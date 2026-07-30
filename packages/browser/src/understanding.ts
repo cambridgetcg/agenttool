@@ -39,6 +39,7 @@ const MAX_MATERIAL_CHARS = 100_000;
 const MAX_MATERIAL_BYTES = MAX_MATERIAL_CHARS * 4;
 const MAX_CLAIM_CHARS = 8_192;
 const MAX_IDENTIFIER_CHARS = 160;
+const MAX_LOCALE_CHARS = 64;
 const MAX_URL_CHARS = 8_192;
 const SHA256_ID = /^sha256:[0-9a-f]{64}$/u;
 const FULL_HUB_REVISION = /^[0-9a-f]{40}$/u;
@@ -267,6 +268,42 @@ function requiredString(
   return value;
 }
 
+function canonicalTimestamp(value: unknown, name: string): string {
+  const timestamp = typeof value === "string" ? value : "";
+  let normalized: string;
+  try {
+    normalized = new Date(timestamp).toISOString();
+  } catch {
+    normalized = "";
+  }
+  if (
+    timestamp.length !== 24
+    || !validUnicode(timestamp)
+    || normalized !== timestamp
+  ) {
+    throw new BrowserUnderstandingError(
+      "invalid_material",
+      `${name} must be a canonical ISO 8601 UTC timestamp.`,
+    );
+  }
+  return timestamp;
+}
+
+function currentTimestamp(now: InterpretBrowserMaterialOptions["now"]): string {
+  try {
+    const value = now?.() ?? new Date();
+    return canonicalTimestamp(
+      Date.prototype.toISOString.call(value),
+      "attempt.startedAt",
+    );
+  } catch {
+    throw new BrowserUnderstandingError(
+      "invalid_model",
+      "now must return a valid Date for a canonical attempt timestamp.",
+    );
+  }
+}
+
 function copyProvenance(value: unknown): WebProvenance {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new BrowserUnderstandingError(
@@ -294,17 +331,10 @@ function copyProvenance(value: unknown): WebProvenance {
     "provenance.url",
     MAX_URL_CHARS,
   );
-  const capturedAt = requiredString(
+  const capturedAt = canonicalTimestamp(
     fields.capturedAt?.value,
     "provenance.capturedAt",
-    64,
   );
-  if (!Number.isFinite(Date.parse(capturedAt))) {
-    throw new BrowserUnderstandingError(
-      "invalid_material",
-      "provenance.capturedAt must be a timestamp.",
-    );
-  }
   return {
     source: "remote_web",
     url,
@@ -372,17 +402,10 @@ function copyBasis(value: unknown): BrowserMaterialBasis {
       "Browser material snapshot basis does not match its source kind.",
     );
   }
-  const capturedAt = requiredString(
+  const capturedAt = canonicalTimestamp(
     fields.capturedAt?.value,
     "material.basis.capturedAt",
-    64,
   );
-  if (!Number.isFinite(Date.parse(capturedAt))) {
-    throw new BrowserUnderstandingError(
-      "invalid_material",
-      "material.basis.capturedAt must be a timestamp.",
-    );
-  }
   return {
     kind,
     sessionId: requiredString(
@@ -613,7 +636,8 @@ function assertMaterial(material: BrowserMaterial): void {
 }
 
 function validLocale(value: string): boolean {
-  return /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/u.test(value);
+  return value.length <= MAX_LOCALE_CHARS
+    && /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/u.test(value);
 }
 
 function cloneModelReference(
@@ -951,8 +975,6 @@ function normalizeModelObservation(
       && attemptFields.calls?.value !== 1
     )
     || attemptFields.retry?.value !== "not_attempted"
-    || typeof attemptFields.startedAt?.value !== "string"
-    || !Number.isFinite(Date.parse(attemptFields.startedAt.value))
     || (
       attemptFields.disclosure?.value !== "not_remote"
       && attemptFields.disclosure?.value
@@ -972,6 +994,10 @@ function normalizeModelObservation(
 
   const status = attemptFields.status.value as BrowserModelAttemptStatus;
   const calls = attemptFields.calls.value as 0 | 1;
+  const startedAt = canonicalTimestamp(
+    attemptFields.startedAt?.value,
+    "model observation attempt.startedAt",
+  );
   const disclosure = attemptFields.disclosure
     .value as BrowserModelObservation["attempt"]["disclosure"];
   const errorCode = attemptFields.errorCode
@@ -1041,7 +1067,7 @@ function normalizeModelObservation(
       status,
       calls,
       retry: "not_attempted",
-      startedAt: attemptFields.startedAt.value,
+      startedAt,
       disclosure,
       errorCode,
     },
@@ -1119,7 +1145,7 @@ export async function interpretBrowserMaterial(
       "A caller-owned evidence interpreter is required.",
     );
   }
-  const startedAt = (options.now?.() ?? new Date()).toISOString();
+  const startedAt = currentTimestamp(options.now);
   const base = modelObservationBase(
     material,
     claim,

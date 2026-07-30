@@ -294,8 +294,9 @@ claim, passage, generated prose, or raw provider errors, and uncertain calls
 are never retried automatically. Browser gives the adapter a separate frozen
 model descriptor, retains its own closed snapshot, and derives disclosure from
 the pre-call execution mode. Assembly revalidates exact observation shapes and
-rejects extra fields instead of copying them into a report. Scores remain
-uncalibrated model outputs.
+rejects extra fields instead of copying them into a report. Source and attempt
+times must be canonical millisecond ISO UTC timestamps, and locale tags are
+capped at 64 characters. Scores remain uncalibrated model outputs.
 Entailment against one observed passage is not world truth; neutral or absent
 evidence is not a refutation. Every assembled report therefore says
 `truth: "not_determined"` and `externalFacts: "not_resolved"`.

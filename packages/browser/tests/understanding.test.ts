@@ -157,6 +157,29 @@ describe("Browser web material", () => {
       "Expected an agent-browser-material/0.1",
     );
   });
+
+  test("requires canonical source timestamps", () => {
+    const leakingTimestamp =
+      "Thu, 30 Jul 2026 12:00:00 GMT (SENTINEL_PAGE_TEXT)";
+    expect(Number.isFinite(Date.parse(leakingTimestamp))).toBe(true);
+
+    expect(() =>
+      createBrowserMaterial(extract({
+        provenance: {
+          ...extract().provenance,
+          capturedAt: leakingTimestamp,
+        },
+      })),
+    ).toThrow("canonical ISO 8601 UTC timestamp");
+    expect(() =>
+      createBrowserMaterial(extract({
+        provenance: {
+          ...extract().provenance,
+          capturedAt: "2026-02-31T12:00:00.000Z",
+        },
+      })),
+    ).toThrow("canonical ISO 8601 UTC timestamp");
+  });
 });
 
 describe("local RhetorLint observation", () => {
@@ -189,6 +212,20 @@ describe("local RhetorLint observation", () => {
     expect(JSON.stringify(disclosed)).toContain("Experts say");
     expect(stringInstead.disclosure.markedPhrases).toBe("omitted");
     expect(stringInstead.signal).not.toHaveProperty("marks");
+  });
+
+  test("bounds the complete locale tag", () => {
+    const material = createBrowserMaterial(observation());
+    const segmented = ["en", ...Array.from({ length: 40 }, () => "a")]
+      .join("-");
+    expect(segmented).toMatch(
+      /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/u,
+    );
+    expect(segmented.length).toBeGreaterThan(64);
+
+    expect(() =>
+      analyzeBrowserMaterial(material, { locale: segmented }),
+    ).toThrow("bounded BCP-47-like language tag");
   });
 });
 
@@ -533,6 +570,40 @@ describe("assembled understanding report", () => {
 
     expect(report.rhetoric?.signal.density.tells).not.toBe(999);
     expect(JSON.stringify(report)).not.toContain(pageText);
+  });
+
+  test("rejects Date.parse-valid receipt text in attempt timestamps", async () => {
+    const sentinel = "SENTINEL_PAGE_TEXT";
+    const material = createBrowserMaterial(observation({ text: sentinel }));
+    const semantic = await interpretBrowserMaterial(material, {
+      claim,
+      model: model({
+        execution: "local",
+        provider: "transformers-js",
+      }),
+      interpreter: {
+        async interpret() {
+          return { label: "insufficient", scores: null };
+        },
+      },
+      now: () => new Date(capturedAt),
+    });
+    const leakingTimestamp =
+      `Thu, 30 Jul 2026 12:00:00 GMT (${sentinel})`;
+    const lookalike = {
+      ...semantic,
+      attempt: {
+        ...semantic.attempt,
+        startedAt: leakingTimestamp,
+      },
+    };
+    expect(Number.isFinite(Date.parse(leakingTimestamp))).toBe(true);
+
+    expect(() =>
+      assembleBrowserUnderstanding(material, {
+        modelObservations: [lookalike],
+      }),
+    ).toThrow("canonical ISO 8601 UTC timestamp");
   });
 
   test("bounds model observation fan-in", () => {

@@ -371,7 +371,9 @@ the receipt. The adapter receives a separate frozen model descriptor; the
 receipt retains a closed snapshot and derives disclosure from the pre-call
 execution mode. The closed result is a model observation—`supports`,
 `contradicts`, or `insufficient`, with optional three-way scores—and those
-scores are not calibrated truth probabilities.
+scores are not calibrated truth probabilities. Material and attempt times use
+the exact `YYYY-MM-DDTHH:mm:ss.sssZ` form; RhetorLint locale tags are capped at
+64 characters. Neither field can carry arbitrary receipt text.
 
 The disclosure gate constrains only adapters that describe their execution
 boundary honestly. It is not consent, permission, adapter attestation, proof
