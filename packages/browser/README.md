@@ -2,7 +2,7 @@
 
 A small local browser surface for agents.
 
-This README belongs to the exact `0.5.1` package bytes. Its registry-neutral
+This README belongs to the exact `0.6.0` package bytes. Its registry-neutral
 release record is the sibling LOVE manifest, which names the artifact size,
 SHA-256, source revision, and interchangeable mirrors. npm and GitHub Releases
 are optional mirrors and should be verified independently. The docs deployment
@@ -18,21 +18,25 @@ into exact `0.5.0`. Earlier `0.1.0`, `0.2.0`, and `0.3.0` releases remain
 immutable historical artifacts. Version `0.5.1` preserves those runtime,
 tool, protocol, and authority semantics while adding a package-root Codex
 plugin and a self-contained Node-targeted MCP bundle. Exact `0.5.0` remains an
-immutable historical artifact too.
+immutable historical artifact too. Version `0.6.0` keeps the same nine tools,
+runtime, plugin, and authority model while adding one direct-only
+`@agenttool/browser/understanding` composition surface. It binds observed text
+to exact provenance, runs RhetorLint locally, and lets the caller inject a
+pinned Hugging Face interpreter behind an explicit remote-disclosure gate.
 
 ```bash
-npm install --save-exact @agenttool/browser@0.5.1
+npm install --save-exact @agenttool/browser@0.6.0
 ```
 
 Registry-neutral exact artifact:
 
 ```bash
 npm install --save-exact \
-  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/agenttool-browser-0.5.1.tgz
+  https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.6.0/agenttool-browser-0.6.0.tgz
 ```
 
 The sibling
-[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.5.1/manifest.json)
+[LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/browser/0.6.0/manifest.json)
 names the artifact size and SHA-256. A URL install does not compare those
 values automatically; verify them first when that boundary matters.
 
@@ -145,7 +149,7 @@ The JSONL methods and MCP tool names are `browser_capabilities`,
 `browser_extract`, `browser_screenshot`, `browser_tabs`, and `browser_close`.
 
 Version `0.5.0` introduced current MCP `2026-07-28` negotiation and an
-explicit 2025-era stdio compatibility path; `0.5.1` retains both unchanged.
+explicit 2025-era stdio compatibility path; `0.6.0` retains both unchanged.
 That negotiation makes the
 same bounded operations usable by hosts from both eras; it does not turn MCP
 into a browser driver, durable browser session, or security boundary. Browser
@@ -235,6 +239,78 @@ does not automatically retry uncertain clicks, submissions, typing, keypresses,
 or navigation. The closed action set covers navigate, click, type, press,
 select, scroll, bounded wait, back, forward, reload, new tab, and close tab;
 there is no raw script or DevTools action.
+
+### Web-material understanding (direct TypeScript only)
+
+The `@agenttool/browser/understanding` subpath composes three deliberately
+separate layers:
+
+1. `createBrowserMaterial()` accepts an existing `Observation` or text
+   `ExtractResult`. It never re-reads the tab. It binds the exact analyzed text
+   SHA-256 to its snapshot or extraction basis, query-redacted URL, capture
+   time, and truncation state.
+2. `analyzeBrowserMaterial()` runs the exact packaged
+   `@rhetorlint/core@0.1.2` and English rule pack locally. Its default signal
+   contains aggregate pattern counts without matched phrases. Literal
+   `includeMarks: true` is required to include those phrases.
+3. `interpretBrowserMaterial()` calls one caller-injected interpreter at most
+   once. A remote descriptor requires literal `discloseText: true` before the
+   page passage or claim reaches the adapter. The model reference must name a
+   Hugging Face repository and full 40-hex revision.
+
+```ts
+import {
+  analyzeBrowserMaterial,
+  assembleBrowserUnderstanding,
+  createBrowserMaterial,
+  interpretBrowserMaterial,
+} from "@agenttool/browser/understanding";
+
+const material = createBrowserMaterial(page);
+const rhetoric = analyzeBrowserMaterial(material); // local; phrases omitted
+
+const evidence = await interpretBrowserMaterial(material, {
+  claim: "The page's stated proposition",
+  model: {
+    source: "huggingface_hub",
+    repoId: "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli",
+    revision: "8adb042d524ecd5c26d3e3ba0e3fbcf7e2d0864c",
+    task: "natural-language-inference",
+    execution: "local",
+    provider: "caller-owned-transformers",
+  },
+  interpreter, // caller-owned; receives no Browser action handle
+});
+
+const report = assembleBrowserUnderstanding(material, {
+  rhetoric,
+  modelObservations: [evidence],
+});
+```
+
+The closed interpreter output is only `supports`, `contradicts`, or
+`insufficient`, plus optional three-way scores. The receipt does not copy the
+claim, passage, generated prose, or raw provider errors, and uncertain calls
+are never retried automatically. Browser gives the adapter a separate frozen
+model descriptor, retains its own closed snapshot, and derives disclosure from
+the pre-call execution mode. Assembly revalidates exact observation shapes and
+rejects extra fields instead of copying them into a report. Source and attempt
+times must be canonical millisecond ISO UTC timestamps, and locale tags are
+capped at 64 characters. Scores remain uncalibrated model outputs.
+Entailment against one observed passage is not world truth; neutral or absent
+evidence is not a refutation. Every assembled report therefore says
+`truth: "not_determined"` and `externalFacts: "not_resolved"`.
+
+The disclosure switch constrains only an adapter that honestly declares its
+execution boundary. It is not consent, permission, provider-policy
+verification, or proof that a supposedly local adapter avoided the network.
+Browser's generic redaction also cannot discover every secret in page text,
+URL paths/fragments, transformed values, Unicode controls, or screenshot
+pixels. Inspect material before deliberately sending it to any remote model.
+
+This first slice adds no JSONL or MCP operation, HF token lookup, hosted
+inference, model download, screenshot interpretation, selector generation, or
+automatic Browser action. The original nine-tool contract remains exact.
 
 ### Action receipts and observation basis
 
@@ -402,7 +478,7 @@ and cannot alter the same underlying facts or widen authority.
 ## Authority profiles
 
 Version `0.2.0` introduced the three named launch-time profiles retained
-unchanged through `0.5.0` and `0.5.1`:
+unchanged through `0.5.0`, `0.5.1`, and `0.6.0`:
 
 | Profile | Policy-checked HTTP(S) requests | WebSockets | Service workers |
 |---|---|---|---|
@@ -427,8 +503,8 @@ destinations available to the host, including local services. In a persistent
 profile, service-worker and site state can outlive the process. Sovereign is
 therefore broad local process authority, not an isolation or SSRF claim.
 
-Destination authority does not imply every other browser power. In `0.5.1`,
-unchanged from `0.5.0`, file upload, automatic download, arbitrary JavaScript
+Destination authority does not imply every other browser power. In `0.6.0`,
+unchanged from `0.5.0` and `0.5.1`, file upload, automatic download, arbitrary JavaScript
 evaluation, credential injection/lookup, ambient profile import, shell
 execution, and extension installation remain unsupported and are reported as
 such by `capabilities()`.
@@ -493,7 +569,7 @@ Do this only for a caller-controlled development network. Tool calls cannot
 widen either profile or network authority after launch. Reserved destinations
 remain blocked even with this opt-in.
 
-Version `0.5.1` retains the same `allowPublicWeb` / `allowLocalNetwork`,
+Version `0.6.0` retains the same `allowPublicWeb` / `allowLocalNetwork`,
 `--public-web` / `--local-network`, and their environment variables as a
 deprecated `0.1.0` compatibility surface. Do not combine the `authority` form
 with any legacy authority option in one launch; mixed configuration is
@@ -540,7 +616,7 @@ unrecognized carriers such as `srcset`, meta refresh, CSS `url()`, or malformed
 markup, browser storage, canvas/image content, or screenshot pixels. It cannot
 undo data already submitted to a site.
 
-Version `0.5.1`, like exact `0.5.0`, intentionally has no:
+Version `0.6.0`, like exact `0.5.0` and `0.5.1`, intentionally has no:
 
 - arbitrary JavaScript evaluation;
 - file-upload operation;
@@ -555,7 +631,7 @@ model-visible state, or advisory plans.
 
 ## Network limitation
 
-The `0.5.1` `public` and `local` profiles preserve the `0.5.0`, `0.2.0`, and
+The `0.6.0` `public` and `local` profiles preserve the `0.5.1`, `0.5.0`, `0.2.0`, and
 historical `0.1.0` destination checks before navigation, including DNS
 answers.
 Playwright then owns the browser connection. The package cannot pin the

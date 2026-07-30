@@ -185,6 +185,20 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     releaseTag: "browser-v0.5.1",
     buildCommands: [["bun", "run", "ci"]],
   },
+  {
+    name: "@agenttool/browser",
+    version: "0.6.0",
+    packagePath: "packages/browser",
+    releaseTag: "browser-v0.6.0",
+    buildCommands: [["bun", "run", "ci"]],
+    expectedDependencies: {
+      "@modelcontextprotocol/server": "2.0.0",
+      "@rhetorlint/core": "0.1.2",
+      "@rhetorlint/rules-en": "0.1.2",
+      "playwright-core": "1.59.1",
+      "zod": "4.4.3",
+    },
+  },
 ] as const;
 
 export interface PackageJson {

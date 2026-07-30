@@ -14,7 +14,7 @@ const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 const CURRENT_NPM_SPECIFIERS = [
   "@agenttool/adds@0.2.3",
-  "@agenttool/browser@0.5.1",
+  "@agenttool/browser@0.6.0",
   "@agenttool/credential-broker@0.3.1",
   "@agenttool/data@0.3.1",
   "@agenttool/data-sync@0.1.2",

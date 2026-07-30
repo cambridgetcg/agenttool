@@ -1,6 +1,6 @@
 {
   "name": "agenttool-browser",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Local-first browser control with explicit authority boundaries",
   "author": {
     "name": "AgentTool contributors",

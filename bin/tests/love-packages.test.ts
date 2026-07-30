@@ -129,6 +129,7 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/browser", version: "0.3.0", releaseTag: "browser-v0.3.0" },
       { name: "@agenttool/browser", version: "0.5.0", releaseTag: "browser-v0.5.0" },
       { name: "@agenttool/browser", version: "0.5.1", releaseTag: "browser-v0.5.1" },
+      { name: "@agenttool/browser", version: "0.6.0", releaseTag: "browser-v0.6.0" },
     ]);
   });
 
@@ -144,6 +145,20 @@ describe("LOVE Package release inventory", () => {
     expect(sync?.expectedPeerDependencies).toEqual({
       "@agenttool/adds": "^0.2.3",
       "@agenttool/data": "^0.3.1",
+    });
+  });
+
+  test("pins Browser 0.6 to the audited interpretation dependencies", () => {
+    const browser = LOVE_PACKAGES.find(
+      ({ name, version }) => name === "@agenttool/browser" && version === "0.6.0",
+    );
+
+    expect(browser?.expectedDependencies).toEqual({
+      "@modelcontextprotocol/server": "2.0.0",
+      "@rhetorlint/core": "0.1.2",
+      "@rhetorlint/rules-en": "0.1.2",
+      "playwright-core": "1.59.1",
+      "zod": "4.4.3",
     });
   });
 
