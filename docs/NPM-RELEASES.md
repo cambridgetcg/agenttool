@@ -102,6 +102,38 @@ and has byte-identical 26,474-byte GitHub/npm tarballs with SHA-256
 `67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`.
 Both npm `latest` tags resolved to those exact versions at readback.
 
+## Verified Agent Browser 0.5.1 publication — 2026-07-30
+
+The authorized Browser packaging release completed through protected
+[workflow run `30527839535`](https://github.com/cambridgetcg/agenttool/actions/runs/30527839535).
+Its final `agenttool.npm-release/1` receipt reports `status: published`,
+`npm_tag: latest`, and public registry observation at
+`2026-07-30T08:54:01.427Z`.
+
+- Annotated tag
+  [`browser-v0.5.1`](https://github.com/cambridgetcg/agenttool/releases/tag/browser-v0.5.1)
+  peels to the two-parent GitHub `main` merge
+  `a535f66c053bc38e114f3cbab9896610b73a561e`.
+- The LOVE manifest binds Browser source revision
+  `13334238a0eea60fef2f9e5b260d301ffa89a22d`.
+- LOVE, the one-asset GitHub Release, the protected workflow artifact, and
+  public npm `@agenttool/browser@0.5.1` are byte-identical: `2,795,747`
+  bytes, SHA-256
+  `6702c7cb6905590ac6ca788455352842b2849276872a7729f88bf5e60d963127`.
+- npm reported SHA-1 `4492bbb71beb6a86bb921723a63851f07d5b9b1b`,
+  `latest: 0.5.1`, and public provenance at
+  [Sigstore log index `2288621112`](https://search.sigstore.dev/?logIndex=2288621112).
+- A frontend-only deployment of the same merge passed live custom-domain
+  byte parity, latest LOVE manifest/archive header checks, and encoded
+  sensitive-path fence checks. The deployment used the explicit Wrangler
+  OAuth fallback, so its raw Cloudflare project-policy inspection was skipped
+  and is not claimed by this receipt.
+
+This patch packages the existing nine-tool Browser runtime as a Codex plugin;
+it does not widen Browser authority, add a hosted control service, supply
+Chrome, import ambient browser state, or authenticate to a site. Exact 0.5.0
+and earlier release bytes remain immutable.
+
 ## Authentication modes
 
 `trusted` is the normal mode. npm exchanges the GitHub-hosted runner's OIDC
