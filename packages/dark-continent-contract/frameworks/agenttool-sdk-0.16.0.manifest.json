@@ -1,0 +1,39 @@
+{
+  "_format": "agenttool-dark-continent-manifest/v0.1",
+  "contract_id": "agenttool.dark-continent/0.1",
+  "source_profile": "agenttool-sdk-ts-0.16.0",
+  "snapshot": {
+    "path": "frameworks/agenttool-sdk-0.16.0.json",
+    "sha256": "66e8d33cf7ce945ed5c3c43c4e0bc2e6d5f8ac0086e86867266ff1090db0dc5b"
+  },
+  "generation": {
+    "mode": "offline_static_source_projection",
+    "network": "none",
+    "package_root": "packages/dark-continent-contract",
+    "inputs": [
+      {
+        "path": "packages/sdk-ts/src/dark-continent.ts",
+        "role": "projection_source",
+        "sha256": "b18b65595b3805510b34a908b10d9d2cf84821612a624226f49561ffa2911e3a"
+      },
+      {
+        "path": "packages/sdk-py/src/agenttool/dark_continent.py",
+        "role": "sibling_implementation_not_projection_source",
+        "sha256": "baa758697c377ce3fdbe8ab6562a6d1b0cc6ab71b74fe25957752ec703ea3e6d"
+      },
+      {
+        "path": "packages/sdk-ts/package.json",
+        "role": "package_identity_and_version",
+        "sha256": "3a9c09d140ce7b5ca9e5c360562d925ba9dd23e39ac37c4497e6a7253a189d07"
+      }
+    ]
+  },
+  "boundaries": {
+    "advisory_only": true,
+    "runtime_wall_verification": false,
+    "grants_permission": false,
+    "authorizes_trade": false,
+    "authorizes_publication": false,
+    "includes_legacy_bin_or_html_taxonomies": false
+  }
+}

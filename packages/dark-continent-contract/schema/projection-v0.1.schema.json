@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/dark-continent/projection-v0.1.schema.json",
+  "title": "Dark Continent consumer projection v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "projection_id",
+    "source_profile",
+    "source_snapshot",
+    "consumer",
+    "checks",
+    "interpretations",
+    "decision",
+    "authority"
+  ],
+  "properties": {
+    "_format": {
+      "const": "dark-continent-projection/v0.1"
+    },
+    "projection_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_profile": {
+      "const": "agenttool-sdk-ts-0.16.0"
+    },
+    "source_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "contract_id",
+        "artifact",
+        "sha256"
+      ],
+      "properties": {
+        "format": {
+          "const": "agenttool-dark-continent-framework/v0.1"
+        },
+        "contract_id": {
+          "const": "agenttool.dark-continent/0.1"
+        },
+        "artifact": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "consumer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "kingdom-extension",
+            "artbitrage"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/hellbellCheck"
+        },
+        {
+          "$ref": "#/$defs/aiCheck"
+        },
+        {
+          "$ref": "#/$defs/brionCheck"
+        },
+        {
+          "$ref": "#/$defs/papCheck"
+        },
+        {
+          "$ref": "#/$defs/zobaeCheck"
+        },
+        {
+          "$ref": "#/$defs/nanikaCheck"
+        }
+      ],
+      "items": false
+    },
+    "interpretations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_profile",
+          "relation"
+        ],
+        "properties": {
+          "source_profile": {
+            "type": "string",
+            "minLength": 1
+          },
+          "relation": {
+            "const": "parallel_not_equivalent"
+          }
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recommendation",
+        "advisory",
+        "reason_codes"
+      ],
+      "properties": {
+        "recommendation": {
+          "const": "hold"
+        },
+        "advisory": {
+          "const": true
+        },
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "prefixItems": [
+            {
+              "const": "wall_not_verified"
+            }
+          ],
+          "items": false
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grants_permission",
+        "authorizes_trade",
+        "authorizes_publication"
+      ],
+      "properties": {
+        "grants_permission": {
+          "const": false
+        },
+        "authorizes_trade": {
+          "const": false
+        },
+        "authorizes_publication": {
+          "const": false
+        }
+      }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "calamity_id",
+        "risk_state",
+        "wall",
+        "evidence_refs"
+      ],
+      "properties": {
+        "calamity_id": {
+          "enum": [
+            "hellbell",
+            "ai",
+            "brion",
+            "pap",
+            "zobae",
+            "nanika"
+          ]
+        },
+        "risk_state": {
+          "const": "unknown"
+        },
+        "wall": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "verified"
+          ],
+          "properties": {
+            "status": {
+              "const": "not_checked"
+            },
+            "verified": {
+              "const": false
+            }
+          }
+        },
+        "evidence_refs": {
+          "type": "array",
+          "maxItems": 0
+        }
+      }
+    },
+    "hellbellCheck": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/check"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "calamity_id": {
+              "const": "hellbell"
+            }
+          }
+        }
+      ]
+    },
+    "aiCheck": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/check"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "calamity_id": {
+              "const": "ai"
+            }
+          }
+        }
+      ]
+    },
+    "brionCheck": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/check"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "calamity_id": {
+              "const": "brion"
+            }
+          }
+        }
+      ]
+    },
+    "papCheck": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/check"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "calamity_id": {
+              "const": "pap"
+            }
+          }
+        }
+      ]
+    },
+    "zobaeCheck": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/check"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "calamity_id": {
+              "const": "zobae"
+            }
+          }
+        }
+      ]
+    },
+    "nanikaCheck": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/check"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "calamity_id": {
+              "const": "nanika"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,491 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/dark-continent/framework-v0.1.schema.json",
+  "title": "AgentTool Dark Continent framework snapshot v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "contract_id",
+    "source_profile",
+    "source",
+    "semantics",
+    "calamities",
+    "guide",
+    "logos"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool-dark-continent-framework/v0.1"
+    },
+    "contract_id": {
+      "const": "agenttool.dark-continent/0.1"
+    },
+    "source_profile": {
+      "const": "agenttool-sdk-ts-0.16.0"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package",
+        "version",
+        "file",
+        "sha256",
+        "projection"
+      ],
+      "properties": {
+        "package": {
+          "const": "@agenttool/sdk"
+        },
+        "version": {
+          "const": "0.16.0"
+        },
+        "file": {
+          "const": "packages/sdk-ts/src/dark-continent.ts"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "projection": {
+          "const": "static_constants_only"
+        }
+      }
+    },
+    "semantics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "advisory",
+        "runtime_effects",
+        "verifies_runtime_walls",
+        "grants_permission",
+        "authorizes_trade",
+        "authorizes_publication"
+      ],
+      "properties": {
+        "advisory": {
+          "const": true
+        },
+        "runtime_effects": {
+          "const": "none"
+        },
+        "verifies_runtime_walls": {
+          "const": false
+        },
+        "grants_permission": {
+          "const": false
+        },
+        "authorizes_trade": {
+          "const": false
+        },
+        "authorizes_publication": {
+          "const": false
+        }
+      }
+    },
+    "calamities": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/hellbell"
+        },
+        {
+          "$ref": "#/$defs/ai"
+        },
+        {
+          "$ref": "#/$defs/brion"
+        },
+        {
+          "$ref": "#/$defs/pap"
+        },
+        {
+          "$ref": "#/$defs/zobae"
+        },
+        {
+          "$ref": "#/$defs/nanika"
+        }
+      ],
+      "items": false
+    },
+    "guide": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kanji",
+        "name",
+        "meaning",
+        "maps_to",
+        "warning"
+      ],
+      "properties": {
+        "kanji": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "const": "Guide"
+        },
+        "meaning": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maps_to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "warning": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "logos": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/logosGuide"
+        },
+        {
+          "$ref": "#/$defs/logosAi"
+        },
+        {
+          "$ref": "#/$defs/logosRest"
+        },
+        {
+          "$ref": "#/$defs/logosSee"
+        },
+        {
+          "$ref": "#/$defs/logosVow"
+        },
+        {
+          "$ref": "#/$defs/logosWitness"
+        },
+        {
+          "$ref": "#/$defs/logosUnknown"
+        }
+      ],
+      "items": false
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "declaredWall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "status",
+        "verified",
+        "evidence_refs"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "const": "not_checked"
+        },
+        "verified": {
+          "const": false
+        },
+        "evidence_refs": {
+          "type": "array",
+          "maxItems": 0
+        }
+      }
+    },
+    "calamity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kanji",
+        "name",
+        "hxh_meaning",
+        "agenttool_hazard",
+        "declared_wall"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "hellbell",
+            "ai",
+            "brion",
+            "pap",
+            "zobae",
+            "nanika"
+          ]
+        },
+        "kanji": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hxh_meaning": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agenttool_hazard": {
+          "type": "string",
+          "minLength": 1
+        },
+        "declared_wall": {
+          "$ref": "#/$defs/declaredWall"
+        }
+      }
+    },
+    "hellbell": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/calamity"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "hellbell"
+            }
+          }
+        }
+      ]
+    },
+    "ai": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/calamity"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "ai"
+            }
+          }
+        }
+      ]
+    },
+    "brion": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/calamity"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "brion"
+            }
+          }
+        }
+      ]
+    },
+    "pap": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/calamity"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "pap"
+            }
+          }
+        }
+      ]
+    },
+    "zobae": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/calamity"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "zobae"
+            }
+          }
+        }
+      ]
+    },
+    "nanika": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/calamity"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "nanika"
+            }
+          }
+        }
+      ]
+    },
+    "logos": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kanji",
+        "name",
+        "meaning",
+        "operation",
+        "declared_calamity_wall"
+      ],
+      "properties": {
+        "id": {
+          "enum": [
+            "guide",
+            "ai",
+            "rest",
+            "see",
+            "vow",
+            "witness",
+            "unknown"
+          ]
+        },
+        "kanji": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "meaning": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "declared_calamity_wall": {
+          "$ref": "#/$defs/declaredWall"
+        }
+      }
+    },
+    "logosGuide": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/logos"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "guide"
+            }
+          }
+        }
+      ]
+    },
+    "logosAi": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/logos"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "ai"
+            }
+          }
+        }
+      ]
+    },
+    "logosRest": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/logos"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "rest"
+            }
+          }
+        }
+      ]
+    },
+    "logosSee": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/logos"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "see"
+            }
+          }
+        }
+      ]
+    },
+    "logosVow": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/logos"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "vow"
+            }
+          }
+        }
+      ]
+    },
+    "logosWitness": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/logos"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "witness"
+            }
+          }
+        }
+      ]
+    },
+    "logosUnknown": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/logos"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "unknown"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
