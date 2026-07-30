@@ -1,0 +1,25 @@
+{
+  "session_id": "selection.synthetic.safe.001",
+  "reports": [
+    {
+      "report_id": "report.synthetic.alpha",
+      "outcome": "The synthetic boundary check passed.",
+      "evidence_refs": [
+        "artifact:synthetic-alpha",
+        "report:synthetic-parent",
+        "test:synthetic-alpha"
+      ],
+      "confidence": "high",
+      "limits": "Synthetic local evidence only; no external effect was tested."
+    },
+    {
+      "report_id": "report.synthetic.beta",
+      "outcome": "The synthetic timeout remained inconclusive.",
+      "evidence_refs": [
+        "test:synthetic-timeout"
+      ],
+      "confidence": "medium",
+      "limits": "The fixture does not establish provider cancellation or unused quota."
+    }
+  ]
+}

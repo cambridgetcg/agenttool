@@ -1,0 +1,65 @@
+{
+  "name": "@agenttool/trials",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "Deterministic local agent trial receipts, boundary-flow evidence, and privacy-first STS projection",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./boundary": {
+      "import": "./dist/boundary.js",
+      "types": "./dist/boundary.d.ts"
+    },
+    "./sts": {
+      "import": "./dist/sts.js",
+      "types": "./dist/sts.d.ts"
+    },
+    "./trial-receipt.schema.json": {
+      "default": "./schema/agenttool-trial-receipt-v0.1.schema.json"
+    },
+    "./boundary-analysis.schema.json": {
+      "default": "./schema/agenttool-boundary-analysis-v0.1.schema.json"
+    },
+    "./sts-projection-receipt.schema.json": {
+      "default": "./schema/agenttool-sts-projection-receipt-v0.1.schema.json"
+    }
+  },
+  "files": [
+    "dist",
+    "schema",
+    "README.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20",
+    "bun": ">=1.3.5"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "smoke:node": "node --input-type=module --eval \"const [m,b,s] = await Promise.all([import('./dist/index.js'),import('./dist/boundary.js'),import('./dist/sts.js')]); if (m.TRIAL_RECEIPT_SCHEMA !== 'agenttool-trial-receipt/0.1' || typeof m.createTrialReceipt !== 'function' || typeof m.analyzeBoundaryFlow !== 'function' || typeof m.projectReportsToSts !== 'function' || b.BOUNDARY_ANALYSIS_SCHEMA !== 'agenttool-boundary-analysis/0.1' || s.STS_PROJECTION_RECEIPT_SCHEMA !== 'agenttool-sts-projection-receipt/0.1') process.exit(1)\"",
+    "ci": "bun run typecheck && bun run build && bun test && bun run smoke:node"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/trials"
+  }
+}

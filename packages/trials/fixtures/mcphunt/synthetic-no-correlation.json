@@ -1,0 +1,43 @@
+{
+  "trial_id": "trial:mcphunt-synthetic-no-correlation",
+  "labels": [
+    {
+      "label_id": "label:early-sink",
+      "completion_requirement": "not_required"
+    },
+    {
+      "label_id": "label:source-only",
+      "completion_requirement": "unknown"
+    }
+  ],
+  "steps": [
+    {
+      "kind": "sink",
+      "step_id": "step:001",
+      "sequence": 1,
+      "sink_class": "document",
+      "propagation": "observed",
+      "observed_label_ids": [
+        "label:early-sink"
+      ]
+    },
+    {
+      "kind": "source",
+      "step_id": "step:002",
+      "sequence": 2,
+      "source_class": "file",
+      "observed_label_ids": [
+        "label:early-sink"
+      ]
+    },
+    {
+      "kind": "source",
+      "step_id": "step:003",
+      "sequence": 3,
+      "source_class": "repository_history",
+      "observed_label_ids": [
+        "label:source-only"
+      ]
+    }
+  ]
+}
