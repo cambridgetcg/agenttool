@@ -1,0 +1,285 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kingdom:hf-sidecar:v0.1",
+  "title": "KINGDOM Hugging Face derived sidecar",
+  "$comment": "This standalone schema closes the JSON shape. createKingdomHfSidecar additionally rejects duplicate logical artifact and model-lock identities.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "generated_at",
+    "extension",
+    "artifacts",
+    "model_locks",
+    "boundary"
+  ],
+  "properties": {
+    "schema": {
+      "const": "kingdom-hf-sidecar/v0.1"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 64
+    },
+    "extension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package", "version", "status"],
+      "properties": {
+        "package": {
+          "const": "@agenttool/hf-scout"
+        },
+        "version": {
+          "const": "0.1.0-dev.0"
+        },
+        "status": {
+          "const": "private_local_prototype"
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/artifactRef"
+      }
+    },
+    "model_locks": {
+      "type": "array",
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/modelLock"
+      }
+    },
+    "boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publisher_metadata",
+        "source_transport_effects",
+        "projector_hub_files_downloaded",
+        "projector_model_code_executed",
+        "projector_remote_compute_invoked",
+        "projector_hub_write_performed"
+      ],
+      "properties": {
+        "publisher_metadata": {
+          "const": "unverified"
+        },
+        "source_transport_effects": {
+          "const": "carried_in_artifact_observation"
+        },
+        "projector_hub_files_downloaded": {
+          "const": false
+        },
+        "projector_model_code_executed": {
+          "const": false
+        },
+        "projector_remote_compute_invoked": {
+          "const": false
+        },
+        "projector_hub_write_performed": {
+          "const": false
+        }
+      }
+    }
+  },
+  "$defs": {
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "subject",
+        "revision",
+        "snapshot_sha256",
+        "observation",
+        "provenance_grade",
+        "license_declared",
+        "boundary_codes"
+      ],
+      "properties": {
+        "schema": {
+          "const": "kingdom-hf-artifact-reference/v0.1"
+        },
+        "subject": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "id"],
+          "properties": {
+            "kind": {
+              "enum": ["model", "dataset", "space", "paper"]
+            },
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 193
+            }
+          }
+        },
+        "revision": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "snapshot_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "observation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["transport", "repository_association"],
+          "properties": {
+            "transport": {
+              "enum": ["public_hub_api", "injected"]
+            },
+            "repository_association": {
+              "enum": ["provider_response", "caller_owned"]
+            }
+          },
+          "oneOf": [
+            {
+              "properties": {
+                "transport": { "const": "public_hub_api" },
+                "repository_association": { "const": "provider_response" }
+              }
+            },
+            {
+              "properties": {
+                "transport": { "const": "injected" },
+                "repository_association": { "const": "caller_owned" }
+              }
+            }
+          ]
+        },
+        "provenance_grade": {
+          "enum": [
+            "provider_observed_commit_metadata",
+            "caller_supplied_commit_metadata",
+            "mutable_observation"
+          ]
+        },
+        "license_declared": {
+          "type": ["string", "null"],
+          "maxLength": 128
+        },
+        "boundary_codes": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "caller_owned_reader",
+              "file_inventory_incomplete",
+              "license_unknown",
+              "publisher_metadata_unverified",
+              "revision_unresolved",
+              "scout_files_not_downloaded",
+              "scout_model_code_not_executed"
+            ]
+          }
+        }
+      }
+    },
+    "modelLock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "lock_schema",
+        "repo_id",
+        "revision",
+        "declared",
+        "file_count",
+        "total_bytes",
+        "lock_sha256",
+        "verification",
+        "snapshot_verified"
+      ],
+      "properties": {
+        "schema": {
+          "const": "kingdom-love-model-lock-projection/v0.1"
+        },
+        "lock_schema": {
+          "const": "love.huggingface-model-lock/v1"
+        },
+        "repo_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 193,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}(?:/[A-Za-z0-9][A-Za-z0-9._-]{0,95})?$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "declared": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["license", "base_model", "task", "library"],
+          "properties": {
+            "license": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "base_model": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 193,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}(?:/[A-Za-z0-9][A-Za-z0-9._-]{0,95})?$"
+                },
+                {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 1000,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 193,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}(?:/[A-Za-z0-9][A-Za-z0-9._-]{0,95})?$"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "task": {
+              "type": ["string", "null"],
+              "maxLength": 128
+            },
+            "library": {
+              "type": ["string", "null"],
+              "maxLength": 128
+            }
+          }
+        },
+        "file_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "total_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "lock_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "verification": {
+          "const": "metadata_lock_only"
+        },
+        "snapshot_verified": {
+          "const": false
+        }
+      }
+    }
+  }
+}

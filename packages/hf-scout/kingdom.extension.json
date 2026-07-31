@@ -1,0 +1,26 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "hf-scout",
+  "package": "@agenttool/hf-scout",
+  "version": "0.1.0-dev.0",
+  "status": "private_local_prototype",
+  "capabilities": [
+    "huggingface:public-metadata-read",
+    "huggingface:provenance-project",
+    "huggingface:research-lead-curation",
+    "love:model-lock-project"
+  ],
+  "defaults": {
+    "credentials": "none",
+    "network": "off_until_explicit_command",
+    "filesystem": "off_until_explicit_lock_path",
+    "network_write": false,
+    "remote_compute": false,
+    "model_execution": false
+  },
+  "host_contract": "not_registered",
+  "notes": [
+    "This manifest is a local prototype descriptor, not an installed KINGDOM host contract.",
+    "MCP OAuth is not inherited by this npm package."
+  ]
+}

@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:hf-scout:research-binding:v0.1",
+  "title": "AgentTool Hugging Face research lead binding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "lead_key",
+    "artifact",
+    "definition_sha256",
+    "snapshot_sha256",
+    "observation",
+    "matched_declared",
+    "boundary"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool-hf-research-binding/v0.1"
+    },
+    "lead_key": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_]{0,63}$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "revision"],
+      "properties": {
+        "kind": {
+          "enum": ["dataset", "model"]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 193,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}(?:/[A-Za-z0-9][A-Za-z0-9._-]{0,95})?$"
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "definition_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "snapshot_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transport", "repository_association", "provenance_grade"],
+      "properties": {
+        "transport": {
+          "enum": ["public_hub_api", "injected"]
+        },
+        "repository_association": {
+          "enum": ["provider_response", "caller_owned"]
+        },
+        "provenance_grade": {
+          "enum": [
+            "provider_observed_commit_metadata",
+            "caller_supplied_commit_metadata"
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "transport": {
+              "const": "public_hub_api"
+            },
+            "repository_association": {
+              "const": "provider_response"
+            },
+            "provenance_grade": {
+              "const": "provider_observed_commit_metadata"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "transport": {
+              "const": "injected"
+            },
+            "repository_association": {
+              "const": "caller_owned"
+            },
+            "provenance_grade": {
+              "const": "caller_supplied_commit_metadata"
+            }
+          }
+        }
+      ]
+    },
+    "matched_declared": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["basis", "license", "gated", "private"],
+      "properties": {
+        "basis": {
+          "const": "publisher_assertion"
+        },
+        "license": {
+          "enum": ["apache-2.0", "bsd-3-clause", "cc-by-4.0", "odc-by", null]
+        },
+        "gated": {
+          "enum": [false, "auto", "manual"]
+        },
+        "private": {
+          "const": false
+        }
+      }
+    },
+    "boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publisher_metadata",
+        "research_annotation",
+        "legal_clearance",
+        "gate_acceptance",
+        "raw_rows_read",
+        "repository_files_downloaded",
+        "model_code_executed",
+        "remote_compute_invoked",
+        "hub_write_performed"
+      ],
+      "properties": {
+        "publisher_metadata": {
+          "const": "matched_unverified_assertion"
+        },
+        "research_annotation": {
+          "const": "researcher_inference"
+        },
+        "legal_clearance": {
+          "const": "not_assessed"
+        },
+        "gate_acceptance": {
+          "const": "not_assessed"
+        },
+        "raw_rows_read": {
+          "const": false
+        },
+        "repository_files_downloaded": {
+          "const": false
+        },
+        "model_code_executed": {
+          "const": false
+        },
+        "remote_compute_invoked": {
+          "const": false
+        },
+        "hub_write_performed": {
+          "const": false
+        }
+      }
+    }
+  }
+}
