@@ -1,0 +1,64 @@
+{
+  "name": "@agenttool/dark-continent-contract",
+  "version": "0.1.0-dev.0",
+  "description": "Offline, advisory Dark Continent framework snapshots and consumer projections",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "engines": {
+    "node": ">=20.19.0",
+    "bun": ">=1.3.5"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./framework": "./frameworks/agenttool-sdk-0.17.0.json",
+    "./framework-manifest": "./frameworks/agenttool-sdk-0.17.0.manifest.json",
+    "./schema/framework": "./schema/framework-v0.1.schema.json",
+    "./schema/projection": "./schema/projection-v0.1.schema.json"
+  },
+  "files": [
+    "dist",
+    "frameworks",
+    "schema",
+    "README.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && node scripts/build.mjs",
+    "snapshot": "bun run scripts/snapshot-agenttool.ts",
+    "check:snapshot": "bun run scripts/snapshot-agenttool.ts --check",
+    "project": "node scripts/create-projection.mjs",
+    "test": "bun run build && node --test tests/*.test.mjs",
+    "smoke:node": "node scripts/smoke-node.mjs",
+    "check:package": "bun run build && npm pack --dry-run --ignore-scripts",
+    "ci": "bun run check:snapshot && bun run test && bun run smoke:node",
+    "prepack": "bun run ci"
+  },
+  "devDependencies": {
+    "ajv": "8.17.1"
+  },
+  "keywords": [
+    "agents",
+    "advisory",
+    "dark-continent",
+    "kingdom",
+    "provenance"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/dark-continent-contract"
+  },
+  "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/dark-continent-contract"
+}

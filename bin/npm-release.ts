@@ -72,6 +72,20 @@ export const RELEASE_SPECS = {
       { packagePath: "packages/data-protocol", scripts: ["ci"] },
     ],
   },
+  "dark-continent-contract": {
+    key: "dark-continent-contract",
+    name: "@agenttool/dark-continent-contract",
+    packagePath: "packages/dark-continent-contract",
+    tagPrefix: "dark-continent-contract",
+    artifactKind: "pack",
+  },
+  "dark-continent-karma": {
+    key: "dark-continent-karma",
+    name: "@agenttool/dark-continent-karma",
+    packagePath: "packages/dark-continent-karma",
+    tagPrefix: "dark-continent-karma",
+    artifactKind: "pack",
+  },
   "credential-broker": {
     key: "credential-broker",
     name: "@agenttool/credential-broker",
@@ -585,6 +599,28 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/dist/cli.js",
       "package/schema/agent-repo-archive-v0.1.schema.json",
       "package/vectors/agent-repo-archive-v0.1-vectors.json",
+    );
+  }
+  if (spec.name === "@agenttool/dark-continent-contract") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/frameworks/agenttool-sdk-0.17.0.json",
+      "package/frameworks/agenttool-sdk-0.17.0.manifest.json",
+      "package/schema/framework-v0.1.schema.json",
+      "package/schema/projection-v0.1.schema.json",
+    );
+  }
+  if (spec.name === "@agenttool/dark-continent-karma") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/docs/INTEGRATION.md",
+      "package/exports/hf-kingdom-lab.json",
+      "package/schema/kingdom-kg-proposal-v0.1.schema.json",
+      "package/sources/karma-2502.06472v2.json",
     );
   }
   if (spec.name === "@agenttool/alchemy") {

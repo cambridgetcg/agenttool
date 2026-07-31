@@ -1,0 +1,117 @@
+{
+  "_format": "kingdom-hf-karma-export-profile/v0.1",
+  "profile_id": "dark-continent-karma-hf-local-v0.1",
+  "profile_kind": "metadata_catalog_release_not_exporter_or_sanitizer",
+  "observed_on": "2026-07-31",
+  "intended_consumers": [
+    "artbitrage",
+    "hf-kingdom-lab",
+    "kingdom-extension"
+  ],
+  "source_pins": {
+    "proposal_format": "kingdom.kg-proposal/0.1",
+    "dark_continent_contract": "agenttool.dark-continent/0.1",
+    "dark_continent_source_profile": "agenttool-sdk-ts-0.17.0",
+    "dark_continent_snapshot_sha256": "f47e1c3ca9da1b97676e1d454cf7235eddd612902c19debe580a6934adcd2b86",
+    "karma_paper": "2502.06472v2",
+    "kingdom_revision": "f4ad215d87432bd7cbb7dbe3eb03d3a1993c6d52",
+    "kingdom_map_crown_status": "arriving_in_review",
+    "kingdom_live_claim": false
+  },
+  "dataset_files": [
+    {
+      "path": "data/phase-seeds.jsonl",
+      "status": "generated",
+      "record_format": "kingdom.training-phase-seed/0.1",
+      "content_policy": "newly_authored_synthetic_metadata_only"
+    },
+    {
+      "path": "data/treasure-index.jsonl",
+      "status": "generated",
+      "record_format": "kingdom.hf-training-treasure/0.1",
+      "content_policy": "commit_pinned_upstream_metadata_only"
+    },
+    {
+      "path": "data/proposal-index.jsonl",
+      "status": "generated",
+      "record_format": "kingdom.hf-proposal-index/0.1",
+      "content_policy": "compact_viewer_projection_only"
+    },
+    {
+      "path": "artifacts/proposals.jsonl",
+      "status": "generated",
+      "record_format": "kingdom.kg-proposal/0.1",
+      "content_policy": "reviewed_public_metadata_subjects_only"
+    },
+    {
+      "path": "README.md",
+      "status": "generated",
+      "record_format": "hugging-face-dataset-card",
+      "content_policy": "cite_arxiv_2502.06472v2_and_state_all_limits"
+    },
+    {
+      "path": "hash-manifest.json",
+      "status": "generated",
+      "record_format": "sha256-manifest",
+      "content_policy": "exact_export_bytes"
+    }
+  ],
+  "exclusions": {
+    "raw_chats": true,
+    "credentials": true,
+    "private_documents": true,
+    "participant_profiles": true,
+    "participant_score_rank_xp_or_trust_values": true,
+    "mutable_hub_revisions": true
+  },
+  "eligibility_gate": {
+    "implementation_status": "metadata_catalog_builder_implemented",
+    "requires_subject_visibility": "public",
+    "allowed_label_classes": [
+      "public_metadata",
+      "synthetic_metadata"
+    ],
+    "forbidden_label_classes": [
+      "local_metadata"
+    ],
+    "allowed_evidence_schemes": [
+      "sha256",
+      "hf_commit_and_file_sha256"
+    ],
+    "requires_independent_privacy_review": true,
+    "sha256_is_anonymization": false,
+    "sha256_authenticates_author": false
+  },
+  "effects": {
+    "llm_calls": 0,
+    "graph_writes": 0,
+    "remote_writes": 0,
+    "hf_uploads": 0,
+    "xp_changes": 0,
+    "reward_changes": 0
+  },
+  "publication": {
+    "ready": true,
+    "authorization_embedded_in_artifact": false,
+    "target_repo": "Yu-and-Ai/kingdom-dark-continent-karma",
+    "reason_codes": [
+      "explicit_external_authorization_required_for_each_publish",
+      "artifact_does_not_grant_account_authority"
+    ]
+  },
+  "space": {
+    "recommended_first_surface": "static_read_only_viewer",
+    "mcp_tools_if_separately_authorized": [
+      "list_proposals",
+      "show_provenance",
+      "compare_conflicts"
+    ],
+    "forbidden_tools": [
+      "award",
+      "authorize",
+      "coronate",
+      "merge",
+      "publish"
+    ]
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "_format": "kingdom-karma-design-source/v0.1",
+  "source_id": "karma-kg-2502.06472v2",
+  "relationship": "inspired_by",
+  "observed_on": "2026-07-31",
+  "paper": {
+    "id": "2502.06472v2",
+    "url": "https://arxiv.org/abs/2502.06472v2",
+    "hf_page": "https://huggingface.co/papers/2502.06472",
+    "hf_cache_revision_status": "stale_v1_observation",
+    "linked_hub_artifacts": "none_observed",
+    "hf_linked_models": 0,
+    "hf_linked_datasets": 0,
+    "hf_linked_spaces": 0
+  },
+  "roles": [
+    "central_controller",
+    "ingestion",
+    "reader",
+    "summarizer",
+    "entity_extraction",
+    "relationship_extraction",
+    "schema_alignment",
+    "conflict_resolution",
+    "evaluator"
+  ],
+  "implementation": {
+    "repository": "https://github.com/YuxingLu613/KARMA",
+    "design_revision": "4c41e59510f636fce0a033b793cc15dabc8ac897",
+    "observed_head": "23610bc2a93ddc9f75322a1234ae6f688f87bdff",
+    "license": "MIT",
+    "runtime_use": "not_imported_or_executed"
+  },
+  "limits": [
+    "The paper describes nine collaborative roles; the inspected implementation exposes eight sequential stage classes rather than that controller architecture.",
+    "The inspected implementation uses remote OpenAI-compatible calls and is not a dependency of this package.",
+    "Model confidence, clarity, relevance, or agent agreement do not verify a claim and cannot rank a being.",
+    "Hugging Face currently exposes the paper page, not a linked KARMA model, dataset, or Space."
+  ],
+  "authority": {
+    "is_truth_oracle": false,
+    "grants_permission": false,
+    "authorizes_publication": false,
+    "authorizes_execution": false,
+    "authorizes_crown": false
+  }
+}

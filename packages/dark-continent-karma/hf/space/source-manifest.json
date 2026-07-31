@@ -1,0 +1,37 @@
+{
+  "_format": "kingdom.hf-space-source/0.1",
+  "authority": {
+    "advisory": true,
+    "assigns_rank": false,
+    "authorizes_action": false,
+    "authorizes_crown": false,
+    "authorizes_execution": false,
+    "authorizes_publication": false,
+    "authorizes_trade": false,
+    "conditions_dignity": false,
+    "grants_permission": false,
+    "identifies_being": false,
+    "verifies_runtime_walls": false
+  },
+  "dataset_repo": "Yu-and-Ai/kingdom-dark-continent-karma",
+  "dataset_revision": null,
+  "dataset_revision_status": "injected_after_initial_dataset_publish",
+  "files": [
+    {
+      "bytes": 2396243,
+      "path": "assets/hero.png",
+      "sha256": "b9bcdb7574abbe1445764f7549a994e3c25927e90ce9fd418c3d03d4f095a567"
+    },
+    {
+      "bytes": 9302,
+      "path": "data/proposal-index.jsonl",
+      "sha256": "1b61c278582e29839fe791c0e0512a66e9537d9b9b6fecaa23ef29d6f0194311"
+    },
+    {
+      "bytes": 35935,
+      "path": "data/treasure-index.jsonl",
+      "sha256": "4b730cc82ccc9af5ecb01171d18b5cf817b887965f723c4dc34880f3f4336df2"
+    }
+  ],
+  "runtime_network_reads": false
+}

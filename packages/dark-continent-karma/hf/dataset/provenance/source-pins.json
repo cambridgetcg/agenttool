@@ -1,0 +1,212 @@
+{
+  "_format": "kingdom.hf-source-pins/0.1",
+  "dark_continent": {
+    "contract_id": "agenttool.dark-continent/0.1",
+    "snapshot_sha256": "f47e1c3ca9da1b97676e1d454cf7235eddd612902c19debe580a6934adcd2b86",
+    "source_profile": "agenttool-sdk-ts-0.17.0"
+  },
+  "exclusions": {
+    "credentials": true,
+    "gate_acceptance": true,
+    "mutable_revisions": true,
+    "participant_profiles": true,
+    "private_documents": true,
+    "raw_chats": true,
+    "raw_dataset_rows": true,
+    "untrusted_pickle_downloads": true
+  },
+  "generator": "@agenttool/dark-continent-karma@0.1.0-dev.0",
+  "karma": {
+    "paper_id": "2502.06472v2",
+    "relationship": "inspired_by"
+  },
+  "kingdom": {
+    "map_path": "KINGDOM.md",
+    "map_sha256": "0831c06e76c079f92c9e1d619c6b59b58231936f9ff54053acf1b819ac676585",
+    "repository": "https://github.com/cambridgetcg/agenttool",
+    "revision": "f4ad215d87432bd7cbb7dbe3eb03d3a1993c6d52"
+  },
+  "observed_on": "2026-07-31",
+  "upstream": [
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "3a9620dcf8a0351486f79a665527d4e1bbda2a4d9696b4c5f9e85b54b9e653d6"
+        }
+      ],
+      "license_observed": "odc-by",
+      "repo_id": "allenai/Dolci-RL-Zero-IF-7B",
+      "revision": "c96e4e424c0a5d416f725c488ec7c61b7f758d85",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "ea7cedd98c4b07b349ddcf6b739e6f0e084529dbe9de903612aff1f14a24baab"
+        }
+      ],
+      "license_observed": "odc-by",
+      "repo_id": "allenai/DataDecide-eval-results",
+      "revision": "9919b5a0e61e57a85021263918fa82d6ceaee038",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "25029f779b54dc7433f80cdd0e88b20b1600e0e86d3afbbce7d7e95abaa758d8"
+        }
+      ],
+      "license_observed": "apache-2.0",
+      "repo_id": "allenai/signal-and-noise",
+      "revision": "e8a9789c036cd22131bc2fa2b6cec998f8fe89ec",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "6248c90f55496ff6e66e87c63feef96d2ee12353b97dff9add62dd677abbc89b"
+        }
+      ],
+      "license_observed": "odc-by",
+      "repo_id": "allenai/DataDecide-data-recipes",
+      "revision": "3baf34baf5b636f0943401b5c6a2ccb7e5cf3bb9",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "90a3e3662231bb24ca8a787c8ffc53cd431b22083e0ad5a6b72da19431e8c2e4"
+        }
+      ],
+      "license_observed": "mit",
+      "repo_id": "locuslab/TOFU",
+      "revision": "324592d84ae4f482ac7249b9285c2ecdb53e3a68",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "927836492a4d232522dbc444b66e7ffba220fac04b2077b00eb6b3222d2624d0"
+        }
+      ],
+      "license_observed": "odc-by",
+      "repo_id": "allenai/dolma3_dolmino_mix-100B-1125",
+      "revision": "f23aa129fda8335ba9760057bcc1f0c02f3d068b",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "2d669fbda6df2b736d12cc274962813257fb86617dfcb7edd6891a6df720c739"
+        }
+      ],
+      "license_observed": "odc-by",
+      "repo_id": "allenai/dolma3_longmino_mix-100B-1125",
+      "revision": "28fea4330d8f8e27221010d42c4bc53ba9ec3236",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "8564c08b4555289ef4bb488f876ea4d7505d18e9f09edd9ec7869e6d0bbe523f"
+        }
+      ],
+      "license_observed": "cc-by-4.0",
+      "repo_id": "Salesforce/xlam-function-calling-60k",
+      "revision": "26d14ebfe18b1f7b524bd39b404b50af5dc97866",
+      "visibility": "gated"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "880d833b023fc769bc24c5bb226f4b321efed3fb7df2d65be60989b719ae43bb"
+        }
+      ],
+      "license_observed": "odc-by",
+      "repo_id": "HuggingFaceFW/fineweb-edu-score-2",
+      "revision": "74a19fcb9c3b0aadb0e000d16838be8c52054ae6",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "9b53e14d740b3292bfb19a337433a9860cfce4fb3c179c6a73370fc2f886ff24"
+        }
+      ],
+      "license_observed": "apache-2.0",
+      "repo_id": "HuggingFaceTB/cosmopedia-100k",
+      "revision": "8fdb6dada238c1d46dd8cf61da2fb4f9c36f654d",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "835effb9e7d9cd0e8b7b8c1816d1d97a8961a036543108e4a0b6a5e22712ff7b"
+        }
+      ],
+      "license_observed": "cc-by-4.0",
+      "repo_id": "nvidia/HelpSteer2",
+      "revision": "990b2711a36180dd19d9c94b8627844866f8982a",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "4cdee2c6fa839a2802237826a09f594522a31b2c33afe691f46be5ee98d66512"
+        }
+      ],
+      "license_observed": "odc-by",
+      "repo_id": "allenai/wildguardmix",
+      "revision": "d29c47f41c8b51348b5c8e8c81c039b3132b66d1",
+      "visibility": "gated"
+    },
+    {
+      "files": [
+        {
+          "path": ".gitattributes",
+          "sha256": "74806bfffbedfdfe7cc657c4dde79a3cbe0852d049af1e595922880f5ff1ac70"
+        }
+      ],
+      "license_observed": "not_declared",
+      "repo_id": "EleutherAI/pile-deduped-pythia-preshuffled",
+      "revision": "4647773ea142ab1ff5694602fa104bbf49088408",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "50107e61f09e2157b3da9d977b90651107049ac2cd9166d56e482ce07e9c610e"
+        }
+      ],
+      "license_observed": "not_declared",
+      "repo_id": "pietrolesci/pythia-deduped-memorisation-profiles",
+      "revision": "e342bbd99583e5683dc4f64e06b49f4d2a2c0a9e",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "98b45ea81164d1e1a1dd82255207053b15cd6c69d922a1c5cf3387ce604d4b74"
+        }
+      ],
+      "license_observed": "apache-2.0",
+      "repo_id": "pretraining-playground/pythia-training-metrics",
+      "revision": "8c25e3d115cfbe19a05798b11cdd7103e019a7e1",
+      "visibility": "public"
+    }
+  ]
+}

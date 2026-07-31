@@ -11,6 +11,8 @@ on:
           - adds
           - data
           - data-sync
+          - dark-continent-contract
+          - dark-continent-karma
           - credential-broker
           - sdk
           - wallet

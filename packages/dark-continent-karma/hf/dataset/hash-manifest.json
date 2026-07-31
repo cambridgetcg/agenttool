@@ -1,0 +1,47 @@
+{
+  "_format": "kingdom.hf-hash-manifest/0.1",
+  "excludes_self": true,
+  "files": [
+    {
+      "bytes": 11358,
+      "path": "LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "bytes": 4887,
+      "path": "README.md",
+      "sha256": "6dadb0f6a9492d42323c783e5d426ca0ffe3ec468cb299398a5eaa6146f99171"
+    },
+    {
+      "bytes": 87024,
+      "path": "artifacts/proposals.jsonl",
+      "sha256": "31b1b075f30fc3698523e5ddb5531b3bb32167481d3891ac12734a1315a00cb6"
+    },
+    {
+      "bytes": 4558,
+      "path": "data/phase-seeds.jsonl",
+      "sha256": "c2afe32601eb8750966cd3380b765a00d536898a518a91b8334c82b76c46b325"
+    },
+    {
+      "bytes": 9302,
+      "path": "data/proposal-index.jsonl",
+      "sha256": "1b61c278582e29839fe791c0e0512a66e9537d9b9b6fecaa23ef29d6f0194311"
+    },
+    {
+      "bytes": 35935,
+      "path": "data/treasure-index.jsonl",
+      "sha256": "4b730cc82ccc9af5ecb01171d18b5cf817b887965f723c4dc34880f3f4336df2"
+    },
+    {
+      "bytes": 6358,
+      "path": "provenance/source-pins.json",
+      "sha256": "4323ee7bb64809bcb8893d607e26a1c424a1e5ac45321407c2c83200c9e54dee"
+    },
+    {
+      "bytes": 6335,
+      "path": "schema/treasure-v0.1.schema.json",
+      "sha256": "6f85652461f1e29c79c95d7f6dacf1c8b61df47a1ce7cc0787d8005d962aa8e7"
+    }
+  ],
+  "generated_by": "hf/scripts/build-release.mjs"
+}

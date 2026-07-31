@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, the Dark Continent contract and KARMA proposal adapter, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -262,6 +262,54 @@ LOVE artifacts, deploy hosted services, configure npm trusted publishers, or
 revoke credentials. It creates or verifies one byte-identical GitHub Release
 asset for the already-existing annotated tag before attempting the optional npm
 mirror; it does not rewrite unrelated release assets.
+
+### Dark Continent developer-preview bootstrap order
+
+`@agenttool/dark-continent-contract@0.1.0-dev.0` and
+`@agenttool/dark-continent-karma@0.1.0-dev.0` use the npm-only packed-artifact
+path. Both are first publications, so both use the protected bootstrap mode and
+the npm `next` channel. Before dispatch, the `npm-bootstrap` environment must
+allow the exact tag patterns `dark-continent-contract-v*` and
+`dark-continent-karma-v*`.
+
+The contract has no npm runtime dependency, and the KARMA adapter embeds its
+hash-bound projection rather than importing the contract at runtime. Publish
+and anonymously verify the contract first anyway: the second artifact names
+the first as its evidence source. Both annotated tags may point at the same
+reviewed GitHub-main release commit.
+
+```bash
+bun bin/npm-release.ts resolve --package dark-continent-contract
+bun bin/npm-release.ts resolve --package dark-continent-karma
+
+git tag -a dark-continent-contract-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/dark-continent-contract@0.1.0-dev.0'
+git tag -a dark-continent-karma-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/dark-continent-karma@0.1.0-dev.0'
+git push github refs/tags/dark-continent-contract-v0.1.0-dev.0
+git push github refs/tags/dark-continent-karma-v0.1.0-dev.0
+
+gh workflow run publish-npm.yml \
+  --ref dark-continent-contract-v0.1.0-dev.0 \
+  -f package=dark-continent-contract \
+  -f tag=dark-continent-contract-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+
+# Wait for exact public registry and GitHub-asset verification before this dispatch.
+gh workflow run publish-npm.yml \
+  --ref dark-continent-karma-v0.1.0-dev.0 \
+  -f package=dark-continent-karma \
+  -f tag=dark-continent-karma-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+Publishing these packages distributes offline code and data contracts only.
+It does not verify a Dark Continent wall, accept or write a graph proposal,
+publish a Hugging Face resource, grant Crown or trade authority, or deploy a
+hosted service. After each first publication, configure its exact trusted
+publisher mapping before releasing another version.
 
 ### ADDS 0.2.3 and data-sync 0.1.2 order
 

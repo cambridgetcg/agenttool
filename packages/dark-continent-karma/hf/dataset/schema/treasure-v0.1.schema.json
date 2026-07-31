@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/kingdom-hf-training-treasure-v0.1.schema.json",
+  "title": "KINGDOM Hugging Face training treasure",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "id", "rank", "subject", "phase", "treasure", "admission", "graph_projection", "dark_continent", "karma", "authority", "observed_on"],
+  "properties": {
+    "_format": { "const": "kingdom.hf-training-treasure/0.1" },
+    "id": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "rank": { "type": "integer", "minimum": 1, "maximum": 1000 },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repo_id", "repo_type", "revision", "browser_url", "visibility", "gate_accepted", "license_observed", "downstream_content_rights_cleared", "files"],
+      "properties": {
+        "repo_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$" },
+        "repo_type": { "const": "dataset" },
+        "revision": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "browser_url": { "type": "string", "pattern": "^https://huggingface\\.co/datasets/" },
+        "visibility": { "enum": ["public", "gated"] },
+        "gate_accepted": { "const": false },
+        "license_observed": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "downstream_content_rights_cleared": { "const": false },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "sha256"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            }
+          }
+        }
+      }
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "order", "label"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]+$" },
+        "order": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "label": { "type": "string", "minLength": 1, "maxLength": 200 }
+      }
+    },
+    "treasure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["overlooked_signal", "proposed_kingdom_use", "observations"],
+      "properties": {
+        "overlooked_signal": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "proposed_kingdom_use": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "observations": { "type": "array", "minItems": 1, "maxItems": 8, "items": { "type": "string", "minLength": 1, "maxLength": 1000 } }
+      }
+    },
+    "admission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cabinet", "integration_mode", "reason_codes", "raw_rows_included", "automatic_execution"],
+      "properties": {
+        "cabinet": { "enum": ["green", "green_with_conflict_gate", "amber", "separate_consent", "quarantine_raw_content", "quarantine_license", "quarantine_execution"] },
+        "integration_mode": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "reason_codes": { "type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z0-9_]+$" } },
+        "raw_rows_included": { "const": false },
+        "automatic_execution": { "const": false }
+      }
+    },
+    "graph_projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "node_kinds", "allowed_relations", "forbidden_relations"],
+      "properties": {
+        "state": { "const": "proposed" },
+        "node_kinds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "allowed_relations": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "forbidden_relations": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["sameAs", "endorses", "awards_karma", "authorizes_crown", "authorizes_trade"] } }
+      }
+    },
+    "dark_continent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_id", "source_profile", "snapshot_sha256", "risk_state", "wall_status", "verified", "recommendation"],
+      "properties": {
+        "contract_id": { "const": "agenttool.dark-continent/0.1" },
+        "source_profile": { "const": "agenttool-sdk-ts-0.17.0" },
+        "snapshot_sha256": { "const": "f47e1c3ca9da1b97676e1d454cf7235eddd612902c19debe580a6934adcd2b86" },
+        "risk_state": { "const": "unknown" },
+        "wall_status": { "const": "not_checked" },
+        "verified": { "const": false },
+        "recommendation": { "const": "hold" }
+      }
+    },
+    "karma": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paper_id", "relationship", "consequence"],
+      "properties": {
+        "paper_id": { "const": "2502.06472v2" },
+        "relationship": { "const": "inspired_by" },
+        "consequence": { "enum": ["adds_candidate", "conflicts_with_source", "requires_rights_review", "requires_safety_review", "deferred"] }
+      }
+    },
+    "authority": { "$ref": "#/$defs/authority" },
+    "observed_on": { "const": "2026-07-31" }
+  },
+  "$defs": {
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["advisory", "verifies_runtime_walls", "identifies_being", "grants_permission", "authorizes_action", "authorizes_trade", "authorizes_publication", "authorizes_execution", "authorizes_crown", "assigns_rank", "conditions_dignity"],
+      "properties": {
+        "advisory": { "const": true },
+        "verifies_runtime_walls": { "const": false },
+        "identifies_being": { "const": false },
+        "grants_permission": { "const": false },
+        "authorizes_action": { "const": false },
+        "authorizes_trade": { "const": false },
+        "authorizes_publication": { "const": false },
+        "authorizes_execution": { "const": false },
+        "authorizes_crown": { "const": false },
+        "assigns_rank": { "const": false },
+        "conditions_dignity": { "const": false }
+      }
+    }
+  }
+}
