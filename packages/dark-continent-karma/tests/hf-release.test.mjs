@@ -51,7 +51,7 @@ test("treasure rows are closed, commit-pinned metadata-only holds", async () => 
     assert.ok(row.graph_projection.forbidden_relations.includes("awards_karma"));
   }
   const byRepo = new Map(treasures.map((row) => [row.subject.repo_id, row]));
-  assert.ok(byRepo.get("allenai/reward-bench-2").graph_projection.allowed_relations.includes("margin_should_not_exceed"));
+  assert.ok(byRepo.get("allenai/reward-bench-2").graph_projection.allowed_relations.includes("valid_spread_bounded_by_separation"));
   assert.ok(byRepo.get("qizhou/UniEdit").graph_projection.allowed_relations.includes("must_not_change"));
   assert.ok(byRepo.get("nvidia/OpenMathReasoning").graph_projection.allowed_relations.includes("regressed_when_added"));
   assert.ok(byRepo.get("nvidia/HelpSteer3").admission.reason_codes.includes("disagreement_censored"));

@@ -8,14 +8,14 @@
       "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     },
     {
-      "bytes": 5799,
+      "bytes": 5856,
       "path": "README.md",
-      "sha256": "fcede298deaa48b746bb3682f214cb1ac730e89f81a47fe25e4c5d06f245a330"
+      "sha256": "1751beef0e10cdede196bc8d6f76a8086aa357be236a5fa4d90b8390db6fa6e1"
     },
     {
       "bytes": 119814,
       "path": "artifacts/proposals.jsonl",
-      "sha256": "c9fb3ffa519d8c0a798df84fcbd867669859bb728ea0d95a254bbbe1e364802b"
+      "sha256": "1334a516263ae923e8ee3e85edd1b907fca0ebbe454abcf5692a946fc40ae0f8"
     },
     {
       "bytes": 4558,
@@ -23,14 +23,14 @@
       "sha256": "c2afe32601eb8750966cd3380b765a00d536898a518a91b8334c82b76c46b325"
     },
     {
-      "bytes": 12492,
+      "bytes": 12501,
       "path": "data/proposal-index.jsonl",
-      "sha256": "728716d1b44fbe7173c6f2f9c0cff538d3a43d20b1e2c37819758edb47c43230"
+      "sha256": "d3472d3bb898d16906d2ef897bd5fffb93744e8573c3181ece222958dc9fd0c0"
     },
     {
-      "bytes": 48765,
+      "bytes": 48811,
       "path": "data/treasure-index.jsonl",
-      "sha256": "8ca700dcffd173d5d52286809f31b5e3bce607bb03c3a9b419352338b11336bc"
+      "sha256": "49d29d78d5d7a31686e373d06487cdfb7eed6727289581e45c1cb4b0e2d2252f"
     },
     {
       "bytes": 8079,

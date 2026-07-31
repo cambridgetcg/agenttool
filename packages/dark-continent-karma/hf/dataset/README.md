@@ -63,8 +63,9 @@ unquestionable truth.
 
 A second seam adds five 2025–2026 mechanisms without copying their rows:
 
-- RewardBench2's 102 ties cases become an explicit do-not-invent-a-margin
-  boundary for equally acceptable answers.
+- RewardBench2's 102 ties cases encode that valid-answer spread should remain
+  below correct-versus-incorrect separation, without turning the score into
+  participant rank.
 - UniEdit separates counterfactual facts that should change from locality
   neighbors that must not change.
 - OpenMathReasoning records a negative curriculum result: a recovered
