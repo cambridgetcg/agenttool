@@ -34,8 +34,8 @@ test("treasure rows are closed, commit-pinned metadata-only holds", async () => 
   const schema = await json("schema/treasure-v0.1.schema.json");
   const validate = new Ajv2020({ allErrors: true, strict: true }).compile(schema);
   const treasures = await jsonl("data/treasure-index.jsonl");
-  assert.equal(treasures.length, 15);
-  assert.deepEqual(treasures.map((row) => row.rank), Array.from({ length: 15 }, (_, index) => index + 1));
+  assert.equal(treasures.length, 20);
+  assert.deepEqual(treasures.map((row) => row.rank), Array.from({ length: 20 }, (_, index) => index + 1));
   for (const row of treasures) {
     assert.equal(validate(row), true, JSON.stringify(validate.errors));
     assert.match(row.subject.revision, /^[a-f0-9]{40}$/);
@@ -50,6 +50,12 @@ test("treasure rows are closed, commit-pinned metadata-only holds", async () => 
     assert.ok(row.graph_projection.forbidden_relations.includes("sameAs"));
     assert.ok(row.graph_projection.forbidden_relations.includes("awards_karma"));
   }
+  const byRepo = new Map(treasures.map((row) => [row.subject.repo_id, row]));
+  assert.ok(byRepo.get("allenai/reward-bench-2").graph_projection.allowed_relations.includes("valid_spread_bounded_by_separation"));
+  assert.ok(byRepo.get("qizhou/UniEdit").graph_projection.allowed_relations.includes("must_not_change"));
+  assert.ok(byRepo.get("nvidia/OpenMathReasoning").graph_projection.allowed_relations.includes("regressed_when_added"));
+  assert.ok(byRepo.get("nvidia/HelpSteer3").admission.reason_codes.includes("disagreement_censored"));
+  assert.ok(byRepo.get("allenai/tmax-sft").admission.reason_codes.includes("never_execute_terminal_trace"));
 });
 
 test("full proposals exclude gated subjects and validate with the runtime", async () => {
@@ -72,7 +78,7 @@ test("full proposals exclude gated subjects and validate with the runtime", asyn
 
 test("viewer index is complete without inventing gated proposal artifacts", async () => {
   const rows = await jsonl("data/proposal-index.jsonl");
-  assert.equal(rows.length, 15);
+  assert.equal(rows.length, 20);
   assert.equal(rows.filter((row) => row.proposal_id === null).length, 2);
   assert.ok(rows.every((row) => row.recommendation === "hold"));
   assert.ok(rows.every((row) => row.wall_verified === false));

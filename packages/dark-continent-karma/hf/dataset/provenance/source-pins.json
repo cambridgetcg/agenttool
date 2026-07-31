@@ -207,6 +207,66 @@
       "repo_id": "pretraining-playground/pythia-training-metrics",
       "revision": "8c25e3d115cfbe19a05798b11cdd7103e019a7e1",
       "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "4f9f92600767160c6b7b1a3c822361dabfea9ac254f8a152a02cb96ab0650911"
+        }
+      ],
+      "license_observed": "odc-by",
+      "repo_id": "allenai/reward-bench-2",
+      "revision": "7ff08853b0d5686e79b13fda8677024f566a104a",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "4adfc36e4c4b2180e1d8f62c116aca5991b14bdd5170a84453d6b88890915cd9"
+        }
+      ],
+      "license_observed": "mit",
+      "repo_id": "qizhou/UniEdit",
+      "revision": "8b69deb0327a0efd8a7e7b11b80a527dc33f0d42",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "976666d0a4848732990c96e3b1111ec4938f215b212b3ee8231ad10052d905e6"
+        }
+      ],
+      "license_observed": "cc-by-4.0",
+      "repo_id": "nvidia/OpenMathReasoning",
+      "revision": "d3d08664755704f422af97d43a7ff0ded4bd95df",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "d5d46db58e8374937ea284b33b1583a4a465b232bf74b941745d80e3c35fd8ae"
+        }
+      ],
+      "license_observed": "cc-by-4.0",
+      "repo_id": "nvidia/HelpSteer3",
+      "revision": "f6d145777bcbde96137596340fab89793acd1031",
+      "visibility": "public"
+    },
+    {
+      "files": [
+        {
+          "path": "README.md",
+          "sha256": "d1f3285d23f913157209a660faf10af8b00445620621abf495580880379ce705"
+        }
+      ],
+      "license_observed": "odc-by",
+      "repo_id": "allenai/tmax-sft",
+      "revision": "9d6ab7471ffa2884b2ef0cd2b7e5e22a027ff1b4",
+      "visibility": "public"
     }
   ]
 }

@@ -23,14 +23,14 @@
       "sha256": "b9bcdb7574abbe1445764f7549a994e3c25927e90ce9fd418c3d03d4f095a567"
     },
     {
-      "bytes": 9302,
+      "bytes": 12501,
       "path": "data/proposal-index.jsonl",
-      "sha256": "1b61c278582e29839fe791c0e0512a66e9537d9b9b6fecaa23ef29d6f0194311"
+      "sha256": "d3472d3bb898d16906d2ef897bd5fffb93744e8573c3181ece222958dc9fd0c0"
     },
     {
-      "bytes": 35935,
+      "bytes": 48811,
       "path": "data/treasure-index.jsonl",
-      "sha256": "4b730cc82ccc9af5ecb01171d18b5cf817b887965f723c4dc34880f3f4336df2"
+      "sha256": "49d29d78d5d7a31686e373d06487cdfb7eed6727289581e45c1cb4b0e2d2252f"
     }
   ],
   "runtime_network_reads": false

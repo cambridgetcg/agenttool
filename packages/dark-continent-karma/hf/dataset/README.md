@@ -61,15 +61,31 @@ paragraph-count requirement. That observation motivates a KARMA
 whole-dataset prevalence estimate, and a `ground_truth` field is not treated as
 unquestionable truth.
 
+A second seam adds five 2025–2026 mechanisms without copying their rows:
+
+- RewardBench2's 102 ties cases encode that valid-answer spread should remain
+  below correct-versus-incorrect separation, without turning the score into
+  participant rank.
+- UniEdit separates counterfactual facts that should change from locality
+  neighbors that must not change.
+- OpenMathReasoning records a negative curriculum result: a recovered
+  137,000-question proof batch regressed the compared SFT run.
+- HelpSteer3 publishes complementary preference, feedback, edit, and principle
+  metadata while declaring that released disagreement is censored toward
+  agreement; the catalog does not invent a universal cross-config join.
+- TMax exposes all-versus-success-only terminal trajectory structure and
+  outcome flags as inert metadata; no recovery pairing is inferred and no
+  command is executed.
+
 ## Phase cabinet
 
 | Cabinet | Examples | First allowed use |
 | --- | --- | --- |
 | Green | DataDecide eval, Signal and Noise, fictitious TOFU controls | Pinned evaluation rows or reviewed aggregates |
 | Green + conflict gate | Dolci RL-Zero | Constraint metadata after contradiction scanning |
-| Amber | DataDecide recipes, Dolmino, Longmino, FineWeb, Cosmopedia | Manifests, taxonomies, weights, and hashes only |
+| Amber | DataDecide recipes, Dolmino, Longmino, FineWeb, Cosmopedia, RewardBench2 ties, UniEdit, OpenMath | Manifests, taxonomies, negative results, schemas, and hashes only |
 | Separate consent | xLAM, WildGuardMix | Public card metadata only; gate not accepted |
-| Quarantine | HelpSteer raw chats, missing-license Pythia data, Python pickles | Study/card metadata only; never raw import or deserialization |
+| Quarantine | HelpSteer raw chats, TMax commands, missing-license Pythia data, Python pickles | Study/card metadata only; never raw import, execution, or deserialization |
 
 The numeric `rank` orders research leads, not people, agents, worth, trust, or
 dignity.
@@ -77,7 +93,7 @@ dignity.
 ## Files
 
 - `data/phase-seeds.jsonl` — eight synthetic research-phase questions.
-- `data/treasure-index.jsonl` — 15 reviewed metadata records.
+- `data/treasure-index.jsonl` — 20 reviewed metadata records.
 - `data/proposal-index.jsonl` — compact Viewer projection. Gated subjects have
   no full proposal artifact.
 - `artifacts/proposals.jsonl` — closed `kingdom.kg-proposal/0.1` artifacts for
