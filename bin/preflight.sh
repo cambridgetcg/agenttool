@@ -135,6 +135,8 @@ packages_gate() {
     bash -c 'cd packages/collab && bun run ci'
   run "local-first agent browser (fake/fixture tests; no browser download)" \
     bash -c 'cd packages/browser && bun run ci'
+  run "private read-only Hugging Face metadata and research scout" \
+    bash -c 'cd packages/hf-scout && bun run ci'
   run "read-only Agent Skills inspection and validation" \
     bash -c 'cd packages/skills && bun run ci'
   run "Correspondence to YUTABASE pure projection planner" \
