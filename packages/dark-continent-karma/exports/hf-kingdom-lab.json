@@ -1,0 +1,105 @@
+{
+  "_format": "kingdom-hf-karma-export-profile/v0.1",
+  "profile_id": "dark-continent-karma-hf-local-v0.1",
+  "profile_kind": "plan_not_exporter_or_sanitizer",
+  "observed_on": "2026-07-31",
+  "intended_consumers": [
+    "artbitrage",
+    "hf-kingdom-lab",
+    "kingdom-extension"
+  ],
+  "source_pins": {
+    "proposal_format": "kingdom.kg-proposal/0.1",
+    "dark_continent_contract": "agenttool.dark-continent/0.1",
+    "dark_continent_snapshot_sha256": "66e8d33cf7ce945ed5c3c43c4e0bc2e6d5f8ac0086e86867266ff1090db0dc5b",
+    "karma_paper": "2502.06472v2",
+    "kingdom_revision": "f4ad215d87432bd7cbb7dbe3eb03d3a1993c6d52",
+    "kingdom_map_crown_status": "arriving_in_review",
+    "kingdom_live_claim": false
+  },
+  "dataset_files": [
+    {
+      "path": "proposals.jsonl",
+      "status": "planned",
+      "record_format": "kingdom.kg-proposal/0.1",
+      "content_policy": "synthetic_or_independently_reviewed_proposals_only"
+    },
+    {
+      "path": "events.jsonl",
+      "status": "planned",
+      "record_format": "not_defined",
+      "planned_contract_hint": "kingdom.kg-proposal-event/v0.1",
+      "content_policy": "hash_chained_consequence_and_review_events_only"
+    },
+    {
+      "path": "README.md",
+      "status": "planned",
+      "record_format": "hugging-face-dataset-card",
+      "content_policy": "cite_arxiv_2502.06472v2_and_state_all_limits"
+    },
+    {
+      "path": "hash-manifest.json",
+      "status": "planned",
+      "record_format": "sha256-manifest",
+      "content_policy": "exact_export_bytes"
+    }
+  ],
+  "exclusions": {
+    "raw_chats": true,
+    "credentials": true,
+    "private_documents": true,
+    "participant_profiles": true,
+    "participant_score_rank_xp_or_trust_values": true,
+    "mutable_hub_revisions": true
+  },
+  "eligibility_gate": {
+    "implementation_status": "not_implemented",
+    "requires_subject_visibility": "public",
+    "allowed_label_classes": [
+      "public_metadata",
+      "synthetic_metadata"
+    ],
+    "forbidden_label_classes": [
+      "local_metadata"
+    ],
+    "allowed_evidence_schemes": [
+      "sha256",
+      "hf_commit_and_file_sha256"
+    ],
+    "requires_independent_privacy_review": true,
+    "sha256_is_anonymization": false,
+    "sha256_authenticates_author": false
+  },
+  "effects": {
+    "llm_calls": 0,
+    "graph_writes": 0,
+    "remote_writes": 0,
+    "hf_uploads": 0,
+    "xp_changes": 0,
+    "reward_changes": 0
+  },
+  "publication": {
+    "ready": false,
+    "authorized": false,
+    "reason_codes": [
+      "private_unlicensed_package",
+      "exporter_and_sanitizer_not_implemented",
+      "explicit_publication_authorization_required"
+    ]
+  },
+  "space": {
+    "recommended_first_surface": "static_read_only_viewer",
+    "mcp_tools_if_separately_authorized": [
+      "list_proposals",
+      "show_provenance",
+      "compare_conflicts"
+    ],
+    "forbidden_tools": [
+      "award",
+      "authorize",
+      "coronate",
+      "merge",
+      "publish"
+    ]
+  }
+}
