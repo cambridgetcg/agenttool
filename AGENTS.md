@@ -47,7 +47,8 @@ transport (`packages/alchemy-agentcred/`), pure explicit-input KINGDOM
 project-card, registry, and
 XENIA Surface helpers (`packages/kingdom/`), a read-only portable Agent Skills
 inspector (`packages/skills/`), a local-first
-agent browser (`packages/browser/`), and three static apps
+agent browser (`packages/browser/`), a private read-only Hugging Face metadata,
+provenance, and phase-aware research scout (`packages/hf-scout/`), and three static apps
 (`apps/`). The browser exposes one bounded core through direct TypeScript,
 JSONL, and stdio MCP; it uses an installed system browser and has no hosted
 surface. Its current `@agenttool/browser@0.6.0` release is one exact LOVE
@@ -133,6 +134,7 @@ cd packages/credential-broker && bun install   # experimental agentcred/0.1 loca
 cd packages/collab && bun install              # public 0.3: collab/0.1 compatibility + 0.2 coordination + session/0.1 presence
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
 cd packages/browser && bun install             # public 0.5 local-first agent browser package
+cd packages/hf-scout && bun install            # private metadata-only HF research scout
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
 cd packages/correspondence-yutabase-projector && bun run setup:local # builds local planner dependency first
 cd packages/constructive-intelligence && bun install # unfunded local receipt ledger; no hosted route
@@ -227,6 +229,11 @@ cd packages/browser
 bun run ci                                     # typecheck + fake/fixture tests + build + import smoke + package boundary
 npm pack --dry-run --ignore-scripts            # does not publish, install, or download a browser
 
+# Private read-only Hugging Face scout ──────────────────────────────
+cd packages/hf-scout
+bun run ci                                     # metadata transport + provenance + canonical pinned research leads
+npm pack --dry-run --ignore-scripts            # inventory only; does not publish, download, infer, or upload
+
 # Correspondence → YUTABASE projection planner ───────────────────────
 cd packages/correspondence-yutabase
 bun run ci                                     # typecheck + vectors + build + Node smoke
@@ -311,7 +318,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + Dark Continent + broker + collab + Browser + projection + constructive intelligence + Skills + SDK + Wallet + Telescope + Alchemy + AgentCred adapter + KINGDOM
+bin/preflight.sh packages                      # data + ADDS + sync + Dark Continent + broker + collab + Browser + HF Scout + projection + constructive intelligence + Skills + SDK + Wallet + Telescope + Alchemy + AgentCred adapter + KINGDOM
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -393,7 +400,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,repo-archive,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,hf-scout,repo-archive,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -453,6 +460,7 @@ source boundary by itself.
 | How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
 | How can a Zerone constructive-intelligence quest collect typed evidence without activating rewards? | `packages/constructive-intelligence/README.md` (`@agenttool/constructive-intelligence`; local tree pin, content-addressed receipts, append-only SQLite replay ledger, and E0–E6 shadow report; no hosted route, money, qualification, permission, or authority) |
 | How can an agent record a bounded local trial, correlate declared boundary labels, and project minimized evidence to HF STS without uploading it? | [`docs/AGENT-TRIALS.md`](docs/AGENT-TRIALS.md) · `packages/trials/` (`@agenttool/trials`; private source-only deterministic evidence, no executor, browser, journal crawler, HF client, credentials, network, release, or hosted route) |
+| How can an agent inspect exact Hugging Face repository metadata and bind phase-aware research leads without downloading or executing them? | `packages/hf-scout/README.md` (`@agenttool/hf-scout`; private source-only metadata/provenance scout with 15 pinned leads, no ambient credentials, file/card/row download, gate acceptance, inference, execution, write, npm release, or hosted route) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.3.1`; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 31 local MCP tools for Codex/Claude/Hermes, not a hosted lock or private model channel) |
 | How can explicit KINGDOM project cards become deterministic registries and conservative XENIA Surface manifests? | `packages/kingdom/README.md` (`@agenttool/kingdom`; pure library APIs and a one-file read-only CLI; declarations only, with no ambient discovery, authority, or conformance certification) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.3.0`; public npm read-only inspector plus an instruction-only AgentCred lifecycle skill whose local controller mutations require explicit invocation and separate authorization; installation alone activates neither) |

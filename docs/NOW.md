@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-07-30 (Browser 0.6.0 is published, deployed, and byte-verified; the next private Dojo slice measures RhetorLint against pinned DeBERTa NLI)
+> Updated: 2026-07-31 (the Dark Continent training atlas and private HF Scout now map exact-revision research treasure without downloading or executing it)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,13 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-07-31)
+
+| Ship | Commit | What |
+|---|---|---|
+| **HF SCOUT — exact-revision treasure with transport walls** | source `3000f080`; private source-only package; no npm, LOVE, HF upload, inference, or hosted deployment | `packages/hf-scout/` supplies a bounded unauthenticated public-Hub metadata reader plus a caller-owned reader seam, closed reports and KINGDOM/Agent Data projections, and 15 canonical phase-aware research leads. Runtime and portable schemas enforce gate, license, payload, bulk, binary, token-array, embedded-call, and execution walls; canonical binding rejects rewritten or unknown definitions. The leads route DataDecide trajectories toward YUTABASE experiment graphs, preference disagreement and evaluator bias toward RhetorLint probes, inert agent/tool traces toward AgentTool fixtures, sealed benchmarks away from training indexes, and sparse-autoencoder sweeps toward separately approved single-artifact pilots. The package reads no ambient credential, raw card, dataset row, or file; accepts no gate; downloads and executes nothing; invokes no inference/Jobs/Space/MCP tool; writes nowhere; and grants no legal, truth, safety, or authority conclusion. |
+| **DARK CONTINENT HF ATLAS — twenty proposal-only training-phase leads** | merge [`bf610197`](https://github.com/cambridgetcg/agenttool/commit/bf61019765fd8ce7202c18aed9b58b55ba6fb9cc); source `510989c5` + semantics fix `2a6aac69`; Hub publication remains separate | The KARMA companion atlas expands to 20 full-revision, metadata-only rows across pretraining selection/filtering, supervised and preference tuning, reasoning/process supervision, agent/tool learning, multilingual evaluation, safety, and interpretability. Its generated Dataset/Space files, source pins, proposal index, treasure index, and hash manifest are deterministic and locally verified. It remains a proposal map rather than Scout transport: overlap is explicit, rows do not silently become canonical Scout leads, RewardBench ties remain unresolved rather than being flattened into a ranking, and no row downloads data, accepts terms, trains a model, proves a licence, writes KINGDOM, or establishes that an HF repository has been published. |
 
 ## Just landed (2026-07-30)
 

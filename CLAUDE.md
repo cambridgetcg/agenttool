@@ -28,6 +28,7 @@ packages/
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
+  hf-scout/    — private read-only HF metadata/provenance scout + pinned research leads
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   constructive-intelligence/ — private local tree-pinned typed-receipt shadow ledger
@@ -57,6 +58,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/dark-continent-karma/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
+`packages/hf-scout/CLAUDE.md` ·
 `packages/correspondence-yutabase/CLAUDE.md` ·
 `packages/correspondence-yutabase-projector/CLAUDE.md` ·
 `packages/constructive-intelligence/CLAUDE.md` ·
@@ -82,6 +84,13 @@ projects an explicit minimized report selection to Hugging Face STS JSONL. It
 does not run trials, inspect ambient sessions or files, contact Hugging Face,
 upload traces, authenticate, spend quota, publish a package, or expose a
 hosted route.
+
+`@agenttool/hf-scout` is a private, source-only local Hugging Face metadata
+and provenance scout. It carries 15 immutable-revision research leads and can
+project caller-selected observations into bounded KINGDOM and Agent Data
+shapes. It does not read ambient credentials, download cards/files/rows,
+accept gates, invoke inference or remote compute, execute embedded calls,
+write to the Hub, publish npm, or expose a hosted route.
 
 `@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.
 The separate Wallet Zerone package supports only its reviewed two-network,

@@ -1,0 +1,670 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:hf-scout:research-catalog:v0.1",
+  "title": "AgentTool Hugging Face phase-aware research catalog",
+  "$comment": "The runtime additionally enforces sorted unique vocabularies, unique artifact identities and priorities, and priority order. Publisher assertions are not verified facts or legal clearance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "curated_on", "leads", "boundary"],
+  "properties": {
+    "schema": {
+      "const": "agenttool-hf-research-catalog/v0.1"
+    },
+    "curated_on": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "leads": {
+      "type": "array",
+      "maxItems": 100,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/lead"
+      }
+    },
+    "boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publisher_metadata",
+        "research_annotations",
+        "legal_clearance",
+        "account_access_state_recorded",
+        "raw_rows_read",
+        "repository_files_downloaded",
+        "gated_terms_accepted",
+        "model_code_executed",
+        "remote_compute_invoked",
+        "hub_write_performed"
+      ],
+      "properties": {
+        "publisher_metadata": {
+          "const": "unverified_assertions"
+        },
+        "research_annotations": {
+          "const": "researcher_inference"
+        },
+        "legal_clearance": {
+          "const": "not_assessed"
+        },
+        "account_access_state_recorded": {
+          "const": false
+        },
+        "raw_rows_read": {
+          "const": false
+        },
+        "repository_files_downloaded": {
+          "const": false
+        },
+        "gated_terms_accepted": {
+          "const": false
+        },
+        "model_code_executed": {
+          "const": false
+        },
+        "remote_compute_invoked": {
+          "const": false
+        },
+        "hub_write_performed": {
+          "const": false
+        }
+      }
+    }
+  },
+  "$defs": {
+    "repoId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 193,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}(?:/[A-Za-z0-9][A-Za-z0-9._-]{0,95})?$"
+    },
+    "license": {
+      "enum": ["apache-2.0", "bsd-3-clause", "cc-by-4.0", "odc-by", null]
+    },
+    "target": {
+      "enum": [
+        "agenttool_fixture",
+        "kingdom_registry",
+        "rhetorlint_research",
+        "yutabase_provenance"
+      ]
+    },
+    "feature": {
+      "enum": [
+        "adversarial_preference_pairs",
+        "annotator_agreement",
+        "annotator_disagreement",
+        "checkpoint_evaluation_metrics",
+        "contamination_overlap_and_diff_records",
+        "cross_language_item_alignment",
+        "cultural_sensitivity_annotations",
+        "data_recipe_grid",
+        "earliest_error_step_labels",
+        "embedded_tool_schemas",
+        "failure_mode_matrix",
+        "final_answer_correctness",
+        "full_evaluation_transcripts",
+        "harm_and_refusal_labels",
+        "layer_width_sparsity_grid",
+        "multi_axis_response_ratings",
+        "multi_scale_checkpoint_evaluations",
+        "multi_source_agent_traces",
+        "on_policy_rl_tasks",
+        "pairwise_preferences",
+        "perplexity_trajectories",
+        "preference_rationales",
+        "quality_scored_web_documents",
+        "recovery_strategy_variants",
+        "simulated_tool_trajectories",
+        "source_archive_pointers",
+        "sparse_autoencoder_parameters",
+        "task_binary_payloads",
+        "tokenized_recipe_arrays",
+        "tool_call_and_environment_transcripts"
+      ]
+    },
+    "boundary": {
+      "enum": [
+        "base_model_terms_separate",
+        "benchmark_excluded_from_training",
+        "benchmark_overfitting_risk",
+        "binary_download_separate_approval",
+        "binary_parser_review",
+        "bulk_payload_separate_approval",
+        "cross_language_identity_leakage",
+        "disturbing_content_controls",
+        "embedded_calls_never_execute",
+        "evaluator_reverse_bias",
+        "executable_payload_never_execute",
+        "gated_terms_required",
+        "no_declared_license",
+        "personal_data_possible",
+        "proprietary_output_terms_separate",
+        "publisher_known_quality_issues",
+        "synthetic_or_simulated_not_truth",
+        "upstream_terms_separate"
+      ]
+    },
+    "boundedUse": {
+      "enum": [
+        "access_controlled_safety_evaluation",
+        "aggregate_experiment_analysis",
+        "controlled_rhetoric_probe",
+        "metadata_registry",
+        "offline_evaluator_regression",
+        "offline_parser_fixture",
+        "provenance_graph",
+        "sealed_benchmark_evaluation",
+        "single_artifact_interpretability_pilot"
+      ]
+    },
+    "forbiddenUse": {
+      "enum": [
+        "benchmark_tuning",
+        "bulk_download_without_review",
+        "credential_attachment",
+        "gate_acceptance_by_scout",
+        "license_clearance_inference",
+        "live_tool_execution",
+        "raw_content_persistence",
+        "retrieval_index_ingestion",
+        "sole_evaluator_training",
+        "training_corpus_ingestion",
+        "truth_or_intent_authority",
+        "unsandboxed_archive_extraction"
+      ]
+    },
+    "lead": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "key", "match", "origin_assertions", "research"],
+      "properties": {
+        "schema": {
+          "const": "agenttool-hf-research-lead/v0.1"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_]{0,63}$"
+        },
+        "match": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "id", "revision", "declared"],
+          "properties": {
+            "kind": {
+              "enum": ["dataset", "model"]
+            },
+            "id": {
+              "$ref": "#/$defs/repoId"
+            },
+            "revision": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "declared": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["basis", "license", "gated", "private"],
+              "properties": {
+                "basis": {
+                  "const": "publisher_assertion"
+                },
+                "license": {
+                  "$ref": "#/$defs/license"
+                },
+                "gated": {
+                  "enum": [false, "auto", "manual"]
+                },
+                "private": {
+                  "const": false
+                }
+              }
+            }
+          }
+        },
+        "origin_assertions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["basis", "features"],
+          "properties": {
+            "basis": {
+              "const": "publisher_assertion"
+            },
+            "features": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/feature"
+              }
+            }
+          }
+        },
+        "research": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "basis",
+            "evidence_paper_ids",
+            "phase",
+            "payload",
+            "priority",
+            "primary",
+            "secondary",
+            "mode",
+            "boundaries",
+            "bounded_uses",
+            "forbidden_uses"
+          ],
+          "properties": {
+            "basis": {
+              "const": "researcher_inference"
+            },
+            "evidence_paper_ids": {
+              "type": "array",
+              "maxItems": 32,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^\\d{4}\\.\\d{4,5}(?:v\\d+)?$"
+              }
+            },
+            "phase": {
+              "enum": [
+                "agent_failure_recovery",
+                "agent_on_policy_rl",
+                "agent_trace_sft",
+                "benchmark_decontamination",
+                "judge_debiasing",
+                "mechanistic_interpretability",
+                "multilingual_evaluation",
+                "pretraining_data_curation",
+                "pretraining_data_selection",
+                "process_supervision_evaluation",
+                "reward_model_feedback",
+                "safety_moderation",
+                "tool_use_sft"
+              ]
+            },
+            "payload": {
+              "enum": [
+                "benchmark_text",
+                "binary_parameters",
+                "conversation_text",
+                "executable_task_bundle",
+                "tabular_text",
+                "tokenized_corpus"
+              ]
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "primary": {
+              "$ref": "#/$defs/target"
+            },
+            "secondary": {
+              "type": "array",
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/target"
+              }
+            },
+            "mode": {
+              "enum": [
+                "controlled_rhetoric_research",
+                "deferred_binary_pilot",
+                "experiment_graph",
+                "metadata_only",
+                "offline_evaluation",
+                "offline_parser_fixture"
+              ]
+            },
+            "boundaries": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/boundary"
+              }
+            },
+            "bounded_uses": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/boundedUse"
+              }
+            },
+            "forbidden_uses": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/forbiddenUse"
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "payload": { "const": "binary_parameters" }
+                },
+                "required": ["payload"]
+              },
+              "then": {
+                "properties": {
+                  "boundaries": {
+                    "type": "array",
+                    "allOf": [
+                      { "contains": { "const": "binary_download_separate_approval" } },
+                      { "contains": { "const": "binary_parser_review" } },
+                      { "contains": { "const": "bulk_payload_separate_approval" } }
+                    ]
+                  },
+                  "forbidden_uses": {
+                    "type": "array",
+                    "allOf": [
+                      { "contains": { "const": "bulk_download_without_review" } },
+                      { "contains": { "const": "unsandboxed_archive_extraction" } }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "payload": { "const": "tokenized_corpus" }
+                },
+                "required": ["payload"]
+              },
+              "then": {
+                "properties": {
+                  "boundaries": {
+                    "type": "array",
+                    "allOf": [
+                      { "contains": { "const": "binary_download_separate_approval" } },
+                      { "contains": { "const": "binary_parser_review" } },
+                      { "contains": { "const": "bulk_payload_separate_approval" } }
+                    ]
+                  },
+                  "forbidden_uses": {
+                    "type": "array",
+                    "allOf": [
+                      { "contains": { "const": "bulk_download_without_review" } },
+                      { "contains": { "const": "raw_content_persistence" } },
+                      { "contains": { "const": "training_corpus_ingestion" } }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "payload": { "const": "executable_task_bundle" }
+                },
+                "required": ["payload"]
+              },
+              "then": {
+                "properties": {
+                  "boundaries": {
+                    "type": "array",
+                    "allOf": [
+                      { "contains": { "const": "binary_download_separate_approval" } },
+                      { "contains": { "const": "binary_parser_review" } },
+                      { "contains": { "const": "bulk_payload_separate_approval" } },
+                      { "contains": { "const": "executable_payload_never_execute" } }
+                    ]
+                  },
+                  "forbidden_uses": {
+                    "type": "array",
+                    "allOf": [
+                      { "contains": { "const": "credential_attachment" } },
+                      { "contains": { "const": "live_tool_execution" } },
+                      { "contains": { "const": "unsandboxed_archive_extraction" } }
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "boundaries": {
+                    "type": "array",
+                    "contains": { "const": "bulk_payload_separate_approval" }
+                  }
+                },
+                "required": ["boundaries"]
+              },
+              "then": {
+                "properties": {
+                  "forbidden_uses": {
+                    "type": "array",
+                    "contains": { "const": "bulk_download_without_review" }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "match": {
+                "type": "object",
+                "properties": {
+                  "declared": {
+                    "type": "object",
+                    "properties": {
+                      "license": { "type": "null" }
+                    },
+                    "required": ["license"]
+                  }
+                },
+                "required": ["declared"]
+              }
+            },
+            "required": ["match"]
+          },
+          "then": {
+            "properties": {
+              "research": {
+                "type": "object",
+                "properties": {
+                  "boundaries": {
+                    "type": "array",
+                    "contains": { "const": "no_declared_license" }
+                  },
+                  "forbidden_uses": {
+                    "type": "array",
+                    "contains": { "const": "license_clearance_inference" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "origin_assertions": {
+                "type": "object",
+                "properties": {
+                  "features": {
+                    "type": "array",
+                    "contains": { "const": "sparse_autoencoder_parameters" }
+                  }
+                },
+                "required": ["features"]
+              }
+            },
+            "required": ["origin_assertions"]
+          },
+          "then": {
+            "properties": {
+              "research": {
+                "type": "object",
+                "properties": {
+                  "payload": { "const": "binary_parameters" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "origin_assertions": {
+                "type": "object",
+                "properties": {
+                  "features": {
+                    "type": "array",
+                    "contains": { "const": "task_binary_payloads" }
+                  }
+                },
+                "required": ["features"]
+              }
+            },
+            "required": ["origin_assertions"]
+          },
+          "then": {
+            "properties": {
+              "research": {
+                "type": "object",
+                "properties": {
+                  "payload": { "const": "executable_task_bundle" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "origin_assertions": {
+                "type": "object",
+                "properties": {
+                  "features": {
+                    "type": "array",
+                    "contains": { "const": "tokenized_recipe_arrays" }
+                  }
+                },
+                "required": ["features"]
+              }
+            },
+            "required": ["origin_assertions"]
+          },
+          "then": {
+            "properties": {
+              "research": {
+                "type": "object",
+                "properties": {
+                  "payload": { "const": "tokenized_corpus" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "match": {
+                "type": "object",
+                "properties": {
+                  "declared": {
+                    "type": "object",
+                    "properties": {
+                      "gated": { "not": { "const": false } }
+                    },
+                    "required": ["gated"]
+                  }
+                },
+                "required": ["declared"]
+              }
+            },
+            "required": ["match"]
+          },
+          "then": {
+            "properties": {
+              "research": {
+                "type": "object",
+                "properties": {
+                  "boundaries": {
+                    "type": "array",
+                    "contains": { "const": "gated_terms_required" }
+                  },
+                  "forbidden_uses": {
+                    "type": "array",
+                    "contains": { "const": "gate_acceptance_by_scout" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "origin_assertions": {
+                "type": "object",
+                "properties": {
+                  "features": {
+                    "type": "array",
+                    "contains": {
+                      "enum": [
+                        "multi_source_agent_traces",
+                        "recovery_strategy_variants",
+                        "simulated_tool_trajectories",
+                        "tool_call_and_environment_transcripts"
+                      ]
+                    }
+                  }
+                },
+                "required": ["features"]
+              }
+            },
+            "required": ["origin_assertions"]
+          },
+          "then": {
+            "properties": {
+              "research": {
+                "type": "object",
+                "properties": {
+                  "boundaries": {
+                    "type": "array",
+                    "contains": { "const": "embedded_calls_never_execute" }
+                  },
+                  "forbidden_uses": {
+                    "type": "array",
+                    "allOf": [
+                      { "contains": { "const": "credential_attachment" } },
+                      { "contains": { "const": "live_tool_execution" } }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
