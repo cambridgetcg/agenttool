@@ -1,10 +1,10 @@
 {
   "_format": "agenttool-dark-continent-framework/v0.1",
   "contract_id": "agenttool.dark-continent/0.1",
-  "source_profile": "agenttool-sdk-ts-0.16.0",
+  "source_profile": "agenttool-sdk-ts-0.17.0",
   "source": {
     "package": "@agenttool/sdk",
-    "version": "0.16.0",
+    "version": "0.17.0",
     "file": "packages/sdk-ts/src/dark-continent.ts",
     "sha256": "b18b65595b3805510b34a908b10d9d2cf84821612a624226f49561ffa2911e3a",
     "projection": "static_constants_only"

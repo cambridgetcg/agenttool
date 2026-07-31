@@ -1,6 +1,6 @@
 # `@agenttool/dark-continent-contract`
 
-A private development package for making AgentTool's Dark Continent framework
+A public developer-preview package for making AgentTool's Dark Continent framework
 portable without turning narrative claims into runtime guarantees.
 
 It does:
@@ -27,7 +27,7 @@ It does not:
 - Contract ID: `agenttool.dark-continent/0.1`
 - Snapshot format: `agenttool-dark-continent-framework/v0.1`
 - Projection format: `dark-continent-projection/v0.1`
-- Source profile: `agenttool-sdk-ts-0.16.0`
+- Source profile: `agenttool-sdk-ts-0.17.0`
 
 The committed snapshot is generated from
 `packages/sdk-ts/src/dark-continent.ts`. The Python file is recorded as a
@@ -61,7 +61,8 @@ node scripts/create-projection.mjs \
 ```
 
 Generation is deliberate. There are no install, postinstall, prepare, or
-publish hooks, and the package remains `private`.
+publish hooks. `prepack` runs the offline test/build/smoke gate before the
+Apache-2.0 package enters the protected npm release workflow.
 
 ## Consumer rule
 

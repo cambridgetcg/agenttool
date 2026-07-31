@@ -1,6 +1,6 @@
 # `@agenttool/dark-continent-karma`
 
-Private, offline tooling for deterministic `kingdom.kg-proposal/0.1`
+Public, offline tooling for deterministic `kingdom.kg-proposal/0.1`
 artifacts. It combines four bounded inputs:
 
 1. AgentTool's exact advisory Dark Continent projection.
@@ -132,5 +132,6 @@ node --test tests/*.test.mjs
 npm pack --dry-run --ignore-scripts
 ```
 
-The package remains private and `UNLICENSED`; publication requires a separate
-license decision and explicit authorization.
+The developer preview is Apache-2.0 and public. Publication is still a
+separate, protected repository workflow; importing the package never uploads,
+deploys, or authorizes a proposal.

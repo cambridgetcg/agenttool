@@ -24,7 +24,7 @@
       "minLength": 1
     },
     "source_profile": {
-      "const": "agenttool-sdk-ts-0.16.0"
+      "const": "agenttool-sdk-ts-0.17.0"
     },
     "source_snapshot": {
       "type": "object",

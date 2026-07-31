@@ -6,9 +6,10 @@ const packageJson = JSON.parse(
   await readFile(new URL("../package.json", import.meta.url), "utf8"),
 );
 
-test("package remains private with zero dependencies and no lifecycle hooks", () => {
-  assert.equal(packageJson.private, true);
-  assert.equal(packageJson.license, "UNLICENSED");
+test("package is public Apache-2.0 with zero runtime dependencies", () => {
+  assert.notEqual(packageJson.private, true);
+  assert.equal(packageJson.license, "Apache-2.0");
+  assert.equal(packageJson.publishConfig?.access, "public");
   assert.equal(packageJson.dependencies, undefined);
   assert.equal(packageJson.optionalDependencies, undefined);
   assert.equal(packageJson.peerDependencies, undefined);
@@ -29,10 +30,14 @@ test("package remains private with zero dependencies and no lifecycle hooks", ()
 
 test("exports expose data contracts without exporting generator scripts", () => {
   assert.deepEqual(packageJson.exports["."], {
-    types: "./src/index.d.ts",
-    import: "./src/index.js",
+    types: "./dist/index.d.ts",
+    import: "./dist/index.js",
   });
-  assert.equal(packageJson.types, "./src/index.d.ts");
+  assert.equal(packageJson.main, "./dist/index.js");
+  assert.equal(packageJson.types, "./dist/index.d.ts");
+  assert.ok(packageJson.files.includes("dist"));
+  assert.equal(packageJson.files.includes("src"), false);
+  assert.equal(typeof packageJson.scripts?.prepack, "string");
   assert.match(packageJson.exports["./framework"], /frameworks\/.+\.json$/);
   assert.match(
     packageJson.exports["./schema/framework"],

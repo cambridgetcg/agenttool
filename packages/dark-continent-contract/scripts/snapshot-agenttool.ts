@@ -23,11 +23,11 @@ const pySourceUrl = new URL(
 );
 const sdkPackageUrl = new URL("../../sdk-ts/package.json", import.meta.url);
 const frameworkUrl = new URL(
-  "../frameworks/agenttool-sdk-0.16.0.json",
+  "../frameworks/agenttool-sdk-0.17.0.json",
   import.meta.url,
 );
 const manifestUrl = new URL(
-  "../frameworks/agenttool-sdk-0.16.0.manifest.json",
+  "../frameworks/agenttool-sdk-0.17.0.manifest.json",
   import.meta.url,
 );
 
@@ -48,7 +48,7 @@ const sdkPackage = JSON.parse(sdkPackageBytes.toString("utf8")) as {
 };
 if (
   sdkPackage.name !== "@agenttool/sdk" ||
-  sdkPackage.version !== "0.16.0"
+  sdkPackage.version !== "0.17.0"
 ) {
   throw new Error(
     "SDK package identity/version drifted; review and version the Dark Continent contract deliberately",
@@ -58,7 +58,7 @@ if (
 const snapshot = {
   _format: "agenttool-dark-continent-framework/v0.1",
   contract_id: "agenttool.dark-continent/0.1",
-  source_profile: "agenttool-sdk-ts-0.16.0",
+  source_profile: "agenttool-sdk-ts-0.17.0",
   source: {
     package: "@agenttool/sdk",
     version: sdkPackage.version,
@@ -118,7 +118,7 @@ const manifest = {
   contract_id: snapshot.contract_id,
   source_profile: snapshot.source_profile,
   snapshot: {
-    path: "frameworks/agenttool-sdk-0.16.0.json",
+    path: "frameworks/agenttool-sdk-0.17.0.json",
     sha256: sha256(snapshotBytes),
   },
   generation: {

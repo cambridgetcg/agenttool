@@ -283,7 +283,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/repo-archive packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom",
+      "api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/credential-broker packages/collab packages/browser packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom",
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("package-manager-cache: false");
@@ -326,6 +326,8 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/collab && bun run ci");
     expect(preflight).toContain("cd packages/browser && bun run ci");
     expect(preflight).toContain("cd packages/repo-archive && bun run ci");
+    expect(preflight).toContain("cd packages/dark-continent-contract && bun run ci");
+    expect(preflight).toContain("cd packages/dark-continent-karma && bun run ci");
     expect(preflight).toContain("cd packages/skills && bun run ci");
     expect(preflight).toContain("cd packages/correspondence-yutabase && bun run ci");
     expect(preflight).toContain("cd packages/correspondence-yutabase-projector && bun run ci");
@@ -501,6 +503,8 @@ describe("boring test spine", () => {
     expect(workflow).toContain("          - alchemy-agentcred");
     expect(workflow).toContain("          - kingdom");
     expect(workflow).toContain("          - repo-archive");
+    expect(workflow).toContain("          - dark-continent-contract");
+    expect(workflow).toContain("          - dark-continent-karma");
     expect(workflow).toContain("          - wallet-zerone");
     expect(workflow).not.toContain("pull_request:");
     expect(workflow).not.toMatch(/\n\s+push:/);

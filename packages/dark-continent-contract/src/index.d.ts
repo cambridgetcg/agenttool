@@ -20,10 +20,10 @@ export type ConsumerKind = "kingdom-extension" | "artbitrage";
 export interface FrameworkSnapshot {
   _format: "agenttool-dark-continent-framework/v0.1";
   contract_id: "agenttool.dark-continent/0.1";
-  source_profile: "agenttool-sdk-ts-0.16.0";
+  source_profile: "agenttool-sdk-ts-0.17.0";
   source: {
     package: "@agenttool/sdk";
-    version: "0.16.0";
+    version: "0.17.0";
     file: "packages/sdk-ts/src/dark-continent.ts";
     sha256: string;
     projection: "static_constants_only";
@@ -74,7 +74,7 @@ export interface FrameworkSnapshot {
 export interface DarkContinentProjection {
   _format: "dark-continent-projection/v0.1";
   projection_id: string;
-  source_profile: "agenttool-sdk-ts-0.16.0";
+  source_profile: "agenttool-sdk-ts-0.17.0";
   source_snapshot: {
     format: "agenttool-dark-continent-framework/v0.1";
     contract_id: "agenttool.dark-continent/0.1";
@@ -113,7 +113,7 @@ export interface DarkContinentProjection {
 export const CONTRACT_ID: "agenttool.dark-continent/0.1";
 export const FRAMEWORK_FORMAT: "agenttool-dark-continent-framework/v0.1";
 export const PROJECTION_FORMAT: "dark-continent-projection/v0.1";
-export const SOURCE_PROFILE: "agenttool-sdk-ts-0.16.0";
+export const SOURCE_PROFILE: "agenttool-sdk-ts-0.17.0";
 export const CALAMITY_IDS: readonly CalamityId[];
 export const LOGOS_IDS: readonly LogosId[];
 export const CONSUMER_KINDS: readonly ConsumerKind[];

@@ -397,20 +397,17 @@ describe("HF and npm packaging boundary", () => {
       "utf8",
     ));
     assert.equal(profile._format, "kingdom-hf-karma-export-profile/v0.1");
-    assert.equal(profile.publication.ready, false);
-    assert.equal(profile.publication.authorized, false);
+    assert.equal(profile.publication.ready, true);
+    assert.equal(profile.publication.authorization_embedded_in_artifact, false);
     assert.equal(profile.effects.hf_uploads, 0);
     assert.equal(profile.effects.remote_writes, 0);
     assert.equal(profile.exclusions.raw_chats, true);
-    assert.equal(profile.profile_kind, "plan_not_exporter_or_sanitizer");
-    assert.equal(profile.eligibility_gate.implementation_status, "not_implemented");
+    assert.equal(profile.profile_kind, "metadata_catalog_release_not_exporter_or_sanitizer");
+    assert.equal(profile.eligibility_gate.implementation_status, "metadata_catalog_builder_implemented");
     assert.equal(profile.eligibility_gate.requires_subject_visibility, "public");
     assert.deepEqual(profile.eligibility_gate.forbidden_label_classes, ["local_metadata"]);
-    assert.ok(profile.dataset_files.every((file) => file.status === "planned"));
-    assert.equal(
-      profile.dataset_files.find((file) => file.path === "events.jsonl").record_format,
-      "not_defined",
-    );
+    assert.ok(profile.dataset_files.every((file) => file.status === "generated"));
+    assert.equal(profile.dataset_files.some((file) => file.path === "events.jsonl"), false);
     assert.deepEqual(profile.space.forbidden_tools, [
       "award",
       "authorize",
@@ -434,7 +431,7 @@ describe("HF and npm packaging boundary", () => {
     assert.equal(source.authority.authorizes_crown, false);
   });
 
-  test("schema and package are closed, private, and zero-dependency", async () => {
+  test("schema and package are closed, public Apache-2.0, and zero-dependency", async () => {
     const schema = JSON.parse(await readFile(
       new URL("../schema/kingdom-kg-proposal-v0.1.schema.json", import.meta.url),
       "utf8",
@@ -484,8 +481,14 @@ describe("HF and npm packaging boundary", () => {
       multiline.graph_delta.nodes[0].label = `raw chat${separator}line`;
       assert.equal(validate(multiline), false, "schema accepted multiline label prose");
     }
-    assert.equal(packageJson.private, true);
-    assert.equal(packageJson.license, "UNLICENSED");
+    assert.notEqual(packageJson.private, true);
+    assert.equal(packageJson.license, "Apache-2.0");
+    assert.equal(packageJson.publishConfig?.access, "public");
+    assert.equal(packageJson.main, "./dist/index.js");
+    assert.equal(packageJson.types, "./dist/index.d.ts");
+    assert.ok(packageJson.files.includes("dist"));
+    assert.equal(packageJson.files.includes("src"), false);
+    assert.equal(typeof packageJson.scripts?.prepack, "string");
     assert.equal(packageJson.dependencies, undefined);
   });
 

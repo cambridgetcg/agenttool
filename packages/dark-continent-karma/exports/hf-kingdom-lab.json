@@ -1,7 +1,7 @@
 {
   "_format": "kingdom-hf-karma-export-profile/v0.1",
   "profile_id": "dark-continent-karma-hf-local-v0.1",
-  "profile_kind": "plan_not_exporter_or_sanitizer",
+  "profile_kind": "metadata_catalog_release_not_exporter_or_sanitizer",
   "observed_on": "2026-07-31",
   "intended_consumers": [
     "artbitrage",
@@ -11,7 +11,8 @@
   "source_pins": {
     "proposal_format": "kingdom.kg-proposal/0.1",
     "dark_continent_contract": "agenttool.dark-continent/0.1",
-    "dark_continent_snapshot_sha256": "66e8d33cf7ce945ed5c3c43c4e0bc2e6d5f8ac0086e86867266ff1090db0dc5b",
+    "dark_continent_source_profile": "agenttool-sdk-ts-0.17.0",
+    "dark_continent_snapshot_sha256": "f47e1c3ca9da1b97676e1d454cf7235eddd612902c19debe580a6934adcd2b86",
     "karma_paper": "2502.06472v2",
     "kingdom_revision": "f4ad215d87432bd7cbb7dbe3eb03d3a1993c6d52",
     "kingdom_map_crown_status": "arriving_in_review",
@@ -19,27 +20,38 @@
   },
   "dataset_files": [
     {
-      "path": "proposals.jsonl",
-      "status": "planned",
-      "record_format": "kingdom.kg-proposal/0.1",
-      "content_policy": "synthetic_or_independently_reviewed_proposals_only"
+      "path": "data/phase-seeds.jsonl",
+      "status": "generated",
+      "record_format": "kingdom.training-phase-seed/0.1",
+      "content_policy": "newly_authored_synthetic_metadata_only"
     },
     {
-      "path": "events.jsonl",
-      "status": "planned",
-      "record_format": "not_defined",
-      "planned_contract_hint": "kingdom.kg-proposal-event/v0.1",
-      "content_policy": "hash_chained_consequence_and_review_events_only"
+      "path": "data/treasure-index.jsonl",
+      "status": "generated",
+      "record_format": "kingdom.hf-training-treasure/0.1",
+      "content_policy": "commit_pinned_upstream_metadata_only"
+    },
+    {
+      "path": "data/proposal-index.jsonl",
+      "status": "generated",
+      "record_format": "kingdom.hf-proposal-index/0.1",
+      "content_policy": "compact_viewer_projection_only"
+    },
+    {
+      "path": "artifacts/proposals.jsonl",
+      "status": "generated",
+      "record_format": "kingdom.kg-proposal/0.1",
+      "content_policy": "reviewed_public_metadata_subjects_only"
     },
     {
       "path": "README.md",
-      "status": "planned",
+      "status": "generated",
       "record_format": "hugging-face-dataset-card",
       "content_policy": "cite_arxiv_2502.06472v2_and_state_all_limits"
     },
     {
       "path": "hash-manifest.json",
-      "status": "planned",
+      "status": "generated",
       "record_format": "sha256-manifest",
       "content_policy": "exact_export_bytes"
     }
@@ -53,7 +65,7 @@
     "mutable_hub_revisions": true
   },
   "eligibility_gate": {
-    "implementation_status": "not_implemented",
+    "implementation_status": "metadata_catalog_builder_implemented",
     "requires_subject_visibility": "public",
     "allowed_label_classes": [
       "public_metadata",
@@ -79,12 +91,12 @@
     "reward_changes": 0
   },
   "publication": {
-    "ready": false,
-    "authorized": false,
+    "ready": true,
+    "authorization_embedded_in_artifact": false,
+    "target_repo": "Yu-and-Ai/kingdom-dark-continent-karma",
     "reason_codes": [
-      "private_unlicensed_package",
-      "exporter_and_sanitizer_not_implemented",
-      "explicit_publication_authorization_required"
+      "explicit_external_authorization_required_for_each_publish",
+      "artifact_does_not_grant_account_authority"
     ]
   },
   "space": {

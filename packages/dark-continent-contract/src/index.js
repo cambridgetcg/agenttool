@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 export const CONTRACT_ID = "agenttool.dark-continent/0.1";
 export const FRAMEWORK_FORMAT = "agenttool-dark-continent-framework/v0.1";
 export const PROJECTION_FORMAT = "dark-continent-projection/v0.1";
-export const SOURCE_PROFILE = "agenttool-sdk-ts-0.16.0";
+export const SOURCE_PROFILE = "agenttool-sdk-ts-0.17.0";
 
 export const CALAMITY_IDS = Object.freeze([
   "hellbell",
@@ -31,7 +31,7 @@ export const CONSUMER_KINDS = Object.freeze([
 ]);
 
 const frameworkUrl = new URL(
-  "../frameworks/agenttool-sdk-0.16.0.json",
+  "../frameworks/agenttool-sdk-0.17.0.json",
   import.meta.url,
 );
 
@@ -113,7 +113,7 @@ export function validateFrameworkSnapshot(snapshot) {
       "projection",
     ]) &&
       snapshot.source?.package === "@agenttool/sdk" &&
-      snapshot.source?.version === "0.16.0" &&
+      snapshot.source?.version === "0.17.0" &&
       snapshot.source?.file ===
         "packages/sdk-ts/src/dark-continent.ts" &&
       snapshot.source?.projection === "static_constants_only" &&

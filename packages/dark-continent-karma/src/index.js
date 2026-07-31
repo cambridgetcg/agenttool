@@ -7,9 +7,9 @@ export const PACKAGE_VERSION = "0.1.0-dev.0";
 export const CONTRACT_ID = "agenttool.dark-continent/0.1";
 export const DARK_CONTINENT_FORMAT = "agenttool-dark-continent-framework/v0.1";
 export const DARK_CONTINENT_PROJECTION_FORMAT = "dark-continent-projection/v0.1";
-export const DARK_CONTINENT_SOURCE_PROFILE = "agenttool-sdk-ts-0.16.0";
+export const DARK_CONTINENT_SOURCE_PROFILE = "agenttool-sdk-ts-0.17.0";
 export const DARK_CONTINENT_SNAPSHOT_SHA256 =
-  "66e8d33cf7ce945ed5c3c43c4e0bc2e6d5f8ac0086e86867266ff1090db0dc5b";
+  "f47e1c3ca9da1b97676e1d454cf7235eddd612902c19debe580a6934adcd2b86";
 export const DARK_CONTINENT_ARTIFACT =
   "@agenttool/dark-continent-contract/framework";
 export const KARMA_PAPER_ID = "2502.06472v2";

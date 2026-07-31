@@ -430,13 +430,13 @@
       "properties": {
         "_format": { "const": "dark-continent-projection/v0.1" },
         "projection_id": { "$ref": "#/$defs/id300" },
-        "source_profile": { "const": "agenttool-sdk-ts-0.16.0" },
+        "source_profile": { "const": "agenttool-sdk-ts-0.17.0" },
         "source_snapshot": {
           "const": {
             "format": "agenttool-dark-continent-framework/v0.1",
             "contract_id": "agenttool.dark-continent/0.1",
             "artifact": "@agenttool/dark-continent-contract/framework",
-            "sha256": "66e8d33cf7ce945ed5c3c43c4e0bc2e6d5f8ac0086e86867266ff1090db0dc5b"
+            "sha256": "f47e1c3ca9da1b97676e1d454cf7235eddd612902c19debe580a6934adcd2b86"
           }
         },
         "consumer": {

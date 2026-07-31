@@ -1,6 +1,7 @@
 # Dark Continent KARMA proposal adapter
 
-This private package produces closed `kingdom.kg-proposal/0.1` artifacts from
+This public developer-preview package produces closed
+`kingdom.kg-proposal/0.1` artifacts from
 caller-supplied commit/file hashes and declared Hugging Face metadata. It is
 inspired by KARMA's knowledge-graph enrichment design; it is not a
 KARMA-compatible runtime.
@@ -30,6 +31,7 @@ KARMA-compatible runtime.
 ```sh
 npm ci --ignore-scripts
 node --test tests/*.test.mjs
+bun run ci
 npm pack --dry-run --ignore-scripts
 ```
 

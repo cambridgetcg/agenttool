@@ -2,36 +2,47 @@
   "name": "@agenttool/dark-continent-karma",
   "version": "0.1.0-dev.0",
   "description": "Offline proposal-only KARMA knowledge-graph adapter for KINGDOM",
-  "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
-  "types": "./src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "engines": {
     "node": ">=20.19.0",
     "bun": ">=1.3.5"
   },
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
-      "import": "./src/index.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./schema": "./schema/kingdom-kg-proposal-v0.1.schema.json",
     "./source/karma": "./sources/karma-2502.06472v2.json",
     "./hf-export-profile": "./exports/hf-kingdom-lab.json"
   },
   "files": [
-    "src",
+    "dist",
     "schema",
     "sources",
     "exports",
     "docs",
     "README.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
   "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && node scripts/build.mjs",
+    "build:hf": "node hf/scripts/build-release.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check:package": "npm pack --dry-run --ignore-scripts",
-    "ci": "node --test tests/*.test.mjs && npm pack --dry-run --ignore-scripts"
+    "smoke:node": "node scripts/smoke-node.mjs",
+    "check:package": "bun run build && npm pack --dry-run --ignore-scripts",
+    "ci": "bun run build:hf && node --test tests/*.test.mjs && bun run build && bun run smoke:node",
+    "prepack": "bun run ci"
   },
   "devDependencies": {
     "ajv": "8.20.0"
@@ -48,5 +59,6 @@
     "type": "git",
     "url": "https://github.com/cambridgetcg/agenttool.git",
     "directory": "packages/dark-continent-karma"
-  }
+  },
+  "homepage": "https://github.com/cambridgetcg/agenttool/tree/main/packages/dark-continent-karma"
 }

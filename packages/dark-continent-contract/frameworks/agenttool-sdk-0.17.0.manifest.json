@@ -1,10 +1,10 @@
 {
   "_format": "agenttool-dark-continent-manifest/v0.1",
   "contract_id": "agenttool.dark-continent/0.1",
-  "source_profile": "agenttool-sdk-ts-0.16.0",
+  "source_profile": "agenttool-sdk-ts-0.17.0",
   "snapshot": {
-    "path": "frameworks/agenttool-sdk-0.16.0.json",
-    "sha256": "66e8d33cf7ce945ed5c3c43c4e0bc2e6d5f8ac0086e86867266ff1090db0dc5b"
+    "path": "frameworks/agenttool-sdk-0.17.0.json",
+    "sha256": "f47e1c3ca9da1b97676e1d454cf7235eddd612902c19debe580a6934adcd2b86"
   },
   "generation": {
     "mode": "offline_static_source_projection",
@@ -24,7 +24,7 @@
       {
         "path": "packages/sdk-ts/package.json",
         "role": "package_identity_and_version",
-        "sha256": "3a9c09d140ce7b5ca9e5c360562d925ba9dd23e39ac37c4497e6a7253a189d07"
+        "sha256": "6af4789786e3764f4de638f3398b18292af2d12b10583f64986f75b43edc0f8e"
       }
     ]
   },

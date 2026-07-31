@@ -5,8 +5,8 @@ advisory data. It is not a hosted client and must stay safe to run offline.
 
 ## Boundaries
 
-- Keep the package private until a separate release review authorizes
-  publication.
+- Keep the public artifact Apache-2.0, zero-dependency, and release it only
+  through the repository's protected npm workflow.
 - Keep runtime dependencies at zero.
 - Do not add install hooks, ambient credential reads, account discovery,
   network calls, model execution, wallet operations, or transaction code.
@@ -25,6 +25,7 @@ Run:
 npm ci --ignore-scripts
 bun run check:snapshot
 node --test tests/*.test.mjs
+bun run ci
 npm pack --dry-run --ignore-scripts
 ```
 

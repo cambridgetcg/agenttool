@@ -22,7 +22,7 @@
       "const": "agenttool.dark-continent/0.1"
     },
     "source_profile": {
-      "const": "agenttool-sdk-ts-0.16.0"
+      "const": "agenttool-sdk-ts-0.17.0"
     },
     "source": {
       "type": "object",
@@ -39,7 +39,7 @@
           "const": "@agenttool/sdk"
         },
         "version": {
-          "const": "0.16.0"
+          "const": "0.17.0"
         },
         "file": {
           "const": "packages/sdk-ts/src/dark-continent.ts"

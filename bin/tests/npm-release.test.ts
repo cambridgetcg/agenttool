@@ -87,7 +87,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists sixteen reviewed release identities", () => {
+  test("allowlists eighteen reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -96,6 +96,8 @@ describe("standard npm release policy", () => {
       "collab",
       "correspondence-yutabase",
       "credential-broker",
+      "dark-continent-contract",
+      "dark-continent-karma",
       "data",
       "data-sync",
       "kingdom",
@@ -147,6 +149,18 @@ describe("standard npm release policy", () => {
       tagPrefix: "kingdom",
       artifactKind: "pack",
     });
+    expect(releaseSpec("dark-continent-contract")).toMatchObject({
+      name: "@agenttool/dark-continent-contract",
+      packagePath: "packages/dark-continent-contract",
+      tagPrefix: "dark-continent-contract",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("dark-continent-karma")).toMatchObject({
+      name: "@agenttool/dark-continent-karma",
+      packagePath: "packages/dark-continent-karma",
+      tagPrefix: "dark-continent-karma",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("repo-archive")).toMatchObject({
       name: "@agenttool/repo-archive",
       packagePath: "packages/repo-archive",
@@ -187,6 +201,18 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/repo-archive", "0.1.0-dev.0")).toBe(
       "agenttool-repo-archive-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("dark-continent-contract"), "0.1.0-dev.0")).toBe(
+      "dark-continent-contract-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/dark-continent-contract", "0.1.0-dev.0")).toBe(
+      "agenttool-dark-continent-contract-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("dark-continent-karma"), "0.1.0-dev.0")).toBe(
+      "dark-continent-karma-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/dark-continent-karma", "0.1.0-dev.0")).toBe(
+      "agenttool-dark-continent-karma-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("alchemy"), "0.1.0-dev.0")).toBe(
       "alchemy-v0.1.0-dev.0",
@@ -260,6 +286,36 @@ describe("standard npm release policy", () => {
       "package/schema/agent-repo-archive-v0.1.schema.json",
       "package/vectors/agent-repo-archive-v0.1-vectors.json",
     ]));
+    expect(requiredArchiveEntries(releaseSpec("dark-continent-contract"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/frameworks/agenttool-sdk-0.17.0.json",
+        "package/frameworks/agenttool-sdk-0.17.0.manifest.json",
+        "package/schema/framework-v0.1.schema.json",
+        "package/schema/projection-v0.1.schema.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("dark-continent-karma"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/docs/INTEGRATION.md",
+        "package/exports/hf-kingdom-lab.json",
+        "package/schema/kingdom-kg-proposal-v0.1.schema.json",
+        "package/sources/karma-2502.06472v2.json",
+      ]),
+    );
     expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([
       "package/dist/index.js",
       "package/dist/index.d.ts",

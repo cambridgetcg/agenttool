@@ -109,12 +109,13 @@ this package.
 
 ## Hugging Face route
 
-The bundled export profile is a local-only, publication-disabled plan, not an
-exporter or sanitizer. Its dataset files are all marked `planned`. A future
-synthetic dataset can contain:
+The bundled export profile describes the reviewed metadata-only catalog
+release; it is not an exporter or sanitizer. The public dataset contains:
 
-- `proposals.jsonl` — closed proposal artifacts;
-- `events.jsonl` — planned proposal-bound event envelopes (format not defined);
+- `data/phase-seeds.jsonl` — synthetic phase windows;
+- `data/treasure-index.jsonl` — pinned Hub metadata and risk gates;
+- `data/proposal-index.jsonl` — compact Viewer rows;
+- `artifacts/proposals.jsonl` — closed proposal artifacts;
 - `README.md` — Dataset Card linking arXiv `2502.06472v2` and stating limits;
 - `hash-manifest.json` — exact exported byte digests.
 
@@ -122,7 +123,7 @@ Core validation closes evidence references to content-addressed SHA-256 values
 or commit-pinned HF file references, and requires single-line labels with an
 explicit metadata class. It still permits private/gated subjects and
 `local_metadata`; do not serialize validated proposals straight to an export.
-The future export gate must require public subjects, allow only reviewed
+The export gate requires public subjects, allows only reviewed
 synthetic/public metadata, reject local metadata, and receive an independent
 privacy review. SHA-256 is neither anonymization nor authentication.
 
@@ -132,7 +133,8 @@ Viewer and a static read-only Space. A separately authorized MCP Space may
 expose `list_proposals`, `show_provenance`, and `compare_conflicts`; it must not
 expose merge, publish, award, authorize, or coronate.
 
-The event JSONL envelope and standalone verifier are not yet defined. Event
+No standalone `events.jsonl` is published because its envelope and verifier
+are not yet defined. Event
 hashes are unsigned: they show rewrites only relative to an independently
 retained head and do not provide Crown-style signature/authorship guarantees.
 
@@ -141,11 +143,10 @@ retained head and do not provide Crown-style signature/authorship guarantees.
 The package is a small transport boundary rather than a runtime integration:
 
 - ESM plus `.d.ts`, explicit `exports`, and an allowlisted `files` set;
-- zero runtime dependencies and no lifecycle hooks;
-- `private: true` and `UNLICENSED`, so npm publication is currently refused;
-- `npm pack --dry-run --ignore-scripts` verifies the exact local tarball shape.
+- zero runtime dependencies and a fail-closed `prepack` verification gate;
+- Apache-2.0 plus explicit public npm metadata;
+- a protected repository workflow for exact reviewed tarballs and receipts.
 
-Before any public release: decide licensing, perform a fresh source/privacy
-review, remove `private`, add an authorized protected release path, and prefer
-OIDC trusted publishing with provenance. None of those release actions are
-authorized by this artifact.
+The npm package transports proposal mechanics. The HF dataset transports
+reviewed metadata rows. Neither surface applies a graph delta or grants an
+action authority.
