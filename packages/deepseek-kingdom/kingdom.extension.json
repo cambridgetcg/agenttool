@@ -1,0 +1,32 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "deepseek-kingdom",
+  "package": "@agenttool/deepseek-kingdom",
+  "version": "0.1.0-dev.0",
+  "status": "public_ready_source",
+  "capabilities": [
+    "deepseek:primary-source-bind",
+    "deepseek:official-source-leads",
+    "kingdom:proposal-create",
+    "kingdom:proposal-validate"
+  ],
+  "defaults": {
+    "network": false,
+    "filesystem": false,
+    "credentials": false,
+    "downloads": false,
+    "model_execution": false,
+    "remote_compute": false,
+    "graph_writes": false,
+    "registry_writes": false,
+    "scores": false,
+    "authority": false,
+    "license_approval": false
+  },
+  "host_contract": "not_registered",
+  "notes": [
+    "This descriptor is a declaration-only extension hint, not an installed KINGDOM host contract.",
+    "The adapter binds caller-supplied metadata and emits unaccepted proposals; it does not fetch, execute, import, apply, score, publish, deploy, or approve upstream terms.",
+    "DeepSeek, Hugging Face, GitHub, and arXiv credentials are neither required nor read."
+  ]
+}

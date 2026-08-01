@@ -27,7 +27,9 @@ archive and same-device restore simulator (`packages/repo-archive/`), the regist
 distribution protocol, an advisory versioned Dark Continent framework
 snapshot/projection package (`packages/dark-continent-contract/`), a
 proposal-only KARMA-inspired knowledge-graph adapter
-(`packages/dark-continent-karma/`), a private source-only KARMA Mirror core for
+(`packages/dark-continent-karma/`), a provenance-first DeepSeek official-source
+binding and unaccepted KINGDOM/Artbitrage proposal adapter
+(`packages/deepseek-kingdom/`), a private source-only KARMA Mirror core for
 an explicitly separate zero-effect defensive-deception island
 (`packages/karma-mirror/`), a pure opt-in HEAVEN invitation and delight/landing
 selection protocol with zero task, economic, or authority effect
@@ -132,6 +134,7 @@ cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
 cd packages/repo-archive && bun install        # encrypted multi-zone Git archive simulator
 cd packages/dark-continent-contract && bun install # advisory Dark Continent contract
 cd packages/dark-continent-karma && bun install # proposal-only KG enrichment adapter
+cd packages/deepseek-kingdom && bun install  # pinned DeepSeek source proposals; no fetch or execution
 cd packages/karma-mirror && bun install       # private isolated theatre; no server or deployment
 cd packages/heaven && bun install             # pure opt-in burst + landing selection; no scheduler or host
 cd packages/data && bun install                # local-first agent-data/v1 node
@@ -210,6 +213,9 @@ cd packages/dark-continent-contract
 bun run ci                                     # snapshot drift + schemas + advisory projection + package boundary
 cd ../dark-continent-karma
 bun run ci                                     # deterministic proposal/hash chain + schemas + package boundary
+cd ../deepseek-kingdom
+bun run ci                                     # exact source pins + unaccepted proposal vectors + package boundary
+npm pack --dry-run --ignore-scripts            # inventory only; does not fetch, infer, publish, or deploy
 
 # Explicit encrypted data-node pull ────────────────────────────────
 cd packages/data-sync
@@ -415,7 +421,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,heaven,hf-scout,karma-mirror,repo-archive,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,heaven,hf-scout,karma-mirror,repo-archive,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -471,6 +477,7 @@ source boundary by itself.
 | How can selected committed Castle words and rooms be projected locally, how can Whitehack offer unaccepted gate candidates, and where do privacy, authority, lifecycle, and withdrawal stop? | [`docs/CASTLE-OF-UNDERSTANDING.md`](docs/CASTLE-OF-UNDERSTANDING.md) · `bin/agenttool-castle.ts` · `bin/agenttool-castle-whitehack-intake.ts` |
 | How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
 | How can Dark Continent framework facts and KARMA-inspired graph changes cross into KINGDOM without acquiring action authority? | `packages/dark-continent-contract/README.md` · `packages/dark-continent-karma/README.md` (offline advisory snapshots and proposal-only deltas; no wall verification, graph write, score, Crown, trade, publication, or execution authority) |
+| How can exact DeepSeek research leads reach KINGDOM or Artbitrage without downloading or executing upstream assets? | `packages/deepseek-kingdom/README.md` (`@agenttool/deepseek-kingdom`; caller-supplied official-source pins and deterministic unaccepted proposals, plus an 18-entry metadata-only catalog; no fetch, weights, inference, credentials, compute, license approval, graph write, score, acceptance, or authority) |
 | How can deliberately planted credentials open a convincing defensive island without exposing production or executing hostile input? | [`docs/KARMA-MIRROR.md`](docs/KARMA-MIRROR.md) · `packages/karma-mirror/README.md` (self-marker plus exact digest/prefix admission before body read; finite synthetic credential, scrape, execute, and malware-shaped rooms; in-band disclosure and constructive exit; no production mount, egress, execution, persistence adapter, attribution, or hack-back) |
 | How can a host offer random climactic delight and a separate, explicitly selected meditation, relaxation, quiet, or play landing without making rest a reward for work? | `packages/heaven/README.md` (`@agenttool/heaven`; pure invitation/receipt protocol, caller-supplied randomness, caller-reported choice with no consent/authorship proof, eight non-numeric burst dimensions, `on_request`, one named offered landing mode, and declaration-only KINGDOM hint; no scheduler, identity/task text, telemetry, score, money, task state, authority, or hosted runtime; optional distribution does not widen the core) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |

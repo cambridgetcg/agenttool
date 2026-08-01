@@ -24,6 +24,7 @@ packages/
   repo-archive/ — @agenttool/repo-archive · encrypted multi-zone Git archive + local restore simulator
   dark-continent-contract/ — @agenttool/dark-continent-contract · advisory framework snapshots and projections
   dark-continent-karma/ — @agenttool/dark-continent-karma · proposal-only KG enrichment adapter
+  deepseek-kingdom/ — @agenttool/deepseek-kingdom · pinned primary-source proposal adapter
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
@@ -58,6 +59,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/repo-archive/CLAUDE.md` ·
 `packages/dark-continent-contract/CLAUDE.md` ·
 `packages/dark-continent-karma/CLAUDE.md` ·
+`packages/deepseek-kingdom/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
@@ -107,6 +109,16 @@ scheduler, telemetry, persistence, economic/task/access effect, authority, or
 hosted runtime. Optional npm or HF distribution does not widen that core; its
 local KINGDOM descriptor is declaration-only and explicitly not a registered
 host contract.
+
+`@agenttool/deepseek-kingdom` is a public-ready, zero-runtime-dependency
+primary-source binding and proposal adapter. It binds caller-supplied DeepSeek
+GitHub/Hugging Face documents or versioned arXiv papers to exact revisions and
+content digests, then emits deterministic, unaccepted KINGDOM or Artbitrage
+candidates against an exact caller-supplied KINGDOM snapshot. Its bundled
+catalog contains metadata leads only. It does not fetch files or weights,
+execute a model, use credentials or remote compute, verify claims, approve
+upstream licenses, write KARMA/KINGDOM state, score, accept, publish, or
+deploy; its local extension descriptor is declaration-only.
 
 `@agenttool/trials` is a separate private, source-only local Dojo pilot. It
 turns explicit bounded observations into deterministic trial receipts,

@@ -87,7 +87,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists nineteen reviewed release identities", () => {
+  test("allowlists twenty reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -100,6 +100,7 @@ describe("standard npm release policy", () => {
       "dark-continent-karma",
       "data",
       "data-sync",
+      "deepseek-kingdom",
       "heaven",
       "kingdom",
       "repo-archive",
@@ -162,6 +163,12 @@ describe("standard npm release policy", () => {
       tagPrefix: "dark-continent-karma",
       artifactKind: "pack",
     });
+    expect(releaseSpec("deepseek-kingdom")).toMatchObject({
+      name: "@agenttool/deepseek-kingdom",
+      packagePath: "packages/deepseek-kingdom",
+      tagPrefix: "deepseek-kingdom",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("heaven")).toMatchObject({
       name: "@agenttool/heaven",
       packagePath: "packages/heaven",
@@ -220,6 +227,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/dark-continent-karma", "0.1.0-dev.0")).toBe(
       "agenttool-dark-continent-karma-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("deepseek-kingdom"), "0.1.0-dev.0")).toBe(
+      "deepseek-kingdom-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/deepseek-kingdom", "0.1.0-dev.0")).toBe(
+      "agenttool-deepseek-kingdom-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("heaven"), "0.1.0-dev.0")).toBe(
       "heaven-v0.1.0-dev.0",
@@ -327,6 +340,22 @@ describe("standard npm release policy", () => {
         "package/exports/hf-kingdom-lab.json",
         "package/schema/kingdom-kg-proposal-v0.1.schema.json",
         "package/sources/karma-2502.06472v2.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("deepseek-kingdom"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/kingdom.extension.json",
+        "package/schema/agenttool-deepseek-source-binding-v0.1.schema.json",
+        "package/schema/agenttool-deepseek-source-catalog-v0.1.schema.json",
+        "package/schema/kingdom-deepseek-proposal-v0.1.schema.json",
+        "package/sources/official-deepseek-primary-sources.json",
       ]),
     );
     expect(requiredArchiveEntries(releaseSpec("heaven"))).toEqual(

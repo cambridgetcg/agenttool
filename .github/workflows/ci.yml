@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/karma-mirror packages/heaven packages/credential-broker packages/collab packages/browser packages/hf-scout packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom; do
+          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/deepseek-kingdom packages/karma-mirror packages/heaven packages/credential-broker packages/collab packages/browser packages/hf-scout packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local-dependent package peers
