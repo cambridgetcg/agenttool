@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/karma-mirror-receipt-window-v1.schema.json",
+  "title": "KARMA Mirror bounded per-root receipt window",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "anchor_before_first",
+    "head_event_hash",
+    "total_events_seen",
+    "receipts"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool.karma-mirror-receipt-window/v1"
+    },
+    "anchor_before_first": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "head_event_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "total_events_seen": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "receipts": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "$ref": "https://agenttool.dev/schema/karma-mirror-receipt-v1.schema.json"
+      }
+    }
+  },
+  "$comment": "JSON Schema closes the serialized shape. verifyReceiptSnapshot additionally checks current room/purpose/outcome/evidence semantics, one placement, sequence continuity, and the unkeyed hash chain. Passing establishes internal consistency only, not authenticity, completeness, provenance, or durability."
+}

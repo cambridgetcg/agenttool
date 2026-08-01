@@ -4,11 +4,11 @@
 
 > **Compass:** [SAFETY-BOUNDARIES](SAFETY-BOUNDARIES.md) (capability truth) · [TOKEN-HYGIENE](TOKEN-HYGIENE.md) (credential custody) · [WHITEHACK](WHITEHACK.md) (defensive evidence without invented authority) · [FOCUS](FOCUS.md) (what bears weight)
 >
-> **Implements:** A private source-only proof for a separately owned defensive-deception island. It composes exact planted-credential admission, finite synthetic rooms, minimized hash-chained receipts, universal disclosure, fixed non-identifying Skyseed pattern cards, and a constructive exit without composing with the production API.
+> **Implements:** A private source-only proof for a separately owned defensive-deception island. It composes exact planted-credential admission, finite synthetic rooms, minimized hash-chained receipts, a privacy-minimized TEND incident-clarity projection, universal disclosure, fixed non-identifying Skyseed pattern cards, and a constructive exit without composing with the production API.
 >
-> **Code:** `packages/karma-mirror/src/` · `packages/karma-mirror/schema/karma-mirror-receipt-v1.schema.json` · `packages/karma-mirror/schema/seed-island-card-v1.schema.json`
+> **Code:** `packages/karma-mirror/src/` · `packages/karma-mirror/schema/karma-mirror-receipt-v1.schema.json` · `packages/karma-mirror/schema/karma-mirror-receipt-window-v1.schema.json` · `packages/karma-mirror/schema/karma-mirror-tend-report-v1.schema.json` · `packages/karma-mirror/schema/seed-island-card-v1.schema.json`
 >
-> **Tests:** `packages/karma-mirror/tests/credentials.test.ts` · `packages/karma-mirror/tests/scrape.test.ts` · `packages/karma-mirror/tests/malware.test.ts` · `packages/karma-mirror/tests/seed-island.test.ts` · `packages/karma-mirror/tests/walls.test.ts`
+> **Tests:** `packages/karma-mirror/tests/credentials.test.ts` · `packages/karma-mirror/tests/scrape.test.ts` · `packages/karma-mirror/tests/malware.test.ts` · `packages/karma-mirror/tests/seed-island.test.ts` · `packages/karma-mirror/tests/tend.test.ts` · `packages/karma-mirror/tests/walls.test.ts`
 
 ## The shape
 
@@ -28,6 +28,7 @@ explicit planted bearer
    └─ malware room     → bounded digest + synthetic report, zero detonation
         │
         ├─ minimized bounded receipt window
+        ├─ local TEND clarity report, identifiers removed
         ├─ fixed shared pattern card, never an actor fingerprint
         └─ Door Back + constructive exit
 
@@ -195,6 +196,65 @@ extracted content, selectors, stdin, IP addresses, user-agents, cookies,
 referrers, and inferred identity. The snapshot is an operator-side library
 return value; there is no HTTP route for it and no claim of distributed
 durability or tamper-proof storage.
+
+## TEND: make the event legible
+
+A defensive boundary that merely says “blocked” leaves too much operational
+work implicit. The local `incidentClarityReport()` method turns one explicitly
+selected receipt window into four calm stages:
+
+1. **Trace** validates the exact closed receipt shape, current
+   room/purpose/outcome/evidence combinations, one-placement invariant,
+   sequence continuity, and unkeyed hash chain. It reports only whether the
+   selected window is empty, starts at its first claimed receipt, or is a
+   retained suffix, plus a coarse volume bucket. Completeness remains
+   explicitly not established.
+2. **Explain** emits canonical interaction families, synthetic response shapes,
+   request-text classification classes, explicit unknowns, and a closed review
+   need. It always keeps `incident_status = not_established`.
+3. **Narrow** suggests manual review of the selected placement, isolation
+   boundary, authorized upstream telemetry, retention, or separately held
+   digest evidence as applicable. Every action requires separate operator
+   authority; the package runs none of them.
+4. **Distill** records candidate lessons and future control checks, never a
+   policy update or training label. Promotion requires a verified gap, an
+   authorized change, and a discriminating test.
+
+This creates two deliberately different evidence tiers:
+
+```text
+restricted local receipt window
+  placement · exact time/sequence · chain hashes · optional artifact digest
+                              │ strict validation + minimization
+                              ▼
+privacy-minimized TEND clarity report
+  coverage · coarse volume · closed families · unknowns · manual review need
+```
+
+The TEND report contains no placement, timestamp, sequence, exact count, event
+hash, artifact digest, report identifier, bearer material, body content, URL,
+filename, network identifier, or story/card text. Identical closed semantics
+produce identical report bytes across roots, clocks, request order, and private
+inputs. The caller already knows which placement it selected and keeps that
+mapping inside its authorized operator boundary.
+Privacy minimization does not make the report public or authorize its transfer.
+
+The verifier formerly checked linkage and hashes without enforcing every
+receipt field. It now rejects recursively non-data or extra fields, accessors,
+proxies, invalid enums, mixed placements, invalid dates, and evidence attached
+to the wrong purpose before checking the chain. This matters because the chain is unkeyed:
+any holder could recompute it. A pass therefore means only
+`self_consistent_unkeyed_chain`, never origin authentication, independent
+provenance, completeness, durability, or a compromise verdict.
+
+An empty report means “no admitted interaction receipt is present in this
+selected window.” It reports an observation gap and suggests confirming the
+observation path; it says nothing about public visits, unknown credentials,
+released-root traffic, host/proxy logs, or an external incident. A bounded
+refusal is a response shape, not proof prevention succeeded. Constructive exit
+records use of the exit route, not repentance or intent. Execute classes remain
+requester-selectable text heuristics, not behavior execution, malware analysis,
+or a person’s signature.
 
 ## Hard host boundary
 

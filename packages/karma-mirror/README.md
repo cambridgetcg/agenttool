@@ -43,6 +43,12 @@ adapter in `packages/dark-continent-karma`.
   placement, sequence/time/hash-chain metadata, closed action categories,
   and—only for staged or polled artifacts—the SHA-256 digest. It has no
   hosted/operator HTTP route.
+- A pure operator-side `incidentClarityReport()` projection using the **TEND**
+  loop—Trace, Explain, Narrow, Distill. It strictly validates the closed receipt
+  semantics, then emits only privacy-minimized families, coarse volume,
+  uncertainty, manual review actions, and candidate control checks. It emits no
+  placement, timestamp, sequence, hash, digest, report ID, request material, or
+  automatic external action or authority-bearing decision.
 
 Every response carries the KARMA, Door Back, and `Link` disclosures; while the
 story is active it also carries the Skyseed header:
@@ -94,6 +100,10 @@ const response = await mirror.handle(
     headers: { authorization: `Bearer ${key}` },
   }),
 );
+
+// Local operator use only. The placement selects one root but is not copied
+// into the privacy-minimized report.
+const tend = mirror.incidentClarityReport("synthetic-test");
 ```
 
 `mintMirrorCredential` returns plaintext once and retains none. The caller is
@@ -106,6 +116,43 @@ AgentTool credential. Derived keys also require an ephemeral per-instance
 secret, are not derivable from the record, and stop working after that mirror
 instance is replaced.
 
+## TEND: from receipt to review
+
+A synthetic response is only the start of the operator's work. TEND helps find
+a recorded interaction, state what it means, decide whether review is enough,
+and identify a control check:
+
+| Phase | Meaning in this package |
+|---|---|
+| **Trace** | Strictly validate one operator-selected receipt window and expose its coverage. |
+| **Explain** | Name closed interaction families, response shapes, uncertainty, and a review need without declaring an incident. |
+| **Narrow** | Suggest only manual, separately authorized, reversible review. No block, revoke, rotate, quarantine, notification, retaliation, or remediation runs automatically. |
+| **Distill** | Emit candidate lessons and control checks. A lesson is promoted only after a verified gap, an authorized change, and a discriminating test. |
+
+“Plant the story; **TEND the evidence**.” The story and evidence remain
+separate: Skyseed cards have evidentiary weight `none` and never enter TEND.
+
+The report contains fewer identifying and correlating fields than the
+underlying receipt window. Privacy minimization does not make the report public
+or authorize its transfer. It buckets retained volume and emits canonical sets,
+so the same closed semantics produce the same report across roots, clocks,
+ordering, bearers,
+request bodies, artifacts, and operator placements. Exact placement, time,
+sequence, event hashes, and artifact digests remain only in the separately
+handled local receipt snapshot. An empty TEND report means only that no
+*admitted receipt* is present; public visits, failed admission, released-root
+traffic, proxy activity, and evicted event categories are not reconstructed. It
+therefore reports an observation gap and suggests confirming the observation
+path rather than treating emptiness as evidence of absence.
+
+`verifyReceiptSnapshot()` now rejects extra fields, accessors, proxies, invalid
+enums, mixed placements, invalid semantic combinations, and misplaced evidence
+before checking sequence and hash continuity. Because the chain is unkeyed, passing
+means **self-consistent**, not authentic, independently witnessed, complete,
+tamper-proof, or durable. `buildKarmaTendReport({ placement, snapshot })` can
+project a previously handled local snapshot through the same strict gate. Both
+the receipt-window and TEND report schemas ship as schema-only package subpaths.
+
 ## Ability card
 
 ```text
@@ -114,13 +161,13 @@ Desire: turn exploit interaction into bounded defensive evidence while real infr
 Affinity: Conjuration, with a narrow Manipulation seam
 Trigger: valid mirror self-marker plus exact hash and prefix match for an explicitly configured planted bearer
 Anti-trigger: missing, malformed, unmarked, unknown, or ordinary production credentials
-Input → output: bounded HTTP-shaped interaction → coherent synthetic response + fixed request-pattern card + content-minimized receipt
+Input → output: bounded HTTP-shaped interaction → coherent synthetic response + fixed request-pattern card + content-minimized receipt; operator-selected receipt window → privacy-minimized TEND report
 Conditions: separately owned island; synthetic assets only; no production modules, secrets, data, billing, queues, providers, or egress
 Limitation and budget: 32 planted roots, 100 KB JSON, 256 body chunks, 2 s total body-read deadline, 64 KiB decoded sample, 8 scrape levels, 3 links/level, 32 child keys/root, 64 digest-only jobs/root, 512 receipts/root by default
 Breach response: generic refusal or closed mirror error; never fall through to AgentTool's real handlers
-Proof: source-wall tests, pre-body admission tests, finite-graph tests, no-effect execution tests, card equality/privacy/schema tests, receipt-chain verification, Node built-artifact smoke
+Proof: source-wall tests, pre-body admission tests, finite-graph tests, no-effect execution tests, card equality/privacy/schema tests, strict Draft 2020 schema compilation, strict receipt semantics and chain verification, TEND cross-root privacy/canonicality tests, Node built-artifact smoke
 Exit: unauthenticated explanation plus authenticated constructive exit; fiction ends immediately, later interactions create no receipts, and the action receives a non-economic freedom-from-the-loop return
-Non-claims: no intent or identity inference, attribution, forensic signature, authorship, endorsement, consent, anonymity, secure erasure, malware analysis, sandboxing, production defense, deployment, or legal authorization
+Non-claims: no incident verdict, intent or identity inference, actor count, attribution, causation, forensic signature, authorship, endorsement, consent, compromise, anonymity, secure erasure, malware analysis, sandboxing, production defense, automatic response authority, training label, deployment, or legal authorization
 ```
 
 ## Hard deployment boundary

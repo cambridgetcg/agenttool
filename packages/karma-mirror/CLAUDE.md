@@ -11,7 +11,8 @@ the KARMA knowledge-graph adapter in `packages/dark-continent-karma`.
 - Never import or invoke filesystem, process, VM, subprocess, worker, socket,
   DNS, HTTP-client, browser, database, queue, payment, provider, wallet, vault,
   federation, or production AgentTool modules.
-- `node:crypto` is the only Node built-in allowed in `src/`.
+- `node:crypto` and the non-capability `node:util` proxy detector are the only
+  Node built-ins allowed in `src/`.
 - Unknown, missing, unmarked, or ordinary AgentTool credentials never
   enter the mirror and never create a receipt. Admission requires the public
   mirror self-marker plus an exact caller-supplied planted-record hash and
@@ -45,6 +46,21 @@ the KARMA knowledge-graph adapter in `packages/dark-continent-karma`.
   may survive in the engine.
 - Never retain request bodies, code, filenames, bearer plaintext, IPs,
   user-agents, cookies, referrers, or inferred identities in receipts.
+- Treat receipt-chain verification as internal consistency only. Validate exact
+  recursive data fields, closed enums, current semantic combinations, one
+  placement, and sequence continuity before hashing; the unkeyed chain does not
+  establish authenticity, provenance, completeness, or durability.
+- Keep TEND (`Trace`, `Explain`, `Narrow`, `Distill`) a pure operator-side
+  projection with no HTTP route or new state. Its report may expose only coarse
+  volume, canonical closed families, explicit unknowns, manual review options,
+  and candidate control checks. Never copy placement, exact counts, timestamps,
+  sequences, hashes, digests, request material, network identifiers, or story
+  text into it.
+- TEND never establishes an incident, request source or source count, request
+  purpose, attribution, causation, compromise, malware, external effect,
+  response or transfer authority, policy update, or training label. It runs no
+  block, revoke, rotate, quarantine, notify, publish, retaliation, or
+  remediation action.
 - Keep each request finite and fast. Enforce the body deadline, byte/fragment
   ceilings, and per-root state partitions. No sleep, held sockets, infinite
   response, recursive expansion, attacker-controlled allocation, or
