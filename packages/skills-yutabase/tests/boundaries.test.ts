@@ -39,7 +39,7 @@ describe("closed minimized input boundary", () => {
     expectInvalid(summary, "input.selection_summary.issue_messages: unexpected field");
   });
 
-  test("requires a valid digest-bearing report and exact inspector provenance", () => {
+  test("requires a valid digest-bearing report and closed inspector identity fields", () => {
     const invalidReport = mutableInput();
     invalidReport.source.report_valid = false;
     expectInvalid(invalidReport, "input.source.report_valid: expected true");
@@ -73,6 +73,52 @@ describe("closed minimized input boundary", () => {
     expectInvalid(
       impossibleCategories,
       "must equal 1 + script_count + resource_count",
+    );
+  });
+
+  test("keeps reported names and redacted aliases in distinct closed lanes", () => {
+    const reportedAlias = mutableInput();
+    reportedAlias.skills[0].name = "<redacted-1>";
+    expectInvalid(
+      reportedAlias,
+      "expected a portable lowercase hyphenated reported skill name",
+    );
+
+    const redactedPortable = mutableInput();
+    redactedPortable.skills[0].name_kind = "redacted_alias";
+    expectInvalid(
+      redactedPortable,
+      "expected an exact upstream <redacted-N> alias",
+    );
+
+    const unknownKind = mutableInput();
+    unknownKind.skills[0].name_kind = "inferred";
+    expectInvalid(unknownKind, "expected reported or redacted_alias");
+
+    for (const alias of [
+      "<redacted-0>",
+      "<redacted-01>",
+      "<redacted-4097>",
+      "<redacted-1>-suffix",
+    ]) {
+      const invalidAlias = mutableInput();
+      invalidAlias.skills[0].name_kind = "redacted_alias";
+      invalidAlias.skills[0].name = alias;
+      expectInvalid(
+        invalidAlias,
+        "expected an exact upstream <redacted-N> alias",
+      );
+    }
+  });
+
+  test("requires the report redaction count to cover selected alias ordinals", () => {
+    const input = mutableInput();
+    input.skills[0].name_kind = "redacted_alias";
+    input.skills[0].name = "<redacted-2>";
+    input.selection_summary.redactions = 1;
+    expectInvalid(
+      input,
+      "must cover every selected redacted skill alias ordinal",
     );
   });
 

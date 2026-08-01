@@ -7,6 +7,7 @@ import {
   INSPECTION_SCHEMA_ID,
   INSPECTION_SCHEMA_VERSION,
   INSPECTOR_NAME,
+  INSPECTOR_REVISION_PROVENANCE,
   MAX_FILES,
   MAX_ISSUES,
   MAX_SKILLS,
@@ -42,8 +43,9 @@ const CANONICAL_UUID =
 const RFC3339_MILLISECONDS =
   /^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
-const GIT_REVISION = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const REVISION_HEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const REDACTED_SKILL_ALIAS = /^<redacted-([1-9][0-9]*)>$/;
 const SEMVER =
   /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
@@ -58,6 +60,9 @@ function compareSkillSnapshots(
   left: MinimizedSkillSnapshot,
   right: MinimizedSkillSnapshot,
 ): number {
+  if (left.name_kind !== right.name_kind) {
+    return left.name_kind < right.name_kind ? -1 : 1;
+  }
   if (left.name !== right.name) return left.name < right.name ? -1 : 1;
   if (left.content_digest === right.content_digest) return 0;
   return left.content_digest < right.content_digest ? -1 : 1;
@@ -68,6 +73,7 @@ export function skillsSelectionDigest(
   skills: readonly MinimizedSkillSnapshot[],
 ): string {
   const canonical = [...skills].sort(compareSkillSnapshots).map((skill) => ({
+    name_kind: skill.name_kind,
     name: skill.name,
     content_digest: skill.content_digest,
     file_count: skill.file_count,
@@ -202,7 +208,7 @@ export function assertSkillsYutabaseInput(input: SkillsYutabaseInput): void {
     fail("input.source.inspector_version", "expected a canonical semantic version");
   }
   assertString(source.inspector_revision, "input.source.inspector_revision");
-  if (!GIT_REVISION.test(source.inspector_revision)) {
+  if (!REVISION_HEX.test(source.inspector_revision)) {
     fail("input.source.inspector_revision", "expected a 40 or 64 lowercase hex revision");
   }
   assertExact(source.mode, "read-only", "input.source.mode");
@@ -232,19 +238,37 @@ export function assertSkillsYutabaseInput(input: SkillsYutabaseInput): void {
   }
 
   const names = new Set<string>();
+  const redactedAliasOrdinals: number[] = [];
   const skills: MinimizedSkillSnapshot[] = [];
   for (const [index, value] of record.skills.entries()) {
     const path = `input.skills[${index}]`;
     const skill = asClosedObject(value, path, [
+      "name_kind",
       "name",
       "content_digest",
       "file_count",
       "script_count",
       "resource_count",
     ]);
+    assertString(skill.name_kind, `${path}.name_kind`);
+    if (skill.name_kind !== "reported" && skill.name_kind !== "redacted_alias") {
+      fail(`${path}.name_kind`, "expected reported or redacted_alias");
+    }
     assertString(skill.name, `${path}.name`);
-    if (skill.name.length > 64 || !SKILL_NAME.test(skill.name)) {
-      fail(`${path}.name`, "expected a portable lowercase hyphenated skill name");
+    if (skill.name_kind === "reported") {
+      if (skill.name.length > 64 || !SKILL_NAME.test(skill.name)) {
+        fail(`${path}.name`, "expected a portable lowercase hyphenated reported skill name");
+      }
+    } else {
+      const match = REDACTED_SKILL_ALIAS.exec(skill.name);
+      const ordinal = match === null ? 0 : Number(match[1]);
+      if (!Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal > MAX_ISSUES) {
+        fail(
+          `${path}.name`,
+          `expected an exact upstream <redacted-N> alias with N from 1 to ${MAX_ISSUES}`,
+        );
+      }
+      redactedAliasOrdinals.push(ordinal);
     }
     if (names.has(skill.name)) fail(`${path}.name`, "skill names must be unique");
     names.add(skill.name);
@@ -262,6 +286,13 @@ export function assertSkillsYutabaseInput(input: SkillsYutabaseInput): void {
       );
     }
     skills.push(skill as unknown as MinimizedSkillSnapshot);
+  }
+
+  if (redactedAliasOrdinals.some((ordinal) => ordinal > (summary.redactions as number))) {
+    fail(
+      "input.selection_summary.redactions",
+      "must cover every selected redacted skill alias ordinal",
+    );
   }
 
   if (checkedSum(skills.map((skill) => skill.file_count), "input.selection_summary.files") !== summary.files) {
@@ -343,6 +374,7 @@ export function planSkillsInspection(
         inspector_name: input.source.inspector_name,
         inspector_version: input.source.inspector_version,
         inspector_revision: input.source.inspector_revision,
+        inspector_revision_provenance: INSPECTOR_REVISION_PROVENANCE,
         inspector_mode: input.source.mode,
         selected_skill_count: input.selection_summary.skills,
         selected_file_count: input.selection_summary.files,
@@ -361,6 +393,7 @@ export function planSkillsInspection(
   for (const skill of skills) {
     const skillUrn = skillEvidenceUrn(
       input.source.report_digest,
+      skill.name_kind,
       skill.name,
       skill.content_digest,
     );
@@ -370,6 +403,7 @@ export function planSkillsInspection(
         "skill_snapshot",
         input.project_id,
         input.source.report_digest,
+        skill.name_kind,
         skill.name,
         skill.content_digest,
       ),
@@ -381,6 +415,7 @@ export function planSkillsInspection(
         {
           project_id: input.project_id,
           source_report_digest: input.source.report_digest,
+          name_kind: skill.name_kind,
           name: skill.name,
           content_digest: skill.content_digest,
           content_digest_semantics: SKILL_CONTENT_DIGEST_SEMANTICS,
@@ -418,6 +453,7 @@ export function planSkillsInspection(
       source_report_schema_validation: "not_performed",
       report_digest_verification: "not_performed",
       skill_content_digest_verification: "not_performed",
+      inspector_revision_verification: "not_performed",
       publisher_authentication: "not_performed",
       skill_interpretation: "not_performed",
       safety_evaluation: "not_performed",

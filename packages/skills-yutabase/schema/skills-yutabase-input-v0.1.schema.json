@@ -23,7 +23,11 @@
         "report_valid": { "const": true },
         "inspector_name": { "const": "@agenttool/skills" },
         "inspector_version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$" },
-        "inspector_revision": { "type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$" },
+        "inspector_revision": {
+          "type": "string",
+          "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$",
+          "$comment": "Caller-supplied identity input. Shape validation does not resolve Git or verify association with the inspector artifact."
+        },
         "mode": { "const": "read-only" }
       }
     },
@@ -47,16 +51,35 @@
       "maxItems": 128,
       "items": {
         "type": "object",
-        "$comment": "The planner additionally enforces file_count = 1 + script_count + resource_count. Standard JSON Schema cannot compare sibling numeric fields without a non-portable extension.",
+        "$comment": "The planner additionally enforces file_count = 1 + script_count + resource_count and requires every redacted alias ordinal to be covered by selection_summary.redactions. Standard JSON Schema cannot compare sibling numeric fields without a non-portable extension.",
         "additionalProperties": false,
-        "required": ["name", "content_digest", "file_count", "script_count", "resource_count"],
+        "required": ["name_kind", "name", "content_digest", "file_count", "script_count", "resource_count"],
         "properties": {
-          "name": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "name_kind": { "type": "string", "enum": ["reported", "redacted_alias"] },
+          "name": { "type": "string", "minLength": 1, "maxLength": 64 },
           "content_digest": { "$ref": "#/$defs/sha256" },
           "file_count": { "type": "integer", "minimum": 1, "maximum": 4096 },
           "script_count": { "type": "integer", "minimum": 0, "maximum": 4096 },
           "resource_count": { "type": "integer", "minimum": 0, "maximum": 4096 }
-        }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "name_kind": { "const": "reported" },
+              "name": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" }
+            }
+          },
+          {
+            "properties": {
+              "name_kind": { "const": "redacted_alias" },
+              "name": {
+                "type": "string",
+                "maxLength": 15,
+                "pattern": "^<redacted-([1-9]|[1-9][0-9]{1,2}|[1-3][0-9]{3}|40([0-8][0-9]|9[0-6]))>$"
+              }
+            }
+          }
+        ]
       }
     },
     "authority": {
