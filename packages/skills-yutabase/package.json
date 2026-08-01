@@ -37,7 +37,7 @@
   "scripts": {
     "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "bun run clean && tsc",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.contract.json",
     "test": "bun test",
     "check:package": "bun run build && bun test ./tests/package.check.ts",
     "smoke:node": "node scripts/smoke-node.mjs",

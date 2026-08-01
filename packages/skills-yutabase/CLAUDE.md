@@ -6,6 +6,15 @@ It does not read an inspection report or skill tree, validate the upstream
 report schema, recompute digests, persist data, execute models, or call a
 network.
 
+Treat JavaScript inputs as inert JSON-shaped data. The runtime must detach one
+snapshot from own enumerable data properties on plain/null-prototype objects
+and own enumerable elements on dense standard arrays; reject accessors,
+inheritance, sparse values, symbols, custom prototypes, and custom array
+fields. Planning and direct selection hashing must use only that snapshot.
+Prototype/key/descriptor inspection can invoke caller-authored Proxy traps, so
+the package does not claim to neutralize effects hidden in a Proxy; document
+and test that limit instead of weakening the data boundary.
+
 Keep `agenttool-skills-yutabase-plan/v0.1`, its UUID namespace, two decks, one
 word, field allowlist, and identity inputs frozen together after first external
 retention. A pre-release contract finalization may retain v0.1 only after

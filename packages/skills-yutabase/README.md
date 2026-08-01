@@ -32,6 +32,28 @@ it does not canonicalize or validate them. This planner checks only the
 minimized fields it consumes. Its explicit `not_performed` results are not
 successful validations.
 
+The JavaScript boundary snapshots inert data rather than retaining the
+caller's objects. Every listed object field and array element must be an own,
+enumerable data property. Objects must use `Object.prototype` or `null`;
+arrays must be dense and use the standard array prototype. Accessors,
+inherited or sparse values, symbols, custom prototypes, and custom array
+fields are rejected. `assertSkillsYutabaseInput()` accepts `unknown` and
+narrows it only after these checks. `planSkillsInspection()` and the direct
+`skillsSelectionDigest()` helper compute exclusively from detached snapshots,
+so a getter cannot change a value between validation, identity, and output.
+
+JSON Schema success is only the portable structural gate. The runtime also
+checks a real exact UTC instant, unique names, skill-array/summary agreement,
+per-skill category equality, aggregate count equality, and redacted-alias
+coverage. The schema's root `$comment` lists the complete runtime-only set.
+
+Inspecting a JavaScript `Proxy` necessarily invokes its prototype, own-key, or
+property-descriptor traps. This package catches malformed or revoked proxies
+and never deliberately reads an accessor, but it cannot prevent effects that
+a caller has embedded inside those traps. Use parsed JSON or other inert plain
+data at this boundary; zero effects describes the planner's own behavior, not
+arbitrary caller-defined Proxy code.
+
 Every selected skill names its source lane explicitly:
 
 - `name_kind: "reported"` accepts only a portable lowercase hyphenated name.

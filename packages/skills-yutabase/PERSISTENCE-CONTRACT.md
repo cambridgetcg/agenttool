@@ -12,8 +12,8 @@ A future private sidecar or deliberately versioned shared projector must:
 3. recompute and compare the caller-supplied report and skill digests;
 4. preserve the inspector revision as caller-supplied and unverified unless it
    independently proves the exact inspector artifact-to-revision association;
-5. create the minimized input without bodies, paths, prose, identities, or
-   requirement names;
+5. create the minimized input as inert JSON-shaped data, without accessors,
+   proxies, bodies, paths, prose, identities, or requirement names;
 6. preserve `reported` and `redacted_alias` name lanes without recovering or
    substituting concealed names;
 7. call this pure planner and transactionally apply its intentions;

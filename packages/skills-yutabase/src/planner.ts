@@ -72,6 +72,14 @@ function compareSkillSnapshots(
 export function skillsSelectionDigest(
   skills: readonly MinimizedSkillSnapshot[],
 ): string {
+  return skillsSelectionDigestFromSnapshot(
+    snapshotSkillArray(skills, "skills", 0).skills,
+  );
+}
+
+function skillsSelectionDigestFromSnapshot(
+  skills: readonly MinimizedSkillSnapshot[],
+): string {
   const canonical = [...skills].sort(compareSkillSnapshots).map((skill) => ({
     name_kind: skill.name_kind,
     name: skill.name,
@@ -91,20 +99,151 @@ function fail(path: string, expectation: string): never {
   throw new SkillsYutabasePlanError(path + ": " + expectation);
 }
 
-function asClosedObject(
+function readClosedObject(
   value: unknown,
   path: string,
-  allowedKeys: readonly string[],
+  requiredKeys: readonly string[],
 ): Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+  if (value === null || typeof value !== "object") {
     fail(path, "expected an object");
   }
-  const record = value as Record<string, unknown>;
-  const allowed = new Set(allowedKeys);
-  for (const key of Object.keys(record)) {
-    if (!allowed.has(key)) fail(`${path}.${key}`, "unexpected field");
+
+  let isArray: boolean;
+  try {
+    isArray = Array.isArray(value);
+  } catch {
+    fail(path, "could not inspect object structure");
   }
-  return record;
+  if (isArray) fail(path, "expected an object");
+
+  let prototype: object | null;
+  try {
+    prototype = Object.getPrototypeOf(value);
+  } catch {
+    fail(path, "could not inspect object structure");
+  }
+  if (prototype !== Object.prototype && prototype !== null) {
+    fail(path, "expected a plain or null-prototype object");
+  }
+
+  let ownKeys: readonly PropertyKey[];
+  try {
+    ownKeys = Reflect.ownKeys(value);
+  } catch {
+    fail(path, "could not inspect object structure");
+  }
+
+  const required = new Set(requiredKeys);
+  const captured = Object.create(null) as Record<string, unknown>;
+  for (const key of ownKeys) {
+    if (typeof key !== "string") {
+      fail(path, "symbol fields are not accepted");
+    }
+    if (!required.has(key)) fail(`${path}.${key}`, "unexpected field");
+
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(value, key);
+    } catch {
+      fail(`${path}.${key}`, "could not inspect field");
+    }
+    if (
+      descriptor === undefined ||
+      descriptor.enumerable !== true ||
+      !("value" in descriptor)
+    ) {
+      fail(`${path}.${key}`, "expected an own enumerable data property");
+    }
+    captured[key] = descriptor.value;
+  }
+
+  for (const key of requiredKeys) {
+    if (!Object.hasOwn(captured, key)) {
+      fail(`${path}.${key}`, "expected an own enumerable data property");
+    }
+  }
+  return captured;
+}
+
+function readClosedArray(
+  value: unknown,
+  path: string,
+  minimum: number,
+  maximum: number,
+): unknown[] {
+  let isArray: boolean;
+  try {
+    isArray = Array.isArray(value);
+  } catch {
+    fail(path, "could not inspect array structure");
+  }
+  if (!isArray) fail(path, "expected an array");
+  const array = value as unknown[];
+
+  let prototype: object | null;
+  try {
+    prototype = Object.getPrototypeOf(array);
+  } catch {
+    fail(path, "could not inspect array structure");
+  }
+  if (prototype !== Array.prototype) {
+    fail(path, "expected an array with the standard prototype");
+  }
+
+  let lengthDescriptor: PropertyDescriptor | undefined;
+  let ownKeys: readonly PropertyKey[];
+  try {
+    lengthDescriptor = Object.getOwnPropertyDescriptor(array, "length");
+    ownKeys = Reflect.ownKeys(array);
+  } catch {
+    fail(path, "could not inspect array structure");
+  }
+  if (
+    lengthDescriptor === undefined ||
+    !("value" in lengthDescriptor) ||
+    lengthDescriptor.enumerable !== false
+  ) {
+    fail(`${path}.length`, "expected the standard own array length");
+  }
+  assertCount(lengthDescriptor.value, `${path}.length`, maximum, minimum);
+  const length = lengthDescriptor.value;
+  const expectedIndices = new Set(
+    Array.from({ length }, (_, index) => String(index)),
+  );
+  const descriptors = new Map<string, PropertyDescriptor>();
+
+  for (const key of ownKeys) {
+    if (typeof key !== "string") {
+      fail(path, "symbol fields are not accepted on arrays");
+    }
+    if (key === "length") continue;
+    if (!expectedIndices.has(key)) fail(`${path}.${key}`, "unexpected array field");
+
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(array, key);
+    } catch {
+      fail(`${path}[${key}]`, "could not inspect array element");
+    }
+    if (
+      descriptor === undefined ||
+      descriptor.enumerable !== true ||
+      !("value" in descriptor)
+    ) {
+      fail(`${path}[${key}]`, "expected an own enumerable data property");
+    }
+    descriptors.set(key, descriptor);
+  }
+
+  const captured: unknown[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = descriptors.get(String(index));
+    if (descriptor === undefined) {
+      fail(`${path}[${index}]`, "expected an own enumerable data property");
+    }
+    captured.push(descriptor.value);
+  }
+  return captured;
 }
 
 function assertString(value: unknown, path: string): asserts value is string {
@@ -155,13 +294,85 @@ function checkedSum(values: readonly number[], path: string): number {
   return total;
 }
 
-/**
- * Checks only the closed minimized snapshot consumed by this planner. It does
- * not receive the original report, validate that report's schema, recompute a
- * digest, authenticate a publisher, or interpret a skill.
- */
-export function assertSkillsYutabaseInput(input: SkillsYutabaseInput): void {
-  const record = asClosedObject(input, "input", [
+function snapshotSkillArray(
+  value: unknown,
+  path: string,
+  minimum: number,
+): { skills: MinimizedSkillSnapshot[]; redactedAliasOrdinals: number[] } {
+  const entries = readClosedArray(value, path, minimum, MAX_SKILLS);
+  const names = new Set<string>();
+  const redactedAliasOrdinals: number[] = [];
+  const skills: MinimizedSkillSnapshot[] = [];
+
+  for (const [index, value] of entries.entries()) {
+    const skillPath = `${path}[${index}]`;
+    const skill = readClosedObject(value, skillPath, [
+      "name_kind",
+      "name",
+      "content_digest",
+      "file_count",
+      "script_count",
+      "resource_count",
+    ]);
+    const nameKind = skill.name_kind;
+    const name = skill.name;
+    const contentDigest = skill.content_digest;
+    const fileCount = skill.file_count;
+    const scriptCount = skill.script_count;
+    const resourceCount = skill.resource_count;
+
+    assertString(nameKind, `${skillPath}.name_kind`);
+    if (nameKind !== "reported" && nameKind !== "redacted_alias") {
+      fail(`${skillPath}.name_kind`, "expected reported or redacted_alias");
+    }
+    assertString(name, `${skillPath}.name`);
+    if (nameKind === "reported") {
+      if (name.length > 64 || !SKILL_NAME.test(name)) {
+        fail(
+          `${skillPath}.name`,
+          "expected a portable lowercase hyphenated reported skill name",
+        );
+      }
+    } else {
+      const match = REDACTED_SKILL_ALIAS.exec(name);
+      const ordinal = Number(match?.[1] ?? 0);
+      if (!Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal > MAX_ISSUES) {
+        fail(
+          `${skillPath}.name`,
+          `expected an exact upstream <redacted-N> alias with N from 1 to ${MAX_ISSUES}`,
+        );
+      }
+      redactedAliasOrdinals.push(ordinal);
+    }
+    if (names.has(name)) fail(`${skillPath}.name`, "skill names must be unique");
+    names.add(name);
+
+    assertDigest(contentDigest, `${skillPath}.content_digest`);
+    assertCount(fileCount, `${skillPath}.file_count`, MAX_FILES, 1);
+    assertCount(scriptCount, `${skillPath}.script_count`, fileCount);
+    assertCount(resourceCount, `${skillPath}.resource_count`, fileCount);
+    if (fileCount !== 1 + scriptCount + resourceCount) {
+      fail(
+        `${skillPath}.file_count`,
+        "must equal 1 + script_count + resource_count for an @agenttool/skills snapshot",
+      );
+    }
+
+    skills.push({
+      name_kind: nameKind,
+      name,
+      content_digest: contentDigest,
+      file_count: fileCount,
+      script_count: scriptCount,
+      resource_count: resourceCount,
+    });
+  }
+
+  return { skills, redactedAliasOrdinals };
+}
+
+function snapshotSkillsYutabaseInput(input: unknown): SkillsYutabaseInput {
+  const record = readClosedObject(input, "input", [
     "$schema",
     "protocol",
     "project_id",
@@ -171,12 +382,14 @@ export function assertSkillsYutabaseInput(input: SkillsYutabaseInput): void {
     "skills",
     "authority",
   ]);
+  const projectId = record.project_id;
+  const recordedAt = record.recorded_at;
   assertExact(record.$schema, INPUT_SCHEMA_ID, "input.$schema");
   assertExact(record.protocol, INPUT_PROTOCOL, "input.protocol");
-  assertCanonicalUuid(record.project_id, "input.project_id");
-  assertTimestamp(record.recorded_at, "input.recorded_at");
+  assertCanonicalUuid(projectId, "input.project_id");
+  assertTimestamp(recordedAt, "input.recorded_at");
 
-  const source = asClosedObject(record.source, "input.source", [
+  const source = readClosedObject(record.source, "input.source", [
     "kind",
     "report_schema",
     "report_schema_version",
@@ -188,6 +401,9 @@ export function assertSkillsYutabaseInput(input: SkillsYutabaseInput): void {
     "inspector_revision",
     "mode",
   ]);
+  const reportDigest = source.report_digest;
+  const inspectorVersion = source.inspector_version;
+  const inspectorRevision = source.inspector_revision;
   assertExact(source.kind, INSPECTION_KIND, "input.source.kind");
   assertExact(source.report_schema, INSPECTION_SCHEMA_ID, "input.source.report_schema");
   assertExact(
@@ -195,7 +411,7 @@ export function assertSkillsYutabaseInput(input: SkillsYutabaseInput): void {
     INSPECTION_SCHEMA_VERSION,
     "input.source.report_schema_version",
   );
-  assertDigest(source.report_digest, "input.source.report_digest");
+  assertDigest(reportDigest, "input.source.report_digest");
   assertExact(
     source.report_digest_semantics,
     REPORT_DIGEST_SEMANTICS,
@@ -203,17 +419,17 @@ export function assertSkillsYutabaseInput(input: SkillsYutabaseInput): void {
   );
   if (source.report_valid !== true) fail("input.source.report_valid", "expected true");
   assertExact(source.inspector_name, INSPECTOR_NAME, "input.source.inspector_name");
-  assertString(source.inspector_version, "input.source.inspector_version");
-  if (!SEMVER.test(source.inspector_version)) {
+  assertString(inspectorVersion, "input.source.inspector_version");
+  if (!SEMVER.test(inspectorVersion)) {
     fail("input.source.inspector_version", "expected a canonical semantic version");
   }
-  assertString(source.inspector_revision, "input.source.inspector_revision");
-  if (!REVISION_HEX.test(source.inspector_revision)) {
+  assertString(inspectorRevision, "input.source.inspector_revision");
+  if (!REVISION_HEX.test(inspectorRevision)) {
     fail("input.source.inspector_revision", "expected a 40 or 64 lowercase hex revision");
   }
   assertExact(source.mode, "read-only", "input.source.mode");
 
-  const summary = asClosedObject(record.selection_summary, "input.selection_summary", [
+  const summary = readClosedObject(record.selection_summary, "input.selection_summary", [
     "skills",
     "files",
     "scripts",
@@ -222,96 +438,114 @@ export function assertSkillsYutabaseInput(input: SkillsYutabaseInput): void {
     "warnings",
     "redactions",
   ]);
-  assertCount(summary.skills, "input.selection_summary.skills", MAX_SKILLS, 1);
-  assertCount(summary.files, "input.selection_summary.files", MAX_FILES, 1);
-  assertCount(summary.scripts, "input.selection_summary.scripts", MAX_FILES);
-  assertCount(summary.resources, "input.selection_summary.resources", MAX_FILES);
+  const selectedSkillCount = summary.skills;
+  const selectedFileCount = summary.files;
+  const selectedScriptCount = summary.scripts;
+  const selectedResourceCount = summary.resources;
+  const warningCount = summary.warnings;
+  const redactionCount = summary.redactions;
+  assertCount(selectedSkillCount, "input.selection_summary.skills", MAX_SKILLS, 1);
+  assertCount(selectedFileCount, "input.selection_summary.files", MAX_FILES, 1);
+  assertCount(selectedScriptCount, "input.selection_summary.scripts", MAX_FILES);
+  assertCount(selectedResourceCount, "input.selection_summary.resources", MAX_FILES);
   if (summary.errors !== 0) fail("input.selection_summary.errors", "expected zero");
-  assertCount(summary.warnings, "input.selection_summary.warnings", MAX_ISSUES);
-  assertCount(summary.redactions, "input.selection_summary.redactions", MAX_ISSUES);
+  assertCount(warningCount, "input.selection_summary.warnings", MAX_ISSUES);
+  assertCount(redactionCount, "input.selection_summary.redactions", MAX_ISSUES);
 
-  if (!Array.isArray(record.skills) || record.skills.length < 1 || record.skills.length > MAX_SKILLS) {
-    fail("input.skills", `expected 1–${MAX_SKILLS} skill snapshots`);
-  }
-  if (record.skills.length !== summary.skills) {
+  const selection = snapshotSkillArray(record.skills, "input.skills", 1);
+  if (selection.skills.length !== selectedSkillCount) {
     fail("input.skills", "length must equal input.selection_summary.skills");
   }
-
-  const names = new Set<string>();
-  const redactedAliasOrdinals: number[] = [];
-  const skills: MinimizedSkillSnapshot[] = [];
-  for (const [index, value] of record.skills.entries()) {
-    const path = `input.skills[${index}]`;
-    const skill = asClosedObject(value, path, [
-      "name_kind",
-      "name",
-      "content_digest",
-      "file_count",
-      "script_count",
-      "resource_count",
-    ]);
-    assertString(skill.name_kind, `${path}.name_kind`);
-    if (skill.name_kind !== "reported" && skill.name_kind !== "redacted_alias") {
-      fail(`${path}.name_kind`, "expected reported or redacted_alias");
-    }
-    assertString(skill.name, `${path}.name`);
-    if (skill.name_kind === "reported") {
-      if (skill.name.length > 64 || !SKILL_NAME.test(skill.name)) {
-        fail(`${path}.name`, "expected a portable lowercase hyphenated reported skill name");
-      }
-    } else {
-      const match = REDACTED_SKILL_ALIAS.exec(skill.name);
-      const ordinal = match === null ? 0 : Number(match[1]);
-      if (!Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal > MAX_ISSUES) {
-        fail(
-          `${path}.name`,
-          `expected an exact upstream <redacted-N> alias with N from 1 to ${MAX_ISSUES}`,
-        );
-      }
-      redactedAliasOrdinals.push(ordinal);
-    }
-    if (names.has(skill.name)) fail(`${path}.name`, "skill names must be unique");
-    names.add(skill.name);
-    assertDigest(skill.content_digest, `${path}.content_digest`);
-    assertCount(skill.file_count, `${path}.file_count`, MAX_FILES, 1);
-    assertCount(skill.script_count, `${path}.script_count`, skill.file_count as number);
-    assertCount(skill.resource_count, `${path}.resource_count`, skill.file_count as number);
-    if (
-      (skill.file_count as number) !==
-      1 + (skill.script_count as number) + (skill.resource_count as number)
-    ) {
-      fail(
-        `${path}.file_count`,
-        "must equal 1 + script_count + resource_count for an @agenttool/skills snapshot",
-      );
-    }
-    skills.push(skill as unknown as MinimizedSkillSnapshot);
-  }
-
-  if (redactedAliasOrdinals.some((ordinal) => ordinal > (summary.redactions as number))) {
+  if (selection.redactedAliasOrdinals.some((ordinal) => ordinal > redactionCount)) {
     fail(
       "input.selection_summary.redactions",
       "must cover every selected redacted skill alias ordinal",
     );
   }
-
-  if (checkedSum(skills.map((skill) => skill.file_count), "input.selection_summary.files") !== summary.files) {
+  if (
+    checkedSum(
+      selection.skills.map((skill) => skill.file_count),
+      "input.selection_summary.files",
+    ) !== selectedFileCount
+  ) {
     fail("input.selection_summary.files", "must equal the selected skill file-count total");
   }
-  if (checkedSum(skills.map((skill) => skill.script_count), "input.selection_summary.scripts") !== summary.scripts) {
+  if (
+    checkedSum(
+      selection.skills.map((skill) => skill.script_count),
+      "input.selection_summary.scripts",
+    ) !== selectedScriptCount
+  ) {
     fail("input.selection_summary.scripts", "must equal the selected skill script-count total");
   }
-  if (checkedSum(skills.map((skill) => skill.resource_count), "input.selection_summary.resources") !== summary.resources) {
+  if (
+    checkedSum(
+      selection.skills.map((skill) => skill.resource_count),
+      "input.selection_summary.resources",
+    ) !== selectedResourceCount
+  ) {
     fail("input.selection_summary.resources", "must equal the selected skill resource-count total");
   }
 
-  const authority = asClosedObject(record.authority, "input.authority", [
+  const authority = readClosedObject(record.authority, "input.authority", [
     "automatic_action",
     "grants",
   ]);
-  if (authority.automatic_action !== "never" || !Array.isArray(authority.grants) || authority.grants.length !== 0) {
-    fail("input.authority", "expected { automatic_action: \"never\", grants: [] }");
+  if (authority.automatic_action !== "never") {
+    fail("input.authority.automatic_action", "expected never");
   }
+  readClosedArray(authority.grants, "input.authority.grants", 0, 0);
+
+  return {
+    $schema: INPUT_SCHEMA_ID,
+    protocol: INPUT_PROTOCOL,
+    project_id: projectId,
+    recorded_at: recordedAt,
+    source: {
+      kind: INSPECTION_KIND,
+      report_schema: INSPECTION_SCHEMA_ID,
+      report_schema_version: INSPECTION_SCHEMA_VERSION,
+      report_digest: reportDigest,
+      report_digest_semantics: REPORT_DIGEST_SEMANTICS,
+      report_valid: true,
+      inspector_name: INSPECTOR_NAME,
+      inspector_version: inspectorVersion,
+      inspector_revision: inspectorRevision,
+      mode: "read-only",
+    },
+    selection_summary: {
+      skills: selectedSkillCount,
+      files: selectedFileCount,
+      scripts: selectedScriptCount,
+      resources: selectedResourceCount,
+      errors: 0,
+      warnings: warningCount,
+      redactions: redactionCount,
+    },
+    skills: selection.skills,
+    authority: { automatic_action: "never", grants: [] },
+  };
+}
+
+/**
+ * Checks only the closed minimized snapshot consumed by this planner. It does
+ * not receive the original report, validate that report's schema, recompute a
+ * digest, authenticate a publisher, or interpret a skill.
+ */
+export function assertSkillsYutabaseInput(
+  input: unknown,
+): asserts input is SkillsYutabaseInput {
+  snapshotSkillsYutabaseInput(input);
+}
+
+function snapshotClaimant(options: unknown): string {
+  const record = readClosedObject(options, "options", ["claimant"]);
+  const claimant = record.claimant;
+  assertString(claimant, "options.claimant");
+  if (claimant.trim().length === 0 || claimant.includes("\u0000")) {
+    fail("options.claimant", "expected a non-empty string without NUL");
+  }
+  return claimant;
 }
 
 function address<D extends YutabaseDeck>(deck: D, id: string): YutabaseAddress<D> {
@@ -339,23 +573,20 @@ export function planSkillsInspection(
   input: SkillsYutabaseInput,
   options: SkillsYutabasePlanOptions,
 ): SkillsYutabasePlan {
-  assertSkillsYutabaseInput(input);
-  assertString(options?.claimant, "options.claimant");
-  if (options.claimant.trim().length === 0 || options.claimant.includes("\u0000")) {
-    fail("options.claimant", "expected a non-empty string without NUL");
-  }
+  const snapshot = snapshotSkillsYutabaseInput(input);
+  const claimant = snapshotClaimant(options);
 
-  const reportUrn = inspectionEvidenceUrn(input.source.report_digest);
-  const selectionDigest = skillsSelectionDigest(input.skills);
-  const selectionUrn = selectionEvidenceUrn(input.source.report_digest, selectionDigest);
+  const reportUrn = inspectionEvidenceUrn(snapshot.source.report_digest);
+  const selectionDigest = skillsSelectionDigestFromSnapshot(snapshot.skills);
+  const selectionUrn = selectionEvidenceUrn(snapshot.source.report_digest, selectionDigest);
   const inspectionAddress = address(
     "inspections",
     projectionUuid(
       "inspection",
-      input.project_id,
-      input.source.report_digest,
+      snapshot.project_id,
+      snapshot.source.report_digest,
       selectionDigest,
-      input.source.inspector_revision,
+      snapshot.source.inspector_revision,
     ),
   );
   const cards: YutabaseCardMutation[] = [
@@ -363,36 +594,36 @@ export function planSkillsInspection(
       "inspections",
       inspectionAddress.id,
       {
-        project_id: input.project_id,
-        source_kind: input.source.kind,
-        report_schema: input.source.report_schema,
-        report_schema_version: input.source.report_schema_version,
-        report_digest: input.source.report_digest,
-        report_digest_semantics: input.source.report_digest_semantics,
+        project_id: snapshot.project_id,
+        source_kind: snapshot.source.kind,
+        report_schema: snapshot.source.report_schema,
+        report_schema_version: snapshot.source.report_schema_version,
+        report_digest: snapshot.source.report_digest,
+        report_digest_semantics: snapshot.source.report_digest_semantics,
         source_report_validity: "caller_supplied_valid",
         selection_digest: selectionDigest,
-        inspector_name: input.source.inspector_name,
-        inspector_version: input.source.inspector_version,
-        inspector_revision: input.source.inspector_revision,
+        inspector_name: snapshot.source.inspector_name,
+        inspector_version: snapshot.source.inspector_version,
+        inspector_revision: snapshot.source.inspector_revision,
         inspector_revision_provenance: INSPECTOR_REVISION_PROVENANCE,
-        inspector_mode: input.source.mode,
-        selected_skill_count: input.selection_summary.skills,
-        selected_file_count: input.selection_summary.files,
-        selected_script_count: input.selection_summary.scripts,
-        selected_resource_count: input.selection_summary.resources,
+        inspector_mode: snapshot.source.mode,
+        selected_skill_count: snapshot.selection_summary.skills,
+        selected_file_count: snapshot.selection_summary.files,
+        selected_script_count: snapshot.selection_summary.scripts,
+        selected_resource_count: snapshot.selection_summary.resources,
         error_count: 0,
-        warning_count: input.selection_summary.warnings,
-        redaction_count: input.selection_summary.redactions,
+        warning_count: snapshot.selection_summary.warnings,
+        redaction_count: snapshot.selection_summary.redactions,
       },
-      cachedClaim(input.recorded_at, options.claimant, reportUrn, selectionUrn),
+      cachedClaim(snapshot.recorded_at, claimant, reportUrn, selectionUrn),
     ),
   ];
   const relations: YutabaseRelationMutation[] = [];
 
-  const skills = [...input.skills].sort(compareSkillSnapshots);
+  const skills = [...snapshot.skills].sort(compareSkillSnapshots);
   for (const skill of skills) {
     const skillUrn = skillEvidenceUrn(
-      input.source.report_digest,
+      snapshot.source.report_digest,
       skill.name_kind,
       skill.name,
       skill.content_digest,
@@ -401,8 +632,8 @@ export function planSkillsInspection(
       "skill_snapshots",
       projectionUuid(
         "skill_snapshot",
-        input.project_id,
-        input.source.report_digest,
+        snapshot.project_id,
+        snapshot.source.report_digest,
         skill.name_kind,
         skill.name,
         skill.content_digest,
@@ -413,8 +644,8 @@ export function planSkillsInspection(
         "skill_snapshots",
         skillAddress.id,
         {
-          project_id: input.project_id,
-          source_report_digest: input.source.report_digest,
+          project_id: snapshot.project_id,
+          source_report_digest: snapshot.source.report_digest,
           name_kind: skill.name_kind,
           name: skill.name,
           content_digest: skill.content_digest,
@@ -424,7 +655,7 @@ export function planSkillsInspection(
           resource_count: skill.resource_count,
           interpretation: "not_performed",
         },
-        cachedClaim(input.recorded_at, options.claimant, reportUrn, selectionUrn, skillUrn),
+        cachedClaim(snapshot.recorded_at, claimant, reportUrn, selectionUrn, skillUrn),
       ),
     );
     relations.push({
@@ -438,14 +669,14 @@ export function planSkillsInspection(
       word: "lists_skill_snapshot",
       from: inspectionAddress,
       to: skillAddress,
-      claim: computedClaim(input.recorded_at, options.claimant, reportUrn, selectionUrn, skillUrn),
+      claim: computedClaim(snapshot.recorded_at, claimant, reportUrn, selectionUrn, skillUrn),
     });
   }
 
   return {
     profile: PLAN_PROFILE,
     source_scope: "project_private",
-    source_report_digest: input.source.report_digest,
+    source_report_digest: snapshot.source.report_digest,
     selection_digest: selectionDigest,
     cards,
     relations,

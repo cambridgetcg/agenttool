@@ -14,6 +14,24 @@ const schema = JSON.parse(
 const validate = new Ajv2020({ allErrors: true, strict: true, validateFormats: false }).compile(schema);
 
 describe("published input schema", () => {
+  test("discloses every runtime-only acceptance invariant", () => {
+    const comment = (schema as { $comment?: unknown }).$comment;
+    expect(typeof comment).toBe("string");
+    for (const fragment of [
+      "own enumerable data properties",
+      "standard dense arrays",
+      "recorded_at",
+      "skills.length = selection_summary.skills",
+      "unique skill names",
+      "file_count = 1 + script_count + resource_count",
+      "aggregate skill file/script/resource totals",
+      "<redacted-N> ordinal <= selection_summary.redactions",
+      "schema success alone is not planner acceptance",
+    ]) {
+      expect(comment as string).toContain(fragment);
+    }
+  });
+
   test("accepts the golden minimized input", () => {
     expect(validate(validInput())).toBe(true);
     expect(validate.errors).toBeNull();

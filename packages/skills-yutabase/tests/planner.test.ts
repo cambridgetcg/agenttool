@@ -68,13 +68,48 @@ describe("skills inspection planner", () => {
 
   test("binds the explicit name lane into the minimized selection digest", () => {
     const reported = validInput().skills[0]!;
-    const sameFieldsInRedactedLane = {
+    const redacted = {
       ...reported,
       name_kind: "redacted_alias" as const,
+      name: "<redacted-1>",
     };
 
-    expect(skillsSelectionDigest([sameFieldsInRedactedLane])).not.toBe(
+    expect(skillsSelectionDigest([redacted])).not.toBe(
       skillsSelectionDigest([reported]),
+    );
+    expect(() => skillsSelectionDigest([{
+      ...reported,
+      name_kind: "redacted_alias",
+    }])).toThrow("expected an exact upstream <redacted-N> alias");
+  });
+
+  test("snapshots direct digest inputs and rejects accessors or sparse arrays", () => {
+    const accessorSkill = structuredClone(validInput().skills[0]!) as any;
+    const originalDigest = accessorSkill.content_digest;
+    let reads = 0;
+    Object.defineProperty(accessorSkill, "content_digest", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        reads += 1;
+        return reads === 1 ? originalDigest : "DIRECT_DIGEST_SENTINEL";
+      },
+    });
+    expect(() => skillsSelectionDigest([accessorSkill])).toThrow(
+      "skills[0].content_digest: expected an own enumerable data property",
+    );
+    expect(reads).toBe(0);
+
+    const inheritedSkill = structuredClone(validInput().skills[0]!) as any;
+    Object.setPrototypeOf(inheritedSkill, { content_digest: originalDigest });
+    expect(() => skillsSelectionDigest([inheritedSkill])).toThrow(
+      "skills[0]: expected a plain or null-prototype object",
+    );
+
+    const sparse = [structuredClone(validInput().skills[0]!)];
+    delete sparse[0];
+    expect(() => skillsSelectionDigest(sparse as never)).toThrow(
+      "skills[0]: expected an own enumerable data property",
     );
   });
 

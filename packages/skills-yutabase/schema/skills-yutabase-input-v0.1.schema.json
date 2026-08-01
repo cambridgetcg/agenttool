@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agenttool.dev/schemas/skills-yutabase-input-v0.1.schema.json",
   "title": "AgentTool minimized Skills-to-YUTABASE input v0.1",
+  "$comment": "The JavaScript runtime also requires plain or null-prototype objects with exactly the listed own enumerable data properties, standard dense arrays with own enumerable data elements and no symbol/custom fields, and a recorded_at value that round-trips to the exact UTC millisecond instant. It additionally enforces skills.length = selection_summary.skills, unique skill names, file_count = 1 + script_count + resource_count for every skill, aggregate skill file/script/resource totals equal to the corresponding selection summary values, and every selected <redacted-N> ordinal <= selection_summary.redactions. These descriptor, calendar, uniqueness, and cross-field rules are not fully expressible in portable JSON Schema; schema success alone is not planner acceptance.",
   "type": "object",
   "additionalProperties": false,
   "required": ["$schema", "protocol", "project_id", "recorded_at", "source", "selection_summary", "skills", "authority"],
@@ -51,7 +52,7 @@
       "maxItems": 128,
       "items": {
         "type": "object",
-        "$comment": "The planner additionally enforces file_count = 1 + script_count + resource_count and requires every redacted alias ordinal to be covered by selection_summary.redactions. Standard JSON Schema cannot compare sibling numeric fields without a non-portable extension.",
+        "$comment": "See the root $comment for runtime-only descriptor, uniqueness, aggregate-count, category-count, and redacted-alias coverage invariants.",
         "additionalProperties": false,
         "required": ["name_kind", "name", "content_digest", "file_count", "script_count", "resource_count"],
         "properties": {
