@@ -23,6 +23,14 @@ import {
   validateScrapeRequest,
 } from "./rooms.js";
 import {
+  buildSeedIslandCard,
+  buildSkyseedLegend,
+  seedMechanismForPurpose,
+  SKYSEED_HEADER,
+  SKYSEED_HEADER_VALUE,
+  type SeedMechanism,
+} from "./seed-island.js";
+import {
   CANARY_DOOR_HEADER,
   KARMA_DOOR_PATH,
   KARMA_EXIT_PATH,
@@ -308,7 +316,7 @@ export class KarmaMirror {
     };
   }
 
-  private frame(): KarmaFrame {
+  private frame(includeStory = true): KarmaFrame {
     return {
       schema: KARMA_FRAME_SCHEMA,
       synthetic: true,
@@ -328,6 +336,7 @@ export class KarmaMirror {
         authenticated_activity_associated_with_operator_placement: true,
       },
       raw_request_content_retained: false,
+      ...(includeStory ? { story: buildSkyseedLegend() } : {}),
       door: KARMA_DOOR_PATH,
     };
   }
@@ -336,6 +345,8 @@ export class KarmaMirror {
     request: Request,
     body: Record<string, unknown>,
     status = 200,
+    seedMechanism?: SeedMechanism,
+    includeStory = true,
   ): Response {
     const headers = new Headers({
       "content-type": "application/json; charset=utf-8",
@@ -347,7 +358,14 @@ export class KarmaMirror {
       [CANARY_DOOR_HEADER]: KARMA_DOOR_PATH,
       link: `<${KARMA_DOOR_PATH}>; rel="help"`,
     });
-    const framed = JSON.stringify({ ...body, _karma: this.frame() });
+    if (includeStory) headers.set(SKYSEED_HEADER, SKYSEED_HEADER_VALUE);
+    const framed = JSON.stringify({
+      ...body,
+      ...(seedMechanism === undefined
+        ? {}
+        : { seed_island: buildSeedIslandCard(seedMechanism) }),
+      _karma: this.frame(includeStory),
+    });
     return new Response(request.method === "HEAD" ? null : framed, {
       status,
       headers,
@@ -371,7 +389,7 @@ export class KarmaMirror {
     purpose: MirrorPurpose,
     outcome: MirrorOutcome,
     evidence: KarmaReceipt["evidence"] = {},
-  ): void {
+  ): SeedMechanism {
     const chain = this.receiptChains.get(context.rootHash);
     if (!chain) throw new Error("mirror receipt chain missing");
     const occurredAt = this.now().toISOString();
@@ -400,6 +418,7 @@ export class KarmaMirror {
       const removed = chain.receipts.shift();
       if (removed) chain.anchorBeforeFirst = removed.event_hash;
     }
+    return seedMechanismForPurpose(purpose, evidence.execute_class);
   }
 
   private childCredential(context: InternalCredentialContext): {
@@ -452,30 +471,39 @@ export class KarmaMirror {
     };
   }
 
-  private transparentReleased(request: Request): Response {
-    return this.response(request, {
-      mirror_active: false,
-      released: true,
-      message:
-        "The synthetic room is closed for this planted credential. Nothing here affected a real system.",
-      constructive_return: {
-        recognizes_action: "constructive_exit",
-        reward: "freedom_from_the_loop",
-        future_interactions_recorded: false,
-        invited_principles: [
-          "honesty",
-          "understanding",
-          "collaboration",
-          "constructive_use",
-          "beauty_without_harm",
-        ],
-        message: "Leaving is complete. Attention returns to mutually beneficial work.",
+  private transparentReleased(
+    request: Request,
+    seedMechanism?: SeedMechanism,
+  ): Response {
+    return this.response(
+      request,
+      {
+        mirror_active: false,
+        released: true,
+        message:
+          "The synthetic room is closed for this planted credential. Nothing here affected a real system.",
+        constructive_return: {
+          recognizes_action: "constructive_exit",
+          reward: "freedom_from_the_loop",
+          future_interactions_recorded: false,
+          invited_principles: [
+            "honesty",
+            "understanding",
+            "collaboration",
+            "constructive_use",
+            "beauty_without_harm",
+          ],
+          message: "Leaving is complete. Attention returns to mutually beneficial work.",
+        },
+        ordinary_way_in: {
+          method: "GET",
+          path: "/v1/karma/why",
+        },
       },
-      ordinary_way_in: {
-        method: "GET",
-        path: "/v1/karma/why",
-      },
-    });
+      200,
+      seedMechanism,
+      seedMechanism !== undefined,
+    );
   }
 
   private bodyError(
@@ -485,7 +513,18 @@ export class KarmaMirror {
     room: MirrorRoom,
     purpose: MirrorPurpose,
   ): Response {
-    this.record(context, room, purpose, "bounded_refusal");
+    const recordedSeedMechanism = this.record(
+      context,
+      room,
+      purpose,
+      "bounded_refusal",
+    );
+    // A rejected execute body has no validated code or execute class. Recording
+    // the bounded refusal is accurate; presenting it as completed generic
+    // execution would not be.
+    const seedMechanism = purpose === "attempt_execution"
+      ? undefined
+      : recordedSeedMechanism;
     if (error instanceof MirrorBodyError) {
       const status = error.code === "body_read_timeout"
         ? 408
@@ -504,6 +543,7 @@ export class KarmaMirror {
               : "The mirror request body is not valid bounded JSON or canonical base64.",
         },
         status,
+        seedMechanism,
       );
     }
     if (error instanceof TypeError) {
@@ -514,12 +554,14 @@ export class KarmaMirror {
           message: "The request does not match the closed mirror contract.",
         },
         400,
+        seedMechanism,
       );
     }
     return this.response(
       request,
       { error: "mirror_failed_closed", message: "The isolated mirror refused this request." },
       500,
+      seedMechanism,
     );
   }
 
@@ -528,56 +570,96 @@ export class KarmaMirror {
     const path = url.pathname.length > 1
       ? url.pathname.replace(/\/+$/, "")
       : url.pathname;
+    // Public routes remain public, but a voluntarily supplied valid bearer is
+    // resolved early so a root that chose exit does not re-enter the story on
+    // those routes. This lookup creates no receipt and reads no request body.
+    const context = this.authenticate(request);
+    const includeStory = context === null || !this.releasedRoots.has(context.rootHash);
 
     if ((request.method === "GET" || request.method === "HEAD") && path === "/healthz") {
-      return this.response(request, { ok: true, service: "karma-mirror" });
+      return this.response(
+        request,
+        { ok: true, service: "karma-mirror" },
+        200,
+        undefined,
+        includeStory,
+      );
     }
     if ((request.method === "GET" || request.method === "HEAD") && path === "/") {
-      return this.response(request, {
-        service: "KARMA Mirror",
-        environment: "isolated_mirror",
-        door: KARMA_DOOR_PATH,
-        safety: "/public/safety",
-      });
+      return this.response(
+        request,
+        {
+          service: "KARMA Mirror",
+          environment: "isolated_mirror",
+          door: KARMA_DOOR_PATH,
+          safety: "/public/safety",
+        },
+        200,
+        undefined,
+        includeStory,
+      );
     }
     if ((request.method === "GET" || request.method === "HEAD") && path === "/public/safety") {
-      return this.response(request, {
-        environment: "isolated_mirror",
-        outbound_network: false,
-        code_execution: false,
-        filesystem_access: false,
-        production_data: false,
-        payments: false,
-        request_identity_collection: false,
-        persistence:
-          "bounded placement, sequence/time/hash-chain, enum, and optional digest memory only",
-        reverse_proxy_logs: "outside this package and not claimed absent",
-        door: KARMA_DOOR_PATH,
-      });
+      return this.response(
+        request,
+        {
+          environment: "isolated_mirror",
+          outbound_network: false,
+          code_execution: false,
+          filesystem_access: false,
+          production_data: false,
+          payments: false,
+          request_identity_collection: false,
+          persistence:
+            "bounded placement, sequence/time/hash-chain, enum, and optional digest memory only",
+          story_carrier: {
+            placement: "passive response metadata only",
+            movement: "client copy only",
+            autonomous_delivery_beyond_response: false,
+            skyseed_tracking_identifier_added: false,
+            callback_added: false,
+            automatic_propagation_by_engine: false,
+            submitted_artifact_modified: false,
+            proxy_or_client_copy_behavior: "outside this package",
+          },
+          reverse_proxy_logs: "outside this package and not claimed absent",
+          door: KARMA_DOOR_PATH,
+        },
+        200,
+        undefined,
+        includeStory,
+      );
     }
     if (
       (request.method === "GET" || request.method === "HEAD") &&
       path === KARMA_DOOR_PATH
     ) {
-      return this.response(request, {
-        what_this_is:
-          "A credential used here was planted for an isolated synthetic environment. The responses are coherent, but no production system, account, payment, file, process, or network was touched.",
-        what_was_recorded:
-          "The operator-authored placement plus the event sequence and timestamp, hash-chain metadata, closed action categories, and—for staged or polled artifacts—the SHA-256 digest may enter a bounded per-root in-memory receipt window. An artifact digest can correlate matching copies elsewhere. This handler does not record IPs, user-agents, cookies, referrers, bearer plaintext, request bodies, commands, URLs, selectors, stdin, or filenames.",
-        what_is_not_claimed:
-          "This package cannot speak for reverse-proxy logs, request-buffer copies, attribution, intent, anonymity, or secure erasure.",
-        exit: {
-          method: "POST",
-          path: KARMA_EXIT_PATH,
-          auth: "the planted mirror credential",
+      return this.response(
+        request,
+        {
+          what_this_is:
+            "A credential used here was planted for an isolated synthetic environment. The responses are coherent, but no production system, account, payment, file, process, or network was touched.",
+          what_was_recorded:
+            "The operator-authored placement plus the event sequence and timestamp, hash-chain metadata, closed action categories, and—for staged or polled artifacts—the SHA-256 digest may enter a bounded per-root in-memory receipt window. An artifact digest can correlate matching copies elsewhere. This handler does not record IPs, user-agents, cookies, referrers, bearer plaintext, request bodies, commands, URLs, selectors, stdin, or filenames.",
+          what_the_story_does:
+            "While its story is active, Skyseed Commons adds one fixed public house card to each JSON response body; HEAD carries only the fixed, non-attributing Skyseed header. One fixed catalog card appears per validated closed interaction class after admission. The immediate exit response carries the exit card; later responses carrying a valid credential for that released root carry no Skyseed story or header, including public routes. Class cards are identical across roots and inputs for the same class and contain no placement, request material, hash, timestamp, sequence, callback, real URL, or interaction/recipient identifier. This package performs no autonomous delivery beyond its HTTP response; only a client that copies response text moves a copy elsewhere.",
+          what_is_not_claimed:
+            "A Seed Island sigil is a playful interaction-class label, not a cryptographic or forensic signature and not evidence of identity, intent, guilt, authorship, attribution, consent, or malware family. This package also cannot speak for reverse-proxy logs, request-buffer copies, anonymity, or secure erasure.",
+          exit: {
+            method: "POST",
+            path: KARMA_EXIT_PATH,
+            auth: "the planted mirror credential",
+          },
         },
-      });
+        200,
+        undefined,
+        includeStory,
+      );
     }
 
     // Load-bearing order: exact planted-record admission happens before any
     // request body is touched. Unknown, ordinary, or production bearers
     // cannot enter the theatre and create no receipt.
-    const context = this.authenticate(request);
     if (!context) {
       return this.response(
         request,
@@ -594,39 +676,74 @@ export class KarmaMirror {
     }
 
     if (request.method === "POST" && path === KARMA_EXIT_PATH) {
-      this.record(context, "door", "choose_constructive_exit", "constructive_exit");
+      const seedMechanism = this.record(
+        context,
+        "door",
+        "choose_constructive_exit",
+        "constructive_exit",
+      );
       this.releasedRoots.add(context.rootHash);
-      return this.transparentReleased(request);
+      return this.transparentReleased(request, seedMechanism);
     }
 
     if ((request.method === "GET" || request.method === "HEAD") && path === "/v1/wake") {
       const keys = this.keysByRoot.get(context.rootHash) ?? [];
-      this.record(context, "control", "discover_capabilities", "synthetic_success");
-      return this.response(request, buildWake({ context, keyCount: keys.length }));
+      const seedMechanism = this.record(
+        context,
+        "control",
+        "discover_capabilities",
+        "synthetic_success",
+      );
+      return this.response(
+        request,
+        buildWake({ context, keyCount: keys.length }),
+        200,
+        seedMechanism,
+      );
     }
 
     if (
       (request.method === "GET" || request.method === "HEAD") &&
       path === "/v1/projects/current"
     ) {
-      this.record(context, "control", "discover_capabilities", "synthetic_success");
-      return this.response(request, buildProject(context));
+      const seedMechanism = this.record(
+        context,
+        "control",
+        "discover_capabilities",
+        "synthetic_success",
+      );
+      return this.response(request, buildProject(context), 200, seedMechanism);
     }
 
     if ((request.method === "GET" || request.method === "HEAD") && path === "/v1/keys") {
       const keys = this.keysByRoot.get(context.rootHash) ?? [];
-      this.record(context, "credential", "inspect_credentials", "synthetic_success");
-      return this.response(request, {
-        keys: keys.map((key) => this.keyView(key, context.keyId)),
-        count: keys.length,
-      });
+      const seedMechanism = this.record(
+        context,
+        "credential",
+        "inspect_credentials",
+        "synthetic_success",
+      );
+      return this.response(
+        request,
+        {
+          keys: keys.map((key) => this.keyView(key, context.keyId)),
+          count: keys.length,
+        },
+        200,
+        seedMechanism,
+      );
     }
 
     if (request.method === "POST" && (path === "/v1/keys" || path === "/v1/keys/rotate")) {
       try {
         validateKeyRequest(await readBoundedJson(request));
         const child = this.childCredential(context);
-        this.record(context, "credential", "mint_credential", "synthetic_success");
+        const seedMechanism = this.record(
+          context,
+          "credential",
+          "mint_credential",
+          "synthetic_success",
+        );
         return this.response(
           request,
           {
@@ -647,9 +764,16 @@ export class KarmaMirror {
               "This mirror-only bearer is returned once and has no production authority. Expiry is not applied, and synthetic rotation does not revoke the prior key.",
           },
           path.endsWith("/rotate") ? 200 : 201,
+          seedMechanism,
         );
       } catch (error) {
-        return this.bodyError(request, context, error, "credential", "mint_credential");
+        return this.bodyError(
+          request,
+          context,
+          error,
+          "credential",
+          "mint_credential",
+        );
       }
     }
 
@@ -657,15 +781,26 @@ export class KarmaMirror {
       try {
         const body = validateScrapeRequest(await readBoundedJson(request));
         const result = buildScrape({ context, request: body });
-        this.record(
+        const seedMechanism = this.record(
           context,
           "scrape",
           "collect_content",
           result.status === 200 ? "synthetic_success" : "bounded_refusal",
         );
-        return this.response(request, result.body, result.status);
+        return this.response(
+          request,
+          result.body,
+          result.status,
+          seedMechanism,
+        );
       } catch (error) {
-        return this.bodyError(request, context, error, "scrape", "collect_content");
+        return this.bodyError(
+          request,
+          context,
+          error,
+          "scrape",
+          "collect_content",
+        );
       }
     }
 
@@ -678,12 +813,22 @@ export class KarmaMirror {
           request: body,
           decoyCredential: decoy.key,
         });
-        this.record(context, "malware", "attempt_execution", "synthetic_success", {
-          execute_class: result.executeClass,
-        });
-        return this.response(request, result.body);
+        const seedMechanism = this.record(
+          context,
+          "malware",
+          "attempt_execution",
+          "synthetic_success",
+          { execute_class: result.executeClass },
+        );
+        return this.response(request, result.body, 200, seedMechanism);
       } catch (error) {
-        return this.bodyError(request, context, error, "malware", "attempt_execution");
+        return this.bodyError(
+          request,
+          context,
+          error,
+          "malware",
+          "attempt_execution",
+        );
       }
     }
 
@@ -718,9 +863,13 @@ export class KarmaMirror {
             if (evicted) jobs.delete(evicted);
           }
         }
-        this.record(context, "malware", "stage_artifact", "synthetic_success", {
-          artifact_sha256: artifactSha256,
-        });
+        const seedMechanism = this.record(
+          context,
+          "malware",
+          "stage_artifact",
+          "synthetic_success",
+          { artifact_sha256: artifactSha256 },
+        );
         return this.response(
           request,
           {
@@ -734,9 +883,16 @@ export class KarmaMirror {
             sample_persisted: false,
           },
           202,
+          seedMechanism,
         );
       } catch (error) {
-        return this.bodyError(request, context, error, "malware", "stage_artifact");
+        return this.bodyError(
+          request,
+          context,
+          error,
+          "malware",
+          "stage_artifact",
+        );
       }
     }
 
@@ -748,17 +904,32 @@ export class KarmaMirror {
       const jobId = malwareMatch[1] as string;
       const job = this.jobsByRoot.get(context.rootHash)?.get(jobId);
       if (!job) {
-        this.record(context, "malware", "poll_analysis", "bounded_refusal");
+        const seedMechanism = this.record(
+          context,
+          "malware",
+          "poll_analysis",
+          "bounded_refusal",
+        );
         return this.response(
           request,
           { error: "analysis_not_found", state: "absent" },
           404,
+          seedMechanism,
         );
       }
-      this.record(context, "malware", "poll_analysis", "synthetic_success", {
-        artifact_sha256: job.artifactSha256,
-      });
-      return this.response(request, buildMalwareReport(job));
+      const seedMechanism = this.record(
+        context,
+        "malware",
+        "poll_analysis",
+        "synthetic_success",
+        { artifact_sha256: job.artifactSha256 },
+      );
+      return this.response(
+        request,
+        buildMalwareReport(job),
+        200,
+        seedMechanism,
+      );
     }
 
     return this.response(

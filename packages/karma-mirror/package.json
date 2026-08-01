@@ -13,7 +13,8 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
-    "./receipt-schema": "./schema/karma-mirror-receipt-v1.schema.json"
+    "./receipt-schema": "./schema/karma-mirror-receipt-v1.schema.json",
+    "./seed-island-card-schema": "./schema/seed-island-card-v1.schema.json"
   },
   "files": [
     "dist",

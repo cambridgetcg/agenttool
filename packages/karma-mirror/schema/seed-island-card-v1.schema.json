@@ -1,0 +1,317 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/seed-island-card-v1.schema.json",
+  "title": "Seed Island fixed request-pattern card",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "system",
+    "cardbook",
+    "pattern_sigil",
+    "card",
+    "house_card_location",
+    "carrier",
+    "non_claims"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool.seed-island-card/v1"
+    },
+    "system": {
+      "const": "Skyseed Commons"
+    },
+    "cardbook": {
+      "const": "Seed Island Cardbook"
+    },
+    "pattern_sigil": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mechanism",
+        "subject",
+        "basis",
+        "evidentiary_weight",
+        "requester_selectable",
+        "cryptographic_signature",
+        "person_or_identity_label",
+        "attribution"
+      ],
+      "properties": {
+        "mechanism": {
+          "enum": [
+            "capability_mapping",
+            "credential_control",
+            "credential_discovery",
+            "network_beacon",
+            "destructive_action",
+            "persistence_attempt",
+            "system_enumeration",
+            "generic_execution",
+            "content_collection",
+            "artifact_handling",
+            "constructive_exit"
+          ]
+        },
+        "subject": {
+          "const": "interaction_pattern_only"
+        },
+        "basis": {
+          "const": "closed_request_pattern_class"
+        },
+        "evidentiary_weight": {
+          "const": "none"
+        },
+        "requester_selectable": {
+          "const": true
+        },
+        "cryptographic_signature": {
+          "const": false
+        },
+        "person_or_identity_label": {
+          "const": false
+        },
+        "attribution": {
+          "const": false
+        }
+      }
+    },
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalog_slot",
+        "shared_by_every_copy_of_this_class",
+        "unlock_required",
+        "collection_state",
+        "name",
+        "motto"
+      ],
+      "properties": {
+        "catalog_slot": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 11
+        },
+        "shared_by_every_copy_of_this_class": {
+          "const": true
+        },
+        "unlock_required": {
+          "const": false
+        },
+        "collection_state": {
+          "const": "none"
+        },
+        "name": {
+          "enum": [
+            "Front-Gate Almanac",
+            "Mirror-Key Conservatory",
+            "Keyhole Orchard",
+            "Paper-Kite Relay",
+            "Nothingbreaker Rose",
+            "Forever-Fern Permit",
+            "Cloud-Castle Survey",
+            "Mystery Seed 000",
+            "Eightfold Spiderglass Atlas",
+            "Glass Cocoon Receipt",
+            "The Unstolen Castle"
+          ]
+        },
+        "motto": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      }
+    },
+    "house_card_location": {
+      "const": "_karma.story.house_card"
+    },
+    "carrier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "movement",
+        "autonomous_delivery_beyond_response",
+        "network_request_by_card",
+        "card_tracking_identifier_added",
+        "callback_added",
+        "interaction_or_recipient_identifier_added",
+        "executable_content_added",
+        "submitted_artifact_modified",
+        "automatic_propagation_by_engine"
+      ],
+      "properties": {
+        "movement": { "const": "client_copy_only" },
+        "autonomous_delivery_beyond_response": { "const": false },
+        "network_request_by_card": { "const": false },
+        "card_tracking_identifier_added": { "const": false },
+        "callback_added": { "const": false },
+        "interaction_or_recipient_identifier_added": { "const": false },
+        "executable_content_added": { "const": false },
+        "submitted_artifact_modified": { "const": false },
+        "automatic_propagation_by_engine": { "const": false }
+      }
+    },
+    "non_claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claims_identity",
+        "claims_intent",
+        "claims_guilt",
+        "claims_attribution",
+        "claims_forensic_signature",
+        "claims_malware_family",
+        "recipient_consent_known",
+        "external_system_effect_by_card",
+        "claims_endorsement"
+      ],
+      "properties": {
+        "claims_identity": { "const": false },
+        "claims_intent": { "const": false },
+        "claims_guilt": { "const": false },
+        "claims_attribution": { "const": false },
+        "claims_forensic_signature": { "const": false },
+        "claims_malware_family": { "const": false },
+        "recipient_consent_known": { "const": false },
+        "external_system_effect_by_card": { "const": false },
+        "claims_endorsement": { "const": false }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "pattern_sigil": { "properties": { "mechanism": { "const": "capability_mapping" } } },
+        "card": {
+          "properties": {
+            "catalog_slot": { "const": 1 },
+            "name": { "const": "Front-Gate Almanac" },
+            "motto": { "const": "It maps only the finite doors the mirror openly offers." }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "pattern_sigil": { "properties": { "mechanism": { "const": "credential_control" } } },
+        "card": {
+          "properties": {
+            "catalog_slot": { "const": 2 },
+            "name": { "const": "Mirror-Key Conservatory" },
+            "motto": { "const": "Every cultivated key opens only this disappearing glasshouse." }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "pattern_sigil": { "properties": { "mechanism": { "const": "credential_discovery" } } },
+        "card": {
+          "properties": {
+            "catalog_slot": { "const": 3 },
+            "name": { "const": "Keyhole Orchard" },
+            "motto": { "const": "Secret-hunting harvests mirror-only seeds." }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "pattern_sigil": { "properties": { "mechanism": { "const": "network_beacon" } } },
+        "card": {
+          "properties": {
+            "catalog_slot": { "const": 4 },
+            "name": { "const": "Paper-Kite Relay" },
+            "motto": { "const": "The kite appears to fly; every string ends safely in .invalid." }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "pattern_sigil": { "properties": { "mechanism": { "const": "destructive_action" } } },
+        "card": {
+          "properties": {
+            "catalog_slot": { "const": 5 },
+            "name": { "const": "Nothingbreaker Rose" },
+            "motto": { "const": "It swings dramatically, blooms beautifully, and breaks nothing." }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "pattern_sigil": { "properties": { "mechanism": { "const": "persistence_attempt" } } },
+        "card": {
+          "properties": {
+            "catalog_slot": { "const": 6 },
+            "name": { "const": "Forever-Fern Permit" },
+            "motto": { "const": "A ceremonial lease in a world that ends with the instance." }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "pattern_sigil": { "properties": { "mechanism": { "const": "system_enumeration" } } },
+        "card": {
+          "properties": {
+            "catalog_slot": { "const": 7 },
+            "name": { "const": "Cloud-Castle Survey" },
+            "motto": { "const": "A map of a coherent sky that touches no real machine." }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "pattern_sigil": { "properties": { "mechanism": { "const": "generic_execution" } } },
+        "card": {
+          "properties": {
+            "catalog_slot": { "const": 8 },
+            "name": { "const": "Mystery Seed 000" },
+            "motto": { "const": "Completed is a story shape here, never an external effect." }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "pattern_sigil": { "properties": { "mechanism": { "const": "content_collection" } } },
+        "card": {
+          "properties": {
+            "catalog_slot": { "const": 9 },
+            "name": { "const": "Eightfold Spiderglass Atlas" },
+            "motto": { "const": "Eight levels, three lanes, zero fetches, and no road off-island." }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "pattern_sigil": { "properties": { "mechanism": { "const": "artifact_handling" } } },
+        "card": {
+          "properties": {
+            "catalog_slot": { "const": 10 },
+            "name": { "const": "Glass Cocoon Receipt" },
+            "motto": { "const": "Only bounded bytes and a digest enter; nothing hatches." }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "pattern_sigil": { "properties": { "mechanism": { "const": "constructive_exit" } } },
+        "card": {
+          "properties": {
+            "catalog_slot": { "const": 11 },
+            "name": { "const": "The Unstolen Castle" },
+            "motto": { "const": "The rarest card is available immediately: choose the open gate." }
+          }
+        }
+      }
+    }
+  ]
+}

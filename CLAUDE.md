@@ -87,7 +87,9 @@ to finite credential, scrape, execute, and malware-shaped rooms whose responses
 are synthetic and whose external effects are always zero. It retains only a
 bounded per-root window of operator-authored placement plus sequence/time/hash-chain
 metadata, closed enums, and optional artifact digests, discloses the mirror in
-headers and every JSON body, and includes a Door Back plus constructive exit. It has no
+headers and every JSON body, includes a fixed non-attributing Skyseed house card
+plus shared request-pattern cards with no dynamic identifiers, and includes a
+Door Back plus constructive exit. It has no
 production route, server, network client, interpreter, filesystem adapter,
 database, release, or deployment surface; do not mount it in the API monolith.
 

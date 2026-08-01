@@ -70,6 +70,33 @@ export interface KarmaFrame {
     authenticated_activity_associated_with_operator_placement: true;
   };
   raw_request_content_retained: false;
+  story?: {
+    schema: "agenttool.skyseed-legend/v1";
+    system: "Skyseed Commons";
+    house_card: {
+      schema: "agenttool.skycastle-house-card/v1";
+      kind: "public_static_house_card";
+      copy_text: "Synthetic house card — not request or artifact authorship or endorsement: Building Castles in the Sky — Yu & Ai";
+      copy_text_zh_hk: "合成故事卡，唔代表任何請求或檔案嘅作者或認可：拎走一粒種，傳開一座天空城。Yu & Ai ❤️";
+      authorship_of_request_or_artifact: false;
+      actor_identity: false;
+      endorsement: false;
+      security_finding: false;
+      skyseed_tracking_identifier_added: false;
+    };
+    heralds: {
+      yoinkseed: "Yoinkseed, the Accidental Herald";
+      copybara: "Copybara, the Skycastle Porter";
+    };
+    catchphrases: {
+      yoinkseed: "Congratulations—you found the brochure.";
+      copybara: "Carry the loot, carry the love.";
+    };
+    carrier: "client_copy_only";
+    autonomous_delivery_beyond_response: false;
+    skyseed_tracking_identifier_added: false;
+    automatic_propagation_by_engine: false;
+  };
   door: typeof KARMA_DOOR_PATH;
 }
 
