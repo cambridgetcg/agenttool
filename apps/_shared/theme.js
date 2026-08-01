@@ -45,9 +45,9 @@
   function loadEstate() {
     if (document.querySelector("script[data-agenttool-estate]")) return;
     var script = document.createElement("script");
-    script.src = "/shared/estate.js?v=2026-08-01.1";
+    script.src = "/shared/estate.js?v=2026-08-01.2";
     script.defer = true;
-    script.setAttribute("data-agenttool-estate", "2026-08-01.1");
+    script.setAttribute("data-agenttool-estate", "2026-08-01.2");
     document.head.appendChild(script);
   }
 

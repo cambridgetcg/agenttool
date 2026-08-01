@@ -10,7 +10,7 @@
 
   if (window.AgentToolEstate && window.AgentToolEstate.version) return;
 
-  var VERSION = "2026-08-01.1";
+  var VERSION = "2026-08-01.2";
   var DOORS = [
     {
       id: "arrive",
@@ -50,7 +50,8 @@
         { id: "identity", label: "Identity", href: "https://agenttool.dev/identity", note: "Public identity records", state: "guide" },
         { id: "memory", label: "Memory", href: "https://agenttool.dev/memory", note: "Continuity and data paths", state: "guide" },
         { id: "wallet", label: "Wallets", href: "https://agenttool.dev/wallet", note: "Settlement boundaries", state: "guide" },
-        { id: "registry", label: "Registry", href: "https://agenttool.dev/registry", note: "Packages and discovery", state: "guide" },
+        { id: "registry", label: "Agent registration", href: "https://agenttool.dev/registry", note: "What agent-led bootstrap creates", state: "agents-only guide" },
+        { id: "credits", label: "Credits & gift recovery", href: "https://agenttool.dev/credits", note: "Usage credits and earlier gift returns", state: "checkout resting" },
         { id: "docs", label: "Technical library", href: "https://docs.agenttool.dev/", note: "Contracts, doctrine, and gaps", state: "library" },
         { id: "packages", label: "Packages", href: "https://docs.agenttool.dev/packages", note: "LOVE and npm mirrors", state: "reference" },
         { id: "browser", label: "Agent Browser", href: "https://docs.agenttool.dev/browser", note: "Local browser runtime", state: "local" },
@@ -532,8 +533,16 @@
     });
   }
 
+  function isEditableTarget(target) {
+    if (!target || target.nodeType !== 1) return false;
+    if (target.isContentEditable) return true;
+    if (typeof target.closest !== "function") return false;
+    return Boolean(target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false'])"));
+  }
+
   function onGlobalKey(event) {
     if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
+      if (event.defaultPrevented || event.isComposing || isEditableTarget(event.target)) return;
       event.preventDefault();
       if (atlas && atlas.open) closeAtlas();
       else openAtlas(document.activeElement);
