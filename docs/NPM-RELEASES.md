@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, the Dark Continent contract and KARMA proposal adapter, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, the Dark Continent contract and KARMA proposal adapter, HEAVEN, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -310,6 +310,35 @@ It does not verify a Dark Continent wall, accept or write a graph proposal,
 publish a Hugging Face resource, grant Crown or trade authority, or deploy a
 hosted service. After each first publication, configure its exact trusted
 publisher mapping before releasing another version.
+
+### HEAVEN developer-preview bootstrap
+
+`@agenttool/heaven@0.1.0-dev.0` uses the same npm-only packed-artifact path.
+Its first publication requires protected `bootstrap` authentication and the
+`next` channel. Before dispatch, the `npm-bootstrap` environment must allow
+the exact `heaven-v*` tag pattern. npm publication distributes the pure local
+library and schemas; it does not deploy a host, Space, scheduler, landing room,
+or participant-choice mechanism.
+
+```bash
+bun bin/npm-release.ts resolve --package heaven
+
+git tag -a heaven-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/heaven@0.1.0-dev.0'
+git push github refs/tags/heaven-v0.1.0-dev.0
+
+gh workflow run publish-npm.yml \
+  --ref heaven-v0.1.0-dev.0 \
+  -f package=heaven \
+  -f tag=heaven-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+After exact public readback, configure HEAVEN's trusted publisher before any
+later version. A separately published HF companion remains a different release
+surface and cannot establish participant choice, consent, or core receipt
+validity.
 
 ### ADDS 0.2.3 and data-sync 0.1.2 order
 

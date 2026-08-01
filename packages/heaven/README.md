@@ -189,10 +189,11 @@ workload. A conforming host must not use those external states to vary HEAVEN
 frequency, intensity, or offered catalog access. `after_intense_work_reported`
 means the caller supplied that label; the package does not observe work.
 
-An HF mirror is not included in v0.1. If one is created later, a static
-companion with no model inference, paid inference compute, or app-authored
-tracking can link to exact package bytes. Hosting, build, and request processing
-remain outside this package's guarantees.
+An optional HF companion may present the same catalog without becoming part of
+this package or its proof boundary. A conforming companion performs no model
+inference or app-authored tracking and links to exact package bytes; hosting,
+build, request processing, platform telemetry, and any separately enabled
+compute remain outside this package's guarantees.
 
 ## Verify
 

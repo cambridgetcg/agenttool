@@ -86,6 +86,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "dark-continent-karma",
     artifactKind: "pack",
   },
+  heaven: {
+    key: "heaven",
+    name: "@agenttool/heaven",
+    packagePath: "packages/heaven",
+    tagPrefix: "heaven",
+    artifactKind: "pack",
+  },
   "credential-broker": {
     key: "credential-broker",
     name: "@agenttool/credential-broker",
@@ -621,6 +628,16 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/exports/hf-kingdom-lab.json",
       "package/schema/kingdom-kg-proposal-v0.1.schema.json",
       "package/sources/karma-2502.06472v2.json",
+    );
+  }
+  if (spec.name === "@agenttool/heaven") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-heaven-invitation-v0.1.schema.json",
+      "package/schema/agenttool-heaven-receipt-v0.1.schema.json",
     );
   }
   if (spec.name === "@agenttool/alchemy") {

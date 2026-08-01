@@ -507,6 +507,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("          - repo-archive");
     expect(workflow).toContain("          - dark-continent-contract");
     expect(workflow).toContain("          - dark-continent-karma");
+    expect(workflow).toContain("          - heaven");
     expect(workflow).not.toContain("          - karma-mirror");
     expect(workflow).toContain("          - wallet-zerone");
     expect(workflow).not.toContain("pull_request:");

@@ -13,6 +13,7 @@ on:
           - data-sync
           - dark-continent-contract
           - dark-continent-karma
+          - heaven
           - credential-broker
           - sdk
           - wallet

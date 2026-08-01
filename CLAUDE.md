@@ -101,9 +101,10 @@ relaxation, quiet, and Pocket Sky never auto-open. `on_request` keeps rest
 independent of work. It
 reads no identity, task text, activity, clock, environment, network,
 filesystem, wallet, KARMA state, trial score, or ambient randomness, and has no
-scheduler, telemetry, persistence, economic/task/access effect, authority,
-hosted route, npm publication, HF Space, or deployment. Its local KINGDOM
-descriptor is declaration-only and explicitly not a registered host contract.
+scheduler, telemetry, persistence, economic/task/access effect, authority, or
+hosted runtime. Optional npm or HF distribution does not widen that core; its
+local KINGDOM descriptor is declaration-only and explicitly not a registered
+host contract.
 
 `@agenttool/trials` is a separate private, source-only local Dojo pilot. It
 turns explicit bounded observations into deterministic trial receipts,
