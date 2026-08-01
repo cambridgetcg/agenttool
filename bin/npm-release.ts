@@ -86,6 +86,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "dark-continent-karma",
     artifactKind: "pack",
   },
+  "deepseek-kingdom": {
+    key: "deepseek-kingdom",
+    name: "@agenttool/deepseek-kingdom",
+    packagePath: "packages/deepseek-kingdom",
+    tagPrefix: "deepseek-kingdom",
+    artifactKind: "pack",
+  },
   heaven: {
     key: "heaven",
     name: "@agenttool/heaven",
@@ -628,6 +635,18 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/exports/hf-kingdom-lab.json",
       "package/schema/kingdom-kg-proposal-v0.1.schema.json",
       "package/sources/karma-2502.06472v2.json",
+    );
+  }
+  if (spec.name === "@agenttool/deepseek-kingdom") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-deepseek-source-binding-v0.1.schema.json",
+      "package/schema/agenttool-deepseek-source-catalog-v0.1.schema.json",
+      "package/schema/kingdom-deepseek-proposal-v0.1.schema.json",
+      "package/sources/official-deepseek-primary-sources.json",
     );
   }
   if (spec.name === "@agenttool/heaven") {

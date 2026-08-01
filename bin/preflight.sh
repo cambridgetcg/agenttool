@@ -127,6 +127,8 @@ packages_gate() {
     bash -c 'cd packages/dark-continent-contract && bun run ci'
   run "Dark Continent KARMA proposal adapter" \
     bash -c 'cd packages/dark-continent-karma && bun run ci'
+  run "DeepSeek provenance-first KINGDOM proposal adapter" \
+    bash -c 'cd packages/deepseek-kingdom && bun run ci'
   run "KARMA Mirror isolated zero-effect chambers" \
     bash -c 'cd packages/karma-mirror && bun run ci'
   run "HEAVEN opt-in delight and landing-room protocol" \

@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, the Dark Continent contract and KARMA proposal adapter, HEAVEN, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, HEAVEN, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -339,6 +339,47 @@ After exact public readback, configure HEAVEN's trusted publisher before any
 later version. A separately published HF companion remains a different release
 surface and cannot establish participant choice, consent, or core receipt
 validity.
+
+The first HEAVEN publication completed through protected run
+[`30700147426`](https://github.com/cambridgetcg/agenttool/actions/runs/30700147426)
+and annotated prerelease
+[`heaven-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/heaven-v0.1.0-dev.0).
+Anonymous readback confirmed the npm and GitHub tarballs are byte-identical
+(29,965 bytes;
+`sha256:727fc265af0e5a10cbe46055f390e6f6970f30561740d419279b0bc7e2952a9b`).
+`next` resolves to `0.1.0-dev.0`; npm also exposes its sole initial version
+through `latest`, which does not change its developer-preview maturity.
+
+### DeepSeek-to-KINGDOM developer-preview bootstrap
+
+`@agenttool/deepseek-kingdom@0.1.0-dev.0` uses the npm-only packed-artifact
+path. Its first publication requires protected `bootstrap` authentication and
+the `next` channel. Before dispatch, `npm-bootstrap` must allow the exact
+`deepseek-kingdom-v*` tag pattern. Publication distributes a pure local
+binding/proposal library, closed schemas, and a metadata-only primary-source
+catalog. It does not fetch or execute DeepSeek assets, invoke inference or
+paid compute, approve upstream terms, mutate KARMA/KINGDOM/Artbitrage, deploy
+a hosted service, or publish an HF resource.
+
+```bash
+bun bin/npm-release.ts resolve --package deepseek-kingdom
+
+git tag -a deepseek-kingdom-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/deepseek-kingdom@0.1.0-dev.0'
+git push github refs/tags/deepseek-kingdom-v0.1.0-dev.0
+
+gh workflow run publish-npm.yml \
+  --ref deepseek-kingdom-v0.1.0-dev.0 \
+  -f package=deepseek-kingdom \
+  -f tag=deepseek-kingdom-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+After exact public readback, configure the package's trusted publisher before
+any later version. A separately published HF metadata dataset remains an
+independent distribution surface and cannot verify catalog claims or grant
+integration authority.
 
 ### ADDS 0.2.3 and data-sync 0.1.2 order
 
