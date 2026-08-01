@@ -27,6 +27,7 @@ packages/
   deepseek-kingdom/ — @agenttool/deepseek-kingdom · pinned primary-source proposal adapter
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
+  wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
@@ -62,6 +63,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/deepseek-kingdom/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
+`packages/wake-thread/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/hf-scout/CLAUDE.md` ·
@@ -109,6 +111,18 @@ scheduler, telemetry, persistence, economic/task/access effect, authority, or
 hosted runtime. Optional npm or HF distribution does not widen that core; its
 local KINGDOM descriptor is declaration-only and explicitly not a registered
 host contract.
+
+`@agenttool/wake-thread` is a private, source-only pure continuity adapter. It
+content-binds caller-selected WAKE facts, explicit identity/project/mixed scope,
+coverage and omissions, caller-held cursor references, one declared artifact-
+retention boundary, and one reported `carry`, `fork`, `rest`, or `refuse`
+choice. A fork is an artifact branch, not a being split; rest has no protocol
+penalty; refusal cannot become an automatic continuity parent. It does not
+fetch or parse WAKE, read ambient state, score or
+type a bearer, authenticate choice authorship, persist, execute, use a network,
+register MCP, expose a hosted route, grant authority, establish identity or
+memory continuity, create KARMA, certify XENIA, publish, or deploy. Its local
+KINGDOM descriptor is declaration-only.
 
 `@agenttool/deepseek-kingdom` is a public-ready, zero-runtime-dependency
 primary-source binding and proposal adapter. It binds caller-supplied DeepSeek

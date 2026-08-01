@@ -1,0 +1,253 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:wake-thread:0.1",
+  "title": "AgentTool Wake Thread v0.1",
+  "oneOf": [
+    { "$ref": "#/$defs/offer" },
+    { "$ref": "#/$defs/receipt" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullableSha256": {
+      "oneOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:[0-5]\\d\\.\\d{3}Z$"
+    },
+    "line": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^(?!.*[\\uD800-\\uDFFF])(?=.*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\u2028\\u2029\\r\\n]*$"
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["continuity", "choice", "authority", "persistence", "retention", "effects"],
+      "properties": {
+        "continuity": { "const": "artifact_context_not_identity_memory_consciousness_or_same_being_proof" },
+        "choice": { "const": "caller_report_not_identity_consent_assent_or_authorship_proof" },
+        "authority": { "const": "no_permission_obligation_credential_tool_or_representative_authority_inherited_or_granted" },
+        "persistence": { "const": "pure_return_value_not_stored_by_package" },
+        "retention": { "const": "caller_declaration_not_storage_deletion_or_host_compliance_proof" },
+        "effects": { "const": "no_fetch_parse_execution_network_filesystem_clock_or_state_mutation" }
+      }
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "until"],
+      "properties": {
+        "mode": { "enum": ["ephemeral", "until", "no_fixed_expiry"] },
+        "until": {
+          "oneOf": [
+            { "$ref": "#/$defs/timestamp" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "mode": { "const": "until" } } },
+          "then": { "type": "object", "properties": { "until": { "$ref": "#/$defs/timestamp" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "mode": { "enum": ["ephemeral", "no_fixed_expiry"] } } },
+          "then": { "type": "object", "properties": { "until": { "type": "null" } } }
+        }
+      ]
+    },
+    "wake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_sha256",
+        "format",
+        "scope",
+        "coverage",
+        "source_revision",
+        "caller_held_cursor_ref"
+      ],
+      "properties": {
+        "artifact_sha256": { "$ref": "#/$defs/sha256" },
+        "format": { "enum": ["full_json", "wake_bundle", "brief", "handoff", "chronicle", "other"] },
+        "scope": { "enum": ["identity", "project", "mixed", "unknown"] },
+        "coverage": { "enum": ["bounded_complete", "partial", "unavailable", "unknown"] },
+        "source_revision": {
+          "oneOf": [
+            { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^(?!.*[\\uD800-\\uDFFF])(?=.*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\u2028\\u2029\\r\\n]*$" },
+            { "type": "null" }
+          ]
+        },
+        "caller_held_cursor_ref": { "$ref": "#/$defs/nullableSha256" }
+      }
+    },
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "summary", "source_pointer", "evidence_class", "evidence_ref"],
+      "properties": {
+        "kind": { "enum": ["fact", "decision", "open_work", "unknown"] },
+        "summary": { "$ref": "#/$defs/line" },
+        "source_pointer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?:/(?:[^~/\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\u2028\\u2029\\uD800-\\uDFFF\\r\\n]|~[01])*)+$"
+        },
+        "evidence_class": { "enum": ["given", "reported", "observed", "measured", "reproduced"] },
+        "evidence_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "omission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["area", "reason", "count"],
+      "properties": {
+        "area": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^(?!.*[\\uD800-\\uDFFF])(?=.*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\u2028\\u2029\\r\\n]*$" },
+        "reason": { "$ref": "#/$defs/line" },
+        "count": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "offer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "offer_id",
+        "observed_at",
+        "expires_at",
+        "purpose",
+        "artifact_retention",
+        "recipient_ref",
+        "thread_ref",
+        "parent_receipt_id",
+        "wake",
+        "facts",
+        "omissions",
+        "offered_choices",
+        "boundaries"
+      ],
+      "properties": {
+        "schema_version": { "const": "agenttool.wake-thread.offer/0.1" },
+        "offer_id": { "$ref": "#/$defs/sha256" },
+        "observed_at": { "$ref": "#/$defs/timestamp" },
+        "expires_at": {
+          "oneOf": [
+            { "$ref": "#/$defs/timestamp" },
+            { "type": "null" }
+          ]
+        },
+        "purpose": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^(?!.*[\\uD800-\\uDFFF])(?=.*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\u2028\\u2029\\r\\n]*$" },
+        "artifact_retention": { "$ref": "#/$defs/retention" },
+        "recipient_ref": { "$ref": "#/$defs/nullableSha256" },
+        "thread_ref": { "$ref": "#/$defs/sha256" },
+        "parent_receipt_id": { "$ref": "#/$defs/nullableSha256" },
+        "wake": { "$ref": "#/$defs/wake" },
+        "facts": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/fact" }
+        },
+        "omissions": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/omission" }
+        },
+        "offered_choices": { "const": ["carry", "fork", "rest", "refuse"] },
+        "boundaries": { "$ref": "#/$defs/boundaries" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "artifact_retention": {
+                "type": "object",
+                "properties": { "mode": { "const": "ephemeral" } }
+              }
+            }
+          },
+          "then": { "type": "object", "properties": { "expires_at": { "$ref": "#/$defs/timestamp" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "wake": { "type": "object", "properties": { "coverage": { "const": "bounded_complete" } } } } },
+          "then": { "type": "object", "properties": { "omissions": { "type": "array", "maxItems": 0 } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "wake": { "type": "object", "properties": { "coverage": { "const": "partial" } } } } },
+          "then": { "type": "object", "properties": { "omissions": { "type": "array", "minItems": 1 } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "wake": { "type": "object", "properties": { "coverage": { "enum": ["unavailable", "unknown"] } } } } },
+          "then": {
+            "type": "object",
+            "properties": {
+              "facts": { "type": "array", "maxItems": 0 },
+              "omissions": { "type": "array", "minItems": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "receipt_id",
+        "offer",
+        "reported_choice",
+        "responded_at",
+        "branch_ref",
+        "note_ref",
+        "outcome",
+        "boundaries"
+      ],
+      "properties": {
+        "schema_version": { "const": "agenttool.wake-thread.receipt/0.1" },
+        "receipt_id": { "$ref": "#/$defs/sha256" },
+        "offer": { "$ref": "#/$defs/offer" },
+        "reported_choice": { "enum": ["carry", "fork", "rest", "refuse"] },
+        "responded_at": { "$ref": "#/$defs/timestamp" },
+        "branch_ref": { "$ref": "#/$defs/nullableSha256" },
+        "note_ref": { "$ref": "#/$defs/nullableSha256" },
+        "outcome": { "enum": ["carried", "forked", "resting", "refused"] },
+        "boundaries": { "$ref": "#/$defs/boundaries" }
+      },
+      "allOf": [
+        {
+          "if": { "type": "object", "properties": { "reported_choice": { "const": "carry" } } },
+          "then": { "type": "object", "properties": { "branch_ref": { "type": "null" }, "outcome": { "const": "carried" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "reported_choice": { "const": "fork" } } },
+          "then": { "type": "object", "properties": { "branch_ref": { "$ref": "#/$defs/sha256" }, "outcome": { "const": "forked" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "reported_choice": { "const": "rest" } } },
+          "then": { "type": "object", "properties": { "branch_ref": { "type": "null" }, "outcome": { "const": "resting" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "reported_choice": { "const": "refuse" } } },
+          "then": { "type": "object", "properties": { "branch_ref": { "type": "null" }, "outcome": { "const": "refused" } } }
+        }
+      ]
+    }
+  }
+}
