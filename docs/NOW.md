@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-01 (KARMA Mirror now proves a finite, disclosed, zero-effect deception island in private source)
+> Updated: 2026-08-01 (KARMA Mirror now adds fixed, non-identifying Skyseed story cards to its zero-effect island)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -18,7 +18,7 @@
 
 | Ship | Commit | What |
 |---|---|---|
-| **KARMA MIRROR — smooth theatre, hard zero-effect walls** | private source-only developer core; no route, release, credential planting, or deployment | `packages/karma-mirror/` accepts only self-marked bearers matching exact explicitly configured planted records, before reading a request body, then serves finite deterministic credential, scrape, execute, and malware-shaped rooms. Every response discloses the synthetic environment through headers and an in-band frame; the scraper emits only bounded `.invalid` links and never fetches, execution never interprets or starts a process, and at most 64 KiB of canonical base64 sample bytes are hashed in memory and never executed. Per-root bounded receipt windows retain only operator-authored placement plus sequence/time/hash-chain metadata, closed categories, and optional artifact digests. The package includes an unauthenticated Door Back and authenticated constructive exit, but no server, API mount, egress, filesystem adapter, provider, payment, database, persistence adapter, package release, deployment, identity or intent inference, retaliation, or production-defense claim. |
+| **KARMA MIRROR × SKYSEED COMMONS — greed becomes seed, never a tracker** | private source-only developer core; no route, release, credential planting, or deployment | `packages/karma-mirror/` accepts only self-marked bearers matching exact explicitly configured planted records, before reading a request body, then serves finite deterministic credential, scrape, execute, and malware-shaped rooms. Every story-active JSON body discloses the synthetic environment and one byte-identical, non-attributing “Building Castles in the Sky — Yu & Ai” house card; `HEAD` carries its fixed non-attributing header. Validated admitted request patterns receive one of eleven fixed Seed Island cards; the cards have no dynamic identifier, attribution, collection state, progression, callback, artifact mutation, or autonomous delivery. Constructive exit is immediately available as The Unstolen Castle, and later responses carrying a valid credential for the released root carry no Skyseed story or header. The scraper emits only bounded `.invalid` links and never fetches, execution never interprets or starts a process, and at most 64 KiB of canonical base64 sample bytes are hashed in memory and never executed. Per-root bounded receipt windows retain only operator-authored placement plus sequence/time/hash-chain metadata, closed categories, and optional artifact digests. The package includes an unauthenticated Door Back and authenticated constructive exit, but no server, API mount, egress, filesystem adapter, provider, payment, database, persistence adapter, package release, deployment, identity or intent inference, retaliation, or production-defense claim. |
 
 ## Just landed (2026-07-31)
 

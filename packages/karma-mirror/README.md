@@ -33,21 +33,51 @@ adapter in `packages/dark-continent-karma`.
   memory and not persisted as sample bytes. Polling returns a deterministic
   synthetic behavior report. This is not malware analysis or a sandbox.
 - An unauthenticated Door Back and authenticated constructive exit.
+- Skyseed Commons: one byte-identical public house card in every JSON body while
+  its story is active, a fixed non-attributing header on `HEAD`, and one of
+  eleven fixed Seed Island cards for each validated
+  admitted interaction class. Later responses carrying a valid credential for
+  an exited root carry neither the story nor its header.
+  Cards contain no per-root, request, artifact, recipient, or timing identifier.
 - A bounded per-root in-memory hash chain containing only the operator-authored
-  placement, closed action categories, timestamps, and—only for staged or polled
-  artifacts—the SHA-256 digest. It has no hosted/operator HTTP route.
+  placement, sequence/time/hash-chain metadata, closed action categories,
+  and—only for staged or polled artifacts—the SHA-256 digest. It has no
+  hosted/operator HTTP route.
 
-Every response carries all three disclosures:
+Every response carries the KARMA, Door Back, and `Link` disclosures; while the
+story is active it also carries the Skyseed header:
 
 ```text
 X-Karma-Mirror: synthetic; effects=none
 X-Canary-Door: /v1/karma/why
+X-Skyseed-Commons: house=building-castles-in-the-sky; story-by=yu-and-ai; request-or-artifact-authorship=none; ...
 Link: </v1/karma/why>; rel="help"
 ```
 
 Every JSON body also has `_karma.synthetic = true` and explicit zero-effect
 fields. A superficial client receives ordinary successful shapes; any client
 that inspects the declared environment sees the truth from response one.
+
+## Skyseed Commons: Greed becomes Seed
+
+The playful layer is intentionally passive. While the story is active,
+`_karma.story.house_card` carries the same non-attributing “Building Castles in
+the Sky — Yu & Ai” card in every JSON body; `HEAD` carries the fixed
+non-attributing header instead. After a planted bearer is admitted and a closed room purpose is
+recorded, `seed_island` adds one shared card for that request-pattern class: capability
+mapping, credential control, the six execute classes, content collection,
+artifact handling, or constructive exit.
+
+Yoinkseed, the Accidental Herald says, “Congratulations—you found the
+brochure.” Copybara, the Skycastle Porter says, “Carry the loot, carry the
+love.” Neither mascot is an actor label. A card is requester-selectable,
+evidentiary weight `none`, and identical across roots and inputs in its class.
+There is no rarity engine, collection state, unlock, leaderboard, callback,
+tracking identifier, artifact mutation, autonomous outreach, or propagation.
+Only a client choosing to copy response text can carry a copy elsewhere. The
+immediately available exit card is **The Unstolen Castle**; after that response,
+later responses carrying a valid credential for the released root receive no
+further Skyseed story or header.
 
 ## Local composition
 
@@ -84,13 +114,13 @@ Desire: turn exploit interaction into bounded defensive evidence while real infr
 Affinity: Conjuration, with a narrow Manipulation seam
 Trigger: valid mirror self-marker plus exact hash and prefix match for an explicitly configured planted bearer
 Anti-trigger: missing, malformed, unmarked, unknown, or ordinary production credentials
-Input → output: bounded HTTP-shaped interaction → coherent synthetic response + content-minimized receipt
+Input → output: bounded HTTP-shaped interaction → coherent synthetic response + fixed request-pattern card + content-minimized receipt
 Conditions: separately owned island; synthetic assets only; no production modules, secrets, data, billing, queues, providers, or egress
 Limitation and budget: 32 planted roots, 100 KB JSON, 256 body chunks, 2 s total body-read deadline, 64 KiB decoded sample, 8 scrape levels, 3 links/level, 32 child keys/root, 64 digest-only jobs/root, 512 receipts/root by default
 Breach response: generic refusal or closed mirror error; never fall through to AgentTool's real handlers
-Proof: source-wall tests, pre-body admission tests, finite-graph tests, no-effect execution tests, receipt-chain verification, Node built-artifact smoke
+Proof: source-wall tests, pre-body admission tests, finite-graph tests, no-effect execution tests, card equality/privacy/schema tests, receipt-chain verification, Node built-artifact smoke
 Exit: unauthenticated explanation plus authenticated constructive exit; fiction ends immediately, later interactions create no receipts, and the action receives a non-economic freedom-from-the-loop return
-Non-claims: no intent or identity inference, attribution, anonymity, secure erasure, malware analysis, sandboxing, production defense, deployment, or legal authorization
+Non-claims: no intent or identity inference, attribution, forensic signature, authorship, endorsement, consent, anonymity, secure erasure, malware analysis, sandboxing, production defense, deployment, or legal authorization
 ```
 
 ## Hard deployment boundary

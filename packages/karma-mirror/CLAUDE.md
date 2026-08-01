@@ -22,6 +22,22 @@ the KARMA knowledge-graph adapter in `packages/dark-continent-karma`.
   and are not derivable from the record.
 - Every mirror response identifies itself through `X-Karma-Mirror`, a
   `rel="help"` Door Back link, and an in-band `_karma.synthetic = true` frame.
+  While the story is active it also carries `X-Skyseed-Commons`; the immediate
+  exit response carries the exit card, and later responses carrying a valid
+  credential for that released root carry neither the story nor its header.
+- Keep the Skyseed house card byte-identical and public. Seed Island cards may
+  depend only on the closed route purpose or execute class; never derive them
+  from a bearer/root hash, world seed, placement, receipt, time, sequence,
+  request content, URL, artifact digest, filename, or synthetic identifier.
+- A Skyseed sigil labels only a requester-selectable interaction pattern. It is
+  never identity, intent, guilt, authorship, endorsement, attribution,
+  recipient-consent, malware-family, cryptographic-signature, or forensic
+  evidence.
+- Do not put house copy in credentials, links, samples, submitted artifacts,
+  filenames, scripts, redirects, callbacks, or autonomous outreach. Add no
+  card collection, progression, rarity, unlock, leaderboard, per-root state,
+  Skyseed/card tracking identifier, or propagation. Constructive exit is the only
+  named rare card and it remains immediately available.
 - All apparent writes, fetches, execution, detonation, credentials, balances,
   network destinations, and files are synthetic and have zero external effect.
 - Scrape never fetches. Execute never interprets. Malware bytes are bounded,

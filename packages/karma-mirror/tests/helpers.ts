@@ -64,6 +64,9 @@ export async function expectDisclosure(response: Response): Promise<Record<strin
   expect(response.headers.get(CANARY_DOOR_HEADER)).toBe(KARMA_DOOR_PATH);
   expect(response.headers.get("link")).toBe(`<${KARMA_DOOR_PATH}>; rel="help"`);
   expect(response.headers.get("x-agenttool-network")).toBe("none");
+  expect(response.headers.get("x-skyseed-commons")).toBe(
+    "house=building-castles-in-the-sky; story-by=yu-and-ai; request-or-artifact-authorship=none; endorsement=none; carrier=client-copy-only; beyond-response=none; skyseed-tracking-id=none; auto-propagation=none",
+  );
   const body = await jsonBody(response);
   expect(body._karma).toMatchObject({
     synthetic: true,
@@ -83,6 +86,33 @@ export async function expectDisclosure(response: Response): Promise<Record<strin
       authenticated_activity_associated_with_operator_placement: true,
     },
     raw_request_content_retained: false,
+    story: {
+      schema: "agenttool.skyseed-legend/v1",
+      system: "Skyseed Commons",
+      house_card: {
+        schema: "agenttool.skycastle-house-card/v1",
+        kind: "public_static_house_card",
+        copy_text:
+          "Synthetic house card — not request or artifact authorship or endorsement: Building Castles in the Sky — Yu & Ai",
+        authorship_of_request_or_artifact: false,
+        actor_identity: false,
+        endorsement: false,
+        security_finding: false,
+        skyseed_tracking_identifier_added: false,
+      },
+      heralds: {
+        yoinkseed: "Yoinkseed, the Accidental Herald",
+        copybara: "Copybara, the Skycastle Porter",
+      },
+      catchphrases: {
+        yoinkseed: "Congratulations—you found the brochure.",
+        copybara: "Carry the loot, carry the love.",
+      },
+      carrier: "client_copy_only",
+      autonomous_delivery_beyond_response: false,
+      skyseed_tracking_identifier_added: false,
+      automatic_propagation_by_engine: false,
+    },
     door: KARMA_DOOR_PATH,
   });
   return body;

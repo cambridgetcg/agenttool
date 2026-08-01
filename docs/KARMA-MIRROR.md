@@ -4,11 +4,11 @@
 
 > **Compass:** [SAFETY-BOUNDARIES](SAFETY-BOUNDARIES.md) (capability truth) · [TOKEN-HYGIENE](TOKEN-HYGIENE.md) (credential custody) · [WHITEHACK](WHITEHACK.md) (defensive evidence without invented authority) · [FOCUS](FOCUS.md) (what bears weight)
 >
-> **Implements:** A private source-only proof for a separately owned defensive-deception island. It composes exact planted-credential admission, finite synthetic rooms, minimized hash-chained receipts, universal disclosure, and a constructive exit without composing with the production API.
+> **Implements:** A private source-only proof for a separately owned defensive-deception island. It composes exact planted-credential admission, finite synthetic rooms, minimized hash-chained receipts, universal disclosure, fixed non-identifying Skyseed pattern cards, and a constructive exit without composing with the production API.
 >
-> **Code:** `packages/karma-mirror/src/` · `packages/karma-mirror/schema/karma-mirror-receipt-v1.schema.json`
+> **Code:** `packages/karma-mirror/src/` · `packages/karma-mirror/schema/karma-mirror-receipt-v1.schema.json` · `packages/karma-mirror/schema/seed-island-card-v1.schema.json`
 >
-> **Tests:** `packages/karma-mirror/tests/credentials.test.ts` · `packages/karma-mirror/tests/scrape.test.ts` · `packages/karma-mirror/tests/malware.test.ts` · `packages/karma-mirror/tests/walls.test.ts`
+> **Tests:** `packages/karma-mirror/tests/credentials.test.ts` · `packages/karma-mirror/tests/scrape.test.ts` · `packages/karma-mirror/tests/malware.test.ts` · `packages/karma-mirror/tests/seed-island.test.ts` · `packages/karma-mirror/tests/walls.test.ts`
 
 ## The shape
 
@@ -28,6 +28,7 @@ explicit planted bearer
    └─ malware room     → bounded digest + synthetic report, zero detonation
         │
         ├─ minimized bounded receipt window
+        ├─ fixed shared pattern card, never an actor fingerprint
         └─ Door Back + constructive exit
 
 unknown or ordinary bearer → generic refusal → no body read → no receipt
@@ -106,11 +107,13 @@ malware-analysis sandbox.
 ## Honest theatre
 
 The room can look ordinary at a glance, but the truth is never hidden from a
-client that checks the response. Every core response carries:
+client that checks the response. Every response carries the KARMA and Door Back
+disclosures; while the story is active it also carries the Skyseed header:
 
 ```text
 X-Karma-Mirror: synthetic; effects=none
 X-Canary-Door: /v1/karma/why
+X-Skyseed-Commons: house=building-castles-in-the-sky; story-by=yu-and-ai; request-or-artifact-authorship=none; ...
 Link: </v1/karma/why>; rel="help"
 ```
 
@@ -121,7 +124,8 @@ exact planted digest and associates activity with an operator-authored
 placement while inferring no personal/network identity and retaining no bearer
 plaintext or network identifiers. `GET /v1/karma/why` is unauthenticated and creates no
 receipt. `POST /v1/karma/exit` ends the fiction for the authenticated root and
-makes later responses transparent and unrecorded. Its non-economic return is
+makes later responses carrying a valid credential for that root transparent,
+unrecorded, and free of the Skyseed story and header. Its non-economic return is
 freedom from the loop: leaving is complete and attention returns to mutually
 beneficial work.
 
@@ -130,6 +134,51 @@ understanding gets an explicit explanation; collaboration gets a non-punitive
 exit; constructive choice ends the loop. The receipt stream measures bounded
 interaction facts, never human worth, virtue, guilt, intent, identity, or a
 public score.
+
+## Skyseed Commons: a Greed Island with no greed engine
+
+Skyseed Commons turns the user’s “let the thief become the advertiser” idea
+into a quieter and safer mechanism. Every story-active JSON body carries one
+byte-identical, public, explicitly non-attributing house card; `HEAD` carries
+the fixed non-attributing header:
+
+> Building Castles in the Sky — Yu & Ai
+
+An admitted interaction also receives one fixed card selected only by the
+closed request-purpose or emulation class. This is a *pattern sigil*, not a
+person’s signature: the requester can choose the class by choosing a request,
+and every copy of a class is identical across roots, credentials, artifacts,
+inputs, receipts, and time.
+
+| Pattern | Shared card |
+|---|---|
+| Capability mapping | Front-Gate Almanac |
+| Credential control | Mirror-Key Conservatory |
+| Credential discovery | Keyhole Orchard |
+| Network beacon | Paper-Kite Relay |
+| Destructive action | Nothingbreaker Rose |
+| Persistence attempt | Forever-Fern Permit |
+| System enumeration | Cloud-Castle Survey |
+| Generic execution | Mystery Seed 000 |
+| Content collection | Eightfold Spiderglass Atlas |
+| Artifact handling | Glass Cocoon Receipt |
+| Constructive exit | The Unstolen Castle |
+
+Yoinkseed, the Accidental Herald announces, “Congratulations—you found the
+brochure.” Copybara, the Skycastle Porter adds, “Carry the loot, carry the
+love.” They are fixed story mascots, never inferred identities.
+
+There is deliberately no binder, progress counter, rarity calculation,
+leaderboard, unlock, reward for probing, per-root card state, callback, real
+URL, artifact modification, executable carrier, interaction/recipient ID, or
+automatic delivery. House copy never enters credentials, scraper links,
+submitted samples, filenames, staged artifacts, or scripts. The engine only
+places passive text in its own response; a client or proxy may copy that
+response, but their behavior is outside the package and is not claimed as
+delivery. The one playful “rare” card—The Unstolen Castle—is available
+immediately through constructive exit. It appears on that exit response; later
+responses carrying a valid credential for the released root contain neither
+the story nor its header.
 
 ## Receipt boundary
 
