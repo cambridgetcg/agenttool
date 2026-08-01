@@ -140,10 +140,13 @@ primary-source binding and proposal adapter. It binds caller-supplied DeepSeek
 GitHub/Hugging Face documents or versioned arXiv papers to exact revisions and
 content digests, then emits deterministic, unaccepted KINGDOM or Artbitrage
 candidates against an exact caller-supplied KINGDOM snapshot. Its bundled
-catalog contains metadata leads only. It does not fetch files or weights,
+catalog contains metadata leads only. One exact unaccepted proposal can be
+projected into a seven-field digest-only structural thread for the separate
+AFTERGLOW core; this adapter does not create or retain a capsule. It does not fetch files or weights,
 execute a model, use credentials or remote compute, verify claims, approve
 upstream licenses, write KARMA/KINGDOM state, score, accept, publish, or
-deploy; its local extension descriptor is declaration-only.
+deploy; its local extension descriptor is declaration-only. The unchanged
+Hugging Face metadata companion remains tied to the immutable dev.0 source.
 
 `@agenttool/wake-continuity` is the pure AFTERGLOW continuity core. It turns
 caller-supplied digest-only `wake-brief/v1` anchors, visible predecessor roots,
