@@ -283,7 +283,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/deepseek-kingdom packages/karma-mirror packages/heaven packages/credential-broker packages/collab packages/browser packages/hf-scout packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom",
+      "api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/deepseek-kingdom packages/karma-mirror packages/heaven packages/wake-thread packages/credential-broker packages/collab packages/browser packages/hf-scout packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom",
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("package-manager-cache: false");
@@ -331,6 +331,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/deepseek-kingdom && bun run ci");
     expect(preflight).toContain("cd packages/karma-mirror && bun run ci");
     expect(preflight).toContain("cd packages/heaven && bun run ci");
+    expect(preflight).toContain("cd packages/wake-thread && bun run ci");
     expect(preflight).toContain("cd packages/skills && bun run ci");
     expect(preflight).toContain("cd packages/correspondence-yutabase && bun run ci");
     expect(preflight).toContain("cd packages/correspondence-yutabase-projector && bun run ci");

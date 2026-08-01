@@ -1,0 +1,36 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "wake-thread",
+  "package": "@agenttool/wake-thread",
+  "version": "0.1.0-dev.0",
+  "status": "private_source",
+  "proposed_ability": "carry-wake-thread",
+  "capabilities": [
+    "wake-thread:offer-create",
+    "wake-thread:offer-resolve",
+    "wake-thread:receipt-validate",
+    "wake-thread:chain-validate"
+  ],
+  "defaults": {
+    "automatic_fetch": false,
+    "automatic_parse": false,
+    "default_acceptance": false,
+    "identity_inference": false,
+    "choice_authorship_verified": false,
+    "network": false,
+    "filesystem": false,
+    "clock": false,
+    "persistence": false,
+    "telemetry": false,
+    "economic_effect": false,
+    "task_state_effect": false,
+    "permission_inheritance": false,
+    "authority": false
+  },
+  "host_contract": "not_registered",
+  "notes": [
+    "This descriptor is a declaration-only local hint, not an installed KINGDOM host contract or an active Nen ability.",
+    "A thread verifies artifact links only; it does not establish identity continuity, persistent memory, consciousness, consent, choice authorship, truth, KARMA, XENIA status, or authority.",
+    "Carry, fork, rest, and refuse remain caller-reported choices; refusal is not an automatic retry parent and rest carries no protocol penalty."
+  ]
+}

@@ -10,7 +10,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + KARMA Mirror + HEAVEN + broker + collab + Browser + HF Scout + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + KARMA Mirror + HEAVEN + WAKE Thread + broker + collab + Browser + HF Scout + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -133,6 +133,8 @@ packages_gate() {
     bash -c 'cd packages/karma-mirror && bun run ci'
   run "HEAVEN opt-in delight and landing-room protocol" \
     bash -c 'cd packages/heaven && bun run ci'
+  run "WAKE Thread refusable artifact continuity protocol" \
+    bash -c 'cd packages/wake-thread && bun run ci'
   run "agent-data-sync/v1 explicit pull bridge" \
     bash -c 'cd packages/data-sync && bun run ci && bun run build'
   run "agentcred/0.1 local credential broker" \
