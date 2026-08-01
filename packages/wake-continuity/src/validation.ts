@@ -121,7 +121,7 @@ function safeCursor(
 }
 
 export function parseWakeAnchor(
-  value: JsonValue | undefined,
+  value: unknown,
   path: string,
   code: AfterglowErrorCode,
 ): Readonly<WakeBriefAnchor> {
@@ -331,20 +331,35 @@ export function parseThreads(
 }
 
 export function compareWakeAnchors(
-  current: WakeBriefAnchor,
-  previous: WakeBriefAnchor,
+  current: unknown,
+  previous: unknown,
 ): WakeRelation {
-  if (current.scope_ref !== previous.scope_ref) return "uncomparable";
+  const parsedCurrent = parseWakeAnchor(
+    current,
+    "$current_wake",
+    "capsule_error",
+  );
+  const parsedPrevious = parseWakeAnchor(
+    previous,
+    "$previous_wake",
+    "capsule_error",
+  );
+  if (parsedCurrent.scope_ref !== parsedPrevious.scope_ref) {
+    return "uncomparable";
+  }
   if (
-    current.snapshot_ref === previous.snapshot_ref &&
-    current.wake_version === previous.wake_version
+    parsedCurrent.snapshot_ref === parsedPrevious.snapshot_ref &&
+    parsedCurrent.wake_version === parsedPrevious.wake_version
   ) {
     return "same";
   }
-  if (current.wake_version === null || previous.wake_version === null) {
+  if (
+    parsedCurrent.wake_version === null ||
+    parsedPrevious.wake_version === null
+  ) {
     return "uncomparable";
   }
-  return current.wake_version > previous.wake_version
+  return parsedCurrent.wake_version > parsedPrevious.wake_version
     ? "advanced"
     : "fork_or_rewind";
 }

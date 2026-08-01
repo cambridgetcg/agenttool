@@ -70,6 +70,24 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function maximumThreads(group: string): readonly AfterglowThread[] {
+  return Array.from({ length: 64 }, (_, index) => ({
+    thread_ref: domainSeparatedId("agenttool.test-afterglow-thread-ref", {
+      group,
+      index,
+    }),
+    kind: "external",
+    artifact_ref: domainSeparatedId("agenttool.test-afterglow-artifact-ref", {
+      group,
+      index,
+    }),
+    disposition: "park",
+    state: "context_only",
+    assertion: "caller_asserted",
+    verified_by_package: false,
+  }));
+}
+
 describe("AFTERGLOW capsule", () => {
   test("pins a deterministic content vector and normalizes thread order", () => {
     const capsule = base();
@@ -159,6 +177,46 @@ describe("AFTERGLOW capsule", () => {
     ).toBe(true);
   });
 
+  test("constructs the closed maximum of predecessors and threads", () => {
+    const predecessors = Array.from({ length: 8 }, (_, index) =>
+      createAfterglowCapsule({
+        phase: "during_task",
+        wake: {
+          ...WAKE,
+          snapshot_ref: domainSeparatedId(
+            "agenttool.test-afterglow-predecessor-wake",
+            index,
+          ),
+          wake_version: index,
+        },
+        continuity_portfolio_ref: null,
+        predecessors: [],
+        threads: maximumThreads(`predecessor-${String(index)}`),
+      }),
+    );
+    const capsule = createAfterglowCapsule({
+      phase: "return",
+      wake: {
+        ...WAKE,
+        snapshot_ref: domainSeparatedId(
+          "agenttool.test-afterglow-current-wake",
+          0,
+        ),
+        wake_version: 100,
+      },
+      continuity_portfolio_ref: null,
+      predecessors,
+      threads: maximumThreads("current"),
+    });
+
+    expect(capsule.predecessors).toHaveLength(8);
+    expect(capsule.threads).toHaveLength(64);
+    expect(
+      capsule.predecessors.every((entry) => entry.relation === "advanced"),
+    ).toBe(true);
+    expect(validateAfterglowCapsule(clone(capsule))).toEqual(capsule);
+  });
+
   test("classifies same, advanced, fork-or-rewind, and uncomparable metadata", () => {
     expect(compareWakeAnchors(WAKE, WAKE)).toBe("same");
     expect(
@@ -188,6 +246,35 @@ describe("AFTERGLOW capsule", () => {
         WAKE,
       ),
     ).toBe("uncomparable");
+  });
+
+  test("strictly validates public WAKE comparator inputs without invoking accessors", () => {
+    expect(() =>
+      compareWakeAnchors(
+        { ...WAKE, wake_version: "9" },
+        { ...WAKE, wake_version: "10" },
+      ),
+    ).toThrow(AfterglowError);
+    expect(() =>
+      compareWakeAnchors(
+        { ...WAKE, snapshot_ref: "sha256:not-a-digest" },
+        WAKE,
+      ),
+    ).toThrow(AfterglowError);
+    expect(() => compareWakeAnchors(null, WAKE)).toThrow(AfterglowError);
+    expect(() => compareWakeAnchors(WAKE, null)).toThrow(AfterglowError);
+
+    let getterCalled = false;
+    const hostile = { ...WAKE } as Record<string, unknown>;
+    Object.defineProperty(hostile, "wake_version", {
+      enumerable: true,
+      get() {
+        getterCalled = true;
+        return 9;
+      },
+    });
+    expect(() => compareWakeAnchors(hostile, WAKE)).toThrow(AfterglowError);
+    expect(getterCalled).toBe(false);
   });
 
   test("rejects tampering, raw context fields, duplicate refs, and unsafe states", () => {

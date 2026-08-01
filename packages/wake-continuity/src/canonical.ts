@@ -5,7 +5,10 @@ import type { Sha256Id } from "./types.js";
 
 const MAX_JSON_BYTES = 128 * 1024;
 const MAX_JSON_DEPTH = 24;
-const MAX_JSON_NODES = 4_096;
+// The public capsule input admits 8 full predecessor capsules with 64 threads
+// each, plus 64 current threads. Keep that closed maximum constructible while
+// retaining a finite hostile-input traversal bound.
+const MAX_JSON_NODES = 8_192;
 const MAX_STRING_BYTES = 4 * 1024;
 const DOMAIN = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/u;
 
