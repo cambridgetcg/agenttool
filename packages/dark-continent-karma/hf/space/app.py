@@ -167,7 +167,8 @@ with gr.Blocks(title="KINGDOM Dark Continent Cartographer", analytics_enabled=Fa
         compare_button.click(compare_conflicts, [left_input, right_input], compare_output)
     gr.Markdown(
         f"Loaded {len(TREASURES)} treasure records and {len(PROPOSAL_INDEX)} proposal-index rows. "
-        "No runtime network, model, upload, graph-write, reward, trade, or Crown path."
+        "No app-initiated outbound runtime network or model call; no app file-input/upload "
+        "consumer, graph-write, reward, trade, or Crown path."
     )
 
 
