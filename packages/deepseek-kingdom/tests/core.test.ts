@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 
 import {
   canonicalJson,
+  createDeepSeekAfterglowThread,
   createDeepSeekKingdomProposal,
   createDeepSeekSourceBinding,
   DeepSeekKingdomError,
+  domainSeparatedId,
   validateDeepSeekKingdomProposal,
   validateDeepSeekSourceBinding,
 } from "../src/index.js";
@@ -212,6 +214,107 @@ describe("proposal-only KINGDOM projection", () => {
       ...proposal,
       authority: { ...proposal.authority, authorizes_inference: true },
     })).toThrow("fixed boundary fields");
+  });
+});
+
+describe("DeepSeek to AFTERGLOW thread seam", () => {
+  test("projects only a deterministic digest-only structural thread", () => {
+    const source = createDeepSeekSourceBinding(githubSourceInput());
+    const proposal = createDeepSeekKingdomProposal(proposalInput(source));
+    const first = createDeepSeekAfterglowThread({
+      proposal,
+      disposition: "park",
+    });
+    const second = createDeepSeekAfterglowThread({
+      proposal,
+      disposition: "park",
+    });
+
+    expect(first).toEqual(second);
+    expect(first).toEqual({
+      thread_ref: domainSeparatedId(
+        "agenttool.deepseek-afterglow-thread/0.1",
+        { artifact_ref: proposal.proposal_id },
+      ),
+      artifact_ref: proposal.proposal_id,
+      disposition: "park",
+      assertion: "caller_asserted",
+      verified_by_package: false,
+      kind: "deepseek",
+      state: "proposed_unaccepted",
+    });
+    expect(Object.keys(first).sort()).toEqual([
+      "artifact_ref",
+      "assertion",
+      "disposition",
+      "kind",
+      "state",
+      "thread_ref",
+      "verified_by_package",
+    ]);
+    expect(Object.isFrozen(first)).toBe(true);
+  });
+
+  test("admits only AFTERGLOW dispositions and one exact proposal", () => {
+    const proposal = createDeepSeekKingdomProposal(
+      proposalInput(createDeepSeekSourceBinding(githubSourceInput())),
+    );
+    expect(
+      (["carry", "park", "release", "withdraw"] as const).map(
+        (disposition) =>
+          createDeepSeekAfterglowThread({
+            proposal,
+            disposition,
+          }).disposition,
+      ),
+    ).toEqual(["carry", "park", "release", "withdraw"]);
+
+    try {
+      createDeepSeekAfterglowThread({
+        proposal,
+        disposition: "resume" as "carry",
+      });
+      throw new Error("invalid disposition was accepted");
+    } catch (error) {
+      expect(error).toBeInstanceOf(DeepSeekKingdomError);
+      expect((error as DeepSeekKingdomError).code).toBe(
+        "invalid_afterglow_thread",
+      );
+    }
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal,
+        disposition: "park",
+        thread_key: "caller-private-label",
+      } as never),
+    ).toThrow("must contain exactly");
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal: {
+          ...proposal,
+          state: "accepted",
+        } as never,
+        disposition: "park",
+      }),
+    ).toThrow("fixed boundary fields");
+
+    let getterCalled = false;
+    const hostile = { proposal, disposition: "park" as const };
+    Object.defineProperty(hostile, "identity", {
+      enumerable: true,
+      get() {
+        getterCalled = true;
+        return "must-not-cross";
+      },
+    });
+    try {
+      createDeepSeekAfterglowThread(hostile);
+      throw new Error("hostile accessor was accepted");
+    } catch (error) {
+      expect(error).toBeInstanceOf(DeepSeekKingdomError);
+      expect((error as DeepSeekKingdomError).code).toBe("invalid_json");
+    }
+    expect(getterCalled).toBe(false);
   });
 });
 

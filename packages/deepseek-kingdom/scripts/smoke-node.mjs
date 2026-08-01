@@ -1,4 +1,5 @@
 import {
+  createDeepSeekAfterglowThread,
   createDeepSeekKingdomProposal,
   createDeepSeekSourceBinding,
 } from "../dist/index.js";
@@ -46,14 +47,24 @@ const proposal = createDeepSeekKingdomProposal({
     claim_refs: ["r1.rl-preliminary-step"],
   }],
 });
+const afterglowThread = createDeepSeekAfterglowThread({
+  proposal,
+  disposition: "park",
+});
 
 const expected = {
   binding: "sha256:f35099fe868345687b210cc2eb6e9e2f139cc44890c10d3631815ccfa7ad573a",
   proposal: "sha256:5498ab9adc311d31bdb35b2ce60a8e680c1ce8cd8834da547f87f5c57286ace3",
+  afterglowThread:
+    "sha256:6c3b88ce7b1e38b29dd1ee6c67804ed7854b74886d2328916a93291ac6afeaf2",
 };
-if (source.binding_id !== expected.binding || proposal.proposal_id !== expected.proposal) {
+if (
+  source.binding_id !== expected.binding ||
+  proposal.proposal_id !== expected.proposal ||
+  afterglowThread.thread_ref !== expected.afterglowThread
+) {
   process.stderr.write(
-    `DeepSeek KINGDOM smoke vector drift: ${source.binding_id} ${proposal.proposal_id}\n`,
+    `DeepSeek KINGDOM smoke vector drift: ${source.binding_id} ${proposal.proposal_id} ${afterglowThread.thread_ref}\n`,
   );
   process.exit(1);
 }
@@ -61,6 +72,14 @@ if (
   proposal.effects.model_executions !== 0 ||
   proposal.effects.network_reads !== 0 ||
   proposal.authority.authorizes_kingdom_registration !== false
+) {
+  process.exit(1);
+}
+if (
+  afterglowThread.artifact_ref !== proposal.proposal_id ||
+  afterglowThread.kind !== "deepseek" ||
+  afterglowThread.state !== "proposed_unaccepted" ||
+  afterglowThread.verified_by_package !== false
 ) {
   process.exit(1);
 }

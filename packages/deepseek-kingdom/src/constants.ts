@@ -1,5 +1,5 @@
 export const PACKAGE_NAME = "@agenttool/deepseek-kingdom" as const;
-export const PACKAGE_VERSION = "0.1.0-dev.0" as const;
+export const PACKAGE_VERSION = "0.1.0-dev.1" as const;
 
 export const DEEPSEEK_FORMATS = Object.freeze({
   source_binding: "agenttool.deepseek-source-binding/0.1",

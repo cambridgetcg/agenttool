@@ -21,6 +21,12 @@ adapter and must remain isolated from model and provider runtimes.
 - Preserve the fixed Dark Continent `not_checked`/`hold` projection. Never
   convert a source lead into a passed wall, accepted KARMA graph mutation, or
   KINGDOM registration.
+- Keep the AFTERGLOW crossover structural and digest-only. It may validate one
+  exact unaccepted proposal and derive one opaque thread reference; it must not
+  accept a caller label, create a capsule, choose a WAKE anchor or predecessor,
+  project a lens, or claim memory, identity, consent, permission, or authority.
+- Do not add a runtime dependency on `@agenttool/wake-continuity` or duplicate
+  its schema. Its capsule validator remains the composition authority.
 - Keep the bundled source catalog metadata-only, primary-source-only, pinned,
   and explicitly dated. Refreshing it requires deliberate source review and
   exact digest updates.

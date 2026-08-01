@@ -4,6 +4,9 @@ import { join } from "node:path";
 
 const root = join(import.meta.dir, "..");
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+const extension = JSON.parse(
+  readFileSync(join(root, "kingdom.extension.json"), "utf8"),
+);
 
 describe("package boundary", () => {
   test("has zero runtime dependencies and no lifecycle or remote action script", () => {
@@ -29,11 +32,14 @@ describe("package boundary", () => {
     expect(source).not.toMatch(/\bfetch\s*\(/u);
     expect(source).not.toMatch(/process\.env/u);
     expect(source).not.toMatch(/child_process/u);
+    expect(source).not.toContain("createDeepSeekWakeInvitation");
   });
 
   test("keeps the KINGDOM descriptor closed by default", () => {
-    const extension = JSON.parse(
-      readFileSync(join(root, "kingdom.extension.json"), "utf8"),
+    expect(manifest.version).toBe("0.1.0-dev.1");
+    expect(extension.version).toBe(manifest.version);
+    expect(extension.capabilities).toContain(
+      "afterglow:deepseek-thread-create",
     );
     expect(extension.host_contract).toBe("not_registered");
     for (const key of [

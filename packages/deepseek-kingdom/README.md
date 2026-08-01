@@ -3,12 +3,14 @@
 A zero-runtime-dependency, provenance-first adapter for bringing DeepSeek
 research leads toward KINGDOM and Artbitrage as **unaccepted proposals**.
 
-It does two small things:
+It does three small things:
 
 1. binds one caller-supplied official-source observation to an immutable Git or
    Hugging Face commit (or a versioned arXiv paper) and an exact SHA-256; and
 2. projects caller-authored claims into review-required KINGDOM candidates
-   bound to an exact caller-supplied KINGDOM snapshot digest.
+   bound to an exact caller-supplied KINGDOM snapshot digest; and
+3. reduces one exact unaccepted proposal to a digest-only structural DeepSeek
+   thread that an independent AFTERGLOW capsule may validate and carry.
 
 It does **not** contact DeepSeek, Hugging Face, GitHub, arXiv, KARMA, KINGDOM,
 or Artbitrage at runtime. It does not download files or weights, run a model,
@@ -102,6 +104,38 @@ Portable schemas close object structure; runtime validation additionally
 recomputes content IDs, canonical ordering, evidence pairing, and claim
 cross-references.
 
+## AFTERGLOW crossover
+
+```ts
+import { createDeepSeekAfterglowThread } from "@agenttool/deepseek-kingdom";
+import { createAfterglowCapsule } from "@agenttool/wake-continuity";
+
+const thread = createDeepSeekAfterglowThread({
+  proposal,
+  disposition: "park",
+});
+
+const capsule = createAfterglowCapsule({
+  phase: "between_tasks",
+  wake: callerValidatedWakeBriefAnchor,
+  continuity_portfolio_ref: null,
+  predecessors: [],
+  threads: [thread],
+});
+```
+
+The thread contains only a domain-separated `thread_ref`, the proposal's
+content-addressed `artifact_ref`, one explicit disposition, and AFTERGLOW's
+fixed DeepSeek boundary fields. There is no caller-selected label, task,
+identity, evidence summary, raw proposal, or WAKE content in it. The proposal
+digest remains linkable by design; hashing does not anonymize its referent.
+
+This package does not import `@agenttool/wake-continuity`, create a capsule,
+choose a WAKE anchor or predecessor, or project a next-WAKE lens. The receiving
+AFTERGLOW package is the runtime authority for that composition, and even a
+valid capsule does not accept the proposal or establish memory, identity,
+consent, permission, authority, truth, replay, or uninterrupted continuity.
+
 ## Primary-source treasure map
 
 [`official-deepseek-primary-sources.json`](./sources/official-deepseek-primary-sources.json)
@@ -155,5 +189,5 @@ bun run ci
 npm pack --dry-run --ignore-scripts --json
 ```
 
-The package is public-ready source at `0.1.0-dev.0`; importing or packing it
+The package is public-ready source at `0.1.0-dev.1`; importing or packing it
 does not publish anything or install a KINGDOM extension.
