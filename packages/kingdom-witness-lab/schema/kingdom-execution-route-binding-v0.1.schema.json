@@ -1,0 +1,235 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kingdom:execution-route-binding:v0.1",
+  "title": "KINGDOM execution-route binding v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "binding_id",
+    "artifact",
+    "route",
+    "features",
+    "disclosure",
+    "evidence_refs",
+    "boundaries",
+    "statement"
+  ],
+  "properties": {
+    "schema": { "const": "kingdom.execution-route-binding/0.1" },
+    "binding_id": { "$ref": "#/$defs/sha256" },
+    "artifact": { "$ref": "#/$defs/artifact" },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "route_id",
+        "effective_version",
+        "observed_at",
+        "api_dialect",
+        "equivalence",
+        "equivalence_evidence_refs"
+      ],
+      "properties": {
+        "provider": {
+          "enum": ["deepseek_api", "huggingface_inference", "local_injected", "other_injected"]
+        },
+        "route_id": { "$ref": "#/$defs/opaque" },
+        "effective_version": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 160,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+@-]{0,159}$"
+        },
+        "observed_at": { "$ref": "#/$defs/time" },
+        "api_dialect": {
+          "enum": [
+            "anthropic_messages",
+            "deepseek_responses",
+            "local_adapter",
+            "openai_chat_completions",
+            "other"
+          ]
+        },
+        "equivalence": { "enum": ["publisher_asserted", "unknown", "verified"] },
+        "equivalence_evidence_refs": { "$ref": "#/$defs/evidenceRefs" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "equivalence": { "const": "unknown" } } },
+          "then": {
+            "properties": { "equivalence_evidence_refs": { "type": "array", "maxItems": 0 } }
+          },
+          "else": {
+            "properties": { "equivalence_evidence_refs": { "type": "array", "minItems": 1 } }
+          }
+        }
+      ]
+    },
+    "features": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["feature", "status", "note_code"],
+        "properties": {
+          "feature": {
+            "enum": [
+              "context_length",
+              "logprobs",
+              "multimodal_input",
+              "prefix_completion",
+              "reasoning_controls",
+              "response_format",
+              "sampling_controls",
+              "tool_use"
+            ]
+          },
+          "status": { "enum": ["ignored", "remapped", "supported", "unknown"] },
+          "note_code": {
+            "type": ["string", "null"],
+            "enum": ["provider_specific_semantics", "silently_ignored", "version_dependent", null]
+          }
+        }
+      }
+    },
+    "disclosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retention_basis", "input_disclosure", "training_use", "evidence_refs"],
+      "properties": {
+        "retention_basis": {
+          "enum": ["caller_reported", "contractual", "provider_policy_observed", "unknown"]
+        },
+        "input_disclosure": { "enum": ["local_only", "remote_provider", "unknown"] },
+        "training_use": {
+          "enum": ["allowed_by_general_policy", "not_applicable", "opted_out_reported", "unknown"]
+        },
+        "evidence_refs": { "$ref": "#/$defs/evidenceRefs" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              {
+                "required": ["retention_basis"],
+                "properties": {
+                  "retention_basis": {
+                    "enum": ["contractual", "provider_policy_observed"]
+                  }
+                }
+              },
+              {
+                "required": ["training_use"],
+                "properties": {
+                  "training_use": {
+                    "enum": ["allowed_by_general_policy", "opted_out_reported"]
+                  }
+                }
+              }
+            ]
+          },
+          "then": {
+            "properties": {
+              "evidence_refs": { "type": "array", "minItems": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "evidence_refs": { "$ref": "#/$defs/evidenceRefs" },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_route_equivalence",
+        "credentials",
+        "dispatch",
+        "authority",
+        "automatic_action"
+      ],
+      "properties": {
+        "artifact_route_equivalence": { "enum": ["publisher_asserted", "unknown", "verified"] },
+        "credentials": { "const": "not_received" },
+        "dispatch": { "const": "not_performed" },
+        "authority": { "const": "none" },
+        "automatic_action": { "const": false }
+      }
+    },
+    "statement": {
+      "const": "Caller-supplied route description only. Artifact identity and execution route are distinct; compatibility is not semantic equivalence. This binding performs no provider call, receives no credential, and grants no authority or permission to dispatch."
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.\\d{3}Z$"
+    },
+    "opaque": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._+@-]{0,255}$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "kind", "id", "revision"],
+      "properties": {
+        "provider": { "enum": ["arxiv", "github", "huggingface"] },
+        "kind": { "enum": ["code", "dataset", "model", "paper"] },
+        "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "provider": { "const": "arxiv" } } },
+          "then": {
+            "properties": {
+              "kind": { "const": "paper" },
+              "id": {
+                "type": "string",
+                "pattern": "^(?!.*\\.\\.)([0-9]{4}\\.[0-9]{4,5}|[A-Za-z][A-Za-z0-9.-]*/[0-9]{7})$"
+              },
+              "revision": { "type": "string", "pattern": "^v[1-9][0-9]*$" }
+            }
+          },
+          "else": {
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "maxLength": 272,
+        "pattern": "^((artifact|collab|data|paper|passport|report|test):(?=.{1,256}$)(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._+@-]*(/[A-Za-z0-9][A-Za-z0-9._+@-]*)*|commit:([0-9a-f]{40}|[0-9a-f]{64})|sha256:[0-9a-f]{64})$"
+      }
+    }
+  }
+}

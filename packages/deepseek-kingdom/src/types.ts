@@ -23,6 +23,7 @@ export type LicenseScope = (typeof LICENSE_SCOPES)[number];
 export type ConsumerKind = (typeof CONSUMER_KINDS)[number];
 export type CandidateKind = (typeof CANDIDATE_KINDS)[number];
 export type IntegrationLane = (typeof INTEGRATION_LANES)[number];
+export type AfterglowDisposition = "carry" | "park" | "release" | "withdraw";
 
 export interface DeepSeekEvidencePin {
   readonly origin: EvidenceOrigin;
@@ -121,6 +122,21 @@ export interface DeepSeekKingdomProposal {
   readonly effects: typeof PROPOSAL_EFFECTS;
   readonly authority: typeof PROPOSAL_AUTHORITY;
   readonly license_boundary: typeof LICENSE_BOUNDARY;
+}
+
+export interface CreateDeepSeekAfterglowThreadInput {
+  readonly proposal: DeepSeekKingdomProposal;
+  readonly disposition: AfterglowDisposition;
+}
+
+export interface DeepSeekAfterglowThread {
+  readonly thread_ref: Sha256Id;
+  readonly artifact_ref: Sha256Id;
+  readonly disposition: AfterglowDisposition;
+  readonly assertion: "caller_asserted";
+  readonly verified_by_package: false;
+  readonly kind: "deepseek";
+  readonly state: "proposed_unaccepted";
 }
 
 export type DeepReadonly<T> = T extends (...args: never[]) => unknown

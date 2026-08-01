@@ -2,6 +2,7 @@ export {
   createDeepSeekSourceBinding,
   validateDeepSeekSourceBinding,
 } from "./binding.js";
+export { createDeepSeekAfterglowThread } from "./afterglow.js";
 export {
   canonicalJson,
   compareUnicode,
@@ -36,16 +37,19 @@ export {
   validateDeepSeekKingdomProposal,
 } from "./proposal.js";
 export type {
+  AfterglowDisposition,
   BoundDeepSeekClaim,
   CandidateKind,
   ClaimKind,
   ConsumerKind,
   CreateDeepSeekKingdomProposalInput,
+  CreateDeepSeekAfterglowThreadInput,
   CreateDeepSeekSourceBindingInput,
   DarkContinentBinding,
   DeepReadonly,
   DeepSeekClaimInput,
   DeepSeekEvidencePin,
+  DeepSeekAfterglowThread,
   DeepSeekKingdomProposal,
   DeepSeekLicenseInput,
   DeepSeekProposalCandidate,

@@ -168,9 +168,15 @@ anything; a Correspondence host owns those separate authorized steps.
 
 Schemas close the wire shape. Runtime validation additionally recomputes
 content IDs and relations, checks canonical ordering and duplicate refs,
-enforces state/disposition walls, and rejects accessors, cycles, custom
-prototypes, sparse arrays, symbols, bigint, non-finite numbers, and extra/raw
-context fields.
+enforces state/disposition walls, and rejects accessors, cycles, custom object
+or array prototypes, sparse arrays, symbols, bigint, non-finite numbers,
+Proxies, and extra/raw context fields. Node/Bun runtime predicates run before
+array, prototype, descriptor, or binary hashing boundaries, including for
+revoked Proxies. `sha256Id` accepts only strings or genuine `Uint8Array` values and
+hashes an internal byte copy, so rejection and byte snapshotting do not enter
+caller-authored Proxy traps, iterators, or property getters.
+`domainSeparatedId` requires a primitive string domain before regex validation
+or interpolation, so it never coerces caller-supplied objects into tokens.
 
 `validateAfterglowLens` validates the lens shape, content address, and limited
 internal coherence. Only `validateAfterglowLensAgainstCapsule` checks that a

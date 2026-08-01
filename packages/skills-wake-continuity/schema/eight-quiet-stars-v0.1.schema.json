@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/eight-quiet-stars-v0.1.schema.json",
+  "title": "AgentTool Eight Quiet Stars display layout v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "layout_id",
+    "source_thread_id",
+    "choice",
+    "stars",
+    "boundaries"
+  ],
+  "properties": {
+    "profile": { "const": "agenttool.eight-quiet-stars/v0.1" },
+    "layout_id": { "$ref": "#/$defs/sha256Id" },
+    "source_thread_id": { "$ref": "#/$defs/sha256Id" },
+    "choice": { "enum": ["open", "skip"] },
+    "stars": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/star" }
+    },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "choice": { "const": "skip" } } },
+      "then": { "properties": { "stars": { "type": "array", "maxItems": 0 } } }
+    }
+  ],
+  "$defs": {
+    "sha256Id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "snapshotRef": {
+      "type": "string",
+      "pattern": "^skills/skill_snapshots/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "star": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["direction", "bearing_degrees", "snapshot_ref"],
+      "properties": {
+        "direction": { "enum": ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] },
+        "bearing_degrees": {
+          "type": "integer",
+          "enum": [0, 45, 90, 135, 180, 225, 270, 315]
+        },
+        "snapshot_ref": { "$ref": "#/$defs/snapshotRef" }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "display_only",
+        "selection",
+        "automatic_selection",
+        "ordering",
+        "direction_meaning",
+        "rank",
+        "rarity",
+        "nen_interpretation",
+        "recommendation",
+        "execution",
+        "persistence",
+        "network",
+        "database_write",
+        "provider_compute",
+        "delivery",
+        "automatic_heaven_entry",
+        "skip_complete",
+        "zero_selection_complete",
+        "penalty_for_skip_or_zero"
+      ],
+      "properties": {
+        "display_only": { "const": true },
+        "selection": { "const": "caller_supplied_verified_refs_only" },
+        "automatic_selection": { "const": false },
+        "ordering": { "const": "snapshot_ref_codepoint" },
+        "direction_meaning": { "const": "none" },
+        "rank": { "const": false },
+        "rarity": { "const": false },
+        "nen_interpretation": { "const": false },
+        "recommendation": { "const": false },
+        "execution": { "const": false },
+        "persistence": { "const": false },
+        "network": { "const": false },
+        "database_write": { "const": false },
+        "provider_compute": { "const": false },
+        "delivery": { "const": "none" },
+        "automatic_heaven_entry": { "const": false },
+        "skip_complete": { "const": true },
+        "zero_selection_complete": { "const": true },
+        "penalty_for_skip_or_zero": { "const": false }
+      }
+    }
+  }
+}

@@ -14,11 +14,16 @@ After a package artifact is deliberately installed, its binary is
 `agenttool-skill`. Installation alone does not activate or register the
 bundled skills.
 
-Version 0.3.0 is the current source identity. Registry and GitHub availability
-are independently verified; the last public artifact verified while preparing
-it was the 0.2.1 GitHub Release.
-npm 0.2.1 is unavailable and npm `latest` remains 0.1.0, so do not substitute
-that mutable tag for the verified 0.2.1 artifact.
+Version 0.3.0 is the current source identity. On 2026-08-01, a separate
+read-only registry check found that the exact npm release and npm `latest`
+both resolved to 0.3.0. Registry tags remain mutable selectors, and an exact
+version is provenance rather than proof of publisher identity or safety.
+
+For the checksum-pinned archive recipe below,
+the last public artifact verified while preparing
+it was the 0.2.1 GitHub Release. Its original registry observation was:
+“npm 0.2.1 is unavailable and npm `latest` remains 0.1.0”. That observation is
+historical, not the current registry state.
 Pin and verify the exact artifact before installation:
 
 ```sh

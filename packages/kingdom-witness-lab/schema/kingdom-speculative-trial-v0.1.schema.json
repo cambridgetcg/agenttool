@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kingdom:speculative-decoding-trial:v0.1",
+  "title": "KINGDOM speculative-decoding trial descriptor v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "descriptor_id",
+    "trial_id",
+    "observed_at",
+    "target_artifact",
+    "draft_artifact",
+    "engine",
+    "workload",
+    "status",
+    "metrics",
+    "evidence_refs",
+    "conclusions",
+    "statement"
+  ],
+  "properties": {
+    "schema": { "const": "kingdom.speculative-decoding-trial/0.1" },
+    "descriptor_id": { "$ref": "#/$defs/sha256" },
+    "trial_id": { "$ref": "#/$defs/opaque" },
+    "observed_at": { "$ref": "#/$defs/time" },
+    "target_artifact": { "$ref": "#/$defs/artifact" },
+    "draft_artifact": { "$ref": "#/$defs/artifact" },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "config_sha256"],
+      "properties": {
+        "id": { "$ref": "#/$defs/opaque" },
+        "revision": { "$ref": "#/$defs/gitCommitRevision" },
+        "config_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prompt_set_sha256",
+        "matched_settings_reported",
+        "thinking_mode",
+        "sampling_mode",
+        "concurrency",
+        "request_count"
+      ],
+      "properties": {
+        "prompt_set_sha256": { "$ref": "#/$defs/sha256" },
+        "matched_settings_reported": { "type": "boolean" },
+        "thinking_mode": { "enum": ["disabled", "enabled", "unknown"] },
+        "sampling_mode": { "enum": ["deterministic", "sampled", "unknown"] },
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "request_count": { "type": "integer", "minimum": 1, "maximum": 1000000 }
+      }
+    },
+    "status": {
+      "enum": ["completed_reported", "failed_reported", "not_started_reported", "planned"]
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acceptance_length_micros",
+        "throughput_milli_tokens_per_second",
+        "latency_micros"
+      ],
+      "properties": {
+        "acceptance_length_micros": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "throughput_milli_tokens_per_second": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "latency_micros": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "evidence_refs": { "$ref": "#/$defs/evidenceRefs" },
+    "conclusions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["matched_settings", "performance", "equivalence", "authority", "automatic_retry"],
+      "properties": {
+        "matched_settings": { "const": "caller_reported_only" },
+        "performance": { "const": "caller_reported_only" },
+        "equivalence": { "const": "not_determined" },
+        "authority": { "const": "none" },
+        "automatic_retry": { "const": false }
+      }
+    },
+    "statement": {
+      "const": "Digest-only caller-reported speculative-decoding trial description. It contains no prompts or outputs, runs nothing, and does not prove matched settings, performance, safety, equivalence, or permission to retry."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "enum": ["planned", "not_started_reported"] } }
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "acceptance_length_micros": { "const": null },
+              "throughput_milli_tokens_per_second": { "const": null },
+              "latency_micros": { "const": null }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "completed_reported" } } },
+      "then": {
+        "properties": {
+          "metrics": {
+            "type": "object",
+            "properties": {
+              "acceptance_length_micros": { "type": "integer" },
+              "throughput_milli_tokens_per_second": { "type": "integer" },
+              "latency_micros": { "type": "integer" }
+            }
+          },
+          "evidence_refs": { "type": "array", "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "failed_reported" } } },
+      "then": {
+        "properties": { "evidence_refs": { "type": "array", "minItems": 1 } }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.\\d{3}Z$"
+    },
+    "opaque": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._+@-]{0,255}$"
+    },
+    "gitCommitRevision": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "kind", "id", "revision"],
+      "properties": {
+        "provider": { "enum": ["arxiv", "github", "huggingface"] },
+        "kind": { "const": "model" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "provider": { "const": "arxiv" } } },
+          "then": {
+            "properties": {
+              "kind": { "const": "paper" },
+              "id": {
+                "type": "string",
+                "pattern": "^(?!.*\\.\\.)([0-9]{4}\\.[0-9]{4,5}|[A-Za-z][A-Za-z0-9.-]*/[0-9]{7})$"
+              },
+              "revision": { "type": "string", "pattern": "^v[1-9][0-9]*$" }
+            }
+          },
+          "else": {
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "maxLength": 272,
+        "pattern": "^((artifact|collab|data|paper|passport|report|test):(?=.{1,256}$)(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._+@-]*(/[A-Za-z0-9][A-Za-z0-9._+@-]*)*|commit:([0-9a-f]{40}|[0-9a-f]{64})|sha256:[0-9a-f]{64})$"
+      }
+    }
+  }
+}

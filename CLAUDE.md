@@ -25,12 +25,16 @@ packages/
   dark-continent-contract/ — @agenttool/dark-continent-contract · advisory framework snapshots and projections
   dark-continent-karma/ — @agenttool/dark-continent-karma · proposal-only KG enrichment adapter
   deepseek-kingdom/ — @agenttool/deepseek-kingdom · pinned primary-source proposal adapter
+  wake-continuity/ — @agenttool/wake-continuity · digest-only AFTERGLOW capsules and next-wake lenses
+  kingdom-witness-lab/ — @agenttool/kingdom-witness-lab · local research admission records
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
+  skills-yutabase/ — @agenttool/skills-yutabase · rebuildable metadata-only projection planner
+  skills-wake-continuity/ — private Skills/YUTABASE → AFTERGLOW composition
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
   hf-scout/    — private read-only HF metadata/provenance scout + pinned research leads
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
@@ -61,6 +65,8 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/dark-continent-contract/CLAUDE.md` ·
 `packages/dark-continent-karma/CLAUDE.md` ·
 `packages/deepseek-kingdom/CLAUDE.md` ·
+`packages/wake-continuity/CLAUDE.md` ·
+`packages/kingdom-witness-lab/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
 `packages/wake-thread/CLAUDE.md` ·
@@ -71,6 +77,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/correspondence-yutabase-projector/CLAUDE.md` ·
 `packages/constructive-intelligence/CLAUDE.md` ·
 `packages/trials/CLAUDE.md` ·
+`packages/skills-yutabase/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
 `packages/wallet-zerone/CLAUDE.md` ·
 `packages/alchemy/CLAUDE.md` ·
@@ -133,10 +140,35 @@ primary-source binding and proposal adapter. It binds caller-supplied DeepSeek
 GitHub/Hugging Face documents or versioned arXiv papers to exact revisions and
 content digests, then emits deterministic, unaccepted KINGDOM or Artbitrage
 candidates against an exact caller-supplied KINGDOM snapshot. Its bundled
-catalog contains metadata leads only. It does not fetch files or weights,
+catalog contains metadata leads only. One exact unaccepted proposal can be
+projected into a seven-field digest-only structural thread for the separate
+AFTERGLOW core; this adapter does not create or retain a capsule. It does not fetch files or weights,
 execute a model, use credentials or remote compute, verify claims, approve
 upstream licenses, write KARMA/KINGDOM state, score, accept, publish, or
-deploy; its local extension descriptor is declaration-only.
+deploy; its local extension descriptor is declaration-only. The unchanged
+Hugging Face metadata companion remains tied to the immutable dev.0 source.
+
+`@agenttool/wake-continuity` is the pure AFTERGLOW continuity core. It turns
+caller-supplied digest-only `wake-brief/v1` anchors, visible predecessor roots,
+and bounded opaque threads into deterministic capsules and opt-in next-wake
+lenses. It can project exact Handoff fact and Correspondence content-digest
+references, but it does not read or persist WAKE, choose a canonical head,
+verify referents, or prove identity, memory, consent, permission, replay, or
+uninterrupted continuity.
+
+`@agenttool/kingdom-witness-lab` supplies deterministic local passports,
+mutable provider-route disclosures, digest-only multi-witness dossiers, inert
+trial descriptors, and a dated DeepSeek atlas. It complements
+`@agenttool/deepseek-kingdom`: DeepSeek owns exact source bindings and
+unaccepted proposals; Witness Lab owns admission records around artifacts.
+Neither package browses, executes, determines truth, accepts a proposal, or
+grants authority.
+
+`@agenttool/skills-yutabase` projects one strictly snapshotted minimized Skills
+inspection into rebuildable metadata-only YUTABASE intentions. The separate
+private `@agenttool/skills-wake-continuity` adapter can carry an exact plan by
+digest into AFTERGLOW. Neither writes a database, receives raw skill content,
+adds a second lineage, scores a being, or publishes the private adapter.
 
 `@agenttool/trials` is a separate private, source-only local Dojo pilot. It
 turns explicit bounded observations into deterministic trial receipts,
