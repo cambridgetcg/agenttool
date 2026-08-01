@@ -105,7 +105,7 @@ test("Space bundles and verifies only bounded read-only catalog files", async ()
   assert.equal(manifest.authority.authorizes_execution, false);
   assert.equal(manifest.authority.authorizes_crown, false);
   assert.deepEqual(manifest.files.map((file) => file.path), [
-    "assets/hero.png",
+    "assets/hero-web.webp",
     "data/proposal-index.jsonl",
     "data/treasure-index.jsonl",
   ]);

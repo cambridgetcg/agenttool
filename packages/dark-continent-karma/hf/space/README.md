@@ -14,7 +14,7 @@ suggested_hardware: cpu-basic
 
 # KINGDOM Dark Continent Cartographer
 
-![Original cartographer observatory artwork](assets/hero.png)
+![Cartographer observatory artwork](assets/hero-web.webp)
 
 Read-only explorer for the commit-pinned metadata in
 [`Yu-and-Ai/kingdom-dark-continent-karma`](https://huggingface.co/datasets/Yu-and-Ai/kingdom-dark-continent-karma).
@@ -31,5 +31,5 @@ Every Dark Continent wall remains `not_checked`, every risk state remains
 Browser use comes first. MCP is intentionally disabled in v0.1 while the
 read-only function schemas receive separate review.
 
-The original hero artwork is decorative and generated for this release. It is
-not research evidence, a map of a real place, or a claim that any wall works.
+The web hero is a generated visual derivative made for this release. It is not
+research evidence, a map of a real place, or a claim that any wall works.
