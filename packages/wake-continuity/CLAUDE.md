@@ -44,6 +44,8 @@ npm pack --dry-run --ignore-scripts
 - Content IDs bind canonical bytes. They do not prove provenance, secrecy,
   safety, identity, licence, consent, authority, or truth. Use high-entropy
   context-local digests; reused or published references are linkable.
+- Validate every public scalar and binary runtime type before regex, string
+  interpolation, hashing, or other coercion can enter caller capabilities.
 - Digest shape excludes raw identity and task prose from the wire shape; it
   does not prove that a caller minimized a referent or avoid pseudonymous
   linkage. Keep these limits machine-readable in the fixed boundaries.

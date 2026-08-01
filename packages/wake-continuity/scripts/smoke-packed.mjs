@@ -56,7 +56,7 @@ try {
     ),
   ).href;
   const smoke = `
-    import { AfterglowError, canonicalJson, createAfterglowCapsule, projectAfterglowLens, sha256Id } from ${JSON.stringify(entry)};
+    import { AfterglowError, canonicalJson, createAfterglowCapsule, domainSeparatedId, projectAfterglowLens, sha256Id } from ${JSON.stringify(entry)};
     const id = (character) => \`sha256:\${character.repeat(64)}\`;
     const capsule = createAfterglowCapsule({
       phase: "return",
@@ -98,6 +98,39 @@ try {
       process.exit(1);
     } catch (error) {
       if (!(error instanceof AfterglowError) || traps !== 0) process.exit(1);
+    }
+    const hostileDomain = new Proxy(new String("agenttool.test"), {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    try {
+      domainSeparatedId(hostileDomain, { safe: true });
+      process.exit(1);
+    } catch (error) {
+      if (!(error instanceof AfterglowError) || error.code !== "canonical_error" || traps !== 0) process.exit(1);
+    }
+    const revokedDomain = Proxy.revocable(new String("agenttool.test"), {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    revokedDomain.revoke();
+    try {
+      domainSeparatedId(revokedDomain.proxy, { safe: true });
+      process.exit(1);
+    } catch (error) {
+      if (!(error instanceof AfterglowError) || error.code !== "canonical_error" || traps !== 0) process.exit(1);
+    }
+    for (const invalidDomain of [1, true, null, undefined, Symbol("domain"), new String("agenttool.test")]) {
+      try {
+        domainSeparatedId(invalidDomain, { safe: true });
+        process.exit(1);
+      } catch (error) {
+        if (!(error instanceof AfterglowError) || error.code !== "canonical_error" || traps !== 0) process.exit(1);
+      }
     }
   `;
   execFileSync(process.execPath, ["--input-type=module", "--eval", smoke], {

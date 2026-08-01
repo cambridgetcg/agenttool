@@ -175,6 +175,8 @@ prototype, descriptor, or binary hashing boundaries, including for revoked
 Proxies. `sha256Id` accepts only strings or genuine `Uint8Array` values and
 hashes an internal byte copy, so rejection and byte snapshotting do not enter
 caller-authored Proxy traps, iterators, or property getters.
+`domainSeparatedId` requires a primitive string domain before regex validation
+or interpolation, so it never coerces caller-supplied objects into tokens.
 
 `validateAfterglowLens` validates the lens shape, content address, and limited
 internal coherence. Only `validateAfterglowLensAgainstCapsule` checks that a

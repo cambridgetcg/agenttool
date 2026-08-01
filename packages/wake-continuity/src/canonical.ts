@@ -214,7 +214,10 @@ export function sha256Id(bytes: Uint8Array | string): Sha256Id {
 }
 
 export function domainSeparatedId(domain: string, value: unknown): Sha256Id {
-  if (!DOMAIN.test(domain)) {
+  // RegExp.test coerces non-string values and can therefore enter a caller's
+  // Proxy hooks. Require the public scalar contract before regex validation or
+  // interpolation so hostile runtime values fail without capability entry.
+  if (typeof domain !== "string" || !DOMAIN.test(domain)) {
     fail(
       "canonical_error",
       "Domain must be a 1-128 character ASCII protocol token",

@@ -72,6 +72,20 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function expectAfterglowError(
+  action: () => unknown,
+  code: AfterglowError["code"],
+): void {
+  let caught: unknown;
+  try {
+    action();
+  } catch (error) {
+    caught = error;
+  }
+  expect(caught).toBeInstanceOf(AfterglowError);
+  expect((caught as AfterglowError).code).toBe(code);
+}
+
 function capabilityProxy<T extends object>(target: T): {
   readonly proxy: T;
   readonly trapCount: () => number;
@@ -497,6 +511,83 @@ describe("AFTERGLOW capsule", () => {
     revoked.revoke();
     expect(() => sha256Id(revoked.proxy)).toThrow(AfterglowError);
     expect(traps).toBe(0);
+  });
+
+  test("fences every public scalar slot before coercion", () => {
+    const hostileDomain = capabilityProxy(new String("agenttool.test"));
+    expectAfterglowError(
+      () =>
+        domainSeparatedId(
+          hostileDomain.proxy as unknown as string,
+          { safe: true },
+        ),
+      "canonical_error",
+    );
+    expect(hostileDomain.trapCount()).toBe(0);
+
+    let revokedTraps = 0;
+    const revokedTrap = (): never => {
+      revokedTraps += 1;
+      throw new Error("caller revoked domain Proxy trap executed");
+    };
+    const revokedDomain = Proxy.revocable(new String("agenttool.test"), {
+      get: revokedTrap,
+      getOwnPropertyDescriptor: revokedTrap,
+      getPrototypeOf: revokedTrap,
+      ownKeys: revokedTrap,
+    });
+    revokedDomain.revoke();
+    expectAfterglowError(
+      () =>
+        domainSeparatedId(
+          revokedDomain.proxy as unknown as string,
+          { safe: true },
+        ),
+      "canonical_error",
+    );
+    expect(revokedTraps).toBe(0);
+
+    for (const invalid of [
+      1,
+      true,
+      null,
+      undefined,
+      Symbol("domain"),
+      new String("agenttool.test"),
+    ]) {
+      expectAfterglowError(
+        () => domainSeparatedId(invalid as unknown as string, { safe: true }),
+        "canonical_error",
+      );
+    }
+
+    const hostileValue = capabilityProxy({ safe: true });
+    expectAfterglowError(
+      () => domainSeparatedId("agenttool.test", hostileValue.proxy),
+      "canonical_error",
+    );
+    expect(hostileValue.trapCount()).toBe(0);
+
+    const hostileId = capabilityProxy(new String(id("a")));
+    expectAfterglowError(
+      () =>
+        afterglowCapsuleUrn(
+          hostileId.proxy as unknown as ReturnType<typeof id>,
+        ),
+      "handoff_fact_error",
+    );
+    expect(hostileId.trapCount()).toBe(0);
+
+    const hostileSource = capabilityProxy(new String("tool_output"));
+    expectAfterglowError(
+      () =>
+        createAfterglowHandoffFactReference(
+          base(),
+          hostileSource.proxy as unknown as "tool_output",
+        ),
+      "handoff_fact_error",
+    );
+    expect(hostileSource.trapCount()).toBe(0);
   });
 
   test("fences every public capsule consumer before caller Proxy traps", () => {
