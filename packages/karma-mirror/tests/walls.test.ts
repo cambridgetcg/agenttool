@@ -72,7 +72,7 @@ function expressionPath(expression: ts.Expression): string[] {
 }
 
 describe("source and package walls", () => {
-  test("AST permits only relative static imports plus node:crypto and denies capability globals", () => {
+  test("AST permits only relative static imports plus bounded Node utilities", () => {
     const issues: string[] = [];
     const deniedRoots = new Set([
       "Bun",
@@ -126,8 +126,28 @@ describe("source and package walls", () => {
           const specifier = node.moduleSpecifier;
           if (!ts.isStringLiteral(specifier)) {
             issues.push(`${path}: non-literal import`);
-          } else if (specifier.text !== "node:crypto" && !specifier.text.startsWith("./")) {
+          } else if (
+            specifier.text !== "node:crypto" &&
+            specifier.text !== "node:util" &&
+            !specifier.text.startsWith("./")
+          ) {
             issues.push(`${path}: forbidden import ${specifier.text}`);
+          }
+          if (ts.isStringLiteral(specifier) && specifier.text === "node:util") {
+            const clause = node.importClause;
+            const bindings = clause?.namedBindings;
+            const elements = bindings && ts.isNamedImports(bindings)
+              ? bindings.elements
+              : [];
+            const binding = elements[0];
+            if (
+              clause?.name ||
+              elements.length !== 1 ||
+              binding?.propertyName?.text !== "types" ||
+              binding.name.text !== "nodeTypes"
+            ) {
+              issues.push(`${path}: node:util import must be exactly types as nodeTypes`);
+            }
           }
         }
         if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
@@ -158,6 +178,18 @@ describe("source and package walls", () => {
             deniedRoots.has(part) || deniedCalls.has(part)
           )) {
             issues.push(`${path}: forbidden global capability ${parts.join(".")}`);
+          }
+        }
+        if (ts.isIdentifier(node) && node.text === "nodeTypes") {
+          const parent = node.parent;
+          const importBinding = ts.isImportSpecifier(parent) && parent.name === node;
+          const proxyCall = ts.isPropertyAccessExpression(parent) &&
+            parent.expression === node &&
+            parent.name.text === "isProxy" &&
+            ts.isCallExpression(parent.parent) &&
+            parent.parent.expression === parent;
+          if (!importBinding && !proxyCall) {
+            issues.push(`${path}: nodeTypes may only call isProxy directly`);
           }
         }
         if (ts.isNewExpression(node)) {
@@ -217,6 +249,12 @@ describe("source and package walls", () => {
       join(PACKAGE_ROOT, manifest.exports["./seed-island-card-schema"]),
       "utf8",
     )).title).toBe("Seed Island fixed request-pattern card");
+    expect(manifest.exports["./receipt-window-schema"]).toBe(
+      "./schema/karma-mirror-receipt-window-v1.schema.json",
+    );
+    expect(manifest.exports["./tend-report-schema"]).toBe(
+      "./schema/karma-mirror-tend-report-v1.schema.json",
+    );
   });
 
   test("keeps the public runtime surface narrow and explicit", () => {
@@ -228,6 +266,7 @@ describe("source and package walls", () => {
       "KARMA_FRAME_SCHEMA",
       "KARMA_HEADER",
       "KARMA_RECEIPT_SCHEMA",
+      "KARMA_TEND_REPORT_SCHEMA",
       "KarmaMirror",
       "MAX_JSON_BODY_BYTES",
       "MAX_JSON_BODY_CHUNKS",
@@ -235,6 +274,7 @@ describe("source and package walls", () => {
       "MAX_ROOT_CREDENTIALS",
       "SCRAPE_LINKS_PER_PAGE",
       "SCRAPE_PAGE_COUNT",
+      "buildKarmaTendReport",
       "isMarkedMirrorCredential",
       "mintMirrorCredential",
       "verifyReceiptSnapshot",
@@ -260,6 +300,37 @@ describe("source and package walls", () => {
     expect(schema.properties.schema.const).toBe("agenttool.karma-mirror-receipt/v1");
     expect(schema.required).toContain("event_hash");
     expect(schema.required).toContain("evidence");
+    expect(schema.oneOf).toHaveLength(8);
+  });
+
+  test("receipt-window and TEND schemas are closed, bounded, and non-authorizing", () => {
+    const windowSchema = JSON.parse(readFileSync(
+      join(PACKAGE_ROOT, "schema/karma-mirror-receipt-window-v1.schema.json"),
+      "utf8",
+    ));
+    const tendSchema = JSON.parse(readFileSync(
+      join(PACKAGE_ROOT, "schema/karma-mirror-tend-report-v1.schema.json"),
+      "utf8",
+    ));
+    expect(windowSchema.additionalProperties).toBe(false);
+    expect(windowSchema.properties.receipts.maxItems).toBe(4096);
+    expect(windowSchema.properties.receipts.items.$ref).toContain(
+      "karma-mirror-receipt-v1.schema.json",
+    );
+    expect(tendSchema.additionalProperties).toBe(false);
+    for (const key of ["trace", "explain", "narrow", "distill", "non_claims"]) {
+      expect(tendSchema.properties[key].additionalProperties).toBe(false);
+    }
+    expect(tendSchema.properties.incident_status.const).toBe("not_established");
+    expect(tendSchema.properties.trace.properties.stable_identifiers_disclosed.const)
+      .toBe(false);
+    expect(tendSchema.properties.narrow.properties.automatic_actions_taken.const)
+      .toBe(false);
+    expect(tendSchema.properties.distill.properties.training_label.const).toBe(false);
+    expect(tendSchema.properties.non_claims.properties.grants_response_authority.const)
+      .toBe(false);
+    expect(tendSchema.properties.non_claims.properties.grants_transfer_authority.const)
+      .toBe(false);
   });
 
   test("source emits no third-party-shaped planted secrets", () => {

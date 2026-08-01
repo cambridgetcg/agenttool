@@ -2,7 +2,7 @@
   "name": "@agenttool/karma-mirror",
   "version": "0.1.0-dev.0",
   "private": true,
-  "description": "Offline deterministic deception-island core for planted credentials, scraper mazes, and non-executing malware emulation",
+  "description": "Offline zero-effect deception-island core with privacy-minimized TEND incident clarity",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
@@ -14,6 +14,8 @@
       "types": "./dist/index.d.ts"
     },
     "./receipt-schema": "./schema/karma-mirror-receipt-v1.schema.json",
+    "./receipt-window-schema": "./schema/karma-mirror-receipt-window-v1.schema.json",
+    "./tend-report-schema": "./schema/karma-mirror-tend-report-v1.schema.json",
     "./seed-island-card-schema": "./schema/seed-island-card-v1.schema.json"
   },
   "files": [
@@ -37,6 +39,8 @@
   "devDependencies": {
     "@types/bun": "1.3.14",
     "@types/node": "20.19.43",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "typescript": "5.9.3"
   }
 }

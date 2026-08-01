@@ -31,6 +31,15 @@ import {
   type SeedMechanism,
 } from "./seed-island.js";
 import {
+  cloneReceipt,
+  receiptHash,
+  ZERO_HASH,
+} from "./receipts.js";
+import {
+  buildKarmaTendReport,
+  type KarmaTendReport,
+} from "./tend.js";
+import {
   CANARY_DOOR_HEADER,
   KARMA_DOOR_PATH,
   KARMA_EXIT_PATH,
@@ -49,7 +58,6 @@ import {
   type MirrorRoom,
 } from "./types.js";
 
-const ZERO_HASH = "0".repeat(64);
 const MAX_BEARER_CHARS = 128;
 export const MAX_ROOT_CREDENTIALS = 32;
 
@@ -135,79 +143,6 @@ function validateMalwareStage(value: unknown): MalwareStageRequest {
       ? { declared_type: body.declared_type }
       : {}),
   };
-}
-
-function receiptHash(receipt: Omit<KarmaReceipt, "event_hash">): string {
-  return sha256Hex(
-    `agenttool.karma-mirror-receipt/v1\0${JSON.stringify(receipt)}`,
-  );
-}
-
-function cloneReceipt(receipt: KarmaReceipt): KarmaReceipt {
-  return {
-    ...receipt,
-    evidence: { ...receipt.evidence },
-  };
-}
-
-export function verifyReceiptSnapshot(snapshot: KarmaReceiptSnapshot): boolean {
-  const hashPattern = /^[0-9a-f]{64}$/;
-  if (
-    snapshot === null ||
-    typeof snapshot !== "object" ||
-    snapshot.schema !== "agenttool.karma-mirror-receipt-window/v1" ||
-    !Array.isArray(snapshot.receipts) ||
-    !Number.isSafeInteger(snapshot.total_events_seen) ||
-    snapshot.total_events_seen < 0 ||
-    typeof snapshot.anchor_before_first !== "string" ||
-    !hashPattern.test(snapshot.anchor_before_first) ||
-    typeof snapshot.head_event_hash !== "string" ||
-    !hashPattern.test(snapshot.head_event_hash)
-  ) {
-    return false;
-  }
-
-  if (snapshot.receipts.length === 0) {
-    return snapshot.total_events_seen === 0 &&
-      snapshot.anchor_before_first === ZERO_HASH &&
-      snapshot.head_event_hash === ZERO_HASH;
-  }
-
-  const firstSequence = snapshot.total_events_seen - snapshot.receipts.length + 1;
-  if (
-    !Number.isSafeInteger(firstSequence) ||
-    firstSequence < 1 ||
-    (firstSequence === 1 && snapshot.anchor_before_first !== ZERO_HASH)
-  ) {
-    return false;
-  }
-
-  let previous = snapshot.anchor_before_first;
-  for (const [index, receipt] of snapshot.receipts.entries()) {
-    if (
-      receipt === null ||
-      typeof receipt !== "object" ||
-      receipt.schema !== KARMA_RECEIPT_SCHEMA ||
-      !Number.isSafeInteger(receipt.sequence) ||
-      receipt.sequence !== firstSequence + index ||
-      typeof receipt.previous_event_hash !== "string" ||
-      !hashPattern.test(receipt.previous_event_hash) ||
-      typeof receipt.event_hash !== "string" ||
-      !hashPattern.test(receipt.event_hash)
-    ) {
-      return false;
-    }
-    if (receipt.previous_event_hash !== previous) return false;
-    const { event_hash: claimed, ...withoutHash } = receipt;
-    try {
-      if (receiptHash(withoutHash) !== claimed) return false;
-    } catch {
-      return false;
-    }
-    previous = claimed;
-  }
-  return previous === snapshot.head_event_hash &&
-    snapshot.receipts.at(-1)?.sequence === snapshot.total_events_seen;
 }
 
 /**
@@ -314,6 +249,24 @@ export class KarmaMirror {
       total_events_seen: chain.totalEventsSeen,
       receipts: chain.receipts.map(cloneReceipt),
     };
+  }
+
+  /** Pure local operator projection. No HTTP route exposes or acts on it. */
+  incidentClarityReport(placement?: string): KarmaTendReport {
+    let resolvedPlacement = placement;
+    if (resolvedPlacement === undefined) {
+      if (this.receiptChains.size !== 1) {
+        throw new Error("placement is required when a mirror has multiple roots");
+      }
+      const rootHash = this.receiptChains.keys().next().value;
+      const context = rootHash === undefined ? undefined : this.credentials.get(rootHash);
+      if (!context) throw new Error("mirror receipt chain missing");
+      resolvedPlacement = context.placement;
+    }
+    return buildKarmaTendReport({
+      placement: resolvedPlacement,
+      snapshot: this.receiptSnapshot(resolvedPlacement),
+    });
   }
 
   private frame(includeStory = true): KarmaFrame {

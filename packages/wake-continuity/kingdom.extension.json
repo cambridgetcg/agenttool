@@ -1,0 +1,43 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "wake-continuity",
+  "package": "@agenttool/wake-continuity",
+  "version": "0.1.0-dev.0",
+  "status": "public_ready_source",
+  "capabilities": [
+    "afterglow:capsule-create",
+    "afterglow:capsule-validate",
+    "afterglow:lens-project",
+    "afterglow:handoff-fact-reference",
+    "afterglow:correspondence-content-digest-artifact"
+  ],
+  "defaults": {
+    "automatic_delivery": false,
+    "default_acceptance": false,
+    "raw_identity_input": false,
+    "reference_minimization_verified": false,
+    "linkability_eliminated": false,
+    "raw_wake_input": false,
+    "task_text_input": false,
+    "network": false,
+    "filesystem": false,
+    "persistence": false,
+    "telemetry": false,
+    "provider_compute": false,
+    "paid_compute": false,
+    "economic_effect": false,
+    "task_state_effect": false,
+    "karma_effect": false,
+    "wallet_effect": false,
+    "automatic_heaven_entry": false,
+    "authority": false
+  },
+  "host_contract": "not_registered",
+  "notes": [
+    "This descriptor is a declaration-only local extension hint, not an installed KINGDOM host contract.",
+    "AFTERGLOW carries caller-supplied digest references for orientation; it is not identity, memory, consent, authorship, currentness, replay, truth, permission, or uninterrupted-continuity proof.",
+    "Digest shape excludes raw identity or task prose from the wire shape but does not prove reference minimization or eliminate linkability; callers must not derive reusable refs directly from private identifiers.",
+    "DeepSeek stays proposed_unaccepted, Dark Continent stays not_checked or hold, KARMA stays receipt-only, and Artbitrage stays review_required or hold.",
+    "A generated Handoff fact is only a three-field reference object. A generated Correspondence artifact is only a two-field content digest. The package never performs POST /v1/handoff, constructs a Correspondence event, or performs any persistence action."
+  ]
+}

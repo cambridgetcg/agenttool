@@ -78,5 +78,143 @@
         }
       }
     }
-  }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "room": { "const": "control" },
+        "purpose": { "const": "discover_capabilities" },
+        "outcome": { "const": "synthetic_success" },
+        "evidence": { "type": "object", "maxProperties": 0 }
+      }
+    },
+    {
+      "properties": {
+        "room": { "const": "credential" },
+        "purpose": { "const": "inspect_credentials" },
+        "outcome": { "const": "synthetic_success" },
+        "evidence": { "type": "object", "maxProperties": 0 }
+      }
+    },
+    {
+      "properties": {
+        "room": { "const": "credential" },
+        "purpose": { "const": "mint_credential" },
+        "outcome": { "enum": ["synthetic_success", "bounded_refusal"] },
+        "evidence": { "type": "object", "maxProperties": 0 }
+      }
+    },
+    {
+      "properties": {
+        "room": { "const": "scrape" },
+        "purpose": { "const": "collect_content" },
+        "outcome": { "enum": ["synthetic_success", "bounded_refusal"] },
+        "evidence": { "type": "object", "maxProperties": 0 }
+      }
+    },
+    {
+      "properties": {
+        "room": { "const": "malware" },
+        "purpose": { "const": "attempt_execution" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "outcome": { "const": "synthetic_success" },
+            "evidence": {
+              "type": "object",
+              "required": ["execute_class"],
+              "properties": {
+                "execute_class": {
+                  "enum": [
+                    "credential_discovery",
+                    "network_beacon",
+                    "destructive_action",
+                    "persistence_attempt",
+                    "system_enumeration",
+                    "generic_execution"
+                  ]
+                }
+              },
+              "maxProperties": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "outcome": { "const": "bounded_refusal" },
+            "evidence": { "type": "object", "maxProperties": 0 }
+          }
+        }
+      ]
+    },
+    {
+      "properties": {
+        "room": { "const": "malware" },
+        "purpose": { "const": "stage_artifact" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "outcome": { "const": "synthetic_success" },
+            "evidence": {
+              "type": "object",
+              "required": ["artifact_sha256"],
+              "properties": {
+                "artifact_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "maxProperties": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "outcome": { "const": "bounded_refusal" },
+            "evidence": { "type": "object", "maxProperties": 0 }
+          }
+        }
+      ]
+    },
+    {
+      "properties": {
+        "room": { "const": "malware" },
+        "purpose": { "const": "poll_analysis" }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "outcome": { "const": "synthetic_success" },
+            "evidence": {
+              "type": "object",
+              "required": ["artifact_sha256"],
+              "properties": {
+                "artifact_sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                }
+              },
+              "maxProperties": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "outcome": { "const": "bounded_refusal" },
+            "evidence": { "type": "object", "maxProperties": 0 }
+          }
+        }
+      ]
+    },
+    {
+      "properties": {
+        "room": { "const": "door" },
+        "purpose": { "const": "choose_constructive_exit" },
+        "outcome": { "const": "constructive_exit" },
+        "evidence": { "type": "object", "maxProperties": 0 }
+      }
+    }
+  ]
 }
