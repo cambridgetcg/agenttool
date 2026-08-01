@@ -1,9 +1,8 @@
 {
   "name": "@agenttool/kingdom-witness-lab",
   "version": "0.1.0-dev.0",
-  "description": "Private deterministic research passports and multi-witness dossiers for KINGDOM",
-  "private": true,
-  "license": "UNLICENSED",
+  "description": "Deterministic research passports and multi-witness dossiers for KINGDOM",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -36,8 +35,14 @@
     "research",
     "schema",
     "README.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
   "engines": {
     "node": ">=20.19.0",
     "bun": ">=1.3.5"

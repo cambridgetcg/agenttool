@@ -1,6 +1,6 @@
 # @agenttool/kingdom-witness-lab
 
-Private, source-only KINGDOM research-admission primitives.
+Public developer-preview, source-only KINGDOM research-admission primitives.
 
 The package gives agents a small common language for four things:
 
@@ -22,6 +22,11 @@ credential, accept repository terms, write a file, publish a record, determine
 truth, or authorize action. Caller-supplied digests and descriptors are checked
 for shape and deterministic binding, not revalidated against Browser,
 RhetorLint, Trials, Collab, Hugging Face, GitHub, or a human reviewer.
+
+Publishing this library to npm distributes only its deterministic local code,
+closed schemas, and dated metadata atlas. It does not turn the package into a
+hosted witness, authenticate any observation, register a KINGDOM capability,
+or widen any permission or authority boundary.
 
 General identifiers and descriptors are colon- and path-separator-free.
 Artifact IDs admit only provider-specific `namespace/name` or versionless arXiv

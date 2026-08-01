@@ -6,8 +6,8 @@ import { PACKAGE_NAME, PACKAGE_VERSION } from "../src/index.js";
 
 const ROOT = join(import.meta.dir, "..");
 
-describe("private package boundary", () => {
-  test("has no runtime dependency or publication configuration", async () => {
+describe("public package boundary", () => {
+  test("is a zero-runtime-dependency public preview", async () => {
     const packageJson = JSON.parse(await readFile(join(ROOT, "package.json"), "utf8")) as {
       name: string;
       version: string;
@@ -21,11 +21,11 @@ describe("private package boundary", () => {
     expect(packageJson).toMatchObject({
       name: PACKAGE_NAME,
       version: PACKAGE_VERSION,
-      private: true,
-      license: "UNLICENSED",
+      license: "Apache-2.0",
     });
     expect(packageJson.dependencies).toBeUndefined();
-    expect(packageJson.publishConfig).toBeUndefined();
+    expect(packageJson.private).not.toBe(true);
+    expect(packageJson.publishConfig).toEqual({ access: "public", tag: "next" });
     expect(Object.keys(packageJson.exports ?? {})).toEqual([
       ".",
       "./research-passport.schema.json",
@@ -37,6 +37,8 @@ describe("private package boundary", () => {
     ]);
     expect(packageJson.files).not.toContain("tests");
     expect(packageJson.files).not.toContain("node_modules");
+    expect(packageJson.files).toContain("LICENSE");
+    expect(packageJson.files).toContain("NOTICE");
   });
 
   test("runtime source has no ambient credential, network, execution, or write path", async () => {

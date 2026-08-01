@@ -1,11 +1,13 @@
 # KINGDOM Witness Lab
 
-Private source-only research-admission primitives. Read `README.md` before
+Public developer-preview source-only research-admission primitives. Read `README.md` before
 changing a contract.
 
 ## Invariants
 
 - Keep runtime dependencies empty and all functions deterministic and local.
+- Keep npm distribution distinct from registration, hosting, verification,
+  permission, and authority.
 - Admit only closed descriptors, digests, exact revisions, and bounded refs.
 - Never accept raw prompts, pages, model output, reasoning traces, credentials,
   headers, arbitrary/raw locator fields, URL-like schemes outside the atlas
