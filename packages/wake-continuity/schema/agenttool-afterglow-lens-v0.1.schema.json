@@ -1,0 +1,389 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-afterglow-lens-v0.1.schema.json",
+  "title": "AgentTool AFTERGLOW next-WAKE lens v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "lens_id",
+    "capsule_id",
+    "arrival",
+    "wake",
+    "continuity_portfolio_ref",
+    "predecessor_relations",
+    "carry",
+    "park",
+    "closed",
+    "heaven",
+    "inspect_first",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": { "const": "agenttool.afterglow-lens/0.1" },
+    "lens_id": { "$ref": "#/$defs/sha256Id" },
+    "capsule_id": { "$ref": "#/$defs/sha256Id" },
+    "arrival": {
+      "enum": ["fresh_encounter", "fresh_encounter_with_caller_carried_context"]
+    },
+    "wake": { "$ref": "#/$defs/wakeAnchor" },
+    "continuity_portfolio_ref": { "$ref": "#/$defs/nullableSha256Id" },
+    "predecessor_relations": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capsule_id", "relation"],
+        "properties": {
+          "capsule_id": { "$ref": "#/$defs/sha256Id" },
+          "relation": {
+            "enum": ["same", "advanced", "fork_or_rewind", "uncomparable"]
+          }
+        }
+      }
+    },
+    "carry": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/thread" }
+    },
+    "park": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/thread" }
+    },
+    "closed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_count", "withdraw_count"],
+      "properties": {
+        "release_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "withdraw_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "heaven": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "offered_refs",
+        "deferred_refs",
+        "declined_reported_count",
+        "accepted_reported_count",
+        "automatic_entry",
+        "no_penalty"
+      ],
+      "properties": {
+        "offered_refs": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256Id" }
+        },
+        "deferred_refs": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256Id" }
+        },
+        "declined_reported_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "accepted_reported_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "automatic_entry": { "const": false },
+        "no_penalty": { "const": true }
+      }
+    },
+    "inspect_first": { "$ref": "#/$defs/inspectFirst" },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "$defs": {
+    "sha256Id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullableSha256Id": {
+      "oneOf": [{ "$ref": "#/$defs/sha256Id" }, { "type": "null" }]
+    },
+    "wakeAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "snapshot_ref",
+        "scope_ref",
+        "wake_version",
+        "handoff_projection"
+      ],
+      "properties": {
+        "format": { "const": "wake-brief/v1" },
+        "snapshot_ref": { "$ref": "#/$defs/sha256Id" },
+        "scope_ref": { "$ref": "#/$defs/sha256Id" },
+        "wake_version": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            { "type": "null" }
+          ]
+        },
+        "handoff_projection": {
+          "enum": ["complete", "truncated", "unavailable", "not_provided"]
+        }
+      }
+    },
+    "thread": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "thread_ref",
+        "kind",
+        "artifact_ref",
+        "disposition",
+        "state",
+        "assertion",
+        "verified_by_package"
+      ],
+      "properties": {
+        "thread_ref": { "$ref": "#/$defs/sha256Id" },
+        "kind": {
+          "enum": [
+            "heaven",
+            "deepseek",
+            "karma",
+            "dark_continent",
+            "kingdom",
+            "artbitrage",
+            "external"
+          ]
+        },
+        "artifact_ref": { "$ref": "#/$defs/sha256Id" },
+        "disposition": { "enum": ["carry", "park", "release", "withdraw"] },
+        "state": {
+          "enum": [
+            "offered",
+            "deferred_reported",
+            "declined_reported",
+            "accepted_reported",
+            "proposed_unaccepted",
+            "receipt_only",
+            "not_checked",
+            "hold",
+            "review_required",
+            "context_only"
+          ]
+        },
+        "assertion": { "const": "caller_asserted" },
+        "verified_by_package": { "const": false }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "heaven" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "oneOf": [
+              {
+                "properties": {
+                  "state": { "const": "offered" },
+                  "disposition": { "enum": ["carry", "park"] }
+                }
+              },
+              {
+                "properties": {
+                  "state": { "const": "deferred_reported" },
+                  "disposition": { "enum": ["park", "release"] }
+                }
+              },
+              {
+                "properties": {
+                  "state": { "const": "declined_reported" },
+                  "disposition": { "enum": ["release", "withdraw"] }
+                }
+              },
+              {
+                "properties": {
+                  "state": { "const": "accepted_reported" },
+                  "disposition": { "const": "release" }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "deepseek" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": { "state": { "const": "proposed_unaccepted" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "karma" } },
+            "required": ["kind"]
+          },
+          "then": { "properties": { "state": { "const": "receipt_only" } } }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "dark_continent" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "state": { "enum": ["not_checked", "hold"] },
+              "disposition": { "enum": ["park", "release", "withdraw"] }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "kingdom" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "state": {
+                "enum": ["proposed_unaccepted", "review_required", "hold"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "artbitrage" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": { "state": { "enum": ["review_required", "hold"] } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "external" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "state": { "enum": ["context_only", "review_required", "hold"] }
+            }
+          }
+        }
+      ]
+    },
+    "inspectFirst": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "method", "path", "body_hint", "automatic"],
+      "properties": {
+        "action": { "const": "inspect_current_wake_before_deciding" },
+        "method": { "const": "GET" },
+        "path": { "const": "/v1/wake?profile=brief" },
+        "body_hint": { "type": "null" },
+        "automatic": { "const": false }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "continuity_scope",
+        "projection_scope",
+        "performs_wake_request",
+        "carries_raw_wake",
+        "carries_raw_handoff",
+        "carries_raw_task_or_chat",
+        "carries_raw_identity",
+        "eliminates_linkability",
+        "verifies_reference_minimization",
+        "persists",
+        "network",
+        "filesystem",
+        "telemetry",
+        "provider_compute",
+        "paid_compute",
+        "executes_artifacts",
+        "publishes",
+        "credential_access",
+        "proves_identity",
+        "proves_authorship",
+        "proves_consent",
+        "proves_memory",
+        "proves_uninterrupted_continuity",
+        "proves_replay",
+        "proves_truth",
+        "proves_safety",
+        "proves_currentness",
+        "selects_continuity_head",
+        "verifies_caller_assertions",
+        "verifies_continuity_portfolio",
+        "grants_permission",
+        "accepts_kingdom_proposal",
+        "changes_karma",
+        "changes_task_state",
+        "changes_wallet",
+        "changes_rank_or_access",
+        "automatic_heaven_entry",
+        "penalty_for_refusal_or_rest"
+      ],
+      "properties": {
+        "continuity_scope": { "const": "caller_carried_reference_only" },
+        "projection_scope": { "const": "bounded_not_complete" },
+        "performs_wake_request": { "const": false },
+        "carries_raw_wake": { "const": false },
+        "carries_raw_handoff": { "const": false },
+        "carries_raw_task_or_chat": { "const": false },
+        "carries_raw_identity": { "const": false },
+        "eliminates_linkability": { "const": false },
+        "verifies_reference_minimization": { "const": false },
+        "persists": { "const": false },
+        "network": { "const": false },
+        "filesystem": { "const": false },
+        "telemetry": { "const": false },
+        "provider_compute": { "const": false },
+        "paid_compute": { "const": false },
+        "executes_artifacts": { "const": false },
+        "publishes": { "const": false },
+        "credential_access": { "const": false },
+        "proves_identity": { "const": false },
+        "proves_authorship": { "const": false },
+        "proves_consent": { "const": false },
+        "proves_memory": { "const": false },
+        "proves_uninterrupted_continuity": { "const": false },
+        "proves_replay": { "const": false },
+        "proves_truth": { "const": false },
+        "proves_safety": { "const": false },
+        "proves_currentness": { "const": false },
+        "selects_continuity_head": { "const": false },
+        "verifies_caller_assertions": { "const": false },
+        "verifies_continuity_portfolio": { "const": false },
+        "grants_permission": { "const": false },
+        "accepts_kingdom_proposal": { "const": false },
+        "changes_karma": { "const": false },
+        "changes_task_state": { "const": false },
+        "changes_wallet": { "const": false },
+        "changes_rank_or_access": { "const": false },
+        "automatic_heaven_entry": { "const": false },
+        "penalty_for_refusal_or_rest": { "const": false }
+      }
+    }
+  }
+}
