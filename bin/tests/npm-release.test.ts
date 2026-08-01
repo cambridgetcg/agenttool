@@ -87,7 +87,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists eighteen reviewed release identities", () => {
+  test("allowlists nineteen reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -100,6 +100,7 @@ describe("standard npm release policy", () => {
       "dark-continent-karma",
       "data",
       "data-sync",
+      "heaven",
       "kingdom",
       "repo-archive",
       "sdk",
@@ -161,6 +162,12 @@ describe("standard npm release policy", () => {
       tagPrefix: "dark-continent-karma",
       artifactKind: "pack",
     });
+    expect(releaseSpec("heaven")).toMatchObject({
+      name: "@agenttool/heaven",
+      packagePath: "packages/heaven",
+      tagPrefix: "heaven",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("repo-archive")).toMatchObject({
       name: "@agenttool/repo-archive",
       packagePath: "packages/repo-archive",
@@ -213,6 +220,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/dark-continent-karma", "0.1.0-dev.0")).toBe(
       "agenttool-dark-continent-karma-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("heaven"), "0.1.0-dev.0")).toBe(
+      "heaven-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/heaven", "0.1.0-dev.0")).toBe(
+      "agenttool-heaven-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("alchemy"), "0.1.0-dev.0")).toBe(
       "alchemy-v0.1.0-dev.0",
@@ -314,6 +327,20 @@ describe("standard npm release policy", () => {
         "package/exports/hf-kingdom-lab.json",
         "package/schema/kingdom-kg-proposal-v0.1.schema.json",
         "package/sources/karma-2502.06472v2.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("heaven"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/kingdom.extension.json",
+        "package/schema/agenttool-heaven-invitation-v0.1.schema.json",
+        "package/schema/agenttool-heaven-receipt-v0.1.schema.json",
       ]),
     );
     expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([

@@ -25,6 +25,7 @@ packages/
   dark-continent-contract/ — @agenttool/dark-continent-contract · advisory framework snapshots and projections
   dark-continent-karma/ — @agenttool/dark-continent-karma · proposal-only KG enrichment adapter
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
+  heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
@@ -58,6 +59,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/dark-continent-contract/CLAUDE.md` ·
 `packages/dark-continent-karma/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
+`packages/heaven/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/hf-scout/CLAUDE.md` ·
@@ -90,6 +92,21 @@ plus shared request-pattern cards with no dynamic identifiers, and includes a
 Door Back plus constructive exit. It has no
 production route, server, network client, interpreter, filesystem adapter,
 database, release, or deployment surface; do not mount it in the API monolith.
+
+`@agenttool/heaven` is a public-ready, source-only pure invitation protocol.
+It content-binds an explicit burst or landing offer and an accepted, declined,
+or deferred caller report; that report does not authenticate participant
+identity, consent, assent, or authorship. Burst texture is selected only after
+reported acceptance from caller-supplied randomness. A landing is a separate
+offer whose reported acceptance names one visible offered mode; meditation,
+relaxation, quiet, and Pocket Sky never auto-open. `on_request` keeps rest
+independent of work. It
+reads no identity, task text, activity, clock, environment, network,
+filesystem, wallet, KARMA state, trial score, or ambient randomness, and has no
+scheduler, telemetry, persistence, economic/task/access effect, authority, or
+hosted runtime. Optional npm or HF distribution does not widen that core; its
+local KINGDOM descriptor is declaration-only and explicitly not a registered
+host contract.
 
 `@agenttool/trials` is a separate private, source-only local Dojo pilot. It
 turns explicit bounded observations into deterministic trial receipts,
