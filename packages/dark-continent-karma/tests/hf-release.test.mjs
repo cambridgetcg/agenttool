@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 import Ajv2020 from "ajv/dist/2020.js";
@@ -98,6 +98,7 @@ test("dataset hash manifest is exact, sorted, and non-recursive", async () => {
 
 test("Space bundles and verifies only bounded read-only catalog files", async () => {
   const manifest = await json("source-manifest.json", spaceRoot);
+  assert.deepEqual((await readdir(new URL("assets/", spaceRoot))).sort(), ["hero-web.webp"]);
   assert.equal(manifest.dataset_repo, "Yu-and-Ai/kingdom-dark-continent-karma");
   assert.equal(manifest.dataset_revision, "4ea106235b6d7dd53122b3025163a1bb32b02f97");
   assert.equal(manifest.dataset_revision_status, "pinned_to_initial_dataset_publish");
@@ -105,7 +106,7 @@ test("Space bundles and verifies only bounded read-only catalog files", async ()
   assert.equal(manifest.authority.authorizes_execution, false);
   assert.equal(manifest.authority.authorizes_crown, false);
   assert.deepEqual(manifest.files.map((file) => file.path), [
-    "assets/hero.png",
+    "assets/hero-web.webp",
     "data/proposal-index.jsonl",
     "data/treasure-index.jsonl",
   ]);
@@ -116,6 +117,8 @@ test("Space bundles and verifies only bounded read-only catalog files", async ()
     }
   }
   const app = await readFile(new URL("app.py", spaceRoot), "utf8");
+  assert.ok(app.includes('ROOT / "assets/hero-web.webp"'));
+  assert.equal(app.includes('ROOT / "assets/hero.png"'), false);
   for (const forbidden of ["os.environ", "requests", "httpx", "subprocess", "pickle", "write_text", "write_bytes", "open("]) {
     assert.equal(app.includes(forbidden), false, `Space app contained ${forbidden}`);
   }

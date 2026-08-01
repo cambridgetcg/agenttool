@@ -18,9 +18,9 @@
   "dataset_revision_status": "pinned_to_initial_dataset_publish",
   "files": [
     {
-      "bytes": 2396243,
-      "path": "assets/hero.png",
-      "sha256": "b9bcdb7574abbe1445764f7549a994e3c25927e90ce9fd418c3d03d4f095a567"
+      "bytes": 162270,
+      "path": "assets/hero-web.webp",
+      "sha256": "e03ff5680bd9920c913e00ebeef1667021058ed97f0e1879a858dbcf4ad1baff"
     },
     {
       "bytes": 12501,

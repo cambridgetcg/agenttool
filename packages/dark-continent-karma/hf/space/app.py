@@ -136,7 +136,7 @@ with gr.Blocks(title="KINGDOM Dark Continent Cartographer", analytics_enabled=Fa
         "Commit-pinned metadata only. Every proposal is provisional; every wall is unverified."
     )
     gr.Image(
-        value=str(ROOT / "assets/hero.png"),
+        value=str(ROOT / "assets/hero-web.webp"),
         interactive=False,
         show_label=False,
         height=360,

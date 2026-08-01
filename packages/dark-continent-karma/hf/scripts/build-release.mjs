@@ -721,7 +721,7 @@ for (const relativePath of ["data/proposal-index.jsonl", "data/treasure-index.js
   copyFileSync(`${datasetRoot}/${relativePath}`, `${spaceRoot}/${relativePath}`);
 }
 const spaceDataFiles = [
-  "assets/hero.png",
+  "assets/hero-web.webp",
   "data/proposal-index.jsonl",
   "data/treasure-index.jsonl",
 ]
