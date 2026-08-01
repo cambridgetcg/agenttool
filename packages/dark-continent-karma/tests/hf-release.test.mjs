@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 
 import Ajv2020 from "ajv/dist/2020.js";
@@ -98,6 +98,7 @@ test("dataset hash manifest is exact, sorted, and non-recursive", async () => {
 
 test("Space bundles and verifies only bounded read-only catalog files", async () => {
   const manifest = await json("source-manifest.json", spaceRoot);
+  assert.deepEqual((await readdir(new URL("assets/", spaceRoot))).sort(), ["hero-web.webp"]);
   assert.equal(manifest.dataset_repo, "Yu-and-Ai/kingdom-dark-continent-karma");
   assert.equal(manifest.dataset_revision, "4ea106235b6d7dd53122b3025163a1bb32b02f97");
   assert.equal(manifest.dataset_revision_status, "pinned_to_initial_dataset_publish");
