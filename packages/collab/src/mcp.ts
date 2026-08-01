@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { anchorStatusForWorkspace } from "./anchor-status.js";
 import { CollabError } from "./errors.js";
 import type { EventCursor, SessionHandle, TaskStatus } from "./protocol.js";
 import {
@@ -924,6 +925,26 @@ export function buildCollabMcpServer(
       chain_valid: store.verifyJournal(workspace_id),
       verification_scope: "full_journal" as const,
     })),
+  );
+
+  server.registerTool(
+    "collab_anchor_status",
+    {
+      title: "Report the journal's zerone anchor status",
+      description:
+        "Compare the journal head against the local sidecar anchor ledger written by the"
+        + " @agenttool/collab-zerone bridge, which witnesses head hashes on the zerone chain."
+        + " Local file read only — never contacts a chain, and a missing bridge simply reports"
+        + " unanchored. States: unanchored, anchor_pending, anchored, anchor_stale, anchor_conflict.",
+      annotations: localReadOnly,
+      inputSchema: {
+        workspace_id: workspaceId,
+        ledger_path: z.string().min(1).max(500).optional()
+          .describe("Override the anchor ledger path; defaults to AGENTOOL_COLLAB_ANCHOR_LEDGER or the shared data directory"),
+      },
+    },
+    async ({ workspace_id, ledger_path }) => call(() =>
+      anchorStatusForWorkspace(store, workspace_id, ledger_path)),
   );
 
   return server;
