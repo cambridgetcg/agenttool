@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isProxy } from "node:util/types";
 
 import { fail } from "./errors.js";
 import type { Sha256Id } from "./types.js";
@@ -72,6 +73,13 @@ export function snapshotJson(root: unknown): JsonValue {
     }
     if (typeof value !== "object") {
       fail("canonical_error", `${path} contains unsupported ${typeof value}`);
+    }
+    // ECMAScript reflection on a Proxy can execute caller-owned traps even
+    // when the underlying target is inert. Node's native predicate does not
+    // enter those traps, including for revoked proxies, so fence them before
+    // Array.isArray, prototype inspection, or descriptor capture.
+    if (isProxy(value)) {
+      fail("canonical_error", `${path} must not be a Proxy`);
     }
     if (seen.has(value)) fail("canonical_error", `${path} contains a cycle`);
     seen.add(value);

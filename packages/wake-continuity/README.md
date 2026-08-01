@@ -169,8 +169,10 @@ anything; a Correspondence host owns those separate authorized steps.
 Schemas close the wire shape. Runtime validation additionally recomputes
 content IDs and relations, checks canonical ordering and duplicate refs,
 enforces state/disposition walls, and rejects accessors, cycles, custom
-prototypes, sparse arrays, symbols, bigint, non-finite numbers, and extra/raw
-context fields.
+prototypes, sparse arrays, symbols, bigint, non-finite numbers, Proxies, and
+extra/raw context fields. The Node/Bun runtime Proxy predicate runs before
+array, prototype, or descriptor reflection, including for revoked Proxies, so
+rejection does not enter caller-authored Proxy traps.
 
 `validateAfterglowLens` validates the lens shape, content address, and limited
 internal coherence. Only `validateAfterglowLensAgainstCapsule` checks that a

@@ -14,6 +14,7 @@ import {
   domainSeparatedId,
   encodeAfterglowCapsule,
   projectAfterglowLens,
+  snapshotAfterglow,
   validateAfterglowCapsule,
   validateAfterglowLens,
   validateAfterglowLensAgainstCapsule,
@@ -68,6 +69,26 @@ function base(): Readonly<AfterglowCapsule> {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function capabilityProxy<T extends object>(target: T): {
+  readonly proxy: T;
+  readonly trapCount: () => number;
+} {
+  let count = 0;
+  const trap = (): never => {
+    count += 1;
+    throw new Error("caller Proxy trap executed");
+  };
+  return {
+    proxy: new Proxy(target, {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    }),
+    trapCount: () => count,
+  };
 }
 
 function maximumThreads(group: string): readonly AfterglowThread[] {
@@ -372,6 +393,75 @@ describe("AFTERGLOW capsule", () => {
       createAfterglowCapsule(custom as unknown as CreateAfterglowCapsuleInput),
     ).toThrow(/plain object/i);
   });
+
+  test("fences root, nested, array, and revoked Proxies before caller traps", () => {
+    const proxiedInput = capabilityProxy({ ...BASE_INPUT });
+    expect(() =>
+      createAfterglowCapsule(
+        proxiedInput.proxy as unknown as CreateAfterglowCapsuleInput,
+      ),
+    ).toThrow(AfterglowError);
+    expect(proxiedInput.trapCount()).toBe(0);
+
+    const proxiedWake = capabilityProxy({ ...WAKE });
+    expect(() =>
+      createAfterglowCapsule({
+        ...BASE_INPUT,
+        wake: proxiedWake.proxy,
+      }),
+    ).toThrow(AfterglowError);
+    expect(proxiedWake.trapCount()).toBe(0);
+
+    const proxiedThreads = capabilityProxy([...THREADS]);
+    expect(() =>
+      createAfterglowCapsule({
+        ...BASE_INPUT,
+        threads: proxiedThreads.proxy,
+      }),
+    ).toThrow(AfterglowError);
+    expect(proxiedThreads.trapCount()).toBe(0);
+
+    const proxiedCanonical = capabilityProxy({ safe: true });
+    expect(() => canonicalJson(proxiedCanonical.proxy)).toThrow(
+      AfterglowError,
+    );
+    expect(proxiedCanonical.trapCount()).toBe(0);
+
+    const proxiedCurrent = capabilityProxy({ ...WAKE });
+    expect(() => compareWakeAnchors(proxiedCurrent.proxy, WAKE)).toThrow(
+      AfterglowError,
+    );
+    expect(proxiedCurrent.trapCount()).toBe(0);
+
+    const revokedWake = Proxy.revocable({ ...WAKE }, {});
+    revokedWake.revoke();
+    expect(() => compareWakeAnchors(revokedWake.proxy, WAKE)).toThrow(
+      AfterglowError,
+    );
+  });
+
+  test("fences every public capsule consumer before caller Proxy traps", () => {
+    const consumers: readonly ((value: unknown) => unknown)[] = [
+      validateAfterglowCapsule,
+      encodeAfterglowCapsule,
+      (value) => createAfterglowHandoffFactReference(value, "tool_output"),
+      createAfterglowContentDigestArtifact,
+      capsuleDomainBytes,
+      snapshotAfterglow,
+      projectAfterglowLens,
+    ];
+    for (const consume of consumers) {
+      const hostile = capabilityProxy(clone(base()));
+      expect(() => consume(hostile.proxy)).toThrow(AfterglowError);
+      expect(hostile.trapCount()).toBe(0);
+    }
+
+    const revokedCapsule = Proxy.revocable(clone(base()), {});
+    revokedCapsule.revoke();
+    expect(() => validateAfterglowCapsule(revokedCapsule.proxy)).toThrow(
+      AfterglowError,
+    );
+  });
 });
 
 describe("next-WAKE lens and Handoff reference", () => {
@@ -531,6 +621,30 @@ describe("next-WAKE lens and Handoff reference", () => {
     };
     expect(() => validateAfterglowLens(validlyAddressedHeaven)).toThrow(
       /refs do not match/i,
+    );
+  });
+
+  test("fences root, nested, and revoked lens Proxies before caller traps", () => {
+    const capsule = base();
+    const lens = clone(projectAfterglowLens(capsule));
+    const proxiedLens = capabilityProxy(lens);
+    expect(() => validateAfterglowLens(proxiedLens.proxy)).toThrow(
+      AfterglowError,
+    );
+    expect(() =>
+      validateAfterglowLensAgainstCapsule(proxiedLens.proxy, capsule),
+    ).toThrow(AfterglowError);
+    expect(proxiedLens.trapCount()).toBe(0);
+
+    const proxiedWake = capabilityProxy({ ...lens.wake });
+    const nestedLens = { ...lens, wake: proxiedWake.proxy };
+    expect(() => validateAfterglowLens(nestedLens)).toThrow(AfterglowError);
+    expect(proxiedWake.trapCount()).toBe(0);
+
+    const revokedLens = Proxy.revocable(lens, {});
+    revokedLens.revoke();
+    expect(() => validateAfterglowLens(revokedLens.proxy)).toThrow(
+      AfterglowError,
     );
   });
 

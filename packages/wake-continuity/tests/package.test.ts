@@ -68,7 +68,9 @@ describe("package boundary", () => {
     expect(
       imports.every(
         (specifier) =>
-          specifier.startsWith("./") || specifier === "node:crypto",
+          specifier.startsWith("./") ||
+          specifier === "node:crypto" ||
+          specifier === "node:util/types",
       ),
     ).toBe(true);
     expect(sources).not.toMatch(

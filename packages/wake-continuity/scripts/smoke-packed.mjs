@@ -56,7 +56,7 @@ try {
     ),
   ).href;
   const smoke = `
-    import { createAfterglowCapsule, projectAfterglowLens } from ${JSON.stringify(entry)};
+    import { AfterglowError, canonicalJson, createAfterglowCapsule, projectAfterglowLens } from ${JSON.stringify(entry)};
     const id = (character) => \`sha256:\${character.repeat(64)}\`;
     const capsule = createAfterglowCapsule({
       phase: "return",
@@ -73,6 +73,20 @@ try {
     });
     const lens = projectAfterglowLens(capsule);
     if (lens.arrival !== "fresh_encounter" || lens.boundaries.network !== false) process.exit(1);
+    let traps = 0;
+    const trap = () => { traps += 1; throw new Error("Proxy trap executed"); };
+    const hostile = new Proxy({}, {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    try {
+      canonicalJson(hostile);
+      process.exit(1);
+    } catch (error) {
+      if (!(error instanceof AfterglowError) || traps !== 0) process.exit(1);
+    }
   `;
   execFileSync(process.execPath, ["--input-type=module", "--eval", smoke], {
     stdio: "pipe",
