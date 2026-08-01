@@ -7,21 +7,12 @@ import {
 } from "../dist/index.js";
 
 const DNS_NAMESPACE = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
-const expectedVector = "170bcb1b-e164-502d-83fd-b81854a32c47";
+const expectedVector = "ae859422-e5d9-5358-a4f1-7aee965bc029";
 
 if (uuidv5(PROJECTION_UUID_NAMESPACE_NAME, DNS_NAMESPACE) !== PROJECTION_UUID_NAMESPACE) {
   throw new Error("published projection namespace changed");
 }
-if (
-  projectionUuid(
-    "skill_snapshot",
-    "project",
-    "report",
-    "reported",
-    "nen-vow-forge",
-    "digest",
-  ) !== expectedVector
-) {
+if (projectionUuid("skill_snapshot", "project", "report", "nen-vow-forge", "digest") !== expectedVector) {
   throw new Error("projection UUID differs between Bun test vectors and Node");
 }
 if (

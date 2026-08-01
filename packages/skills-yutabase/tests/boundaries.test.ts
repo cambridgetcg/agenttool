@@ -53,7 +53,7 @@ describe("closed minimized input boundary", () => {
     expectInvalid(summary, "input.selection_summary.issue_messages: unexpected field");
   });
 
-  test("requires plain objects with exact own enumerable data fields", () => {
+  test("requires exact own enumerable data fields on plain objects", () => {
     const missingOwn = mutableInput();
     delete missingOwn.source.report_digest;
     expectInvalid(
@@ -67,10 +67,6 @@ describe("closed minimized input boundary", () => {
     Object.setPrototypeOf(inherited.source, { report_digest: inheritedDigest });
     expectInvalid(inherited, "input.source: expected a plain or null-prototype object");
 
-    const customRoot = mutableInput();
-    Object.setPrototypeOf(customRoot, { inherited: true });
-    expectInvalid(customRoot, "input: expected a plain or null-prototype object");
-
     const nonEnumerable = mutableInput();
     Object.defineProperty(nonEnumerable.source, "report_digest", {
       value: nonEnumerable.source.report_digest,
@@ -81,15 +77,15 @@ describe("closed minimized input boundary", () => {
       "input.source.report_digest: expected an own enumerable data property",
     );
 
-    const symbolField = mutableInput();
-    symbolField[Symbol("hidden")] = "not-json";
-    expectInvalid(symbolField, "input: symbol fields are not accepted");
+    const symbolic = mutableInput();
+    symbolic.source[Symbol("hidden")] = "not-json";
+    expectInvalid(symbolic, "input.source: symbol fields are not accepted");
   });
 
   test("accepts detached null-prototype data without retaining it", () => {
     const input = nullPrototypeObjects(validInput());
     const first = planSkillsInspection(input, { claimant: "projector:test" });
-    input.source.report_digest = "sha256:" + "f".repeat(64);
+    input.source.report_digest = `sha256:${"f".repeat(64)}`;
     input.skills[0].name = "changed-after-return";
 
     expect(first).toEqual(
@@ -99,7 +95,7 @@ describe("closed minimized input boundary", () => {
     expect(JSON.stringify(first)).not.toContain("changed-after-return");
   });
 
-  test("rejects accessors without invoking them or exposing rotating values", () => {
+  test("rejects accessors without invoking rotating values", () => {
     const sentinel = "PRIVATE_ROTATING_DIGEST_SENTINEL";
     const input = mutableInput();
     let reads = 0;
@@ -108,7 +104,7 @@ describe("closed minimized input boundary", () => {
       configurable: true,
       get() {
         reads += 1;
-        return reads === 1 ? "sha256:" + "a".repeat(64) : sentinel;
+        return reads === 1 ? `sha256:${"a".repeat(64)}` : sentinel;
       },
     });
 
@@ -126,28 +122,49 @@ describe("closed minimized input boundary", () => {
     expect(reads).toBe(0);
   });
 
-  test("contains revoked or structurally failing proxies", () => {
-    const revoked = Proxy.revocable({}, {});
-    revoked.revoke();
-    expectInvalid(revoked.proxy, "input: could not inspect object structure");
-
-    const input = mutableInput();
-    input.source = new Proxy(input.source, {
-      ownKeys() {
-        throw new Error("PROXY_TRAP_SENTINEL");
+  test("rejects root, nested, array, and revoked Proxies with zero traps", () => {
+    let traps = 0;
+    const handler: ProxyHandler<object> = {
+      get(target, key, receiver) {
+        traps += 1;
+        return Reflect.get(target, key, receiver);
       },
-    });
-    let thrown: unknown;
-    try {
-      assertSkillsYutabaseInput(input);
-    } catch (error) {
-      thrown = error;
-    }
-    expect(thrown).toBeInstanceOf(SkillsYutabasePlanError);
-    expect(String(thrown)).toBe(
-      "SkillsYutabasePlanError: input.source: could not inspect object structure",
-    );
-    expect(String(thrown)).not.toContain("PROXY_TRAP_SENTINEL");
+      getOwnPropertyDescriptor(target, key) {
+        traps += 1;
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+      getPrototypeOf(target) {
+        traps += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys(target) {
+        traps += 1;
+        return Reflect.ownKeys(target);
+      },
+    };
+
+    expectInvalid(new Proxy(validInput() as object, handler), "Proxies are not accepted");
+    expect(traps).toBe(0);
+
+    const nested = mutableInput();
+    nested.source = new Proxy(nested.source, handler);
+    expectInvalid(nested, "input.source: Proxies are not accepted");
+    expect(traps).toBe(0);
+
+    const nestedSkill = mutableInput();
+    nestedSkill.skills[0] = new Proxy(nestedSkill.skills[0], handler);
+    expectInvalid(nestedSkill, "input.skills[0]: Proxies are not accepted");
+    expect(traps).toBe(0);
+
+    const array = mutableInput();
+    array.skills = new Proxy(array.skills, handler);
+    expectInvalid(array, "input.skills: Proxies are not accepted");
+    expect(traps).toBe(0);
+
+    const revoked = Proxy.revocable(validInput() as object, {});
+    revoked.revoke();
+    expectInvalid(revoked.proxy, "Proxies are not accepted");
+    expect(traps).toBe(0);
   });
 
   test("requires dense own data elements on standard arrays", () => {
@@ -159,64 +176,82 @@ describe("closed minimized input boundary", () => {
     );
 
     const inheritedElement = mutableInput();
-    const first = inheritedElement.skills[0];
+    const inheritedFirst = inheritedElement.skills[0];
     delete inheritedElement.skills[0];
     Object.setPrototypeOf(
       inheritedElement.skills,
-      Object.assign(Object.create(Array.prototype), { 0: first }),
+      Object.assign(Object.create(Array.prototype), { 0: inheritedFirst }),
     );
     expectInvalid(
       inheritedElement,
       "input.skills: expected an array with the standard prototype",
     );
 
-    const accessorElement = mutableInput();
-    const accessorValue = accessorElement.skills[0];
+    const accessor = mutableInput();
+    const first = accessor.skills[0];
     let reads = 0;
-    Object.defineProperty(accessorElement.skills, "0", {
+    Object.defineProperty(accessor.skills, "0", {
       enumerable: true,
       configurable: true,
       get() {
         reads += 1;
-        return accessorValue;
+        return first;
       },
     });
     expectInvalid(
-      accessorElement,
+      accessor,
       "input.skills[0]: expected an own enumerable data property",
     );
     expect(reads).toBe(0);
 
-    const arraySymbol = mutableInput();
-    arraySymbol.skills[Symbol("hidden")] = "not-json";
-    expectInvalid(arraySymbol, "input.skills: symbol fields are not accepted on arrays");
+    const customField = mutableInput();
+    let customMapCalled = false;
+    Object.defineProperty(customField.skills, "map", {
+      enumerable: true,
+      value() {
+        customMapCalled = true;
+        return [];
+      },
+    });
+    expectInvalid(customField, "input.skills.map: unexpected array field");
+    expect(customMapCalled).toBe(false);
+
+    const symbol = mutableInput();
+    symbol.skills[Symbol("hidden")] = "not-json";
+    expectInvalid(symbol, "input.skills: symbol fields are not accepted on arrays");
   });
 
-  test("captures claimant only through an own data property", () => {
-    const sentinel = "PRIVATE_ROTATING_CLAIMANT_SENTINEL";
+  test("captures claimant only through one own data snapshot", () => {
     let reads = 0;
     const options = {
       get claimant() {
         reads += 1;
-        return reads <= 3 ? "projector:test" : sentinel;
+        return "projector:test";
       },
     };
-
-    let thrown: unknown;
-    try {
-      planSkillsInspection(validInput(), options);
-    } catch (error) {
-      thrown = error;
-    }
-    expect(thrown).toBeInstanceOf(SkillsYutabasePlanError);
-    expect(String(thrown)).toContain(
+    expect(() => planSkillsInspection(validInput(), options)).toThrow(
       "options.claimant: expected an own enumerable data property",
     );
-    expect(String(thrown)).not.toContain(sentinel);
     expect(reads).toBe(0);
+
+    let traps = 0;
+    const proxy = new Proxy({ claimant: "projector:test" }, {
+      get(target, key, receiver) {
+        traps += 1;
+        return Reflect.get(target, key, receiver);
+      },
+      ownKeys(target) {
+        traps += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    expect(() => planSkillsInspection(validInput(), proxy)).toThrow(
+      "options: Proxies are not accepted",
+    );
+    expect(traps).toBe(0);
   });
 
-  test("requires a valid digest-bearing report and closed inspector identity fields", () => {
+  test("requires a valid digest-bearing report and exact inspector provenance", () => {
     const invalidReport = mutableInput();
     invalidReport.source.report_valid = false;
     expectInvalid(invalidReport, "input.source.report_valid: expected true");
@@ -250,52 +285,6 @@ describe("closed minimized input boundary", () => {
     expectInvalid(
       impossibleCategories,
       "must equal 1 + script_count + resource_count",
-    );
-  });
-
-  test("keeps reported names and redacted aliases in distinct closed lanes", () => {
-    const reportedAlias = mutableInput();
-    reportedAlias.skills[0].name = "<redacted-1>";
-    expectInvalid(
-      reportedAlias,
-      "expected a portable lowercase hyphenated reported skill name",
-    );
-
-    const redactedPortable = mutableInput();
-    redactedPortable.skills[0].name_kind = "redacted_alias";
-    expectInvalid(
-      redactedPortable,
-      "expected an exact upstream <redacted-N> alias",
-    );
-
-    const unknownKind = mutableInput();
-    unknownKind.skills[0].name_kind = "inferred";
-    expectInvalid(unknownKind, "expected reported or redacted_alias");
-
-    for (const alias of [
-      "<redacted-0>",
-      "<redacted-01>",
-      "<redacted-4097>",
-      "<redacted-1>-suffix",
-    ]) {
-      const invalidAlias = mutableInput();
-      invalidAlias.skills[0].name_kind = "redacted_alias";
-      invalidAlias.skills[0].name = alias;
-      expectInvalid(
-        invalidAlias,
-        "expected an exact upstream <redacted-N> alias",
-      );
-    }
-  });
-
-  test("requires the report redaction count to cover selected alias ordinals", () => {
-    const input = mutableInput();
-    input.skills[0].name_kind = "redacted_alias";
-    input.skills[0].name = "<redacted-2>";
-    input.selection_summary.redactions = 1;
-    expectInvalid(
-      input,
-      "must cover every selected redacted skill alias ordinal",
     );
   });
 

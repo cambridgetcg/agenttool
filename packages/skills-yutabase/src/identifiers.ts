@@ -4,7 +4,6 @@ import {
   PLAN_PROFILE,
   PROJECTION_UUID_NAMESPACE,
 } from "./constants.js";
-import type { SkillNameKind } from "./types.js";
 
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -66,15 +65,13 @@ export function inspectionEvidenceUrn(reportDigest: string): string {
 
 export function skillEvidenceUrn(
   reportDigest: string,
-  nameKind: SkillNameKind,
   name: string,
   contentDigest: string,
 ): string {
   return [
     "urn:agenttool:skills:skill-snapshot",
     reportDigest,
-    nameKind,
-    encodeURIComponent(name),
+    name,
     contentDigest,
   ].join(":");
 }

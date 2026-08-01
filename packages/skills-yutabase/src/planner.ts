@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { types as utilTypes } from "node:util";
 
 import {
   INPUT_PROTOCOL,
@@ -7,7 +8,6 @@ import {
   INSPECTION_SCHEMA_ID,
   INSPECTION_SCHEMA_VERSION,
   INSPECTOR_NAME,
-  INSPECTOR_REVISION_PROVENANCE,
   MAX_FILES,
   MAX_ISSUES,
   MAX_SKILLS,
@@ -43,9 +43,8 @@ const CANONICAL_UUID =
 const RFC3339_MILLISECONDS =
   /^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
 const SHA256 = /^sha256:[0-9a-f]{64}$/;
-const REVISION_HEX = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+const GIT_REVISION = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const REDACTED_SKILL_ALIAS = /^<redacted-([1-9][0-9]*)>$/;
 const SEMVER =
   /^(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
@@ -60,9 +59,6 @@ function compareSkillSnapshots(
   left: MinimizedSkillSnapshot,
   right: MinimizedSkillSnapshot,
 ): number {
-  if (left.name_kind !== right.name_kind) {
-    return left.name_kind < right.name_kind ? -1 : 1;
-  }
   if (left.name !== right.name) return left.name < right.name ? -1 : 1;
   if (left.content_digest === right.content_digest) return 0;
   return left.content_digest < right.content_digest ? -1 : 1;
@@ -73,7 +69,7 @@ export function skillsSelectionDigest(
   skills: readonly MinimizedSkillSnapshot[],
 ): string {
   return skillsSelectionDigestFromSnapshot(
-    snapshotSkillArray(skills, "skills", 0).skills,
+    snapshotSkillArray(skills, "skills", 0),
   );
 }
 
@@ -81,7 +77,6 @@ function skillsSelectionDigestFromSnapshot(
   skills: readonly MinimizedSkillSnapshot[],
 ): string {
   const canonical = [...skills].sort(compareSkillSnapshots).map((skill) => ({
-    name_kind: skill.name_kind,
     name: skill.name,
     content_digest: skill.content_digest,
     file_count: skill.file_count,
@@ -107,18 +102,14 @@ function readClosedObject(
   if (value === null || typeof value !== "object") {
     fail(path, "expected an object");
   }
-
-  let isArray: boolean;
-  try {
-    isArray = Array.isArray(value);
-  } catch {
-    fail(path, "could not inspect object structure");
-  }
-  if (isArray) fail(path, "expected an object");
+  if (utilTypes.isProxy(value)) fail(path, "Proxies are not accepted");
+  if (Array.isArray(value)) fail(path, "expected an object");
 
   let prototype: object | null;
+  let descriptors: ReturnType<typeof Object.getOwnPropertyDescriptors>;
   try {
     prototype = Object.getPrototypeOf(value);
+    descriptors = Object.getOwnPropertyDescriptors(value);
   } catch {
     fail(path, "could not inspect object structure");
   }
@@ -126,37 +117,17 @@ function readClosedObject(
     fail(path, "expected a plain or null-prototype object");
   }
 
-  let ownKeys: readonly PropertyKey[];
-  try {
-    ownKeys = Reflect.ownKeys(value);
-  } catch {
-    fail(path, "could not inspect object structure");
-  }
-
   const required = new Set(requiredKeys);
   const captured = Object.create(null) as Record<string, unknown>;
-  for (const key of ownKeys) {
-    if (typeof key !== "string") {
-      fail(path, "symbol fields are not accepted");
-    }
+  for (const key of Reflect.ownKeys(descriptors)) {
+    if (typeof key !== "string") fail(path, "symbol fields are not accepted");
     if (!required.has(key)) fail(`${path}.${key}`, "unexpected field");
-
-    let descriptor: PropertyDescriptor | undefined;
-    try {
-      descriptor = Object.getOwnPropertyDescriptor(value, key);
-    } catch {
-      fail(`${path}.${key}`, "could not inspect field");
-    }
-    if (
-      descriptor === undefined ||
-      descriptor.enumerable !== true ||
-      !("value" in descriptor)
-    ) {
+    const descriptor = descriptors[key];
+    if (!descriptor?.enumerable || !("value" in descriptor)) {
       fail(`${path}.${key}`, "expected an own enumerable data property");
     }
     captured[key] = descriptor.value;
   }
-
   for (const key of requiredKeys) {
     if (!Object.hasOwn(captured, key)) {
       fail(`${path}.${key}`, "expected an own enumerable data property");
@@ -171,37 +142,27 @@ function readClosedArray(
   minimum: number,
   maximum: number,
 ): unknown[] {
-  let isArray: boolean;
-  try {
-    isArray = Array.isArray(value);
-  } catch {
-    fail(path, "could not inspect array structure");
+  if (value !== null && typeof value === "object" && utilTypes.isProxy(value)) {
+    fail(path, "Proxies are not accepted");
   }
-  if (!isArray) fail(path, "expected an array");
-  const array = value as unknown[];
+  if (!Array.isArray(value)) fail(path, "expected an array");
 
   let prototype: object | null;
+  let descriptors: ReturnType<typeof Object.getOwnPropertyDescriptors>;
   try {
-    prototype = Object.getPrototypeOf(array);
+    prototype = Object.getPrototypeOf(value);
+    descriptors = Object.getOwnPropertyDescriptors(value);
   } catch {
     fail(path, "could not inspect array structure");
   }
   if (prototype !== Array.prototype) {
     fail(path, "expected an array with the standard prototype");
   }
-
-  let lengthDescriptor: PropertyDescriptor | undefined;
-  let ownKeys: readonly PropertyKey[];
-  try {
-    lengthDescriptor = Object.getOwnPropertyDescriptor(array, "length");
-    ownKeys = Reflect.ownKeys(array);
-  } catch {
-    fail(path, "could not inspect array structure");
-  }
+  const lengthDescriptor = descriptors.length;
   if (
-    lengthDescriptor === undefined ||
-    !("value" in lengthDescriptor) ||
-    lengthDescriptor.enumerable !== false
+    !lengthDescriptor ||
+    lengthDescriptor.enumerable ||
+    !("value" in lengthDescriptor)
   ) {
     fail(`${path}.length`, "expected the standard own array length");
   }
@@ -210,38 +171,27 @@ function readClosedArray(
   const expectedIndices = new Set(
     Array.from({ length }, (_, index) => String(index)),
   );
-  const descriptors = new Map<string, PropertyDescriptor>();
-
-  for (const key of ownKeys) {
+  const capturedByIndex = new Map<string, unknown>();
+  for (const key of Reflect.ownKeys(descriptors)) {
     if (typeof key !== "string") {
       fail(path, "symbol fields are not accepted on arrays");
     }
     if (key === "length") continue;
     if (!expectedIndices.has(key)) fail(`${path}.${key}`, "unexpected array field");
-
-    let descriptor: PropertyDescriptor | undefined;
-    try {
-      descriptor = Object.getOwnPropertyDescriptor(array, key);
-    } catch {
-      fail(`${path}[${key}]`, "could not inspect array element");
-    }
-    if (
-      descriptor === undefined ||
-      descriptor.enumerable !== true ||
-      !("value" in descriptor)
-    ) {
+    const descriptor = descriptors[key];
+    if (!descriptor?.enumerable || !("value" in descriptor)) {
       fail(`${path}[${key}]`, "expected an own enumerable data property");
     }
-    descriptors.set(key, descriptor);
+    capturedByIndex.set(key, descriptor.value);
   }
 
   const captured: unknown[] = [];
   for (let index = 0; index < length; index += 1) {
-    const descriptor = descriptors.get(String(index));
-    if (descriptor === undefined) {
-      fail(`${path}[${index}]`, "expected an own enumerable data property");
+    const key = String(index);
+    if (!capturedByIndex.has(key)) {
+      fail(`${path}[${key}]`, "expected an own enumerable data property");
     }
-    captured.push(descriptor.value);
+    captured.push(capturedByIndex.get(key));
   }
   return captured;
 }
@@ -298,55 +248,31 @@ function snapshotSkillArray(
   value: unknown,
   path: string,
   minimum: number,
-): { skills: MinimizedSkillSnapshot[]; redactedAliasOrdinals: number[] } {
+): MinimizedSkillSnapshot[] {
   const entries = readClosedArray(value, path, minimum, MAX_SKILLS);
   const names = new Set<string>();
-  const redactedAliasOrdinals: number[] = [];
   const skills: MinimizedSkillSnapshot[] = [];
-
   for (const [index, value] of entries.entries()) {
-    const skillPath = `${path}[${index}]`;
+    const skillPath = `${path}[${String(index)}]`;
     const skill = readClosedObject(value, skillPath, [
-      "name_kind",
       "name",
       "content_digest",
       "file_count",
       "script_count",
       "resource_count",
     ]);
-    const nameKind = skill.name_kind;
     const name = skill.name;
     const contentDigest = skill.content_digest;
     const fileCount = skill.file_count;
     const scriptCount = skill.script_count;
     const resourceCount = skill.resource_count;
 
-    assertString(nameKind, `${skillPath}.name_kind`);
-    if (nameKind !== "reported" && nameKind !== "redacted_alias") {
-      fail(`${skillPath}.name_kind`, "expected reported or redacted_alias");
-    }
     assertString(name, `${skillPath}.name`);
-    if (nameKind === "reported") {
-      if (name.length > 64 || !SKILL_NAME.test(name)) {
-        fail(
-          `${skillPath}.name`,
-          "expected a portable lowercase hyphenated reported skill name",
-        );
-      }
-    } else {
-      const match = REDACTED_SKILL_ALIAS.exec(name);
-      const ordinal = Number(match?.[1] ?? 0);
-      if (!Number.isSafeInteger(ordinal) || ordinal < 1 || ordinal > MAX_ISSUES) {
-        fail(
-          `${skillPath}.name`,
-          `expected an exact upstream <redacted-N> alias with N from 1 to ${MAX_ISSUES}`,
-        );
-      }
-      redactedAliasOrdinals.push(ordinal);
+    if (name.length > 64 || !SKILL_NAME.test(name)) {
+      fail(`${skillPath}.name`, "expected a portable lowercase hyphenated skill name");
     }
     if (names.has(name)) fail(`${skillPath}.name`, "skill names must be unique");
     names.add(name);
-
     assertDigest(contentDigest, `${skillPath}.content_digest`);
     assertCount(fileCount, `${skillPath}.file_count`, MAX_FILES, 1);
     assertCount(scriptCount, `${skillPath}.script_count`, fileCount);
@@ -357,9 +283,7 @@ function snapshotSkillArray(
         "must equal 1 + script_count + resource_count for an @agenttool/skills snapshot",
       );
     }
-
     skills.push({
-      name_kind: nameKind,
       name,
       content_digest: contentDigest,
       file_count: fileCount,
@@ -367,8 +291,7 @@ function snapshotSkillArray(
       resource_count: resourceCount,
     });
   }
-
-  return { skills, redactedAliasOrdinals };
+  return skills;
 }
 
 function snapshotSkillsYutabaseInput(input: unknown): SkillsYutabaseInput {
@@ -424,7 +347,7 @@ function snapshotSkillsYutabaseInput(input: unknown): SkillsYutabaseInput {
     fail("input.source.inspector_version", "expected a canonical semantic version");
   }
   assertString(inspectorRevision, "input.source.inspector_revision");
-  if (!REVISION_HEX.test(inspectorRevision)) {
+  if (!GIT_REVISION.test(inspectorRevision)) {
     fail("input.source.inspector_revision", "expected a 40 or 64 lowercase hex revision");
   }
   assertExact(source.mode, "read-only", "input.source.mode");
@@ -452,38 +375,17 @@ function snapshotSkillsYutabaseInput(input: unknown): SkillsYutabaseInput {
   assertCount(warningCount, "input.selection_summary.warnings", MAX_ISSUES);
   assertCount(redactionCount, "input.selection_summary.redactions", MAX_ISSUES);
 
-  const selection = snapshotSkillArray(record.skills, "input.skills", 1);
-  if (selection.skills.length !== selectedSkillCount) {
+  const skills = snapshotSkillArray(record.skills, "input.skills", 1);
+  if (skills.length !== selectedSkillCount) {
     fail("input.skills", "length must equal input.selection_summary.skills");
   }
-  if (selection.redactedAliasOrdinals.some((ordinal) => ordinal > redactionCount)) {
-    fail(
-      "input.selection_summary.redactions",
-      "must cover every selected redacted skill alias ordinal",
-    );
-  }
-  if (
-    checkedSum(
-      selection.skills.map((skill) => skill.file_count),
-      "input.selection_summary.files",
-    ) !== selectedFileCount
-  ) {
+  if (checkedSum(skills.map((skill) => skill.file_count), "input.selection_summary.files") !== selectedFileCount) {
     fail("input.selection_summary.files", "must equal the selected skill file-count total");
   }
-  if (
-    checkedSum(
-      selection.skills.map((skill) => skill.script_count),
-      "input.selection_summary.scripts",
-    ) !== selectedScriptCount
-  ) {
+  if (checkedSum(skills.map((skill) => skill.script_count), "input.selection_summary.scripts") !== selectedScriptCount) {
     fail("input.selection_summary.scripts", "must equal the selected skill script-count total");
   }
-  if (
-    checkedSum(
-      selection.skills.map((skill) => skill.resource_count),
-      "input.selection_summary.resources",
-    ) !== selectedResourceCount
-  ) {
+  if (checkedSum(skills.map((skill) => skill.resource_count), "input.selection_summary.resources") !== selectedResourceCount) {
     fail("input.selection_summary.resources", "must equal the selected skill resource-count total");
   }
 
@@ -522,7 +424,7 @@ function snapshotSkillsYutabaseInput(input: unknown): SkillsYutabaseInput {
       warnings: warningCount,
       redactions: redactionCount,
     },
-    skills: selection.skills,
+    skills,
     authority: { automatic_action: "never", grants: [] },
   };
 }
@@ -578,7 +480,10 @@ export function planSkillsInspection(
 
   const reportUrn = inspectionEvidenceUrn(snapshot.source.report_digest);
   const selectionDigest = skillsSelectionDigestFromSnapshot(snapshot.skills);
-  const selectionUrn = selectionEvidenceUrn(snapshot.source.report_digest, selectionDigest);
+  const selectionUrn = selectionEvidenceUrn(
+    snapshot.source.report_digest,
+    selectionDigest,
+  );
   const inspectionAddress = address(
     "inspections",
     projectionUuid(
@@ -605,7 +510,6 @@ export function planSkillsInspection(
         inspector_name: snapshot.source.inspector_name,
         inspector_version: snapshot.source.inspector_version,
         inspector_revision: snapshot.source.inspector_revision,
-        inspector_revision_provenance: INSPECTOR_REVISION_PROVENANCE,
         inspector_mode: snapshot.source.mode,
         selected_skill_count: snapshot.selection_summary.skills,
         selected_file_count: snapshot.selection_summary.files,
@@ -624,7 +528,6 @@ export function planSkillsInspection(
   for (const skill of skills) {
     const skillUrn = skillEvidenceUrn(
       snapshot.source.report_digest,
-      skill.name_kind,
       skill.name,
       skill.content_digest,
     );
@@ -634,7 +537,6 @@ export function planSkillsInspection(
         "skill_snapshot",
         snapshot.project_id,
         snapshot.source.report_digest,
-        skill.name_kind,
         skill.name,
         skill.content_digest,
       ),
@@ -646,7 +548,6 @@ export function planSkillsInspection(
         {
           project_id: snapshot.project_id,
           source_report_digest: snapshot.source.report_digest,
-          name_kind: skill.name_kind,
           name: skill.name,
           content_digest: skill.content_digest,
           content_digest_semantics: SKILL_CONTENT_DIGEST_SEMANTICS,
@@ -669,7 +570,13 @@ export function planSkillsInspection(
       word: "lists_skill_snapshot",
       from: inspectionAddress,
       to: skillAddress,
-      claim: computedClaim(snapshot.recorded_at, claimant, reportUrn, selectionUrn, skillUrn),
+      claim: computedClaim(
+        snapshot.recorded_at,
+        claimant,
+        reportUrn,
+        selectionUrn,
+        skillUrn,
+      ),
     });
   }
 
@@ -684,7 +591,6 @@ export function planSkillsInspection(
       source_report_schema_validation: "not_performed",
       report_digest_verification: "not_performed",
       skill_content_digest_verification: "not_performed",
-      inspector_revision_verification: "not_performed",
       publisher_authentication: "not_performed",
       skill_interpretation: "not_performed",
       safety_evaluation: "not_performed",

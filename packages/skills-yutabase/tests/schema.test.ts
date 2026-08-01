@@ -20,12 +20,12 @@ describe("published input schema", () => {
     for (const fragment of [
       "own enumerable data properties",
       "standard dense arrays",
+      "rejects Proxies",
       "recorded_at",
       "skills.length = selection_summary.skills",
       "unique skill names",
       "file_count = 1 + script_count + resource_count",
       "aggregate skill file/script/resource totals",
-      "<redacted-N> ordinal <= selection_summary.redactions",
       "schema success alone is not planner acceptance",
     ]) {
       expect(comment as string).toContain(fragment);
@@ -35,36 +35,6 @@ describe("published input schema", () => {
   test("accepts the golden minimized input", () => {
     expect(validate(validInput())).toBe(true);
     expect(validate.errors).toBeNull();
-  });
-
-  test("accepts an explicitly classified upstream redacted-name alias", () => {
-    const redacted = structuredClone(validInput()) as any;
-    redacted.skills[0].name_kind = "redacted_alias";
-    redacted.skills[0].name = "<redacted-4096>";
-    redacted.selection_summary.redactions = 4096;
-    expect(validate(redacted)).toBe(true);
-    expect(validate.errors).toBeNull();
-  });
-
-  test("rejects name-kind mismatches and malformed or out-of-range aliases", () => {
-    const unknownKind = structuredClone(validInput()) as any;
-    unknownKind.skills[0].name_kind = "inferred";
-    expect(validate(unknownKind)).toBe(false);
-
-    const reportedAlias = structuredClone(validInput()) as any;
-    reportedAlias.skills[0].name = "<redacted-1>";
-    expect(validate(reportedAlias)).toBe(false);
-
-    const redactedPortable = structuredClone(validInput()) as any;
-    redactedPortable.skills[0].name_kind = "redacted_alias";
-    expect(validate(redactedPortable)).toBe(false);
-
-    for (const alias of ["<redacted-0>", "<redacted-01>", "<redacted-4097>"]) {
-      const malformed = structuredClone(validInput()) as any;
-      malformed.skills[0].name_kind = "redacted_alias";
-      malformed.skills[0].name = alias;
-      expect(validate(malformed)).toBe(false);
-    }
   });
 
   test("is closed against raw skill content and authority grants", () => {
