@@ -6,22 +6,24 @@ separate YUTABASE `skills` book. The v0.1 profile has two decks,
 `lists_skill_snapshot`.
 
 This is the safe first seam for Nen skills: an exact `@agenttool/skills`
-inspection report stays outside YUTABASE, while its digest, pinned inspector
-revision, bounded counts, and each selected skill name/content digest can be
-cached as rebuildable provenance. The planner computes a domain-separated
-digest of the minimized selection so two subsets of one report cannot collide
-on an inspection-card identity. The exact inspector source revision is also
-bound into that identity because it is external to the canonical report bytes.
-The same mechanism can catalog a separately reviewed Hugging Face skill bundle
-without installing or executing it.
+inspection report stays outside YUTABASE, while its digest, caller-supplied
+inspector revision, bounded counts, and each selected skill name/content digest
+can be cached as rebuildable provenance. The planner computes a
+domain-separated digest of the minimized selection so two subsets of one
+report cannot collide on an inspection-card identity. The supplied revision
+value is also bound into that identity because it is external to the canonical
+report bytes. It remains unverified and is not a Git observation. The same
+mechanism can catalog a separately reviewed Hugging Face skill bundle only
+after it is inspected locally through `@agenttool/skills`; Hugging Face or
+proposal digests cannot substitute for the inspection digest.
 
 ## Boundary
 
 The caller must first validate the full report against
 `@agenttool/skills/report.schema.json`, retain canonical report bytes, verify
-the report and skill digests, pin the inspector source revision, and minimize
-the result into this package's closed `./input.schema.json` contract. The
-report digest recipe is frozen as
+the report and skill digests, supply the claimed inspector revision, and
+minimize the result into this package's closed `./input.schema.json` contract.
+The report digest recipe is frozen as
 `agenttool.skills/report-stable-json-sha256-v1`: SHA-256 of the UTF-8 bytes
 returned by `@agenttool/skills` `stableStringify(report)` with its default
 recursive key ordering, two-space indentation, and trailing LF. The exported
@@ -43,8 +45,25 @@ so caller code cannot rotate a value between validation, identity, and output.
 
 JSON Schema success is only the portable structural gate. Runtime validation
 also checks a real exact UTC instant, unique skill names, skill-array/summary
-agreement, per-skill category equality, and aggregate file/script/resource
-totals. The root schema comment lists these runtime-only rules.
+agreement, per-skill category equality, aggregate file/script/resource totals,
+and redacted-alias coverage. The root schema comment lists these runtime-only
+rules.
+
+Every selected skill names its source lane explicitly:
+
+- `name_kind: "reported"` accepts only a portable lowercase hyphenated name.
+- `name_kind: "redacted_alias"` accepts only the exact `<redacted-N>`
+  placeholder emitted by the upstream inspector, with `N` bounded to
+  `1..4096` and covered by the report redaction count.
+
+Never recover or substitute the concealed original. The kind is bound into
+selection, skill-snapshot, relation, and evidence identity.
+
+`source.inspector_revision` accepts only a 40- or 64-character lowercase hex
+shape. It is identity-bearing caller input, not proof that a Git object exists
+or that an `@agenttool/skills` artifact was built from it. Plans therefore
+project `inspector_revision_provenance: "caller_supplied_unverified"` and report
+`limitations.inspector_revision_verification: "not_performed"`.
 
 It accepts no skill bodies, descriptions, prompts, paths, issue messages,
 requirement names, identities, model output, scores, ranks, XP, credentials,
@@ -91,6 +110,7 @@ const plan = planSkillsInspection(
       redactions: 0,
     },
     skills: [{
+      name_kind: "reported",
       name: "nen-vow-forge",
       content_digest: "sha256:" + "c".repeat(64),
       file_count: 2,
@@ -106,7 +126,9 @@ const plan = planSkillsInspection(
 The plan contains intentions only. The existing Correspondence projector does
 not apply this book. See `PERSISTENCE-CONTRACT.md` before designing a durable
 private sidecar. `recorded_at` and the claimant are claim metadata only: they
-do not participate in IDs or immutable card fields.
+do not participate in IDs or immutable card fields. The caller-supplied
+inspector revision does participate in inspection identity, without becoming
+verified provenance.
 
 ## Development
 

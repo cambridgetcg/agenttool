@@ -8,6 +8,8 @@ export const INSPECTION_KIND = "agenttool.skills.inspection" as const;
 export const INSPECTION_SCHEMA_ID = "urn:agenttool:skills:inspection:v0.1" as const;
 export const INSPECTION_SCHEMA_VERSION = "agenttool.skills/inspect-v0.1" as const;
 export const INSPECTOR_NAME = "@agenttool/skills" as const;
+export const INSPECTOR_REVISION_PROVENANCE =
+  "caller_supplied_unverified" as const;
 export const REPORT_DIGEST_SEMANTICS =
   "agenttool.skills/report-stable-json-sha256-v1" as const;
 

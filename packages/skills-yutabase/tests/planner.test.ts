@@ -31,9 +31,31 @@ describe("skills inspection planner", () => {
     expect(plan.relations.every((entry) => entry.to.deck === "skill_snapshots")).toBe(true);
     const firstSkill = plan.cards.find((entry) => entry.address.deck === "skill_snapshots");
     expect(firstSkill?.fields).toMatchObject({
+      name_kind: "reported",
       content_digest_semantics: SKILL_CONTENT_DIGEST_SEMANTICS,
       interpretation: "not_performed",
     });
+  });
+
+  test("projects an exact upstream redacted-name alias as an explicit lane", () => {
+    const input = structuredClone(validInput()) as any;
+    input.skills[0].name_kind = "redacted_alias";
+    input.skills[0].name = "<redacted-1>";
+    input.selection_summary.redactions = 1;
+
+    const plan = planSkillsInspection(input, OPTIONS);
+    const redacted = plan.cards.find(
+      (entry) => entry.address.deck === "skill_snapshots" &&
+        entry.fields.name_kind === "redacted_alias",
+    );
+    expect(redacted?.fields).toMatchObject({
+      name_kind: "redacted_alias",
+      name: "<redacted-1>",
+    });
+    expect(redacted?.claim.src.at(-1)).toContain(
+      ":redacted_alias:%3Credacted-1%3E:",
+    );
+    expect(redacted?.claim.src.at(-1)).not.toContain("<redacted-1>");
   });
 
   test("is deterministic across caller skill ordering", () => {
@@ -81,6 +103,19 @@ describe("skills inspection planner", () => {
       "skills: Proxies are not accepted",
     );
     expect(traps).toBe(0);
+  });
+
+  test("binds the explicit name lane into the minimized selection digest", () => {
+    const reported = validInput().skills[0]!;
+    const redacted = {
+      ...reported,
+      name_kind: "redacted_alias" as const,
+      name: "<redacted-1>",
+    };
+
+    expect(skillsSelectionDigest([redacted])).not.toBe(
+      skillsSelectionDigest([reported]),
+    );
   });
 
   test("gives different selections distinct inspection identities", () => {
@@ -171,19 +206,30 @@ describe("skills inspection planner", () => {
     );
   });
 
+  test("labels the identity-bearing inspector revision as caller supplied and unverified", () => {
+    const plan = planSkillsInspection(validInput(), OPTIONS);
+    expect(plan.cards[0]?.fields).toMatchObject({
+      inspector_revision: "d".repeat(40),
+      inspector_revision_provenance: "caller_supplied_unverified",
+    });
+    expect(plan.limitations.inspector_revision_verification).toBe(
+      "not_performed",
+    );
+  });
+
   test("pins the complete v0.1 identity vector", () => {
     const plan = planSkillsInspection(validInput(), OPTIONS);
     expect(plan.selection_digest).toBe(
-      "sha256:923268cc74d1e4ce1cc1da41f826eeb0fe734492683a3f656a0c4e229487c96f",
+      "sha256:28c3cfc24e30133a4727c5e89242b563915e7d8606d0b0ec1a2dded6bbe7381d",
     );
     expect(plan.cards.map((entry) => entry.address.id)).toEqual([
-      "c8df826f-f471-593a-a8e4-7767723facdc",
-      "d0475fa6-6411-5922-81de-d087f54e17a7",
-      "04f68738-b7da-5192-8718-abd1660907a9",
+      "18de8870-aef5-57fe-b883-ad4db36005fd",
+      "8a36bd48-7dc1-5115-b0df-34517a4f51f8",
+      "20c5cb98-8ea0-5700-9f93-33803a72532a",
     ]);
     expect(plan.relations.map((entry) => entry.id)).toEqual([
-      "6f73aac2-f61a-5446-9854-04bb2b7fbc3e",
-      "e98c28cc-7b13-5079-a855-1776895c0564",
+      "0b874d33-2303-5cf7-a19c-de2336042838",
+      "e815c064-6531-55c2-8250-663180cc884a",
     ]);
   });
 
@@ -192,6 +238,7 @@ describe("skills inspection planner", () => {
       source_report_schema_validation: "not_performed",
       report_digest_verification: "not_performed",
       skill_content_digest_verification: "not_performed",
+      inspector_revision_verification: "not_performed",
       publisher_authentication: "not_performed",
       skill_interpretation: "not_performed",
       safety_evaluation: "not_performed",

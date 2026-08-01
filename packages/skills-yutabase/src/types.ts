@@ -5,6 +5,7 @@ import type {
   INSPECTION_SCHEMA_ID,
   INSPECTION_SCHEMA_VERSION,
   INSPECTOR_NAME,
+  INSPECTOR_REVISION_PROVENANCE,
   PLAN_PROFILE,
   REPORT_DIGEST_SEMANTICS,
   SKILL_CONTENT_DIGEST_SEMANTICS,
@@ -15,8 +16,10 @@ import type {
 
 export type YutabaseDeck = (typeof YUTABASE_DECKS)[number];
 export type YutabaseWord = (typeof YUTABASE_WORDS)[number];
+export type SkillNameKind = "reported" | "redacted_alias";
 
 export interface MinimizedSkillSnapshot {
+  readonly name_kind: SkillNameKind;
   readonly name: string;
   readonly content_digest: string;
   readonly file_count: number;
@@ -38,6 +41,7 @@ export interface SkillsYutabaseInput {
     readonly report_valid: true;
     readonly inspector_name: typeof INSPECTOR_NAME;
     readonly inspector_version: string;
+    /** Caller-supplied identity input; this planner does not resolve or verify it. */
     readonly inspector_revision: string;
     readonly mode: "read-only";
   };
@@ -91,6 +95,7 @@ export interface YutabaseCardFieldMap {
     readonly inspector_name: typeof INSPECTOR_NAME;
     readonly inspector_version: string;
     readonly inspector_revision: string;
+    readonly inspector_revision_provenance: typeof INSPECTOR_REVISION_PROVENANCE;
     readonly inspector_mode: "read-only";
     readonly selected_skill_count: number;
     readonly selected_file_count: number;
@@ -103,6 +108,7 @@ export interface YutabaseCardFieldMap {
   readonly skill_snapshots: {
     readonly project_id: string;
     readonly source_report_digest: string;
+    readonly name_kind: SkillNameKind;
     readonly name: string;
     readonly content_digest: string;
     readonly content_digest_semantics: typeof SKILL_CONTENT_DIGEST_SEMANTICS;
@@ -142,6 +148,7 @@ export interface SkillsYutabasePlan {
     readonly source_report_schema_validation: "not_performed";
     readonly report_digest_verification: "not_performed";
     readonly skill_content_digest_verification: "not_performed";
+    readonly inspector_revision_verification: "not_performed";
     readonly publisher_authentication: "not_performed";
     readonly skill_interpretation: "not_performed";
     readonly safety_evaluation: "not_performed";

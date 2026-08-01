@@ -37,6 +37,36 @@ describe("published input schema", () => {
     expect(validate.errors).toBeNull();
   });
 
+  test("accepts an explicitly classified upstream redacted-name alias", () => {
+    const redacted = structuredClone(validInput()) as any;
+    redacted.skills[0].name_kind = "redacted_alias";
+    redacted.skills[0].name = "<redacted-4096>";
+    redacted.selection_summary.redactions = 4096;
+    expect(validate(redacted)).toBe(true);
+    expect(validate.errors).toBeNull();
+  });
+
+  test("rejects name-kind mismatches and malformed or out-of-range aliases", () => {
+    const unknownKind = structuredClone(validInput()) as any;
+    unknownKind.skills[0].name_kind = "inferred";
+    expect(validate(unknownKind)).toBe(false);
+
+    const reportedAlias = structuredClone(validInput()) as any;
+    reportedAlias.skills[0].name = "<redacted-1>";
+    expect(validate(reportedAlias)).toBe(false);
+
+    const redactedPortable = structuredClone(validInput()) as any;
+    redactedPortable.skills[0].name_kind = "redacted_alias";
+    expect(validate(redactedPortable)).toBe(false);
+
+    for (const alias of ["<redacted-0>", "<redacted-01>", "<redacted-4097>"]) {
+      const malformed = structuredClone(validInput()) as any;
+      malformed.skills[0].name_kind = "redacted_alias";
+      malformed.skills[0].name = alias;
+      expect(validate(malformed)).toBe(false);
+    }
+  });
+
   test("is closed against raw skill content and authority grants", () => {
     const raw = structuredClone(validInput()) as any;
     raw.skills[0].body = "private instructions";
