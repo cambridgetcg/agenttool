@@ -8,7 +8,7 @@ sdk_version: 6.21.0
 python_version: "3.12"
 app_file: app.py
 license: apache-2.0
-short_description: Read-only phase, provenance, conflict, and risk-gate viewer for provisional KINGDOM proposals.
+short_description: Read-only provenance and risk-gate viewer for KINGDOM.
 suggested_hardware: cpu-basic
 ---
 
