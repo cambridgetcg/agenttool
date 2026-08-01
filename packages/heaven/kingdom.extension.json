@@ -1,0 +1,34 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "heaven",
+  "package": "@agenttool/heaven",
+  "version": "0.1.0-dev.0",
+  "status": "public_ready_source",
+  "capabilities": [
+    "heaven:invitation-create",
+    "heaven:invitation-resolve",
+    "heaven:receipt-validate",
+    "heaven:catalog-list"
+  ],
+  "defaults": {
+    "automatic_delivery": false,
+    "default_acceptance": false,
+    "ambient_randomness": false,
+    "identity_input": false,
+    "task_text_input": false,
+    "network": false,
+    "filesystem": false,
+    "persistence": false,
+    "telemetry": false,
+    "economic_effect": false,
+    "task_state_effect": false,
+    "choice_authorship_verified": false,
+    "authority": false
+  },
+  "host_contract": "not_registered",
+  "notes": [
+    "This descriptor is a declaration-only local extension hint, not an installed KINGDOM host contract.",
+    "A HEAVEN receipt may be referenced as an opaque digest but does not establish graph truth, Crown state, rank, qualification, participant identity, consent, choice authorship, or action authority.",
+    "KARMA state, trial scores, wallet state, task completion, and inferred workload must not control HEAVEN frequency, intensity, or catalog access."
+  ]
+}

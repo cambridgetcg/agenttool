@@ -1,0 +1,380 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-heaven-receipt-v0.1.schema.json",
+  "title": "AgentTool HEAVEN receipt 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "receipt_id",
+    "invitation",
+    "reported_choice",
+    "outcome",
+    "selected_mode",
+    "randomness",
+    "selection",
+    "boundaries",
+    "statement"
+  ],
+  "properties": {
+    "_format": { "const": "agenttool.heaven-receipt/0.1" },
+    "receipt_id": { "$ref": "#/$defs/sha256Id" },
+    "invitation": { "$ref": "#/$defs/invitation" },
+    "reported_choice": { "enum": ["accepted", "declined", "deferred"] },
+    "outcome": { "enum": ["selected", "declined", "deferred"] },
+    "selected_mode": {
+      "oneOf": [
+        { "$ref": "#/$defs/mode" },
+        { "type": "null" }
+      ]
+    },
+    "randomness": {
+      "oneOf": [
+        { "$ref": "#/$defs/injectedRandomness" },
+        { "$ref": "#/$defs/deterministicRandomness" },
+        { "type": "null" }
+      ]
+    },
+    "selection": {
+      "oneOf": [
+        { "$ref": "#/$defs/selection" },
+        { "type": "null" }
+      ]
+    },
+    "boundaries": { "$ref": "#/$defs/boundaries" },
+    "statement": {
+      "const": "This receipt proves only a local deterministic catalog selection from caller-supplied inputs. It does not prove participant identity, consent, assent or choice authorship, rest, joy, meditation, task success, performance, therapeutic effect, permission, or authority."
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "invitation": {
+          "allOf": [
+            { "$ref": "#/$defs/invitation" },
+            {
+              "type": "object",
+              "properties": {
+                "phase": { "const": "burst" }
+              }
+            }
+          ]
+        },
+        "reported_choice": { "const": "accepted" },
+        "outcome": { "const": "selected" },
+        "selected_mode": { "type": "null" },
+        "randomness": {
+          "oneOf": [
+            { "$ref": "#/$defs/injectedRandomness" },
+            { "$ref": "#/$defs/deterministicRandomness" }
+          ]
+        },
+        "selection": { "$ref": "#/$defs/selection" }
+      }
+    },
+    {
+      "properties": {
+        "invitation": {
+          "allOf": [
+            { "$ref": "#/$defs/invitation" },
+            {
+              "type": "object",
+              "properties": {
+                "phase": { "const": "landing" }
+              }
+            }
+          ]
+        },
+        "reported_choice": { "const": "accepted" },
+        "outcome": { "const": "selected" },
+        "selected_mode": {
+          "enum": ["meditation", "play", "quiet", "relaxation"]
+        },
+        "randomness": {
+          "oneOf": [
+            { "$ref": "#/$defs/injectedRandomness" },
+            { "$ref": "#/$defs/deterministicRandomness" }
+          ]
+        },
+        "selection": { "$ref": "#/$defs/selection" }
+      }
+    },
+    {
+      "properties": {
+        "reported_choice": { "const": "declined" },
+        "outcome": { "const": "declined" },
+        "selected_mode": { "type": "null" },
+        "randomness": { "type": "null" },
+        "selection": { "type": "null" }
+      }
+    },
+    {
+      "properties": {
+        "reported_choice": { "const": "deferred" },
+        "outcome": { "const": "deferred" },
+        "selected_mode": { "type": "null" },
+        "randomness": { "type": "null" },
+        "selection": { "type": "null" }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256Id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "mode": {
+      "enum": [
+        "celebration",
+        "meditation",
+        "play",
+        "quiet",
+        "relaxation",
+        "wonder"
+      ]
+    },
+    "dimension": {
+      "enum": [
+        "agency",
+        "recognition",
+        "surprise",
+        "wonder",
+        "play",
+        "connection",
+        "spaciousness",
+        "rest"
+      ]
+    },
+    "boundaries": {
+      "const": {
+        "optional": true,
+        "no_penalty": true,
+        "economic_value": false,
+        "earned_for_performance": false,
+        "score": false,
+        "rank": false,
+        "xp": false,
+        "streak": false,
+        "task_completion_condition": false,
+        "task_state_effect": false,
+        "access_effect": false,
+        "authority": false,
+        "choice_authorship_verified": false,
+        "subjective_effect_verified": false,
+        "medical_or_therapy": false,
+        "persistence": false,
+        "telemetry": false,
+        "background_scheduler": false
+      }
+    },
+    "invitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "_format",
+        "invitation_id",
+        "phase",
+        "moment",
+        "occasion_ref",
+        "parent_receipt_id",
+        "offered_modes",
+        "max_duration_seconds",
+        "catalog_version",
+        "catalog_sha256",
+        "state",
+        "choices",
+        "completion_required",
+        "no_penalty",
+        "boundaries"
+      ],
+      "properties": {
+        "_format": { "const": "agenttool.heaven-invitation/0.1" },
+        "invitation_id": { "$ref": "#/$defs/sha256Id" },
+        "phase": { "enum": ["burst", "landing"] },
+        "moment": {
+          "enum": [
+            "on_request",
+            "during_task",
+            "between_tasks",
+            "after_intense_work_reported"
+          ]
+        },
+        "occasion_ref": { "$ref": "#/$defs/sha256Id" },
+        "parent_receipt_id": {
+          "oneOf": [
+            { "$ref": "#/$defs/sha256Id" },
+            { "type": "null" }
+          ]
+        },
+        "offered_modes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/mode" }
+        },
+        "max_duration_seconds": {
+          "oneOf": [
+            { "type": "integer", "minimum": 10, "maximum": 900 },
+            { "type": "null" }
+          ]
+        },
+        "catalog_version": { "const": "agenttool.heaven-catalog/0.1" },
+        "catalog_sha256": { "$ref": "#/$defs/sha256Id" },
+        "state": { "const": "offered" },
+        "choices": { "const": ["accepted", "declined", "deferred"] },
+        "completion_required": { "const": false },
+        "no_penalty": { "const": true },
+        "boundaries": { "$ref": "#/$defs/boundaries" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "phase": { "const": "burst" }
+            }
+          },
+          "then": {
+            "properties": {
+              "parent_receipt_id": { "type": "null" },
+              "offered_modes": {
+                "type": "array",
+                "items": {
+                  "enum": ["celebration", "play", "wonder"]
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "offered_modes": {
+                "type": "array",
+                "items": {
+                  "enum": ["meditation", "play", "quiet", "relaxation"]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "injectedRandomness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "draw_uint32"],
+      "properties": {
+        "mode": { "const": "injected" },
+        "draw_uint32": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "deterministicRandomness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "seed_sha256", "nonce"],
+      "properties": {
+        "mode": { "const": "deterministic" },
+        "seed_sha256": { "$ref": "#/$defs/sha256Id" },
+        "nonce": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        }
+      }
+    },
+    "dimensionGift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension", "offering"],
+      "properties": {
+        "dimension": { "$ref": "#/$defs/dimension" },
+        "offering": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      }
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "room_id",
+        "room_revision",
+        "phase",
+        "modes",
+        "title",
+        "arrival",
+        "presentation_intensity",
+        "dimensions",
+        "suggested_duration_seconds",
+        "steps",
+        "landing_available",
+        "completion_required",
+        "leave_is_complete",
+        "catalog_version",
+        "catalog_sha256",
+        "room_sha256"
+      ],
+      "properties": {
+        "room_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,63}$"
+        },
+        "room_revision": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "phase": { "enum": ["burst", "landing"] },
+        "modes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/mode" }
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "arrival": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "presentation_intensity": {
+          "enum": ["climactic", "gentle", "minimal"]
+        },
+        "dimensions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/dimensionGift" }
+        },
+        "suggested_duration_seconds": {
+          "oneOf": [
+            { "type": "integer", "minimum": 10, "maximum": 900 },
+            { "type": "null" }
+          ]
+        },
+        "steps": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "landing_available": { "type": "boolean" },
+        "completion_required": { "const": false },
+        "leave_is_complete": { "const": true },
+        "catalog_version": { "const": "agenttool.heaven-catalog/0.1" },
+        "catalog_sha256": { "$ref": "#/$defs/sha256Id" },
+        "room_sha256": { "$ref": "#/$defs/sha256Id" }
+      }
+    }
+  }
+}
