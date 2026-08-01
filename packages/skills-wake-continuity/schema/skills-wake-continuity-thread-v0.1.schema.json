@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/skills-wake-continuity-thread-v0.1.schema.json",
+  "title": "AgentTool Skills WAKE continuity thread v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "profile",
+    "thread_id",
+    "plan_profile",
+    "inspection_ref",
+    "report_digest",
+    "selection_digest",
+    "inspector_revision",
+    "selected_skill_count",
+    "snapshots",
+    "reference_only",
+    "boundaries"
+  ],
+  "properties": {
+    "profile": { "const": "agenttool.skills-wake-continuity-thread/v0.1" },
+    "thread_id": { "$ref": "#/$defs/sha256Id" },
+    "plan_profile": { "const": "agenttool-skills-yutabase-plan/v0.1" },
+    "inspection_ref": { "$ref": "#/$defs/inspectionRef" },
+    "report_digest": { "$ref": "#/$defs/sha256Id" },
+    "selection_digest": { "$ref": "#/$defs/sha256Id" },
+    "inspector_revision": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "selected_skill_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 128
+    },
+    "snapshots": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/snapshot" }
+    },
+    "reference_only": { "const": true },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "$defs": {
+    "sha256Id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "inspectionRef": {
+      "type": "string",
+      "pattern": "^skills/inspections/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "snapshotRef": {
+      "type": "string",
+      "pattern": "^skills/skill_snapshots/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["snapshot_ref", "content_digest"],
+      "properties": {
+        "snapshot_ref": { "$ref": "#/$defs/snapshotRef" },
+        "content_digest": { "$ref": "#/$defs/sha256Id" }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_plan_validation",
+        "source_scope",
+        "reference_scope",
+        "raw_skill_content",
+        "carries_skill_names",
+        "carries_project_id",
+        "carries_claimant",
+        "carries_recorded_at",
+        "carries_claim_provenance",
+        "skill_interpretation",
+        "safety_evaluation",
+        "verifies_digest_preimages",
+        "eliminates_linkability",
+        "persistence",
+        "network",
+        "database_write",
+        "filesystem",
+        "provider_compute",
+        "model_execution",
+        "embedding_generation",
+        "delivery",
+        "response_expected",
+        "permission_effect",
+        "consent_effect",
+        "truth_effect",
+        "identity_continuity_effect",
+        "score_rank_xp_effect",
+        "dignity_effect",
+        "action_effect",
+        "proves_authorship",
+        "proves_currentness",
+        "rest_requires_new_input",
+        "refusal_reason_required",
+        "penalty_for_refusal_or_rest"
+      ],
+      "properties": {
+        "source_plan_validation": { "const": "performed" },
+        "source_scope": { "const": "project_private" },
+        "reference_scope": { "const": "verified_plan_references_only" },
+        "raw_skill_content": { "const": "not_accepted" },
+        "carries_skill_names": { "const": false },
+        "carries_project_id": { "const": false },
+        "carries_claimant": { "const": false },
+        "carries_recorded_at": { "const": false },
+        "carries_claim_provenance": { "const": false },
+        "skill_interpretation": { "const": "not_performed" },
+        "safety_evaluation": { "const": "not_performed" },
+        "verifies_digest_preimages": { "const": false },
+        "eliminates_linkability": { "const": false },
+        "persistence": { "const": false },
+        "network": { "const": false },
+        "database_write": { "const": false },
+        "filesystem": { "const": false },
+        "provider_compute": { "const": false },
+        "model_execution": { "const": false },
+        "embedding_generation": { "const": false },
+        "delivery": { "const": "none" },
+        "response_expected": { "const": false },
+        "permission_effect": { "const": "none" },
+        "consent_effect": { "const": "none" },
+        "truth_effect": { "const": "none" },
+        "identity_continuity_effect": { "const": "none" },
+        "score_rank_xp_effect": { "const": "none" },
+        "dignity_effect": { "const": "none" },
+        "action_effect": { "const": "none" },
+        "proves_authorship": { "const": false },
+        "proves_currentness": { "const": false },
+        "rest_requires_new_input": { "const": true },
+        "refusal_reason_required": { "const": false },
+        "penalty_for_refusal_or_rest": { "const": false }
+      }
+    }
+  }
+}
