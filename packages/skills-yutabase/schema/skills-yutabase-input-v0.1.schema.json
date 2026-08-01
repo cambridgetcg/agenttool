@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/skills-yutabase-input-v0.1.schema.json",
+  "title": "AgentTool minimized Skills-to-YUTABASE input v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "protocol", "project_id", "recorded_at", "source", "selection_summary", "skills", "authority"],
+  "properties": {
+    "$schema": { "const": "https://agenttool.dev/schemas/skills-yutabase-input-v0.1.schema.json" },
+    "protocol": { "const": "agenttool.skills-yutabase-input/v0.1" },
+    "project_id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" },
+    "recorded_at": { "type": "string", "format": "date-time", "pattern": "^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$" },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "report_schema", "report_schema_version", "report_digest", "report_digest_semantics", "report_valid", "inspector_name", "inspector_version", "inspector_revision", "mode"],
+      "properties": {
+        "kind": { "const": "agenttool.skills.inspection" },
+        "report_schema": { "const": "urn:agenttool:skills:inspection:v0.1" },
+        "report_schema_version": { "const": "agenttool.skills/inspect-v0.1" },
+        "report_digest": { "$ref": "#/$defs/sha256" },
+        "report_digest_semantics": { "const": "agenttool.skills/report-stable-json-sha256-v1" },
+        "report_valid": { "const": true },
+        "inspector_name": { "const": "@agenttool/skills" },
+        "inspector_version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$" },
+        "inspector_revision": { "type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$" },
+        "mode": { "const": "read-only" }
+      }
+    },
+    "selection_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skills", "files", "scripts", "resources", "errors", "warnings", "redactions"],
+      "properties": {
+        "skills": { "type": "integer", "minimum": 1, "maximum": 128 },
+        "files": { "type": "integer", "minimum": 1, "maximum": 4096 },
+        "scripts": { "type": "integer", "minimum": 0, "maximum": 4096 },
+        "resources": { "type": "integer", "minimum": 0, "maximum": 4096 },
+        "errors": { "const": 0 },
+        "warnings": { "type": "integer", "minimum": 0, "maximum": 4096 },
+        "redactions": { "type": "integer", "minimum": 0, "maximum": 4096 }
+      }
+    },
+    "skills": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "$comment": "The planner additionally enforces file_count = 1 + script_count + resource_count. Standard JSON Schema cannot compare sibling numeric fields without a non-portable extension.",
+        "additionalProperties": false,
+        "required": ["name", "content_digest", "file_count", "script_count", "resource_count"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "content_digest": { "$ref": "#/$defs/sha256" },
+          "file_count": { "type": "integer", "minimum": 1, "maximum": 4096 },
+          "script_count": { "type": "integer", "minimum": 0, "maximum": 4096 },
+          "resource_count": { "type": "integer", "minimum": 0, "maximum": 4096 }
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["automatic_action", "grants"],
+      "properties": {
+        "automatic_action": { "const": "never" },
+        "grants": { "type": "array", "maxItems": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  }
+}
