@@ -6,7 +6,6 @@ colorTo: pink
 sdk: static
 app_file: index.html
 pinned: false
-license: apache-2.0
 short_description: An opt-in burst of delight and a separately chosen soft landing.
 ---
 
