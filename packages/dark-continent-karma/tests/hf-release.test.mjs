@@ -119,6 +119,8 @@ test("Space bundles and verifies only bounded read-only catalog files", async ()
   const app = await readFile(new URL("app.py", spaceRoot), "utf8");
   assert.ok(app.includes('ROOT / "assets/hero-web.webp"'));
   assert.equal(app.includes('ROOT / "assets/hero.png"'), false);
+  const readme = await readFile(new URL("README.md", spaceRoot), "utf8");
+  assert.match(readme, /^python_version: "3\.12"$/m);
   for (const forbidden of ["os.environ", "requests", "httpx", "subprocess", "pickle", "write_text", "write_bytes", "open("]) {
     assert.equal(app.includes(forbidden), false, `Space app contained ${forbidden}`);
   }
