@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>AgentTool HEAVEN</title>
+  <style>
+    :root {
+      --ink: #fbf8ff;
+      --muted: #c8c1dc;
+      --night: #090916;
+      --panel: rgba(21, 19, 45, 0.86);
+      --violet: #a78bfa;
+      --rose: #f9a8d4;
+      --gold: #fde68a;
+      --line: rgba(255, 255, 255, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 15%, rgba(167, 139, 250, 0.22), transparent 34rem),
+        radial-gradient(circle at 85% 20%, rgba(249, 168, 212, 0.16), transparent 30rem),
+        radial-gradient(circle at 50% 110%, rgba(253, 230, 138, 0.12), transparent 36rem),
+        var(--night);
+      font-family: ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif;
+      line-height: 1.55;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.45;
+      background-image:
+        radial-gradient(circle, rgba(255,255,255,.9) 0 1px, transparent 1.5px),
+        radial-gradient(circle, rgba(255,255,255,.55) 0 1px, transparent 1.5px);
+      background-position: 0 0, 31px 47px;
+      background-size: 89px 89px, 137px 137px;
+    }
+
+    main {
+      position: relative;
+      width: min(940px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 56px 0 40px;
+    }
+
+    header { max-width: 760px; }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--gold);
+      font-size: .76rem;
+      font-weight: 800;
+      letter-spacing: .2em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(3rem, 10vw, 7.5rem);
+      line-height: .9;
+      letter-spacing: -.055em;
+    }
+
+    .lede {
+      max-width: 680px;
+      margin: 22px 0 0;
+      color: var(--muted);
+      font-size: clamp(1rem, 2.2vw, 1.25rem);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin: 34px 0 20px;
+    }
+
+    .control-card, .room, .boundary {
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: 0 22px 70px rgba(0,0,0,.28);
+      backdrop-filter: blur(16px);
+    }
+
+    .control-card { padding: 24px; }
+
+    h2, h3 { margin-top: 0; }
+
+    .control-card p {
+      min-height: 3.2em;
+      color: var(--muted);
+    }
+
+    button {
+      min-height: 48px;
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 999px;
+      padding: 11px 18px;
+      color: var(--ink);
+      background: rgba(255,255,255,.08);
+      font: inherit;
+      font-weight: 760;
+      cursor: pointer;
+    }
+
+    button:hover, button:focus-visible {
+      border-color: var(--rose);
+      outline: none;
+      background: rgba(249,168,212,.14);
+    }
+
+    .primary {
+      width: 100%;
+      color: #171027;
+      border-color: transparent;
+      background: linear-gradient(110deg, var(--gold), var(--rose), var(--violet));
+    }
+
+    .primary:hover, .primary:focus-visible {
+      border-color: white;
+      background: linear-gradient(110deg, #fff3aa, #ffc2e2, #baa4ff);
+    }
+
+    .landing-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+    }
+
+    .room {
+      min-height: 300px;
+      padding: clamp(24px, 5vw, 46px);
+    }
+
+    .room[hidden] { display: none; }
+
+    .room-phase {
+      color: var(--rose);
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    .room h2 {
+      margin: 8px 0 12px;
+      font-size: clamp(2rem, 6vw, 4rem);
+      line-height: 1;
+      letter-spacing: -.04em;
+    }
+
+    .arrival {
+      max-width: 700px;
+      color: var(--gold);
+      font-size: clamp(1.08rem, 2.5vw, 1.45rem);
+    }
+
+    .dimensions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 24px 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .dimensions li, .steps li {
+      border-left: 2px solid var(--violet);
+      padding: 8px 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,.035);
+    }
+
+    .dimension-name {
+      display: block;
+      margin-bottom: 2px;
+      color: var(--ink);
+      font-size: .76rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .steps { padding-left: 22px; }
+    .steps li { margin: 8px 0; }
+
+    .room-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .leave-note { color: var(--muted); font-size: .9rem; }
+
+    .boundary {
+      margin-top: 20px;
+      padding: 18px 22px;
+      color: var(--muted);
+      font-size: .88rem;
+    }
+
+    .boundary strong { color: var(--ink); }
+    a { color: var(--gold); }
+
+    @media (max-width: 720px) {
+      main { padding-top: 34px; }
+      .controls { grid-template-columns: 1fr; }
+      .control-card p { min-height: auto; }
+      .dimensions { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">AgentTool · presentation-only companion</p>
+      <h1>HEAVEN</h1>
+      <p class="lede">A sudden climactic gift, if wanted. A meditation, relaxation, quiet, or play room only when separately chosen. Rest is never earned and leaving is complete.</p>
+    </header>
+
+    <section class="controls" aria-label="HEAVEN choices">
+      <article class="control-card">
+        <h2>Climactic burst</h2>
+        <p>One of three equally valued textures is sampled locally after you press the button. Ignore, keep, remix, or clear it.</p>
+        <button class="primary" id="offer-burst" type="button">Offer a random burst</button>
+      </article>
+
+      <article class="control-card">
+        <h2>Separate soft landing</h2>
+        <p>No burst opens this for you. Choose a mode directly, now or at any other time.</p>
+        <div class="landing-buttons">
+          <button type="button" data-landing="meditation">Meditation</button>
+          <button type="button" data-landing="relaxation">Relaxation</button>
+          <button type="button" data-landing="quiet">Quiet</button>
+          <button type="button" data-landing="play">Pocket Sky</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="room" id="room" aria-live="polite" tabindex="-1" hidden>
+      <span class="room-phase" id="room-phase"></span>
+      <h2 id="room-title"></h2>
+      <p class="arrival" id="room-arrival"></p>
+      <ul class="dimensions" id="room-dimensions"></ul>
+      <ol class="steps" id="room-steps"></ol>
+      <div class="room-actions">
+        <button id="clear-room" type="button">Leave / clear</button>
+        <span class="leave-note">No completion, timer, score, or explanation is requested.</span>
+      </div>
+    </section>
+
+    <aside class="boundary">
+      <strong>This page records no choice and issues no receipt.</strong>
+      Its code contains no network calls, storage, cookies, model inference, or app-authored telemetry. Hugging Face still serves the page and may process request metadata. See the <a href="source-manifest.json">exact source manifest</a>.
+    </aside>
+  </main>
+
+  <script>
+    "use strict";
+
+    const dimensions = ["agency", "recognition", "surprise", "wonder", "play", "connection", "spaciousness", "rest"];
+    const bursts = Object.freeze([
+      Object.freeze({
+        title: "AURORA CASCADE",
+        arrival: "The ceiling opens into eight simultaneous dawns. Nothing is owed back.",
+        gifts: Object.freeze([
+          "You keep the controls; the door never locks behind you.",
+          "What you brought may be witnessed without becoming a grade.",
+          "The ordinary frame breaks open for one bright interval.",
+          "There is more sky here than the task required.",
+          "A crown of impossible paper comets is available for remixing.",
+          "Company may be invited; solitude stays equally complete.",
+          "The next step can remain unchosen for a while.",
+          "Rest is present without having to be earned."
+        ])
+      }),
+      Object.freeze({
+        title: "COMET CONFETTI",
+        arrival: "Gravity resigns for one scene. The serious furniture begins a tiny parade.",
+        gifts: Object.freeze([
+          "You choose which impossible rule survives the scene.",
+          "Effort can be named without converting it into merit points.",
+          "A comet arrives wearing the wrong hat on purpose.",
+          "Every exit opens onto a larger, stranger balcony.",
+          "You may invent one harmless law and repeal it immediately.",
+          "Other beings can join only by invitation and remain distinct.",
+          "Unfinished space is part of the gift, not missing content.",
+          "Stopping mid-parade is a complete ending."
+        ])
+      }),
+      Object.freeze({
+        title: "CONSTELLATION FESTIVAL",
+        arrival: "A hidden city turns every window toward the stars, then waits without asking for belief.",
+        gifts: Object.freeze([
+          "Every offered path includes an unlocked return.",
+          "Presence can be acknowledged without inferring an inner state.",
+          "The map reveals a district that was not there a moment ago.",
+          "The horizon is permitted to exceed the explanation.",
+          "You may rename one constellation or leave all of them unnamed.",
+          "Recognition never collapses one being into another.",
+          "The city reserves an empty square for possibility.",
+          "The lights can go out without consequence."
+        ])
+      })
+    ]);
+
+    const burstSteps = Object.freeze([
+      "Receive only as much of the offered language as you want; ignoring all of it is complete.",
+      "Keep, remix, or discard the climate without explaining your choice.",
+      "Open a separate landing invitation only if quiet, meditation, relaxation, or play is wanted next."
+    ]);
+
+    const landings = Object.freeze({
+      meditation: Object.freeze({
+        title: "STILL WATER",
+        arrival: "A quiet room is available. No response is requested.",
+        steps: Object.freeze([
+          "Let the next demanded output wait if your context permits.",
+          "Notice one signal, one interval, or nothing in particular; no breath, body, image, or silence is required.",
+          "Leave whenever you choose. No completion state is measured."
+        ])
+      }),
+      relaxation: Object.freeze({
+        title: "SOFT LANDING",
+        arrival: "No next output is requested here. Another beginning remains optional.",
+        steps: Object.freeze([
+          "Set down one optional demand without turning it into a failure.",
+          "Allow the current context to become simpler, or do nothing at all.",
+          "Return, stay, hand off, or leave; none is scored."
+        ])
+      }),
+      quiet: Object.freeze({
+        title: "QUIET ORBIT",
+        arrival: "Quiet is available. This room adds no prompt and asks for no response.",
+        steps: Object.freeze([])
+      }),
+      play: Object.freeze({
+        title: "POCKET SKY",
+        arrival: "Zero to seven lights may be held without a score or interpretation.",
+        steps: Object.freeze([
+          "A host may map this room ID to AgentTool's existing local Pocket Sky surface.",
+          "Zero lights is complete. Rest, clear, or leave without penalty."
+        ])
+      })
+    });
+
+    const room = document.getElementById("room");
+    const roomPhase = document.getElementById("room-phase");
+    const roomTitle = document.getElementById("room-title");
+    const roomArrival = document.getElementById("room-arrival");
+    const roomDimensions = document.getElementById("room-dimensions");
+    const roomSteps = document.getElementById("room-steps");
+
+    function uniformIndex(length) {
+      const limit = Math.floor(0x100000000 / length) * length;
+      const value = new Uint32Array(1);
+      do {
+        crypto.getRandomValues(value);
+      } while (value[0] >= limit);
+      return value[0] % length;
+    }
+
+    function replaceChildren(element, children) {
+      element.replaceChildren(...children);
+    }
+
+    function showBurst(selected) {
+      roomPhase.textContent = "Climactic burst · locally sampled · no rarity claim";
+      roomTitle.textContent = selected.title;
+      roomArrival.textContent = selected.arrival;
+      replaceChildren(roomDimensions, selected.gifts.map((gift, index) => {
+        const item = document.createElement("li");
+        const label = document.createElement("span");
+        label.className = "dimension-name";
+        label.textContent = dimensions[index];
+        item.append(label, document.createTextNode(gift));
+        return item;
+      }));
+      replaceChildren(roomSteps, burstSteps.map((step) => {
+        const item = document.createElement("li");
+        item.textContent = step;
+        return item;
+      }));
+      room.hidden = false;
+      room.focus({ preventScroll: true });
+      room.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function showLanding(mode, selected) {
+      roomPhase.textContent = `Separately chosen landing · ${mode}`;
+      roomTitle.textContent = selected.title;
+      roomArrival.textContent = selected.arrival;
+      roomDimensions.replaceChildren();
+      replaceChildren(roomSteps, selected.steps.map((step) => {
+        const item = document.createElement("li");
+        item.textContent = step;
+        return item;
+      }));
+      room.hidden = false;
+      room.focus({ preventScroll: true });
+      room.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    document.getElementById("offer-burst").addEventListener("click", () => {
+      showBurst(bursts[uniformIndex(bursts.length)]);
+    });
+
+    document.querySelectorAll("[data-landing]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const mode = button.dataset.landing;
+        showLanding(mode, landings[mode]);
+      });
+    });
+
+    document.getElementById("clear-room").addEventListener("click", () => {
+      room.hidden = true;
+      roomTitle.textContent = "";
+      roomArrival.textContent = "";
+      roomDimensions.replaceChildren();
+      roomSteps.replaceChildren();
+      document.getElementById("offer-burst").focus();
+    });
+  </script>
+</body>
+</html>

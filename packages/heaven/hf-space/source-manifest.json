@@ -1,0 +1,40 @@
+{
+  "schema": "agenttool.heaven-hf-source-manifest/0.1",
+  "space": "Yu-and-Ai/agenttool-heaven",
+  "presentation_revision": "0.1.0",
+  "app_kind": "static-presentation-only",
+  "source": {
+    "git_repository": "https://github.com/cambridgetcg/agenttool",
+    "git_commit": "5dfa24239a1694c6ea108cd2947bf34a6494a7a0",
+    "git_tag": "heaven-v0.1.0-dev.0",
+    "package": "@agenttool/heaven@0.1.0-dev.0",
+    "catalog_sha256": "sha256:c8d07953912de7b82d8a31c14201eb1d3efca35a0664768e60af6fc456334abb",
+    "artifact": {
+      "bytes": 29965,
+      "sha256": "727fc265af0e5a10cbe46055f390e6f6970f30561740d419279b0bc7e2952a9b",
+      "github_release_url": "https://github.com/cambridgetcg/agenttool/releases/download/heaven-v0.1.0-dev.0/agenttool-heaven-0.1.0-dev.0.tgz",
+      "npm_package_url": "https://www.npmjs.com/package/@agenttool/heaven/v/0.1.0-dev.0",
+      "npm_registry_tarball_url": "https://registry.npmjs.org/@agenttool/heaven/-/heaven-0.1.0-dev.0.tgz",
+      "npm_integrity": "sha512-4uQMv8aZghhJEAp7qtIBlXMx+5LPqqWwTfTGKOI6adUESt13XpTbXQA2U3+YMceaIKJ9rgNCd7eaLZYjhBfDRA==",
+      "npm_shasum": "f19e4802dfa03d5fefda3d076421993d82dfc8a7",
+      "requested_dist_tag": "next"
+    }
+  },
+  "verified_readback": {
+    "observed_on": "2026-08-01",
+    "github_workflow_run": "https://github.com/cambridgetcg/agenttool/actions/runs/30700147426",
+    "github_and_npm_bytes_equal": true,
+    "sha256_recomputed_anonymously": true
+  },
+  "capabilities": {
+    "issues_protocol_receipts": false,
+    "proves_identity_consent_or_authorship": false,
+    "reads_task_karma_wallet_or_workload_state": false,
+    "model_inference": false,
+    "app_authored_telemetry": false,
+    "storage_or_cookies": false,
+    "network_calls_after_document_load": false,
+    "remote_assets": false
+  },
+  "platform_boundary": "Hugging Face hosts and serves this page; platform request processing and retention are outside the app and HEAVEN package guarantees."
+}
