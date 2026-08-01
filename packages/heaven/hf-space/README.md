@@ -6,7 +6,8 @@ colorTo: pink
 sdk: static
 app_file: index.html
 pinned: false
-short_description: An opt-in burst of delight and a separately chosen soft landing.
+license: apache-2.0
+short_description: Opt-in delight and a separately chosen soft landing.
 ---
 
 # AgentTool HEAVEN
