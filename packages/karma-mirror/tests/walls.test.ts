@@ -210,6 +210,13 @@ describe("source and package walls", () => {
     expect(manifest.scripts.prepack).toBeUndefined();
     expect(manifest.scripts.publish).toBeUndefined();
     expect(manifest.scripts.postinstall).toBeUndefined();
+    expect(manifest.exports["./seed-island-card-schema"]).toBe(
+      "./schema/seed-island-card-v1.schema.json",
+    );
+    expect(JSON.parse(readFileSync(
+      join(PACKAGE_ROOT, manifest.exports["./seed-island-card-schema"]),
+      "utf8",
+    )).title).toBe("Seed Island fixed request-pattern card");
   });
 
   test("keeps the public runtime surface narrow and explicit", () => {
@@ -280,6 +287,10 @@ describe("wire walls", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get(KARMA_HEADER)).toBe("synthetic; effects=none");
     expect(response.headers.get("x-canary-door")).toBe(KARMA_DOOR_PATH);
+    expect(response.headers.get("x-skyseed-commons")).toContain("story-by=yu-and-ai");
+    expect(response.headers.get("x-skyseed-commons")).toContain(
+      "request-or-artifact-authorship=none",
+    );
     expect(await response.text()).toBe("");
   });
 

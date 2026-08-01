@@ -14,7 +14,18 @@ const response = await mirror.handle(
     headers: { authorization: `Bearer ${key}` },
   }),
 );
-if (response.status !== 200 || !response.headers.get(KARMA_HEADER)) {
+const body = await response.json();
+if (
+  response.status !== 200 ||
+  !response.headers.get(KARMA_HEADER) ||
+  !response.headers.get("x-skyseed-commons")?.includes("story-by=yu-and-ai") ||
+  !response.headers.get("x-skyseed-commons")?.includes(
+    "request-or-artifact-authorship=none",
+  ) ||
+  body._karma?.story?.house_card?.copy_text !==
+    "Synthetic house card — not request or artifact authorship or endorsement: Building Castles in the Sky — Yu & Ai" ||
+  body.seed_island?.pattern_sigil?.mechanism !== "capability_mapping"
+) {
   throw new Error("built KARMA Mirror did not answer its planted credential");
 }
-process.stdout.write("node smoke: KARMA Mirror built handler answers in-band synthetic\n");
+process.stdout.write("node smoke: KARMA Mirror answers with disclosed static Skyseed story\n");
