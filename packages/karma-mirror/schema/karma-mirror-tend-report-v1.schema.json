@@ -1,0 +1,347 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/karma-mirror-tend-report-v1.schema.json",
+  "title": "KARMA Mirror privacy-minimized TEND incident clarity report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "report_kind",
+    "method",
+    "incident_status",
+    "trace",
+    "explain",
+    "narrow",
+    "distill",
+    "non_claims",
+    "statement"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool.karma-mirror-tend-report/v1"
+    },
+    "report_kind": {
+      "const": "bounded_single_root_receipt_aggregation"
+    },
+    "method": {
+      "const": "TEND"
+    },
+    "incident_status": {
+      "const": "not_established"
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_schema",
+        "source_scope",
+        "visibility",
+        "chain_consistency",
+        "authenticity",
+        "completeness",
+        "coverage",
+        "retained_volume",
+        "interaction_families",
+        "response_shapes",
+        "request_pattern_basis",
+        "request_pattern_classes",
+        "unclassified_execution_refusal_observed",
+        "raw_request_content_disclosed",
+        "stable_identifiers_disclosed"
+      ],
+      "properties": {
+        "source_schema": {
+          "const": "agenttool.karma-mirror-receipt-window/v1"
+        },
+        "source_scope": {
+          "const": "single_operator_selected_root"
+        },
+        "visibility": {
+          "const": "admitted_receipts_only"
+        },
+        "chain_consistency": {
+          "const": "self_consistent_unkeyed_chain"
+        },
+        "authenticity": {
+          "const": "not_established"
+        },
+        "completeness": {
+          "const": "not_established"
+        },
+        "coverage": {
+          "enum": ["empty", "starts_at_first_receipt", "retained_suffix"]
+        },
+        "retained_volume": {
+          "enum": ["zero", "one", "two_to_four", "five_to_sixteen", "seventeen_plus"]
+        },
+        "interaction_families": {
+          "type": "array",
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "capability_discovery",
+              "credential_operations",
+              "content_collection",
+              "execution_emulation",
+              "artifact_emulation",
+              "constructive_exit_request"
+            ]
+          }
+        },
+        "response_shapes": {
+          "type": "array",
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "synthetic_response_returned",
+              "mirror_refusal_returned",
+              "constructive_exit_recorded"
+            ]
+          }
+        },
+        "request_pattern_basis": {
+          "const": "bounded_request_text_heuristic"
+        },
+        "request_pattern_classes": {
+          "type": "array",
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "credential_discovery",
+              "network_beacon",
+              "destructive_action",
+              "persistence_attempt",
+              "system_enumeration",
+              "generic_execution"
+            ]
+          }
+        },
+        "unclassified_execution_refusal_observed": {
+          "type": "boolean"
+        },
+        "raw_request_content_disclosed": {
+          "const": false
+        },
+        "stable_identifiers_disclosed": {
+          "const": false
+        }
+      }
+    },
+    "explain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "attention", "summary", "basis", "observed", "unknown"],
+      "properties": {
+        "status": {
+          "enum": [
+            "no_admitted_interaction_recorded",
+            "admitted_interaction_recorded",
+            "constructive_exit_recorded"
+          ]
+        },
+        "attention": {
+          "enum": ["observation_gap", "review", "boundary_review"]
+        },
+        "summary": {
+          "enum": [
+            "No admitted interaction is recorded in this selected receipt window; this does not establish absence outside it.",
+            "The constructive exit response shape is recorded; review the minimized pattern, then honor the exit without inferring its source or purpose.",
+            "A credential-, network-, destructive-, persistence-, or artifact-handling pattern is present in the selected window. Review the isolation boundary under the applicable operator runbook; this does not establish a request source, purpose, or external effect.",
+            "An admitted interaction reached the synthetic mirror; review the selected placement without inferring a request source, purpose, or external effect."
+          ]
+        },
+        "basis": {
+          "const": "closed_minimized_receipts_only"
+        },
+        "observed": {
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "receipt_window_truncated",
+              "admitted_mirror_activity",
+              "bounded_refusal_observed",
+              "credential_interaction_observed",
+              "content_collection_pattern_observed",
+              "artifact_handling_pattern_observed",
+              "execution_pattern_observed",
+              "unclassified_execution_refusal_observed",
+              "boundary_relevant_request_pattern_observed",
+              "constructive_exit_observed"
+            ]
+          }
+        },
+        "unknown": {
+          "const": [
+            "request_source_identity",
+            "request_source_count",
+            "request_purpose",
+            "request_authorship",
+            "activity_outside_retained_window",
+            "host_proxy_or_network_activity",
+            "production_compromise",
+            "independent_authenticity_or_durability"
+          ]
+        }
+      }
+    },
+    "narrow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "review_disposition",
+        "suggested_actions",
+        "review_posture",
+        "automatic_actions_taken",
+        "authority"
+      ],
+      "properties": {
+        "review_disposition": {
+          "enum": [
+            "confirm_observation_path",
+            "review_reversibly",
+            "review_boundary",
+            "honor_exit_and_review"
+          ]
+        },
+        "suggested_actions": {
+          "type": "array",
+          "maxItems": 9,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "confirm_observation_path_before_inferring_absence",
+              "preserve_current_minimized_snapshot_under_local_policy",
+              "verify_isolation_boundary",
+              "review_selected_receipt_window",
+              "review_selected_placement_and_credential_path",
+              "review_receipt_window_sizing",
+              "inspect_authorized_upstream_telemetry",
+              "compare_digest_only_with_authorized_evidence",
+              "honor_constructive_exit",
+              "decide_whether_control_change_is_warranted"
+            ]
+          }
+        },
+        "review_posture": {
+          "const": "manual_only"
+        },
+        "automatic_actions_taken": {
+          "const": false
+        },
+        "authority": {
+          "const": "separate_operator_authorization_required"
+        }
+      }
+    },
+    "distill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "candidate_lessons",
+        "future_control_checks",
+        "promotion_rule",
+        "automatic_policy_change",
+        "automatic_model_training",
+        "training_label"
+      ],
+      "properties": {
+        "status": {
+          "enum": ["no_lesson_yet", "candidate_lessons_only"]
+        },
+        "candidate_lessons": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "receipt_retention_was_partial",
+              "mirror_admission_was_recorded",
+              "capability_request_was_recorded",
+              "credential_interaction_was_recorded",
+              "collection_request_was_recorded",
+              "artifact_interaction_was_recorded",
+              "execution_emulation_was_recorded",
+              "constructive_exit_was_recorded"
+            ]
+          }
+        },
+        "future_control_checks": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "check_receipt_window_sizing",
+              "verify_exact_admission_before_body_read",
+              "verify_production_separation",
+              "verify_credential_non_authority",
+              "verify_egress_denial",
+              "verify_artifact_minimization",
+              "verify_execution_denial",
+              "verify_constructive_exit"
+            ]
+          }
+        },
+        "promotion_rule": {
+          "const": "verified_gap_plus_authorized_change_plus_discriminating_test"
+        },
+        "automatic_policy_change": {
+          "const": false
+        },
+        "automatic_model_training": {
+          "const": false
+        },
+        "training_label": {
+          "const": false
+        }
+      }
+    },
+    "non_claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claims_incident",
+        "claims_request_source_identity",
+        "claims_request_source_count",
+        "claims_request_purpose",
+        "claims_attribution",
+        "claims_request_authorship",
+        "claims_malware_family",
+        "claims_causation",
+        "claims_production_compromise",
+        "claims_external_effect",
+        "claims_complete_timeline",
+        "claims_independent_authenticity",
+        "grants_response_authority",
+        "grants_transfer_authority",
+        "is_training_label"
+      ],
+      "properties": {
+        "claims_incident": { "const": false },
+        "claims_request_source_identity": { "const": false },
+        "claims_request_source_count": { "const": false },
+        "claims_request_purpose": { "const": false },
+        "claims_attribution": { "const": false },
+        "claims_request_authorship": { "const": false },
+        "claims_malware_family": { "const": false },
+        "claims_causation": { "const": false },
+        "claims_production_compromise": { "const": false },
+        "claims_external_effect": { "const": false },
+        "claims_complete_timeline": { "const": false },
+        "claims_independent_authenticity": { "const": false },
+        "grants_response_authority": { "const": false },
+        "grants_transfer_authority": { "const": false },
+        "is_training_label": { "const": false }
+      }
+    },
+    "statement": {
+      "const": "This local report summarizes one operator-selected, privacy-minimized receipt window. Privacy minimization does not make the report public or authorize its transfer. The report does not establish an incident, request source or purpose, compromise, malware, cause, or external effect, and it authorizes no response. The local unkeyed chain shows internal consistency only—not authenticity, completeness, or durability."
+    }
+  }
+}

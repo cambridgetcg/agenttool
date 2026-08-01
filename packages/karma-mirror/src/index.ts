@@ -11,8 +11,12 @@ export {
 export {
   MAX_ROOT_CREDENTIALS,
   KarmaMirror,
-  verifyReceiptSnapshot,
 } from "./engine.js";
+export { verifyReceiptSnapshot } from "./receipts.js";
+export {
+  KARMA_TEND_REPORT_SCHEMA,
+  buildKarmaTendReport,
+} from "./tend.js";
 export {
   SCRAPE_LINKS_PER_PAGE,
   SCRAPE_PAGE_COUNT,
@@ -40,3 +44,19 @@ export type {
   MirrorRoom,
   ScrapeRequest,
 } from "./types.js";
+export type {
+  BuildKarmaTendReportInput,
+  KarmaTendReport,
+  TendAction,
+  TendAttention,
+  TendCandidateLesson,
+  TendControlCheck,
+  TendCoverage,
+  TendReviewDisposition,
+  TendInteractionFamily,
+  TendObservation,
+  TendResponseShape,
+  TendRetainedVolume,
+  TendStatus,
+  TendUnknown,
+} from "./tend.js";

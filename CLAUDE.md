@@ -91,7 +91,11 @@ bounded per-root window of operator-authored placement plus sequence/time/hash-c
 metadata, closed enums, and optional artifact digests, discloses the mirror in
 headers and every JSON body, includes a fixed non-attributing Skyseed house card
 plus shared request-pattern cards with no dynamic identifiers, and includes a
-Door Back plus constructive exit. It has no
+Door Back plus constructive exit. Its operator-only TEND projection strictly
+validates one receipt window and removes placement, time, sequence, exact count,
+hash, and digest before emitting coarse closed families, uncertainty, manual
+review choices, and candidate control checks; it establishes no incident,
+identity, compromise, authority, policy update, or training label. It has no
 production route, server, network client, interpreter, filesystem adapter,
 database, release, or deployment surface; do not mount it in the API monolith.
 
