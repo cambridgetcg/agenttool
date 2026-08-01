@@ -104,6 +104,33 @@ Portable schemas close object structure; runtime validation additionally
 recomputes content IDs, canonical ordering, evidence pairing, and claim
 cross-references.
 
+Canonical intake accepts only own enumerable data properties on plain or
+null-prototype objects and exact dense standard arrays. It reads captured
+property-descriptor values rather than calling getters, index accessors, or
+caller-provided array methods, and rejects symbols, non-enumerable fields,
+custom prototypes, sparse arrays, and extra array properties. Traversal is
+bounded to depth 32, 16,384 values, 4 KiB of UTF-8 per string or key, and 2 MiB
+of aggregate input and canonical UTF-8. The documented maximum of 64 source
+claims and 64 candidates with 64 claim references each remains constructible.
+Obvious oversized strings reject from their code-unit lower bound before a
+Unicode or byte scan, and arrays reject oversized lengths before own-key or
+descriptor capture. JavaScript has no paged own-key primitive, so each
+surviving container still requires one own-key list; descriptors are fetched
+individually only after that list satisfies the relevant shape/count cap.
+
+On this package's supported Node and Bun surfaces, `node:util/types.isProxy`
+rejects direct, nested, revoked, and byte-helper `Proxy` values before array,
+prototype, descriptor, freeze, or hash-input reflection. That fence runs
+without invoking caller traps in the supported engine versions. It is a
+Node/Bun runtime guarantee, not a portable JavaScript-language property: a port
+to another runtime must provide and test an equivalent zero-trap fence before
+claiming the same boundary. The byte-hash helper accepts only strings or
+genuine `Uint8Array` values and hashes a detached intrinsic copy, so a
+typed-array subclass cannot inject iterators or property getters. Parsed
+bounded JSON remains the preferred representation across a trust boundary.
+Domain-separated hashing and Unicode ordering also type-check and Proxy-fence
+their string arguments before regex or iterator use.
+
 ## AFTERGLOW crossover
 
 ```ts

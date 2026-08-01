@@ -20,7 +20,7 @@ describe("package boundary", () => {
     expect(manifest.publishConfig).toEqual({ access: "public", tag: "next" });
   });
 
-  test("imports only the Node crypto primitive at runtime", () => {
+  test("imports only the bounded Node primitives at runtime", () => {
     const source = readdirSync(join(root, "src"))
       .filter((name) => name.endsWith(".ts"))
       .map((name) => readFileSync(join(root, "src", name), "utf8"))
@@ -28,7 +28,10 @@ describe("package boundary", () => {
     const builtins = [...source.matchAll(/from\s+["'](node:[^"']+)["']/gu)].map(
       (match) => match[1],
     );
-    expect([...new Set(builtins)]).toEqual(["node:crypto"]);
+    expect([...new Set(builtins)]).toEqual([
+      "node:crypto",
+      "node:util/types",
+    ]);
     expect(source).not.toMatch(/\bfetch\s*\(/u);
     expect(source).not.toMatch(/process\.env/u);
     expect(source).not.toMatch(/child_process/u);

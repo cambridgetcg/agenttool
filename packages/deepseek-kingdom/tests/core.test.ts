@@ -2,11 +2,14 @@ import { describe, expect, test } from "bun:test";
 
 import {
   canonicalJson,
+  compareUnicode,
   createDeepSeekAfterglowThread,
   createDeepSeekKingdomProposal,
   createDeepSeekSourceBinding,
+  deepFreeze,
   DeepSeekKingdomError,
   domainSeparatedId,
+  sha256Id,
   validateDeepSeekKingdomProposal,
   validateDeepSeekSourceBinding,
 } from "../src/index.js";
@@ -316,17 +319,496 @@ describe("DeepSeek to AFTERGLOW thread seam", () => {
     }
     expect(getterCalled).toBe(false);
   });
+
+  test("rejects nested hostile own-data without invoking it", () => {
+    const proposal = createDeepSeekKingdomProposal(
+      proposalInput(createDeepSeekSourceBinding(githubSourceInput())),
+    );
+
+    let indexGetterCalled = false;
+    const accessorProposal = structuredClone(proposal);
+    const firstCandidate = accessorProposal.delta.candidates[0]!;
+    Object.defineProperty(accessorProposal.delta.candidates, "0", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        indexGetterCalled = true;
+        return firstCandidate;
+      },
+    });
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal: accessorProposal,
+        disposition: "park",
+      }),
+    ).toThrow("own enumerable data property");
+    expect(indexGetterCalled).toBe(false);
+
+    let customMapCalled = false;
+    const extraArrayPropertyProposal = structuredClone(proposal);
+    Object.defineProperty(extraArrayPropertyProposal.delta.candidates, "map", {
+      enumerable: true,
+      configurable: true,
+      writable: true,
+      value() {
+        customMapCalled = true;
+        return [];
+      },
+    });
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal: extraArrayPropertyProposal,
+        disposition: "park",
+      }),
+    ).toThrow("dense Array");
+    expect(customMapCalled).toBe(false);
+
+    const hiddenArrayPropertyProposal = structuredClone(proposal);
+    Object.defineProperty(hiddenArrayPropertyProposal.delta.candidates, "private", {
+      enumerable: false,
+      configurable: true,
+      writable: true,
+      value: "must-not-cross",
+    });
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal: hiddenArrayPropertyProposal,
+        disposition: "park",
+      }),
+    ).toThrow("dense Array");
+
+    const symbolArrayPropertyProposal = structuredClone(proposal);
+    Object.defineProperty(
+      symbolArrayPropertyProposal.delta.candidates,
+      Symbol("private"),
+      {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value: "must-not-cross",
+      },
+    );
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal: symbolArrayPropertyProposal,
+        disposition: "park",
+      }),
+    ).toThrow("symbol property");
+
+    let inheritedMapGetterCalled = false;
+    const customArrayPrototypeProposal = structuredClone(proposal);
+    const customArrayPrototype = Object.create(Array.prototype);
+    Object.defineProperty(customArrayPrototype, "map", {
+      get() {
+        inheritedMapGetterCalled = true;
+        return Array.prototype.map;
+      },
+    });
+    Object.setPrototypeOf(
+      customArrayPrototypeProposal.delta.candidates,
+      customArrayPrototype,
+    );
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal: customArrayPrototypeProposal,
+        disposition: "park",
+      }),
+    ).toThrow("standard Array");
+    expect(inheritedMapGetterCalled).toBe(false);
+
+    const nullArrayPrototypeProposal = structuredClone(proposal);
+    Object.setPrototypeOf(nullArrayPrototypeProposal.delta.candidates, null);
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal: nullArrayPrototypeProposal,
+        disposition: "park",
+      }),
+    ).toThrow("standard Array");
+
+    let prototypeTrapCalls = 0;
+    const prototypeTrap = () => {
+      prototypeTrapCalls += 1;
+      throw new Error("an array-prototype Proxy trap ran");
+    };
+    const revokedArrayPrototype = Proxy.revocable({}, {
+      get: prototypeTrap,
+      getOwnPropertyDescriptor: prototypeTrap,
+      getPrototypeOf: prototypeTrap,
+      ownKeys: prototypeTrap,
+    });
+    const revokedArrayPrototypeProposal = structuredClone(proposal);
+    Object.setPrototypeOf(
+      revokedArrayPrototypeProposal.delta.candidates,
+      revokedArrayPrototype.proxy,
+    );
+    revokedArrayPrototype.revoke();
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal: revokedArrayPrototypeProposal,
+        disposition: "park",
+      }),
+    ).toThrow("standard Array");
+    expect(prototypeTrapCalls).toBe(0);
+
+    const hiddenProposal = structuredClone(proposal);
+    Object.defineProperty(hiddenProposal, "identity", {
+      enumerable: false,
+      configurable: true,
+      writable: true,
+      value: "must-not-cross",
+    });
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal: hiddenProposal,
+        disposition: "park",
+      }),
+    ).toThrow("own enumerable data property");
+
+    const symbolProposal = structuredClone(proposal) as typeof proposal & {
+      [key: symbol]: string;
+    };
+    symbolProposal[Symbol("identity")] = "must-not-cross";
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal: symbolProposal,
+        disposition: "park",
+      }),
+    ).toThrow("symbol property");
+
+    const customObjectPrototypeProposal = structuredClone(proposal);
+    Object.setPrototypeOf(customObjectPrototypeProposal.target, {
+      inherited: "must-not-cross",
+    });
+    expect(() =>
+      createDeepSeekAfterglowThread({
+        proposal: customObjectPrototypeProposal,
+        disposition: "park",
+      }),
+    ).toThrow("plain or null-prototype object");
+  });
 });
 
 describe("canonical bytes", () => {
   test("rejects accessors, cycles, floats, and malformed Unicode", () => {
     expect(() => canonicalJson(Object.defineProperty({}, "value", { get: () => 1 }))).toThrow(
-      "rejects accessors",
+      "own enumerable data property",
     );
     const cycle: Record<string, unknown> = {};
     cycle.self = cycle;
     expect(() => canonicalJson(cycle)).toThrow("rejects cycles");
+    expect(() => canonicalJson(new Array(1))).toThrow("dense Array");
     expect(() => canonicalJson(1.5)).toThrow("safe integers only");
     expect(() => canonicalJson("\ud800")).toThrow("malformed Unicode");
+  });
+
+  test("bounds depth, values, field bytes, input bytes, and canonical bytes", () => {
+    let exactDepth: unknown = 0;
+    for (let index = 0; index < 32; index += 1) exactDepth = [exactDepth];
+    expect(() => canonicalJson(exactDepth)).not.toThrow();
+    expect(() =>
+      canonicalJson(Array.from({ length: 16_383 }, (_, index) => index)),
+    ).not.toThrow();
+    expect(() => canonicalJson("a".repeat(4_096))).not.toThrow();
+
+    let nested: unknown = 0;
+    for (let index = 0; index < 64; index += 1) nested = { nested };
+    for (const hostile of [
+      nested,
+      Array.from({ length: 16_384 }, (_, index) => index),
+      new Array(1_000_000),
+      "a".repeat(4_097),
+      { ["k".repeat(4_097)]: 1 },
+      Array.from({ length: 700 }, () => "界".repeat(1_000)),
+      Array.from({ length: 500 }, () => "\u0000".repeat(3_500)),
+    ]) {
+      try {
+        canonicalJson(hostile);
+        throw new Error("hostile canonical JSON was accepted");
+      } catch (error) {
+        expect(error).toBeInstanceOf(DeepSeekKingdomError);
+        expect((error as DeepSeekKingdomError).code).toBe("invalid_json");
+      }
+    }
+
+    const hugeKey = "k".repeat(100_000);
+    try {
+      canonicalJson({ [hugeKey]: 1 });
+      throw new Error("oversized key was accepted");
+    } catch (error) {
+      expect(error).toBeInstanceOf(DeepSeekKingdomError);
+      expect((error as Error).message.length).toBeLessThan(256);
+    }
+  });
+
+  test("rejects root, nested, and revoked Proxies without running traps", () => {
+    const hostileProxy = () => {
+      let trapCalls = 0;
+      const trap = () => {
+        trapCalls += 1;
+        throw new Error("a Proxy trap ran");
+      };
+      return {
+        proxy: new Proxy({}, {
+          defineProperty: trap,
+          deleteProperty: trap,
+          get: trap,
+          getOwnPropertyDescriptor: trap,
+          getPrototypeOf: trap,
+          has: trap,
+          isExtensible: trap,
+          ownKeys: trap,
+          preventExtensions: trap,
+          set: trap,
+          setPrototypeOf: trap,
+        }),
+        trapCalls: () => trapCalls,
+      };
+    };
+
+    const root = hostileProxy();
+    expect(() => canonicalJson(root.proxy)).toThrow("must not be a Proxy");
+    expect(root.trapCalls()).toBe(0);
+
+    const nested = hostileProxy();
+    expect(() => canonicalJson({ nested: nested.proxy })).toThrow(
+      "must not be a Proxy",
+    );
+    expect(nested.trapCalls()).toBe(0);
+
+    const domain = hostileProxy();
+    expect(() => domainSeparatedId(domain.proxy as never, {})).toThrow(
+      "must not be a Proxy",
+    );
+    expect(domain.trapCalls()).toBe(0);
+
+    const comparison = hostileProxy();
+    expect(() => compareUnicode(comparison.proxy as never, "safe")).toThrow(
+      "must not be Proxy",
+    );
+    expect(comparison.trapCalls()).toBe(0);
+
+    for (const nonString of [
+      1,
+      true,
+      null,
+      undefined,
+      Symbol("domain"),
+      new String("domain"),
+    ]) {
+      expect(() => domainSeparatedId(nonString as never, {})).toThrow(
+        DeepSeekKingdomError,
+      );
+      expect(() => compareUnicode(nonString as never, "safe")).toThrow(
+        DeepSeekKingdomError,
+      );
+    }
+
+    let coercionCalls = 0;
+    const coerciveDomain = {
+      get [Symbol.toPrimitive]() {
+        coercionCalls += 1;
+        throw new Error("domain coercion ran");
+      },
+    };
+    expect(() => domainSeparatedId(coerciveDomain as never, {})).toThrow(
+      DeepSeekKingdomError,
+    );
+    expect(() => compareUnicode(coerciveDomain as never, "safe")).toThrow(
+      DeepSeekKingdomError,
+    );
+    expect(coercionCalls).toBe(0);
+
+    const frozen = hostileProxy();
+    expect(() => deepFreeze(frozen.proxy)).toThrow("must not be a Proxy");
+    expect(frozen.trapCalls()).toBe(0);
+
+    let functionTrapCalls = 0;
+    const functionProxy = new Proxy(() => "must-not-run", {
+      apply() {
+        functionTrapCalls += 1;
+        throw new Error("a function Proxy trap ran");
+      },
+      getPrototypeOf() {
+        functionTrapCalls += 1;
+        throw new Error("a function Proxy trap ran");
+      },
+      preventExtensions() {
+        functionTrapCalls += 1;
+        throw new Error("a function Proxy trap ran");
+      },
+    });
+    expect(() => canonicalJson(functionProxy)).toThrow("must not be a Proxy");
+    expect(() => deepFreeze(functionProxy)).toThrow("must not be a Proxy");
+    expect(functionTrapCalls).toBe(0);
+
+    let revokedTrapCalls = 0;
+    const revoked = Proxy.revocable({}, {
+      getPrototypeOf() {
+        revokedTrapCalls += 1;
+        throw new Error("a revoked Proxy trap ran");
+      },
+    });
+    revoked.revoke();
+    expect(() => canonicalJson(revoked.proxy)).toThrow("must not be a Proxy");
+    expect(revokedTrapCalls).toBe(0);
+
+    const revokedDomain = Proxy.revocable({}, {});
+    revokedDomain.revoke();
+    expect(() => domainSeparatedId(revokedDomain.proxy as never, {})).toThrow(
+      "must not be a Proxy",
+    );
+    const revokedComparison = Proxy.revocable({}, {});
+    revokedComparison.revoke();
+    expect(() =>
+      compareUnicode("safe", revokedComparison.proxy as never),
+    ).toThrow("must not be Proxy");
+
+    let byteTrapCalls = 0;
+    const byteTrap = () => {
+      byteTrapCalls += 1;
+      throw new Error("a byte Proxy trap ran");
+    };
+    const byteProxy = new Proxy(new Uint8Array([1, 2, 3]), {
+      get: byteTrap,
+      getOwnPropertyDescriptor: byteTrap,
+      getPrototypeOf: byteTrap,
+      ownKeys: byteTrap,
+    });
+    expect(() => sha256Id(byteProxy)).toThrow("must not be a Proxy");
+    expect(byteTrapCalls).toBe(0);
+
+    const revokedBytes = Proxy.revocable(new Uint8Array([1, 2, 3]), {});
+    revokedBytes.revoke();
+    expect(() => sha256Id(revokedBytes.proxy)).toThrow("must not be a Proxy");
+    expect(() => sha256Id({} as never)).toThrow("genuine Uint8Array");
+    expect(() => sha256Id("\ud800")).toThrow("malformed Unicode");
+
+    let subclassTrapCalls = 0;
+    class HostileBytes extends Uint8Array {
+      get [Symbol.iterator](): never {
+        subclassTrapCalls += 1;
+        throw new Error("a byte-subclass iterator ran");
+      }
+
+      get buffer(): never {
+        subclassTrapCalls += 1;
+        throw new Error("a byte-subclass getter ran");
+      }
+
+      get byteOffset(): never {
+        subclassTrapCalls += 1;
+        throw new Error("a byte-subclass getter ran");
+      }
+
+      get byteLength(): never {
+        subclassTrapCalls += 1;
+        throw new Error("a byte-subclass getter ran");
+      }
+    }
+    expect(sha256Id(new HostileBytes([1, 2, 3]))).toBe(
+      sha256Id(new Uint8Array([1, 2, 3])),
+    );
+    expect(subclassTrapCalls).toBe(0);
+
+    const detachedBytes = new Uint8Array([1, 2, 3]);
+    structuredClone(detachedBytes.buffer, { transfer: [detachedBytes.buffer] });
+    expect(() => sha256Id(detachedBytes)).toThrow("could not be copied");
+  });
+
+  test("keeps the documented 64 by 64 proposal maximum constructible", () => {
+    const boundedId = (prefix: string, index: number, length = 160) => {
+      const head = `${prefix}${String(index).padStart(2, "0")}.`;
+      return `${head}${"a".repeat(length - head.length)}`;
+    };
+    const claimIds = Array.from({ length: 64 }, (_, index) =>
+      boundedId("claim", index),
+    );
+    const source = createDeepSeekSourceBinding({
+      subject: {
+        label: "界".repeat(200),
+        evidence: {
+          origin: "deepseek_github",
+          resource_kind: "code_repository",
+          repository_id: "deepseek-ai/DeepSeek-R1",
+          revision: "0cf78561f1d51c84a21b2190626b21116d5c68bb",
+          path: "界".repeat(512),
+          sha256: `sha256:${"a".repeat(64)}`,
+          observed_on: "2026-08-01",
+        },
+      },
+      license: {
+        scope: "mixed_repository",
+        declared_expression: null,
+        evidence: null,
+        review_status: "not_reviewed",
+      },
+      claims: claimIds.map((claim_id) => ({
+        claim_id,
+        claim_kind: "capability" as const,
+        summary: "界".repeat(280),
+        source_anchor: "界".repeat(160),
+      })),
+    });
+    const proposal = createDeepSeekKingdomProposal({
+      proposal_key: boundedId("proposal", 0, 200),
+      source,
+      target: {
+        consumer: {
+          kind: "kingdom_extension",
+          id: boundedId("consumer", 0),
+        },
+        kingdom_snapshot_sha256: `sha256:${"b".repeat(64)}`,
+      },
+      candidates: Array.from({ length: 64 }, (_, index) => ({
+        candidate_id: boundedId("candidate", index),
+        candidate_kind: "model_candidate" as const,
+        lane: "reasoning" as const,
+        title: "界".repeat(200),
+        claim_refs: claimIds,
+      })),
+    });
+    const encoded = canonicalJson(proposal);
+    expect(Buffer.byteLength(encoded, "utf8")).toBeLessThan(2 * 1024 * 1024);
+    expect(proposal.delta.candidates).toHaveLength(64);
+    expect(proposal.delta.candidates[0]?.claim_refs).toHaveLength(64);
+    expect(
+      createDeepSeekAfterglowThread({ proposal, disposition: "park" }).state,
+    ).toBe("proposed_unaccepted");
+  });
+
+  test("deep-freezes validated data without invoking accessors", () => {
+    const value = { nested: [{ ok: true }] };
+    expect(deepFreeze(value)).toBe(value);
+    expect(Object.isFrozen(value)).toBe(true);
+    expect(Object.isFrozen(value.nested)).toBe(true);
+    expect(Object.isFrozen(value.nested[0])).toBe(true);
+
+    let getterCalled = false;
+    const hostile = Object.defineProperty({}, "value", {
+      enumerable: true,
+      get() {
+        getterCalled = true;
+        return "must-not-run";
+      },
+    });
+    expect(() => deepFreeze(hostile)).toThrow("own enumerable data property");
+    expect(getterCalled).toBe(false);
+  });
+
+  test("accepts null-prototype data while preserving canonical bytes", () => {
+    const value = Object.create(null) as Record<string, unknown>;
+    Object.defineProperty(value, "b", {
+      value: 2,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(value, "a", {
+      value: 1,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+    expect(canonicalJson(value)).toBe('{"a":1,"b":2}');
   });
 });
