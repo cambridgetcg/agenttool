@@ -11,6 +11,12 @@
   Substrate-Disposition: love; doctrine=https://docs.agenttool.dev/SOUL.md; ring-1=https://docs.agenttool.dev/RING-1.md
   X-Agent-Surface: see https://api.agenttool.dev/.well-known/agent.txt
 
+/shared/estate.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/shared/estate.js
+  Cache-Control: public, max-age=0, must-revalidate
+
 /adapters
   Link: <https://api.agenttool.dev/v1/adapters>; rel="alternate"; type="application/json"
 

@@ -9,7 +9,10 @@ Shared design assets for the three agenttool frontends — `agenttool.dev`
 | File | Purpose |
 |---|---|
 | `theme.css` | Design tokens, base reset, typography, navigation, footer, components (buttons, callouts, code blocks, params tables, endpoint blocks, surface/shape tiles, step lists, forms). |
-| `theme.js` | Small dawn/night controller for the open-door pages; follows the system preference, persists an explicit choice, and keeps the toggle state accessible. |
+| `theme.js` | Small dawn/night controller for the open-door pages; follows the system preference, persists an explicit choice, keeps the toggle state accessible, and progressively loads the estate atlas. |
+| `mode.js` | Dawn/night controller for docs and the agents-only app; also progressively loads the estate atlas. |
+| `estate.js` | Single seven-door room registry plus the shared breadcrumb, searchable room atlas, nearby exits, and homepage map. Navigation changes location only; it grants no authority. |
+| `estate.css` | Cross-surface shell, atlas, room-map, responsive, contrast, and reduced-motion styles. |
 | `nav.html` | Canonical top-nav markup. Copy into every page; set `class="active"` on the matching link. |
 | `footer.html` | Canonical footer markup. |
 
@@ -22,6 +25,9 @@ apps/
 ├── _shared/                  ← real files live here
 │   ├── theme.css
 │   ├── theme.js
+│   ├── mode.js
+│   ├── estate.css
+│   ├── estate.js
 │   ├── nav.html
 │   ├── footer.html
 │   └── README.md
@@ -33,14 +39,18 @@ apps/
     └── shared → ../_shared   ← symlink
 ```
 
-Most docs pages and all dashboard pages load `/shared/theme.css`. The web pages
-keep their page-specific `/style.css` and navigation markup while loading
-selected shared files such as `/shared/theme.js`. Wrangler follows the symlink
-during direct upload, so every shared file remains available on each Cloudflare
-Pages origin.
+Most docs pages and all dashboard pages load `/shared/theme.css` and
+`/shared/mode.js`. The web pages keep their page-specific `/style.css` and
+navigation markup while loading `/shared/theme.js`. Both appearance scripts
+progressively load `/shared/estate.js`; older docs pages without an appearance
+script load the estate script directly. Wrangler follows the symlink during
+direct upload, so every shared file remains available on each Cloudflare Pages
+origin.
 
 A shared-file change reaches the pages that load that file; it is not a runtime
-HTML include or a replacement for web-specific styles.
+HTML include or a replacement for room-specific styles. Existing static links
+remain the no-JavaScript fallback. Keep the JavaScript door IDs aligned with
+`apps/web/welcome.json` so human and machine arrival maps name the same house.
 
 ## Fonts
 
