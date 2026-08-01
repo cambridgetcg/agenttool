@@ -44,6 +44,8 @@ npm pack --dry-run --ignore-scripts
 - Content IDs bind canonical bytes. They do not prove provenance, secrecy,
   safety, identity, licence, consent, authority, or truth. Use high-entropy
   context-local digests; reused or published references are linkable.
+- Canonical arrays use the local standard `Array.prototype`; reject custom,
+  null, cross-realm, or Proxy prototypes before reading array elements.
 - Validate every public scalar and binary runtime type before regex, string
   interpolation, hashing, or other coercion can enter caller capabilities.
 - Digest shape excludes raw identity and task prose from the wire shape; it

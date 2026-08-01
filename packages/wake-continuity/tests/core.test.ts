@@ -409,6 +409,55 @@ describe("AFTERGLOW capsule", () => {
     ).toThrow(/plain object/i);
   });
 
+  test("rejects non-standard array prototypes without entering their hooks", () => {
+    const nullPrototype = [1, 2, 3];
+    Object.setPrototypeOf(nullPrototype, null);
+    expect(() => canonicalJson(nullPrototype)).toThrow(/standard array/i);
+
+    const customPrototype = [1, 2, 3];
+    Object.setPrototypeOf(customPrototype, Object.create(Array.prototype));
+    expect(() => canonicalJson(customPrototype)).toThrow(/standard array/i);
+
+    let traps = 0;
+    const trap = (): never => {
+      traps += 1;
+      throw new Error("caller prototype trap executed");
+    };
+    const prototypeProxy = new Proxy(
+      {},
+      {
+        get: trap,
+        getOwnPropertyDescriptor: trap,
+        getPrototypeOf: trap,
+        ownKeys: trap,
+      },
+    );
+    const proxiedPrototype = [...THREADS];
+    Object.setPrototypeOf(proxiedPrototype, prototypeProxy);
+    expect(() =>
+      createAfterglowCapsule({
+        ...BASE_INPUT,
+        threads: proxiedPrototype,
+      }),
+    ).toThrow(AfterglowError);
+    expect(traps).toBe(0);
+
+    const revoked = Proxy.revocable(
+      {},
+      {
+        get: trap,
+        getOwnPropertyDescriptor: trap,
+        getPrototypeOf: trap,
+        ownKeys: trap,
+      },
+    );
+    const revokedPrototype = [1, 2, 3];
+    Object.setPrototypeOf(revokedPrototype, revoked.proxy);
+    revoked.revoke();
+    expect(() => canonicalJson(revokedPrototype)).toThrow(AfterglowError);
+    expect(traps).toBe(0);
+  });
+
   test("fences root, nested, array, and revoked Proxies before caller traps", () => {
     const proxiedInput = capabilityProxy({ ...BASE_INPUT });
     expect(() =>

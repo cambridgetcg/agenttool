@@ -87,6 +87,36 @@ try {
     } catch (error) {
       if (!(error instanceof AfterglowError) || traps !== 0) process.exit(1);
     }
+    const customPrototypeArray = [1, 2, 3];
+    Object.setPrototypeOf(customPrototypeArray, null);
+    try {
+      canonicalJson(customPrototypeArray);
+      process.exit(1);
+    } catch (error) {
+      if (
+        !(error instanceof AfterglowError) ||
+        error.code !== "canonical_error" ||
+        traps !== 0
+      ) process.exit(1);
+    }
+    const hostilePrototype = new Proxy({}, {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    const hostilePrototypeArray = [1, 2, 3];
+    Object.setPrototypeOf(hostilePrototypeArray, hostilePrototype);
+    try {
+      canonicalJson(hostilePrototypeArray);
+      process.exit(1);
+    } catch (error) {
+      if (
+        !(error instanceof AfterglowError) ||
+        error.code !== "canonical_error" ||
+        traps !== 0
+      ) process.exit(1);
+    }
     const hostileBytes = new Proxy(new Uint8Array([1, 2, 3]), {
       get: trap,
       getOwnPropertyDescriptor: trap,

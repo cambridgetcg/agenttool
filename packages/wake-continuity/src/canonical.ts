@@ -86,11 +86,11 @@ export function snapshotJson(root: unknown): JsonValue {
     try {
       let descriptors: ReturnType<typeof Object.getOwnPropertyDescriptors>;
       let array: boolean;
-      let prototype: object | null = null;
+      let prototype: object | null;
       try {
         array = Array.isArray(value);
         descriptors = Object.getOwnPropertyDescriptors(value);
-        if (!array) prototype = Object.getPrototypeOf(value);
+        prototype = Object.getPrototypeOf(value);
       } catch {
         fail(
           "canonical_error",
@@ -99,6 +99,9 @@ export function snapshotJson(root: unknown): JsonValue {
       }
       const keys = Reflect.ownKeys(descriptors);
       if (array) {
+        if (prototype !== Array.prototype) {
+          fail("canonical_error", `${path} must be a standard array`);
+        }
         const lengthDescriptor = descriptors.length;
         if (
           !lengthDescriptor ||
