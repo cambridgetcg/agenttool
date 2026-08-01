@@ -319,7 +319,13 @@ export function planSkillsInspection(
   const selectionUrn = selectionEvidenceUrn(input.source.report_digest, selectionDigest);
   const inspectionAddress = address(
     "inspections",
-    projectionUuid("inspection", input.project_id, input.source.report_digest, selectionDigest),
+    projectionUuid(
+      "inspection",
+      input.project_id,
+      input.source.report_digest,
+      selectionDigest,
+      input.source.inspector_revision,
+    ),
   );
   const cards: YutabaseCardMutation[] = [
     card(

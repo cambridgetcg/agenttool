@@ -39,5 +39,7 @@ publisher, interpret a skill, establish safety or truth, grant permission or
 consent, authorize action, or create a score/rank/XP/dignity effect. Changed
 skill bytes create a new skill snapshot; a changed minimized selection creates
 a new inspection snapshot while reusing any unchanged skill snapshots. A
-profile, allowlist, field, deck, word, selection-digest framing, or identity
-change requires a new planner profile and UUID namespace.
+changed pinned inspector revision also creates a new inspection snapshot
+because that provenance is external to the report bytes. A profile, allowlist,
+field, deck, word, selection-digest framing, or identity change requires a new
+planner profile and UUID namespace.

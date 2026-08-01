@@ -114,19 +114,37 @@ describe("skills inspection planner", () => {
     );
   });
 
+  test("binds external inspector revision into inspection identity", () => {
+    const revisedInput = structuredClone(validInput()) as any;
+    revisedInput.source.inspector_revision = "e".repeat(40);
+    const first = planSkillsInspection(validInput(), OPTIONS);
+    const revised = planSkillsInspection(revisedInput, OPTIONS);
+
+    expect(revised.cards[0]?.address.id).not.toBe(first.cards[0]?.address.id);
+    expect(revised.cards.slice(1).map((entry) => entry.address.id)).toEqual(
+      first.cards.slice(1).map((entry) => entry.address.id),
+    );
+    expect(revised.cards.slice(1).map((entry) => entry.fields)).toEqual(
+      first.cards.slice(1).map((entry) => entry.fields),
+    );
+    expect(revised.relations.map((entry) => entry.id)).not.toEqual(
+      first.relations.map((entry) => entry.id),
+    );
+  });
+
   test("pins the complete v0.1 identity vector", () => {
     const plan = planSkillsInspection(validInput(), OPTIONS);
     expect(plan.selection_digest).toBe(
       "sha256:923268cc74d1e4ce1cc1da41f826eeb0fe734492683a3f656a0c4e229487c96f",
     );
     expect(plan.cards.map((entry) => entry.address.id)).toEqual([
-      "c0161f72-20e3-525e-a0ab-92313a8177b3",
+      "c8df826f-f471-593a-a8e4-7767723facdc",
       "d0475fa6-6411-5922-81de-d087f54e17a7",
       "04f68738-b7da-5192-8718-abd1660907a9",
     ]);
     expect(plan.relations.map((entry) => entry.id)).toEqual([
-      "e729e586-1383-5717-a140-4f5e5d7246eb",
-      "b4cc212e-6412-5896-a680-d2128db9bcb1",
+      "6f73aac2-f61a-5446-9854-04bb2b7fbc3e",
+      "e98c28cc-7b13-5079-a855-1776895c0564",
     ]);
   });
 

@@ -14,7 +14,8 @@ identity change requires a new profile and namespace.
 `agenttool.skills/report-stable-json-sha256-v1`. The category invariant is
 `file_count = 1 + script_count + resource_count`. `recorded_at`, claimant, and
 claim sources never enter IDs or typed card fields; executors retain the first
-claim on an exact address/field replay.
+claim on an exact address/field replay. The pinned inspector revision is
+external to report bytes and must remain part of inspection identity.
 
 Never add skill bodies, descriptions, prompts, paths, issue messages,
 requirement names, credentials, identities, model output, scores, ranks, XP,

@@ -10,8 +10,10 @@ inspection report stays outside YUTABASE, while its digest, pinned inspector
 revision, bounded counts, and each selected skill name/content digest can be
 cached as rebuildable provenance. The planner computes a domain-separated
 digest of the minimized selection so two subsets of one report cannot collide
-on an inspection-card identity. The same mechanism can catalog a separately
-reviewed Hugging Face skill bundle without installing or executing it.
+on an inspection-card identity. The exact inspector source revision is also
+bound into that identity because it is external to the canonical report bytes.
+The same mechanism can catalog a separately reviewed Hugging Face skill bundle
+without installing or executing it.
 
 ## Boundary
 
