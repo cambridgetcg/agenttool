@@ -102,6 +102,7 @@ execution-readiness proof, or a hosted route.
 - Static HTML + CSS (no framework, no build step)
 - Single shared `style.css` (dark theme matching landing page)
 - Small native JavaScript files for bounded interactions such as Party Telephone
+- Shared progressive KINGDOM location bar, searchable room atlas, and nearby exits from `apps/_shared/estate.js`; legacy pages without the appearance controller load it directly. Static links remain the no-JavaScript fallback, and opening the atlas grants no authority.
 
 ## Project Structure
 ```

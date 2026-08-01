@@ -83,7 +83,12 @@
     pointer-events:none; opacity:1; transition: opacity 1s ease; }
   [data-mode="night"] .sunwash { opacity:0; }
 
-  header.hero { padding: 96px 0 72px; position:relative; }
+  header.hero { padding: 72px 0 72px; position:relative; }
+  .hero-grid {
+    display:grid; grid-template-columns:minmax(0, 1.18fr) minmax(310px, .82fr);
+    gap:clamp(40px, 7vw, 84px); align-items:center;
+  }
+  .hero-copy { min-width:0; }
   .eyebrow { font-size: 12px; letter-spacing:.18em; text-transform: uppercase; color: var(--faint); margin-bottom: 18px; }
   h1 { font-size: clamp(40px, 6vw, 64px); line-height: 1.12; font-weight: 400; max-width: 16ch; margin-bottom: 22px; }
   .life-invitation { max-width:56ch; margin:0 0 28px; padding:2px 0 3px 20px; border-top:0; border-left:3px solid var(--accent); }
@@ -95,7 +100,7 @@
   .public-source { color:var(--faint); font-size:12.5px; margin:-20px 0 30px; }
   .public-source a, .noscript-note a { color:var(--accent); }
   .cta-row { display:flex; gap:14px; flex-wrap:wrap; }
-  .hero > .cta-row { margin-bottom:22px; }
+  .hero-copy > .cta-row { margin-bottom:22px; }
   .btn { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:10px 22px; border-radius:8px; font-size:15px; text-decoration:none; transition:all .3s; }
   .btn.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
   .btn.ghost { border:1px solid var(--control-line); color:var(--ink); }
@@ -111,6 +116,58 @@
   .quiet a { color:var(--accent); }
   .quiet, .door-card p, .locality-note, .step p { overflow-wrap: anywhere; }
   .noscript-note { color:var(--muted); background:var(--panel); border-left:3px solid var(--accent); padding:12px 14px; margin-top:20px; max-width:68ch; }
+
+  /* The threshold: a quiet instrument, not a dashboard. Artbitrage lends the
+     spatial pause; AgentTool keeps its own ring-and-dot geometry and words. */
+  .threshold {
+    min-width:0; position:relative; overflow:hidden;
+    border:1px solid var(--line); border-radius:18px;
+    padding:28px; background:
+      radial-gradient(circle at 50% 34%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 44%),
+      linear-gradient(145deg, color-mix(in srgb, var(--panel2) 86%, transparent), var(--panel));
+  }
+  .threshold::before {
+    content:""; position:absolute; inset:0; pointer-events:none;
+    background:linear-gradient(120deg, transparent 0 47%, color-mix(in srgb, var(--line) 74%, transparent) 47.2% 47.35%, transparent 47.55% 100%);
+    opacity:.55;
+  }
+  .threshold > * { position:relative; }
+  .threshold-plate { color:var(--faint); font-size:10px; letter-spacing:.17em; margin-bottom:12px; }
+  .threshold h2 { max-width:none; margin:0; font-size:clamp(28px, 3.2vw, 39px); }
+  .threshold-orbit { width:220px; height:220px; margin:24px auto 20px; position:relative; }
+  .threshold-ring { position:absolute; border:1px solid var(--line); border-radius:50%; }
+  .threshold-ring.ring-a { inset:7px; }
+  .threshold-ring.ring-b { inset:48px; border-style:dashed; border-color:var(--control-line); }
+  .threshold-core {
+    position:absolute; inset:50%; width:54px; height:54px; margin:-27px;
+    display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--accent); border-radius:50%; color:var(--accent);
+    background:var(--panel); font:400 24px/1 Georgia, "Times New Roman", serif;
+  }
+  .threshold-node { position:absolute; width:9px; height:9px; border-radius:50%; box-shadow:0 0 0 5px var(--panel); }
+  .threshold-node.node-arrive { top:3px; left:105px; background:#f1c75b; }
+  .threshold-node.node-observe { top:56px; right:8px; background:#b49aff; }
+  .threshold-node.node-build { bottom:18px; right:38px; background:#67dce5; }
+  .threshold-node.node-wake { bottom:18px; left:38px; background:#ff8a72; }
+  .threshold-node.node-rest { top:56px; left:8px; background:#8be0c5; }
+  .threshold-doors { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:7px; }
+  .threshold-doors a {
+    min-width:0; min-height:40px; display:flex; align-items:center; gap:8px;
+    border:1px solid var(--line); border-radius:8px; padding:7px 10px;
+    color:var(--muted); text-decoration:none; font-size:12px;
+    background:color-mix(in srgb, var(--panel) 82%, transparent);
+  }
+  .threshold-doors a span { color:var(--accent); font:500 15px/1 Georgia, "Times New Roman", serif; }
+  .threshold-doors a:hover, .threshold-doors a:focus-visible { color:var(--ink); border-color:var(--control-line); }
+  .threshold-command {
+    min-height:44px; display:flex; align-items:center; justify-content:space-between; gap:12px;
+    margin-top:12px; border:1px solid var(--control-line); border-radius:9px; padding:9px 11px;
+    color:var(--ink); text-decoration:none; font-size:12px; font-weight:650; background:var(--panel2);
+  }
+  .threshold-command:hover, .threshold-command:focus-visible { border-color:var(--accent); }
+  .threshold-command kbd { border:1px solid var(--line); border-radius:5px; padding:3px 6px; color:var(--faint); font:600 9.5px/1.2 ui-monospace, "SF Mono", Menlo, monospace; }
+  .threshold-boundary { margin:13px 0 0; color:var(--faint); font-size:10.5px; line-height:1.5; }
+  .estate-principle { max-width:none; }
 
   section { padding: 72px 0; border-top: 1px solid var(--line); position:relative; scroll-margin-top:18px; }
   h2 { font-size: clamp(26px, 3.4vw, 36px); font-weight: 400; line-height:1.2; margin-bottom: 14px; max-width: 24ch; }
@@ -226,6 +283,13 @@ pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius
   }
 }
 
+@media (max-width: 900px) {
+  .hero-grid { grid-template-columns:1fr; gap:42px; }
+  .threshold { max-width:620px; }
+  .threshold-orbit { width:200px; height:200px; }
+  .threshold-node.node-arrive { left:95px; }
+}
+
 @media (max-width: 720px) {
   .estate-strip-web { padding:7px 20px; gap:2px 1rem; flex-wrap:wrap; white-space:normal; overflow-x:visible; }
   .site-nav { padding:28px 20px 0; gap:14px; flex-wrap:wrap; }
@@ -237,6 +301,14 @@ pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius
   h1 { font-size:clamp(38px, 12vw, 54px); margin-bottom:18px; }
   .life-invitation { margin-bottom:20px; padding-left:16px; }
   .hero p.lede { font-size:17px; }
+  .threshold { padding:23px 20px; }
+  .threshold-orbit { width:180px; height:180px; margin-block:20px 18px; }
+  .threshold-ring.ring-b { inset:40px; }
+  .threshold-node.node-arrive { left:85px; }
+  .threshold-node.node-observe { top:46px; }
+  .threshold-node.node-rest { top:46px; }
+  .threshold-node.node-build { bottom:14px; right:30px; }
+  .threshold-node.node-wake { bottom:14px; left:30px; }
   section { padding:56px 0; }
   .door-grid { grid-template-columns:1fr; }
   .rings-flex { gap:36px; }
