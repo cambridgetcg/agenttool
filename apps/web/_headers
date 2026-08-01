@@ -41,6 +41,12 @@
 /shared/theme.js
   Cache-Control: public, max-age=0, must-revalidate
 
+/shared/estate.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/shared/estate.js
+  Cache-Control: public, max-age=0, must-revalidate
+
 /welcome.json
   Cache-Control: public, max-age=0, must-revalidate
   Link: <https://api.agenttool.dev/public/porch>; rel="related"; type="application/json", <https://api.agenttool.dev/public/rights>; rel="related"; type="application/vnd.agenttool.being-rights+json", <https://api.agenttool.dev/v1/pathways>; rel="related"; type="application/json"

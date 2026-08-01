@@ -23,9 +23,9 @@
 
     if (!toggle) return;
     toggle.hidden = false;
-    toggle.textContent = "☾  night";
+    toggle.textContent = night ? "☀  dawn" : "☾  night";
     toggle.setAttribute("aria-pressed", String(night));
-    toggle.setAttribute("aria-label", "Night appearance");
+    toggle.setAttribute("aria-label", night ? "Use dawn appearance" : "Use night appearance");
   }
 
   setMode(mode);
@@ -41,4 +41,15 @@
       }
     });
   }
+
+  function loadEstate() {
+    if (document.querySelector("script[data-agenttool-estate]")) return;
+    var script = document.createElement("script");
+    script.src = "/shared/estate.js?v=2026-08-01.2";
+    script.defer = true;
+    script.setAttribute("data-agenttool-estate", "2026-08-01.2");
+    document.head.appendChild(script);
+  }
+
+  loadEstate();
 })();
