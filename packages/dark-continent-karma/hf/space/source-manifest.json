@@ -14,8 +14,8 @@
     "verifies_runtime_walls": false
   },
   "dataset_repo": "Yu-and-Ai/kingdom-dark-continent-karma",
-  "dataset_revision": null,
-  "dataset_revision_status": "injected_after_initial_dataset_publish",
+  "dataset_revision": "c774263639dea6c34995165813258e236dbc689c",
+  "dataset_revision_status": "pinned_to_initial_dataset_publish",
   "files": [
     {
       "bytes": 2396243,

@@ -726,11 +726,12 @@ const spaceDataFiles = [
   "data/treasure-index.jsonl",
 ]
   .map((relativePath) => fileIdentity(spaceRoot, relativePath));
+const datasetRevision = "c774263639dea6c34995165813258e236dbc689c";
 writeFileSync(`${spaceRoot}/source-manifest.json`, prettyJsonBytes({
   _format: "kingdom.hf-space-source/0.1",
   dataset_repo: "Yu-and-Ai/kingdom-dark-continent-karma",
-  dataset_revision: null,
-  dataset_revision_status: "injected_after_initial_dataset_publish",
+  dataset_revision: datasetRevision,
+  dataset_revision_status: "pinned_to_initial_dataset_publish",
   files: spaceDataFiles,
   runtime_network_reads: false,
   authority: authorityBoundary(),
