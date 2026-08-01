@@ -119,6 +119,9 @@ test("Space bundles and verifies only bounded read-only catalog files", async ()
   const app = await readFile(new URL("app.py", spaceRoot), "utf8");
   assert.ok(app.includes('ROOT / "assets/hero-web.webp"'));
   assert.equal(app.includes('ROOT / "assets/hero.png"'), false);
+  assert.equal(app.includes("No runtime network, model, upload"), false);
+  assert.ok(app.includes("No app-initiated outbound runtime network or model call; "));
+  assert.ok(app.includes("no app file-input/upload "));
   const readme = await readFile(new URL("README.md", spaceRoot), "utf8");
   assert.match(readme, /^python_version: "3\.12"$/m);
   assert.match(readme, /^short_description: .{1,60}$/m);
