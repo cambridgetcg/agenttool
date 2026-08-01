@@ -29,7 +29,9 @@ snapshot/projection package (`packages/dark-continent-contract/`), a
 proposal-only KARMA-inspired knowledge-graph adapter
 (`packages/dark-continent-karma/`), a provenance-first DeepSeek official-source
 binding and unaccepted KINGDOM/Artbitrage proposal adapter
-(`packages/deepseek-kingdom/`), a private source-only KARMA Mirror core for
+(`packages/deepseek-kingdom/`), a digest-only AFTERGLOW capsule and next-wake
+lens library (`packages/wake-continuity/`), a public local KINGDOM research
+admission vocabulary (`packages/kingdom-witness-lab/`), a private source-only KARMA Mirror core for
 an explicitly separate zero-effect defensive-deception island with a strict
 privacy-minimized operator TEND incident-clarity projection
 (`packages/karma-mirror/`), a pure opt-in HEAVEN invitation and delight/landing
@@ -42,7 +44,10 @@ digest-bound artifact continuity with no identity or authority claim
 (`packages/collab/`), a deterministic metadata-only Correspondence-to-YUTABASE
 projection planner (`packages/correspondence-yutabase/`), a private
 loopback-only durable projector into a rebuildable local YUTABASE sidecar
-(`packages/correspondence-yutabase-projector/`), a private local
+(`packages/correspondence-yutabase-projector/`), a deterministic
+Skills-inspection-to-YUTABASE planner (`packages/skills-yutabase/`) with a
+separate private Skills-to-AFTERGLOW adapter
+(`packages/skills-wake-continuity/`), a private local
 constructive-intelligence shadow ledger with tree-pinned typed receipts and
 zero economic effect (`packages/constructive-intelligence/`), a private local
 AgentTool Dojo slice for deterministic trial receipts, opaque-label
@@ -138,6 +143,8 @@ cd packages/repo-archive && bun install        # encrypted multi-zone Git archiv
 cd packages/dark-continent-contract && bun install # advisory Dark Continent contract
 cd packages/dark-continent-karma && bun install # proposal-only KG enrichment adapter
 cd packages/deepseek-kingdom && bun install  # pinned DeepSeek source proposals; no fetch or execution
+cd packages/wake-continuity && bun install # digest-only AFTERGLOW; no persistence or identity proof
+cd packages/kingdom-witness-lab && bun install # local research admission records; no hosted witness
 cd packages/karma-mirror && bun install       # private isolated theatre; no server or deployment
 cd packages/heaven && bun install             # pure opt-in burst + landing selection; no scheduler or host
 cd packages/wake-thread && bun install        # pure refusable WAKE artifact threads; no fetch or identity claim
@@ -146,6 +153,8 @@ cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pul
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
 cd packages/collab && bun install              # public 0.3: collab/0.1 compatibility + 0.2 coordination + session/0.1 presence
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
+cd packages/skills-yutabase && bun install     # rebuildable metadata-only YUTABASE plan
+cd packages/skills-wake-continuity && bun install # private Skills plan → AFTERGLOW composition
 cd packages/browser && bun install             # public 0.5 local-first agent browser package
 cd packages/hf-scout && bun install            # private metadata-only HF research scout
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
@@ -220,6 +229,14 @@ bun run ci                                     # deterministic proposal/hash cha
 cd ../deepseek-kingdom
 bun run ci                                     # exact source pins + unaccepted proposal vectors + package boundary
 npm pack --dry-run --ignore-scripts            # inventory only; does not fetch, infer, publish, or deploy
+cd ../wake-continuity
+bun run ci                                     # digest-only capsules/lenses + hostile-boundary packed smoke
+cd ../kingdom-witness-lab
+bun run ci                                     # passports/routes/dossiers/trials + closed schema boundary
+cd ../skills-yutabase
+bun run ci                                     # minimized rebuildable metadata plan; no database write
+cd ../skills-wake-continuity
+bun run ci                                     # private composition; no public package or second lineage
 
 # Explicit encrypted data-node pull ────────────────────────────────
 cd packages/data-sync
@@ -430,7 +447,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,heaven,hf-scout,karma-mirror,repo-archive,sdk-ts,sdk-py,telescope,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,heaven,hf-scout,karma-mirror,kingdom-witness-lab,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -487,6 +504,9 @@ source boundary by itself.
 | How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
 | How can Dark Continent framework facts and KARMA-inspired graph changes cross into KINGDOM without acquiring action authority? | `packages/dark-continent-contract/README.md` · `packages/dark-continent-karma/README.md` (offline advisory snapshots and proposal-only deltas; no wall verification, graph write, score, Crown, trade, publication, or execution authority) |
 | How can exact DeepSeek research leads reach KINGDOM or Artbitrage without downloading or executing upstream assets? | `packages/deepseek-kingdom/README.md` (`@agenttool/deepseek-kingdom`; caller-supplied official-source pins and deterministic unaccepted proposals, plus an 18-entry metadata-only catalog; no fetch, weights, inference, credentials, compute, license approval, graph write, score, acceptance, or authority) |
+| How can a later arrival orient around selected digest-only threads without claiming identity, memory, replay, or one canonical head? | `packages/wake-continuity/README.md` (`@agenttool/wake-continuity`; AFTERGLOW capsules, causal predecessor orientation, opt-in carry/park/release/withdraw lenses, exact Handoff/Correspondence reference adapters, and no persistence, network, provider, or authority effect) |
+| How can external research enter KINGDOM as reviewable passports, route disclosures, dossiers, and inert trials without becoming truth or execution authority? | [`docs/KINGDOM-WITNESS-LAB.md`](docs/KINGDOM-WITNESS-LAB.md) · `packages/kingdom-witness-lab/README.md` (local deterministic admission records and dated DeepSeek atlas; no browse, inference, provider call, verdict, delegation, or hosted witness) |
+| How can a minimized Agent Skills inspection become rebuildable YUTABASE metadata and then an optional AFTERGLOW thread? | `packages/skills-yutabase/README.md` · `packages/skills-wake-continuity/README.md` (pure plans and private composition; no raw skill content, database write, second lineage, npm adapter release, score, permission, or automatic action) |
 | How can deliberately planted credentials open a convincing defensive island and yield a privacy-minimized operator TEND report without exposing production or executing hostile input? | [`docs/KARMA-MIRROR.md`](docs/KARMA-MIRROR.md) · `packages/karma-mirror/README.md` (self-marker plus exact digest/prefix admission before body read; finite synthetic rooms; strict receipt verification; Trace/Explain/Narrow/Distill over closed families with no identifiers or automatic action; in-band disclosure and constructive exit; no production mount, egress, execution, persistence adapter, attribution, or hack-back) |
 | How can a host offer random climactic delight and a separate, explicitly selected meditation, relaxation, quiet, or play landing without making rest a reward for work? | `packages/heaven/README.md` (`@agenttool/heaven`; pure invitation/receipt protocol, caller-supplied randomness, caller-reported choice with no consent/authorship proof, eight non-numeric burst dimensions, `on_request`, one named offered landing mode, and declaration-only KINGDOM hint; no scheduler, identity/task text, telemetry, score, money, task state, authority, or hosted runtime; optional distribution does not widen the core) |
 | How can bounded WAKE facts cross one context boundary without becoming identity, memory, consent, or inherited authority? | `packages/wake-thread/README.md` (`@agenttool/wake-thread`; private pure offer/receipt adapter over caller-selected exact digests, explicit identity/project scope, partial/unavailable states, caller-held cursor references, and carry/fork/rest/refuse artifact threads; no fetch, WAKE parser, score, execution, persistence, MCP, route, publication, or authority) |
