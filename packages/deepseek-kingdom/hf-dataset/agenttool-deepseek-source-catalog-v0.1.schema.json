@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docs.agenttool.dev/schemas/agenttool-deepseek-source-catalog-v0.1.schema.json",
+  "title": "AgentTool DeepSeek primary-source lead catalog v0.1",
+  "description": "Closed metadata-only catalog of exact official DeepSeek and versioned primary-paper observations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "catalog_version", "observed_on", "sources", "boundaries"],
+  "properties": {
+    "_format": { "const": "agenttool.deepseek-source-catalog/0.1" },
+    "catalog_version": { "const": "2026-08-01" },
+    "observed_on": { "const": "2026-08-01" },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_id",
+          "title",
+          "origin",
+          "resource_kind",
+          "repository_id",
+          "revision",
+          "path",
+          "evidence_sha256",
+          "canonical_url",
+          "evidence_url",
+          "candidate_lanes",
+          "classification_basis",
+          "license_review_required"
+        ],
+        "properties": {
+          "source_id": { "$ref": "#/$defs/id" },
+          "title": { "$ref": "#/$defs/text" },
+          "origin": { "enum": ["deepseek_github", "deepseek_huggingface", "arxiv_primary"] },
+          "resource_kind": { "enum": ["code_repository", "model_repository", "dataset_repository", "paper"] },
+          "repository_id": { "type": "string", "minLength": 1, "maxLength": 193 },
+          "revision": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "path": { "oneOf": [{ "type": "null" }, { "type": "string", "minLength": 1, "maxLength": 512 }] },
+          "evidence_sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "canonical_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+          "evidence_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+          "candidate_lanes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "reasoning",
+                "formal_verification",
+                "multimodal",
+                "long_context",
+                "conditional_memory",
+                "training_systems",
+                "evaluation",
+                "research_provenance"
+              ]
+            }
+          },
+          "classification_basis": { "const": "researcher_inference_from_primary_source" },
+          "license_review_required": { "const": true }
+        }
+      }
+    },
+    "boundaries": {
+      "const": {
+        "metadata_only": true,
+        "runtime_network": false,
+        "runtime_downloads": false,
+        "artifact_contents_bundled": false,
+        "publisher_claims_verified": false,
+        "license_compatibility_verified": false,
+        "execution_readiness_verified": false,
+        "proposal_authority": false
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u206f]+$"
+    }
+  }
+}

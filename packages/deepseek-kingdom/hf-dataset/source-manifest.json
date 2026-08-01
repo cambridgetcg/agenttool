@@ -1,0 +1,85 @@
+{
+  "_format": "agenttool.deepseek-kingdom-hf-dataset-source-manifest/0.1",
+  "intended_huggingface_dataset": {
+    "repo_id": "Yu-and-Ai/kingdom-deepseek-primary-sources",
+    "repo_type": "dataset",
+    "status": "intended_identifier_only",
+    "created_uploaded_or_verified_by_this_artifact": false
+  },
+  "source": {
+    "git_repository": "https://github.com/cambridgetcg/agenttool",
+    "merge_commit": "5018d944838fc755bb01c5dd1d82d5cf8bf3b0ba",
+    "release_tag": "deepseek-kingdom-v0.1.0-dev.0",
+    "package": "@agenttool/deepseek-kingdom",
+    "package_version": "0.1.0-dev.0",
+    "package_path": "packages/deepseek-kingdom"
+  },
+  "catalog": {
+    "path": "official-deepseek-primary-sources.json",
+    "source_path": "packages/deepseek-kingdom/sources/official-deepseek-primary-sources.json",
+    "format": "agenttool.deepseek-source-catalog/0.1",
+    "catalog_version": "2026-08-01",
+    "entries": 18,
+    "canonical_sha256": "sha256:81c89c027ba5a53d2402c3c99bbf685e307c6c294f2d41b5e03ab07df5ccf4a9",
+    "raw_file_sha256": "6eaf0653a9eedb2328aab23e9c217acb40deedc968395243a2c5289d66e5a703"
+  },
+  "schema": {
+    "path": "agenttool-deepseek-source-catalog-v0.1.schema.json",
+    "source_path": "packages/deepseek-kingdom/schema/agenttool-deepseek-source-catalog-v0.1.schema.json",
+    "draft": "https://json-schema.org/draft/2020-12/schema",
+    "closed": true,
+    "raw_file_sha256": "d5d439330c978de08e079e3c020f9f3d579cee828dcd219f293bc2c7a9ef0858"
+  },
+  "files": [
+    {
+      "bytes": 11352,
+      "path": "LICENSE",
+      "sha256": "4af01afe87f0ce8b4a716258ad189a28d379f92c18584152f1ebf75ecc9ddfb0"
+    },
+    {
+      "bytes": 514,
+      "path": "NOTICE",
+      "sha256": "d2b40b4ea1c4ba2194e096d11ae7b7964020348a91b607ea80a5e91203676246"
+    },
+    {
+      "bytes": 4232,
+      "path": "README.md",
+      "sha256": "46a1df6519036649ab8a98732d447dbc2d136a1d8ddb79023b436d44731ae68b"
+    },
+    {
+      "bytes": 3466,
+      "path": "agenttool-deepseek-source-catalog-v0.1.schema.json",
+      "sha256": "d5d439330c978de08e079e3c020f9f3d579cee828dcd219f293bc2c7a9ef0858"
+    },
+    {
+      "bytes": 15486,
+      "path": "official-deepseek-primary-sources.json",
+      "sha256": "6eaf0653a9eedb2328aab23e9c217acb40deedc968395243a2c5289d66e5a703"
+    }
+  ],
+  "boundaries": {
+    "metadata_leads_only": true,
+    "upstream_assets_included": false,
+    "upstream_rows_included": false,
+    "upstream_code_included": false,
+    "upstream_weights_included": false,
+    "per_asset_license_review_required": true,
+    "truth_verified": false,
+    "safety_verified": false,
+    "license_compatibility_verified": false,
+    "proposal_accepted": false,
+    "acceptance_authority": false,
+    "karma_authority": false,
+    "runtime_network": false,
+    "inference": false,
+    "hugging_face_jobs": false,
+    "compute": false,
+    "credentials": false,
+    "graph_write": false,
+    "hub_repository_creation": false,
+    "hub_upload": false,
+    "publication": false,
+    "deployment": false,
+    "manifest_excludes_self": true
+  }
+}
