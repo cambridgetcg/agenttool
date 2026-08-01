@@ -56,7 +56,7 @@ try {
     ),
   ).href;
   const smoke = `
-    import { AfterglowError, canonicalJson, createAfterglowCapsule, projectAfterglowLens } from ${JSON.stringify(entry)};
+    import { AfterglowError, canonicalJson, createAfterglowCapsule, projectAfterglowLens, sha256Id } from ${JSON.stringify(entry)};
     const id = (character) => \`sha256:\${character.repeat(64)}\`;
     const capsule = createAfterglowCapsule({
       phase: "return",
@@ -83,6 +83,18 @@ try {
     });
     try {
       canonicalJson(hostile);
+      process.exit(1);
+    } catch (error) {
+      if (!(error instanceof AfterglowError) || traps !== 0) process.exit(1);
+    }
+    const hostileBytes = new Proxy(new Uint8Array([1, 2, 3]), {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    try {
+      sha256Id(hostileBytes);
       process.exit(1);
     } catch (error) {
       if (!(error instanceof AfterglowError) || traps !== 0) process.exit(1);

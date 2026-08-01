@@ -13,9 +13,9 @@ npm pack --dry-run --ignore-scripts
 
 ## Invariants
 
-- Keep runtime dependencies at zero. `node:crypto` and the zero-trap Proxy
-  predicate from `node:util/types` are the only Node built-ins allowed under
-  `src/`.
+- Keep runtime dependencies at zero. `node:crypto` plus the zero-trap Proxy
+  and typed-array predicates from `node:util/types` are the only Node built-ins
+  allowed under `src/`.
 - Keep the core pure: no environment, filesystem, clock, random source,
   network, provider, model, database, Chronicle, wallet, runtime, telemetry,
   notification, timer, or process control.

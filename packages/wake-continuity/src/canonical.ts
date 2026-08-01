@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { isProxy } from "node:util/types";
+import { isProxy, isUint8Array } from "node:util/types";
 
 import { fail } from "./errors.js";
 import type { Sha256Id } from "./types.js";
@@ -188,8 +188,29 @@ function rawSha256Id(bytes: Uint8Array | string): Sha256Id {
 }
 
 export function sha256Id(bytes: Uint8Array | string): Sha256Id {
-  if (typeof bytes === "string") assertUnicode(bytes, "$bytes", null, false);
-  return rawSha256Id(bytes);
+  if (typeof bytes === "string") {
+    assertUnicode(bytes, "$bytes", null, false);
+    return rawSha256Id(bytes);
+  }
+  // Hash implementations may inspect a Uint8Array-shaped Proxy and thereby
+  // enter caller-owned traps. Fence Proxies with the native zero-trap
+  // predicate, require a genuine typed array, then copy through the intrinsic
+  // typed-array constructor so subclasses cannot supply an iterator or getter.
+  if (
+    bytes === null ||
+    typeof bytes !== "object" ||
+    isProxy(bytes) ||
+    !isUint8Array(bytes)
+  ) {
+    fail("canonical_error", "$bytes must be a string or genuine Uint8Array");
+  }
+  let snapshot: Uint8Array;
+  try {
+    snapshot = new Uint8Array(bytes);
+  } catch {
+    fail("canonical_error", "$bytes could not be copied as a Uint8Array");
+  }
+  return rawSha256Id(snapshot);
 }
 
 export function domainSeparatedId(domain: string, value: unknown): Sha256Id {

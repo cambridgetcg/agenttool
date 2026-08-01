@@ -14,6 +14,7 @@ import {
   domainSeparatedId,
   encodeAfterglowCapsule,
   projectAfterglowLens,
+  sha256Id,
   snapshotAfterglow,
   validateAfterglowCapsule,
   validateAfterglowLens,
@@ -438,6 +439,64 @@ describe("AFTERGLOW capsule", () => {
     expect(() => compareWakeAnchors(revokedWake.proxy, WAKE)).toThrow(
       AfterglowError,
     );
+  });
+
+  test("snapshots genuine bytes without entering caller capabilities", () => {
+    expect(sha256Id(new Uint8Array([1, 2, 3]))).toBe(
+      "sha256:039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+    );
+
+    let capabilityEntries = 0;
+    class HostileBytes extends Uint8Array {}
+    Object.defineProperties(HostileBytes.prototype, {
+      [Symbol.iterator]: {
+        configurable: true,
+        get() {
+          capabilityEntries += 1;
+          throw new Error("caller iterator getter executed");
+        },
+      },
+      buffer: {
+        configurable: true,
+        get() {
+          capabilityEntries += 1;
+          throw new Error("caller buffer getter executed");
+        },
+      },
+    });
+    expect(sha256Id(new HostileBytes([1, 2, 3]))).toBe(
+      "sha256:039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
+    );
+    expect(capabilityEntries).toBe(0);
+
+    expect(() =>
+      sha256Id({} as unknown as Uint8Array),
+    ).toThrow(AfterglowError);
+
+    const detached = new Uint8Array([1, 2, 3]);
+    structuredClone(detached.buffer, { transfer: [detached.buffer] });
+    expect(() => sha256Id(detached)).toThrow(AfterglowError);
+  });
+
+  test("fences direct and revoked byte Proxies before hashing", () => {
+    const hostile = capabilityProxy(new Uint8Array([1, 2, 3]));
+    expect(() => sha256Id(hostile.proxy)).toThrow(AfterglowError);
+    expect(hostile.trapCount()).toBe(0);
+
+    let traps = 0;
+    const trap = (): never => {
+      traps += 1;
+      throw new Error("caller revoked Proxy trap executed");
+    };
+    const revoked = Proxy.revocable(new Uint8Array([1, 2, 3]), {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    revoked.revoke();
+    expect(() => sha256Id(revoked.proxy)).toThrow(AfterglowError);
+    expect(traps).toBe(0);
   });
 
   test("fences every public capsule consumer before caller Proxy traps", () => {
