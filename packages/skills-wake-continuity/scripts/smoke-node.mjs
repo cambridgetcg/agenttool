@@ -41,6 +41,7 @@ const input = {
   },
   skills: [
     {
+      name_kind: "reported",
       name: "nen-vow-forge",
       content_digest: id("c"),
       file_count: 2,
@@ -48,6 +49,7 @@ const input = {
       resource_count: 1,
     },
     {
+      name_kind: "reported",
       name: "nen-contract-mantle",
       content_digest: id("b"),
       file_count: 3,

@@ -49,6 +49,7 @@ export function validInput(): SkillsYutabaseInput {
     },
     skills: [
       {
+        name_kind: "reported",
         name: "nen-vow-forge",
         content_digest: VOW_DIGEST,
         file_count: 2,
@@ -56,6 +57,7 @@ export function validInput(): SkillsYutabaseInput {
         resource_count: 1,
       },
       {
+        name_kind: "reported",
         name: "nen-contract-mantle",
         content_digest: CONTRACT_DIGEST,
         file_count: 3,
@@ -76,6 +78,7 @@ export function validPlan(
 
 export function maximumPlan(): SkillsYutabasePlan {
   const skills = Array.from({ length: 128 }, (_, index) => ({
+    name_kind: "reported" as const,
     name: `skill-${String(index).padStart(3, "0")}`,
     content_digest: `sha256:${index.toString(16).padStart(64, "0")}`,
     file_count: 1,

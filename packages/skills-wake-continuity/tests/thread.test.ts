@@ -22,7 +22,7 @@ describe("Skills reference-only continuity thread", () => {
     const thread = createSkillsWakeContinuityThread(validPlan());
     expect(thread.profile).toBe("agenttool.skills-wake-continuity-thread/v0.1");
     expect(thread.thread_id).toBe(
-      "sha256:d356437935f9a79756866ae2e85c8bb932d3b42d665fae73b9d461c4da536c24",
+      "sha256:47a5903b2aa013b2d2e1dd62913994a148de01ea1e7d5e51882a20d24aae7964",
     );
     expect(thread.inspector_revision).toBe(INSPECTOR_REVISION);
     expect(thread.selected_skill_count).toBe(2);
@@ -68,6 +68,28 @@ describe("Skills reference-only continuity thread", () => {
     expect(b).toEqual(a);
   });
 
+  test("validates the source name-provenance lane without carrying it", () => {
+    const reportedThread = createSkillsWakeContinuityThread(validPlan());
+    const redacted = validInput();
+    redacted.skills[0] = {
+      ...redacted.skills[0]!,
+      name_kind: "redacted_alias",
+      name: "<redacted-1>",
+    };
+    redacted.selection_summary.redactions = 1;
+    const redactedPlan = validPlan(redacted);
+    const redactedThread = createSkillsWakeContinuityThread(redactedPlan);
+
+    expect(redactedThread.thread_id).not.toBe(reportedThread.thread_id);
+    expect(validateSkillsYutabasePlan(redactedPlan)).toEqual(redactedPlan);
+    expect(JSON.stringify(redactedThread)).not.toContain("redacted_alias");
+    expect(JSON.stringify(redactedThread)).not.toContain("<redacted-1>");
+
+    const invalid = clone(redactedPlan) as any;
+    invalid.cards[1].fields.name_kind = "inferred";
+    expect(() => validateSkillsYutabasePlan(invalid)).toThrow(/name_kind/i);
+  });
+
   test("admits the source planner's closed 128-snapshot maximum", () => {
     const thread = createSkillsWakeContinuityThread(maximumPlan());
     expect(thread.selected_skill_count).toBe(128);
@@ -79,6 +101,8 @@ describe("Skills reference-only continuity thread", () => {
     const cases: Array<(plan: any) => void> = [
       (plan) => { plan.selection_digest = `sha256:${"0".repeat(64)}`; },
       (plan) => { plan.cards[1].fields.content_digest = `sha256:${"1".repeat(64)}`; },
+      (plan) => { plan.cards[1].fields.name_kind = "inferred"; },
+      (plan) => { delete plan.cards[1].fields.name_kind; },
       (plan) => { plan.relations.pop(); },
       (plan) => { plan.limitations.persistence = "performed"; },
       (plan) => { plan.cards[0].claim.by = ""; },

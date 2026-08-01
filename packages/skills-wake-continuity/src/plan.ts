@@ -19,6 +19,7 @@ import {
   array,
   deepFreeze,
   integer,
+  literal,
   record,
   snapshotData,
   text,
@@ -67,7 +68,14 @@ export function validateSkillsYutabasePlan(
       `$plan.cards[${String(index + 1)}].fields`,
       "plan_invalid",
     );
+    const nameKind = literal(
+      fields.name_kind,
+      ["reported", "redacted_alias"],
+      `${String(index)}.name_kind`,
+      "plan_invalid",
+    );
     return {
+      name_kind: nameKind,
       name: text(fields.name, `${String(index)}.name`, "plan_invalid"),
       content_digest: text(
         fields.content_digest,

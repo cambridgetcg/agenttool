@@ -9,7 +9,10 @@ The source plan must be snapshotted from own plain data properties without
 invoking accessors, rebuilt through `planSkillsInspection`, and compared in
 full. Claims participate in validation but never in the thread identity. Keep
 project ID, claimant, recorded time, claim sources, and skill names out of the
-thread. A digest is a reference, not proof of minimization, truth, authorship,
+thread. Validate the explicit `reported` / `redacted_alias` name-provenance lane
+when rebuilding the source plan; it is bound by the accepted plan's selection
+digest and snapshot refs but is not copied into the thread. A digest is a
+reference, not proof of minimization, truth, authorship,
 safety, currentness, consent, or identity.
 
 The posture mapping is frozen together:

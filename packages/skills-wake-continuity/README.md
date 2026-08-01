@@ -5,6 +5,9 @@ This private package is the narrow seam between a minimized
 `@agenttool/wake-continuity` AFTERGLOW capsule. It verifies one exact planner
 result, removes project, claimant, observation-time, claim-source, and skill-name
 fields, then content-addresses the remaining inspection and snapshot references.
+The source plan's explicit `reported` / `redacted_alias` name-provenance lane is
+validated during exact reconstruction and remains bound by the source selection
+digest and snapshot refs, but the lane and name do not cross into the thread.
 
 It does not add a YUTABASE deck, continuity UUID, cursor, database adapter, WAKE
 route, model call, or background resume loop. AFTERGLOW remains the only capsule,
@@ -35,8 +38,8 @@ The Skills thread carries only:
 - selected count; and
 - sorted existing snapshot refs paired with their content digests.
 
-It does not carry `project_id`, skill names, claimant, `recorded_at`, claim
-sources, descriptions, prompts, paths, bodies, issues, credentials, Nen
+It does not carry `project_id`, skill names or their provenance lane, claimant,
+`recorded_at`, claim sources, descriptions, prompts, paths, bodies, issues, credentials, Nen
 interpretations, scores, consent, permission, authority, or identity claims.
 Digest references can still be linkable; the adapter neither sees nor verifies
 their preimages.
