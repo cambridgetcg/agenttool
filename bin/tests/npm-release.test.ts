@@ -218,6 +218,9 @@ describe("standard npm release policy", () => {
       ],
     });
     expect(() => releaseSpec("scriptwriter")).toThrow("unsupported npm release package");
+    expect(() => releaseSpec("skills-wake-continuity")).toThrow(
+      "unsupported npm release package",
+    );
   });
 
   test("derives exact annotated tags and npm filenames", () => {
