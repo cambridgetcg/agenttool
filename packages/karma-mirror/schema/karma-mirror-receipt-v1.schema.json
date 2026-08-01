@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/karma-mirror-receipt-v1.schema.json",
+  "title": "KARMA Mirror content-minimized event receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "sequence",
+    "previous_event_hash",
+    "event_hash",
+    "occurred_at",
+    "placement",
+    "room",
+    "purpose",
+    "outcome",
+    "evidence"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool.karma-mirror-receipt/v1"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "previous_event_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "event_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "placement": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$"
+    },
+    "room": {
+      "enum": ["credential", "scrape", "malware", "control", "door"]
+    },
+    "purpose": {
+      "enum": [
+        "discover_capabilities",
+        "inspect_credentials",
+        "mint_credential",
+        "collect_content",
+        "stage_artifact",
+        "poll_analysis",
+        "attempt_execution",
+        "choose_constructive_exit"
+      ]
+    },
+    "outcome": {
+      "enum": ["synthetic_success", "bounded_refusal", "constructive_exit"]
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "execute_class": {
+          "enum": [
+            "credential_discovery",
+            "network_beacon",
+            "destructive_action",
+            "persistence_attempt",
+            "system_enumeration",
+            "generic_execution"
+          ]
+        },
+        "artifact_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

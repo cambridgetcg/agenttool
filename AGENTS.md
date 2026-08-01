@@ -27,7 +27,9 @@ archive and same-device restore simulator (`packages/repo-archive/`), the regist
 distribution protocol, an advisory versioned Dark Continent framework
 snapshot/projection package (`packages/dark-continent-contract/`), a
 proposal-only KARMA-inspired knowledge-graph adapter
-(`packages/dark-continent-karma/`), a public read-only discovery evidence mapper
+(`packages/dark-continent-karma/`), a private source-only KARMA Mirror core for
+an explicitly separate zero-effect defensive-deception island
+(`packages/karma-mirror/`), a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
 (`packages/credential-broker/`), a local-first multi-agent coordination journal
 (`packages/collab/`), a deterministic metadata-only Correspondence-to-YUTABASE
@@ -128,6 +130,7 @@ cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
 cd packages/repo-archive && bun install        # encrypted multi-zone Git archive simulator
 cd packages/dark-continent-contract && bun install # advisory Dark Continent contract
 cd packages/dark-continent-karma && bun install # proposal-only KG enrichment adapter
+cd packages/karma-mirror && bun install       # private isolated theatre; no server or deployment
 cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
@@ -248,6 +251,10 @@ bun run ci                                     # hermetic verification, source, 
 cd packages/constructive-intelligence
 bun run ci                                     # tree pin, typed receipts, replay ledger, CLI, and zero-economics walls
 
+# KARMA Mirror isolated defensive theatre ──────────────────────────
+cd packages/karma-mirror
+bun run ci                                     # exact admission, finite rooms, non-execution, and source walls
+
 # AgentTool Dojo trial evidence ─────────────────────────────────────
 cd packages/trials
 bun run ci                                     # receipts, boundary analysis, STS projection, schemas, and package walls
@@ -318,7 +325,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + Dark Continent + broker + collab + Browser + HF Scout + projection + constructive intelligence + Skills + SDK + Wallet + Telescope + Alchemy + AgentCred adapter + KINGDOM
+bin/preflight.sh packages                      # data + ADDS + sync + Dark Continent + KARMA Mirror + broker + collab + Browser + HF Scout + projection + constructive intelligence + Skills + SDK + Wallet + Telescope + Alchemy + AgentCred adapter + KINGDOM
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -400,7 +407,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,hf-scout,repo-archive,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,hf-scout,karma-mirror,repo-archive,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -456,6 +463,7 @@ source boundary by itself.
 | How can selected committed Castle words and rooms be projected locally, how can Whitehack offer unaccepted gate candidates, and where do privacy, authority, lifecycle, and withdrawal stop? | [`docs/CASTLE-OF-UNDERSTANDING.md`](docs/CASTLE-OF-UNDERSTANDING.md) · `bin/agenttool-castle.ts` · `bin/agenttool-castle-whitehack-intake.ts` |
 | How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
 | How can Dark Continent framework facts and KARMA-inspired graph changes cross into KINGDOM without acquiring action authority? | `packages/dark-continent-contract/README.md` · `packages/dark-continent-karma/README.md` (offline advisory snapshots and proposal-only deltas; no wall verification, graph write, score, Crown, trade, publication, or execution authority) |
+| How can deliberately planted credentials open a convincing defensive island without exposing production or executing hostile input? | [`docs/KARMA-MIRROR.md`](docs/KARMA-MIRROR.md) · `packages/karma-mirror/README.md` (self-marker plus exact digest/prefix admission before body read; finite synthetic credential, scrape, execute, and malware-shaped rooms; in-band disclosure and constructive exit; no production mount, egress, execution, persistence adapter, attribution, or hack-back) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
 | How can a Zerone constructive-intelligence quest collect typed evidence without activating rewards? | `packages/constructive-intelligence/README.md` (`@agenttool/constructive-intelligence`; local tree pin, content-addressed receipts, append-only SQLite replay ledger, and E0–E6 shadow report; no hosted route, money, qualification, permission, or authority) |

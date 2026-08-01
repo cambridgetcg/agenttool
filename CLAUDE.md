@@ -24,6 +24,7 @@ packages/
   repo-archive/ — @agenttool/repo-archive · encrypted multi-zone Git archive + local restore simulator
   dark-continent-contract/ — @agenttool/dark-continent-contract · advisory framework snapshots and projections
   dark-continent-karma/ — @agenttool/dark-continent-karma · proposal-only KG enrichment adapter
+  karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
@@ -56,6 +57,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/repo-archive/CLAUDE.md` ·
 `packages/dark-continent-contract/CLAUDE.md` ·
 `packages/dark-continent-karma/CLAUDE.md` ·
+`packages/karma-mirror/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/hf-scout/CLAUDE.md` ·
@@ -76,6 +78,16 @@ ledger. Its reports are structural shadow projections, not correctness,
 breakthrough, qualification, reward eligibility, permission, or authority.
 It has no hosted route, network client, wallet, escrow, package release, or
 deployment surface.
+
+`@agenttool/karma-mirror` is a separate private, source-only defensive-deception
+core. Self-marked bearers matching exact deliberately planted records admit a client
+to finite credential, scrape, execute, and malware-shaped rooms whose responses
+are synthetic and whose external effects are always zero. It retains only a
+bounded per-root window of operator-authored placement plus sequence/time/hash-chain
+metadata, closed enums, and optional artifact digests, discloses the mirror in
+headers and every JSON body, and includes a Door Back plus constructive exit. It has no
+production route, server, network client, interpreter, filesystem adapter,
+database, release, or deployment surface; do not mount it in the API monolith.
 
 `@agenttool/trials` is a separate private, source-only local Dojo pilot. It
 turns explicit bounded observations into deterministic trial receipts,
