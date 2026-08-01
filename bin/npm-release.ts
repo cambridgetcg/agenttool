@@ -9,7 +9,7 @@
  * credentials and makes an accepted-but-not-yet-visible publish recoverable.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
@@ -1001,12 +1001,20 @@ async function timedRegistryFetch(
 
 async function registryFetch(
   path: string,
+  observation: string,
   timeoutMs = REGISTRY_METADATA_TIMEOUT_MS,
   fetchMetadata: TimedRegistryFetch = timedRegistryFetch,
 ): Promise<Response> {
+  const url = new URL(path, `${REGISTRY_ORIGIN}/`);
+  if (url.origin !== REGISTRY_ORIGIN) fail("npm registry metadata URL has an unexpected origin");
+  if (url.username !== "" || url.password !== "") {
+    fail("npm registry metadata URL must not contain userinfo");
+  }
+  if (url.hash !== "") fail("npm registry metadata URL must not contain a fragment");
+  url.searchParams.set("_agenttool_release_check", observation);
   try {
     return await fetchMetadata(
-      `${REGISTRY_ORIGIN}${path}`,
+      url.href,
       {
         headers: { accept: "application/json" },
         redirect: "error",
@@ -1044,9 +1052,17 @@ async function registryState(
   fetchMetadata: TimedRegistryFetch = timedRegistryFetch,
 ): Promise<RegistryState> {
   const packagePath = registryPackagePath(name);
+  // Share one fresh cache key across this package/version observation so a
+  // pre-publication CDN 404 cannot pin later registry polls.
+  const observation = randomUUID();
   const [packageResponse, versionResponse] = await Promise.all([
-    registryFetch(packagePath, timeoutMs, fetchMetadata),
-    registryFetch(`${packagePath}/${encodeURIComponent(version)}`, timeoutMs, fetchMetadata),
+    registryFetch(packagePath, observation, timeoutMs, fetchMetadata),
+    registryFetch(
+      `${packagePath}/${encodeURIComponent(version)}`,
+      observation,
+      timeoutMs,
+      fetchMetadata,
+    ),
   ]);
   const packageDocument = packageResponse.status === 200
     ? await registryJson(packageResponse, "npm registry package document") as RegistryPackage

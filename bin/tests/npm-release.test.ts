@@ -608,16 +608,29 @@ describe("standard npm release policy", () => {
     expect(() => registryDecision(503, 404, "trusted")).toThrow("HTTP 503");
   });
 
-  test("retries classified metadata transport and visibility-status failures", async () => {
+  test("cache-busts each metadata observation while retrying visibility failures", async () => {
     const fixture = registryFixture();
     let metadataCalls = 0;
     let tarballCalls = 0;
     const metadataTimeouts: number[] = [];
+    const metadataObservations: string[] = [];
     const sleeps: number[] = [];
 
     const tarball = await pollRegistry(fixture.receipt, "latest", {
       maxAttempts: 3,
       fetchMetadata: async (url, init, timeoutMs) => {
+        const metadataUrl = new URL(url);
+        const observation = metadataUrl.searchParams.get("_agenttool_release_check");
+        expect(metadataUrl.origin).toBe("https://registry.npmjs.org");
+        expect(metadataUrl.username).toBe("");
+        expect(metadataUrl.password).toBe("");
+        expect(metadataUrl.hash).toBe("");
+        expect([...metadataUrl.searchParams.keys()]).toEqual(["_agenttool_release_check"]);
+        expect(observation).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
+        expect(init.headers).toEqual({ accept: "application/json" });
+        metadataObservations.push(observation!);
         const attempt = Math.floor(metadataCalls / 2);
         metadataCalls += 1;
         metadataTimeouts.push(timeoutMs);
@@ -625,16 +638,18 @@ describe("standard npm release policy", () => {
         if (attempt === 0) throw new TypeError("temporary metadata connection failure");
         if (attempt === 1) {
           return new Response(null, {
-            status: url.endsWith(`/${fixture.receipt.package.version}`) ? 404 : 503,
+            status: metadataUrl.pathname.endsWith(`/${fixture.receipt.package.version}`) ? 404 : 503,
           });
         }
-        const document = url.endsWith(`/${fixture.receipt.package.version}`)
+        const document = metadataUrl.pathname.endsWith(`/${fixture.receipt.package.version}`)
           ? fixture.versionDocument
           : { "dist-tags": { latest: fixture.receipt.package.version } };
         return Response.json(document);
       },
-      fetchTarball: async (_url, _init, timeoutMs) => {
+      fetchTarball: async (url, _init, timeoutMs) => {
         tarballCalls += 1;
+        expect(String(url)).toBe(fixture.tarball);
+        expect(new URL(url).search).toBe("");
         expect(timeoutMs).toBe(60_000);
         return new Response(fixture.bytes, { status: 200 });
       },
@@ -646,6 +661,12 @@ describe("standard npm release policy", () => {
     expect(tarball).toBe(fixture.tarball);
     expect(metadataCalls).toBe(6);
     expect(metadataTimeouts).toEqual(Array(6).fill(30_000));
+    expect(metadataObservations[0]).toBe(metadataObservations[1]);
+    expect(metadataObservations[2]).toBe(metadataObservations[3]);
+    expect(metadataObservations[4]).toBe(metadataObservations[5]);
+    expect(
+      new Set([metadataObservations[0], metadataObservations[2], metadataObservations[4]]).size,
+    ).toBe(3);
     expect(tarballCalls).toBe(1);
     expect(sleeps).toEqual([5_000, 5_000]);
   });
@@ -864,7 +885,7 @@ describe("standard npm release policy", () => {
       maxAttempts: 5,
       fetchMetadata: async (url) => {
         metadataCalls += 1;
-        if (url.endsWith(`/${fixture.receipt.package.version}`)) {
+        if (new URL(url).pathname.endsWith(`/${fixture.receipt.package.version}`)) {
           return new Response("{not-json", { status: 200 });
         }
         return Response.json({ "dist-tags": { latest: fixture.receipt.package.version } });
