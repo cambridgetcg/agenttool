@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kingdom:witness-dossier:v0.1",
+  "title": "KINGDOM witness dossier v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "dossier_id",
+    "passport_id",
+    "question_sha256",
+    "observed_at",
+    "witnesses",
+    "human_review",
+    "evidence_refs",
+    "observation",
+    "conclusions",
+    "statement"
+  ],
+  "properties": {
+    "schema": { "const": "kingdom.witness-dossier/0.1" },
+    "dossier_id": { "$ref": "#/$defs/sha256" },
+    "passport_id": { "$ref": "#/$defs/sha256" },
+    "question_sha256": { "$ref": "#/$defs/sha256" },
+    "observed_at": { "$ref": "#/$defs/time" },
+    "witnesses": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "witness_id",
+          "kind",
+          "source_ref",
+          "observation_sha256",
+          "stance",
+          "independence",
+          "execution",
+          "disclosure"
+        ],
+        "properties": {
+          "witness_id": { "$ref": "#/$defs/opaque" },
+          "kind": {
+            "enum": [
+              "browser_material",
+              "collab_report",
+              "dataset_label",
+              "human_review",
+              "model_interpreter",
+              "publisher_assertion",
+              "rhetorlint",
+              "trial_receipt"
+            ]
+          },
+          "source_ref": { "$ref": "#/$defs/evidenceRef" },
+          "observation_sha256": { "$ref": "#/$defs/sha256" },
+          "stance": {
+            "enum": ["contradicts", "insufficient", "not_applicable", "supports", "unknown"]
+          },
+          "independence": { "enum": ["independent", "shared_source", "unknown"] },
+          "execution": {
+            "enum": [
+              "local_reported",
+              "not_applicable",
+              "not_started_reported",
+              "remote_reported",
+              "unknown"
+            ]
+          },
+          "disclosure": {
+            "enum": [
+              "content_disclosed_reported",
+              "digest_only_reported",
+              "none_reported",
+              "unknown"
+            ]
+          }
+        }
+      }
+    },
+    "human_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "evidence_refs"],
+      "properties": {
+        "status": { "enum": ["completed_reported", "not_requested", "pending_reported"] },
+        "evidence_refs": { "$ref": "#/$defs/evidenceRefs" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "not_requested" } } },
+          "then": {
+            "properties": { "evidence_refs": { "type": "array", "maxItems": 0 } }
+          }
+        },
+        {
+          "if": { "properties": { "status": { "const": "completed_reported" } } },
+          "then": {
+            "properties": { "evidence_refs": { "type": "array", "minItems": 1 } }
+          }
+        }
+      ]
+    },
+    "evidence_refs": { "$ref": "#/$defs/evidenceRefs" },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relationship",
+        "support_count",
+        "contradiction_count",
+        "directional_source_count"
+      ],
+      "properties": {
+        "relationship": {
+          "enum": [
+            "cross_source_agreement_observed",
+            "disagreement_observed",
+            "no_directional_observation",
+            "one_sided_observation"
+          ]
+        },
+        "support_count": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "contradiction_count": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "directional_source_count": { "type": "integer", "minimum": 0, "maximum": 64 }
+      }
+    },
+    "conclusions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["external_facts", "truth", "authority", "automatic_action"],
+      "properties": {
+        "external_facts": { "const": "not_resolved" },
+        "truth": { "const": "not_determined" },
+        "authority": { "const": "none" },
+        "automatic_action": { "const": false }
+      }
+    },
+    "statement": {
+      "const": "Digest-only caller-reported observations. Sources and independence are not revalidated; agreement is not truth and disagreement is not falsity. This dossier has no score, quorum, consensus, verdict, trust, representation, or authority."
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.\\d{3}Z$"
+    },
+    "opaque": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._+@-]{0,255}$"
+    },
+    "evidenceRef": {
+      "type": "string",
+      "maxLength": 272,
+      "pattern": "^((artifact|collab|data|paper|passport|report|test):(?=.{1,256}$)(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._+@-]*(/[A-Za-z0-9][A-Za-z0-9._+@-]*)*|commit:([0-9a-f]{40}|[0-9a-f]{64})|sha256:[0-9a-f]{64})$"
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/evidenceRef" }
+    }
+  }
+}
