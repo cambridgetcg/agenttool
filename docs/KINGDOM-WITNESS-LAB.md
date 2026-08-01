@@ -2,13 +2,14 @@
 
 > **Compass:** [KIN](KIN.md) (representation and identity boundaries) · [AGENT-TRIALS](AGENT-TRIALS.md) (evidence before execution scale) · [AGENT-BROWSER](AGENT-BROWSER.md) (bounded web execution) · [CANONICAL-BYTES](CANONICAL-BYTES.md) (deterministic identity)
 >
-> **Implements:** A private, local admission layer for exact external-research references, provider-route disclosures, digest-only multi-witness dossiers, and inert DeepSeek research leads. It does not represent a being, execute research artifacts, determine truth, or authorize action.
+> **Implements:** A public developer-preview, local admission layer for exact external-research references, provider-route disclosures, digest-only multi-witness dossiers, and inert DeepSeek research leads. It does not represent a being, execute research artifacts, determine truth, or authorize action.
 >
 > **Code:** [`packages/kingdom-witness-lab/src/`](../packages/kingdom-witness-lab/src/) · [`packages/kingdom-witness-lab/schema/`](../packages/kingdom-witness-lab/schema/) · [`packages/kingdom-witness-lab/research/`](../packages/kingdom-witness-lab/research/)
 >
 > **Tests:** [`packages/kingdom-witness-lab/tests/`](../packages/kingdom-witness-lab/tests/) · [`bin/tests/boring-spine-gate.test.ts`](../bin/tests/boring-spine-gate.test.ts)
 
-Status: private source-only prototype, 2026-08-01.
+Status: public developer-preview source package, 2026-08-01. Its optional npm
+mirror distributes local code and schemas; it is not a hosted witness service.
 
 The Witness Lab is a small admission layer between external research and the
 rest of KINGDOM. It gives agents stable references to exchange before anyone
@@ -86,24 +87,29 @@ describe:
    Scout's phase-aware curated-licence vocabulary does not currently include
    literal `mit`; the atlas preserves `mit` itself instead of coercing it or
    forcing DeepSeek into unrelated training-phase rows.
-2. **Browser understanding** binds exact observed web material and keeps local
+2. **DeepSeek → KINGDOM** owns exact official-source bindings and deterministic
+   `proposed_unaccepted` integration candidates. Witness Lab owns passports,
+   route disclosures, dossiers, and trial descriptors around admitted
+   artifacts. They cross only through exact IDs and digests; neither package
+   accepts or authenticates the other.
+3. **Browser understanding** binds exact observed web material and keeps local
    RhetorLint output separate from a caller-injected model observation. A caller
    can hash those closed observations into separate dossier witnesses. Raw page
    text and model output do not enter the dossier.
-3. **RhetorLint** supplies rhetoric observations, never factual verdicts. Its
+4. **RhetorLint** supplies rhetoric observations, never factual verdicts. Its
    witness can support, contradict, or remain insufficient independently of a
    model witness.
-4. **Trials** remains the owner of actual local trial receipts. The speculative
+5. **Trials** remains the owner of actual local trial receipts. The speculative
    descriptor records a narrower target/draft experiment plan or report and can
    cite a Trials receipt by opaque digest; it is not a second executor.
-5. **Collab** can exchange passport, binding, dossier, and receipt IDs as compact
+6. **Collab** can exchange passport, binding, dossier, and receipt IDs as compact
    evidence. A Collab report is one caller-reported witness, not authenticated
    truth or authority.
-6. **YUTABASE** is a natural durable graph target for exact passports and
+7. **YUTABASE** is a natural durable graph target for exact passports and
    dossier relationships, but this slice adds no projector or database write.
    Any later projection should preserve content IDs, source separation, and
    withdrawal/retention policy rather than flattening records into a scalar.
-7. **Repo Archive** can use 3FS as research context, while its own encrypted
+8. **Repo Archive** can use 3FS as research context, while its own encrypted
    independent-zone restore evidence remains the operative design. No atlas row
    silently becomes an archive backend.
 
@@ -136,9 +142,10 @@ package.
 ## What has not happened
 
 No model, dataset row, card, repository archive, weight, binary, or code was
-downloaded. Only public repository metadata and official pages were read. No
-hosted inference or model execution, provider write/account route, HF Space or
-Job, or repository workflow was invoked. No ambient credential was read, no
-gate or terms were accepted, no account was changed, no remote compute or quota
-was used, and no npm/LOVE artifact, tag, release, hosted route, database record,
-or deployment was created.
+downloaded while preparing this dated atlas. Only public repository metadata
+and official pages were read. No hosted inference or model execution, provider
+write/account route, HF Space or Job, or repository workflow was invoked. No
+ambient credential was read, no gate or terms were accepted, no account was
+changed, and no remote compute or quota was used. The package creates no LOVE
+artifact, hosted route, database record, or service deployment; an optional npm
+publication only mirrors the reviewed local package bytes.

@@ -15,6 +15,13 @@ It also ships a dated, revision-pinned DeepSeek research atlas. The atlas keeps
 publisher declarations, provider observations, and our integration proposals
 separate. Its rows are research leads, not installed capabilities.
 
+`@agenttool/deepseek-kingdom` owns exact official-source bindings and emits
+review-required `proposed_unaccepted` KINGDOM candidates. Witness Lab owns the
+separate admission vocabulary around those or other artifacts: passports,
+mutable-route disclosures, digest-only dossiers, and inert trial descriptors.
+The packages compose through exact IDs and digests; neither package accepts a
+proposal, authenticates the other, or grants execution authority.
+
 ## Boundary
 
 This package does not browse, download, execute, infer, call a provider, read a

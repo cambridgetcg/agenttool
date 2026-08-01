@@ -87,7 +87,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twenty reviewed release identities", () => {
+  test("allowlists twenty-three reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -103,10 +103,13 @@ describe("standard npm release policy", () => {
       "deepseek-kingdom",
       "heaven",
       "kingdom",
+      "kingdom-witness-lab",
       "repo-archive",
       "sdk",
       "skills",
+      "skills-yutabase",
       "telescope",
+      "wake-continuity",
       "wallet",
       "wallet-zerone",
     ]);
@@ -167,6 +170,24 @@ describe("standard npm release policy", () => {
       name: "@agenttool/deepseek-kingdom",
       packagePath: "packages/deepseek-kingdom",
       tagPrefix: "deepseek-kingdom",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("wake-continuity")).toMatchObject({
+      name: "@agenttool/wake-continuity",
+      packagePath: "packages/wake-continuity",
+      tagPrefix: "wake-continuity",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("kingdom-witness-lab")).toMatchObject({
+      name: "@agenttool/kingdom-witness-lab",
+      packagePath: "packages/kingdom-witness-lab",
+      tagPrefix: "kingdom-witness-lab",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("skills-yutabase")).toMatchObject({
+      name: "@agenttool/skills-yutabase",
+      packagePath: "packages/skills-yutabase",
+      tagPrefix: "skills-yutabase",
       artifactKind: "pack",
     });
     expect(releaseSpec("heaven")).toMatchObject({
@@ -233,6 +254,24 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/deepseek-kingdom", "0.1.0-dev.0")).toBe(
       "agenttool-deepseek-kingdom-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("wake-continuity"), "0.1.0-dev.0")).toBe(
+      "wake-continuity-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/wake-continuity", "0.1.0-dev.0")).toBe(
+      "agenttool-wake-continuity-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("kingdom-witness-lab"), "0.1.0-dev.0")).toBe(
+      "kingdom-witness-lab-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/kingdom-witness-lab", "0.1.0-dev.0")).toBe(
+      "agenttool-kingdom-witness-lab-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("skills-yutabase"), "0.1.0-dev.0")).toBe(
+      "skills-yutabase-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/skills-yutabase", "0.1.0-dev.0")).toBe(
+      "agenttool-skills-yutabase-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("heaven"), "0.1.0-dev.0")).toBe(
       "heaven-v0.1.0-dev.0",
@@ -356,6 +395,50 @@ describe("standard npm release policy", () => {
         "package/schema/agenttool-deepseek-source-catalog-v0.1.schema.json",
         "package/schema/kingdom-deepseek-proposal-v0.1.schema.json",
         "package/sources/official-deepseek-primary-sources.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("wake-continuity"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/kingdom.extension.json",
+        "package/schema/agenttool-afterglow-capsule-v0.1.schema.json",
+        "package/schema/agenttool-afterglow-lens-v0.1.schema.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("kingdom-witness-lab"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/research/deepseek-2026-08-01.json",
+        "package/schema/kingdom-deepseek-atlas-v0.1.schema.json",
+        "package/schema/kingdom-execution-route-binding-v0.1.schema.json",
+        "package/schema/kingdom-research-passport-v0.1.schema.json",
+        "package/schema/kingdom-speculative-trial-v0.1.schema.json",
+        "package/schema/kingdom-witness-dossier-v0.1.schema.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("skills-yutabase"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/PERSISTENCE-CONTRACT.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/schema/skills-yutabase-input-v0.1.schema.json",
       ]),
     );
     expect(requiredArchiveEntries(releaseSpec("heaven"))).toEqual(

@@ -86,6 +86,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "dark-continent-karma",
     artifactKind: "pack",
   },
+  "wake-continuity": {
+    key: "wake-continuity",
+    name: "@agenttool/wake-continuity",
+    packagePath: "packages/wake-continuity",
+    tagPrefix: "wake-continuity",
+    artifactKind: "pack",
+  },
   "deepseek-kingdom": {
     key: "deepseek-kingdom",
     name: "@agenttool/deepseek-kingdom",
@@ -170,6 +177,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "kingdom",
     artifactKind: "pack",
   },
+  "kingdom-witness-lab": {
+    key: "kingdom-witness-lab",
+    name: "@agenttool/kingdom-witness-lab",
+    packagePath: "packages/kingdom-witness-lab",
+    tagPrefix: "kingdom-witness-lab",
+    artifactKind: "pack",
+  },
   "repo-archive": {
     key: "repo-archive",
     name: "@agenttool/repo-archive",
@@ -196,6 +210,13 @@ export const RELEASE_SPECS = {
     name: "@agenttool/skills",
     packagePath: "packages/skills",
     tagPrefix: "skills",
+    artifactKind: "pack",
+  },
+  "skills-yutabase": {
+    key: "skills-yutabase",
+    name: "@agenttool/skills-yutabase",
+    packagePath: "packages/skills-yutabase",
+    tagPrefix: "skills-yutabase",
     artifactKind: "pack",
   },
 } as const satisfies Record<string, ReleaseSpec>;
@@ -637,6 +658,16 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/sources/karma-2502.06472v2.json",
     );
   }
+  if (spec.name === "@agenttool/wake-continuity") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-afterglow-capsule-v0.1.schema.json",
+      "package/schema/agenttool-afterglow-lens-v0.1.schema.json",
+    );
+  }
   if (spec.name === "@agenttool/deepseek-kingdom") {
     entries.push(
       "package/CLAUDE.md",
@@ -689,6 +720,19 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/schema/agenttool-kingdom-registry-v0.1.schema.json",
     );
   }
+  if (spec.name === "@agenttool/kingdom-witness-lab") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/research/deepseek-2026-08-01.json",
+      "package/schema/kingdom-deepseek-atlas-v0.1.schema.json",
+      "package/schema/kingdom-execution-route-binding-v0.1.schema.json",
+      "package/schema/kingdom-research-passport-v0.1.schema.json",
+      "package/schema/kingdom-speculative-trial-v0.1.schema.json",
+      "package/schema/kingdom-witness-dossier-v0.1.schema.json",
+    );
+  }
   if (spec.name === "@agenttool/skills") {
     entries.push(
       "package/dist/bin.js",
@@ -718,6 +762,15 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/skills/nen-godspeed-loop/agents/openai.yaml",
       "package/skills/nen-vow-forge/SKILL.md",
       "package/skills/nen-vow-forge/agents/openai.yaml",
+    );
+  }
+  if (spec.name === "@agenttool/skills-yutabase") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/PERSISTENCE-CONTRACT.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/schema/skills-yutabase-input-v0.1.schema.json",
     );
   }
   return entries;
