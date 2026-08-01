@@ -99,7 +99,7 @@ test("dataset hash manifest is exact, sorted, and non-recursive", async () => {
 test("Space bundles and verifies only bounded read-only catalog files", async () => {
   const manifest = await json("source-manifest.json", spaceRoot);
   assert.equal(manifest.dataset_repo, "Yu-and-Ai/kingdom-dark-continent-karma");
-  assert.equal(manifest.dataset_revision, "c774263639dea6c34995165813258e236dbc689c");
+  assert.equal(manifest.dataset_revision, "4ea106235b6d7dd53122b3025163a1bb32b02f97");
   assert.equal(manifest.dataset_revision_status, "pinned_to_initial_dataset_publish");
   assert.equal(manifest.runtime_network_reads, false);
   assert.equal(manifest.authority.authorizes_execution, false);
