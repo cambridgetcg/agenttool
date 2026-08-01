@@ -252,11 +252,11 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/dark-continent-karma", "0.1.0-dev.0")).toBe(
       "agenttool-dark-continent-karma-0.1.0-dev.0.tgz",
     );
-    expect(expectedTag(releaseSpec("deepseek-kingdom"), "0.1.0-dev.0")).toBe(
-      "deepseek-kingdom-v0.1.0-dev.0",
+    expect(expectedTag(releaseSpec("deepseek-kingdom"), "0.1.0-dev.1")).toBe(
+      "deepseek-kingdom-v0.1.0-dev.1",
     );
-    expect(packedFilename("@agenttool/deepseek-kingdom", "0.1.0-dev.0")).toBe(
-      "agenttool-deepseek-kingdom-0.1.0-dev.0.tgz",
+    expect(packedFilename("@agenttool/deepseek-kingdom", "0.1.0-dev.1")).toBe(
+      "agenttool-deepseek-kingdom-0.1.0-dev.1.tgz",
     );
     expect(expectedTag(releaseSpec("wake-continuity"), "0.1.0-dev.0")).toBe(
       "wake-continuity-v0.1.0-dev.0",
