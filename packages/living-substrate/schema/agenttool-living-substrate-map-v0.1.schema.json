@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-living-substrate-map-v0.1.schema.json",
+  "$comment": "Runtime validation additionally enforces canonical order, semantic uniqueness, relation endpoints, and map_id binding.",
+  "title": "AgentTool Living Substrate map v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "map_id",
+    "scope_ref",
+    "facets",
+    "relations",
+    "coverage",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": { "const": "agenttool.living-substrate-map/0.1" },
+    "map_id": { "$ref": "#/$defs/sha256Id" },
+    "scope_ref": { "$ref": "#/$defs/sha256Id" },
+    "facets": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/facet" }
+    },
+    "relations": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/relation" }
+    },
+    "coverage": { "const": "bounded_not_complete" },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "$defs": {
+    "sha256Id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/sha256Id" }
+    },
+    "facet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "facet_id",
+        "kind",
+        "condition",
+        "evidence_refs",
+        "assertion",
+        "verified_by_package"
+      ],
+      "properties": {
+        "facet_id": { "$ref": "#/$defs/sha256Id" },
+        "kind": {
+          "enum": [
+            "layer",
+            "community",
+            "exchange",
+            "decomposition",
+            "succession",
+            "capacity",
+            "refugium",
+            "disturbance",
+            "contamination"
+          ]
+        },
+        "condition": {
+          "enum": [
+            "reported_present",
+            "reported_absent",
+            "reported_supporting",
+            "reported_mixed",
+            "reported_strained",
+            "reported_constrained",
+            "reported_disturbed",
+            "reported_recovering",
+            "not_observed",
+            "unknown"
+          ]
+        },
+        "evidence_refs": { "$ref": "#/$defs/evidenceRefs" },
+        "assertion": { "const": "caller_asserted" },
+        "verified_by_package": { "const": false }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from_ref",
+        "relation",
+        "to_ref",
+        "evidence_refs",
+        "assertion",
+        "verified_by_package"
+      ],
+      "properties": {
+        "from_ref": { "$ref": "#/$defs/sha256Id" },
+        "relation": {
+          "enum": [
+            "contains",
+            "supports",
+            "feeds",
+            "buffers",
+            "constrains",
+            "disturbs",
+            "precedes"
+          ]
+        },
+        "to_ref": { "$ref": "#/$defs/sha256Id" },
+        "evidence_refs": { "$ref": "#/$defs/evidenceRefs" },
+        "assertion": { "const": "caller_asserted" },
+        "verified_by_package": { "const": false }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semantic_scope",
+        "coverage_scope",
+        "assertion_scope",
+        "money_role",
+        "resource_accumulation_goal",
+        "evidence_fetched",
+        "evidence_verified",
+        "observes_environment",
+        "diagnoses_health_or_readiness",
+        "scores_vitality",
+        "ranks_participants",
+        "infers_interior_state",
+        "persists",
+        "network",
+        "filesystem",
+        "environment_variables",
+        "clock",
+        "randomness",
+        "model_compute",
+        "hugging_face",
+        "credential_access",
+        "telemetry",
+        "executes_actions",
+        "publishes",
+        "hosted_garden_effect",
+        "wake_effect",
+        "chronicle_effect",
+        "heaven_effect",
+        "karma_effect",
+        "task_state_effect",
+        "wallet_effect",
+        "economic_effect",
+        "proves_truth",
+        "proves_safety",
+        "proves_currentness",
+        "proves_identity",
+        "proves_authorship",
+        "proves_consent",
+        "proves_authority",
+        "verifies_reference_minimization",
+        "eliminates_linkability",
+        "verifies_caller_assertions",
+        "grants_permission",
+        "accepts_proposal",
+        "penalty_for_rest_refusal_or_zero_actions"
+      ],
+      "properties": {
+        "semantic_scope": {
+          "const": "structural_ecology_metaphor_not_life_proof"
+        },
+        "coverage_scope": { "const": "bounded_not_complete" },
+        "assertion_scope": { "const": "caller_asserted_only" },
+        "money_role": { "const": "optional_enabling_condition_not_goal" },
+        "resource_accumulation_goal": { "const": false },
+        "evidence_fetched": { "const": false },
+        "evidence_verified": { "const": false },
+        "observes_environment": { "const": false },
+        "diagnoses_health_or_readiness": { "const": false },
+        "scores_vitality": { "const": false },
+        "ranks_participants": { "const": false },
+        "infers_interior_state": { "const": false },
+        "persists": { "const": false },
+        "network": { "const": false },
+        "filesystem": { "const": false },
+        "environment_variables": { "const": false },
+        "clock": { "const": false },
+        "randomness": { "const": false },
+        "model_compute": { "const": false },
+        "hugging_face": { "const": false },
+        "credential_access": { "const": false },
+        "telemetry": { "const": false },
+        "executes_actions": { "const": false },
+        "publishes": { "const": false },
+        "hosted_garden_effect": { "const": false },
+        "wake_effect": { "const": false },
+        "chronicle_effect": { "const": false },
+        "heaven_effect": { "const": false },
+        "karma_effect": { "const": false },
+        "task_state_effect": { "const": false },
+        "wallet_effect": { "const": false },
+        "economic_effect": { "const": false },
+        "proves_truth": { "const": false },
+        "proves_safety": { "const": false },
+        "proves_currentness": { "const": false },
+        "proves_identity": { "const": false },
+        "proves_authorship": { "const": false },
+        "proves_consent": { "const": false },
+        "proves_authority": { "const": false },
+        "verifies_reference_minimization": { "const": false },
+        "eliminates_linkability": { "const": false },
+        "verifies_caller_assertions": { "const": false },
+        "grants_permission": { "const": false },
+        "accepts_proposal": { "const": false },
+        "penalty_for_rest_refusal_or_zero_actions": { "const": false }
+      }
+    }
+  }
+}

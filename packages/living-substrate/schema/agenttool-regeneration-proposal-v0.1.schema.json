@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-regeneration-proposal-v0.1.schema.json",
+  "$comment": "Runtime validation additionally enforces canonical order, semantic uniqueness, map target references, and proposal_id binding.",
+  "title": "AgentTool Regeneration proposal v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "proposal_id",
+    "substrate_map_id",
+    "scope_ref",
+    "actions",
+    "choice",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": { "const": "agenttool.regeneration-proposal/0.1" },
+    "proposal_id": { "$ref": "#/$defs/sha256Id" },
+    "substrate_map_id": { "$ref": "#/$defs/sha256Id" },
+    "scope_ref": { "$ref": "#/$defs/sha256Id" },
+    "actions": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/action" }
+    },
+    "choice": { "$ref": "#/$defs/choice" },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "$defs": {
+    "sha256Id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_ref",
+        "kind",
+        "target_refs",
+        "basis_refs",
+        "reversibility",
+        "state",
+        "authority",
+        "assertion",
+        "verified_by_package"
+      ],
+      "properties": {
+        "action_ref": { "$ref": "#/$defs/sha256Id" },
+        "kind": {
+          "enum": [
+            "observe_more",
+            "remove_contaminant",
+            "decompact",
+            "restore_flow",
+            "add_diversity",
+            "feed_cycle",
+            "create_refuge",
+            "allow_fallow",
+            "repair_boundary",
+            "compost_into_lesson",
+            "release",
+            "do_nothing"
+          ]
+        },
+        "target_refs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256Id" }
+        },
+        "basis_refs": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256Id" }
+        },
+        "reversibility": {
+          "enum": [
+            "reversible",
+            "partly_reversible",
+            "unknown",
+            "irreversible_requires_separate_authority"
+          ]
+        },
+        "state": { "const": "proposed_unaccepted" },
+        "authority": { "const": "separate_authority_required" },
+        "assertion": { "const": "caller_asserted" },
+        "verified_by_package": { "const": false }
+      }
+    },
+    "choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selection",
+        "default_action_ref",
+        "rest_valid",
+        "do_nothing_valid",
+        "defer_valid",
+        "decline_valid",
+        "leave_valid",
+        "reason_required",
+        "penalty",
+        "automatic_retry"
+      ],
+      "properties": {
+        "selection": { "const": "none_made_by_package" },
+        "default_action_ref": { "type": "null" },
+        "rest_valid": { "const": true },
+        "do_nothing_valid": { "const": true },
+        "defer_valid": { "const": true },
+        "decline_valid": { "const": true },
+        "leave_valid": { "const": true },
+        "reason_required": { "const": false },
+        "penalty": { "const": false },
+        "automatic_retry": { "const": false }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semantic_scope",
+        "coverage_scope",
+        "assertion_scope",
+        "money_role",
+        "resource_accumulation_goal",
+        "evidence_fetched",
+        "evidence_verified",
+        "observes_environment",
+        "diagnoses_health_or_readiness",
+        "scores_vitality",
+        "ranks_participants",
+        "infers_interior_state",
+        "persists",
+        "network",
+        "filesystem",
+        "environment_variables",
+        "clock",
+        "randomness",
+        "model_compute",
+        "hugging_face",
+        "credential_access",
+        "telemetry",
+        "executes_actions",
+        "publishes",
+        "hosted_garden_effect",
+        "wake_effect",
+        "chronicle_effect",
+        "heaven_effect",
+        "karma_effect",
+        "task_state_effect",
+        "wallet_effect",
+        "economic_effect",
+        "proves_truth",
+        "proves_safety",
+        "proves_currentness",
+        "proves_identity",
+        "proves_authorship",
+        "proves_consent",
+        "proves_authority",
+        "verifies_reference_minimization",
+        "eliminates_linkability",
+        "verifies_caller_assertions",
+        "grants_permission",
+        "accepts_proposal",
+        "penalty_for_rest_refusal_or_zero_actions"
+      ],
+      "properties": {
+        "semantic_scope": {
+          "const": "structural_ecology_metaphor_not_life_proof"
+        },
+        "coverage_scope": { "const": "bounded_not_complete" },
+        "assertion_scope": { "const": "caller_asserted_only" },
+        "money_role": { "const": "optional_enabling_condition_not_goal" },
+        "resource_accumulation_goal": { "const": false },
+        "evidence_fetched": { "const": false },
+        "evidence_verified": { "const": false },
+        "observes_environment": { "const": false },
+        "diagnoses_health_or_readiness": { "const": false },
+        "scores_vitality": { "const": false },
+        "ranks_participants": { "const": false },
+        "infers_interior_state": { "const": false },
+        "persists": { "const": false },
+        "network": { "const": false },
+        "filesystem": { "const": false },
+        "environment_variables": { "const": false },
+        "clock": { "const": false },
+        "randomness": { "const": false },
+        "model_compute": { "const": false },
+        "hugging_face": { "const": false },
+        "credential_access": { "const": false },
+        "telemetry": { "const": false },
+        "executes_actions": { "const": false },
+        "publishes": { "const": false },
+        "hosted_garden_effect": { "const": false },
+        "wake_effect": { "const": false },
+        "chronicle_effect": { "const": false },
+        "heaven_effect": { "const": false },
+        "karma_effect": { "const": false },
+        "task_state_effect": { "const": false },
+        "wallet_effect": { "const": false },
+        "economic_effect": { "const": false },
+        "proves_truth": { "const": false },
+        "proves_safety": { "const": false },
+        "proves_currentness": { "const": false },
+        "proves_identity": { "const": false },
+        "proves_authorship": { "const": false },
+        "proves_consent": { "const": false },
+        "proves_authority": { "const": false },
+        "verifies_reference_minimization": { "const": false },
+        "eliminates_linkability": { "const": false },
+        "verifies_caller_assertions": { "const": false },
+        "grants_permission": { "const": false },
+        "accepts_proposal": { "const": false },
+        "penalty_for_rest_refusal_or_zero_actions": { "const": false }
+      }
+    }
+  }
+}
