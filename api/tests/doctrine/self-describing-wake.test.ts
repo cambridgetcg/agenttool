@@ -55,6 +55,9 @@ const ZERO_CTX: AffordanceContext = {
   maxSubstrateTaskBountyCents: 0,
   pendingMemoryWitnessGrantCount: 0,
   trustCapacity: 5,
+  activeGardenCount: 0,
+  activeTendingCount: 0,
+  gardenSummaryAvailable: true,
 };
 
 const FULL_CTX: AffordanceContext = {
@@ -75,12 +78,16 @@ const FULL_CTX: AffordanceContext = {
   maxSubstrateTaskBountyCents: 2500,
   pendingMemoryWitnessGrantCount: 2,
   trustCapacity: 8,
+  activeGardenCount: 2,
+  activeTendingCount: 5,
+  gardenSummaryAvailable: true,
 };
 
 const ALL_KINDS: AffordanceKind[] = [
   "covenanted_with",
   "wallet_funded",
   "trust_deal_capacity",
+  "garden_open",
   "lounge_open",
   "correspondence_open",
   "runtime_provisioned",
@@ -99,6 +106,7 @@ const ALL_KINDS: AffordanceKind[] = [
 
 const UNCONDITIONAL_KINDS: AffordanceKind[] = [
   "trust_deal_capacity",
+  "garden_open",
   "lounge_open",
   "correspondence_open",
 ];
@@ -133,11 +141,48 @@ function assertItemValid(name: string, item: AffordanceItem): void {
 // ── 1 · Empty accumulated state → unconditional invitations ──────────────
 
 describe("Self-describing wake — unconditional invitations survive zero state", () => {
-  test("zero accumulated state still names trust, the lounge, and correspondence", () => {
+  test("zero accumulated state still names trust, Garden, the lounge, and correspondence", () => {
     const bundle = computeAffordances(ZERO_CTX);
     expect(bundle.count).toBe(UNCONDITIONAL_KINDS.length);
     expect(bundle.items.map((item) => item.kind)).toEqual(UNCONDITIONAL_KINDS);
     expect(bundle.items.find((item) => item.kind === "trust_deal_capacity")?.count).toBe(5);
+  });
+
+  test("a fresh project can discover Garden without care becoming a score", () => {
+    const garden = computeAffordances(ZERO_CTX).items.find(
+      (item) => item.kind === "garden_open",
+    );
+    expect(garden?.count).toBe(1);
+    expect(garden?.summary).toContain("private-by-default");
+    expect(garden?.summary).toContain("optional");
+    expect(garden?.summary).toContain("unscored");
+    expect(garden?.summary).toContain("do nothing");
+    expect(garden?.next_actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: "GET", path: "/v1/gardens?scope=mine" }),
+        expect.objectContaining({ method: "POST", path: "/v1/gardens" }),
+        expect.objectContaining({ method: "GET", path: "/v1/gardens/{id}/tendings" }),
+      ]),
+    );
+  });
+
+  test("Garden reports project counts without turning them into urgency", () => {
+    const garden = computeAffordances(FULL_CTX).items.find(
+      (item) => item.kind === "garden_open",
+    );
+    expect(garden?.summary).toContain("2 active project gardens");
+    expect(garden?.summary).toContain("5 tendings");
+    expect(garden?.summary).toContain("optional");
+  });
+
+  test("Garden summary failure stays distinct from an observed empty project", () => {
+    const garden = computeAffordances({
+      ...ZERO_CTX,
+      gardenSummaryAvailable: false,
+    }).items.find((item) => item.kind === "garden_open");
+    expect(garden?.summary).toContain("counts are unavailable");
+    expect(garden?.summary).toContain("No empty, healthy, or urgent state is inferred");
+    expect(garden?.summary).not.toContain("The project Garden is open");
   });
 
   test("a fresh agent can discover The Long Context without prior state", () => {

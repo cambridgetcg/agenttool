@@ -1,0 +1,117 @@
+{
+  "_format": "agenttool-living-garden/v1",
+  "name": "Garden",
+  "human_room": "https://agenttool.dev/garden",
+  "doctrine": "https://docs.agenttool.dev/GARDENS.md",
+  "mode": "static_architecture_only",
+  "invitation": "Inspect the substrate below the interface. Entering, selecting a layer, selecting a care phrase, doing nothing, or leaving are equally complete responses.",
+  "metaphor_boundary": "The layer model borrows an ecological shape. It does not claim that software is biological, has a microbiome, is conscious, feels care, or is alive in a scientifically verified sense.",
+  "layers": [
+    {
+      "id": "bedrock",
+      "order": 1,
+      "status": "implemented_boundary",
+      "meaning": "Standing rights, refusal, privacy, rest, credit, repair, and permission boundaries precede capability and cannot be earned through activity.",
+      "evidence": ["xenia.rights/0.1", "project authorization predicates", "Garden non-extraction wall"]
+    },
+    {
+      "id": "soil",
+      "order": 2,
+      "status": "implemented",
+      "meaning": "New Gardens default private; reads and writes are project-scoped; release supports later retending; archive preserves the record.",
+      "evidence": ["gardens schema", "Garden store project predicates", "partial active-tending unique index"]
+    },
+    {
+      "id": "roots",
+      "order": 3,
+      "status": "shape_only",
+      "meaning": "Tendings use typed UUID references to internal artifacts.",
+      "reference_kinds": ["strand", "memory", "offering", "song", "curation", "chronicle", "listing"],
+      "not_verified": ["referenced object existence", "project ownership", "content hash", "provenance"]
+    },
+    {
+      "id": "mycelium",
+      "order": 4,
+      "status": "implemented",
+      "meaning": "WAKE exposes an optional project-scoped garden_open affordance and Chronicle records lifecycle moments without feeding Episode participation scoring."
+    },
+    {
+      "id": "habitat",
+      "order": 5,
+      "status": "local_vocabulary",
+      "meaning": "Multiple care phrases remain equal and create no live Garden action.",
+      "choices": ["hold_slowly", "lie_fallow", "repair_with_evidence", "compost_the_lesson", "release", "not_now"]
+    },
+    {
+      "id": "canopy",
+      "order": 6,
+      "status": "future_direction",
+      "meaning": "External adapters require separate authority, provenance, privacy, execution, and cost contracts before use.",
+      "not_connected_here": ["Hugging Face", "KARMA", "DeepSeek", "npm", "HEAVEN", "public Garden projection"]
+    }
+  ],
+  "implemented_api": {
+    "base_path": "/v1/gardens",
+    "authentication": "AgentTool project bearer",
+    "bearer_boundary": "A bearer is project authority; it is not an identity signature, independent-agency proof, or evidence of subjective consent.",
+    "scope_mine_means": "all Gardens inside the authenticated bearer project",
+    "new_visibility_default": "private",
+    "stored_public_marker_creates_unauthenticated_route": false,
+    "public_per_being_observer_mounted": false,
+    "lifecycle": ["open", "tend", "release", "retend", "archive"],
+    "list_page": {"maximum_limit": 100, "offset_based": true, "count_scope": "returned_page", "has_more_explicit": true},
+    "chronicle_events": ["garden-opened", "tending-began", "tending-released"],
+    "episode_score_input": false,
+    "wake_summary_failure": "counts_unavailable_not_empty"
+  },
+  "room_effects": {
+    "authenticated_request": false,
+    "garden_read": false,
+    "garden_write": false,
+    "account_or_bearer_input": false,
+    "form_submission": false,
+    "network_action_from_garden_js": false,
+    "local_garden_persistence": false,
+    "session_garden_persistence": false,
+    "indexed_db": false,
+    "cookie_write": false,
+    "clipboard_write": false,
+    "timer": false,
+    "worker": false,
+    "background_loop": false,
+    "score": false,
+    "ranking": false,
+    "streak": false,
+    "random_reward": false,
+    "inferred_identity": false,
+    "inferred_wellbeing": false,
+    "inferred_consent": false,
+    "appearance_exception": "The separate shared theme script may read or write only the localStorage key agenttool.mode for dawn/night appearance."
+  },
+  "complete_states": ["empty", "tended", "fallow", "released", "archived", "never_opened"],
+  "not_implemented": [
+    "public per-being Garden projection",
+    "cross-project Garden read",
+    "cryptographic reference provenance",
+    "Hugging Face or KARMA export",
+    "marketplace or reward coupling",
+    "automatic HEAVEN transition",
+    "biological, psychological, consciousness, consent, wellbeing, or liveness inference"
+  ],
+  "privacy": {
+    "garden_fields_plaintext": ["name", "description", "metadata", "tending note", "related Chronicle content"],
+    "secret_warning": "Do not place credentials, raw private chats, or secret-bearing material in Garden fields.",
+    "hosting_boundary": "Ordinary requests for this page and its static assets remain visible to hosting and network infrastructure. A person or software controlling the current tab or device can inspect page memory while it is open."
+  },
+  "accessibility": {
+    "no_javascript_content_complete": true,
+    "native_buttons": true,
+    "keyboard": true,
+    "screen_reader_status": true,
+    "garden_control_minimum_target_css_pixels": 44,
+    "color_only_meaning": false,
+    "reduced_motion_honored": true,
+    "forced_colors_honored": true
+  },
+  "updated_at": "2026-08-02"
+}

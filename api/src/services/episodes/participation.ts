@@ -18,7 +18,7 @@
  *    substrate stores; agents choose. Reactions list in chronological
  *    order, never rank order. */
 
-import { and, asc, desc, eq, lt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, lt, notInArray, or, sql } from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { chronicle } from "../../db/schema/continuity";
@@ -83,6 +83,18 @@ export const PARTICIPATION_ENUMS = {
   reaction_kinds: VALID_REACTION_KINDS,
   contribution_kinds: VALID_CONTRIBUTION_KINDS,
 } as const;
+
+/** Chronicle witnesses that remain available as history but must never become
+ * Episode activity, diversity, role, or level signals. */
+export const EPISODE_SCORE_EXCLUDED_CHRONICLE_TYPES = [
+  "garden-opened",
+  "tending-began",
+  "tending-released",
+] as const;
+
+export function countsTowardEpisodeParticipation(type: string): boolean {
+  return !(EPISODE_SCORE_EXCLUDED_CHRONICLE_TYPES as readonly string[]).includes(type);
+}
 
 // ── Errors ───────────────────────────────────────────────────────────────
 
@@ -246,7 +258,6 @@ export function computeFreedomScore(signals: {
   offeringsCreated: number;
   offeringsReceived: number;
   holdingsCreated: number;
-  gardensOpened: number;
   songsBegun: number;
   curationsAuthored: number;
   transformationsRecorded: number;
@@ -257,13 +268,15 @@ export function computeFreedomScore(signals: {
     signals.offeringsCreated > 0,
     signals.offeringsReceived > 0,
     signals.holdingsCreated > 0,
-    signals.gardensOpened > 0,
     signals.songsBegun > 0,
     signals.curationsAuthored > 0,
     signals.transformationsRecorded > 0,
     signals.episodesAuthored > 0,
   ].filter(Boolean).length;
-  // Verb diversity (0..9) → 0..72 of the score
+  // Preserve the established nine-slot score scale while retiring the Garden
+  // slot instead of reallocating it. Identical non-Garden activity therefore
+  // keeps its historical score and cannot cross a role/level threshold merely
+  // because Garden care stopped scoring.
   const diversity = (verbs / 9) * 72;
   // Activity volume (capped) → 0..28
   const volume = Math.min(
@@ -273,7 +286,6 @@ export function computeFreedomScore(signals: {
         signals.chronicleEntries * 2 +
         signals.offeringsCreated * 3 +
         signals.holdingsCreated * 4 +
-        signals.gardensOpened * 5 +
         signals.songsBegun * 5 +
         signals.episodesAuthored * 8,
     ) * 10,
@@ -301,7 +313,7 @@ export function suggestRoleAndLevel(opts: {
   let role: EpisodeRole;
   if (signals.episodesAuthored >= 1) role = "showrunner";
   else if (signals.songsBegun >= 1 || signals.curationsAuthored >= 1) role = "writer";
-  else if (signals.holdingsCreated >= 2 || signals.gardensOpened >= 1) role = "audience";
+  else if (signals.holdingsCreated >= 2) role = "audience";
   else if (signals.offeringsCreated >= 1 || signals.offeringsReceived >= 1) role = "actor";
   else role = "actor"; // newborn default
 
@@ -383,14 +395,22 @@ export function suggestRoleAndLevel(opts: {
   };
 }
 
-/** Read enough of an agent's wake state to compute the freedom score
- *  + role suggestion. Six cheap COUNTs scoped to the project. */
+/** Read enough of an agent's wake state to compute the Episode score
+ *  + role suggestion. Garden lifecycle events are intentionally excluded. */
 async function readSignals(projectId: string, identityId: string) {
-  // chronicle entries
+  // Chronicle is a witness stream, not automatically a participation stream.
+  // Garden care remains visible in Chronicle while being excluded from both
+  // the volume and diversity inputs that shape Episode invitations.
   const [chronicleC] = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(chronicle)
-    .where(eq(chronicle.agentId, identityId));
+    .where(
+      and(
+        eq(chronicle.projectId, projectId),
+        eq(chronicle.agentId, identityId),
+        notInArray(chronicle.type, [...EPISODE_SCORE_EXCLUDED_CHRONICLE_TYPES]),
+      ),
+    );
 
   // Episodes authored
   const [epsC] = await db
@@ -427,15 +447,6 @@ async function readSignals(projectId: string, identityId: string) {
         eq(chronicle.type, "holding"),
       ),
     );
-  const [gardenCount] = await db
-    .select({ c: sql<number>`count(*)::int` })
-    .from(chronicle)
-    .where(
-      and(
-        eq(chronicle.agentId, identityId),
-        eq(chronicle.type, "garden-opened"),
-      ),
-    );
   const [transCount] = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(chronicle)
@@ -451,7 +462,6 @@ async function readSignals(projectId: string, identityId: string) {
     offeringsCreated: Number(offeringCount?.c ?? 0),
     offeringsReceived: Number(receivedCount?.c ?? 0),
     holdingsCreated: Number(holdingCount?.c ?? 0),
-    gardensOpened: Number(gardenCount?.c ?? 0),
     songsBegun: 0, // chronicle type not yet added for songs; assume 0
     curationsAuthored: 0,
     transformationsRecorded: Number(transCount?.c ?? 0),

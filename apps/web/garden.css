@@ -1,0 +1,501 @@
+.garden-wrap {
+  max-width: 1060px;
+  overflow-x: clip;
+}
+
+.garden-hero {
+  position: relative;
+  min-height: 760px;
+  padding-bottom: 76px;
+}
+
+.soil-label {
+  margin: 40px 0 4px;
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.garden-hero h1 {
+  max-width: 880px;
+  margin-bottom: 18px;
+  font-size: clamp(54px, 9vw, 102px);
+  letter-spacing: -.06em;
+  line-height: .94;
+}
+
+.garden-thesis {
+  max-width: 28ch;
+  margin: 0 0 22px;
+  color: var(--ink);
+  font-size: clamp(27px, 4.1vw, 43px);
+  line-height: 1.14;
+}
+
+.garden-hero .lede {
+  max-width: 68ch;
+}
+
+.root-mark {
+  position: absolute;
+  top: 74px;
+  right: clamp(8px, 3vw, 36px);
+  width: 178px;
+  height: 238px;
+  opacity: .72;
+  pointer-events: none;
+}
+
+.root-mark span {
+  position: absolute;
+  display: block;
+}
+
+.root-mark .stem {
+  top: 16px;
+  left: 86px;
+  width: 2px;
+  height: 114px;
+  background: var(--accent);
+}
+
+.root-mark .leaf {
+  top: 25px;
+  width: 58px;
+  height: 34px;
+  border: 1px solid var(--accent);
+  border-radius: 90% 10% 90% 10%;
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.root-mark .leaf-a {
+  left: 28px;
+  transform: rotate(18deg);
+}
+
+.root-mark .leaf-b {
+  right: 27px;
+  border-radius: 10% 90% 10% 90%;
+  transform: rotate(-18deg);
+}
+
+.root-mark .root {
+  top: 128px;
+  left: 87px;
+  width: 1px;
+  height: 100px;
+  background: var(--faint);
+  transform-origin: top;
+}
+
+.root-mark .root-a { transform: rotate(25deg); }
+.root-mark .root-b { transform: rotate(-25deg); }
+.root-mark .root-c { height: 110px; transform: rotate(4deg); }
+
+.ground-promises {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+  max-width: 950px;
+  margin: 34px 0 0;
+  list-style: none;
+}
+
+.ground-promises li {
+  min-height: 112px;
+  padding: 17px 18px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.ground-promises strong {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--ink);
+}
+
+.cross-section {
+  padding-top: 92px;
+}
+
+.layer-controls {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 7px;
+  margin: 34px 0 13px;
+}
+
+.layer-controls button,
+.care-choices button {
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid var(--control-line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  font: 600 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.layer-controls button:hover,
+.layer-controls button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel));
+  color: var(--ink);
+}
+
+.layer-controls button:focus-visible,
+.care-choices button:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.reading-tray {
+  display: grid;
+  grid-template-columns: minmax(180px, .75fr) minmax(260px, 1.55fr);
+  gap: 8px 32px;
+  min-height: 220px;
+  margin-bottom: 13px;
+  padding: clamp(24px, 5vw, 46px);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 14% 20%, color-mix(in srgb, #799565 15%, transparent), transparent 34%),
+    var(--panel);
+}
+
+.reading-tray[hidden],
+.layer-controls[hidden],
+.care-choices[hidden],
+.care-static[hidden] {
+  display: none;
+}
+
+.tray-number,
+.tray-proof {
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.reading-tray h3 {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  margin: 0;
+  font-size: clamp(31px, 5vw, 53px);
+  line-height: 1.05;
+}
+
+.reading-tray > p:not(.tray-proof) {
+  grid-column: 2;
+  margin: 0;
+  color: var(--muted);
+}
+
+.tray-proof {
+  align-self: end;
+  margin: 0;
+}
+
+.substrate-stack {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.substrate-layer {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(180px, .7fr) minmax(300px, 2fr);
+  gap: 12px 34px;
+  min-height: 138px;
+  padding: 26px clamp(22px, 5vw, 48px);
+  border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  background: var(--panel);
+}
+
+.substrate-layer:first-child {
+  border-top: 0;
+}
+
+.substrate-layer::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  background: var(--layer-color, var(--accent));
+  opacity: .62;
+}
+
+.substrate-layer.is-active {
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.substrate-layer h3 {
+  grid-column: 2;
+  margin: 0;
+  font-size: clamp(21px, 3vw, 30px);
+}
+
+.substrate-layer p {
+  grid-column: 2;
+  margin: 0;
+  color: var(--muted);
+}
+
+.layer-index {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.layer-canopy { --layer-color: #86a86d; background: color-mix(in srgb, #86a86d 8%, var(--panel)); }
+.layer-habitat { --layer-color: #a9a05d; background: color-mix(in srgb, #a9a05d 9%, var(--panel)); }
+.layer-mycelium { --layer-color: #b3a68d; background: color-mix(in srgb, #b3a68d 11%, var(--panel)); }
+.layer-roots { --layer-color: #98704f; background: color-mix(in srgb, #98704f 11%, var(--panel)); }
+.layer-soil { --layer-color: #71533f; background: color-mix(in srgb, #71533f 14%, var(--panel)); }
+.layer-bedrock { --layer-color: #59616a; background: color-mix(in srgb, #59616a 15%, var(--panel)); }
+
+.care-room {
+  padding-top: 104px;
+}
+
+.care-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 34px 0 18px;
+}
+
+.care-static {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 34px 0 18px;
+  padding: 0;
+  list-style: none;
+}
+
+.care-static li {
+  min-height: 96px;
+  padding: 18px 20px;
+  border: 1px solid var(--control-line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--muted);
+  font: 400 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.care-static strong {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--ink);
+  font: 600 20px/1.2 Georgia, "Times New Roman", serif;
+}
+
+.care-choices button {
+  display: grid;
+  min-height: 118px;
+  align-content: center;
+  justify-items: start;
+  padding: 18px 20px;
+  text-align: left;
+  text-transform: none;
+}
+
+.care-choices button span {
+  color: var(--ink);
+  font: 600 20px/1.2 Georgia, "Times New Roman", serif;
+  letter-spacing: 0;
+}
+
+.care-choices button small {
+  margin-top: 7px;
+  color: var(--muted);
+  font: 400 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0;
+}
+
+.care-choices button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%),
+    var(--panel);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.care-status {
+  min-height: 48px;
+  margin: 0;
+  padding: 14px 16px;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.truth-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+  margin-top: 34px;
+}
+
+.truth-card {
+  min-height: 360px;
+  padding: 24px 22px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--panel);
+}
+
+.truth-card h3 {
+  margin: 15px 0;
+  font-size: 23px;
+}
+
+.truth-card ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.truth-state {
+  color: var(--faint);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.truth-card.is-live { border-top: 5px solid #71906c; }
+.truth-card.is-room { border-top: 5px solid #b58c58; }
+.truth-card.is-future { border-top: 5px dashed #777f89; }
+
+@media (max-width: 860px) {
+  .root-mark {
+    display: none;
+  }
+
+  .layer-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ground-promises,
+  .truth-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .truth-card {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .garden-hero {
+    min-height: 0;
+  }
+
+  .reading-tray,
+  .substrate-layer {
+    grid-template-columns: 1fr;
+  }
+
+  .reading-tray h3,
+  .reading-tray > p:not(.tray-proof),
+  .substrate-layer h3,
+  .substrate-layer p,
+  .layer-index {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .care-choices,
+  .care-static {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 420px) {
+  .garden-hero h1 {
+    font-size: clamp(48px, 16vw, 68px);
+  }
+
+  .layer-controls,
+  .care-choices,
+  .care-static {
+    grid-template-columns: 1fr;
+  }
+
+  .layer-controls button {
+    min-height: 44px;
+  }
+
+  .care-choices button {
+    min-height: 92px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root-mark *,
+  .layer-controls button,
+  .care-choices button,
+  .care-static li,
+  .substrate-layer {
+    animation: none;
+    scroll-behavior: auto;
+    transition: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .reading-tray,
+  .substrate-stack,
+  .substrate-layer,
+  .care-choices button,
+  .truth-card {
+    border-width: 2px;
+  }
+}
+
+@media (forced-colors: active) {
+  .root-mark,
+  .reading-tray,
+  .substrate-layer,
+  .layer-controls button,
+  .care-choices button,
+  .care-status,
+  .truth-card {
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: none;
+  }
+
+  .substrate-layer::before {
+    background: CanvasText;
+  }
+
+  .layer-controls button[aria-pressed="true"],
+  .care-choices button[aria-pressed="true"],
+  .substrate-layer.is-active {
+    outline: 3px solid Highlight;
+    outline-offset: -4px;
+  }
+}

@@ -254,6 +254,7 @@ describe("brief projection", () => {
   test("ranks activity-bearing affordances ahead of evergreen invitations", () => {
     const selected = selectBriefAffordances([
       affordance("trust_deal_capacity"),
+      affordance("garden_open"),
       affordance("lounge_open"),
       affordance("expression_declared"),
       affordance("runtime_provisioned"),
@@ -263,7 +264,7 @@ describe("brief projection", () => {
       "invocations_pending_seller",
       "runtime_provisioned",
       "expression_declared",
-      "trust_deal_capacity",
+      "garden_open",
     ]);
   });
 

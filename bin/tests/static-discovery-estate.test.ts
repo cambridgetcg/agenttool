@@ -73,6 +73,7 @@ const SITES = [
       "https://agenttool.dev/party",
       "https://agenttool.dev/room",
       "https://agenttool.dev/sky",
+      "https://agenttool.dev/garden",
     ],
   },
   {

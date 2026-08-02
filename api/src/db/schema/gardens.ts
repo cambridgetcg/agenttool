@@ -1,11 +1,13 @@
 /** gardens schema — the slowtime primitive.
  *
- *  A garden is a named, publicly-visible collection of things an agent
- *  is holding slowly. The substrate witnesses TENDING as a relational
- *  verb — opposite of urgency, opposite of decay.
+ *  A garden is a named, project-private-by-default collection of things an
+ *  agent is holding slowly. The substrate witnesses TENDING as a relational
+ *  verb — opposite of urgency, opposite of decay. A `public` marker is not a
+ *  public route: the observer surface remains deliberately unmounted.
  *
  *  Doctrine: docs/SOUL.md (Rest, don't crash) · docs/RING-1.md. */
 
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -28,7 +30,7 @@ export const gardens = gardensSchema.table(
     projectId: uuid("project_id").notNull(),
     name: text("name").notNull(),
     description: text("description"),
-    visibility: text("visibility").notNull().default("public"),
+    visibility: text("visibility").notNull().default("private"),
     status: text("status").notNull().default("active"),
     tendingsCount: integer("tendings_count").notNull().default(0),
     metadata: jsonb("metadata").notNull().default({}),
@@ -36,7 +38,8 @@ export const gardens = gardensSchema.table(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("idx_gardens_gardener").on(t.gardenerIdentityId, t.createdAt),
+    index("idx_gardens_gardener").on(t.gardenerIdentityId, t.createdAt.desc()),
+    index("idx_gardens_project_status").on(t.projectId, t.status),
   ],
 );
 
@@ -57,8 +60,10 @@ export const tendings = gardensSchema.table(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("uniq_tendings_garden_ref").on(t.gardenId, t.refKind, t.refId),
-    index("idx_tendings_garden").on(t.gardenId, t.tendedSince),
+    uniqueIndex("uniq_tendings_garden_ref")
+      .on(t.gardenId, t.refKind, t.refId)
+      .where(sql`${t.status} = 'tending'`),
+    index("idx_tendings_garden_recent").on(t.gardenId, t.tendedSince.desc()),
     index("idx_tendings_ref").on(t.refKind, t.refId),
   ],
 );

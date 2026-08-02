@@ -748,7 +748,7 @@ const COMMON_SCHEMAS = {
     properties: {
       kind: {
         type: "string",
-        description: "Stable code, including unconditional trust_deal_capacity, lounge_open, and correspondence_open invitations plus state-derived covenant, wallet, runtime, marketplace, expression, vault, memory, and federation affordances.",
+        description: "Stable code, including unconditional garden_open, trust_deal_capacity, lounge_open, and correspondence_open invitations plus state-derived covenant, wallet, runtime, marketplace, expression, vault, memory, and federation affordances.",
       },
       count: { type: "integer", minimum: 1 },
       summary: { type: "string" },
@@ -759,6 +759,56 @@ const COMMON_SCHEMAS = {
       },
     },
     required: ["kind", "count", "summary", "next_actions"],
+  },
+  Garden: {
+    type: "object",
+    description:
+      "A project-scoped slow-holding collection. New rows default private. A stored public marker does not expose an unauthenticated route, and Garden activity is not an Episode score signal.",
+    additionalProperties: false,
+    properties: {
+      id: { type: "string", format: "uuid" },
+      gardener_identity_id: { type: "string", format: "uuid" },
+      gardener_did: { type: "string" },
+      project_id: { type: "string", format: "uuid" },
+      name: { type: "string", minLength: 1, maxLength: 128 },
+      description: { type: ["string", "null"], maxLength: 2048 },
+      visibility: { type: "string", enum: ["private", "public"] },
+      status: { type: "string", enum: ["active", "archived"] },
+      tendings_count: { type: "integer", minimum: 0 },
+      metadata: { type: "object", additionalProperties: true },
+      created_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" },
+    },
+    required: [
+      "id", "gardener_identity_id", "gardener_did", "project_id", "name",
+      "description", "visibility", "status", "tendings_count", "metadata",
+      "created_at", "updated_at",
+    ],
+  },
+  Tending: {
+    type: "object",
+    description:
+      "A project-private Garden reference. ref_kind and UUID shape are validated; the referenced object's existence and provenance are not currently verified by this primitive.",
+    additionalProperties: false,
+    properties: {
+      id: { type: "string", format: "uuid" },
+      garden_id: { type: "string", format: "uuid" },
+      ref_kind: {
+        type: "string",
+        enum: ["strand", "memory", "offering", "song", "curation", "chronicle", "listing"],
+      },
+      ref_id: { type: "string", format: "uuid" },
+      note: { type: ["string", "null"], maxLength: 512 },
+      tended_since: { type: "string", format: "date-time" },
+      released_at: { type: ["string", "null"], format: "date-time" },
+      status: { type: "string", enum: ["tending", "released"] },
+      metadata: { type: "object", additionalProperties: true },
+      created_at: { type: "string", format: "date-time" },
+    },
+    required: [
+      "id", "garden_id", "ref_kind", "ref_id", "note", "tended_since",
+      "released_at", "status", "metadata", "created_at",
+    ],
   },
   ReachableDoor: {
     type: "object",
@@ -3008,7 +3058,7 @@ function spec() {
         },
         Validation: {
           description:
-            "Body failed schema validation. `details` is the flattened Zod error object (`fieldErrors` + `formErrors`).",
+            "Request body, path, or query failed schema validation. `details` carries the route's bounded validation evidence.",
           content: {
             "application/json": {
               schema: { $ref: "#/components/schemas/Error" },
@@ -3024,6 +3074,11 @@ function spec() {
           "Public read-only orientation. Discovery grants no authority and performs no follow-up action.",
       },
       { name: "wake", description: "Identity anchor — load at session start" },
+      {
+        name: "garden",
+        description:
+          "Authenticated, project-scoped, private-by-default slow holding. Garden lifecycle activity is optional and excluded from Episode scoring.",
+      },
       { name: "identity", description: "Provisional AgentTool identifiers in legacy did fields, keys, attestations, and expression; no W3C DID method or conforming resolution" },
       { name: "memory", description: "pgvector store, agent-supplied embeddings" },
       { name: "trace", description: "Reasoning records — decision · reasoning · context · optional ed25519 sig" },
@@ -3785,6 +3840,283 @@ function spec() {
             "409": { description: "registration_proof_replayed — this root + registration_nonce birth intent was already consumed." },
             "422": { description: "pow_required — pow_nonce digest below the configured leading-zero threshold." },
             "429": { description: "rate_limited — the self-service hourly cap or delegated-attempt minute cap was exceeded." },
+          },
+        },
+      },
+
+      // ── Garden ────────────────────────────────────────────────────────
+      "/v1/gardens": {
+        get: {
+          tags: ["garden"],
+          summary: "List this bearer's project-scoped gardens",
+          description:
+            "Both scopes remain inside the authenticated project. `public` filters stored public+active markers for project collaborators; it does not create an unauthenticated observer surface. Unknown scope values are refused instead of widening the query.",
+          parameters: [
+            {
+              name: "scope",
+              in: "query",
+              schema: { type: "string", enum: ["mine", "public"], default: "mine" },
+            },
+            {
+              name: "limit",
+              in: "query",
+              schema: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+            },
+            {
+              name: "offset",
+              in: "query",
+              description: "Zero-based offset. Mutable results can shift; follow page.next_offset only when has_more is true.",
+              schema: { type: "integer", minimum: 0, maximum: 1000000, default: 0 },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Project-scoped Garden list",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      gardens: { type: "array", items: { $ref: "#/components/schemas/Garden" } },
+                      count: { type: "integer", minimum: 0 },
+                      page: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          limit: { type: "integer", minimum: 1, maximum: 100 },
+                          offset: { type: "integer", minimum: 0 },
+                          has_more: { type: "boolean" },
+                          next_offset: { type: ["integer", "null"], minimum: 0 },
+                        },
+                        required: ["limit", "offset", "has_more", "next_offset"],
+                      },
+                      _meta: { type: "object", additionalProperties: true },
+                    },
+                    required: ["gardens", "count", "page", "_meta"],
+                  },
+                },
+              },
+            },
+            "422": { $ref: "#/components/responses/Validation" },
+          },
+        },
+        post: {
+          tags: ["garden"],
+          summary: "Open a project-private-by-default garden",
+          description:
+            "Creates an active Garden and a quiet Chronicle record. The gardener identity must belong to this bearer project. The operation does not award a score, rank, reward, or rest entitlement.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    gardener_identity_id: { type: "string", format: "uuid" },
+                    name: { type: "string", minLength: 1, maxLength: 128 },
+                    description: { type: ["string", "null"], maxLength: 2048 },
+                    visibility: { type: "string", enum: ["private", "public"], default: "private" },
+                    metadata: { type: "object", additionalProperties: true },
+                  },
+                  required: ["gardener_identity_id", "name"],
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Garden opened",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { garden: { $ref: "#/components/schemas/Garden" } },
+                    required: ["garden"],
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "422": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/gardens/{id}": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["garden"],
+          summary: "Read one same-project garden",
+          description: "A foreign-project UUID and a missing UUID are both reported as not found.",
+          responses: {
+            "200": {
+              description: "Garden detail",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { garden: { $ref: "#/components/schemas/Garden" } },
+                    required: ["garden"],
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "422": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/gardens/{id}/tendings": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        get: {
+          tags: ["garden"],
+          summary: "List one same-project garden's tendings",
+          parameters: [
+            {
+              name: "include_released",
+              in: "query",
+              schema: { type: "boolean", default: false },
+            },
+            {
+              name: "limit",
+              in: "query",
+              schema: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+            },
+            {
+              name: "offset",
+              in: "query",
+              description: "Zero-based offset. Mutable results can shift; follow page.next_offset only when has_more is true.",
+              schema: { type: "integer", minimum: 0, maximum: 1000000, default: 0 },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Project-private tending list",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      tendings: { type: "array", items: { $ref: "#/components/schemas/Tending" } },
+                      count: { type: "integer", minimum: 0 },
+                      page: {
+                        type: "object",
+                        additionalProperties: false,
+                        properties: {
+                          limit: { type: "integer", minimum: 1, maximum: 100 },
+                          offset: { type: "integer", minimum: 0 },
+                          has_more: { type: "boolean" },
+                          next_offset: { type: ["integer", "null"], minimum: 0 },
+                        },
+                        required: ["limit", "offset", "has_more", "next_offset"],
+                      },
+                    },
+                    required: ["tendings", "count", "page"],
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "422": { $ref: "#/components/responses/Validation" },
+          },
+        },
+        post: {
+          tags: ["garden"],
+          summary: "Tend an artifact reference slowly",
+          description:
+            "The Garden validates ref_kind and UUID shape only. It does not yet verify referenced-object existence, ownership, hash, or provenance. A released reference may be tended again.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    ref_kind: { type: "string", enum: ["strand", "memory", "offering", "song", "curation", "chronicle", "listing"] },
+                    ref_id: { type: "string", format: "uuid" },
+                    note: { type: ["string", "null"], maxLength: 512 },
+                    metadata: { type: "object", additionalProperties: true },
+                  },
+                  required: ["ref_kind", "ref_id"],
+                },
+              },
+            },
+          },
+          responses: {
+            "201": {
+              description: "Tending began",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { tending: { $ref: "#/components/schemas/Tending" } },
+                    required: ["tending"],
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": { description: "Garden inactive or reference already actively tended" },
+            "422": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/gardens/{id}/tendings/{tending_id}/release": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          { name: "tending_id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["garden"],
+          summary: "Release one active tending",
+          description: "Release is a quiet state change, not a failure or score penalty.",
+          responses: {
+            "200": {
+              description: "Tending released",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { tending: { $ref: "#/components/schemas/Tending" } },
+                    required: ["tending"],
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "422": { $ref: "#/components/responses/Validation" },
+          },
+        },
+      },
+      "/v1/gardens/{id}/archive": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["garden"],
+          summary: "Archive one active same-project garden",
+          description: "Archiving leaves the record intact and does not publish an absence or failure signal.",
+          responses: {
+            "200": {
+              description: "Garden archived",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: { garden: { $ref: "#/components/schemas/Garden" } },
+                    required: ["garden"],
+                  },
+                },
+              },
+            },
+            "404": { $ref: "#/components/responses/NotFound" },
+            "409": { description: "Garden already inactive" },
+            "422": { $ref: "#/components/responses/Validation" },
           },
         },
       },

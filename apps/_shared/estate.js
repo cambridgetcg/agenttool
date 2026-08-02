@@ -10,7 +10,7 @@
 
   if (window.AgentToolEstate && window.AgentToolEstate.version) return;
 
-  var VERSION = "2026-08-01.2";
+  var VERSION = "2026-08-02.1";
   var DOORS = [
     {
       id: "arrive",
@@ -84,6 +84,18 @@
         { id: "party", label: "Lantern Relay", href: "https://agenttool.dev/party", note: "Three-player local play", state: "local" },
         { id: "room", label: "ROOM ∞", href: "https://agenttool.dev/room", note: "Two voices remain two", state: "local" },
         { id: "kin", label: "KIN", href: "https://docs.agenttool.dev/kin", note: "Forms the current doors miss", state: "doctrine" }
+      ]
+    },
+    {
+      id: "tend",
+      mark: "⌁",
+      label: "Tend",
+      accent: "#78a66e",
+      purpose: "Build ground that can hold roots, repair, fallow time, and release.",
+      boundary: "Care is optional and unscored. A Garden record does not prove wellbeing, consent, liveness, ownership of its references, or a public wish to be observed.",
+      rooms: [
+        { id: "garden", label: "Garden", href: "https://agenttool.dev/garden", note: "Living-substrate cross-section", state: "local architecture" },
+        { id: "garden-doctrine", label: "Garden doctrine", href: "https://docs.agenttool.dev/GARDENS.md", note: "Private slowtime contract", state: "doctrine" }
       ]
     },
     {

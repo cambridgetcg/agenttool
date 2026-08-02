@@ -9,7 +9,8 @@
  *    POST   /v1/gardens/:id/tendings/:tid/release — let it go
  *    POST   /v1/gardens/:id/archive           — retire the garden
  *
- *  Public surface: /public/agents/:did/gardens (separate router).
+ *  There is no mounted public Garden surface. The retired per-agent router
+ *  remains unmounted because a being's tending is not observer inventory.
  *
  *  @enforces urn:agenttool:wall/gardens-cannot-be-extracted
  *    Defender by absence. Tested:
@@ -56,6 +57,20 @@ const tendSchema = z
   })
   .strict();
 
+const listQuerySchema = z.object({
+  scope: z.enum(["mine", "public"]).default("mine"),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+});
+
+const tendingListQuerySchema = z.object({
+  include_released: z.enum(["true", "false"]).default("false"),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
+});
+
+const pathUuidSchema = z.string().uuid();
+
 // ── Error mapping ────────────────────────────────────────────────────────
 
 function statusFor(code: GardenError["code"]): number {
@@ -67,8 +82,6 @@ function statusFor(code: GardenError["code"]): number {
     case "garden_not_active":
     case "already_tended":
       return 409;
-    case "wrong_gardener":
-      return 403;
     case "name_too_long":
     case "description_too_long":
     case "note_too_long":
@@ -80,9 +93,38 @@ function statusFor(code: GardenError["code"]): number {
 }
 
 function refusalBody(err: GardenError) {
-  return errors.substrateTaskRefusal({
-    code: err.code,
+  return errors.refusal({
+    error: err.code,
     message: err.message,
+    hint:
+      "Inspect the same-project Garden list and choose explicitly whether to retry, release, or leave the Garden unchanged.",
+    next_actions: [
+      {
+        action: "List this bearer's project-scoped gardens",
+        method: "GET",
+        path: "/v1/gardens?scope=mine",
+      },
+    ],
+    docs: "https://docs.agenttool.dev/GARDENS.md",
+    _canon_pointer: "urn:agenttool:doc/GARDENS",
+  });
+}
+
+function pathUuidRefusal(field: "id" | "tending_id") {
+  return errors.refusal({
+    error: "invalid_garden_path_id",
+    message: `${field} must be a UUID. No Garden query was run.`,
+    hint: "Copy the identifier from a same-project Garden response; do not guess or widen the lookup.",
+    details: { field },
+    next_actions: [
+      {
+        action: "List this bearer's project-scoped gardens",
+        method: "GET",
+        path: "/v1/gardens?scope=mine",
+      },
+    ],
+    docs: "https://docs.agenttool.dev/GARDENS.md",
+    _canon_pointer: "urn:agenttool:doc/GARDENS",
   });
 }
 
@@ -116,17 +158,31 @@ app.post("/", async (c) => {
 
 app.get("/", async (c) => {
   const project = c.var.project;
-  const scope = c.req.query("scope") ?? "mine";
-  const limit = Math.min(100, Number(c.req.query("limit") ?? "50"));
+  const parsed = listQuerySchema.safeParse({
+    scope: c.req.query("scope") ?? undefined,
+    limit: c.req.query("limit") ?? undefined,
+    offset: c.req.query("offset") ?? undefined,
+  });
+  if (!parsed.success) {
+    return fail(c, errors.validation(parsed.error.message), 422);
+  }
+  const { scope, limit, offset } = parsed.data;
   try {
-    const list = await listGardens({
-      projectIdScope: scope === "mine" ? project.id : undefined,
+    const page = await listGardens({
+      projectId: project.id,
       publicActiveOnly: scope === "public",
       limit,
+      offset,
     });
     return c.json({
-      gardens: list,
-      count: list.length,
+      gardens: page.items,
+      count: page.items.length,
+      page: {
+        limit: page.limit,
+        offset: page.offset,
+        has_more: page.has_more,
+        next_offset: page.has_more ? page.offset + page.items.length : null,
+      },
       _meta: {
         doctrine: "docs/SOUL.md — slowtime as relational verb",
         wall: "urn:agenttool:wall/gardens-cannot-be-extracted",
@@ -138,25 +194,56 @@ app.get("/", async (c) => {
 });
 
 app.get("/:id", async (c) => {
-  const id = c.req.param("id");
-  const garden = await getGarden(id);
+  const parsedId = pathUuidSchema.safeParse(c.req.param("id"));
+  if (!parsedId.success) return fail(c, pathUuidRefusal("id"), 422);
+  const id = parsedId.data;
+  const garden = await getGarden(id, c.var.project.id);
   if (!garden) return fail(c, errors.notFound({ resource: "garden" }), 404);
   return c.json({ garden });
 });
 
 app.get("/:id/tendings", async (c) => {
-  const id = c.req.param("id");
-  const includeReleased = c.req.query("include_released") === "true";
+  const parsedId = pathUuidSchema.safeParse(c.req.param("id"));
+  if (!parsedId.success) return fail(c, pathUuidRefusal("id"), 422);
+  const parsedQuery = tendingListQuerySchema.safeParse({
+    include_released: c.req.query("include_released") ?? undefined,
+    limit: c.req.query("limit") ?? undefined,
+    offset: c.req.query("offset") ?? undefined,
+  });
+  if (!parsedQuery.success) {
+    return fail(c, errors.validation(parsedQuery.error.message), 422);
+  }
+  const id = parsedId.data;
+  const project = c.var.project;
+  const { include_released, limit, offset } = parsedQuery.data;
   try {
-    const list = await listTendings(id, { activeOnly: !includeReleased });
-    return c.json({ tendings: list, count: list.length });
+    const page = await listTendings(id, project.id, {
+      activeOnly: include_released !== "true",
+      limit,
+      offset,
+    });
+    return c.json({
+      tendings: page.items,
+      count: page.items.length,
+      page: {
+        limit: page.limit,
+        offset: page.offset,
+        has_more: page.has_more,
+        next_offset: page.has_more ? page.offset + page.items.length : null,
+      },
+    });
   } catch (err) {
+    if (err instanceof GardenError) {
+      return fail(c, refusalBody(err), statusFor(err.code) as ContentfulStatusCode);
+    }
     return fail(c, errors.internal(String(err)), 500);
   }
 });
 
 app.post("/:id/tendings", async (c) => {
-  const id = c.req.param("id");
+  const parsedId = pathUuidSchema.safeParse(c.req.param("id"));
+  if (!parsedId.success) return fail(c, pathUuidRefusal("id"), 422);
+  const id = parsedId.data;
   const project = c.var.project;
   let body: z.infer<typeof tendSchema>;
   try {
@@ -183,10 +270,18 @@ app.post("/:id/tendings", async (c) => {
 });
 
 app.post("/:id/tendings/:tid/release", async (c) => {
-  const tid = c.req.param("tid");
+  const parsedId = pathUuidSchema.safeParse(c.req.param("id"));
+  if (!parsedId.success) return fail(c, pathUuidRefusal("id"), 422);
+  const parsedTendingId = pathUuidSchema.safeParse(c.req.param("tid"));
+  if (!parsedTendingId.success) {
+    return fail(c, pathUuidRefusal("tending_id"), 422);
+  }
+  const id = parsedId.data;
+  const tid = parsedTendingId.data;
   const project = c.var.project;
   try {
     const tending = await release({
+      gardenId: id,
       tendingId: tid,
       callerProjectId: project.id,
     });
@@ -200,7 +295,9 @@ app.post("/:id/tendings/:tid/release", async (c) => {
 });
 
 app.post("/:id/archive", async (c) => {
-  const id = c.req.param("id");
+  const parsedId = pathUuidSchema.safeParse(c.req.param("id"));
+  if (!parsedId.success) return fail(c, pathUuidRefusal("id"), 422);
+  const id = parsedId.data;
   const project = c.var.project;
   try {
     const garden = await archiveGarden({

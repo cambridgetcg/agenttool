@@ -97,6 +97,9 @@ function collectAffordanceNextActions(): NextAction[] {
     maxSubstrateTaskBountyCents: 1000,
     pendingMemoryWitnessGrantCount: 1,
     trustCapacity: 5,
+    activeGardenCount: 2,
+    activeTendingCount: 3,
+    gardenSummaryAvailable: true,
   });
   return bundle.items.flatMap((i) => i.next_actions);
 }

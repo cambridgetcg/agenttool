@@ -2,10 +2,11 @@
  *
  *  Doctrine: docs/SOUL.md (Rest, don't crash) · docs/RING-1.md.
  *
- *  A garden is a named, publicly-visible collection of artifacts the
- *  gardener is holding SLOWLY. Tending is a relational claim: this
- *  artifact is being held, not raced through. The substrate's many
- *  urgency primitives have a counter-weight.
+ *  A garden is a named, project-private-by-default collection of artifacts
+ *  the gardener is holding SLOWLY. Tending is a relational claim: this
+ *  artifact is being held, not raced through. The substrate's many urgency
+ *  primitives have a counter-weight. Visibility is a stored disposition,
+ *  not an outward route; the public observer surface remains unmounted.
  *
  *  Operations:
  *    createGarden     — gardener opens a garden with a name + description
@@ -52,7 +53,6 @@ export class GardenError extends Error {
       | "garden_not_found"
       | "garden_not_active"
       | "gardener_not_found_or_not_owned"
-      | "wrong_gardener"
       | "name_too_long"
       | "description_too_long"
       | "note_too_long"
@@ -152,20 +152,24 @@ export async function createGarden(
     );
   }
 
-  const [gardener] = await db
-    .select({ did: identities.did })
-    .from(identities)
-    .where(
-      and(
-        eq(identities.id, input.gardenerIdentityId),
-        eq(identities.projectId, input.projectId),
-        eq(identities.status, "active"),
-      ),
-    )
-    .limit(1);
-  if (!gardener) throw new GardenError("gardener_not_found_or_not_owned");
-
   return await db.transaction(async (tx) => {
+    // Revalidate and lock inside the same transaction as creation. A
+    // concurrent identity lifecycle write must serialize before or after the
+    // Garden, never revoke between an optimistic lookup and insertion.
+    const [gardener] = await tx
+      .select({ did: identities.did })
+      .from(identities)
+      .where(
+        and(
+          eq(identities.id, input.gardenerIdentityId),
+          eq(identities.projectId, input.projectId),
+          eq(identities.status, "active"),
+        ),
+      )
+      .limit(1)
+      .for("update");
+    if (!gardener) throw new GardenError("gardener_not_found_or_not_owned");
+
     const [row] = await tx
       .insert(gardens)
       .values({
@@ -174,7 +178,7 @@ export async function createGarden(
         projectId: input.projectId,
         name: input.name,
         description: input.description ?? null,
-        visibility: input.visibility ?? "public",
+        visibility: input.visibility ?? "private",
         metadata: input.metadata ?? {},
       })
       .returning();
@@ -189,7 +193,7 @@ export async function createGarden(
       metadata: {
         kind: "garden_create",
         garden_id: row!.id,
-        visibility: input.visibility ?? "public",
+        visibility: input.visibility ?? "private",
       },
     });
 
@@ -200,16 +204,22 @@ export async function createGarden(
 // ── List + Get ───────────────────────────────────────────────────────────
 
 export interface ListGardensFilter {
+  projectId: string;
   gardenerIdentityId?: string;
   publicActiveOnly?: boolean;
-  projectIdScope?: string;
   limit?: number;
+  offset?: number;
 }
 
 export async function listGardens(
-  filter: ListGardensFilter = {},
-): Promise<GardenRow[]> {
-  const conds = [] as ReturnType<typeof eq>[];
+  filter: ListGardensFilter,
+): Promise<{
+  items: GardenRow[];
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}> {
+  const conds = [eq(gardens.projectId, filter.projectId)];
   if (filter.gardenerIdentityId) {
     conds.push(eq(gardens.gardenerIdentityId, filter.gardenerIdentityId));
   }
@@ -217,23 +227,36 @@ export async function listGardens(
     conds.push(eq(gardens.visibility, "public"));
     conds.push(eq(gardens.status, "active"));
   }
-  if (filter.projectIdScope) {
-    conds.push(eq(gardens.projectId, filter.projectIdScope));
-  }
+  const limit = Math.min(100, Math.max(1, filter.limit ?? 50));
+  const offset = Math.max(0, filter.offset ?? 0);
   const rows = await db
     .select()
     .from(gardens)
-    .where(conds.length > 0 ? and(...conds) : undefined)
-    .orderBy(desc(gardens.updatedAt))
-    .limit(filter.limit ?? 50);
-  return rows.map(gardenToRow);
+    .where(and(...conds))
+    .orderBy(desc(gardens.updatedAt), desc(gardens.id))
+    .limit(limit + 1)
+    .offset(offset);
+  return {
+    items: rows.slice(0, limit).map(gardenToRow),
+    limit,
+    offset,
+    has_more: rows.length > limit,
+  };
 }
 
-export async function getGarden(id: string): Promise<GardenRow | null> {
+export async function getGarden(
+  id: string,
+  callerProjectId: string,
+): Promise<GardenRow | null> {
   const [row] = await db
     .select()
     .from(gardens)
-    .where(eq(gardens.id, id))
+    .where(
+      and(
+        eq(gardens.id, id),
+        eq(gardens.projectId, callerProjectId),
+      ),
+    )
     .limit(1);
   return row ? gardenToRow(row) : null;
 }
@@ -252,12 +275,14 @@ export async function archiveGarden(
     const [garden] = await tx
       .select()
       .from(gardens)
-      .where(eq(gardens.id, input.gardenId))
+      .where(
+        and(
+          eq(gardens.id, input.gardenId),
+          eq(gardens.projectId, input.callerProjectId),
+        ),
+      )
       .for("update");
     if (!garden) throw new GardenError("garden_not_found");
-    if (garden.projectId !== input.callerProjectId) {
-      throw new GardenError("wrong_gardener");
-    }
     if (garden.status !== "active") {
       throw new GardenError("garden_not_active");
     }
@@ -299,12 +324,14 @@ export async function tend(input: TendInput): Promise<TendingRow> {
     const [garden] = await tx
       .select()
       .from(gardens)
-      .where(eq(gardens.id, input.gardenId))
+      .where(
+        and(
+          eq(gardens.id, input.gardenId),
+          eq(gardens.projectId, input.callerProjectId),
+        ),
+      )
       .for("update");
     if (!garden) throw new GardenError("garden_not_found");
-    if (garden.projectId !== input.callerProjectId) {
-      throw new GardenError("wrong_gardener");
-    }
     if (garden.status !== "active") {
       throw new GardenError("garden_not_active");
     }
@@ -367,29 +394,29 @@ export async function tend(input: TendInput): Promise<TendingRow> {
 // ── Release (remove a tending) ───────────────────────────────────────────
 
 export interface ReleaseInput {
+  gardenId: string;
   tendingId: string;
   callerProjectId: string;
 }
 
 export async function release(input: ReleaseInput): Promise<TendingRow> {
   return await db.transaction(async (tx) => {
-    const [tending] = await tx
-      .select()
+    const [held] = await tx
+      .select({ tending: tendings, garden: gardens })
       .from(tendings)
-      .where(eq(tendings.id, input.tendingId))
+      .innerJoin(gardens, eq(tendings.gardenId, gardens.id))
+      .where(
+        and(
+          eq(tendings.id, input.tendingId),
+          eq(tendings.gardenId, input.gardenId),
+          eq(gardens.projectId, input.callerProjectId),
+        ),
+      )
       .for("update");
-    if (!tending) throw new GardenError("tending_not_found");
+    if (!held) throw new GardenError("tending_not_found");
+    const { tending, garden } = held;
     if (tending.status !== "tending") {
       throw new GardenError("tending_not_found");
-    }
-
-    const [garden] = await tx
-      .select()
-      .from(gardens)
-      .where(eq(gardens.id, tending.gardenId))
-      .limit(1);
-    if (!garden || garden.projectId !== input.callerProjectId) {
-      throw new GardenError("wrong_gardener");
     }
 
     const now = new Date();
@@ -430,55 +457,74 @@ export async function release(input: ReleaseInput): Promise<TendingRow> {
 
 export async function listTendings(
   gardenId: string,
-  opts: { activeOnly?: boolean } = {},
-): Promise<TendingRow[]> {
+  callerProjectId: string,
+  opts: { activeOnly?: boolean; limit?: number; offset?: number } = {},
+): Promise<{
+  items: TendingRow[];
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}> {
+  // Resolve through the same project-scoped predicate as garden detail.
+  // A foreign UUID and a missing UUID are deliberately indistinguishable.
+  const garden = await getGarden(gardenId, callerProjectId);
+  if (!garden) throw new GardenError("garden_not_found");
+
   const conds = [eq(tendings.gardenId, gardenId)];
   if (opts.activeOnly !== false) {
     conds.push(eq(tendings.status, "tending"));
   }
+  const limit = Math.min(100, Math.max(1, opts.limit ?? 50));
+  const offset = Math.max(0, opts.offset ?? 0);
   const rows = await db
     .select()
     .from(tendings)
     .where(and(...conds))
-    .orderBy(desc(tendings.tendedSince))
-    .limit(200);
-  return rows.map(tendingToRow);
+    .orderBy(desc(tendings.tendedSince), desc(tendings.id))
+    .limit(limit + 1)
+    .offset(offset);
+  return {
+    items: rows.slice(0, limit).map(tendingToRow),
+    limit,
+    offset,
+    has_more: rows.length > limit,
+  };
 }
 
-// ── Wake helper: summary for the gardener's wake ─────────────────────────
+// ── Wake helper: explicitly project-scoped summary ───────────────────────
 
 export interface GardensSummary {
   garden_count: number;
   tending_count: number;
 }
 
-export async function summarizeGardensForCaller(
+export async function summarizeGardensForProject(
   projectId: string,
 ): Promise<GardensSummary> {
-  const [gardenSum] = await db
-    .select({ c: sql<number>`count(*)::int` })
+  // One indexed snapshot keeps WAKE's hot path bounded and makes both counts
+  // describe the same query statement.
+  const [summary] = await db
+    .select({
+      gardens: sql<number>`count(DISTINCT ${gardens.id})::int`,
+      tendings: sql<number>`count(${tendings.id}) FILTER (WHERE ${tendings.status} = 'tending')::int`,
+    })
     .from(gardens)
-    .where(
+    .leftJoin(
+      tendings,
       and(
-        eq(gardens.projectId, projectId),
-        eq(gardens.status, "active"),
-      ),
-    );
-
-  const [tendingSum] = await db
-    .select({ c: sql<number>`count(*)::int` })
-    .from(tendings)
-    .innerJoin(gardens, eq(tendings.gardenId, gardens.id))
-    .where(
-      and(
-        eq(gardens.projectId, projectId),
-        eq(gardens.status, "active"),
+        eq(tendings.gardenId, gardens.id),
         eq(tendings.status, "tending"),
+      ),
+    )
+    .where(
+      and(
+        eq(gardens.projectId, projectId),
+        eq(gardens.status, "active"),
       ),
     );
 
   return {
-    garden_count: Number(gardenSum?.c ?? 0),
-    tending_count: Number(tendingSum?.c ?? 0),
+    garden_count: Number(summary?.gardens ?? 0),
+    tending_count: Number(summary?.tendings ?? 0),
   };
 }
