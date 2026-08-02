@@ -90,6 +90,25 @@ those powers.
   or upgrade entailment against one passage into world truth. Assembled
   reports must retain `truth: not_determined` and
   `externalFacts: not_resolved`.
+- Keep XENIA guest-right practice direct-only, guest-side, and evidence-fed.
+  The xenia subpath consumes existing observations, extractions, plans, and
+  authentic receipts; it must not fetch a manifest, follow a next action or
+  discovery hint, probe declared resources, run the Surface checker, assess
+  Covenant adoption, or produce a conformance result. `conformance` stays
+  `not_tested` and the observed origin stays observed, not authenticated.
+- Keep the XENIA Surface wire constants release-pinned literals. A document
+  that does not match the exact pinned profile identifiers is projected as a
+  state, never partially trusted. Host-controlled bytes project states;
+  only caller mistakes throw.
+- Keep guest-act classification advisory and two-valued. Reading-shaped acts
+  are open; page-control interaction is indeterminate and always carries the
+  specific-consent floor. Never emit a classification that claims to grant,
+  verify, or record consent, permission, or authority, and never let a
+  declared-door annotation authorize a navigation.
+- Keep visit records bound to authentic receipts through the runtime's own
+  authenticity check, identity capped at `none` or `asserted`, and content
+  identities recomputed on re-entry so edited readings and records are
+  rejected rather than trusted.
 - Keep main-document response metadata strictly allowlisted, bounded,
   query-redacted, and untrusted. Never expose cookies/auth headers or turn a
   discovery hint into navigation, authentication, payment, or ambient RRR.
@@ -179,7 +198,10 @@ the unreleased `0.4.0` boundary. Browser-act receipts, non-ref observation
 bases, observation-local receipt context, backend-neutral capability
 inventory, and current/legacy MCP negotiation belong to exact `0.5.0`.
 The Codex plugin manifest and isolated packed MCP bundle belong to exact
-`0.5.1`; the understanding subpath belongs to exact `0.6.0`. Those bytes are
+`0.5.1`; the understanding subpath belongs to exact `0.6.0`. Version `0.7.0`
+is prepared source, not yet a distributed release: it adds the direct-only
+XENIA guest-right subpath while preserving the exact `0.6.0` runtime, nine
+tools, protocol, and authority contracts. Those released bytes are
 frozen: any later source change—especially a
 machine-readable capability contract change—requires a new package version
 before publication.
