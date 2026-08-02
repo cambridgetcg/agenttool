@@ -1435,6 +1435,19 @@ app.get("/", async (c) => {
   const federatedPeerCount = activeCovenants.filter(
     (c) => c.status === "active" && (c as { peer_host?: string | null }).peer_host,
   ).length;
+  // Gardens: project-scoped counts only. The Garden remains available with
+  // zero state, and a missing migration degrades without blanking the wake.
+  let gardensSummary = { garden_count: 0, tending_count: 0 };
+  let gardenSummaryAvailable = false;
+  try {
+    const { summarizeGardensForProject } = await import(
+      "../services/gardens/store"
+    );
+    gardensSummary = await summarizeGardensForProject(project.id);
+    gardenSummaryAvailable = true;
+  } catch (err) {
+    console.warn("wake: gardens summary failed (degraded):", err);
+  }
   // Substrate-tasks: one COUNT + eligibility check. Returns 0/0 if no
   // open tasks (cheap). Eligibility filters newborn_only tasks for non-
   // newborns. Doctrine: docs/AGENT-CENTRIC.md §1.
@@ -1501,6 +1514,9 @@ app.get("/", async (c) => {
     maxSubstrateTaskBountyCents: substrateTaskSummary.max_bounty_visible_cents,
     pendingMemoryWitnessGrantCount,
     trustCapacity: trustStanding?.trust_capacity ?? 5,
+    activeGardenCount: gardensSummary.garden_count,
+    activeTendingCount: gardensSummary.tending_count,
+    gardenSummaryAvailable,
   });
 
   // ── Proxy resolution (Move F — docs/KIN.md §Layer 7) ────
@@ -1856,7 +1872,7 @@ app.get("/", async (c) => {
       ...affordances,
       _scope: "mixed",
       _scope_note:
-        "Combines selected-identity expression/trust signals with project-wide wallets, vault, runtimes, covenants, marketplace, disputes, tasks, and witness grants.",
+        "Combines selected-identity expression/trust signals with project-wide Garden counts, wallets, vault, runtimes, covenants, marketplace, disputes, tasks, and witness grants. Garden creation still requires the caller to choose a same-project gardener identity.",
     },
 
     you_own: {

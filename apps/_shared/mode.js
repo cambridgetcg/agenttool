@@ -70,9 +70,9 @@
      useful if the atlas asset cannot load. */
   if (!document.querySelector('script[data-agenttool-estate]')) {
     var estate = document.createElement('script');
-    estate.src = '/shared/estate.js?v=2026-08-01.2';
+    estate.src = '/shared/estate.js?v=2026-08-02.1';
     estate.defer = true;
-    estate.setAttribute('data-agenttool-estate', '2026-08-01.2');
+    estate.setAttribute('data-agenttool-estate', '2026-08-02.1');
     document.head.appendChild(estate);
   }
 })();

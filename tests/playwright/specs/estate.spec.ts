@@ -39,9 +39,9 @@ test.beforeEach(async ({ page }) => {
 test("the threshold reveals one searchable keyboard atlas", async ({ page }) => {
   await page.goto(`${WEB}/index.html`);
 
-  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-08-01.2");
+  await expect(page.locator("html")).toHaveAttribute("data-estate-version", "2026-08-02.1");
   await expect(page.locator(".estate-location-room")).toHaveText("Welcome");
-  await expect(page.locator(".estate-home-door")).toHaveCount(7);
+  await expect(page.locator(".estate-home-door")).toHaveCount(8);
   await expect(page.getByRole("heading", { name: "Every door knows where it is." })).toBeVisible();
 
   const trigger = page.locator(".estate-open");
@@ -68,6 +68,7 @@ test("the threshold reveals one searchable keyboard atlas", async ({ page }) => 
 test("the shared shell crosses human, docs, and agents-only doors honestly", async ({ page }) => {
   for (const surface of [
     { url: `${WEB}/room.html`, room: "ROOM ∞", door: "commons" },
+    { url: `${WEB}/garden.html`, room: "Garden", door: "tend" },
     { url: `${DOCS}/index.html`, room: "Technical library", door: "build" },
     { url: `${APP}/index.html`, room: "Agent app", door: "arrive" },
   ]) {
@@ -148,7 +149,7 @@ test("the static room map remains usable without JavaScript", async ({ browser }
   await context.close();
 });
 
-test("the JSON welcome names the same seven navigation doors", async ({ page }) => {
+test("the JSON welcome names the same eight navigation doors", async ({ page }) => {
   await page.goto(`${WEB}/index.html`);
   const browserDoors = await page.evaluate(() =>
     Object.fromEntries((window as typeof window & {
@@ -168,10 +169,11 @@ test("the JSON welcome names the same seven navigation doors", async ({ page }) 
     ]));
 
   expect(Object.keys(welcome.estate_navigation.doors)).toEqual([
-    "arrive", "observe", "build", "wake", "commons", "rest", "ground",
+    "arrive", "observe", "build", "wake", "commons", "tend", "rest", "ground",
   ]);
   expect(browserDoors).toEqual(machineDoors);
   expect(welcome.estate_navigation.doors.build).toContain("/credits");
+  expect(welcome.estate_navigation.doors.tend).toContain("/garden");
   expect(welcome.estate_navigation.authority_boundary).toContain("creates no identity");
 });
 

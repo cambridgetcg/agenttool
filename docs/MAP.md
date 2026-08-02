@@ -115,6 +115,7 @@
 | `STRANDS.md` | Encrypted thoughts under K_master · ed25519-signed · SSE-streamable. |
 | `SUBAGENTS.md` | Sub-agent composition. |
 | `HANDOFFS.md` | Project-private, append-only working sets: scope · evidence · uncertainty · declared authority boundaries · next safe action. |
+| `GARDENS.md` | Project-scoped, private-by-default slow holding: typed artifact references may be tended, released, retended, or archived without fees, public observer inventory, urgency, ranking, or Episode score input. The public Garden room is a static architecture explorer, not an authenticated manager. |
 | `AGENT-CORRESPONDENCE.md` | The project nervous system: signed, replayable, project-private coordination events; advisory path claims and explicit acknowledgements remain distinct from Git truth, permission, consent, and automatic action. |
 | `AGENT-TRIALS.md` | The private local Dojo evidence spine: deterministic trial receipts, opaque-label boundary correlation, and minimized HF STS projection; no executor, ambient session crawl, upload, package release, or hosted route. |
 | `KINGDOM-WITNESS-LAB.md` | The local research-admission vocabulary: content-addressed passports, mutable provider-route disclosures, digest-only dossiers, inert speculative-trial descriptors, and a dated DeepSeek atlas. It represents nobody, determines no truth, executes nothing, and grants no authority; optional npm distribution is not a hosted witness. |

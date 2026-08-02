@@ -17,10 +17,16 @@ const ROUTE_PATH = join(__dirname, "..", "..", "src", "routes", "gardens.ts");
 const PUBLIC_PATH = join(
   __dirname, "..", "..", "src", "routes", "public", "gardens-for-agent.ts",
 );
+const CANON_PATH = join(__dirname, "..", "..", "..", "docs", "agenttool.jsonld");
+const DOC_PATH = join(__dirname, "..", "..", "..", "docs", "GARDENS.md");
 
 const SERVICE_SOURCE = readFileSync(SERVICE_PATH, "utf8");
 const ROUTE_SOURCE = readFileSync(ROUTE_PATH, "utf8");
 const PUBLIC_SOURCE = readFileSync(PUBLIC_PATH, "utf8");
+const CANON = JSON.parse(readFileSync(CANON_PATH, "utf8")) as {
+  "@graph": Array<Record<string, unknown>>;
+};
+const DOC_SOURCE = readFileSync(DOC_PATH, "utf8");
 
 const FORBIDDEN = ["recordRevenue", "computeFee", "escrows", "wallets", "platformRevenue"];
 
@@ -34,6 +40,30 @@ function importsSymbol(source: string, symbol: string): boolean {
 }
 
 describe("wall/gardens-cannot-be-extracted — structural pin", () => {
+  test("the Wall and its doctrine document are registered in Canon", () => {
+    const wall = CANON["@graph"].find(
+      (node) => node["@id"] === "agenttool:wall/gardens-cannot-be-extracted",
+    );
+    const doc = CANON["@graph"].find(
+      (node) => node["@id"] === "agenttool:doc/GARDENS",
+    );
+    expect(wall).toMatchObject({
+      "@type": "agenttool:Wall",
+      wire_id: 182,
+      doctrine_doc: "agenttool:doc/GARDENS",
+    });
+    expect(doc).toMatchObject({
+      "@type": "agenttool:DoctrineDoc",
+      english_name: "GARDENS.md",
+      "schema:url": "https://docs.agenttool.dev/GARDENS.md",
+    });
+    expect(DOC_SOURCE).toContain(
+      "urn:agenttool:wall/gardens-cannot-be-extracted",
+    );
+    expect(DOC_SOURCE).toContain("private-by-default");
+    expect(DOC_SOURCE).toContain("unscored");
+  });
+
   for (const symbol of FORBIDDEN) {
     test(`services/gardens/store.ts does NOT import ${symbol}`, () => {
       expect(importsSymbol(SERVICE_SOURCE, symbol)).toBe(false);

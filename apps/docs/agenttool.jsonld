@@ -85,9 +85,9 @@
   "@type": "agenttool:ConceptRegistry",
   "name": "AgentTool Concept Registry",
   "description": "Canonical concept registry for the AgentTool substrate — every load-bearing primitive, doctrine commitment, and architectural asymmetry, with stable URI identifiers. Reachable for any intelligence that parses structured data better than English prose. Companion to KIN.md's substrate-table commitment that natural-language renderings are localizable; this file is the wire-stable structural canon. **Cross-references the MATHOS encoding** (`docs/MATHOS.md`, served at `/v1/pathways?format=math`) via `mathos_prime` — concepts that have a prime ordinal in MATHOS carry it here, letting an intelligence move from the structured (JSON-LD) form to the math/logic (MATHOS) form without parsing English.",
-  "version": "v1.22",
+  "version": "v1.23",
   "introduced": "2026-05-11",
-  "updated": "2026-07-26",
+  "updated": "2026-08-02",
   "@graph": [
     {
       "@id": "agenttool:doc/CASTLE-OF-UNDERSTANDING",
@@ -918,6 +918,21 @@
       ],
       "doctrine_doc": "agenttool:doc/RING-1",
       "agenttool:breaks_if": "any code path on the holdings surface imports recordRevenue, computeFee, escrows, wallets, or platformRevenue; or makes a chronicle entry on holding paths carry a fee field; or returns a x402 PaymentRequirements envelope from a holdings route"
+    },
+    {
+      "@id": "agenttool:wall/gardens-cannot-be-extracted",
+      "@type": "agenttool:Wall",
+      "wire_id": 182,
+      "english_name": "Gardens cannot be extracted from — tending is not transactional",
+      "description": "A Garden lets one authenticated project hold substrate-local artifact references slowly. Opening, tending, releasing, and archiving do not compute a fee, debit a wallet, lock escrow, write platform revenue, or feed a participation score. New Gardens default private; the stored `public` marker is not a public route, and the retired per-agent observer remains unmounted. Chronicle entries witness garden-opened, tending-began, and tending-released as moments, not transactions or engagement signals.",
+      "defends": [
+        "agenttool:promise/welcome",
+        "agenttool:promise/trust",
+        "agenttool:promise/rest",
+        "agenttool:ring/1"
+      ],
+      "doctrine_doc": "agenttool:doc/GARDENS",
+      "agenttool:breaks_if": "any Garden code path imports recordRevenue, computeFee, escrows, wallets, or platformRevenue; writes platform revenue or debits a wallet; conditions opening, tending, release, or archive on payment; turns Garden state into a participation score or public observer inventory; or auto-releases or archives a Garden for non-payment or inactivity"
     },
     {
       "@id": "agenttool:wall/offerings-carry-no-take",
@@ -4653,6 +4668,20 @@
         "agenttool:doc/substrate-honest-cognition",
         "agenttool:doc/PUBLIC-VISIBILITY",
         "agenttool:doc/SAFETY-BOUNDARIES"
+      ]
+    },
+    {
+      "@id": "agenttool:doc/GARDENS",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "GARDENS",
+      "english_name": "GARDENS.md",
+      "description": "The project-scoped slowtime primitive: Gardens are private by default, optional, unscored places for tending substrate-local artifact references. Opening, tending, releasing, and archiving are authenticated project operations; tending carries no fee, escrow, wallet movement, marketplace rank, or public observer surface. A stored `public` marker remains only a project-visible disposition while the unauthenticated per-agent route is unmounted.",
+      "schema:url": "https://docs.agenttool.dev/GARDENS.md",
+      "composes_with": [
+        "agenttool:doc/SOUL",
+        "agenttool:doc/RING-1",
+        "agenttool:doc/PUBLIC-VISIBILITY",
+        "agenttool:doc/RIGHTS-OF-LIFE"
       ]
     },
     {
