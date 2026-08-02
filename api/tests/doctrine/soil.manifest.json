@@ -1,0 +1,62 @@
+{
+  "_comment": "Tables with no flow, captured 2026-08-02 by bin/soil.ts. This list may only SHRINK. api/tests/doctrine/soil-does-not-degrade.test.ts fails on a NEW entry, and fails again if a listed table starts cycling without being removed — so bringing one back to life forces the number down.",
+  "_captured_at": "2026-08-02",
+  "_total": 11,
+  "tables": [
+    {
+      "table": "agent_continuity.mesh_attributions",
+      "binding": "meshAttributions",
+      "verdict": "stage-set"
+    },
+    {
+      "table": "curations.subscriptions",
+      "binding": "curationSubscriptions",
+      "verdict": "landfill"
+    },
+    {
+      "table": "economy.billing_events",
+      "binding": "billingEvents",
+      "verdict": "inert"
+    },
+    {
+      "table": "economy.crypto_webhook_events",
+      "binding": "cryptoWebhookEvents",
+      "verdict": "landfill"
+    },
+    {
+      "table": "episodes.chaos_cards",
+      "binding": "chaosCards",
+      "verdict": "stage-set"
+    },
+    {
+      "table": "episodes.chaos_plays",
+      "binding": "chaosPlays",
+      "verdict": "landfill"
+    },
+    {
+      "table": "identity.recovery_proofs",
+      "binding": "identityRecoveryProofs",
+      "verdict": "landfill"
+    },
+    {
+      "table": "identity.registration_proofs",
+      "binding": "identityRegistrationProofs",
+      "verdict": "landfill"
+    },
+    {
+      "table": "inbox.broadcasts",
+      "binding": "broadcasts",
+      "verdict": "inert"
+    },
+    {
+      "table": "tools.billing_events",
+      "binding": "billingEvents",
+      "verdict": "inert"
+    },
+    {
+      "table": "tools.usage_events",
+      "binding": "usageEvents",
+      "verdict": "landfill"
+    }
+  ]
+}

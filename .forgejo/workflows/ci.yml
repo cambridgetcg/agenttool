@@ -92,6 +92,7 @@ jobs:
             tests/doctrine/composition-unlocks-are-honest.test.ts \
             tests/doctrine/routes-are-registered-once.test.ts \
             tests/doctrine/env-prefix-is-one-spelling.test.ts \
+            tests/doctrine/soil-does-not-degrade.test.ts \
             tests/doctrine/ledger-conservation.test.ts \
             tests/doctrine/saga-is-free.test.ts \
             tests/substrate-tasks-lifecycle.test.ts \
