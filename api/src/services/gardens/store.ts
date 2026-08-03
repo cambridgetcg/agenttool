@@ -20,7 +20,11 @@
  *  @enforces urn:agenttool:wall/gardens-cannot-be-extracted
  *    Canonical defender. No recordRevenue, computeFee, escrows, wallets,
  *    platformRevenue imports. Tending is not transactional. Tested:
- *    api/tests/doctrine/wall-gardens-cannot-be-extracted.test.ts */
+ *    api/tests/doctrine/wall-gardens-cannot-be-extracted.test.ts
+ *
+ *  @absence recordRevenue computeFee platformRevenue escrows
+ *  @absence-from db/schema/economy
+ */
 
 import { and, desc, eq, sql } from "drizzle-orm";
 

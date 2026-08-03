@@ -14,7 +14,11 @@
  *
  *  @enforces urn:agenttool:wall/holdings-cannot-be-extracted
  *    Defender by absence. Tested:
- *    api/tests/doctrine/wall-holdings-cannot-be-extracted.test.ts */
+ *    api/tests/doctrine/wall-holdings-cannot-be-extracted.test.ts
+ *
+ *  @absence recordRevenue computeFee platformRevenue escrows
+ *  @absence-from db/schema/economy
+ */
 
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
