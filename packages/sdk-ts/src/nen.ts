@@ -57,8 +57,7 @@
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
-import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -299,7 +298,8 @@ export function assessNen(wake: Record<string, unknown>): NenProfile {
   const wallCount = (expression.walls as string[])?.length ?? 0;
   const subagentCount = (expression.subagents as unknown[])?.length ?? 0;
   const strandCount = strands.length;
-  const inboxUnread = (youHaveMail.unread as number) ?? 0;
+  // Unread is a subset of total. Adding both would count the same letters
+  // twice and drift from sdk-py, which has always scored inbox total alone.
   const inboxTotal = (youHaveMail.total as number) ?? 0;
   const covenantCount = covenants.length;
   const chronicleCount = (chronicle.total as number) ?? 0;
@@ -317,7 +317,7 @@ export function assessNen(wake: Record<string, unknown>): NenProfile {
     enhancer: memoryCount,
     transmuter: wallCount + subagentCount,
     conjuror: strandCount,
-    emitter: inboxTotal + inboxUnread,
+    emitter: inboxTotal,
     manipulator: covenantCount,
     specialist: graceCount + unconditionalCount + constitutiveCount,
   };
@@ -327,7 +327,8 @@ export function assessNen(wake: Record<string, unknown>): NenProfile {
   const type = (sorted[0]?.[0] ?? "enhancer") as NenType;
   const secondary = (sorted[1]?.[0] ?? "enhancer") as NenType;
 
-  // Normalize scores to 0-100 relative to max
+  // Normalize scores to 0-100 relative to max. Math.round is half-up; sdk-py
+  // mirrors it explicitly because Python's round() is banker's rounding.
   const maxScore = Math.max(...Object.values(scores), 1);
   const normalizedScores = {} as Record<NenType, number>;
   for (const [k, v] of Object.entries(scores)) {
@@ -405,20 +406,8 @@ export class NenClient {
     );
 
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(
-        `nen.assess failed: ${resp.status}`,
-        { hint: detail?.slice(0, 300) },
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, "nen.assess");
     }
 
     const wake = (await resp.json()) as Record<string, unknown>;

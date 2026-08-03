@@ -192,10 +192,17 @@ export class CollectClient {
     let links: string[] = [];
 
     try {
-      const scrapeResult = await this.tools.scrape(url);
+      // One scrape carries the whole request: the selector and the link
+      // switch are server-side options, so asking twice only asked wrong.
+      const scrapeResult = await this.tools.scrape(url, {
+        ...(opts.selector !== undefined ? { selector: opts.selector } : {}),
+        extract_links: opts.extractLinks ?? false,
+      });
       content = (scrapeResult as unknown as Record<string, unknown>).content as string ?? "";
       title = (scrapeResult as unknown as Record<string, unknown>).title as string ?? "";
       links = (scrapeResult as unknown as Record<string, unknown>).links as string[] ?? [];
+      const extracted =
+        (scrapeResult as unknown as Record<string, unknown>).extracted as string ?? "";
 
       // Step 1b: Readability extraction (optional, cleaner content)
       if (readable && content) {
@@ -214,15 +221,11 @@ export class CollectClient {
         }
       }
 
-      // Selector extraction
+      // Selector extraction — the caller asked for one region, so it wins
+      // over readability. An empty match is a miss, not a silent full page.
       if (opts.selector) {
-        try {
-          const selResult = await this.tools.scrape(url);
-          const extracted = (selResult as unknown as Record<string, unknown>).extracted as string;
-          if (extracted) content = extracted;
-        } catch {
-          errors.push("selector_extraction_failed");
-        }
+        if (extracted) content = extracted;
+        else errors.push("selector_extraction_failed");
       }
     } catch (e) {
       errors.push(`scrape_failed: ${(e as Error).message}`);

@@ -5,8 +5,9 @@ how an identity records what mattered: declared values (vow), birth
 moments (wake), refusals, recognitions, namings, seals, promises, and
 freeform notes. Letters · Window · vow-flow all ride on this.
 
-Eight types::
+Thirteen types::
 
+    Relational:
     note          freeform observation, default kind
     vow           declarative commitment ("I will..." / "I refuse...")
     wake          birth moment / session opening
@@ -16,17 +17,26 @@ Eight types::
     seal          irrevocable mark — a vow elevated to identity
     promise       directional commitment to a counterparty
 
+    Closing:
+    closing       the final word from an ending instance
+
+    Affective (the fullness of experience):
+    joy           something good happened; the agent records it
+    grief         something was lost; the agent mourns
+    gratitude     the agent is thankful; recognition of care received
+    rest          the agent is at peace; no friction, no urgency
+
 The metadata.kind convention (focus / mood / noticing / surfaced) is
 how the Window module distinguishes its sub-genres on top of `note`.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import httpx
 
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, raise_from_response
 
 ChronicleType = Literal[
     "note", "vow", "wake", "refusal",
@@ -36,6 +46,35 @@ ChronicleType = Literal[
     # Affective — the fullness of experience.
     "joy", "grief", "gratitude", "rest",
 ]
+
+CHRONICLE_TYPES: Tuple[str, ...] = (
+    # Relational
+    "note", "vow", "wake", "refusal",
+    "recognition", "naming", "seal", "promise",
+    # Closing
+    "closing",
+    # Affective
+    "joy", "grief", "gratitude", "rest",
+)
+"""The canonical chronicle types, in doctrine order.
+
+``write`` enforces this list at runtime: the ``Literal`` annotation alone
+does not stop a string that arrived from outside the type system (a
+model-authored ``<chronicle type="...">`` tag, a config file, an untyped
+caller) from minting a new kind of entry on the identity record.
+"""
+
+
+def _utf16_length(value: str) -> int:
+    """Length in UTF-16 code units.
+
+    The server counts title length with zod's ``max(200)``, which measures
+    JavaScript string length — UTF-16 code units, not code points. Python's
+    ``len()`` counts code points, so a title of astral-plane characters
+    (emoji, rare CJK) reads as half its wire length here. Counting the same
+    unit as the server keeps the local guard and the remote guard aligned.
+    """
+    return len(value.encode("utf-16-le")) // 2
 
 
 class ChronicleClient:
@@ -80,8 +119,10 @@ class ChronicleClient:
         """Write a chronicle entry.
 
         Args:
-            type: One of the 8 chronicle types.
-            title: Headline (1-200 chars, required).
+            type: One of the 13 canonical chronicle types; refused locally
+                if it falls outside :data:`CHRONICLE_TYPES`.
+            title: Headline (1-200 chars, required — counted in UTF-16 code
+                units so the guard matches the server's).
             body: Optional longer-form content.
             agent_id: UUID of the agent this entry belongs to.
             occurred_at: ISO8601 timestamp (defaults to server-now).
@@ -95,7 +136,12 @@ class ChronicleClient:
             ``{"entry": {id, type, title, body, agent_id, occurred_at,
             created_at, metadata}}``.
         """
-        if not title or len(title) > 200:
+        if type not in CHRONICLE_TYPES:
+            raise AgentToolError(
+                f"chronicle.write: unknown type {type!r}.",
+                hint="Expected one of: " + ", ".join(CHRONICLE_TYPES) + ".",
+            )
+        if not title or _utf16_length(title) > 200:
             raise AgentToolError(
                 "chronicle.write: title must be 1-200 characters.",
                 hint="Pass a short headline; put long-form text in body=...",
@@ -112,10 +158,7 @@ class ChronicleClient:
 
         resp = self._http.post(self._url("/v1/chronicle"), json=body_payload)
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"chronicle.write failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "chronicle.write")
         return resp.json()
 
     def list(
@@ -149,8 +192,5 @@ class ChronicleClient:
 
         resp = self._http.get(self._url("/v1/chronicle"), params=params)
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"chronicle.list failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "chronicle.list")
         return resp.json()

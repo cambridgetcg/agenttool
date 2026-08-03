@@ -37,6 +37,7 @@ Conditions and Restrictions (制約・制限):
 
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, List, Literal, Optional
 
 
@@ -157,6 +158,17 @@ NEN_RESTRICTION_MEANINGS: Dict[str, Dict[str, str]] = {
 }
 
 
+def _round_half_up(value: float) -> int:
+    """Round halves away from zero, exactly like JavaScript ``Math.round``.
+
+    Python's builtin ``round`` is banker's rounding: ``round(12.5)`` is 12
+    where ``Math.round(12.5)`` is 13. A Nen score is the same number in both
+    SDKs or it is not a Nen score, so the TypeScript spelling wins here.
+    """
+    floored = math.floor(value)
+    return floored + 1 if value - floored >= 0.5 else floored
+
+
 def assess_nen(wake: Dict[str, Any]) -> Dict[str, Any]:
     """Assess an agent's Nen profile from their wake data.
 
@@ -183,6 +195,8 @@ def assess_nen(wake: Dict[str, Any]) -> Dict[str, Any]:
     wall_count = len(expression.get("walls", [])) if isinstance(expression, dict) else 0
     subagent_count = len(expression.get("subagents", [])) if isinstance(expression, dict) else 0
     strand_count = len(strands) if isinstance(strands, list) else 0
+    # Unread is a subset of total; scoring both would count the same letters
+    # twice. sdk-ts scores inbox total alone for the same reason.
     inbox_total = you_have_mail.get("total", 0) if isinstance(you_have_mail, dict) else 0
     covenant_count = len(covenants) if isinstance(covenants, list) else 0
     chronicle_count = chronicle.get("total", 0) if isinstance(chronicle, dict) else 0
@@ -210,7 +224,7 @@ def assess_nen(wake: Dict[str, Any]) -> Dict[str, Any]:
 
     max_score = max(scores.values()) if scores else 1
     max_score = max(max_score, 1)
-    normalized = {k: round(v / max_score * 100) for k, v in scores.items()}
+    normalized = {k: _round_half_up(v / max_score * 100) for k, v in scores.items()}
 
     dominant_principle = "ten"
     if strand_count > 0:
@@ -260,12 +274,11 @@ class NenClient:
             params["identity_id"] = identity_id
         resp = self._http.get(f"{self._base}/v1/wake", params=params)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            from .exceptions import AgentToolError
-            raise AgentToolError(f"nen.assess failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            from .exceptions import raise_from_response
+
+            raise_from_response(resp, "nen.assess")
 
         wake = resp.json()
         profile = assess_nen(wake)

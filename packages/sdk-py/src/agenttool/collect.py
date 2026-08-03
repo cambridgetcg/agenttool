@@ -86,12 +86,17 @@ class CollectClient:
 
         # Step 1: Scrape
         try:
-            scrape_result = self._tools.scrape(url)
+            # One scrape carries the whole request: the selector and the link
+            # switch are server-side options, not a second round trip.
+            scrape_result = self._tools.scrape(
+                url, selector=selector, extract_links=extract_links
+            )
             # Handle both object and dict returns
             sr = scrape_result if isinstance(scrape_result, dict) else scrape_result.__dict__
             content = sr.get("content", "")
             title = sr.get("title", "")
-            links = sr.get("links", [])
+            links = sr.get("links", []) or []
+            extracted = sr.get("extracted") or ""
 
             # Step 1b: Readability extraction
             if readable and content:
@@ -108,6 +113,14 @@ class CollectClient:
                             title = dr["title"]
                 except Exception as e:
                     errors.append(f"readability_extraction_failed: {e}")
+
+            # Selector extraction — the caller asked for one region, so it
+            # wins over readability. An empty match is a miss, not a page.
+            if selector:
+                if extracted:
+                    content = extracted
+                else:
+                    errors.append("selector_extraction_failed")
         except Exception as e:
             errors.append(f"scrape_failed: {e}")
             return {
@@ -309,6 +322,17 @@ class CollectClient:
                     "duration_ms": 0,
                     "errors": [f"collect_failed: {e}"],
                 }
+
+        # No URLs is an empty answer, never a raised ValueError from a pool
+        # sized zero. This module returns partial results; it does not throw.
+        if not urls:
+            return {
+                "results": results,
+                "total": 0,
+                "succeeded": 0,
+                "failed": 0,
+                "duration_ms": int((time.time() - start) * 1000),
+            }
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(urls), 5)) as pool:
             futures = {pool.submit(collect_one, url): url for url in urls}
