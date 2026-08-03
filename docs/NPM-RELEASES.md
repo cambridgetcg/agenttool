@@ -314,15 +314,15 @@ publisher mapping before releasing another version.
 ### Living Substrate developer-preview bootstrap
 
 `@agenttool/living-substrate@0.1.0-dev.0` uses the npm-only packed-artifact
-path. Its first publication requires public registry `404` for both the
-package and exact version, protected `bootstrap` authentication, and the npm
-`next` channel. Before dispatch, the `npm-bootstrap` environment must allow
-the exact `living-substrate-v*` tag pattern.
+path. Its first publication completed only after public registry `404` for both
+the package and exact version, protected `bootstrap` authentication, the npm
+`next` channel, and an exact `living-substrate-v*` deployment-tag policy on the
+`npm-bootstrap` environment. The completed one-time sequence was:
 
 ```bash
 bun bin/npm-release.ts resolve --package living-substrate
 
-git tag -a living-substrate-v0.1.0-dev.0 <github-main-commit> \
+git tag -a living-substrate-v0.1.0-dev.0 719857efb246ebd334cd131b7f0e0a41bf55b13b \
   -m '@agenttool/living-substrate@0.1.0-dev.0'
 git push github refs/tags/living-substrate-v0.1.0-dev.0
 
@@ -341,6 +341,21 @@ system, diagnose health, choose or execute a tending action, score vitality,
 or establish life, consciousness, consent, truth, safety, or authority. After
 exact anonymous npm and GitHub-asset readback, configure this package's exact
 trusted-publisher mapping before releasing another version.
+
+The first publication completed through protected run
+[`30804085199`](https://github.com/cambridgetcg/agenttool/actions/runs/30804085199)
+and annotated prerelease
+[`living-substrate-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/living-substrate-v0.1.0-dev.0).
+Its `agenttool.npm-release/1` receipt records `published`, `npm_tag: next`,
+registry observation at `2026-08-03T10:11:14.367Z`, and npm-only tag/source
+revision `719857efb246ebd334cd131b7f0e0a41bf55b13b`. Anonymous readback confirmed
+the GitHub and npm tarballs are byte-identical (29,329 bytes;
+`sha256:c1e24810ab01abff3c367596fe9bc617b06584b70417c7beafc756b13acaa166`),
+and `npm audit signatures` independently verified one registry signature and
+one provenance attestation. Both `next` and the sole-version fallback `latest`
+resolve to `0.1.0-dev.0`; the fallback is not a stable-release or maturity
+signal. The package record now exists, so bootstrap is forbidden for later
+versions; configure its exact trusted publisher and use `trusted` thereafter.
 
 ### HEAVEN developer-preview bootstrap
 
