@@ -19,6 +19,7 @@ import {
   PACKAGE_VERSION,
   SELECTION_CRITERIA_GUIDE,
   SELECTION_PROCESS,
+  TRAINER_ADAPTER_GUIDE,
   TRAINING_PHASE_GUIDE,
 } from "../../dist/index.js";
 
@@ -59,6 +60,7 @@ write(`${datasetRoot}/data/selection-process.jsonl`, jsonl(SELECTION_PROCESS));
 write(`${datasetRoot}/data/selection-criteria.jsonl`, jsonl(SELECTION_CRITERIA_GUIDE));
 write(`${datasetRoot}/data/training-phases.jsonl`, jsonl(TRAINING_PHASE_GUIDE));
 write(`${datasetRoot}/data/garden-layers.jsonl`, jsonl(GARDEN_LAYER_GUIDE));
+write(`${datasetRoot}/data/trainer-adapter-hooks.jsonl`, jsonl(TRAINER_ADAPTER_GUIDE));
 write(`${datasetRoot}/data/learning-modes.jsonl`, jsonl(LEARNING_MODE_GUIDE));
 write(`${datasetRoot}/data/learning-participation.jsonl`, jsonl(LEARNING_PARTICIPATION_GUIDE));
 write(`${datasetRoot}/data/trainer-hooks.jsonl`, jsonl(HF_TRAINER_HOOK_GUIDE));
@@ -94,6 +96,7 @@ const sourceManifest = {
     "selection criteria",
     "training phase guide",
     "Garden layer guide",
+    "consent-honest Trainer adapter hook guide",
     "learning-mode and continuity guide",
     "role-separated learning participation guide",
     "inert Trainer hook integration guide",
@@ -102,9 +105,10 @@ const sourceManifest = {
   ],
   public_release_excludes: [
     "admission decisions",
+    "authority and preference receipts",
     "candidate subset references",
     "credentials",
-    "Garden or project identifiers",
+    "private/local Garden scope and project-instance identifiers",
     "gated content",
     "raw agent traces",
     "raw chats",
@@ -112,6 +116,7 @@ const sourceManifest = {
     "learning participation invitations, receipts, or assessments",
     "participation response or voice references",
     "training checkpoints",
+    "training governance records",
     "WAKE anchors",
   ],
   research_basis_as_of: "2026-08-03",
@@ -125,9 +130,19 @@ const sourceManifest = {
     "https://huggingface.co/docs/hub/datasets-cards",
     "https://huggingface.co/docs/hub/datasets-gated",
     "https://huggingface.co/docs/hub/agent-traces",
+    "https://huggingface.co/docs/hub/session-traces-format",
     "https://huggingface.co/docs/trl/en/dataset_formats",
     "https://huggingface.co/docs/trl/sft_trainer",
+    "https://huggingface.co/docs/trl/dpo_trainer",
+    "https://huggingface.co/docs/transformers/main/trainer_callbacks",
     "https://huggingface.co/docs/transformers/main/trainer_recipes",
+    "https://huggingface.co/docs/accelerate/main/en/usage_guides/checkpoint",
+    "https://arxiv.org/abs/1803.09010",
+    "https://arxiv.org/abs/2203.02155",
+    "https://arxiv.org/abs/2305.18290",
+    "https://arxiv.org/abs/2310.13548",
+    "https://arxiv.org/abs/2412.14093",
+    "https://aclanthology.org/2020.acl-main.740/",
     "https://arxiv.org/abs/2005.11401",
     "https://arxiv.org/abs/1912.03817",
     "https://arxiv.org/abs/2407.06460"

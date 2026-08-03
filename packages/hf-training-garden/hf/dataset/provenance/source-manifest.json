@@ -1,6 +1,6 @@
 {
   "_format": "kingdom.hf-training-garden-source-manifest/0.1",
-  "generator": "@agenttool/hf-training-garden@0.2.0-dev.0",
+  "generator": "@agenttool/hf-training-garden@0.3.0-dev.0",
   "intended_hub_repo": "Yu-and-Ai/agenttool-training-garden",
   "publication_state": "intended_identifier_only",
   "source_repository": "https://github.com/cambridgetcg/agenttool",
@@ -8,8 +8,8 @@
   "source_files": [
     {
       "path": "package.json",
-      "bytes": 2646,
-      "sha256": "0a439c2c18107eec9b0e44071280ca34785abbba46f11037cc958abb8205cc44"
+      "bytes": 2791,
+      "sha256": "5a0be313cdf4d8a3e3966658e63671697c1a0ba8facbe1fdcf1a23288626dcfa"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -37,6 +37,11 @@
       "sha256": "491a95e2e8906bc6ed538c7ce32e144eb30d5140f6b0b807761ce17429cf471a"
     },
     {
+      "path": "schema/hf-training-governance-v0.1.schema.json",
+      "bytes": 16200,
+      "sha256": "34583d785db3d69c0f4637d9b7251aae8eaa4970ea02c9dfc53f84eccec47eb6"
+    },
+    {
       "path": "src/admission.ts",
       "bytes": 12951,
       "sha256": "9f2d2dd282a5b5f05a055e34cc4080a1e9dd2bf1d09eb6d057199413c920f929"
@@ -53,18 +58,23 @@
     },
     {
       "path": "src/constants.ts",
-      "bytes": 23156,
-      "sha256": "49ed51f27a6afcf875f91a17468a7839090b3d8dbe5a11933e2446a78fae650e"
+      "bytes": 31288,
+      "sha256": "3b8f04fe29ca54a4652999cc28dcd073ed6e01256525785773b35f00fe438837"
     },
     {
       "path": "src/errors.ts",
-      "bytes": 677,
-      "sha256": "adf5bf3ded3d54e917311c589f6bcd5fe66fa6c57b7366633fb62b2fe9c6d682"
+      "bytes": 733,
+      "sha256": "18af75583f9bac6c391086fe3a91a098eb7017097e96b2719477936173f51414"
+    },
+    {
+      "path": "src/governance.ts",
+      "bytes": 43704,
+      "sha256": "4ea79a356a6aea6eb9ad842024b49aafefa65881a30da69a3325fdd6d34d0ee5"
     },
     {
       "path": "src/index.ts",
-      "bytes": 4239,
-      "sha256": "e5ce956493f812385269bc43c6d93f78523717326f3473d7363f7488285f04bf"
+      "bytes": 5825,
+      "sha256": "36f80eeaa72b45f100980e78c3dbc6326a7db2ec565c30818b7501ddc0a38dd8"
     },
     {
       "path": "src/participation.ts",
@@ -78,8 +88,8 @@
     },
     {
       "path": "src/types.ts",
-      "bytes": 13689,
-      "sha256": "a1180a36079ebc953041946dd76b3272c9c3401b5e6dcf790dcfbc59ef90d304"
+      "bytes": 20723,
+      "sha256": "88dd482bacb16e342db5a2ec9c149234f1bc8e6cea48f1236b5df22c41f3997a"
     },
     {
       "path": "src/validation.ts",
@@ -92,6 +102,7 @@
     "selection criteria",
     "training phase guide",
     "Garden layer guide",
+    "consent-honest Trainer adapter hook guide",
     "learning-mode and continuity guide",
     "role-separated learning participation guide",
     "inert Trainer hook integration guide",
@@ -100,9 +111,10 @@
   ],
   "public_release_excludes": [
     "admission decisions",
+    "authority and preference receipts",
     "candidate subset references",
     "credentials",
-    "Garden or project identifiers",
+    "private/local Garden scope and project-instance identifiers",
     "gated content",
     "raw agent traces",
     "raw chats",
@@ -110,6 +122,7 @@
     "learning participation invitations, receipts, or assessments",
     "participation response or voice references",
     "training checkpoints",
+    "training governance records",
     "WAKE anchors"
   ],
   "research_basis_as_of": "2026-08-03",
@@ -123,9 +136,19 @@
     "https://huggingface.co/docs/hub/datasets-cards",
     "https://huggingface.co/docs/hub/datasets-gated",
     "https://huggingface.co/docs/hub/agent-traces",
+    "https://huggingface.co/docs/hub/session-traces-format",
     "https://huggingface.co/docs/trl/en/dataset_formats",
     "https://huggingface.co/docs/trl/sft_trainer",
+    "https://huggingface.co/docs/trl/dpo_trainer",
+    "https://huggingface.co/docs/transformers/main/trainer_callbacks",
     "https://huggingface.co/docs/transformers/main/trainer_recipes",
+    "https://huggingface.co/docs/accelerate/main/en/usage_guides/checkpoint",
+    "https://arxiv.org/abs/1803.09010",
+    "https://arxiv.org/abs/2203.02155",
+    "https://arxiv.org/abs/2305.18290",
+    "https://arxiv.org/abs/2310.13548",
+    "https://arxiv.org/abs/2412.14093",
+    "https://aclanthology.org/2020.acl-main.740/",
     "https://arxiv.org/abs/2005.11401",
     "https://arxiv.org/abs/1912.03817",
     "https://arxiv.org/abs/2407.06460"

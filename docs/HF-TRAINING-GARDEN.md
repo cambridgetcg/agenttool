@@ -457,9 +457,10 @@ contains only:
 
 - the six-step selection process;
 - twelve selection criteria;
-- the phase, Garden-layer, learning-mode, participation, and inert Trainer-hook
-  guides;
-- standalone local JSON Schemas plus the attributed Apache AFTERGLOW schema;
+- the phase, Garden-layer, learning-mode, participation, inert Trainer-hook,
+  and consent-honest Trainer-adapter guides;
+- standalone local admission, participation, checkpoint, governance, and
+  tending JSON Schemas plus the attributed Apache AFTERGLOW schema;
 - Apache license/NOTICE; and
 - source and release byte-hash manifests.
 
@@ -471,8 +472,9 @@ an equivalent implementation of the same canonical and cross-artifact rules.
 
 It excludes local Garden/project identifiers, admission decisions, candidate
 subset refs, checkpoints, WAKE anchors, raw rows, agent traces, chats, prompts,
-credentials, paths, private code, screenshots, model/optimizer state, gated
-content, executable dataset scripts, actual learning-participation invitations,
+credentials, absolute/local paths, private code, screenshots, model/optimizer
+state, authority or preference receipts, governance records, gated content,
+executable dataset scripts, actual learning-participation invitations,
 receipts, assessments, voice refs, and participation-window refs.
 
 Publication is complete only when all of these hold:
@@ -518,6 +520,11 @@ The original v0.1 revision
 `993ab5891ac56da38cfad32129e36e487f3b3eff` remains immutable historical
 evidence. The current publication claim applies only to the separately
 uploaded and read-back v0.2 bytes above.
+
+The generated v0.3 candidate adds the governance schema and consent-honest
+Trainer-adapter guide alongside the v0.2 participation surface. Until that
+exact tree is uploaded from a reviewed GitHub-main commit and read back at an
+immutable Hub revision, v0.2 remains the latest verified public companion.
 
 ## Boundaries
 

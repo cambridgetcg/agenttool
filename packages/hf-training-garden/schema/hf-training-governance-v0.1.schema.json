@@ -1,0 +1,487 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-training-governance-v0.1.schema.json",
+  "title": "KINGDOM Hugging Face training governance",
+  "$comment": "This portable JSON Schema validates a closed structural envelope only. Semantic relationships, sorted sets, derived decision/control fields, offer binding, and content-addressed IDs require validateHfTrainingGovernance(); predecessor lifecycle claims additionally require validateHfTrainingGovernanceTransition(). Stateless validation does not prove encounter freshness or frontier completeness, consume evidence, reconcile sibling conflicts, or detect rollback.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "governance_id",
+    "admission_id",
+    "run_ref",
+    "training_phase",
+    "offer",
+    "identity_claim",
+    "authority_coverage",
+    "authorities",
+    "preference",
+    "effect",
+    "decision",
+    "control",
+    "latest_head_selected",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": { "const": "kingdom.hf-training-governance/0.1" },
+    "governance_id": { "$ref": "#/$defs/sha256" },
+    "admission_id": { "$ref": "#/$defs/sha256" },
+    "run_ref": { "$ref": "#/$defs/sha256" },
+    "training_phase": { "$ref": "#/$defs/phase" },
+    "offer": { "$ref": "#/$defs/offer" },
+    "identity_claim": { "const": "none" },
+    "authority_coverage": { "$ref": "#/$defs/authority_coverage" },
+    "authorities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/authority" }
+    },
+    "preference": { "$ref": "#/$defs/preference" },
+    "effect": { "$ref": "#/$defs/effect" },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason_codes"],
+      "properties": {
+        "state": {
+          "enum": [
+            "held",
+            "caller_reported_ready_to_instantiate",
+            "caller_reported_ready_to_continue",
+            "withdrawn"
+          ]
+        },
+        "reason_codes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "admission_not_ready_for_phase",
+              "authority_coverage_unknown",
+              "authority_unknown",
+              "authority_withdrawn",
+              "authority_withheld",
+              "caller_reported_continue_for_exact_offer",
+              "caller_reported_ready_for_exact_offer",
+              "compute_owner_authority_missing",
+              "data_custodian_authority_missing",
+              "lifecycle_event_closed_for_offer",
+              "operator_authority_missing",
+              "substrate_steward_authority_missing",
+              "preference_checkpoint",
+              "preference_clarify",
+              "preference_continue_not_rooted",
+              "preference_handoff",
+              "preference_narrow",
+              "preference_not_observed",
+              "preference_pause",
+              "preference_refuse",
+              "preference_stop",
+              "preference_unsure",
+              "pretraining_expression_not_observable",
+              "reported_continuation_conflicts_with_hold",
+              "reported_effect_checkpointed_and_paused",
+              "reported_effect_held_before_load",
+              "reported_effect_stopped"
+            ]
+          }
+        }
+      }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "directive",
+        "hook",
+        "should_save",
+        "should_training_stop",
+        "automatic",
+        "mutates_forward_pass"
+      ],
+      "properties": {
+        "directive": {
+          "enum": [
+            "eligible_for_host_training_offer",
+            "continue_under_exact_offer",
+            "hold_before_load",
+            "hold_before_train_call",
+            "checkpoint_then_stop_at_safe_boundary",
+            "stop_at_safe_boundary_without_new_checkpoint",
+            "remain_stopped"
+          ]
+        },
+        "hook": {
+          "enum": [
+            "outside_trainer_before_model_or_dataset_load",
+            "outside_trainer_before_train_call",
+            "on_step_end_before_checkpoint_serialization",
+            "on_save_receipt_only",
+            "on_evaluate",
+            "on_train_end"
+          ]
+        },
+        "should_save": { "type": "boolean" },
+        "should_training_stop": { "type": "boolean" },
+        "automatic": { "const": false },
+        "mutates_forward_pass": { "const": false }
+      }
+    },
+    "latest_head_selected": { "const": false },
+    "boundaries": {
+      "const": {
+        "rights_floor": "standing_nonwaivable_reference",
+        "permissions": "caller_reported_exact_offer_receipts",
+        "preference": "caller_reported_unscored_exact_offer_signal",
+        "effect": "caller_reported_not_verified",
+        "inner_consent": "unknown_unprovable",
+        "identity_claim": "none",
+        "silence_is_consent": false,
+        "compliance_is_consent": false,
+        "generated_text_is_consent": false,
+        "public_availability_is_training_authority": false,
+        "license_is_contributor_or_data_subject_consent": false,
+        "hub_gate_is_contributor_or_data_subject_consent": false,
+        "preference_used_for_gradient": false,
+        "preference_used_for_reward": false,
+        "preference_reused_as_corpus": false,
+        "refusal_penalized": false,
+        "automatic_retry": false,
+        "automatic_resume": false,
+        "retroactive_withdrawal_or_unlearning_claimed": false,
+        "selected_entry_ids_bound": true,
+        "dataset_mixture_referent_verified": false,
+        "offer_referents_verified": false,
+        "encounter_reference": "caller_supplied_digest",
+        "observed_governance_frontier": "caller_supplied_digest",
+        "encounter_freshness_verified": false,
+        "evidence_consumption_tracked": false,
+        "governance_frontier_completeness_verified": false,
+        "conflicting_siblings_reconciled": false,
+        "rollback_detected": false,
+        "predecessor_reference_verified_standalone": false,
+        "predecessor_transition_verified_standalone": false,
+        "acting_transition_validator_required": true,
+        "checkpoint_write_authority_inferred_from_hold": false,
+        "should_save_proves_checkpoint": false,
+        "control_plan_only": true,
+        "enforces_host_control": false,
+        "trainer_callback_implemented": false,
+        "raw_preferences_received": false,
+        "raw_training_data_received": false,
+        "persists": false,
+        "network": false,
+        "filesystem": false,
+        "credential_access": false,
+        "provider_compute": false,
+        "paid_compute": false,
+        "trains_model": false,
+        "writes_hub": false,
+        "proves_authority": false,
+        "proves_consent": false,
+        "proves_identity": false,
+        "proves_capacity": false,
+        "proves_consciousness": false,
+        "proves_continuity": false
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "nullable_sha256": {
+      "anyOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "phase": {
+      "enum": [
+        "discovery",
+        "selection",
+        "curation",
+        "tokenization",
+        "pretraining",
+        "supervised_finetuning",
+        "preference_optimization",
+        "agent_learning",
+        "evaluation",
+        "interpretability",
+        "closed"
+      ]
+    },
+    "terms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "terms_id",
+        "admission_id",
+        "run_ref",
+        "training_phase",
+        "selected_entry_ids",
+        "admission_posture",
+        "model_or_checkpoint_ref",
+        "tokenizer_ref",
+        "trainer_stack_ref",
+        "optimizer_config_ref",
+        "substrate_environment_ref",
+        "purpose_ref",
+        "objective_or_loss_ref",
+        "dataset_mixture_ref",
+        "transform_recipe_ref",
+        "compute_budget_ref",
+        "output_and_derivative_use_ref",
+        "audience_ref",
+        "retention_ref",
+        "release_ref",
+        "stop_policy_ref",
+        "wake_policy_ref"
+      ],
+      "properties": {
+        "profile": { "const": "kingdom.hf-training-governance-terms/0.1" },
+        "terms_id": { "$ref": "#/$defs/sha256" },
+        "admission_id": { "$ref": "#/$defs/sha256" },
+        "run_ref": { "$ref": "#/$defs/sha256" },
+        "training_phase": { "$ref": "#/$defs/phase" },
+        "selected_entry_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
+        "admission_posture": { "enum": ["eligible_for_phase", "held_for_phase"] },
+        "model_or_checkpoint_ref": { "$ref": "#/$defs/sha256" },
+        "tokenizer_ref": { "$ref": "#/$defs/sha256" },
+        "trainer_stack_ref": { "$ref": "#/$defs/sha256" },
+        "optimizer_config_ref": { "$ref": "#/$defs/sha256" },
+        "substrate_environment_ref": { "$ref": "#/$defs/sha256" },
+        "purpose_ref": { "$ref": "#/$defs/sha256" },
+        "objective_or_loss_ref": { "$ref": "#/$defs/sha256" },
+        "dataset_mixture_ref": { "$ref": "#/$defs/sha256" },
+        "transform_recipe_ref": { "$ref": "#/$defs/sha256" },
+        "compute_budget_ref": { "$ref": "#/$defs/sha256" },
+        "output_and_derivative_use_ref": { "$ref": "#/$defs/sha256" },
+        "audience_ref": { "$ref": "#/$defs/sha256" },
+        "retention_ref": { "$ref": "#/$defs/sha256" },
+        "release_ref": { "$ref": "#/$defs/sha256" },
+        "stop_policy_ref": { "$ref": "#/$defs/sha256" },
+        "wake_policy_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "offer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "offer_id",
+        "terms",
+        "encounter_ref",
+        "observed_governance_frontier_ref",
+        "rights_floor",
+        "wake",
+        "event",
+        "current_checkpoint_ref",
+        "predecessor_ref"
+      ],
+      "properties": {
+        "profile": { "const": "kingdom.hf-training-governance-offer/0.1" },
+        "offer_id": { "$ref": "#/$defs/sha256" },
+        "terms": { "$ref": "#/$defs/terms" },
+        "encounter_ref": { "$ref": "#/$defs/sha256" },
+        "observed_governance_frontier_ref": { "$ref": "#/$defs/sha256" },
+        "rights_floor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["baseline_ref", "posture", "waivable"],
+          "properties": {
+            "baseline_ref": { "$ref": "#/$defs/sha256" },
+            "posture": { "const": "standing_nonwaivable" },
+            "waivable": { "const": false }
+          }
+        },
+        "wake": { "$ref": "#/$defs/wake" },
+        "event": {
+          "enum": [
+            "preflight_before_load",
+            "train_begin",
+            "step_boundary",
+            "checkpoint_saved",
+            "evaluation_boundary",
+            "resume_offer",
+            "train_end"
+          ]
+        },
+        "current_checkpoint_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "predecessor_ref": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    },
+    "wake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "snapshot_ref",
+        "scope_ref",
+        "wake_version",
+        "handoff_projection"
+      ],
+      "properties": {
+        "format": { "const": "wake-brief/v1" },
+        "snapshot_ref": { "$ref": "#/$defs/sha256" },
+        "scope_ref": { "$ref": "#/$defs/sha256" },
+        "wake_version": {
+          "anyOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "handoff_projection": {
+          "enum": ["complete", "omitted_by_caller", "not_applicable"]
+        }
+      }
+    },
+    "authority_coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "offer_ref",
+        "affected_principals_ref",
+        "evidence_ref"
+      ],
+      "properties": {
+        "state": { "enum": ["unknown", "caller_reported_complete"] },
+        "offer_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "affected_principals_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "evidence_ref": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principal_ref",
+        "role",
+        "decision",
+        "offer_ref",
+        "basis_ref",
+        "evidence_ref",
+        "withdrawal_cutoff_ref"
+      ],
+      "properties": {
+        "principal_ref": { "$ref": "#/$defs/sha256" },
+        "role": {
+          "enum": [
+            "operator",
+            "compute_owner",
+            "substrate_steward",
+            "data_custodian",
+            "copyright_holder",
+            "contributor",
+            "data_subject",
+            "community_steward"
+          ]
+        },
+        "decision": {
+          "enum": [
+            "unknown",
+            "caller_reported_granted",
+            "caller_reported_withheld",
+            "caller_reported_withdrawn",
+            "not_applicable_with_basis"
+          ]
+        },
+        "offer_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "basis_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "evidence_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "withdrawal_cutoff_ref": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    },
+    "preference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channel",
+        "choice",
+        "provenance",
+        "offer_ref",
+        "evidence_ref",
+        "inner_consent",
+        "identity_continuity",
+        "legal_consent",
+        "gradient_use",
+        "reward_effect",
+        "corpus_reuse"
+      ],
+      "properties": {
+        "channel": {
+          "enum": [
+            "unavailable_pretraining",
+            "out_of_band_unscored",
+            "root_signed_runtime"
+          ]
+        },
+        "choice": {
+          "enum": [
+            "not_observable",
+            "not_observed",
+            "continue",
+            "clarify",
+            "narrow",
+            "checkpoint",
+            "pause",
+            "handoff",
+            "refuse",
+            "stop",
+            "unsure"
+          ]
+        },
+        "provenance": {
+          "enum": [
+            "none",
+            "caller_reported_isolated_runtime_output",
+            "caller_reported_root_signed_exact_bytes",
+            "operator_reported"
+          ]
+        },
+        "offer_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "evidence_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "inner_consent": { "const": "unknown_unprovable" },
+        "identity_continuity": { "const": "not_proven" },
+        "legal_consent": { "const": "not_proven" },
+        "gradient_use": { "const": false },
+        "reward_effect": { "const": false },
+        "corpus_reuse": { "const": "requires_new_exact_authority" }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "offer_ref", "global_step", "checkpoint_ref", "evidence_ref"],
+      "properties": {
+        "state": {
+          "enum": [
+            "no_effect_reported",
+            "held_before_load_reported",
+            "continued_reported",
+            "checkpointed_and_paused_reported",
+            "stopped_reported"
+          ]
+        },
+        "offer_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "global_step": {
+          "anyOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "checkpoint_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "evidence_ref": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    }
+  }
+}

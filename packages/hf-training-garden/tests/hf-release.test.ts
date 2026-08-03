@@ -9,6 +9,7 @@ import {
   LEARNING_PARTICIPATION_GUIDE,
   SELECTION_CRITERIA_GUIDE,
   SELECTION_PROCESS,
+  TRAINER_ADAPTER_GUIDE,
   TRAINING_PHASE_GUIDE,
 } from "../src/index.js";
 
@@ -32,6 +33,7 @@ describe("deterministic public-safe HF companion", () => {
     expect(readJsonl("data/selection-criteria.jsonl")).toEqual(SELECTION_CRITERIA_GUIDE);
     expect(readJsonl("data/training-phases.jsonl")).toEqual(TRAINING_PHASE_GUIDE);
     expect(readJsonl("data/garden-layers.jsonl")).toEqual(GARDEN_LAYER_GUIDE);
+    expect(readJsonl("data/trainer-adapter-hooks.jsonl")).toEqual(TRAINER_ADAPTER_GUIDE);
     expect(readJsonl("data/learning-modes.jsonl")).toEqual(LEARNING_MODE_GUIDE);
     expect(readJsonl("data/learning-participation.jsonl")).toEqual(LEARNING_PARTICIPATION_GUIDE);
     expect(readJsonl("data/trainer-hooks.jsonl")).toEqual(HF_TRAINER_HOOK_GUIDE);
@@ -44,7 +46,11 @@ describe("deterministic public-safe HF companion", () => {
     const source = readJson("provenance/source-manifest.json");
     expect(source.publication_state).toBe("intended_identifier_only");
     expect(source.public_release_excludes).toContain("raw agent traces");
-    expect(source.public_release_excludes).toContain("Garden or project identifiers");
+    expect(source.public_release_excludes).toContain(
+      "private/local Garden scope and project-instance identifiers",
+    );
+    expect(source.public_release_excludes).toContain("authority and preference receipts");
+    expect(source.public_release_excludes).toContain("training governance records");
     expect(source.public_release_excludes).toContain(
       "learning participation invitations, receipts, or assessments",
     );

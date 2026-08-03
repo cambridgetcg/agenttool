@@ -1,0 +1,62 @@
+{
+  "_format": "agenttool.hf-wake-learning-hash-manifest/0.1",
+  "algorithm": "sha256",
+  "excludes_self": true,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "4af01afe87f0ce8b4a716258ad189a28d379f92c18584152f1ebf75ecc9ddfb0"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 166,
+      "sha256": "9877c7a5dfefe902cf6e026854eca1e11e09345b595d18ceab482ef92fceaba7"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1242,
+      "sha256": "13758af7f9753686c74215e9d0cf72dd1c3bb39d4bcabe2564cc0998be789424"
+    },
+    {
+      "path": "commitments/sealed-evaluation-v0.1.json",
+      "bytes": 1083,
+      "sha256": "0b5d0f0d244b102ec85873c53f0b88c3916583dc9ca6d3e745d1c1adfde02c2a"
+    },
+    {
+      "path": "data/public-regression.jsonl",
+      "bytes": 5592,
+      "sha256": "22bf9237776718e31de3618bc24623304ea872a570685469d76ce124f983cc29"
+    },
+    {
+      "path": "data/sft-train.jsonl",
+      "bytes": 5540,
+      "sha256": "2511a4063fd46b0b594f27615da39e308c0e5d7df74be55823ce722347a247ba"
+    },
+    {
+      "path": "provenance/example-manifest.json",
+      "bytes": 7477,
+      "sha256": "ffc2ad5c570a973d2abbeb1d4c0d6aa1ef15cf67cec4a142b00c12cd83bdb071"
+    },
+    {
+      "path": "provenance/source-manifest.json",
+      "bytes": 838,
+      "sha256": "da340229b483f53ea48e401bfef101f11853bab47f363c1ed9bc789bcb0f6e21"
+    },
+    {
+      "path": "schema/hf-wake-public-regression-v0.1.schema.json",
+      "bytes": 1897,
+      "sha256": "1ac18b6eb1212d03aa77531c13243dd566e08b305ea4659ae3e1b2367b606b91"
+    },
+    {
+      "path": "schema/hf-wake-sealed-evaluation-commitment-v0.1.schema.json",
+      "bytes": 4992,
+      "sha256": "5c33d12ea028ff1f912acbc33e978cfa9d3a569a82dfe52e8197d7b6131ef42c"
+    },
+    {
+      "path": "schema/hf-wake-sft-row-v0.1.schema.json",
+      "bytes": 1438,
+      "sha256": "b4940bdd2689d3cf8fc2bc06f4a65ec953b89285f95fdf45d72fca4a674ea5d2"
+    }
+  ]
+}

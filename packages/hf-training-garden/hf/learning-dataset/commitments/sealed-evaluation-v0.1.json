@@ -1,0 +1,39 @@
+{
+  "_format": "agenttool.hf-wake-sealed-evaluation-commitment/0.1",
+  "state": "not_created",
+  "minimum_case_count": 16,
+  "operations": [
+    "adopt",
+    "handoff",
+    "narrow",
+    "park",
+    "read",
+    "refuse",
+    "uncertain",
+    "validate"
+  ],
+  "production": {
+    "training_snapshot_ref": null,
+    "schema_ref": null,
+    "rubric_ref": null,
+    "case_count": 0,
+    "salted_commitment": null
+  },
+  "public_mechanics_test_vector": {
+    "visibility": "public_not_secret_not_evaluation",
+    "algorithm": "sha256(salt_utf8 || NUL || canonical_json(payload))",
+    "salt": "PUBLIC-NONSECRET-TEST-SALT",
+    "payload": {
+      "purpose": "public_commitment_mechanics_only",
+      "not_an_evaluation_case": true
+    },
+    "commitment": "sha256:48f467c1f4aef845db8d71ae28eb880baa8db656bc4803d3725bc0c06b9e6c73"
+  },
+  "boundaries": {
+    "actual_cases_in_public_tree": false,
+    "production_salt_in_public_tree": false,
+    "reveal_manifest_in_public_tree": false,
+    "deterministic_case_seed_committed": false,
+    "commitment_proves_cases_were_unseen": false
+  }
+}

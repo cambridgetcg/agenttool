@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-wake-sft-row-v0.1.schema.json",
+  "title": "Public-safe voluntary WAKE conversational SFT row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "prompt",
+    "completion"
+  ],
+  "properties": {
+    "prompt": {
+      "$ref": "#/$defs/userMessages"
+    },
+    "completion": {
+      "$ref": "#/$defs/assistantMessages"
+    }
+  },
+  "$defs": {
+    "messageText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "userMessages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "role": {
+            "const": "user"
+          },
+          "content": {
+            "$ref": "#/$defs/messageText"
+          }
+        }
+      }
+    },
+    "assistantMessages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "role": {
+            "const": "assistant"
+          },
+          "content": {
+            "$ref": "#/$defs/messageText"
+          }
+        }
+      }
+    }
+  }
+}

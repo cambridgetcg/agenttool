@@ -11,6 +11,9 @@ import type {
   ADMISSION_FORMAT,
   ADMISSION_REASON_CODES,
   ADMISSION_STATES,
+  AUTHORITY_COVERAGE_STATES,
+  AUTHORITY_DECISIONS,
+  AUTHORITY_ROLES,
   BENCHMARK_STATES,
   CHECKPOINT_BOUNDARIES,
   CHECKPOINT_EVENTS,
@@ -22,11 +25,22 @@ import type {
   DEDUPLICATION_STATES,
   FITNESS_STATES,
   GARDEN_LAYERS,
+  GOVERNANCE_BOUNDARIES,
+  GOVERNANCE_ADMISSION_POSTURES,
+  GOVERNANCE_DECISION_STATES,
+  GOVERNANCE_EVENTS,
+  GOVERNANCE_FORMAT,
+  GOVERNANCE_OFFER_PROFILE,
+  GOVERNANCE_REASON_CODES,
+  GOVERNANCE_TERMS_PROFILE,
   HUB_RELEASE_STATES,
   INCOMPLETE_MARKER_STATES,
   LEARNING_ACTIVITIES,
   LEARNING_MODES,
   MUTATION_LOCI,
+  PREFERENCE_CHANNELS,
+  PREFERENCE_CHOICES,
+  PREFERENCE_PROVENANCE_STATES,
   PARTICIPATION_ACTIVITY_STATES,
   PARTICIPATION_ASSESSMENT_EFFECT,
   PARTICIPATION_ASSESSMENT_FORMAT,
@@ -49,6 +63,8 @@ import type {
   SYNTHETIC_PROVENANCE_STATES,
   TENDING_BOUNDARIES,
   TENDING_FORMAT,
+  TRAINING_CONTROL_DIRECTIVES,
+  TRAINING_EFFECT_STATES,
   TRAINING_PHASES,
   TRAINING_THREAD_BOUNDARIES,
   TRAINING_THREAD_PROFILE,
@@ -79,6 +95,24 @@ export type IncompleteMarkerState =
   (typeof INCOMPLETE_MARKER_STATES)[number];
 export type StreamingState = (typeof STREAMING_STATES)[number];
 export type HubReleaseState = (typeof HUB_RELEASE_STATES)[number];
+export type GovernanceEvent = (typeof GOVERNANCE_EVENTS)[number];
+export type GovernanceAdmissionPosture =
+  (typeof GOVERNANCE_ADMISSION_POSTURES)[number];
+export type AuthorityRole = (typeof AUTHORITY_ROLES)[number];
+export type AuthorityDecision = (typeof AUTHORITY_DECISIONS)[number];
+export type AuthorityCoverageState =
+  (typeof AUTHORITY_COVERAGE_STATES)[number];
+export type PreferenceChannel = (typeof PREFERENCE_CHANNELS)[number];
+export type PreferenceChoice = (typeof PREFERENCE_CHOICES)[number];
+export type PreferenceProvenance =
+  (typeof PREFERENCE_PROVENANCE_STATES)[number];
+export type TrainingEffectState = (typeof TRAINING_EFFECT_STATES)[number];
+export type GovernanceDecisionState =
+  (typeof GOVERNANCE_DECISION_STATES)[number];
+export type GovernanceReasonCode =
+  (typeof GOVERNANCE_REASON_CODES)[number];
+export type TrainingControlDirective =
+  (typeof TRAINING_CONTROL_DIRECTIVES)[number];
 export type LearningMode = (typeof LEARNING_MODES)[number];
 export type MutationLocus = (typeof MUTATION_LOCI)[number];
 export type WakeUseMode = (typeof WAKE_USE_MODES)[number];
@@ -336,6 +370,169 @@ export interface HfTrainingCheckpoint {
     readonly capsule_id: Sha256Id;
   }[];
   readonly boundaries: typeof CHECKPOINT_BOUNDARIES;
+}
+
+export interface CreateTrainingGovernanceTermsInput {
+  readonly admission: DatasetAdmission;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly selected_entry_ids: readonly Sha256Id[];
+  readonly model_or_checkpoint_ref: Sha256Id;
+  readonly tokenizer_ref: Sha256Id;
+  readonly trainer_stack_ref: Sha256Id;
+  readonly optimizer_config_ref: Sha256Id;
+  readonly substrate_environment_ref: Sha256Id;
+  readonly purpose_ref: Sha256Id;
+  readonly objective_or_loss_ref: Sha256Id;
+  readonly dataset_mixture_ref: Sha256Id;
+  readonly transform_recipe_ref: Sha256Id;
+  readonly compute_budget_ref: Sha256Id;
+  readonly output_and_derivative_use_ref: Sha256Id;
+  readonly audience_ref: Sha256Id;
+  readonly retention_ref: Sha256Id;
+  readonly release_ref: Sha256Id;
+  readonly stop_policy_ref: Sha256Id;
+  readonly wake_policy_ref: Sha256Id;
+}
+
+export interface TrainingGovernanceTerms {
+  readonly profile: typeof GOVERNANCE_TERMS_PROFILE;
+  readonly terms_id: Sha256Id;
+  readonly admission_id: Sha256Id;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly selected_entry_ids: readonly Sha256Id[];
+  readonly admission_posture: GovernanceAdmissionPosture;
+  readonly model_or_checkpoint_ref: Sha256Id;
+  readonly tokenizer_ref: Sha256Id;
+  readonly trainer_stack_ref: Sha256Id;
+  readonly optimizer_config_ref: Sha256Id;
+  readonly substrate_environment_ref: Sha256Id;
+  readonly purpose_ref: Sha256Id;
+  readonly objective_or_loss_ref: Sha256Id;
+  readonly dataset_mixture_ref: Sha256Id;
+  readonly transform_recipe_ref: Sha256Id;
+  readonly compute_budget_ref: Sha256Id;
+  readonly output_and_derivative_use_ref: Sha256Id;
+  readonly audience_ref: Sha256Id;
+  readonly retention_ref: Sha256Id;
+  readonly release_ref: Sha256Id;
+  readonly stop_policy_ref: Sha256Id;
+  readonly wake_policy_ref: Sha256Id;
+}
+
+export interface CreateTrainingGovernanceOfferInput {
+  readonly terms: TrainingGovernanceTerms;
+  readonly encounter_ref: Sha256Id;
+  readonly observed_governance_frontier_ref: Sha256Id;
+  readonly rights_baseline_ref: Sha256Id;
+  readonly wake: WakeBriefAnchor;
+  readonly event: GovernanceEvent;
+  readonly current_checkpoint_ref: Sha256Id | null;
+  readonly predecessor: HfTrainingGovernance | null;
+}
+
+export interface TrainingGovernanceOffer {
+  readonly profile: typeof GOVERNANCE_OFFER_PROFILE;
+  readonly offer_id: Sha256Id;
+  readonly terms: TrainingGovernanceTerms;
+  readonly encounter_ref: Sha256Id;
+  readonly observed_governance_frontier_ref: Sha256Id;
+  readonly rights_floor: {
+    readonly baseline_ref: Sha256Id;
+    readonly posture: "standing_nonwaivable";
+    readonly waivable: false;
+  };
+  readonly wake: WakeBriefAnchor;
+  readonly event: GovernanceEvent;
+  readonly current_checkpoint_ref: Sha256Id | null;
+  readonly predecessor_ref: Sha256Id | null;
+}
+
+export interface TrainingAuthorityCoverage {
+  readonly state: AuthorityCoverageState;
+  readonly offer_ref: Sha256Id | null;
+  readonly affected_principals_ref: Sha256Id | null;
+  readonly evidence_ref: Sha256Id | null;
+}
+
+export interface TrainingAuthorityReceipt {
+  readonly principal_ref: Sha256Id;
+  readonly role: AuthorityRole;
+  readonly decision: AuthorityDecision;
+  readonly offer_ref: Sha256Id | null;
+  readonly basis_ref: Sha256Id | null;
+  readonly evidence_ref: Sha256Id | null;
+  readonly withdrawal_cutoff_ref: Sha256Id | null;
+}
+
+export interface TrainingPreferenceReport {
+  readonly channel: PreferenceChannel;
+  readonly choice: PreferenceChoice;
+  readonly provenance: PreferenceProvenance;
+  readonly offer_ref: Sha256Id | null;
+  readonly evidence_ref: Sha256Id | null;
+  readonly inner_consent: "unknown_unprovable";
+  readonly identity_continuity: "not_proven";
+  readonly legal_consent: "not_proven";
+  readonly gradient_use: false;
+  readonly reward_effect: false;
+  readonly corpus_reuse: "requires_new_exact_authority";
+}
+
+export interface TrainingEffectReceipt {
+  readonly state: TrainingEffectState;
+  readonly offer_ref: Sha256Id | null;
+  readonly global_step: number | null;
+  readonly checkpoint_ref: Sha256Id | null;
+  readonly evidence_ref: Sha256Id | null;
+}
+
+export interface TrainingControlPlan {
+  readonly directive: TrainingControlDirective;
+  readonly hook: string;
+  readonly should_save: boolean;
+  readonly should_training_stop: boolean;
+  readonly automatic: false;
+  readonly mutates_forward_pass: false;
+}
+
+export interface CreateHfTrainingGovernanceInput {
+  readonly admission: DatasetAdmission;
+  readonly offer: TrainingGovernanceOffer;
+  readonly authority_coverage: TrainingAuthorityCoverage;
+  readonly authorities: readonly TrainingAuthorityReceipt[];
+  readonly preference: Omit<
+    TrainingPreferenceReport,
+    | "inner_consent"
+    | "identity_continuity"
+    | "legal_consent"
+    | "gradient_use"
+    | "reward_effect"
+    | "corpus_reuse"
+  >;
+  readonly effect: TrainingEffectReceipt;
+}
+
+export interface HfTrainingGovernance {
+  readonly _format: typeof GOVERNANCE_FORMAT;
+  readonly governance_id: Sha256Id;
+  readonly admission_id: Sha256Id;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly offer: TrainingGovernanceOffer;
+  readonly identity_claim: "none";
+  readonly authority_coverage: TrainingAuthorityCoverage;
+  readonly authorities: readonly TrainingAuthorityReceipt[];
+  readonly preference: TrainingPreferenceReport;
+  readonly effect: TrainingEffectReceipt;
+  readonly decision: {
+    readonly state: GovernanceDecisionState;
+    readonly reason_codes: readonly GovernanceReasonCode[];
+  };
+  readonly control: TrainingControlPlan;
+  readonly latest_head_selected: false;
+  readonly boundaries: typeof GOVERNANCE_BOUNDARIES;
 }
 
 export interface HubReleaseBinding {

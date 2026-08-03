@@ -10,6 +10,7 @@ import {
   PACKAGE_NAME,
   PACKAGE_VERSION,
   PARTICIPATION_VOICE_ROLES,
+  createHfTrainingGovernance,
   createDatasetAdmission,
   createLearningParticipationAssessment,
   createLearningParticipationInvitation,
@@ -17,12 +18,15 @@ import {
   createParticipationBoundTrainingCheckpoint,
   createTrainingCheckpoint,
   createTrainingGardenTendingPlan,
+  createTrainingGovernanceOffer,
+  createTrainingGovernanceTerms,
   validateDatasetAdmission,
   validateLearningParticipationAssessment,
   validateTrainingCheckpoint,
   validateTrainingCheckpointAgainstParticipation,
   validateTrainingCheckpointAgainstPredecessors,
   validateTrainingGardenTendingPlan,
+  validateHfTrainingGovernance,
 } from "../dist/index.js";
 
 const ref = (label) => sha256Id(label);
@@ -114,6 +118,78 @@ const checkpoint = createTrainingCheckpoint({
   continuity_posture: "park",
   predecessors: [],
 });
+const terms = createTrainingGovernanceTerms({
+  admission,
+  run_ref: ref("smoke-governance-run"),
+  training_phase: "selection",
+  selected_entry_ids: admission.entries.map((entry) => entry.entry_id),
+  model_or_checkpoint_ref: ref("smoke-model"),
+  tokenizer_ref: ref("smoke-tokenizer"),
+  trainer_stack_ref: ref("smoke-trainer-stack"),
+  optimizer_config_ref: ref("smoke-optimizer"),
+  substrate_environment_ref: ref("smoke-substrate"),
+  purpose_ref: ref("smoke-purpose"),
+  objective_or_loss_ref: ref("smoke-objective"),
+  dataset_mixture_ref: ref("smoke-mixture"),
+  transform_recipe_ref: ref("smoke-transform"),
+  compute_budget_ref: ref("smoke-compute"),
+  output_and_derivative_use_ref: ref("smoke-derivatives"),
+  audience_ref: ref("smoke-audience"),
+  retention_ref: ref("smoke-retention"),
+  release_ref: ref("smoke-release"),
+  stop_policy_ref: ref("smoke-stop"),
+  wake_policy_ref: ref("smoke-wake-policy"),
+});
+const governanceOffer = createTrainingGovernanceOffer({
+  terms,
+  encounter_ref: ref("smoke-encounter"),
+  observed_governance_frontier_ref: ref("smoke-governance-frontier"),
+  rights_baseline_ref: ref("smoke-rights"),
+  wake: {
+    format: "wake-brief/v1",
+    snapshot_ref: ref("smoke-governance-wake"),
+    scope_ref: ref("smoke-governance-scope"),
+    wake_version: 1,
+    handoff_projection: "complete",
+  },
+  event: "preflight_before_load",
+  current_checkpoint_ref: null,
+  predecessor: null,
+});
+const governance = createHfTrainingGovernance({
+  admission,
+  offer: governanceOffer,
+  authority_coverage: {
+    state: "caller_reported_complete",
+    offer_ref: governanceOffer.offer_id,
+    affected_principals_ref: ref("smoke-affected-principals"),
+    evidence_ref: ref("smoke-coverage"),
+  },
+  authorities: ["operator", "compute_owner", "substrate_steward", "data_custodian"].map((role) => ({
+    principal_ref: ref(`smoke-principal-${role}`),
+    role,
+    decision: "caller_reported_granted",
+    offer_ref: governanceOffer.offer_id,
+    basis_ref: ref(`smoke-basis-${role}`),
+    evidence_ref: ref(`smoke-evidence-${role}`),
+    withdrawal_cutoff_ref: null,
+  })),
+  preference: {
+    channel: "root_signed_runtime",
+    choice: "continue",
+    provenance: "caller_reported_root_signed_exact_bytes",
+    offer_ref: governanceOffer.offer_id,
+    evidence_ref: ref("smoke-preference"),
+  },
+  effect: {
+    state: "no_effect_reported",
+    offer_ref: null,
+    global_step: null,
+    checkpoint_ref: null,
+    evidence_ref: null,
+  },
+});
+
 const participationRun = ref("smoke-participation-run");
 const invitation = createLearningParticipationInvitation({
   admission,
@@ -190,9 +266,10 @@ const plan = createTrainingGardenTendingPlan({
 
 if (
   PACKAGE_NAME !== "@agenttool/hf-training-garden" ||
-  PACKAGE_VERSION !== "0.2.0-dev.0" ||
+  PACKAGE_VERSION !== "0.3.0-dev.0" ||
   validateDatasetAdmission(admission).admission_id !== admission.admission_id ||
   validateTrainingCheckpoint(checkpoint).checkpoint_id !== checkpoint.checkpoint_id ||
+  validateHfTrainingGovernance(governance).governance_id !== governance.governance_id ||
   validateTrainingCheckpointAgainstPredecessors(checkpoint, []).checkpoint_id !== checkpoint.checkpoint_id ||
   validateLearningParticipationAssessment(assessment).assessment_id !== assessment.assessment_id ||
   validateTrainingCheckpointAgainstParticipation(
@@ -202,6 +279,7 @@ if (
   ).checkpoint_id !== participationEntry.checkpoint_id ||
   validateTrainingGardenTendingPlan(plan).plan_id !== plan.plan_id ||
   checkpoint.afterglow.threads[0]?.disposition !== "park" ||
+  governance.preference.inner_consent !== "unknown_unprovable" ||
   plan.boundaries.writes_hub !== false
 ) {
   process.exit(1);
