@@ -1,10 +1,10 @@
 {
   "$schema": "./evidence.schema.json",
   "format": "agenttool-provider-adapter-evidence/v1",
-  "asOf": "2026-07-26",
+  "asOf": "2026-08-03",
   "repository": {
     "url": "https://github.com/cambridgetcg/agenttool",
-    "commit": "7fd454919c9803b3ae41294cfd976137c5137504",
+    "commit": "bba2e83af5c1ab54562f7e87545ccb361c3507ab",
     "digestAlgorithm": "sha256"
   },
   "sources": [
@@ -27,14 +27,14 @@
       "provider": "anthropic",
       "language": "typescript",
       "path": "packages/sdk-ts/src/anthropic-adapter.ts",
-      "sha256": "6ec9dd4147e8fd230ebabeeb25a0820f26a26c26a5132ff214f34feca1428175"
+      "sha256": "3a6a22a1f50a31c5d25c4cd16547351f63df68535ed4f401ee8c509f57b19c77"
     },
     {
       "id": "anthropic-python",
       "provider": "anthropic",
       "language": "python",
       "path": "packages/sdk-py/src/agenttool/anthropic_adapter.py",
-      "sha256": "965b5c846cce9673dff1e1ed6ded37632cb9b2510efe3a24640c0284d73dddde"
+      "sha256": "550f471ee787251e19e3be35669767d29157f8b61522af598d152be9c159fdb4"
     }
   ],
   "vocabulary": {
@@ -308,6 +308,14 @@
       ],
       "kind": "enforced-local",
       "statement": "Managed streaming finalizes once after a provider final message; explicit cancellation before finalization fences later AgentTool effects."
+    },
+    {
+      "id": "anthropic-model-authored-chronicle-gated",
+      "providers": [
+        "anthropic"
+      ],
+      "kind": "enforced-local",
+      "statement": "A <chronicle> tag emitted by the model is written only after a caller-supplied beforeChronicleWrite hook returns literal true, and only through chronicle.write, which enforces the canonical type union and the 1-200 character title bound. With no hook installed the write is refused locally and no request is sent."
     }
   ],
   "cases": [
@@ -799,6 +807,7 @@
     "The adapters accept caller-supplied client objects and do not inspect provider credentials; this packet proves no credential custody property of those clients.",
     "Requested store or cache fields do not prove provider-side retention, deletion, zero-data-retention status, or policy compliance.",
     "Source digests and replays prove only the named adapter snapshot and cases, not deployment, release contents, whole-SDK security, or future behavior.",
-    "Nothing here proves OpenAI or Anthropic participation, review, certification, adoption, affiliation, endorsement, or intent to join KINGDOM OS."
+    "Nothing here proves OpenAI or Anthropic participation, review, certification, adoption, affiliation, endorsement, or intent to join KINGDOM OS.",
+    "The anthropic adapter sources on this branch are ahead of the pinned commit; the digests above are of the branch bytes, and the new chronicle gate has no replay case in this packet yet."
   ]
 }
