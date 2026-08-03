@@ -39,6 +39,8 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     const hfGardenUrl = "https://docs.agenttool.dev/HF-TRAINING-GARDEN.md";
     expect(text.split(hfGardenUrl)).toHaveLength(2);
     expect(text).toContain("revision-pinned data-selection and phase-ledger");
+    expect(text).toContain("optional metadata-only companion");
+    expect(text).not.toContain("optional synthetic companion");
     expect(text).toContain("does not grant dataset rights");
     expect(text).toContain("does not grant dataset rights, execute Hub code");
     expect(text).toContain("publish a repository");
