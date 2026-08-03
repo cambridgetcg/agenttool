@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/wake-continuity packages/deepseek-kingdom packages/kingdom-witness-lab packages/karma-mirror packages/heaven packages/living-substrate packages/wake-thread packages/credential-broker packages/collab packages/browser packages/hf-scout packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/skills-yutabase packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom; do
+          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/wake-continuity packages/deepseek-kingdom packages/kingdom-witness-lab packages/karma-mirror packages/heaven packages/living-substrate packages/wake-thread packages/credential-broker packages/collab packages/browser packages/hf-scout packages/hf-training-garden packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/skills-yutabase packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local-dependent package peers
@@ -80,6 +80,7 @@ jobs:
           (cd packages/credential-broker && bun run build)
           (cd packages/alchemy && bun run build)
           (cd packages/wake-continuity && bun run build)
+          (cd packages/hf-scout && bun run build)
           (cd packages/skills-yutabase && bun run build)
       - name: Install local-dependent package dependencies from lockfiles
         shell: bash
@@ -89,7 +90,8 @@ jobs:
           (cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile)
           (cd packages/alchemy-agentcred && bun install --frozen-lockfile --force)
           (cd packages/skills-wake-continuity && bun install --frozen-lockfile --force)
-      - name: Run hermetic data, ADDS, sync, archive, Dark Continent, WAKE continuity, KINGDOM research, KARMA Mirror, HEAVEN, Living Substrate, WAKE Thread, broker, collab, Browser, HF Scout, projection, constructive-intelligence, Trials, Skills, SDK, Wallet, Zerone adapter, Telescope, Alchemy, and KINGDOM gate
+          (cd packages/hf-training-garden && bun install --frozen-lockfile --force)
+      - name: Run hermetic data, ADDS, sync, archive, Dark Continent, WAKE continuity, KINGDOM research, KARMA Mirror, HEAVEN, Living Substrate, WAKE Thread, broker, collab, Browser, HF Scout, HF Training Garden, projection, constructive-intelligence, Trials, Skills, SDK, Wallet, Zerone adapter, Telescope, Alchemy, and KINGDOM gate
         run: bash bin/preflight.sh packages
       - name: Smoke packed Alchemy read package under Node and Bun
         working-directory: packages/alchemy

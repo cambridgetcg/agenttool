@@ -10,7 +10,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + KARMA Mirror + HEAVEN + Living Substrate + WAKE Thread + broker + collab + Browser + HF Scout + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + KARMA Mirror + HEAVEN + Living Substrate + WAKE Thread + broker + collab + Browser + HF Scout/Training Garden + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -151,6 +151,8 @@ packages_gate() {
     bash -c 'cd packages/browser && bun run ci'
   run "private read-only Hugging Face metadata and research scout" \
     bash -c 'cd packages/hf-scout && bun run ci'
+  run "private HF dataset admission, training WAKE, and Garden tending" \
+    bash -c 'cd packages/hf-training-garden && bun run ci'
   run "read-only Agent Skills inspection and validation" \
     bash -c 'cd packages/skills && bun run ci'
   run "Agent Skills to rebuildable YUTABASE metadata plan" \
