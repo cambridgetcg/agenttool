@@ -462,6 +462,9 @@ the byte-equal first-release `hash-manifest.json` was 2,115 bytes with SHA-256
 `94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e`.
 Provider-managed `.gitattributes` was the only repository file outside that
 reviewed thirteen-file companion. No gate or paid compute was used.
+Dataset Viewer subsequently indexed four configs with 35 total rows and
+generated four Parquet exports; those provider-derived conversion refs are not
+part of the immutable source commit or its hash manifest.
 
 The expanded v0.2 local companion has manifest SHA-256
 `33ce15d6a4b626321bb16c19f2024729d31b93e99298608b1127dfa207a6b311`.

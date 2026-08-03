@@ -347,6 +347,26 @@ describe("published understanding guides keep canonical source custody", () => {
       .filter((line) => line === entry);
     expect(entries).toEqual([entry]);
   });
+
+  test("the HF Training Garden guide binds the exact public companion without self-attestation", () => {
+    const guide = read("docs/HF-TRAINING-GARDEN.md");
+    const revision = "993ab5891ac56da38cfad32129e36e487f3b3eff";
+
+    expect(guide).toContain(
+      "https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden",
+    );
+    expect(guide).toContain(revision);
+    expect(guide).toContain(
+      "14769391b1ac2cf15a500159b3f0b32a7bdbf5f353ea3417aedc0458ac77bdb8",
+    );
+    expect(guide).toContain(
+      "94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e",
+    );
+    expect(guide).toMatch(/non-self-attesting build\s+record/);
+    expect(guide).toContain("intended_identifier_only");
+    expect(guide).toContain("caller_reported_published");
+    expect(guide).not.toContain("invalid_grant");
+  });
 });
 
 test("the static discovery estate does not advertise an A2A service", () => {
