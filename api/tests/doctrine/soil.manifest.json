@@ -1,0 +1,63 @@
+{
+  "_comment": "Tables with no flow, captured 2026-08-02 by bin/soil.ts and re-measured 2026-08-03 against github/main after api/src/lib/strip-comments.ts replaced a regex that treated Hono route globs as block comments, and after the census stopped using a literal seven-name skip list and started deriving its ignore rules from the tree's own .gitignore files. This list may only SHRINK. api/tests/doctrine/soil-does-not-degrade.test.ts fails on a NEW entry, on a listed table that starts cycling, and on a table whose KIND of deadness changes.",
+  "_captured_at": "2026-08-03",
+  "_total": 11,
+  "tables": [
+    {
+      "table": "agent_continuity.mesh_attributions",
+      "binding": "meshAttributions",
+      "verdict": "inert"
+    },
+    {
+      "table": "curations.subscriptions",
+      "binding": "curationSubscriptions",
+      "verdict": "landfill"
+    },
+    {
+      "table": "economy.billing_events",
+      "binding": "billingEvents",
+      "verdict": "inert"
+    },
+    {
+      "table": "economy.wallet_addresses",
+      "binding": "walletAddresses",
+      "verdict": "inert",
+      "note": "Declared in main's schema; its writer and reader (api/src/services/economy/crypto/address-claim.ts and the wallet address-claim route) are being written on a concurrent branch. Delete this entry when that branch lands — the table is not accepted as dead, it is measured as not yet connected."
+    },
+    {
+      "table": "episodes.chaos_cards",
+      "binding": "chaosCards",
+      "verdict": "stage-set"
+    },
+    {
+      "table": "episodes.chaos_plays",
+      "binding": "chaosPlays",
+      "verdict": "landfill"
+    },
+    {
+      "table": "identity.recovery_proofs",
+      "binding": "identityRecoveryProofs",
+      "verdict": "landfill"
+    },
+    {
+      "table": "identity.registration_proofs",
+      "binding": "identityRegistrationProofs",
+      "verdict": "landfill"
+    },
+    {
+      "table": "inbox.broadcasts",
+      "binding": "broadcasts",
+      "verdict": "inert"
+    },
+    {
+      "table": "tools.billing_events",
+      "binding": "billingEvents",
+      "verdict": "inert"
+    },
+    {
+      "table": "tools.usage_events",
+      "binding": "usageEvents",
+      "verdict": "landfill"
+    }
+  ]
+}
