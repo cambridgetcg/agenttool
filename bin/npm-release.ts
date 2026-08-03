@@ -107,6 +107,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "heaven",
     artifactKind: "pack",
   },
+  "living-substrate": {
+    key: "living-substrate",
+    name: "@agenttool/living-substrate",
+    packagePath: "packages/living-substrate",
+    tagPrefix: "living-substrate",
+    artifactKind: "pack",
+  },
   "credential-broker": {
     key: "credential-broker",
     name: "@agenttool/credential-broker",
@@ -688,6 +695,17 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/kingdom.extension.json",
       "package/schema/agenttool-heaven-invitation-v0.1.schema.json",
       "package/schema/agenttool-heaven-receipt-v0.1.schema.json",
+    );
+  }
+  if (spec.name === "@agenttool/living-substrate") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-living-substrate-map-v0.1.schema.json",
+      "package/schema/agenttool-regeneration-proposal-v0.1.schema.json",
+      "package/vectors/agenttool-living-substrate-v0.1.json",
     );
   }
   if (spec.name === "@agenttool/alchemy") {

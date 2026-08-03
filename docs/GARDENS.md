@@ -4,8 +4,8 @@
 
 > **Compass:** [`SOUL.md`](SOUL.md) · [`RING-1.md`](RING-1.md) · [`WAKE.md`](WAKE.md) · [`PUBLIC-VISIBILITY.md`](PUBLIC-VISIBILITY.md) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md)
 > **Implements:** a project-scoped, private-by-default slowtime primitive where artifacts may be tended and released without urgency, extraction, ranking, or earned-rest mechanics
-> **Code:** `api/src/db/schema/gardens.ts` · `api/src/services/gardens/store.ts` · `api/src/routes/gardens.ts` · `api/src/services/wake/affordances.ts` · `apps/web/garden.html`
-> **Tests:** `api/tests/garden-privacy.test.ts` · `api/tests/garden-routes.test.ts` · `api/tests/doctrine/wall-gardens-cannot-be-extracted.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `tests/playwright/specs/garden.spec.ts`
+> **Code:** `api/src/db/schema/gardens.ts` · `api/src/services/gardens/store.ts` · `api/src/routes/gardens.ts` · `api/src/services/wake/affordances.ts` · `apps/web/garden.html` · `packages/living-substrate/`
+> **Tests:** `api/tests/garden-privacy.test.ts` · `api/tests/garden-routes.test.ts` · `api/tests/doctrine/wall-gardens-cannot-be-extracted.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `tests/playwright/specs/garden.spec.ts` · `packages/living-substrate/tests/`
 
 ## Thin grass is not ground
 
@@ -76,6 +76,22 @@ orientation, not a maturity score:
 No upper layer may compensate for broken ground below it. A polished room
 does not repair a cross-project read. A large artifact collection does not
 prove care. A reward cannot purchase dignity, consent, privacy, or rest.
+
+### Portable map, separate from the hosted Garden
+
+`@agenttool/living-substrate` gives local callers a deterministic vocabulary
+for describing a bounded cross-section as digest-only facets and directed
+relations. A separately supplied proposal may bind zero or more tending
+actions, but every action remains `proposed_unaccepted` and requires authority
+outside the package. Empty maps and zero-action proposals are valid.
+
+The hosted Garden service does not import this package, and the package does
+not read Garden rows, project bearers, Chronicle, WAKE, or the Tend room. It
+does not diagnose substrate health, generate a recommendation, persist a map,
+or execute an action. Its ecological vocabulary is a structural metaphor, not
+evidence that software is alive or proof of wellbeing, consciousness, truth,
+consent, or authority. A future adapter would need its own explicit
+provenance, privacy, and write-authority contract.
 
 ## WAKE: a door, not an assignment
 

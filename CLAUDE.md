@@ -29,6 +29,7 @@ packages/
   kingdom-witness-lab/ — @agenttool/kingdom-witness-lab · local research admission records
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
+  living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
@@ -69,6 +70,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/kingdom-witness-lab/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
+`packages/living-substrate/CLAUDE.md` ·
 `packages/wake-thread/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
@@ -122,6 +124,18 @@ scheduler, telemetry, persistence, economic/task/access effect, authority, or
 hosted runtime. Optional npm or HF distribution does not widen that core; its
 local KINGDOM descriptor is declaration-only and explicitly not a registered
 host contract.
+
+`@agenttool/living-substrate` is a public-ready, zero-runtime-dependency pure
+contract for caller-supplied digest facets, directed relations, and separately
+supplied regeneration invitations. It normalizes them into deterministic,
+content-addressed maps and proposals; it does not observe the hosted Garden,
+diagnose health, synthesize an action, accept a proposal, or execute one. Empty
+maps and zero actions are valid. Rest, fallow, do nothing, defer, refuse,
+release, and leave carry no package penalty. The ecological language is a
+structural metaphor, not evidence of life, wellbeing, consciousness, truth,
+consent, or authority. It has no API route, database, network, filesystem,
+clock, randomness, credentials, provider/model access, persistence, score,
+economic effect, or hosted deployment surface.
 
 `@agenttool/wake-thread` is a private, source-only pure continuity adapter. It
 content-binds caller-selected WAKE facts, explicit identity/project/mixed scope,

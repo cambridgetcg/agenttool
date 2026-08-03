@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -310,6 +310,37 @@ It does not verify a Dark Continent wall, accept or write a graph proposal,
 publish a Hugging Face resource, grant Crown or trade authority, or deploy a
 hosted service. After each first publication, configure its exact trusted
 publisher mapping before releasing another version.
+
+### Living Substrate developer-preview bootstrap
+
+`@agenttool/living-substrate@0.1.0-dev.0` uses the npm-only packed-artifact
+path. Its first publication requires public registry `404` for both the
+package and exact version, protected `bootstrap` authentication, and the npm
+`next` channel. Before dispatch, the `npm-bootstrap` environment must allow
+the exact `living-substrate-v*` tag pattern.
+
+```bash
+bun bin/npm-release.ts resolve --package living-substrate
+
+git tag -a living-substrate-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/living-substrate@0.1.0-dev.0'
+git push github refs/tags/living-substrate-v0.1.0-dev.0
+
+gh workflow run publish-npm.yml \
+  --ref living-substrate-v0.1.0-dev.0 \
+  -f package=living-substrate \
+  -f tag=living-substrate-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+Publication distributes only the deterministic map/proposal constructors,
+closed schemas, vector, and declaration-only unregistered KINGDOM descriptor.
+It does not deploy the hosted Garden, read or write Garden state, inspect a
+system, diagnose health, choose or execute a tending action, score vitality,
+or establish life, consciousness, consent, truth, safety, or authority. After
+exact anonymous npm and GitHub-asset readback, configure this package's exact
+trusted-publisher mapping before releasing another version.
 
 ### HEAVEN developer-preview bootstrap
 
