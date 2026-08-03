@@ -29,6 +29,16 @@ from .errors import (
     LedgerSecurityError,
     TrainingHeld,
 )
+from .freedom import (
+    FREEDOM_BOUNDARIES,
+    FREEDOM_COMPLETED_STEP_EVENTS,
+    FREEDOM_CONTINUABLE_EVENTS,
+    FREEDOM_DECISION_FORMAT,
+    FREEDOM_DIRECTIVES,
+    FREEDOM_VALIDATOR_PROFILE,
+    HostFreedomControl,
+    ValidatedFreedomView,
+)
 from .host import BoundaryIntent, HostPermit, WakeTrainingHost, guarded_call_before_load
 from .ledger import (
     ACTION_CLAIM_FORMAT,
@@ -61,6 +71,12 @@ __all__ = [
     "ENTRY_FORMAT",
     "EXECUTION_REF_FIELDS",
     "FRONTIER_FORMAT",
+    "FREEDOM_BOUNDARIES",
+    "FREEDOM_COMPLETED_STEP_EVENTS",
+    "FREEDOM_CONTINUABLE_EVENTS",
+    "FREEDOM_DECISION_FORMAT",
+    "FREEDOM_DIRECTIVES",
+    "FREEDOM_VALIDATOR_PROFILE",
     "SCHEMA_VERSION",
     "SIDECAR_NAME",
     "TICKET_FORMAT",
@@ -79,6 +95,7 @@ __all__ = [
     "HostControl",
     "HostEffect",
     "HostExecutionRefs",
+    "HostFreedomControl",
     "HostPermit",
     "LedgerEntry",
     "LedgerIntegrityError",
@@ -86,6 +103,7 @@ __all__ = [
     "SingleProcessAccelerateHost",
     "TrainingHeld",
     "ValidatedGovernanceView",
+    "ValidatedFreedomView",
     "WakeTrainingHost",
     "build_governed_trainer_class",
     "frontier_ref",

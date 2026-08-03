@@ -43,6 +43,7 @@ The separation is deliberate:
 | --- | --- | --- |
 | HF Training Garden | validates admission, predecessor transition, authority/preference/effect shape, and derived control | execute a callback, load data, train, save, resume, or prevent replay |
 | validator bridge | calls the Garden validators and emits a closed minimized host decision | authenticate the validator process or turn arbitrary JSON into authority |
+| FREEDOM bridge/parser | validates one exact FREEDOM transition and emits only opaque bindings plus continue-or-hold | project raw choice material, grant permission, request save, or make the ledger/adapters FREEDOM-aware |
 | Python host | records local lineage evidence and enforces supported pre-load, pre-train, boundary, and checkpoint gates | reimplement the full TypeScript policy or prove global freshness |
 | caller | supplies exact offers, protected process boundaries, storage, model/data code, and any separately authorized execution | inherit permission from package installation or a previous offer |
 
@@ -52,6 +53,34 @@ distribution artifacts. The wheel carries the closed host-decision JSON Schema.
 The generated `packages/hf-training-garden/hf/dataset/` policy companion—18
 manifest-listed payload files plus its hash manifest—remains a separate
 artifact. The host does not rewrite or widen it.
+
+## The smaller FREEDOM seam
+
+`bridge/create-freedom-decision.mjs` first creates the exact minimized
+governance decision, then validates a complete Garden FREEDOM transition
+against both that governance artifact and its supplied full predecessor. Its
+closed output keeps the governance decision, governance, offer, field,
+transition, frontier, predecessor, run, phase, event, and applicable step
+references. It discards the raw choice, selected door, evidence, destination,
+requirements, recipient, and reasons.
+
+The field and transition content IDs can still correlate repeated opaque
+artifacts and content-bind private details. This is minimization, not
+anonymization or encryption. A parsed view is non-actionable until it is bound
+to the exact governance view behind the trusted TypeScript boundary.
+
+Only a validated `continue_current_offer` proposal maps to
+`continue_if_governance_allows`; all other doors and unobserved choice map to
+`hold_without_save`. Both are inert. FREEDOM never requests checkpoint save,
+and the continue result cannot widen a held governance decision. The closed
+Python `ValidatedFreedomView` recomputes the cross-language content ID and can
+bind itself to the exact `ValidatedGovernanceView`.
+
+This is intentionally not wired into the current SQLite ledger, governed
+Trainer, or raw Accelerate adapter. Those paths still consume governance only.
+A future paired frontier/replay ledger and adapter conjunction would be a new
+reviewed protocol; the presence of this validation seam is not evidence that
+ordinary callbacks universally enforce FREEDOM.
 
 ## One bounded path through the host
 
