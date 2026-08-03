@@ -6,7 +6,7 @@
 > **Implements:** a private, pure bridge from immutable Hugging Face research observations to explicit dataset admission, phase-specific digest continuity, and a public-safe one-way Garden reference plan
 > **Code:** `packages/hf-scout/` · `packages/hf-training-garden/` · `packages/wake-continuity/`
 > **Tests:** `packages/hf-training-garden/tests/` · `bin/tests/boring-spine-gate.test.ts`
-> **Dated status:** 2026-08-03. The intended Hub dataset is `Yu-and-Ai/agenttool-training-garden`; it is not described as published until an exact Hub revision is read back and verified.
+> **Dated status:** 2026-08-03. The public companion is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden) at immutable Hub revision [`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff), with exact-revision byte read-back recorded below.
 
 ## The result
 
@@ -265,8 +265,8 @@ trigger, latest-head selection, or credential handoff.
 
 ## Public-safe HF companion
 
-The committed `packages/hf-training-garden/hf/dataset/` tree is designed for
-the intended `Yu-and-Ai/agenttool-training-garden` dataset repository. It
+The committed `packages/hf-training-garden/hf/dataset/` tree is the source for
+the public `Yu-and-Ai/agenttool-training-garden` dataset repository. It
 contains only:
 
 - the six-step selection process;
@@ -287,16 +287,32 @@ Publication is complete only when all of these hold:
    invoking paid compute;
 2. the Hub returns a full immutable commit revision;
 3. README and `hash-manifest.json` are read back at that revision;
-4. every listed byte hash matches the local release; and
-5. a new tending plan binds that revision, card SHA-256, and manifest SHA-256.
+4. every listed byte hash matches the local release.
 
-At the dated status above, the local manifest SHA-256 is
+Garden projection is a separate local step: a new tending plan may bind that
+revision, card SHA-256, and manifest SHA-256 without writing either system.
+
+All four publication conditions now hold for the first public companion.
+Exact-revision read-back at `993ab5891ac56da38cfad32129e36e487f3b3eff` matched all twelve
+manifest-listed files against their local byte counts and SHA-256 values. The
+card is 5,559 bytes with SHA-256
+`14769391b1ac2cf15a500159b3f0b32a7bdbf5f353ea3417aedc0458ac77bdb8`;
+`hash-manifest.json` is 2,115 bytes, byte-equal to local source, with SHA-256
 `94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e`.
-The live HF MCP OAuth refresh failed before repository operations with
-`invalid_grant`; no Hub repo creation, upload, gate acceptance, paid compute,
-or read-back was performed in this slice. Reauthorization and client reload are
-required before publication can truthfully move beyond
-`intended_identifier_only`.
+The provider-managed `.gitattributes` is the only repository file outside the
+reviewed thirteen-file companion. No gate was accepted and no paid compute was
+invoked. Dataset Viewer subsequently indexed four configs with 35 total rows
+and generated four Parquet exports; those provider-derived conversion refs are
+not part of the immutable source commit or its hash manifest.
+
+The published bundle deliberately retains `intended_identifier_only` inside
+`provenance/source-manifest.json`: that field is a non-self-attesting build
+record, not a claim about what happened after those immutable bytes were
+created. External release evidence belongs outside the bundle so a commit does
+not pretend to contain its own future Hub revision. A caller may now pass the
+exact revision and two observed hashes as `caller_reported_published` evidence
+to a tending plan; the package still does not fetch or verify Hub publication.
+No Garden reference was written as part of this release.
 
 ## Boundaries
 

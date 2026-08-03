@@ -115,6 +115,18 @@ Generate the deterministic companion tree with:
 bun run build:hf
 ```
 
-The intended Hub target is `Yu-and-Ai/agenttool-training-garden`. A publication
-is not complete until the uploaded tree is read back at an exact 40-character
-Hub revision and its card/hash-manifest bytes are verified.
+The public companion is
+[`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden)
+at immutable Hub revision
+[`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff).
+Exact-revision read-back matched all twelve manifest-listed files. The card
+SHA-256 is
+`14769391b1ac2cf15a500159b3f0b32a7bdbf5f353ea3417aedc0458ac77bdb8` and
+the byte-equal `hash-manifest.json` SHA-256 is
+`94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e`.
+No gate or paid compute was used.
+
+The bundle's internal `intended_identifier_only` value remains a deliberately
+non-self-attesting build record. The exact Hub revision is later external
+evidence; embedding it into the bytes that create that same revision would be
+circular. This package still performs no Hub publication or verification.
