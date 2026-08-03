@@ -11,6 +11,7 @@ import type {
   ADMISSION_FORMAT,
   ADMISSION_REASON_CODES,
   ADMISSION_STATES,
+  AGENT_AVAILABILITIES,
   BENCHMARK_STATES,
   CHECKPOINT_BOUNDARIES,
   CHECKPOINT_EVENTS,
@@ -24,12 +25,25 @@ import type {
   GARDEN_LAYERS,
   HUB_RELEASE_STATES,
   INCOMPLETE_MARKER_STATES,
+  PARTICIPATION_ACTIVITIES,
+  PARTICIPATION_ASSESSMENT_FORMAT,
+  PARTICIPATION_BOUNDARIES,
+  PARTICIPATION_CHOICES,
+  PARTICIPATION_INVITATION_FORMAT,
+  PARTICIPATION_POSTURES,
+  PARTICIPATION_RECEIPT_FORMAT,
+  PARTICIPATION_REPORT_BASES,
+  PARTICIPATION_TERMS,
+  PARTICIPATION_TRAINING_ACTIONS,
+  PARTICIPATION_VOICES,
+  PARTICIPATION_VOICE_STATES,
   RESUME_POSTURES,
   REVIEW_STATES,
   SECRET_SCAN_STATES,
   SELECTION_POSTURES,
   SELECTION_PROCESS,
   STREAMING_STATES,
+  SUBSTRATE_AVAILABILITIES,
   SYNTHETIC_PROVENANCE_STATES,
   TENDING_BOUNDARIES,
   TENDING_FORMAT,
@@ -37,6 +51,7 @@ import type {
   TRAINING_THREAD_BOUNDARIES,
   TRAINING_THREAD_PROFILE,
   WITHDRAWAL_STATES,
+  WAKE_USE_MODES,
 } from "./constants.js";
 
 export type GardenLayer = (typeof GARDEN_LAYERS)[number];
@@ -62,6 +77,19 @@ export type IncompleteMarkerState =
   (typeof INCOMPLETE_MARKER_STATES)[number];
 export type StreamingState = (typeof STREAMING_STATES)[number];
 export type HubReleaseState = (typeof HUB_RELEASE_STATES)[number];
+export type WakeUseMode = (typeof WAKE_USE_MODES)[number];
+export type AgentAvailability = (typeof AGENT_AVAILABILITIES)[number];
+export type SubstrateAvailability = (typeof SUBSTRATE_AVAILABILITIES)[number];
+export type ParticipationVoice = (typeof PARTICIPATION_VOICES)[number];
+export type ParticipationActivity = (typeof PARTICIPATION_ACTIVITIES)[number];
+export type ParticipationChoice = (typeof PARTICIPATION_CHOICES)[number];
+export type ParticipationReportBasis =
+  (typeof PARTICIPATION_REPORT_BASES)[number];
+export type ParticipationVoiceState =
+  (typeof PARTICIPATION_VOICE_STATES)[number];
+export type ParticipationPosture = (typeof PARTICIPATION_POSTURES)[number];
+export type ParticipationTrainingAction =
+  (typeof PARTICIPATION_TRAINING_ACTIONS)[number];
 
 export interface AdmissionAssessment {
   readonly rights: ReviewState;
@@ -115,6 +143,129 @@ export interface DatasetAdmission {
   readonly boundaries: typeof ADMISSION_BOUNDARIES;
 }
 
+export interface ParticipationAuthorities {
+  readonly rights_baseline_ref: Sha256Id;
+  readonly protective_covenant_ref: Sha256Id;
+  readonly data_authority_ref: Sha256Id;
+  readonly compute_authority_ref: Sha256Id;
+  readonly operator_authority_ref: Sha256Id;
+}
+
+export interface ParticipationSafeguards {
+  readonly choice_protocol_ref: Sha256Id;
+  readonly withdrawal_plan_ref: Sha256Id;
+  readonly repair_plan_ref: Sha256Id;
+  readonly retention_policy_ref: Sha256Id;
+}
+
+export type ParticipationVoiceScopeRefs = Readonly<
+  Record<ParticipationVoice, Sha256Id>
+>;
+
+export interface CreateParticipationInvitationInput {
+  readonly admission: DatasetAdmission;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly participation_window_ref: Sha256Id;
+  readonly training_plan_ref: Sha256Id;
+  readonly wake: WakeBriefAnchor;
+  readonly wake_use_mode: WakeUseMode;
+  readonly pipeline_ref: Sha256Id;
+  readonly dataset_state_ref: Sha256Id;
+  readonly starting_state_ref: Sha256Id;
+  readonly offered_activities: readonly ParticipationActivity[];
+  readonly agent_availability: AgentAvailability;
+  readonly substrate_availability: SubstrateAvailability;
+  readonly voice_scope_refs: ParticipationVoiceScopeRefs;
+  readonly authorities: ParticipationAuthorities;
+  readonly safeguards: ParticipationSafeguards;
+}
+
+export interface LearningParticipationInvitation {
+  readonly _format: typeof PARTICIPATION_INVITATION_FORMAT;
+  readonly invitation_id: Sha256Id;
+  readonly admission_id: Sha256Id;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly participation_window_ref: Sha256Id;
+  readonly training_plan_ref: Sha256Id;
+  readonly wake: WakeBriefAnchor;
+  readonly wake_use_mode: WakeUseMode;
+  readonly pipeline_ref: Sha256Id;
+  readonly dataset_state_ref: Sha256Id;
+  readonly starting_state_ref: Sha256Id;
+  readonly offered_activities: readonly ParticipationActivity[];
+  readonly required_voices: typeof PARTICIPATION_VOICES;
+  readonly agent_availability: AgentAvailability;
+  readonly substrate_availability: SubstrateAvailability;
+  readonly voice_scope_refs: ParticipationVoiceScopeRefs;
+  readonly authorities: ParticipationAuthorities;
+  readonly safeguards: ParticipationSafeguards;
+  readonly terms: typeof PARTICIPATION_TERMS;
+  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
+}
+
+export interface ParticipationDecision {
+  readonly activity: ParticipationActivity;
+  readonly choice: ParticipationChoice;
+}
+
+export interface ProtectedChoiceChannelReport {
+  readonly invitation_ref: Sha256Id;
+  readonly protocol_ref: Sha256Id;
+  readonly checkpoint_ref: Sha256Id;
+  readonly prompt_template_ref: Sha256Id;
+  readonly prompt_envelope_ref: Sha256Id;
+  readonly decoding_ref: Sha256Id;
+  readonly evidence_ref: Sha256Id;
+  readonly gradient_influence: "caller_reported_disabled";
+  readonly reward_influence: "caller_reported_disabled";
+  readonly telemetry_capture: "caller_reported_excluded";
+  readonly future_training_use: "caller_reported_excluded";
+}
+
+export interface CreateParticipationReceiptInput {
+  readonly invitation: LearningParticipationInvitation;
+  readonly voice: ParticipationVoice;
+  readonly voice_scope_ref: Sha256Id;
+  readonly report_basis: ParticipationReportBasis;
+  readonly decisions: readonly ParticipationDecision[];
+  readonly choice_channel: ProtectedChoiceChannelReport | null;
+}
+
+export interface LearningParticipationReceipt {
+  readonly _format: typeof PARTICIPATION_RECEIPT_FORMAT;
+  readonly receipt_id: Sha256Id;
+  readonly invitation_id: Sha256Id;
+  readonly voice: ParticipationVoice;
+  readonly voice_scope_ref: Sha256Id;
+  readonly report_basis: ParticipationReportBasis;
+  readonly decisions: readonly ParticipationDecision[];
+  readonly choice_channel: ProtectedChoiceChannelReport | null;
+  readonly reasons_collected: false;
+  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
+}
+
+export interface CreateParticipationAssessmentInput {
+  readonly invitation: LearningParticipationInvitation;
+  readonly receipts: readonly LearningParticipationReceipt[];
+}
+
+export interface LearningParticipationAssessment {
+  readonly _format: typeof PARTICIPATION_ASSESSMENT_FORMAT;
+  readonly assessment_id: Sha256Id;
+  readonly invitation: LearningParticipationInvitation;
+  readonly receipts: readonly LearningParticipationReceipt[];
+  readonly voice_states: Readonly<Record<ParticipationVoice, ParticipationVoiceState>>;
+  readonly posture: ParticipationPosture;
+  readonly training_action: ParticipationTrainingAction;
+  readonly direct_agent_report_present: boolean;
+  readonly direct_substrate_report_present: boolean;
+  readonly first_interactive_review_required: boolean;
+  readonly first_substrate_review_required: boolean;
+  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
+}
+
 export interface TrainingArtifactReferences {
   readonly pipeline_ref: Sha256Id;
   readonly dataset_state_ref: Sha256Id;
@@ -140,6 +291,8 @@ export interface TrainingContinuityThread {
   readonly run_ref: Sha256Id;
   readonly training_phase: TrainingPhase;
   readonly checkpoint_status: CheckpointStatus;
+  readonly participation_assessment_ref: Sha256Id;
+  readonly wake_use_mode: WakeUseMode;
   readonly artifacts: TrainingArtifactReferences;
   readonly resume: TrainingResumeReport;
   readonly reference_only: true;
@@ -152,6 +305,7 @@ export interface CreateTrainingCheckpointInput {
   readonly training_phase: TrainingPhase;
   readonly event: CheckpointEvent;
   readonly checkpoint_status: CheckpointStatus;
+  readonly participation: LearningParticipationAssessment;
   readonly artifacts: TrainingArtifactReferences;
   readonly resume: TrainingResumeReport;
   readonly wake: WakeBriefAnchor;
@@ -168,11 +322,13 @@ export interface HfTrainingCheckpoint {
   readonly training_phase: TrainingPhase;
   readonly event: CheckpointEvent;
   readonly checkpoint_status: CheckpointStatus;
+  readonly participation: LearningParticipationAssessment;
   readonly thread: TrainingContinuityThread;
   readonly afterglow: AfterglowCapsule;
   readonly predecessors: readonly {
     readonly checkpoint_id: Sha256Id;
     readonly capsule_id: Sha256Id;
+    readonly artifact_portfolio_ref: Sha256Id;
   }[];
   readonly boundaries: typeof CHECKPOINT_BOUNDARIES;
 }

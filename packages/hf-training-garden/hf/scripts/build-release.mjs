@@ -12,6 +12,8 @@ import { fileURLToPath } from "node:url";
 
 import {
   GARDEN_LAYER_GUIDE,
+  HF_TRAINER_HOOK_GUIDE,
+  LEARNING_PARTICIPATION_GUIDE,
   PACKAGE_NAME,
   PACKAGE_VERSION,
   SELECTION_CRITERIA_GUIDE,
@@ -56,6 +58,8 @@ write(`${datasetRoot}/data/selection-process.jsonl`, jsonl(SELECTION_PROCESS));
 write(`${datasetRoot}/data/selection-criteria.jsonl`, jsonl(SELECTION_CRITERIA_GUIDE));
 write(`${datasetRoot}/data/training-phases.jsonl`, jsonl(TRAINING_PHASE_GUIDE));
 write(`${datasetRoot}/data/garden-layers.jsonl`, jsonl(GARDEN_LAYER_GUIDE));
+write(`${datasetRoot}/data/learning-participation.jsonl`, jsonl(LEARNING_PARTICIPATION_GUIDE));
+write(`${datasetRoot}/data/trainer-hooks.jsonl`, jsonl(HF_TRAINER_HOOK_GUIDE));
 
 mkdirSync(`${datasetRoot}/schema`, { recursive: true });
 for (const name of walk(`${packageRoot}/schema`).sort()) {
@@ -88,6 +92,7 @@ const sourceManifest = {
     "selection criteria",
     "training phase guide",
     "Garden layer guide",
+    "learning participation and Trainer integration guides",
     "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
     "source and byte hash manifests",
   ],
@@ -99,6 +104,7 @@ const sourceManifest = {
     "gated content",
     "raw agent traces",
     "raw chats",
+    "participation invitations, receipts, assessments, and choice evidence",
     "raw dataset rows",
     "training checkpoints",
     "WAKE anchors",
@@ -113,8 +119,12 @@ const sourceManifest = {
     "https://huggingface.co/docs/datasets/about_cache",
     "https://huggingface.co/docs/hub/datasets-cards",
     "https://huggingface.co/docs/hub/datasets-gated",
+    "https://huggingface.co/docs/peft/main/en/developer_guides/checkpoint",
     "https://huggingface.co/docs/trl/en/dataset_formats",
-    "https://huggingface.co/docs/transformers/main/trainer_recipes"
+    "https://huggingface.co/docs/transformers/main/trainer_callbacks",
+    "https://huggingface.co/docs/transformers/main/trainer_recipes",
+    "https://arxiv.org/abs/2005.14165",
+    "https://arxiv.org/abs/2106.09685"
   ]
 };
 write(`${datasetRoot}/provenance/source-manifest.json`, json(sourceManifest));

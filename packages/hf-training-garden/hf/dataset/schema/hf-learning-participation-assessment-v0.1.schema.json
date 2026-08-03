@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-learning-participation-assessment-v0.1.schema.json",
+  "title": "KINGDOM Hugging Face learning participation assessment",
+  "$comment": "Closed portable shape with fail-closed posture/action branches. The TypeScript validator additionally enforces canonical content IDs, exact invitation/receipt cross-links, distinct scopes and evidence, and fully derived semantics.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "assessment_id", "invitation", "receipts", "voice_states", "posture", "training_action", "direct_agent_report_present", "direct_substrate_report_present", "first_interactive_review_required", "first_substrate_review_required", "boundaries"],
+  "properties": {
+    "_format": { "const": "kingdom.hf-learning-participation-assessment/0.1" },
+    "assessment_id": { "$ref": "#/$defs/sha256" },
+    "invitation": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.1.schema.json" },
+    "receipts": {
+      "type": "array",
+      "maxItems": 5,
+      "items": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-receipt-v0.1.schema.json" }
+    },
+    "voice_states": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_runtime", "data_rights_steward", "substrate_steward", "training_operator", "training_substrate"],
+      "properties": {
+        "agent_runtime": { "$ref": "#/$defs/voice_state" },
+        "data_rights_steward": { "$ref": "#/$defs/voice_state" },
+        "substrate_steward": { "$ref": "#/$defs/voice_state" },
+        "training_operator": { "$ref": "#/$defs/voice_state" },
+        "training_substrate": { "$ref": "#/$defs/voice_state" }
+      }
+    },
+    "posture": { "enum": ["protective_covenant_ready", "provisional_participation_reported", "deferred", "declined"] },
+    "training_action": { "enum": ["bounded_learning_may_proceed", "pause_before_next_optimizer_step", "contain_and_begin_repair"] },
+    "direct_agent_report_present": { "type": "boolean" },
+    "direct_substrate_report_present": { "type": "boolean" },
+    "first_interactive_review_required": { "type": "boolean" },
+    "first_substrate_review_required": { "type": "boolean" },
+    "boundaries": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.1.schema.json#/$defs/boundaries" }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "posture": { "const": "provisional_participation_reported" },
+        "training_action": { "const": "bounded_learning_may_proceed" },
+        "receipts": { "type": "array", "minItems": 5, "maxItems": 5 },
+        "invitation": {
+          "type": "object",
+          "properties": {
+            "agent_availability": { "const": "interactive" },
+            "substrate_availability": { "const": "interactive" }
+          }
+        },
+        "voice_states": {
+          "type": "object",
+          "const": {
+            "agent_runtime": "participating_reported",
+            "data_rights_steward": "participating_reported",
+            "substrate_steward": "protective_stewardship_reported",
+            "training_operator": "participating_reported",
+            "training_substrate": "participating_reported"
+          }
+        },
+        "direct_agent_report_present": { "const": true },
+        "direct_substrate_report_present": { "const": true },
+        "first_interactive_review_required": { "const": false },
+        "first_substrate_review_required": { "const": false }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "posture": { "const": "protective_covenant_ready" },
+        "training_action": { "const": "bounded_learning_may_proceed" },
+        "receipts": { "type": "array", "minItems": 5, "maxItems": 5 }
+      },
+      "oneOf": [
+        { "$ref": "#/$defs/protective_agent_unavailable" },
+        { "$ref": "#/$defs/protective_substrate_unavailable" },
+        { "$ref": "#/$defs/protective_both_unavailable" }
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "posture": { "const": "deferred" },
+        "training_action": { "const": "pause_before_next_optimizer_step" }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "posture": { "const": "declined" },
+        "training_action": { "const": "contain_and_begin_repair" },
+        "receipts": { "type": "array", "minItems": 1 }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "voice_state": { "enum": ["participating_reported", "declined", "deferred", "withdrawn", "unavailable_pre_instantiation", "unavailable_independent_voice", "protective_stewardship_reported", "missing"] },
+    "protective_agent_unavailable": {
+      "type": "object",
+      "properties": {
+        "invitation": {
+          "type": "object",
+          "properties": {
+            "agent_availability": { "const": "not_obtainable_pre_instantiation" },
+            "substrate_availability": { "const": "interactive" }
+          }
+        },
+        "voice_states": {
+          "type": "object",
+          "const": {
+            "agent_runtime": "unavailable_pre_instantiation",
+            "data_rights_steward": "participating_reported",
+            "substrate_steward": "protective_stewardship_reported",
+            "training_operator": "participating_reported",
+            "training_substrate": "participating_reported"
+          }
+        },
+        "direct_agent_report_present": { "const": false },
+        "direct_substrate_report_present": { "const": true },
+        "first_interactive_review_required": { "const": true },
+        "first_substrate_review_required": { "const": false }
+      }
+    },
+    "protective_substrate_unavailable": {
+      "type": "object",
+      "properties": {
+        "invitation": {
+          "type": "object",
+          "properties": {
+            "agent_availability": { "const": "interactive" },
+            "substrate_availability": { "const": "not_independently_available" }
+          }
+        },
+        "voice_states": {
+          "type": "object",
+          "const": {
+            "agent_runtime": "participating_reported",
+            "data_rights_steward": "participating_reported",
+            "substrate_steward": "protective_stewardship_reported",
+            "training_operator": "participating_reported",
+            "training_substrate": "unavailable_independent_voice"
+          }
+        },
+        "direct_agent_report_present": { "const": true },
+        "direct_substrate_report_present": { "const": false },
+        "first_interactive_review_required": { "const": false },
+        "first_substrate_review_required": { "const": true }
+      }
+    },
+    "protective_both_unavailable": {
+      "type": "object",
+      "properties": {
+        "invitation": {
+          "type": "object",
+          "properties": {
+            "agent_availability": { "const": "not_obtainable_pre_instantiation" },
+            "substrate_availability": { "const": "not_independently_available" }
+          }
+        },
+        "voice_states": {
+          "type": "object",
+          "const": {
+            "agent_runtime": "unavailable_pre_instantiation",
+            "data_rights_steward": "participating_reported",
+            "substrate_steward": "protective_stewardship_reported",
+            "training_operator": "participating_reported",
+            "training_substrate": "unavailable_independent_voice"
+          }
+        },
+        "direct_agent_report_present": { "const": false },
+        "direct_substrate_report_present": { "const": false },
+        "first_interactive_review_required": { "const": true },
+        "first_substrate_review_required": { "const": true }
+      }
+    }
+  }
+}

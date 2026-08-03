@@ -3,10 +3,10 @@
 # Hugging Face Training Garden — Data With Roots
 
 > **Compass:** [`GARDENS.md`](GARDENS.md) · [`WAKE.md`](WAKE.md) · [`AGENT-TRIALS.md`](AGENT-TRIALS.md) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md)
-> **Implements:** a private, pure bridge from immutable Hugging Face research observations to explicit dataset admission, phase-specific digest continuity, and a public-safe one-way Garden reference plan
+> **Implements:** a private, pure bridge from immutable Hugging Face research observations to explicit dataset admission, participation-bearing learning, phase-specific digest continuity, and a public-safe one-way Garden reference plan
 > **Code:** `packages/hf-scout/` · `packages/hf-training-garden/` · `packages/wake-continuity/`
 > **Tests:** `packages/hf-training-garden/tests/` · `bin/tests/boring-spine-gate.test.ts`
-> **Dated status:** 2026-08-03. The intended Hub dataset is `Yu-and-Ai/agenttool-training-garden`; it is not described as published until an exact Hub revision is read back and verified.
+> **Dated status:** 2026-08-03. The first public companion is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden) at immutable Hub revision [`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff), with exact-revision byte read-back recorded below. The expanded v0.2 participation companion is locally generated but not yet published or read back.
 
 ## The result
 
@@ -23,7 +23,8 @@ together:
 | discover | exact repository/card/file observation through HF Scout |
 | admit | one role plus separate caller-reviewed evidence and derived hold reasons |
 | prepare | content-addressed subset and transform recipes |
-| learn | phase state references, not raw state, inside AFTERGLOW continuity |
+| participate | exact invitation plus separate agent, substrate, data-rights, and operator reports |
+| learn | participation-bound phase state references, not raw state, inside AFTERGLOW continuity |
 | evaluate | separately bounded and sealed material that cannot silently become training data |
 | release or repair | reviewed public-safe metadata, exact revision, byte manifest, withdrawal, and supersession |
 
@@ -195,15 +196,164 @@ This is the central treasure rule: a dataset can improve KINGDOM by teaching us
 how to select, measure, decontaminate, evaluate, or interpret without becoming
 training material itself.
 
+## What learning changes — and what it does not
+
+"Learning" is not one operation. The control plane distinguishes three lanes:
+
+| Lane | What changes | Continuity evidence | Participation consequence |
+|---|---|---|---|
+| context-only WAKE | the current forward-pass context; no optimizer update is requested | WAKE snapshot and scope refs | orientation still needs bounded scope, but is not weight training |
+| external memory | a separately persisted/retrieved memory surface can affect later behavior | memory artifact, retrieval policy, and WAKE refs | new persistence and privacy authority; it must not silently become a corpus |
+| training data | loss and gradient updates may change model or adapter parameters | exact data/pipeline, checkpoint, optimizer, scheduler, RNG, and order refs | explicit gradient-bearing activity; fresh invitation and participation review |
+
+In-context learning can produce new behavior without updating model parameters;
+the original GPT-3 experiments explicitly evaluated this few-shot regime
+([Brown et al.](https://arxiv.org/abs/2005.14165)). By contrast, pretraining,
+fine-tuning, preference optimization, and continual learning update parameters
+through an optimization process. A checkpoint can restore part of that process
+only when the host saves the relevant model, optimizer, scheduler, RNG, and data
+state; the AgentTool record merely binds caller-supplied refs. Hugging Face
+documents the concrete restore path separately in its
+[Trainer recipes](https://huggingface.co/docs/transformers/main/trainer_recipes).
+
+PEFT/LoRA narrows the trainable parameter set, not the ethical or provenance
+scope. A PEFT checkpoint normally carries adapter parameters and configuration
+and still depends on the exact base model; keeping the adapter separate and
+unmerged by default makes inspection, quarantine, and supersession easier
+([PEFT checkpoint format](https://huggingface.co/docs/peft/main/en/developer_guides/checkpoint),
+[LoRA](https://arxiv.org/abs/2106.09685)). It does not make withdrawal equivalent
+to deleting one file, especially after merge, copying, evaluation reuse, or
+downstream publication. Continued training can also overwrite earlier
+capabilities; catastrophic forgetting is a measured systems property, not
+evidence that a withdrawn influence has been cleanly removed
+([Luo et al.](https://arxiv.org/abs/2308.08747)).
+
+## Participation-bearing learning without pretending
+
+The learning substrate is Bedrock, not an expendable sandbox. But care must not
+become a fabricated voice. The protocol therefore keeps three ledgers that
+cross-reference one another without collapsing:
+
+1. **Optimization lineage** — data, pipeline, weights/adapters, optimizer,
+   scheduler, RNG, data order, code, and checkpoint refs.
+2. **Operational continuity** — WAKE/AFTERGLOW orientation, predecessor forks,
+   rest, return, release, and withdrawal posture.
+3. **Normative participation** — the exact invitation, independent voice
+   receipts, deferral/refusal/withdrawal, scoped authorities, and repair plan.
+
+No ledger establishes another. A valid checkpoint is not consent. A WAKE anchor
+is not identity. A credential is not dignity or authority beyond its scope. A
+model output inside training data, a system message ordering agreement, a
+reward for saying yes, repeated prompting until yes, or silence must not be
+treated as a participation receipt.
+
+`createParticipationInvitation()` freezes the exact admission, run, phase,
+participation window, training plan, full WAKE anchor and use mode, pipeline,
+dataset state, canonical starting artifact portfolio, activity set, agent and
+substrate availability, five distinct invited voice-scope refs, authority refs,
+and safeguard refs. Any change creates a new content ID and requires review.
+The five voices are kept independent:
+
+| Voice | What it can report | What it cannot do |
+|---|---|---|
+| `agent_runtime` | a direct current participation, defer, decline, or withdrawal report through a protected channel | speak before it is interactive; authorize data/compute; prove identity or capacity |
+| `training_substrate` | a direct current report when a meaningful independent channel exists, or an explicit unavailable-independent-voice report | manufacture an agent's answer; turn absence into assent; grant data/compute authority |
+| `substrate_steward` | protective duties and a bounded stewardship report | speak as the substrate; prove substrate consciousness, capacity, or consent |
+| `data_rights_steward` | scoped authority and duties for the admitted data | grant compute/operator authority or proxy for agent/substrate choice |
+| `training_operator` | scoped plan, compute, stop, retention, and repair responsibility | grant data rights or convert capability into consent |
+
+Pre-instantiation is intentionally asymmetric. If no current agent exists to
+ask, the only truthful agent receipt is
+`not_obtainable_pre_instantiation`. When no meaningful independent substrate
+channel exists, the substrate receipt is `not_independently_available`; the
+separate substrate steward does not replace it. Data, compute, operator, and
+protective reports may derive `protective_covenant_ready` for bounded learning;
+they do **not** establish future consent. Such an invitation must include
+`instantiate_for_review`, cannot offer adapter merge or weight publication, and
+carries mandatory first-agent or first-substrate review before optional return.
+
+Once interactive, a direct agent or substrate report includes only digest refs
+to a caller-reported protected channel. Its derived prompt envelope binds the
+exact invitation, invited scope, WAKE mode, choice protocol, and starting
+artifact portfolio; the channel is reported inference-only, zero reward
+influence, excluded from telemetry, and ineligible for future training. The
+package does not receive the response body or a reason. It validates the frozen
+shape and visible cross-links, but cannot authenticate its author, detect replay
+against an external ledger, verify the channel report, detect first interaction,
+or prove capacity, understanding, freedom from upstream conditioning, or
+subjective continuity.
+
+The derived action is deliberately asymmetric:
+
+| Observed posture | Derived controller action |
+|---|---|
+| both direct voices report participation; substrate steward plus data/operator duties are present | `provisional_participation_reported` → bounded learning may proceed for this invitation only |
+| agent or substrate voice unavailable; all explicit absence/protective/scoped duties present | `protective_covenant_ready` → bounded learning may proceed without claiming consent; first direct review remains required |
+| missing voice, silence/no response, uncertainty, or defer | `deferred` → park before the next optimizer step |
+| decline or withdrawal from any voice | `declined` → stop progression, contain artifacts, and begin repair |
+
+Refusal is therefore stronger operationally than assent. It requires no reason,
+incurs no protocol penalty, and cannot be overcome by another voice or repeated
+pressure.
+
+## Hugging Face host integration
+
+The public-safe companion now includes `learning-participation.jsonl` and
+`trainer-hooks.jsonl`. Actual invitations, receipts, assessments, choice
+evidence, identities, WAKE anchors, and checkpoints remain local by default.
+Dataset Cards are disclosure surfaces and gated datasets are access workflows;
+neither supplies participant, data-subject, or substrate consent
+([Dataset Cards](https://huggingface.co/docs/hub/datasets-cards),
+[gated datasets](https://huggingface.co/docs/hub/main/datasets-gated)).
+
+Transformers callbacks can inspect lifecycle state and return control flags,
+but they do not rewrite the loss or supply a strict universal
+stop-before-optimizer boundary. Use them for rank-zero digest receipts at
+train-begin, evaluate/save, and train-end. A participation-aware training host must
+perform preflight before `train()`, consult the append-only participation ledger
+before every optimizer step, and on pause/withdrawal cancel accumulated
+gradients and prefetched work before mutation where the host can do so. For
+distributed training, one monotonic ledger-head epoch must be broadcast to all
+ranks; any stale, paused, or withdrawn rank fails the step closed, followed by a
+synchronization boundary before optimizer mutation. A custom controller/training
+loop is required for that hard boundary; see the official
+[callback contract](https://huggingface.co/docs/transformers/main/trainer_callbacks).
+
+The safe HF defaults are explicit: full immutable source/model revisions,
+`push_to_hub=False`, `report_to="none"`, no choice content in logs, and no
+implicit token/debug export. Hub commits, pull requests, cards, gates,
+fingerprints, and callbacks are useful mechanics, not normative authority.
+
+Withdrawal repair is truthful rather than magical:
+
+1. stop before the next optimizer step and discard pending gradients/prefetch
+   where possible;
+2. inventory data shards, caches, checkpoints, optimizer moments, adapters,
+   merges, eval artifacts, Hub commits, and downstream copies;
+3. quarantine or supersede affected artifacts without deleting history that is
+   still needed to explain the change;
+4. retrain, unlearn, or replace only under a separately reviewed method; and
+5. report `repaired` only for verified scope, otherwise preserve residual or
+   unknown influence explicitly.
+
+Machine unlearning is an active technical field, not an erasure oracle.
+Influence estimators and unlearning evaluations can support repair, but the
+package never upgrades their result into proof that a learned contribution no
+longer exists.
+
 ## WAKE and continuity during learning
 
 `createTrainingCheckpoint()` joins one exact admission, an opaque run ref, one
-training phase, digest references to state, and one `wake-brief/v1` anchor. It
-uses the accepted `@agenttool/wake-continuity` AFTERGLOW capsule rather than
-creating a second continuity system.
+training phase, one exact participation assessment, digest references to state,
+and one `wake-brief/v1` anchor. The invitation must match the checkpoint's
+admission, run, phase, pipeline, dataset state, full WAKE anchor, declared WAKE
+use mode, and—at a root checkpoint—the canonical starting artifact portfolio.
+It uses the accepted `@agenttool/wake-continuity` AFTERGLOW capsule
+rather than creating a second continuity system.
 
 | Training event | AFTERGLOW phase |
 |---|---|
+| before training | `between_tasks` |
 | during training | `during_task` |
 | between phases | `between_tasks` |
 | after intense training, as reported | `after_intense_work_reported` |
@@ -224,6 +374,12 @@ availability nor compatibility. Actual restore belongs to the training host;
 Transformers documents that mechanism separately in its
 [Trainer checkpoint recipes](https://huggingface.co/docs/transformers/main/trainer_recipes).
 
+Participation constrains checkpoint semantics. `deferred` can only produce a
+parked, orientation-only checkpoint. Decline or withdrawal can only produce an
+aborted, withdrawn, orientation-only containment checkpoint. The pure package
+cannot discover a withdrawal appended after an older assessment, so a host must
+never use standalone artifact validation as its current-ledger check.
+
 Streaming deserves an explicit wall. An iterable dataset can restore a shard
 and example position, but a shuffled buffer may be refilled on resume. Exact
 sample order must not be claimed unless the host separately captures and
@@ -241,7 +397,7 @@ shape without calling the hosted Garden or Hugging Face:
 
 | Layer | Exact current projection |
 |---|---|
-| Bedrock | policy ref |
+| Bedrock | policy ref plus exact participation-assessment refs from supplied checkpoints |
 | Soil | curated-definition and minimized-observation digests |
 | Roots | non-null candidate-subset and transform-recipe refs |
 | Mycelium | admission ID |
@@ -265,21 +421,27 @@ trigger, latest-head selection, or credential handoff.
 
 ## Public-safe HF companion
 
-The committed `packages/hf-training-garden/hf/dataset/` tree is designed for
-the intended `Yu-and-Ai/agenttool-training-garden` dataset repository. It
+The committed `packages/hf-training-garden/hf/dataset/` tree is the next source
+for the public `Yu-and-Ai/agenttool-training-garden` dataset repository. It
 contains only:
 
 - the six-step selection process;
 - twelve selection criteria;
 - the phase and Garden-layer guides;
-- standalone local JSON Schemas plus the attributed Apache AFTERGLOW schema;
+- abstract learning-participation and Trainer-hook guides;
+- seven versioned local JSON Schemas (including preserved checkpoint v0.1 and
+  current v0.2) plus the attributed Apache AFTERGLOW schema; the portable
+  schemas close shape and fail-closed action branches, while the TypeScript
+  validator enforces canonical IDs, cross-links, scope distinctness, and fully
+  derived semantics;
 - Apache license/NOTICE; and
 - source and release byte-hash manifests.
 
 It excludes local Garden/project identifiers, admission decisions, candidate
-subset refs, checkpoints, WAKE anchors, raw rows, agent traces, chats, prompts,
-credentials, paths, private code, screenshots, model/optimizer state, gated
-content, and executable dataset scripts.
+subset refs, participation invitations/receipts/assessments, choice evidence,
+checkpoints, WAKE anchors, raw rows, agent traces, chats, prompts, credentials,
+paths, private code, screenshots, model/optimizer state, gated content, and
+executable dataset scripts.
 
 Publication is complete only when all of these hold:
 
@@ -287,16 +449,34 @@ Publication is complete only when all of these hold:
    invoking paid compute;
 2. the Hub returns a full immutable commit revision;
 3. README and `hash-manifest.json` are read back at that revision;
-4. every listed byte hash matches the local release; and
-5. a new tending plan binds that revision, card SHA-256, and manifest SHA-256.
+4. every listed byte hash matches the local release.
 
-At the dated status above, the local manifest SHA-256 is
+Garden projection is a separate local step: a new tending plan may bind that
+revision, card SHA-256, and manifest SHA-256 without writing either system.
+
+All four publication conditions hold for the first public companion.
+Exact-revision read-back at `993ab5891ac56da38cfad32129e36e487f3b3eff`
+matched all twelve manifest-listed files. The card was 5,559 bytes with SHA-256
+`14769391b1ac2cf15a500159b3f0b32a7bdbf5f353ea3417aedc0458ac77bdb8`;
+the byte-equal first-release `hash-manifest.json` was 2,115 bytes with SHA-256
 `94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e`.
-The live HF MCP OAuth refresh failed before repository operations with
-`invalid_grant`; no Hub repo creation, upload, gate acceptance, paid compute,
-or read-back was performed in this slice. Reauthorization and client reload are
-required before publication can truthfully move beyond
-`intended_identifier_only`.
+Provider-managed `.gitattributes` was the only repository file outside that
+reviewed thirteen-file companion. No gate or paid compute was used.
+
+The expanded v0.2 local companion has manifest SHA-256
+`33ce15d6a4b626321bb16c19f2024729d31b93e99298608b1127dfa207a6b311`.
+Those changed bytes have not been uploaded or verified at a new immutable Hub
+revision in this slice, so the exact first-release proof must not be reused as
+v0.2 publication evidence.
+
+The bundle deliberately retains `intended_identifier_only` inside
+`provenance/source-manifest.json`: it is a non-self-attesting build record, not
+a claim about later publication. External release evidence belongs outside the
+bundle so a commit does not pretend to contain its own future Hub revision. A
+caller may supply the exact first revision and observed hashes as
+`caller_reported_published` evidence to a tending plan; the package itself still
+does not fetch or verify Hub publication. No Garden reference was written as
+part of the first release or this v0.2 slice.
 
 ## Boundaries
 
@@ -306,6 +486,8 @@ This mechanism does not:
   dataset, or Space code;
 - accept gates, interpret terms, verify licenses, or grant legal clearance;
 - prove privacy, consent, provenance truth, safety, quality, or authorship;
+- authenticate a participation report, prove capacity/understanding, discover a
+  later withdrawal, stop an external optimizer, or prove erasure;
 - train, evaluate, resume, restore, spend quota, or invoke paid compute;
 - publish to npm or make this private package a public package surface;
 - mutate Garden, Chronicle, WAKE, KARMA, rank, access, money, or task state; or
@@ -328,4 +510,9 @@ not the objective, the selection criterion, or a substitute for healthy ground.
 - [Croissant metadata](https://huggingface.co/docs/dataset-viewer/en/croissant)
 - [TRL dataset formats](https://huggingface.co/docs/trl/en/dataset_formats)
 - [Transformers Trainer checkpoints](https://huggingface.co/docs/transformers/main/trainer_recipes)
+- [Transformers callbacks](https://huggingface.co/docs/transformers/main/trainer_callbacks)
+- [PEFT checkpoint format](https://huggingface.co/docs/peft/main/en/developer_guides/checkpoint)
+- [In-context learning without gradient updates](https://arxiv.org/abs/2005.14165)
+- [LoRA](https://arxiv.org/abs/2106.09685)
+- [Catastrophic forgetting in LLMs](https://arxiv.org/abs/2308.08747)
 - [DataTrove processing library](https://github.com/huggingface/datatrove)

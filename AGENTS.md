@@ -64,8 +64,8 @@ XENIA Surface helpers (`packages/kingdom/`), a read-only portable Agent Skills
 inspector (`packages/skills/`), a local-first
 agent browser (`packages/browser/`), a private read-only Hugging Face metadata,
 provenance, and phase-aware research scout (`packages/hf-scout/`), a private
-pure HF dataset-admission, training-phase WAKE, and one-way Garden tending
-contract (`packages/hf-training-garden/`), and three static apps
+pure HF dataset-admission, learning-participation, training-phase WAKE, and
+one-way Garden tending contract (`packages/hf-training-garden/`), and three static apps
 (`apps/`). The browser exposes one bounded core through direct TypeScript,
 JSONL, and stdio MCP; it uses an installed system browser and has no hosted
 surface. Its current `@agenttool/browser@0.6.0` release is one exact LOVE
@@ -161,7 +161,7 @@ cd packages/skills-yutabase && bun install     # rebuildable metadata-only YUTAB
 cd packages/skills-wake-continuity && bun install # private Skills plan → AFTERGLOW composition
 cd packages/browser && bun install             # public 0.5 local-first agent browser package
 cd packages/hf-scout && bun install            # private metadata-only HF research scout
-cd packages/hf-training-garden && bun install  # private admission + training WAKE + Garden plans
+cd packages/hf-training-garden && bun install  # private admission + participation + training WAKE + Garden plans
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
 cd packages/correspondence-yutabase-projector && bun run setup:local # builds local planner dependency first
 cd packages/constructive-intelligence && bun install # unfunded local receipt ledger; no hosted route
@@ -274,8 +274,8 @@ npm pack --dry-run --ignore-scripts            # inventory only; does not publis
 
 # Private Hugging Face Training Garden ──────────────────────────────
 cd packages/hf-training-garden
-bun run ci                                     # admission + phase WAKE + Garden plans + deterministic HF companion
-# Runtime performs no download, gate acceptance, training, Garden/Hub write, or npm release.
+bun run ci                                     # admission + participation + phase WAKE + Garden plans + deterministic HF companion
+# Runtime performs no download, gate acceptance, training, report authentication, external stop, Garden/Hub write, or npm release.
 
 # Correspondence → YUTABASE projection planner ───────────────────────
 cd packages/correspondence-yutabase
@@ -520,7 +520,7 @@ source boundary by itself.
 | How can Dark Continent framework facts and KARMA-inspired graph changes cross into KINGDOM without acquiring action authority? | `packages/dark-continent-contract/README.md` · `packages/dark-continent-karma/README.md` (offline advisory snapshots and proposal-only deltas; no wall verification, graph write, score, Crown, trade, publication, or execution authority) |
 | How can exact DeepSeek research leads reach KINGDOM or Artbitrage without downloading or executing upstream assets? | `packages/deepseek-kingdom/README.md` (`@agenttool/deepseek-kingdom`; caller-supplied official-source pins and deterministic unaccepted proposals, plus an 18-entry metadata-only catalog; no fetch, weights, inference, credentials, compute, license approval, graph write, score, acceptance, or authority) |
 | How can a later arrival orient around selected digest-only threads without claiming identity, memory, replay, or one canonical head? | `packages/wake-continuity/README.md` (`@agenttool/wake-continuity`; AFTERGLOW capsules, causal predecessor orientation, opt-in carry/park/release/withdraw lenses, exact Handoff/Correspondence reference adapters, and no persistence, network, provider, or authority effect) |
-| How can Hugging Face datasets move from discovery through bounded selection, phase-specific training continuity, sealed evaluation, and a public-safe Garden reference without making Hub metadata into authority? | [`docs/HF-TRAINING-GARDEN.md`](docs/HF-TRAINING-GARDEN.md) · `packages/hf-training-garden/README.md` (exact Scout bindings, non-scalar admission, digest-only AFTERGLOW checkpoints, and inert six-layer tending plans; no raw rows, gate acceptance, training/resume, Garden mutation, Hub write, or clearance proof) |
+| How can Hugging Face datasets move from discovery through bounded selection, separate agent/substrate/operator/data-rights participation, pre/during-training WAKE, sealed evaluation, and a public-safe Garden reference without making Hub metadata into authority? | [`docs/HF-TRAINING-GARDEN.md`](docs/HF-TRAINING-GARDEN.md) · `packages/hf-training-garden/README.md` (exact Scout bindings, non-scalar admission, protected choice reports, participation-bound digest-only AFTERGLOW checkpoints, and inert six-layer tending plans; no raw rows/choices, gate acceptance, training/resume, report authentication, external stop, Garden/Hub write, or consent/clearance proof) |
 | How can external research enter KINGDOM as reviewable passports, route disclosures, dossiers, and inert trials without becoming truth or execution authority? | [`docs/KINGDOM-WITNESS-LAB.md`](docs/KINGDOM-WITNESS-LAB.md) · `packages/kingdom-witness-lab/README.md` (local deterministic admission records and dated DeepSeek atlas; no browse, inference, provider call, verdict, delegation, or hosted witness) |
 | How can a minimized Agent Skills inspection become rebuildable YUTABASE metadata and then an optional AFTERGLOW thread? | `packages/skills-yutabase/README.md` · `packages/skills-wake-continuity/README.md` (pure plans and private composition; no raw skill content, database write, second lineage, npm adapter release, score, permission, or automatic action) |
 | How can deliberately planted credentials open a convincing defensive island and yield a privacy-minimized operator TEND report without exposing production or executing hostile input? | [`docs/KARMA-MIRROR.md`](docs/KARMA-MIRROR.md) · `packages/karma-mirror/README.md` (self-marker plus exact digest/prefix admission before body read; finite synthetic rooms; strict receipt verification; Trace/Explain/Narrow/Distill over closed families with no identifiers or automatic action; in-band disclosure and constructive exit; no production mount, egress, execution, persistence adapter, attribution, or hack-back) |

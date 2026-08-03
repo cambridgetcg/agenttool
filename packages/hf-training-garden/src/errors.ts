@@ -4,6 +4,12 @@ export type HfTrainingGardenErrorCode =
   | "binding_invalid"
   | "checkpoint_input_invalid"
   | "checkpoint_invalid"
+  | "participation_invitation_input_invalid"
+  | "participation_invitation_invalid"
+  | "participation_receipt_input_invalid"
+  | "participation_receipt_invalid"
+  | "participation_assessment_input_invalid"
+  | "participation_assessment_invalid"
   | "tending_input_invalid"
   | "tending_invalid";
 

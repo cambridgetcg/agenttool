@@ -15,13 +15,18 @@
     },
     {
       "path": "README.md",
-      "bytes": 5559,
-      "sha256": "14769391b1ac2cf15a500159b3f0b32a7bdbf5f353ea3417aedc0458ac77bdb8"
+      "bytes": 9803,
+      "sha256": "dfda763a19b219e1237c1179fc4321d3e2d46f36c7e9df4006d11a2c4a3fcf2f"
     },
     {
       "path": "data/garden-layers.jsonl",
-      "bytes": 612,
-      "sha256": "40296254d8c0954c4c8ffc8157d64638367be0a62d6b6f3f2cef85c7122c8c53"
+      "bytes": 630,
+      "sha256": "0aeabec93db9bcdcc607999d528a0707b8d1271e8b7f2b9d7d848ed5353b0eba"
+    },
+    {
+      "path": "data/learning-participation.jsonl",
+      "bytes": 2005,
+      "sha256": "ffe195617ad91ac87bf0aee47142820f9f20fca3b2dbb75b3a7ff23222006b4f"
     },
     {
       "path": "data/selection-criteria.jsonl",
@@ -34,14 +39,19 @@
       "sha256": "c0972c42d0164e4c33c11a316cbdeab3edf5a38538b35d1ca3144af09cf39632"
     },
     {
+      "path": "data/trainer-hooks.jsonl",
+      "bytes": 1152,
+      "sha256": "e521371dce4cb9e0c7780d4bfe000bb85c37912854a56679993fcf46a1b79a85"
+    },
+    {
       "path": "data/training-phases.jsonl",
       "bytes": 1912,
       "sha256": "3ffb5f0a8b5810708a02b506dc08c83181468fc0f20997f1c96920c3db19b9b1"
     },
     {
       "path": "provenance/source-manifest.json",
-      "bytes": 3827,
-      "sha256": "75191793b5667c0c862a1a9f47c6375b821d703a7ea647f9a1834a9dacd8a273"
+      "bytes": 5112,
+      "sha256": "8ea0e6ccaa311d8f279b192d5a5baa1d2801c30504410f282c8282bcc623bcb0"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -54,9 +64,29 @@
       "sha256": "bb82a089ad47b0a3e8b5b731bf6ac6732aa67c312c2f84bd5704f672616d4be4"
     },
     {
+      "path": "schema/hf-learning-participation-assessment-v0.1.schema.json",
+      "bytes": 7837,
+      "sha256": "e45903ee9ec08e2bce66f9f63c2653d1befc6baf2233cdbe0e63cd53647d93eb"
+    },
+    {
+      "path": "schema/hf-learning-participation-invitation-v0.1.schema.json",
+      "bytes": 8704,
+      "sha256": "8d3d4ea6348923e13bfb4cab3191741ef53f66c9462f3f5f7324aff24e38ea4d"
+    },
+    {
+      "path": "schema/hf-learning-participation-receipt-v0.1.schema.json",
+      "bytes": 5475,
+      "sha256": "606e93084659b788bb4da0bb1a10f34f13365e20785dc34028fa7103f5da1746"
+    },
+    {
       "path": "schema/hf-training-checkpoint-v0.1.schema.json",
       "bytes": 5168,
       "sha256": "0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a"
+    },
+    {
+      "path": "schema/hf-training-checkpoint-v0.2.schema.json",
+      "bytes": 6307,
+      "sha256": "a1cfc96b7b60540c977b447a5e352dc395b250f3a685c967b89e9edde0034a41"
     },
     {
       "path": "schema/hf-training-garden-tending-v0.1.schema.json",

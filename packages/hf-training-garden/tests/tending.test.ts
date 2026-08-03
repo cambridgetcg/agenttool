@@ -11,6 +11,7 @@ import {
   admission,
   artifacts,
   orientationOnly,
+  participation,
   ref,
   wake,
 } from "./fixtures.js";
@@ -24,6 +25,7 @@ describe("Garden to HF tending seam", () => {
       training_phase: "evaluation",
       event: "between_training_phases",
       checkpoint_status: "parked",
+      participation: participation(source, { runRef: ref("run:tending") }),
       artifacts,
       resume: orientationOnly,
       wake,
@@ -43,7 +45,10 @@ describe("Garden to HF tending seam", () => {
       },
     };
     const plan = createTrainingGardenTendingPlan(input);
-    expect(plan.layers.bedrock).toEqual([source.policy_ref]);
+    expect(plan.layers.bedrock).toEqual([
+      source.policy_ref,
+      checkpoint.participation.assessment_id,
+    ].sort());
     expect(plan.layers.roots).toEqual([
       source.entries[0]!.candidate_slice_ref!,
       source.entries[0]!.transform_recipe_ref!,

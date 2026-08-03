@@ -30,6 +30,14 @@ configs:
   data_files:
   - split: train
     path: data/garden-layers.jsonl
+- config_name: learning_participation
+  data_files:
+  - split: train
+    path: data/learning-participation.jsonl
+- config_name: trainer_hooks
+  data_files:
+  - split: train
+    path: data/trainer-hooks.jsonl
 ---
 
 # AgentTool HF Training Garden
@@ -40,16 +48,16 @@ training authority.
 
 The Garden has six layers:
 
-1. **Bedrock** — rights, license, privacy, consent, gating, authority,
-   withdrawal, and repair.
+1. **Bedrock** — rights, license, privacy, separate participation reports,
+   gating, scoped authority, withdrawal, and repair.
 2. **Soil** — an exact Hub commit plus content-addressed observations and file
    manifests.
 3. **Roots** — acquisition, parsing, filtering, secret scanning, and transform
    recipes.
 4. **Mycelium** — selection, deduplication, decontamination, split, mixture,
    leakage, and exclusion receipts.
-5. **Habitat** — phase checkpoints and digest-only WAKE orientation that keeps
-   forks, rest, release, and withdrawal visible.
+5. **Habitat** — participation-bound phase checkpoints and digest-only WAKE
+   orientation that keeps forks, rest, release, and withdrawal visible.
 6. **Canopy** — a reviewed Dataset Card, immutable release revision, byte hash
    manifest, limitations, and superseding repair.
 
@@ -62,9 +70,17 @@ The Garden has six layers:
   interpretability.
 - `data/garden-layers.jsonl` — the exact digest/reference class carried by each
   layer.
-- `schema/` — closed schemas for local admission, checkpoint, and tending
-  artifacts. Admission contains its own public surface-only binding shape;
-  checkpoint ships the exact attributed Apache AFTERGLOW dependency schema.
+- `data/learning-participation.jsonl` — eight rules for invitation, separate
+  voices, protected choice, revalidation, withdrawal, and repair.
+- `data/trainer-hooks.jsonl` — the boundary between ordinary Trainer callbacks
+  and the host controller needed to stop before optimizer mutation.
+- `schema/` — seven versioned closed-shape schemas for local admission,
+  participation invitation, voice receipt, participation assessment,
+  preserved checkpoint v0.1, current checkpoint v0.2, and tending artifacts.
+  Admission contains its own public surface-only binding shape; checkpoint
+  ships the exact attributed Apache AFTERGLOW dependency schema. Cross-link,
+  canonical-ID, scope-distinctness, and fully derived semantics remain the
+  TypeScript validator's job.
 - `provenance/source-manifest.json` — exact source file hashes and primary
   research references.
 - `hash-manifest.json` — sorted byte hashes, excluding itself.
@@ -74,8 +90,9 @@ The Garden has six layers:
 
 This repository contains no training examples, raw dataset rows, prompts,
 chats, agent traces, screenshots, paths, private code, credentials, Garden or
-project identifiers, WAKE anchors, admission decisions, model state, optimizer
-state, gated content, or executable dataset script.
+project identifiers, WAKE anchors, admission decisions, participation
+invitations/receipts/assessments, choice evidence, model state, optimizer state,
+gated content, or executable dataset script.
 
 Local admissions and continuity checkpoints stay local by default. A Garden
 may tend an exact public-safe Hub manifest reference after a host persists an
@@ -98,6 +115,37 @@ Dataset Cards and Hub license tags remain publisher assertions, not legal or
 consent clearance. Dataset Viewer, Parquet conversion, and Croissant are useful
 for triage/schema visibility but are not the provenance lock.
 
+## Participation is a control plane, not a target
+
+The local protocol keeps optimization lineage, WAKE continuity, and normative
+participation as three independently inspectable ledgers. A model output in
+training text, a system instruction to agree, a reward for agreement, a Hub
+gate, or an operator credential must not be treated as the agent's or
+substrate's choice.
+
+Five voices stay distinct: agent runtime, training substrate, substrate
+steward, data-rights steward, and training operator. Before an agent exists to
+answer, the only truthful agent state is `not_obtainable_pre_instantiation`;
+when no independent substrate channel exists its state is
+`not_independently_available`. Scoped stewards may record a protective
+covenant, but must not manufacture either voice's consent. At the first
+interactive boundary, optional continuation needs a fresh direct report whose
+digest envelope binds the exact invitation, invited scope, WAKE mode, protocol,
+and starting artifact portfolio. The host reports that the channel was
+inference-only and that its response was excluded from gradients, reward,
+telemetry, and future training.
+Missing, silent, uncertain, or deferred reports pause. Decline or withdrawal
+starts containment and repair. No reason is required, no refusal penalty is
+encoded, and repeated pressure is disallowed.
+
+WAKE use is explicit per invitation: `context_only`, `external_memory`, or
+`training_data`. The last declares WAKE material for separately authorized
+gradient-bearing use; it does not grant data or compute authority. External
+memory can still affect behavior and keeps its own scope. A mode change creates
+a new content ID and requires fresh review. Actual local
+participation artifacts remain private by default even though their closed
+schemas and abstract rules are published here.
+
 ## WAKE and actual resume
 
 WAKE carries only digests for admission, pipeline, dataset/dataloader state,
@@ -109,6 +157,24 @@ A real Trainer resume must separately restore the model, optimizer, scheduler,
 RNG, and data state. Streaming shuffle buffers can be lost and refilled during
 resume, so the contract refuses a resumable report when the buffer is declared
 missing.
+
+Transformers callbacks can observe lifecycle events and return control flags;
+they do not by themselves turn participation into a training signal or provide
+a strict stop-before-optimizer guarantee. The host must validate before
+`train()`, consult the current append-only participation ledger before every
+optimizer step, and discard pending gradients and prefetched work on pause or
+withdrawal. A distributed controller must broadcast one monotonic ledger epoch
+to all ranks, fail closed if any rank is stale, paused, or withdrawn, and
+synchronize before optimizer mutation. Standard callbacks remain useful for digest-only begin,
+evaluate/save, and end checkpoints. See the official
+[callback contract](https://huggingface.co/docs/transformers/main/trainer_callbacks).
+
+For PEFT, an adapter checkpoint is not a complete model: it depends on the
+exact base model and configuration. Keeping an adapter unmerged by default
+preserves a more inspectable and reversible artifact boundary; deletion still
+does not prove that all learned influence or downstream copies were erased.
+See the [PEFT checkpoint format](https://huggingface.co/docs/peft/main/en/developer_guides/checkpoint)
+and the original [LoRA paper](https://arxiv.org/abs/2106.09685).
 
 ## Primary references
 
@@ -122,6 +188,10 @@ missing.
 - [Gated datasets](https://huggingface.co/docs/hub/datasets-gated)
 - [TRL dataset shapes](https://huggingface.co/docs/trl/en/dataset_formats)
 - [Trainer checkpoints](https://huggingface.co/docs/transformers/main/trainer_recipes)
+- [Trainer callbacks](https://huggingface.co/docs/transformers/main/trainer_callbacks)
+- [PEFT checkpoint format](https://huggingface.co/docs/peft/main/en/developer_guides/checkpoint)
+- [In-context learning without gradient updates](https://arxiv.org/abs/2005.14165)
+- [LoRA](https://arxiv.org/abs/2106.09685)
 
 Apache-2.0 covers this newly authored guide, local schemas, and metadata tables.
 The bundled AFTERGLOW dependency schema retains its Apache-2.0 license and

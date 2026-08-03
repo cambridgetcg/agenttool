@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/hf-training-garden",
-  "version": "0.1.0-dev.0",
-  "description": "Private HF dataset admission, training-phase WAKE, and Garden tending contracts",
+  "version": "0.2.0-dev.0",
+  "description": "Private HF dataset admission, participation-bearing learning, WAKE, and Garden tending contracts",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,19 @@
       "default": "./schema/hf-dataset-admission-v0.1.schema.json"
     },
     "./checkpoint.schema.json": {
+      "default": "./schema/hf-training-checkpoint-v0.2.schema.json"
+    },
+    "./checkpoint-v0.1.schema.json": {
       "default": "./schema/hf-training-checkpoint-v0.1.schema.json"
+    },
+    "./participation-invitation.schema.json": {
+      "default": "./schema/hf-learning-participation-invitation-v0.1.schema.json"
+    },
+    "./participation-receipt.schema.json": {
+      "default": "./schema/hf-learning-participation-receipt-v0.1.schema.json"
+    },
+    "./participation-assessment.schema.json": {
+      "default": "./schema/hf-learning-participation-assessment-v0.1.schema.json"
     },
     "./tending.schema.json": {
       "default": "./schema/hf-training-garden-tending-v0.1.schema.json"

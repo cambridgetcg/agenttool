@@ -10,21 +10,32 @@ import {
   admission,
   artifacts,
   orientationOnly,
+  participation,
   ref,
   wake,
 } from "./fixtures.js";
 
 function checkpointInput(overrides: Record<string, unknown> = {}) {
-  const source = admission("sealed_evaluation");
+  const source = (overrides.admission ?? admission("sealed_evaluation")) as ReturnType<typeof admission>;
+  const runRef = (overrides.run_ref ?? ref("run:test")) as ReturnType<typeof ref>;
+  const phase = (overrides.training_phase ?? "evaluation") as "evaluation" | "pretraining";
+  const wakeValue = (overrides.wake ?? wake) as typeof wake;
+  const artifactValue = (overrides.artifacts ?? artifacts) as typeof artifacts;
   return {
     admission: source,
-    run_ref: ref("run:test"),
-    training_phase: "evaluation" as const,
+    run_ref: runRef,
+    training_phase: phase,
     event: "during_training" as const,
     checkpoint_status: "checkpointed" as const,
-    artifacts,
+    participation: participation(source, {
+      runRef,
+      phase,
+      wakeValue,
+      artifactsValue: artifactValue,
+    }),
+    artifacts: artifactValue,
     resume: orientationOnly,
-    wake,
+    wake: wakeValue,
     continuity_portfolio_ref: null,
     continuity_posture: "carry" as const,
     predecessors: [],
@@ -47,6 +58,10 @@ describe("training phase WAKE checkpoints", () => {
       artifact_ref: value.thread.thread_id,
       verified_by_package: false,
     });
+    expect(value.thread.participation_assessment_ref).toBe(
+      value.participation.assessment_id,
+    );
+    expect(value.thread.wake_use_mode).toBe("context_only");
     expect(validateTrainingCheckpoint(value)).toEqual(value);
     expect(validateTrainingCheckpointAgainstAdmission(value, input.admission)).toEqual(value);
     expect(value.boundaries.trains_model).toBe(false);
@@ -120,5 +135,112 @@ describe("training phase WAKE checkpoints", () => {
     const value = structuredClone(createTrainingCheckpoint(checkpointInput())) as Record<string, any>;
     value.thread.run_ref = ref("run:tampered");
     expect(() => validateTrainingCheckpoint(value)).toThrow(HfTrainingGardenError);
+  });
+
+  test("binds the full WAKE anchor rather than its snapshot ref alone", () => {
+    const source = admission("sealed_evaluation");
+    const exactParticipation = participation(source);
+    expect(() => createTrainingCheckpoint(checkpointInput({
+      admission: source,
+      participation: exactParticipation,
+      wake: { ...wake, scope_ref: ref("wake:other-scope") },
+    }))).toThrow(HfTrainingGardenError);
+  });
+
+  test("binds a root invitation to the exact starting artifact portfolio", () => {
+    const source = admission("sealed_evaluation");
+    const invitedArtifacts = {
+      ...artifacts,
+      model_checkpoint_ref: ref("model:invited"),
+      optimizer_state_ref: ref("optimizer:invited"),
+    };
+    const suppliedArtifacts = {
+      ...invitedArtifacts,
+      model_checkpoint_ref: ref("model:substituted"),
+      optimizer_state_ref: ref("optimizer:substituted"),
+    };
+    expect(() => createTrainingCheckpoint(checkpointInput({
+      admission: source,
+      participation: participation(source, { artifactsValue: invitedArtifacts }),
+      artifacts: suppliedArtifacts,
+    }))).toThrow(HfTrainingGardenError);
+  });
+
+  test("rejects an unreviewed non-root base-state substitution", () => {
+    const source = admission("sealed_evaluation");
+    const first = createTrainingCheckpoint(checkpointInput({ admission: source }));
+    const substituted = {
+      ...artifacts,
+      model_checkpoint_ref: ref("model:unreviewed-substitution"),
+      optimizer_state_ref: ref("optimizer:unreviewed-substitution"),
+    };
+    expect(() => createTrainingCheckpoint(checkpointInput({
+      admission: source,
+      artifacts: substituted,
+      participation: participation(source, { artifactsValue: substituted }),
+      predecessors: [first],
+    }))).toThrow(HfTrainingGardenError);
+  });
+
+  test("turns deferral into park and withdrawal into containment", () => {
+    const source = admission("sealed_evaluation");
+    const deferred = participation(source, { choice: "defer" });
+    expect(() => createTrainingCheckpoint(checkpointInput({
+      admission: source,
+      participation: deferred,
+    }))).toThrow(HfTrainingGardenError);
+    const parked = createTrainingCheckpoint(checkpointInput({
+      admission: source,
+      participation: deferred,
+      checkpoint_status: "parked",
+      continuity_posture: "park",
+    }));
+    expect(parked.participation.training_action).toBe(
+      "pause_before_next_optimizer_step",
+    );
+
+    const withdrawn = participation(source, { choice: "withdraw" });
+    expect(() => createTrainingCheckpoint(checkpointInput({
+      admission: source,
+      participation: withdrawn,
+      checkpoint_status: "parked",
+      continuity_posture: "park",
+    }))).toThrow(HfTrainingGardenError);
+    const contained = createTrainingCheckpoint(checkpointInput({
+      admission: source,
+      participation: withdrawn,
+      checkpoint_status: "aborted_reported",
+      continuity_posture: "withdraw",
+    }));
+    expect(contained.participation.training_action).toBe(
+      "contain_and_begin_repair",
+    );
+  });
+
+  test("records a before-training protective covenant without calling it consent", () => {
+    const source = admission("sealed_evaluation");
+    const runRef = ref("run:pretraining");
+    const value = createTrainingCheckpoint(checkpointInput({
+      admission: source,
+      run_ref: runRef,
+      training_phase: "pretraining",
+      event: "before_training",
+      participation: participation(source, {
+        runRef,
+        phase: "pretraining",
+        agentAvailability: "not_obtainable_pre_instantiation",
+      }),
+    }));
+    expect(value.afterglow.phase).toBe("between_tasks");
+    expect(value.participation.posture).toBe("protective_covenant_ready");
+    expect(value.participation.boundaries.proves_consent).toBe(false);
+
+    expect(() => createTrainingCheckpoint(checkpointInput({
+      admission: source,
+      run_ref: runRef,
+      training_phase: "pretraining",
+      event: "resume_or_return",
+      participation: value.participation,
+    }))).toThrow(HfTrainingGardenError);
   });
 });

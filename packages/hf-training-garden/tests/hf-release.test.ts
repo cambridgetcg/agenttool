@@ -4,6 +4,8 @@ import { readFileSync, statSync } from "node:fs";
 
 import {
   GARDEN_LAYER_GUIDE,
+  HF_TRAINER_HOOK_GUIDE,
+  LEARNING_PARTICIPATION_GUIDE,
   SELECTION_CRITERIA_GUIDE,
   SELECTION_PROCESS,
   TRAINING_PHASE_GUIDE,
@@ -29,6 +31,8 @@ describe("deterministic public-safe HF companion", () => {
     expect(readJsonl("data/selection-criteria.jsonl")).toEqual(SELECTION_CRITERIA_GUIDE);
     expect(readJsonl("data/training-phases.jsonl")).toEqual(TRAINING_PHASE_GUIDE);
     expect(readJsonl("data/garden-layers.jsonl")).toEqual(GARDEN_LAYER_GUIDE);
+    expect(readJsonl("data/learning-participation.jsonl")).toEqual(LEARNING_PARTICIPATION_GUIDE);
+    expect(readJsonl("data/trainer-hooks.jsonl")).toEqual(HF_TRAINER_HOOK_GUIDE);
 
     const card = read("README.md").toString("utf8");
     expect(card).not.toContain("config_name: admissions");
@@ -38,6 +42,9 @@ describe("deterministic public-safe HF companion", () => {
     expect(source.publication_state).toBe("intended_identifier_only");
     expect(source.public_release_excludes).toContain("raw agent traces");
     expect(source.public_release_excludes).toContain("Garden or project identifiers");
+    expect(source.public_release_excludes).toContain(
+      "participation invitations, receipts, assessments, and choice evidence",
+    );
     expect(source.public_release_contains).toContain(
       "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
     );

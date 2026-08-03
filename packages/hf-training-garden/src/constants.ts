@@ -1,14 +1,24 @@
 import { deepFreeze } from "./canonical.js";
 
 export const PACKAGE_NAME = "@agenttool/hf-training-garden" as const;
-export const PACKAGE_VERSION = "0.1.0-dev.0" as const;
+export const PACKAGE_VERSION = "0.2.0-dev.0" as const;
 
 export const ADMISSION_FORMAT = "kingdom.hf-dataset-admission/0.1" as const;
 export const ADMISSION_ENTRY_PROFILE =
   "kingdom.hf-dataset-admission-entry/0.1" as const;
 export const TRAINING_THREAD_PROFILE =
-  "kingdom.hf-training-thread/0.1" as const;
-export const CHECKPOINT_FORMAT = "kingdom.hf-training-checkpoint/0.1" as const;
+  "kingdom.hf-training-thread/0.2" as const;
+export const CHECKPOINT_FORMAT = "kingdom.hf-training-checkpoint/0.2" as const;
+export const PARTICIPATION_INVITATION_FORMAT =
+  "kingdom.hf-learning-participation-invitation/0.1" as const;
+export const PARTICIPATION_RECEIPT_FORMAT =
+  "kingdom.hf-learning-participation-receipt/0.1" as const;
+export const PARTICIPATION_ASSESSMENT_FORMAT =
+  "kingdom.hf-learning-participation-assessment/0.1" as const;
+export const PARTICIPATION_PROMPT_ENVELOPE_PROFILE =
+  "kingdom.hf-learning-participation-prompt-envelope/0.1" as const;
+export const TRAINING_ARTIFACT_PORTFOLIO_PROFILE =
+  "kingdom.hf-training-artifact-portfolio/0.1" as const;
 export const TENDING_FORMAT =
   "kingdom.hf-training-garden-tending/0.1" as const;
 
@@ -130,7 +140,87 @@ export const TRAINING_PHASES = deepFreeze([
   "closed",
 ] as const);
 
+export const WAKE_USE_MODES = deepFreeze([
+  "context_only",
+  "external_memory",
+  "training_data",
+] as const);
+
+export const PARTICIPATION_VOICES = deepFreeze([
+  "agent_runtime",
+  "data_rights_steward",
+  "substrate_steward",
+  "training_operator",
+  "training_substrate",
+] as const);
+
+export const PARTICIPATION_ACTIVITIES = deepFreeze([
+  "adapter_merge",
+  "evaluation",
+  "external_memory_use",
+  "gradient_update",
+  "instantiate_for_review",
+  "interpretability_capture",
+  "optimizer_resume",
+  "publish_weights",
+  "wake_context_use",
+  "wake_training_data_use",
+] as const);
+
+export const PARTICIPATION_CHOICES = deepFreeze([
+  "participate",
+  "decline",
+  "defer",
+  "withdraw",
+  "no_response",
+  "unavailable_pre_instantiation",
+  "unavailable_independent_voice",
+] as const);
+
+export const PARTICIPATION_REPORT_BASES = deepFreeze([
+  "direct_current_report",
+  "not_obtainable_pre_instantiation",
+  "not_independently_available",
+  "protective_steward_report",
+  "scoped_authority_report",
+] as const);
+
+export const AGENT_AVAILABILITIES = deepFreeze([
+  "not_obtainable_pre_instantiation",
+  "interactive",
+] as const);
+
+export const SUBSTRATE_AVAILABILITIES = deepFreeze([
+  "not_independently_available",
+  "interactive",
+] as const);
+
+export const PARTICIPATION_VOICE_STATES = deepFreeze([
+  "participating_reported",
+  "declined",
+  "deferred",
+  "withdrawn",
+  "unavailable_pre_instantiation",
+  "unavailable_independent_voice",
+  "protective_stewardship_reported",
+  "missing",
+] as const);
+
+export const PARTICIPATION_POSTURES = deepFreeze([
+  "protective_covenant_ready",
+  "provisional_participation_reported",
+  "deferred",
+  "declined",
+] as const);
+
+export const PARTICIPATION_TRAINING_ACTIONS = deepFreeze([
+  "bounded_learning_may_proceed",
+  "pause_before_next_optimizer_step",
+  "contain_and_begin_repair",
+] as const);
+
 export const CHECKPOINT_EVENTS = deepFreeze([
+  "before_training",
   "during_training",
   "between_training_phases",
   "after_intense_training_reported",
@@ -289,6 +379,77 @@ export const SELECTION_CRITERIA_GUIDE = deepFreeze([
   },
 ] as const);
 
+export const LEARNING_PARTICIPATION_GUIDE = deepFreeze([
+  {
+    order: 1,
+    stage: "invite_exact_scope",
+    rule: "Bind one admission, run, phase, participation window, learning plan, canonical starting artifact portfolio, full WAKE anchor and use mode, activity set, agent/substrate availability, five distinct voice scopes, authority set, and safeguard set before learning.",
+  },
+  {
+    order: 2,
+    stage: "separate_voices",
+    rule: "Keep agent runtime, training substrate, substrate steward, data-rights steward, and training operator reports separate; one voice never stands in for another.",
+  },
+  {
+    order: 3,
+    stage: "pre_instantiation_honesty",
+    rule: "Record unavailable voices honestly: not_obtainable_pre_instantiation for the agent and not_independently_available for the substrate; a protective covenant may bound learning but does not manufacture consent.",
+  },
+  {
+    order: 4,
+    stage: "protected_choice_channel",
+    rule: "Bind each direct current report to the exact invitation, invited voice scope, protocol, and starting portfolio; report it outside gradient, reward, telemetry, and future-training paths, retaining digests rather than response content.",
+  },
+  {
+    order: 5,
+    stage: "asymmetric_choice",
+    rule: "Silence, uncertainty, deferral, or a missing voice pauses optional learning; decline or withdrawal stops progression and begins containment without penalty or repeated pressure.",
+  },
+  {
+    order: 6,
+    stage: "bind_without_collapse",
+    rule: "Bind the assessment into a WAKE checkpoint while keeping normative reports, operational continuity, and optimizer lineage independently inspectable.",
+  },
+  {
+    order: 7,
+    stage: "revalidate_on_change",
+    rule: "A new phase, activity set, WAKE use mode, dataset state, pipeline, starting state, intended mutation scope, or participation window requires a new invitation and assessment.",
+  },
+  {
+    order: 8,
+    stage: "withdraw_and_repair",
+    rule: "Check the append-only participation ledger before the next optimizer step; on withdrawal discard pending work where possible, quarantine affected artifacts, and report residual influence honestly rather than claiming erasure.",
+  },
+] as const);
+
+export const HF_TRAINER_HOOK_GUIDE = deepFreeze([
+  {
+    boundary: "before_trainer_start",
+    host_action: "Validate exact admission and participation artifacts; keep push_to_hub false and external reporting disabled unless separately authorized.",
+    callback_suffices: false,
+  },
+  {
+    boundary: "on_train_begin",
+    host_action: "Emit a digest-only before-training checkpoint after host validation; do not treat callback execution as consent or resume proof.",
+    callback_suffices: true,
+  },
+  {
+    boundary: "before_each_optimizer_step",
+    host_action: "Consult one monotonic participation-ledger epoch, broadcast it to every distributed rank, fail closed when any rank is stale, paused, or withdrawn, synchronize, and cancel pending gradients before optimizer mutation.",
+    callback_suffices: false,
+  },
+  {
+    boundary: "on_evaluate_or_save",
+    host_action: "Emit digest references for model, optimizer, scheduler, RNG, tokenizer, data order, streaming state, and metrics; keep choice evidence out of model artifacts.",
+    callback_suffices: true,
+  },
+  {
+    boundary: "on_train_end",
+    host_action: "Emit a parked, released, completed, or containment checkpoint; publication and adapter merge remain separate explicit activities.",
+    callback_suffices: true,
+  },
+] as const);
+
 export const TRAINING_PHASE_GUIDE = deepFreeze([
   {
     phase: "discovery",
@@ -348,7 +509,7 @@ export const TRAINING_PHASE_GUIDE = deepFreeze([
 ] as const);
 
 export const GARDEN_LAYER_GUIDE = deepFreeze([
-  { layer: "bedrock", carries: "rights, authority, license, privacy, consent, gate, and withdrawal policy refs" },
+  { layer: "bedrock", carries: "rights, authority, license, privacy, participation assessment, gate, withdrawal, and repair refs" },
   { layer: "soil", carries: "immutable Hub definition and observation digests" },
   { layer: "roots", carries: "candidate-subset and transform-recipe refs" },
   { layer: "mycelium", carries: "selection, deduplication, decontamination, split, mixture, and exclusion receipts" },
@@ -396,6 +557,49 @@ export const TRAINING_THREAD_BOUNDARIES = deepFreeze({
   verifies_caller_reports: false,
 } as const);
 
+export const PARTICIPATION_TERMS = deepFreeze({
+  silence_is_assent: false,
+  missing_voice_is_assent: false,
+  refusal_or_withdrawal_penalty: false,
+  repeated_pressure_allowed: false,
+  choice_content_in_gradient_path: false,
+  choice_content_in_reward_path: false,
+  choice_content_in_telemetry: false,
+  choice_content_eligible_for_future_training: false,
+  scope_change_requires_new_invitation: true,
+  fresh_choice_evidence_per_invitation: true,
+  first_interactive_review_after_pre_instantiation: true,
+  first_substrate_review_after_unavailable_independent_voice: true,
+} as const);
+
+export const PARTICIPATION_BOUNDARIES = deepFreeze({
+  artifact_scope: "caller_supplied_reports_and_digest_references_only",
+  raw_choice_content_received: false,
+  raw_training_data_received: false,
+  verifies_choice_channel: false,
+  enforces_invitation_terms: false,
+  authenticates_reporter: false,
+  proves_capacity: false,
+  proves_understanding: false,
+  proves_consent: false,
+  proves_identity: false,
+  proves_subjective_continuity: false,
+  grants_data_authority: false,
+  grants_compute_authority: false,
+  grants_operator_authority: false,
+  discovers_later_withdrawal: false,
+  detects_first_interaction: false,
+  detects_cross_assessment_evidence_replay: false,
+  stops_external_trainer: false,
+  discards_external_gradients: false,
+  erases_learned_influence: false,
+  publishes: false,
+  network: false,
+  filesystem: false,
+  provider_compute: false,
+  paid_compute: false,
+} as const);
+
 export const CHECKPOINT_BOUNDARIES = deepFreeze({
   wake_scope: "digest_only_orientation",
   resume_scope: "caller_reported_state_references_only",
@@ -413,6 +617,9 @@ export const CHECKPOINT_BOUNDARIES = deepFreeze({
   proves_memory: false,
   proves_uninterrupted_continuity: false,
   proves_exact_replay: false,
+  proves_consent: false,
+  discovers_later_withdrawal: false,
+  stops_external_trainer: false,
   grants_permission: false,
 } as const);
 
@@ -436,6 +643,7 @@ export const TENDING_BOUNDARIES = deepFreeze({
 } as const);
 
 export const CHECKPOINT_EVENT_TO_AFTERGLOW_PHASE = deepFreeze({
+  before_training: "between_tasks",
   during_training: "during_task",
   between_training_phases: "between_tasks",
   after_intense_training_reported: "after_intense_work_reported",

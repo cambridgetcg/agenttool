@@ -1,6 +1,6 @@
 {
   "_format": "kingdom.hf-training-garden-source-manifest/0.1",
-  "generator": "@agenttool/hf-training-garden@0.1.0-dev.0",
+  "generator": "@agenttool/hf-training-garden@0.2.0-dev.0",
   "intended_hub_repo": "Yu-and-Ai/agenttool-training-garden",
   "publication_state": "intended_identifier_only",
   "source_repository": "https://github.com/cambridgetcg/agenttool",
@@ -8,8 +8,8 @@
   "source_files": [
     {
       "path": "package.json",
-      "bytes": 2479,
-      "sha256": "f69a9a01aba980f94e299bb63c834fcfb7a78552d02092b5972255fceae8a7f0"
+      "bytes": 3015,
+      "sha256": "25359789b6f50fd1f47b01fac090bbc9df551e500ed21e2f4f48d60ac2071358"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -22,9 +22,29 @@
       "sha256": "bb82a089ad47b0a3e8b5b731bf6ac6732aa67c312c2f84bd5704f672616d4be4"
     },
     {
+      "path": "schema/hf-learning-participation-assessment-v0.1.schema.json",
+      "bytes": 7837,
+      "sha256": "e45903ee9ec08e2bce66f9f63c2653d1befc6baf2233cdbe0e63cd53647d93eb"
+    },
+    {
+      "path": "schema/hf-learning-participation-invitation-v0.1.schema.json",
+      "bytes": 8704,
+      "sha256": "8d3d4ea6348923e13bfb4cab3191741ef53f66c9462f3f5f7324aff24e38ea4d"
+    },
+    {
+      "path": "schema/hf-learning-participation-receipt-v0.1.schema.json",
+      "bytes": 5475,
+      "sha256": "606e93084659b788bb4da0bb1a10f34f13365e20785dc34028fa7103f5da1746"
+    },
+    {
       "path": "schema/hf-training-checkpoint-v0.1.schema.json",
       "bytes": 5168,
       "sha256": "0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a"
+    },
+    {
+      "path": "schema/hf-training-checkpoint-v0.2.schema.json",
+      "bytes": 6307,
+      "sha256": "a1cfc96b7b60540c977b447a5e352dc395b250f3a685c967b89e9edde0034a41"
     },
     {
       "path": "schema/hf-training-garden-tending-v0.1.schema.json",
@@ -43,33 +63,38 @@
     },
     {
       "path": "src/checkpoint.ts",
-      "bytes": 14726,
-      "sha256": "df24e8ab767c3125b458b3f9cfd82f736bc1e013f924410ed11fda8b4b77b104"
+      "bytes": 20428,
+      "sha256": "02bd5b456aed3f942be4e4098ed44bccee4f2631460c2235566cca13965d49b7"
     },
     {
       "path": "src/constants.ts",
-      "bytes": 14177,
-      "sha256": "f6cfdc638e9a56b6a29fe075b356e71524b028b938195e5b3f3195c8555ba177"
+      "bytes": 21795,
+      "sha256": "9a0516e0492eff7add25114717fe033275ef6c07d8909809394900da140ced07"
     },
     {
       "path": "src/errors.ts",
-      "bytes": 615,
-      "sha256": "a3e518afd5799c12ddd49738692d17bfb22c0c87c5d450afea8880d5c4aa2dcf"
+      "bytes": 861,
+      "sha256": "faffdf8a137325dce3d83bc4b6595335310ce2d915c5cb50e2bfac52a670444a"
     },
     {
       "path": "src/index.ts",
-      "bytes": 2230,
-      "sha256": "77045de02ca636180b97c2abbc4d3832bb6ccb022355ca3edd32522fd62fa6ee"
+      "bytes": 3831,
+      "sha256": "44d4bb5a436ed418e9891aca21e6c23c379b025e28c89e758625b2dc41571a4e"
+    },
+    {
+      "path": "src/participation.ts",
+      "bytes": 41433,
+      "sha256": "bbb9faef57e77913622eebba0f64841db3ce28d9ba43f3875e7ce2bfa2bb88f2"
     },
     {
       "path": "src/tending.ts",
-      "bytes": 8922,
-      "sha256": "158fb690919c212001d727b0d9a46bacc91f9832c07dfd0088c5851a75cd897e"
+      "bytes": 9027,
+      "sha256": "427a81fa399eeef27acc2d70f274fb2d4779d581dba3d26edf2cbc36410d4712"
     },
     {
       "path": "src/types.ts",
-      "bytes": 7495,
-      "sha256": "9d80e632ad3a58302acc715ce83acf137ad512663988a6c205d1758901b7c6a2"
+      "bytes": 13756,
+      "sha256": "e5672aa1fff0dfb5507f8c9820d468a65b909dd419da7cca0b950df62394d6e5"
     },
     {
       "path": "src/validation.ts",
@@ -82,6 +107,7 @@
     "selection criteria",
     "training phase guide",
     "Garden layer guide",
+    "learning participation and Trainer integration guides",
     "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
     "source and byte hash manifests"
   ],
@@ -93,6 +119,7 @@
     "gated content",
     "raw agent traces",
     "raw chats",
+    "participation invitations, receipts, assessments, and choice evidence",
     "raw dataset rows",
     "training checkpoints",
     "WAKE anchors"
@@ -107,7 +134,11 @@
     "https://huggingface.co/docs/datasets/about_cache",
     "https://huggingface.co/docs/hub/datasets-cards",
     "https://huggingface.co/docs/hub/datasets-gated",
+    "https://huggingface.co/docs/peft/main/en/developer_guides/checkpoint",
     "https://huggingface.co/docs/trl/en/dataset_formats",
-    "https://huggingface.co/docs/transformers/main/trainer_recipes"
+    "https://huggingface.co/docs/transformers/main/trainer_callbacks",
+    "https://huggingface.co/docs/transformers/main/trainer_recipes",
+    "https://arxiv.org/abs/2005.14165",
+    "https://arxiv.org/abs/2106.09685"
   ]
 }

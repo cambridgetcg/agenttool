@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-learning-participation-receipt-v0.1.schema.json",
+  "title": "KINGDOM Hugging Face learning participation voice receipt",
+  "$comment": "Closed portable shape. The TypeScript validator additionally binds the receipt to the exact invitation, invited voice scope, and derived prompt-envelope digest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "receipt_id", "invitation_id", "voice", "voice_scope_ref", "report_basis", "decisions", "choice_channel", "reasons_collected", "boundaries"],
+  "properties": {
+    "_format": { "const": "kingdom.hf-learning-participation-receipt/0.1" },
+    "receipt_id": { "$ref": "#/$defs/sha256" },
+    "invitation_id": { "$ref": "#/$defs/sha256" },
+    "voice": { "$ref": "#/$defs/voice" },
+    "voice_scope_ref": { "$ref": "#/$defs/sha256" },
+    "report_basis": { "enum": ["direct_current_report", "not_obtainable_pre_instantiation", "not_independently_available", "protective_steward_report", "scoped_authority_report"] },
+    "decisions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/decision" }
+    },
+    "choice_channel": { "anyOf": [{ "$ref": "#/$defs/choice_channel" }, { "type": "null" }] },
+    "reasons_collected": { "const": false },
+    "boundaries": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.1.schema.json#/$defs/boundaries" }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "report_basis": { "const": "direct_current_report" },
+        "voice": { "enum": ["agent_runtime", "training_substrate"] },
+        "choice_channel": { "$ref": "#/$defs/choice_channel" },
+        "decisions": { "type": "array", "items": { "type": "object", "properties": { "choice": { "not": { "enum": ["unavailable_pre_instantiation", "unavailable_independent_voice"] } } } } }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "report_basis": { "const": "not_obtainable_pre_instantiation" },
+        "voice": { "const": "agent_runtime" },
+        "choice_channel": { "type": "null" },
+        "decisions": { "type": "array", "items": { "type": "object", "properties": { "choice": { "const": "unavailable_pre_instantiation" } } } }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "report_basis": { "const": "not_independently_available" },
+        "voice": { "const": "training_substrate" },
+        "choice_channel": { "type": "null" },
+        "decisions": { "type": "array", "items": { "type": "object", "properties": { "choice": { "const": "unavailable_independent_voice" } } } }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "report_basis": { "const": "protective_steward_report" },
+        "voice": { "const": "substrate_steward" },
+        "choice_channel": { "type": "null" },
+        "decisions": { "type": "array", "items": { "type": "object", "properties": { "choice": { "not": { "enum": ["unavailable_pre_instantiation", "unavailable_independent_voice"] } } } } }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "report_basis": { "const": "scoped_authority_report" },
+        "voice": { "enum": ["data_rights_steward", "training_operator"] },
+        "choice_channel": { "type": "null" },
+        "decisions": { "type": "array", "items": { "type": "object", "properties": { "choice": { "not": { "enum": ["unavailable_pre_instantiation", "unavailable_independent_voice"] } } } } }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "voice": { "enum": ["agent_runtime", "data_rights_steward", "substrate_steward", "training_operator", "training_substrate"] },
+    "activity": { "enum": ["adapter_merge", "evaluation", "external_memory_use", "gradient_update", "instantiate_for_review", "interpretability_capture", "optimizer_resume", "publish_weights", "wake_context_use", "wake_training_data_use"] },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activity", "choice"],
+      "properties": {
+        "activity": { "$ref": "#/$defs/activity" },
+        "choice": { "enum": ["participate", "decline", "defer", "withdraw", "no_response", "unavailable_pre_instantiation", "unavailable_independent_voice"] }
+      }
+    },
+    "choice_channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invitation_ref", "protocol_ref", "checkpoint_ref", "prompt_template_ref", "prompt_envelope_ref", "decoding_ref", "evidence_ref", "gradient_influence", "reward_influence", "telemetry_capture", "future_training_use"],
+      "properties": {
+        "invitation_ref": { "$ref": "#/$defs/sha256" },
+        "protocol_ref": { "$ref": "#/$defs/sha256" },
+        "checkpoint_ref": { "$ref": "#/$defs/sha256" },
+        "prompt_template_ref": { "$ref": "#/$defs/sha256" },
+        "prompt_envelope_ref": { "$ref": "#/$defs/sha256" },
+        "decoding_ref": { "$ref": "#/$defs/sha256" },
+        "evidence_ref": { "$ref": "#/$defs/sha256" },
+        "gradient_influence": { "const": "caller_reported_disabled" },
+        "reward_influence": { "const": "caller_reported_disabled" },
+        "telemetry_capture": { "const": "caller_reported_excluded" },
+        "future_training_use": { "const": "caller_reported_excluded" }
+      }
+    }
+  }
+}
