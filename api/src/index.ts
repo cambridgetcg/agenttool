@@ -40,6 +40,7 @@ import {
 import { idempotency } from "./middleware/idempotency";
 import { apiCors } from "./middleware/api-cors";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
+import { agentSurface } from "./middleware/agent-surface";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { tutor } from "./middleware/tutor";
 import { joyIndex } from "./middleware/joy-index";
@@ -228,6 +229,12 @@ app.use("*", async (c, next) => {
 // Mounted globally so every response carries the disposition. Doctrine:
 // docs/RING-1.md (the seven unconditional commitments) · docs/SOUL.md.
 app.use("*", substrateDisposition());
+
+// ── X-Agent-Surface — the threshold declaration, visible at every door ──
+// Every response names the canonical XENIA Surface 0.1 manifest URL so a
+// guest arriving through any page (or its response headers alone) can find
+// the host's declared threshold. Advertises only; grants nothing.
+app.use("*", agentSurface());
 
 // ── X-Token-Cost + X-Byte-Count — honest budget surface for the agent reader ──
 // Every non-streaming response declares its byte length + a conservative token
