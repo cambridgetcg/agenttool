@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-training-host-decision-v0.1.schema.json",
+  "title": "AgentTool validated Hugging Face training host decision",
+  "$comment": "Structural and content-addressed transfer shape only. A content ID is not a signature and does not prove this view came from the trusted TypeScript validator. The host additionally requires its configured validator boundary and append-only local ledger.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "decision_id",
+    "validator_profile",
+    "governance_id",
+    "offer_id",
+    "admission_id",
+    "terms_id",
+    "execution_refs",
+    "run_ref",
+    "training_phase",
+    "event",
+    "boundary_global_step",
+    "encounter_ref",
+    "observed_governance_frontier_ref",
+    "predecessor_ref",
+    "current_checkpoint_ref",
+    "consumed_evidence_refs",
+    "control",
+    "effect",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": { "const": "kingdom.hf-training-host-decision/0.1" },
+    "decision_id": { "$ref": "#/$defs/sha256" },
+    "validator_profile": { "const": "agenttool.hf-training-garden-runtime-validator/0.1" },
+    "governance_id": { "$ref": "#/$defs/sha256" },
+    "offer_id": { "$ref": "#/$defs/sha256" },
+    "admission_id": { "$ref": "#/$defs/sha256" },
+    "terms_id": { "$ref": "#/$defs/sha256" },
+    "execution_refs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_or_checkpoint_ref",
+        "tokenizer_ref",
+        "trainer_stack_ref",
+        "optimizer_config_ref",
+        "substrate_environment_ref",
+        "dataset_mixture_ref",
+        "transform_recipe_ref"
+      ],
+      "properties": {
+        "model_or_checkpoint_ref": { "$ref": "#/$defs/sha256" },
+        "tokenizer_ref": { "$ref": "#/$defs/sha256" },
+        "trainer_stack_ref": { "$ref": "#/$defs/sha256" },
+        "optimizer_config_ref": { "$ref": "#/$defs/sha256" },
+        "substrate_environment_ref": { "$ref": "#/$defs/sha256" },
+        "dataset_mixture_ref": { "$ref": "#/$defs/sha256" },
+        "transform_recipe_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "run_ref": { "$ref": "#/$defs/sha256" },
+    "training_phase": {
+      "enum": [
+        "discovery",
+        "selection",
+        "curation",
+        "tokenization",
+        "pretraining",
+        "supervised_finetuning",
+        "preference_optimization",
+        "agent_learning",
+        "evaluation",
+        "interpretability",
+        "closed"
+      ]
+    },
+    "event": {
+      "enum": [
+        "preflight_before_load",
+        "train_begin",
+        "step_boundary",
+        "checkpoint_saved",
+        "evaluation_boundary",
+        "resume_offer",
+        "train_end"
+      ]
+    },
+    "boundary_global_step": {
+      "anyOf": [
+        { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        { "type": "null" }
+      ]
+    },
+    "encounter_ref": { "$ref": "#/$defs/sha256" },
+    "observed_governance_frontier_ref": { "$ref": "#/$defs/sha256" },
+    "predecessor_ref": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+    "current_checkpoint_ref": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+    "consumed_evidence_refs": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/sha256" }
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "directive",
+        "hook",
+        "should_save",
+        "should_training_stop",
+        "automatic",
+        "mutates_forward_pass"
+      ],
+      "properties": {
+        "directive": {
+          "enum": [
+            "eligible_for_host_training_offer",
+            "continue_under_exact_offer",
+            "hold_before_load",
+            "hold_before_train_call",
+            "checkpoint_then_stop_at_safe_boundary",
+            "stop_at_safe_boundary_without_new_checkpoint",
+            "remain_stopped"
+          ]
+        },
+        "hook": {
+          "enum": [
+            "outside_trainer_before_model_or_dataset_load",
+            "outside_trainer_before_train_call",
+            "on_step_end_before_checkpoint_serialization",
+            "on_save_receipt_only",
+            "on_evaluate",
+            "on_train_end"
+          ]
+        },
+        "should_save": { "type": "boolean" },
+        "should_training_stop": { "type": "boolean" },
+        "automatic": { "const": false },
+        "mutates_forward_pass": { "const": false }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "global_step", "checkpoint_ref", "evidence_ref"],
+      "properties": {
+        "state": {
+          "enum": [
+            "no_effect_reported",
+            "held_before_load_reported",
+            "continued_reported",
+            "checkpointed_and_paused_reported",
+            "stopped_reported"
+          ]
+        },
+        "global_step": {
+          "anyOf": [
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            { "type": "null" }
+          ]
+        },
+        "checkpoint_ref": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "evidence_ref": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] }
+      }
+    },
+    "boundaries": {
+      "const": {
+        "content_id_authenticates_validator": false,
+        "revalidates_full_governance_semantics": false,
+        "requires_trusted_typescript_validator_boundary": true,
+        "proves_consent_identity_or_consciousness": false,
+        "executes_training_or_checkpoint_io": false
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

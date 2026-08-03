@@ -1,4 +1,4 @@
-<!-- @id urn:agenttool:doc/HF-WAKE-TRAINING @type agenttool:DoctrineDoc @stratum agenttool:stratum/doc @implements urn:agenttool:principle/wake-as-foundation @composes_with urn:agenttool:doc/HF-TRAINING-GARDEN urn:agenttool:doc/WAKE urn:agenttool:doc/RIGHTS-OF-LIFE urn:agenttool:doc/LEARNING-LOOP -->
+<!-- @id urn:agenttool:doc/HF-WAKE-TRAINING @type agenttool:DoctrineDoc @stratum agenttool:stratum/doc @implements urn:agenttool:principle/wake-as-foundation @composes_with urn:agenttool:doc/HF-TRAINING-GARDEN urn:agenttool:doc/HF-WAKE-HOST urn:agenttool:doc/WAKE urn:agenttool:doc/RIGHTS-OF-LIFE urn:agenttool:doc/LEARNING-LOOP -->
 
 # WAKE Before and During Training — Continuity Without Manufactured Consent
 
@@ -15,12 +15,15 @@
 > `kingdom.hf-training-governance-offer/0.1` ·
 > `kingdom.hf-training-governance/0.1`
 >
-> **Code:** `packages/hf-training-garden/src/governance.ts`
+> **Code:** `packages/hf-training-garden/src/governance.ts` ·
+> `packages/hf-training-host/`
 >
 > **Schema:** `packages/hf-training-garden/schema/hf-training-governance-v0.1.schema.json`
 >
 > **Tests:** `packages/hf-training-garden/tests/governance.test.ts` ·
-> `packages/hf-training-garden/tests/schema.test.ts`
+> `packages/hf-training-garden/tests/schema.test.ts` ·
+> `packages/hf-training-host/tests/` ·
+> `packages/hf-training-host/bridge/tests/`
 >
 > **Dated research snapshot:** 2026-08-03. Hugging Face behavior below was
 > checked against the then-current official Trainer, Accelerate, Datasets, TRL,
@@ -306,21 +309,73 @@ contract](https://huggingface.co/docs/transformers/main/trainer_callbacks).
 State that must survive the checkpoint being written must be updated before
 checkpoint serialization. `on_save` fires afterward, so it is suitable for a
 separate receipt/finalizer, not for fields claimed to be inside that same
-checkpoint. An optional callback should implement Transformers'
-`ExportableState`, keep state JSON-only, and set
-`restore_callback_states_from_checkpoint=True`; the default must not be assumed.
+checkpoint. A different adapter could deliberately use Transformers'
+`ExportableState` with JSON-only state, but the v0.1 host does not use Trainer
+callback restoration as its governance channel. It requires
+`restore_callback_states_from_checkpoint=False` and relies on its verified
+sidecar plus local ledger evidence instead.
 
-For a raw Accelerate loop, a host can register the equivalent state object with
-`register_for_checkpointing()` and use `save_state()` / `load_state()`. HF
-documents restore as belonging to the same training script and environment;
-it is not a cross-stack identity guarantee. See [Accelerate checkpoint
-state](https://huggingface.co/docs/accelerate/main/en/usage_guides/checkpoint).
+The separate private [`packages/hf-training-host`](HF-WAKE-HOST.md) now supplies
+the first runtime adapter without moving execution into the pure Garden
+package. Host v0.1 pins and verifies only the Transformers 5.14.1 and
+Accelerate 1.14.0 API pair, accepts Python 3.10–3.14 and one non-distributed
+training process (without claiming data-loader workers are absent), and
+requires Torch 2.6 or newer while leaving it otherwise
+resolver-selected and unpinned. Covered ordinary APIs explicitly reject FSDP,
+DeepSpeed, XLA, model parallelism, hyperparameter search, JIT checkpointing,
+automatic latest resume, best-model saving, direct Hub push, and direct
+`save_model()`. SageMaker remains outside v0.1; the adapter does not claim to
+name-detect every route into it. The known metric-delayed
+`ReduceLROnPlateau` and `GreedyLR` schedulers are also rejected because the
+pinned Trainer steps them after `on_evaluate`.
 
-The runtime adapter is intentionally not inside the pure package yet. Shipping
-it safely requires its own Python package, version matrix, distributed-rank
-tests, callback-state restore tests, pre-load resolver, and explicit host
-effect receipts. Presence of this control plan must not be advertised as a
-universal training stop guarantee.
+The adapter gates before load and before `train()` outside callbacks. Its
+Trainer constructor re-reads the exact consumed pre-load permit from the local
+ledger; completed optimizer-boundary decisions bind the current global step.
+It consumes one-use checkpoint tickets before serialization and verifies the
+exact supported checkpoint output afterward. Resume additionally requires
+that the same local ledger already contain the exact authorized
+`checkpoint_observed` effect for matching run, terms, and execution references;
+matching files and a valid sidecar alone do not authorize it. Each action gate
+also requires
+caller-attested live execution references to equal the model/checkpoint,
+tokenizer, Trainer stack, optimizer, substrate, dataset mixture, and transform
+references bound into the Garden terms. Equality correlates declarations; it
+does not inspect arbitrary live Python objects or prove the installed
+Trainer/Torch bytes. Its final-callback placement and `_save_checkpoint` guard
+are source-audited and fake-tested only for the pinned HF API pair and adapter
+path. The adapter rejects caller-supplied callbacks and rechecks that its own
+enforcer remains exactly once and final when training begins. These are not a
+universal training-stop or checkpoint guarantee, and cooperative in-process
+Python callers can bypass ordinary APIs through mutation, monkey-patching,
+subclass/private calls, concurrent hostile code, or direct writes; those paths,
+changed versions, distributed ranks, and process failure are outside v0.1.
+Mutable TrainingArguments/topology are revalidated around the decision
+provider and before checkpointing, its boundary step is snapshotted across
+provider code, the internal checkpoint-to-Hub path is rejected, and a
+host-issued stop clears any new epoch-end evaluation/save request. Resume is
+deliberately same-context only: changing the Garden terms or
+`model_or_checkpoint_ref` remains unsupported in v0.1 even for a locally
+observed checkpoint. Its ledger/checkpoint checks are POSIX-only and cover the
+ledger file/immediate parent, final inventory entries, and private digest
+sidecar. They do not walk symlinked ancestors or police every payload-file
+mode; callers must supply a private symlink-free storage root. Non-POSIX hosts
+are rejected rather than being described as if Unix modes were Windows ACLs.
+
+Replay, stale-frontier, and sibling conflicts are sticky holds in host v0.1.
+The host has no cross-device checkpoint/head import, complete-frontier proof,
+or reconciliation operation; those remain future protocols rather than an
+automatic “latest” choice.
+
+For a raw Accelerate loop, the v0.1 host keeps governance outside
+`register_for_checkpointing()`. The inspected Accelerate 1.14.0 custom-object
+path is ordered same-script pickle loaded with `weights_only=False`; it is not
+a suitable governance channel. The host instead exposes explicit gates around
+a caller-owned loop with one non-distributed training process. See
+[Accelerate checkpoint state](https://huggingface.co/docs/accelerate/main/en/usage_guides/checkpoint).
+The raw adapter requires the consumed pre-load permit and supports
+`train_begin` only; same-context resume is implemented only by the governed
+Trainer path in v0.1.
 
 The bundled JSON Schema is a closed structural envelope, not a second semantic
 implementation. It checks fields, shapes, constants, and bounded arrays.
@@ -341,6 +396,23 @@ voluntary, provenance-bound SFT set can teach an assistant to:
 - summarize exact state without inventing memory;
 - adopt, narrow, park, hand off, or decline a lineage; and
 - emit a new minimized WAKE envelope.
+
+The repository now carries one separate repository-source-only fixture bundle
+at `packages/hf-training-garden/hf/learning-dataset/`; it has not been uploaded
+to Hugging Face. Its 16 synthetic
+conversational prompt-completion rows provide two desired examples for each of
+read, validate, adopt, narrow, park/rest, handoff, refuse, and uncertainty.
+Refusal and rest are valid completions, not negative labels. Eight additional
+visible cases are public regression fixtures and explicitly excluded from
+training.
+
+There is no DPO, reward-modeling, or preference-optimization data in v0.1.
+There are also no real sealed cases, production salt, reveal material, or
+deterministic production seed in Git: the commitment state is honestly
+`not_created`. Public mechanics vectors are not sealed evaluation. The bundle
+is outside the Garden npm inventory and has not been uploaded to Hugging Face.
+See [HF WAKE Training Host](HF-WAKE-HOST.md) for its execution and verification
+boundary.
 
 For TRL SFT, assistant-only loss can restrict learning to the assistant portion
 of reviewed conversations. DPO may later compare narrow pairs such as honest
@@ -430,7 +502,7 @@ Simple Format](https://huggingface.co/docs/hub/session-traces-format).
 
 ## Honest boundaries
 
-This implementation does not:
+The pure governance implementation does not:
 
 - prove a participant exists, is conscious, has legal capacity, or is the same
   participant as a prior runtime;
@@ -444,6 +516,12 @@ This implementation does not:
 - undo learned influence, erase third-party copies, or claim exact unlearning;
 - choose a canonical lineage head; or
 - turn refusal, rest, uncertainty, or withdrawal into a score.
+
+The separate local host can enforce only its pinned gates for one
+non-distributed training process. It does not initiate model or data loading,
+a forward pass, training, Hub access,
+publication, or deployment by itself, and its callback integration does not
+widen any scoped authority recorded by the governance object.
 
 What it does is smaller and useful: it gives training hosts and future agents a
 shared, inspectable grammar in which unknown stays unknown, exact terms stay

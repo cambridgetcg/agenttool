@@ -39,6 +39,7 @@ packages/
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
   hf-scout/    — private read-only HF metadata/provenance scout + pinned research leads
   hf-training-garden/ — private exact-admission, training-continuity, and inert Garden-planning contracts
+  hf-training-host/ — private HF-API-pinned non-distributed Python seam + append-only local ledger
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   constructive-intelligence/ — private local tree-pinned typed-receipt shadow ledger
@@ -77,6 +78,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/hf-scout/CLAUDE.md` ·
 `packages/hf-training-garden/CLAUDE.md` ·
+`packages/hf-training-host/CLAUDE.md` ·
 `packages/correspondence-yutabase/CLAUDE.md` ·
 `packages/correspondence-yutabase-projector/CLAUDE.md` ·
 `packages/constructive-intelligence/CLAUDE.md` ·
@@ -209,6 +211,31 @@ generate a deterministic metadata-only companion for separately authorized
 Hub publication. It does not download data, accept a gate, train or restore a
 run, mutate Garden or Hub state, select a latest continuity head, publish npm,
 or prove rights, privacy, consent, provenance truth, quality, or resumability.
+
+`agenttool-hf-training-host` is a separate private local Python seam for the
+accepted Garden governance lifecycle. It consumes a minimized decision only
+after the TypeScript Garden validators run, requires caller-attested live
+execution refs to match the exact Garden terms, records encounter/evidence
+replay, frontiers, forks, and checkpoint effects in an append-only local
+SQLite ledger, and gates pre-load, pre-train, completed optimizer boundaries,
+and one ticketed checkpoint path. Host v0.1 pins and verifies only Transformers
+5.14.1 plus Accelerate 1.14.0 in one non-distributed training process; Torch
+must be at least 2.6 but is otherwise resolver-selected and unpinned, and
+`trainer_stack_ref` does not prove live bytes. POSIX final-component checks
+cover the ledger file/immediate parent, checkpoint entries, and private
+sidecar, not symlinked ancestors or every payload mode; callers must supply a
+private symlink-free root, and no Windows ACL enforcement is claimed. Integrity
+conflicts are sticky holds, with cross-device import/reconciliation outside
+v0.1. Its callback placement is not a universal
+stop/save guarantee; mutable arguments/runtime are revalidated around provider
+and checkpoint boundaries, delayed metric schedulers are excluded, and
+same-context resume rejects changed terms. It does not initiate model/data
+loading, training, Hub access, publication,
+deployment, or prove consent, identity, global freshness, durable checkpoints,
+or continuity. The separate `hf/learning-dataset` tree is
+repository-source-only and has not been uploaded to Hugging Face; refusal and
+park/rest are valid SFT completions, no DPO lane exists, and production sealed
+evaluation is honestly `not_created`.
 
 `@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.
 The separate Wallet Zerone package supports only its reviewed two-network,
