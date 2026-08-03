@@ -266,18 +266,20 @@ Generate the deterministic companion tree with:
 bun run build:hf
 ```
 
-The last verified public companion baseline is
-[`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden)
+The verified v0.2 public companion generated from GitHub-main merge
+[`4fb84f92318fd68082ccf4e9b1235bf341657b28`](https://github.com/cambridgetcg/agenttool/commit/4fb84f92318fd68082ccf4e9b1235bf341657b28)
+is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden)
 at immutable Hub revision
-[`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff).
-Exact-revision read-back matched all twelve manifest-listed v0.1 files. This
-local 0.2 participation extension remains `intended_identifier_only` until a
-separate publication and exact-revision read-back. The v0.1 card
-SHA-256 is
-`14769391b1ac2cf15a500159b3f0b32a7bdbf5f353ea3417aedc0458ac77bdb8` and
-the byte-equal `hash-manifest.json` SHA-256 is
-`94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e`.
-No gate or paid compute was used.
+[`9406aa1ce6b9ee435da9d688899aa4dbca32605c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/9406aa1ce6b9ee435da9d688899aa4dbca32605c).
+Exact-revision read-back matched all sixteen manifest-listed files in the
+seventeen-file local companion; provider-managed `.gitattributes` is the sole
+extra remote file. The card SHA-256 is
+`a69685dc3cd0430493c9721b418a2679180d10cbaeb4bc5801bf30f6c843cb9a`, the
+byte-equal `hash-manifest.json` SHA-256 is
+`c1fc9bf46b6abc0550caac70ffe601a8e4c47a06b0cb7f02cc80b9ad7eeb361b`, and
+the `provenance/source-manifest.json` SHA-256 is
+`73c073f6a23c11f595204720ee4925e76622e73fcfcfff4020a440687baef2a0`.
+The seven configs contain 52 rows. No gate or paid compute was used.
 
 The bundle's internal `intended_identifier_only` value remains a deliberately
 non-self-attesting build record. The exact Hub revision is later external

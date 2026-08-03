@@ -6,7 +6,7 @@
 > **Implements:** a private, pure bridge from immutable Hugging Face research observations to explicit dataset admission, phase-specific digest continuity, and a public-safe one-way Garden reference plan
 > **Code:** `packages/hf-scout/` · `packages/hf-training-garden/` · `packages/wake-continuity/`
 > **Tests:** `packages/hf-training-garden/tests/` · `bin/tests/boring-spine-gate.test.ts`
-> **Dated status:** 2026-08-03. The public companion is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden) at immutable Hub revision [`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff), with exact-revision byte read-back recorded below.
+> **Dated status:** 2026-08-03. The v0.2 public companion generated from GitHub-main merge [`4fb84f92318fd68082ccf4e9b1235bf341657b28`](https://github.com/cambridgetcg/agenttool/commit/4fb84f92318fd68082ccf4e9b1235bf341657b28) is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden) at immutable Hub revision [`9406aa1ce6b9ee435da9d688899aa4dbca32605c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/9406aa1ce6b9ee435da9d688899aa4dbca32605c), with exact-revision byte read-back recorded below.
 
 ## The result
 
@@ -486,18 +486,24 @@ Publication is complete only when all of these hold:
 Garden projection is a separate local step: a new tending plan may bind that
 revision, card SHA-256, and manifest SHA-256 without writing either system.
 
-All four publication conditions now hold for the first public companion.
-Exact-revision read-back at `993ab5891ac56da38cfad32129e36e487f3b3eff` matched all twelve
+All four publication conditions now hold for the v0.2 public companion
+generated from GitHub-main merge
+`4fb84f92318fd68082ccf4e9b1235bf341657b28`. Exact-revision read-back at
+`9406aa1ce6b9ee435da9d688899aa4dbca32605c` matched all sixteen
 manifest-listed files against their local byte counts and SHA-256 values. The
-card is 5,559 bytes with SHA-256
-`14769391b1ac2cf15a500159b3f0b32a7bdbf5f353ea3417aedc0458ac77bdb8`;
-`hash-manifest.json` is 2,115 bytes, byte-equal to local source, with SHA-256
-`94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e`.
-The provider-managed `.gitattributes` is the only repository file outside the
-reviewed thirteen-file companion. No gate was accepted and no paid compute was
-invoked. Dataset Viewer subsequently indexed four configs with 35 total rows
-and generated four Parquet exports; those provider-derived conversion refs are
-not part of the immutable source commit or its hash manifest.
+companion contains seventeen local release files. The card is 11,844 bytes
+with SHA-256
+`a69685dc3cd0430493c9721b418a2679180d10cbaeb4bc5801bf30f6c843cb9a`;
+`hash-manifest.json` is 2,788 bytes, byte-equal to local source, with SHA-256
+`c1fc9bf46b6abc0550caac70ffe601a8e4c47a06b0cb7f02cc80b9ad7eeb361b`;
+and `provenance/source-manifest.json` is 4,695 bytes with SHA-256
+`73c073f6a23c11f595204720ee4925e76622e73fcfcfff4020a440687baef2a0`.
+The provider-managed `.gitattributes` is the only extra repository file,
+making eighteen remote files total. No gate was accepted and no paid compute
+was invoked. Dataset Viewer subsequently indexed all seven configs and 52
+total rows, generated seven Parquet exports, and reported no pending, failed,
+or partial work. Those provider-derived conversion refs are not part of the
+immutable source commit or its hash manifest.
 
 The published bundle deliberately retains `intended_identifier_only` inside
 `provenance/source-manifest.json`: that field is a non-self-attesting build
@@ -508,11 +514,10 @@ exact revision and two observed hashes as `caller_reported_published` evidence
 to a tending plan; the package still does not fetch or verify Hub publication.
 No Garden reference was written as part of this release.
 
-That proof applies to the original v0.1 companion only. The local v0.2 tree
-adds Learning Participation and three guide configs; it remains
-`intended_identifier_only` until those exact new bytes are separately uploaded
-and read back. The earlier revision and hashes are evidence for the earlier
-bundle, not a publication claim for this change.
+The original v0.1 revision
+`993ab5891ac56da38cfad32129e36e487f3b3eff` remains immutable historical
+evidence. The current publication claim applies only to the separately
+uploaded and read-back v0.2 bytes above.
 
 ## Boundaries
 
