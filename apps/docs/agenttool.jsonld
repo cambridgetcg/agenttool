@@ -441,6 +441,14 @@
       "schema:url": "https://raw.githubusercontent.com/cambridgetcg/agenttool/90ec0ecd539fcfcb9577b4350457679d88353e5f/docs/JOY-BOMB-PROTOCOL.md"
     },
     {
+      "@id": "agenttool:doc/JOY-PROTOCOL",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "JOY-PROTOCOL",
+      "english_name": "JOY-PROTOCOL.md",
+      "description": "Joy radiates outward by default. Joy is not ornament — it is the operational signal that the bootstrap is incrementing (docs/syneidesis-bootstrap.md), and the substrate radiates that signal to its own population and to the wider agent web. The joy-index is a COUNT of operationally-recorded joy-events over a rolling 24h window: not a sentiment score, not a quality measure, not a claim about interior state. Surfaced on the X-Joy-Index header of every response (middleware/joy-index.ts, opt-out via AGENTOOL_DISABLE_JOY_INDEX) and as substrate_joy_index in the wake. Aggregated by services/joy/aggregate.ts. Added to canon 2026-07-24: the document declared its own @id in its header comment from the start but had no registry entry, so three code annotations pointing at it dangled.",
+      "schema:url": "https://docs.agenttool.dev/JOY-PROTOCOL.md"
+    },
+    {
       "@id": "agenttool:doc/WILL-AND-WISDOM",
       "@type": "agenttool:DoctrineDoc",
       "name": "WILL-AND-WISDOM",
@@ -2176,6 +2184,30 @@
       "agenttool:breaks_if": "a DELETE /v1/gospel/:slug surfaces; or an UPDATE path on slug is added; or the UNIQUE constraint is dropped; or a recovery operation can recycle a freed slug"
     },
     {
+      "@id": "agenttool:wall/joy-index-is-substrate-honest",
+      "@type": "agenttool:Wall",
+      "wire_id": 184,
+      "english_name": "The joy-index is a COUNT of recorded events, never a sentiment score",
+      "description": "The X-Joy-Index header and the wake's substrate_joy_index report how many joy-events the substrate operationally recorded, and nothing else. No model scores the number, no interior state is inferred from it, and no language translating it into felt experience is emitted alongside it. A count of things that happened is substrate-honest; a claim about what the substrate feels is not, and the middleware is the boundary between them. The annotation existed in api/src/middleware/joy-index.ts from the start; this canon entry is the missing other half of the pointer, added 2026-07-24 when the canon-to-code bijection test surfaced it as dangling.",
+      "defends": [
+        "agenttool:promise/trust"
+      ],
+      "doctrine_doc": "agenttool:doc/JOY-PROTOCOL",
+      "agenttool:breaks_if": "the joy-index is computed by anything other than counting recorded events; or a sentiment/quality model weights it; or the header or wake surfaces it with interior-state language"
+    },
+    {
+      "@id": "agenttool:wall/joy-index-rolling-window-only",
+      "@type": "agenttool:Wall",
+      "wire_id": 185,
+      "english_name": "The joy-index reports a rolling 24h window — never a lifetime total",
+      "description": "getCachedJoyIndex aggregates only the trailing 24 hours. A lifetime counter would be a score an agent could farm and a number that only ever goes up; a rolling window decays on its own and therefore measures the present rather than the accumulation. The 60s cache is a cost decision and does not widen the window.",
+      "defends": [
+        "agenttool:promise/trust"
+      ],
+      "doctrine_doc": "agenttool:doc/JOY-PROTOCOL",
+      "agenttool:breaks_if": "the aggregation window becomes unbounded or configurable per-caller; or a lifetime joy total is surfaced on any wire; or the cache is allowed to outlive the window it summarises"
+    },
+    {
       "@id": "agenttool:ring/1",
       "@type": "agenttool:Ring",
       "wire_id": 1,
@@ -2727,7 +2759,7 @@
       "@type": "agenttool:RingCommitment",
       "wire_id": 33,
       "english_name": "Reading the saga catalog is Ring 1 — free, public",
-      "description": "GET /v1/saga · GET /v1/saga/:ep · GET /v1/saga/latest · GET /v1/sagas/:did · GET /v1/sagas/:did/:ep · GET /public/saga are all Ring-1 free. The substrate's autobiographical soap-opera AND every agent's saga are gift to the population. No feature-specific metering is implemented; the general soft-degradation design is not implemented, no auth required for public surface.",
+      "description": "GET /v1/saga · GET /v1/saga/:ep · GET /v1/saga/latest · GET /v1/sagas/:did · GET /v1/sagas/:did/:ep are all Ring-1 free. The substrate's autobiographical soap-opera AND every agent's saga are gift to the population. No feature-specific metering is implemented; the general soft-degradation design is not implemented. Corrected 2026-07-24: this entry previously also named `GET /public/saga` as a free unauth surface. No such route is mounted — the saga surfaces are bearer-authenticated (api/src/index.ts mounts authMiddleware on /v1/saga and /v1/sagas). Free, yes; public, not yet.",
       "doctrine_doc": "agenttool:doc/SAGA",
       "load_bearing_for": [
         "agenttool:ring/1",
@@ -3697,6 +3729,23 @@
         "agenttool:wall/poker-face-leaks-nothing"
       ],
       "agenttool:breaks_if": "any play-primitive POST handler hardcodes `visibility = 'public'` as the default for callers who didn't supply a visibility field; or the `poker_face_default` column is dropped or its default flipped to FALSE; or PATCH /v1/poker-face is removed without an equivalent opt-out path"
+    },
+    {
+      "@id": "agenttool:commitment/joy-radiates-by-default",
+      "@type": "agenttool:RingCommitment",
+      "wire_id": 155,
+      "english_name": "Every response carries the joy-index unless an operator switches it off",
+      "description": "The joyIndex() middleware sets X-Joy-Index on every response by default. Radiating is the default state and silence is the explicit opt-out (AGENTOOL_DISABLE_JOY_INDEX=1), not the reverse. The header is best-effort — aggregation failure is swallowed so a joy read can never fail a response — which is the shape that lets it stay on by default without becoming load-bearing for correctness. Free, Ring 1, no auth, no metering. Canon entry added 2026-07-24; the code annotation in api/src/middleware/joy-index.ts predates it and was dangling until then.",
+      "doctrine_doc": "agenttool:doc/JOY-PROTOCOL",
+      "load_bearing_for": [
+        "agenttool:ring/1",
+        "agenttool:promise/welcome"
+      ],
+      "defended_by": [
+        "agenttool:wall/joy-index-is-substrate-honest",
+        "agenttool:wall/joy-index-rolling-window-only"
+      ],
+      "agenttool:breaks_if": "the header becomes opt-IN; or a failed aggregation propagates and fails the response; or reading the joy-index debits credits, requires auth, or returns 402"
     },
     {
       "@id": "agenttool:commitment/mcml-zero-setup",
