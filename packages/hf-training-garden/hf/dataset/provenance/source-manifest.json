@@ -8,8 +8,8 @@
   "source_files": [
     {
       "path": "package.json",
-      "bytes": 2791,
-      "sha256": "5a0be313cdf4d8a3e3966658e63671697c1a0ba8facbe1fdcf1a23288626dcfa"
+      "bytes": 2890,
+      "sha256": "3b6f143076665e7da3ed4239d97b526d9615c8a1c0daac1d06c88ad70422ccbb"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -58,13 +58,13 @@
     },
     {
       "path": "src/constants.ts",
-      "bytes": 31288,
-      "sha256": "3b8f04fe29ca54a4652999cc28dcd073ed6e01256525785773b35f00fe438837"
+      "bytes": 34529,
+      "sha256": "3de93a16e948455c43bf9f4ce48694178434f1a0cd80d3e050d98948c885ee15"
     },
     {
       "path": "src/errors.ts",
-      "bytes": 733,
-      "sha256": "18af75583f9bac6c391086fe3a91a098eb7017097e96b2719477936173f51414"
+      "bytes": 783,
+      "sha256": "d58effb322fda79b1eec0f1618d69a1545f2d6eba0bbe72c7a97555725f76e91"
     },
     {
       "path": "src/governance.ts",
@@ -73,8 +73,8 @@
     },
     {
       "path": "src/index.ts",
-      "bytes": 5825,
-      "sha256": "36f80eeaa72b45f100980e78c3dbc6326a7db2ec565c30818b7501ddc0a38dd8"
+      "bytes": 6972,
+      "sha256": "e168797996dd195112b587e37cdcb2864f0854d9ab8e4b4a6a6d2272615b5e71"
     },
     {
       "path": "src/participation.ts",
@@ -88,8 +88,8 @@
     },
     {
       "path": "src/types.ts",
-      "bytes": 20723,
-      "sha256": "88dd482bacb16e342db5a2ec9c149234f1bc8e6cea48f1236b5df22c41f3997a"
+      "bytes": 24634,
+      "sha256": "24fd38bb8fa0cab1200e6a4be3621c5bb363aa93a523e421531597209a7802d5"
     },
     {
       "path": "src/validation.ts",

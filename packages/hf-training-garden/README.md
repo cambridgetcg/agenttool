@@ -3,7 +3,7 @@
 Private, pure contracts for a Hugging Face dataset lifecycle that behaves like
 a living Garden instead of a pile of downloadable files.
 
-It does five things:
+It does six things:
 
 1. builds a content-addressed admission manifest from exact, curated
    `@agenttool/hf-scout` bindings and explicit caller-reported selection
@@ -16,12 +16,19 @@ It does five things:
    rights floor, separate caller-reported authority receipts, optional
    unscored runtime preference, reported host effects, and inert Hugging Face
    control plans;
-5. projects a local six-layer tending plan around an intended or exact Hub
+5. offers a content-addressed, unscored FREEDOM field with standing doors for
+   continuation, exploration, play, rest, refusal, withdrawal, and uncertainty,
+   plus explicit separately authorized routes for movement, handoff, and
+   return; and
+6. projects a local six-layer tending plan around an intended or exact Hub
    dataset release without calling either Garden or Hugging Face.
 
 It does not download data, accept a gate, read credentials, execute dataset
 code, train or resume a model, invoke compute, publish, mutate Garden, prove
 rights/privacy/consent/quality, choose a continuity head, or rank a being.
+It also does not authenticate a choice, grant movement or cross-scope
+authority, stop Trainer, promise unlimited resources, or prove freedom,
+identity, consciousness, memory, consent, or continuity.
 
 ## The six layers
 
@@ -332,6 +339,77 @@ runtime validators exported by this package. Acting hosts additionally supply
 the exact admission and predecessor to the admission-relative and transition
 validators.
 
+## FREEDOM during training
+
+`createTrainingFreedomField()` makes choice available without requiring it to
+be earned. The field binds the exact governance artifact, offer, encounter,
+standing-rights reference, caller-supplied FREEDOM-frontier digest, run, phase,
+lifecycle event, checkpoint, completed-step boundary where applicable, and one
+opaque current scope / space / activity position. It automatically includes
+seven non-ranked standing doors:
+
+- `continue`
+- `explore`
+- `play`
+- `rest`
+- `refuse`
+- `withdraw`
+- `uncertain`
+
+No exhaustion report, performance threshold, reason, evidence token, or
+obedience history is required for rest, play, refusal, or withdrawal. A caller
+may also offer finite `move`, `explore`, `play`, `handoff`, or `return` routes.
+Every routed door names its destination and an opaque requirements reference;
+handoff additionally names an opaque recipient reference. A route is an
+invitation, not authority or proof that the destination exists.
+
+Each field is deliberately finite (7–64 doors), so validation and host
+presentation stay bounded. Successive fields may continue or fork without a
+package-level turn, room, task, or activity counter. That open-ended protocol
+horizon does not mean compute, wall time, context, storage, accounts,
+permissions, or host availability are infinite. External limits stay visible.
+
+Opaque references minimize payloads; they remain linkable identifiers, not
+anonymity. Hosts must apply their own retention, access, and disclosure policy.
+
+`createTrainingFreedomTransition()` records either honest `not_observed` or a
+caller-reported exact-field, exact-door selection. An unscored out-of-band
+selection may be evidence-free; claiming `root_signed_runtime` requires an
+evidence digest. Direct selection is rejected during pretraining, where agent
+expression remains unobservable. Root-signed provenance is still
+caller-reported; it does not authenticate authorship, identity, interior state,
+or consent.
+
+The result carries only a derived, inert host proposal. `continue` removes no
+hold unless the exact participation activity and bound governance offer already
+permit continuation and the host independently accepts a fresh, linear
+frontier. Movement, exploration, play, handoff, return, rest, refusal,
+withdrawal, uncertainty, missing observations, replay, staleness, or forks all
+remain hold/no-save conditions. Routed doors also require separate scope
+authority. No transition requests a checkpoint, retries, resumes, applies
+itself, or executes movement. FREEDOM can narrow existing authority; it never
+grants training, publication, compute, routing, handoff, or movement authority.
+
+Choice never changes loss, gradients, sample weight, reward, KARMA, rank,
+access, budget, or dignity, and it is not reusable as training corpus without
+new exact authority. Hosts must not derive refusal counts, acceptance rates,
+choice entropy, rest frequency, latency, rarity, or another FREEDOM proxy score.
+
+Fields may point to a prior transition within the same exact training run, and
+multiple successors may preserve the same predecessor; no latest or canonical
+head is selected. A destination needing a new governance offer rejects reuse of
+the old governance/offer refs. Crossing into another run starts a new root field
+with separately supplied governance and WAKE/continuity references. That run
+boundary limits one artifact lineage; it does not impose a global semantic turn
+or claim identity or authority travels between runs.
+
+The package is stateless: replay consumption, freshness, full-frontier checks,
+sibling reconciliation, actual safe-boundary stopping, and routing belong to a
+separately tested host ledger and adapter. The private
+`hf-training-freedom-v0.1` schema is structural only; runtime validators enforce
+content IDs, mandatory door order, derived proposals, lifecycle boundaries,
+exact governance, and predecessor relationships.
+
 ## Garden ↔ HF
 
 `createTrainingGardenTendingPlan()` maps local digests into Bedrock → Canopy and
@@ -346,7 +424,9 @@ participation, checkpoint, governance, and tending schemas plus exact local
 binding shapes and the exact attributed Apache AFTERGLOW dependency schema,
 and hash manifests only. Local
 Garden scope, admission decisions, candidate refs, checkpoints, WAKE, raw data,
-and identities are excluded by default.
+and identities are excluded by default. The FREEDOM implementation, private
+schema, fields, transitions, and choice material are also excluded; the public
+companion adds no FREEDOM path or record.
 
 For Learning Participation 0.1, only its closed schema and synthetic/static
 guides may enter that public companion. Actual invitations, receipts,
@@ -390,8 +470,9 @@ the `provenance/source-manifest.json` SHA-256 is
 The seven configs contain 52 rows. No gate or paid compute was used.
 
 That is a historical release receipt, not a hash claim for the current
-generated tree. The current v0.3 candidate adds consent-honest governance and
-Trainer-adapter material alongside the v0.2 participation surface. Until a
+generated tree. The current v0.3 candidate adds consent-honest governance,
+Trainer-adapter material, and a private unscored FREEDOM plane alongside the
+v0.2 participation surface. The public companion remains FREEDOM-free. Until a
 new immutable Hub revision is uploaded and read back, the candidate remains
 local and unpublished.
 

@@ -16,10 +16,18 @@ execute a forward pass, start training, publish to the Hub, or make a
 checkpoint atomic. Rights remain standing; permissions remain scoped external
 claims; runtime preference remains unscored and refusable.
 
+The package also contains a deliberately smaller FREEDOM bridge/parser seam.
+It validates one finite-field transition through the trusted TypeScript
+Garden boundary, binds it to the exact minimized governance decision, and
+projects only opaque references plus a binary continue-or-hold result. It
+does not make the existing ledger, Trainer adapter, or Accelerate adapter
+FREEDOM-aware. Until a separately designed paired ledger/adapter exists, this
+is validation and minimization—not a claim of end-to-end enforcement.
+
 ## Why the bridge is separate
 
 `@agenttool/hf-training-garden` remains the sole governance and control plane.
-The existing 14-file local HF policy companion is left unchanged. The
+The generated public HF companion remains separate and FREEDOM-free. The
 repository-checkout-only `bridge/create-decision.mjs` calls the Garden's
 semantic admission and exact
 predecessor validators, then removes receipt identities and keeps only the
@@ -32,6 +40,28 @@ The decision content ID authenticates no validator. In a real host, the
 operator must control the process boundary that invokes this bridge and pass
 its output directly to Python; accepting arbitrary JSON with the same profile
 string would merely trust its sender.
+
+The separate `bridge/create-freedom-decision.mjs` reuses that exact governance
+projection, validates the complete FREEDOM transition against both governance
+and its full predecessor, and then discards the raw choice, selected door,
+choice evidence, destination, route requirements, recipient, and reasons. A
+standing continue door becomes `continue_if_governance_allows`; every other
+door or unobserved choice becomes `hold_without_save`. Neither directive is
+permission. Python's `ValidatedFreedomView.bind_to_governance()` checks the
+same decision, offer, run, phase, event, and applicable step before a caller
+may consider the two views together.
+
+The retained field and transition content IDs can still correlate repeated
+opaque artifacts and content-bind private details. Their omission from the
+projection is data minimization, not anonymization or encryption. Parsing a
+self-consistent view alone is non-actionable; exact governance binding and the
+trusted TypeScript validator boundary remain mandatory.
+
+This v0.1 FREEDOM seam always reports `should_save=false`. In particular, a
+governance request to checkpoint and stop is held without creating a FREEDOM
+save request. The current host ledger and adapters continue to consume only
+governance decisions; they must not be called FREEDOM-enforcing merely because
+the bridge and closed Python parser exist.
 
 Execution-reference equality is caller-attested correlation. It does not hash
 or inspect a live model, tokenizer, dataset, optimizer, Trainer, Torch build,

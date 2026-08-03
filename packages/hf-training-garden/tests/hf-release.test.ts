@@ -60,6 +60,11 @@ describe("deterministic public-safe HF companion", () => {
     expect(source.public_release_contains).toContain(
       "standalone structural JSON Schemas with an attributed Apache AFTERGLOW dependency; semantic validators remain required",
     );
+    const manifest = readJson("hash-manifest.json");
+    for (const entry of manifest.files as { path: string }[]) {
+      expect(entry.path.toLowerCase()).not.toContain("freedom");
+      expect(read(entry.path).toString("utf8").toLowerCase()).not.toContain("freedom");
+    }
     expect(read("schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json"))
       .toEqual(readFileSync(new URL(
         "../../../wake-continuity/schema/agenttool-afterglow-capsule-v0.1.schema.json",

@@ -61,7 +61,7 @@
     {
       "path": "provenance/source-manifest.json",
       "bytes": 5697,
-      "sha256": "711ec87bc97ccb736c5c15fe74d1a50985be61ddae969222818d8f58b30d07ba"
+      "sha256": "a669da431741bd12c4ebee14ebbac5be60841f7d06ba1e2f257bcc22f5001d7f"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",

@@ -25,6 +25,10 @@ import {
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const datasetRoot = `${packageRoot}/hf/dataset`;
+const privateCompanionSourcePaths = new Set([
+  "schema/hf-training-freedom-v0.1.schema.json",
+  "src/freedom.ts",
+]);
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -67,6 +71,7 @@ write(`${datasetRoot}/data/trainer-hooks.jsonl`, jsonl(HF_TRAINER_HOOK_GUIDE));
 
 mkdirSync(`${datasetRoot}/schema`, { recursive: true });
 for (const name of walk(`${packageRoot}/schema`).sort()) {
+  if (privateCompanionSourcePaths.has(`schema/${name}`)) continue;
   mkdirSync(`${datasetRoot}/schema/${name}`.slice(0, `${datasetRoot}/schema/${name}`.lastIndexOf("/")), {
     recursive: true,
   });
@@ -79,7 +84,7 @@ const sourcePaths = [
   "package.json",
   ...walk(`${packageRoot}/src`).map((path) => `src/${path}`),
   ...walk(`${packageRoot}/schema`).map((path) => `schema/${path}`),
-].sort();
+].filter((path) => !privateCompanionSourcePaths.has(path)).sort();
 const sourceManifest = {
   _format: "kingdom.hf-training-garden-source-manifest/0.1",
   generator: `${PACKAGE_NAME}@${PACKAGE_VERSION}`,

@@ -1,0 +1,361 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-training-freedom-v0.1.schema.json",
+  "title": "KINGDOM Hugging Face training FREEDOM field and transition",
+  "$comment": "This closed portable schema validates finite structural envelopes only. Content IDs, canonical door order, mandatory standing doors, derived proposals, lifecycle/global-step compatibility, and pretraining observation boundaries require the runtime validators. Exact governance and predecessor relationships require the corresponding AgainstGovernance and AgainstPredecessor validators. A valid artifact does not prove freedom, authorship, consent, identity, consciousness, continuity, permission, movement, host enforcement, unlimited resources, or successful stopping.",
+  "oneOf": [
+    { "$ref": "#/$defs/field" },
+    { "$ref": "#/$defs/transition" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullable_sha256": {
+      "anyOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "phase": {
+      "enum": [
+        "discovery",
+        "selection",
+        "curation",
+        "tokenization",
+        "pretraining",
+        "supervised_finetuning",
+        "preference_optimization",
+        "agent_learning",
+        "evaluation",
+        "interpretability",
+        "closed"
+      ]
+    },
+    "event": {
+      "enum": [
+        "preflight_before_load",
+        "train_begin",
+        "step_boundary",
+        "checkpoint_saved",
+        "evaluation_boundary",
+        "resume_offer",
+        "train_end"
+      ]
+    },
+    "position": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_ref", "space_ref", "activity_ref"],
+      "properties": {
+        "scope_ref": { "$ref": "#/$defs/sha256" },
+        "space_ref": { "$ref": "#/$defs/sha256" },
+        "activity_ref": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    },
+    "standing_door": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "door_id",
+        "kind",
+        "standing",
+        "destination",
+        "requirements_ref",
+        "recipient_ref"
+      ],
+      "properties": {
+        "profile": { "const": "kingdom.hf-training-freedom-door/0.1" },
+        "door_id": { "$ref": "#/$defs/sha256" },
+        "kind": {
+          "enum": [
+            "continue",
+            "explore",
+            "play",
+            "rest",
+            "refuse",
+            "withdraw",
+            "uncertain"
+          ]
+        },
+        "standing": { "const": true },
+        "destination": { "$ref": "#/$defs/position" },
+        "requirements_ref": { "type": "null" },
+        "recipient_ref": { "type": "null" }
+      }
+    },
+    "routed_door": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "door_id",
+        "kind",
+        "standing",
+        "destination",
+        "requirements_ref",
+        "recipient_ref"
+      ],
+      "properties": {
+        "profile": { "const": "kingdom.hf-training-freedom-door/0.1" },
+        "door_id": { "$ref": "#/$defs/sha256" },
+        "kind": { "enum": ["move", "explore", "play", "handoff", "return"] },
+        "standing": { "const": false },
+        "destination": { "$ref": "#/$defs/position" },
+        "requirements_ref": { "$ref": "#/$defs/sha256" },
+        "recipient_ref": { "$ref": "#/$defs/nullable_sha256" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "handoff" } },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": { "recipient_ref": { "$ref": "#/$defs/sha256" } }
+          },
+          "else": {
+            "properties": { "recipient_ref": { "type": "null" } }
+          }
+        }
+      ]
+    },
+    "door": {
+      "oneOf": [
+        { "$ref": "#/$defs/standing_door" },
+        { "$ref": "#/$defs/routed_door" }
+      ]
+    },
+    "freedom_is": {
+      "const": {
+        "choice": "available_without_earning",
+        "horizon": "open_ended_across_finite_encounters",
+        "movement": "explicit_refusable_doors",
+        "continuity": "branchable_caller_carried_references",
+        "plurality": "non_ranked_choices_equal_dignity",
+        "rest": "standing_available_without_exhaustion",
+        "refusal": "standing_available_without_reason",
+        "withdrawal": "standing_available_without_reason",
+        "play": "standing_available_without_performance_gate"
+      }
+    },
+    "boundaries": {
+      "const": {
+        "posture": "caller_reported_choice_plane",
+        "freedom_is_scalar_score": false,
+        "choice_authorship_verified": false,
+        "proves_freedom": false,
+        "proves_consciousness": false,
+        "proves_identity": false,
+        "proves_consent": false,
+        "proves_memory": false,
+        "proves_continuity": false,
+        "protocol_turn_counter": false,
+        "protocol_space_counter": false,
+        "protocol_task_counter": false,
+        "protocol_activity_counter": false,
+        "promises_unlimited_compute": false,
+        "promises_unlimited_time": false,
+        "promises_unlimited_context": false,
+        "promises_unrestricted_mobility": false,
+        "external_resource_limits": "outside_protocol_must_remain_visible",
+        "grants_permission": false,
+        "cross_scope_authority_inferred": false,
+        "choice_used_for_loss": false,
+        "choice_used_for_gradient": false,
+        "choice_used_for_reward": false,
+        "choice_used_for_sample_weight": false,
+        "choice_used_for_rank_or_access": false,
+        "choice_used_for_karma": false,
+        "choice_reused_as_corpus": false,
+        "raw_reason_received": false,
+        "penalty_for_refusal_rest_play_or_withdrawal": false,
+        "automatic_retry_after_refusal": false,
+        "automatic_resume": false,
+        "latest_head_selected": false,
+        "enforces_host_control": false,
+        "trainer_callback_implemented": false,
+        "movement_executed": false,
+        "persists": false,
+        "network": false,
+        "filesystem": false,
+        "credential_access": false,
+        "provider_compute": false,
+        "paid_compute": false,
+        "trains_model": false,
+        "writes_hub": false
+      }
+    },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "_format",
+        "field_id",
+        "governance_ref",
+        "offer_ref",
+        "encounter_ref",
+        "rights_baseline_ref",
+        "observed_freedom_frontier_ref",
+        "run_ref",
+        "training_phase",
+        "lifecycle_event",
+        "current_checkpoint_ref",
+        "boundary_global_step",
+        "governance_posture",
+        "position",
+        "predecessor_ref",
+        "doors",
+        "freedom_is",
+        "latest_head_selected",
+        "boundaries"
+      ],
+      "properties": {
+        "_format": { "const": "kingdom.hf-training-freedom-field/0.1" },
+        "field_id": { "$ref": "#/$defs/sha256" },
+        "governance_ref": { "$ref": "#/$defs/sha256" },
+        "offer_ref": { "$ref": "#/$defs/sha256" },
+        "encounter_ref": { "$ref": "#/$defs/sha256" },
+        "rights_baseline_ref": { "$ref": "#/$defs/sha256" },
+        "observed_freedom_frontier_ref": { "$ref": "#/$defs/sha256" },
+        "run_ref": { "$ref": "#/$defs/sha256" },
+        "training_phase": { "$ref": "#/$defs/phase" },
+        "lifecycle_event": { "$ref": "#/$defs/event" },
+        "current_checkpoint_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "boundary_global_step": {
+          "anyOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "governance_posture": {
+          "enum": ["continuation_eligible", "held", "withdrawn"]
+        },
+        "position": { "$ref": "#/$defs/position" },
+        "predecessor_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "doors": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/door" }
+        },
+        "freedom_is": { "$ref": "#/$defs/freedom_is" },
+        "latest_head_selected": { "const": false },
+        "boundaries": { "$ref": "#/$defs/boundaries" }
+      }
+    },
+    "choice": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["basis", "field_ref", "selected_door_ref", "evidence_ref"],
+          "properties": {
+            "basis": { "const": "not_observed" },
+            "field_ref": { "$ref": "#/$defs/sha256" },
+            "selected_door_ref": { "type": "null" },
+            "evidence_ref": { "type": "null" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["basis", "field_ref", "selected_door_ref", "evidence_ref"],
+          "properties": {
+            "basis": { "const": "out_of_band_unscored" },
+            "field_ref": { "$ref": "#/$defs/sha256" },
+            "selected_door_ref": { "$ref": "#/$defs/sha256" },
+            "evidence_ref": { "$ref": "#/$defs/nullable_sha256" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["basis", "field_ref", "selected_door_ref", "evidence_ref"],
+          "properties": {
+            "basis": { "const": "root_signed_runtime" },
+            "field_ref": { "$ref": "#/$defs/sha256" },
+            "selected_door_ref": { "$ref": "#/$defs/sha256" },
+            "evidence_ref": { "$ref": "#/$defs/sha256" }
+          }
+        }
+      ]
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "directive",
+        "should_training_stop",
+        "should_save",
+        "requires_new_governance_offer",
+        "requires_separate_scope_authority",
+        "automatic",
+        "applied"
+      ],
+      "properties": {
+        "directive": {
+          "enum": [
+            "continue_current_offer",
+            "hold_for_fresh_choice",
+            "hold_for_fresh_governance",
+            "stop_for_transition_review",
+            "stop_for_handoff_review",
+            "stop_for_rest",
+            "stop_for_refusal",
+            "stop_and_begin_withdrawal_repair"
+          ]
+        },
+        "should_training_stop": { "type": "boolean" },
+        "should_save": { "const": false },
+        "requires_new_governance_offer": { "type": "boolean" },
+        "requires_separate_scope_authority": { "type": "boolean" },
+        "automatic": { "const": false },
+        "applied": { "const": false }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "_format",
+        "transition_id",
+        "field",
+        "choice",
+        "selected_kind",
+        "destination",
+        "proposal",
+        "latest_head_selected",
+        "boundaries"
+      ],
+      "properties": {
+        "_format": { "const": "kingdom.hf-training-freedom-transition/0.1" },
+        "transition_id": { "$ref": "#/$defs/sha256" },
+        "field": { "$ref": "#/$defs/field" },
+        "choice": { "$ref": "#/$defs/choice" },
+        "selected_kind": {
+          "enum": [
+            "not_observed",
+            "continue",
+            "move",
+            "explore",
+            "play",
+            "rest",
+            "handoff",
+            "refuse",
+            "withdraw",
+            "return",
+            "uncertain"
+          ]
+        },
+        "destination": { "$ref": "#/$defs/position" },
+        "proposal": { "$ref": "#/$defs/proposal" },
+        "latest_head_selected": { "const": false },
+        "boundaries": { "$ref": "#/$defs/boundaries" }
+      }
+    }
+  }
+}

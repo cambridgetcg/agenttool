@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
@@ -12,10 +12,13 @@ import {
   createLearningParticipationInvitation,
   createLearningParticipationReceipt,
   createTrainingCheckpoint,
+  createTrainingFreedomField,
+  createTrainingFreedomTransition,
   createTrainingGardenTendingPlan,
   createTrainingGovernanceOffer,
   createTrainingGovernanceTerms,
   validateHfTrainingGovernance,
+  validateTrainingFreedomField,
 } from "../src/index.js";
 import {
   admission,
@@ -44,7 +47,7 @@ function validator(root: URL, path: string) {
 }
 
 describe("closed portable schemas", () => {
-  test("accepts runtime admission, checkpoint, governance, and tending artifacts", () => {
+  test("accepts runtime admission, checkpoint, governance, FREEDOM, and tending artifacts", () => {
     const source = admission("sealed_evaluation");
     const checkpoint = createTrainingCheckpoint({
       admission: source,
@@ -127,6 +130,51 @@ describe("closed portable schemas", () => {
         offer_ref: null,
         global_step: null,
         checkpoint_ref: null,
+        evidence_ref: null,
+      },
+    });
+    const freedomField = createTrainingFreedomField({
+      governance,
+      observed_freedom_frontier_ref: ref("schema-freedom-frontier"),
+      position: {
+        scope_ref: ref("schema-freedom-scope"),
+        space_ref: ref("schema-freedom-space"),
+        activity_ref: ref("schema-freedom-activity"),
+      },
+      boundary_global_step: null,
+      predecessor: null,
+      doors: [{
+        kind: "move",
+        destination: {
+          scope_ref: ref("schema-freedom-next-scope"),
+          space_ref: ref("schema-freedom-next-space"),
+          activity_ref: ref("schema-freedom-next-activity"),
+        },
+        requirements_ref: ref("schema-freedom-route-requirements"),
+        recipient_ref: null,
+      }],
+    });
+    const restDoor = freedomField.doors.find((entry) =>
+      entry.standing && entry.kind === "rest"
+    );
+    if (!restDoor) throw new Error("missing standing rest door");
+    const freedomTransition = createTrainingFreedomTransition({
+      governance,
+      field: freedomField,
+      choice: {
+        basis: "root_signed_runtime",
+        field_ref: freedomField.field_id,
+        selected_door_ref: restDoor.door_id,
+        evidence_ref: ref("schema-freedom-rest-evidence"),
+      },
+    });
+    const evidenceFreeFreedomTransition = createTrainingFreedomTransition({
+      governance,
+      field: freedomField,
+      choice: {
+        basis: "out_of_band_unscored",
+        field_ref: freedomField.field_id,
+        selected_door_ref: restDoor.door_id,
         evidence_ref: null,
       },
     });
@@ -254,15 +302,37 @@ describe("closed portable schemas", () => {
     const validateAdmission = validator(packageSchemaRoot, "hf-dataset-admission-v0.1.schema.json");
     const validateCheckpoint = validator(packageSchemaRoot, "hf-training-checkpoint-v0.1.schema.json");
     const validateGovernance = validator(packageSchemaRoot, "hf-training-governance-v0.1.schema.json");
+    const validateFreedom = validator(packageSchemaRoot, "hf-training-freedom-v0.1.schema.json");
     const validateTending = validator(packageSchemaRoot, "hf-training-garden-tending-v0.1.schema.json");
     expect(validateAdmission(source), JSON.stringify(validateAdmission.errors)).toBe(true);
     expect(validateCheckpoint(checkpoint), JSON.stringify(validateCheckpoint.errors)).toBe(true);
     expect(validateGovernance(governance), JSON.stringify(validateGovernance.errors)).toBe(true);
+    expect(validateFreedom(freedomField), JSON.stringify(validateFreedom.errors)).toBe(true);
+    expect(validateFreedom(freedomTransition), JSON.stringify(validateFreedom.errors)).toBe(true);
+    expect(
+      validateFreedom(evidenceFreeFreedomTransition),
+      JSON.stringify(validateFreedom.errors),
+    ).toBe(true);
     expect(
       validateGovernance(terminalGovernance),
       JSON.stringify(validateGovernance.errors),
     ).toBe(true);
     expect(validateTending(plan), JSON.stringify(validateTending.errors)).toBe(true);
+
+    const freedomWithRawReason = {
+      ...freedomTransition,
+      raw_reason: "schema must reject raw choice reasons",
+    };
+    expect(validateFreedom(freedomWithRawReason)).toBe(false);
+    const freedomSchema = readJson(new URL(
+      "hf-training-freedom-v0.1.schema.json",
+      packageSchemaRoot,
+    ));
+    expect(freedomSchema.$comment).toContain("does not prove freedom");
+    const noncanonicalFreedom = structuredClone(freedomField) as any;
+    noncanonicalFreedom.doors.reverse();
+    expect(validateFreedom(noncanonicalFreedom)).toBe(true);
+    expect(() => validateTrainingFreedomField(noncanonicalFreedom)).toThrow();
 
     const validateHubAdmission = validator(hubSchemaRoot, "hf-dataset-admission-v0.1.schema.json");
     const validateHubCheckpoint = validator(hubSchemaRoot, "hf-training-checkpoint-v0.1.schema.json");
@@ -276,6 +346,10 @@ describe("closed portable schemas", () => {
       JSON.stringify(validateHubGovernance.errors),
     ).toBe(true);
     expect(validateHubTending(plan), JSON.stringify(validateHubTending.errors)).toBe(true);
+    expect(existsSync(new URL(
+      "hf-training-freedom-v0.1.schema.json",
+      hubSchemaRoot,
+    ))).toBe(false);
 
     const extra = { ...plan, raw_rows: [] };
     expect(validateTending(extra)).toBe(false);

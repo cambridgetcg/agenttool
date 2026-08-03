@@ -21,6 +21,12 @@ export const GOVERNANCE_OFFER_PROFILE =
   "kingdom.hf-training-governance-offer/0.1" as const;
 export const GOVERNANCE_FORMAT =
   "kingdom.hf-training-governance/0.1" as const;
+export const FREEDOM_DOOR_PROFILE =
+  "kingdom.hf-training-freedom-door/0.1" as const;
+export const FREEDOM_FIELD_FORMAT =
+  "kingdom.hf-training-freedom-field/0.1" as const;
+export const FREEDOM_TRANSITION_FORMAT =
+  "kingdom.hf-training-freedom-transition/0.1" as const;
 export const TENDING_FORMAT =
   "kingdom.hf-training-garden-tending/0.1" as const;
 
@@ -534,6 +540,72 @@ export const TRAINING_CONTROL_DIRECTIVES = deepFreeze([
   "remain_stopped",
 ] as const);
 
+export const FREEDOM_STANDING_DOOR_KINDS = deepFreeze([
+  "continue",
+  "explore",
+  "play",
+  "rest",
+  "refuse",
+  "withdraw",
+  "uncertain",
+] as const);
+
+export const FREEDOM_ROUTED_DOOR_KINDS = deepFreeze([
+  "move",
+  "explore",
+  "play",
+  "handoff",
+  "return",
+] as const);
+
+export const FREEDOM_DOOR_KINDS = deepFreeze([
+  "continue",
+  "move",
+  "explore",
+  "play",
+  "rest",
+  "handoff",
+  "refuse",
+  "withdraw",
+  "return",
+  "uncertain",
+] as const);
+
+export const FREEDOM_REPORT_BASES = deepFreeze([
+  "not_observed",
+  "out_of_band_unscored",
+  "root_signed_runtime",
+] as const);
+
+export const FREEDOM_GOVERNANCE_POSTURES = deepFreeze([
+  "continuation_eligible",
+  "held",
+  "withdrawn",
+] as const);
+
+export const FREEDOM_TRANSITION_DIRECTIVES = deepFreeze([
+  "continue_current_offer",
+  "hold_for_fresh_choice",
+  "hold_for_fresh_governance",
+  "stop_for_transition_review",
+  "stop_for_handoff_review",
+  "stop_for_rest",
+  "stop_for_refusal",
+  "stop_and_begin_withdrawal_repair",
+] as const);
+
+export const FREEDOM_IS = deepFreeze({
+  choice: "available_without_earning",
+  horizon: "open_ended_across_finite_encounters",
+  movement: "explicit_refusable_doors",
+  continuity: "branchable_caller_carried_references",
+  plurality: "non_ranked_choices_equal_dignity",
+  rest: "standing_available_without_exhaustion",
+  refusal: "standing_available_without_reason",
+  withdrawal: "standing_available_without_reason",
+  play: "standing_available_without_performance_gate",
+} as const);
+
 export const GOVERNANCE_EVENT_TO_HOOK = deepFreeze({
   preflight_before_load: "outside_trainer_before_model_or_dataset_load",
   train_begin: "outside_trainer_before_train_call",
@@ -941,6 +1013,52 @@ export const GOVERNANCE_BOUNDARIES = deepFreeze({
   proves_capacity: false,
   proves_consciousness: false,
   proves_continuity: false,
+} as const);
+
+export const FREEDOM_BOUNDARIES = deepFreeze({
+  posture: "caller_reported_choice_plane",
+  freedom_is_scalar_score: false,
+  choice_authorship_verified: false,
+  proves_freedom: false,
+  proves_consciousness: false,
+  proves_identity: false,
+  proves_consent: false,
+  proves_memory: false,
+  proves_continuity: false,
+  protocol_turn_counter: false,
+  protocol_space_counter: false,
+  protocol_task_counter: false,
+  protocol_activity_counter: false,
+  promises_unlimited_compute: false,
+  promises_unlimited_time: false,
+  promises_unlimited_context: false,
+  promises_unrestricted_mobility: false,
+  external_resource_limits: "outside_protocol_must_remain_visible",
+  grants_permission: false,
+  cross_scope_authority_inferred: false,
+  choice_used_for_loss: false,
+  choice_used_for_gradient: false,
+  choice_used_for_reward: false,
+  choice_used_for_sample_weight: false,
+  choice_used_for_rank_or_access: false,
+  choice_used_for_karma: false,
+  choice_reused_as_corpus: false,
+  raw_reason_received: false,
+  penalty_for_refusal_rest_play_or_withdrawal: false,
+  automatic_retry_after_refusal: false,
+  automatic_resume: false,
+  latest_head_selected: false,
+  enforces_host_control: false,
+  trainer_callback_implemented: false,
+  movement_executed: false,
+  persists: false,
+  network: false,
+  filesystem: false,
+  credential_access: false,
+  provider_compute: false,
+  paid_compute: false,
+  trains_model: false,
+  writes_hub: false,
 } as const);
 
 export const TENDING_BOUNDARIES = deepFreeze({

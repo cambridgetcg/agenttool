@@ -9,6 +9,13 @@ Private, source-first Python host for the accepted
 - TypeScript Garden validation is authoritative. `bridge/create-decision.mjs`
   validates the exact admission and predecessor before projecting a minimized
   host view. The view's content ID detects changed bytes; it is not a signature.
+- `bridge/create-freedom-decision.mjs` separately validates one exact FREEDOM
+  transition and predecessor, binds it to the minimized governance view, and
+  projects only opaque references plus continue-or-hold control. It never
+  projects the choice, selected door, evidence, destination, or reasons.
+- FREEDOM v0.1 only narrows governance and never requests save. The existing
+  ledger, Trainer adapter, and Accelerate adapter are not FREEDOM-aware yet;
+  this bridge/parser seam must not be described as universal enforcement.
 - The Python package has zero base runtime dependencies and performs no model,
   dataset, Hub, credential, or network operation by itself.
 - Ledger/checkpoint enforcement is POSIX-only in v0.1. It checks the ledger
