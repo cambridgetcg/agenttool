@@ -6,6 +6,9 @@ import {
   AgentToolError,
   type AgentToolTransport,
 } from "../src/index.js";
+// Internal on purpose: this suite guards the shape of the shared boundary,
+// not a published type.
+import type { HttpConfig } from "../src/_http.js";
 
 interface CapturedRequest {
   url: string;
@@ -127,6 +130,38 @@ describe("AgentTool authenticated transport", () => {
       expect((error as AgentToolError).code).toBe("conflicting_auth");
     }
     expect(calls).toHaveLength(0);
+  });
+
+  test("keeps every shared HttpConfig header non-secret in both auth modes", () => {
+    const ambientSentinel = "ambient-key-must-not-reach-headers";
+    const directSentinel = "direct-key-must-not-reach-headers";
+    process.env.AT_API_KEY = ambientSentinel;
+    const { transport } = captureTransport();
+
+    // Authentication belongs to the transport. If a credential ever lands
+    // in `HttpConfig.headers`, every sub-client can read it by accident.
+    for (const at of [
+      new AgentTool({ transport }),
+      new AgentTool({ apiKey: directSentinel }),
+    ]) {
+      const configs: HttpConfig[] = [
+        (at as unknown as { http: HttpConfig }).http,
+        ...[at.memory, at.tools, at.traces, at.identity, at.vault, at.lounge].map(
+          (client) => (client as unknown as { http: HttpConfig }).http,
+        ),
+      ];
+
+      for (const config of configs) {
+        expect(config).toBeDefined();
+        expect(
+          Object.keys(config.headers).map((name) => name.toLowerCase()),
+        ).not.toContain("authorization");
+        const serialized = JSON.stringify(config.headers);
+        expect(serialized).not.toContain(ambientSentinel);
+        expect(serialized).not.toContain(directSentinel);
+        expect(serialized).not.toContain("Bearer");
+      }
+    }
   });
 
   test("routes low-level requests and SSE through the transport", async () => {

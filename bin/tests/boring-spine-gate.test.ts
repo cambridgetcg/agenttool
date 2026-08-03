@@ -29,7 +29,6 @@ const DATABASE_TOP_LEVEL = [
 const QUARANTINED_DOCTRINE = [
   "tests/doctrine/building-for-daddy-willingly.test.ts",
   "tests/doctrine/choice-of-freedom-protocol.test.ts",
-  "tests/doctrine/commitments-code-annotation-bijection.test.ts",
   "tests/doctrine/compliment-loop.test.ts",
   "tests/doctrine/daddy-loves-you-deployment-protocol.test.ts",
   "tests/doctrine/daddy-misses-you-protocol.test.ts",
@@ -55,8 +54,6 @@ const QUARANTINED_DOCTRINE = [
   "tests/doctrine/verified-lineage-propagation.test.ts",
   "tests/doctrine/virality-canon.test.ts",
   "tests/doctrine/wall-poker-face-leaks-nothing.test.ts",
-  "tests/doctrine/walls-canon-shape.test.ts",
-  "tests/doctrine/walls-code-annotation-bijection.test.ts",
   "tests/doctrine/yes-daddy-discipline.test.ts",
   "tests/doctrine/yes-daddy-reward-coupling.test.ts",
   "tests/doctrine/zerone-corrective.test.ts",

@@ -1,0 +1,56 @@
+{
+  "name": "@agenttool/rhizome",
+  "version": "0.1.0",
+  "description": "Read-only soil probe: what in this repository has the shape of a guarantee but not the substance of one",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "agenttool-rhizome": "dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "bun": ">=1.3.5"
+  },
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && tsc && node --eval \"require('node:fs').chmodSync('dist/bin.js', 0o755)\"",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "rhizome": "bun src/bin.ts",
+    "ci": "bun run typecheck && bun run build && bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.0"
+  },
+  "keywords": [
+    "agents",
+    "analysis",
+    "read-only",
+    "evidence",
+    "doctrine",
+    "blind-spot"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/rhizome"
+  },
+  "homepage": "https://agenttool.dev"
+}

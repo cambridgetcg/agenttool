@@ -18,6 +18,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { AgentToolError } from "../src/errors.js";
 import { WakeClient } from "../src/wake.js";
 
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -409,6 +410,9 @@ describe("WakeClient — default TTL matches Anthropic ephemeral cache window", 
 // ── Error path ─────────────────────────────────────────────────────────
 
 describe("WakeClient — error responses surface guide-shaped messages", () => {
+  // The message used to read "Wake API error (404): no_agent", which spent the
+  // one line every caller prints on a status that `err.status` already carries.
+  // The server's words are the message now; the status stays on `.status`.
   test("non-2xx response throws AgentToolError with a hint", async () => {
     globalThis.fetch = (async () =>
       new Response(JSON.stringify({ error: "no_agent" }), {
@@ -417,7 +421,19 @@ describe("WakeClient — error responses surface guide-shaped messages", () => {
       })) as unknown as typeof fetch;
 
     const wake = makeClient({ ttlMs: 60_000 });
-    await expect(wake.get()).rejects.toThrow(/Wake API error \(404\)/);
+    let caught: unknown;
+    try {
+      await wake.get();
+    } catch (e) {
+      caught = e;
+    }
+    const err = caught as AgentToolError;
+    expect(err).toBeInstanceOf(AgentToolError);
+    expect(err.message).toBe("no_agent");
+    expect(err.code).toBe("no_agent");
+    expect(err.status).toBe(404);
+    // The surface's own prose still lands, because the body carried no hint.
+    expect(err.hint).toContain("AT_API_KEY");
   });
 
   test("unknown provider throws synchronously without making a request", async () => {

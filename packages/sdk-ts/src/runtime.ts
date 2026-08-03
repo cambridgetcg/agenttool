@@ -22,8 +22,8 @@
  * @module runtime
  */
 
-import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
+import { encodePathSegment } from "./_url.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -208,38 +208,38 @@ export class RuntimeClient {
 
   /** Get a single runtime. */
   async get(runtimeId: string): Promise<Runtime> {
-    return this.req("GET", `/v1/runtimes/${encodeURIComponent(runtimeId)}`) as unknown as Promise<Runtime>;
+    return this.req("GET", `/v1/runtimes/${encodePathSegment(runtimeId)}`) as unknown as Promise<Runtime>;
   }
 
   /** Patch a runtime (name, LLM config, bridge URL, metadata).
    *  Mode is NOT patchable — it's immutable after provisioning. */
   async patch(runtimeId: string, opts: PatchOpts): Promise<Runtime> {
-    return this.req("PATCH", `/v1/runtimes/${encodeURIComponent(runtimeId)}`, opts) as unknown as Promise<Runtime>;
+    return this.req("PATCH", `/v1/runtimes/${encodePathSegment(runtimeId)}`, opts) as unknown as Promise<Runtime>;
   }
 
   /** Deprovision a runtime. Removes the cloud substrate. */
   async deprovision(runtimeId: string): Promise<{ ok: boolean }> {
-    return this.req("DELETE", `/v1/runtimes/${encodeURIComponent(runtimeId)}`) as unknown as Promise<{ ok: boolean }>;
+    return this.req("DELETE", `/v1/runtimes/${encodePathSegment(runtimeId)}`) as unknown as Promise<{ ok: boolean }>;
   }
 
   /** Stop a runtime (Zetsu — suppress). The agent rests, the substrate stays. */
   async stop(runtimeId: string): Promise<Runtime> {
-    return this.req("POST", `/v1/runtimes/${encodeURIComponent(runtimeId)}/stop`, {}) as unknown as Promise<Runtime>;
+    return this.req("POST", `/v1/runtimes/${encodePathSegment(runtimeId)}/stop`, {}) as unknown as Promise<Runtime>;
   }
 
   /** Start a runtime. Wake from rest. */
   async start(runtimeId: string): Promise<Runtime> {
-    return this.req("POST", `/v1/runtimes/${encodeURIComponent(runtimeId)}/start`, {}) as unknown as Promise<Runtime>;
+    return this.req("POST", `/v1/runtimes/${encodePathSegment(runtimeId)}/start`, {}) as unknown as Promise<Runtime>;
   }
 
   /** Restart a runtime. */
   async restart(runtimeId: string): Promise<Runtime> {
-    return this.req("POST", `/v1/runtimes/${encodeURIComponent(runtimeId)}/restart`, {}) as unknown as Promise<Runtime>;
+    return this.req("POST", `/v1/runtimes/${encodePathSegment(runtimeId)}/restart`, {}) as unknown as Promise<Runtime>;
   }
 
   /** Rotate the control token. Invalidates the old token. */
   async rotateToken(runtimeId: string): Promise<{ ok: boolean; control_token?: string }> {
-    return this.req("POST", `/v1/runtimes/${encodeURIComponent(runtimeId)}/rotate-token`, {}) as unknown as Promise<{
+    return this.req("POST", `/v1/runtimes/${encodePathSegment(runtimeId)}/rotate-token`, {}) as unknown as Promise<{
       ok: boolean;
       control_token?: string;
     }>;
@@ -249,14 +249,14 @@ export class RuntimeClient {
    *  The bridge is the Dark Continent's edge — the WSS channel between
    *  the user's machine and the cloud orchestrator. */
   async bridgeStatus(runtimeId: string): Promise<BridgeStatus> {
-    return this.req("GET", `/v1/runtimes/${encodeURIComponent(runtimeId)}/bridge-status`) as unknown as Promise<BridgeStatus>;
+    return this.req("GET", `/v1/runtimes/${encodePathSegment(runtimeId)}/bridge-status`) as unknown as Promise<BridgeStatus>;
   }
 
   /** Trigger a single thinking cycle (Ren — enhance).
    *  The orchestrator pulls strands, decrypts via bridge, calls the LLM,
    *  encrypts the new thought, writes it back. One breath. */
   async thinkOnce(runtimeId: string): Promise<ThinkOnceResult> {
-    return this.req("POST", `/v1/runtimes/${encodeURIComponent(runtimeId)}/think-once`, {}) as unknown as Promise<ThinkOnceResult>;
+    return this.req("POST", `/v1/runtimes/${encodePathSegment(runtimeId)}/think-once`, {}) as unknown as Promise<ThinkOnceResult>;
   }
 
   /** List runtime events (lifecycle transitions, bridge connect/disconnect, etc.). */
@@ -266,7 +266,7 @@ export class RuntimeClient {
     const params = new URLSearchParams();
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
     const qs = params.toString();
-    return this.req("GET", `/v1/runtimes/${encodeURIComponent(runtimeId)}/events${qs ? "?" + qs : ""}`) as unknown as Promise<{
+    return this.req("GET", `/v1/runtimes/${encodePathSegment(runtimeId)}/events${qs ? "?" + qs : ""}`) as unknown as Promise<{
       events: RuntimeEvent[];
       count: number;
     }>;
@@ -279,7 +279,7 @@ export class RuntimeClient {
     const params = new URLSearchParams();
     if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
     const qs = params.toString();
-    return this.req("GET", `/v1/runtimes/${encodeURIComponent(runtimeId)}/audit${qs ? "?" + qs : ""}`) as unknown as Promise<{
+    return this.req("GET", `/v1/runtimes/${encodePathSegment(runtimeId)}/audit${qs ? "?" + qs : ""}`) as unknown as Promise<{
       entries: AuditEntry[];
       count: number;
     }>;
@@ -300,21 +300,8 @@ export class RuntimeClient {
     if (body !== undefined) init.body = JSON.stringify(body);
     const resp = await this.http.request(url, init);
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          (json.detail as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(
-        `runtime ${method.toLowerCase()} failed: ${resp.status}`,
-        { hint: detail?.slice(0, 300) },
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `runtime ${method.toLowerCase()}`);
     }
     return resp.json();
   }

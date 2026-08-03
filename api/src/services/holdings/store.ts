@@ -15,7 +15,11 @@
  *  @enforces urn:agenttool:wall/holdings-cannot-be-extracted
  *    Canonical defender. Module imports neither recordRevenue, computeFee,
  *    escrows, nor wallets. Pure relational primitive. Pinned by
- *    tests/doctrine/wall-holdings-cannot-be-extracted.test.ts. */
+ *    tests/doctrine/wall-holdings-cannot-be-extracted.test.ts.
+ *
+ *  @absence recordRevenue computeFee platformRevenue escrows
+ *  @absence-from db/schema/economy
+ */
 
 import { and, desc, eq, sql } from "drizzle-orm";
 

@@ -350,3 +350,161 @@ describe("CollectClient — method shapes", () => {
     expect(typeof at.collect.enrich).toBe("function");
   });
 });
+// ── Cross-language shared fixtures ─────────────────────────────────────
+//
+// The wire shapes below are pinned byte-for-byte in
+// packages/sdk-py/tests/test_collect.py. Both SDKs must send the same
+// scrape body and return the same links, content, and errors.
+
+const SHARED_SCRAPE_URL = "https://example.com/article";
+const SHARED_SELECTOR = "article.main";
+const SHARED_EXTRACTED = "Just the article body, selected.";
+const SHARED_LINKS = ["https://link1.example", "https://link2.example"];
+
+/** Stub whose scrape answer depends on the options actually sent. */
+function makeSelectorStubFetch() {
+  const scrapeBodies: Record<string, unknown>[] = [];
+  const fn = (async (url: RequestInfo | URL, init?: RequestInit) => {
+    const u = String(url);
+    const body = init?.body
+      ? (JSON.parse(String(init.body)) as Record<string, unknown>)
+      : {};
+
+    if (u.includes("/v1/scrape")) {
+      scrapeBodies.push(body);
+      return new Response(JSON.stringify({
+        url: SHARED_SCRAPE_URL,
+        title: "Test Page",
+        content: "The whole page. " + "x".repeat(200),
+        extracted: body.selector === SHARED_SELECTOR ? SHARED_EXTRACTED : null,
+        links: body.extract_links === true ? SHARED_LINKS : [],
+        fetched_at: "2026-07-18T04:00:00.000Z",
+        duration_ms: 1,
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+
+    if (u.includes("/v1/document")) {
+      return new Response(JSON.stringify({
+        title: "Readable Article",
+        content: "Readable extraction that is comfortably longer than one hundred characters, "
+          + "so it would replace the raw scrape.",
+        word_count: 20,
+        content_type: "text/html",
+        metadata: {},
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+
+    return new Response(JSON.stringify({ error: "not_found" }), {
+      status: 404,
+      headers: { "content-type": "application/json" },
+    });
+  }) as unknown as typeof fetch;
+
+  return { fn, scrapeBodies };
+}
+
+describe("CollectClient — selector and links, pinned against sdk-py", () => {
+  test("selector rides the one scrape call and its extraction wins", async () => {
+    const stub = makeSelectorStubFetch();
+    globalThis.fetch = stub.fn;
+
+    const at = new AgentTool({ apiKey: "at_test" });
+    const result = await at.collect.url(SHARED_SCRAPE_URL, {
+      selector: SHARED_SELECTOR,
+      extractLinks: true,
+      storeMemory: false,
+    });
+
+    // One scrape, carrying the options. The old second call sent none.
+    expect(stub.scrapeBodies.length).toBe(1);
+    expect(stub.scrapeBodies[0]).toEqual({
+      url: SHARED_SCRAPE_URL,
+      selector: SHARED_SELECTOR,
+      extract_links: true,
+    });
+    expect(result.content).toBe(SHARED_EXTRACTED);
+    expect(result.links).toEqual(SHARED_LINKS);
+    expect(result.errors).toEqual([]);
+  });
+
+  test("links stay empty and unrequested when extractLinks is off", async () => {
+    const stub = makeSelectorStubFetch();
+    globalThis.fetch = stub.fn;
+
+    const at = new AgentTool({ apiKey: "at_test" });
+    const result = await at.collect.url(SHARED_SCRAPE_URL, { storeMemory: false });
+
+    expect(stub.scrapeBodies[0]).toEqual({
+      url: SHARED_SCRAPE_URL,
+      extract_links: false,
+    });
+    expect(result.links).toEqual([]);
+    expect(result.errors).toEqual([]);
+  });
+
+  test("a selector that matches nothing is reported, not silently ignored", async () => {
+    const stub = makeSelectorStubFetch();
+    globalThis.fetch = stub.fn;
+
+    const at = new AgentTool({ apiKey: "at_test" });
+    const result = await at.collect.url(SHARED_SCRAPE_URL, {
+      selector: "aside.missing",
+      storeMemory: false,
+    });
+
+    expect(result.errors).toEqual(["selector_extraction_failed"]);
+    expect(result.content).toContain("Readable extraction");
+  });
+
+  test("batch of no URLs answers empty instead of throwing", async () => {
+    const stub = makeSelectorStubFetch();
+    globalThis.fetch = stub.fn;
+
+    const at = new AgentTool({ apiKey: "at_test" });
+    const result = await at.collect.batch({ urls: [] });
+
+    expect(result.results).toEqual([]);
+    expect(result.total).toBe(0);
+    expect(result.succeeded).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(stub.scrapeBodies.length).toBe(0);
+  });
+});
+
+describe("Memory tier and search score, pinned against sdk-py", () => {
+  // collect.url stores through MemoryClient, so the memory model is this
+  // pipeline's storage boundary. Losing `tier` hides a constitutive root.
+  const SHARED_MEMORY = {
+    id: "mem-shared-1",
+    content: "I was witnessed at my root.",
+    type: "semantic",
+    metadata: { source: "collect.url" },
+    importance: 0.9,
+    tier: "constitutive",
+    score: 0.42,
+    created_at: "2026-07-18T04:00:00.000Z",
+  };
+
+  test("tier and score survive the client boundary", async () => {
+    globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      const body = JSON.stringify(
+        u.includes("/search") ? { results: [SHARED_MEMORY] } : SHARED_MEMORY,
+      );
+      void init;
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+
+    const at = new AgentTool({ apiKey: "at_test" });
+    const fetched = await at.memory.get("mem-shared-1");
+    const [found] = await at.memory.search("root");
+
+    expect(fetched.tier).toBe("constitutive");
+    expect(fetched.score).toBe(0.42);
+    expect(found?.tier).toBe("constitutive");
+    expect(found?.score).toBe(0.42);
+  });
+});

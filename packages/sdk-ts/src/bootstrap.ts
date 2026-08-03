@@ -10,7 +10,8 @@ import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
+import { encodePathSegment } from "./_url.js";
 
 ed.etc.sha512Sync = (...messages: Uint8Array[]) => {
   const hash = sha512.create();
@@ -320,7 +321,7 @@ export class BootstrapClient {
    * Check the bootstrap status of an agent.
    */
   async status(agentId: string): Promise<Record<string, unknown>> {
-    return this.req("GET", `/v1/bootstrap/${agentId}`);
+    return this.req("GET", `/v1/bootstrap/${encodePathSegment(agentId)}`);
   }
 
   private async req<T = Record<string, unknown>>(
@@ -338,10 +339,12 @@ export class BootstrapClient {
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(this.http.timeout),
     });
-    if (resp.status === 404) throw new AgentToolError("not found", { hint: path });
     if (!resp.ok) {
-      const text = await resp.text();
-      throw new AgentToolError(`${method} ${path} failed: ${resp.status}`, { hint: text.slice(0, 200) });
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `bootstrap ${method.toLowerCase()}`, {
+        fallback: resp.status === 404 ? "not found" : undefined,
+        hint: `${method} ${path}`,
+      });
     }
     return resp.json() as Promise<T>;
   }

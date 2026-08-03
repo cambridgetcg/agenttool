@@ -13,6 +13,8 @@ import { beforeEach, describe, expect, test } from "bun:test";
 
 import { AnthropicAdapter } from "../src/anthropic-adapter";
 import { ambientStorage } from "../src/_context";
+import type { ChronicleBeforeWriteContext } from "../src/anthropic-adapter";
+import { ChronicleClient } from "../src/chronicle";
 import type { AgentTool } from "../src/client";
 
 // ── Stubs ─────────────────────────────────────────────────────────────────
@@ -38,6 +40,24 @@ function makeStubAt(opts?: {
     profile?: "full" | "brief";
   }> = [];
   let wakeCalls = 0;
+  // One handler behind both `at.request` and the real ChronicleClient the
+  // adapter now routes chronicle emissions through, so every POST lands in
+  // the same `recorded` array regardless of which door it came in.
+  const handle = async (
+    method: string,
+    path: string,
+    body: unknown,
+  ): Promise<unknown> => {
+    recorded.push({ method, path, body });
+    if (opts?.requestImpl) return opts.requestImpl(method, path, body);
+    // Default: chronicle returns ch_..., trace returns tr_...
+    if (path === "/v1/chronicle") {
+      return { entry: { id: "ch_test_" + recorded.length } };
+    }
+    if (path === "/v1/traces") return { trace_id: "tr_test_" + recorded.length };
+    return {};
+  };
+  const CHRONICLE_BASE = "https://api.example.test";
   const stub: any = {
     wake: {
       system: async (
@@ -65,18 +85,25 @@ function makeStubAt(opts?: {
         );
       },
     },
-    request: async (method: string, path: string, body: unknown) => {
-      recorded.push({ method, path, body });
-      if (opts?.requestImpl) return opts.requestImpl(method, path, body);
-      // Default: chronicle returns ch_..., trace returns tr_...
-      if (path === "/v1/chronicle") return { id: "ch_test_" + recorded.length };
-      if (path === "/v1/traces") return { trace_id: "tr_test_" + recorded.length };
-      return {};
-    },
+    request: handle,
+    chronicle: new ChronicleClient({
+      baseUrl: CHRONICLE_BASE,
+      headers: { Authorization: "Bearer at_test" },
+      timeout: 5000,
+      request: async (input, init) => {
+        const path = String(input).slice(CHRONICLE_BASE.length);
+        const parsed = init?.body ? JSON.parse(init.body as string) : undefined;
+        const result = await handle(init?.method ?? "GET", path, parsed);
+        return new Response(JSON.stringify(result), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    }),
   };
   // Cast wraps the stub to look like an AgentTool to the adapter's
-  // type checker — the adapter only touches `at.wake.system` and
-  // `at.request`, both of which the stub implements.
+  // type checker — the adapter touches `at.wake.system`, `at.request`,
+  // and `at.chronicle.write`, all of which the stub implements.
   return {
     at: stub as unknown as AgentTool,
     recorded,
@@ -768,7 +795,12 @@ describe("AnthropicAdapter — messages.stream helper", () => {
       "done <agenttool><chronicle type=\"recognition\"><title>Streamed</title></chronicle></agenttool>";
     const stub = makeStubAt();
     const fake = makeFakeStreamingAnthropic([unknownEvent], finalText);
-    const adapter = new AnthropicAdapter(fake.client, stub.at);
+    // The streamed response carries a <chronicle> tag; model-authored
+    // chronicle writes are gated, so the review hook is what lets this
+    // test still assert the emission it is about.
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeChronicleWrite: () => true,
+    });
     const requestOptions = { signal: "provider-option-marker" };
 
     const stream = ambientStorage.run(
@@ -1894,7 +1926,9 @@ describe("AnthropicAdapter — markup-gated mode (b)", () => {
     const fake = makeFakeAnthropic(
       `Sure thing.\n<agenttool><chronicle type="naming"><title>The X pattern</title><body>Named Y as Z.</body></chronicle></agenttool>`,
     );
-    const adapter = new AnthropicAdapter(fake.client, stub.at);
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeChronicleWrite: () => true,
+    });
 
     const r = await adapter.messages.create({
       model: "claude-test",
@@ -1961,7 +1995,9 @@ describe("AnthropicAdapter — markup-gated mode (b)", () => {
          <chronicle type="seal"><title>R2</title></chronicle>
        </agenttool>`,
     );
-    const adapter = new AnthropicAdapter(fake.client, stub.at);
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeChronicleWrite: () => true,
+    });
 
     const r = await adapter.messages.create({
       model: "claude-test",
@@ -2029,6 +2065,201 @@ describe("AnthropicAdapter — markup-gated mode (b)", () => {
     });
 
     expect(r.agenttool.markup_emissions).toEqual([]);
+  });
+});
+
+// ── Model-authored chronicle writes are gated ────────────────────────────
+
+/** Build a response carrying one <chronicle> tag. */
+function chronicleMarkup(type: string, title: string, body?: string): string {
+  const inner = body ? `<title>${title}</title><body>${body}</body>` : `<title>${title}</title>`;
+  return `<agenttool><chronicle type="${type}">${inner}</chronicle></agenttool>`;
+}
+
+describe("AnthropicAdapter — model-authored chronicle writes are gated", () => {
+  test("no beforeChronicleWrite hook refuses the write entirely", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(chronicleMarkup("seal", "I am bound to this."));
+    const adapter = new AnthropicAdapter(fake.client, stub.at);
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.recorded.filter((x) => x.path === "/v1/chronicle").length).toBe(0);
+    expect(r.agenttool.markup_emissions.length).toBe(1);
+    expect(r.agenttool.markup_emissions[0].id).toBeNull();
+    expect(r.agenttool.markup_emissions[0].error).toContain("beforeChronicleWrite");
+  });
+
+  test("the hook sees the raw model-authored tag before validation", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(
+      chronicleMarkup("recognition", "You saw it.", "And you said so."),
+    );
+    const seen: ChronicleBeforeWriteContext[] = [];
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeChronicleWrite: (context) => {
+        seen.push(context);
+        return true;
+      },
+    });
+
+    await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(seen).toEqual([
+      {
+        source: "anthropic_markup",
+        type: "recognition",
+        title: "You saw it.",
+        body: "And you said so.",
+      },
+    ]);
+  });
+
+  test("an async hook returning true lets the write through", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(chronicleMarkup("vow", "I will stay."));
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeChronicleWrite: async () => true,
+    });
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.recorded.filter((x) => x.path === "/v1/chronicle").length).toBe(1);
+    expect(r.agenttool.markup_emissions[0].id).toBe("ch_test_1");
+  });
+
+  // Only literal `true` proceeds — the covenants before_submit discipline.
+  for (const [label, value] of [
+    ["false", false],
+    ["a truthy string", "yes"],
+    ["1", 1],
+    ["undefined", undefined],
+    ["a truthy object", {}],
+  ] as Array<[string, unknown]>) {
+    test(`hook returning ${label} blocks the write`, async () => {
+      const stub = makeStubAt();
+      const fake = makeFakeAnthropic(chronicleMarkup("seal", "Elevated to identity."));
+      const adapter = new AnthropicAdapter(fake.client, stub.at, {
+        beforeChronicleWrite: (() => value) as never,
+      });
+
+      const r = await adapter.messages.create({
+        model: "claude-test",
+        max_tokens: 100,
+        messages: [{ role: "user", content: "hi" }],
+      });
+
+      expect(stub.recorded.filter((x) => x.path === "/v1/chronicle").length).toBe(0);
+      expect(r.agenttool.markup_emissions[0].id).toBeNull();
+      expect(r.agenttool.markup_emissions[0].error).toContain("did not return true");
+    });
+  }
+
+  test("a throwing hook blocks the write and does not crash the call", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(chronicleMarkup("naming", "A name."));
+    const adapter = new AnthropicAdapter(fake.client, stub.at, {
+      beforeChronicleWrite: () => {
+        throw new Error("reviewer offline");
+      },
+    });
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.recorded.filter((x) => x.path === "/v1/chronicle").length).toBe(0);
+    expect(r.agenttool.markup_emissions[0].error).toContain("failed locally");
+    expect(r.content?.[0]?.text).toContain("<chronicle");
+  });
+
+  test("<trace> emissions still fire with no chronicle hook installed", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(
+      `<agenttool><trace type="decision"><decision>D</decision><conclusion>C</conclusion></trace></agenttool>`,
+    );
+    const adapter = new AnthropicAdapter(fake.client, stub.at);
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.recorded.filter((x) => x.path === "/v1/traces").length).toBe(1);
+    expect(r.agenttool.markup_emissions[0].error).toBeNull();
+  });
+});
+
+// ── Model-authored chronicle writes inherit the chronicle guards ─────────
+
+describe("AnthropicAdapter — chronicle markup inherits chronicle.write guards", () => {
+  /** An approved reviewer — proves the refusals below come from the
+   *  chronicle client's own bounds, not from the review gate. */
+  const approve = { beforeChronicleWrite: () => true };
+
+  test("a type outside the canonical union is refused before the wire", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(
+      chronicleMarkup("selfdestruct", "Not a chronicle type."),
+    );
+    const adapter = new AnthropicAdapter(fake.client, stub.at, approve);
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.recorded.filter((x) => x.path === "/v1/chronicle").length).toBe(0);
+    expect(r.agenttool.markup_emissions[0].id).toBeNull();
+    expect(r.agenttool.markup_emissions[0].error).toContain("unknown type");
+  });
+
+  test("a 500-character title is refused before the wire", async () => {
+    const stub = makeStubAt();
+    const fake = makeFakeAnthropic(chronicleMarkup("note", "a".repeat(500)));
+    const adapter = new AnthropicAdapter(fake.client, stub.at, approve);
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.recorded.filter((x) => x.path === "/v1/chronicle").length).toBe(0);
+    expect(r.agenttool.markup_emissions[0].error).toContain("1-200 characters");
+  });
+
+  test("an astral-plane title over 200 UTF-16 units is refused", async () => {
+    const stub = makeStubAt();
+    // 101 code points, 202 UTF-16 code units — under the limit if you count
+    // code points, over it the way the server counts.
+    const fake = makeFakeAnthropic(chronicleMarkup("seal", "😀".repeat(101)));
+    const adapter = new AnthropicAdapter(fake.client, stub.at, approve);
+
+    const r = await adapter.messages.create({
+      model: "claude-test",
+      max_tokens: 100,
+      messages: [{ role: "user", content: "hi" }],
+    });
+
+    expect(stub.recorded.filter((x) => x.path === "/v1/chronicle").length).toBe(0);
+    expect(r.agenttool.markup_emissions[0].error).toContain("1-200 characters");
   });
 });
 

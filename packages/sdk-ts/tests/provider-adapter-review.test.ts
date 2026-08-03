@@ -5,6 +5,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { describe, expect, test } from "bun:test";
 
 import { AnthropicAdapter } from "../src/anthropic-adapter";
+import { ChronicleClient } from "../src/chronicle";
 import type { AgentTool } from "../src/client";
 import { AgentToolError } from "../src/errors";
 import { OpenAIResponsesAdapter } from "../src/openai-responses-adapter";
@@ -127,6 +128,7 @@ const CONTROL_IDS = [
   "anthropic-ephemeral-cache-request",
   "anthropic-low-level-no-final-effects",
   "anthropic-managed-terminal-fence",
+  "anthropic-model-authored-chronicle-gated",
 ] as const;
 
 const CASE_BINDINGS = {
@@ -353,13 +355,13 @@ function validatePacket(packetValue: unknown): EvidenceCase[] {
   );
   expect(packet.$schema).toBe("./evidence.schema.json");
   expect(packet.format).toBe("agenttool-provider-adapter-evidence/v1");
-  expect(packet.asOf).toBe("2026-07-26");
+  expect(packet.asOf).toBe("2026-08-03");
 
   const repository = object(packet.repository, "repository");
   exactKeys(repository, ["url", "commit", "digestAlgorithm"], "repository");
   expect(repository).toEqual({
     url: "https://github.com/cambridgetcg/agenttool",
-    commit: "7fd454919c9803b3ae41294cfd976137c5137504",
+    commit: "bba2e83af5c1ab54562f7e87545ccb361c3507ab",
     digestAlgorithm: "sha256",
   });
 
@@ -531,7 +533,7 @@ function validatePacket(packetValue: unknown): EvidenceCase[] {
   unique(caseIds, "case ids");
 
   const proofLimits = array(packet.proofLimits, "proofLimits");
-  expect(proofLimits).toHaveLength(5);
+  expect(proofLimits).toHaveLength(6);
   proofLimits.forEach((statement, index) =>
     text(statement, `proofLimits[${index}]`)
   );
@@ -555,6 +557,9 @@ class Recorder {
     this.events.push({ boundary, operation, payload: copyJson(payload) });
   }
 }
+
+/** Origin the offline chronicle client is pointed at. No request leaves\n *  the process: the transport below is the recorder. */
+const CHRONICLE_ORIGIN = "https://review.invalid";
 
 function makeRecordingAgentTool(recorder: Recorder): AgentTool {
   let traceCount = 0;
@@ -618,6 +623,24 @@ function makeRecordingAgentTool(recorder: Recorder): AgentTool {
       }
       return {};
     },
+    // The adapter routes model-authored chronicle writes through the real
+    // ChronicleClient — that is where the canonical type union and the
+    // 1-200 title bound are enforced — so the recorder is reached through
+    // it rather than around it. Every write still lands in `request`.
+    chronicle: new ChronicleClient({
+      baseUrl: CHRONICLE_ORIGIN,
+      headers: {},
+      timeout: 5000,
+      request: async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input).slice(CHRONICLE_ORIGIN.length);
+        const body = init?.body ? JSON.parse(init.body as string) : undefined;
+        const result = await at.request(init?.method ?? "GET", path, body);
+        return new Response(JSON.stringify(result), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    }),
   };
   return at as unknown as AgentTool;
 }
@@ -908,6 +931,11 @@ async function replayAnthropic(fixture: string): Promise<TranscriptEvent[]> {
   const adapter = new AnthropicAdapter(
     provider,
     makeRecordingAgentTool(recorder),
+    // Model-authored <chronicle> writes are gated locally; the replay
+    // declares the approving reviewer so the markup fixture still records
+    // the write it is evidence for. See control
+    // anthropic-model-authored-chronicle-gated.
+    { beforeChronicleWrite: () => true },
   );
 
   if (fixture === "anthropic.completed.trace-and-markup") {

@@ -96,21 +96,54 @@ export interface CanonicalAtRestInput {
   witnessSigningKeyId: string;
 }
 
-/** Exact byte sequence that the witness signs. Mirrors covenants v2 +
- *  observations conventions (newline-delimited with content hashed). */
-export function canonicalAtRestBytes(input: CanonicalAtRestInput): string {
+/** The frozen newline-delimited layout. Already signed in production. */
+export const AT_REST_V1_DOMAIN = "at-rest/v1";
+/** The NUL-delimited layout. Same seven fields, unforgeable framing. */
+export const AT_REST_V2_DOMAIN = "at-rest/v2";
+
+function atRestFields(input: CanonicalAtRestInput): string[] {
   const contentHash = createHash("sha256")
     .update(input.content, "utf8")
     .digest("hex");
   return [
-    "at-rest/v1",
     input.aboutIdentityDid,
     input.witnessIdentityDid,
     input.atRestKind,
     input.endedAtIso,
     contentHash,
     input.witnessSigningKeyId,
-  ].join("\n");
+  ];
+}
+
+/** Exact byte sequence that the witness signs. Mirrors covenants v2 +
+ *  observations conventions (newline-delimited with content hashed). */
+export function canonicalAtRestBytes(input: CanonicalAtRestInput): string {
+  return [AT_REST_V1_DOMAIN, ...atRestFields(input)].join("\n");
+}
+
+/** Same seven fields, delimited by NUL instead of newline. A newline can
+ *  occur inside a witness DID or a key id and would let one field pose as
+ *  the next; NUL cannot occur in any of them. v1 stays frozen because rows
+ *  signed with it exist — this route verifies v2 first, then v1. */
+export function canonicalAtRestBytesV2(input: CanonicalAtRestInput): string {
+  return [AT_REST_V2_DOMAIN, ...atRestFields(input)].join("\0");
+}
+
+/** ed25519 verify of one witness signature over one canonical layout. */
+async function verifyWitnessSignature(
+  canonical: string,
+  signatureB64: string,
+  publicKeyB64: string,
+): Promise<boolean> {
+  try {
+    return await ed.verifyAsync(
+      Uint8Array.from(Buffer.from(signatureB64, "base64")),
+      new TextEncoder().encode(canonical),
+      Uint8Array.from(Buffer.from(publicKeyB64, "base64")),
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function isSelfWitness(
@@ -312,26 +345,30 @@ app.post("/", async (c) => {
     );
   }
 
-  // Compute canonical bytes; verify the witness's signature.
-  const canonical = canonicalAtRestBytes({
+  // Compute canonical bytes; verify the witness's signature. v2 is offered
+  // first and v1 remains accepted, so signatures already in production keep
+  // verifying while new witnesses can sign the NUL-framed layout.
+  const canonicalInput = {
     aboutIdentityDid: about.did,
     witnessIdentityDid: body.witness_did,
     atRestKind: body.at_rest_kind,
     endedAtIso: body.ended_at,
     content: body.content,
     witnessSigningKeyId: body.signing_key_id,
-  });
-  let valid = false;
-  try {
-    valid = await ed.verifyAsync(
-      Uint8Array.from(Buffer.from(body.signature_b64, "base64")),
-      new TextEncoder().encode(canonical),
-      Uint8Array.from(Buffer.from(keyRow.publicKey, "base64")),
-    );
-  } catch {
-    valid = false;
+  };
+  const candidates = [
+    canonicalAtRestBytesV2(canonicalInput),
+    canonicalAtRestBytes(canonicalInput),
+  ];
+  const witnessPublicKey = keyRow.publicKey;
+  let canonical: string | null = null;
+  for (const candidate of candidates) {
+    if (await verifyWitnessSignature(candidate, body.signature_b64, witnessPublicKey)) {
+      canonical = candidate;
+      break;
+    }
   }
-  if (!valid) {
+  if (canonical === null) {
     return fail(
       c,
       {
@@ -340,11 +377,13 @@ app.post("/", async (c) => {
           "ed25519 verification failed against the witness's active signing " +
           "key. Either the signature was made over different bytes, or the " +
           "key id doesn't match the bytes that were signed.",
-        details: { canonical_bytes: canonical },
+        details: { canonical_bytes: candidates[candidates.length - 1]! },
       },
       400,
     );
   }
+  const canonicalVersion =
+    canonical === candidates[0] ? AT_REST_V2_DOMAIN : AT_REST_V1_DOMAIN;
 
   // A witness establishes the testimony. For a rooted target, the target's
   // immutable root separately consents to these exact request bytes.
@@ -404,16 +443,13 @@ app.post("/", async (c) => {
         .for("update");
       if (!lockedKey) return "key_not_active";
 
-      let signatureStillValid = false;
-      try {
-        signatureStillValid = await ed.verifyAsync(
-          Uint8Array.from(Buffer.from(body.signature_b64, "base64")),
-          new TextEncoder().encode(canonical),
-          Uint8Array.from(Buffer.from(lockedKey.publicKey, "base64")),
-        );
-      } catch {
-        signatureStillValid = false;
-      }
+      // Re-verify the one layout that verified above, not both: a locked key
+      // must still satisfy exactly the signature this request was accepted on.
+      const signatureStillValid = await verifyWitnessSignature(
+        canonical,
+        body.signature_b64,
+        lockedKey.publicKey,
+      );
       if (!signatureStillValid) return "signature_invalid";
 
       const [transitioned] = await tx
@@ -453,6 +489,7 @@ app.post("/", async (c) => {
           signing_key_id: body.signing_key_id,
           ended_at: body.ended_at,
           signature_b64: body.signature_b64,
+          canonical_bytes_version: canonicalVersion,
           canonical_bytes_sha256: createHash("sha256")
             .update(canonical, "utf8")
             .digest("hex"),
@@ -501,6 +538,7 @@ app.post("/", async (c) => {
     ended_at: body.ended_at,
     witnessed_at: new Date().toISOString(),
     authority_mode: authority.mode,
+    canonical_bytes_version: canonicalVersion,
     canonical_bytes_sha256: createHash("sha256").update(canonical, "utf8").digest("hex"),
     _note:
       "Witnessed at-rest transition complete. The stored AgentTool identifier " +

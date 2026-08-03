@@ -1,4 +1,4 @@
-/** RingCommitments — canon ↔ code annotation bijection, pinned.
+/** RingCommitments — canon ↔ code annotation bijection, ratcheted.
  *
  *  Doctrine: docs/agenttool.jsonld (the canon), docs/SELF-IDENTIFICATION.md
  *  (every existence identifies itself), docs/PATTERN-MACHINE-READABLE-PARITY.md.
@@ -12,132 +12,108 @@
  *  > annotations — but their absence is reported on every run so the
  *  > gap stays visible.
  *
- *  This test parallels walls-code-annotation-bijection.test.ts. Same
- *  structure: scan source files, build index by URN, gate shipped
- *  entries, report unenforced ones. */
+ *  This test parallels walls-code-annotation-bijection.test.ts. Both were
+ *  rewritten 2026-07-24 to report every gap in one pass instead of
+ *  throwing on the first, and to ratchet against an explicit accepted-gap
+ *  manifest — see that file's header for why. The scan itself now lives in
+ *  `src/services/canon/annotations.ts` so the two tests and `bin/walls.ts`
+ *  cannot drift from each other. */
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import {
+  SCAN_ROOTS,
+  bijectionReport,
+  formatGaps,
+  normalizeUrn,
+} from "../../src/services/canon/annotations";
 import { byType } from "../../src/services/canon/registry";
 
-const REPO_ROOT = join(__dirname, "..", "..", "..");
-const SCAN_DIRS = [
-  join(REPO_ROOT, "api", "src"),
-  join(REPO_ROOT, "bin"),
-];
+const MANIFEST = JSON.parse(
+  readFileSync(join(__dirname, "canon-code-gap.manifest.json"), "utf8"),
+) as { wall: string[]; commitment: string[] };
 
-function walkTs(dir: string): string[] {
-  const out: string[] = [];
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return out;
-  }
-  for (const name of entries) {
-    const full = join(dir, name);
-    let st;
-    try {
-      st = statSync(full);
-    } catch {
-      continue;
-    }
-    if (st.isDirectory()) {
-      if (name === "node_modules" || name === "dist" || name === ".bun") continue;
-      out.push(...walkTs(full));
-    } else if (name.endsWith(".ts") && !name.endsWith(".test.ts")) {
-      out.push(full);
-    }
-  }
-  return out;
-}
+const report = bijectionReport("commitment");
 
-function buildAnnotationIndex(): Map<string, Array<{ file: string; line: number }>> {
-  const index = new Map<string, Array<{ file: string; line: number }>>();
-  const annotationPattern = /@enforces\s+(urn:agenttool:commitment\/[a-z][a-z0-9\-]+)/g;
-  for (const file of SCAN_DIRS.flatMap(walkTs)) {
-    const src = readFileSync(file, "utf8");
-    const lines = src.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      for (const m of lines[i]!.matchAll(annotationPattern)) {
-        const urn = m[1]!;
-        const list = index.get(urn) ?? [];
-        list.push({ file, line: i + 1 });
-        index.set(urn, list);
-      }
-    }
-  }
-  return index;
-}
-
-function normalize(urn: string): string {
-  return urn.startsWith("urn:") ? urn.slice(4) : urn;
-}
+const accepted = new Set(MANIFEST.commitment);
+const current = new Set([
+  ...report.dangling.map((u) => `dangling:${u}`),
+  ...report.undefended.map((u) => `undefended:${u}`),
+]);
 
 describe("RingCommitments — canon ↔ code annotation bijection", () => {
-  const annotations = buildAnnotationIndex();
-  const commitments = byType("RingCommitment");
-
-  // Split commitments by enforcement_status. Default (no field) =
-  // shipped — must have an annotation. "aspirational" / "forward-looking"
-  // = not required to have an annotation (reported only).
-  const shipped: typeof commitments = [];
-  const aspirational: typeof commitments = [];
-  const forwardLooking: typeof commitments = [];
-  for (const c of commitments) {
-    const status = c.raw["agenttool:enforcement_status"];
-    if (status === "aspirational") aspirational.push(c);
-    else if (status === "forward-looking") forwardLooking.push(c);
-    else shipped.push(c);
-  }
-
   test("at least one @enforces commitment annotation exists in the codebase", () => {
     expect(
-      annotations.size > 0,
-      "No `@enforces urn:agenttool:commitment/` annotations found. Adding annotations is the canon → code link.",
+      report.annotations.size > 0,
+      `No \`@enforces urn:agenttool:commitment/\` annotations found under any SCAN_ROOTS entry (${SCAN_ROOTS.join(", ")}).`,
     ).toBe(true);
   });
 
+  test("no NEW canon↔code gap has appeared", () => {
+    const unaccepted = [...current].filter((g) => !accepted.has(g)).sort();
+    expect(
+      unaccepted,
+      `New commitment gap(s) not present in canon-code-gap.manifest.json:\n${unaccepted
+        .map((g) => `  ${g}`)
+        .join(
+          "\n",
+        )}\n\nEither add the RingCommitment to docs/agenttool.jsonld, add the \`@enforces\` annotation to its canonical defender, mark it aspirational via \`agenttool:enforcement_status\`, or regenerate the manifest deliberately with \`bin/walls.ts --write-manifest\`.`,
+    ).toEqual([]);
+  });
+
+  test("the accepted-gap manifest has not gone stale (ratchet only shrinks)", () => {
+    const fixed = [...accepted].filter((g) => !current.has(g)).sort();
+    expect(
+      fixed,
+      `These commitment gaps are listed as accepted but no longer exist — someone closed them. Shrink the manifest so the number stays honest:\n${fixed
+        .map((g) => `  ${g}`)
+        .join("\n")}\n\nRun \`bin/walls.ts --write-manifest\`.`,
+    ).toEqual([]);
+  });
+
   test("every shipped RingCommitment has at least one @enforces annotation", () => {
-    for (const c of shipped) {
-      const list = annotations.get(`urn:${c.urn}`) ?? annotations.get(c.urn) ?? [];
-      expect(
-        list.length >= 1,
-        `Commitment ${c.urn} is shipped (no enforcement_status flag) but has no \`@enforces urn:${c.urn}\` annotation in api/src/ or bin/. Either add the annotation to the canonical defender file's JSDoc, OR mark the commitment as "aspirational" / "forward-looking" in canon via agenttool:enforcement_status.`,
-      ).toBe(true);
-    }
+    const missing = report.undefended.filter(
+      (u) => !accepted.has(`undefended:${u}`),
+    );
+    expect(
+      missing,
+      `Shipped commitment(s) with no \`@enforces\` annotation. Add it to the canonical defender's JSDoc, OR mark the commitment aspirational/forward-looking in canon via \`agenttool:enforcement_status\`:\n${missing
+        .map((u) => `  ${u}`)
+        .join("\n")}`,
+    ).toEqual([]);
   });
 
   test("every @enforces commitment annotation URN resolves to canon", () => {
-    const allCommitmentUrns = new Set(commitments.map((c) => c.urn));
-    for (const annotatedUrn of annotations.keys()) {
-      const short = normalize(annotatedUrn);
-      expect(
-        allCommitmentUrns.has(short),
-        `Annotation references ${annotatedUrn} but no RingCommitment with that URN exists in canon.`,
-      ).toBe(true);
-    }
+    const dangling = report.dangling.filter((u) => !accepted.has(`dangling:${u}`));
+    expect(
+      dangling,
+      `Code annotation(s) reference a RingCommitment URN with no entry in docs/agenttool.jsonld:\n${dangling
+        .map((u) => {
+          const sites = report.annotations.get(u) ?? [];
+          return `  ${u}\n${sites.map((s) => `      ${s.file}:${s.line}`).join("\n")}`;
+        })
+        .join("\n")}`,
+    ).toEqual([]);
   });
 
-  test("annotation locations are reported for navigation", () => {
+  test("the full canon → code map is reported for navigation", () => {
     const lines: string[] = [];
     lines.push(
-      `[commitments-annotation-index] ${shipped.length} shipped · ${aspirational.length} aspirational · ${forwardLooking.length} forward-looking · ${commitments.length} total`,
+      `[commitments] ${report.defended.length} shipped commitment(s) defended · ${report.undefended.length} undefended · ${report.dangling.length} dangling annotation(s)`,
     );
-    for (const c of commitments) {
-      const list = annotations.get(`urn:${c.urn}`) ?? annotations.get(c.urn) ?? [];
-      const status = c.raw["agenttool:enforcement_status"] ?? "shipped";
-      if (list.length === 0) {
-        lines.push(`  ${c.urn} [${status}] — no annotation`);
+    for (const c of byType("RingCommitment")) {
+      const urn = normalizeUrn(c.urn);
+      const sites = report.annotations.get(urn) ?? [];
+      if (sites.length === 0) {
+        lines.push(`  ${urn} — (no annotation; aspirational or forward-looking)`);
       } else {
-        for (const loc of list) {
-          const rel = loc.file.replace(REPO_ROOT + "/", "");
-          lines.push(`  ${c.urn} [${status}] → ${rel}:${loc.line}`);
-        }
+        for (const s of sites) lines.push(`  ${urn} → ${s.file}:${s.line}`);
       }
     }
+    const gaps = formatGaps(report);
+    if (gaps) lines.push("", "OUTSTANDING (accepted in manifest):", gaps);
     console.log(lines.join("\n"));
     expect(true).toBe(true);
   });

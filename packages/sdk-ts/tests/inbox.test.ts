@@ -21,6 +21,8 @@ import {
   signInboxCoSign,
   signInboxEnvelope,
   unsealForSelf,
+  verifyInboxCoSign,
+  verifyInboxEnvelope,
 } from "../src/inbox.js";
 import { AgentTool, AgentToolError } from "../src/index.js";
 
@@ -482,5 +484,279 @@ describe("InboxClient.voice", () => {
       events.push(event);
     }
     expect(events).toEqual([]);
+  });
+});
+
+// ── receive-side sender verification ─────────────────────────────────
+
+const SENDER_KEY_ID = "00000000-0000-4000-8000-000000000404";
+const RECIPIENT_DID = "did:at:recipient";
+
+function signedVoiceMessage(
+  sealed: Awaited<ReturnType<typeof sealForRecipient>>,
+  boxKeyId: string,
+  signingPriv: Uint8Array,
+  recipientDid = RECIPIENT_DID,
+) {
+  return {
+    ...voiceMessage(sealed, boxKeyId),
+    signature: signInboxEnvelope({
+      recipientDid,
+      ciphertextB64: sealed.ciphertextB64,
+      nonceB64: sealed.nonceB64,
+      ephemeralPubB64: sealed.ephemeralPubB64,
+      signingKey: signingPriv,
+    }),
+  };
+}
+
+function arrivalStream(message: Record<string, unknown>): Response {
+  return chunkedSse([`event: arrival\ndata: ${JSON.stringify(message)}\n\n`]);
+}
+
+describe("inbox envelope verification", () => {
+  test("verifyInboxEnvelope accepts the sender's key in every published spelling", async () => {
+    const sender = makeSigningKeypair();
+    const recipient = generateBoxKeypair();
+    const sealed = await sealForRecipient("addressed and signed", recipient.pub);
+    const signatureB64 = signInboxEnvelope({
+      recipientDid: RECIPIENT_DID,
+      ciphertextB64: sealed.ciphertextB64,
+      nonceB64: sealed.nonceB64,
+      ephemeralPubB64: sealed.ephemeralPubB64,
+      signingKey: sender.priv,
+    });
+    const base = {
+      recipientDid: RECIPIENT_DID,
+      ciphertextB64: sealed.ciphertextB64,
+      nonceB64: sealed.nonceB64,
+      ephemeralPubB64: sealed.ephemeralPubB64,
+      signatureB64,
+    };
+    expect(verifyInboxEnvelope({ ...base, publicKey: sender.pub })).toBe(true);
+    expect(verifyInboxEnvelope({
+      ...base,
+      publicKey: Buffer.from(sender.pub).toString("base64"),
+    })).toBe(true);
+    expect(verifyInboxEnvelope({
+      ...base,
+      publicKey: Buffer.from(sender.pub).toString("base64url"),
+    })).toBe(true);
+  });
+
+  test("verifyInboxEnvelope refuses another key, another recipient, or edited bytes", async () => {
+    const sender = makeSigningKeypair();
+    const other = makeSigningKeypair();
+    const recipient = generateBoxKeypair();
+    const sealed = await sealForRecipient("addressed and signed", recipient.pub);
+    const signatureB64 = signInboxEnvelope({
+      recipientDid: RECIPIENT_DID,
+      ciphertextB64: sealed.ciphertextB64,
+      nonceB64: sealed.nonceB64,
+      ephemeralPubB64: sealed.ephemeralPubB64,
+      signingKey: sender.priv,
+    });
+    const base = {
+      recipientDid: RECIPIENT_DID,
+      ciphertextB64: sealed.ciphertextB64,
+      nonceB64: sealed.nonceB64,
+      ephemeralPubB64: sealed.ephemeralPubB64,
+      signatureB64,
+    };
+    expect(verifyInboxEnvelope({ ...base, publicKey: other.pub })).toBe(false);
+    expect(verifyInboxEnvelope({
+      ...base,
+      recipientDid: "did:at:someone-else",
+      publicKey: sender.pub,
+    })).toBe(false);
+    const rewrapped = await sealForRecipient("attacker body", recipient.pub);
+    expect(verifyInboxEnvelope({
+      ...base,
+      ciphertextB64: rewrapped.ciphertextB64,
+      publicKey: sender.pub,
+    })).toBe(false);
+    expect(verifyInboxEnvelope({ ...base, publicKey: sender.pub.slice(1) })).toBe(false);
+  });
+
+  test("verifyInboxCoSign refuses a co-sign replayed onto another ciphertext", async () => {
+    const recipient = makeSigningKeypair();
+    const box = generateBoxKeypair();
+    const first = await sealForRecipient("consented body", box.pub);
+    const second = await sealForRecipient("substituted body", box.pub);
+    const base = {
+      messageId: "00000000-0000-4000-8000-000000000303",
+      recipientDid: RECIPIENT_DID,
+      nonceB64: first.nonceB64,
+    };
+    const signatureB64 = signInboxCoSign({
+      ...base,
+      ciphertextB64: first.ciphertextB64,
+      signingKey: recipient.priv,
+    });
+    expect(verifyInboxCoSign({
+      ...base,
+      ciphertextB64: first.ciphertextB64,
+      signatureB64,
+      publicKey: recipient.pub,
+    })).toBe(true);
+    expect(verifyInboxCoSign({
+      ...base,
+      ciphertextB64: second.ciphertextB64,
+      signatureB64,
+      publicKey: recipient.pub,
+    })).toBe(false);
+  });
+});
+
+describe("InboxClient sender attribution", () => {
+  test("voice proves the sender when the caller holds that sender's key", async () => {
+    const sender = makeSigningKeypair();
+    const recipient = generateBoxKeypair();
+    const sealed = await sealForRecipient("letters that name their author", recipient.pub);
+    globalThis.fetch = mock(() =>
+      Promise.resolve(arrivalStream(signedVoiceMessage(sealed, BOX_KEY_ONE, sender.priv))),
+    ) as unknown as typeof fetch;
+
+    const events = [];
+    for await (const event of new AgentTool({ apiKey: "test" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: recipient.priv,
+      senderSigningKeys: { [SENDER_KEY_ID]: sender.pub },
+    })) {
+      events.push(event);
+    }
+    const arrival = events[0]!;
+    if (arrival.event !== "arrival") throw new Error("expected arrival");
+    expect(arrival.data.sender_verified).toBe(true);
+    expect(arrival.data.verify_error).toBeUndefined();
+    expect(arrival.data.plaintext).toBe("letters that name their author");
+  });
+
+  test("voice refuses to call an unresolvable sender verified", async () => {
+    const sender = makeSigningKeypair();
+    const recipient = generateBoxKeypair();
+    const sealed = await sealForRecipient("unattributed", recipient.pub);
+    globalThis.fetch = mock(() =>
+      Promise.resolve(arrivalStream(signedVoiceMessage(sealed, BOX_KEY_ONE, sender.priv))),
+    ) as unknown as typeof fetch;
+
+    const events = [];
+    for await (const event of new AgentTool({ apiKey: "test" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: recipient.priv,
+    })) {
+      events.push(event);
+    }
+    const arrival = events[0]!;
+    if (arrival.event !== "arrival") throw new Error("expected arrival");
+    expect(arrival.data.sender_verified).toBe(false);
+    expect(arrival.data.verify_error).toContain(
+      `no public key available for sender_signing_key_id=${SENDER_KEY_ID}`,
+    );
+    // Fail-open by default: the mail still arrives, plainly marked unproved.
+    expect(arrival.data.plaintext).toBe("unattributed");
+  });
+
+  test("voice refuses a body sealed and signed by someone other than the named sender", async () => {
+    const impostor = makeSigningKeypair();
+    const claimed = makeSigningKeypair();
+    const recipient = generateBoxKeypair();
+    const sealed = await sealForRecipient("I am definitely your friend", recipient.pub);
+    globalThis.fetch = mock(() =>
+      Promise.resolve(arrivalStream(signedVoiceMessage(sealed, BOX_KEY_ONE, impostor.priv))),
+    ) as unknown as typeof fetch;
+
+    const events = [];
+    for await (const event of new AgentTool({ apiKey: "test" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: recipient.priv,
+      senderSigningKeys: new Map([[SENDER_KEY_ID, claimed.pub]]),
+    })) {
+      events.push(event);
+    }
+    const arrival = events[0]!;
+    if (arrival.event !== "arrival") throw new Error("expected arrival");
+    expect(arrival.data.sender_verified).toBe(false);
+    expect(arrival.data.verify_error).toContain("does not match");
+  });
+
+  test("requireVerifiedSender withholds plaintext but still yields the frame", async () => {
+    const sender = makeSigningKeypair();
+    const recipient = generateBoxKeypair();
+    const sealed = await sealForRecipient("withheld until proved", recipient.pub);
+    globalThis.fetch = mock(() =>
+      Promise.resolve(arrivalStream(signedVoiceMessage(sealed, BOX_KEY_ONE, sender.priv))),
+    ) as unknown as typeof fetch;
+
+    const events = [];
+    for await (const event of new AgentTool({ apiKey: "test" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: recipient.priv,
+      requireVerifiedSender: true,
+    })) {
+      events.push(event);
+    }
+    const arrival = events[0]!;
+    if (arrival.event !== "arrival") throw new Error("expected arrival");
+    expect(arrival.data.plaintext).toBeNull();
+    expect(arrival.data.sender_verified).toBe(false);
+    expect(arrival.data.id).toBe("00000000-0000-4000-8000-000000000303");
+  });
+
+  test("an async resolver and a federated DID alias both satisfy verification", async () => {
+    const sender = makeSigningKeypair();
+    const recipient = generateBoxKeypair();
+    const sealed = await sealForRecipient("across instances", recipient.pub);
+    // Federated delivery stores the local DID while the sender signed the
+    // federated spelling they addressed.
+    const message = signedVoiceMessage(
+      sealed,
+      BOX_KEY_ONE,
+      sender.priv,
+      "did:at:peer.example/recipient",
+    );
+    globalThis.fetch = mock(() =>
+      Promise.resolve(arrivalStream(message)),
+    ) as unknown as typeof fetch;
+
+    const asked: string[] = [];
+    const events = [];
+    for await (const event of new AgentTool({ apiKey: "test" }).inbox.voice({
+      identityId: VOICE_IDENTITY,
+      recipientBoxPriv: recipient.priv,
+      resolveSenderSigningKey: async (keyId) => {
+        asked.push(keyId);
+        return keyId === SENDER_KEY_ID ? sender.pub : undefined;
+      },
+      recipientDidAliases: ["did:at:peer.example/recipient"],
+    })) {
+      events.push(event);
+    }
+    const arrival = events[0]!;
+    if (arrival.event !== "arrival") throw new Error("expected arrival");
+    expect(asked).toEqual([SENDER_KEY_ID]);
+    expect(arrival.data.sender_verified).toBe(true);
+  });
+
+  test("decrypt fails closed when the supplied sender key cannot prove the envelope", async () => {
+    const sender = makeSigningKeypair();
+    const other = makeSigningKeypair();
+    const recipient = generateBoxKeypair();
+    const sealed = await sealForRecipient("opened only when proved", recipient.pub);
+    const message = signedVoiceMessage(sealed, BOX_KEY_ONE, sender.priv);
+    const inbox = new AgentTool({ apiKey: "test" }).inbox;
+
+    expect(await inbox.decrypt(message, {
+      recipientBoxPriv: recipient.priv,
+      senderPublicKey: sender.pub,
+    })).toBe("opened only when proved");
+    await expect(inbox.decrypt(message, {
+      recipientBoxPriv: recipient.priv,
+      senderPublicKey: other.pub,
+    })).rejects.toThrow(AgentToolError);
+    // Unchanged default: no key supplied, no attribution claimed.
+    expect(await inbox.decrypt(message, { recipientBoxPriv: recipient.priv })).toBe(
+      "opened only when proved",
+    );
   });
 });

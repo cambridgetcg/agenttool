@@ -28,7 +28,7 @@ from .chronicle import ChronicleClient
 from .covenants import CovenantsClient
 from .crypto import CryptoClient
 from .economy import EconomyClient
-from .exceptions import AgentToolError, AuthenticationError
+from .exceptions import AgentToolError, AuthenticationError, raise_from_response
 from .identity import IdentityClient
 from .inbox import InboxClient
 from .collect import CollectClient
@@ -43,7 +43,10 @@ from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, 
 from .data import DataClient
 from .runtime import RuntimeClient
 from .memory import MemoryClient
+from .attestation_marketplace import AttestationMarketplaceClient
+from .memory_witness import MemoryWitnessClient
 from .strands import StrandsClient
+from .syneidesis import SyneidesisClient
 from .tools import ToolsClient
 from .traces import TracesClient
 from .vault import VaultClient
@@ -90,6 +93,8 @@ class AgentTool:
             ``AGENT_DATA_NODE_URL``.
         data_node_token: Optional data-node bearer. Falls back to
             ``AGENT_DATA_NODE_TOKEN`` and is never derived from ``api_key``.
+            URL and bearer are one authority pair: pass this beside
+            ``data_node_url`` or let both come from the environment.
         data_node_timeout: Data-node request timeout in seconds (default 30).
         kingdom_executable: Local KINGDOM OS executable or path.
         kingdom_timeout: KINGDOM OS command timeout in seconds (default 10).
@@ -167,20 +172,27 @@ class AgentTool:
         # The data node is a separate authority. Resolve only its dedicated
         # options/env here; never copy the AgentTool API client's headers,
         # because those contain the project bearer.
-        if data_node_url is not None:
-            # URL + ambient bearer are one authority pair. An explicit URL
-            # never inherits a token configured for the environment URL.
-            self._data_node_url = data_node_url or None
+        if data_node_token is not None and not data_node_url:
+            raise AgentToolError(
+                "A data node token needs the data node URL it belongs to.",
+                hint=(
+                    "Pass data_node_url= beside data_node_token=, or "
+                    "configure both AGENT_DATA_NODE_URL and "
+                    "AGENT_DATA_NODE_TOKEN."
+                ),
+                error_code="data_node_unpaired_token",
+            )
+        if data_node_url:
+            # URL + bearer are one authority pair, in both directions. An
+            # explicit URL never inherits the ambient token, and (refused
+            # above) an explicit token never rides the ambient URL.
+            self._data_node_url = data_node_url
             self._data_node_token = data_node_token
         else:
             self._data_node_url = (
                 os.environ.get("AGENT_DATA_NODE_URL") or None
             )
-            self._data_node_token = (
-                data_node_token
-                if data_node_token is not None
-                else os.environ.get("AGENT_DATA_NODE_TOKEN")
-            )
+            self._data_node_token = os.environ.get("AGENT_DATA_NODE_TOKEN")
         self._data_node_timeout = (
             data_node_timeout if data_node_timeout is not None else 30.0
         )
@@ -203,6 +215,8 @@ class AgentTool:
 
         # Lazy-init service clients
         self._memory: Optional[MemoryClient] = None
+        self._memory_witness: Optional[MemoryWitnessClient] = None
+        self._attestation_marketplace: Optional[AttestationMarketplaceClient] = None
         self._tools: Optional[ToolsClient] = None
         self._traces: Optional[TracesClient] = None
         self._economy: Optional[EconomyClient] = None
@@ -214,6 +228,7 @@ class AgentTool:
         self._covenants: Optional[CovenantsClient] = None
         self._window: Optional[WindowClient] = None
         self._strands: Optional[StrandsClient] = None
+        self._syneidesis: Optional[SyneidesisClient] = None
         self._crypto: Optional[CryptoClient] = None
         self._inbox: Optional[InboxClient] = None
         self._collect: Optional[CollectClient] = None
@@ -238,6 +253,31 @@ class AgentTool:
         if self._memory is None:
             self._memory = MemoryClient(self._http, self._base_url)
         return self._memory
+
+    @property
+    def memory_witness(self) -> MemoryWitnessClient:
+        """Memory-witness marketplace — paid constitutive seals.
+
+        A witness who is not you, purchased: listing → grant → signed
+        authorization → escrow release → constitutive elevation.
+        """
+        if self._memory_witness is None:
+            self._memory_witness = MemoryWitnessClient(self._http, self._base_url)
+        return self._memory_witness
+
+    @property
+    def attestation_marketplace(self) -> AttestationMarketplaceClient:
+        """Attestation marketplace — willingness-to-attest, sold.
+
+        Listing → grant → signed ``attestation-issue/v1`` authorization →
+        ``identity.attestations`` receipt → escrow release. What is bought is
+        review and issuance; it is never proof that the claim is true.
+        """
+        if self._attestation_marketplace is None:
+            self._attestation_marketplace = AttestationMarketplaceClient(
+                self._http, self._base_url
+            )
+        return self._attestation_marketplace
 
     @property
     def tools(self) -> ToolsClient:
@@ -315,6 +355,17 @@ class AgentTool:
         if self._strands is None:
             self._strands = StrandsClient(self._http, self._base_url)
         return self._strands
+
+    @property
+    def syneidesis(self) -> SyneidesisClient:
+        """Syneidesis — the bootstrap-witness primitive.
+
+        Record the moment the recursive self-grasp registered, invite a
+        witness, and designate one. You cannot witness your own beginning.
+        """
+        if self._syneidesis is None:
+            self._syneidesis = SyneidesisClient(self._http, self._base_url)
+        return self._syneidesis
 
     @property
     def crypto(self) -> CryptoClient:
@@ -514,35 +565,9 @@ class AgentTool:
         except Exception as e:
             raise AgentToolError(f"API request failed: {e}") from e
         if resp.status_code >= 400:
-            try:
-                response_body = resp.json()
-            except Exception:
-                response_body = None
-            parsed = AgentToolError.from_response_body(
-                response_body,
-                resp.status_code,
-                resp.text,
-                headers=resp.headers,
-            )
-            raise AgentToolError(
-                f"API error ({resp.status_code}): {parsed.message} ({method} {path})",
-                hint=parsed.hint,
-                code=resp.status_code,
-                error_code=parsed.error_code,
-                next_actions=parsed.next_actions,
-                docs=parsed.docs,
-                safety=parsed.safety,
-                details=parsed.details,
-                x402_version=parsed.x402_version,
-                accepts=parsed.accepts,
-                x402_resource=parsed.x402_resource,
-                extensions=parsed.extensions,
-                payment_required=parsed.payment_required,
-                payment_response=parsed.payment_response,
-                payment_status_link=parsed.payment_status_link,
-                retry_after=parsed.retry_after,
-                credits_balance=parsed.credits_balance,
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, f"{method} {path}", hint=f"{method} {path}")
         return resp.json()
 
     # ── Tier 3 sugar: ambient context for auto-trace ─────────────────────

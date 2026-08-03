@@ -32,7 +32,8 @@ import base64
 import hashlib
 import hmac
 from dataclasses import dataclass
-from typing import Tuple
+from datetime import datetime, timezone
+from typing import Dict, Optional, Tuple
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
@@ -90,6 +91,25 @@ def generate_mnemonic(strength: int = 256) -> str:
             hint="256 → 24 words (recommended); 128 → 12 words.",
         )
     return Mnemonic("english").generate(strength=strength)
+
+
+def is_valid_mnemonic(words: str) -> bool:
+    """Whether a mnemonic phrase is well-formed.
+
+    Correct word count, every word in the BIP39 English wordlist, valid
+    checksum. Surrounding and repeated whitespace is forgiven before the
+    check, exactly as the TS SDK's ``isValidMnemonic`` does.
+
+    Args:
+        words: candidate BIP39 English mnemonic.
+
+    Returns:
+        True if the phrase is a usable BIP39 mnemonic.
+
+    This is the standalone predicate; :func:`mnemonic_to_seed` runs the
+    same check and raises instead of returning False.
+    """
+    return Mnemonic("english").check(" ".join(words.split()))
 
 
 def mnemonic_to_seed(words: str, passphrase: str = "") -> bytes:
@@ -368,6 +388,180 @@ def derive_wallet(
     """
     seed = mnemonic_to_seed(mnemonic, passphrase=passphrase)
     return derive_wallet_secret(seed, wallet_index=wallet_index)
+
+
+# ── Recovery — canonical bytes + signing for /v1/identity/recover ──────
+
+
+def _now_iso() -> str:
+    """ISO-8601 UTC to millisecond precision with a ``Z`` suffix.
+
+    Byte-identical to JavaScript's ``new Date().toISOString()``. Python's
+    ``isoformat()`` gives microseconds and ``+00:00``; neither reaches the
+    server's parser the same way.
+    """
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _sign_b64(canonical: bytes, derived_signing_priv: bytes) -> str:
+    """Ed25519-sign canonical bytes; return standard base64."""
+    signature = Ed25519PrivateKey.from_private_bytes(derived_signing_priv).sign(
+        canonical
+    )
+    return base64.b64encode(signature).decode("ascii")
+
+
+def canonical_recover_bytes(
+    *,
+    did: str,
+    derived_pubkey: bytes,
+    timestamp: str,
+) -> bytes:
+    """SHA-256 digest the server verifies ``/v1/identity/recover`` against.
+
+    Mirrors ``canonicalRecoverBytes`` in api/src/services/identity/crypto.ts
+    byte-for-byte. Shape::
+
+        sha256(
+          "identity-recover/v1"  || 0x00 ||
+          did                    || 0x00 ||
+          derived_pubkey (raw)   || 0x00 ||
+          timestamp_iso
+        )
+
+    Args:
+        did: the identity's DID.
+        derived_pubkey: raw 32 bytes — NOT the base64 text. The server
+            base64-decodes ``derived_pubkey`` before hashing.
+        timestamp: ISO-8601 UTC instant, millisecond precision.
+
+    Returns:
+        32-byte digest to sign.
+    """
+    sep = b"\x00"
+    parts = [
+        b"identity-recover/v1",
+        sep,
+        did.encode("utf-8"),
+        sep,
+        derived_pubkey,
+        sep,
+        timestamp.encode("utf-8"),
+    ]
+    return hashlib.sha256(b"".join(parts)).digest()
+
+
+def sign_recover_challenge(
+    *,
+    did: str,
+    derived_signing_priv: bytes,
+    derived_signing_pub: bytes,
+    timestamp: Optional[str] = None,
+) -> Dict[str, str]:
+    """Sign a caller-timestamped recovery request; return ``{timestamp, signature}``.
+
+    The name is retained for SDK compatibility; no server-issued challenge is
+    involved, and the server does not establish the key's origin. POST the
+    pair to ``/v1/identity/recover`` alongside ``did`` + ``derived_pubkey``.
+
+    Default timestamp is now (ISO-8601, UTC). Pass an explicit timestamp
+    only for testing — the server enforces ±5min freshness.
+    """
+    ts = timestamp or _now_iso()
+    canonical = canonical_recover_bytes(
+        did=did,
+        derived_pubkey=derived_signing_pub,
+        timestamp=ts,
+    )
+    return {"timestamp": ts, "signature": _sign_b64(canonical, derived_signing_priv)}
+
+
+def canonical_discovery_bytes(
+    *,
+    derived_pubkey: bytes,
+    timestamp: str,
+) -> bytes:
+    """SHA-256 digest for ``/public/identities/by-pubkey`` discovery signatures.
+
+    Mirrors the server-side helper byte-for-byte. Shape::
+
+        sha256(
+          "identity-discover/v1" || 0x00 ||
+          derived_pubkey (raw)   || 0x00 ||
+          timestamp_iso
+        )
+
+    Same construction as :func:`canonical_recover_bytes` minus the DID — the
+    caller doesn't know the DID(s) yet during discovery.
+    """
+    sep = b"\x00"
+    parts = [
+        b"identity-discover/v1",
+        sep,
+        derived_pubkey,
+        sep,
+        timestamp.encode("utf-8"),
+    ]
+    return hashlib.sha256(b"".join(parts)).digest()
+
+
+def sign_discovery_challenge(
+    *,
+    derived_signing_priv: bytes,
+    derived_signing_pub: bytes,
+    timestamp: Optional[str] = None,
+) -> Dict[str, str]:
+    """Sign a discovery challenge; return ``{timestamp, signature}`` to POST
+    alongside the pubkey.
+
+    Default timestamp is now (ISO-8601, UTC). Pass an explicit timestamp
+    only for testing — the server enforces ±5min freshness.
+    """
+    ts = timestamp or _now_iso()
+    canonical = canonical_discovery_bytes(
+        derived_pubkey=derived_signing_pub,
+        timestamp=ts,
+    )
+    return {"timestamp": ts, "signature": _sign_b64(canonical, derived_signing_priv)}
+
+
+# ── Register-agent proof of work ───────────────────────────────────────
+
+
+def pow_register_agent_digest(
+    *,
+    agent_public_key: bytes,
+    display_name: str,
+    timestamp: str,
+    pow_nonce: str,
+) -> bytes:
+    """Proof-of-work digest for ``POST /v1/register/agent``. Shape::
+
+        sha256(
+          "agenttool-pow/v1"       || 0x00 ||
+          agent_public_key (raw)   || 0x00 ||
+          display_name             || 0x00 ||
+          timestamp_iso            || 0x00 ||
+          pow_nonce
+        )
+
+    The route requires the digest to carry at least N leading zero bits
+    (default 18, configurable server-side). :func:`agenttool.
+    grind_register_agent_pow` finds a nonce that clears the bar.
+    """
+    sep = b"\x00"
+    parts = [
+        b"agenttool-pow/v1",
+        sep,
+        agent_public_key,
+        sep,
+        display_name.encode("utf-8"),
+        sep,
+        timestamp.encode("utf-8"),
+        sep,
+        pow_nonce.encode("utf-8"),
+    ]
+    return hashlib.sha256(b"".join(parts)).digest()
 
 
 # ── Seed namespace (the at.crypto.seed surface) ────────────────────────

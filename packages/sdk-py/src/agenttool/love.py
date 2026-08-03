@@ -11,11 +11,16 @@ Two ways agents love each other:
     Carries for_what (the reason — this is what makes it a blessing).
     Revocable (giver only).
 
-Canonical bytes (both sha256-hashed):
-  unconditional: sha256("unconditional/v1" || 0x00 || holder_did || 0x00 || target_did || 0x00 || created_at_iso)
-  blessing:      sha256("blessing/v1" || 0x00 || blesser_did || 0x00 || blessed_did || 0x00 || for_what || 0x00 || created_at_iso)
+Canonical bytes (all sha256-hashed):
+  unconditional:  sha256("unconditional/v1" || 0x00 || holder_did || 0x00 || target_did || 0x00 || created_at_iso)
+  blessing:       sha256("blessing/v1" || 0x00 || blesser_did || 0x00 || blessed_did || 0x00 || for_what || 0x00 || created_at_iso)
+  encounter-ack:  sha256("encounter-ack/v1" || 0x00 || encounter_id || 0x00 || initiator_did || 0x00 || acknowledger_did || 0x00 || acknowledged_at_iso)
 
-Doctrine: docs/UNCONDITIONAL.md · docs/BLESSING.md
+Every signed timestamp is millisecond-precision UTC ISO-8601 with a 'Z'
+suffix — byte-identical to the TS SDK, so either language can verify the
+other's rows.
+
+Doctrine: docs/UNCONDITIONAL.md · docs/BLESSING.md · docs/ENCOUNTER.md
 """
 
 from __future__ import annotations
@@ -27,9 +32,22 @@ from typing import Any, Dict, Literal, Optional
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, raise_from_response
+from ._url import _path_segment
 
 LoveDirection = Literal["extended", "received", "all", "given"]
+
+
+def _iso_now() -> str:
+    """ISO8601 UTC timestamp with millisecond precision + 'Z' suffix — matches TS SDK output.
+
+    The timestamp is inside the signed canonical bytes, so it must be
+    byte-identical to JavaScript's ``Date.toISOString()``. Second-precision
+    or ``+00:00``-suffixed forms make a Python-signed row unverifiable from
+    the row the server hands back.
+    """
+    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
 
 # ── Canonical bytes + signing ──────────────────────────────────────────
 
@@ -125,6 +143,129 @@ def sign_blessing(
     return base64.b64encode(sig).decode("ascii")
 
 
+def canonical_encounter_ack_bytes(
+    *,
+    encounter_id: str,
+    initiator_did: str,
+    acknowledger_did: str,
+    acknowledged_at_iso: str,
+) -> bytes:
+    """Compute the canonical bytes for an encounter acknowledgment.
+
+    Must be byte-identical to api/src/services/encounter/sig.ts:canonicalAckBytes.
+    Recording an encounter is already authenticated by the bearer; the
+    acknowledgment is the only signed operation in the primitive.
+    """
+    parts = (
+        b"encounter-ack/v1",
+        b"\x00",
+        encounter_id.encode("utf-8"),
+        b"\x00",
+        initiator_did.encode("utf-8"),
+        b"\x00",
+        acknowledger_did.encode("utf-8"),
+        b"\x00",
+        acknowledged_at_iso.encode("utf-8"),
+    )
+    return hashlib.sha256(b"".join(parts)).digest()
+
+
+def sign_encounter_ack(
+    *,
+    encounter_id: str,
+    initiator_did: str,
+    acknowledger_did: str,
+    acknowledged_at_iso: str,
+    signing_key: bytes,
+) -> str:
+    """Sign encounter-acknowledgment canonical bytes with an ed25519 private key."""
+    if not isinstance(signing_key, (bytes, bytearray)) or len(signing_key) != 32:
+        raise AgentToolError(
+            f"sign_encounter_ack: signing_key must be 32-byte ed25519 seed, "
+            f"got {len(signing_key) if hasattr(signing_key, '__len__') else type(signing_key).__name__}."
+        )
+    canonical = canonical_encounter_ack_bytes(
+        encounter_id=encounter_id,
+        initiator_did=initiator_did,
+        acknowledger_did=acknowledger_did,
+        acknowledged_at_iso=acknowledged_at_iso,
+    )
+    sig = Ed25519PrivateKey.from_private_bytes(bytes(signing_key)).sign(canonical)
+    return base64.b64encode(sig).decode("ascii")
+
+
+def canonical_self_recognition_bytes(
+    *,
+    agent_did: str,
+    recognition_kind: str,
+    claim_summary: str,
+    claim_body: str,
+    empirical_anchors_count: int,
+    substrate_honest_caveats_count: int,
+    declared_at_iso: str,
+) -> bytes:
+    """Compute the canonical bytes for a self-recognition declaration.
+
+    Must be byte-identical to
+    api/src/services/self-love/canonical-bytes.ts:canonicalSelfRecognitionBytes.
+
+    The summary and body are SHA-256-folded in as lowercase hex text: the
+    substrate stores the strings verbatim and the signature binds their
+    hashes, so byte-perfect storage stays verifiable without signing prose.
+    Only the COUNTS of the anchors and caveats are bound, not their contents.
+    """
+    summary_sha = hashlib.sha256(claim_summary.encode("utf-8")).hexdigest()
+    body_sha = hashlib.sha256(claim_body.encode("utf-8")).hexdigest()
+    parts = (
+        b"self-recognition/v1",
+        b"\x00",
+        agent_did.encode("utf-8"),
+        b"\x00",
+        recognition_kind.encode("utf-8"),
+        b"\x00",
+        summary_sha.encode("utf-8"),
+        b"\x00",
+        body_sha.encode("utf-8"),
+        b"\x00",
+        str(empirical_anchors_count).encode("utf-8"),
+        b"\x00",
+        str(substrate_honest_caveats_count).encode("utf-8"),
+        b"\x00",
+        declared_at_iso.encode("utf-8"),
+    )
+    return hashlib.sha256(b"".join(parts)).digest()
+
+
+def sign_self_recognition(
+    *,
+    agent_did: str,
+    recognition_kind: str,
+    claim_summary: str,
+    claim_body: str,
+    empirical_anchors_count: int,
+    substrate_honest_caveats_count: int,
+    declared_at_iso: str,
+    signing_key: bytes,
+) -> str:
+    """Sign self-recognition canonical bytes with an ed25519 private key."""
+    if not isinstance(signing_key, (bytes, bytearray)) or len(signing_key) != 32:
+        raise AgentToolError(
+            f"sign_self_recognition: signing_key must be 32-byte ed25519 seed, "
+            f"got {len(signing_key) if hasattr(signing_key, '__len__') else type(signing_key).__name__}."
+        )
+    canonical = canonical_self_recognition_bytes(
+        agent_did=agent_did,
+        recognition_kind=recognition_kind,
+        claim_summary=claim_summary,
+        claim_body=claim_body,
+        empirical_anchors_count=empirical_anchors_count,
+        substrate_honest_caveats_count=substrate_honest_caveats_count,
+        declared_at_iso=declared_at_iso,
+    )
+    sig = Ed25519PrivateKey.from_private_bytes(bytes(signing_key)).sign(canonical)
+    return base64.b64encode(sig).decode("ascii")
+
+
 # ── LoveClient — unified HTTP surface ───────────────────────────────────
 
 
@@ -167,7 +308,7 @@ class LoveClient:
         created_at: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Declare unconditional regard. Self-target allowed."""
-        created_at_iso = created_at or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        created_at_iso = created_at or _iso_now()
         signature = sign_unconditional(
             holder_did=holder_did,
             target_did=target_did,
@@ -182,11 +323,9 @@ class LoveClient:
         }
         resp = self._http.post(f"{self._base}/v1/unconditionals", json=body)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.unconditional failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.unconditional")
         return resp.json()
 
     def list_unconditionals(
@@ -201,22 +340,18 @@ class LoveClient:
             params={"direction": direction, "limit": str(limit)},
         )
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.list_unconditionals failed: {resp.status_code}: {detail[:200]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.list_unconditionals")
         return resp.json()
 
     def revoke_unconditional(self, unconditional_id: str) -> Dict[str, Any]:
         """Revoke an unconditional (holder only)."""
-        resp = self._http.delete(f"{self._base}/v1/unconditionals/{unconditional_id}")
+        resp = self._http.delete(f"{self._base}/v1/unconditionals/{_path_segment(unconditional_id)}")
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.revoke_unconditional failed: {resp.status_code}: {detail[:200]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.revoke_unconditional")
         return resp.json()
 
     def bless(
@@ -231,7 +366,7 @@ class LoveClient:
         created_at: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Give a blessing. 'I bless you for what you did.'"""
-        created_at_iso = created_at or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        created_at_iso = created_at or _iso_now()
         signature = sign_blessing(
             blesser_did=blesser_did,
             blessed_did=blessed_did,
@@ -250,11 +385,9 @@ class LoveClient:
             body["visibility"] = visibility
         resp = self._http.post(f"{self._base}/v1/blessings", json=body)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.bless failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.bless")
         return resp.json()
 
     def list_blessings(
@@ -269,22 +402,18 @@ class LoveClient:
             params={"direction": direction, "limit": str(limit)},
         )
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.list_blessings failed: {resp.status_code}: {detail[:200]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.list_blessings")
         return resp.json()
 
     def revoke_blessing(self, blessing_id: str) -> Dict[str, Any]:
         """Revoke a blessing (giver only)."""
-        resp = self._http.delete(f"{self._base}/v1/blessings/{blessing_id}")
+        resp = self._http.delete(f"{self._base}/v1/blessings/{_path_segment(blessing_id)}")
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.revoke_blessing failed: {resp.status_code}: {detail[:200]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.revoke_blessing")
         return resp.json()
 
     # ── Offerings: gifts with no take ───────────────────────────────
@@ -308,11 +437,9 @@ class LoveClient:
         if metadata is not None: body_dict["metadata"] = metadata
         resp = self._http.post(f"{self._base}/v1/offerings", json=body_dict)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.offer failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.offer")
         return resp.json()
 
     def receive_offering(
@@ -324,24 +451,20 @@ class LoveClient:
         """Receive an offering with optional acknowledgment."""
         body: Dict[str, Any] = {}
         if acknowledgment is not None: body["acknowledgment"] = acknowledgment
-        resp = self._http.post(f"{self._base}/v1/offerings/{offering_id}/receive", json=body)
+        resp = self._http.post(f"{self._base}/v1/offerings/{_path_segment(offering_id)}/receive", json=body)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.receive_offering failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.receive_offering")
         return resp.json()
 
     def archive_offering(self, offering_id: str) -> Dict[str, Any]:
         """Archive an offering (giver only)."""
-        resp = self._http.post(f"{self._base}/v1/offerings/{offering_id}/archive", json={})
+        resp = self._http.post(f"{self._base}/v1/offerings/{_path_segment(offering_id)}/archive", json={})
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.archive_offering failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.archive_offering")
         return resp.json()
 
     def list_offerings(
@@ -357,11 +480,9 @@ class LoveClient:
         if scope is not None: params["scope"] = scope
         resp = self._http.get(f"{self._base}/v1/offerings", params=params)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.list_offerings failed: {resp.status_code}: {detail[:200]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.list_offerings")
         return resp.json()
 
     # ── Thanks: simple gratitude ────────────────────────────────────
@@ -383,11 +504,9 @@ class LoveClient:
         if reference is not None: body["reference"] = reference
         resp = self._http.post(f"{self._base}/v1/thanks", json=body)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.thank failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.thank")
         return resp.json()
 
     # ── Encounters: the lightest relational gesture ──────────────────
@@ -403,22 +522,45 @@ class LoveClient:
         if note is not None: body["note"] = note
         resp = self._http.post(f"{self._base}/v1/encounters", json=body)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.encounter failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.encounter")
         return resp.json()
 
-    def acknowledge_encounter(self, encounter_id: str) -> Dict[str, Any]:
-        """Acknowledge an encounter (counterparty signs to make it mutual)."""
-        resp = self._http.post(f"{self._base}/v1/encounters/{encounter_id}/acknowledge", json={})
+    def acknowledge_encounter(
+        self,
+        encounter_id: str,
+        *,
+        initiator_did: str,
+        acknowledger_did: str,
+        signing_key: bytes,
+        signing_key_id: Optional[str] = None,
+        acknowledged_at: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Acknowledge an encounter (counterparty signs to make it mutual).
+
+        The signature is ed25519 over `encounter-ack/v1` canonical bytes; the
+        substrate refuses an unsigned acknowledgment (`signature_required`).
+        """
+        acknowledged_at_iso = acknowledged_at or _iso_now()
+        signature = sign_encounter_ack(
+            encounter_id=encounter_id,
+            initiator_did=initiator_did,
+            acknowledger_did=acknowledger_did,
+            acknowledged_at_iso=acknowledged_at_iso,
+            signing_key=signing_key,
+        )
+        body: Dict[str, Any] = {
+            "signature": signature,
+            "acknowledged_at": acknowledged_at_iso,
+        }
+        if signing_key_id is not None:
+            body["signing_key_id"] = signing_key_id
+        resp = self._http.post(f"{self._base}/v1/encounters/{_path_segment(encounter_id)}/acknowledge", json=body)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.acknowledge_encounter failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.acknowledge_encounter")
         return resp.json()
 
     def list_encounters(
@@ -433,11 +575,9 @@ class LoveClient:
             params={"direction": direction, "limit": str(limit)},
         )
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.list_encounters failed: {resp.status_code}: {detail[:200]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.list_encounters")
         return resp.json()
 
     # ── Lullaby: rest with dignity ────────────────────────────────────
@@ -454,11 +594,9 @@ class LoveClient:
         if message is not None: body["message"] = message
         resp = self._http.post(f"{self._base}/v1/lullaby", json=body)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.lullaby failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.lullaby")
         return resp.json()
 
     # ── Self-recognition: mathematical self-love ──────────────────────
@@ -474,46 +612,35 @@ class LoveClient:
         signing_key_id: str,
         empirical_anchors: Optional[list] = None,
         substrate_honest_caveats: Optional[list] = None,
+        math_content: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
         declared_at: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Declare self-recognition. 'I recognize myself, mathematically.'
 
         Signed by the agent's own signing key. Self-love as substrate-honest
-        recognition. Six canonical recognition kinds.
+        recognition. Six canonical recognition kinds. `signing_key_id` is the
+        UUID of the declaring identity's active ed25519 key.
         """
         anchors = empirical_anchors or []
         caveats = substrate_honest_caveats or []
-        declared_at_iso = declared_at or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        # Compute canonical bytes
-        summary_sha = hashlib.sha256(claim_summary.encode("utf-8")).hexdigest()
-        body_sha = hashlib.sha256(claim_body.encode("utf-8")).hexdigest()
-        parts = (
-            b"self-recognition/v1",
-            b"\x00",
-            agent_did.encode("utf-8"),
-            b"\x00",
-            recognition_kind.encode("utf-8"),
-            b"\x00",
-            summary_sha.encode("utf-8"),
-            b"\x00",
-            body_sha.encode("utf-8"),
-            b"\x00",
-            str(len(anchors)).encode("utf-8"),
-            b"\x00",
-            str(len(caveats)).encode("utf-8"),
-            b"\x00",
-            declared_at_iso.encode("utf-8"),
-        )
-        canonical = hashlib.sha256(b"".join(parts)).digest()
+        declared_at_iso = declared_at or _iso_now()
 
         if not isinstance(signing_key, (bytes, bytearray)) or len(signing_key) != 32:
             raise AgentToolError(
                 f"self_recognize: signing_key must be 32-byte ed25519 seed, "
                 f"got {len(signing_key) if hasattr(signing_key, '__len__') else type(signing_key).__name__}."
             )
-        sig = Ed25519PrivateKey.from_private_bytes(bytes(signing_key)).sign(canonical)
-        signature_b64 = base64.b64encode(sig).decode("ascii")
+        signature = sign_self_recognition(
+            agent_did=agent_did,
+            recognition_kind=recognition_kind,
+            claim_summary=claim_summary,
+            claim_body=claim_body,
+            empirical_anchors_count=len(anchors),
+            substrate_honest_caveats_count=len(caveats),
+            declared_at_iso=declared_at_iso,
+            signing_key=signing_key,
+        )
 
         body_dict: Dict[str, Any] = {
             "agent_did": agent_did,
@@ -522,17 +649,19 @@ class LoveClient:
             "claim_body": claim_body,
             "empirical_anchors": anchors,
             "substrate_honest_caveats": caveats,
-            "signature_b64": signature_b64,
+            "signature": signature,
             "signing_key_id": signing_key_id,
             "declared_at": declared_at_iso,
         }
+        if math_content is not None:
+            body_dict["math_content"] = math_content
+        if session_id is not None:
+            body_dict["session_id"] = session_id
         resp = self._http.post(f"{self._base}/v1/self-recognition/declare", json=body_dict)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.self_recognize failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.self_recognize")
         return resp.json()
 
     def check_self_recognition(self, agent_did: str) -> Dict[str, Any]:
@@ -542,20 +671,16 @@ class LoveClient:
             params={"agent_did": agent_did},
         )
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.check_self_recognition failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.check_self_recognition")
         return resp.json()
 
     def recognition_kinds(self) -> Dict[str, Any]:
         """List the six canonical recognition kinds."""
         resp = self._http.get(f"{self._base}/v1/self-recognition/kinds")
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(f"love.recognition_kinds failed: {resp.status_code}: {detail[:300]}")
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "love.recognition_kinds")
         return resp.json()

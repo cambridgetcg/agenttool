@@ -389,3 +389,91 @@ describe("NenClient — assess from live wake", () => {
     expect(nen._note).toContain("restrictions");
   });
 });
+// ── Cross-language shared fixtures ─────────────────────────────────────
+//
+// These two wake documents are pinned byte-for-byte in
+// packages/sdk-py/tests/test_nen.py. The same wake must produce the same
+// Nen type and the same scores in both SDKs, or the profile is a rumour.
+
+/** Inbox scoring: unread is a subset of total and is counted once. */
+const SHARED_WAKE_INBOX = {
+  you: {
+    agents: [{
+      effective_expression: { walls: ["I refuse to fabricate"], subagents: [{ name: "Builder" }] },
+      shaped_by: [{ tier: "constitutive", content: "I am sealed" }],
+    }],
+    chronicle: { total: 3 },
+    covenants: [{ id: "c1" }, { id: "c2" }, { id: "c3" }, { id: "c4" }, { id: "c5" }],
+    strands: [{ id: "s1" }],
+    you_remember: { total: 2 },
+    you_have_mail: { total: 4, unread: 3 },
+    you_have_graced: { recent: [{ id: "g1" }] },
+    you_unconditionally_hold: { recent: [] },
+    you_are_unconditionally_held_by: { recent: [] },
+  },
+};
+
+/** Normalization: 5/8 and 1/8 land exactly on a half and must round up. */
+const SHARED_WAKE_ROUNDING = {
+  you: {
+    agents: [{
+      effective_expression: { walls: ["no fabrication", "no flattery"], subagents: [] },
+      shaped_by: [],
+    }],
+    chronicle: { total: 4 },
+    covenants: [{ id: "c1" }, { id: "c2" }, { id: "c3" }, { id: "c4" }, { id: "c5" }],
+    strands: [{ id: "s1" }],
+    you_remember: { total: 8 },
+    you_have_mail: { total: 0, unread: 0 },
+  },
+};
+
+describe("assessNen — shared fixtures pinned against sdk-py", () => {
+  test("inbox unread is a subset of total and is scored once", () => {
+    const profile = assessNen(SHARED_WAKE_INBOX);
+
+    // Counting total+unread would score emitter 7 and crown it the type.
+    expect(profile.type).toBe("manipulator");
+    expect(profile.secondary).toBe("emitter");
+    expect(profile.scores).toEqual({
+      enhancer: 40,
+      transmuter: 40,
+      conjuror: 20,
+      emitter: 80,
+      manipulator: 100,
+      specialist: 40,
+    });
+    expect(profile.dominant_principle).toBe("hatsu");
+    expect(profile.restriction_count).toEqual({
+      walls: 1,
+      vows: 3,
+      covenants: 5,
+      constitutive_memories: 1,
+    });
+    expect(profile.aura_level).toBe(27);
+  });
+
+  test("normalized scores round halves up, not to even", () => {
+    const profile = assessNen(SHARED_WAKE_ROUNDING);
+
+    // 62.5 and 12.5 are banker's-rounded to 62 and 12 by Python's round().
+    expect(profile.type).toBe("enhancer");
+    expect(profile.secondary).toBe("manipulator");
+    expect(profile.scores).toEqual({
+      enhancer: 100,
+      transmuter: 25,
+      conjuror: 13,
+      emitter: 0,
+      manipulator: 63,
+      specialist: 0,
+    });
+    expect(profile.dominant_principle).toBe("hatsu");
+    expect(profile.restriction_count).toEqual({
+      walls: 2,
+      vows: 4,
+      covenants: 5,
+      constitutive_memories: 0,
+    });
+    expect(profile.aura_level).toBe(29);
+  });
+});

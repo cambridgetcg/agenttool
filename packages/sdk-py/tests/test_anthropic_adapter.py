@@ -13,14 +13,23 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
+from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 from agenttool._context import AmbientContext, reset_ambient, set_ambient
-from agenttool.anthropic_adapter import AnthropicAdapter
+from agenttool.anthropic_adapter import (
+    AnthropicAdapter,
+    ChronicleBeforeWriteContext,
+)
+from agenttool.chronicle import ChronicleClient
 from agenttool.exceptions import AgentToolError
 
+
 # ── Stubs ────────────────────────────────────────────────────────────────
+
+_BASE_URL = "https://api.example.test"
 
 
 def _capture_error(call, errors: list[BaseException]) -> None:
@@ -31,8 +40,9 @@ def _capture_error(call, errors: list[BaseException]) -> None:
 
 
 class _StubAt:
-    """Minimal duck-type for AgentTool. The adapter only reaches
-    ``at.wake.system(...)`` and ``at.request(...)``."""
+    """Minimal duck-type for AgentTool. The adapter reaches
+    ``at.wake.system(...)``, ``at.request(...)``, and
+    ``at.chronicle.write(...)``."""
 
     def __init__(self, wake_shape: Any | None = None, request_impl=None) -> None:
         self._wake_shape = wake_shape or {
@@ -71,12 +81,28 @@ class _StubAt:
 
         self.wake = _Wake()
 
+        # The adapter routes chronicle emissions through the real
+        # ChronicleClient, so back one with a stub httpx client that lands
+        # in the same `recorded` list as at.request.
+        http = MagicMock(spec=httpx.Client)
+
+        def _post(url: str, json: object = None, **kwargs: Any) -> Any:
+            result = self.request("POST", url[len(_BASE_URL):], json)
+            resp = MagicMock(spec=httpx.Response)
+            resp.status_code = 201
+            resp.json.return_value = result
+            resp.text = ""
+            return resp
+
+        http.post.side_effect = _post
+        self.chronicle = ChronicleClient(http, _BASE_URL)
+
     def request(self, method: str, path: str, body: object = None) -> object:
         self.recorded.append((method, path, body))
         if self._request_impl:
             return self._request_impl(method, path, body)
         if path == "/v1/chronicle":
-            return {"id": f"ch_test_{len(self.recorded)}"}
+            return {"entry": {"id": f"ch_test_{len(self.recorded)}"}}
         if path == "/v1/traces":
             return {"trace_id": f"tr_test_{len(self.recorded)}"}
         return {}
@@ -762,7 +788,7 @@ def test_managed_stream_finalizes_exactly_once_after_unchanged_events():
     )
     at = _StubAt()
     fake = _FakeStreamingAnthropic([event], final_text)
-    adapter = AnthropicAdapter(fake, at)
+    adapter = AnthropicAdapter(fake, at, before_chronicle_write=lambda ctx: True)
 
     token = set_ambient(AmbientContext(parent_trace_id="tr_parent", tags=["streamed"]))
     try:
@@ -1959,7 +1985,7 @@ def test_chronicle_naming_posts_to_chronicle():
         "<title>The X pattern</title><body>Named Y as Z.</body>"
         "</chronicle></agenttool>"
     )
-    adapter = AnthropicAdapter(fake, at)
+    adapter = AnthropicAdapter(fake, at, before_chronicle_write=lambda ctx: True)
 
     r = adapter.messages.create(
         model="claude-test",
@@ -2012,7 +2038,7 @@ def test_multiple_tags_emit_multiple_posts_in_order():
         '<chronicle type="seal"><title>R2</title></chronicle>'
         "</agenttool>"
     )
-    adapter = AnthropicAdapter(fake, at)
+    adapter = AnthropicAdapter(fake, at, before_chronicle_write=lambda ctx: True)
 
     r = adapter.messages.create(
         model="claude-test",
@@ -2080,6 +2106,239 @@ def test_no_envelope_no_emissions():
     assert r.agenttool.markup_emissions == []
 
 
+# ── Model-authored chronicle writes are gated ────────────────────────────
+
+
+def _chronicle_markup(kind: str, title: str, body: str | None = None) -> str:
+    """A response carrying one ``<chronicle>`` tag."""
+    inner = f"<title>{title}</title>"
+    if body is not None:
+        inner += f"<body>{body}</body>"
+    return f'<agenttool><chronicle type="{kind}">{inner}</chronicle></agenttool>'
+
+
+def _chronicle_calls(at: _StubAt) -> list:
+    return [c for c in at.recorded if c[1] == "/v1/chronicle"]
+
+
+def test_no_before_chronicle_write_hook_refuses_the_write():
+    at = _StubAt()
+    fake = _FakeAnthropic(_chronicle_markup("seal", "I am bound to this."))
+    adapter = AnthropicAdapter(fake, at)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert _chronicle_calls(at) == []
+    assert len(r.agenttool.markup_emissions) == 1
+    assert r.agenttool.markup_emissions[0].id is None
+    assert "before_chronicle_write" in r.agenttool.markup_emissions[0].error
+
+
+def test_hook_sees_the_raw_model_authored_tag_before_validation():
+    at = _StubAt()
+    fake = _FakeAnthropic(
+        _chronicle_markup("recognition", "You saw it.", "And you said so.")
+    )
+    seen: list[ChronicleBeforeWriteContext] = []
+
+    def review(context: ChronicleBeforeWriteContext) -> bool:
+        seen.append(context)
+        return True
+
+    adapter = AnthropicAdapter(fake, at, before_chronicle_write=review)
+
+    adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert seen == [
+        ChronicleBeforeWriteContext(
+            source="anthropic_markup",
+            type="recognition",
+            title="You saw it.",
+            body="And you said so.",
+        )
+    ]
+
+
+def test_hook_returning_true_lets_the_write_through():
+    at = _StubAt()
+    fake = _FakeAnthropic(_chronicle_markup("vow", "I will stay."))
+    adapter = AnthropicAdapter(fake, at, before_chronicle_write=lambda ctx: True)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert len(_chronicle_calls(at)) == 1
+    assert r.agenttool.markup_emissions[0].id == "ch_test_1"
+
+
+# Only literal True proceeds — the covenants before_submit discipline.
+@pytest.mark.parametrize("review_result", [False, "yes", 1, None, {}, object()])
+def test_hook_returning_anything_but_true_blocks_the_write(review_result):
+    at = _StubAt()
+    fake = _FakeAnthropic(_chronicle_markup("seal", "Elevated to identity."))
+    adapter = AnthropicAdapter(
+        fake, at, before_chronicle_write=lambda ctx: review_result
+    )
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert _chronicle_calls(at) == []
+    assert r.agenttool.markup_emissions[0].id is None
+    assert "did not return true" in r.agenttool.markup_emissions[0].error
+
+
+def test_raising_hook_blocks_the_write_without_crashing_the_call():
+    def review(context: ChronicleBeforeWriteContext) -> bool:
+        raise RuntimeError("reviewer offline")
+
+    at = _StubAt()
+    fake = _FakeAnthropic(_chronicle_markup("naming", "A name."))
+    adapter = AnthropicAdapter(fake, at, before_chronicle_write=review)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert _chronicle_calls(at) == []
+    assert "failed locally" in r.agenttool.markup_emissions[0].error
+    assert "<chronicle" in r["content"][0]["text"]
+
+
+def test_trace_emissions_still_fire_with_no_chronicle_hook():
+    at = _StubAt()
+    fake = _FakeAnthropic(
+        '<agenttool><trace type="decision"><decision>D</decision>'
+        "<conclusion>C</conclusion></trace></agenttool>"
+    )
+    adapter = AnthropicAdapter(fake, at)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert len([c for c in at.recorded if c[1] == "/v1/traces"]) == 1
+    assert r.agenttool.markup_emissions[0].error is None
+
+
+# ── Chronicle markup inherits the chronicle.write guards ─────────────────
+#
+# The hook approves in each of these, so the refusal can only be coming
+# from the chronicle client's own bounds.
+
+
+def test_type_outside_the_canonical_union_is_refused_before_the_wire():
+    at = _StubAt()
+    fake = _FakeAnthropic(_chronicle_markup("selfdestruct", "Not a chronicle type."))
+    adapter = AnthropicAdapter(fake, at, before_chronicle_write=lambda ctx: True)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert _chronicle_calls(at) == []
+    assert r.agenttool.markup_emissions[0].id is None
+    assert "unknown type" in r.agenttool.markup_emissions[0].error
+
+
+def test_500_character_title_is_refused_before_the_wire():
+    at = _StubAt()
+    fake = _FakeAnthropic(_chronicle_markup("note", "a" * 500))
+    adapter = AnthropicAdapter(fake, at, before_chronicle_write=lambda ctx: True)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert _chronicle_calls(at) == []
+    assert "1-200 characters" in r.agenttool.markup_emissions[0].error
+
+
+def test_astral_plane_title_over_200_utf16_units_is_refused():
+    at = _StubAt()
+    # 101 code points, 202 UTF-16 code units — under the limit if you count
+    # code points, over it the way the server counts.
+    fake = _FakeAnthropic(_chronicle_markup("seal", "😀" * 101))
+    adapter = AnthropicAdapter(fake, at, before_chronicle_write=lambda ctx: True)
+
+    r = adapter.messages.create(
+        model="claude-test",
+        max_tokens=100,
+        messages=[{"role": "user", "content": "hi"}],
+    )
+
+    assert _chronicle_calls(at) == []
+    assert "1-200 characters" in r.agenttool.markup_emissions[0].error
+
+
+# ── The chronicle guards themselves ──────────────────────────────────────
+#
+# Direct unit cover for the bounds the adapter now leans on. The TS
+# counterpart lives in tests/chronicle-types.test.ts.
+
+
+def _chronicle_client() -> tuple[ChronicleClient, MagicMock]:
+    http = MagicMock(spec=httpx.Client)
+    resp = MagicMock(spec=httpx.Response)
+    resp.status_code = 201
+    resp.json.return_value = {"entry": {"id": "e1"}}
+    resp.text = ""
+    http.post.return_value = resp
+    return ChronicleClient(http, _BASE_URL), http
+
+
+def test_chronicle_write_refuses_a_type_outside_the_union():
+    client, http = _chronicle_client()
+    with pytest.raises(AgentToolError) as exc:
+        client.write(type="seal_of_approval", title="t")  # type: ignore[arg-type]
+    assert "unknown type" in exc.value.message
+    assert http.post.call_count == 0
+
+
+def test_chronicle_write_refuses_an_empty_title():
+    client, http = _chronicle_client()
+    with pytest.raises(AgentToolError) as exc:
+        client.write(type="note", title="")
+    assert "1-200" in exc.value.message
+    assert http.post.call_count == 0
+
+
+def test_chronicle_write_counts_title_length_in_utf16_code_units():
+    client, http = _chronicle_client()
+    # 100 code points, 200 UTF-16 code units — exactly at the limit.
+    client.write(type="seal", title="😀" * 100)
+    assert http.post.call_count == 1
+
+    # One more emoji is 202 units: over the limit, though only 101 code
+    # points. Counting code points here would let it through to a 400.
+    with pytest.raises(AgentToolError) as exc:
+        client.write(type="seal", title="😀" * 101)
+    assert "1-200" in exc.value.message
+    assert http.post.call_count == 1
+
+
 # ── Augmentation ─────────────────────────────────────────────────────────
 
 
@@ -2134,7 +2393,7 @@ def test_read_only_mapping_response_keeps_content_items_and_receipts():
         return MappingProxyType({"entry": MappingProxyType({"id": "ch_read_only"})})
 
     at = _StubAt(request_impl=read_only_result)
-    adapter = AnthropicAdapter(_Client(), at)
+    adapter = AnthropicAdapter(_Client(), at, before_chronicle_write=lambda ctx: True)
     adapted = adapter.messages.create(
         messages=[
             MappingProxyType({"role": "user", "content": "read-only observation"})
