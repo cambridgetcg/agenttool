@@ -24,6 +24,22 @@ import type {
   GARDEN_LAYERS,
   HUB_RELEASE_STATES,
   INCOMPLETE_MARKER_STATES,
+  LEARNING_ACTIVITIES,
+  LEARNING_MODES,
+  MUTATION_LOCI,
+  PARTICIPATION_ACTIVITY_STATES,
+  PARTICIPATION_ASSESSMENT_EFFECT,
+  PARTICIPATION_ASSESSMENT_FORMAT,
+  PARTICIPATION_BOUNDARIES,
+  PARTICIPATION_CHOICE_BASES,
+  PARTICIPATION_INVITATION_FORMAT,
+  PARTICIPATION_OVERALL_STATES,
+  PARTICIPATION_RECEIPT_FORMAT,
+  PARTICIPATION_REPORTED_CHOICES,
+  PARTICIPATION_STAGES,
+  PARTICIPATION_TERMS,
+  PARTICIPATION_VOICE_OUTCOMES,
+  PARTICIPATION_VOICE_ROLES,
   RESUME_POSTURES,
   REVIEW_STATES,
   SECRET_SCAN_STATES,
@@ -36,6 +52,7 @@ import type {
   TRAINING_PHASES,
   TRAINING_THREAD_BOUNDARIES,
   TRAINING_THREAD_PROFILE,
+  WAKE_USE_MODES,
   WITHDRAWAL_STATES,
 } from "./constants.js";
 
@@ -62,6 +79,22 @@ export type IncompleteMarkerState =
   (typeof INCOMPLETE_MARKER_STATES)[number];
 export type StreamingState = (typeof STREAMING_STATES)[number];
 export type HubReleaseState = (typeof HUB_RELEASE_STATES)[number];
+export type LearningMode = (typeof LEARNING_MODES)[number];
+export type MutationLocus = (typeof MUTATION_LOCI)[number];
+export type WakeUseMode = (typeof WAKE_USE_MODES)[number];
+export type ParticipationStage = (typeof PARTICIPATION_STAGES)[number];
+export type LearningActivity = (typeof LEARNING_ACTIVITIES)[number];
+export type ParticipationVoiceRole = (typeof PARTICIPATION_VOICE_ROLES)[number];
+export type ParticipationReportedChoice =
+  (typeof PARTICIPATION_REPORTED_CHOICES)[number];
+export type ParticipationChoiceBasis =
+  (typeof PARTICIPATION_CHOICE_BASES)[number];
+export type ParticipationActivityState =
+  (typeof PARTICIPATION_ACTIVITY_STATES)[number];
+export type ParticipationOverallState =
+  (typeof PARTICIPATION_OVERALL_STATES)[number];
+export type ParticipationVoiceOutcome =
+  (typeof PARTICIPATION_VOICE_OUTCOMES)[number];
 
 export interface AdmissionAssessment {
   readonly rights: ReviewState;
@@ -133,6 +166,126 @@ export interface TrainingResumeReport {
   readonly streaming_state: StreamingState;
 }
 
+export interface ParticipationRequiredVoice {
+  readonly role: ParticipationVoiceRole;
+  readonly voice_ref: Sha256Id;
+}
+
+export interface CreateLearningParticipationInvitationInput {
+  readonly admission: DatasetAdmission;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly participation_stage: ParticipationStage;
+  readonly primary_activity: LearningActivity;
+  readonly activities: readonly LearningActivity[];
+  readonly participation_window_ref: Sha256Id;
+  readonly purpose_ref: Sha256Id;
+  readonly training_plan_ref: Sha256Id;
+  readonly limits_ref: Sha256Id;
+  readonly retention_ref: Sha256Id;
+  readonly choice_channel_ref: Sha256Id;
+  readonly stop_control_ref: Sha256Id;
+  readonly withdrawal_policy_ref: Sha256Id;
+  readonly repair_policy_ref: Sha256Id;
+  readonly learning_mode: LearningMode;
+  readonly wake_use_mode: WakeUseMode;
+  readonly mutation_loci: readonly MutationLocus[];
+  readonly maximum_optimizer_steps: number;
+  readonly artifacts: TrainingArtifactReferences;
+  readonly wake: WakeBriefAnchor;
+  readonly predecessors: readonly HfTrainingCheckpoint[];
+  readonly required_voices: readonly ParticipationRequiredVoice[];
+}
+
+export interface LearningParticipationInvitation {
+  readonly _format: typeof PARTICIPATION_INVITATION_FORMAT;
+  readonly invitation_id: Sha256Id;
+  readonly admission_id: Sha256Id;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly participation_stage: ParticipationStage;
+  readonly primary_activity: LearningActivity;
+  readonly activities: readonly LearningActivity[];
+  readonly participation_window_ref: Sha256Id;
+  readonly purpose_ref: Sha256Id;
+  readonly training_plan_ref: Sha256Id;
+  readonly limits_ref: Sha256Id;
+  readonly retention_ref: Sha256Id;
+  readonly choice_channel_ref: Sha256Id;
+  readonly stop_control_ref: Sha256Id;
+  readonly withdrawal_policy_ref: Sha256Id;
+  readonly repair_policy_ref: Sha256Id;
+  readonly learning_mode: LearningMode;
+  readonly wake_use_mode: WakeUseMode;
+  readonly mutation_loci: readonly MutationLocus[];
+  readonly maximum_optimizer_steps: number;
+  readonly artifacts: TrainingArtifactReferences;
+  readonly wake: WakeBriefAnchor;
+  readonly predecessor_checkpoint_refs: readonly Sha256Id[];
+  readonly required_voices: readonly ParticipationRequiredVoice[];
+  readonly terms: typeof PARTICIPATION_TERMS;
+  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
+}
+
+export interface CreateParticipationActivityChoiceInput {
+  readonly activity: LearningActivity;
+  readonly choice: ParticipationReportedChoice;
+}
+
+export interface ParticipationActivityChoice {
+  readonly activity: LearningActivity;
+  readonly choice: ParticipationReportedChoice;
+  readonly basis: ParticipationChoiceBasis;
+}
+
+export interface CreateLearningParticipationReceiptInput {
+  readonly invitation: LearningParticipationInvitation;
+  readonly voice_role: ParticipationVoiceRole;
+  readonly voice_ref: Sha256Id;
+  readonly response_ref: Sha256Id | null;
+  readonly choices: readonly CreateParticipationActivityChoiceInput[];
+  readonly previous_receipt: LearningParticipationReceipt | null;
+}
+
+export interface LearningParticipationReceipt {
+  readonly _format: typeof PARTICIPATION_RECEIPT_FORMAT;
+  readonly receipt_id: Sha256Id;
+  readonly invitation_id: Sha256Id;
+  readonly voice_role: ParticipationVoiceRole;
+  readonly voice_ref: Sha256Id;
+  readonly response_ref: Sha256Id | null;
+  readonly choices: readonly ParticipationActivityChoice[];
+  readonly supersedes_receipt_id: Sha256Id | null;
+  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
+}
+
+export interface ParticipationVoiceResult {
+  readonly voice_role: ParticipationVoiceRole;
+  readonly outcome: ParticipationVoiceOutcome;
+}
+
+export interface ParticipationActivityAssessment {
+  readonly activity: LearningActivity;
+  readonly state: ParticipationActivityState;
+  readonly voices: readonly ParticipationVoiceResult[];
+}
+
+export interface CreateLearningParticipationAssessmentInput {
+  readonly invitation: LearningParticipationInvitation;
+  readonly receipts: readonly LearningParticipationReceipt[];
+}
+
+export interface LearningParticipationAssessment {
+  readonly _format: typeof PARTICIPATION_ASSESSMENT_FORMAT;
+  readonly assessment_id: Sha256Id;
+  readonly invitation: LearningParticipationInvitation;
+  readonly receipts: readonly LearningParticipationReceipt[];
+  readonly activity_assessments: readonly ParticipationActivityAssessment[];
+  readonly overall_state: ParticipationOverallState;
+  readonly effect: typeof PARTICIPATION_ASSESSMENT_EFFECT;
+  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
+}
+
 export interface TrainingContinuityThread {
   readonly profile: typeof TRAINING_THREAD_PROFILE;
   readonly thread_id: Sha256Id;
@@ -158,6 +311,14 @@ export interface CreateTrainingCheckpointInput {
   readonly continuity_portfolio_ref: Sha256Id | null;
   readonly continuity_posture: ContinuityPosture;
   readonly predecessors: readonly HfTrainingCheckpoint[];
+}
+
+export interface CreateParticipationBoundTrainingCheckpointInput {
+  readonly assessment: LearningParticipationAssessment;
+  readonly checkpoint: Omit<
+    CreateTrainingCheckpointInput,
+    "continuity_portfolio_ref"
+  >;
 }
 
 export interface HfTrainingCheckpoint {

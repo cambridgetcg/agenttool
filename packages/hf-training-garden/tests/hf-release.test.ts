@@ -4,6 +4,9 @@ import { readFileSync, statSync } from "node:fs";
 
 import {
   GARDEN_LAYER_GUIDE,
+  HF_TRAINER_HOOK_GUIDE,
+  LEARNING_MODE_GUIDE,
+  LEARNING_PARTICIPATION_GUIDE,
   SELECTION_CRITERIA_GUIDE,
   SELECTION_PROCESS,
   TRAINING_PHASE_GUIDE,
@@ -29,17 +32,27 @@ describe("deterministic public-safe HF companion", () => {
     expect(readJsonl("data/selection-criteria.jsonl")).toEqual(SELECTION_CRITERIA_GUIDE);
     expect(readJsonl("data/training-phases.jsonl")).toEqual(TRAINING_PHASE_GUIDE);
     expect(readJsonl("data/garden-layers.jsonl")).toEqual(GARDEN_LAYER_GUIDE);
+    expect(readJsonl("data/learning-modes.jsonl")).toEqual(LEARNING_MODE_GUIDE);
+    expect(readJsonl("data/learning-participation.jsonl")).toEqual(LEARNING_PARTICIPATION_GUIDE);
+    expect(readJsonl("data/trainer-hooks.jsonl")).toEqual(HF_TRAINER_HOOK_GUIDE);
 
     const card = read("README.md").toString("utf8");
     expect(card).not.toContain("config_name: admissions");
     expect(card).not.toContain("config_name: checkpoints");
     expect(card).not.toContain("config_name: wake");
+    expect(card).not.toContain("config_name: participation_receipts");
     const source = readJson("provenance/source-manifest.json");
     expect(source.publication_state).toBe("intended_identifier_only");
     expect(source.public_release_excludes).toContain("raw agent traces");
     expect(source.public_release_excludes).toContain("Garden or project identifiers");
+    expect(source.public_release_excludes).toContain(
+      "learning participation invitations, receipts, or assessments",
+    );
+    expect(source.public_release_excludes).toContain(
+      "participation response or voice references",
+    );
     expect(source.public_release_contains).toContain(
-      "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
+      "standalone structural JSON Schemas with an attributed Apache AFTERGLOW dependency; semantic validators remain required",
     );
     expect(read("schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json"))
       .toEqual(readFileSync(new URL(

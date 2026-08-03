@@ -38,7 +38,7 @@ packages/
   skills-wake-continuity/ — private Skills/YUTABASE → AFTERGLOW composition
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
   hf-scout/    — private read-only HF metadata/provenance scout + pinned research leads
-  hf-training-garden/ — private exact-admission, training-continuity, and inert Garden-planning contracts
+  hf-training-garden/ — private exact-admission, learning-participation, training-continuity, and inert Garden-planning contracts
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   constructive-intelligence/ — private local tree-pinned typed-receipt shadow ledger
@@ -203,12 +203,14 @@ accept gates, invoke inference or remote compute, execute embedded calls,
 write to the Hub, publish npm, or expose a hosted route.
 
 `@agenttool/hf-training-garden` is the private pure bridge from one exact
-HF Scout observation to a role-specific admission record, digest-only
-AFTERGLOW training checkpoint, and inert six-layer Garden tending plan. It can
-generate a deterministic metadata-only companion for separately authorized
-Hub publication. It does not download data, accept a gate, train or restore a
-run, mutate Garden or Hub state, select a latest continuity head, publish npm,
-or prove rights, privacy, consent, provenance truth, quality, or resumability.
+HF Scout observation to a role-specific admission record, a four-voice
+per-activity learning-participation report, digest-only AFTERGLOW training
+checkpoint, and inert six-layer Garden tending plan. It can generate a
+deterministic public-safe companion for separately authorized Hub publication.
+It does not download data, accept a gate, train or restore a run, observe
+current receipt heads, mutate Garden or Hub state, select a latest continuity
+head, publish npm, or prove rights, privacy, consent, provenance truth,
+quality, or resumability.
 
 `@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.
 The separate Wallet Zerone package supports only its reviewed two-network,
