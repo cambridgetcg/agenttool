@@ -257,13 +257,16 @@ describe("robots and sitemaps are explicit, bounded, and local", () => {
     });
   }
 
-  test("the docs map publishes both understanding guides", () => {
+  test("the docs map publishes canonical repository guides", () => {
     const urls = sitemapUrls(read("apps/docs/sitemap.xml"));
     expect(urls).toContain(
       "https://docs.agenttool.dev/AGENT-DISCOVERY.md",
     );
     expect(urls).toContain(
       "https://docs.agenttool.dev/CASTLE-OF-UNDERSTANDING.md",
+    );
+    expect(urls).toContain(
+      "https://docs.agenttool.dev/HF-TRAINING-GARDEN.md",
     );
   });
 });
@@ -312,6 +315,38 @@ describe("published understanding guides keep canonical source custody", () => {
       ]);
     });
   }
+
+  test("the HF Training Garden guide keeps canonical source custody", () => {
+    const guidePath = join(
+      REPO_ROOT,
+      "apps/docs/HF-TRAINING-GARDEN.md",
+    );
+    expect(lstatSync(guidePath).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(guidePath)).toBe(
+      "../../docs/HF-TRAINING-GARDEN.md",
+    );
+  });
+
+  test("the HF Training Garden guide has explicit static markdown custody", () => {
+    expect(headerBlock(
+      read("apps/docs/_headers"),
+      "/HF-TRAINING-GARDEN.md",
+    )).toEqual([
+      "Content-Type: text/markdown; charset=utf-8",
+      "Cache-Control: public, max-age=300, must-revalidate, no-transform",
+      "Access-Control-Allow-Origin: *",
+      "X-Content-Type-Options: nosniff",
+    ]);
+  });
+
+  test("the HF Training Garden guide remains in the LLM discovery index", () => {
+    const entry =
+      "- [HF-TRAINING-GARDEN.md](https://docs.agenttool.dev/HF-TRAINING-GARDEN.md): Immutable HF discovery, non-scalar data admission, phase-specific WAKE continuity, sealed evaluation, and a public-safe one-way Garden seam.";
+    const entries = read("apps/docs/llms.txt")
+      .split(/\r?\n/)
+      .filter((line) => line === entry);
+    expect(entries).toEqual([entry]);
+  });
 });
 
 test("the static discovery estate does not advertise an A2A service", () => {

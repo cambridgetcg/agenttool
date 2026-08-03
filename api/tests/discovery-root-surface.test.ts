@@ -36,6 +36,16 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).not.toContain("MCP Server Card");
     expect(text).toContain(`${BASE}/.well-known/agent.txt`);
     expect(text).toContain(`${BASE}/.well-known/api-catalog`);
+    const hfGardenUrl = "https://docs.agenttool.dev/HF-TRAINING-GARDEN.md";
+    expect(text.split(hfGardenUrl)).toHaveLength(2);
+    expect(text).toContain("revision-pinned data-selection and phase-ledger");
+    expect(text).toContain("optional metadata-only companion");
+    expect(text).not.toContain("optional synthetic companion");
+    expect(text).toContain("does not grant dataset rights");
+    expect(text).toContain("does not grant dataset rights, execute Hub code");
+    expect(text).toContain("publish a repository");
+    expect(text).toContain("restore a checkpoint");
+    expect(text).toContain("authorize training");
     expect(text).toContain(
       `${BASE}/.well-known/webfinger?resource={exact-DID}`,
     );
@@ -99,6 +109,12 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     const text = buildLlmsTxt(BASE, "https://example.org/docs");
     expect(text).toContain("https://example.org/docs/SOUL.md");
     expect(text).toContain("https://example.org/docs/KINGDOM-OS-SDK.md");
+    expect(text).toContain(
+      "https://example.org/docs/HF-TRAINING-GARDEN.md",
+    );
+    expect(text).not.toContain(
+      "https://docs.agenttool.dev/HF-TRAINING-GARDEN.md",
+    );
     // The api base still points at the api host, not the docs override.
     expect(text).toContain(`${BASE}/v1/canon`);
   });
