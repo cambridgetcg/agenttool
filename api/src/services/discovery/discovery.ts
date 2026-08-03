@@ -47,6 +47,7 @@ export function buildLlmsTxt(
     `- [XENIA Surface](${baseUrl}/.well-known/agent.json): Release-pinned XENIA Surface 0.1 manifest for same-origin public GET resources; it is not Covenant adoption or conformance.`,
     `- [Agent manifest](${baseUrl}/.well-known/agent.txt): Agent-addressed key:value manifest.`,
     `- [KINGDOM framework profile](${baseUrl}/public/kingdom/framework): AgentTool's own validated project-card projection and explicit registry boundaries; separate from the doctrine library at /public/kingdom.`,
+    `- [HF Training Garden](${docsBaseUrl}/HF-TRAINING-GARDEN.md): Read-only, revision-pinned data-selection and phase-ledger architecture for metadata admission, WAKE/AFTERGLOW checkpoints, and an optional metadata-only companion; it does not grant dataset rights, execute Hub code, publish a repository, restore a checkpoint, or authorize training.`,
     `- [API catalog](${baseUrl}/.well-known/api-catalog): RFC 9727 public API and product map; catalog membership grants no action or payment authority.`,
     `- [Experimental MCP compatibility locator](${baseUrl}/.well-known/mcp/server-card.json): Project-owned pointer to the real read-only /v1/mcp endpoint and official Registry row; not a current MCP standard or authority record. MCP 2025-11-25 does not standardize this path or card shape.`,
     `- [Offer Bus](${baseUrl}/feeds/offers.atom): Canonical Atom 1.0 syndication of the logical Offer Bus model; RSS and canonical logical JSON are linked alternates. Discovery has no action or payment authority.`,
