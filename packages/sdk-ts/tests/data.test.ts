@@ -141,6 +141,32 @@ describe("AgentTool.data security boundary", () => {
     expect(calls[0]!.headers.has("authorization")).toBe(false);
   });
 
+  test("does not pair an explicit node token with the ambient node URL", () => {
+    process.env.AGENT_DATA_NODE_URL = "http://ambient-node.test";
+    delete process.env.AGENT_DATA_NODE_TOKEN;
+    const calls = installFetchStub();
+
+    try {
+      new AgentTool({
+        apiKey: "agenttool-project-secret",
+        // An untyped caller still reaches this shape at runtime, and the
+        // pairing rule has to hold there too — otherwise a token chosen
+        // for one node follows whichever origin the environment names.
+        dataNode: { token: "explicit-node-secret" } as unknown as {
+          baseUrl: string;
+        },
+      });
+      throw new Error("expected an unpaired data node token to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolError);
+      expect((error as AgentToolError).code).toBe("data_node_unpaired_token");
+      expect((error as AgentToolError).hint).toContain(
+        "AGENT_DATA_NODE_TOKEN",
+      );
+    }
+    expect(calls).toHaveLength(0);
+  });
+
   test("guides callers when no data node is configured", () => {
     delete process.env.AGENT_DATA_NODE_URL;
     delete process.env.AGENT_DATA_NODE_TOKEN;

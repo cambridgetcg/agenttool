@@ -114,7 +114,10 @@ class TestRegister:
             )
             with pytest.raises(AgentToolError) as exc:
                 register("X" * 200)
-        assert "register failed (422)" in exc.value.message
+        # The server's own sentence is the message; the status stays readable
+        # on `.status` rather than eating the line every caller prints.
+        assert exc.value.message == "name too long"
+        assert exc.value.status == 422
         assert exc.value.hint and "name length" in exc.value.hint
 
 

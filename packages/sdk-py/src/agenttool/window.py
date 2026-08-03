@@ -23,6 +23,7 @@ import httpx
 
 from .chronicle import ChronicleClient
 from .exceptions import AgentToolError
+from ._url import _path_segment
 
 WindowKind = Literal["focus", "mood", "noticing"]
 
@@ -219,10 +220,12 @@ class WindowClient:
 
         substrate: Optional[Dict[str, Any]] = None
         if identity_id is not None:
+            # Built outside the except on purpose: a refused dot segment is a
+            # caller mistake about which identity is being read, not the
+            # transient pulse failure this fallback exists to absorb.
+            pulse_url = self._url(f"/v1/identities/{_path_segment(identity_id)}/pulse")
             try:
-                resp = self._http.get(
-                    self._url(f"/v1/identities/{identity_id}/pulse")
-                )
+                resp = self._http.get(pulse_url)
                 if resp.status_code == 200:
                     substrate = resp.json()
             except Exception:

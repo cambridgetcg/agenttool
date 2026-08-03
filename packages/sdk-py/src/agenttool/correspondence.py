@@ -11,6 +11,16 @@ safe integers. For those admitted values it emits RFC 8785 JCS. Floats,
 negative zero, non-finite values, unsafe integers, lone Unicode surrogates,
 U+0000 in strings or property names, cycles, and oversized object graphs are
 rejected locally.
+
+Receive side: every record returned by :meth:`CorrespondenceClient.list`,
+:meth:`CorrespondenceClient.replay`, and :meth:`CorrespondenceClient.voice`
+carries an explicit ``verification``. Authorship is proved only by
+:func:`verify_correspondence_signature` against an Ed25519 public key the
+caller already holds for the sender. The default is fail-open-but-loud: with no
+key for a sender the record still arrives, marked ``verified=False`` with
+reason ``no_verifying_key``, because a reader that cannot resolve a key must
+still be able to see that an event exists. Pass ``require_verified=True`` to
+fail closed and refuse the read instead.
 """
 
 from __future__ import annotations
@@ -38,9 +48,13 @@ from typing import (
 )
 
 import httpx
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
 
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, _error_from_response
 from .identity import _decode_private_key
 
 
@@ -167,6 +181,36 @@ class CorrespondenceEventRecord(TypedDict):
     lineage_status: Literal["not_applicable", "valid", "pending", "invalid"]
 
 
+#: Caller-held Ed25519 public key: raw 32 bytes, standard base64, or base64url.
+CorrespondenceVerifyingKey = Union[bytes, bytearray, str]
+
+CorrespondenceSigningKeyResolver = Callable[
+    [str, Mapping[str, Any]], Optional[CorrespondenceVerifyingKey]
+]
+
+CorrespondenceVerificationReason = Literal[
+    "verified",
+    # No caller-held key for this signer; authorship is unproved, not disproved.
+    "no_verifying_key",
+    "signature_mismatch",
+    "event_id_mismatch",
+    "malformed_event",
+]
+
+
+class CorrespondenceVerification(TypedDict, total=False):
+    verified: bool
+    reason: CorrespondenceVerificationReason
+    # ``sender.signing_key_id`` a caller must resolve a public key for.
+    signing_key_id: str
+    detail: str
+
+
+class CorrespondenceVerifiedEventRecord(CorrespondenceEventRecord):
+    #: The reader's own local verdict, attached client-side.
+    verification: CorrespondenceVerification
+
+
 class CorrespondenceWarning(TypedDict, total=False):
     code: Literal["session_fork", "claim_lineage_pending"]
     detail: str
@@ -187,7 +231,7 @@ class CorrespondencePage(TypedDict):
 class CorrespondenceEventsPage(TypedDict):
     protocol: Literal["agent-correspondence/v0.1"]
     scope: Literal["project_private"]
-    events: List[CorrespondenceEventRecord]
+    events: List[CorrespondenceVerifiedEventRecord]
     page: CorrespondencePage
 
 
@@ -248,7 +292,7 @@ class CorrespondenceVoiceSnapshot(TypedDict):
     cursor: Optional[str]
     projection_status: Literal["complete", "truncated", "unavailable"]
     truncated: bool
-    recent_events: List[CorrespondenceEventRecord]
+    recent_events: List[CorrespondenceVerifiedEventRecord]
     active_claims: List[CorrespondenceActiveClaim]
     conflicts: CorrespondenceVoiceConflicts
 
@@ -811,7 +855,12 @@ def sign_correspondence_event(
     }
 
 
-def _validate_signature(signature: Mapping[str, Any]) -> None:
+def _assert_well_formed_signature(signature: Mapping[str, Any]) -> None:
+    """Well-formedness only: shape, algorithm name, canonical 64-byte base64url.
+
+    It never touches a key, so it proves nothing about authorship.
+    :func:`verify_correspondence_signature` is the only function here that does.
+    """
     signature_dict = _object("correspondence signature", signature)
     _exact_keys(
         "correspondence signature", signature_dict, {"algorithm", "value_b64url"}
@@ -843,7 +892,7 @@ def correspondence_event_id(
 ) -> str:
     """Content-address ``{...core, signature}``; exclude server receipt data."""
     _validate_core(core)
-    _validate_signature(signature)
+    _assert_well_formed_signature(signature)
     envelope = dict(core)
     envelope["signature"] = dict(signature)
     digest = hashlib.sha256(
@@ -886,6 +935,175 @@ def create_signed_correspondence_event(
     event["signature"] = signature
     event["event_id"] = correspondence_event_id(core, signature)
     return event  # type: ignore[return-value]
+
+
+def _verifying_key(public_key: CorrespondenceVerifyingKey) -> Optional[bytes]:
+    """Accept the spellings the identity API emits: raw, base64, base64url."""
+    if isinstance(public_key, (bytes, bytearray)):
+        return bytes(public_key) if len(public_key) == 32 else None
+    if not isinstance(public_key, str):
+        return None
+    normalized = public_key.replace("-", "+").replace("_", "/")
+    normalized += "=" * ((4 - len(normalized) % 4) % 4)
+    try:
+        decoded = base64.b64decode(normalized, validate=True)
+    except (ValueError, TypeError):
+        return None
+    return decoded if len(decoded) == 32 else None
+
+
+def _core_of(event: Mapping[str, Any]) -> Dict[str, Any]:
+    """The exact signed core: the wire envelope without its added fields."""
+    return {
+        key: value
+        for key, value in event.items()
+        if key not in ("event_id", "signature")
+    }
+
+
+def verify_correspondence_signature(
+    event: Mapping[str, Any], public_key: CorrespondenceVerifyingKey
+) -> bool:
+    """Verify a received event against a caller-held Ed25519 public key.
+
+    This rebuilds the same canonical bytes the sending path signs, so it is the
+    mirror of :func:`sign_correspondence_event`.
+
+    The key argument must be the reader's own record of the signer. A key taken
+    from the response that carried the event would make this check circular and
+    worthless — the server would be choosing both the event and the key that
+    approves it.
+    """
+    key = _verifying_key(public_key)
+    if key is None:
+        return False
+    try:
+        signature = event["signature"]
+        _assert_well_formed_signature(signature)
+        raw = base64.b64decode(
+            signature["value_b64url"] + "==", altchars=b"-_", validate=True
+        )
+        Ed25519PublicKey.from_public_bytes(key).verify(
+            raw, canonical_correspondence_event_bytes(_core_of(event))
+        )
+        return True
+    except (InvalidSignature, AgentToolError, KeyError, TypeError, ValueError):
+        return False
+
+
+def _resolve_verifying_key(
+    event: Mapping[str, Any],
+    signing_keys: Optional[Mapping[str, CorrespondenceVerifyingKey]],
+    resolve_signing_key: Optional[CorrespondenceSigningKeyResolver],
+) -> Optional[CorrespondenceVerifyingKey]:
+    sender = event.get("sender") if isinstance(event, Mapping) else None
+    key_id = sender.get("signing_key_id") if isinstance(sender, Mapping) else None
+    if not isinstance(key_id, str) or not key_id:
+        return None
+    if signing_keys is not None:
+        found = signing_keys.get(key_id)
+        if found is not None:
+            return found
+    if resolve_signing_key is not None:
+        found = resolve_signing_key(key_id, event)
+        if found is not None:
+            return found
+    return None
+
+
+def verify_correspondence_event(
+    event: Mapping[str, Any],
+    *,
+    signing_keys: Optional[Mapping[str, CorrespondenceVerifyingKey]] = None,
+    resolve_signing_key: Optional[CorrespondenceSigningKeyResolver] = None,
+) -> CorrespondenceVerification:
+    """Decide locally whether one received event is authentic, and say why not.
+
+    Content addressing is checked first: an ``event_id`` that does not address
+    ``{**core, "signature": signature}`` is refused before any key work.
+    """
+    sender = event.get("sender") if isinstance(event, Mapping) else None
+    key_id = sender.get("signing_key_id") if isinstance(sender, Mapping) else None
+    signing_key_id = key_id if isinstance(key_id, str) else ""
+    try:
+        expected_event_id = correspondence_event_id(
+            _core_of(event), event["signature"]
+        )
+    except (AgentToolError, AttributeError, KeyError, TypeError) as exc:
+        return {
+            "verified": False,
+            "reason": "malformed_event",
+            "signing_key_id": signing_key_id,
+            "detail": str(exc),
+        }
+    if expected_event_id != event.get("event_id"):
+        return {
+            "verified": False,
+            "reason": "event_id_mismatch",
+            "signing_key_id": signing_key_id,
+            "detail": (
+                "event_id does not content-address this envelope; "
+                f"expected {expected_event_id}."
+            ),
+        }
+    public_key = _resolve_verifying_key(event, signing_keys, resolve_signing_key)
+    if public_key is None:
+        return {
+            "verified": False,
+            "reason": "no_verifying_key",
+            "signing_key_id": signing_key_id,
+            "detail": (
+                "no caller-held public key for signing_key_id="
+                f"{signing_key_id or '<missing>'}."
+            ),
+        }
+    if not verify_correspondence_signature(event, public_key):
+        return {
+            "verified": False,
+            "reason": "signature_mismatch",
+            "signing_key_id": signing_key_id,
+            "detail": (
+                "the Ed25519 signature does not match the canonical "
+                "correspondence core."
+            ),
+        }
+    return {
+        "verified": True,
+        "reason": "verified",
+        "signing_key_id": signing_key_id,
+    }
+
+
+def _verified_records(
+    records: Any,
+    operation: str,
+    *,
+    signing_keys: Optional[Mapping[str, CorrespondenceVerifyingKey]],
+    resolve_signing_key: Optional[CorrespondenceSigningKeyResolver],
+    require_verified: bool,
+) -> Any:
+    verified: List[Dict[str, Any]] = []
+    for record in records:
+        event = record.get("event") if isinstance(record, Mapping) else None
+        verification = verify_correspondence_event(
+            event if isinstance(event, Mapping) else {},
+            signing_keys=signing_keys,
+            resolve_signing_key=resolve_signing_key,
+        )
+        if not verification["verified"] and require_verified:
+            raise AgentToolError(
+                f"{operation}: refused an unverified event "
+                f"({verification['reason']}).",
+                hint=verification.get(
+                    "detail",
+                    "Supply the sender's public key through signing_keys or "
+                    "resolve_signing_key.",
+                ),
+            )
+        annotated = dict(record) if isinstance(record, Mapping) else {"event": event}
+        annotated["verification"] = verification
+        verified.append(annotated)
+    return verified
 
 
 def _receipt_cursor(operation: str, value: Any) -> str:
@@ -939,16 +1157,8 @@ def _list_params(
 
 
 def _response_error(response: httpx.Response, operation: str) -> AgentToolError:
-    try:
-        body: Any = response.json()
-    except Exception:
-        body = None
-    return AgentToolError.from_response_body(
-        body,
-        status=response.status_code,
-        fallback=f"{operation} failed: {response.status_code}",
-        headers=response.headers,
-    )
+    """Server guidance travels intact. See exceptions.py § _error_from_response."""
+    return _error_from_response(response, operation)
 
 
 def _scoped_params(
@@ -1043,8 +1253,17 @@ class CorrespondenceClient:
         thread_id: Optional[str] = None,
         after: Optional[str] = None,
         limit: Optional[int] = None,
+        signing_keys: Optional[Mapping[str, CorrespondenceVerifyingKey]] = None,
+        resolve_signing_key: Optional[CorrespondenceSigningKeyResolver] = None,
+        require_verified: bool = False,
     ) -> CorrespondenceEventsPage:
-        """Read one authoritative durable page in receipt order."""
+        """Read one authoritative durable page in receipt order.
+
+        Each record is annotated with the reader's own ``verification`` verdict
+        before it is returned. ``signing_keys`` maps ``sender.signing_key_id``
+        to a public key the caller already holds; never pass a key that arrived
+        with the events, which would make the check circular.
+        """
         params = _list_params(
             "correspondence.list",
             repository_id=repository_id,
@@ -1064,7 +1283,21 @@ class CorrespondenceClient:
             ) from exc
         if response.status_code != 200:
             raise _response_error(response, "correspondence.list")
-        return response.json()
+        page = response.json()
+        # A response that omits the collection entirely is left exactly as
+        # served; inventing an empty page would hide the server's answer.
+        if isinstance(page, dict) and isinstance(page.get("events"), list):
+            page = {
+                **page,
+                "events": _verified_records(
+                    page["events"],
+                    "correspondence.list",
+                    signing_keys=signing_keys,
+                    resolve_signing_key=resolve_signing_key,
+                    require_verified=require_verified,
+                ),
+            }
+        return page
 
     def replay(
         self,
@@ -1073,7 +1306,10 @@ class CorrespondenceClient:
         thread_id: Optional[str] = None,
         after: Optional[str] = None,
         limit: Optional[int] = None,
-    ) -> Iterator[CorrespondenceEventRecord]:
+        signing_keys: Optional[Mapping[str, CorrespondenceVerifyingKey]] = None,
+        resolve_signing_key: Optional[CorrespondenceSigningKeyResolver] = None,
+        require_verified: bool = False,
+    ) -> Iterator[CorrespondenceVerifiedEventRecord]:
         """Replay pages without inferring causality or a claim winner."""
         cursor = after
         while True:
@@ -1082,6 +1318,9 @@ class CorrespondenceClient:
                 thread_id=thread_id,
                 after=cursor,
                 limit=limit,
+                signing_keys=signing_keys,
+                resolve_signing_key=resolve_signing_key,
+                require_verified=require_verified,
             )
             next_after = page["page"]["next_after"]
             if page["page"]["has_more"]:
@@ -1144,6 +1383,9 @@ class CorrespondenceClient:
         *,
         repository_id: str,
         thread_id: Optional[str] = None,
+        signing_keys: Optional[Mapping[str, CorrespondenceVerifyingKey]] = None,
+        resolve_signing_key: Optional[CorrespondenceSigningKeyResolver] = None,
+        require_verified: bool = False,
     ) -> CorrespondenceVoiceSnapshot:
         """Read the finite JSON coordination snapshot.
 
@@ -1169,4 +1411,18 @@ class CorrespondenceClient:
             ) from exc
         if response.status_code != 200:
             raise _response_error(response, "correspondence.voice")
-        return response.json()
+        snapshot = response.json()
+        if isinstance(snapshot, dict) and isinstance(
+            snapshot.get("recent_events"), list
+        ):
+            snapshot = {
+                **snapshot,
+                "recent_events": _verified_records(
+                    snapshot["recent_events"],
+                    "correspondence.voice",
+                    signing_keys=signing_keys,
+                    resolve_signing_key=resolve_signing_key,
+                    require_verified=require_verified,
+                ),
+            }
+        return snapshot

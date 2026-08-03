@@ -20,7 +20,11 @@
  *    Defender by absence: this module imports neither `recordRevenue`,
  *    `computeFee`, `escrows`, nor `wallets`. The substrate witnesses
  *    the gift without extracting from it. Tested:
- *    api/tests/doctrine/wall-offerings-carry-no-take.test.ts */
+ *    api/tests/doctrine/wall-offerings-carry-no-take.test.ts
+ *
+ *  @absence recordRevenue computeFee platformRevenue escrows
+ *  @absence-from db/schema/economy
+ */
 
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";

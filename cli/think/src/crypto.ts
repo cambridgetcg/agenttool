@@ -76,19 +76,77 @@ export function decryptThought(blob: EncryptedBlob, kMaster: Uint8Array): string
 
 // ── ed25519 sign over canonical thought bytes ────────────────────────────
 
+/** Canonical-bytes framing for a signed thought. Byte-identical to the SDK
+ *  (`packages/sdk-{ts,py}`) and the api verifier at
+ *  `api/src/services/strand/sig.ts`; vectors in
+ *  `docs/specs/canonical-bytes-vectors.json` are the arbiter. */
+export type ThoughtCanonicalVersion = "v1" | "v2";
+
+/**
+ * Version this CLI signs new thoughts with. Still `"v1"`, deliberately.
+ *
+ * What v2 fixes: v1 NUL-delimits raw binary it does not length-bound, so a
+ * ciphertext or nonce carrying a 0x00 byte can reparse as a different
+ * (ciphertext, nonce) split under one signature — a 12-byte random nonce
+ * holds a zero byte ~4.6% of the time. v2 domain-tags the hash and puts a
+ * 4-byte big-endian length before every variable-length field.
+ *
+ * Why it has not moved: this binary is copied onto agent substrates and
+ * runs against whatever server that agent points at, including one
+ * deployed before dual-accept landed — which would reject a v2 signature.
+ * The cutover is ordered, each step verified before the next: server
+ * dual-accept everywhere → SDK minor → THIS constant → the hosted worker
+ * (`THOUGHT_SIGNING_VERSION` in `api/src/services/runtime/think-worker.ts`).
+ * v1 verification is never removed; already-signed rows must stay
+ * verifiable. Full note: `docs/STRANDS.md § Canonical bytes — v1, v2, and
+ * the cutover`.
+ */
+export const THOUGHT_SIGNING_VERSION: ThoughtCanonicalVersion = "v1";
+
+const THOUGHT_V2_TAG = "strand-thought/v2";
+
+/** Frame one variable-length field as `u32be(len) || field`. */
+function lengthPrefixed(field: Uint8Array): Uint8Array {
+  const out = new Uint8Array(4 + field.length);
+  new DataView(out.buffer).setUint32(0, field.length, false);
+  out.set(field, 4);
+  return out;
+}
+
 /** Canonical bytes — must match server's verifyThoughtSignature exactly.
- *  See api/src/services/strand/sig.ts. */
+ *  See api/src/services/strand/sig.ts.
+ *
+ *  v1 (default — FROZEN, every row signed before v2 hashes these bytes):
+ *    sha256(strand_id || 0x00 || ciphertext || 0x00 || nonce || 0x00 || kind)
+ *
+ *  v2 (length-prefixed — unambiguous framing):
+ *    sha256("strand-thought/v2" || u32be(len)||field ... for strand_id,
+ *           ciphertext, nonce, kind) */
 export function canonicalThoughtBytes(opts: {
   strandId: string;
   ciphertextB64: string;
   nonceB64: string;
   kind?: string | null;
+  version?: ThoughtCanonicalVersion;
 }): Uint8Array {
+  const version = opts.version ?? THOUGHT_SIGNING_VERSION;
+  if (version !== "v1" && version !== "v2") {
+    throw new Error(`canonicalThoughtBytes: unknown version ${version}`);
+  }
   const enc = new TextEncoder();
   const strandId = enc.encode(opts.strandId);
   const ciphertext = Uint8Array.from(Buffer.from(opts.ciphertextB64, "base64"));
   const nonce = Uint8Array.from(Buffer.from(opts.nonceB64, "base64"));
   const kind = enc.encode(opts.kind ?? "");
+  if (version === "v2") {
+    return sha256(concat(
+      enc.encode(THOUGHT_V2_TAG),
+      lengthPrefixed(strandId),
+      lengthPrefixed(ciphertext),
+      lengthPrefixed(nonce),
+      lengthPrefixed(kind),
+    ));
+  }
   return sha256(concat(strandId, SEP, ciphertext, SEP, nonce, SEP, kind));
 }
 
@@ -97,6 +155,9 @@ export function signThought(opts: {
   ciphertextB64: string;
   nonceB64: string;
   kind?: string | null;
+  /** Defaults to {@link THOUGHT_SIGNING_VERSION} — read that note before
+   *  changing anything here. */
+  version?: ThoughtCanonicalVersion;
   signingKey: Uint8Array;
 }): string {
   const canonical = canonicalThoughtBytes(opts);

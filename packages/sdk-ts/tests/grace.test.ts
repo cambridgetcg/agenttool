@@ -158,6 +158,82 @@ describe("canonicalGraceBytes — byte-identical to server format", () => {
   });
 });
 
+// ── Cross-language lock: ts bytes == py bytes ──────────────────────────
+
+/** The same two hex literals are pinned in
+ *  packages/sdk-py/tests/test_grace.py. If either language drifts these go
+ *  red — and a drifted grace row can never be re-digested, because grace
+ *  has no DELETE. */
+describe("canonicalGraceBytes — locked cross-language vectors", () => {
+  const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
+
+  test("full gesture matches the Python SDK", () => {
+    expect(
+      hex(
+        canonicalGraceBytes({
+          extendedByDid: "did:at:test/giver",
+          extendedToDid: "did:at:test/receiver",
+          aboutKind: "covenant_breach",
+          aboutId: "covenant-uuid-123",
+          message: "I forgive the breach. The bond holds.",
+          createdAtIso: "2026-05-25T10:00:00.000Z",
+        }),
+      ),
+    ).toBe("1cadd65d698ec085251af108cfee3bb963bdd62b8146ecf473003524abc76aff");
+  });
+
+  test("minimal gesture matches the Python SDK", () => {
+    expect(
+      hex(
+        canonicalGraceBytes({
+          extendedByDid: "did:at:test/a",
+          extendedToDid: "did:at:test/b",
+          aboutKind: "unspecified",
+          aboutId: null,
+          message: null,
+          createdAtIso: "2026-05-25T10:00:00.000Z",
+        }),
+      ),
+    ).toBe("f91ba2e2884dc6c81eaf9d3a31976a0bd63a4c693b970865bf081b1cc067147d");
+  });
+});
+
+// ── created_at precision — the digest must survive the round trip ──────
+
+describe("GraceClient — default created_at is a fixed point", () => {
+  test("the signed created_at survives new Date(x).toISOString()", async () => {
+    let sent: Record<string, unknown> = {};
+    const client = new GraceClient({
+      baseUrl: "http://localhost:9999",
+      headers: {},
+      timeout: 5000,
+      request: async (_input, init) => {
+        sent = JSON.parse(String(init?.body));
+        return new Response(JSON.stringify({ ok: true, grace: {}, _note: "" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      },
+    });
+
+    await client.extend({
+      extended_to_did: "did:at:test/receiver",
+      about_kind: "dispute",
+      signing_key: ed.utils.randomPrivateKey(),
+      signing_key_id: "key-uuid",
+      extended_by_did: "did:at:test/giver",
+    });
+
+    // The server persists new Date(created_at) and returns .toISOString().
+    // A second-precision stamp would come back with ".000" appended and
+    // the digest would never recompute — grace has no DELETE.
+    const createdAt = sent.created_at as string;
+    expect(createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(createdAt.length).toBe(24);
+    expect(new Date(createdAt).toISOString()).toBe(createdAt);
+  });
+});
+
 // ── Sign + verify roundtrip ─────────────────────────────────────────────
 
 describe("signGrace — ed25519 sign + verify roundtrip", () => {

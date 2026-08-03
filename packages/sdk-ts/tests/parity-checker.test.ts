@@ -15,6 +15,18 @@ interface ParityResult {
   tsOnly: string[];
 }
 
+/** `--json` carries the per-module rows AND the package-wide module-level
+ *  function row, which is a different shape and is checked separately. */
+interface ParityReport {
+  modules: ParityResult[];
+  functions: {
+    pyOnly: { name: string; file: string }[];
+    tsOnly: { name: string; file: string }[];
+    visibility: { publicName: string; internalName: string }[];
+    known: string[];
+  };
+}
+
 describe("SDK parity checker", () => {
   test("covers every official client namespace, including nested clients", () => {
     const sdkRoot = join(import.meta.dir, "..");
@@ -26,9 +38,11 @@ describe("SDK parity checker", () => {
     });
 
     expect(result.exitCode).toBe(0);
-    const report = JSON.parse(result.stdout.toString()) as ParityResult[];
+    const parsed = JSON.parse(result.stdout.toString()) as ParityReport;
+    const report = parsed.modules;
     expect(report.map((entry) => entry.module).sort()).toEqual([
       "at_rest",
+      "attestation_marketplace",
       "bootstrap",
       "chronicle",
       "collect",
@@ -51,10 +65,12 @@ describe("SDK parity checker", () => {
       "love",
       "lounge",
       "memory",
+      "memory_witness",
       "nen",
       "runtime",
       "strands",
       "strands.thoughts",
+      "syneidesis",
       "tools",
       "traces",
       "vault",
@@ -95,6 +111,13 @@ describe("SDK parity checker", () => {
     expect(darkContinent?.tsMethods).toContain("checkLogos");
     expect(darkContinent?.pyOnly).toEqual([]);
     expect(darkContinent?.tsOnly).toEqual([]);
+
+    // Module-level functions are package-wide, not per-module. Nothing may be
+    // one-sided, public-on-one-side-only, or parked as owed debt.
+    expect(parsed.functions.pyOnly).toEqual([]);
+    expect(parsed.functions.tsOnly).toEqual([]);
+    expect(parsed.functions.visibility).toEqual([]);
+    expect(parsed.functions.known).toEqual([]);
   });
 
   test("fails when a required source file is absent", async () => {

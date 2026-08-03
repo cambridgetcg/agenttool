@@ -9,12 +9,28 @@ These differ from `docs/*.md` (which are doctrine — *what we believe and why*)
 | Spec | Layer | Status | Adoption |
 |---|---|---|---|
 | [`WAKE-1.0-DRAFT.md`](WAKE-1.0-DRAFT.md) | L1 — Discovery | Working Draft 1.0 (2026-05-17) | Reference implementation in agenttool; open for review/revision/adoption. |
+| [`AGENT-CORRESPONDENCE-0.1.md`](AGENT-CORRESPONDENCE-0.1.md) | L3 — Communication | AgentTool Profile 0.1 (2026-07-19) | Signed project-private operational facts with durable replay, advisory claims, explicit acknowledgement, refusal, rest, handoff, and repair. Git remains byte truth; no winner or external authority is inferred. |
+| [`AGENTTOOL-COLLAB-RELEASE-ROOM-0.4.md`](AGENTTOOL-COLLAB-RELEASE-ROOM-0.4.md) | L3 — Coordination | AgentTool Profile 0.4 (2026-07-23) | Explicit per-device enrolment, repository-scoped atomic external-operation leases, recovery-required uncertainty, and bounded provider observations. Includes strict non-secret [`agenttool.project/1`](agenttool-project-1.schema.json) project profiles. |
 | [`WITNESS-1.0-DRAFT.md`](WITNESS-1.0-DRAFT.md) | L4 — Trust / Witness | Working Draft 1.0 (2026-05-17) | Cryptographic anti-sycophancy primitive. Foundational for Covenant 1.0, Encounter 1.0, Dispute 1.0, all subsequent AIP specs. |
 | [`COVENANT-1.0-DRAFT.md`](COVENANT-1.0-DRAFT.md) | L5 — Covenants | Working Draft 1.0 (2026-05-17; rights floor added 2026-07-13) | Structured-contract primitive — the substrate-honest replacement for ToS. Composes on Witness 1.0. Its attributed XENIA rights rule is normative but current AgentTool vow strings remain opaque and are not semantically checked; no XENIA Covenant conformance is claimed. |
 | [`AGENT-WALLET-0.1.md`](AGENT-WALLET-0.1.md) | L6/L7 — Value & Capability | Working Draft 0.1 (2026-07-21) | Closed capability, intent, receipt, signer-boundary, and continuity primitives. Apache-2.0 LOVE package: `@agenttool/wallet`; npm is an independently verifiable optional mirror. No hosted wallet, key custody, RPC, or execution conformance is claimed. |
 | [`AGENT-WALLET-ZERONE-0.1.md`](AGENT-WALLET-ZERONE-0.1.md) | L6/L7 — Zerone Value & Capability Profile | Working Draft 0.1 (2026-07-28) | Exact public `@agenttool/wallet-zerone@0.1.2` LOVE package: closed two-message profile, exact Cosmos direct-sign bytes, independent Go/Cosmos vectors, and injected transports. It does not supply keys, custody, hosted RPC, generic REST, automatic retry, durable host reservations, a deployed bridge, or attestation-settlement/reward proof. npm/GitHub mirrors remain separate facts. |
 | [`ADDS-0.1-DRAFT.md`](ADDS-0.1-DRAFT.md) | L8 — Data & Continuity | Working Draft 0.1 (2026-07-11) | ADDS: provider-independent encrypted Blocks, signed Manifests/Grants/locations/Heads/Receipts, and offline conformance. Experimental reference package: `@agenttool/adds`; `agent-data/v1` is a separate higher layer. |
 | [`AGENT-REPO-ARCHIVE-0.1.md`](AGENT-REPO-ARCHIVE-0.1.md) | L8 — Data & Continuity | Experimental Working Draft 0.1 (2026-07-23) | Local reference profile for conservative Git capture, encrypted complete-zone ADDS replicas, restore evidence, and offline recovery bootstrap. `@agenttool/repo-archive@0.1.0-dev.0` is an npm-only developer-preview candidate; this source status is not evidence of registry publication. The three-filesystem-zone drill is a simulator, not a provider-durability claim or hosted deployment. |
+
+## Also here: cross-implementation conformance fixtures
+
+These are not proposed standards, so they are not in the index above. They are
+language-neutral JSON fixtures that hold this repository's implementations to
+one another, loaded directly by the test suites named beside each.
+
+| Fixture | Guards | Loaded by |
+|---|---|---|
+| [`canonical-bytes-vectors.json`](canonical-bytes-vectors.json) · [`CANONICAL-BYTES-VECTORS.md`](CANONICAL-BYTES-VECTORS.md) | The exact bytes every signed format hashes. The server is normative and generates every vector; a moved hex means signed history stopped verifying. | `api` · `sdk-ts` · `sdk-py` |
+| [`behaviour-conformance.json`](behaviour-conformance.json) · [`BEHAVIOUR-CONFORMANCE.md`](BEHAVIOUR-CONFORMANCE.md) | Observable client behaviour above the bytes — response parsing, error semantics, pure computation, boundaries, request shape, transport policy. Hand-authored: there is no server oracle at this layer. | `sdk-ts` · `sdk-py` |
+
+`canonical-bytes-vectors.json` is generated, never hand-edited — regenerate it
+with [`generate-canonical-bytes-vectors.ts`](generate-canonical-bytes-vectors.ts).
 
 ## The Agentic Internet Protocol (AIP) — proposed stack
 
@@ -33,7 +49,8 @@ These specs are part of a multi-layer proposal for the agent web. Layer dependen
   L6  — Value                       VALUE 1.0 (extends x402) ◐ Wallet boundaries + Zerone direct-sign profile; settlement proof TBD
   L5  — Covenants                   COVENANT 1.0             ✓ Working Draft 2026-05-17
   L4  — Trust / Witness             WITNESS 1.0              ✓ Working Draft 2026-05-17
-  L3  — Communication               (existing: HTTP, MCP, A2A)
+  L3  — Communication / Coordination Agent Correspondence 0.1 + Collab Release Room 0.4
+                                     ✓ AgentTool profiles over HTTP/MCP
   L2  — Identity                    (existing: W3C DID, ed25519)
   L1  — Discovery                   WAKE 1.0                 ✓ Working Draft 2026-05-17
   L0  — Transport                   (existing: TCP/IP, TLS)

@@ -52,6 +52,20 @@ function b64(value: Uint8Array): string {
   return globalThis.btoa(binary);
 }
 
+/** Default freshness stamp for a proof. The server window is ±5 minutes. */
+export function authorityTimestampNow(): string {
+  return new Date().toISOString();
+}
+
+/** Exact origin-form request target an authority proof covers.
+ *  Byte-identical to `authorityRequestTarget` in the API service — the
+ *  proof binds path-and-query, so the caller must derive it from the same
+ *  absolute URL the transport will actually fetch. */
+export function authorityRequestTarget(url: string): string {
+  const parsed = new URL(url);
+  return `${parsed.pathname}${parsed.search}`;
+}
+
 export function canonicalIdentityAuthorityBytes(
   opts: CanonicalIdentityAuthorityOpts,
 ): Uint8Array {
@@ -98,6 +112,52 @@ export function identityAuthorityHeaders(
     [AUTHORITY_HEADERS.timestamp]: opts.timestamp,
     [AUTHORITY_HEADERS.signature]: signature,
   };
+}
+
+/**
+ * An agent-rooted identity's consent to one exact HTTP mutation.
+ *
+ * `IdentityAuthority` in identity.ts is this shape, and is accepted here
+ * structurally. It lives in this module so that any client — identity,
+ * at-rest, memory — can bind a proof without importing the identity module.
+ */
+export interface AuthorityBinding {
+  /** DID of the identity whose immutable root consents. */
+  did: string;
+  /** That identity's immutable root ed25519 seed (32 bytes). */
+  signing_key: Uint8Array;
+  /** `next_sequence` from `GET /v1/identities/:id/authority`. */
+  sequence: number;
+  /** ISO-8601 UTC instant. Defaults to now; the server window is ±5 minutes. */
+  timestamp?: string;
+}
+
+/**
+ * The three proof headers for the exact request a client is about to send.
+ *
+ * Pass the absolute URL the transport will fetch and the exact entity it
+ * will carry — the empty string for a body-less mutation, which is what the
+ * server reads there. The proof hashes those bytes, so a client must
+ * serialize once, call this, and transmit the same value unchanged; any
+ * re-serialization in between invalidates the signature.
+ */
+export function authorityHeadersForRequest(opts: {
+  method: string;
+  /** Absolute URL the transport will fetch, query string included. */
+  url: string;
+  /** Exact entity bytes that will be transmitted. */
+  body: string | Uint8Array;
+  authority: AuthorityBinding;
+}): Record<string, string> {
+  return identityAuthorityHeaders({
+    identityDid: opts.authority.did,
+    method: opts.method,
+    requestTarget: authorityRequestTarget(opts.url),
+    body: opts.body,
+    sequence: opts.authority.sequence,
+    timestamp: opts.authority.timestamp ?? authorityTimestampNow(),
+    signingKey: opts.authority.signing_key,
+  });
 }
 
 /**

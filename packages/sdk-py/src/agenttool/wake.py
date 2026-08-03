@@ -37,10 +37,8 @@ import httpx
 
 from .exceptions import (
     AgentToolError,
-    AuthenticationError,
-    NotFoundError,
-    RateLimitError,
-    ServerError,
+    _typed_error_from_response,
+    raise_from_response,
 )
 
 WakeProvider = Literal["anthropic", "openai", "gemini", "cohere"]
@@ -55,27 +53,24 @@ DEFAULT_TTL_SECONDS = 5 * 60
 
 
 def _raise_for_status(resp: httpx.Response) -> None:
+    """Raise the guided error a non-OK wake response carries.
+
+    Python callers catch the status-shaped subclasses by type, so the dispatch
+    stays; what changed is that it no longer costs them the server's ``code``,
+    ``details``, ``docs`` and ``next_actions``. See exceptions.py
+    § _typed_error_from_response.
+    """
     if resp.status_code < 400:
         return
-    try:
-        body = resp.json()
-        detail = body.get("message") or body.get("error") or body.get("detail") or resp.text
-    except Exception:
-        detail = resp.text
-    if resp.status_code == 401:
-        raise AuthenticationError(detail=str(detail))
-    if resp.status_code == 404:
-        raise NotFoundError(f"Wake: {detail}", resource="wake")
-    if resp.status_code == 429:
-        retry_after = resp.headers.get("Retry-After")
-        raise RateLimitError(
-            "Wake: rate limit reached.",
-            retry_after=float(retry_after) if retry_after else None,
-            detail=str(detail),
-        )
-    if resp.status_code >= 500:
-        raise ServerError(f"Wake: {detail}")
-    raise AgentToolError(f"Wake API error ({resp.status_code}): {detail}")
+    raise _typed_error_from_response(
+        resp,
+        "Wake",
+        resource="wake",
+        hint=(
+            "Check AT_API_KEY, identity_id (multi-identity projects), and the "
+            "format param."
+        ),
+    )
 
 
 def _brief_profile_acknowledged(resp: httpx.Response, data: Any) -> bool:
@@ -337,14 +332,10 @@ class WakeClient:
             "GET", url, params=params, headers={"Accept": "text/event-stream"}, timeout=None
         ) as resp:
             if resp.status_code != 200:
-                try:
-                    detail = resp.read().decode("utf-8", errors="replace")[:200]
-                except Exception:
-                    detail = ""
-                raise AgentToolError(
-                    f"wake.voice failed: {resp.status_code}",
-                    hint=detail,
-                )
+                # A streaming response must be read before it can be parsed;
+                # after that it carries the same guided body as any other 4xx.
+                resp.read()
+                raise_from_response(resp, "wake.voice")
 
             event: Optional[str] = None
             data_lines: list[str] = []
@@ -357,7 +348,7 @@ class WakeClient:
                     if event == "change" and data_lines:
                         try:
                             payload = _json.loads("\n".join(data_lines))
-                            if _wake_event_matches(
+                            if wake_event_matches(
                                 payload,
                                 kinds=kinds,
                                 context_filter=context_filter,
@@ -384,15 +375,16 @@ class WakeClient:
                     data_lines.append(payload_chunk)
 
 
-def _wake_event_matches(
+def wake_event_matches(
     ev: Any,
     *,
-    kinds: Optional[List[str]],
-    context_filter: Optional[dict[str, str]],
-    runtime_id: Optional[str],
+    kinds: Optional[List[str]] = None,
+    context_filter: Optional[dict[str, str]] = None,
+    runtime_id: Optional[str] = None,
 ) -> bool:
-    """Client-side filter for wake voice events. Pure function — exported
-    via ``__all__`` for tests + composition. Mirror of the TS SDK's
+    """Decide whether an event passes the client-side filters.
+
+    Pure function; published for tests + composition. Mirror of the TS SDK's
     ``wakeEventMatches``.
     """
     if kinds and ev.get("kind") not in kinds:
@@ -408,6 +400,12 @@ def _wake_event_matches(
             if ctx.get(k) != v:
                 return False
     return True
+
+
+#: Deprecated private spelling kept so anything already importing it keeps
+#: working. The published name is :func:`wake_event_matches`, which is what
+#: the TS SDK exports.
+_wake_event_matches = wake_event_matches
 
 
 # ── Wake voice types ─────────────────────────────────────────────────

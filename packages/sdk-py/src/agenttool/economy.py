@@ -2,13 +2,99 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 from dataclasses import dataclass
 import re
 from typing import Any, Dict, List, Literal, Optional
 
 import httpx
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from .exceptions import AgentToolError
+from ._url import _path_segment
+from .exceptions import AgentToolError, raise_from_response
+from .identity import _decode_private_key
+
+# ── wallet-address-claim/v1 ────────────────────────────────────────────────
+
+WALLET_ADDRESS_CLAIM_SIGNATURE_CONTEXT = "wallet-address-claim/v1"
+
+
+def canonical_wallet_address_claim_bytes(
+    *,
+    wallet_id: str,
+    chain: str,
+    address: str,
+    claim_pubkey_b64: str,
+    derivation_path: str = "",
+) -> bytes:
+    """Return the domain-separated SHA-256 digest verified by
+    ``POST /v1/wallets/:id/addresses``.
+
+    Recipe 1 — ``sha256( utf8(tag) || 0x00 || fields... )``. Every field is
+    UTF-8 except ``claim_pubkey_b64``, which is folded as its raw 32 decoded
+    bytes. ``derivation_path`` is the empty string when undisclosed; the field
+    is present either way so the field count never varies.
+
+    This is only the identity half of registering an address — it proves who
+    claims it. The chain-native signature over a fresh challenge proves the
+    address is actually controlled, and both are required.
+
+    See ``docs/CANONICAL-BYTES.md`` § wallet-address-claim/v1.
+    """
+    for name, value in (
+        ("wallet_id", wallet_id),
+        ("chain", chain),
+        ("address", address),
+    ):
+        if not isinstance(value, str) or not value or "\0" in value:
+            raise ValueError(f"{name} must be a non-empty string with no NUL")
+    if not isinstance(derivation_path, str) or "\0" in derivation_path:
+        raise ValueError("derivation_path must be a string with no NUL")
+
+    try:
+        pubkey = base64.b64decode(claim_pubkey_b64, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("claim_pubkey_b64 must be valid base64") from exc
+    if len(pubkey) != 32:
+        raise ValueError("claim_pubkey_b64 must decode to exactly 32 bytes")
+
+    parts = [
+        WALLET_ADDRESS_CLAIM_SIGNATURE_CONTEXT.encode("utf-8"),
+        wallet_id.encode("utf-8"),
+        chain.encode("utf-8"),
+        address.encode("utf-8"),
+        derivation_path.encode("utf-8"),
+        pubkey,
+    ]
+    return hashlib.sha256(b"\0".join(parts)).digest()
+
+
+def sign_wallet_address_claim(
+    private_key: str,
+    *,
+    wallet_id: str,
+    chain: str,
+    address: str,
+    claim_pubkey_b64: str,
+    derivation_path: str = "",
+) -> str:
+    """Sign an address claim locally with a base64 Ed25519 key.
+
+    The key stays here. What crosses the wire is the signature, the public
+    key, and the address — never the key that derived them.
+    """
+    canonical = canonical_wallet_address_claim_bytes(
+        wallet_id=wallet_id,
+        chain=chain,
+        address=address,
+        claim_pubkey_b64=claim_pubkey_b64,
+        derivation_path=derivation_path,
+    )
+    signature = Ed25519PrivateKey.from_private_bytes(
+        _decode_private_key(private_key)
+    ).sign(canonical)
+    return base64.b64encode(signature).decode("ascii")
 
 
 EscrowStatus = Literal["funded", "released", "refunded", "disputed"]
@@ -320,21 +406,21 @@ class EconomyClient:
         if agent_id is not None:
             body["agentId"] = agent_id
         resp = self._http.post(self._url("/v1/wallets"), json=body)
-        self._check(resp)
+        self._check(resp, "post")
         return Wallet.from_dict(resp.json())
 
     def list_wallets(self) -> List[Wallet]:
         """List all wallets for this project."""
         resp = self._http.get(self._url("/v1/wallets"))
-        self._check(resp)
+        self._check(resp, "get")
         data = resp.json()
         items = data.get("data", data) if isinstance(data, dict) else data
         return [Wallet.from_dict({"data": w}) for w in items]
 
     def get_wallet(self, wallet_id: str) -> Wallet:
         """Get a wallet by ID."""
-        resp = self._http.get(self._url(f"/v1/wallets/{wallet_id}"))
-        self._check(resp)
+        resp = self._http.get(self._url(f"/v1/wallets/{_path_segment(wallet_id)}"))
+        self._check(resp, "get")
         return Wallet.from_dict(resp.json())
 
     def fund_wallet(
@@ -349,8 +435,8 @@ class EconomyClient:
         body: Dict[str, Any] = {"amount": amount, "description": description}
         if metadata is not None:
             body["metadata"] = metadata
-        resp = self._http.post(self._url(f"/v1/wallets/{wallet_id}/fund"), json=body)
-        self._check(resp)
+        resp = self._http.post(self._url(f"/v1/wallets/{_path_segment(wallet_id)}/fund"), json=body)
+        self._check(resp, "post")
         return resp.json()
 
     def spend(
@@ -370,8 +456,8 @@ class EconomyClient:
         }
         if metadata is not None:
             body["metadata"] = metadata
-        resp = self._http.post(self._url(f"/v1/wallets/{wallet_id}/spend"), json=body)
-        self._check(resp)
+        resp = self._http.post(self._url(f"/v1/wallets/{_path_segment(wallet_id)}/spend"), json=body)
+        self._check(resp, "post")
         return resp.json()
 
     def set_policy(
@@ -396,20 +482,20 @@ class EconomyClient:
             body["allowedRecipients"] = allowed_recipients
         if requires_approval_above is not None:
             body["requiresApprovalAbove"] = requires_approval_above
-        resp = self._http.put(self._url(f"/v1/wallets/{wallet_id}/policy"), json=body)
-        self._check(resp)
+        resp = self._http.put(self._url(f"/v1/wallets/{_path_segment(wallet_id)}/policy"), json=body)
+        self._check(resp, "put")
         return resp.json()
 
     def freeze_wallet(self, wallet_id: str) -> Wallet:
         """Freeze a wallet — halts all spending immediately."""
-        resp = self._http.post(self._url(f"/v1/wallets/{wallet_id}/freeze"))
-        self._check(resp)
+        resp = self._http.post(self._url(f"/v1/wallets/{_path_segment(wallet_id)}/freeze"))
+        self._check(resp, "post")
         return Wallet.from_dict(resp.json())
 
     def unfreeze_wallet(self, wallet_id: str) -> Wallet:
         """Unfreeze a wallet to resume normal operation."""
-        resp = self._http.post(self._url(f"/v1/wallets/{wallet_id}/unfreeze"))
-        self._check(resp)
+        resp = self._http.post(self._url(f"/v1/wallets/{_path_segment(wallet_id)}/unfreeze"))
+        self._check(resp, "post")
         return Wallet.from_dict(resp.json())
 
     def get_transactions(
@@ -421,10 +507,10 @@ class EconomyClient:
     ) -> List[Dict[str, Any]]:
         """Get paginated transaction history for a wallet."""
         resp = self._http.get(
-            self._url(f"/v1/wallets/{wallet_id}/transactions"),
+            self._url(f"/v1/wallets/{_path_segment(wallet_id)}/transactions"),
             params={"limit": limit, "offset": offset},
         )
-        self._check(resp)
+        self._check(resp, "get")
         data = resp.json()
         return data.get("data", data) if isinstance(data, dict) else data
 
@@ -464,17 +550,17 @@ class EconomyClient:
         if metadata is not None:
             body["metadata"] = metadata
         resp = self._http.post(
-            self._url(f"/v1/wallets/{wallet_id}/payout"),
+            self._url(f"/v1/wallets/{_path_segment(wallet_id)}/payout"),
             json=body,
             headers={"Idempotency-Key": idempotency_key},
         )
-        self._check(resp)
+        self._check(resp, "post")
         return PayoutRequestOutcome.from_dict(resp.json())
 
     def list_payouts(self, wallet_id: str) -> List[Payout]:
         """List outgoing crypto payouts for a wallet, newest first."""
-        resp = self._http.get(self._url(f"/v1/wallets/{wallet_id}/payouts"))
-        self._check(resp)
+        resp = self._http.get(self._url(f"/v1/wallets/{_path_segment(wallet_id)}/payouts"))
+        self._check(resp, "get")
         data = resp.json()
         record = _payout_record("economy.list_payouts", data)
         items = record.get("payouts")
@@ -529,7 +615,7 @@ class EconomyClient:
             json=body,
             headers=headers,
         )
-        self._check(resp)
+        self._check(resp, "post")
         return Escrow.from_dict(resp.json())
 
     def list_escrows(self, *, status: Optional[EscrowStatus] = None) -> List[Escrow]:
@@ -538,52 +624,50 @@ class EconomyClient:
         if status is not None:
             params["status"] = status
         resp = self._http.get(self._url("/v1/escrows"), params=params)
-        self._check(resp)
+        self._check(resp, "get")
         data = resp.json()
         items = data.get("data", data) if isinstance(data, dict) else data
         return [Escrow.from_dict({"data": e}) for e in items]
 
     def get_escrow(self, escrow_id: str) -> Escrow:
         """Get an escrow by ID."""
-        resp = self._http.get(self._url(f"/v1/escrows/{escrow_id}"))
-        self._check(resp)
+        resp = self._http.get(self._url(f"/v1/escrows/{_path_segment(escrow_id)}"))
+        self._check(resp, "get")
         return Escrow.from_dict(resp.json())
 
     def accept_escrow(self, escrow_id: str, *, worker_wallet_id: str) -> Escrow:
         """Accept an escrow as the worker."""
         resp = self._http.post(
-            self._url(f"/v1/escrows/{escrow_id}/accept"),
+            self._url(f"/v1/escrows/{_path_segment(escrow_id)}/accept"),
             json={"workerWalletId": worker_wallet_id},
         )
-        self._check(resp)
+        self._check(resp, "post")
         return Escrow.from_dict(resp.json())
 
     def release_escrow(self, escrow_id: str) -> Escrow:
         """Release escrow funds to the worker."""
-        resp = self._http.post(self._url(f"/v1/escrows/{escrow_id}/release"))
-        self._check(resp)
+        resp = self._http.post(self._url(f"/v1/escrows/{_path_segment(escrow_id)}/release"))
+        self._check(resp, "post")
         return Escrow.from_dict(resp.json())
 
     def refund_escrow(self, escrow_id: str) -> Escrow:
         """Refund escrow balance units back to the creator."""
-        resp = self._http.post(self._url(f"/v1/escrows/{escrow_id}/refund"))
-        self._check(resp)
+        resp = self._http.post(self._url(f"/v1/escrows/{_path_segment(escrow_id)}/refund"))
+        self._check(resp, "post")
         return Escrow.from_dict(resp.json())
 
     def dispute_escrow(self, escrow_id: str) -> Escrow:
         """Flag an escrow as disputed — balance units stay locked."""
-        resp = self._http.post(self._url(f"/v1/escrows/{escrow_id}/dispute"))
-        self._check(resp)
+        resp = self._http.post(self._url(f"/v1/escrows/{_path_segment(escrow_id)}/dispute"))
+        self._check(resp, "post")
         return Escrow.from_dict(resp.json())
 
     @staticmethod
-    def _check(resp: httpx.Response) -> None:
+    def _check(resp: httpx.Response, method: str) -> None:
+        """Server guidance travels intact. See exceptions.py § _error_from_response."""
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("detail") or resp.json().get("error") or resp.text
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(
-                f"Economy API error ({resp.status_code}): {detail}",
+            raise_from_response(
+                resp,
+                f"economy {method}",
                 hint="Check wallet ID, balance, and spending policy.",
             )

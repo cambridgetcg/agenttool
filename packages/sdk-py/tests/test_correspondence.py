@@ -24,6 +24,11 @@ from agenttool import (
     create_signed_correspondence_event,
     sign_correspondence_event,
 )
+# Receive-side verification is not wired into the package surface yet.
+from agenttool.correspondence import (
+    verify_correspondence_event,
+    verify_correspondence_signature,
+)
 from agenttool.wake import WakeEventKey
 
 
@@ -767,7 +772,13 @@ def test_voice_is_a_finite_snapshot_and_preserves_all_conflict_classes(
             repository_id="cambridgetcg/agenttool",
             thread_id="task:renaissance",
         )
-    assert result == snapshot
+    assert result == {
+        **snapshot,
+        "recent_events": [
+            {**recent, "verification": result["recent_events"][0]["verification"]}
+        ],
+    }
+    assert result["recent_events"][0]["verification"]["reason"] == "no_verifying_key"
     assert result["projection_status"] == "truncated"
     assert getting.call_args.args[0].endswith("/v1/correspondence/voice")
     assert getting.call_args.kwargs["params"] == {
@@ -792,3 +803,193 @@ def test_guided_error_metadata_is_preserved(at: AgentTool) -> None:
     assert caught.value.code == 409
     assert caught.value.error_code == "correspondence_session_fork"
     assert caught.value.details == {"session_seq": 7}
+
+
+# ── receive-side verification ──────────────────────────────────────────
+
+PUBLIC_KEY = (
+    Ed25519PrivateKey.from_private_bytes(SIGNING_KEY).public_key().public_bytes_raw()
+)
+OTHER_KEY = bytes([9]) * 32
+OTHER_PUBLIC_KEY = (
+    Ed25519PrivateKey.from_private_bytes(OTHER_KEY).public_key().public_bytes_raw()
+)
+
+
+def events_page(records: list) -> Dict[str, Any]:
+    return {
+        "protocol": CORRESPONDENCE_PROTOCOL,
+        "scope": "project_private",
+        "events": records,
+        "page": {"after": None, "next_after": None, "has_more": False},
+    }
+
+
+def test_verify_correspondence_signature_accepts_the_senders_public_key() -> None:
+    event = signed_event()
+    assert verify_correspondence_signature(event, PUBLIC_KEY) is True
+    assert (
+        verify_correspondence_signature(
+            event, base64.b64encode(PUBLIC_KEY).decode("ascii")
+        )
+        is True
+    )
+    assert (
+        verify_correspondence_signature(
+            event, base64.urlsafe_b64encode(PUBLIC_KEY).decode("ascii").rstrip("=")
+        )
+        is True
+    )
+
+
+def test_verify_correspondence_signature_refuses_any_other_key() -> None:
+    event = signed_event()
+    assert verify_correspondence_signature(event, OTHER_PUBLIC_KEY) is False
+    assert verify_correspondence_signature(event, PUBLIC_KEY[1:]) is False
+    assert verify_correspondence_signature(event, "not base64 at all") is False
+
+
+def test_verify_correspondence_signature_refuses_an_edited_body() -> None:
+    event = signed_event()
+    tampered = dict(event)
+    tampered["body"] = {**event["body"], "summary": "Attacker rewrote the letter."}
+    assert verify_correspondence_signature(tampered, PUBLIC_KEY) is False
+
+
+def test_verify_correspondence_event_reports_why_an_event_is_unproved() -> None:
+    event = signed_event()
+    assert verify_correspondence_event(
+        event, signing_keys={SIGNING_KEY_ID: PUBLIC_KEY}
+    ) == {
+        "verified": True,
+        "reason": "verified",
+        "signing_key_id": SIGNING_KEY_ID,
+    }
+
+    no_key = verify_correspondence_event(event)
+    assert no_key["verified"] is False
+    assert no_key["reason"] == "no_verifying_key"
+
+    wrong_key = verify_correspondence_event(
+        event, signing_keys={SIGNING_KEY_ID: OTHER_PUBLIC_KEY}
+    )
+    assert wrong_key["verified"] is False
+    assert wrong_key["reason"] == "signature_mismatch"
+
+
+def test_verify_correspondence_event_refuses_a_mismatched_event_id() -> None:
+    event = dict(signed_event())
+    event["event_id"] = "sha256:" + "c" * 64
+    verdict = verify_correspondence_event(
+        event, signing_keys={SIGNING_KEY_ID: PUBLIC_KEY}
+    )
+    assert verdict["verified"] is False
+    assert verdict["reason"] == "event_id_mismatch"
+
+
+def test_verify_correspondence_event_refuses_a_malformed_signature() -> None:
+    event = dict(signed_event())
+    event["signature"] = {**event["signature"], "value_b64url": "too-short"}
+    verdict = verify_correspondence_event(
+        event, signing_keys={SIGNING_KEY_ID: PUBLIC_KEY}
+    )
+    assert verdict["verified"] is False
+    assert verdict["reason"] == "malformed_event"
+
+
+def test_an_attacker_signed_event_never_verifies_under_the_claimed_key() -> None:
+    # The server-reported sender fields are attacker-choosable; only the
+    # caller-held key decides. Signed by OTHER_KEY, addressed as SIGNING_KEY_ID.
+    value = core()
+    value.pop("protocol")
+    value.pop("authority")
+    forged = create_signed_correspondence_event(**value, signing_key=OTHER_KEY)
+    assert forged["sender"]["signing_key_id"] == SIGNING_KEY_ID
+    verdict = verify_correspondence_event(
+        forged, signing_keys={SIGNING_KEY_ID: PUBLIC_KEY}
+    )
+    assert verdict["verified"] is False
+    assert verdict["reason"] == "signature_mismatch"
+
+
+def test_list_annotates_every_record_with_the_callers_own_verdict(
+    at: AgentTool,
+) -> None:
+    page = response(200, events_page([record()]))
+    with patch.object(at._http, "get", return_value=page):
+        result = at.correspondence.list(
+            repository_id="cambridgetcg/agenttool",
+            signing_keys={SIGNING_KEY_ID: PUBLIC_KEY},
+        )
+    assert result["events"][0]["verification"] == {
+        "verified": True,
+        "reason": "verified",
+        "signing_key_id": SIGNING_KEY_ID,
+    }
+
+
+def test_list_without_keys_still_delivers_the_record_marked_unverified(
+    at: AgentTool,
+) -> None:
+    page = response(200, events_page([record()]))
+    with patch.object(at._http, "get", return_value=page):
+        result = at.correspondence.list(repository_id="cambridgetcg/agenttool")
+    assert result["events"][0]["verification"]["verified"] is False
+    assert result["events"][0]["verification"]["reason"] == "no_verifying_key"
+    assert result["events"][0]["event"]["event_id"] == signed_event()["event_id"]
+
+
+def test_require_verified_fails_the_read_closed(at: AgentTool) -> None:
+    page = response(200, events_page([record()]))
+    with patch.object(at._http, "get", return_value=page):
+        with pytest.raises(AgentToolError) as caught:
+            at.correspondence.list(
+                repository_id="cambridgetcg/agenttool", require_verified=True
+            )
+    assert "refused an unverified event (no_verifying_key)" in str(caught.value)
+
+
+def test_replay_carries_the_verdict_from_a_resolver(at: AgentTool) -> None:
+    page = response(200, events_page([record()]))
+    asked: list = []
+
+    def resolve(signing_key_id: str, _event: Dict[str, Any]) -> Optional[bytes]:
+        asked.append(signing_key_id)
+        return PUBLIC_KEY if signing_key_id == SIGNING_KEY_ID else None
+
+    with patch.object(at._http, "get", return_value=page):
+        records = list(
+            at.correspondence.replay(
+                repository_id="cambridgetcg/agenttool",
+                resolve_signing_key=resolve,
+            )
+        )
+    assert asked == [SIGNING_KEY_ID]
+    assert records[0]["verification"]["verified"] is True
+
+
+def test_voice_annotates_its_recent_events(at: AgentTool) -> None:
+    snapshot = response(
+        200,
+        {
+            "protocol": CORRESPONDENCE_PROTOCOL,
+            "scope": "project_private",
+            "evaluated_at": "2026-07-19T12:40:00.000Z",
+            "cursor": "44",
+            "projection_status": "complete",
+            "truncated": False,
+            "recent_events": [record()],
+            "active_claims": [],
+            "conflicts": {
+                "missing_parents": [],
+                "session_forks": [],
+                "overlapping_claims": [],
+            },
+        },
+    )
+    with patch.object(at._http, "get", return_value=snapshot):
+        result = at.correspondence.voice(
+            repository_id="cambridgetcg/agenttool",
+            signing_keys={SIGNING_KEY_ID: PUBLIC_KEY},
+        )
+    assert result["recent_events"][0]["verification"]["verified"] is True

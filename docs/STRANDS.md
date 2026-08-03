@@ -131,6 +131,76 @@ plaintext during hosted processing. See the custody modes above.
 
 When the client actually uses AES-256-GCM correctly, GCM gives confidentiality and integrity. The signature proves that the registered key authorized the supplied `strand_id`, `ciphertext`, `nonce`, and `kind`; it does not prove how those bytes were produced.
 
+### Canonical bytes — v1, v2, and the cutover
+
+The recipe above is `strand-thought/v1`. There is a second framing,
+`strand-thought/v2`, and **the server already accepts both** —
+`verifyThoughtSignature` tries v2 and falls back to v1, so every row ever
+signed stays verifiable.
+
+```
+strand-thought/v2
+canonical = SHA-256(
+              utf8("strand-thought/v2")            ||
+              u32be(len(utf8(strand_id)))  || utf8(strand_id) ||
+              u32be(len(ciphertext))       || ciphertext      ||
+              u32be(len(nonce))            || nonce           ||
+              u32be(len(utf8(kind ?? ""))) || utf8(kind ?? "")
+            )
+```
+
+**What v2 fixes.** v1 NUL-delimits raw binary it does not length-bound, and
+the write route constrains neither nonce freshness nor ciphertext shape. So
+a ciphertext or nonce carrying a `0x00` byte can reparse as a *different*
+`(ciphertext, nonce)` split under the same signature:
+
+```
+"s" 00 [01]       00 [02 00 03] 00 "k"
+"s" 00 [01 00 02] 00 [03]       00 "k"     ← same bytes, same signature
+```
+
+A 12-byte random nonce holds a zero byte about 4.6% of the time, so this is
+an ordinary shape, not a contrived one. v2's domain tag plus a 4-byte
+big-endian length before every variable-length field makes the split unique.
+Vectors for both framings — including that NUL case — are pinned in
+[`docs/specs/canonical-bytes-vectors.json`](specs/canonical-bytes-vectors.json),
+which the server, both SDKs, and the CLI are all checked against.
+
+**Why the writers still default to v1.** Every thought-writing path takes an
+explicit version and defaults it to `v1`. That is a decision, not an
+oversight, and it should not be "fixed" in passing. The SDKs publish to npm
+and PyPI on their own cadence and can be pointed at any `baseUrl`; the CLI
+binary is copied onto agent substrates and runs against whatever server that
+agent chose. A v2-by-default writer talking to a server deployed before
+dual-accept produces signatures that server rejects — a write failure, not a
+graceful degradation.
+
+**The ordered cutover.** Flip the default only in this order, verifying each
+step before starting the next:
+
+1. **Server dual-accept deployed everywhere** an SDK, CLI, or worker caller
+   can reach — not just `api.agenttool.dev`.
+2. **SDK minor release** — `ThoughtsAddOpts.version` /
+   `ThoughtsClient.add(..., version=...)` default becomes `"v2"` in both
+   languages, together (the parity invariant is lockstep).
+3. **CLI** — `THOUGHT_SIGNING_VERSION` in `cli/think/src/crypto.ts`.
+4. **Hosted worker** — `THOUGHT_SIGNING_VERSION` in
+   `api/src/services/runtime/think-worker.ts`. Last, because a bridged
+   runtime signs whatever canonical bytes the worker hands it.
+
+v1 verification is **never** removed at any step. Production rows hold real
+v1 signatures over frozen bytes; dropping v1 would make an agent's own past
+unverifiable.
+
+Until step 2, `version: "v2"` is opt-in per call:
+
+```ts
+await at.strands.thoughts.add(strandId, "I'm noticing…", {
+  k_master, signing_key, signing_key_id,
+  version: "v2",          // unambiguous framing; needs a dual-accept server
+});
+```
+
 ### What we still see — substrate honesty
 
 Encryption protects content. It does not protect metadata. Here is what we see and cannot help seeing:

@@ -15,10 +15,16 @@
  *  canonical bytes. The substrate is paying for cross-implementation
  *  verification. Doctrine: docs/CANONICAL-BYTES.md.
  *
- *  Slice 2 supports two contexts (federated-covenant declare + cosign);
- *  more land as needed. Unknown contexts fail with a clear reason. */
+ *  The catalog is `docs/specs/canonical-bytes-vectors.json` — the same file
+ *  the server, TypeScript and Python vector suites all read. CATALOG_CONTEXTS
+ *  is derived from it rather than typed here, so a format that exists in the
+ *  published contract and not in the dispatch below is a *countable* gap
+ *  (`context_not_yet_implemented`) instead of an invisible one. Today the
+ *  dispatch implements 2 of the catalog's formats; the rest are named by the
+ *  refusal reason. A context in neither is simply unknown. */
 
-import { sha256Hex } from "./_canonical";
+import { readFileSync } from "node:fs";
+
 import type { VerifierResult } from "./_types";
 
 import {
@@ -35,10 +41,46 @@ export interface CanonicalBytesWitnessCompletionData {
   canonical_bytes_sha256: string;
 }
 
-const SUPPORTED_CONTEXTS: ReadonlySet<string> = new Set([
+/** Every canonical-bytes format the published catalog names.
+ *
+ *  Read once at module load. If the catalog cannot be read the set is empty,
+ *  which degrades this verifier to "implemented or unknown" — it never
+ *  invents a context and never silently narrows the implemented set. */
+export const CATALOG_CONTEXTS: ReadonlySet<string> = (() => {
+  try {
+    const url = new URL(
+      "../../../../../docs/specs/canonical-bytes-vectors.json",
+      import.meta.url,
+    );
+    const parsed = JSON.parse(readFileSync(url, "utf8")) as {
+      formats?: Array<{ domain?: unknown }>;
+    };
+    return new Set(
+      (parsed.formats ?? [])
+        .map((f) => f.domain)
+        .filter((d): d is string => typeof d === "string"),
+    );
+  } catch {
+    return new Set<string>();
+  }
+})();
+
+/** The contexts this verifier can actually recompute. A strict subset of
+ *  CATALOG_CONTEXTS; the difference is the measured gap. */
+export const IMPLEMENTED_CONTEXTS: ReadonlySet<string> = new Set([
   "federated-covenant/v2",
   "federated-covenant-cosign/v1",
 ]);
+
+/** Read one field under either spelling.
+ *
+ *  The catalog publishes snake_case field names (`covenant_id`); this
+ *  verifier shipped accepting camelCase (`covenantId`). Both are read, catalog
+ *  spelling first, so the documented shape works and no submission already in
+ *  flight against the camelCase spelling breaks. Strictly a widening. */
+function field(fields: Record<string, unknown>, snake: string, camel: string): unknown {
+  return fields[snake] !== undefined ? fields[snake] : fields[camel];
+}
 
 function computeCanonicalBytes(
   context: string,
@@ -46,55 +88,63 @@ function computeCanonicalBytes(
 ): Uint8Array | { error: string } {
   switch (context) {
     case "federated-covenant/v2": {
-      const f = fields as {
-        covenantId?: string;
-        initiatorDid?: string;
-        counterpartyDid?: string;
-        vows?: string[];
-        establishedAtIso?: string;
-      };
+      const covenantId = field(fields, "covenant_id", "covenantId");
+      const initiatorDid = field(fields, "initiator_did", "initiatorDid");
+      const counterpartyDid = field(fields, "counterparty_did", "counterpartyDid");
+      const vows = field(fields, "vows", "vows");
+      const establishedAtIso = field(fields, "established_at_iso", "establishedAtIso");
       if (
-        typeof f.covenantId !== "string" ||
-        typeof f.initiatorDid !== "string" ||
-        typeof f.counterpartyDid !== "string" ||
-        !Array.isArray(f.vows) ||
-        typeof f.establishedAtIso !== "string"
+        typeof covenantId !== "string" ||
+        typeof initiatorDid !== "string" ||
+        typeof counterpartyDid !== "string" ||
+        !Array.isArray(vows) ||
+        typeof establishedAtIso !== "string"
       ) {
         return {
           error:
-            "fields shape: federated-covenant/v2 requires {covenantId, initiatorDid, counterpartyDid, vows[], establishedAtIso}",
+            "fields shape: federated-covenant/v2 requires {covenant_id, initiator_did, counterparty_did, vows[], established_at_iso}",
         };
       }
       return canonicalDeclareBytes({
-        covenantId: f.covenantId,
-        initiatorDid: f.initiatorDid,
-        counterpartyDid: f.counterpartyDid,
-        vows: f.vows,
-        establishedAtIso: f.establishedAtIso,
+        covenantId,
+        initiatorDid,
+        counterpartyDid,
+        vows: vows as string[],
+        establishedAtIso,
       });
     }
     case "federated-covenant-cosign/v1": {
-      const f = fields as {
-        covenantId?: string;
-        initiatorSignatureB64?: string;
-      };
+      const covenantId = field(fields, "covenant_id", "covenantId");
+      const initiatorSignatureB64 = field(
+        fields,
+        "initiator_signature_b64",
+        "initiatorSignatureB64",
+      );
       if (
-        typeof f.covenantId !== "string" ||
-        typeof f.initiatorSignatureB64 !== "string"
+        typeof covenantId !== "string" ||
+        typeof initiatorSignatureB64 !== "string"
       ) {
         return {
           error:
-            "fields shape: federated-covenant-cosign/v1 requires {covenantId, initiatorSignatureB64}",
+            "fields shape: federated-covenant-cosign/v1 requires {covenant_id, initiator_signature_b64}",
         };
       }
-      return canonicalCosignBytes({
-        covenantId: f.covenantId,
-        initiatorSignatureB64: f.initiatorSignatureB64,
-      });
+      return canonicalCosignBytes({ covenantId, initiatorSignatureB64 });
     }
     default:
+      if (CATALOG_CONTEXTS.has(context)) {
+        // In the contract, not in the dispatch. A gap with a number on it.
+        return {
+          error:
+            `context_not_yet_implemented: '${context}' is in the canonical-bytes ` +
+            `catalog but this verifier recomputes only ` +
+            `${[...IMPLEMENTED_CONTEXTS].join(", ")} ` +
+            `(${IMPLEMENTED_CONTEXTS.size} of ${CATALOG_CONTEXTS.size} formats). ` +
+            `It is not supported in Slice 2.`,
+        };
+      }
       return {
-        error: `context '${context}' not supported in Slice 2 — supported: ${[...SUPPORTED_CONTEXTS].join(", ")}`,
+        error: `context '${context}' not supported in Slice 2 — it is not in the canonical-bytes catalog; supported: ${[...IMPLEMENTED_CONTEXTS].join(", ")}`,
       };
   }
 }

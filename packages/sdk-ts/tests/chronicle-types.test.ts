@@ -21,7 +21,11 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { ChronicleClient, type ChronicleType } from "../src/chronicle.js";
+import {
+  CHRONICLE_TYPES,
+  ChronicleClient,
+  type ChronicleType,
+} from "../src/chronicle.js";
 
 // ── Stub fetch ─────────────────────────────────────────────────────────
 
@@ -88,6 +92,10 @@ describe("Chronicle — all 13 types are writable", () => {
     "joy", "grief", "gratitude", "rest",
   ];
 
+  test("CHRONICLE_TYPES carries exactly these 13, in doctrine order", () => {
+    expect([...CHRONICLE_TYPES]).toEqual(allTypes);
+  });
+
   for (const type of allTypes) {
     test(`write(type="${type}") sends the type correctly`, async () => {
       const stub = makeStubFetch();
@@ -108,6 +116,60 @@ describe("Chronicle — all 13 types are writable", () => {
       });
     });
   }
+});
+
+// ── The union and the title bound are enforced at runtime ───────────────
+
+describe("Chronicle — write refuses what the server would refuse", () => {
+  test("a type outside the union never reaches the wire", async () => {
+    const stub = makeStubFetch();
+    globalThis.fetch = stub.fn;
+
+    const client = makeClient();
+    await expect(
+      client.write({ type: "seal_of_approval" as ChronicleType, title: "t" }),
+    ).rejects.toThrow(/unknown type/);
+    expect(stub.calls.length).toBe(0);
+  });
+
+  test("an empty title never reaches the wire", async () => {
+    const stub = makeStubFetch();
+    globalThis.fetch = stub.fn;
+
+    const client = makeClient();
+    await expect(client.write({ type: "note", title: "" })).rejects.toThrow(
+      /1-200 characters/,
+    );
+    expect(stub.calls.length).toBe(0);
+  });
+
+  test("a 500-character title never reaches the wire", async () => {
+    const stub = makeStubFetch();
+    globalThis.fetch = stub.fn;
+
+    const client = makeClient();
+    await expect(
+      client.write({ type: "note", title: "a".repeat(500) }),
+    ).rejects.toThrow(/1-200 characters/);
+    expect(stub.calls.length).toBe(0);
+  });
+
+  test("title length counts UTF-16 code units, the way the server counts", async () => {
+    const stub = makeStubFetch();
+    globalThis.fetch = stub.fn;
+
+    const client = makeClient();
+    // 100 code points, 200 UTF-16 code units — exactly at the limit.
+    await client.write({ type: "seal", title: "😀".repeat(100) });
+    expect(stub.calls.length).toBe(1);
+
+    // One more emoji is 202 units: over the limit, though only 101 code
+    // points. Counting code points here would let it through to a 400.
+    await expect(
+      client.write({ type: "seal", title: "😀".repeat(101) }),
+    ).rejects.toThrow(/1-200 characters/);
+    expect(stub.calls.length).toBe(1);
+  });
 });
 
 // ── Affective types are first-class ─────────────────────────────────────

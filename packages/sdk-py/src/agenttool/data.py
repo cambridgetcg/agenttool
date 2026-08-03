@@ -11,7 +11,8 @@ from typing import Any, Callable, Dict, List, Literal, Optional, TypedDict, cast
 
 import httpx
 
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, raise_from_response
+from ._url import _path_segment
 
 
 AGENT_DATA_PROTOCOL = "agent-data/v1"
@@ -174,11 +175,9 @@ class DataClient:
 
     def get(self, record_id: str) -> Dict[str, Any]:
         """Fetch one record by its stable ID."""
-        from urllib.parse import quote
-
         return self._request(
             "GET",
-            f"/v1/data/records/{quote(record_id, safe='')}",
+            f"/v1/data/records/{_path_segment(record_id)}",
         )
 
     def changes(
@@ -205,14 +204,12 @@ class DataClient:
         reason: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Append a tombstone while preserving the record's change history."""
-        from urllib.parse import quote
-
         body: Dict[str, Any] = {}
         if reason is not None:
             body["reason"] = reason
         return self._request(
             "POST",
-            f"/v1/data/records/{quote(record_id, safe='')}/tombstone",
+            f"/v1/data/records/{_path_segment(record_id)}/tombstone",
             body=body,
         )
 
@@ -261,17 +258,14 @@ class DataClient:
             )
 
         if response.status_code >= 400:
-            try:
-                payload: Any = response.json()
-            except Exception:
-                payload = None
-            raise AgentToolError.from_response_body(
-                payload,
-                response.status_code,
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(
+                response,
+                "Agent data node request",
                 fallback=(
                     f"Agent data node request failed ({response.status_code})."
                 ),
-                headers=response.headers,
             )
 
         if response.status_code == 204:

@@ -19,7 +19,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional, TypedDict
 
 import httpx
 
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, raise_from_response
 
 
 HandoffStatus = Literal["active", "blocked", "complete"]
@@ -150,16 +150,8 @@ def _empty_epistemic_state() -> HandoffEpistemicState:
 
 
 def _raise_handoff_error(response: httpx.Response, operation: str) -> None:
-    """Raise a guided SDK error while preserving API error metadata."""
-    try:
-        body: Any = response.json()
-    except Exception:
-        body = None
-    raise AgentToolError.from_response_body(
-        body,
-        status=response.status_code,
-        fallback=f"handoff.{operation} failed: {response.status_code}",
-    )
+    """Server guidance travels intact. See exceptions.py § _error_from_response."""
+    raise_from_response(response, f"handoff.{operation}")
 
 
 class HandoffClient:

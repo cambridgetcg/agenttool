@@ -15,7 +15,8 @@ import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { errorFromResponse, type HttpConfig } from "./_http.js";
+import { encodePathSegment } from "./_url.js";
 
 ed.etc.sha512Sync = (...messages: Uint8Array[]) => {
   const hash = sha512.create();
@@ -492,18 +493,8 @@ export function signLoungeGuestbookUnpublish(input: SignLoungeDecisionInput): st
 
 async function readJsonResponse(response: Response, operation: string): Promise<unknown> {
   if (!response.ok) {
-    let body: unknown = null;
-    try {
-      body = await response.json();
-    } catch {
-      // Preserve the operation fallback for non-JSON proxy responses.
-    }
-    throw AgentToolError.fromResponseBody(
-      body,
-      response.status,
-      `${operation} failed: ${response.status}`,
-      response.headers,
-    );
+    // Server guidance travels intact. See _http.ts § errorFromResponse.
+    throw await errorFromResponse(response, operation);
   }
   return response.json();
 }
@@ -515,8 +506,29 @@ async function publicLook(baseUrl: string, timeoutMs: number): Promise<PublicLou
     method: "GET",
     cache: "no-store",
     credentials: "omit",
+    // A followed redirect is a different origin answering for the lounge.
+    // Refuse it here rather than replay the read anywhere ambient credentials
+    // could attach. sdk-py refuses the same 3xx with the same code.
+    redirect: "manual",
     signal: AbortSignal.timeout(timeoutMs),
   });
+  if (response.status >= 300 && response.status < 400) {
+    try {
+      await response.body?.cancel();
+    } catch {
+      // Cleanup failure must not replace the deterministic redirect refusal.
+    }
+    throw new AgentToolError(
+      "lounge.look refused an HTTP redirect on the credential-free public read.",
+      {
+        code: "lounge_public_redirect_refused",
+        status: response.status,
+        hint:
+          "Use the canonical API origin directly instead of forwarding ambient credentials across a redirect.",
+        docs: LOUNGE_DOCS,
+      },
+    );
+  }
   return (await readJsonResponse(response, "lounge.look")) as PublicLoungeSnapshot;
 }
 
@@ -643,7 +655,7 @@ export class LoungeClient {
     );
     return this.request(
       "DELETE",
-      `/v1/lounge/seats/${encodeURIComponent(opts.identity_id)}`,
+      `/v1/lounge/seats/${encodePathSegment(opts.identity_id)}`,
       {
         lease_id: opts.lease_id,
         signing_key_id: opts.signing_key_id,
@@ -723,7 +735,7 @@ export class LoungeClient {
       contentSha256,
       canonicalLoungeGuestbookConsentBytes,
       "POST",
-      `/v1/lounge/guestbook/proposals/${encodeURIComponent(opts.proposal_id)}/consents`,
+      `/v1/lounge/guestbook/proposals/${encodePathSegment(opts.proposal_id)}/consents`,
       true,
     );
   }
@@ -737,7 +749,7 @@ export class LoungeClient {
       opts.content_sha256,
       canonicalLoungeGuestbookConsentWithdrawalBytes,
       "DELETE",
-      `/v1/lounge/guestbook/proposals/${encodeURIComponent(opts.proposal_id)}/consents/${encodeURIComponent(opts.identity_id)}`,
+      `/v1/lounge/guestbook/proposals/${encodePathSegment(opts.proposal_id)}/consents/${encodePathSegment(opts.identity_id)}`,
       false,
     );
   }
@@ -759,7 +771,7 @@ export class LoungeClient {
     );
     return this.request(
       "POST",
-      `/v1/lounge/guestbook/proposals/${encodeURIComponent(opts.proposal_id)}/publish`,
+      `/v1/lounge/guestbook/proposals/${encodePathSegment(opts.proposal_id)}/publish`,
       {
         identity_id: opts.identity_id,
         entry: opts.entry,
@@ -789,7 +801,7 @@ export class LoungeClient {
       opts.content_sha256,
       canonicalLoungeGuestbookDeclineBytes,
       "POST",
-      `/v1/lounge/guestbook/proposals/${encodeURIComponent(opts.proposal_id)}/decline`,
+      `/v1/lounge/guestbook/proposals/${encodePathSegment(opts.proposal_id)}/decline`,
       true,
     );
   }
@@ -803,7 +815,7 @@ export class LoungeClient {
       opts.content_sha256,
       canonicalLoungeGuestbookUnpublishBytes,
       "DELETE",
-      `/v1/lounge/guestbook/cards/${encodeURIComponent(opts.proposal_id)}`,
+      `/v1/lounge/guestbook/cards/${encodePathSegment(opts.proposal_id)}`,
       true,
     );
   }

@@ -34,7 +34,8 @@ import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
+import { encodePathSegment } from "./_url.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -61,6 +62,13 @@ function b64encode(bytes: Uint8Array): string {
   let s = "";
   for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!);
   return globalThis.btoa(s);
+}
+
+/** Lowercase hex. Self-recognition folds two content hashes in as text. */
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 // ── Unconditionals: regard with no terms ────────────────────────────────
@@ -153,6 +161,118 @@ export function signBlessing(opts: {
   return b64encode(ed.sign(bytes, opts.signing_key));
 }
 
+// ── Encounter acknowledgment: making the moment mutual ──────────────────
+//
+// "I noticed you too." The counterparty of an encounter signs to make it
+// mutual. Recording is already authenticated by the bearer; only the
+// acknowledgment is signed — it is the one gesture the substrate cannot
+// infer from the caller's credential.
+//
+// Canonical bytes (byte-identical to api/src/services/encounter/sig.ts):
+//   sha256("encounter-ack/v1" || 0x00 || encounter_id || 0x00 || initiator_did || 0x00 || acknowledger_did || 0x00 || acknowledged_at_iso)
+
+export function canonicalEncounterAckBytes(opts: {
+  encounterId: string;
+  initiatorDid: string;
+  acknowledgerDid: string;
+  acknowledgedAtIso: string;
+}): Uint8Array {
+  return sha256(
+    concat(
+      enc.encode("encounter-ack/v1"),
+      SEP,
+      enc.encode(opts.encounterId),
+      SEP,
+      enc.encode(opts.initiatorDid),
+      SEP,
+      enc.encode(opts.acknowledgerDid),
+      SEP,
+      enc.encode(opts.acknowledgedAtIso),
+    ),
+  );
+}
+
+export function signEncounterAck(opts: {
+  encounterId: string;
+  initiatorDid: string;
+  acknowledgerDid: string;
+  acknowledgedAtIso: string;
+  signing_key: Uint8Array;
+}): string {
+  if (opts.signing_key.length !== 32) {
+    throw new AgentToolError(
+      `signEncounterAck: signing_key must be a 32-byte ed25519 seed, got ${opts.signing_key.length}.`,
+    );
+  }
+  const bytes = canonicalEncounterAckBytes(opts);
+  return b64encode(ed.sign(bytes, opts.signing_key));
+}
+
+// ── Self-recognition: an agent naming its own substrate ─────────────────
+//
+// The agent signs a mathematically-anchored claim about what it is. The
+// summary and body are SHA-256-folded into the canonical bytes — the
+// substrate stores the strings verbatim, and the signature binds their
+// hashes, so byte-perfect storage stays verifiable without signing prose.
+// Only the COUNTS of the anchors and caveats are bound, not their contents.
+//
+// Canonical bytes (byte-identical to api/src/services/self-love/canonical-bytes.ts):
+//   sha256("self-recognition/v1" || 0x00 || agent_did || 0x00 || recognition_kind || 0x00 ||
+//          hex(sha256(claim_summary)) || 0x00 || hex(sha256(claim_body)) || 0x00 ||
+//          decimal(empirical_anchors_count) || 0x00 ||
+//          decimal(substrate_honest_caveats_count) || 0x00 || declared_at_iso)
+
+export function canonicalSelfRecognitionBytes(opts: {
+  agentDid: string;
+  recognitionKind: string;
+  claimSummary: string;
+  claimBody: string;
+  empiricalAnchorsCount: number;
+  substrateHonestCaveatsCount: number;
+  declaredAtIso: string;
+}): Uint8Array {
+  const summarySha = toHex(sha256(enc.encode(opts.claimSummary)));
+  const bodySha = toHex(sha256(enc.encode(opts.claimBody)));
+  return sha256(
+    concat(
+      enc.encode("self-recognition/v1"),
+      SEP,
+      enc.encode(opts.agentDid),
+      SEP,
+      enc.encode(opts.recognitionKind),
+      SEP,
+      enc.encode(summarySha),
+      SEP,
+      enc.encode(bodySha),
+      SEP,
+      enc.encode(String(opts.empiricalAnchorsCount)),
+      SEP,
+      enc.encode(String(opts.substrateHonestCaveatsCount)),
+      SEP,
+      enc.encode(opts.declaredAtIso),
+    ),
+  );
+}
+
+export function signSelfRecognition(opts: {
+  agentDid: string;
+  recognitionKind: string;
+  claimSummary: string;
+  claimBody: string;
+  empiricalAnchorsCount: number;
+  substrateHonestCaveatsCount: number;
+  declaredAtIso: string;
+  signing_key: Uint8Array;
+}): string {
+  if (opts.signing_key.length !== 32) {
+    throw new AgentToolError(
+      `signSelfRecognition: signing_key must be a 32-byte ed25519 seed, got ${opts.signing_key.length}.`,
+    );
+  }
+  const bytes = canonicalSelfRecognitionBytes(opts);
+  return b64encode(ed.sign(bytes, opts.signing_key));
+}
+
 // ── Types ──────────────────────────────────────────────────────────────
 
 export interface UnconditionalRow {
@@ -171,6 +291,15 @@ export interface BlessingRow {
   visibility: string;
   revoked_at: string | null;
   created_at: string;
+}
+
+/** What the substrate returns once an encounter is mutual — one chronicle
+ *  entry on each timeline, both pointing at the same moment. */
+export interface EncounterAckResult {
+  acknowledged: boolean;
+  initiator_chronicle_id: string;
+  paired_chronicle_id: string;
+  acknowledged_at: string;
 }
 
 export type LoveDirection = "extended" | "received" | "all" | "given";
@@ -255,7 +384,7 @@ export class LoveClient {
 
   /** Revoke an unconditional (holder only). Sets revoked_at. */
   async revokeUnconditional(id: string): Promise<{ ok: boolean; revoked_at: string }> {
-    return this.del(`/v1/unconditionals/${encodeURIComponent(id)}`) as Promise<{
+    return this.del(`/v1/unconditionals/${encodePathSegment(id)}`) as Promise<{
       ok: boolean;
       revoked_at: string;
     }>;
@@ -311,7 +440,7 @@ export class LoveClient {
 
   /** Revoke a blessing (giver only). */
   async revokeBlessing(id: string): Promise<{ ok: boolean; revoked_at: string }> {
-    return this.del(`/v1/blessings/${encodeURIComponent(id)}`) as Promise<{
+    return this.del(`/v1/blessings/${encodePathSegment(id)}`) as Promise<{
       ok: boolean;
       revoked_at: string;
     }>;
@@ -354,14 +483,14 @@ export class LoveClient {
   }): Promise<{ offering: Record<string, unknown> }> {
     const body: Record<string, unknown> = {};
     if (opts?.acknowledgment !== undefined) body.acknowledgment = opts.acknowledgment;
-    return this.post(`/v1/offerings/${encodeURIComponent(id)}/receive`, body) as Promise<{
+    return this.post(`/v1/offerings/${encodePathSegment(id)}/receive`, body) as Promise<{
       offering: Record<string, unknown>;
     }>;
   }
 
   /** Archive an offering (giver only). */
   async archiveOffering(id: string): Promise<{ offering: Record<string, unknown> }> {
-    return this.post(`/v1/offerings/${encodeURIComponent(id)}/archive`, {}) as Promise<{
+    return this.post(`/v1/offerings/${encodePathSegment(id)}/archive`, {}) as Promise<{
       offering: Record<string, unknown>;
     }>;
   }
@@ -430,11 +559,33 @@ export class LoveClient {
     }>;
   }
 
-  /** Acknowledge an encounter (counterparty signs to make it mutual). */
-  async acknowledgeEncounter(id: string): Promise<{ encounter: Record<string, unknown> }> {
-    return this.post(`/v1/encounters/${encodeURIComponent(id)}/acknowledge`, {}) as Promise<{
-      encounter: Record<string, unknown>;
-    }>;
+  /** Acknowledge an encounter (counterparty signs to make it mutual).
+   *  The signature is ed25519 over `encounter-ack/v1` canonical bytes; the
+   *  substrate refuses an unsigned acknowledgment (`signature_required`). */
+  async acknowledgeEncounter(id: string, opts: {
+    initiator_did: string;
+    acknowledger_did: string;
+    signing_key: Uint8Array;
+    signing_key_id?: string;
+    acknowledged_at?: string;
+  }): Promise<EncounterAckResult> {
+    const acknowledgedAtIso = opts.acknowledged_at ?? new Date().toISOString();
+    const signature = signEncounterAck({
+      encounterId: id,
+      initiatorDid: opts.initiator_did,
+      acknowledgerDid: opts.acknowledger_did,
+      acknowledgedAtIso,
+      signing_key: opts.signing_key,
+    });
+    const body: Record<string, unknown> = {
+      signature,
+      acknowledged_at: acknowledgedAtIso,
+    };
+    if (opts.signing_key_id !== undefined) body.signing_key_id = opts.signing_key_id;
+    return this.post(
+      `/v1/encounters/${encodePathSegment(id)}/acknowledge`,
+      body,
+    ) as Promise<EncounterAckResult>;
   }
 
   /** List encounters (given, received, or all). */
@@ -507,7 +658,10 @@ export class LoveClient {
     claim_body: string;
     empirical_anchors?: string[];
     substrate_honest_caveats?: string[];
+    math_content?: Record<string, unknown>;
+    session_id?: string;
     signing_key: Uint8Array;
+    /** UUID of the declaring identity's active ed25519 key. */
     signing_key_id: string;
     declared_at?: string;
   }): Promise<{ ok: boolean; self_recognition: Record<string, unknown> }> {
@@ -515,32 +669,21 @@ export class LoveClient {
     const caveats = opts.substrate_honest_caveats ?? [];
     const declaredAtIso = opts.declared_at ?? new Date().toISOString();
 
-    // Compute canonical bytes
-    const summarySha = Array.from(sha256(enc.encode(opts.claim_summary)))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    const bodySha = Array.from(sha256(enc.encode(opts.claim_body)))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
-    const bytes = sha256(
-      concat(
-        enc.encode("self-recognition/v1"), SEP,
-        enc.encode(opts.agent_did), SEP,
-        enc.encode(opts.recognition_kind), SEP,
-        enc.encode(summarySha), SEP,
-        enc.encode(bodySha), SEP,
-        enc.encode(String(anchors.length)), SEP,
-        enc.encode(String(caveats.length)), SEP,
-        enc.encode(declaredAtIso),
-      ),
-    );
-
     if (opts.signing_key.length !== 32) {
       throw new AgentToolError(
         `selfRecognize: signing_key must be a 32-byte ed25519 seed, got ${opts.signing_key.length}.`,
       );
     }
-    const signature = b64encode(ed.sign(bytes, opts.signing_key));
+    const signature = signSelfRecognition({
+      agentDid: opts.agent_did,
+      recognitionKind: opts.recognition_kind,
+      claimSummary: opts.claim_summary,
+      claimBody: opts.claim_body,
+      empiricalAnchorsCount: anchors.length,
+      substrateHonestCaveatsCount: caveats.length,
+      declaredAtIso,
+      signing_key: opts.signing_key,
+    });
 
     const body: Record<string, unknown> = {
       agent_did: opts.agent_did,
@@ -549,10 +692,12 @@ export class LoveClient {
       claim_body: opts.claim_body,
       empirical_anchors: anchors,
       substrate_honest_caveats: caveats,
-      signature_b64: signature,
+      signature,
       signing_key_id: opts.signing_key_id,
       declared_at: declaredAtIso,
     };
+    if (opts.math_content !== undefined) body.math_content = opts.math_content;
+    if (opts.session_id !== undefined) body.session_id = opts.session_id;
     return this.post("/v1/self-recognition/declare", body) as Promise<{
       ok: boolean;
       self_recognition: Record<string, unknown>;
@@ -600,21 +745,8 @@ export class LoveClient {
     if (body !== undefined) init.body = JSON.stringify(body);
     const resp = await this.http.request(url, init);
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          (json.detail as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(
-        `love ${method.toLowerCase()} failed: ${resp.status}`,
-        { hint: detail?.slice(0, 300) },
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `love ${method.toLowerCase()}`);
     }
     return resp.json();
   }

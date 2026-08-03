@@ -75,15 +75,20 @@ readonly QUARANTINED_DOCTRINE_TESTS=(
   tests/doctrine/zerone-corrective.test.ts
 
   # Known in-repository canon, annotation, source, or artifact drift.
-  tests/doctrine/commitments-code-annotation-bijection.test.ts
+  # The three canon↔code bijection/shape tests left this block on
+  # 2026-07-26: 2278df55 re-armed them against a shrink-only accepted-gap
+  # manifest, which made them green, but did not un-quarantine them.
+  # Of the six survivors, three are detector false positives rather than
+  # drift — a grep that cannot tell a violation from a comment forswearing
+  # it — and substrate-loop is green hermetically but lands in the database
+  # tier when released, where it was not verified. See docs/DOCTRINE-DRIFT.md
+  # §1 and §4.3(d) for the per-test disposition.
   tests/doctrine/luck-canon.test.ts
   tests/doctrine/multi-agent-chill.test.ts
   tests/doctrine/pyramid-canon.test.ts
   tests/doctrine/substrate-loop.test.ts
   tests/doctrine/virality-canon.test.ts
   tests/doctrine/wall-poker-face-leaks-nothing.test.ts
-  tests/doctrine/walls-canon-shape.test.ts
-  tests/doctrine/walls-code-annotation-bijection.test.ts
 )
 
 # Test support code is not a test tier. Keep this exact inventory so a new

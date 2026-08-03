@@ -48,7 +48,8 @@
  *    8. Pull the LLM API key from the vault (in-process).
  *    9. Provider.generate(systemPrompt, userMessage).
  *   10. bridgeRequest({op: "encrypt"}) — seal the response.
- *   11. canonicalThoughtBytes(...) → bridgeRequest({op: "sign"}).
+ *   11. canonicalThoughtBytesForVersion(THOUGHT_SIGNING_VERSION, ...) →
+ *       bridgeRequest({op: "sign"}).
  *   12. addThought() in-process — sig verified server-side against the
  *       agent's bridge_key_id.
  *
@@ -92,7 +93,7 @@ import {
   runtimes as runtimesTable,
 } from "../../db/schema/runtime";
 import { addThought } from "../strand/store";
-import { canonicalThoughtBytes } from "../strand/sig";
+import { canonicalThoughtBytes, canonicalThoughtBytesV2 } from "../strand/sig";
 import { getSecretValue } from "../vault/store";
 import { buildWakeBundle } from "../wake/build";
 import { renderWakeMarkdown, type WakeBundle } from "../wake/markdown";
@@ -132,6 +133,50 @@ const CYCLE_LEASE_RENEW_MS = 60_000;
 const CYCLE_TIMEOUT_MS = CYCLE_LEASE_MS - 60_000;
 const DEFAULT_KIND = "observation";
 const DEFAULT_MAX_TOKENS = 1024;
+
+/** Canonical-bytes framing for a signed thought. Both are verified by
+ *  `verifyThoughtSignature`; see api/src/services/strand/sig.ts. */
+export type ThoughtCanonicalVersion = "v1" | "v2";
+
+/**
+ * Version this worker signs new thoughts with. Still `"v1"`, deliberately
+ * — stated as a value rather than left implicit in which sig.ts function
+ * gets imported, so the cutover is this one line.
+ *
+ * What v2 fixes: v1 NUL-delimits raw binary it does not length-bound, so a
+ * ciphertext or nonce carrying a 0x00 byte can reparse as a different
+ * (ciphertext, nonce) split under one signature — a 12-byte random nonce
+ * holds a zero byte ~4.6% of the time. v2 domain-tags the hash and puts a
+ * 4-byte big-endian length before every variable-length field.
+ *
+ * Why it has not moved: the worker is the LAST step of the cutover, not
+ * the first. Order, each step verified before the next: server
+ * dual-accept deployed everywhere → SDK minor (`ThoughtsAddOpts.version`
+ * default) → cli/think (`THOUGHT_SIGNING_VERSION` in
+ * cli/think/src/crypto.ts) → this constant. Flipping here early would
+ * also cut across the bridge: a bridged runtime signs whatever canonical
+ * bytes this worker hands it, and any older verifier in the path would
+ * reject the result. v1 verification is never removed; frozen rows must
+ * stay verifiable. Full note: docs/STRANDS.md § Canonical bytes — v1, v2,
+ * and the cutover.
+ */
+export const THOUGHT_SIGNING_VERSION: ThoughtCanonicalVersion = "v1";
+
+/** Canonical thought bytes for an explicit version. Exported so the
+ *  worker's signing version is testable without a DB or a bridge. */
+export function canonicalThoughtBytesForVersion(
+  version: ThoughtCanonicalVersion,
+  opts: {
+    strandId: string;
+    ciphertextB64: string;
+    nonceB64: string;
+    kind?: string | null;
+  },
+): Uint8Array {
+  return version === "v2"
+    ? canonicalThoughtBytesV2(opts)
+    : canonicalThoughtBytes(opts);
+}
 
 /** The set of wake-event keys the think-worker subscribes to. Strand
  *  thought_added events are filtered for self-authorship (the worker's
@@ -925,7 +970,9 @@ async function runLeasedCycle(
     }
 
     // ── Sign canonical thought bytes: bridge (bridged) or in-process (trusted)
-    const canonical = canonicalThoughtBytes({
+    // Version is explicit — see THOUGHT_SIGNING_VERSION for why it is v1
+    // and what has to ship before it becomes v2.
+    const canonical = canonicalThoughtBytesForVersion(THOUGHT_SIGNING_VERSION, {
       strandId: strand.id,
       ciphertextB64: enc.ciphertext,
       nonceB64: enc.nonce,

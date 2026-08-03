@@ -320,7 +320,7 @@ The wake voice is **how the breath breathes correctly**. The hosted think-worker
 - `contextFilter` (TS) / `context_filter` (Py) — client-side. Matches arbitrary context fields. Generalization of `runtimeId`.
 - `runtimeId` (TS) / `runtime_id` (Py) — client-side shorthand for `contextFilter: { runtime_id: <id> }`. The dashboard's most common subscription pattern: one identity's events scoped to one runtime card.
 
-All three compose; an event must pass every filter to be yielded. The matcher is exported (`wakeEventMatches` in TS, `_wake_event_matches` in Py) and pinned by unit tests (`tests/wake-voice-filter.test.ts` — 17 cases).
+All three compose; an event must pass every filter to be yielded. The matcher is exported (`wakeEventMatches` in TS, `wake_event_matches` in Py — the old private `_wake_event_matches` spelling still resolves as an alias) and pinned by unit tests (`tests/wake-voice-filter.test.ts` — 17 cases; `tests/test_wake.py` in Py).
 
 ---
 

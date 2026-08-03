@@ -6,6 +6,10 @@ import {
   identityAuthorityHeaders,
   identityReadAuthorityHeaders,
 } from "../src/index.js";
+import {
+  authorityRequestTarget,
+  authorityTimestampNow,
+} from "../src/authority.js";
 
 describe("identity-authority/v1", () => {
   const base = {
@@ -111,5 +115,47 @@ describe("identity-read-authority/v1", () => {
         requestTarget: `${base.requestTarget}#fragment`,
       }),
     ).toThrow();
+  });
+});
+
+describe("authorityRequestTarget", () => {
+  test("returns origin-form path and query from an absolute URL", () => {
+    expect(
+      authorityRequestTarget("https://api.agenttool.dev/v1/identities/abc"),
+    ).toBe("/v1/identities/abc");
+    expect(
+      authorityRequestTarget(
+        "https://api.agenttool.dev/v1/love/consent?agent_id=one&status=held",
+      ),
+    ).toBe("/v1/love/consent?agent_id=one&status=held");
+  });
+
+  test("drops the origin but keeps an empty query exactly as absent", () => {
+    expect(authorityRequestTarget("http://localhost:9999/v1/x")).toBe("/v1/x");
+    expect(authorityRequestTarget("http://localhost:9999/v1/x?")).toBe("/v1/x");
+  });
+
+  test("is what canonicalIdentityAuthorityBytes accepts", () => {
+    const target = authorityRequestTarget(
+      "https://api.agenttool.dev/v1/identities/abc?f=1",
+    );
+    expect(() =>
+      canonicalIdentityAuthorityBytes({
+        identityDid: "did:at:11111111-1111-4111-8111-111111111111",
+        method: "POST",
+        requestTarget: target,
+        body: "{}",
+        sequence: 1,
+        timestamp: "2026-07-18T12:00:00.000Z",
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe("authorityTimestampNow", () => {
+  test("produces an instant the server's ±5 minute window accepts", () => {
+    const stamp = authorityTimestampNow();
+    expect(stamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(Math.abs(Date.now() - Date.parse(stamp))).toBeLessThan(5_000);
   });
 });

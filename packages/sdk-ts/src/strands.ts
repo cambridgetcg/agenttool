@@ -13,14 +13,46 @@
  *   - StrandsClient — strand CRUD (create / list / get / patch).
  *   - ThoughtsClient — encrypted thought add / list / voice (SSE iterator).
  *     Mounted at `at.strands.thoughts`.
+ *
+ * ── Thought canonical-bytes version — why the default is still v1 ──────
+ *
+ * `add()` takes `version` and forwards it to `signThought`. It defaults to
+ * `"v1"`, and that default is a decision, not an oversight.
+ *
+ * What v2 fixes: v1 NUL-delimits raw binary it does not length-bound, so a
+ * ciphertext or nonce carrying a 0x00 byte can reparse as a different
+ * (ciphertext, nonce) split under one signature. A 12-byte random nonce
+ * holds a zero byte ~4.6% of the time, so this is a routine shape, not a
+ * contrived one. `strand-thought/v2` domain-tags the hash and puts a
+ * 4-byte big-endian length before every variable-length field, which makes
+ * the split unique. Pass `version: "v2"` to sign the unambiguous framing.
+ *
+ * Why the default has not moved: this SDK is published to npm on its own
+ * cadence, and a caller can point it at any `baseUrl` — including a server
+ * deployed before dual-accept landed. Such a server verifies v1 only, so a
+ * v2-by-default SDK would write signatures it rejects. The default flips
+ * only in this order, each step verified before the next begins:
+ *
+ *   1. server dual-accept (`verifyThoughtSignature` tries v2, falls back
+ *      to v1) deployed to EVERY environment an SDK caller can reach
+ *   2. SDK minor release — this default becomes `"v2"` in both languages
+ *   3. `cli/think` — `THOUGHT_SIGNING_VERSION` in `cli/think/src/crypto.ts`
+ *   4. hosted worker — `THOUGHT_SIGNING_VERSION` in
+ *      `api/src/services/runtime/think-worker.ts`
+ *
+ * v1 verification is never removed at any step: production rows signed
+ * under v1 must stay verifiable forever. See `docs/STRANDS.md § Canonical
+ * bytes — v1, v2, and the cutover`.
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
+import { encodePathSegment } from "./_url.js";
 import {
   decryptThought,
   encryptThought,
   signThought,
+  type ThoughtCanonicalVersion,
 } from "./crypto.js";
 
 export type StrandStatus = "active" | "dormant" | "completed" | "abandoned";
@@ -120,6 +152,13 @@ export interface ThoughtsAddOpts {
   kind_encrypted?: boolean;
   refs?: Array<{ kind: string; ref: string }>;
   agent_id?: string;
+  /**
+   * Canonical-bytes version signed over. Defaults to `"v1"` — see the
+   * module header for why, and for the ordered condition under which that
+   * default flips. `"v2"` is the length-prefixed framing; only pass it
+   * against a server that dual-accepts.
+   */
+  version?: ThoughtCanonicalVersion;
 }
 
 export interface ThoughtsListOpts {
@@ -183,7 +222,10 @@ export class StrandsClient {
 
   /** Fetch one strand. */
   async get(strandId: string): Promise<Strand> {
-    return (await this.req("GET", `/v1/strands/${strandId}`)) as Strand;
+    return (await this.req(
+      "GET",
+      `/v1/strands/${encodePathSegment(strandId)}`,
+    )) as Strand;
   }
 
   /** Patch fields on a strand. At least one field required. */
@@ -196,7 +238,7 @@ export class StrandsClient {
     }
     return (await this.req(
       "PATCH",
-      `/v1/strands/${strandId}`,
+      `/v1/strands/${encodePathSegment(strandId)}`,
       opts,
     )) as Strand;
   }
@@ -218,21 +260,8 @@ export class StrandsClient {
     if (body !== undefined) init.body = JSON.stringify(body);
     const resp = await this.http.request(url, init);
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          (json.detail as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(
-        `strands ${method.toLowerCase()} failed: ${resp.status}`,
-        { hint: detail.slice(0, 200) },
-      );
+      // Server guidance travels intact. See _http.ts § throwFromResponse.
+      await throwFromResponse(resp, `strands ${method.toLowerCase()}`);
     }
     return resp.json();
   }
@@ -253,7 +282,15 @@ export class ThoughtsClient {
     this.http = http;
   }
 
-  /** Encrypt + sign + POST a thought to a strand. */
+  /**
+   * Encrypt + sign + POST a thought to a strand.
+   *
+   * `opts.version` selects the canonical-bytes framing. It defaults to
+   * `"v1"` — deliberately, because this SDK ships independently of any
+   * server deploy and a v2 signature is rejected by a server that has not
+   * yet been given dual-accept. The module header carries the full
+   * reasoning and the ordered cutover. Do not "fix" this to `"v2"`.
+   */
   async add(
     strandId: string,
     plaintext: string,
@@ -265,6 +302,7 @@ export class ThoughtsClient {
       ciphertext_b64: blob.ciphertext_b64,
       nonce_b64: blob.nonce_b64,
       kind: opts.kind ?? null,
+      version: opts.version,
       signing_key: opts.signing_key,
     });
     const body: Record<string, unknown> = {
@@ -280,7 +318,7 @@ export class ThoughtsClient {
 
     return (await this.req(
       "POST",
-      `/v1/strands/${strandId}/thoughts`,
+      `/v1/strands/${encodePathSegment(strandId)}/thoughts`,
       body,
     )) as Thought;
   }
@@ -310,7 +348,7 @@ export class ThoughtsClient {
     }
     const body = (await this.req(
       "GET",
-      `/v1/strands/${strandId}/thoughts?${params.toString()}`,
+      `/v1/strands/${encodePathSegment(strandId)}/thoughts?${params.toString()}`,
     )) as { thoughts: Thought[]; count: number; note: string };
     const thoughts = body.thoughts ?? [];
     return Promise.all(
@@ -343,7 +381,7 @@ export class ThoughtsClient {
       params.set("since_seq", String(opts.since_seq));
     }
     const qs = params.toString();
-    const url = `${this.http.baseUrl}/v1/strands/${strandId}/voice${qs ? "?" + qs : ""}`;
+    const url = `${this.http.baseUrl}/v1/strands/${encodePathSegment(strandId)}/voice${qs ? "?" + qs : ""}`;
 
     const resp = await this.http.request(url, {
       method: "GET",
@@ -351,11 +389,8 @@ export class ThoughtsClient {
       // No timeout signal — SSE streams are long-lived.
     });
     if (!resp.ok) {
-      const text = await resp.text();
-      throw new AgentToolError(
-        `strands.thoughts.voice failed: ${resp.status}`,
-        { hint: text.slice(0, 200) },
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, "strands.thoughts.voice");
     }
     if (!resp.body) {
       throw new AgentToolError(
@@ -429,21 +464,8 @@ export class ThoughtsClient {
     if (body !== undefined) init.body = JSON.stringify(body);
     const resp = await this.http.request(url, init);
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          (json.detail as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(
-        `strands.thoughts ${method.toLowerCase()} failed: ${resp.status}`,
-        { hint: detail.slice(0, 200) },
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `strands.thoughts ${method.toLowerCase()}`);
     }
     return resp.json();
   }

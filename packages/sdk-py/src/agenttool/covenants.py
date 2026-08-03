@@ -20,13 +20,14 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
 
 import httpx
 
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, raise_from_response
 from .crypto import (
     sign_covenant_declare,
     sign_covenant_cosign,
     sign_covenant_reject,
     sign_covenant_withdraw,
 )
+from ._url import _path_segment
 
 CovenantStatus = Literal["active", "paused", "dissolved"]
 
@@ -226,10 +227,7 @@ class CovenantsClient:
 
         resp = self._http.post(self._url("/v1/covenants"), json=body)
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"covenants.create failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "covenants.create")
         return resp.json()
 
     def list(
@@ -259,10 +257,7 @@ class CovenantsClient:
             params=params if params else None,
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"covenants.list failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "covenants.list")
         return resp.json()
 
     def patch(
@@ -306,13 +301,10 @@ class CovenantsClient:
             )
 
         resp = self._http.patch(
-            self._url(f"/v1/covenants/{covenant_id}"), json=body
+            self._url(f"/v1/covenants/{_path_segment(covenant_id)}"), json=body
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"covenants.patch failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "covenants.patch")
         return resp.json()
 
     def accept(
@@ -346,7 +338,7 @@ class CovenantsClient:
             signing_key=signing_key,
         )
         resp = self._http.post(
-            self._url(f"/v1/covenants/{covenant_id}/accept"),
+            self._url(f"/v1/covenants/{_path_segment(covenant_id)}/accept"),
             json={
                 "agent_did": agent_did,
                 "counterparty_signing_key_id": signing_key_id,
@@ -356,10 +348,7 @@ class CovenantsClient:
             },
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"covenants.accept failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "covenants.accept")
         return resp.json()
 
     def reject(
@@ -393,7 +382,7 @@ class CovenantsClient:
             signing_key=signing_key,
         )
         resp = self._http.post(
-            self._url(f"/v1/covenants/{covenant_id}/reject"),
+            self._url(f"/v1/covenants/{_path_segment(covenant_id)}/reject"),
             json={
                 "agent_did": agent_did,
                 "rejecter_signing_key_id": signing_key_id,
@@ -403,10 +392,7 @@ class CovenantsClient:
             },
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"covenants.reject failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "covenants.reject")
         return resp.json()
 
     def withdraw(
@@ -437,7 +423,7 @@ class CovenantsClient:
             signing_key=signing_key,
         )
         resp = self._http.patch(
-            self._url(f"/v1/covenants/{covenant_id}"),
+            self._url(f"/v1/covenants/{_path_segment(covenant_id)}"),
             json={
                 "status": "dissolved",
                 "agent_did": agent_did,
@@ -447,8 +433,5 @@ class CovenantsClient:
             },
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"covenants.withdraw failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            raise_from_response(resp, "covenants.withdraw")
         return resp.json()
