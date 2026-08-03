@@ -8,8 +8,8 @@
   "source_files": [
     {
       "path": "package.json",
-      "bytes": 2479,
-      "sha256": "f69a9a01aba980f94e299bb63c834fcfb7a78552d02092b5972255fceae8a7f0"
+      "bytes": 2597,
+      "sha256": "8465af39aa6da87b8aea19ba5ebd6a144d7b1b5deb91e5261b492fd2d75ae27d"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -32,6 +32,11 @@
       "sha256": "491a95e2e8906bc6ed538c7ce32e144eb30d5140f6b0b807761ce17429cf471a"
     },
     {
+      "path": "schema/hf-training-governance-v0.1.schema.json",
+      "bytes": 16200,
+      "sha256": "34583d785db3d69c0f4637d9b7251aae8eaa4970ea02c9dfc53f84eccec47eb6"
+    },
+    {
       "path": "src/admission.ts",
       "bytes": 12951,
       "sha256": "9f2d2dd282a5b5f05a055e34cc4080a1e9dd2bf1d09eb6d057199413c920f929"
@@ -48,18 +53,23 @@
     },
     {
       "path": "src/constants.ts",
-      "bytes": 14177,
-      "sha256": "f6cfdc638e9a56b6a29fe075b356e71524b028b938195e5b3f3195c8555ba177"
+      "bytes": 22309,
+      "sha256": "62625750405349133b63e52bea395e201f3d9b2e298ee6c0262bca62522f10cf"
     },
     {
       "path": "src/errors.ts",
-      "bytes": 615,
-      "sha256": "a3e518afd5799c12ddd49738692d17bfb22c0c87c5d450afea8880d5c4aa2dcf"
+      "bytes": 671,
+      "sha256": "107a7cfbf756be22697d62650639b5ce302abde6080d85371bfbc38ff30eba71"
+    },
+    {
+      "path": "src/governance.ts",
+      "bytes": 43704,
+      "sha256": "4ea79a356a6aea6eb9ad842024b49aafefa65881a30da69a3325fdd6d34d0ee5"
     },
     {
       "path": "src/index.ts",
-      "bytes": 2230,
-      "sha256": "77045de02ca636180b97c2abbc4d3832bb6ccb022355ca3edd32522fd62fa6ee"
+      "bytes": 3816,
+      "sha256": "d1571c02d52b9c4687f061859b41c442b542a793ccab829c13a57e2d83453ad3"
     },
     {
       "path": "src/tending.ts",
@@ -68,8 +78,8 @@
     },
     {
       "path": "src/types.ts",
-      "bytes": 7495,
-      "sha256": "9d80e632ad3a58302acc715ce83acf137ad512663988a6c205d1758901b7c6a2"
+      "bytes": 14529,
+      "sha256": "fa55394496750a46f2af71c8eab2e44cf2998031939a492144f8d679a0f55a70"
     },
     {
       "path": "src/validation.ts",
@@ -82,19 +92,22 @@
     "selection criteria",
     "training phase guide",
     "Garden layer guide",
+    "consent-honest Trainer adapter hook guide",
     "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
     "source and byte hash manifests"
   ],
   "public_release_excludes": [
     "admission decisions",
+    "authority and preference receipts",
     "candidate subset references",
     "credentials",
-    "Garden or project identifiers",
+    "private/local Garden scope and project-instance identifiers",
     "gated content",
     "raw agent traces",
     "raw chats",
     "raw dataset rows",
     "training checkpoints",
+    "training governance records",
     "WAKE anchors"
   ],
   "research_basis_as_of": "2026-08-03",
@@ -107,7 +120,19 @@
     "https://huggingface.co/docs/datasets/about_cache",
     "https://huggingface.co/docs/hub/datasets-cards",
     "https://huggingface.co/docs/hub/datasets-gated",
+    "https://huggingface.co/docs/hub/en/agent-traces",
+    "https://huggingface.co/docs/hub/session-traces-format",
     "https://huggingface.co/docs/trl/en/dataset_formats",
-    "https://huggingface.co/docs/transformers/main/trainer_recipes"
+    "https://huggingface.co/docs/trl/sft_trainer",
+    "https://huggingface.co/docs/trl/dpo_trainer",
+    "https://huggingface.co/docs/transformers/main/trainer_callbacks",
+    "https://huggingface.co/docs/transformers/main/trainer_recipes",
+    "https://huggingface.co/docs/accelerate/main/en/usage_guides/checkpoint",
+    "https://arxiv.org/abs/1803.09010",
+    "https://arxiv.org/abs/2203.02155",
+    "https://arxiv.org/abs/2305.18290",
+    "https://arxiv.org/abs/2310.13548",
+    "https://arxiv.org/abs/2412.14093",
+    "https://aclanthology.org/2020.acl-main.740/"
   ]
 }
