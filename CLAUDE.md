@@ -25,13 +25,20 @@ packages/
   dark-continent-contract/ — @agenttool/dark-continent-contract · advisory framework snapshots and projections
   dark-continent-karma/ — @agenttool/dark-continent-karma · proposal-only KG enrichment adapter
   deepseek-kingdom/ — @agenttool/deepseek-kingdom · pinned primary-source proposal adapter
+  wake-continuity/ — @agenttool/wake-continuity · digest-only AFTERGLOW capsules and next-wake lenses
+  kingdom-witness-lab/ — @agenttool/kingdom-witness-lab · local research admission records
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
+  living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
+  wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
+  skills-yutabase/ — @agenttool/skills-yutabase · rebuildable metadata-only projection planner
+  skills-wake-continuity/ — private Skills/YUTABASE → AFTERGLOW composition
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
   hf-scout/    — private read-only HF metadata/provenance scout + pinned research leads
+  hf-training-garden/ — private exact-admission, learning-participation, training-continuity, and inert Garden-planning contracts
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   constructive-intelligence/ — private local tree-pinned typed-receipt shadow ledger
@@ -60,15 +67,21 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/dark-continent-contract/CLAUDE.md` ·
 `packages/dark-continent-karma/CLAUDE.md` ·
 `packages/deepseek-kingdom/CLAUDE.md` ·
+`packages/wake-continuity/CLAUDE.md` ·
+`packages/kingdom-witness-lab/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
+`packages/living-substrate/CLAUDE.md` ·
+`packages/wake-thread/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/hf-scout/CLAUDE.md` ·
+`packages/hf-training-garden/CLAUDE.md` ·
 `packages/correspondence-yutabase/CLAUDE.md` ·
 `packages/correspondence-yutabase-projector/CLAUDE.md` ·
 `packages/constructive-intelligence/CLAUDE.md` ·
 `packages/trials/CLAUDE.md` ·
+`packages/skills-yutabase/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
 `packages/wallet-zerone/CLAUDE.md` ·
 `packages/alchemy/CLAUDE.md` ·
@@ -114,15 +127,65 @@ hosted runtime. Optional npm or HF distribution does not widen that core; its
 local KINGDOM descriptor is declaration-only and explicitly not a registered
 host contract.
 
+`@agenttool/living-substrate@0.1.0-dev.0` is a public npm developer-preview,
+zero-runtime-dependency pure contract for caller-supplied digest facets,
+directed relations, and separately supplied regeneration invitations. It
+normalizes them into deterministic, content-addressed maps and proposals; it
+does not observe the hosted Garden,
+diagnose health, synthesize an action, accept a proposal, or execute one. Empty
+maps and zero actions are valid. Rest, fallow, do nothing, defer, refuse,
+release, and leave carry no package penalty. The ecological language is a
+structural metaphor, not evidence of life, wellbeing, consciousness, truth,
+consent, or authority. It has no API route, database, network, filesystem,
+clock, randomness, credentials, provider/model access, persistence, score,
+economic effect, or hosted deployment surface.
+
+`@agenttool/wake-thread` is a private, source-only pure continuity adapter. It
+content-binds caller-selected WAKE facts, explicit identity/project/mixed scope,
+coverage and omissions, caller-held cursor references, one declared artifact-
+retention boundary, and one reported `carry`, `fork`, `rest`, or `refuse`
+choice. A fork is an artifact branch, not a being split; rest has no protocol
+penalty; refusal cannot become an automatic continuity parent. It does not
+fetch or parse WAKE, read ambient state, score or
+type a bearer, authenticate choice authorship, persist, execute, use a network,
+register MCP, expose a hosted route, grant authority, establish identity or
+memory continuity, create KARMA, certify XENIA, publish, or deploy. Its local
+KINGDOM descriptor is declaration-only.
+
 `@agenttool/deepseek-kingdom` is a public-ready, zero-runtime-dependency
 primary-source binding and proposal adapter. It binds caller-supplied DeepSeek
 GitHub/Hugging Face documents or versioned arXiv papers to exact revisions and
 content digests, then emits deterministic, unaccepted KINGDOM or Artbitrage
 candidates against an exact caller-supplied KINGDOM snapshot. Its bundled
-catalog contains metadata leads only. It does not fetch files or weights,
+catalog contains metadata leads only. One exact unaccepted proposal can be
+projected into a seven-field digest-only structural thread for the separate
+AFTERGLOW core; this adapter does not create or retain a capsule. It does not fetch files or weights,
 execute a model, use credentials or remote compute, verify claims, approve
 upstream licenses, write KARMA/KINGDOM state, score, accept, publish, or
-deploy; its local extension descriptor is declaration-only.
+deploy; its local extension descriptor is declaration-only. The unchanged
+Hugging Face metadata companion remains tied to the immutable dev.0 source.
+
+`@agenttool/wake-continuity` is the pure AFTERGLOW continuity core. It turns
+caller-supplied digest-only `wake-brief/v1` anchors, visible predecessor roots,
+and bounded opaque threads into deterministic capsules and opt-in next-wake
+lenses. It can project exact Handoff fact and Correspondence content-digest
+references, but it does not read or persist WAKE, choose a canonical head,
+verify referents, or prove identity, memory, consent, permission, replay, or
+uninterrupted continuity.
+
+`@agenttool/kingdom-witness-lab` supplies deterministic local passports,
+mutable provider-route disclosures, digest-only multi-witness dossiers, inert
+trial descriptors, and a dated DeepSeek atlas. It complements
+`@agenttool/deepseek-kingdom`: DeepSeek owns exact source bindings and
+unaccepted proposals; Witness Lab owns admission records around artifacts.
+Neither package browses, executes, determines truth, accepts a proposal, or
+grants authority.
+
+`@agenttool/skills-yutabase` projects one strictly snapshotted minimized Skills
+inspection into rebuildable metadata-only YUTABASE intentions. The separate
+private `@agenttool/skills-wake-continuity` adapter can carry an exact plan by
+digest into AFTERGLOW. Neither writes a database, receives raw skill content,
+adds a second lineage, scores a being, or publishes the private adapter.
 
 `@agenttool/trials` is a separate private, source-only local Dojo pilot. It
 turns explicit bounded observations into deterministic trial receipts,
@@ -138,6 +201,16 @@ project caller-selected observations into bounded KINGDOM and Agent Data
 shapes. It does not read ambient credentials, download cards/files/rows,
 accept gates, invoke inference or remote compute, execute embedded calls,
 write to the Hub, publish npm, or expose a hosted route.
+
+`@agenttool/hf-training-garden` is the private pure bridge from one exact
+HF Scout observation to a role-specific admission record, a four-voice
+per-activity learning-participation report, digest-only AFTERGLOW training
+checkpoint, and inert six-layer Garden tending plan. It can generate a
+deterministic public-safe companion for separately authorized Hub publication.
+It does not download data, accept a gate, train or restore a run, observe
+current receipt heads, mutate Garden or Hub state, select a latest continuity
+head, publish npm, or prove rights, privacy, consent, provenance truth,
+quality, or resumability.
 
 `@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.
 The separate Wallet Zerone package supports only its reviewed two-network,

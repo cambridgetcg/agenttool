@@ -11,6 +11,15 @@
  * safe integers. That admitted subset is serialized as RFC 8785 JCS. Floats,
  * non-finite numbers, unsafe integers, undefined values, lone UTF-16
  * surrogates, and U+0000 in strings or property names are rejected locally.
+ *
+ * Receive side: every record returned by `list`, `replay`, and `voice` carries
+ * an explicit `verification`. Authorship is proved only by
+ * `verifyCorrespondenceSignature` against an Ed25519 public key the caller
+ * already holds for the sender. The default is fail-open-but-loud: with no key
+ * for a sender the record still arrives, marked `verified: false` with reason
+ * `no_verifying_key`, because a reader that cannot resolve a key must still be
+ * able to see that an event exists. Pass `require_verified: true` to fail
+ * closed and refuse the page instead.
  */
 
 import * as ed from "@noble/ed25519";
@@ -18,7 +27,7 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
 import { decodeSigningKey } from "./identity.js";
-import type { HttpConfig } from "./_http.js";
+import { errorFromResponse, type HttpConfig } from "./_http.js";
 
 ed.etc.sha512Sync = (...messages: Uint8Array[]) => {
   const hash = sha512.create();
@@ -261,6 +270,56 @@ export interface CorrespondenceEventRecord {
   lineage_status: "not_applicable" | "valid" | "pending" | "invalid";
 }
 
+/** Caller-held Ed25519 public key: raw 32 bytes, standard base64, or base64url. */
+export type CorrespondenceVerifyingKey = Uint8Array | string;
+
+export type CorrespondenceSigningKeyResolver = (
+  signingKeyId: string,
+  event: CorrespondenceSignedEvent,
+) =>
+  | CorrespondenceVerifyingKey
+  | undefined
+  | Promise<CorrespondenceVerifyingKey | undefined>;
+
+export type CorrespondenceVerificationReason =
+  | "verified"
+  /** No caller-held key for this signer; authorship is unproved, not disproved. */
+  | "no_verifying_key"
+  | "signature_mismatch"
+  | "event_id_mismatch"
+  | "malformed_event";
+
+export interface CorrespondenceVerification {
+  verified: boolean;
+  reason: CorrespondenceVerificationReason;
+  /** `sender.signing_key_id` a caller must resolve a public key for. */
+  signing_key_id: string;
+  detail?: string;
+}
+
+export interface CorrespondenceVerifyOptions {
+  /**
+   * Caller-held Ed25519 public keys indexed by `sender.signing_key_id`.
+   *
+   * These must come from the reader's own record of the sender. Never feed a
+   * key carried by the same response that carried the event: whoever served
+   * the event would then also choose the key that "verifies" it, and the check
+   * would prove nothing. Do not "simplify" this by reading a key off the wire.
+   */
+  signing_keys?:
+    | Readonly<Record<string, CorrespondenceVerifyingKey>>
+    | ReadonlyMap<string, CorrespondenceVerifyingKey>;
+  /** Async-capable resolver for keychain- or directory-backed signer keys. */
+  resolve_signing_key?: CorrespondenceSigningKeyResolver;
+  /** Fail closed: refuse the read instead of returning an unverified record. */
+  require_verified?: boolean;
+}
+
+/** An event record with the reader's own local verdict attached. */
+export interface CorrespondenceVerifiedEventRecord extends CorrespondenceEventRecord {
+  verification: CorrespondenceVerification;
+}
+
 export interface CorrespondenceWarning {
   code: "session_fork" | "claim_lineage_pending";
   detail: string;
@@ -273,7 +332,7 @@ export interface CorrespondenceAppendResponse extends CorrespondenceEventRecord 
   warnings: CorrespondenceWarning[];
 }
 
-export interface CorrespondenceListOptions {
+export interface CorrespondenceListOptions extends CorrespondenceVerifyOptions {
   repository_id: string;
   thread_id?: string;
   /** Exclusive project-local receipt cursor, kept as a decimal string. */
@@ -284,7 +343,7 @@ export interface CorrespondenceListOptions {
 export interface CorrespondenceEventsPage {
   protocol: typeof CORRESPONDENCE_PROTOCOL;
   scope: "project_private";
-  events: CorrespondenceEventRecord[];
+  events: CorrespondenceVerifiedEventRecord[];
   page: {
     after: string | null;
     next_after: string | null;
@@ -344,7 +403,7 @@ export interface CorrespondenceOverlappingClaimsConflict {
   paths: string[];
 }
 
-export interface CorrespondenceVoiceOptions {
+export interface CorrespondenceVoiceOptions extends CorrespondenceVerifyOptions {
   repository_id: string;
   thread_id?: string;
 }
@@ -363,7 +422,7 @@ export interface CorrespondenceVoiceSnapshot {
   cursor: string | null;
   projection_status: "complete" | "truncated" | "unavailable";
   truncated: boolean;
-  recent_events: CorrespondenceEventRecord[];
+  recent_events: CorrespondenceVerifiedEventRecord[];
   active_claims: CorrespondenceActiveClaim[];
   conflicts: CorrespondenceVoiceConflicts;
 }
@@ -903,7 +962,12 @@ export function signCorrespondenceEvent(
   };
 }
 
-function validateSignature(signature: CorrespondenceSignature): void {
+/**
+ * Well-formedness only: shape, algorithm name, and canonical 64-byte
+ * base64url. It never touches a key, so it proves nothing about authorship.
+ * `verifyCorrespondenceSignature` is the only function here that does.
+ */
+function assertWellFormedSignature(signature: CorrespondenceSignature): void {
   assertObject("correspondence signature", signature);
   assertExactKeys("correspondence signature", signature, ["algorithm", "value_b64url"]);
   if (signature.algorithm !== CORRESPONDENCE_SIGNATURE_ALGORITHM) {
@@ -930,7 +994,7 @@ export function correspondenceEventId(
   signature: CorrespondenceSignature,
 ): string {
   validateCore(core);
-  validateSignature(signature);
+  assertWellFormedSignature(signature);
   return `sha256:${hex(sha256(encoder.encode(canonicalCorrespondenceJson(
     { ...core, signature } as unknown as CorrespondenceJsonValue,
   ))))}`;
@@ -948,6 +1012,153 @@ export function createSignedCorrespondenceEvent(
   } as CorrespondenceEventCore;
   const signature = signCorrespondenceEvent(core, signingKey);
   return { ...core, signature, event_id: correspondenceEventId(core, signature) } as CorrespondenceSignedEvent;
+}
+
+/** Accepts the spellings the identity API emits: raw bytes, base64, base64url. */
+function decodeVerifyingKey(value: CorrespondenceVerifyingKey): Uint8Array | null {
+  if (value instanceof Uint8Array) {
+    return value.length === 32 ? new Uint8Array(value) : null;
+  }
+  if (typeof value !== "string") return null;
+  try {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized + "=".repeat((4 - (normalized.length % 4)) % 4);
+    const decoded = Uint8Array.from(globalThis.atob(padded), (character) => character.charCodeAt(0));
+    return decoded.length === 32 ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The exact signed core: the wire envelope without its receipt-free additions. */
+function correspondenceCoreOf(event: CorrespondenceSignedEvent): CorrespondenceEventCore {
+  const { event_id: _eventId, signature: _signature, ...core } = event;
+  return core as CorrespondenceEventCore;
+}
+
+/**
+ * Verify a received event against an Ed25519 public key the caller already
+ * holds for that sender. This rebuilds the same canonical bytes the sending
+ * path signs, so it is the mirror of `signCorrespondenceEvent`.
+ *
+ * The key argument must be the reader's own record of the signer. A key taken
+ * from the response that carried the event would make this check circular and
+ * worthless — the server would be choosing both the event and the key that
+ * approves it.
+ */
+export function verifyCorrespondenceSignature(
+  event: CorrespondenceSignedEvent,
+  publicKey: CorrespondenceVerifyingKey,
+): boolean {
+  const key = decodeVerifyingKey(publicKey);
+  if (!key) return false;
+  try {
+    assertWellFormedSignature(event.signature);
+    return ed.verify(
+      decodeBase64Url(event.signature.value_b64url),
+      canonicalCorrespondenceEventBytes(correspondenceCoreOf(event)),
+      key,
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function resolveVerifyingKey(
+  event: CorrespondenceSignedEvent,
+  opts: CorrespondenceVerifyOptions,
+): Promise<CorrespondenceVerifyingKey | undefined> {
+  const keyId = event.sender?.signing_key_id;
+  if (typeof keyId !== "string" || keyId.length === 0) return undefined;
+  const keys = opts.signing_keys;
+  if (keys) {
+    const mapGetter = (keys as ReadonlyMap<string, CorrespondenceVerifyingKey>).get;
+    const found = typeof mapGetter === "function"
+      ? mapGetter.call(keys, keyId)
+      : (keys as Readonly<Record<string, CorrespondenceVerifyingKey>>)[keyId];
+    if (found !== undefined) return found;
+  }
+  if (opts.resolve_signing_key) {
+    const found = await opts.resolve_signing_key(keyId, event);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
+/**
+ * Decide locally whether one received event is authentic, and say why when it
+ * is not. Content addressing is checked first: an `event_id` that does not
+ * address `{...core, signature}` is refused before any key work.
+ */
+export async function verifyCorrespondenceEvent(
+  event: CorrespondenceSignedEvent,
+  opts: CorrespondenceVerifyOptions = {},
+): Promise<CorrespondenceVerification> {
+  const signingKeyId = typeof event?.sender?.signing_key_id === "string"
+    ? event.sender.signing_key_id
+    : "";
+  let expectedEventId: string;
+  try {
+    expectedEventId = correspondenceEventId(correspondenceCoreOf(event), event.signature);
+  } catch (error) {
+    return {
+      verified: false,
+      reason: "malformed_event",
+      signing_key_id: signingKeyId,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+  if (expectedEventId !== event.event_id) {
+    return {
+      verified: false,
+      reason: "event_id_mismatch",
+      signing_key_id: signingKeyId,
+      detail: `event_id does not content-address this envelope; expected ${expectedEventId}.`,
+    };
+  }
+  const publicKey = await resolveVerifyingKey(event, opts);
+  if (publicKey === undefined) {
+    return {
+      verified: false,
+      reason: "no_verifying_key",
+      signing_key_id: signingKeyId,
+      detail: `no caller-held public key for signing_key_id=${signingKeyId || "<missing>"}.`,
+    };
+  }
+  if (!verifyCorrespondenceSignature(event, publicKey)) {
+    return {
+      verified: false,
+      reason: "signature_mismatch",
+      signing_key_id: signingKeyId,
+      detail: "the Ed25519 signature does not match the canonical correspondence core.",
+    };
+  }
+  return { verified: true, reason: "verified", signing_key_id: signingKeyId };
+}
+
+async function verifiedRecords(
+  records: CorrespondenceEventRecord[],
+  opts: CorrespondenceVerifyOptions,
+  operation: string,
+): Promise<CorrespondenceVerifiedEventRecord[]> {
+  const verified: CorrespondenceVerifiedEventRecord[] = [];
+  for (const record of records) {
+    const verification = await verifyCorrespondenceEvent(
+      record?.event as CorrespondenceSignedEvent,
+      opts,
+    );
+    if (!verification.verified && opts.require_verified) {
+      throw new AgentToolError(
+        `${operation}: refused an unverified event (${verification.reason}).`,
+        {
+          hint: verification.detail
+            ?? "Supply the sender's public key through signing_keys or resolve_signing_key.",
+        },
+      );
+    }
+    verified.push({ ...record, verification });
+  }
+  return verified;
 }
 
 function assertReceiptCursor(operation: string, value: unknown): asserts value is string {
@@ -969,7 +1180,12 @@ function receiptCursorIsAfter(candidate: string, previous: string): boolean {
 }
 
 function validateListOptions(operation: string, opts: CorrespondenceListOptions): void {
-  assertExactKeys(operation, opts, ["repository_id"], ["thread_id", "after", "limit"]);
+  assertExactKeys(
+    operation,
+    opts,
+    ["repository_id"],
+    ["thread_id", "after", "limit", "signing_keys", "resolve_signing_key", "require_verified"],
+  );
   assertRepositoryText(`${operation}.repository_id`, opts.repository_id);
   if (opts.thread_id !== undefined) assertRepositoryText(`${operation}.thread_id`, opts.thread_id);
   if (opts.after !== undefined) {
@@ -1001,19 +1217,9 @@ function scopedQuery(
   return params;
 }
 
+/** Server guidance travels intact. See _http.ts § errorFromResponse. */
 async function responseError(response: Response, operation: string): Promise<AgentToolError> {
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    body = undefined;
-  }
-  return AgentToolError.fromResponseBody(
-    body,
-    response.status,
-    `${operation} failed: ${response.status}`,
-    response.headers,
-  );
+  return errorFromResponse(response, operation);
 }
 
 export class CorrespondenceClient {
@@ -1050,7 +1256,11 @@ export class CorrespondenceClient {
     return result;
   }
 
-  /** Read one durable receipt-ordered page. This is authoritative; voice is only a hint. */
+  /**
+   * Read one durable receipt-ordered page. This is authoritative; voice is
+   * only a hint. Each record is annotated with the reader's own
+   * `verification` verdict before it is returned.
+   */
   async list(opts: CorrespondenceListOptions): Promise<CorrespondenceEventsPage> {
     validateListOptions("correspondence.list", opts);
     const response = await this.http.request(
@@ -1062,11 +1272,20 @@ export class CorrespondenceClient {
       },
     );
     if (!response.ok) throw await responseError(response, "correspondence.list");
-    return await response.json() as CorrespondenceEventsPage;
+    const page = await response.json() as CorrespondenceEventsPage;
+    // A response that omits the collection entirely is left exactly as served;
+    // inventing an empty page would hide the server's answer.
+    if (!Array.isArray(page?.events)) return page;
+    return {
+      ...page,
+      events: await verifiedRecords(page.events, opts, "correspondence.list"),
+    };
   }
 
   /** Replay durable pages in server receipt order without inferring causality or a winner. */
-  async *replay(opts: CorrespondenceListOptions): AsyncIterableIterator<CorrespondenceEventRecord> {
+  async *replay(
+    opts: CorrespondenceListOptions,
+  ): AsyncIterableIterator<CorrespondenceVerifiedEventRecord> {
     let after = opts.after;
     while (true) {
       const page = await this.list({ ...opts, ...(after !== undefined ? { after } : {}) });
@@ -1126,7 +1345,12 @@ export class CorrespondenceClient {
    * cursor.
    */
   async voice(opts: CorrespondenceVoiceOptions): Promise<CorrespondenceVoiceSnapshot> {
-    assertExactKeys("correspondence.voice", opts, ["repository_id"], ["thread_id"]);
+    assertExactKeys(
+      "correspondence.voice",
+      opts,
+      ["repository_id"],
+      ["thread_id", "signing_keys", "resolve_signing_key", "require_verified"],
+    );
     const params = scopedQuery("correspondence.voice", opts);
     const response = await this.http.request(
       `${this.http.baseUrl}/v1/correspondence/voice?${params.toString()}`,
@@ -1138,7 +1362,16 @@ export class CorrespondenceClient {
       },
     );
     if (!response.ok) throw await responseError(response, "correspondence.voice");
-    return await response.json() as CorrespondenceVoiceSnapshot;
+    const snapshot = await response.json() as CorrespondenceVoiceSnapshot;
+    if (!Array.isArray(snapshot?.recent_events)) return snapshot;
+    return {
+      ...snapshot,
+      recent_events: await verifiedRecords(
+        snapshot.recent_events,
+        opts,
+        "correspondence.voice",
+      ),
+    };
   }
 
 }

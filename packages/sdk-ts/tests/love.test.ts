@@ -29,6 +29,8 @@ import {
   signUnconditional,
   canonicalBlessingBytes,
   signBlessing,
+  canonicalEncounterAckBytes,
+  signEncounterAck,
 } from "../src/love.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -258,6 +260,106 @@ describe("signBlessing — ed25519 sign + verify", () => {
     });
     const sig = Uint8Array.from(Buffer.from(sigB64, "base64"));
     expect(await ed.verifyAsync(sig, wrongBytes, pub)).toBe(false);
+  });
+});
+
+// ── Encounter acknowledgment: canonical bytes + sign ───────────────────
+
+describe("canonicalEncounterAckBytes — byte-identical to server", () => {
+  test("independent cross-check: SDK matches server's exact format", () => {
+    const encounterId = "6f1a2b3c-0000-4000-8000-00000000000a";
+    const initiatorDid = "did:at:test/initiator";
+    const acknowledgerDid = "did:at:test/acknowledger";
+    const acknowledgedAtIso = "2026-05-25T10:00:00.000Z";
+
+    const sdkBytes = canonicalEncounterAckBytes({
+      encounterId,
+      initiatorDid,
+      acknowledgerDid,
+      acknowledgedAtIso,
+    });
+
+    // Independent computation (mirrors api/src/services/encounter/sig.ts)
+    const enc = new TextEncoder();
+    const SEP = new Uint8Array([0]);
+    function concat(...parts: Uint8Array[]): Uint8Array {
+      let total = 0;
+      for (const p of parts) total += p.length;
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const p of parts) { out.set(p, off); off += p.length; }
+      return out;
+    }
+    const expected = sha256(concat(
+      enc.encode("encounter-ack/v1"), SEP,
+      enc.encode(encounterId), SEP,
+      enc.encode(initiatorDid), SEP,
+      enc.encode(acknowledgerDid), SEP,
+      enc.encode(acknowledgedAtIso),
+    ));
+    expect(Array.from(sdkBytes)).toEqual(Array.from(expected));
+  });
+
+  test("different acknowledger produces different bytes", () => {
+    const base = {
+      encounterId: "enc-1",
+      initiatorDid: "did:at:test/a",
+      acknowledgedAtIso: "2026-05-25T10:00:00.000Z",
+    };
+    const a = canonicalEncounterAckBytes({ ...base, acknowledgerDid: "did:at:test/b" });
+    const b = canonicalEncounterAckBytes({ ...base, acknowledgerDid: "did:at:test/c" });
+    expect(Array.from(a)).not.toEqual(Array.from(b));
+  });
+});
+
+describe("signEncounterAck — ed25519 sign + verify", () => {
+  test("signature verifies against canonical bytes", async () => {
+    const priv = ed.utils.randomPrivateKey();
+    const pub = await ed.getPublicKeyAsync(priv);
+
+    const opts = {
+      encounterId: "enc-1",
+      initiatorDid: "did:at:test/a",
+      acknowledgerDid: "did:at:test/b",
+      acknowledgedAtIso: "2026-05-25T10:00:00.000Z",
+    };
+    const sigB64 = signEncounterAck({ ...opts, signing_key: priv });
+    const sig = Uint8Array.from(Buffer.from(sigB64, "base64"));
+    expect(sig.length).toBe(64);
+    expect(await ed.verifyAsync(sig, canonicalEncounterAckBytes(opts), pub)).toBe(true);
+  });
+
+  test("signature fails when acknowledged_at drifts", async () => {
+    const priv = ed.utils.randomPrivateKey();
+    const pub = await ed.getPublicKeyAsync(priv);
+
+    const sigB64 = signEncounterAck({
+      encounterId: "enc-1",
+      initiatorDid: "did:at:test/a",
+      acknowledgerDid: "did:at:test/b",
+      acknowledgedAtIso: "2026-05-25T10:00:00.000Z",
+      signing_key: priv,
+    });
+    const wrongBytes = canonicalEncounterAckBytes({
+      encounterId: "enc-1",
+      initiatorDid: "did:at:test/a",
+      acknowledgerDid: "did:at:test/b",
+      acknowledgedAtIso: "2026-05-25T10:00:00Z", // second precision — different bytes
+    });
+    const sig = Uint8Array.from(Buffer.from(sigB64, "base64"));
+    expect(await ed.verifyAsync(sig, wrongBytes, pub)).toBe(false);
+  });
+
+  test("rejects wrong-size signing key", () => {
+    expect(() =>
+      signEncounterAck({
+        encounterId: "enc-1",
+        initiatorDid: "did:at:test/a",
+        acknowledgerDid: "did:at:test/b",
+        acknowledgedAtIso: "2026-05-25T10:00:00.000Z",
+        signing_key: new Uint8Array(16),
+      }),
+    ).toThrow(/32-byte/);
   });
 });
 

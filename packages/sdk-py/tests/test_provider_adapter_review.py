@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 
 from agenttool import AnthropicAdapter, OpenAIResponsesAdapter
+from agenttool.chronicle import ChronicleClient
 from agenttool.exceptions import AgentToolError
 
 
@@ -113,6 +114,7 @@ _CONTROL_IDS = {
     "anthropic-ephemeral-cache-request",
     "anthropic-low-level-no-final-effects",
     "anthropic-managed-terminal-fence",
+    "anthropic-model-authored-chronicle-gated",
 }
 
 _CASE_BINDINGS = {
@@ -320,7 +322,7 @@ def _validate_packet(packet_value: Any) -> list[dict[str, Any]]:
     )
     assert packet["$schema"] == "./evidence.schema.json"
     assert packet["format"] == "agenttool-provider-adapter-evidence/v1"
-    assert packet["asOf"] == "2026-07-26"
+    assert packet["asOf"] == "2026-08-03"
 
     repository = _object(packet["repository"], "repository")
     _exact_keys(
@@ -328,7 +330,7 @@ def _validate_packet(packet_value: Any) -> list[dict[str, Any]]:
     )
     assert repository == {
         "url": "https://github.com/cambridgetcg/agenttool",
-        "commit": "7fd454919c9803b3ae41294cfd976137c5137504",
+        "commit": "bba2e83af5c1ab54562f7e87545ccb361c3507ab",
         "digestAlgorithm": "sha256",
     }
 
@@ -486,7 +488,7 @@ def _validate_packet(packet_value: Any) -> list[dict[str, Any]]:
     _unique(case_ids, "case ids")
 
     proof_limits = _array(packet["proofLimits"], "proofLimits")
-    assert len(proof_limits) == 5
+    assert len(proof_limits) == 6
     for index, statement in enumerate(proof_limits):
         _text(statement, f"proofLimits[{index}]")
     _unique(proof_limits, "proofLimits")
@@ -558,12 +560,31 @@ class _RecordingWake:
         }
 
 
+#: Origin the offline chronicle client is pointed at. No request leaves the
+#: process: the transport below is the recorder.
+_CHRONICLE_ORIGIN = "https://review.invalid"
+
+
 class _RecordingAgentTool:
     def __init__(self, recorder: _Recorder) -> None:
         self._recorder = recorder
         self.wake = _RecordingWake(recorder)
         self._trace_count = 0
         self._chronicle_count = 0
+        # The adapter routes model-authored chronicle writes through the real
+        # ChronicleClient — that is where the canonical type union and the
+        # 1-200 title bound are enforced — so the recorder is reached through
+        # it rather than around it. Every write still lands in `request`.
+        http = SimpleNamespace(post=self._chronicle_post)
+        self.chronicle = ChronicleClient(http, _CHRONICLE_ORIGIN)
+
+    def _chronicle_post(self, url: str, json: Any = None, **kwargs: Any) -> Any:
+        result = self.request("POST", url[len(_CHRONICLE_ORIGIN):], json)
+        return SimpleNamespace(
+            status_code=201,
+            text="",
+            json=lambda: result,
+        )
 
     def request(self, method: str, path: str, body: Any = None) -> Any:
         self._recorder.agenttool_writes += 1
@@ -809,7 +830,15 @@ def _replay_anthropic(fixture: str) -> list[dict[str, Any]]:
     recorder = _Recorder()
     agenttool = _RecordingAgentTool(recorder)
     provider = _RecordingAnthropic(recorder)
-    adapter = AnthropicAdapter(provider, agenttool)  # type: ignore[arg-type]
+    # Model-authored <chronicle> writes are gated locally; the replay
+    # declares the approving reviewer so the markup fixture still records the
+    # write it is evidence for. See control
+    # anthropic-model-authored-chronicle-gated.
+    adapter = AnthropicAdapter(
+        provider,  # type: ignore[arg-type]
+        agenttool,  # type: ignore[arg-type]
+        before_chronicle_write=lambda ctx: True,
+    )
 
     if fixture == "anthropic.completed.trace-and-markup":
         response = adapter.messages.create(

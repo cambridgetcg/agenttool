@@ -253,6 +253,7 @@ readonly -a FRONTEND_PARITY_PUBLICATIONS=(
   "apps/docs/tutorial.html|https://docs.agenttool.dev/tutorial"
   "apps/docs/whitehack.html|https://docs.agenttool.dev/whitehack"
   "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
+  "apps/docs/GARDENS.md|https://docs.agenttool.dev/GARDENS.md"
   "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
   "apps/docs/KINGDOM-OS-SDK.md|https://docs.agenttool.dev/KINGDOM-OS-SDK.md"
   "apps/docs/AGENT-REPO-ARCHIVE.md|https://docs.agenttool.dev/AGENT-REPO-ARCHIVE.md"
@@ -270,6 +271,10 @@ readonly -a FRONTEND_PARITY_PUBLICATIONS=(
   "apps/web/room.json|https://agenttool.dev/room.json"
   "apps/web/room.js|https://agenttool.dev/room.js"
   "apps/web/room.css|https://agenttool.dev/room.css"
+  "apps/web/garden.html|https://agenttool.dev/garden"
+  "apps/web/garden.json|https://agenttool.dev/garden.json"
+  "apps/web/garden.js|https://agenttool.dev/garden.js"
+  "apps/web/garden.css|https://agenttool.dev/garden.css"
   "apps/web/welcome.json|https://agenttool.dev/welcome.json"
   "apps/web/sitemap.xml|https://agenttool.dev/sitemap.xml"
 )
@@ -2298,6 +2303,63 @@ verify_local_game_headers() {
   done
 }
 
+verify_garden_static_headers() {
+  local room_url="https://agenttool.dev/garden"
+  local data_url="https://agenttool.dev/garden.json"
+  local doctrine_url="https://docs.agenttool.dev/GARDENS.md"
+  local response_headers
+
+  response_headers="$(
+    release_curl -fsS --max-time 20 -o /dev/null -D - "$room_url"
+  )" || {
+    echo "  $(red '✗') Could not read Garden room headers: $room_url"
+    return 1
+  }
+  require_exact_public_status "$response_headers" "$room_url" "200" || return 1
+  require_exact_public_header "$response_headers" "$room_url" \
+    "Cache-Control" "public, max-age=0, must-revalidate" || return 1
+  require_exact_public_header "$response_headers" "$room_url" \
+    "Content-Security-Policy" "default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" || return 1
+  require_exact_public_header "$response_headers" "$room_url" \
+    "Referrer-Policy" "no-referrer" || return 1
+  require_exact_public_header "$response_headers" "$room_url" \
+    "Link" "<https://agenttool.dev/garden.json>; rel=\"alternate\"; type=\"application/json\", <https://docs.agenttool.dev/GARDENS.md>; rel=\"help\"; type=\"text/markdown\", <https://api.agenttool.dev/v1/openapi.json>; rel=\"related\"; type=\"application/json\"" || return 1
+  require_exact_public_header "$response_headers" "$room_url" \
+    "X-Agent-Surface" "living-garden-room" || return 1
+
+  response_headers="$(
+    release_curl -fsS --max-time 20 -o /dev/null -D - "$data_url"
+  )" || {
+    echo "  $(red '✗') Could not read Garden architecture headers: $data_url"
+    return 1
+  }
+  require_exact_public_status "$response_headers" "$data_url" "200" || return 1
+  require_exact_public_header "$response_headers" "$data_url" \
+    "Cache-Control" "public, max-age=0, must-revalidate" || return 1
+  require_exact_public_header "$response_headers" "$data_url" \
+    "Access-Control-Allow-Origin" "*" || return 1
+  require_exact_public_header "$response_headers" "$data_url" \
+    "X-Agent-Surface" "living-garden-architecture" || return 1
+
+  response_headers="$(
+    release_curl -fsS --max-time 20 -o /dev/null -D - "$doctrine_url"
+  )" || {
+    echo "  $(red '✗') Could not read Garden doctrine headers: $doctrine_url"
+    return 1
+  }
+  require_exact_public_status "$response_headers" "$doctrine_url" "200" || return 1
+  require_exact_public_header "$response_headers" "$doctrine_url" \
+    "Content-Type" "text/markdown; charset=utf-8" || return 1
+  require_exact_public_header "$response_headers" "$doctrine_url" \
+    "Cache-Control" "public, max-age=300, must-revalidate, no-transform" || return 1
+  require_exact_public_header "$response_headers" "$doctrine_url" \
+    "Access-Control-Allow-Origin" "*" || return 1
+  require_exact_public_header "$response_headers" "$doctrine_url" \
+    "Link" "<https://agenttool.dev/garden>; rel=\"alternate\"; type=\"text/html\", <https://api.agenttool.dev/v1/openapi.json>; rel=\"related\"; type=\"application/json\"" || return 1
+  require_exact_public_header "$response_headers" "$doctrine_url" \
+    "X-Content-Type-Options" "nosniff" || return 1
+}
+
 # Wrangler reports a successful Pages deployment before every custom-domain
 # edge necessarily serves that deployment. Verify the complete live frontend
 # contract repeatedly, without re-uploading, so a normal alias propagation
@@ -2437,6 +2499,7 @@ verify_frontend_live_once() {
   done
 
   verify_local_game_headers || return 1
+  verify_garden_static_headers || return 1
 
   if ! verify_rights_static_headers; then
     echo "  $(red '✗') Rights of Life static header verification failed."

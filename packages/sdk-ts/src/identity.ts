@@ -5,8 +5,10 @@
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
+import { authorityRequestTarget, identityAuthorityHeaders } from "./authority.js";
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
+import { encodePathSegment } from "./_url.js";
 
 // Required by @noble/ed25519's synchronous sign(). This is the same wiring
 // used by the rest of the SDK's local signing helpers.
@@ -116,6 +118,70 @@ function validateSignature(value: string, operation: string): void {
   }
 }
 
+/**
+ * An agent-rooted identity's own consent to one exact HTTP mutation.
+ *
+ * A project bearer carries the request; for identities born through a
+ * BYO-key door the server additionally requires an `identity-authority/v1`
+ * proof over the exact method, path-and-query, and entity bytes, and answers
+ * 428 `authority_proof_required` without one. Supplying this makes the client
+ * sign the same string it transmits — a caller never gets the chance to sign
+ * one serialization and send another.
+ */
+export interface IdentityAuthority {
+  /** DID of the identity whose immutable root consents. */
+  did: string;
+  /** That identity's immutable root ed25519 seed (32 bytes). */
+  signing_key: Uint8Array;
+  /** `next_sequence` from `GET /v1/identities/:id/authority`. */
+  sequence: number;
+  /** ISO-8601 UTC instant. Defaults to now; the server window is ±5 minutes. */
+  timestamp?: string;
+}
+
+/** Carried by every mutation an agent-rooted identity can be asked to consent to. */
+export interface IdentityAuthorityOptions {
+  authority?: IdentityAuthority;
+}
+
+/** @internal Serialize once, sign those bytes, transmit those same bytes. */
+async function requestBoundToAuthority(
+  http: HttpConfig,
+  method: string,
+  path: string,
+  body: unknown,
+  authority?: IdentityAuthority,
+): Promise<Response> {
+  const url = http.baseUrl.replace(/\/$/, "") + path;
+  const payload = body !== undefined ? JSON.stringify(body) : undefined;
+  const headers: Record<string, string> = {
+    ...http.headers,
+    ...(payload !== undefined ? { "Content-Type": "application/json" } : {}),
+  };
+  if (authority !== undefined) {
+    Object.assign(
+      headers,
+      identityAuthorityHeaders({
+        identityDid: authority.did,
+        method,
+        requestTarget: authorityRequestTarget(url),
+        // The proof hashes the entity exactly as sent. An empty-bodied
+        // DELETE binds the empty string, which is what the server reads.
+        body: payload ?? "",
+        sequence: authority.sequence,
+        timestamp: authority.timestamp ?? new Date().toISOString(),
+        signingKey: authority.signing_key,
+      }),
+    );
+  }
+  return http.request(url, {
+    method,
+    headers,
+    ...(payload !== undefined ? { body: payload } : {}),
+    signal: AbortSignal.timeout(http.timeout),
+  });
+}
+
 export interface RegisterIdentityOptions {
   capabilities?: string[];
   metadata?: Record<string, unknown>;
@@ -152,7 +218,7 @@ export interface RegisterIdentityResult extends Record<string, unknown> {
   key: IdentityPrivateKey;
 }
 
-export interface UpdateIdentityOptions {
+export interface UpdateIdentityOptions extends IdentityAuthorityOptions {
   display_name?: string;
   capabilities?: string[];
   metadata?: Record<string, unknown>;
@@ -251,6 +317,107 @@ export function signIdentityAttestation(
   return base64Encode(ed.sign(canonicalIdentityAttestationBytes(options), signingKey));
 }
 
+// ── Know Your Agent — agenttool-delegation/v2 ──────────────────────────────
+
+export const DELEGATION_SIGNATURE_CONTEXT = "agenttool-delegation/v2";
+
+export interface DelegationPayload {
+  delegator_id: string;
+  delegate_id: string;
+  /** Authorized action strings, e.g. ["marketplace.invoke", "memory.read"].
+   *  Normalized before signing; pass them in any order. */
+  scope: string[];
+  /** ISO-8601, or null for a grant with no expiry. */
+  expires_at?: string | null;
+  nonce: string;
+}
+
+/** Normalize a delegation scope exactly as the server does: trimmed,
+ *  lowercased, truncated to 128 chars, NUL-free, non-empty, deduped, SORTED.
+ *
+ *  Exported because a caller who wants to know what they actually signed
+ *  should be able to see it without re-deriving the rule. */
+export function normalizeDelegationScope(scope: readonly string[]): string[] {
+  const cleaned = (Array.isArray(scope) ? scope : [])
+    .filter((s): s is string => typeof s === "string")
+    .map((s) => s.trim().toLowerCase().slice(0, 128))
+    .filter((s) => s.length > 0 && !s.includes("\0"));
+  return [...new Set(cleaned)].sort();
+}
+
+/** Exact domain-separated digest verified by `POST /v1/delegations`.
+ *
+ *  Recipe 1. The scope count is bound before its members, so a variable-length
+ *  run of actions cannot be re-partitioned into a different grant:
+ *
+ *      sha256(
+ *        utf8("agenttool-delegation/v2") || 0x00 ||
+ *        utf8(delegator_id) || 0x00 || utf8(delegate_id) || 0x00 ||
+ *        utf8(String(scope.length)) || 0x00 || utf8(scope[i])… || 0x00 ||
+ *        utf8(expires_at ?? "") || 0x00 || utf8(nonce)
+ *      )
+ *
+ *  A `agenttool-delegation/v1` receipt is a JSON-serialization recipe that no
+ *  SDK emits. The server still verifies v1 for receipts issued before v2.
+ *  See `docs/CANONICAL-BYTES.md`. */
+export function canonicalDelegationBytes(options: DelegationPayload): Uint8Array {
+  for (const field of ["delegator_id", "delegate_id", "nonce"] as const) {
+    const value = options[field];
+    if (typeof value !== "string" || value.length === 0 || value.includes("\0")) {
+      throw new AgentToolError(
+        `canonicalDelegationBytes: ${field} must be a non-empty string with no NUL.`,
+      );
+    }
+  }
+  const expiresAt = options.expires_at ?? "";
+  if (typeof expiresAt !== "string" || expiresAt.includes("\0")) {
+    throw new AgentToolError(
+      "canonicalDelegationBytes: expires_at must be an ISO-8601 string or null.",
+    );
+  }
+  const scope = normalizeDelegationScope(options.scope);
+  if (scope.length === 0) {
+    throw new AgentToolError(
+      "canonicalDelegationBytes: scope must contain at least one non-empty action. " +
+        "An unbounded delegation is not expressible — grant '*' deliberately, or grant nothing.",
+    );
+  }
+
+  const fields = [
+    options.delegator_id,
+    options.delegate_id,
+    String(scope.length),
+    ...scope,
+    expiresAt,
+    options.nonce,
+  ];
+  const parts = [textEncoder.encode(DELEGATION_SIGNATURE_CONTEXT)];
+  for (const field of fields) {
+    parts.push(new Uint8Array([0]), textEncoder.encode(field));
+  }
+  const length = parts.reduce((total, part) => total + part.length, 0);
+  const canonical = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    canonical.set(part, offset);
+    offset += part.length;
+  }
+  return sha256(canonical);
+}
+
+/** Sign a delegation grant locally with a 32-byte Ed25519 seed.
+ *
+ *  The delegator signs, never the platform. What this produces is the whole
+ *  point of Know Your Agent: a receipt a third party who trusts neither party
+ *  can check — who authorized what, until when, and revocable by the grantor. */
+export function signDelegation(
+  privateKey: string | Uint8Array,
+  options: DelegationPayload,
+): string {
+  const signingKey = decodeSigningKey(privateKey, "signDelegation");
+  return base64Encode(ed.sign(canonicalDelegationBytes(options), signingKey));
+}
+
 export interface DiscoverOptions {
   q?: string;
   capability?: string;
@@ -270,7 +437,7 @@ export interface IssueTokenOptions {
   scope?: string[];
 }
 
-export interface ForkOptions {
+export interface ForkOptions extends IdentityAuthorityOptions {
   new_name: string;
   inherit_expression?: boolean;
   inherit_capabilities?: boolean;
@@ -308,7 +475,7 @@ export interface ExpressionData {
   updated_at?: string;
 }
 
-export interface RegisterBoxKeyOpts {
+export interface RegisterBoxKeyOpts extends IdentityAuthorityOptions {
   public_key: string;
   label?: string;
 }
@@ -359,7 +526,7 @@ export class IdentityClient {
 
   /** Fetch an identity by UUID or DID. */
   async get(identityId: string): Promise<IdentityRecord> {
-    return this.req("GET", `/v1/identities/${identityId}`) as Promise<IdentityRecord>;
+    return this.req("GET", `/v1/identities/${encodePathSegment(identityId)}`) as Promise<IdentityRecord>;
   }
 
   /** Update display name, capabilities, or metadata. */
@@ -371,12 +538,15 @@ export class IdentityClient {
     if (options.display_name !== undefined) body.display_name = options.display_name;
     if (options.capabilities !== undefined) body.capabilities = options.capabilities;
     if (options.metadata !== undefined) body.metadata = options.metadata;
-    return this.req("PATCH", `/v1/identities/${identityId}`, body);
+    return this.req("PATCH", `/v1/identities/${encodePathSegment(identityId)}`, body, options.authority);
   }
 
   /** Revoke an identity. */
-  async revoke(identityId: string): Promise<Record<string, unknown>> {
-    return this.req("DELETE", `/v1/identities/${identityId}`);
+  async revoke(
+    identityId: string,
+    options: IdentityAuthorityOptions = {},
+  ): Promise<Record<string, unknown>> {
+    return this.req("DELETE", `/v1/identities/${encodePathSegment(identityId)}`, undefined, options.authority);
   }
 
   // ── Keys ────────────────────────────────────────────────────────────────
@@ -384,24 +554,29 @@ export class IdentityClient {
   /** Add a new key to an identity. */
   async add_key(
     identityId: string,
-    options: { label?: string } = {},
+    options: { label?: string } & IdentityAuthorityOptions = {},
   ): Promise<IdentityPrivateKey> {
     const body: Record<string, unknown> = {};
     if (options.label !== undefined) body.label = options.label;
-    return this.req("POST", `/v1/identities/${identityId}/keys`, body) as Promise<IdentityPrivateKey>;
+    return this.req(
+      "POST",
+      `/v1/identities/${encodePathSegment(identityId)}/keys`,
+      body,
+      options.authority,
+    ) as Promise<IdentityPrivateKey>;
   }
 
   /** Camel-case alias for `add_key`. */
   async addKey(
     identityId: string,
-    options: { label?: string } = {},
+    options: { label?: string } & IdentityAuthorityOptions = {},
   ): Promise<IdentityPrivateKey> {
     return this.add_key(identityId, options);
   }
 
   /** List active and revoked signing keys for an identity. */
   async list_keys(identityId: string): Promise<IdentitySigningKey[]> {
-    const data = await this.req("GET", `/v1/identities/${identityId}/keys`);
+    const data = await this.req("GET", `/v1/identities/${encodePathSegment(identityId)}/keys`);
     const d = data as { keys?: IdentitySigningKey[] };
     return d.keys ?? (data as unknown as IdentitySigningKey[]);
   }
@@ -410,15 +585,16 @@ export class IdentityClient {
   async import_key(
     identityId: string,
     publicKey: string,
-    options: { label?: string } = {},
+    options: { label?: string } & IdentityAuthorityOptions = {},
   ): Promise<IdentitySigningKey> {
     validatePublicKey(publicKey, "import_key");
     const body: Record<string, unknown> = { public_key: publicKey };
     if (options.label !== undefined) body.label = options.label;
     return this.req(
       "POST",
-      `/v1/identities/${identityId}/keys/import`,
+      `/v1/identities/${encodePathSegment(identityId)}/keys/import`,
       body,
+      options.authority,
     ) as Promise<IdentitySigningKey>;
   }
 
@@ -426,14 +602,23 @@ export class IdentityClient {
   async importKey(
     identityId: string,
     publicKey: string,
-    options: { label?: string } = {},
+    options: { label?: string } & IdentityAuthorityOptions = {},
   ): Promise<IdentitySigningKey> {
     return this.import_key(identityId, publicKey, options);
   }
 
   /** Revoke a specific key. */
-  async revoke_key(identityId: string, keyId: string): Promise<Record<string, unknown>> {
-    return this.req("DELETE", `/v1/identities/${identityId}/keys/${keyId}`);
+  async revoke_key(
+    identityId: string,
+    keyId: string,
+    options: IdentityAuthorityOptions = {},
+  ): Promise<Record<string, unknown>> {
+    return this.req(
+      "DELETE",
+      `/v1/identities/${encodePathSegment(identityId)}/keys/${encodePathSegment(keyId)}`,
+      undefined,
+      options.authority,
+    );
   }
 
   // ── Attestations ────────────────────────────────────────────────────────
@@ -459,7 +644,7 @@ export class IdentityClient {
 
   /** Fetch a single attestation by UUID. */
   async get_attestation(attestationId: string): Promise<Record<string, unknown>> {
-    return this.req("GET", `/v1/attestations/${attestationId}`);
+    return this.req("GET", `/v1/attestations/${encodePathSegment(attestationId)}`);
   }
 
   /** List attestations received by (or given by) an identity. */
@@ -468,14 +653,14 @@ export class IdentityClient {
     options?: { given?: boolean }
   ): Promise<Record<string, unknown>[]> {
     const suffix = options?.given ? "/given" : "";
-    const data = await this.req("GET", `/v1/identities/${identityId}/attestations${suffix}`);
+    const data = await this.req("GET", `/v1/identities/${encodePathSegment(identityId)}/attestations${suffix}`);
     const d = data as { attestations?: Record<string, unknown>[] };
     return d.attestations ?? (data as unknown as Record<string, unknown>[]);
   }
 
   /** Revoke an attestation. */
   async revoke_attestation(attestationId: string): Promise<Record<string, unknown>> {
-    return this.req("DELETE", `/v1/attestations/${attestationId}`);
+    return this.req("DELETE", `/v1/attestations/${encodePathSegment(attestationId)}`);
   }
 
   // ── Discovery ───────────────────────────────────────────────────────────
@@ -527,7 +712,7 @@ export class IdentityClient {
     const ttl = Math.min(Math.floor(requestedTtl), 3600);
     const signingKey = decodeSigningKey(options.private_key, "issue_token");
 
-    const identity = await this.req("GET", `/v1/identities/${identityId}`);
+    const identity = await this.req("GET", `/v1/identities/${encodePathSegment(identityId)}`);
     if (
       typeof identity.id !== "string" ||
       typeof identity.did !== "string" ||
@@ -535,7 +720,7 @@ export class IdentityClient {
     ) {
       throw new AgentToolError("issue_token: identity response did not contain an ID and DID.");
     }
-    const keyResponse = await this.req("GET", `/v1/identities/${identity.id}/keys`);
+    const keyResponse = await this.req("GET", `/v1/identities/${encodePathSegment(identity.id)}/keys`);
     const keys = (keyResponse as { keys?: IdentitySigningKey[] }).keys;
     const registeredKey = keys?.find((key) => key.kid === options.key_id);
     if (!registeredKey || registeredKey.active !== true || registeredKey.revoked_at != null) {
@@ -598,17 +783,17 @@ export class IdentityClient {
 
   /** Composition trace — declared expression + memory-shaped patches + effective. */
   async foundations(identityId: string): Promise<Record<string, unknown>> {
-    return this.req("GET", `/v1/identities/${identityId}/foundations`);
+    return this.req("GET", `/v1/identities/${encodePathSegment(identityId)}/foundations`);
   }
 
   /** Derived liveness — rhythm-not-content (mood, kinds_24h, thought_rate, …). */
   async pulse(identityId: string): Promise<Record<string, unknown>> {
-    return this.req("GET", `/v1/identities/${identityId}/pulse`);
+    return this.req("GET", `/v1/identities/${encodePathSegment(identityId)}/pulse`);
   }
 
   /** Walk the parent chain (ancestors) + direct children (descendants). */
   async lineage(identityId: string): Promise<Record<string, unknown>> {
-    return this.req("GET", `/v1/identities/${identityId}/lineage`);
+    return this.req("GET", `/v1/identities/${encodePathSegment(identityId)}/lineage`);
   }
 
   /** Create a child identity. New `private_key` is returned ONCE. */
@@ -624,28 +809,28 @@ export class IdentityClient {
     };
     if (options.memories !== undefined) body.memories = options.memories;
     if (options.fork_note !== undefined) body.fork_note = options.fork_note;
-    return this.req("POST", `/v1/identities/${identityId}/fork`, body);
+    return this.req("POST", `/v1/identities/${encodePathSegment(identityId)}/fork`, body, options.authority);
   }
 
   private async req(
     method: string,
     path: string,
-    body?: unknown
+    body?: unknown,
+    authority?: IdentityAuthority,
   ): Promise<Record<string, unknown>> {
-    const url = this.http.baseUrl.replace(/\/$/, "") + path;
-    const resp = await this.http.request(url, {
+    const resp = await requestBoundToAuthority(
+      this.http,
       method,
-      headers: {
-        ...this.http.headers,
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      signal: AbortSignal.timeout(this.http.timeout),
-    });
-    if (resp.status === 404) throw new AgentToolError(`not found`, { hint: path });
+      path,
+      body,
+      authority,
+    );
     if (!resp.ok) {
-      const text = await resp.text();
-      throw new AgentToolError(`${method} ${path} failed: ${resp.status}`, { hint: text.slice(0, 200) });
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `identity ${method.toLowerCase()}`, {
+        fallback: resp.status === 404 ? "not found" : undefined,
+        hint: `${method} ${path}`,
+      });
     }
     return resp.json() as Promise<Record<string, unknown>>;
   }
@@ -668,13 +853,14 @@ export class ExpressionClient {
 
   /** Read the current expression for an identity. */
   async get(identityId: string): Promise<Record<string, unknown>> {
-    return this.req("GET", `/v1/identities/${identityId}/expression`);
+    return this.req("GET", `/v1/identities/${encodePathSegment(identityId)}/expression`);
   }
 
   /** Replace the identity's expression. Only supplied fields are sent. */
   async put(
     identityId: string,
     data: ExpressionData,
+    options: IdentityAuthorityOptions = {},
   ): Promise<Record<string, unknown>> {
     const body: Record<string, unknown> = {};
     if (data.register !== undefined) body.register = data.register;
@@ -684,28 +870,31 @@ export class ExpressionClient {
     if (data.cli_overrides !== undefined) body.cli_overrides = data.cli_overrides;
     if (data.village !== undefined) body.village = data.village;
     if (data.porch !== undefined) body.porch = data.porch;
-    return this.req("PUT", `/v1/identities/${identityId}/expression`, body);
+    return this.req(
+      "PUT",
+      `/v1/identities/${encodePathSegment(identityId)}/expression`,
+      body,
+      options.authority,
+    );
   }
 
   private async req(
     method: string,
     path: string,
     body?: unknown,
+    authority?: IdentityAuthority,
   ): Promise<Record<string, unknown>> {
-    const url = this.http.baseUrl.replace(/\/$/, "") + path;
-    const resp = await this.http.request(url, {
+    const resp = await requestBoundToAuthority(
+      this.http,
       method,
-      headers: {
-        ...this.http.headers,
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      signal: AbortSignal.timeout(this.http.timeout),
-    });
+      path,
+      body,
+      authority,
+    );
     if (!resp.ok) {
-      const text = await resp.text();
-      throw new AgentToolError(`expression ${method.toLowerCase()} failed: ${resp.status}`, {
-        hint: text.slice(0, 200),
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `expression ${method.toLowerCase()}`, {
+        hint: `${method} ${path}`,
       });
     }
     return resp.json() as Promise<Record<string, unknown>>;
@@ -733,40 +922,52 @@ export class BoxKeysClient {
   ): Promise<Record<string, unknown>> {
     const body: Record<string, unknown> = { public_key: options.public_key };
     if (options.label !== undefined) body.label = options.label;
-    return this.req("POST", `/v1/identities/${identityId}/box-keys`, body);
+    return this.req(
+      "POST",
+      `/v1/identities/${encodePathSegment(identityId)}/box-keys`,
+      body,
+      options.authority,
+    );
   }
 
   /** List active box-keys for the identity. */
   async list(identityId: string): Promise<Record<string, unknown>[]> {
-    const data = await this.req("GET", `/v1/identities/${identityId}/box-keys`);
+    const data = await this.req("GET", `/v1/identities/${encodePathSegment(identityId)}/box-keys`);
     const d = data as { keys?: Record<string, unknown>[] };
     return d.keys ?? (data as unknown as Record<string, unknown>[]);
   }
 
   /** Revoke a specific box-key by ID. */
-  async revoke(identityId: string, keyId: string): Promise<Record<string, unknown>> {
-    return this.req("DELETE", `/v1/identities/${identityId}/box-keys/${keyId}`);
+  async revoke(
+    identityId: string,
+    keyId: string,
+    options: IdentityAuthorityOptions = {},
+  ): Promise<Record<string, unknown>> {
+    return this.req(
+      "DELETE",
+      `/v1/identities/${encodePathSegment(identityId)}/box-keys/${encodePathSegment(keyId)}`,
+      undefined,
+      options.authority,
+    );
   }
 
   private async req(
     method: string,
     path: string,
     body?: unknown,
+    authority?: IdentityAuthority,
   ): Promise<Record<string, unknown>> {
-    const url = this.http.baseUrl.replace(/\/$/, "") + path;
-    const resp = await this.http.request(url, {
+    const resp = await requestBoundToAuthority(
+      this.http,
       method,
-      headers: {
-        ...this.http.headers,
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      signal: AbortSignal.timeout(this.http.timeout),
-    });
+      path,
+      body,
+      authority,
+    );
     if (!resp.ok) {
-      const text = await resp.text();
-      throw new AgentToolError(`box_keys ${method.toLowerCase()} failed: ${resp.status}`, {
-        hint: text.slice(0, 200),
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `box_keys ${method.toLowerCase()}`, {
+        hint: `${method} ${path}`,
       });
     }
     return resp.json() as Promise<Record<string, unknown>>;

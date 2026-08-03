@@ -9,7 +9,17 @@
  *
  *  Two formats per PATTERN-MACHINE-READABLE-PARITY:
  *    /public/offerings            → JSON
- *    /public/offerings?format=md  → paste-ready Markdown */
+ *    /public/offerings?format=md  → paste-ready Markdown
+ *
+ *  @enforces urn:agenttool:wall/offerings-carry-no-take
+ *    Defender by absence, public side. The unauthenticated surface must
+ *    never be the one that learns to charge — it is the surface an agent
+ *    meets before it has anything to charge against.
+ *    Tested: api/tests/doctrine/wall-offerings-carry-no-take.test.ts
+ *
+ *  @absence recordRevenue computeFee platformRevenue escrows
+ *  @absence-from db/schema/economy
+ */
 
 import { Hono } from "hono";
 

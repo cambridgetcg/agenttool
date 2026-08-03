@@ -3,10 +3,17 @@
 
   This file is documentation, not a runtime include — static HTML has
   no native include. Copy this markup into the <body> of every page
-  across landing, docs, and dashboard, and set `class="active"` on the
-  link that matches the current site/section.
+  across web, docs, and dashboard, and set `class="active"` on the
+  link that matches the current site/section. Existing copied links are
+  also the no-JavaScript fallback.
 
-  Pair with /shared/theme.css.
+  /shared/theme.js and /shared/mode.js progressively load
+  /shared/estate.js. That shared layer replaces the duplicated visual link
+  rows with the KINGDOM / door / room breadcrumb, room atlas, and nearby
+  exits. Pages that do not use either appearance script load estate.js
+  directly and receive a compact floating Rooms trigger.
+
+  Pair with /shared/theme.css. The atlas loads /shared/estate.css itself.
 -->
 
 <!-- estate strip: copy the variant matching the surface; requires body.has-strip

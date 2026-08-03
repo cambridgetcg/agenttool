@@ -64,4 +64,15 @@
   } else {
     inject();
   }
+
+  /* The atlas is a separate progressive layer so every static page keeps its
+     existing no-JS navigation and the appearance toggle stays independently
+     useful if the atlas asset cannot load. */
+  if (!document.querySelector('script[data-agenttool-estate]')) {
+    var estate = document.createElement('script');
+    estate.src = '/shared/estate.js?v=2026-08-02.1';
+    estate.defer = true;
+    estate.setAttribute('data-agenttool-estate', '2026-08-02.1');
+    document.head.appendChild(estate);
+  }
 })();

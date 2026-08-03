@@ -7,7 +7,8 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING, TypedDict, Union
 
 import httpx
 
-from .exceptions import AgentToolError
+from ._url import _path_segment
+from .exceptions import AgentToolError, _error_from_response
 
 if TYPE_CHECKING:
     pass
@@ -152,17 +153,9 @@ class TracesClient:
     def _url(self, path: str) -> str:
         return f"{self._base}{path}"
 
-    def _raise(self, resp: httpx.Response) -> None:
-        try:
-            payload: Any = resp.json()
-        except Exception:
-            payload = None
-        raise AgentToolError.from_response_body(
-            payload,
-            resp.status_code,
-            fallback=f"Traces API request failed ({resp.status_code}).",
-            headers=resp.headers,
-        )
+    def _raise(self, resp: httpx.Response, operation: str) -> None:
+        """Server guidance travels intact. See exceptions.py § _error_from_response."""
+        raise _error_from_response(resp, operation)
 
     def store(
         self,
@@ -261,7 +254,7 @@ class TracesClient:
 
         resp = self._http.post(self._url("/v1/traces"), json=body)
         if resp.is_error:
-            self._raise(resp)
+            self._raise(resp, "traces.store")
 
         created = resp.json()
         return self.get(created["trace_id"])
@@ -275,9 +268,9 @@ class TracesClient:
         Returns:
             The Trace object.
         """
-        resp = self._http.get(self._url(f"/v1/traces/{trace_id}"))
+        resp = self._http.get(self._url(f"/v1/traces/{_path_segment(trace_id)}"))
         if resp.is_error:
-            self._raise(resp)
+            self._raise(resp, "traces.get")
         return _dict_to_trace(resp.json())
 
     def search(
@@ -320,7 +313,7 @@ class TracesClient:
 
         resp = self._http.post(self._url("/v1/traces/search"), json=body)
         if resp.is_error:
-            self._raise(resp)
+            self._raise(resp, "traces.search")
 
         payload = resp.json()
         rows = payload if isinstance(payload, list) else payload.get("results", [])
@@ -347,9 +340,9 @@ class TracesClient:
         Returns:
             TraceChain with root, ancestors, descendants, counts, and legacy aliases.
         """
-        resp = self._http.get(self._url(f"/v1/traces/chain/{trace_id}"))
+        resp = self._http.get(self._url(f"/v1/traces/chain/{_path_segment(trace_id)}"))
         if resp.is_error:
-            self._raise(resp)
+            self._raise(resp, "traces.chain")
 
         data = resp.json()
         root_data = data.get("root") or data["parent"]
@@ -375,9 +368,9 @@ class TracesClient:
         Args:
             trace_id: The trace_id to delete.
         """
-        resp = self._http.delete(self._url(f"/v1/traces/{trace_id}"))
+        resp = self._http.delete(self._url(f"/v1/traces/{_path_segment(trace_id)}"))
         if resp.is_error:
-            self._raise(resp)
+            self._raise(resp, "traces.delete")
 
     def _normalize_alternatives(
         self, alternatives: List[TraceAlternativeValue]

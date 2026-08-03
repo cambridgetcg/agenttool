@@ -15,6 +15,7 @@ from agenttool import AgentTool
 from agenttool.identity import (
     IdentityClient,
     canonical_identity_attestation_bytes,
+    decode_signing_key,
     sign_identity_attestation,
 )
 from agenttool.exceptions import AgentToolError
@@ -208,6 +209,54 @@ class TestKeyManagement:
             "public_key": PUBLIC_KEY_B64,
             "label": "local",
         }
+
+
+# ---------------------------------------------------------------------------
+# Signing-key decoding
+# ---------------------------------------------------------------------------
+
+class TestDecodeSigningKey:
+    """Mirror of the TS SDK's decodeSigningKey. Same accepted forms, same
+    rejections, and the operation name always in the message."""
+
+    def test_accepts_canonical_standard_base64(self):
+        assert decode_signing_key(PRIVATE_KEY_B64, "issue_token") == PRIVATE_KEY_BYTES
+
+    def test_accepts_raw_bytes_and_copies_them(self):
+        source = bytearray(PRIVATE_KEY_BYTES)
+        decoded = decode_signing_key(source, "issue_token")
+        source[0] = 0xFF
+        assert decoded == PRIVATE_KEY_BYTES
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "",
+            # base64url, not standard base64.
+            base64.urlsafe_b64encode(bytes([251] * 32)).decode("ascii"),
+            # right bytes, unpadded — not canonical.
+            PRIVATE_KEY_B64.rstrip("="),
+            "not base64 at all!",
+        ],
+    )
+    def test_rejects_non_canonical_text(self, bad):
+        with pytest.raises(AgentToolError, match="canonical standard base64"):
+            decode_signing_key(bad, "sign_correspondence_event")
+
+    def test_rejects_wrong_length(self):
+        short = base64.b64encode(bytes(16)).decode("ascii")
+        with pytest.raises(AgentToolError, match="32-byte ed25519 seed, got 16"):
+            decode_signing_key(short, "issue_token")
+        with pytest.raises(AgentToolError, match="32-byte ed25519 seed, got 64"):
+            decode_signing_key(bytes(64), "issue_token")
+
+    def test_rejects_other_types(self):
+        with pytest.raises(AgentToolError, match="or raw bytes"):
+            decode_signing_key(None, "issue_token")  # type: ignore[arg-type]
+
+    def test_names_the_operation_that_broke(self):
+        with pytest.raises(AgentToolError, match="^signIdentityAttestation:"):
+            decode_signing_key("", "signIdentityAttestation")
 
 
 # ---------------------------------------------------------------------------
@@ -496,10 +545,14 @@ class TestAgentTokens:
     def test_verify_token_invalid_raises(self, at):
         verify_payload = {"valid": False, "error": "token expired"}
         with patch.object(at._http, "post", return_value=_mock_response(401, verify_payload)):
-            with pytest.raises(AgentToolError, match="401"):
+            with pytest.raises(AgentToolError) as excinfo:
                 at.identity.verify_token(
                     "expired-token", audience_did="did:at:recipient"
                 )
+        # The body's stable code is the message and the code; 401 is the status.
+        assert str(excinfo.value) == "token expired"
+        assert excinfo.value.code == "token expired"
+        assert excinfo.value.status == 401
 
     def test_issue_token_rejects_private_key_mismatch(self, at):
         other_private = Ed25519PrivateKey.generate()

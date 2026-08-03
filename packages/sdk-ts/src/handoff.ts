@@ -6,7 +6,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
 
 export type HandoffStatus = "active" | "blocked" | "complete";
 export type HandoffState = "absent" | "current" | "stale";
@@ -284,19 +284,8 @@ export class HandoffClient {
       signal: AbortSignal.timeout(this.http.timeout),
     });
     if (!resp.ok) {
-      let responseBody: unknown = null;
-      try {
-        responseBody = await resp.json();
-      } catch {
-        // The shared error parser keeps the fallback when a proxy returns a
-        // non-JSON response.
-      }
-      throw AgentToolError.fromResponseBody(
-        responseBody,
-        resp.status,
-        `handoff ${method.toLowerCase()} failed: ${resp.status}`,
-        resp.headers,
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `handoff ${method.toLowerCase()}`);
     }
     return resp.json();
   }

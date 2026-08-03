@@ -42,6 +42,11 @@ class Memory:
     key: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     importance: float = 0.5
+    #: "episodic" · "foundational" · "constitutive". The asymmetry clause
+    #: lives here — dropping it hides a witness-sealed root from its own agent.
+    tier: Optional[str] = None
+    #: Relevance from a search response; absent on a plain store/get.
+    score: Optional[float] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -55,6 +60,8 @@ class Memory:
             key=data.get("key"),
             metadata=data.get("metadata", {}),
             importance=data.get("importance", 0.5),
+            tier=data.get("tier"),
+            score=data.get("score"),
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at"),
         )

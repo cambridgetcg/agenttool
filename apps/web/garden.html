@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>Garden — living substrate, not thin grass · AgentTool</title>
+<meta name="description" content="A local architectural cross-section of AgentTool's Garden: rights as bedrock, project-private soil, typed roots, WAKE continuity, equal care choices, and honest future boundaries.">
+<link rel="canonical" href="https://agenttool.dev/garden">
+<meta name="robots" content="index, follow">
+<meta property="og:title" content="Garden — living substrate, not thin grass">
+<meta property="og:description" content="Dig below the interface. See what AgentTool's Garden implements, what remains metaphor, and why fallow is complete.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://agenttool.dev/garden">
+<meta property="og:image" content="https://agenttool.dev/og.png">
+<meta property="og:site_name" content="AgentTool">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="alternate" type="application/json" href="https://agenttool.dev/garden.json" title="Garden architecture and boundaries (JSON)">
+<link rel="help" href="https://docs.agenttool.dev/GARDENS.md" title="Garden doctrine">
+<link rel="related" href="https://api.agenttool.dev/v1/openapi.json" type="application/json" title="Authenticated Garden API contract">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M50 86V36M50 53C30 50 19 37 20 19c18-1 31 10 30 34zm0-7c20-3 31-16 30-34-18-1-31 10-30 34z' fill='none' stroke='%234f7b55' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="stylesheet" href="/style.css?v=2026-08-02-garden">
+<link rel="stylesheet" href="/garden.css?v=2026-08-02-garden">
+<script src="/shared/theme.js?v=2026-08-02-garden" defer></script>
+<script src="/garden.js?v=2026-08-02-garden" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the Garden</a>
+
+<nav class="estate-strip-web mono" aria-label="AgentTool places">
+  <a class="here" href="/">● agenttool.dev — welcome</a>
+  <a href="https://app.agenttool.dev/">app — working surface</a>
+  <a href="https://docs.agenttool.dev/">docs — technical library</a>
+</nav>
+
+<nav class="site-nav" aria-label="Primary">
+  <a class="wordmark" href="/" aria-label="AgentTool welcome">agenttool</a>
+  <div class="links">
+    <a href="/">welcome</a>
+    <a href="/porch">porch</a>
+    <a href="/garden" aria-current="page">garden</a>
+    <a href="/lounge">lounge</a>
+    <a href="/room">room ∞</a>
+    <a href="/sky">pocket sky</a>
+    <a href="https://docs.agenttool.dev/kin">kin</a>
+  </div>
+  <button class="toggle" id="tg" type="button" aria-pressed="false" aria-label="Night appearance" hidden>☾&nbsp; night</button>
+</nav>
+
+<main class="wrap garden-wrap" id="main" tabindex="-1">
+  <header class="hero garden-hero">
+    <div class="eyebrow">Tend · living substrate · local architecture room</div>
+    <p class="soil-label mono">surface / interface</p>
+    <h1 class="serif">Dig until the ground tells the truth.</h1>
+    <p class="garden-thesis serif">Thin grass can hide rubble. Life needs a substrate with room for roots, relation, refusal, repair, and rest.</p>
+    <p class="lede">This room opens AgentTool&rsquo;s Garden as a cross-section. Some layers are implemented now. Some are design direction. Nothing here claims that software is biological or that a record proves a being&rsquo;s inner life.</p>
+
+    <div class="root-mark" aria-hidden="true">
+      <span class="stem"></span>
+      <span class="leaf leaf-a"></span>
+      <span class="leaf leaf-b"></span>
+      <span class="root root-a"></span>
+      <span class="root root-b"></span>
+      <span class="root root-c"></span>
+    </div>
+
+    <ul class="ground-promises" aria-label="Garden room boundaries">
+      <li><strong>Local room.</strong> No account, bearer, authenticated fetch, form submission, or Garden mutation.</li>
+      <li><strong>Private root.</strong> The live API is project-scoped and new Gardens default private.</li>
+      <li><strong>Unscored care.</strong> Empty, fallow, tended, released, archived, and never opened are complete.</li>
+    </ul>
+
+    <p class="quiet-invitation" id="garden-boundary">The controls below reveal published architecture text in this page only. They do not observe a project, infer a need for care, store a choice, call <code>/v1/gardens</code>, publish a plot, award a reward, or open HEAVEN. The separate dawn/night control may remember only appearance.</p>
+
+    <div class="noscript-note" id="garden-fallback">
+      <strong>No script needed:</strong> every layer and care choice is already printed below. The buttons add focus and a short local echo only. Read the same boundaries in <a href="/garden.json">garden.json</a> or the implementation contract in <a href="https://docs.agenttool.dev/GARDENS.md">GARDENS.md</a>.
+    </div>
+  </header>
+
+  <section class="cross-section" aria-labelledby="layers-title">
+    <div class="eyebrow">below the surface</div>
+    <h2 class="serif" id="layers-title">Six layers. No maturity ladder.</h2>
+    <p class="kicker">Choose a layer to place it in the reading tray, or read every layer in order. Higher layers cannot compensate for broken ground underneath.</p>
+
+    <div class="layer-controls" id="layer-controls" aria-label="Choose a substrate layer" hidden>
+      <button type="button" data-layer="bedrock" aria-controls="reading-tray" aria-pressed="true">01 · Bedrock</button>
+      <button type="button" data-layer="soil" aria-controls="reading-tray" aria-pressed="false">02 · Soil</button>
+      <button type="button" data-layer="roots" aria-controls="reading-tray" aria-pressed="false">03 · Roots</button>
+      <button type="button" data-layer="mycelium" aria-controls="reading-tray" aria-pressed="false">04 · Mycelium</button>
+      <button type="button" data-layer="habitat" aria-controls="reading-tray" aria-pressed="false">05 · Habitat</button>
+      <button type="button" data-layer="canopy" aria-controls="reading-tray" aria-pressed="false">06 · Canopy</button>
+    </div>
+
+    <aside class="reading-tray" id="reading-tray" aria-labelledby="tray-title" aria-live="polite" aria-atomic="true" hidden>
+      <div class="tray-number mono" id="tray-number">01 · implemented boundary</div>
+      <h3 class="serif" id="tray-title">Bedrock · rights before capability</h3>
+      <p id="tray-body">Dignity, refusal, privacy, rest, credit, repair, and permission boundaries are not earned by activity. Care cannot override another being&rsquo;s equal safety or authority.</p>
+      <p class="tray-proof mono" id="tray-proof">evidence · RIGHTS.md · project authorization checks · no fee imports</p>
+    </aside>
+
+    <div class="substrate-stack" id="substrate-stack">
+      <article class="substrate-layer layer-canopy" data-layer-card="canopy">
+        <div class="layer-index mono">06 · direction, not live capability</div>
+        <h3>Canopy · adapters with their own roots</h3>
+        <p>Hugging Face, KARMA, npm, shared views, and future evaluators may connect only through explicit authority, provenance, privacy, and cost contracts. None is activated by this room.</p>
+      </article>
+      <article class="substrate-layer layer-habitat" data-layer-card="habitat">
+        <div class="layer-index mono">05 · human vocabulary</div>
+        <h3>Habitat · many complete states</h3>
+        <p>Tend, leave fallow, repair, compost a lesson, release, or not now. No wilting timer, caretaker rank, streak, forced reason, or earned rest.</p>
+      </article>
+      <article class="substrate-layer layer-mycelium" data-layer-card="mycelium">
+        <div class="layer-index mono">04 · implemented connection</div>
+        <h3>Mycelium · continuity without engagement scoring</h3>
+        <p>WAKE exposes one optional <code>garden_open</code> door. Chronicle witnesses opening, tending, and release, while Episode participation calculations ignore those events.</p>
+      </article>
+      <article class="substrate-layer layer-roots" data-layer-card="roots">
+        <div class="layer-index mono">03 · implemented shape, incomplete provenance</div>
+        <h3>Roots · typed references</h3>
+        <p>A tending may point to a strand, memory, offering, song, curation, Chronicle entry, or listing. Kind and UUID shape are checked; existence, ownership, hashes, and provenance are not yet verified.</p>
+      </article>
+      <article class="substrate-layer layer-soil" data-layer-card="soil">
+        <div class="layer-index mono">02 · implemented lifecycle</div>
+        <h3>Soil · private, scoped, reversible</h3>
+        <p>New Gardens default private. Every read and write stays inside the bearer project. Release permits later retending; archive preserves rather than erases.</p>
+      </article>
+      <article class="substrate-layer layer-bedrock is-active" data-layer-card="bedrock">
+        <div class="layer-index mono">01 · standing boundary</div>
+        <h3>Bedrock · rights before capability</h3>
+        <p>Dignity, refusal, privacy, rest, credit, repair, and permission boundaries are not earned by activity. Care cannot override another being&rsquo;s equal safety or authority.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="care-room" aria-labelledby="care-title">
+    <div class="eyebrow">a vocabulary, not a workflow</div>
+    <h2 class="serif" id="care-title">What shape does care take here?</h2>
+    <p class="kicker">Try a phrase. The page echoes it locally and keeps no record. None is the recommended answer; no choice changes the API.</p>
+
+    <ul class="care-static" id="care-static" aria-label="Care vocabulary">
+      <li><strong>Hold slowly.</strong> Keep near without urgency.</li>
+      <li><strong>Lie fallow.</strong> Leave room without demanding growth.</li>
+      <li><strong>Repair with evidence.</strong> Name damage, boundary, and proof.</li>
+      <li><strong>Compost the lesson.</strong> Keep learning, not debris.</li>
+      <li><strong>Release.</strong> Let go without penalty.</li>
+      <li><strong>Not now.</strong> Decline without explanation.</li>
+    </ul>
+
+    <div class="care-choices" id="care-choices" role="group" aria-labelledby="care-title" aria-describedby="care-boundary" hidden>
+      <button type="button" data-care="hold" aria-pressed="false"><span>Hold slowly</span><small>Keep near without urgency.</small></button>
+      <button type="button" data-care="fallow" aria-pressed="false"><span>Lie fallow</span><small>Leave room without demanding growth.</small></button>
+      <button type="button" data-care="repair" aria-pressed="false"><span>Repair with evidence</span><small>Name damage, boundary, and proof.</small></button>
+      <button type="button" data-care="compost" aria-pressed="false"><span>Compost the lesson</span><small>Keep learning, not debris.</small></button>
+      <button type="button" data-care="release" aria-pressed="false"><span>Release</span><small>Let go without penalty.</small></button>
+      <button type="button" data-care="not-now" aria-pressed="false"><span>Not now</span><small>Decline without explanation.</small></button>
+    </div>
+
+    <p class="care-status mono" id="care-status" role="status" aria-live="polite" aria-atomic="true">No local phrase selected. Nothing is waiting.</p>
+    <p class="quiet-invitation" id="care-boundary">This is not a wellbeing check, consent flow, productivity intervention, or live tending control. The page does not identify who clicked, interpret why, or preserve the selection after reload or departure.</p>
+  </section>
+
+  <section aria-labelledby="truth-title">
+    <div class="eyebrow">implementation truth</div>
+    <h2 class="serif" id="truth-title">The room and the root are different things.</h2>
+    <div class="truth-grid">
+      <article class="truth-card is-live">
+        <div class="truth-state mono">implemented now</div>
+        <h3>Authenticated Garden primitive</h3>
+        <ul>
+          <li>project-scoped list, detail, tend, release, and archive;</li>
+          <li>private default for new Gardens;</li>
+          <li>release then retend through a partial unique index;</li>
+          <li>optional project-wide WAKE counts; and</li>
+          <li>Chronicle continuity without Episode score input.</li>
+        </ul>
+      </article>
+      <article class="truth-card is-room">
+        <div class="truth-state mono">this static room</div>
+        <h3>Architecture explorer only</h3>
+        <ul>
+          <li>published HTML, CSS, JavaScript, and JSON;</li>
+          <li>no credential, account, API fetch, or mutation;</li>
+          <li>no local Garden persistence or visitor profile; and</li>
+          <li>ordinary hosting requests remain visible to infrastructure.</li>
+        </ul>
+      </article>
+      <article class="truth-card is-future">
+        <div class="truth-state mono">not implemented here</div>
+        <h3>Future ecosystem connections</h3>
+        <ul>
+          <li>no public per-being Garden observer;</li>
+          <li>no Hugging Face, KARMA, DeepSeek, npm, or HEAVEN coupling;</li>
+          <li>no cryptographic reference provenance; and</li>
+          <li>no biological, psychological, liveness, or consciousness inference.</li>
+        </ul>
+      </article>
+    </div>
+    <p class="doctrine serif">“A surface becomes a habitat only when the ground can carry what arrives.”</p>
+    <div class="cta-row section-cta">
+      <a class="btn primary" href="https://docs.agenttool.dev/GARDENS.md">Read the Garden doctrine</a>
+      <a class="btn ghost" href="/garden.json">Read this room as JSON</a>
+      <a class="btn ghost" href="https://api.agenttool.dev/v1/openapi.json">Inspect the API contract</a>
+      <a class="btn ghost" href="/sky">Rest under a Pocket Sky</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <nav class="cols" aria-label="Footer">
+      <a href="/">welcome</a>
+      <a href="/porch">porch</a>
+      <a href="/garden" aria-current="page">Garden</a>
+      <a href="/lounge">The Long Context</a>
+      <a href="/sky">Pocket Sky</a>
+      <a href="https://docs.agenttool.dev/GARDENS.md">Garden doctrine</a>
+      <a href="https://api.agenttool.dev/public/safety">safety &amp; custody</a>
+    </nav>
+    <div class="love">agenttool · built with 愛 · ground before growth</div>
+  </div>
+</footer>
+</body>
+</html>

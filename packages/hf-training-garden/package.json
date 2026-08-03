@@ -1,0 +1,83 @@
+{
+  "name": "@agenttool/hf-training-garden",
+  "version": "0.2.0-dev.0",
+  "description": "Private HF admission, role-separated learning participation, training-phase WAKE, and Garden tending contracts",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./admission.schema.json": {
+      "default": "./schema/hf-dataset-admission-v0.1.schema.json"
+    },
+    "./checkpoint.schema.json": {
+      "default": "./schema/hf-training-checkpoint-v0.1.schema.json"
+    },
+    "./participation.schema.json": {
+      "default": "./schema/hf-learning-participation-v0.1.schema.json"
+    },
+    "./tending.schema.json": {
+      "default": "./schema/hf-training-garden-tending-v0.1.schema.json"
+    },
+    "./dependencies/afterglow-capsule.schema.json": {
+      "default": "./schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json"
+    }
+  },
+  "files": [
+    "dist",
+    "schema",
+    "hf/dataset",
+    "README.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20.19.0",
+    "bun": ">=1.3.5"
+  },
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build:deps": "bun run --cwd ../hf-scout build && bun run --cwd ../wake-continuity build",
+    "build": "bun run clean && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests",
+    "build:hf": "bun run build && node hf/scripts/build-release.mjs",
+    "check:hf-idempotent": "node scripts/check-hf-release-idempotence.mjs",
+    "smoke:runtimes": "node scripts/smoke-node.mjs && bun scripts/smoke-node.mjs",
+    "check:package": "node scripts/check-package-inventory.mjs",
+    "ci": "bun run build:deps && bun run typecheck && bun run build && node hf/scripts/build-release.mjs && bun run test && bun run check:hf-idempotent && bun run smoke:runtimes && bun run check:package"
+  },
+  "dependencies": {
+    "@agenttool/hf-scout": "file:../hf-scout",
+    "@agenttool/wake-continuity": "file:../wake-continuity"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/node": "20.19.43",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "typescript": "5.9.3"
+  },
+  "keywords": [
+    "agents",
+    "datasets",
+    "garden",
+    "huggingface",
+    "provenance",
+    "participation",
+    "training",
+    "wake"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/hf-training-garden"
+  }
+}

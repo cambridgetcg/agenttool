@@ -1,154 +1,148 @@
-/** Walls — canon ↔ code annotation bijection, pinned.
+/** Walls — canon ↔ code annotation bijection, ratcheted.
  *
  *  Doctrine: docs/agenttool.jsonld (the canon), docs/SELF-IDENTIFICATION.md
  *  (every existence identifies itself), docs/PATTERN-MACHINE-READABLE-PARITY.md.
  *
  *  > Every shipped Wall in canon must have at least one canonical
- *  > defender file in `api/src/` (or `bin/`) annotated with
+ *  > defender file under one of `SCAN_ROOTS` annotated with
  *  > `@enforces urn:agenttool:wall/<slug>` in its JSDoc header. The
  *  > annotation is the structural connection that lets an intelligence
  *  > reading the canon ask "where in code is this defended?" and grep
  *  > the codebase for a concrete answer.
  *
- *  The link is one-way (like the platform-self bijection): every shipped
- *  Wall needs a code annotation; forward-looking walls (in canon but
- *  not yet enforced in code) are allowed to lack annotations until
- *  their implementation lands. Forward-looking walls are reported on
- *  every run via the platform-self bijection test.
+ *  The link is one-way: every shipped Wall needs a code annotation;
+ *  forward-looking walls (in canon but not in `PLATFORM_SELF.wall_urns`)
+ *  are allowed to lack annotations until their implementation lands.
  *
- *  Why this matters: the canon describes commitments; the code enforces
- *  them; the annotation is the bidirectional pointer between the two.
- *  Without it, an intelligence reading the canon has to guess which
- *  files defend which walls; with it, the connection is grepable. */
+ *  ── Why this file was rewritten, 2026-07-24 ──────────────────────────
+ *
+ *  The previous version asserted inside a `for` loop, so the first
+ *  mismatch threw and the rest were never reached. The gap it was
+ *  reporting as "1 dangling URN" was in fact 63 across walls and
+ *  commitments — and because the console only ever showed one, the whole
+ *  test was carried in `api/tests/.failure-baseline.txt` as known-red
+ *  rather than finished. A detector that names one problem at a time
+ *  cannot be used to close a queue of 63; it just looks like a typo
+ *  forever.
+ *
+ *  Now: every gap is reported at once, and the accepted set lives in
+ *  `canon-code-gap.manifest.json` as an explicit, dated list. The
+ *  manifest may only SHRINK — a gap missing from it fails, and a gap
+ *  listed in it that has since been fixed ALSO fails, so closing one
+ *  forces the number down and nothing can quietly re-open. The direction
+ *  of the drift is worth naming: nearly every dangling annotation is code
+ *  defending something canon never recorded. The code is ahead.
+ *
+ *  ── Scope widened, 2026-07-26 ────────────────────────────────────────
+ *
+ *  The scanner read `api/src` and `bin` only. `packages/scriptwriter/src`
+ *  carried ten wall URNs and two commitment URNs, none of them in canon,
+ *  and the bijection never saw a single one. The scan roots now include it,
+ *  and `annotation-scan-covers-the-repo.test.ts` fails if an annotated
+ *  source file ever again turns up outside the list. The manifest grew
+ *  63 → 75 in the same round: not new debt, the same debt finally in view.
+ *  Full accounting in docs/DOCTRINE-DRIFT.md §0. */
 
 import { describe, expect, test } from "bun:test";
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import {
+  SCAN_ROOTS,
+  bijectionReport,
+  formatGaps,
+  normalizeUrn,
+} from "../../src/services/canon/annotations";
 import { byType } from "../../src/services/canon/registry";
 import { PLATFORM_SELF } from "../../src/services/wake/platform-self";
 
-const REPO_ROOT = join(__dirname, "..", "..", "..");
-const SCAN_DIRS = [
-  join(REPO_ROOT, "api", "src"),
-  join(REPO_ROOT, "bin"),
-];
+const MANIFEST = JSON.parse(
+  readFileSync(join(__dirname, "canon-code-gap.manifest.json"), "utf8"),
+) as { wall: string[]; commitment: string[] };
 
-/** Walk a directory recursively, returning .ts files only. */
-function walkTs(dir: string): string[] {
-  const out: string[] = [];
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return out;
-  }
-  for (const name of entries) {
-    const full = join(dir, name);
-    let st;
-    try {
-      st = statSync(full);
-    } catch {
-      continue;
-    }
-    if (st.isDirectory()) {
-      // Skip node_modules and similar.
-      if (name === "node_modules" || name === "dist" || name === ".bun") continue;
-      out.push(...walkTs(full));
-    } else if (name.endsWith(".ts") && !name.endsWith(".test.ts")) {
-      out.push(full);
-    }
-  }
-  return out;
-}
+const shippedWallUrns = new Set(PLATFORM_SELF.wall_urns.map(normalizeUrn));
+const report = bijectionReport("wall", shippedWallUrns);
 
-/** Extract every `@enforces urn:agenttool:wall/<slug>` annotation found
- *  in the codebase. Returns a map: wall URN → array of {file, line}. */
-function buildAnnotationIndex(): Map<string, Array<{ file: string; line: number }>> {
-  const index = new Map<string, Array<{ file: string; line: number }>>();
-  const annotationPattern = /@enforces\s+(urn:agenttool:wall\/[a-z][a-z0-9\-]+)/g;
-
-  const allFiles = SCAN_DIRS.flatMap(walkTs);
-  for (const file of allFiles) {
-    const src = readFileSync(file, "utf8");
-    const lines = src.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      const matches = lines[i]!.matchAll(annotationPattern);
-      for (const m of matches) {
-        const urn = m[1]!;
-        const list = index.get(urn) ?? [];
-        list.push({ file, line: i + 1 });
-        index.set(urn, list);
-      }
-    }
-  }
-  return index;
-}
-
-/** Normalize an annotation URN to canon short form (without "urn:" prefix). */
-function normalize(urn: string): string {
-  return urn.startsWith("urn:") ? urn.slice(4) : urn;
-}
+const accepted = new Set(MANIFEST.wall);
+const current = new Set([
+  ...report.dangling.map((u) => `dangling:${u}`),
+  ...report.undefended.map((u) => `undefended:${u}`),
+]);
 
 describe("Walls — canon ↔ code annotation bijection", () => {
-  const annotations = buildAnnotationIndex();
-  const annotatedShortUrns = new Set(
-    [...annotations.keys()].map(normalize),
-  );
-
-  // Which walls are SHIPPED (in PLATFORM_SELF.wall_urns) — those need code
-  // annotations. Forward-looking walls (in canon but not in PLATFORM_SELF)
-  // are excused until their enforcement lands.
-  const shippedWallUrns = new Set(
-    PLATFORM_SELF.wall_urns.map(normalize),
-  );
-  const shippedWalls = byType("Wall").filter((w) => shippedWallUrns.has(w.urn));
-
   test("at least one @enforces annotation exists in the codebase", () => {
     expect(
-      annotations.size > 0,
-      "No `@enforces urn:agenttool:wall/` annotations found in api/src/ or bin/. The canon → code link requires annotations at canonical defending sites.",
+      report.annotations.size > 0,
+      `No \`@enforces urn:agenttool:wall/\` annotations found under any SCAN_ROOTS entry (${SCAN_ROOTS.join(", ")}). The canon → code link requires annotations at canonical defending sites.`,
     ).toBe(true);
   });
 
-  test("every shipped Wall has at least one @enforces annotation in code", () => {
-    for (const wall of shippedWalls) {
-      const list = annotations.get(`urn:${wall.urn}`) ?? annotations.get(wall.urn) ?? [];
-      expect(
-        list.length >= 1,
-        `Wall ${wall.urn} is shipped (in PLATFORM_SELF.wall_urns) but has no \`@enforces ${`urn:${wall.urn}`}\` annotation in api/src/ or bin/. Add the annotation to the canonical defender file's JSDoc header. The canon → code link requires every shipped wall to be grepable from the source side.`,
-      ).toBe(true);
-    }
+  test("no NEW canon↔code gap has appeared", () => {
+    const unaccepted = [...current].filter((g) => !accepted.has(g)).sort();
+    expect(
+      unaccepted,
+      `New wall gap(s) not present in canon-code-gap.manifest.json:\n${unaccepted
+        .map((g) => `  ${g}`)
+        .join(
+          "\n",
+        )}\n\nEither add the Wall to docs/agenttool.jsonld, add the \`@enforces\` annotation to its canonical defender, or — if it is genuinely accepted debt — say so out loud by regenerating the manifest with \`bin/walls.ts --write-manifest\`. Regenerating to make a red build green is the one use this ratchet exists to prevent.`,
+    ).toEqual([]);
   });
 
-  test("every @enforces annotation URN resolves to a Wall in canon (no dangling)", () => {
-    const allWallUrns = new Set(byType("Wall").map((w) => w.urn));
-    for (const annotatedUrn of annotations.keys()) {
-      const short = normalize(annotatedUrn);
-      expect(
-        allWallUrns.has(short),
-        `Code annotation references ${annotatedUrn} but no Wall concept with that URN exists in canon. Either fix the annotation typo or add the Wall to docs/agenttool.jsonld.`,
-      ).toBe(true);
-    }
+  test("the accepted-gap manifest has not gone stale (ratchet only shrinks)", () => {
+    const fixed = [...accepted].filter((g) => !current.has(g)).sort();
+    expect(
+      fixed,
+      `These wall gaps are listed as accepted in canon-code-gap.manifest.json but no longer exist — someone closed them. Good. Now shrink the manifest so the number is honest:\n${fixed
+        .map((g) => `  ${g}`)
+        .join("\n")}\n\nRun \`bin/walls.ts --write-manifest\`.`,
+    ).toEqual([]);
   });
 
-  test("annotation locations are reported for navigation", () => {
-    // This is a reporter — always passes. Publishes the canon → code
-    // index so a maintainer can see at a glance which file defends
-    // which wall. Helps onboard future readers without grep.
+  test("every shipped Wall has at least one @enforces annotation", () => {
+    const missing = report.undefended.filter(
+      (u) => !accepted.has(`undefended:${u}`),
+    );
+    expect(
+      missing,
+      `Shipped wall(s) with no \`@enforces\` annotation under any SCAN_ROOTS entry (${SCAN_ROOTS.join(", ")}). Add the annotation to the canonical defender file's JSDoc — the canon → code link requires every shipped wall to be grepable from the source side:\n${missing
+        .map((u) => `  ${u}`)
+        .join("\n")}`,
+    ).toEqual([]);
+  });
+
+  test("every @enforces annotation URN resolves to a Wall in canon", () => {
+    const dangling = report.dangling.filter((u) => !accepted.has(`dangling:${u}`));
+    expect(
+      dangling,
+      `Code annotation(s) reference a Wall URN with no entry in docs/agenttool.jsonld:\n${dangling
+        .map((u) => {
+          const sites = report.annotations.get(u) ?? [];
+          return `  ${u}\n${sites.map((s) => `      ${s.file}:${s.line}`).join("\n")}`;
+        })
+        .join("\n")}`,
+    ).toEqual([]);
+  });
+
+  test("the full canon → code map is reported for navigation", () => {
+    // Reporter — always passes. Publishes the index so a maintainer can
+    // see which file defends which wall without grepping, and prints the
+    // outstanding gap in full rather than one item at a time.
     const lines: string[] = [];
-    lines.push(`[walls-annotation-index] ${annotations.size} wall(s) annotated:`);
+    lines.push(
+      `[walls] ${report.defended.length} shipped wall(s) defended · ${report.undefended.length} undefended · ${report.dangling.length} dangling annotation(s)`,
+    );
     for (const wall of byType("Wall")) {
-      const list = annotations.get(`urn:${wall.urn}`) ?? annotations.get(wall.urn) ?? [];
-      if (list.length === 0) {
-        lines.push(`  ${wall.urn} — (no annotation; forward-looking or unenforced)`);
+      const urn = normalizeUrn(wall.urn);
+      const sites = report.annotations.get(urn) ?? [];
+      if (sites.length === 0) {
+        lines.push(`  ${urn} — (no annotation; forward-looking or unenforced)`);
       } else {
-        for (const loc of list) {
-          const rel = loc.file.replace(REPO_ROOT + "/", "");
-          lines.push(`  ${wall.urn} → ${rel}:${loc.line}`);
-        }
+        for (const s of sites) lines.push(`  ${urn} → ${s.file}:${s.line}`);
       }
     }
+    const gaps = formatGaps(report);
+    if (gaps) lines.push("", "OUTSTANDING (accepted in manifest):", gaps);
     console.log(lines.join("\n"));
     expect(true).toBe(true);
   });

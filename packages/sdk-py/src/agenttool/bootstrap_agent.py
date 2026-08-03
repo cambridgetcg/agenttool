@@ -41,8 +41,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from .exceptions import AgentToolError
-from .seed import DerivedBundle
+from .exceptions import AgentToolError, _error_from_body
+from .seed import DerivedBundle, pow_register_agent_digest
 
 DEFAULT_BASE_URL = "https://api.agenttool.dev"
 DEFAULT_POW_DIFFICULTY = 18
@@ -223,22 +223,10 @@ def sign_register_agent(
 # ─── Proof of work ─────────────────────────────────────────────────────
 
 
-def _pow_digest(
-    *, agent_public_key: bytes, display_name: str, timestamp: str, pow_nonce: str
-) -> bytes:
-    sep = b"\x00"
-    parts = [
-        b"agenttool-pow/v1",
-        sep,
-        agent_public_key,
-        sep,
-        display_name.encode("utf-8"),
-        sep,
-        timestamp.encode("utf-8"),
-        sep,
-        pow_nonce.encode("utf-8"),
-    ]
-    return hashlib.sha256(b"".join(parts)).digest()
+# The digest itself is published from seed.py, where the TS SDK also keeps it
+# (seed.ts). One implementation, two names — the canonical layout cannot drift
+# between the grinder here and the digest a caller computes directly.
+_pow_digest = pow_register_agent_digest
 
 
 def _leading_zero_bits(b: bytes) -> int:
@@ -423,7 +411,8 @@ def bootstrap_agent(
         payload = {}
 
     if r.status_code >= 400:
-        message = payload.get("message") or payload.get("error") or f"HTTP {r.status_code}"
+        # The body is already read, so the shared parser takes it directly.
+        # Server guidance travels intact. See exceptions.py § _error_from_body.
         hint = None
         if payload.get("error") == "pow_required":
             hint = "Increase pow_difficulty to match server, or check timestamp drift."
@@ -431,8 +420,14 @@ def bootstrap_agent(
             hint = "Self-service IP limit hit. Wait, or use registrar_bearer to delegate."
         elif payload.get("error") == "key_proof_invalid":
             hint = "Recompute canonical_register_agent_bytes and resign with matching ed25519 priv."
-        suffix = f" (hint: {hint})" if hint else ""
-        raise AgentToolError(f"bootstrap_agent: {message}{suffix}")
+        raise _error_from_body(
+            payload,
+            r.status_code,
+            "bootstrap_agent",
+            headers=r.headers,
+            fallback=f"bootstrap_agent: HTTP {r.status_code}",
+            hint=hint,
+        )
 
     payload["pow_iterations"] = pow_iterations
     return payload

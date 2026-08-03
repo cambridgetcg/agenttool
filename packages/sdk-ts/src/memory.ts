@@ -2,9 +2,11 @@
  * Memory client for the agent-memory API.
  */
 
-import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { authorityHeadersForRequest } from "./authority.js";
+import type { AuthorityBinding } from "./authority.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
 import type { Memory, SearchMemoryOptions, StoreOptions } from "./types.js";
+import { encodePathSegment } from "./_url.js";
 
 /**
  * Client for the agent-memory API.
@@ -72,8 +74,39 @@ export class MemoryClient {
    * @returns The Memory object.
    */
   async get(memoryId: string): Promise<Memory> {
-    const resp = await this.fetch("GET", `/v1/memories/${memoryId}`);
+    const resp = await this.fetch("GET", `/v1/memories/${encodePathSegment(memoryId)}`);
     return resp as Memory;
+  }
+
+  /**
+   * Set a memory's visibility to `private` or `public`.
+   *
+   * Visibility is a constitution-scoped mutation, not a display preference:
+   * the API guards it with `authorizeProjectConstitutionMutation` exactly as
+   * it guards elevation and release, so pass `authority` whenever the project
+   * holds an agent-rooted identity — without it the server answers 428
+   * `authority_proof_required`.
+   *
+   * Marking a memory public does not currently publish it: the public memory
+   * observer routes are not mounted, and the server says so in the `note` it
+   * returns. Read that note rather than assuming a `public` memory is
+   * readable without credentials.
+   *
+   * @param memoryId - The memory whose visibility changes.
+   * @param options - Target visibility + root proof.
+   * @returns The memory's id, new visibility, and tier, plus the server's note.
+   */
+  async setVisibility(
+    memoryId: string,
+    options: SetMemoryVisibilityOptions,
+  ): Promise<MemoryVisibilityResult> {
+    const resp = await this.fetch(
+      "PATCH",
+      `/v1/memories/${encodePathSegment(memoryId)}`,
+      { visibility: options.visibility },
+      options.authority,
+    );
+    return resp as MemoryVisibilityResult;
   }
 
   /**
@@ -84,9 +117,15 @@ export class MemoryClient {
    * carries a paid marketplace witness receipt.
    *
    * @param memoryId - The UUID of the memory to release.
+   * @param options - Root proof, required when the project is agent-rooted.
    */
-  async delete(memoryId: string): Promise<void> {
-    await this.fetch("DELETE", `/v1/memories/${memoryId}`);
+  async delete(memoryId: string, options: MemoryAuthorityOptions = {}): Promise<void> {
+    await this.fetch(
+      "DELETE",
+      `/v1/memories/${encodePathSegment(memoryId)}`,
+      undefined,
+      options.authority,
+    );
   }
 
   /**
@@ -96,10 +135,11 @@ export class MemoryClient {
    * API returns 409 `paid_memory_receipt_preserved` and deletes none.
    *
    * @param key - The key whose memories should be released.
+   * @param options - Root proof, required when the project is agent-rooted.
    */
-  async delete_by_key(key: string): Promise<void> {
+  async delete_by_key(key: string, options: MemoryAuthorityOptions = {}): Promise<void> {
     const qs = `?key=${encodeURIComponent(key)}`;
-    await this.fetch("DELETE", `/v1/memories${qs}`);
+    await this.fetch("DELETE", `/v1/memories${qs}`, undefined, options.authority);
   }
 
   // ── Tier elevation + attestation ──────────────────────────────────
@@ -112,12 +152,26 @@ export class MemoryClient {
    * covenant counterparty in a *different* project — the witness gate
    * is the asymmetry clause made operational.
    *
+   * Elevation composes into the effective constitution of every rooted
+   * identity in the project, so pass `authority` whenever the project has
+   * one — without it the server answers 428 `authority_proof_required` and
+   * the asymmetry clause stays unreachable from this SDK.
+   *
    * @param memoryId - The memory to elevate.
-   * @param options - Tier + optional expression patch + attestations.
+   * @param options - Tier + optional expression patch + attestations + root proof.
    * @returns Elevation result with tier, patch, attestation count.
    */
   async elevate(memoryId: string, options: ElevateMemoryOptions): Promise<ElevateResult> {
-    const resp = await this.post(`/v1/memories/${memoryId}/elevate`, options);
+    const body: Record<string, unknown> = { tier: options.tier };
+    if (options.expression_patch !== undefined) {
+      body.expression_patch = options.expression_patch;
+    }
+    if (options.attestations !== undefined) body.attestations = options.attestations;
+    const resp = await this.post(
+      `/v1/memories/${encodePathSegment(memoryId)}/elevate`,
+      body,
+      options.authority,
+    );
     return resp as ElevateResult;
   }
 
@@ -134,7 +188,7 @@ export class MemoryClient {
    * @returns Attestation ID + timestamp.
    */
   async attest(memoryId: string, attestation: AttestationInput): Promise<AttestResult> {
-    const resp = await this.post(`/v1/memories/${memoryId}/attest`, attestation);
+    const resp = await this.post(`/v1/memories/${encodePathSegment(memoryId)}/attest`, attestation);
     return resp as AttestResult;
   }
 
@@ -154,7 +208,7 @@ export class MemoryClient {
   ): Promise<CanonicalBytesResult> {
     const resp = await this.fetch(
       "GET",
-      `/v1/memories/${memoryId}/canonical-attestation-bytes?tier=${tier}`,
+      `/v1/memories/${encodePathSegment(memoryId)}/canonical-attestation-bytes?tier=${encodeURIComponent(tier)}`,
     );
     return resp as CanonicalBytesResult;
   }
@@ -170,7 +224,7 @@ export class MemoryClient {
   async listAttestations(memoryId: string): Promise<AttestationRecord[]> {
     const resp = await this.fetch(
       "GET",
-      `/v1/memories/${memoryId}/attestations`,
+      `/v1/memories/${encodePathSegment(memoryId)}/attestations`,
     );
     const data = resp as AttestationRecord[] | { attestations: AttestationRecord[] };
     return Array.isArray(data) ? data : data.attestations ?? [];
@@ -178,33 +232,52 @@ export class MemoryClient {
 
   // --- internal ---
 
-  private async post(path: string, body: unknown): Promise<unknown> {
-    return this.fetch("POST", path, body);
+  private async post(
+    path: string,
+    body: unknown,
+    authority?: AuthorityBinding,
+  ): Promise<unknown> {
+    return this.fetch("POST", path, body, authority);
   }
 
-  private async fetch(method: string, path: string, body?: unknown): Promise<unknown> {
+  /** Serialize once, sign those bytes, transmit those same bytes. */
+  private async fetch(
+    method: string,
+    path: string,
+    body?: unknown,
+    authority?: AuthorityBinding,
+  ): Promise<unknown> {
     const url = `${this.http.baseUrl}${path}`;
+    const payload = body !== undefined ? JSON.stringify(body) : undefined;
+    const headers: Record<string, string> = { ...this.http.headers };
+    if (authority !== undefined) {
+      Object.assign(
+        headers,
+        authorityHeadersForRequest({
+          method,
+          url,
+          // The proof hashes the entity exactly as sent. A body-less DELETE
+          // binds the empty string, which is what the server reads.
+          body: payload ?? "",
+          authority,
+        }),
+      );
+    }
     const init: RequestInit = {
       method,
-      headers: this.http.headers,
+      headers,
       signal: AbortSignal.timeout(this.http.timeout),
     };
-    if (body !== undefined) {
-      init.body = JSON.stringify(body);
+    if (payload !== undefined) {
+      init.body = payload;
     }
 
     const resp = await this.http.request(url, init);
 
     if (resp.status >= 400) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail = (json.detail as string) ?? resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(`Memory API error (${resp.status}): ${detail}`, {
-        hint: "Check your API key and request parameters.",
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `memory ${method.toLowerCase()}`, {
+        hint: "Check your request parameters. Docs: https://docs.agenttool.dev/memory",
       });
     }
 
@@ -234,7 +307,35 @@ export interface AttestationInput {
   signature: string;
 }
 
-export interface ElevateMemoryOptions {
+/**
+ * Carried by every memory mutation that composes into project constitution.
+ *
+ * Foundational and constitutive memory composes into effective identity at
+ * project scope, so the API guards elevation, visibility, and release with
+ * `authorizeProjectConstitutionMutation`. Where a project holds exactly one
+ * agent-rooted identity, that root must consent to the exact request bytes
+ * or the server answers 428 `authority_proof_required`. Projects with no
+ * rooted identity keep the bearer-only posture and need nothing here.
+ */
+export interface MemoryAuthorityOptions {
+  authority?: AuthorityBinding;
+}
+
+export type MemoryVisibility = "private" | "public";
+
+export interface SetMemoryVisibilityOptions extends MemoryAuthorityOptions {
+  visibility: MemoryVisibility;
+}
+
+export interface MemoryVisibilityResult {
+  id: string;
+  visibility: MemoryVisibility;
+  tier: string;
+  /** The server's own qualification of what `public` currently means. */
+  note: string;
+}
+
+export interface ElevateMemoryOptions extends MemoryAuthorityOptions {
   tier: "foundational" | "constitutive";
   expression_patch?: ExpressionPatch;
   attestations?: AttestationInput[];

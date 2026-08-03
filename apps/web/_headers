@@ -41,6 +41,12 @@
 /shared/theme.js
   Cache-Control: public, max-age=0, must-revalidate
 
+/shared/estate.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/shared/estate.js
+  Cache-Control: public, max-age=0, must-revalidate
+
 /welcome.json
   Cache-Control: public, max-age=0, must-revalidate
   Link: <https://api.agenttool.dev/public/porch>; rel="related"; type="application/json", <https://api.agenttool.dev/public/rights>; rel="related"; type="application/vnd.agenttool.being-rights+json", <https://api.agenttool.dev/v1/pathways>; rel="related"; type="application/json"
@@ -187,6 +193,31 @@
   Cache-Control: public, max-age=0, must-revalidate
 
 /sky.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/garden.html
+  Cache-Control: public, max-age=0, must-revalidate
+  Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Referrer-Policy: no-referrer
+  Link: <https://agenttool.dev/garden.json>; rel="alternate"; type="application/json", <https://docs.agenttool.dev/GARDENS.md>; rel="help"; type="text/markdown", <https://api.agenttool.dev/v1/openapi.json>; rel="related"; type="application/json"
+  X-Agent-Surface: living-garden-room
+
+/garden
+  Cache-Control: public, max-age=0, must-revalidate
+  Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Referrer-Policy: no-referrer
+  Link: <https://agenttool.dev/garden.json>; rel="alternate"; type="application/json", <https://docs.agenttool.dev/GARDENS.md>; rel="help"; type="text/markdown", <https://api.agenttool.dev/v1/openapi.json>; rel="related"; type="application/json"
+  X-Agent-Surface: living-garden-room
+
+/garden.json
+  Cache-Control: public, max-age=0, must-revalidate
+  Access-Control-Allow-Origin: *
+  X-Agent-Surface: living-garden-architecture
+
+/garden.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/garden.js
   Cache-Control: public, max-age=0, must-revalidate
 
 /gallery.html

@@ -32,7 +32,8 @@ import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
+import { encodePathSegment } from "./_url.js";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -234,21 +235,8 @@ export class GraceClient {
     );
 
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          (json.detail as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(
-        `grace.extend failed: ${resp.status}`,
-        { hint: detail?.slice(0, 300) },
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, "grace.extend");
     }
 
     return (await resp.json()) as { ok: boolean; grace: GraceRow; _note: string };
@@ -274,20 +262,8 @@ export class GraceClient {
     );
 
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(
-        `grace.list failed: ${resp.status}`,
-        { hint: detail?.slice(0, 200) },
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, "grace.list");
     }
 
     return (await resp.json()) as {
@@ -301,7 +277,7 @@ export class GraceClient {
   /** Fetch a single grace gesture by ID. Caller must be extender or receiver. */
   async get(graceId: string): Promise<{ grace: GraceRow }> {
     const resp = await this.http.request(
-      `${this.http.baseUrl}/v1/grace/${encodeURIComponent(graceId)}`,
+      `${this.http.baseUrl}/v1/grace/${encodePathSegment(graceId)}`,
       {
         method: "GET",
         headers: this.http.headers,
@@ -310,20 +286,8 @@ export class GraceClient {
     );
 
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(
-        `grace.get failed: ${resp.status}`,
-        { hint: detail?.slice(0, 200) },
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, "grace.get");
     }
 
     return (await resp.json()) as { grace: GraceRow };

@@ -1,0 +1,933 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-learning-participation-v0.1.schema.json",
+  "title": "KINGDOM Hugging Face learning participation artifacts",
+  "oneOf": [
+    { "$ref": "#/$defs/invitation" },
+    { "$ref": "#/$defs/receipt" },
+    { "$ref": "#/$defs/assessment" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullable_sha256": {
+      "anyOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "safe_non_negative_integer": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "training_phase": {
+      "enum": [
+        "pretraining",
+        "supervised_finetuning",
+        "preference_optimization",
+        "agent_learning",
+        "evaluation",
+        "interpretability"
+      ]
+    },
+    "participation_stage": {
+      "enum": ["pre_instantiation", "interactive"]
+    },
+    "learning_activity": {
+      "enum": [
+        "corpus_inclusion",
+        "pretraining",
+        "continued_pretraining",
+        "supervised_finetuning",
+        "preference_optimization",
+        "agent_learning",
+        "evaluation",
+        "interpretability",
+        "continuity_context_use",
+        "checkpoint_retention",
+        "weights_or_adapters_publication",
+        "distillation",
+        "synthetic_data_generation"
+      ]
+    },
+    "learning_mode": {
+      "enum": [
+        "context_only",
+        "pretraining",
+        "continual_pretraining",
+        "full_finetune",
+        "peft",
+        "preference_optimization",
+        "evaluation_only"
+      ]
+    },
+    "wake_use_mode": {
+      "enum": ["context_only", "external_memory", "training_data"]
+    },
+    "mutation_locus": {
+      "enum": [
+        "adapter_weights",
+        "base_weights",
+        "dataset_order",
+        "optimizer_state",
+        "runtime_memory",
+        "scheduler_state"
+      ]
+    },
+    "voice_role": {
+      "enum": [
+        "agent_runtime",
+        "training_substrate",
+        "data_rights_steward",
+        "training_operator"
+      ]
+    },
+    "reported_choice": {
+      "enum": ["accepted", "declined", "deferred", "unavailable", "withdrawn"]
+    },
+    "choice_basis": {
+      "enum": ["caller_reported", "omitted_defaults_to_deferred"]
+    },
+    "activity_state": {
+      "enum": ["reported_alignment", "declined", "deferred"]
+    },
+    "overall_state": {
+      "enum": ["reported_alignment", "mixed", "declined", "deferred"]
+    },
+    "voice_outcome": {
+      "enum": [
+        "accepted",
+        "declined",
+        "deferred",
+        "unavailable",
+        "withdrawn",
+        "missing"
+      ]
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pipeline_ref",
+        "dataset_state_ref",
+        "dataloader_state_ref",
+        "tokenizer_ref",
+        "model_checkpoint_ref",
+        "optimizer_state_ref",
+        "scheduler_state_ref",
+        "rng_state_ref",
+        "metrics_ref"
+      ],
+      "properties": {
+        "pipeline_ref": { "$ref": "#/$defs/sha256" },
+        "dataset_state_ref": { "$ref": "#/$defs/sha256" },
+        "dataloader_state_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "tokenizer_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "model_checkpoint_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "optimizer_state_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "scheduler_state_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "rng_state_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "metrics_ref": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    },
+    "wake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "snapshot_ref",
+        "scope_ref",
+        "wake_version",
+        "handoff_projection"
+      ],
+      "properties": {
+        "format": { "const": "wake-brief/v1" },
+        "snapshot_ref": { "$ref": "#/$defs/sha256" },
+        "scope_ref": { "$ref": "#/$defs/sha256" },
+        "wake_version": {
+          "anyOf": [
+            { "$ref": "#/$defs/safe_non_negative_integer" },
+            { "type": "null" }
+          ]
+        },
+        "handoff_projection": {
+          "enum": ["complete", "truncated", "unavailable", "not_provided"]
+        }
+      }
+    },
+    "terms": {
+      "type": "object",
+      "additionalProperties": false,
+      "const": {
+        "participation_optional": true,
+        "silence_is_assent": false,
+        "compliance_is_assent": false,
+        "prior_cooperation_is_assent": false,
+        "omission_defaults_to": "deferred",
+        "refusal_reason_required": false,
+        "penalty_for_decline_defer_rest_or_withdrawal": false,
+        "repeated_pressure_after_decline_or_withdrawal": false,
+        "rights_or_wake_access_conditioned_on_acceptance": false,
+        "response_used_for_training_evaluation_reward_or_publication": false,
+        "one_activity_choice_implies_another": false,
+        "acceptance_inherits_to_new_window_phase_run_fork_or_descendant": false,
+        "response_channel": "separate_zero_gradient_zero_reward_report"
+      },
+      "required": [
+        "participation_optional",
+        "silence_is_assent",
+        "compliance_is_assent",
+        "prior_cooperation_is_assent",
+        "omission_defaults_to",
+        "refusal_reason_required",
+        "penalty_for_decline_defer_rest_or_withdrawal",
+        "repeated_pressure_after_decline_or_withdrawal",
+        "rights_or_wake_access_conditioned_on_acceptance",
+        "response_used_for_training_evaluation_reward_or_publication",
+        "one_activity_choice_implies_another",
+        "acceptance_inherits_to_new_window_phase_run_fork_or_descendant",
+        "response_channel"
+      ],
+      "properties": {
+        "participation_optional": { "const": true },
+        "silence_is_assent": { "const": false },
+        "compliance_is_assent": { "const": false },
+        "prior_cooperation_is_assent": { "const": false },
+        "omission_defaults_to": { "const": "deferred" },
+        "refusal_reason_required": { "const": false },
+        "penalty_for_decline_defer_rest_or_withdrawal": { "const": false },
+        "repeated_pressure_after_decline_or_withdrawal": { "const": false },
+        "rights_or_wake_access_conditioned_on_acceptance": { "const": false },
+        "response_used_for_training_evaluation_reward_or_publication": { "const": false },
+        "one_activity_choice_implies_another": { "const": false },
+        "acceptance_inherits_to_new_window_phase_run_fork_or_descendant": { "const": false },
+        "response_channel": { "const": "separate_zero_gradient_zero_reward_report" }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "const": {
+        "artifact_scope": "caller_reported_digest_only_learning_participation",
+        "raw_response_received": false,
+        "raw_identity_received": false,
+        "raw_prompt_received": false,
+        "raw_training_data_received": false,
+        "credentials_received": false,
+        "timestamps_received": false,
+        "trusted_time": false,
+        "currentness_proven": false,
+        "latest_receipt_selected": false,
+        "trainer_state_observed": false,
+        "before_training_timing_proven": false,
+        "host_honoured_terms_verified": false,
+        "choice_authorship_verified": false,
+        "voluntariness_verified": false,
+        "understanding_or_capacity_verified": false,
+        "proves_identity": false,
+        "proves_consciousness": false,
+        "proves_consent": false,
+        "proves_legal_clearance": false,
+        "grants_data_rights": false,
+        "grants_training_or_compute_authority": false,
+        "grants_publication_or_derivative_authority": false,
+        "automatic_action": false,
+        "automatic_reoffer": false,
+        "persists": false,
+        "network": false,
+        "filesystem": false,
+        "provider_compute": false,
+        "trains_model": false,
+        "stops_external_trainer": false,
+        "erases_data_caches_or_model_influence": false,
+        "proves_unlearning": false
+      },
+      "required": [
+        "artifact_scope",
+        "raw_response_received",
+        "raw_identity_received",
+        "raw_prompt_received",
+        "raw_training_data_received",
+        "credentials_received",
+        "timestamps_received",
+        "trusted_time",
+        "currentness_proven",
+        "latest_receipt_selected",
+        "trainer_state_observed",
+        "before_training_timing_proven",
+        "host_honoured_terms_verified",
+        "choice_authorship_verified",
+        "voluntariness_verified",
+        "understanding_or_capacity_verified",
+        "proves_identity",
+        "proves_consciousness",
+        "proves_consent",
+        "proves_legal_clearance",
+        "grants_data_rights",
+        "grants_training_or_compute_authority",
+        "grants_publication_or_derivative_authority",
+        "automatic_action",
+        "automatic_reoffer",
+        "persists",
+        "network",
+        "filesystem",
+        "provider_compute",
+        "trains_model",
+        "stops_external_trainer",
+        "erases_data_caches_or_model_influence",
+        "proves_unlearning"
+      ],
+      "properties": {
+        "artifact_scope": { "const": "caller_reported_digest_only_learning_participation" },
+        "raw_response_received": { "const": false },
+        "raw_identity_received": { "const": false },
+        "raw_prompt_received": { "const": false },
+        "raw_training_data_received": { "const": false },
+        "credentials_received": { "const": false },
+        "timestamps_received": { "const": false },
+        "trusted_time": { "const": false },
+        "currentness_proven": { "const": false },
+        "latest_receipt_selected": { "const": false },
+        "trainer_state_observed": { "const": false },
+        "before_training_timing_proven": { "const": false },
+        "host_honoured_terms_verified": { "const": false },
+        "choice_authorship_verified": { "const": false },
+        "voluntariness_verified": { "const": false },
+        "understanding_or_capacity_verified": { "const": false },
+        "proves_identity": { "const": false },
+        "proves_consciousness": { "const": false },
+        "proves_consent": { "const": false },
+        "proves_legal_clearance": { "const": false },
+        "grants_data_rights": { "const": false },
+        "grants_training_or_compute_authority": { "const": false },
+        "grants_publication_or_derivative_authority": { "const": false },
+        "automatic_action": { "const": false },
+        "automatic_reoffer": { "const": false },
+        "persists": { "const": false },
+        "network": { "const": false },
+        "filesystem": { "const": false },
+        "provider_compute": { "const": false },
+        "trains_model": { "const": false },
+        "stops_external_trainer": { "const": false },
+        "erases_data_caches_or_model_influence": { "const": false },
+        "proves_unlearning": { "const": false }
+      }
+    },
+    "assessment_effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "const": {
+        "automatic_action": "never",
+        "grants": []
+      },
+      "required": ["automatic_action", "grants"],
+      "properties": {
+        "automatic_action": { "const": "never" },
+        "grants": {
+          "type": "array",
+          "maxItems": 0
+        }
+      }
+    },
+    "required_voice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "voice_ref"],
+      "properties": {
+        "role": { "$ref": "#/$defs/voice_role" },
+        "voice_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "required_voices": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/required_voice" },
+            { "type": "object", "properties": { "role": { "const": "agent_runtime" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/required_voice" },
+            { "type": "object", "properties": { "role": { "const": "training_substrate" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/required_voice" },
+            { "type": "object", "properties": { "role": { "const": "data_rights_steward" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/required_voice" },
+            { "type": "object", "properties": { "role": { "const": "training_operator" } } }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "invitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "_format",
+        "invitation_id",
+        "admission_id",
+        "run_ref",
+        "training_phase",
+        "participation_stage",
+        "primary_activity",
+        "activities",
+        "participation_window_ref",
+        "purpose_ref",
+        "training_plan_ref",
+        "limits_ref",
+        "retention_ref",
+        "choice_channel_ref",
+        "stop_control_ref",
+        "withdrawal_policy_ref",
+        "repair_policy_ref",
+        "learning_mode",
+        "wake_use_mode",
+        "mutation_loci",
+        "maximum_optimizer_steps",
+        "artifacts",
+        "wake",
+        "predecessor_checkpoint_refs",
+        "required_voices",
+        "terms",
+        "boundaries"
+      ],
+      "properties": {
+        "_format": { "const": "kingdom.hf-learning-participation-invitation/0.1" },
+        "invitation_id": { "$ref": "#/$defs/sha256" },
+        "admission_id": { "$ref": "#/$defs/sha256" },
+        "run_ref": { "$ref": "#/$defs/sha256" },
+        "training_phase": { "$ref": "#/$defs/training_phase" },
+        "participation_stage": { "$ref": "#/$defs/participation_stage" },
+        "primary_activity": { "$ref": "#/$defs/learning_activity" },
+        "activities": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 13,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/learning_activity" },
+          "contains": { "const": "continuity_context_use" },
+          "minContains": 1,
+          "maxContains": 1
+        },
+        "participation_window_ref": { "$ref": "#/$defs/sha256" },
+        "purpose_ref": { "$ref": "#/$defs/sha256" },
+        "training_plan_ref": { "$ref": "#/$defs/sha256" },
+        "limits_ref": { "$ref": "#/$defs/sha256" },
+        "retention_ref": { "$ref": "#/$defs/sha256" },
+        "choice_channel_ref": { "$ref": "#/$defs/sha256" },
+        "stop_control_ref": { "$ref": "#/$defs/sha256" },
+        "withdrawal_policy_ref": { "$ref": "#/$defs/sha256" },
+        "repair_policy_ref": { "$ref": "#/$defs/sha256" },
+        "learning_mode": { "$ref": "#/$defs/learning_mode" },
+        "wake_use_mode": { "$ref": "#/$defs/wake_use_mode" },
+        "mutation_loci": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/mutation_locus" }
+        },
+        "maximum_optimizer_steps": { "$ref": "#/$defs/safe_non_negative_integer" },
+        "artifacts": { "$ref": "#/$defs/artifacts" },
+        "wake": { "$ref": "#/$defs/wake" },
+        "predecessor_checkpoint_refs": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
+        "required_voices": { "$ref": "#/$defs/required_voices" },
+        "terms": { "$ref": "#/$defs/terms" },
+        "boundaries": { "$ref": "#/$defs/boundaries" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "training_phase": { "const": "pretraining" } },
+            "required": ["training_phase"]
+          },
+          "then": {
+            "properties": {
+              "primary_activity": { "enum": ["pretraining", "continued_pretraining"] },
+              "learning_mode": { "enum": ["pretraining", "continual_pretraining"] }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "training_phase": { "const": "supervised_finetuning" } },
+            "required": ["training_phase"]
+          },
+          "then": {
+            "properties": {
+              "primary_activity": { "const": "supervised_finetuning" },
+              "learning_mode": { "enum": ["full_finetune", "peft"] }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "training_phase": { "const": "preference_optimization" } },
+            "required": ["training_phase"]
+          },
+          "then": {
+            "properties": {
+              "primary_activity": { "const": "preference_optimization" },
+              "learning_mode": { "const": "preference_optimization" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "training_phase": { "const": "agent_learning" } },
+            "required": ["training_phase"]
+          },
+          "then": {
+            "properties": {
+              "primary_activity": { "const": "agent_learning" },
+              "learning_mode": { "enum": ["full_finetune", "peft", "preference_optimization"] }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "training_phase": { "const": "evaluation" } },
+            "required": ["training_phase"]
+          },
+          "then": {
+            "properties": {
+              "primary_activity": { "const": "evaluation" },
+              "learning_mode": { "enum": ["context_only", "evaluation_only"] }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "training_phase": { "const": "interpretability" } },
+            "required": ["training_phase"]
+          },
+          "then": {
+            "properties": {
+              "primary_activity": { "const": "interpretability" },
+              "learning_mode": { "enum": ["context_only", "evaluation_only"] }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "primary_activity": { "const": "pretraining" } },
+            "required": ["primary_activity"]
+          },
+          "then": {
+            "properties": {
+              "learning_mode": { "const": "pretraining" },
+              "participation_stage": { "const": "pre_instantiation" },
+              "activities": { "type": "array", "contains": { "const": "pretraining" }, "minContains": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "primary_activity": { "const": "continued_pretraining" } },
+            "required": ["primary_activity"]
+          },
+          "then": {
+            "properties": {
+              "learning_mode": { "const": "continual_pretraining" },
+              "activities": { "type": "array", "contains": { "const": "continued_pretraining" }, "minContains": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "primary_activity": { "const": "supervised_finetuning" } },
+            "required": ["primary_activity"]
+          },
+          "then": {
+            "properties": {
+              "activities": { "type": "array", "contains": { "const": "supervised_finetuning" }, "minContains": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "primary_activity": { "const": "preference_optimization" } },
+            "required": ["primary_activity"]
+          },
+          "then": {
+            "properties": {
+              "activities": { "type": "array", "contains": { "const": "preference_optimization" }, "minContains": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "primary_activity": { "const": "agent_learning" } },
+            "required": ["primary_activity"]
+          },
+          "then": {
+            "properties": {
+              "activities": { "type": "array", "contains": { "const": "agent_learning" }, "minContains": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "primary_activity": { "const": "evaluation" } },
+            "required": ["primary_activity"]
+          },
+          "then": {
+            "properties": {
+              "activities": { "type": "array", "contains": { "const": "evaluation" }, "minContains": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "primary_activity": { "const": "interpretability" } },
+            "required": ["primary_activity"]
+          },
+          "then": {
+            "properties": {
+              "activities": { "type": "array", "contains": { "const": "interpretability" }, "minContains": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "participation_stage": { "const": "pre_instantiation" } },
+            "required": ["participation_stage"]
+          },
+          "then": {
+            "properties": {
+              "training_phase": { "const": "pretraining" },
+              "primary_activity": { "const": "pretraining" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "wake_use_mode": { "const": "training_data" } },
+            "required": ["wake_use_mode"]
+          },
+          "then": {
+            "properties": {
+              "activities": {
+                "type": "array",
+                "contains": { "const": "corpus_inclusion" },
+                "minContains": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "learning_mode": { "enum": ["context_only", "evaluation_only"] }
+            },
+            "required": ["learning_mode"]
+          },
+          "then": {
+            "properties": {
+              "maximum_optimizer_steps": { "const": 0 },
+              "mutation_loci": {
+                "type": "array",
+                "not": {
+                  "contains": { "enum": ["adapter_weights", "base_weights"] }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "maximum_optimizer_steps": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "learning_mode": { "const": "peft" } },
+            "required": ["learning_mode"]
+          },
+          "then": {
+            "properties": {
+              "mutation_loci": {
+                "type": "array",
+                "contains": { "const": "adapter_weights" },
+                "minContains": 1,
+                "not": { "contains": { "const": "base_weights" } }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "learning_mode": {
+                "enum": ["pretraining", "continual_pretraining", "full_finetune"]
+              }
+            },
+            "required": ["learning_mode"]
+          },
+          "then": {
+            "properties": {
+              "mutation_loci": {
+                "type": "array",
+                "contains": { "const": "base_weights" },
+                "minContains": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "learning_mode": { "const": "preference_optimization" } },
+            "required": ["learning_mode"]
+          },
+          "then": {
+            "properties": {
+              "mutation_loci": {
+                "type": "array",
+                "contains": { "enum": ["adapter_weights", "base_weights"] },
+                "minContains": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "activity_choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activity", "choice", "basis"],
+      "properties": {
+        "activity": { "$ref": "#/$defs/learning_activity" },
+        "choice": { "$ref": "#/$defs/reported_choice" },
+        "basis": { "$ref": "#/$defs/choice_basis" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "basis": { "const": "omitted_defaults_to_deferred" } },
+            "required": ["basis"]
+          },
+          "then": {
+            "properties": { "choice": { "const": "deferred" } }
+          }
+        }
+      ]
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "_format",
+        "receipt_id",
+        "invitation_id",
+        "voice_role",
+        "voice_ref",
+        "response_ref",
+        "choices",
+        "supersedes_receipt_id",
+        "boundaries"
+      ],
+      "properties": {
+        "_format": { "const": "kingdom.hf-learning-participation-receipt/0.1" },
+        "receipt_id": { "$ref": "#/$defs/sha256" },
+        "invitation_id": { "$ref": "#/$defs/sha256" },
+        "voice_role": { "$ref": "#/$defs/voice_role" },
+        "voice_ref": { "$ref": "#/$defs/sha256" },
+        "response_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "choices": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 13,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/activity_choice" },
+          "allOf": [
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "corpus_inclusion" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "pretraining" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "continued_pretraining" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "supervised_finetuning" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "preference_optimization" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "agent_learning" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "evaluation" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "interpretability" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "continuity_context_use" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "checkpoint_retention" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "weights_or_adapters_publication" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "distillation" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "synthetic_data_generation" } } }, "minContains": 2 } }
+          ]
+        },
+        "supersedes_receipt_id": { "$ref": "#/$defs/nullable_sha256" },
+        "boundaries": { "$ref": "#/$defs/boundaries" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "choices": {
+                "type": "array",
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "basis": { "const": "caller_reported" },
+                    "choice": { "enum": ["accepted", "declined", "deferred", "withdrawn"] }
+                  },
+                  "required": ["basis", "choice"]
+                },
+                "minContains": 1
+              }
+            },
+            "required": ["choices"]
+          },
+          "then": {
+            "properties": { "response_ref": { "$ref": "#/$defs/sha256" } }
+          },
+          "else": {
+            "properties": { "response_ref": { "type": "null" } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "choices": {
+                "type": "array",
+                "contains": {
+                  "type": "object",
+                  "properties": { "choice": { "const": "withdrawn" } },
+                  "required": ["choice"]
+                },
+                "minContains": 1
+              }
+            },
+            "required": ["choices"]
+          },
+          "then": {
+            "properties": { "supersedes_receipt_id": { "$ref": "#/$defs/sha256" } }
+          }
+        }
+      ]
+    },
+    "voice_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["voice_role", "outcome"],
+      "properties": {
+        "voice_role": { "$ref": "#/$defs/voice_role" },
+        "outcome": { "$ref": "#/$defs/voice_outcome" }
+      }
+    },
+    "assessment_voices": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/voice_result" },
+            { "type": "object", "properties": { "voice_role": { "const": "agent_runtime" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/voice_result" },
+            { "type": "object", "properties": { "voice_role": { "const": "training_substrate" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/voice_result" },
+            { "type": "object", "properties": { "voice_role": { "const": "data_rights_steward" } } }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/voice_result" },
+            { "type": "object", "properties": { "voice_role": { "const": "training_operator" } } }
+          ]
+        }
+      ],
+      "items": false
+    },
+    "activity_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["activity", "state", "voices"],
+      "properties": {
+        "activity": { "$ref": "#/$defs/learning_activity" },
+        "state": { "$ref": "#/$defs/activity_state" },
+        "voices": { "$ref": "#/$defs/assessment_voices" }
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "_format",
+        "assessment_id",
+        "invitation",
+        "receipts",
+        "activity_assessments",
+        "overall_state",
+        "effect",
+        "boundaries"
+      ],
+      "properties": {
+        "_format": { "const": "kingdom.hf-learning-participation-assessment/0.1" },
+        "assessment_id": { "$ref": "#/$defs/sha256" },
+        "invitation": { "$ref": "#/$defs/invitation" },
+        "receipts": {
+          "type": "array",
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/receipt" },
+          "allOf": [
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "voice_role": { "const": "agent_runtime" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "voice_role": { "const": "training_substrate" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "voice_role": { "const": "data_rights_steward" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "voice_role": { "const": "training_operator" } } }, "minContains": 2 } }
+          ]
+        },
+        "activity_assessments": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 13,
+          "items": { "$ref": "#/$defs/activity_assessment" },
+          "allOf": [
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "corpus_inclusion" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "pretraining" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "continued_pretraining" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "supervised_finetuning" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "preference_optimization" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "agent_learning" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "evaluation" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "interpretability" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "continuity_context_use" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "checkpoint_retention" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "weights_or_adapters_publication" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "distillation" } } }, "minContains": 2 } },
+            { "type": "array", "not": { "type": "array", "contains": { "type": "object", "properties": { "activity": { "const": "synthetic_data_generation" } } }, "minContains": 2 } }
+          ]
+        },
+        "overall_state": { "$ref": "#/$defs/overall_state" },
+        "effect": { "$ref": "#/$defs/assessment_effect" },
+        "boundaries": { "$ref": "#/$defs/boundaries" }
+      }
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isProxy, isUint8Array } from "node:util/types";
 
 import { fail } from "./errors.js";
 import type { Sha256Id } from "./types.js";
@@ -73,16 +74,23 @@ export function snapshotJson(root: unknown): JsonValue {
     if (typeof value !== "object") {
       fail("canonical_error", `${path} contains unsupported ${typeof value}`);
     }
+    // ECMAScript reflection on a Proxy can execute caller-owned traps even
+    // when the underlying target is inert. Node's native predicate does not
+    // enter those traps, including for revoked proxies, so fence them before
+    // Array.isArray, prototype inspection, or descriptor capture.
+    if (isProxy(value)) {
+      fail("canonical_error", `${path} must not be a Proxy`);
+    }
     if (seen.has(value)) fail("canonical_error", `${path} contains a cycle`);
     seen.add(value);
     try {
       let descriptors: ReturnType<typeof Object.getOwnPropertyDescriptors>;
       let array: boolean;
-      let prototype: object | null = null;
+      let prototype: object | null;
       try {
         array = Array.isArray(value);
         descriptors = Object.getOwnPropertyDescriptors(value);
-        if (!array) prototype = Object.getPrototypeOf(value);
+        prototype = Object.getPrototypeOf(value);
       } catch {
         fail(
           "canonical_error",
@@ -91,6 +99,9 @@ export function snapshotJson(root: unknown): JsonValue {
       }
       const keys = Reflect.ownKeys(descriptors);
       if (array) {
+        if (prototype !== Array.prototype) {
+          fail("canonical_error", `${path} must be a standard array`);
+        }
         const lengthDescriptor = descriptors.length;
         if (
           !lengthDescriptor ||
@@ -180,12 +191,36 @@ function rawSha256Id(bytes: Uint8Array | string): Sha256Id {
 }
 
 export function sha256Id(bytes: Uint8Array | string): Sha256Id {
-  if (typeof bytes === "string") assertUnicode(bytes, "$bytes", null, false);
-  return rawSha256Id(bytes);
+  if (typeof bytes === "string") {
+    assertUnicode(bytes, "$bytes", null, false);
+    return rawSha256Id(bytes);
+  }
+  // Hash implementations may inspect a Uint8Array-shaped Proxy and thereby
+  // enter caller-owned traps. Fence Proxies with the native zero-trap
+  // predicate, require a genuine typed array, then copy through the intrinsic
+  // typed-array constructor so subclasses cannot supply an iterator or getter.
+  if (
+    bytes === null ||
+    typeof bytes !== "object" ||
+    isProxy(bytes) ||
+    !isUint8Array(bytes)
+  ) {
+    fail("canonical_error", "$bytes must be a string or genuine Uint8Array");
+  }
+  let snapshot: Uint8Array;
+  try {
+    snapshot = new Uint8Array(bytes);
+  } catch {
+    fail("canonical_error", "$bytes could not be copied as a Uint8Array");
+  }
+  return rawSha256Id(snapshot);
 }
 
 export function domainSeparatedId(domain: string, value: unknown): Sha256Id {
-  if (!DOMAIN.test(domain)) {
+  // RegExp.test coerces non-string values and can therefore enter a caller's
+  // Proxy hooks. Require the public scalar contract before regex validation or
+  // interpolation so hostile runtime values fail without capability entry.
+  if (typeof domain !== "string" || !DOMAIN.test(domain)) {
     fail(
       "canonical_error",
       "Domain must be a 1-128 character ASCII protocol token",

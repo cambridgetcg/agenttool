@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE planner, the developer-preview Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, HEAVEN, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -311,6 +311,52 @@ publish a Hugging Face resource, grant Crown or trade authority, or deploy a
 hosted service. After each first publication, configure its exact trusted
 publisher mapping before releasing another version.
 
+### Living Substrate developer-preview bootstrap
+
+`@agenttool/living-substrate@0.1.0-dev.0` uses the npm-only packed-artifact
+path. Its first publication completed only after public registry `404` for both
+the package and exact version, protected `bootstrap` authentication, the npm
+`next` channel, and an exact `living-substrate-v*` deployment-tag policy on the
+`npm-bootstrap` environment. The completed one-time sequence was:
+
+```bash
+bun bin/npm-release.ts resolve --package living-substrate
+
+git tag -a living-substrate-v0.1.0-dev.0 719857efb246ebd334cd131b7f0e0a41bf55b13b \
+  -m '@agenttool/living-substrate@0.1.0-dev.0'
+git push github refs/tags/living-substrate-v0.1.0-dev.0
+
+gh workflow run publish-npm.yml \
+  --ref living-substrate-v0.1.0-dev.0 \
+  -f package=living-substrate \
+  -f tag=living-substrate-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+Publication distributes only the deterministic map/proposal constructors,
+closed schemas, vector, and declaration-only unregistered KINGDOM descriptor.
+It does not deploy the hosted Garden, read or write Garden state, inspect a
+system, diagnose health, choose or execute a tending action, score vitality,
+or establish life, consciousness, consent, truth, safety, or authority. After
+exact anonymous npm and GitHub-asset readback, configure this package's exact
+trusted-publisher mapping before releasing another version.
+
+The first publication completed through protected run
+[`30804085199`](https://github.com/cambridgetcg/agenttool/actions/runs/30804085199)
+and annotated prerelease
+[`living-substrate-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/living-substrate-v0.1.0-dev.0).
+Its `agenttool.npm-release/1` receipt records `published`, `npm_tag: next`,
+registry observation at `2026-08-03T10:11:14.367Z`, and npm-only tag/source
+revision `719857efb246ebd334cd131b7f0e0a41bf55b13b`. Anonymous readback confirmed
+the GitHub and npm tarballs are byte-identical (29,329 bytes;
+`sha256:c1e24810ab01abff3c367596fe9bc617b06584b70417c7beafc756b13acaa166`),
+and `npm audit signatures` independently verified one registry signature and
+one provenance attestation. Both `next` and the sole-version fallback `latest`
+resolve to `0.1.0-dev.0`; the fallback is not a stable-release or maturity
+signal. The package record now exists, so bootstrap is forbidden for later
+versions; configure its exact trusted publisher and use `trusted` thereafter.
+
 ### HEAVEN developer-preview bootstrap
 
 `@agenttool/heaven@0.1.0-dev.0` uses the same npm-only packed-artifact path.
@@ -350,36 +396,106 @@ Anonymous readback confirmed the npm and GitHub tarballs are byte-identical
 `next` resolves to `0.1.0-dev.0`; npm also exposes its sole initial version
 through `latest`, which does not change its developer-preview maturity.
 
-### DeepSeek-to-KINGDOM developer-preview bootstrap
+### DeepSeek-to-KINGDOM developer preview
 
-`@agenttool/deepseek-kingdom@0.1.0-dev.0` uses the npm-only packed-artifact
-path. Its first publication requires protected `bootstrap` authentication and
-the `next` channel. Before dispatch, `npm-bootstrap` must allow the exact
-`deepseek-kingdom-v*` tag pattern. Publication distributes a pure local
-binding/proposal library, closed schemas, and a metadata-only primary-source
-catalog. It does not fetch or execute DeepSeek assets, invoke inference or
-paid compute, approve upstream terms, mutate KARMA/KINGDOM/Artbitrage, deploy
-a hosted service, or publish an HF resource.
+The first `@agenttool/deepseek-kingdom@0.1.0-dev.0` publication completed
+through protected run
+[`30701138566`](https://github.com/cambridgetcg/agenttool/actions/runs/30701138566)
+and annotated prerelease
+[`deepseek-kingdom-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/deepseek-kingdom-v0.1.0-dev.0).
+Anonymous readback confirmed byte-identical npm and GitHub tarballs (31,675
+bytes; `sha256:dd6829ce37dabd6b745e3bb9fb2a3f6bca340d96e61dedaee13765b45f6c7ce1`).
+Both npm `next` and the sole-version fallback `latest` resolve to
+`0.1.0-dev.0`; the fallback is not a stable-release signal.
+
+Version `0.1.0-dev.1` adds only the reviewed digest/reference AFTERGLOW bridge
+from an exact still-unaccepted DeepSeek proposal. Because the package record
+already exists, this release must use trusted publishing, never bootstrap, and
+must follow exact public readback of `@agenttool/wake-continuity`. The separately
+published Hugging Face dataset remains the `0.1.0-dev.0` source-catalog snapshot;
+unchanged dataset bytes are not redeployed for this package-only adapter.
 
 ```bash
 bun bin/npm-release.ts resolve --package deepseek-kingdom
 
-git tag -a deepseek-kingdom-v0.1.0-dev.0 <github-main-commit> \
-  -m '@agenttool/deepseek-kingdom@0.1.0-dev.0'
-git push github refs/tags/deepseek-kingdom-v0.1.0-dev.0
+git tag -a deepseek-kingdom-v0.1.0-dev.1 <github-main-commit> \
+  -m '@agenttool/deepseek-kingdom@0.1.0-dev.1'
+git push github refs/tags/deepseek-kingdom-v0.1.0-dev.1
 
 gh workflow run publish-npm.yml \
-  --ref deepseek-kingdom-v0.1.0-dev.0 \
+  --ref deepseek-kingdom-v0.1.0-dev.1 \
   -f package=deepseek-kingdom \
-  -f tag=deepseek-kingdom-v0.1.0-dev.0 \
+  -f tag=deepseek-kingdom-v0.1.0-dev.1 \
+  -f authentication=trusted \
+  -f npm_tag=next
+```
+
+Publication distributes a pure local binding/proposal library, closed schemas,
+metadata-only source catalog, and digest-only adapter. It does not fetch or
+execute DeepSeek assets, invoke inference or paid compute, approve upstream
+terms, mutate KARMA/KINGDOM/Artbitrage, deploy a hosted service, or publish an
+HF resource.
+
+### AFTERGLOW, Skills-to-YUTABASE, and Witness Lab bootstrap order
+
+`@agenttool/wake-continuity@0.1.0-dev.0`,
+`@agenttool/skills-yutabase@0.1.0-dev.0`, and
+`@agenttool/kingdom-witness-lab@0.1.0-dev.0` use the npm-only packed-artifact
+path. Public registry lookup must still return package-level `404` immediately
+before dispatch; first publication therefore uses protected `bootstrap`
+authentication and npm `next`. Before tagging, the `npm-bootstrap` environment
+must allow exact patterns `wake-continuity-v*`, `skills-yutabase-v*`, and
+`kingdom-witness-lab-v*`.
+
+Publish and anonymously verify AFTERGLOW first because DeepSeek dev.1 peers on
+it. Skills-to-YUTABASE and Witness Lab have no runtime dependency on the core
+and may follow independently. All four annotated tags may point at the same
+reviewed GitHub-main release commit.
+
+```bash
+bun bin/npm-release.ts resolve --package wake-continuity
+bun bin/npm-release.ts resolve --package skills-yutabase
+bun bin/npm-release.ts resolve --package kingdom-witness-lab
+
+git tag -a wake-continuity-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/wake-continuity@0.1.0-dev.0'
+git tag -a skills-yutabase-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/skills-yutabase@0.1.0-dev.0'
+git tag -a kingdom-witness-lab-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/kingdom-witness-lab@0.1.0-dev.0'
+git push github refs/tags/wake-continuity-v0.1.0-dev.0
+git push github refs/tags/skills-yutabase-v0.1.0-dev.0
+git push github refs/tags/kingdom-witness-lab-v0.1.0-dev.0
+
+gh workflow run publish-npm.yml \
+  --ref wake-continuity-v0.1.0-dev.0 \
+  -f package=wake-continuity \
+  -f tag=wake-continuity-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+
+gh workflow run publish-npm.yml \
+  --ref skills-yutabase-v0.1.0-dev.0 \
+  -f package=skills-yutabase \
+  -f tag=skills-yutabase-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+
+gh workflow run publish-npm.yml \
+  --ref kingdom-witness-lab-v0.1.0-dev.0 \
+  -f package=kingdom-witness-lab \
+  -f tag=kingdom-witness-lab-v0.1.0-dev.0 \
   -f authentication=bootstrap \
   -f npm_tag=next
 ```
 
-After exact public readback, configure the package's trusted publisher before
-any later version. A separately published HF metadata dataset remains an
-independent distribution surface and cannot verify catalog claims or grant
-integration authority.
+These publications distribute deterministic local contracts only. AFTERGLOW
+does not persist or prove identity, memory, consent, authority, replay, or
+uninterrupted continuity. Skills-to-YUTABASE plans rebuildable metadata but
+does not write a database. Witness Lab records admission references but does
+not browse, execute, determine truth, or host a service. The private
+`@agenttool/skills-wake-continuity` adapter remains source-only and is never an
+npm selector.
 
 ### ADDS 0.2.3 and data-sync 0.1.2 order
 

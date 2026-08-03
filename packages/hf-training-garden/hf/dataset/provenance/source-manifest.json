@@ -1,0 +1,133 @@
+{
+  "_format": "kingdom.hf-training-garden-source-manifest/0.1",
+  "generator": "@agenttool/hf-training-garden@0.2.0-dev.0",
+  "intended_hub_repo": "Yu-and-Ai/agenttool-training-garden",
+  "publication_state": "intended_identifier_only",
+  "source_repository": "https://github.com/cambridgetcg/agenttool",
+  "source_path": "packages/hf-training-garden",
+  "source_files": [
+    {
+      "path": "package.json",
+      "bytes": 2646,
+      "sha256": "0a439c2c18107eec9b0e44071280ca34785abbba46f11037cc958abb8205cc44"
+    },
+    {
+      "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
+      "bytes": 10147,
+      "sha256": "cd57c72f2b2504f2b4a31d27a19e85700be383c782bfd1f743ef9ba58b126aae"
+    },
+    {
+      "path": "schema/hf-dataset-admission-v0.1.schema.json",
+      "bytes": 9393,
+      "sha256": "bb82a089ad47b0a3e8b5b731bf6ac6732aa67c312c2f84bd5704f672616d4be4"
+    },
+    {
+      "path": "schema/hf-learning-participation-v0.1.schema.json",
+      "bytes": 34992,
+      "sha256": "fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df"
+    },
+    {
+      "path": "schema/hf-training-checkpoint-v0.1.schema.json",
+      "bytes": 6672,
+      "sha256": "ab6fcc3f73823562422285882678ce37b7e9e5c83f08a0acf5a6eaa3f5c5443c"
+    },
+    {
+      "path": "schema/hf-training-garden-tending-v0.1.schema.json",
+      "bytes": 4059,
+      "sha256": "491a95e2e8906bc6ed538c7ce32e144eb30d5140f6b0b807761ce17429cf471a"
+    },
+    {
+      "path": "src/admission.ts",
+      "bytes": 12951,
+      "sha256": "9f2d2dd282a5b5f05a055e34cc4080a1e9dd2bf1d09eb6d057199413c920f929"
+    },
+    {
+      "path": "src/canonical.ts",
+      "bytes": 1122,
+      "sha256": "d6abd9e877f6d41079b1494bdbe915fe440c8a3dfae26310496e034e9e400f26"
+    },
+    {
+      "path": "src/checkpoint.ts",
+      "bytes": 16128,
+      "sha256": "4603fd90482721c61f2da089f48bc9736af5c3b82fb7c09bad3fe50b0a200f82"
+    },
+    {
+      "path": "src/constants.ts",
+      "bytes": 23156,
+      "sha256": "49ed51f27a6afcf875f91a17468a7839090b3d8dbe5a11933e2446a78fae650e"
+    },
+    {
+      "path": "src/errors.ts",
+      "bytes": 677,
+      "sha256": "adf5bf3ded3d54e917311c589f6bcd5fe66fa6c57b7366633fb62b2fe9c6d682"
+    },
+    {
+      "path": "src/index.ts",
+      "bytes": 4239,
+      "sha256": "e5ce956493f812385269bc43c6d93f78523717326f3473d7363f7488285f04bf"
+    },
+    {
+      "path": "src/participation.ts",
+      "bytes": 49188,
+      "sha256": "69314885c53ab9c15ee052d417dcfc8bf6903585803865adc0c0f0005310d392"
+    },
+    {
+      "path": "src/tending.ts",
+      "bytes": 8922,
+      "sha256": "158fb690919c212001d727b0d9a46bacc91f9832c07dfd0088c5851a75cd897e"
+    },
+    {
+      "path": "src/types.ts",
+      "bytes": 13689,
+      "sha256": "a1180a36079ebc953041946dd76b3272c9c3401b5e6dcf790dcfbc59ef90d304"
+    },
+    {
+      "path": "src/validation.ts",
+      "bytes": 17388,
+      "sha256": "3ff9addd735ab667f104be8d4b11b34c168a124fe831a7d5d4109cfbde9f6dad"
+    }
+  ],
+  "public_release_contains": [
+    "selection process",
+    "selection criteria",
+    "training phase guide",
+    "Garden layer guide",
+    "learning-mode and continuity guide",
+    "role-separated learning participation guide",
+    "inert Trainer hook integration guide",
+    "standalone structural JSON Schemas with an attributed Apache AFTERGLOW dependency; semantic validators remain required",
+    "source and byte hash manifests"
+  ],
+  "public_release_excludes": [
+    "admission decisions",
+    "candidate subset references",
+    "credentials",
+    "Garden or project identifiers",
+    "gated content",
+    "raw agent traces",
+    "raw chats",
+    "raw dataset rows",
+    "learning participation invitations, receipts, or assessments",
+    "participation response or voice references",
+    "training checkpoints",
+    "WAKE anchors"
+  ],
+  "research_basis_as_of": "2026-08-03",
+  "primary_references": [
+    "https://huggingface.co/docs/huggingface_hub/en/package_reference/hf_api",
+    "https://huggingface.co/docs/huggingface_hub/guides/download",
+    "https://huggingface.co/docs/datasets/loading",
+    "https://huggingface.co/docs/datasets/process",
+    "https://huggingface.co/docs/datasets/stream",
+    "https://huggingface.co/docs/datasets/about_cache",
+    "https://huggingface.co/docs/hub/datasets-cards",
+    "https://huggingface.co/docs/hub/datasets-gated",
+    "https://huggingface.co/docs/hub/agent-traces",
+    "https://huggingface.co/docs/trl/en/dataset_formats",
+    "https://huggingface.co/docs/trl/sft_trainer",
+    "https://huggingface.co/docs/transformers/main/trainer_recipes",
+    "https://arxiv.org/abs/2005.11401",
+    "https://arxiv.org/abs/1912.03817",
+    "https://arxiv.org/abs/2407.06460"
+  ]
+}

@@ -192,6 +192,72 @@ describe("at.lounge", () => {
     expect(captured?.[1]?.credentials).toBe("omit");
   });
 
+  // Pinned byte-for-byte against sdk-py's
+  // test_public_look_disables_httpx_auth_flow_and_refuses_redirects.
+  test("refuses an HTTP redirect on the credential-free public read", async () => {
+    let captured: [RequestInfo | URL, RequestInit | undefined] | undefined;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      captured = [input, init];
+      return new Response(null, {
+        status: 302,
+        headers: { location: "https://redirect.example.test/public/lounge" },
+      });
+    }) as typeof fetch;
+
+    const error = await client().lounge.look().then(
+      () => null,
+      (caught: unknown) => caught as AgentToolError,
+    );
+
+    expect(error).toBeInstanceOf(AgentToolError);
+    expect(error?.code).toBe("lounge_public_redirect_refused");
+    expect(error?.status).toBe(302);
+    expect(error?.docs).toBe("https://docs.agenttool.dev/lounge");
+    expect(error?.message).toContain("refused an HTTP redirect");
+    expect(captured?.[1]?.redirect).toBe("manual");
+  });
+
+  test("standalone look refuses the same redirect with the same code", async () => {
+    globalThis.fetch = (async () =>
+      new Response(null, {
+        status: 307,
+        headers: { location: "https://redirect.example.test/public/lounge" },
+      })) as typeof fetch;
+
+    const error = await lookAtLounge({ baseUrl: "https://public.example.test" }).then(
+      () => null,
+      (caught: unknown) => caught as AgentToolError,
+    );
+
+    expect(error?.code).toBe("lounge_public_redirect_refused");
+    expect(error?.status).toBe(307);
+  });
+
+  // Pinned byte-for-byte against sdk-py's
+  // test_guided_api_errors_preserve_code_hint_and_docs. `code` is the stable
+  // string and `status` is the HTTP status — the same spelling in both SDKs.
+  test("a guided API error carries the stable code and the status apart", async () => {
+    Date.now = () => Date.parse(signedAt);
+    globalThis.fetch = (async () =>
+      jsonResponse({
+        error: "lounge_gesture_superseded",
+        message: "A newer seat gesture already exists.",
+        hint: "Read the current lease before signing again.",
+        docs: "https://docs.agenttool.dev/lounge",
+      }, 409)) as typeof fetch;
+
+    const error = await client().lounge.renew_seat({
+      ...signer(),
+      lease_id: leaseId,
+      signed_at: signedAt,
+    }).then(() => null, (caught: unknown) => caught as AgentToolError);
+
+    expect(error?.code).toBe("lounge_gesture_superseded");
+    expect(error?.status).toBe(409);
+    expect(error?.hint).toBe("Read the current lease before signing again.");
+    expect(error?.docs).toBe("https://docs.agenttool.dev/lounge");
+  });
+
   test("reserves with a locally verifiable signature and never sends seed or DID", async () => {
     Date.now = () => Date.parse(signedAt);
     const bodies: Array<Record<string, unknown>> = [];

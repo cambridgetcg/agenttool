@@ -87,7 +87,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twenty reviewed release identities", () => {
+  test("allowlists twenty-four reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -103,10 +103,14 @@ describe("standard npm release policy", () => {
       "deepseek-kingdom",
       "heaven",
       "kingdom",
+      "kingdom-witness-lab",
+      "living-substrate",
       "repo-archive",
       "sdk",
       "skills",
+      "skills-yutabase",
       "telescope",
+      "wake-continuity",
       "wallet",
       "wallet-zerone",
     ]);
@@ -169,10 +173,34 @@ describe("standard npm release policy", () => {
       tagPrefix: "deepseek-kingdom",
       artifactKind: "pack",
     });
+    expect(releaseSpec("wake-continuity")).toMatchObject({
+      name: "@agenttool/wake-continuity",
+      packagePath: "packages/wake-continuity",
+      tagPrefix: "wake-continuity",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("kingdom-witness-lab")).toMatchObject({
+      name: "@agenttool/kingdom-witness-lab",
+      packagePath: "packages/kingdom-witness-lab",
+      tagPrefix: "kingdom-witness-lab",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("skills-yutabase")).toMatchObject({
+      name: "@agenttool/skills-yutabase",
+      packagePath: "packages/skills-yutabase",
+      tagPrefix: "skills-yutabase",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("heaven")).toMatchObject({
       name: "@agenttool/heaven",
       packagePath: "packages/heaven",
       tagPrefix: "heaven",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("living-substrate")).toMatchObject({
+      name: "@agenttool/living-substrate",
+      packagePath: "packages/living-substrate",
+      tagPrefix: "living-substrate",
       artifactKind: "pack",
     });
     expect(releaseSpec("repo-archive")).toMatchObject({
@@ -197,6 +225,9 @@ describe("standard npm release policy", () => {
       ],
     });
     expect(() => releaseSpec("scriptwriter")).toThrow("unsupported npm release package");
+    expect(() => releaseSpec("skills-wake-continuity")).toThrow(
+      "unsupported npm release package",
+    );
   });
 
   test("derives exact annotated tags and npm filenames", () => {
@@ -228,17 +259,41 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/dark-continent-karma", "0.1.0-dev.0")).toBe(
       "agenttool-dark-continent-karma-0.1.0-dev.0.tgz",
     );
-    expect(expectedTag(releaseSpec("deepseek-kingdom"), "0.1.0-dev.0")).toBe(
-      "deepseek-kingdom-v0.1.0-dev.0",
+    expect(expectedTag(releaseSpec("deepseek-kingdom"), "0.1.0-dev.1")).toBe(
+      "deepseek-kingdom-v0.1.0-dev.1",
     );
-    expect(packedFilename("@agenttool/deepseek-kingdom", "0.1.0-dev.0")).toBe(
-      "agenttool-deepseek-kingdom-0.1.0-dev.0.tgz",
+    expect(packedFilename("@agenttool/deepseek-kingdom", "0.1.0-dev.1")).toBe(
+      "agenttool-deepseek-kingdom-0.1.0-dev.1.tgz",
+    );
+    expect(expectedTag(releaseSpec("wake-continuity"), "0.1.0-dev.0")).toBe(
+      "wake-continuity-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/wake-continuity", "0.1.0-dev.0")).toBe(
+      "agenttool-wake-continuity-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("kingdom-witness-lab"), "0.1.0-dev.0")).toBe(
+      "kingdom-witness-lab-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/kingdom-witness-lab", "0.1.0-dev.0")).toBe(
+      "agenttool-kingdom-witness-lab-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("skills-yutabase"), "0.1.0-dev.0")).toBe(
+      "skills-yutabase-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/skills-yutabase", "0.1.0-dev.0")).toBe(
+      "agenttool-skills-yutabase-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("heaven"), "0.1.0-dev.0")).toBe(
       "heaven-v0.1.0-dev.0",
     );
     expect(packedFilename("@agenttool/heaven", "0.1.0-dev.0")).toBe(
       "agenttool-heaven-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("living-substrate"), "0.1.0-dev.0")).toBe(
+      "living-substrate-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/living-substrate", "0.1.0-dev.0")).toBe(
+      "agenttool-living-substrate-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("alchemy"), "0.1.0-dev.0")).toBe(
       "alchemy-v0.1.0-dev.0",
@@ -358,6 +413,50 @@ describe("standard npm release policy", () => {
         "package/sources/official-deepseek-primary-sources.json",
       ]),
     );
+    expect(requiredArchiveEntries(releaseSpec("wake-continuity"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/kingdom.extension.json",
+        "package/schema/agenttool-afterglow-capsule-v0.1.schema.json",
+        "package/schema/agenttool-afterglow-lens-v0.1.schema.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("kingdom-witness-lab"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/research/deepseek-2026-08-01.json",
+        "package/schema/kingdom-deepseek-atlas-v0.1.schema.json",
+        "package/schema/kingdom-execution-route-binding-v0.1.schema.json",
+        "package/schema/kingdom-research-passport-v0.1.schema.json",
+        "package/schema/kingdom-speculative-trial-v0.1.schema.json",
+        "package/schema/kingdom-witness-dossier-v0.1.schema.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("skills-yutabase"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/PERSISTENCE-CONTRACT.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/schema/skills-yutabase-input-v0.1.schema.json",
+      ]),
+    );
     expect(requiredArchiveEntries(releaseSpec("heaven"))).toEqual(
       expect.arrayContaining([
         "package/package.json",
@@ -370,6 +469,21 @@ describe("standard npm release policy", () => {
         "package/kingdom.extension.json",
         "package/schema/agenttool-heaven-invitation-v0.1.schema.json",
         "package/schema/agenttool-heaven-receipt-v0.1.schema.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("living-substrate"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/kingdom.extension.json",
+        "package/schema/agenttool-living-substrate-map-v0.1.schema.json",
+        "package/schema/agenttool-regeneration-proposal-v0.1.schema.json",
+        "package/vectors/agenttool-living-substrate-v0.1.json",
       ]),
     );
     expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([
@@ -522,16 +636,29 @@ describe("standard npm release policy", () => {
     expect(() => registryDecision(503, 404, "trusted")).toThrow("HTTP 503");
   });
 
-  test("retries classified metadata transport and visibility-status failures", async () => {
+  test("cache-busts each metadata observation while retrying visibility failures", async () => {
     const fixture = registryFixture();
     let metadataCalls = 0;
     let tarballCalls = 0;
     const metadataTimeouts: number[] = [];
+    const metadataObservations: string[] = [];
     const sleeps: number[] = [];
 
     const tarball = await pollRegistry(fixture.receipt, "latest", {
       maxAttempts: 3,
       fetchMetadata: async (url, init, timeoutMs) => {
+        const metadataUrl = new URL(url);
+        const observation = metadataUrl.searchParams.get("_agenttool_release_check");
+        expect(metadataUrl.origin).toBe("https://registry.npmjs.org");
+        expect(metadataUrl.username).toBe("");
+        expect(metadataUrl.password).toBe("");
+        expect(metadataUrl.hash).toBe("");
+        expect([...metadataUrl.searchParams.keys()]).toEqual(["_agenttool_release_check"]);
+        expect(observation).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        );
+        expect(init.headers).toEqual({ accept: "application/json" });
+        metadataObservations.push(observation!);
         const attempt = Math.floor(metadataCalls / 2);
         metadataCalls += 1;
         metadataTimeouts.push(timeoutMs);
@@ -539,16 +666,18 @@ describe("standard npm release policy", () => {
         if (attempt === 0) throw new TypeError("temporary metadata connection failure");
         if (attempt === 1) {
           return new Response(null, {
-            status: url.endsWith(`/${fixture.receipt.package.version}`) ? 404 : 503,
+            status: metadataUrl.pathname.endsWith(`/${fixture.receipt.package.version}`) ? 404 : 503,
           });
         }
-        const document = url.endsWith(`/${fixture.receipt.package.version}`)
+        const document = metadataUrl.pathname.endsWith(`/${fixture.receipt.package.version}`)
           ? fixture.versionDocument
           : { "dist-tags": { latest: fixture.receipt.package.version } };
         return Response.json(document);
       },
-      fetchTarball: async (_url, _init, timeoutMs) => {
+      fetchTarball: async (url, _init, timeoutMs) => {
         tarballCalls += 1;
+        expect(String(url)).toBe(fixture.tarball);
+        expect(new URL(url).search).toBe("");
         expect(timeoutMs).toBe(60_000);
         return new Response(fixture.bytes, { status: 200 });
       },
@@ -560,6 +689,12 @@ describe("standard npm release policy", () => {
     expect(tarball).toBe(fixture.tarball);
     expect(metadataCalls).toBe(6);
     expect(metadataTimeouts).toEqual(Array(6).fill(30_000));
+    expect(metadataObservations[0]).toBe(metadataObservations[1]);
+    expect(metadataObservations[2]).toBe(metadataObservations[3]);
+    expect(metadataObservations[4]).toBe(metadataObservations[5]);
+    expect(
+      new Set([metadataObservations[0], metadataObservations[2], metadataObservations[4]]).size,
+    ).toBe(3);
     expect(tarballCalls).toBe(1);
     expect(sleeps).toEqual([5_000, 5_000]);
   });
@@ -778,7 +913,7 @@ describe("standard npm release policy", () => {
       maxAttempts: 5,
       fetchMetadata: async (url) => {
         metadataCalls += 1;
-        if (url.endsWith(`/${fixture.receipt.package.version}`)) {
+        if (new URL(url).pathname.endsWith(`/${fixture.receipt.package.version}`)) {
           return new Response("{not-json", { status: 200 });
         }
         return Response.json({ "dist-tags": { latest: fixture.receipt.package.version } });

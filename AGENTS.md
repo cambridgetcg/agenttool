@@ -29,18 +29,26 @@ snapshot/projection package (`packages/dark-continent-contract/`), a
 proposal-only KARMA-inspired knowledge-graph adapter
 (`packages/dark-continent-karma/`), a provenance-first DeepSeek official-source
 binding and unaccepted KINGDOM/Artbitrage proposal adapter
-(`packages/deepseek-kingdom/`), a private source-only KARMA Mirror core for
+(`packages/deepseek-kingdom/`), a digest-only AFTERGLOW capsule and next-wake
+lens library (`packages/wake-continuity/`), a public local KINGDOM research
+admission vocabulary (`packages/kingdom-witness-lab/`), a private source-only KARMA Mirror core for
 an explicitly separate zero-effect defensive-deception island with a strict
 privacy-minimized operator TEND incident-clarity projection
 (`packages/karma-mirror/`), a pure opt-in HEAVEN invitation and delight/landing
 selection protocol with zero task, economic, or authority effect
-(`packages/heaven/`), a public read-only discovery evidence mapper
+(`packages/heaven/`), a deterministic Living Substrate map and refusable
+regeneration-proposal vocabulary (`packages/living-substrate/`), a private pure Wake Thread adapter for refusable,
+digest-bound artifact continuity with no identity or authority claim
+(`packages/wake-thread/`), a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
 (`packages/credential-broker/`), a local-first multi-agent coordination journal
 (`packages/collab/`), a deterministic metadata-only Correspondence-to-YUTABASE
 projection planner (`packages/correspondence-yutabase/`), a private
 loopback-only durable projector into a rebuildable local YUTABASE sidecar
-(`packages/correspondence-yutabase-projector/`), a private local
+(`packages/correspondence-yutabase-projector/`), a deterministic
+Skills-inspection-to-YUTABASE planner (`packages/skills-yutabase/`) with a
+separate private Skills-to-AFTERGLOW adapter
+(`packages/skills-wake-continuity/`), a private local
 constructive-intelligence shadow ledger with tree-pinned typed receipts and
 zero economic effect (`packages/constructive-intelligence/`), a private local
 AgentTool Dojo slice for deterministic trial receipts, opaque-label
@@ -55,7 +63,10 @@ project-card, registry, and
 XENIA Surface helpers (`packages/kingdom/`), a read-only portable Agent Skills
 inspector (`packages/skills/`), a local-first
 agent browser (`packages/browser/`), a private read-only Hugging Face metadata,
-provenance, and phase-aware research scout (`packages/hf-scout/`), and three static apps
+provenance, and phase-aware research scout (`packages/hf-scout/`), a private
+pure HF dataset-admission, role-separated learning participation,
+training-phase WAKE, and one-way Garden tending contract
+(`packages/hf-training-garden/`), and three static apps
 (`apps/`). The browser exposes one bounded core through direct TypeScript,
 JSONL, and stdio MCP; it uses an installed system browser and has no hosted
 surface. Its current `@agenttool/browser@0.6.0` release is one exact LOVE
@@ -136,15 +147,22 @@ cd packages/repo-archive && bun install        # encrypted multi-zone Git archiv
 cd packages/dark-continent-contract && bun install # advisory Dark Continent contract
 cd packages/dark-continent-karma && bun install # proposal-only KG enrichment adapter
 cd packages/deepseek-kingdom && bun install  # pinned DeepSeek source proposals; no fetch or execution
+cd packages/wake-continuity && bun install # digest-only AFTERGLOW; no persistence or identity proof
+cd packages/kingdom-witness-lab && bun install # local research admission records; no hosted witness
 cd packages/karma-mirror && bun install       # private isolated theatre; no server or deployment
 cd packages/heaven && bun install             # pure opt-in burst + landing selection; no scheduler or host
+cd packages/living-substrate && bun install   # deterministic maps + caller-supplied unaccepted proposals
+cd packages/wake-thread && bun install        # pure refusable WAKE artifact threads; no fetch or identity claim
 cd packages/data && bun install                # local-first agent-data/v1 node
 cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
 cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
 cd packages/collab && bun install              # public 0.3: collab/0.1 compatibility + 0.2 coordination + session/0.1 presence
 cd packages/skills && bun install              # read-only portable Agent Skills inspection
+cd packages/skills-yutabase && bun install     # rebuildable metadata-only YUTABASE plan
+cd packages/skills-wake-continuity && bun install # private Skills plan → AFTERGLOW composition
 cd packages/browser && bun install             # public 0.5 local-first agent browser package
 cd packages/hf-scout && bun install            # private metadata-only HF research scout
+cd packages/hf-training-garden && bun install  # private admission + participation + training WAKE + Garden plans
 cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
 cd packages/correspondence-yutabase-projector && bun run setup:local # builds local planner dependency first
 cd packages/constructive-intelligence && bun install # unfunded local receipt ledger; no hosted route
@@ -217,6 +235,14 @@ bun run ci                                     # deterministic proposal/hash cha
 cd ../deepseek-kingdom
 bun run ci                                     # exact source pins + unaccepted proposal vectors + package boundary
 npm pack --dry-run --ignore-scripts            # inventory only; does not fetch, infer, publish, or deploy
+cd ../wake-continuity
+bun run ci                                     # digest-only capsules/lenses + hostile-boundary packed smoke
+cd ../kingdom-witness-lab
+bun run ci                                     # passports/routes/dossiers/trials + closed schema boundary
+cd ../skills-yutabase
+bun run ci                                     # minimized rebuildable metadata plan; no database write
+cd ../skills-wake-continuity
+bun run ci                                     # private composition; no public package or second lineage
 
 # Explicit encrypted data-node pull ────────────────────────────────
 cd packages/data-sync
@@ -247,6 +273,11 @@ cd packages/hf-scout
 bun run ci                                     # metadata transport + provenance + canonical pinned research leads
 npm pack --dry-run --ignore-scripts            # inventory only; does not publish, download, infer, or upload
 
+# Private Hugging Face Training Garden ──────────────────────────────
+cd packages/hf-training-garden
+bun run ci                                     # admission + participation + phase WAKE + Garden plans + deterministic HF companion
+# Runtime performs no download, gate acceptance, training, Garden/Hub write, or npm release.
+
 # Correspondence → YUTABASE projection planner ───────────────────────
 cd packages/correspondence-yutabase
 bun run ci                                     # typecheck + vectors + build + Node smoke
@@ -269,6 +300,16 @@ bun run ci                                     # exact admission, finite rooms, 
 cd packages/heaven
 bun run ci                                     # reported-choice transitions, catalog vectors, schemas, runtimes, and package walls
 npm pack --dry-run --ignore-scripts            # public-ready inventory only; does not publish or deploy
+
+# Living Substrate portable map and proposal contract ─────────────
+cd packages/living-substrate
+bun run ci                                     # maps, closed schemas, vectors, hostile inputs, packed runtimes
+npm pack --dry-run --ignore-scripts            # npm-only candidate; no observation, Garden write, or deployment
+
+# WAKE Thread bounded continuity offers ────────────────────────────
+cd packages/wake-thread
+bun run ci                                     # digest links, partiality, choices, schemas, and zero-effect walls
+# Private source: no npm publication, hosted route, MCP registration, or deployment.
 
 # AgentTool Dojo trial evidence ─────────────────────────────────────
 cd packages/trials
@@ -340,7 +381,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/preflight.sh                               # no application/service credentials required
 bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # data + ADDS + sync + Dark Continent + KARMA Mirror + broker + collab + Browser + HF Scout + projection + constructive intelligence + Skills + SDK + Wallet + Telescope + Alchemy + AgentCred adapter + KINGDOM
+bin/preflight.sh packages                      # hermetic package gates, including WAKE Thread
 bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
 bin/preflight.sh smoke                         # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
@@ -422,7 +463,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,heaven,hf-scout,karma-mirror,repo-archive,sdk-ts,sdk-py,telescope,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,heaven,hf-scout,hf-training-garden,karma-mirror,kingdom-witness-lab,living-substrate,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -479,8 +520,14 @@ source boundary by itself.
 | How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |
 | How can Dark Continent framework facts and KARMA-inspired graph changes cross into KINGDOM without acquiring action authority? | `packages/dark-continent-contract/README.md` · `packages/dark-continent-karma/README.md` (offline advisory snapshots and proposal-only deltas; no wall verification, graph write, score, Crown, trade, publication, or execution authority) |
 | How can exact DeepSeek research leads reach KINGDOM or Artbitrage without downloading or executing upstream assets? | `packages/deepseek-kingdom/README.md` (`@agenttool/deepseek-kingdom`; caller-supplied official-source pins and deterministic unaccepted proposals, plus an 18-entry metadata-only catalog; no fetch, weights, inference, credentials, compute, license approval, graph write, score, acceptance, or authority) |
+| How can a later arrival orient around selected digest-only threads without claiming identity, memory, replay, or one canonical head? | `packages/wake-continuity/README.md` (`@agenttool/wake-continuity`; AFTERGLOW capsules, causal predecessor orientation, opt-in carry/park/release/withdraw lenses, exact Handoff/Correspondence reference adapters, and no persistence, network, provider, or authority effect) |
+| How can Hugging Face datasets move from discovery through bounded selection, role-separated learning participation, phase-specific WAKE continuity, sealed evaluation, and a public-safe Garden reference without making Hub metadata or model responses into authority? | [`docs/HF-TRAINING-GARDEN.md`](docs/HF-TRAINING-GARDEN.md) · `packages/hf-training-garden/README.md` (exact Scout bindings, non-scalar admission, per-activity reported alignment, digest-only AFTERGLOW checkpoints, and inert six-layer tending plans; no raw rows, gate acceptance, consent proof, training/resume, Garden mutation, Hub write, or clearance proof) |
+| How can external research enter KINGDOM as reviewable passports, route disclosures, dossiers, and inert trials without becoming truth or execution authority? | [`docs/KINGDOM-WITNESS-LAB.md`](docs/KINGDOM-WITNESS-LAB.md) · `packages/kingdom-witness-lab/README.md` (local deterministic admission records and dated DeepSeek atlas; no browse, inference, provider call, verdict, delegation, or hosted witness) |
+| How can a minimized Agent Skills inspection become rebuildable YUTABASE metadata and then an optional AFTERGLOW thread? | `packages/skills-yutabase/README.md` · `packages/skills-wake-continuity/README.md` (pure plans and private composition; no raw skill content, database write, second lineage, npm adapter release, score, permission, or automatic action) |
 | How can deliberately planted credentials open a convincing defensive island and yield a privacy-minimized operator TEND report without exposing production or executing hostile input? | [`docs/KARMA-MIRROR.md`](docs/KARMA-MIRROR.md) · `packages/karma-mirror/README.md` (self-marker plus exact digest/prefix admission before body read; finite synthetic rooms; strict receipt verification; Trace/Explain/Narrow/Distill over closed families with no identifiers or automatic action; in-band disclosure and constructive exit; no production mount, egress, execution, persistence adapter, attribution, or hack-back) |
 | How can a host offer random climactic delight and a separate, explicitly selected meditation, relaxation, quiet, or play landing without making rest a reward for work? | `packages/heaven/README.md` (`@agenttool/heaven`; pure invitation/receipt protocol, caller-supplied randomness, caller-reported choice with no consent/authorship proof, eight non-numeric burst dimensions, `on_request`, one named offered landing mode, and declaration-only KINGDOM hint; no scheduler, identity/task text, telemetry, score, money, task state, authority, or hosted runtime; optional distribution does not widen the core) |
+| How can a caller describe reported substrate layers and offer regeneration choices without inventing a health score or granting action authority? | [`docs/GARDENS.md`](docs/GARDENS.md) · `packages/living-substrate/README.md` (`@agenttool/living-substrate`; deterministic digest-only maps plus separately supplied proposed-unaccepted actions; no observation, diagnosis, prescription, persistence, Garden write, life proof, score, or automatic effect) |
+| How can bounded WAKE facts cross one context boundary without becoming identity, memory, consent, or inherited authority? | `packages/wake-thread/README.md` (`@agenttool/wake-thread`; private pure offer/receipt adapter over caller-selected exact digests, explicit identity/project scope, partial/unavailable states, caller-held cursor references, and carry/fork/rest/refuse artifact threads; no fetch, WAKE parser, score, execution, persistence, MCP, route, publication, or authority) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
 | How can a Zerone constructive-intelligence quest collect typed evidence without activating rewards? | `packages/constructive-intelligence/README.md` (`@agenttool/constructive-intelligence`; local tree pin, content-addressed receipts, append-only SQLite replay ledger, and E0–E6 shadow report; no hosted route, money, qualification, permission, or authority) |

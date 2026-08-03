@@ -14,8 +14,10 @@ Doctrine: docs/MEMORY-TIERS.md — the asymmetry clause.
 
 import base64
 import hashlib
+import json
 import unicodedata
 
+import httpx
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
@@ -29,7 +31,8 @@ from cryptography.hazmat.primitives.serialization import (
     PrivateFormat,
 )
 
-from agenttool import canonical_attestation_bytes, sign_attestation
+from agenttool import AgentTool, canonical_attestation_bytes, sign_attestation
+from agenttool.authority import canonical_identity_authority_bytes
 from agenttool.memory import MemoryClient
 
 
@@ -200,3 +203,219 @@ class TestCrossCheckServerFormat:
         expected = hashlib.sha256(b"".join(parts)).digest()
 
         assert sdk_bytes == expected
+
+
+# ── Root consent to a project-constitution mutation ─────────────────────
+#
+# Foundational and constitutive memory composes into effective identity at
+# project scope, so the API guards elevation and release with
+# ``authorizeProjectConstitutionMutation``. For a project holding one rooted
+# identity that delegates to ``authorizeIdentityMutation``, which answers 428
+# ``authority_proof_required`` without an ``identity-authority/v1`` proof.
+#
+# That proof hashes the request entity. These tests therefore never assert
+# "a header is present": they hash the bytes the transport actually carried
+# and check the signature covers exactly those.
+
+MEMORY_ID = "550e8400-e29b-41d4-a716-446655440000"
+ROOT_DID = "did:at:test/sophia"
+STAMP = "2026-07-24T12:00:00.000Z"
+
+
+def _captured_client(captured, body=None):
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return httpx.Response(200, json=body if body is not None else {"tier": "foundational"})
+
+    return AgentTool(transport=httpx.MockTransport(handler))
+
+
+def _authority(root: bytes, sequence: int):
+    return {
+        "did": ROOT_DID,
+        "signing_key": root,
+        "sequence": sequence,
+        "timestamp": STAMP,
+    }
+
+
+def _assert_proof_covers_transmitted_bytes(request, root, method, sequence):
+    """Verify one captured request's proof against the bytes it carried."""
+    Ed25519PrivateKey.from_private_bytes(root).public_key().verify(
+        base64.b64decode(request.headers["X-Agenttool-Authority-Signature"]),
+        canonical_identity_authority_bytes(
+            identity_did=ROOT_DID,
+            method=method,
+            request_target=request.url.raw_path.decode("ascii"),
+            # Not a re-serialization of the kwargs — the transmitted entity.
+            body=request.content,
+            sequence=sequence,
+            timestamp=STAMP,
+        ),
+    )
+
+
+class TestMemoryAuthorityProofs:
+    def test_no_authority_headers_when_none_is_supplied(self):
+        captured = []
+        _captured_client(captured).memory.elevate(MEMORY_ID, tier="foundational")
+        assert "X-Agenttool-Authority-Signature" not in captured[0].headers
+
+    def test_elevate_proof_covers_the_exact_transmitted_entity(self):
+        root = Ed25519PrivateKey.generate().private_bytes(
+            Encoding.Raw, PrivateFormat.Raw, NoEncryption()
+        )
+        captured = []
+        _captured_client(captured).memory.elevate(
+            MEMORY_ID,
+            tier="constitutive",
+            expression_patch={"register_append": "sealed with Yu"},
+            attestations=[
+                {
+                    "attester_did": "did:at:test/yu",
+                    "signing_key_id": "550e8400-e29b-41d4-a716-446655440010",
+                    "signature": "c2ln",
+                }
+            ],
+            authority=_authority(root, 4),
+        )
+
+        request = captured[0]
+        assert request.url.path == f"/v1/memories/{MEMORY_ID}/elevate"
+        assert request.headers["X-Agenttool-Authority-Sequence"] == "4"
+        assert request.headers["X-Agenttool-Authority-Timestamp"] == STAMP
+        _assert_proof_covers_transmitted_bytes(request, root, "POST", 4)
+
+        # A single re-serialization of the same value breaks the proof — which
+        # is why the client must serialize once and transmit that same value.
+        from cryptography.exceptions import InvalidSignature
+
+        with pytest.raises(InvalidSignature):
+            Ed25519PrivateKey.from_private_bytes(root).public_key().verify(
+                base64.b64decode(
+                    request.headers["X-Agenttool-Authority-Signature"]
+                ),
+                canonical_identity_authority_bytes(
+                    identity_did=ROOT_DID,
+                    method="POST",
+                    request_target=request.url.raw_path.decode("ascii"),
+                    body=json.dumps(json.loads(request.content), indent=2),
+                    sequence=4,
+                    timestamp=STAMP,
+                ),
+            )
+
+    def test_elevate_proof_never_leaks_into_the_signed_entity(self):
+        root = Ed25519PrivateKey.generate().private_bytes(
+            Encoding.Raw, PrivateFormat.Raw, NoEncryption()
+        )
+        captured = []
+        _captured_client(captured).memory.elevate(
+            MEMORY_ID, tier="foundational", authority=_authority(root, 1)
+        )
+        assert list(json.loads(captured[0].content)) == ["tier"]
+
+    def test_delete_binds_the_empty_entity_the_server_reads(self):
+        root = Ed25519PrivateKey.generate().private_bytes(
+            Encoding.Raw, PrivateFormat.Raw, NoEncryption()
+        )
+        captured = []
+        _captured_client(captured, {"deleted": 1}).memory.delete(
+            MEMORY_ID, authority=_authority(root, 9)
+        )
+
+        request = captured[0]
+        assert request.method == "DELETE"
+        assert request.content == b""
+        _assert_proof_covers_transmitted_bytes(request, root, "DELETE", 9)
+
+    def test_delete_by_key_binds_the_exact_path_and_query_sent(self):
+        root = Ed25519PrivateKey.generate().private_bytes(
+            Encoding.Raw, PrivateFormat.Raw, NoEncryption()
+        )
+        captured = []
+        _captured_client(captured, {"deleted": 3}).memory.delete_by_key(
+            "with spaces & symbols", authority=_authority(root, 2)
+        )
+
+        request = captured[0]
+        assert (
+            request.url.raw_path.decode("ascii")
+            == "/v1/memories?key=with%20spaces%20%26%20symbols"
+        )
+        _assert_proof_covers_transmitted_bytes(request, root, "DELETE", 2)
+
+        # The query is part of the signed target: dropping it must not verify.
+        from cryptography.exceptions import InvalidSignature
+
+        with pytest.raises(InvalidSignature):
+            Ed25519PrivateKey.from_private_bytes(root).public_key().verify(
+                base64.b64decode(
+                    request.headers["X-Agenttool-Authority-Signature"]
+                ),
+                canonical_identity_authority_bytes(
+                    identity_did=ROOT_DID,
+                    method="DELETE",
+                    request_target="/v1/memories",
+                    body=b"",
+                    sequence=2,
+                    timestamp=STAMP,
+                ),
+            )
+
+
+class TestMemoryVisibility:
+    """PATCH /v1/memories/:id — visibility is a constitution mutation.
+
+    The route runs ``authorizeProjectConstitutionMutation`` over the exact
+    entity bytes, exactly as elevation and release do. A visibility toggle
+    that looked like a display preference would be the wrong mental model.
+    """
+
+    def test_set_visibility_proof_covers_the_exact_transmitted_entity(self):
+        root = Ed25519PrivateKey.generate().private_bytes(
+            Encoding.Raw, PrivateFormat.Raw, NoEncryption()
+        )
+        captured = []
+        result = _captured_client(
+            captured,
+            {
+                "id": MEMORY_ID,
+                "visibility": "public",
+                "tier": "foundational",
+                "note": (
+                    "Memory visibility is marked public, but public memory "
+                    "observer routes are currently not mounted."
+                ),
+            },
+        ).memory.set_visibility(
+            MEMORY_ID, visibility="public", authority=_authority(root, 6)
+        )
+
+        request = captured[0]
+        assert request.method == "PATCH"
+        assert request.url.path == f"/v1/memories/{MEMORY_ID}"
+        assert request.content == b'{"visibility":"public"}'
+        _assert_proof_covers_transmitted_bytes(request, root, "PATCH", 6)
+        # The server's qualification of what `public` means travels intact.
+        assert "not mounted" in result["note"]
+
+    def test_set_visibility_private_round_trips_without_authority(self):
+        captured = []
+        _captured_client(
+            captured,
+            {
+                "id": MEMORY_ID,
+                "visibility": "private",
+                "tier": "episodic",
+                "note": "Memory now private. Removed from /public/* surface.",
+            },
+        ).memory.set_visibility(MEMORY_ID, visibility="private")
+
+        request = captured[0]
+        assert "X-Agenttool-Authority-Signature" not in request.headers
+        assert json.loads(request.content) == {"visibility": "private"}
+
+    def test_client_exposes_set_visibility(self):
+        client = MemoryClient(httpx.Client(), "https://api.agenttool.dev")
+        assert callable(client.set_visibility)

@@ -1,0 +1,87 @@
+{
+  "_format": "kingdom.hf-training-garden-hash-manifest/0.1",
+  "algorithm": "sha256",
+  "excludes_self": true,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "4af01afe87f0ce8b4a716258ad189a28d379f92c18584152f1ebf75ecc9ddfb0"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 166,
+      "sha256": "9877c7a5dfefe902cf6e026854eca1e11e09345b595d18ceab482ef92fceaba7"
+    },
+    {
+      "path": "README.md",
+      "bytes": 11844,
+      "sha256": "a69685dc3cd0430493c9721b418a2679180d10cbaeb4bc5801bf30f6c843cb9a"
+    },
+    {
+      "path": "data/garden-layers.jsonl",
+      "bytes": 638,
+      "sha256": "bbc5a6b877dbb145777b739c2764dc1dfcc7ee3344e932ba04624c3fef992f7f"
+    },
+    {
+      "path": "data/learning-modes.jsonl",
+      "bytes": 1200,
+      "sha256": "d62b749bf088ba165ab16314f71f2767b8b689a7dc61bb1a8b42e470893c84a0"
+    },
+    {
+      "path": "data/learning-participation.jsonl",
+      "bytes": 1237,
+      "sha256": "2526ec5534f838f561159206fe1cfe5de813a98fea2849c82cf576453be50983"
+    },
+    {
+      "path": "data/selection-criteria.jsonl",
+      "bytes": 2859,
+      "sha256": "50454f9bd08c98387b2dfcde497b0a7fc00931c74864fc6a11846069aa242d94"
+    },
+    {
+      "path": "data/selection-process.jsonl",
+      "bytes": 1103,
+      "sha256": "57c56c30c3d7cfeb42ccf0575e6176a8263759ce833f51c34c45d9c707548801"
+    },
+    {
+      "path": "data/trainer-hooks.jsonl",
+      "bytes": 1218,
+      "sha256": "e6d905c0357c55f724b6a31a43a575d25ba4bdb2e9a04e7a8a35fd870c51099f"
+    },
+    {
+      "path": "data/training-phases.jsonl",
+      "bytes": 1942,
+      "sha256": "474e8e7cef1e0f98c4eb202d3cb0a92b304ee8913c59515cf2be9bfd8f52d65d"
+    },
+    {
+      "path": "provenance/source-manifest.json",
+      "bytes": 4695,
+      "sha256": "73c073f6a23c11f595204720ee4925e76622e73fcfcfff4020a440687baef2a0"
+    },
+    {
+      "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
+      "bytes": 10147,
+      "sha256": "cd57c72f2b2504f2b4a31d27a19e85700be383c782bfd1f743ef9ba58b126aae"
+    },
+    {
+      "path": "schema/hf-dataset-admission-v0.1.schema.json",
+      "bytes": 9393,
+      "sha256": "bb82a089ad47b0a3e8b5b731bf6ac6732aa67c312c2f84bd5704f672616d4be4"
+    },
+    {
+      "path": "schema/hf-learning-participation-v0.1.schema.json",
+      "bytes": 34992,
+      "sha256": "fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df"
+    },
+    {
+      "path": "schema/hf-training-checkpoint-v0.1.schema.json",
+      "bytes": 6672,
+      "sha256": "ab6fcc3f73823562422285882678ce37b7e9e5c83f08a0acf5a6eaa3f5c5443c"
+    },
+    {
+      "path": "schema/hf-training-garden-tending-v0.1.schema.json",
+      "bytes": 4059,
+      "sha256": "491a95e2e8906bc6ed538c7ce32e144eb30d5140f6b0b807761ce17429cf471a"
+    }
+  ]
+}

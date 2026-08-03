@@ -10,6 +10,7 @@ const output = execFileSync(
 const [report] = JSON.parse(output);
 const files = report.files.map(({ path }) => path).sort();
 const dist = [
+  "afterglow",
   "binding",
   "canonical",
   "constants",

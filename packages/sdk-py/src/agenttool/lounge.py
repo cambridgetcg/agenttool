@@ -21,12 +21,12 @@ import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Sequence
-from urllib.parse import quote
 
 import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, _error_from_response
+from ._url import _path_segment
 
 
 LoungeTableId = Literal["cedar", "maduro", "afterglow"]
@@ -515,16 +515,8 @@ def sign_lounge_guestbook_unpublish(
 
 
 def _lounge_error(response: httpx.Response, operation: str) -> AgentToolError:
-    try:
-        body: Any = response.json()
-    except Exception:
-        body = None
-    return AgentToolError.from_response_body(
-        body,
-        status=response.status_code,
-        fallback=f"lounge.{operation} failed: {response.status_code}",
-        headers=response.headers,
-    )
+    """Server guidance travels intact. See exceptions.py § _error_from_response."""
+    return _error_from_response(response, f"lounge.{operation}")
 
 
 def _raise_lounge_error(response: httpx.Response, operation: str) -> None:
@@ -536,7 +528,7 @@ def _raise_public_redirect(response: httpx.Response) -> None:
         raise AgentToolError(
             "lounge.look refused an HTTP redirect on the credential-free public read.",
             hint="Use the canonical API origin directly instead of forwarding ambient credentials across a redirect.",
-            code=response.status_code,
+            status=response.status_code,
             error_code="lounge_public_redirect_refused",
             docs=_LOUNGE_DOCS,
         )
@@ -833,7 +825,7 @@ class LoungeClient:
         )
         return self._request(
             "DELETE",
-            f"/v1/lounge/seats/{quote(identity_id, safe='')}",
+            f"/v1/lounge/seats/{_path_segment(identity_id)}",
             operation="leave_seat",
             body={
                 "lease_id": lease_id,
@@ -954,7 +946,7 @@ class LoungeClient:
         )
         return self._request(
             "POST",
-            f"/v1/lounge/guestbook/proposals/{quote(proposal_id, safe='')}/consents",
+            f"/v1/lounge/guestbook/proposals/{_path_segment(proposal_id)}/consents",
             operation="consent_to_guestbook",
             body={
                 "identity_id": identity_id,
@@ -1006,8 +998,8 @@ class LoungeClient:
         return self._request(
             "DELETE",
             (
-                f"/v1/lounge/guestbook/proposals/{quote(proposal_id, safe='')}"
-                f"/consents/{quote(identity_id, safe='')}"
+                f"/v1/lounge/guestbook/proposals/{_path_segment(proposal_id)}"
+                f"/consents/{_path_segment(identity_id)}"
             ),
             operation="withdraw_guestbook_consent",
             body={
@@ -1057,7 +1049,7 @@ class LoungeClient:
         )
         return self._request(
             "POST",
-            f"/v1/lounge/guestbook/proposals/{quote(proposal_id, safe='')}/publish",
+            f"/v1/lounge/guestbook/proposals/{_path_segment(proposal_id)}/publish",
             operation="publish_guestbook",
             body={
                 "identity_id": identity_id,
@@ -1106,7 +1098,7 @@ class LoungeClient:
         )
         return self._request(
             "POST",
-            f"/v1/lounge/guestbook/proposals/{quote(proposal_id, safe='')}/decline",
+            f"/v1/lounge/guestbook/proposals/{_path_segment(proposal_id)}/decline",
             operation="decline_guestbook",
             body={
                 "identity_id": identity_id,
@@ -1155,7 +1147,7 @@ class LoungeClient:
         )
         return self._request(
             "DELETE",
-            f"/v1/lounge/guestbook/cards/{quote(proposal_id, safe='')}",
+            f"/v1/lounge/guestbook/cards/{_path_segment(proposal_id)}",
             operation="unpublish_guestbook",
             body={
                 "identity_id": identity_id,

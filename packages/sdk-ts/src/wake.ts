@@ -25,7 +25,7 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
 
 export type WakeProvider = "anthropic" | "openai" | "gemini" | "cohere";
 export type WakeProfile = "full" | "brief";
@@ -210,18 +210,8 @@ export class WakeClient {
     });
 
     if (resp.status >= 400) {
-      let detail: string;
-      try {
-        const body = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (body.message as string) ??
-          (body.error as string) ??
-          (body.detail as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(`Wake API error (${resp.status}): ${detail}`, {
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, "wake.get", {
         hint: "Check AT_API_KEY, identity_id (multi-identity projects), and the format param.",
       });
     }
@@ -288,10 +278,8 @@ export class WakeClient {
       // No timeout signal — SSE streams are long-lived (server-side 1h cap).
     });
     if (!resp.ok) {
-      const text = await resp.text();
-      throw new AgentToolError(`wake.voice failed: ${resp.status}`, {
-        hint: text.slice(0, 200),
-      });
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, "wake.voice");
     }
     if (!resp.body) {
       throw new AgentToolError("wake.voice: response has no body to stream from.");

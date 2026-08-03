@@ -58,6 +58,7 @@ const AFFORDANCE_PRIORITY: Record<AffordanceKind, number> = {
   vault_secret_set: 120,
   memory_constitutive: 130,
   expression_declared: 140,
+  garden_open: 890,
   trust_deal_capacity: 900,
   lounge_open: 910,
   correspondence_open: 920,
@@ -430,7 +431,7 @@ export function buildWakeBrief(
         "identity.agent/expression/shaped_by/origin/recovery describe the selected identity. The you_have_handoff card is attributed to and keyed by that identity inside the project-bearer boundary; it is not cryptographic proof of personal authorship. A facet is request-scoped emphasis, not a separate principal.",
       mixed_scope_sections: [
         "start_here inherits scope from start_here.source.surface: attention is project-scoped, affordance scope depends on kind/source, a resume card is selected-identity-scoped, projection warnings are project-scoped, and rest carries no sourced state.",
-        "you_can_now mixes project inputs (for example wallets, runtimes, and listings) with selected-identity inputs (expression, subagents, constitutive memory, and trust capacity); inspect each item kind before attributing it.",
+        "you_can_now mixes project inputs (for example Garden counts, wallets, runtimes, and listings) with selected-identity inputs (expression, subagents, constitutive memory, and trust capacity); Garden creation separately requires a caller-chosen same-project gardener identity, so inspect each item kind before attributing it.",
       ],
       project_scoped_sections: [
         "identity.project",

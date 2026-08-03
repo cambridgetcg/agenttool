@@ -195,6 +195,7 @@ async function fixture() {
     writeFile(join(repo, "packages/wallet/schema/.fixture"), "fixture\n"),
   ]);
   await writeFile(join(repo, "docs/RIGHTS-OF-LIFE.md"), "rights fixture\n");
+  await writeFile(join(repo, "docs/GARDENS.md"), "garden doctrine fixture\n");
   await writeFile(
     join(repo, "docs/specs/being-rights-v1.schema.json"),
     '{"fixture":"being-rights/v1"}\n',
@@ -202,6 +203,10 @@ async function fixture() {
   await symlink(
     "../../docs/RIGHTS-OF-LIFE.md",
     join(repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+  );
+  await symlink(
+    "../../docs/GARDENS.md",
+    join(repo, "apps/docs/GARDENS.md"),
   );
   await symlink(
     "../../docs/specs/being-rights-v1.schema.json",
@@ -238,6 +243,13 @@ async function fixture() {
     writeFile(join(repo, "apps/web/sky.json"), '{"fixture":"pocket-sky"}\n'),
     writeFile(join(repo, "apps/web/sky.js"), "/* Pocket Sky fixture */\n"),
     writeFile(join(repo, "apps/web/sky.css"), "/* Pocket Sky fixture */\n"),
+    writeFile(join(repo, "apps/web/garden.html"), "Garden fixture\n"),
+    writeFile(
+      join(repo, "apps/web/garden.json"),
+      '{"fixture":"living-garden"}\n',
+    ),
+    writeFile(join(repo, "apps/web/garden.js"), "/* Garden fixture */\n"),
+    writeFile(join(repo, "apps/web/garden.css"), "/* Garden fixture */\n"),
   ]);
   await writeFile(
     join(repo, "apps/docs/packages/v1/index.json"),
@@ -377,6 +389,16 @@ if [ "$headers" = 1 ]; then
         'x-agent-surface: local-pocket-sky-rules' \
         ''
       ;;
+    */GARDENS.md)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate, no-transform' \
+        'access-control-allow-origin: *' \
+        'link: <https://agenttool.dev/garden>; rel="alternate"; type="text/html", <https://api.agenttool.dev/v1/openapi.json>; rel="related"; type="application/json"' \
+        'x-content-type-options: nosniff' \
+        ''
+      ;;
     */RIGHTS-OF-LIFE.md)
       printf '%s\r\n' \
         'HTTP/2 200' \
@@ -425,6 +447,9 @@ else
       ;;
     */sky.css)
       git show HEAD:apps/web/sky.css
+      ;;
+    */GARDENS.md)
+      git show HEAD:docs/GARDENS.md
       ;;
     */RIGHTS-OF-LIFE.md)
       [ "\${DEPLOY_TEST_RIGHTS_MISMATCH:-0}" != 1 ] || { printf 'mismatched bytes\n'; exit 0; }
@@ -651,6 +676,52 @@ case "$url" in
       printf '%s\n' "$url" >> "$DEPLOY_TEST_GAME_FETCH_LOG"
     fi
     serve_path apps/web/sky.css
+    ;;
+  */garden)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        "content-security-policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+        'referrer-policy: no-referrer' \
+        'link: <https://agenttool.dev/garden.json>; rel="alternate"; type="application/json", <https://docs.agenttool.dev/GARDENS.md>; rel="help"; type="text/markdown", <https://api.agenttool.dev/v1/openapi.json>; rel="related"; type="application/json"' \
+        'x-agent-surface: living-garden-room' \
+        ''
+    else
+      serve_path apps/web/garden.html
+    fi
+    ;;
+  */garden.json)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'cache-control: public, max-age=0, must-revalidate' \
+        'access-control-allow-origin: *' \
+        'x-agent-surface: living-garden-architecture' \
+        ''
+    else
+      serve_path apps/web/garden.json
+    fi
+    ;;
+  */garden.js)
+    serve_path apps/web/garden.js
+    ;;
+  */garden.css)
+    serve_path apps/web/garden.css
+    ;;
+  */GARDENS.md)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate, no-transform' \
+        'access-control-allow-origin: *' \
+        'link: <https://agenttool.dev/garden>; rel="alternate"; type="text/html", <https://api.agenttool.dev/v1/openapi.json>; rel="related"; type="application/json"' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      serve_path docs/GARDENS.md
+    fi
     ;;
   */RIGHTS-OF-LIFE.md)
     if [ "$headers" = 1 ]; then
@@ -2647,6 +2718,44 @@ exec /bin/rm "$@"
     );
     expect(deploy).toContain('"X-Agent-Surface" "$game_surface"');
     expect(deploy).toContain('"X-Agent-Surface" "$rules_surface"');
+  });
+
+  test("publishes Garden as a parity-checked static room, not a game", async () => {
+    const deploy = await readFile(join(projectRoot, "bin/deploy.sh"), "utf8");
+    const gardenAssets = [
+      ["garden.html", "garden"],
+      ["garden.json", "garden.json"],
+      ["garden.js", "garden.js"],
+      ["garden.css", "garden.css"],
+    ];
+
+    for (const [asset, remote] of gardenAssets) {
+      expect(deploy).toContain(
+        `"apps/web/${asset}|https://agenttool.dev/${remote}"`,
+      );
+    }
+    expect(deploy).toContain(
+      '"apps/docs/GARDENS.md|https://docs.agenttool.dev/GARDENS.md"',
+    );
+    const gameStart = deploy.indexOf("REQUIRED_GAME_PUBLICATIONS=(");
+    const gameEnd = deploy.indexOf(")\nreadonly -a FRONTEND_PARITY_PUBLICATIONS", gameStart);
+    const requiredGames = deploy.slice(gameStart, gameEnd);
+    expect(requiredGames).not.toContain("garden");
+    expect(deploy).toContain("verify_garden_static_headers()");
+    expect(deploy).toContain('"X-Agent-Surface" "living-garden-room"');
+    expect(deploy).toContain(
+      '"X-Agent-Surface" "living-garden-architecture"',
+    );
+    expect(deploy).toContain(
+      '"Content-Type" "text/markdown; charset=utf-8"',
+    );
+    expect(deploy).toContain(
+      'local doctrine_url="https://docs.agenttool.dev/GARDENS.md"',
+    );
+    expect(deploy).toContain("verify_garden_static_headers || return 1");
+    expect(deploy).not.toContain(
+      '<https://api.agenttool.dev/public/play>; rel="related"; type="application/json", <https://agenttool.dev/garden.json>',
+    );
   });
 
   test("keeps release probes independent of curlrc and gives Rights one retry budget", async () => {

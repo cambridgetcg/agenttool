@@ -8,13 +8,14 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
 import {
   signCovenantDeclare,
   signCovenantCosign,
   signCovenantReject,
   signCovenantWithdraw,
 } from "./crypto.js";
+import { encodePathSegment } from "./_url.js";
 
 export type CovenantStatus = "active" | "paused" | "dissolved";
 
@@ -299,7 +300,7 @@ export class CovenantsClient {
       initiatorSignatureB64: opts.initiator_signature_b64,
       signing_key: opts.signing_key,
     });
-    return (await this.req("POST", `/v1/covenants/${id}/accept`, {
+    return (await this.req("POST", `/v1/covenants/${encodePathSegment(id)}/accept`, {
       agent_did: opts.agent_did,
       counterparty_signing_key_id: opts.signing_key_id,
       counterparty_signature,
@@ -329,7 +330,7 @@ export class CovenantsClient {
       reason,
       signing_key: opts.signing_key,
     });
-    return (await this.req("POST", `/v1/covenants/${id}/reject`, {
+    return (await this.req("POST", `/v1/covenants/${encodePathSegment(id)}/reject`, {
       agent_did: opts.agent_did,
       rejecter_signing_key_id: opts.signing_key_id,
       rejection_signature,
@@ -354,7 +355,7 @@ export class CovenantsClient {
       initiatorDid: opts.agent_did,
       signing_key: opts.signing_key,
     });
-    return (await this.req("PATCH", `/v1/covenants/${id}`, {
+    return (await this.req("PATCH", `/v1/covenants/${encodePathSegment(id)}`, {
       status: "dissolved",
       agent_did: opts.agent_did,
       signing_key_id: opts.signing_key_id,
@@ -389,7 +390,7 @@ export class CovenantsClient {
         { hint: "Pass status, vows, notes, or another mutable field." },
       );
     }
-    return (await this.req("PATCH", `/v1/covenants/${covenantId}`, body)) as Covenant;
+    return (await this.req("PATCH", `/v1/covenants/${encodePathSegment(covenantId)}`, body)) as Covenant;
   }
 
   private async req(
@@ -409,20 +410,9 @@ export class CovenantsClient {
     if (body !== undefined) init.body = JSON.stringify(body);
     const resp = await this.http.request(url, init);
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          (json.detail as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(`covenants ${method.toLowerCase()} failed: ${resp.status}`, {
-        hint: detail.slice(0, 200),
-      });
+      // Hand the server's own guidance back intact — code, hint, next_actions,
+      // docs — instead of a bare status. See _http.ts § throwFromResponse.
+      await throwFromResponse(resp, `covenants ${method.toLowerCase()}`);
     }
     return resp.json();
   }

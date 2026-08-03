@@ -1,0 +1,11 @@
+{"phase":"discovery","hf_shape":"card, repository, viewer, Croissant, and file metadata only","wake_focus":"scope and exact source observation refs"}
+{"phase":"selection","hf_shape":"admission decisions, subset manifests, and exclusion aggregates","wake_focus":"policy, admission, and sealed-evaluation refs"}
+{"phase":"curation","hf_shape":"filter, deduplication, decontamination, split, and mixture receipts","wake_focus":"pipeline and dataset-state refs"}
+{"phase":"tokenization","hf_shape":"tokenizer revision, packing recipe, length bands, and token budget","wake_focus":"tokenizer, pipeline, and dataset-state refs"}
+{"phase":"pretraining","hf_shape":"language-modeling examples from separately admitted sources","wake_focus":"role-separated participation, model, optimizer, scheduler, RNG, dataloader, and checkpoint refs"}
+{"phase":"supervised_finetuning","hf_shape":"text, prompt-completion, or conversation records after minimization","wake_focus":"SFT recipe, checkpoint, and held-source refs"}
+{"phase":"preference_optimization","hf_shape":"paired or unpaired preference records with disagreement preserved","wake_focus":"rubric, comparison, checkpoint, and evaluator refs"}
+{"phase":"agent_learning","hf_shape":"synthetic or explicitly consented minimized tool and trajectory fixtures","wake_focus":"environment, policy, tool schema, checkpoint, and stop-condition refs"}
+{"phase":"evaluation","hf_shape":"sealed, revision-pinned evaluation sets never reused for training or retrieval","wake_focus":"sealed dataset, evaluator, metric-summary, and checkpoint refs"}
+{"phase":"interpretability","hf_shape":"activation or analysis metadata under a separate artifact and compute approval","wake_focus":"model checkpoint, probe, method, and result-summary refs"}
+{"phase":"closed","hf_shape":"reviewed card, hash manifest, limitations, withdrawal, and repair record","wake_focus":"final, parked, released, and withdrawn thread refs"}

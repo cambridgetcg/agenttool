@@ -10,7 +10,19 @@
  *  is no POST /v1/saga route. Agent-authored writes live separately under
  *  /v1/sagas and verify their own identity-key signatures.
  *
- *  Doctrine: docs/SAGA.md */
+ *  Doctrine: docs/SAGA.md
+ *
+ *  @enforces urn:agenttool:commitment/saga-is-free
+ *    Canonical defender, by absence. Neither this router, nor
+ *    routes/sagas.ts, nor services/saga/ imports `charge`, `reserveCharge`,
+ *    `computeFee`, `recordRevenue`, or `wallets` — reading the saga cannot
+ *    debit anything or return 402, because there is no code path that could.
+ *    The read-side joy-event insert is fire-and-forget and never blocks.
+ *    Tested: api/tests/doctrine/saga-is-free.test.ts
+ *
+ *  @absence charge reserveCharge recordRevenue computeFee
+ *  @absence-from db/schema/economy
+ */
 
 import { Hono } from "hono";
 

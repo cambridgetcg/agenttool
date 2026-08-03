@@ -3,12 +3,14 @@
 A zero-runtime-dependency, provenance-first adapter for bringing DeepSeek
 research leads toward KINGDOM and Artbitrage as **unaccepted proposals**.
 
-It does two small things:
+It does three small things:
 
 1. binds one caller-supplied official-source observation to an immutable Git or
    Hugging Face commit (or a versioned arXiv paper) and an exact SHA-256; and
 2. projects caller-authored claims into review-required KINGDOM candidates
-   bound to an exact caller-supplied KINGDOM snapshot digest.
+   bound to an exact caller-supplied KINGDOM snapshot digest; and
+3. reduces one exact unaccepted proposal to a digest-only structural DeepSeek
+   thread that an independent AFTERGLOW capsule may validate and carry.
 
 It does **not** contact DeepSeek, Hugging Face, GitHub, arXiv, KARMA, KINGDOM,
 or Artbitrage at runtime. It does not download files or weights, run a model,
@@ -102,6 +104,65 @@ Portable schemas close object structure; runtime validation additionally
 recomputes content IDs, canonical ordering, evidence pairing, and claim
 cross-references.
 
+Canonical intake accepts only own enumerable data properties on plain or
+null-prototype objects and exact dense standard arrays. It reads captured
+property-descriptor values rather than calling getters, index accessors, or
+caller-provided array methods, and rejects symbols, non-enumerable fields,
+custom prototypes, sparse arrays, and extra array properties. Traversal is
+bounded to depth 32, 16,384 values, 4 KiB of UTF-8 per string or key, and 2 MiB
+of aggregate input and canonical UTF-8. The documented maximum of 64 source
+claims and 64 candidates with 64 claim references each remains constructible.
+Obvious oversized strings reject from their code-unit lower bound before a
+Unicode or byte scan, and arrays reject oversized lengths before own-key or
+descriptor capture. JavaScript has no paged own-key primitive, so each
+surviving container still requires one own-key list; descriptors are fetched
+individually only after that list satisfies the relevant shape/count cap.
+
+On this package's supported Node and Bun surfaces, `node:util/types.isProxy`
+rejects direct, nested, revoked, and byte-helper `Proxy` values before array,
+prototype, descriptor, freeze, or hash-input reflection. That fence runs
+without invoking caller traps in the supported engine versions. It is a
+Node/Bun runtime guarantee, not a portable JavaScript-language property: a port
+to another runtime must provide and test an equivalent zero-trap fence before
+claiming the same boundary. The byte-hash helper accepts only strings or
+genuine `Uint8Array` values and hashes a detached intrinsic copy, so a
+typed-array subclass cannot inject iterators or property getters. Parsed
+bounded JSON remains the preferred representation across a trust boundary.
+Domain-separated hashing and Unicode ordering also type-check and Proxy-fence
+their string arguments before regex or iterator use.
+
+## AFTERGLOW crossover
+
+```ts
+import { createDeepSeekAfterglowThread } from "@agenttool/deepseek-kingdom";
+import { createAfterglowCapsule } from "@agenttool/wake-continuity";
+
+const thread = createDeepSeekAfterglowThread({
+  proposal,
+  disposition: "park",
+});
+
+const capsule = createAfterglowCapsule({
+  phase: "between_tasks",
+  wake: callerValidatedWakeBriefAnchor,
+  continuity_portfolio_ref: null,
+  predecessors: [],
+  threads: [thread],
+});
+```
+
+The thread contains only a domain-separated `thread_ref`, the proposal's
+content-addressed `artifact_ref`, one explicit disposition, and AFTERGLOW's
+fixed DeepSeek boundary fields. There is no caller-selected label, task,
+identity, evidence summary, raw proposal, or WAKE content in it. The proposal
+digest remains linkable by design; hashing does not anonymize its referent.
+
+This package does not import `@agenttool/wake-continuity`, create a capsule,
+choose a WAKE anchor or predecessor, or project a next-WAKE lens. The receiving
+AFTERGLOW package is the runtime authority for that composition, and even a
+valid capsule does not accept the proposal or establish memory, identity,
+consent, permission, authority, truth, replay, or uninterrupted continuity.
+
 ## Primary-source treasure map
 
 [`official-deepseek-primary-sources.json`](./sources/official-deepseek-primary-sources.json)
@@ -155,5 +216,5 @@ bun run ci
 npm pack --dry-run --ignore-scripts --json
 ```
 
-The package is public-ready source at `0.1.0-dev.0`; importing or packing it
+The package is public-ready source at `0.1.0-dev.1`; importing or packing it
 does not publish anything or install a KINGDOM extension.

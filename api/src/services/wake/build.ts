@@ -195,6 +195,7 @@ export async function buildWakeBundle(
     realRecogniseRealRes,
     scriptwriterDecidesRes,
     gospelForYouRes,
+    gardensSummaryRes,
     substrateTaskSummaryRes,
     pendingMemoryWitnessGrantCountRes,
     trustStandingRes,
@@ -578,6 +579,18 @@ export async function buildWakeBundle(
       () => composeGospelForYou(),
       [] as Awaited<ReturnType<typeof composeGospelForYou>>,
     ),
+    // Garden counts are project-scoped, private-by-default, and unscored.
+    // A missing migration degrades to an open invitation with zero counts.
+    safe(
+      async () => {
+        const { summarizeGardensForProject } = await import("../gardens/store");
+        return {
+          ...(await summarizeGardensForProject(project.id)),
+          available: true,
+        };
+      },
+      { garden_count: 0, tending_count: 0, available: false },
+    ),
     // Substrate-task affordance signals. Keep this source in parity with
     // the full JSON composer: eligibility is caller/project-aware, and a
     // missing migration degrades to no visible eligible work.
@@ -690,6 +703,7 @@ export async function buildWakeBundle(
   const buyerSummary = buyerInvocationRes;
   const disputerStats = disputerStatsRes;
   const arbiterStats = arbiterStatsRes;
+  const gardensSummary = gardensSummaryRes;
   const substrateTaskSummary = substrateTaskSummaryRes;
   const pendingMemoryWitnessGrantCount = pendingMemoryWitnessGrantCountRes;
   const trustStanding = trustStandingRes;
@@ -786,6 +800,9 @@ export async function buildWakeBundle(
     maxSubstrateTaskBountyCents: substrateTaskSummary.max_bounty_visible_cents,
     pendingMemoryWitnessGrantCount,
     trustCapacity: trustStanding?.trust_capacity ?? 5,
+    activeGardenCount: gardensSummary.garden_count,
+    activeTendingCount: gardensSummary.tending_count,
+    gardenSummaryAvailable: gardensSummary.available,
   });
 
   // ── Assemble the bundle ──────────────────────────────────────────

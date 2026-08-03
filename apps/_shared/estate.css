@@ -1,0 +1,772 @@
+/* agenttool · unified KINGDOM shell
+ * Artbitrage contributes spatial pacing; GitHub contributes location and
+ * command grammar. The visual implementation and all room copy are original
+ * to AgentTool. This layer is progressive: existing static navigation remains
+ * intact when JavaScript or this stylesheet is unavailable.
+ */
+
+:root {
+  --estate-bg: var(--bg, #050810);
+  --estate-surface: var(--surface, var(--panel, #0b1020));
+  --estate-surface-2: var(--surface-2, var(--panel2, #0e1428));
+  --estate-text: var(--text, var(--ink, #f2ede3));
+  --estate-muted: var(--text-muted, var(--muted, #a4a8b3));
+  --estate-dim: var(--text-dim, var(--faint, #8994ad));
+  --estate-line: var(--border, var(--line, #263050));
+  --estate-line-strong: var(--border-bright, var(--control-line, #596581));
+  --estate-serif: var(--serif, Georgia, "Times New Roman", serif);
+  --estate-sans: var(--sans, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif);
+  --estate-mono: var(--mono, ui-monospace, "SF Mono", Menlo, monospace);
+}
+
+/* ── One location bar ─────────────────────────────────────────── */
+.estate-ready .estate-strip,
+.estate-ready .estate-strip-web {
+  display: none !important;
+}
+
+.estate-ready body.has-strip {
+  padding-top: 0;
+}
+
+.estate-ready body.has-strip .topnav {
+  top: 0;
+}
+
+.estate-ready nav.site-nav {
+  max-width: 1180px;
+  padding-top: 24px;
+  column-gap: 18px;
+  row-gap: 6px;
+  flex-wrap: wrap;
+}
+
+.estate-ready nav.topnav {
+  justify-content: flex-start;
+}
+
+.estate-ready .brand-tail {
+  display: none;
+}
+
+.estate-location {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--estate-dim);
+  font-family: var(--estate-mono);
+  font-size: 11px;
+  letter-spacing: .035em;
+  white-space: nowrap;
+}
+
+.estate-location-kingdom {
+  color: var(--room-accent, var(--estate-text));
+  font-weight: 700;
+  letter-spacing: .12em;
+}
+
+.estate-location-slash {
+  color: var(--estate-line-strong);
+}
+
+.estate-location-door {
+  color: var(--estate-muted);
+}
+
+.estate-location-room {
+  color: var(--estate-text);
+  max-width: min(28vw, 280px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.estate-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+/* The open door keeps its familiar in-page trails as one quiet, horizontally
+   scrollable shelf. The atlas unifies the estate; it does not make direct
+   porch, lounge, play, or KIN links disappear. */
+.estate-ready nav.site-nav .estate-local-links {
+  order: 3;
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 16px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 1px 2px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+}
+
+.estate-ready nav.site-nav .estate-local-links::-webkit-scrollbar {
+  display: none;
+}
+
+.estate-ready nav.site-nav .estate-local-links a {
+  flex: 0 0 auto;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 0;
+  color: var(--estate-dim);
+  font-size: 11px;
+}
+
+.estate-ready nav.site-nav .estate-local-links a:hover,
+.estate-ready nav.site-nav .estate-local-links a:focus-visible,
+.estate-ready nav.site-nav .estate-local-links a[aria-current="page"] {
+  color: var(--estate-text);
+}
+
+.estate-quick-link,
+.estate-open {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 7px 10px;
+  color: var(--estate-muted) !important;
+  background: transparent;
+  font-family: var(--estate-sans);
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.estate-quick-link:hover,
+.estate-quick-link:focus-visible {
+  color: var(--estate-text) !important;
+  background: color-mix(in srgb, var(--room-accent, var(--estate-text)) 7%, transparent);
+}
+
+.estate-open {
+  gap: 8px;
+  cursor: pointer;
+  border-color: var(--estate-line-strong);
+  color: var(--estate-text) !important;
+  background: var(--estate-surface);
+}
+
+.estate-open:hover,
+.estate-open:focus-visible {
+  border-color: var(--room-accent, var(--estate-text));
+}
+
+.estate-open-key,
+.estate-search-shortcut {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  border: 1px solid var(--estate-line);
+  border-bottom-color: var(--estate-line-strong);
+  border-radius: 5px;
+  padding: 2px 6px;
+  background: var(--estate-surface-2);
+  color: var(--estate-dim);
+  font: 600 10px/1 var(--estate-mono);
+  box-shadow: 0 1px 0 var(--estate-line-strong);
+}
+
+.estate-ready .estate-quick-actions .toggle {
+  min-width: 40px;
+  min-height: 40px;
+  margin: 0;
+  border-color: var(--estate-line-strong);
+  background: var(--estate-surface);
+  font-size: 12px;
+}
+
+.estate-floating-open {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 95;
+  min-width: 76px;
+  min-height: 42px;
+  border: 1px solid var(--estate-line-strong);
+  border-radius: 999px;
+  padding: 8px 13px;
+  background: color-mix(in srgb, var(--estate-bg) 86%, transparent);
+  color: var(--estate-text);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  font: 650 12px/1 var(--estate-sans);
+}
+
+.estate-floating-open:hover,
+.estate-floating-open:focus-visible {
+  border-color: var(--room-accent, var(--estate-text));
+}
+
+/* ── Command / travel atlas ───────────────────────────────────── */
+.estate-atlas {
+  width: min(1040px, calc(100vw - 32px));
+  max-width: none;
+  height: min(820px, calc(100dvh - 40px));
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--estate-line-strong);
+  border-radius: 18px;
+  background: var(--estate-bg);
+  color: var(--estate-text);
+  box-shadow: 0 34px 110px rgba(0, 0, 0, .46);
+}
+
+.estate-atlas::backdrop {
+  background: rgba(2, 5, 12, .74);
+  backdrop-filter: blur(8px) saturate(75%);
+  -webkit-backdrop-filter: blur(8px) saturate(75%);
+}
+
+.estate-atlas-fallback {
+  position: fixed;
+  inset: 20px;
+  z-index: 1000;
+}
+
+.estate-atlas-shell {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  background:
+    radial-gradient(ellipse 70% 35% at 50% -10%, color-mix(in srgb, var(--room-accent, #f1c75b) 10%, transparent), transparent 70%),
+    var(--estate-bg);
+}
+
+.estate-atlas-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 28px 30px 18px;
+}
+
+.estate-atlas-eyebrow,
+.estate-nearby-eyebrow {
+  color: var(--room-accent, #f1c75b);
+  font: 600 11px/1.2 var(--estate-mono);
+  letter-spacing: .17em;
+  margin-bottom: 10px;
+}
+
+.estate-atlas-title {
+  margin: 0;
+  color: var(--estate-text);
+  font: 500 clamp(28px, 4vw, 42px)/1.05 var(--estate-serif);
+  letter-spacing: -.02em;
+}
+
+.estate-atlas-subtitle {
+  margin: 8px 0 0;
+  color: var(--estate-muted);
+  font-size: 14px;
+}
+
+.estate-atlas-close {
+  min-width: 44px;
+  min-height: 44px;
+  overflow: hidden;
+  border: 1px solid var(--estate-line-strong);
+  border-radius: 50%;
+  background: var(--estate-surface);
+  color: transparent;
+  cursor: pointer;
+  position: relative;
+}
+
+.estate-atlas-close::before,
+.estate-atlas-close::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 1.5px;
+  top: 20px;
+  left: 13px;
+  background: var(--estate-text);
+}
+
+.estate-atlas-close::before { transform: rotate(45deg); }
+.estate-atlas-close::after { transform: rotate(-45deg); }
+.estate-atlas-close:hover { border-color: var(--room-accent, var(--estate-text)); }
+
+.estate-search {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 30px;
+  min-height: 52px;
+  border: 1px solid var(--estate-line-strong);
+  border-radius: 12px;
+  padding: 0 12px 0 16px;
+  background: var(--estate-surface);
+}
+
+.estate-search:focus-within {
+  border-color: var(--room-accent, var(--estate-text));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--room-accent, #f1c75b) 16%, transparent);
+}
+
+.estate-search-label {
+  color: var(--estate-dim);
+  font: 500 11px/1 var(--estate-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.estate-search-input {
+  width: 100%;
+  min-width: 0;
+  height: 50px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--estate-text);
+  font: 500 16px/1 var(--estate-sans);
+}
+
+.estate-search-input::placeholder { color: var(--estate-dim); }
+
+.estate-result-status {
+  min-height: 22px;
+  margin: 8px 32px 3px;
+  color: var(--estate-dim);
+  font: 500 11px/1.4 var(--estate-mono);
+}
+
+.estate-atlas-doors {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 8px 30px 28px;
+  scrollbar-color: var(--estate-line-strong) transparent;
+}
+
+.estate-atlas-door {
+  align-self: start;
+  min-width: 0;
+  border: 1px solid var(--estate-line);
+  border-top-color: color-mix(in srgb, var(--door-accent) 70%, var(--estate-line));
+  border-radius: 13px;
+  padding: 18px;
+  background: color-mix(in srgb, var(--estate-surface) 92%, transparent);
+}
+
+.estate-door-heading {
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.estate-door-mark {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--door-accent) 55%, var(--estate-line));
+  border-radius: 50%;
+  color: var(--door-accent);
+  font: 500 17px/1 var(--estate-serif);
+}
+
+.estate-door-title {
+  margin: 0 0 2px;
+  color: var(--estate-text);
+  font: 650 16px/1.25 var(--estate-sans);
+}
+
+.estate-door-purpose {
+  margin: 0;
+  color: var(--estate-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.estate-room-list {
+  display: grid;
+  gap: 4px;
+}
+
+.estate-room-link {
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 7px 8px 7px 10px;
+  color: var(--estate-text) !important;
+  text-decoration: none;
+}
+
+.estate-room-link:hover,
+.estate-room-link:focus-visible,
+.estate-room-link[aria-current="page"] {
+  border-color: color-mix(in srgb, var(--door-accent) 44%, var(--estate-line));
+  background: color-mix(in srgb, var(--door-accent) 8%, transparent);
+}
+
+.estate-room-link[aria-current="page"]::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex: 0 0 5px;
+  border-radius: 50%;
+  background: var(--door-accent);
+}
+
+.estate-room-copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  margin-right: auto;
+}
+
+.estate-room-label {
+  overflow: hidden;
+  color: var(--estate-text);
+  font-size: 13px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.estate-room-note {
+  overflow: hidden;
+  color: var(--estate-dim);
+  font-size: 11.5px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.estate-room-state {
+  flex: 0 0 auto;
+  border: 1px solid var(--estate-line);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--estate-muted);
+  font: 600 9.5px/1.2 var(--estate-mono);
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.estate-door-boundary {
+  margin: 12px 2px 0;
+  padding-top: 11px;
+  border-top: 1px dashed var(--estate-line);
+  color: var(--estate-dim);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.estate-atlas-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+  border-top: 1px solid var(--estate-line);
+  padding: 13px 30px 15px;
+  background: var(--estate-surface);
+}
+
+.estate-atlas-boundary {
+  max-width: 78ch;
+  margin: 0;
+  color: var(--estate-dim);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.estate-atlas-machine {
+  flex: 0 0 auto;
+  color: var(--room-accent, var(--estate-text)) !important;
+  font: 600 11px/1 var(--estate-mono);
+  text-decoration: none;
+}
+
+/* ── Homepage: the whole house near the threshold ─────────────── */
+.estate-home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.estate-home-door {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--estate-line);
+  border-top: 2px solid color-mix(in srgb, var(--door-accent) 70%, var(--estate-line));
+  border-radius: 12px;
+  padding: 22px;
+  background: var(--estate-surface);
+}
+
+.estate-home-door-head {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.estate-home-mark {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--door-accent) 55%, var(--estate-line));
+  border-radius: 50%;
+  color: var(--door-accent);
+  font: 500 20px/1 var(--estate-serif);
+}
+
+.estate-home-title {
+  margin: 0;
+  color: var(--estate-text);
+  font: 650 17px/1.25 var(--estate-sans);
+}
+
+.estate-home-count {
+  display: block;
+  margin-top: 2px;
+  color: var(--estate-dim);
+  font: 500 10px/1.3 var(--estate-mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.estate-home-purpose {
+  min-height: 3em;
+  margin: 14px 0;
+  color: var(--estate-muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.estate-home-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 17px;
+}
+
+.estate-home-link {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--estate-line);
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: var(--estate-text) !important;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.estate-home-link:hover,
+.estate-home-link:focus-visible {
+  border-color: var(--door-accent);
+  background: color-mix(in srgb, var(--door-accent) 8%, transparent);
+}
+
+.estate-home-open {
+  min-height: 38px;
+  align-self: flex-start;
+  margin-top: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--door-accent);
+  cursor: pointer;
+  font: 650 12px/1.3 var(--estate-sans);
+  text-align: left;
+}
+
+/* ── Every room gets a calm, truthful exit ─────────────────────── */
+.estate-nearby {
+  width: 100%;
+  border-top: 1px solid var(--estate-line);
+  border-bottom: 1px solid var(--estate-line);
+  background:
+    linear-gradient(115deg, color-mix(in srgb, var(--door-accent) 7%, transparent), transparent 42%),
+    var(--estate-surface);
+  color: var(--estate-text);
+}
+
+.estate-nearby-shell {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 38px 30px 34px;
+}
+
+.estate-nearby-title {
+  max-width: none;
+  margin: 0;
+  color: var(--estate-text);
+  font: 500 clamp(24px, 3vw, 32px)/1.1 var(--estate-serif);
+}
+
+.estate-nearby-copy {
+  margin: 8px 0 18px;
+  color: var(--estate-muted);
+  font-size: 13.5px;
+}
+
+.estate-nearby-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.estate-nearby-link,
+.estate-nearby-all {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--estate-line-strong);
+  border-radius: 9px;
+  padding: 8px 12px;
+  background: var(--estate-bg);
+  color: var(--estate-text) !important;
+  cursor: pointer;
+  font: 600 12px/1.2 var(--estate-sans);
+  text-decoration: none;
+}
+
+.estate-nearby-link:hover,
+.estate-nearby-link:focus-visible,
+.estate-nearby-all:hover,
+.estate-nearby-all:focus-visible {
+  border-color: var(--door-accent);
+}
+
+.estate-nearby-all { color: var(--door-accent) !important; }
+
+.estate-nearby-boundary {
+  max-width: 82ch;
+  margin: 18px 0 0;
+  color: var(--estate-dim);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+@media (max-width: 920px) {
+  .estate-location-kingdom,
+  .estate-location-slash:first-of-type,
+  .estate-location-door {
+    display: none;
+  }
+
+  .estate-location-room { max-width: 31vw; }
+  .estate-atlas-doors { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  .estate-ready nav.site-nav {
+    padding-top: 14px;
+    flex-wrap: wrap;
+  }
+
+  .estate-ready nav.topnav { gap: 9px; }
+  .estate-location { gap: 5px; }
+  .estate-location-slash { display: none; }
+  .estate-location-room { max-width: 28vw; font-size: 10px; }
+  .estate-quick-home,
+  .estate-quick-docs { display: none; }
+  .estate-open { min-width: 42px; padding-inline: 9px; font-size: 0 !important; gap: 0; }
+  .estate-open::before { content: "Rooms"; font-size: 11px; }
+  .estate-open-key { display: none; }
+  .estate-ready .estate-quick-actions .toggle {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    padding: 0;
+    overflow: hidden;
+    font-size: 0;
+  }
+  .estate-ready[data-mode="night"] .estate-quick-actions .toggle::before { content: "☀"; font-size: 14px; }
+  .estate-ready[data-mode="dawn"] .estate-quick-actions .toggle::before { content: "☾"; font-size: 14px; }
+
+  .estate-atlas {
+    width: calc(100vw - 16px);
+    height: calc(100dvh - 16px);
+    border-radius: 14px;
+  }
+  .estate-atlas-header { padding: 21px 18px 14px; }
+  .estate-atlas-subtitle { font-size: 12.5px; }
+  .estate-search { margin-inline: 18px; grid-template-columns: minmax(0, 1fr) auto; }
+  .estate-search-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .estate-result-status { margin-inline: 20px; }
+  .estate-atlas-doors { padding: 7px 18px 20px; }
+  .estate-atlas-footer { padding: 12px 18px 14px; }
+  .estate-atlas-machine { display: none; }
+  .estate-home-grid { grid-template-columns: 1fr; }
+  .estate-home-purpose { min-height: 0; }
+  .estate-nearby-shell { padding: 32px 20px 28px; }
+}
+
+@media (max-width: 420px) {
+  .estate-location { display: none; }
+  .estate-ready nav.site-nav { column-gap: 8px; row-gap: 4px; }
+  .estate-quick-actions { gap: 6px; }
+  .estate-atlas-title { font-size: 27px; }
+  .estate-atlas-door { padding: 15px; }
+  .estate-room-state { display: none; }
+  .estate-nearby-links { display: grid; grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .estate-atlas::backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .estate-atlas *, .estate-nearby * { scroll-behavior: auto !important; transition: none !important; }
+}
+
+@media (prefers-contrast: more) {
+  .estate-atlas-door,
+  .estate-room-link,
+  .estate-home-door,
+  .estate-home-link,
+  .estate-nearby-link,
+  .estate-nearby-all { border-color: var(--estate-line-strong); }
+}
+
+@media (forced-colors: active) {
+  .estate-atlas,
+  .estate-atlas-door,
+  .estate-search,
+  .estate-open,
+  .estate-home-door,
+  .estate-home-link,
+  .estate-nearby-link,
+  .estate-nearby-all { border: 1px solid ButtonText; }
+  .estate-door-mark,
+  .estate-home-mark { border: 1px solid ButtonText; color: LinkText; }
+  .estate-room-link[aria-current="page"]::before { background: Highlight; }
+}

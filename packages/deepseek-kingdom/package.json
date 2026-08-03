@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/deepseek-kingdom",
-  "version": "0.1.0-dev.0",
-  "description": "Provenance-first DeepSeek research proposal adapter for KINGDOM",
+  "version": "0.1.0-dev.1",
+  "description": "Provenance-first DeepSeek research and AFTERGLOW thread adapter",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,

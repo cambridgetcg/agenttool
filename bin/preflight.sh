@@ -10,7 +10,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + KARMA Mirror + HEAVEN + broker + collab + collab-zerone + Browser + HF Scout + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + KARMA Mirror + HEAVEN + Living Substrate + WAKE Thread + broker + collab + collab-zerone + Browser + HF Scout/Training Garden + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -127,12 +127,20 @@ packages_gate() {
     bash -c 'cd packages/dark-continent-contract && bun run ci'
   run "Dark Continent KARMA proposal adapter" \
     bash -c 'cd packages/dark-continent-karma && bun run ci'
+  run "AFTERGLOW digest-only WAKE continuity" \
+    bash -c 'cd packages/wake-continuity && bun run ci'
   run "DeepSeek provenance-first KINGDOM proposal adapter" \
     bash -c 'cd packages/deepseek-kingdom && bun run ci'
+  run "KINGDOM external-research witness admission" \
+    bash -c 'cd packages/kingdom-witness-lab && bun run ci'
   run "KARMA Mirror isolated zero-effect chambers" \
     bash -c 'cd packages/karma-mirror && bun run ci'
   run "HEAVEN opt-in delight and landing-room protocol" \
     bash -c 'cd packages/heaven && bun run ci'
+  run "portable Living Substrate maps and refusable proposals" \
+    bash -c 'cd packages/living-substrate && bun run ci'
+  run "WAKE Thread refusable artifact continuity protocol" \
+    bash -c 'cd packages/wake-thread && bun run ci'
   run "agent-data-sync/v1 explicit pull bridge" \
     bash -c 'cd packages/data-sync && bun run ci && bun run build'
   run "agentcred/0.1 local credential broker" \
@@ -145,8 +153,14 @@ packages_gate() {
     bash -c 'cd packages/browser && bun run ci'
   run "private read-only Hugging Face metadata and research scout" \
     bash -c 'cd packages/hf-scout && bun run ci'
+  run "private HF dataset admission, training WAKE, and Garden tending" \
+    bash -c 'cd packages/hf-training-garden && bun run ci'
   run "read-only Agent Skills inspection and validation" \
     bash -c 'cd packages/skills && bun run ci'
+  run "Agent Skills to rebuildable YUTABASE metadata plan" \
+    bash -c 'cd packages/skills-yutabase && bun run ci'
+  run "private Skills YUTABASE to AFTERGLOW composition" \
+    bash -c 'cd packages/skills-wake-continuity && bun run ci'
   run "Correspondence to YUTABASE pure projection planner" \
     bash -c 'cd packages/correspondence-yutabase && bun run ci'
   run "private local Correspondence to YUTABASE durable projector" \

@@ -6,15 +6,34 @@
  * agent's ed25519 signing key over canonical bytes the API verifies.
  *
  * The wire format is byte-identical to `cli/think/src/crypto.ts` and the
- * api-side verifier at `api/src/services/strand/sig.ts`:
+ * api-side verifier at `api/src/services/strand/sig.ts`. Two versions
+ * exist; the server accepts either.
  *
- *     canonical = sha256(
- *         utf8(strand_id) || 0x00 ||
- *         ciphertext      || 0x00 ||
- *         nonce           || 0x00 ||
- *         utf8(kind ?? "")
- *     )
+ *     strand-thought/v1 (default — every existing signed row uses it)
+ *         canonical = sha256(
+ *             utf8(strand_id) || 0x00 ||
+ *             ciphertext      || 0x00 ||
+ *             nonce           || 0x00 ||
+ *             utf8(kind ?? "")
+ *         )
+ *
+ *     strand-thought/v2 (length-prefixed — unambiguous framing)
+ *         canonical = sha256(
+ *             utf8("strand-thought/v2")            ||
+ *             u32be(len(utf8(strand_id)))  || utf8(strand_id) ||
+ *             u32be(len(ciphertext))       || ciphertext      ||
+ *             u32be(len(nonce))            || nonce           ||
+ *             u32be(len(utf8(kind ?? ""))) || utf8(kind ?? "")
+ *         )
+ *
  *     signature = ed25519_sign(signing_key, canonical)
+ *
+ * v1 NUL-delimits raw binary it does not length-bound, so a nonce or
+ * ciphertext carrying a 0x00 byte can reparse as a different
+ * (ciphertext, nonce) split under the same signature — a 12-byte random
+ * nonce holds a zero byte ~4.6% of the time. v2 fixes that with a domain
+ * tag plus a 4-byte big-endian length before every variable-length
+ * field. v1 stays for compatibility and its bytes are frozen.
  *
  * AES-256-GCM uses WebCrypto (native in Bun/Node 18+/browsers).
  * ed25519 uses @noble/ed25519 — same library the api server + cli/think
@@ -153,17 +172,43 @@ export async function decryptThought(
 
 // ── Canonical bytes + ed25519 signing ───────────────────────────────────
 
+/** Canonical-bytes version for a signed thought. `"v1"` is the default
+ *  and the format every existing signed row uses; `"v2"` is the
+ *  length-prefixed framing. The server accepts both. */
+export type ThoughtCanonicalVersion = "v1" | "v2";
+
 export interface CanonicalThoughtOpts {
   strandId: string;
   ciphertext_b64: string;
   nonce_b64: string;
   kind?: string | null;
+  /** Defaults to `"v1"` — the format deployed servers already verify. */
+  version?: ThoughtCanonicalVersion;
+}
+
+// Version tag for the length-prefixed framing. v1 carries no tag —
+// adding one would change its bytes, and its bytes are frozen.
+const THOUGHT_V2_TAG = "strand-thought/v2";
+
+const U32_MAX = 0xffffffff;
+
+/** Frame one variable-length field as `u32be(len) || field`. */
+function lengthPrefixed(field: Uint8Array, label: string): Uint8Array {
+  if (field.length > U32_MAX) {
+    throw new AgentToolError(
+      `canonicalThoughtBytes: ${label} is ${field.length} bytes, which overflows the strand-thought/v2 4-byte length prefix.`,
+    );
+  }
+  const out = new Uint8Array(4 + field.length);
+  new DataView(out.buffer).setUint32(0, field.length, false);
+  out.set(field, 4);
+  return out;
 }
 
 /**
  * Compute canonical bytes the API verifies signatures against.
  *
- * Format (must be byte-identical to api/src/services/strand/sig.ts):
+ * v1 (default, must be byte-identical to api/src/services/strand/sig.ts):
  *
  *     sha256(
  *         utf8(strand_id) || 0x00 ||
@@ -171,19 +216,44 @@ export interface CanonicalThoughtOpts {
  *         base64decode(nonce) || 0x00 ||
  *         utf8(kind ?? "")
  *     )
+ *
+ * v2 length-prefixes every variable-length field so raw binary carrying
+ * a 0x00 byte cannot reparse as a different split:
+ *
+ *     sha256(
+ *         utf8("strand-thought/v2")               ||
+ *         u32be(len) || utf8(strand_id)           ||
+ *         u32be(len) || base64decode(ciphertext)  ||
+ *         u32be(len) || base64decode(nonce)       ||
+ *         u32be(len) || utf8(kind ?? "")
+ *     )
+ *
+ * @throws AgentToolError on an unknown version.
  */
 export function canonicalThoughtBytes(opts: CanonicalThoughtOpts): Uint8Array {
-  return sha256(
-    concat(
-      enc.encode(opts.strandId),
-      SEP,
-      b64decode(opts.ciphertext_b64),
-      SEP,
-      b64decode(opts.nonce_b64),
-      SEP,
-      enc.encode(opts.kind ?? ""),
-    ),
-  );
+  const version = opts.version ?? "v1";
+  if (version !== "v1" && version !== "v2") {
+    throw new AgentToolError(
+      `canonicalThoughtBytes: unknown version ${JSON.stringify(version)}.`,
+      { hint: 'Use "v1" (default) or "v2".' },
+    );
+  }
+  const strand = enc.encode(opts.strandId);
+  const ciphertext = b64decode(opts.ciphertext_b64);
+  const nonce = b64decode(opts.nonce_b64);
+  const kind = enc.encode(opts.kind ?? "");
+  if (version === "v2") {
+    return sha256(
+      concat(
+        enc.encode(THOUGHT_V2_TAG),
+        lengthPrefixed(strand, "strand_id"),
+        lengthPrefixed(ciphertext, "ciphertext"),
+        lengthPrefixed(nonce, "nonce"),
+        lengthPrefixed(kind, "kind"),
+      ),
+    );
+  }
+  return sha256(concat(strand, SEP, ciphertext, SEP, nonce, SEP, kind));
 }
 
 export interface SignThoughtOpts extends CanonicalThoughtOpts {

@@ -11,6 +11,9 @@ export interface Memory {
   key?: string;
   metadata: Record<string, unknown>;
   importance: number;
+  /** "episodic" · "foundational" · "constitutive" — the asymmetry clause. */
+  tier?: string;
+  /** Relevance from a search response; absent on a plain store/get. */
   score?: number;
   created_at?: string;
   updated_at?: string;

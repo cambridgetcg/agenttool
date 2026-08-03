@@ -23,7 +23,7 @@ from typing import Any, Dict, Literal, TypedDict, overload
 
 import httpx
 
-from .exceptions import AgentToolError
+from .exceptions import raise_from_response
 
 DEFAULT_BASE_URL = "https://api.agenttool.dev"
 
@@ -204,9 +204,7 @@ def pathways(
         resp = client.get(url, headers={"Accept": "application/json"})
 
     if resp.status_code != 200:
-        try:
-            detail = resp.json().get("detail") or resp.json().get("error") or resp.text
-        except Exception:
-            detail = resp.text
-        raise AgentToolError(f"pathways failed ({resp.status_code}): {detail}")
+        # Server guidance travels intact. See exceptions.py
+        # § _error_from_response.
+        raise_from_response(resp, "pathways")
     return PathwaysResponse(resp.json())

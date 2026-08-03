@@ -1,0 +1,80 @@
+{
+  "name": "@agenttool/kingdom-witness-lab",
+  "version": "0.1.0-dev.0",
+  "description": "Deterministic research passports and multi-witness dossiers for KINGDOM",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./research-passport.schema.json": {
+      "default": "./schema/kingdom-research-passport-v0.1.schema.json"
+    },
+    "./execution-route-binding.schema.json": {
+      "default": "./schema/kingdom-execution-route-binding-v0.1.schema.json"
+    },
+    "./witness-dossier.schema.json": {
+      "default": "./schema/kingdom-witness-dossier-v0.1.schema.json"
+    },
+    "./speculative-trial.schema.json": {
+      "default": "./schema/kingdom-speculative-trial-v0.1.schema.json"
+    },
+    "./deepseek-atlas.schema.json": {
+      "default": "./schema/kingdom-deepseek-atlas-v0.1.schema.json"
+    },
+    "./deepseek-2026-08-01.json": {
+      "default": "./research/deepseek-2026-08-01.json"
+    }
+  },
+  "files": [
+    "dist",
+    "research",
+    "schema",
+    "README.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "engines": {
+    "node": ">=20.19.0",
+    "bun": ">=1.3.5"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests",
+    "smoke:node": "node --input-type=module --eval \"import('./dist/index.js').then(m=>{if(m.RESEARCH_PASSPORT_SCHEMA!=='kingdom.research-passport/0.1'||typeof m.createResearchPassport!=='function'||typeof m.getDeepSeekResearchAtlas!=='function')process.exit(1)})\"",
+    "ci": "bun run typecheck && bun run test && bun run build && bun run smoke:node",
+    "prepack": "bun run ci"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/node": "20.19.43",
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1",
+    "typescript": "5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/kingdom-witness-lab"
+  },
+  "keywords": [
+    "agents",
+    "deepseek",
+    "kingdom",
+    "provenance",
+    "research",
+    "witness"
+  ]
+}

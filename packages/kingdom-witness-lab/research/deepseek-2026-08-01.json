@@ -1,0 +1,306 @@
+{
+  "schema": "kingdom.deepseek-atlas/0.1",
+  "atlas_id": "sha256:90bb057b3a1a562bbaf32ebe361592cf19bd85e69b847b146eaf7e0c49d20bd1",
+  "observed_on": "2026-08-01",
+  "entries": [
+    {
+      "key": "deepseek-3fs",
+      "subject": {
+        "provider": "github",
+        "kind": "code",
+        "id": "deepseek-ai/3FS",
+        "revision": "22fca04564c7cc230fd8b9523b8b92864e1dad47"
+      },
+      "publisher_assertions": {
+        "publisher": "deepseek-ai",
+        "declared_license": "mit",
+        "license_scope": "repository",
+        "capabilities": ["distributed_training_storage"]
+      },
+      "provider_observation": {
+        "public_access": "public_observed",
+        "basis": "github_repository"
+      },
+      "proposal": {
+        "roles": ["storage_research_lead"],
+        "targets": ["repo_archive", "trusted_runtime", "yutabase"],
+        "stage": "deferred_design_reference",
+        "boundary_codes": [
+          "code_execution_separate_review",
+          "license_clearance_not_assessed",
+          "not_decentralized_archive",
+          "raw_content_not_admitted",
+          "workflow_not_executed"
+        ]
+      },
+      "official_sources": ["https://github.com/deepseek-ai/3FS"]
+    },
+    {
+      "key": "deepseek-engram",
+      "subject": {
+        "provider": "github",
+        "kind": "code",
+        "id": "deepseek-ai/Engram",
+        "revision": "fb7f84a21f91223715394a33a1dc24bbfb7f788e"
+      },
+      "publisher_assertions": {
+        "publisher": "deepseek-ai",
+        "declared_license": "apache-2.0",
+        "license_scope": "code_only",
+        "capabilities": ["conditional_static_memory"]
+      },
+      "provider_observation": {
+        "public_access": "public_observed",
+        "basis": "github_repository"
+      },
+      "proposal": {
+        "roles": ["static_memory_research_lead"],
+        "targets": ["kingdom", "trusted_runtime", "yutabase"],
+        "stage": "deferred_design_reference",
+        "boundary_codes": [
+          "code_execution_separate_review",
+          "demo_not_production_implementation",
+          "license_clearance_not_assessed",
+          "model_terms_separate",
+          "raw_content_not_admitted",
+          "workflow_not_executed"
+        ]
+      },
+      "official_sources": [
+        "https://arxiv.org/abs/2601.07372",
+        "https://github.com/deepseek-ai/Engram"
+      ]
+    },
+    {
+      "key": "deepseek-math-v2",
+      "subject": {
+        "provider": "huggingface",
+        "kind": "model",
+        "id": "deepseek-ai/DeepSeek-Math-V2",
+        "revision": "6ea7c60b42df79beac8cfa51ccb7e19b9e7b6e95"
+      },
+      "publisher_assertions": {
+        "publisher": "deepseek-ai",
+        "declared_license": "apache-2.0",
+        "license_scope": "artifact",
+        "capabilities": ["self_verification_research"]
+      },
+      "provider_observation": {
+        "public_access": "public_ungated_observed",
+        "basis": "huggingface_metadata"
+      },
+      "proposal": {
+        "roles": ["reasoning_research_lead"],
+        "targets": ["trials", "yutabase"],
+        "stage": "offline_trial_candidate",
+        "boundary_codes": [
+          "binary_download_separate_approval",
+          "caller_injected_execution_only",
+          "license_clearance_not_assessed",
+          "model_output_not_truth",
+          "raw_content_not_admitted",
+          "weights_not_downloaded"
+        ]
+      },
+      "official_sources": [
+        "https://arxiv.org/abs/2511.22570",
+        "https://huggingface.co/deepseek-ai/DeepSeek-Math-V2"
+      ]
+    },
+    {
+      "key": "deepseek-ocr-2",
+      "subject": {
+        "provider": "huggingface",
+        "kind": "model",
+        "id": "deepseek-ai/DeepSeek-OCR-2",
+        "revision": "aaa02f3811945a91062062994c5c4a3f4c0af2b0"
+      },
+      "publisher_assertions": {
+        "publisher": "deepseek-ai",
+        "declared_license": "apache-2.0",
+        "license_scope": "artifact",
+        "capabilities": ["document_ocr", "multilingual_visual_interpretation"]
+      },
+      "provider_observation": {
+        "public_access": "public_ungated_observed",
+        "basis": "huggingface_metadata"
+      },
+      "proposal": {
+        "roles": ["document_interpreter_candidate"],
+        "targets": ["browser", "trials"],
+        "stage": "offline_trial_candidate",
+        "boundary_codes": [
+          "binary_download_separate_approval",
+          "caller_injected_execution_only",
+          "custom_code_never_auto_execute",
+          "license_clearance_not_assessed",
+          "model_output_not_truth",
+          "raw_content_not_admitted",
+          "visual_input_disclosure_separate",
+          "weights_not_downloaded"
+        ]
+      },
+      "official_sources": [
+        "https://arxiv.org/abs/2601.20552",
+        "https://github.com/deepseek-ai/DeepSeek-OCR-2",
+        "https://huggingface.co/deepseek-ai/DeepSeek-OCR-2"
+      ]
+    },
+    {
+      "key": "deepseek-proverbench",
+      "subject": {
+        "provider": "huggingface",
+        "kind": "dataset",
+        "id": "deepseek-ai/DeepSeek-ProverBench",
+        "revision": "3b9f067088e5e005fab91434ddc05a903e0a6252"
+      },
+      "publisher_assertions": {
+        "publisher": "deepseek-ai",
+        "declared_license": null,
+        "license_scope": "unknown",
+        "capabilities": ["formal_proof_benchmark"]
+      },
+      "provider_observation": {
+        "public_access": "public_ungated_observed",
+        "basis": "huggingface_metadata"
+      },
+      "proposal": {
+        "roles": ["benchmark_fixture"],
+        "targets": ["trials", "yutabase"],
+        "stage": "metadata_only",
+        "boundary_codes": [
+          "benchmark_excluded_from_training",
+          "license_clearance_not_assessed",
+          "no_declared_license",
+          "raw_content_not_admitted"
+        ]
+      },
+      "official_sources": [
+        "https://arxiv.org/abs/2504.21801",
+        "https://huggingface.co/datasets/deepseek-ai/DeepSeek-ProverBench"
+      ]
+    },
+    {
+      "key": "deepseek-r1",
+      "subject": {
+        "provider": "huggingface",
+        "kind": "model",
+        "id": "deepseek-ai/DeepSeek-R1",
+        "revision": "56d4cbbb4d29f4355bab4b9a39ccb717a14ad5ad"
+      },
+      "publisher_assertions": {
+        "publisher": "deepseek-ai",
+        "declared_license": "mit",
+        "license_scope": "artifact",
+        "capabilities": ["reasoning_text_generation"]
+      },
+      "provider_observation": {
+        "public_access": "public_ungated_observed",
+        "basis": "huggingface_metadata"
+      },
+      "proposal": {
+        "roles": ["reasoning_research_lead"],
+        "targets": ["kingdom", "trials", "yutabase"],
+        "stage": "offline_trial_candidate",
+        "boundary_codes": [
+          "binary_download_separate_approval",
+          "caller_injected_execution_only",
+          "license_clearance_not_assessed",
+          "model_output_not_truth",
+          "provider_api_separate",
+          "raw_content_not_admitted",
+          "weights_not_downloaded"
+        ]
+      },
+      "official_sources": [
+        "https://arxiv.org/abs/2501.12948",
+        "https://huggingface.co/deepseek-ai/DeepSeek-R1"
+      ]
+    },
+    {
+      "key": "deepseek-v4-flash-0731",
+      "subject": {
+        "provider": "huggingface",
+        "kind": "model",
+        "id": "deepseek-ai/DeepSeek-V4-Flash-0731",
+        "revision": "7872f01b1d1fe23eabc4c98b48bffcef5a386062"
+      },
+      "publisher_assertions": {
+        "publisher": "deepseek-ai",
+        "declared_license": "mit",
+        "license_scope": "artifact",
+        "capabilities": ["long_context_text_generation"]
+      },
+      "provider_observation": {
+        "public_access": "public_ungated_observed",
+        "basis": "huggingface_metadata"
+      },
+      "proposal": {
+        "roles": ["long_context_interpreter_candidate"],
+        "targets": ["browser", "rhetorlint", "trials", "trusted_runtime"],
+        "stage": "offline_trial_candidate",
+        "boundary_codes": [
+          "binary_download_separate_approval",
+          "caller_injected_execution_only",
+          "custom_code_never_auto_execute",
+          "license_clearance_not_assessed",
+          "model_output_not_truth",
+          "provider_api_separate",
+          "raw_content_not_admitted",
+          "weights_not_downloaded"
+        ]
+      },
+      "official_sources": [
+        "https://arxiv.org/abs/2606.19348",
+        "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731"
+      ]
+    },
+    {
+      "key": "deepspec",
+      "subject": {
+        "provider": "github",
+        "kind": "code",
+        "id": "deepseek-ai/DeepSpec",
+        "revision": "005e03b81cec38b7da6399833d609ee89a2587f2"
+      },
+      "publisher_assertions": {
+        "publisher": "deepseek-ai",
+        "declared_license": "mit",
+        "license_scope": "repository",
+        "capabilities": ["speculative_decoding"]
+      },
+      "provider_observation": {
+        "public_access": "public_observed",
+        "basis": "github_repository"
+      },
+      "proposal": {
+        "roles": ["speculative_decoding_research_lead"],
+        "targets": ["trials", "trusted_runtime"],
+        "stage": "deferred_design_reference",
+        "boundary_codes": [
+          "bulk_cache_separate_approval",
+          "code_execution_separate_review",
+          "license_clearance_not_assessed",
+          "raw_content_not_admitted",
+          "third_party_terms_separate",
+          "workflow_not_executed"
+        ]
+      },
+      "official_sources": [
+        "https://arxiv.org/abs/2607.05147",
+        "https://github.com/deepseek-ai/DeepSpec"
+      ]
+    }
+  ],
+  "boundary": {
+    "artifact_content": "not_downloaded",
+    "code": "not_executed",
+    "public_metadata": "read_only_observed",
+    "inference_or_write_api": "not_called",
+    "credentials": "not_read",
+    "terms": "not_accepted",
+    "legal_clearance": "not_assessed",
+    "truth": "not_determined",
+    "authority": "none"
+  }
+}

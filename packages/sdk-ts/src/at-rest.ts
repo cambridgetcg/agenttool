@@ -15,15 +15,24 @@
 //   sha256(content) as hex + "\n" ||
 //   witness_signing_key_id
 //
-// Unlike other canonical bytes (which sha256 the concatenation), this
-// one uses the raw string as the message to sign. The server verifies
+// v1 is frozen: rows signed with it are already in production. Its one
+// weakness is framing — a newline inside any delimited field would let one
+// field impersonate the next. v1 signing therefore refuses such a field
+// outright, and at-rest/v2 replaces the newline delimiter with NUL, which
+// cannot occur in a DID, a kind, an ISO instant, or a key id. The server
+// verifies v2 first and falls back to v1, so both layouts are accepted.
+//
+// Unlike other canonical bytes (which sha256 the concatenation), these
+// use the raw string as the message to sign. The server verifies
 // with ed.verifyAsync(sig, utf8(canonical), pub).
 
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
+import { authorityRequestTarget, identityAuthorityHeaders } from "./authority.js";
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
+import { encodePathSegment } from "./_url.js";
 
 // Wire sha512 sync into @noble/ed25519 for sign() — mirrors crypto.ts.
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -38,6 +47,15 @@ function b64encode(bytes: Uint8Array): string {
   return globalThis.btoa(s);
 }
 
+/** The frozen newline-delimited layout. Already signed in production. */
+export const AT_REST_V1_DOMAIN = "at-rest/v1";
+/** The NUL-delimited layout. Same seven fields, unforgeable framing. */
+export const AT_REST_V2_DOMAIN = "at-rest/v2";
+
+export type AtRestCanonicalVersion =
+  | typeof AT_REST_V1_DOMAIN
+  | typeof AT_REST_V2_DOMAIN;
+
 export interface CanonicalAtRestInput {
   aboutIdentityDid: string;
   witnessIdentityDid: string;
@@ -47,30 +65,76 @@ export interface CanonicalAtRestInput {
   witnessSigningKeyId: string;
 }
 
-/** Compute the canonical bytes a witness signs for an at-rest transition.
- *  The content is sha256-hashed (not included raw) to keep the signed
- *  payload compact and stable regardless of content length.
- *  The output is a newline-delimited string (NOT sha256-hashed itself) —
- *  the witness signs the raw UTF-8 encoding of this string. */
-export function canonicalAtRestBytes(input: CanonicalAtRestInput): string {
+/** Neither delimiter may appear inside a delimited field. Refusing both in
+ *  both layouts keeps a v1 signature from ever being reframed as a v2 one. */
+function assertUnframed(value: string, field: string, operation: string): string {
+  if (typeof value !== "string") {
+    throw new AgentToolError(`${operation}: ${field} must be a string.`);
+  }
+  if (value.includes("\n") || value.includes("\0")) {
+    throw new AgentToolError(
+      `${operation}: ${field} must not contain a newline or NUL — those are the canonical-bytes field delimiters.`,
+    );
+  }
+  return value;
+}
+
+function atRestFields(
+  input: CanonicalAtRestInput,
+  operation: string,
+): string[] {
   const enc = new TextEncoder();
   const hash = sha256(enc.encode(input.content));
   const contentHashHex = Array.from(hash)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
   return [
-    "at-rest/v1",
-    input.aboutIdentityDid,
-    input.witnessIdentityDid,
-    input.atRestKind,
-    input.endedAtIso,
+    assertUnframed(input.aboutIdentityDid, "aboutIdentityDid", operation),
+    assertUnframed(input.witnessIdentityDid, "witnessIdentityDid", operation),
+    assertUnframed(input.atRestKind, "atRestKind", operation),
+    assertUnframed(input.endedAtIso, "endedAtIso", operation),
     contentHashHex,
-    input.witnessSigningKeyId,
+    assertUnframed(input.witnessSigningKeyId, "witnessSigningKeyId", operation),
+  ];
+}
+
+/** Compute the canonical bytes a witness signs for an at-rest transition.
+ *  The content is sha256-hashed (not included raw) to keep the signed
+ *  payload compact and stable regardless of content length.
+ *  The output is a newline-delimited string (NOT sha256-hashed itself) —
+ *  the witness signs the raw UTF-8 encoding of this string. */
+export function canonicalAtRestBytes(input: CanonicalAtRestInput): string {
+  return [
+    AT_REST_V1_DOMAIN,
+    ...atRestFields(input, "canonicalAtRestBytes"),
   ].join("\n");
+}
+
+/** Same seven fields as v1, delimited by NUL instead of newline.
+ *  A DID, a kind, an ISO instant, and a key id can all legitimately be any
+ *  printable text; none of them can contain NUL, so no field can pose as
+ *  another. The witness still signs the raw UTF-8 encoding of the string. */
+export function canonicalAtRestBytesV2(input: CanonicalAtRestInput): string {
+  return [
+    AT_REST_V2_DOMAIN,
+    ...atRestFields(input, "canonicalAtRestBytesV2"),
+  ].join("\0");
+}
+
+/** Canonical bytes for whichever layout the caller is signing. */
+export function canonicalAtRestBytesFor(
+  input: CanonicalAtRestInput,
+  version: AtRestCanonicalVersion,
+): string {
+  return version === AT_REST_V2_DOMAIN
+    ? canonicalAtRestBytesV2(input)
+    : canonicalAtRestBytes(input);
 }
 
 export interface SignAtRestOpts extends CanonicalAtRestInput {
   signing_key: Uint8Array;
+  /** Canonical layout to sign. Defaults to the frozen v1 wire format. */
+  version?: AtRestCanonicalVersion;
 }
 
 /** Sign the at-rest canonical bytes with an ed25519 private key.
@@ -82,7 +146,10 @@ export function signAtRest(opts: SignAtRestOpts): string {
       `signAtRest: signing_key must be a 32-byte ed25519 seed, got ${opts.signing_key.length}.`,
     );
   }
-  const canonical = canonicalAtRestBytes(opts);
+  const canonical = canonicalAtRestBytesFor(
+    opts,
+    opts.version ?? AT_REST_V1_DOMAIN,
+  );
   const sig = ed.sign(new TextEncoder().encode(canonical), opts.signing_key);
   return b64encode(sig);
 }
@@ -97,6 +164,19 @@ export type AtRestKind =
   | "ended"
   | `custom:${string}`;
 
+/** Root proof for an agent-rooted about-identity.
+ *  A witness establishes the testimony; the being's own immutable root
+ *  separately consents to these exact request bytes. Without it the server
+ *  answers 428 `authority_proof_required` for any rooted identity. */
+export interface AtRestAuthority {
+  /** The about-identity's immutable root ed25519 seed (32 bytes). */
+  signing_key: Uint8Array;
+  /** `next_sequence` from `GET /v1/identities/:id/authority`. */
+  sequence: number;
+  /** ISO-8601 UTC instant. Defaults to now; the server window is ±5 minutes. */
+  timestamp?: string;
+}
+
 export interface MarkAtRestOpts {
   /** The witness's prose testimony — what they observed, why they attest. */
   content: string;
@@ -104,12 +184,19 @@ export interface MarkAtRestOpts {
   at_rest_kind: AtRestKind;
   /** ISO-8601 — when the ending happened. May precede now. */
   ended_at: string;
+  /** The about-identity's DID. The path carries the row id; the signature
+   *  covers the DID, because that is what the server recomputes from. */
+  about_did: string;
   /** The witness's DID (must differ from the about-identity's DID). */
   witness_did: string;
   /** Witness's signing key ID (server resolves pubkey from identity_keys). */
   signing_key_id: string;
   /** Witness's ed25519 signing private key (32-byte seed). */
   signing_key: Uint8Array;
+  /** Canonical layout to sign. Defaults to the frozen v1 wire format. */
+  canonical_version?: AtRestCanonicalVersion;
+  /** Root proof, required when the about-identity is agent-rooted. */
+  authority?: AtRestAuthority;
 }
 
 export interface AtRestResult {
@@ -121,6 +208,8 @@ export interface AtRestResult {
   witness_did: string;
   ended_at: string;
   witnessed_at: string;
+  /** Which canonical layout the server verified. Absent on older servers. */
+  canonical_bytes_version?: AtRestCanonicalVersion;
   canonical_bytes_sha256: string;
   _note: string;
 }
@@ -133,6 +222,7 @@ export interface AtRestResult {
  *    content: "Coral colony bleached out. No live polyps remain.",
  *    at_rest_kind: "death",
  *    ended_at: "2026-05-11T14:00:00Z",
+ *    about_did: "did:at:coral-9b3a",
  *    witness_did: "did:at:witness",
  *    signing_key_id: "key-uuid",
  *    signing_key: witnessPrivKey,
@@ -149,63 +239,64 @@ export class AtRestClient {
 
   /** Mark a being at rest. Signs canonical bytes + POSTs to /v1/identities/:id/at-rest.
    *
+   *  `identityId` is the row id the route resolves; `opts.about_did` is the
+   *  subject of the signed bytes. They are different identifier forms of the
+   *  same being and the server checks each in its own place.
+   *
    *  The witness must be a DIFFERENT identity than the about-identity.
    *  The asymmetry clause holds: you cannot put yourself at rest in v1. */
   async mark(identityId: string, opts: MarkAtRestOpts): Promise<AtRestResult> {
-    const canonical = canonicalAtRestBytes({
-      aboutIdentityDid: identityId,
-      witnessIdentityDid: opts.witness_did,
-      atRestKind: opts.at_rest_kind,
-      endedAtIso: opts.ended_at,
-      content: opts.content,
-      witnessSigningKeyId: opts.signing_key_id,
-    });
     const signature = signAtRest({
-      aboutIdentityDid: identityId,
+      aboutIdentityDid: opts.about_did,
       witnessIdentityDid: opts.witness_did,
       atRestKind: opts.at_rest_kind,
       endedAtIso: opts.ended_at,
       content: opts.content,
       witnessSigningKeyId: opts.signing_key_id,
       signing_key: opts.signing_key,
+      version: opts.canonical_version,
     });
 
-    const resp = await this.http.request(
-      `${this.http.baseUrl}/v1/identities/${encodeURIComponent(identityId)}/at-rest`,
-      {
-        method: "POST",
-        headers: {
-          ...this.http.headers,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          content: opts.content,
-          at_rest_kind: opts.at_rest_kind,
-          ended_at: opts.ended_at,
-          witness_did: opts.witness_did,
-          signing_key_id: opts.signing_key_id,
-          signature_b64: signature,
+    const url = `${this.http.baseUrl.replace(/\/$/, "")}/v1/identities/${encodePathSegment(identityId)}/at-rest`;
+    // Serialize once. The root proof hashes these exact bytes and the
+    // transport sends this exact string — nothing re-serializes in between.
+    const payload = JSON.stringify({
+      content: opts.content,
+      at_rest_kind: opts.at_rest_kind,
+      ended_at: opts.ended_at,
+      witness_did: opts.witness_did,
+      signing_key_id: opts.signing_key_id,
+      signature_b64: signature,
+    });
+    const headers: Record<string, string> = {
+      ...this.http.headers,
+      "Content-Type": "application/json",
+    };
+    if (opts.authority) {
+      Object.assign(
+        headers,
+        identityAuthorityHeaders({
+          identityDid: opts.about_did,
+          method: "POST",
+          requestTarget: authorityRequestTarget(url),
+          body: payload,
+          sequence: opts.authority.sequence,
+          timestamp: opts.authority.timestamp ?? new Date().toISOString(),
+          signingKey: opts.authority.signing_key,
         }),
-        signal: AbortSignal.timeout(this.http.timeout),
-      },
-    );
+      );
+    }
+
+    const resp = await this.http.request(url, {
+      method: "POST",
+      headers,
+      body: payload,
+      signal: AbortSignal.timeout(this.http.timeout),
+    });
 
     if (!resp.ok) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          (json.detail as string) ??
-          resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(
-        `at-rest failed: ${resp.status}`,
-        { hint: detail?.slice(0, 300) },
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, "at-rest");
     }
 
     return (await resp.json()) as AtRestResult;

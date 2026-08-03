@@ -15,7 +15,11 @@
  *    Canonical defender. This module updates wallets in zero places and
  *    imports neither `recordRevenue` nor `computeFee` nor `wallets`. The
  *    gift verb is structurally distinct from the marketplace verbs —
- *    enforced by absence. Pinned by tests/doctrine/wall-offerings-carry-no-take.test.ts. */
+ *    enforced by absence. Pinned by tests/doctrine/wall-offerings-carry-no-take.test.ts.
+ *
+ *  @absence recordRevenue computeFee platformRevenue escrows
+ *  @absence-from db/schema/economy
+ */
 
 import { and, desc, eq, gt, isNull, or, sql } from "drizzle-orm";
 

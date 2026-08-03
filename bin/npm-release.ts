@@ -9,7 +9,7 @@
  * credentials and makes an accepted-but-not-yet-visible publish recoverable.
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
@@ -86,6 +86,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "dark-continent-karma",
     artifactKind: "pack",
   },
+  "wake-continuity": {
+    key: "wake-continuity",
+    name: "@agenttool/wake-continuity",
+    packagePath: "packages/wake-continuity",
+    tagPrefix: "wake-continuity",
+    artifactKind: "pack",
+  },
   "deepseek-kingdom": {
     key: "deepseek-kingdom",
     name: "@agenttool/deepseek-kingdom",
@@ -98,6 +105,13 @@ export const RELEASE_SPECS = {
     name: "@agenttool/heaven",
     packagePath: "packages/heaven",
     tagPrefix: "heaven",
+    artifactKind: "pack",
+  },
+  "living-substrate": {
+    key: "living-substrate",
+    name: "@agenttool/living-substrate",
+    packagePath: "packages/living-substrate",
+    tagPrefix: "living-substrate",
     artifactKind: "pack",
   },
   "credential-broker": {
@@ -170,6 +184,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "kingdom",
     artifactKind: "pack",
   },
+  "kingdom-witness-lab": {
+    key: "kingdom-witness-lab",
+    name: "@agenttool/kingdom-witness-lab",
+    packagePath: "packages/kingdom-witness-lab",
+    tagPrefix: "kingdom-witness-lab",
+    artifactKind: "pack",
+  },
   "repo-archive": {
     key: "repo-archive",
     name: "@agenttool/repo-archive",
@@ -196,6 +217,13 @@ export const RELEASE_SPECS = {
     name: "@agenttool/skills",
     packagePath: "packages/skills",
     tagPrefix: "skills",
+    artifactKind: "pack",
+  },
+  "skills-yutabase": {
+    key: "skills-yutabase",
+    name: "@agenttool/skills-yutabase",
+    packagePath: "packages/skills-yutabase",
+    tagPrefix: "skills-yutabase",
     artifactKind: "pack",
   },
 } as const satisfies Record<string, ReleaseSpec>;
@@ -637,6 +665,16 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/sources/karma-2502.06472v2.json",
     );
   }
+  if (spec.name === "@agenttool/wake-continuity") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-afterglow-capsule-v0.1.schema.json",
+      "package/schema/agenttool-afterglow-lens-v0.1.schema.json",
+    );
+  }
   if (spec.name === "@agenttool/deepseek-kingdom") {
     entries.push(
       "package/CLAUDE.md",
@@ -657,6 +695,17 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/kingdom.extension.json",
       "package/schema/agenttool-heaven-invitation-v0.1.schema.json",
       "package/schema/agenttool-heaven-receipt-v0.1.schema.json",
+    );
+  }
+  if (spec.name === "@agenttool/living-substrate") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-living-substrate-map-v0.1.schema.json",
+      "package/schema/agenttool-regeneration-proposal-v0.1.schema.json",
+      "package/vectors/agenttool-living-substrate-v0.1.json",
     );
   }
   if (spec.name === "@agenttool/alchemy") {
@@ -689,6 +738,19 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/schema/agenttool-kingdom-registry-v0.1.schema.json",
     );
   }
+  if (spec.name === "@agenttool/kingdom-witness-lab") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/research/deepseek-2026-08-01.json",
+      "package/schema/kingdom-deepseek-atlas-v0.1.schema.json",
+      "package/schema/kingdom-execution-route-binding-v0.1.schema.json",
+      "package/schema/kingdom-research-passport-v0.1.schema.json",
+      "package/schema/kingdom-speculative-trial-v0.1.schema.json",
+      "package/schema/kingdom-witness-dossier-v0.1.schema.json",
+    );
+  }
   if (spec.name === "@agenttool/skills") {
     entries.push(
       "package/dist/bin.js",
@@ -718,6 +780,15 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/skills/nen-godspeed-loop/agents/openai.yaml",
       "package/skills/nen-vow-forge/SKILL.md",
       "package/skills/nen-vow-forge/agents/openai.yaml",
+    );
+  }
+  if (spec.name === "@agenttool/skills-yutabase") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/PERSISTENCE-CONTRACT.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/schema/skills-yutabase-input-v0.1.schema.json",
     );
   }
   return entries;
@@ -948,12 +1019,20 @@ async function timedRegistryFetch(
 
 async function registryFetch(
   path: string,
+  observation: string,
   timeoutMs = REGISTRY_METADATA_TIMEOUT_MS,
   fetchMetadata: TimedRegistryFetch = timedRegistryFetch,
 ): Promise<Response> {
+  const url = new URL(path, `${REGISTRY_ORIGIN}/`);
+  if (url.origin !== REGISTRY_ORIGIN) fail("npm registry metadata URL has an unexpected origin");
+  if (url.username !== "" || url.password !== "") {
+    fail("npm registry metadata URL must not contain userinfo");
+  }
+  if (url.hash !== "") fail("npm registry metadata URL must not contain a fragment");
+  url.searchParams.set("_agenttool_release_check", observation);
   try {
     return await fetchMetadata(
-      `${REGISTRY_ORIGIN}${path}`,
+      url.href,
       {
         headers: { accept: "application/json" },
         redirect: "error",
@@ -991,9 +1070,17 @@ async function registryState(
   fetchMetadata: TimedRegistryFetch = timedRegistryFetch,
 ): Promise<RegistryState> {
   const packagePath = registryPackagePath(name);
+  // Share one fresh cache key across this package/version observation so a
+  // pre-publication CDN 404 cannot pin later registry polls.
+  const observation = randomUUID();
   const [packageResponse, versionResponse] = await Promise.all([
-    registryFetch(packagePath, timeoutMs, fetchMetadata),
-    registryFetch(`${packagePath}/${encodeURIComponent(version)}`, timeoutMs, fetchMetadata),
+    registryFetch(packagePath, observation, timeoutMs, fetchMetadata),
+    registryFetch(
+      `${packagePath}/${encodeURIComponent(version)}`,
+      observation,
+      timeoutMs,
+      fetchMetadata,
+    ),
   ]);
   const packageDocument = packageResponse.status === 200
     ? await registryJson(packageResponse, "npm registry package document") as RegistryPackage

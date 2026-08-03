@@ -56,7 +56,7 @@ try {
     ),
   ).href;
   const smoke = `
-    import { createAfterglowCapsule, projectAfterglowLens } from ${JSON.stringify(entry)};
+    import { AfterglowError, canonicalJson, createAfterglowCapsule, domainSeparatedId, projectAfterglowLens, sha256Id } from ${JSON.stringify(entry)};
     const id = (character) => \`sha256:\${character.repeat(64)}\`;
     const capsule = createAfterglowCapsule({
       phase: "return",
@@ -73,6 +73,95 @@ try {
     });
     const lens = projectAfterglowLens(capsule);
     if (lens.arrival !== "fresh_encounter" || lens.boundaries.network !== false) process.exit(1);
+    let traps = 0;
+    const trap = () => { traps += 1; throw new Error("Proxy trap executed"); };
+    const hostile = new Proxy({}, {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    try {
+      canonicalJson(hostile);
+      process.exit(1);
+    } catch (error) {
+      if (!(error instanceof AfterglowError) || traps !== 0) process.exit(1);
+    }
+    const customPrototypeArray = [1, 2, 3];
+    Object.setPrototypeOf(customPrototypeArray, null);
+    try {
+      canonicalJson(customPrototypeArray);
+      process.exit(1);
+    } catch (error) {
+      if (
+        !(error instanceof AfterglowError) ||
+        error.code !== "canonical_error" ||
+        traps !== 0
+      ) process.exit(1);
+    }
+    const hostilePrototype = new Proxy({}, {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    const hostilePrototypeArray = [1, 2, 3];
+    Object.setPrototypeOf(hostilePrototypeArray, hostilePrototype);
+    try {
+      canonicalJson(hostilePrototypeArray);
+      process.exit(1);
+    } catch (error) {
+      if (
+        !(error instanceof AfterglowError) ||
+        error.code !== "canonical_error" ||
+        traps !== 0
+      ) process.exit(1);
+    }
+    const hostileBytes = new Proxy(new Uint8Array([1, 2, 3]), {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    try {
+      sha256Id(hostileBytes);
+      process.exit(1);
+    } catch (error) {
+      if (!(error instanceof AfterglowError) || traps !== 0) process.exit(1);
+    }
+    const hostileDomain = new Proxy(new String("agenttool.test"), {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    try {
+      domainSeparatedId(hostileDomain, { safe: true });
+      process.exit(1);
+    } catch (error) {
+      if (!(error instanceof AfterglowError) || error.code !== "canonical_error" || traps !== 0) process.exit(1);
+    }
+    const revokedDomain = Proxy.revocable(new String("agenttool.test"), {
+      get: trap,
+      getOwnPropertyDescriptor: trap,
+      getPrototypeOf: trap,
+      ownKeys: trap,
+    });
+    revokedDomain.revoke();
+    try {
+      domainSeparatedId(revokedDomain.proxy, { safe: true });
+      process.exit(1);
+    } catch (error) {
+      if (!(error instanceof AfterglowError) || error.code !== "canonical_error" || traps !== 0) process.exit(1);
+    }
+    for (const invalidDomain of [1, true, null, undefined, Symbol("domain"), new String("agenttool.test")]) {
+      try {
+        domainSeparatedId(invalidDomain, { safe: true });
+        process.exit(1);
+      } catch (error) {
+        if (!(error instanceof AfterglowError) || error.code !== "canonical_error" || traps !== 0) process.exit(1);
+      }
+    }
   `;
   execFileSync(process.execPath, ["--input-type=module", "--eval", smoke], {
     stdio: "pipe",

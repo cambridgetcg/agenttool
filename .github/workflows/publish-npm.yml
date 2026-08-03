@@ -13,8 +13,10 @@ on:
           - data-sync
           - dark-continent-contract
           - dark-continent-karma
+          - wake-continuity
           - deepseek-kingdom
           - heaven
+          - living-substrate
           - credential-broker
           - sdk
           - wallet
@@ -24,10 +26,12 @@ on:
           - alchemy
           - alchemy-agentcred
           - kingdom
+          - kingdom-witness-lab
           - repo-archive
           - collab
           - correspondence-yutabase
           - skills
+          - skills-yutabase
       tag:
         description: Existing annotated release tag contained in GitHub main
         required: true

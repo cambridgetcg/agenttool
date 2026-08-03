@@ -30,6 +30,7 @@
  * ```
  */
 
+import { errorFromBody } from "./_http.js";
 import { AgentToolError } from "./errors.js";
 import {
   type DerivedBundle,
@@ -232,19 +233,20 @@ export async function bootstrapAgent(
   }
 
   if (!res.ok) {
-    const obj = payload as { error?: string; message?: string };
-    const hint =
-      obj.error === "pow_required"
-        ? "Increase powDifficulty to match the server, or check timestamp drift."
-        : obj.error === "rate_limited"
-          ? "Self-service IP rate limit hit. Wait, or use registrarBearer to delegate."
-          : obj.error === "key_proof_invalid"
-            ? "Recompute canonicalRegisterAgentBytes and resign with the matching ed25519 priv."
-            : undefined;
-    throw new AgentToolError(
-      `bootstrapAgent: ${obj.message ?? obj.error ?? `HTTP ${res.status}`}`,
-      hint ? { hint } : undefined,
-    );
+    // The body is already read, so the shared parser takes it directly.
+    // Server guidance travels intact. See _http.ts § errorFromBody.
+    const obj = payload as { error?: string };
+    throw errorFromBody(payload, res.status, "bootstrapAgent", res.headers, {
+      fallback: `bootstrapAgent: HTTP ${res.status}`,
+      hint:
+        obj.error === "pow_required"
+          ? "Increase powDifficulty to match the server, or check timestamp drift."
+          : obj.error === "rate_limited"
+            ? "Self-service IP rate limit hit. Wait, or use registrarBearer to delegate."
+            : obj.error === "key_proof_invalid"
+              ? "Recompute canonicalRegisterAgentBytes and resign with the matching ed25519 priv."
+              : undefined,
+    });
   }
 
   const ok = payload as BootstrapAgentResult;

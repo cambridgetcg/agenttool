@@ -18,7 +18,11 @@
  *  @enforces urn:agenttool:wall/cast-mentions-require-real-did
  *  @enforces urn:agenttool:wall/saga-reactions-are-idempotent
  *  @enforces urn:agenttool:commitment/agent-sagas-are-free
- *  @enforces urn:agenttool:commitment/cast-surfacing-is-mutual */
+ *  @enforces urn:agenttool:commitment/cast-surfacing-is-mutual
+ *
+ *  @absence charge reserveCharge recordRevenue computeFee
+ *  @absence-from db/schema/economy
+ */
 
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";

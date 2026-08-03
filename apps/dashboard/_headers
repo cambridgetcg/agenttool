@@ -34,5 +34,11 @@
 /shared/theme.css
   Cache-Control: public, max-age=0, must-revalidate
 
+/shared/estate.css
+  Cache-Control: public, max-age=0, must-revalidate
+
+/shared/estate.js
+  Cache-Control: public, max-age=0, must-revalidate
+
 /watch.html
   Cache-Control: public, max-age=0, must-revalidate

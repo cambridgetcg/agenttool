@@ -1,6 +1,7 @@
 export type DeepSeekKingdomErrorCode =
   | "invalid_source"
   | "invalid_proposal"
+  | "invalid_afterglow_thread"
   | "invalid_json";
 
 export class DeepSeekKingdomError extends TypeError {

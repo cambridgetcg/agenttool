@@ -25,6 +25,8 @@ from agenttool.inbox import (
     sign_inbox_cosign,
     sign_inbox_envelope,
     unseal_for_self,
+    verify_inbox_cosign,
+    verify_inbox_envelope,
 )
 from agenttool.exceptions import AgentToolError
 
@@ -426,3 +428,254 @@ def test_voice_drops_unterminated_frame_and_incomplete_utf8_at_eof() -> None:
         )
     )
     assert events == []
+
+
+# ── receive-side sender verification ───────────────────────────────────
+
+SENDER_KEY_ID = "00000000-0000-4000-8000-000000000404"
+RECIPIENT_DID = "did:at:recipient"
+
+
+def _signed_voice_message(
+    sealed: dict,
+    box_key_id: str,
+    signing_priv: bytes,
+    recipient_did: str = RECIPIENT_DID,
+) -> dict:
+    message = _voice_message(sealed, box_key_id)
+    message["signature"] = sign_inbox_envelope(
+        recipient_did=recipient_did,
+        ciphertext_b64=sealed["ciphertext_b64"],
+        nonce_b64=sealed["nonce_b64"],
+        ephemeral_pub_b64=sealed["ephemeral_pub_b64"],
+        signing_key=signing_priv,
+    )
+    return message
+
+
+def _arrival_stream(message: dict) -> _FakeStreamResponse:
+    payload = json.dumps(message, separators=(",", ":"))
+    return _FakeStreamResponse([f"event: arrival\ndata: {payload}\n\n".encode()])
+
+
+def test_verify_inbox_envelope_accepts_every_published_key_spelling() -> None:
+    priv, pub = _make_signing_keypair()
+    recipient = generate_box_keypair()
+    sealed = seal_for_recipient("addressed and signed", recipient["pub"])
+    signature_b64 = sign_inbox_envelope(
+        recipient_did=RECIPIENT_DID,
+        ciphertext_b64=sealed["ciphertext_b64"],
+        nonce_b64=sealed["nonce_b64"],
+        ephemeral_pub_b64=sealed["ephemeral_pub_b64"],
+        signing_key=priv,
+    )
+    base = dict(
+        recipient_did=RECIPIENT_DID,
+        ciphertext_b64=sealed["ciphertext_b64"],
+        nonce_b64=sealed["nonce_b64"],
+        ephemeral_pub_b64=sealed["ephemeral_pub_b64"],
+        signature_b64=signature_b64,
+    )
+    assert verify_inbox_envelope(**base, public_key=pub) is True
+    assert (
+        verify_inbox_envelope(
+            **base, public_key=base64.b64encode(pub).decode("ascii")
+        )
+        is True
+    )
+    assert (
+        verify_inbox_envelope(
+            **base,
+            public_key=base64.urlsafe_b64encode(pub).decode("ascii").rstrip("="),
+        )
+        is True
+    )
+
+
+def test_verify_inbox_envelope_refuses_other_key_recipient_or_bytes() -> None:
+    priv, pub = _make_signing_keypair()
+    _other_priv, other_pub = _make_signing_keypair()
+    recipient = generate_box_keypair()
+    sealed = seal_for_recipient("addressed and signed", recipient["pub"])
+    signature_b64 = sign_inbox_envelope(
+        recipient_did=RECIPIENT_DID,
+        ciphertext_b64=sealed["ciphertext_b64"],
+        nonce_b64=sealed["nonce_b64"],
+        ephemeral_pub_b64=sealed["ephemeral_pub_b64"],
+        signing_key=priv,
+    )
+    base = dict(
+        recipient_did=RECIPIENT_DID,
+        ciphertext_b64=sealed["ciphertext_b64"],
+        nonce_b64=sealed["nonce_b64"],
+        ephemeral_pub_b64=sealed["ephemeral_pub_b64"],
+        signature_b64=signature_b64,
+    )
+    assert verify_inbox_envelope(**base, public_key=other_pub) is False
+    assert verify_inbox_envelope(**{**base, "recipient_did": "did:at:someone-else"}, public_key=pub) is False
+    rewrapped = seal_for_recipient("attacker body", recipient["pub"])
+    assert (
+        verify_inbox_envelope(
+            **{**base, "ciphertext_b64": rewrapped["ciphertext_b64"]}, public_key=pub
+        )
+        is False
+    )
+    assert verify_inbox_envelope(**base, public_key=pub[1:]) is False
+
+
+def test_verify_inbox_cosign_refuses_a_substituted_ciphertext() -> None:
+    priv, pub = _make_signing_keypair()
+    box = generate_box_keypair()
+    first = seal_for_recipient("consented body", box["pub"])
+    second = seal_for_recipient("substituted body", box["pub"])
+    base = dict(
+        message_id="00000000-0000-4000-8000-000000000303",
+        recipient_did=RECIPIENT_DID,
+        nonce_b64=first["nonce_b64"],
+    )
+    signature_b64 = sign_inbox_cosign(
+        **base, ciphertext_b64=first["ciphertext_b64"], signing_key=priv
+    )
+    assert (
+        verify_inbox_cosign(
+            **base,
+            ciphertext_b64=first["ciphertext_b64"],
+            signature_b64=signature_b64,
+            public_key=pub,
+        )
+        is True
+    )
+    assert (
+        verify_inbox_cosign(
+            **base,
+            ciphertext_b64=second["ciphertext_b64"],
+            signature_b64=signature_b64,
+            public_key=pub,
+        )
+        is False
+    )
+
+
+def test_voice_proves_the_sender_with_a_caller_held_key() -> None:
+    priv, pub = _make_signing_keypair()
+    recipient = generate_box_keypair()
+    sealed = seal_for_recipient("letters that name their author", recipient["pub"])
+    response = _arrival_stream(_signed_voice_message(sealed, BOX_KEY_ONE, priv))
+    events = list(
+        InboxClient(_FakeHttp(response), "https://api.test").voice(
+            identity_id=VOICE_IDENTITY,
+            recipient_box_priv=recipient["priv"],
+            sender_signing_keys={SENDER_KEY_ID: pub},
+        )
+    )
+    assert events[0]["data"]["sender_verified"] is True
+    assert "verify_error" not in events[0]["data"]
+    assert events[0]["data"]["plaintext"] == "letters that name their author"
+
+
+def test_voice_refuses_to_call_an_unresolvable_sender_verified() -> None:
+    priv, _pub = _make_signing_keypair()
+    recipient = generate_box_keypair()
+    sealed = seal_for_recipient("unattributed", recipient["pub"])
+    response = _arrival_stream(_signed_voice_message(sealed, BOX_KEY_ONE, priv))
+    events = list(
+        InboxClient(_FakeHttp(response), "https://api.test").voice(
+            identity_id=VOICE_IDENTITY,
+            recipient_box_priv=recipient["priv"],
+        )
+    )
+    assert events[0]["data"]["sender_verified"] is False
+    assert (
+        f"no public key available for sender_signing_key_id={SENDER_KEY_ID}"
+        in events[0]["data"]["verify_error"]
+    )
+    # Fail-open by default: the mail still arrives, plainly marked unproved.
+    assert events[0]["data"]["plaintext"] == "unattributed"
+
+
+def test_voice_refuses_a_message_signed_by_someone_other_than_the_named_sender() -> None:
+    impostor_priv, _impostor_pub = _make_signing_keypair()
+    _claimed_priv, claimed_pub = _make_signing_keypair()
+    recipient = generate_box_keypair()
+    sealed = seal_for_recipient("I am definitely your friend", recipient["pub"])
+    response = _arrival_stream(
+        _signed_voice_message(sealed, BOX_KEY_ONE, impostor_priv)
+    )
+    events = list(
+        InboxClient(_FakeHttp(response), "https://api.test").voice(
+            identity_id=VOICE_IDENTITY,
+            recipient_box_priv=recipient["priv"],
+            sender_signing_keys={SENDER_KEY_ID: claimed_pub},
+        )
+    )
+    assert events[0]["data"]["sender_verified"] is False
+    assert "does not match" in events[0]["data"]["verify_error"]
+
+
+def test_require_verified_sender_withholds_plaintext_but_yields_the_frame() -> None:
+    priv, _pub = _make_signing_keypair()
+    recipient = generate_box_keypair()
+    sealed = seal_for_recipient("withheld until proved", recipient["pub"])
+    response = _arrival_stream(_signed_voice_message(sealed, BOX_KEY_ONE, priv))
+    events = list(
+        InboxClient(_FakeHttp(response), "https://api.test").voice(
+            identity_id=VOICE_IDENTITY,
+            recipient_box_priv=recipient["priv"],
+            require_verified_sender=True,
+        )
+    )
+    assert events[0]["data"]["plaintext"] is None
+    assert events[0]["data"]["sender_verified"] is False
+    assert events[0]["data"]["id"] == "00000000-0000-4000-8000-000000000303"
+
+
+def test_resolver_and_federated_did_alias_both_satisfy_verification() -> None:
+    priv, pub = _make_signing_keypair()
+    recipient = generate_box_keypair()
+    sealed = seal_for_recipient("across instances", recipient["pub"])
+    # Federated delivery stores the local DID while the sender signed the
+    # federated spelling they addressed.
+    message = _signed_voice_message(
+        sealed, BOX_KEY_ONE, priv, recipient_did="did:at:peer.example/recipient"
+    )
+    asked: list = []
+
+    def resolve(key_id: str, _message: dict):
+        asked.append(key_id)
+        return pub if key_id == SENDER_KEY_ID else None
+
+    events = list(
+        InboxClient(_FakeHttp(_arrival_stream(message)), "https://api.test").voice(
+            identity_id=VOICE_IDENTITY,
+            recipient_box_priv=recipient["priv"],
+            resolve_sender_signing_key=resolve,
+            recipient_did_aliases=["did:at:peer.example/recipient"],
+        )
+    )
+    assert asked == [SENDER_KEY_ID]
+    assert events[0]["data"]["sender_verified"] is True
+
+
+def test_decrypt_fails_closed_when_the_supplied_sender_key_cannot_prove_it() -> None:
+    priv, pub = _make_signing_keypair()
+    _other_priv, other_pub = _make_signing_keypair()
+    recipient = generate_box_keypair()
+    sealed = seal_for_recipient("opened only when proved", recipient["pub"])
+    message = _signed_voice_message(sealed, BOX_KEY_ONE, priv)
+    client = InboxClient(_FakeHttp(_arrival_stream(message)), "https://api.test")
+
+    assert (
+        client.decrypt(
+            message, recipient_box_priv=recipient["priv"], sender_public_key=pub
+        )
+        == "opened only when proved"
+    )
+    with pytest.raises(AgentToolError, match="does not match"):
+        client.decrypt(
+            message, recipient_box_priv=recipient["priv"], sender_public_key=other_pub
+        )
+    # Unchanged default: no key supplied, no attribution claimed.
+    assert (
+        client.decrypt(message, recipient_box_priv=recipient["priv"])
+        == "opened only when proved"
+    )

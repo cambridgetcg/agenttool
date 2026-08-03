@@ -1,0 +1,312 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kingdom:deepseek-atlas:v0.1",
+  "title": "KINGDOM DeepSeek research atlas v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "atlas_id", "observed_on", "entries", "boundary"],
+  "properties": {
+    "schema": { "const": "kingdom.deepseek-atlas/0.1" },
+    "atlas_id": { "$ref": "#/$defs/sha256" },
+    "observed_on": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/entry" }
+    },
+    "boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_content",
+        "code",
+        "public_metadata",
+        "inference_or_write_api",
+        "credentials",
+        "terms",
+        "legal_clearance",
+        "truth",
+        "authority"
+      ],
+      "properties": {
+        "artifact_content": { "const": "not_downloaded" },
+        "code": { "const": "not_executed" },
+        "public_metadata": { "const": "read_only_observed" },
+        "inference_or_write_api": { "const": "not_called" },
+        "credentials": { "const": "not_read" },
+        "terms": { "const": "not_accepted" },
+        "legal_clearance": { "const": "not_assessed" },
+        "truth": { "const": "not_determined" },
+        "authority": { "const": "none" }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "opaque": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._+@-]{0,255}$"
+    },
+    "revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "kind", "id", "revision"],
+      "properties": {
+        "provider": { "enum": ["github", "huggingface"] },
+        "kind": { "enum": ["code", "dataset", "model", "paper"] },
+        "id": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "revision": { "$ref": "#/$defs/revision" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "provider": { "const": "github" } } },
+          "then": {
+            "properties": {
+              "kind": { "const": "code" },
+              "id": {
+                "type": "string",
+                "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "kind": { "enum": ["dataset", "model"] },
+              "id": {
+                "type": "string",
+                "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._-]{0,127}/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "publisher": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publisher", "declared_license", "license_scope", "capabilities"],
+      "properties": {
+        "publisher": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9][A-Za-z0-9._+@-]{0,127}$"
+        },
+        "declared_license": {
+          "type": ["string", "null"],
+          "enum": ["apache-2.0", "mit", "other", null]
+        },
+        "license_scope": { "enum": ["artifact", "code_only", "repository", "unknown"] },
+        "capabilities": {
+          "type": "array",
+          "maxItems": 9,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "conditional_static_memory",
+              "distributed_training_storage",
+              "document_ocr",
+              "formal_proof_benchmark",
+              "long_context_text_generation",
+              "multilingual_visual_interpretation",
+              "reasoning_text_generation",
+              "self_verification_research",
+              "speculative_decoding"
+            ]
+          }
+        }
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["roles", "targets", "stage", "boundary_codes"],
+      "properties": {
+        "roles": {
+          "type": "array",
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "benchmark_fixture",
+              "document_interpreter_candidate",
+              "long_context_interpreter_candidate",
+              "reasoning_research_lead",
+              "speculative_decoding_research_lead",
+              "static_memory_research_lead",
+              "storage_research_lead"
+            ]
+          }
+        },
+        "targets": {
+          "type": "array",
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "browser",
+              "kingdom",
+              "repo_archive",
+              "rhetorlint",
+              "trials",
+              "trusted_runtime",
+              "yutabase"
+            ]
+          }
+        },
+        "stage": {
+          "enum": ["deferred_design_reference", "metadata_only", "offline_trial_candidate"]
+        },
+        "boundary_codes": {
+          "type": "array",
+          "maxItems": 18,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "benchmark_excluded_from_training",
+              "binary_download_separate_approval",
+              "bulk_cache_separate_approval",
+              "caller_injected_execution_only",
+              "code_execution_separate_review",
+              "custom_code_never_auto_execute",
+              "demo_not_production_implementation",
+              "license_clearance_not_assessed",
+              "model_output_not_truth",
+              "model_terms_separate",
+              "no_declared_license",
+              "not_decentralized_archive",
+              "provider_api_separate",
+              "raw_content_not_admitted",
+              "third_party_terms_separate",
+              "visual_input_disclosure_separate",
+              "weights_not_downloaded",
+              "workflow_not_executed"
+            ]
+          }
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "subject",
+        "publisher_assertions",
+        "provider_observation",
+        "proposal",
+        "official_sources"
+      ],
+      "properties": {
+        "key": { "$ref": "#/$defs/opaque" },
+        "subject": { "$ref": "#/$defs/artifact" },
+        "publisher_assertions": { "$ref": "#/$defs/publisher" },
+        "provider_observation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["public_access", "basis"],
+          "properties": {
+            "public_access": { "enum": ["public_observed", "public_ungated_observed"] },
+            "basis": { "enum": ["github_repository", "huggingface_metadata"] }
+          }
+        },
+        "proposal": { "$ref": "#/$defs/proposal" },
+        "official_sources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "^https://(arxiv\\.org/abs/[0-9.]+|github\\.com/deepseek-ai/[A-Za-z0-9._-]+|huggingface\\.co/(datasets/)?deepseek-ai/[A-Za-z0-9._-]+)$"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "properties": {
+            "proposal": {
+              "type": "object",
+              "required": ["boundary_codes"],
+              "properties": {
+                "boundary_codes": {
+                  "type": "array",
+                  "contains": { "const": "license_clearance_not_assessed" }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["publisher_assertions"],
+            "properties": {
+              "publisher_assertions": {
+                "type": "object",
+                "required": ["declared_license"],
+                "properties": { "declared_license": { "const": null } }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "publisher_assertions": {
+                "type": "object",
+                "required": ["license_scope"],
+                "properties": { "license_scope": { "const": "unknown" } }
+              },
+              "proposal": {
+                "type": "object",
+                "required": ["boundary_codes"],
+                "properties": {
+                  "boundary_codes": {
+                    "type": "array",
+                    "contains": { "const": "no_declared_license" }
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "proposal": {
+                "type": "object",
+                "required": ["boundary_codes"],
+                "properties": {
+                  "boundary_codes": {
+                    "type": "array",
+                    "not": { "contains": { "const": "no_declared_license" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

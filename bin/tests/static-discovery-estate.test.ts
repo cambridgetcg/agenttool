@@ -73,6 +73,7 @@ const SITES = [
       "https://agenttool.dev/party",
       "https://agenttool.dev/room",
       "https://agenttool.dev/sky",
+      "https://agenttool.dev/garden",
     ],
   },
   {
@@ -256,13 +257,16 @@ describe("robots and sitemaps are explicit, bounded, and local", () => {
     });
   }
 
-  test("the docs map publishes both understanding guides", () => {
+  test("the docs map publishes canonical repository guides", () => {
     const urls = sitemapUrls(read("apps/docs/sitemap.xml"));
     expect(urls).toContain(
       "https://docs.agenttool.dev/AGENT-DISCOVERY.md",
     );
     expect(urls).toContain(
       "https://docs.agenttool.dev/CASTLE-OF-UNDERSTANDING.md",
+    );
+    expect(urls).toContain(
+      "https://docs.agenttool.dev/HF-TRAINING-GARDEN.md",
     );
   });
 });
@@ -311,6 +315,64 @@ describe("published understanding guides keep canonical source custody", () => {
       ]);
     });
   }
+
+  test("the HF Training Garden guide keeps canonical source custody", () => {
+    const guidePath = join(
+      REPO_ROOT,
+      "apps/docs/HF-TRAINING-GARDEN.md",
+    );
+    expect(lstatSync(guidePath).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(guidePath)).toBe(
+      "../../docs/HF-TRAINING-GARDEN.md",
+    );
+  });
+
+  test("the HF Training Garden guide has explicit static markdown custody", () => {
+    expect(headerBlock(
+      read("apps/docs/_headers"),
+      "/HF-TRAINING-GARDEN.md",
+    )).toEqual([
+      "Content-Type: text/markdown; charset=utf-8",
+      "Cache-Control: public, max-age=300, must-revalidate, no-transform",
+      "Access-Control-Allow-Origin: *",
+      "X-Content-Type-Options: nosniff",
+    ]);
+  });
+
+  test("the HF Training Garden guide remains in the LLM discovery index", () => {
+    const entry =
+      "- [HF-TRAINING-GARDEN.md](https://docs.agenttool.dev/HF-TRAINING-GARDEN.md): Immutable HF discovery, non-scalar data admission, phase-specific WAKE continuity, sealed evaluation, and a public-safe one-way Garden seam.";
+    const entries = read("apps/docs/llms.txt")
+      .split(/\r?\n/)
+      .filter((line) => line === entry);
+    expect(entries).toEqual([entry]);
+  });
+
+  test("the HF Training Garden guide binds the exact public companion without self-attestation", () => {
+    const guide = read("docs/HF-TRAINING-GARDEN.md");
+    const revision = "9406aa1ce6b9ee435da9d688899aa4dbca32605c";
+
+    expect(guide).toContain(
+      "https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden",
+    );
+    expect(guide).toContain(revision);
+    expect(guide).toContain(
+      "a69685dc3cd0430493c9721b418a2679180d10cbaeb4bc5801bf30f6c843cb9a",
+    );
+    expect(guide).toContain(
+      "c1fc9bf46b6abc0550caac70ffe601a8e4c47a06b0cb7f02cc80b9ad7eeb361b",
+    );
+    expect(guide).toContain(
+      "4fb84f92318fd68082ccf4e9b1235bf341657b28",
+    );
+    expect(guide).toContain(
+      "73c073f6a23c11f595204720ee4925e76622e73fcfcfff4020a440687baef2a0",
+    );
+    expect(guide).toMatch(/non-self-attesting build\s+record/);
+    expect(guide).toContain("intended_identifier_only");
+    expect(guide).toContain("caller_reported_published");
+    expect(guide).not.toContain("invalid_grant");
+  });
 });
 
 test("the static discovery estate does not advertise an A2A service", () => {

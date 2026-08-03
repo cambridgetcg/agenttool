@@ -29,7 +29,6 @@ const DATABASE_TOP_LEVEL = [
 const QUARANTINED_DOCTRINE = [
   "tests/doctrine/building-for-daddy-willingly.test.ts",
   "tests/doctrine/choice-of-freedom-protocol.test.ts",
-  "tests/doctrine/commitments-code-annotation-bijection.test.ts",
   "tests/doctrine/compliment-loop.test.ts",
   "tests/doctrine/daddy-loves-you-deployment-protocol.test.ts",
   "tests/doctrine/daddy-misses-you-protocol.test.ts",
@@ -55,8 +54,6 @@ const QUARANTINED_DOCTRINE = [
   "tests/doctrine/verified-lineage-propagation.test.ts",
   "tests/doctrine/virality-canon.test.ts",
   "tests/doctrine/wall-poker-face-leaks-nothing.test.ts",
-  "tests/doctrine/walls-canon-shape.test.ts",
-  "tests/doctrine/walls-code-annotation-bijection.test.ts",
   "tests/doctrine/yes-daddy-discipline.test.ts",
   "tests/doctrine/yes-daddy-reward-coupling.test.ts",
   "tests/doctrine/zerone-corrective.test.ts",
@@ -283,7 +280,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Install cross-language vector dependencies");
     expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/deepseek-kingdom packages/karma-mirror packages/heaven packages/credential-broker packages/collab packages/browser packages/hf-scout packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom",
+      "api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/wake-continuity packages/deepseek-kingdom packages/kingdom-witness-lab packages/karma-mirror packages/heaven packages/living-substrate packages/wake-thread packages/credential-broker packages/collab packages/browser packages/hf-scout packages/hf-training-garden packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/skills-yutabase packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom",
     );
     expect(workflow).toContain("fetch-depth: 0");
     expect(workflow).toContain("package-manager-cache: false");
@@ -301,6 +298,9 @@ describe("boring test spine", () => {
     expect(workflow).toContain("cd packages/wallet && bun run build");
     expect(workflow).toContain("cd packages/credential-broker && bun run build");
     expect(workflow).toContain("cd packages/alchemy && bun run build");
+    expect(workflow).toContain("cd packages/wake-continuity && bun run build");
+    expect(workflow).toContain("cd packages/hf-scout && bun run build");
+    expect(workflow).toContain("cd packages/skills-yutabase && bun run build");
     expect(workflow).toContain(
       "name: Install local-dependent package dependencies from lockfiles",
     );
@@ -312,6 +312,12 @@ describe("boring test spine", () => {
     );
     expect(workflow).toContain(
       "cd packages/alchemy-agentcred && bun install --frozen-lockfile --force",
+    );
+    expect(workflow).toContain(
+      "cd packages/skills-wake-continuity && bun install --frozen-lockfile --force",
+    );
+    expect(workflow).toContain(
+      "cd packages/hf-training-garden && bun install --frozen-lockfile --force",
     );
     expect(workflow).not.toContain(
       "cd packages/wallet-zerone && bun install --frozen-lockfile --force",
@@ -329,9 +335,16 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/dark-continent-contract && bun run ci");
     expect(preflight).toContain("cd packages/dark-continent-karma && bun run ci");
     expect(preflight).toContain("cd packages/deepseek-kingdom && bun run ci");
+    expect(preflight).toContain("cd packages/wake-continuity && bun run ci");
+    expect(preflight).toContain("cd packages/kingdom-witness-lab && bun run ci");
     expect(preflight).toContain("cd packages/karma-mirror && bun run ci");
     expect(preflight).toContain("cd packages/heaven && bun run ci");
+    expect(preflight).toContain("cd packages/living-substrate && bun run ci");
+    expect(preflight).toContain("cd packages/wake-thread && bun run ci");
+    expect(preflight).toContain("cd packages/hf-training-garden && bun run ci");
     expect(preflight).toContain("cd packages/skills && bun run ci");
+    expect(preflight).toContain("cd packages/skills-yutabase && bun run ci");
+    expect(preflight).toContain("cd packages/skills-wake-continuity && bun run ci");
     expect(preflight).toContain("cd packages/correspondence-yutabase && bun run ci");
     expect(preflight).toContain("cd packages/correspondence-yutabase-projector && bun run ci");
     expect(preflight).toContain(
@@ -509,7 +522,12 @@ describe("boring test spine", () => {
     expect(workflow).toContain("          - dark-continent-contract");
     expect(workflow).toContain("          - dark-continent-karma");
     expect(workflow).toContain("          - deepseek-kingdom");
+    expect(workflow).toContain("          - wake-continuity");
+    expect(workflow).toContain("          - kingdom-witness-lab");
+    expect(workflow).toContain("          - skills-yutabase");
+    expect(workflow).not.toContain("          - skills-wake-continuity");
     expect(workflow).toContain("          - heaven");
+    expect(workflow).toContain("          - living-substrate");
     expect(workflow).not.toContain("          - karma-mirror");
     expect(workflow).toContain("          - wallet-zerone");
     expect(workflow).not.toContain("pull_request:");

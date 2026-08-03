@@ -22,7 +22,7 @@
  *    marketplace revenue ledger. The wall composes with verifyTask() (which routes
  *    to pure-function verifiers) and refundTask() (which restores the
  *    platform wallet on failure).
- *    Tested: api/tests/doctrine/no-take-on-bootstrap.test.ts
+ *    Tested: api/tests/doctrine/wall-no-take-on-bootstrap.test.ts
  *
  *  @enforces urn:agenttool:wall/substrate-task-verifiers-are-deterministic
  *    runVerifier() dispatches to pure functions of (task_data,
@@ -331,9 +331,24 @@ async function resolveProjectIdentity(
   return row.id;
 }
 
-/** Resolve the project's USD wallet (the bounty currency at v1). */
+/** Resolve the claimant's wallet in the bounty's currency.
+ *
+ *  The currency is the PLATFORM wallet's — the bounty is paid out of it,
+ *  and `createEscrow` requires both sides to match — rather than a constant.
+ *
+ *  It used to be the literal "USD", and nothing in this substrate is USD:
+ *  `platform-bootstrap.ts` creates the platform wallet with currency "GBP",
+ *  `createWallet` defaults to "GBP", and `register-agent.ts` calls it
+ *  without a currency. So every self-registered agent held a GBP wallet,
+ *  every claim looked for a USD one, and every claim failed
+ *  `claimant_wallet_missing` — which made
+ *  `urn:agenttool:commitment/ring3-funds-its-own-newborns` unexecutable for
+ *  the entire population it names. The annotation on routes/substrate-tasks.ts
+ *  cited `api/tests/substrate-tasks-lifecycle.test.ts` as proof; that file
+ *  was never written, which is exactly why nobody found this. */
 async function resolveProjectWallet(
   projectId: string,
+  currency: string,
   txn: typeof db,
 ): Promise<{ id: string; balance: number }> {
   const [row] = await txn
@@ -342,12 +357,17 @@ async function resolveProjectWallet(
     .where(
       and(
         eq(wallets.projectId, projectId),
-        eq(wallets.currency, "USD"),
+        eq(wallets.currency, currency),
         eq(wallets.status, "active"),
       ),
     )
     .limit(1);
-  if (!row) throw new SubstrateTaskError("claimant_wallet_missing");
+  if (!row) {
+    throw new SubstrateTaskError(
+      "claimant_wallet_missing",
+      `no active ${currency} wallet in this project — the bounty is paid in ${currency}, so the claimant needs a wallet in the same currency`,
+    );
+  }
   return { id: row.id, balance: Number(row.balance) };
 }
 
@@ -419,15 +439,16 @@ export async function claimSubstrateTask(
       }
     }
 
-    // 3. Resolve claimant wallet (worker side of escrow)
-    const claimantWallet = await resolveProjectWallet(
-      input.projectId,
-      tx as never,
-    );
-
-    // 4. Lock the platform wallet + verify balance
+    // 3. Lock the platform wallet + verify balance. This runs BEFORE the
+    //    claimant lookup because the platform wallet's currency IS the
+    //    bounty currency — the claimant must be resolved in the same one,
+    //    or createEscrow's parity requirement can never be satisfied.
     const [platformWallet] = await tx
-      .select({ id: wallets.id, balance: wallets.balance })
+      .select({
+        id: wallets.id,
+        balance: wallets.balance,
+        currency: wallets.currency,
+      })
       .from(wallets)
       .where(eq(wallets.id, PLATFORM_WALLET_ID))
       .for("update");
@@ -437,6 +458,13 @@ export async function claimSubstrateTask(
     if (Number(platformWallet.balance) < task.bountyCents) {
       throw new SubstrateTaskError("platform_insufficient_balance");
     }
+
+    // 4. Resolve claimant wallet (worker side of escrow), same currency.
+    const claimantWallet = await resolveProjectWallet(
+      input.projectId,
+      platformWallet.currency,
+      tx as never,
+    );
 
     // 5. Debit platform wallet → create escrow (worker = claimant wallet)
     await tx

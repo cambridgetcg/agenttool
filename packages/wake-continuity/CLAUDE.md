@@ -13,7 +13,8 @@ npm pack --dry-run --ignore-scripts
 
 ## Invariants
 
-- Keep runtime dependencies at zero. `node:crypto` is the only Node built-in
+- Keep runtime dependencies at zero. `node:crypto` plus the zero-trap Proxy
+  and typed-array predicates from `node:util/types` are the only Node built-ins
   allowed under `src/`.
 - Keep the core pure: no environment, filesystem, clock, random source,
   network, provider, model, database, Chronicle, wallet, runtime, telemetry,
@@ -43,6 +44,10 @@ npm pack --dry-run --ignore-scripts
 - Content IDs bind canonical bytes. They do not prove provenance, secrecy,
   safety, identity, licence, consent, authority, or truth. Use high-entropy
   context-local digests; reused or published references are linkable.
+- Canonical arrays use the local standard `Array.prototype`; reject custom,
+  null, cross-realm, or Proxy prototypes before reading array elements.
+- Validate every public scalar and binary runtime type before regex, string
+  interpolation, hashing, or other coercion can enter caller capabilities.
 - Digest shape excludes raw identity and task prose from the wire shape; it
   does not prove that a caller minimized a referent or avoid pseudonymous
   linkage. Keep these limits machine-readable in the fixed boundaries.

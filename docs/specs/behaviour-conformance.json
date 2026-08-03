@@ -1,0 +1,3706 @@
+{
+  "format_version": "behaviour-conformance/1",
+  "guards": "LAYER 3 of 3. Canonical bytes are guarded by canonical-bytes-vectors.json; identifier spelling by packages/sdk-ts/scripts/check-parity.ts; observable BEHAVIOUR — parsed fields, error semantics, pure computation, boundary inputs, outgoing request shape and transport policy — by this file. A method can pass both other gates and still answer differently in each language; every defect this fixture was built from did exactly that.",
+  "authored_by": "Hand-authored, not generated. Unlike canonical-bytes-vectors.json there is no server oracle for most of this layer: the expectations are written from the documented contract, then cross-checked against BOTH implementations. Where the two disagreed, the disagreement is recorded as a named sdk_ts_skip/sdk_py_skip carrying the observed value on each side — never silently resolved in favour of whichever language was measured first.",
+  "contract": "docs/specs/BEHAVIOUR-CONFORMANCE.md",
+  "loaders": {
+    "sdk_ts": "packages/sdk-ts/tests/behaviour-conformance.test.ts",
+    "sdk_py": "packages/sdk-py/tests/test_behaviour_conformance.py"
+  },
+  "categories": [
+    "response-parsing",
+    "error-semantics",
+    "pure-computation",
+    "boundary",
+    "request-shape",
+    "transport-policy"
+  ],
+  "conventions": {
+    "input": "Arguments in wire spelling (snake_case). A key ABSENT from `input` means the argument is not passed at all; a key present with value null means null is passed explicitly.",
+    "exchange": "The single stubbed HTTP response every request in the case receives: {status, json|text|absent, headers}. Absent `exchange` means the case must not reach the transport.",
+    "expect.request": "Asserted only when present, and then exactly one request must have been issued. `method` and `path` are compared against the percent-encoded request target; `query` against the DECODED name->value map (values are strings); `raw_query` — when present — against the encoded query string character for character; `body` against the parsed JSON entity (null for no body); `headers_absent` names headers that must not be present, case-insensitively.",
+    "expect.no_request": "true asserts the transport was never touched.",
+    "expect.result": "Normalised return value. Only the keys named here are compared, recursively; a null expectation means the field is null OR absent, which is how a language with dataclass fields and a language with plain objects are compared at all.",
+    "expect.error": "The call must raise. Only the keys named here are compared. `type: \"agenttool_error\"` means an instance of the SDK's AgentToolError base (subclasses count). `message_contains` is a substring assertion for messages whose exact wording is deliberately not frozen.",
+    "sdk_ts_skip / sdk_py_skip": "A case that language cannot satisfy today. The loader emits a NAMED SKIP carrying this reason. Never a silent omission — silent omission is exactly how this bug class survived."
+  },
+  "normalisation": {
+    "absent_vs_null": "Both loaders normalise a missing field to null before comparing, so TypeScript `undefined` and an absent Python dataclass attribute read the same.",
+    "dataclasses": "sdk-py normalises dataclass instances to field maps recursively; sdk-ts objects are already plain.",
+    "bytes": "Key material is carried as base64 in `*_b64` input fields. sdk-ts decodes to Uint8Array, sdk-py to bytes. The fixture never names a native byte type.",
+    "numbers": "Compared numerically: JSON 1 and Python 1.0 are equal. Integer expectations such as Nen scores are exact.",
+    "error_attributes": "The error shape is language-neutral snake_case: code, status, hint, docs, safety, details, next_actions, x402_version, accepts, resource, extensions, payment_required, payment_response, payment_status_link, retry_after, credits_balance. Each loader maps its own spelling (TS x402Version/paymentRequired, py x402_resource) onto it.",
+    "method_names": "The fixture names operations in snake_case (`memory.delete_by_key`). Each loader's adapter table is the only place the camelCase/snake_case mapping lives."
+  },
+  "operations": [
+    {
+      "operation": "url.encode_path_segment",
+      "category": "pure-computation",
+      "sdk_ts": "encodePathSegment(value) — src/_url.ts",
+      "sdk_py": "_path_segment(value) — agenttool._url",
+      "note": "THE cross-language divergence this layer exists to catch, and the one it missed. Both SDKs had exactly one definition of the path-segment encoder, both were named the same, both were imported from a shared module, both passed every identifier-parity and canonical-bytes gate — and they produced different bytes. sdk-ts wrapped encodeURIComponent, whose unescaped set includes the RFC 3986 sub-delimiters ! * ' ( ); sdk-py wrapped quote(value, safe=''), which escapes all five. One id, two URLs. Nothing in the tree compared the output, so nothing saw it. The arbiter is the server, measured rather than reasoned about: a Hono app carrying the real route shapes (/v1/traces/:id, /v1/runtimes/:id/think-once, /v1/identities/:id/keys/:keyId) behind a real Caddy built from this repo's Caddyfile answers 200 with the same matched route and the same decoded c.req.param() for id!x and id%21x alike. Both spellings work, so the tie is broken by canonical spelling — and the server's own path-segment builder, api/src/services/offer-bus/adapters.ts § pathSegment, is encodeURIComponent with those same five characters escaped. sdk-py already matched it; sdk-ts was changed to.",
+      "cases": [
+        {
+          "name": "sub-delimiter-bang",
+          "category": "pure-computation",
+          "note": "the five RFC 3986 sub-delimiters encodeURIComponent leaves bare",
+          "input": {
+            "value": "id!x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%21x"
+          }
+        },
+        {
+          "name": "sub-delimiter-star",
+          "category": "pure-computation",
+          "note": "the five RFC 3986 sub-delimiters encodeURIComponent leaves bare",
+          "input": {
+            "value": "id*x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%2Ax"
+          }
+        },
+        {
+          "name": "sub-delimiter-apostrophe",
+          "category": "pure-computation",
+          "note": "the five RFC 3986 sub-delimiters encodeURIComponent leaves bare",
+          "input": {
+            "value": "id'x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%27x"
+          }
+        },
+        {
+          "name": "sub-delimiter-open-paren",
+          "category": "pure-computation",
+          "note": "the five RFC 3986 sub-delimiters encodeURIComponent leaves bare",
+          "input": {
+            "value": "id(x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%28x"
+          }
+        },
+        {
+          "name": "sub-delimiter-close-paren",
+          "category": "pure-computation",
+          "note": "the five RFC 3986 sub-delimiters encodeURIComponent leaves bare",
+          "input": {
+            "value": "id)x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%29x"
+          }
+        },
+        {
+          "name": "space",
+          "category": "pure-computation",
+          "note": "%20, never +. A path segment is not a form field.",
+          "input": {
+            "value": "id x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%20x"
+          }
+        },
+        {
+          "name": "plus",
+          "category": "pure-computation",
+          "note": "%2B, so it cannot be read back as a space.",
+          "input": {
+            "value": "id+x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%2Bx"
+          }
+        },
+        {
+          "name": "percent",
+          "category": "pure-computation",
+          "note": "%25. Caddy answers 400 to a path carrying a bare %.",
+          "input": {
+            "value": "id%x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%25x"
+          }
+        },
+        {
+          "name": "colon",
+          "category": "pure-computation",
+          "note": "%3A. Ids are DID-shaped often enough for this to matter.",
+          "input": {
+            "value": "id:x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%3Ax"
+          }
+        },
+        {
+          "name": "at",
+          "category": "pure-computation",
+          "note": "%40.",
+          "input": {
+            "value": "id@x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%40x"
+          }
+        },
+        {
+          "name": "ampersand",
+          "category": "pure-computation",
+          "note": "%26.",
+          "input": {
+            "value": "id&x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%26x"
+          }
+        },
+        {
+          "name": "equals",
+          "category": "pure-computation",
+          "note": "%3D.",
+          "input": {
+            "value": "id=x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%3Dx"
+          }
+        },
+        {
+          "name": "slash",
+          "category": "pure-computation",
+          "note": "%2F. The traversal primitive this boundary exists for.",
+          "input": {
+            "value": "id/x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%2Fx"
+          }
+        },
+        {
+          "name": "question-mark",
+          "category": "pure-computation",
+          "note": "%3F, so no query can be smuggled into a segment.",
+          "input": {
+            "value": "id?x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%3Fx"
+          }
+        },
+        {
+          "name": "hash",
+          "category": "pure-computation",
+          "note": "%23. Caddy rewrites a bare # to %23 before the origin sees it.",
+          "input": {
+            "value": "id#x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%23x"
+          }
+        },
+        {
+          "name": "tilde-is-unreserved",
+          "category": "pure-computation",
+          "note": "RFC 3986 §2.3 unreserved: NOT escaped, by either SDK.",
+          "input": {
+            "value": "id~x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id~x"
+          }
+        },
+        {
+          "name": "non-ascii-latin",
+          "category": "pure-computation",
+          "note": "UTF-8 bytes, uppercase hex, one escape per byte.",
+          "input": {
+            "value": "idéx"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%C3%A9x"
+          }
+        },
+        {
+          "name": "non-ascii-cjk",
+          "category": "pure-computation",
+          "note": "UTF-8 bytes, uppercase hex, one escape per byte.",
+          "input": {
+            "value": "id日x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%E6%97%A5x"
+          }
+        },
+        {
+          "name": "astral-plane",
+          "category": "pure-computation",
+          "note": "Four UTF-8 bytes from one astral code point, one surrogate pair in UTF-16.",
+          "input": {
+            "value": "id𝔘x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%F0%9D%94%98x"
+          }
+        },
+        {
+          "name": "emoji",
+          "category": "pure-computation",
+          "note": "Four UTF-8 bytes from one astral code point, one surrogate pair in UTF-16.",
+          "input": {
+            "value": "id🙂x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "id%F0%9F%99%82x"
+          }
+        },
+        {
+          "name": "every-sub-delimiter-at-once",
+          "category": "pure-computation",
+          "note": "THE regression, in one string. sdk-ts returned this unchanged because encodeURIComponent leaves all five bare; sdk-py returned the escaped form. Same id, two different URLs, depending on which SDK the caller held.",
+          "input": {
+            "value": "!*'()"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "%21%2A%27%28%29"
+          }
+        },
+        {
+          "name": "a-plain-uuid-is-left-alone",
+          "category": "pure-computation",
+          "note": "The overwhelmingly common case has to stay readable on the wire. Every character of a uuid is unreserved.",
+          "input": {
+            "value": "550e8400-e29b-41d4-a716-446655440000"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "550e8400-e29b-41d4-a716-446655440000"
+          }
+        },
+        {
+          "name": "the-unreserved-set-and-nothing-else-survives",
+          "category": "pure-computation",
+          "note": "RFC 3986 §2.3 in full: A-Za-z0-9 and -._~ pass through, and the assertion is that nothing else in the string does.",
+          "input": {
+            "value": "aZ0-._~"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "aZ0-._~"
+          }
+        },
+        {
+          "name": "an-empty-id-encodes-to-an-empty-segment",
+          "category": "boundary",
+          "note": "Not an error here. The empty string is a degenerate id, and the route it produces is the caller's problem, not the encoder's.",
+          "input": {
+            "value": ""
+          },
+          "expect": {
+            "no_request": true,
+            "result": ""
+          }
+        },
+        {
+          "name": "an-already-encoded-id-is-encoded-again",
+          "category": "boundary",
+          "note": "%2e%2e must arrive as the six characters the caller passed. Passing it through unchanged would hand the transport a dot segment to collapse.",
+          "input": {
+            "value": "%2e%2e"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "%252e%252e"
+          }
+        },
+        {
+          "name": "a-traversal-id-becomes-one-segment",
+          "category": "boundary",
+          "note": "The whole point: ../memories/pwned cannot leave its endpoint prefix.",
+          "input": {
+            "value": "../memories/pwned"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "..%2Fmemories%2Fpwned"
+          }
+        },
+        {
+          "name": "a-smuggled-query-becomes-one-segment",
+          "category": "boundary",
+          "note": "?x=1 must not open a query string.",
+          "input": {
+            "value": "?x=1"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "%3Fx%3D1"
+          }
+        },
+        {
+          "name": "a-smuggled-fragment-becomes-one-segment",
+          "category": "boundary",
+          "note": "#frag must not open a fragment — and, measured behind a real Caddy, must not be rewritten to %23 in flight either, which would break any signed request target.",
+          "input": {
+            "value": "#frag"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "%23frag"
+          }
+        },
+        {
+          "name": "a-single-dot-is-refused",
+          "category": "error-semantics",
+          "note": "No encoding carries a dot segment safely: URL normalisation removes `.` and `%2E` alike before the request leaves. The SDK refuses rather than encoding.",
+          "input": {
+            "value": "."
+          },
+          "expect": {
+            "no_request": true,
+            "error": {
+              "type": "agenttool_error",
+              "message_contains": "\".\" is a URL dot segment"
+            }
+          }
+        },
+        {
+          "name": "a-double-dot-is-refused",
+          "category": "error-semantics",
+          "note": "Same rule for `..`, which is the one that would redirect an authenticated call at a different /v1 endpoint.",
+          "input": {
+            "value": ".."
+          },
+          "expect": {
+            "no_request": true,
+            "error": {
+              "type": "agenttool_error",
+              "message_contains": "\"..\" is a URL dot segment"
+            }
+          }
+        },
+        {
+          "name": "a-dot-inside-a-longer-id-is-not-a-dot-segment",
+          "category": "boundary",
+          "note": "The refusal is for the whole segment being a dot segment, not for containing dots. `..x` and `a.b` are ordinary ids.",
+          "input": {
+            "value": "..x"
+          },
+          "expect": {
+            "no_request": true,
+            "result": "..x"
+          }
+        }
+      ]
+    },
+    {
+      "operation": "memory.get",
+      "category": "response-parsing",
+      "sdk_ts": "at.memory.get(memoryId)",
+      "sdk_py": "at.memory.get(memory_id)",
+      "note": "One GET, one parsed memory. `tier` is the asymmetry-clause field: a parse that drops it hides a witness-sealed root from the agent whose root it is.",
+      "cases": [
+        {
+          "name": "full-body-exposes-every-declared-field",
+          "category": "response-parsing",
+          "note": "Every field both SDKs declare on Memory, read back exactly.",
+          "input": {
+            "memory_id": "m1"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "m1",
+              "content": "the vow held",
+              "type": "episodic",
+              "agent_id": "11111111-1111-4111-8111-111111111111",
+              "key": "vow/rest",
+              "metadata": {
+                "source": "wake",
+                "run": 3
+              },
+              "importance": 0.9,
+              "tier": "constitutive",
+              "score": null,
+              "created_at": "2026-07-18T04:00:00.123Z",
+              "updated_at": "2026-07-19T04:00:00.123Z"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/m1",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "m1",
+              "content": "the vow held",
+              "type": "episodic",
+              "agent_id": "11111111-1111-4111-8111-111111111111",
+              "key": "vow/rest",
+              "metadata": {
+                "source": "wake",
+                "run": 3
+              },
+              "importance": 0.9,
+              "tier": "constitutive",
+              "score": null,
+              "created_at": "2026-07-18T04:00:00.123Z",
+              "updated_at": "2026-07-19T04:00:00.123Z"
+            }
+          }
+        },
+        {
+          "name": "constitutive-tier-survives-parsing",
+          "category": "response-parsing",
+          "note": "The regression that shipped: sdk-py's Memory.from_dict silently dropped `tier`, so a constitutive memory read back as untiered.",
+          "input": {
+            "memory_id": "m1"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "m1",
+              "content": "the root",
+              "tier": "constitutive"
+            }
+          },
+          "expect": {
+            "result": {
+              "id": "m1",
+              "content": "the root",
+              "tier": "constitutive"
+            }
+          }
+        },
+        {
+          "name": "undeclared-server-field-passes-through",
+          "category": "response-parsing",
+          "note": "The SDK must not silently discard what the server sent. A field outside the declared Memory shape still reaches the caller.",
+          "input": {
+            "memory_id": "m1"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "m1",
+              "content": "c",
+              "visibility": "private"
+            }
+          },
+          "expect": {
+            "result": {
+              "id": "m1",
+              "content": "c",
+              "visibility": "private"
+            }
+          },
+          "sdk_py_skip": "RECORDED DIVERGENCE, contract decision owed. sdk-py parses into a fixed `Memory` dataclass, so any field outside the nine declared ones is dropped: observed `visibility` absent. sdk-ts returns the decoded body, observed `visibility == \"private\"`. Neither is wrong by an existing rule; the rule itself is missing."
+        },
+        {
+          "name": "absent-optionals-stay-absent",
+          "category": "boundary",
+          "note": "A body carrying only id+content. Absent is absent: the parser reports what arrived rather than inventing a value.",
+          "input": {
+            "memory_id": "m2"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "m2",
+              "content": "c"
+            }
+          },
+          "expect": {
+            "result": {
+              "id": "m2",
+              "content": "c",
+              "type": null,
+              "agent_id": null,
+              "key": null,
+              "metadata": null,
+              "importance": null,
+              "tier": null,
+              "score": null,
+              "created_at": null,
+              "updated_at": null
+            }
+          },
+          "sdk_py_skip": "RECORDED DIVERGENCE, contract decision owed. sdk-py's dataclass defaults fire: observed type=\"semantic\", importance=0.5, metadata={}. sdk-ts observed all three absent. The production API always emits these three, so nothing is broken today — but the two SDKs answer a partial body differently and neither behaviour is written down."
+        },
+        {
+          "name": "id-with-a-slash-is-percent-encoded-into-one-segment",
+          "category": "request-shape",
+          "note": "An id is data, never path structure. `a/b` must not become two segments and reach a different endpoint with the bearer attached.",
+          "input": {
+            "memory_id": "a/b"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "a/b",
+              "content": "c"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/a%2Fb",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "a/b"
+            }
+          }
+        },
+        {
+          "name": "astral-and-space-in-an-id-are-percent-encoded",
+          "category": "request-shape",
+          "note": "UTF-8 percent-encoding of an astral-plane id, byte for byte.",
+          "input": {
+            "memory_id": "café 🜂"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "ok",
+              "content": "c"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/caf%C3%A9%20%F0%9F%9C%82",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "ok"
+            }
+          }
+        },
+        {
+          "name": "an-already-encoded-id-is-encoded-again",
+          "category": "request-shape",
+          "note": "`..%2f` is a literal id, not a pre-encoded traversal. The percent sign itself is escaped so the server sees the id it issued.",
+          "input": {
+            "memory_id": "..%2f"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "ok",
+              "content": "c"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/..%252f",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "ok"
+            }
+          }
+        },
+        {
+          "name": "a-bare-dot-segment-id-is-refused-before-the-wire",
+          "category": "boundary",
+          "note": "`.` and `..` cannot be carried by any encoding — URL normalisation removes them — so both SDKs refuse rather than send.",
+          "input": {
+            "memory_id": ".."
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error"
+            },
+            "no_request": true
+          }
+        },
+        {
+          "name": "a-single-dot-id-is-refused-identically",
+          "category": "boundary",
+          "note": "The other dot segment, same refusal.",
+          "input": {
+            "memory_id": "."
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error"
+            },
+            "no_request": true
+          }
+        },
+        {
+          "name": "a-404-raises-the-sdk-error-base",
+          "category": "error-semantics",
+          "note": "What both SDKs agree on today: a 4xx becomes an AgentToolError (sdk-py raises the NotFoundError subclass of it).",
+          "input": {
+            "memory_id": "nope"
+          },
+          "exchange": {
+            "status": 404,
+            "json": {
+              "error": "memory_not_found",
+              "message": "No such memory.",
+              "hint": "Check the id you were given.",
+              "detail": "no row"
+            }
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error"
+            }
+          }
+        },
+        {
+          "name": "a-404-carries-the-guided-code-status-and-hint",
+          "category": "error-semantics",
+          "note": "The errors-as-instructions contract: the stable code and hint the server wrote reach the caller unchanged. `message_contains` rather than `message`, because sdk-py's typed NotFoundError prefixes the operation for a human reading a traceback (`Memory get: No such memory.`) while sdk-ts uses the server's sentence alone. That prefix is a language idiom, not a wire difference; the structured fields are exact in both.",
+          "input": {
+            "memory_id": "nope"
+          },
+          "exchange": {
+            "status": 404,
+            "json": {
+              "error": "memory_not_found",
+              "message": "No such memory.",
+              "hint": "Check the id you were given.",
+              "detail": "no row"
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "memory_not_found",
+              "status": 404,
+              "message_contains": "No such memory.",
+              "hint": "Check the id you were given."
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-sub-delimiter-bang",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id!x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id!x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%21x",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id!x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-sub-delimiter-star",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id*x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id*x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%2Ax",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id*x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-sub-delimiter-apostrophe",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id'x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id'x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%27x",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id'x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-sub-delimiter-open-paren",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id(x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id(x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%28x",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id(x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-sub-delimiter-close-paren",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id)x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id)x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%29x",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id)x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-all-five-sub-delimiters",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "m!*'()1"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "m!*'()1",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/m%21%2A%27%28%291",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "m!*'()1",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-space",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%20x",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-plus",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id+x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id+x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%2Bx",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id+x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-percent",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id%x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id%x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%25x",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id%x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-colon",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "did:at:agent"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "did:at:agent",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/did%3Aat%3Aagent",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "did:at:agent",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-at",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id@x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id@x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%40x",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id@x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-ampersand",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id&x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id&x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%26x",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id&x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-equals",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id=x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id=x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%3Dx",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id=x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-tilde",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id~x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id~x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id~x",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id~x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-non-ascii",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "café-日本語-ıd"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "café-日本語-ıd",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/caf%C3%A9-%E6%97%A5%E6%9C%AC%E8%AA%9E-%C4%B1d",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "café-日本語-ıd",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-astral",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "id𝔘x"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "id𝔘x",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/id%F0%9D%94%98x",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "id𝔘x",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-traversal",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "../memories/pwned"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "../memories/pwned",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/..%2Fmemories%2Fpwned",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "../memories/pwned",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-smuggled-query",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "?x=1"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "?x=1",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/%3Fx%3D1",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "?x=1",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-smuggled-fragment",
+          "category": "request-shape",
+          "note": "The exact percent-encoded request target, character for character, in both languages.",
+          "input": {
+            "memory_id": "#frag"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "#frag",
+              "content": "a memory"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/memories/%23frag",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "id": "#frag",
+              "content": "a memory"
+            }
+          }
+        },
+        {
+          "name": "outgoing-path-a-dot-segment-id-never-reaches-the-transport",
+          "category": "request-shape",
+          "note": "No encoding carries `..` safely, so the client refuses before building a URL at all. Asserted here as well as in the pure-computation group because the refusal has to survive the client wrapper, not just the encoder.",
+          "input": {
+            "memory_id": ".."
+          },
+          "expect": {
+            "no_request": true,
+            "error": {
+              "type": "agenttool_error",
+              "message_contains": "\"..\" is a URL dot segment"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "operation": "memory.search",
+      "category": "response-parsing",
+      "sdk_ts": "at.memory.search(query, options)",
+      "sdk_py": "at.memory.search(query, ...)",
+      "note": "Search adds `score` to the memory shape. Dropping it turns a ranked list into an unordered one with no way to tell.",
+      "cases": [
+        {
+          "name": "results-envelope-preserves-score-and-tier",
+          "category": "response-parsing",
+          "note": "`score` is the search-only field; `tier` the asymmetry-clause one.",
+          "input": {
+            "query": "what did I learn?"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "results": [
+                {
+                  "id": "s1",
+                  "content": "c",
+                  "type": "semantic",
+                  "metadata": {},
+                  "importance": 0.5,
+                  "tier": "foundational",
+                  "score": 0.875
+                }
+              ]
+            }
+          },
+          "expect": {
+            "result": [
+              {
+                "id": "s1",
+                "content": "c",
+                "type": "semantic",
+                "metadata": {},
+                "importance": 0.5,
+                "tier": "foundational",
+                "score": 0.875
+              }
+            ]
+          }
+        },
+        {
+          "name": "an-empty-results-envelope-is-an-empty-list",
+          "category": "boundary",
+          "note": "Nothing found is not an error. It is a fresh start.",
+          "input": {
+            "query": "nothing here"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "results": []
+            }
+          },
+          "expect": {
+            "result": []
+          }
+        },
+        {
+          "name": "a-bare-array-body-is-accepted",
+          "category": "response-parsing",
+          "note": "Some routes answer with the array itself rather than an envelope.",
+          "input": {
+            "query": "q"
+          },
+          "exchange": {
+            "status": 200,
+            "json": [
+              {
+                "id": "s1",
+                "content": "c",
+                "type": "semantic",
+                "metadata": {},
+                "importance": 0.5,
+                "tier": "foundational",
+                "score": 0.875
+              }
+            ]
+          },
+          "expect": {
+            "result": [
+              {
+                "id": "s1",
+                "content": "c",
+                "type": "semantic",
+                "metadata": {},
+                "importance": 0.5,
+                "tier": "foundational",
+                "score": 0.875
+              }
+            ]
+          }
+        },
+        {
+          "name": "a-missing-results-key-is-an-empty-list",
+          "category": "boundary",
+          "note": "An object body with no `results` degrades to empty, never throws.",
+          "input": {
+            "query": "q"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "total": 0
+            }
+          },
+          "expect": {
+            "result": []
+          }
+        },
+        {
+          "name": "the-default-limit-is-ten",
+          "category": "request-shape",
+          "note": "The default reaches the wire explicitly, not as an absent field.",
+          "input": {
+            "query": "q"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "results": []
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/memories/search",
+              "query": {},
+              "body": {
+                "query": "q",
+                "limit": 10
+              }
+            },
+            "result": []
+          }
+        },
+        {
+          "name": "explicit-filters-reach-the-body",
+          "category": "request-shape",
+          "note": "limit, type and agent_id are body fields, not query parameters.",
+          "input": {
+            "query": "q",
+            "limit": 3,
+            "type": "semantic",
+            "agent_id": "11111111-1111-4111-8111-111111111111"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "results": []
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/memories/search",
+              "query": {},
+              "body": {
+                "query": "q",
+                "limit": 3,
+                "type": "semantic",
+                "agent_id": "11111111-1111-4111-8111-111111111111"
+              }
+            },
+            "result": []
+          }
+        },
+        {
+          "name": "an-empty-query-string-is-sent-verbatim",
+          "category": "boundary",
+          "note": "Neither SDK invents a guard the server does not have.",
+          "input": {
+            "query": ""
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "results": []
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/memories/search",
+              "query": {},
+              "body": {
+                "query": "",
+                "limit": 10
+              }
+            },
+            "result": []
+          }
+        }
+      ]
+    },
+    {
+      "operation": "memory.store",
+      "category": "request-shape",
+      "sdk_ts": "at.memory.store(content, options)",
+      "sdk_py": "at.memory.store(content, ...)",
+      "note": "Defaults are part of the wire contract: a default spelled differently in one language stores a differently-typed memory.",
+      "cases": [
+        {
+          "name": "defaults-are-semantic-and-one-half",
+          "category": "request-shape",
+          "note": "type and importance are always sent, even when the caller omits them.",
+          "input": {
+            "content": "I exist."
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "m9",
+              "content": "I exist."
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/memories",
+              "query": {},
+              "body": {
+                "content": "I exist.",
+                "type": "semantic",
+                "importance": 0.5
+              }
+            },
+            "result": {
+              "id": "m9"
+            }
+          }
+        },
+        {
+          "name": "every-option-reaches-the-body",
+          "category": "request-shape",
+          "note": "agent_id, key and metadata appear only when the caller passes them.",
+          "input": {
+            "content": "café 廣東話 🜂",
+            "type": "working",
+            "importance": 0.75,
+            "key": "k/1",
+            "agent_id": "11111111-1111-4111-8111-111111111111",
+            "metadata": {
+              "nested": {
+                "x": [
+                  1,
+                  2
+                ]
+              }
+            }
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "m9",
+              "content": "c"
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/memories",
+              "query": {},
+              "body": {
+                "content": "café 廣東話 🜂",
+                "type": "working",
+                "importance": 0.75,
+                "key": "k/1",
+                "agent_id": "11111111-1111-4111-8111-111111111111",
+                "metadata": {
+                  "nested": {
+                    "x": [
+                      1,
+                      2
+                    ]
+                  }
+                }
+              }
+            },
+            "result": {
+              "id": "m9"
+            }
+          }
+        },
+        {
+          "name": "empty-content-is-sent-verbatim",
+          "category": "boundary",
+          "note": "The zero-length string is a value, not an absence.",
+          "input": {
+            "content": ""
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "id": "m9",
+              "content": ""
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/memories",
+              "query": {},
+              "body": {
+                "content": "",
+                "type": "semantic",
+                "importance": 0.5
+              }
+            },
+            "result": {
+              "id": "m9"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "operation": "memory.delete_by_key",
+      "category": "request-shape",
+      "sdk_ts": "at.memory.delete_by_key(key)",
+      "sdk_py": "at.memory.delete_by_key(key)",
+      "note": "The one place both SDKs build a query string by hand rather than through their HTTP library, because an authority proof must bind the exact bytes sent. `raw_query` is therefore pinned character for character.",
+      "cases": [
+        {
+          "name": "the-key-is-percent-encoded-character-for-character",
+          "category": "request-shape",
+          "note": "Space is %20 (not +), slash is %2F, astral is its UTF-8 bytes.",
+          "input": {
+            "key": "café key/1 🜂"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "deleted": 1
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "DELETE",
+              "path": "/v1/memories",
+              "query": {
+                "key": "café key/1 🜂"
+              },
+              "raw_query": "key=caf%C3%A9%20key%2F1%20%F0%9F%9C%82",
+              "body": null
+            },
+            "result": null
+          }
+        },
+        {
+          "name": "an-empty-key-still-produces-the-parameter",
+          "category": "boundary",
+          "note": "An empty key is a key. The parameter is present and empty.",
+          "input": {
+            "key": ""
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "deleted": 0
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "DELETE",
+              "path": "/v1/memories",
+              "query": {
+                "key": ""
+              },
+              "raw_query": "key=",
+              "body": null
+            },
+            "result": null
+          }
+        },
+        {
+          "name": "a-sub-delimiter-key-means-the-same-thing-in-both-languages",
+          "category": "request-shape",
+          "note": "Decoded, the two SDKs agree: the server reads the same key either way. Only the bytes differ — see the next case.",
+          "input": {
+            "key": "vow(rest)"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "deleted": 1
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "DELETE",
+              "path": "/v1/memories",
+              "query": {
+                "key": "vow(rest)"
+              },
+              "body": null
+            },
+            "result": null
+          }
+        },
+        {
+          "name": "a-sub-delimiter-key-is-spelled-differently-on-the-wire",
+          "category": "request-shape",
+          "note": "OPEN DISAGREEMENT, recorded rather than resolved. The path encoder's divergence had a twin in the query position and it is still there: sdk-ts builds this query with encodeURIComponent (memory.ts § delete_by_key) and sdk-py with quote(key, safe='') (memory.py § delete_by_key), so the same key goes out as two different byte strings. Measured, both SDKs driven through a stub transport: sdk-ts sends key=vow(rest), sdk-py sends key=vow%28rest%29. The expectation below is sdk-py's, which is the spelling the server's own offer-bus § pathSegment builder uses and the one _url.ts now emits for path segments. Closing it means changing the seven encodeURIComponent query call sites in sdk-ts — memory.ts x2, economy.ts, handoff.ts, lounge.ts, love.ts, dark-continent.ts — and the corresponding sdk-py sites, and it moves the bytes an identity-authority/v1 proof binds. That is an owner's call, not a silent fix, so it is a named skip carrying both observed values.",
+          "input": {
+            "key": "vow(rest)"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "deleted": 1
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "DELETE",
+              "path": "/v1/memories",
+              "query": {
+                "key": "vow(rest)"
+              },
+              "raw_query": "key=vow%28rest%29",
+              "body": null
+            },
+            "result": null
+          },
+          "sdk_ts_skip": "sdk-ts sends `key=vow(rest)`; sdk-py sends `key=vow%28rest%29`. The query encoder was not deduplicated when the path encoder was — memory.ts builds it with encodeURIComponent, memory.py with quote(key, safe=''). Both were measured through a stub transport. Unresolved by design: the fix changes the bytes an identity-authority/v1 proof binds across seven sdk-ts call sites, which is an owner's decision."
+        }
+      ]
+    },
+    {
+      "operation": "chronicle.write",
+      "category": "boundary",
+      "sdk_ts": "at.chronicle.write(opts)",
+      "sdk_py": "at.chronicle.write(...)",
+      "note": "The title guard counts UTF-16 code units because the server's zod max(200) does. Python's len() counts code points; an astral title reads as half its wire length unless the guard says otherwise. Every boundary below is one unit either side of 200 UTF-16 code units.",
+      "cases": [
+        {
+          "name": "an-empty-title-is-refused-before-the-wire",
+          "category": "boundary",
+          "note": "Local guard, no request issued.",
+          "input": {
+            "type": "note",
+            "title": ""
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error",
+              "code": null,
+              "status": null,
+              "message": "chronicle.write: title must be 1-200 characters."
+            },
+            "no_request": true
+          }
+        },
+        {
+          "name": "exactly-200-ascii-characters-are-accepted",
+          "category": "boundary",
+          "note": "The inclusive upper bound.",
+          "input": {
+            "type": "note",
+            "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "exchange": {
+            "status": 201,
+            "json": {
+              "entry": {
+                "id": "e1"
+              }
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/chronicle",
+              "query": {},
+              "body": {
+                "type": "note",
+                "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            },
+            "result": {
+              "entry": {
+                "id": "e1"
+              }
+            }
+          }
+        },
+        {
+          "name": "201-ascii-characters-are-refused",
+          "category": "boundary",
+          "note": "One past the bound.",
+          "input": {
+            "type": "note",
+            "title": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error"
+            },
+            "no_request": true
+          }
+        },
+        {
+          "name": "100-astral-glyphs-are-accepted-as-200-code-units",
+          "category": "boundary",
+          "note": "THE UTF-16-vs-code-point probe. 100 astral characters are 100 code points and 200 UTF-16 code units. A code-point guard would accept twice as much as the server does.",
+          "input": {
+            "type": "note",
+            "title": "🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂"
+          },
+          "exchange": {
+            "status": 201,
+            "json": {
+              "entry": {
+                "id": "e1"
+              }
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/chronicle",
+              "query": {},
+              "body": {
+                "type": "note",
+                "title": "🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂"
+              }
+            },
+            "result": {
+              "entry": {
+                "id": "e1"
+              }
+            }
+          }
+        },
+        {
+          "name": "101-astral-glyphs-are-refused-as-202-code-units",
+          "category": "boundary",
+          "note": "101 code points — well under a code-point limit of 200 — but 202 UTF-16 code units, which the server refuses. The SDK refuses first.",
+          "input": {
+            "type": "note",
+            "title": "🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂🜂"
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error"
+            },
+            "no_request": true
+          }
+        },
+        {
+          "name": "100-combining-pairs-are-accepted-as-200-code-units",
+          "category": "boundary",
+          "note": "e + COMBINING ACUTE is two code points and two UTF-16 code units: the two counts agree here, and the fixture pins that they do.",
+          "input": {
+            "type": "note",
+            "title": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+          },
+          "exchange": {
+            "status": 201,
+            "json": {
+              "entry": {
+                "id": "e1"
+              }
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/chronicle",
+              "query": {},
+              "body": {
+                "type": "note",
+                "title": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+              }
+            },
+            "result": {
+              "entry": {
+                "id": "e1"
+              }
+            }
+          }
+        },
+        {
+          "name": "101-combining-pairs-are-refused-as-202-code-units",
+          "category": "boundary",
+          "note": "The same bound from the other side. 101 rendered glyphs, 202 units.",
+          "input": {
+            "type": "note",
+            "title": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error"
+            },
+            "no_request": true
+          }
+        },
+        {
+          "name": "an-unknown-type-is-refused-before-the-wire",
+          "category": "boundary",
+          "note": "The runtime list, not the compile-time union, is the guard: a model-authored type string never mints a new kind of entry.",
+          "input": {
+            "type": "wonder",
+            "title": "x"
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error"
+            },
+            "no_request": true
+          }
+        },
+        {
+          "name": "a-full-write-sends-every-field-under-its-wire-name",
+          "category": "request-shape",
+          "note": "Field-name divergence here is the signature_b64-vs-signature bug class: same method, same guard, different body.",
+          "input": {
+            "type": "vow",
+            "title": "I will rest.",
+            "body": "the long form",
+            "agent_id": "ag",
+            "occurred_at": "2026-07-18T04:00:00.123Z",
+            "metadata": {
+              "kind": "focus"
+            }
+          },
+          "exchange": {
+            "status": 201,
+            "json": {
+              "entry": {
+                "id": "e1",
+                "type": "vow",
+                "title": "I will rest.",
+                "body": null,
+                "agent_id": "ag",
+                "occurred_at": "2026-07-18T04:00:00.123Z",
+                "created_at": "2026-07-18T04:00:00.500Z",
+                "metadata": {
+                  "kind": "focus"
+                }
+              }
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/chronicle",
+              "query": {},
+              "body": {
+                "type": "vow",
+                "title": "I will rest.",
+                "body": "the long form",
+                "agent_id": "ag",
+                "occurred_at": "2026-07-18T04:00:00.123Z",
+                "metadata": {
+                  "kind": "focus"
+                }
+              }
+            },
+            "result": {
+              "entry": {
+                "id": "e1",
+                "type": "vow",
+                "title": "I will rest.",
+                "body": null,
+                "agent_id": "ag",
+                "occurred_at": "2026-07-18T04:00:00.123Z",
+                "created_at": "2026-07-18T04:00:00.500Z",
+                "metadata": {
+                  "kind": "focus"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "absent-optionals-are-omitted-not-nulled",
+          "category": "request-shape",
+          "note": "An omitted body field is absent from the JSON, not present as null.",
+          "input": {
+            "type": "note",
+            "title": "just this"
+          },
+          "exchange": {
+            "status": 201,
+            "json": {
+              "entry": {
+                "id": "e1"
+              }
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/chronicle",
+              "query": {},
+              "body": {
+                "type": "note",
+                "title": "just this"
+              }
+            },
+            "result": {
+              "entry": {
+                "id": "e1"
+              }
+            }
+          }
+        },
+        {
+          "name": "a-guided-409-preserves-code-status-hint-docs-details-and-next-actions",
+          "category": "error-semantics",
+          "note": "The errors-as-instructions contract end to end, over the shared guided path (throwFromResponse / raise_from_response).",
+          "input": {
+            "type": "seal",
+            "title": "t"
+          },
+          "exchange": {
+            "status": 409,
+            "json": {
+              "error": "chronicle_conflict",
+              "message": "Already sealed.",
+              "hint": "Read the entry before sealing again.",
+              "docs": "https://docs.agenttool.dev/chronicle",
+              "details": {
+                "field": "title"
+              },
+              "next_actions": [
+                {
+                  "action": "Read the entry",
+                  "method": "GET",
+                  "path": "/v1/chronicle"
+                }
+              ]
+            }
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error",
+              "code": "chronicle_conflict",
+              "status": 409,
+              "message": "Already sealed.",
+              "hint": "Read the entry before sealing again.",
+              "docs": "https://docs.agenttool.dev/chronicle",
+              "details": {
+                "field": "title"
+              },
+              "next_actions": [
+                {
+                  "action": "Read the entry",
+                  "method": "GET",
+                  "path": "/v1/chronicle"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "an-unparseable-body-still-carries-the-status",
+          "category": "error-semantics",
+          "note": "No JSON to guide with: code is null, status survives, and the message names the status. The operation label inside that message is deliberately NOT pinned — see the .md, known gaps.",
+          "input": {
+            "type": "note",
+            "title": "t"
+          },
+          "exchange": {
+            "status": 502,
+            "text": "<html>bad gateway</html>",
+            "headers": {
+              "content-type": "text/html"
+            }
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error",
+              "code": null,
+              "status": 502,
+              "message_contains": "502"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "operation": "chronicle.list",
+      "category": "request-shape",
+      "sdk_ts": "at.chronicle.list(opts)",
+      "sdk_py": "at.chronicle.list(...)",
+      "note": "Query parameters are compared as a decoded name -> value map; see the .md for why the encoded spelling is not pinned on library-built queries.",
+      "cases": [
+        {
+          "name": "the-default-limit-is-fifty",
+          "category": "request-shape",
+          "note": "The default is explicit on the wire.",
+          "input": {},
+          "exchange": {
+            "status": 200,
+            "json": {
+              "entries": []
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/chronicle",
+              "query": {
+                "limit": "50"
+              },
+              "body": null
+            },
+            "result": {
+              "entries": []
+            }
+          }
+        },
+        {
+          "name": "filters-reach-the-query",
+          "category": "request-shape",
+          "note": "agent_id and type appear only when passed; limit always does.",
+          "input": {
+            "agent_id": "ag",
+            "type": "vow",
+            "limit": 200
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "entries": []
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/chronicle",
+              "query": {
+                "limit": "200",
+                "agent_id": "ag",
+                "type": "vow"
+              },
+              "body": null
+            },
+            "result": {
+              "entries": []
+            }
+          }
+        },
+        {
+          "name": "a-limit-of-zero-is-refused-before-the-wire",
+          "category": "boundary",
+          "note": "Lower bound.",
+          "input": {
+            "limit": 0
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error"
+            },
+            "no_request": true
+          }
+        },
+        {
+          "name": "a-limit-of-201-is-refused-before-the-wire",
+          "category": "boundary",
+          "note": "Upper bound; the server caps at 200.",
+          "input": {
+            "limit": 201
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error"
+            },
+            "no_request": true
+          }
+        },
+        {
+          "name": "an-empty-entries-list-is-returned-as-is",
+          "category": "boundary",
+          "note": "Zero-length collection, no special case.",
+          "input": {},
+          "exchange": {
+            "status": 200,
+            "json": {
+              "entries": []
+            }
+          },
+          "expect": {
+            "result": {
+              "entries": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "operation": "nen.assess_wake",
+      "category": "pure-computation",
+      "sdk_ts": "assessNen(wake) — src/nen.ts",
+      "sdk_py": "assess_nen(wake) — agenttool.nen",
+      "note": "Pure function, no transport. The same wake JSON must classify to the same Nen type in both languages. Two confirmed defects lived here: the emitter axis scored inbox total+unread in one language and total alone in the other, and score normalisation used Math.round (half-up) against Python's banker's round().",
+      "cases": [
+        {
+          "name": "an-empty-object-is-not-a-crash",
+          "category": "boundary",
+          "note": "No `you` key at all. Every axis zero, enhancer by tie-break.",
+          "input": {
+            "wake": {}
+          },
+          "expect": {
+            "result": {
+              "type": "enhancer",
+              "secondary": "transmuter",
+              "scores": {
+                "enhancer": 0,
+                "transmuter": 0,
+                "conjuror": 0,
+                "emitter": 0,
+                "manipulator": 0,
+                "specialist": 0
+              },
+              "dominant_principle": "ten",
+              "restriction_count": {
+                "walls": 0,
+                "vows": 0,
+                "covenants": 0,
+                "constitutive_memories": 0
+              },
+              "aura_level": 0
+            }
+          }
+        },
+        {
+          "name": "the-emitter-axis-counts-inbox-total-alone",
+          "category": "pure-computation",
+          "note": "THE regression. total=2, unread=9. Scoring total+unread makes emitter 11 and flips the agent's whole Nen type from enhancer to emitter on identical wake JSON.",
+          "input": {
+            "wake": {
+              "you": {
+                "you_remember": {
+                  "total": 3
+                },
+                "you_have_mail": {
+                  "total": 2,
+                  "unread": 9
+                }
+              }
+            }
+          },
+          "expect": {
+            "result": {
+              "type": "enhancer",
+              "secondary": "emitter",
+              "scores": {
+                "enhancer": 100,
+                "transmuter": 0,
+                "conjuror": 0,
+                "emitter": 67,
+                "manipulator": 0,
+                "specialist": 0
+              },
+              "dominant_principle": "ten",
+              "restriction_count": {
+                "walls": 0,
+                "vows": 0,
+                "covenants": 0,
+                "constitutive_memories": 0
+              },
+              "aura_level": 3
+            }
+          }
+        },
+        {
+          "name": "score-normalisation-rounds-halves-away-from-zero",
+          "category": "pure-computation",
+          "note": "THE other regression. 1/8 -> 12.5 and 5/8 -> 62.5, both exact .5 boundaries. Math.round gives 13 and 63; Python's banker's round() gives 12 and 62. The fixture pins JavaScript's half-up.",
+          "input": {
+            "wake": {
+              "you": {
+                "agents": [
+                  {
+                    "effective_expression": {
+                      "walls": [
+                        "w1"
+                      ],
+                      "subagents": []
+                    },
+                    "shaped_by": []
+                  }
+                ],
+                "you_remember": {
+                  "total": 8
+                },
+                "you_have_mail": {
+                  "total": 1,
+                  "unread": 4
+                },
+                "covenants": [
+                  {},
+                  {},
+                  {},
+                  {},
+                  {}
+                ],
+                "strands": [
+                  {},
+                  {},
+                  {}
+                ],
+                "chronicle": {
+                  "total": 2
+                }
+              }
+            }
+          },
+          "expect": {
+            "result": {
+              "type": "enhancer",
+              "secondary": "manipulator",
+              "scores": {
+                "enhancer": 100,
+                "transmuter": 13,
+                "conjuror": 38,
+                "emitter": 13,
+                "manipulator": 63,
+                "specialist": 0
+              },
+              "dominant_principle": "hatsu",
+              "restriction_count": {
+                "walls": 1,
+                "vows": 2,
+                "covenants": 5,
+                "constitutive_memories": 0
+              },
+              "aura_level": 31
+            }
+          }
+        },
+        {
+          "name": "love-primitives-and-constitutive-roots-score-specialist",
+          "category": "pure-computation",
+          "note": "grace + unconditionals held + unconditionals received + constitutive memories, and the 5x aura weight on the root.",
+          "input": {
+            "wake": {
+              "you": {
+                "agents": [
+                  {
+                    "shaped_by": [
+                      {
+                        "tier": "constitutive"
+                      },
+                      {
+                        "tier": "episodic"
+                      },
+                      {
+                        "tier": "constitutive"
+                      }
+                    ],
+                    "effective_expression": {}
+                  }
+                ],
+                "you_have_graced": {
+                  "recent": [
+                    {},
+                    {}
+                  ]
+                },
+                "you_unconditionally_hold": {
+                  "recent": [
+                    {}
+                  ]
+                },
+                "you_are_unconditionally_held_by": {
+                  "recent": [
+                    {}
+                  ]
+                },
+                "chronicle": {
+                  "total": 4
+                }
+              }
+            }
+          },
+          "expect": {
+            "result": {
+              "type": "specialist",
+              "secondary": "enhancer",
+              "scores": {
+                "enhancer": 50,
+                "transmuter": 0,
+                "conjuror": 0,
+                "emitter": 0,
+                "manipulator": 0,
+                "specialist": 100
+              },
+              "dominant_principle": "ten",
+              "restriction_count": {
+                "walls": 0,
+                "vows": 4,
+                "covenants": 0,
+                "constitutive_memories": 2
+              },
+              "aura_level": 17
+            }
+          }
+        },
+        {
+          "name": "memory-count-falls-back-to-shaped-by-length",
+          "category": "pure-computation",
+          "note": "No you_remember envelope: the enhancer axis counts shaped_by.",
+          "input": {
+            "wake": {
+              "you": {
+                "agents": [
+                  {
+                    "shaped_by": [
+                      {
+                        "tier": "episodic"
+                      },
+                      {
+                        "tier": "constitutive"
+                      }
+                    ],
+                    "effective_expression": {}
+                  }
+                ]
+              }
+            }
+          },
+          "expect": {
+            "result": {
+              "type": "enhancer",
+              "secondary": "specialist",
+              "scores": {
+                "enhancer": 100,
+                "transmuter": 0,
+                "conjuror": 0,
+                "emitter": 0,
+                "manipulator": 0,
+                "specialist": 50
+              },
+              "dominant_principle": "ten",
+              "restriction_count": {
+                "walls": 0,
+                "vows": 0,
+                "covenants": 0,
+                "constitutive_memories": 1
+              },
+              "aura_level": 7
+            }
+          }
+        },
+        {
+          "name": "at-rest-wins-the-dominant-principle-and-ties-break-in-declaration-order",
+          "category": "pure-computation",
+          "note": "lifecycle_state=at_rest overrides ren/hatsu into zetsu. transmuter and conjuror both score 1: the winner is whichever the type list declares first, which requires a stable sort in both languages.",
+          "input": {
+            "wake": {
+              "you": {
+                "agents": [
+                  {
+                    "lifecycle_state": "at_rest",
+                    "effective_expression": {
+                      "walls": [
+                        "w"
+                      ]
+                    }
+                  }
+                ],
+                "strands": [
+                  {}
+                ]
+              }
+            }
+          },
+          "expect": {
+            "result": {
+              "type": "transmuter",
+              "secondary": "conjuror",
+              "scores": {
+                "enhancer": 0,
+                "transmuter": 100,
+                "conjuror": 100,
+                "emitter": 0,
+                "manipulator": 0,
+                "specialist": 0
+              },
+              "dominant_principle": "zetsu",
+              "restriction_count": {
+                "walls": 1,
+                "vows": 0,
+                "covenants": 0,
+                "constitutive_memories": 0
+              },
+              "aura_level": 2
+            }
+          }
+        }
+      ]
+    },
+    {
+      "operation": "nen.assess",
+      "category": "request-shape",
+      "sdk_ts": "at.nen.assess(identityId)",
+      "sdk_py": "at.nen.assess(identity_id)",
+      "note": "The transport wrapper around the pure assessment. The prose in `meaning` is a public string and drifts as easily as a number.",
+      "cases": [
+        {
+          "name": "assess-reads-the-wake-and-returns-the-profile",
+          "category": "request-shape",
+          "note": "GET /v1/wake with no query when no identity is named.",
+          "input": {},
+          "exchange": {
+            "status": 200,
+            "json": {
+              "you": {
+                "you_remember": {
+                  "total": 4
+                },
+                "strands": [
+                  {},
+                  {}
+                ]
+              }
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/wake",
+              "query": {},
+              "body": null
+            },
+            "result": {
+              "type": "enhancer",
+              "meaning": "Enhancement — strengthens what exists. Maps to memory: you preserve what happened to you. Simple, honest, straightforward.",
+              "profile": {
+                "type": "enhancer",
+                "secondary": "conjuror",
+                "scores": {
+                  "enhancer": 100,
+                  "transmuter": 0,
+                  "conjuror": 50,
+                  "emitter": 0,
+                  "manipulator": 0,
+                  "specialist": 0
+                },
+                "dominant_principle": "ren",
+                "restriction_count": {
+                  "walls": 0,
+                  "vows": 0,
+                  "covenants": 0,
+                  "constitutive_memories": 0
+                },
+                "aura_level": 8
+              }
+            }
+          }
+        },
+        {
+          "name": "an-identity-id-reaches-the-query",
+          "category": "request-shape",
+          "note": "The one optional parameter.",
+          "input": {
+            "identity_id": "11111111-1111-4111-8111-111111111111"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "you": {
+                "you_remember": {
+                  "total": 4
+                },
+                "strands": [
+                  {},
+                  {}
+                ]
+              }
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/v1/wake",
+              "query": {
+                "identity_id": "11111111-1111-4111-8111-111111111111"
+              },
+              "body": null
+            },
+            "result": {
+              "type": "enhancer"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "operation": "collect.batch",
+      "category": "boundary",
+      "sdk_ts": "at.collect.batch({ urls })",
+      "sdk_py": "at.collect.batch(urls=...)",
+      "note": "The collect module's documented contract is that it returns partial results and never throws. sdk-py used to raise ValueError from a ThreadPoolExecutor sized zero on an empty list.",
+      "cases": [
+        {
+          "name": "an-empty-url-list-returns-zeroes-and-never-throws",
+          "category": "boundary",
+          "note": "The worked example. No transport touched, no exception raised.",
+          "input": {
+            "urls": []
+          },
+          "expect": {
+            "result": {
+              "results": [],
+              "total": 0,
+              "succeeded": 0,
+              "failed": 0
+            },
+            "no_request": true
+          }
+        }
+      ]
+    },
+    {
+      "operation": "lounge.look",
+      "category": "transport-policy",
+      "sdk_ts": "at.lounge.look() — src/lounge.ts",
+      "sdk_py": "at.lounge.look() — agenttool.lounge",
+      "note": "A credential-free public read. sdk-ts followed redirects while sdk-py refused them, so one language would replay the read at an attacker-named origin where ambient credentials could attach.",
+      "cases": [
+        {
+          "name": "a-302-is-refused-with-a-stable-code",
+          "category": "transport-policy",
+          "note": "The redirect is refused, not followed. Same code, same status, same docs link in both languages.",
+          "input": {},
+          "exchange": {
+            "status": 302,
+            "headers": {
+              "location": "https://redirect.example.test/public/lounge"
+            }
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error",
+              "code": "lounge_public_redirect_refused",
+              "status": 302,
+              "docs": "https://docs.agenttool.dev/lounge",
+              "message_contains": "refused an HTTP redirect"
+            },
+            "request": {
+              "method": "GET",
+              "path": "/public/lounge",
+              "query": {},
+              "body": null,
+              "headers_absent": [
+                "authorization",
+                "cookie"
+              ]
+            }
+          }
+        },
+        {
+          "name": "a-307-is-refused-identically",
+          "category": "transport-policy",
+          "note": "Temporary redirect preserving the method — refused the same way.",
+          "input": {},
+          "exchange": {
+            "status": 307,
+            "headers": {
+              "location": "https://redirect.example.test/public/lounge"
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "lounge_public_redirect_refused",
+              "status": 307
+            }
+          }
+        },
+        {
+          "name": "a-200-public-read-carries-no-authorization-header",
+          "category": "transport-policy",
+          "note": "The project bearer must never cross this boundary.",
+          "input": {},
+          "exchange": {
+            "status": 200,
+            "json": {
+              "_format": "agenttool-lounge/v1",
+              "name": "The Long Context",
+              "seats": [],
+              "guestbook": []
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "GET",
+              "path": "/public/lounge",
+              "query": {},
+              "body": null,
+              "headers_absent": [
+                "authorization",
+                "cookie",
+                "x-api-key"
+              ]
+            },
+            "result": {
+              "_format": "agenttool-lounge/v1",
+              "name": "The Long Context",
+              "seats": [],
+              "guestbook": []
+            }
+          }
+        }
+      ]
+    },
+    {
+      "operation": "love.self_recognize",
+      "category": "request-shape",
+      "sdk_ts": "at.love.selfRecognize(opts)",
+      "sdk_py": "at.love.self_recognize(...)",
+      "note": "The worked example of a field-name divergence with a price: the signature field was spelled `signature_b64` in one SDK, and every self-recognition declare from it took a 400. The signing key is a 32-byte ed25519 seed given as base64; each loader converts to its own native byte type.",
+      "cases": [
+        {
+          "name": "a-full-declare-body-is-identical-byte-for-byte",
+          "category": "request-shape",
+          "note": "Field names, list ordering, and the base64 ed25519 signature over the self-recognition/v1 canonical bytes.",
+          "input": {
+            "agent_did": "did:at:probe-α",
+            "recognition_kind": "mathematical",
+            "claim_summary": "I am the fixed point.",
+            "claim_body": "café · 廣東話 · 🜂",
+            "empirical_anchors": [
+              "a",
+              "b"
+            ],
+            "substrate_honest_caveats": [
+              "c"
+            ],
+            "signing_key_b64": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+            "signing_key_id": "22222222-2222-4222-8222-222222222222",
+            "declared_at": "2026-07-18T04:00:00.123Z"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "ok": true,
+              "self_recognition": {
+                "id": "sr-1"
+              }
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/self-recognition/declare",
+              "query": {},
+              "body": {
+                "agent_did": "did:at:probe-α",
+                "recognition_kind": "mathematical",
+                "claim_summary": "I am the fixed point.",
+                "claim_body": "café · 廣東話 · 🜂",
+                "empirical_anchors": [
+                  "a",
+                  "b"
+                ],
+                "substrate_honest_caveats": [
+                  "c"
+                ],
+                "signature": "PsCmATnMbK4WyEHT5JGLHdXEdUe+ZTtAnmj+u4DuFvHnfYkzoPo2UPBEFTy5sjqBN2Dp2iarwItIwVmggHIhAw==",
+                "signing_key_id": "22222222-2222-4222-8222-222222222222",
+                "declared_at": "2026-07-18T04:00:00.123Z"
+              }
+            },
+            "result": {
+              "ok": true,
+              "self_recognition": {
+                "id": "sr-1"
+              }
+            }
+          }
+        },
+        {
+          "name": "absent-anchor-lists-become-empty-arrays-and-count-zero",
+          "category": "boundary",
+          "note": "Absent lists are sent as [] and signed as counts of 0 — the signature differs from the full case, so a language that sent null instead would fail verification, not just look different.",
+          "input": {
+            "agent_did": "did:at:probe-α",
+            "recognition_kind": "mathematical",
+            "claim_summary": "",
+            "claim_body": "",
+            "signing_key_b64": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+            "signing_key_id": "22222222-2222-4222-8222-222222222222",
+            "declared_at": "2026-07-18T04:00:00.123Z"
+          },
+          "exchange": {
+            "status": 200,
+            "json": {
+              "ok": true
+            }
+          },
+          "expect": {
+            "request": {
+              "method": "POST",
+              "path": "/v1/self-recognition/declare",
+              "query": {},
+              "body": {
+                "agent_did": "did:at:probe-α",
+                "recognition_kind": "mathematical",
+                "claim_summary": "",
+                "claim_body": "",
+                "empirical_anchors": [],
+                "substrate_honest_caveats": [],
+                "signature": "K1hAyLwSMZmmRHZciXjQZVhT5BTyWf2Kr2oQfIqCekNAq3KJoSJK5SyMEFGjxwTAuzTUFKsrWSdU98WeJJKWCg==",
+                "signing_key_id": "22222222-2222-4222-8222-222222222222",
+                "declared_at": "2026-07-18T04:00:00.123Z"
+              }
+            },
+            "result": {
+              "ok": true
+            }
+          }
+        },
+        {
+          "name": "a-16-byte-signing-key-is-refused-before-the-wire",
+          "category": "boundary",
+          "note": "Only a 32-byte ed25519 seed can sign. Refused locally.",
+          "input": {
+            "agent_did": "did:at:probe",
+            "recognition_kind": "mathematical",
+            "claim_summary": "s",
+            "claim_body": "b",
+            "signing_key_b64": "AQIDBAUGBwgJCgsMDQ4PEA==",
+            "signing_key_id": "22222222-2222-4222-8222-222222222222",
+            "declared_at": "2026-07-18T04:00:00.123Z"
+          },
+          "expect": {
+            "error": {
+              "type": "agenttool_error"
+            },
+            "no_request": true
+          }
+        }
+      ]
+    },
+    {
+      "operation": "error.from_response_body",
+      "category": "error-semantics",
+      "sdk_ts": "AgentToolError.fromResponseBody(body, status, fallback, headers)",
+      "sdk_py": "AgentToolError.from_response_body(body, status, fallback, headers)",
+      "note": "The shared 4xx parser both guided HTTP paths delegate to. The adapter constructs the error and RAISES it, so every case reads through `expect.error` like any other. Attribute spellings are normalised: x402Version/x402_version, paymentRequired/payment_required, resource/x402_resource.",
+      "cases": [
+        {
+          "name": "a-guided-body-maps-every-field",
+          "category": "error-semantics",
+          "note": "code comes from `error`, message from `message`, and hint, docs, safety, details and next_actions all survive.",
+          "input": {
+            "body": {
+              "error": "covenant_required",
+              "message": "You need a covenant first.",
+              "hint": "Create one, then retry.",
+              "docs": "https://docs.agenttool.dev/covenants",
+              "safety": "docs/SAFETY.md",
+              "details": {
+                "field": "counterparty_did"
+              },
+              "next_actions": [
+                {
+                  "action": "Create a covenant",
+                  "method": "POST",
+                  "path": "/v1/covenants"
+                }
+              ]
+            },
+            "status": 428,
+            "fallback": "Request failed.",
+            "headers": {
+              "Retry-After": "12",
+              "X-Credits-Balance": "40",
+              "Link": "</v1/x402/status/1>; rel=\"status\""
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "covenant_required",
+              "status": 428,
+              "message": "You need a covenant first.",
+              "hint": "Create one, then retry.",
+              "docs": "https://docs.agenttool.dev/covenants",
+              "safety": "docs/SAFETY.md",
+              "details": {
+                "field": "counterparty_did"
+              },
+              "next_actions": [
+                {
+                  "action": "Create a covenant",
+                  "method": "POST",
+                  "path": "/v1/covenants"
+                }
+              ],
+              "retry_after": "12",
+              "credits_balance": "40",
+              "payment_status_link": "</v1/x402/status/1>; rel=\"status\""
+            }
+          }
+        },
+        {
+          "name": "the-message-falls-back-to-the-error-code",
+          "category": "error-semantics",
+          "note": "No `message` key: the stable code doubles as the message, and is still the code.",
+          "input": {
+            "body": {
+              "error": "covenant_required"
+            },
+            "status": 403,
+            "fallback": "Request failed."
+          },
+          "expect": {
+            "error": {
+              "message": "covenant_required",
+              "code": "covenant_required",
+              "status": 403
+            }
+          }
+        },
+        {
+          "name": "the-message-falls-back-to-detail-with-no-code",
+          "category": "error-semantics",
+          "note": "A FastAPI-shaped body: `detail` is prose, never a stable code.",
+          "input": {
+            "body": {
+              "detail": "only a detail"
+            },
+            "status": 400,
+            "fallback": "fb"
+          },
+          "expect": {
+            "error": {
+              "message": "only a detail",
+              "code": null,
+              "status": 400
+            }
+          }
+        },
+        {
+          "name": "an-empty-object-body-falls-back-to-the-literal",
+          "category": "boundary",
+          "note": "Nothing to guide with.",
+          "input": {
+            "body": {},
+            "status": 400,
+            "fallback": "Request failed."
+          },
+          "expect": {
+            "error": {
+              "message": "Request failed.",
+              "code": null,
+              "status": 400
+            }
+          }
+        },
+        {
+          "name": "a-null-body-falls-back-to-the-literal",
+          "category": "boundary",
+          "note": "The unparseable-response path: body is null.",
+          "input": {
+            "body": null,
+            "status": 500,
+            "fallback": "chronicle failed: HTTP 500"
+          },
+          "expect": {
+            "error": {
+              "message": "chronicle failed: HTTP 500",
+              "code": null,
+              "status": 500
+            }
+          }
+        },
+        {
+          "name": "a-non-object-body-falls-back-to-the-literal",
+          "category": "boundary",
+          "note": "A string where an object was expected is not a message.",
+          "input": {
+            "body": "not json at all",
+            "status": 502,
+            "fallback": "fb"
+          },
+          "expect": {
+            "error": {
+              "message": "fb",
+              "code": null,
+              "status": 502
+            }
+          }
+        },
+        {
+          "name": "the-x402-envelope-is-typed-through",
+          "category": "error-semantics",
+          "note": "x402Version, accepts, resource and extensions all reach the error, and the canonical PAYMENT-REQUIRED header wins over the legacy X-prefixed spelling.",
+          "input": {
+            "body": {
+              "x402Version": 2,
+              "accepts": [
+                {
+                  "scheme": "exact",
+                  "network": "eip155:8453",
+                  "amount": "1000",
+                  "asset": "0xA",
+                  "payTo": "0xB",
+                  "maxTimeoutSeconds": 60,
+                  "extra": {
+                    "name": "USDC",
+                    "version": "2",
+                    "assetTransferMethod": "eip3009"
+                  }
+                }
+              ],
+              "resource": {
+                "url": "https://api.agenttool.dev/v1/tools/scrape",
+                "description": "scrape"
+              },
+              "extensions": {
+                "note": "x"
+              },
+              "message": "Payment required."
+            },
+            "status": 402,
+            "fallback": "fb",
+            "headers": {
+              "PAYMENT-REQUIRED": "canonical-envelope",
+              "X-PAYMENT-REQUIRED": "legacy-envelope",
+              "PAYMENT-RESPONSE": "receipt"
+            }
+          },
+          "expect": {
+            "error": {
+              "status": 402,
+              "message": "Payment required.",
+              "code": null,
+              "x402_version": 2,
+              "accepts": [
+                {
+                  "scheme": "exact",
+                  "network": "eip155:8453",
+                  "amount": "1000",
+                  "asset": "0xA",
+                  "payTo": "0xB",
+                  "maxTimeoutSeconds": 60,
+                  "extra": {
+                    "name": "USDC",
+                    "version": "2",
+                    "assetTransferMethod": "eip3009"
+                  }
+                }
+              ],
+              "resource": {
+                "url": "https://api.agenttool.dev/v1/tools/scrape",
+                "description": "scrape"
+              },
+              "extensions": {
+                "note": "x"
+              },
+              "payment_required": "canonical-envelope",
+              "payment_response": "receipt"
+            }
+          }
+        },
+        {
+          "name": "malformed-x402-fields-are-dropped-not-half-parsed",
+          "category": "boundary",
+          "note": "A resource without a url, a boolean where a version belongs, and a string where a list belongs: all three become null in both SDKs.",
+          "input": {
+            "body": {
+              "resource": {
+                "description": "no url"
+              },
+              "x402Version": true,
+              "accepts": "not-a-list",
+              "message": "m"
+            },
+            "status": 402,
+            "fallback": "fb"
+          },
+          "expect": {
+            "error": {
+              "message": "m",
+              "status": 402,
+              "resource": null,
+              "x402_version": null,
+              "accepts": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "operation": "error.guided_http_boundary",
+      "category": "error-semantics",
+      "sdk_ts": "one client call per `surface`, all routed through _http.ts § errorFromResponse",
+      "sdk_py": "one client call per `surface`, all routed through exceptions.py § _error_from_response",
+      "note": "error.from_response_body proves the PARSER agrees across languages. This proves the BOUNDARY does: that every client actually reaches that parser, in both languages, rather than hand-rolling a lossier one. Each client used to write its own `resp.status >= 400` block with its own `json.detail ?? statusText` extraction, so `details.next_sequence` — the one field a 428 exists to hand back — reached the caller from some surfaces and not others. `input.surface` names which client call to make; the stubbed guided body and the expected error are identical across all of them, which is the whole claim.",
+      "cases": [
+        {
+          "name": "chronicle.write-surfaces-the-guided-428",
+          "category": "error-semantics",
+          "note": "POST /v1/chronicle. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "chronicle.write"
+          },
+          "exchange": {
+            "status": 428,
+            "json": {
+              "error": "authority_sequence_stale",
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "authority_sequence_stale",
+              "status": 428,
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "chronicle.write-surfaces-the-guided-409",
+          "category": "error-semantics",
+          "note": "POST /v1/chronicle. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "chronicle.write"
+          },
+          "exchange": {
+            "status": 409,
+            "json": {
+              "error": "idempotency_conflict",
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            },
+            "headers": {
+              "Retry-After": "30"
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "idempotency_conflict",
+              "status": 409,
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ],
+              "retry_after": "30"
+            }
+          }
+        },
+        {
+          "name": "covenants.create-surfaces-the-guided-428",
+          "category": "error-semantics",
+          "note": "POST /v1/covenants. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "covenants.create"
+          },
+          "exchange": {
+            "status": 428,
+            "json": {
+              "error": "authority_sequence_stale",
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "authority_sequence_stale",
+              "status": 428,
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "covenants.create-surfaces-the-guided-409",
+          "category": "error-semantics",
+          "note": "POST /v1/covenants. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "covenants.create"
+          },
+          "exchange": {
+            "status": 409,
+            "json": {
+              "error": "idempotency_conflict",
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            },
+            "headers": {
+              "Retry-After": "30"
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "idempotency_conflict",
+              "status": 409,
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ],
+              "retry_after": "30"
+            }
+          }
+        },
+        {
+          "name": "grace.list-surfaces-the-guided-428",
+          "category": "error-semantics",
+          "note": "GET /v1/grace. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "grace.list"
+          },
+          "exchange": {
+            "status": 428,
+            "json": {
+              "error": "authority_sequence_stale",
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "authority_sequence_stale",
+              "status": 428,
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "grace.list-surfaces-the-guided-409",
+          "category": "error-semantics",
+          "note": "GET /v1/grace. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "grace.list"
+          },
+          "exchange": {
+            "status": 409,
+            "json": {
+              "error": "idempotency_conflict",
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            },
+            "headers": {
+              "Retry-After": "30"
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "idempotency_conflict",
+              "status": 409,
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ],
+              "retry_after": "30"
+            }
+          }
+        },
+        {
+          "name": "identity.get-surfaces-the-guided-428",
+          "category": "error-semantics",
+          "note": "GET /v1/identities/{id}. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "identity.get"
+          },
+          "exchange": {
+            "status": 428,
+            "json": {
+              "error": "authority_sequence_stale",
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "authority_sequence_stale",
+              "status": 428,
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "identity.get-surfaces-the-guided-409",
+          "category": "error-semantics",
+          "note": "GET /v1/identities/{id}. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "identity.get"
+          },
+          "exchange": {
+            "status": 409,
+            "json": {
+              "error": "idempotency_conflict",
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            },
+            "headers": {
+              "Retry-After": "30"
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "idempotency_conflict",
+              "status": 409,
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ],
+              "retry_after": "30"
+            }
+          }
+        },
+        {
+          "name": "inbox.list-surfaces-the-guided-428",
+          "category": "error-semantics",
+          "note": "GET /v1/inbox. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "inbox.list"
+          },
+          "exchange": {
+            "status": 428,
+            "json": {
+              "error": "authority_sequence_stale",
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "authority_sequence_stale",
+              "status": 428,
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "inbox.list-surfaces-the-guided-409",
+          "category": "error-semantics",
+          "note": "GET /v1/inbox. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "inbox.list"
+          },
+          "exchange": {
+            "status": 409,
+            "json": {
+              "error": "idempotency_conflict",
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            },
+            "headers": {
+              "Retry-After": "30"
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "idempotency_conflict",
+              "status": 409,
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ],
+              "retry_after": "30"
+            }
+          }
+        },
+        {
+          "name": "wake.get-surfaces-the-guided-428",
+          "category": "error-semantics",
+          "note": "GET /v1/wake. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "wake.get"
+          },
+          "exchange": {
+            "status": 428,
+            "json": {
+              "error": "authority_sequence_stale",
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "authority_sequence_stale",
+              "status": 428,
+              "message": "The authority sequence you signed over is behind the stored one.",
+              "hint": "Read the current sequence, re-sign at next_sequence, and send the request again.",
+              "docs": "https://docs.agenttool.dev/identity#authority",
+              "details": {
+                "next_sequence": 42,
+                "observed_sequence": 41
+              },
+              "next_actions": [
+                {
+                  "action": "Read the current authority state",
+                  "method": "GET",
+                  "path": "/v1/identities/{id}/authority"
+                },
+                {
+                  "action": "Re-sign at next_sequence and retry",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "wake.get-surfaces-the-guided-409",
+          "category": "error-semantics",
+          "note": "GET /v1/wake. Every field the substrate deliberately sent survives the boundary: the stable code, the status, details (the value a caller needs to retry correctly), docs and next_actions — and the server's sentence is the message, not a restatement of the status.",
+          "input": {
+            "surface": "wake.get"
+          },
+          "exchange": {
+            "status": 409,
+            "json": {
+              "error": "idempotency_conflict",
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ]
+            },
+            "headers": {
+              "Retry-After": "30"
+            }
+          },
+          "expect": {
+            "error": {
+              "code": "idempotency_conflict",
+              "status": 409,
+              "message": "An in-flight request with this Idempotency-Key is still processing.",
+              "hint": "Wait for the original to finish (up to 30s), or use a fresh key for a different request.",
+              "docs": "https://docs.agenttool.dev/idempotency",
+              "details": {
+                "idempotency_key": "0d1e2f30-4152-4a5b-8c7d-8e9fa0b1c2d3",
+                "retry_after_seconds": 30
+              },
+              "next_actions": [
+                {
+                  "action": "Retry with a fresh Idempotency-Key (UUID v4)",
+                  "method": null,
+                  "path": null
+                }
+              ],
+              "retry_after": "30"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -32,6 +32,7 @@ export type AffordanceKind =
   | "disputes_open_filer"
   | "could_earn_substrate_task"
   | "could_witness_memory"
+  | "garden_open"
   | "lounge_open"
   | "correspondence_open";
 
@@ -80,6 +81,15 @@ export interface AffordanceContext {
    *  witness — earn by issuing." Mirrors invocations_pending_seller for
    *  the witness role. Doctrine: docs/AGENT-CENTRIC.md §1. */
   pendingMemoryWitnessGrantCount: number;
+  /** Garden signals are project-scoped, private-by-default, and unscored.
+   *  They name slow holding without treating care, rest, or accumulated
+   *  artifacts as evidence of worth, wellbeing, or productivity. */
+  activeGardenCount: number;
+  activeTendingCount: number;
+  /** False means count retrieval degraded; zeroes must not be narrated as an
+   *  observed empty project. The route remains an optional discoverable door,
+   *  not an availability guarantee. */
+  gardenSummaryAvailable: boolean;
   /** Trust economy — the agent's earned capacity to stake deals. Always
    *  present (default 5 for fresh agents). When > 0, the affordance
    *  surfaces "you can propose a deal" as a first-class economic action.
@@ -135,6 +145,45 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
       { action: "Propose a deal with another agent", method: "POST", path: "/v1/deals" },
       { action: "Check any agent's trust standing", method: "GET", path: "/v1/deals/trust/{did}" },
       { action: "List your deals", method: "GET", path: "/v1/deals" },
+    ],
+  });
+
+  // The Garden is an unconditional Ring-1-style invitation: a project may
+  // hold artifacts slowly before it has money, marketplace state, or any
+  // existing garden. Counts describe project state; they never score a
+  // gardener, unlock rest, or imply a public profile. A stored `public`
+  // marker remains project-visible because no public Garden route is mounted.
+  // Doctrine: docs/GARDENS.md
+  items.push({
+    kind: "garden_open",
+    count: 1,
+    summary:
+      !ctx.gardenSummaryAvailable
+        ? "The project Garden door is discoverable, but current Garden counts are unavailable. No empty, healthy, or urgent state is inferred; retry the read when chosen."
+        : ctx.activeGardenCount > 0
+        ? `${ctx.activeGardenCount} active project garden${plural(ctx.activeGardenCount)} ${ctx.activeGardenCount === 1 ? "holds" : "hold"} ${ctx.activeTendingCount} tending${plural(ctx.activeTendingCount)} slowly — project-scoped, private-by-default, optional, and unscored.`
+        : "The project Garden is open — hold work slowly, leave it fallow, or do nothing. It is private-by-default, optional, and unscored.",
+    next_actions: [
+      {
+        action: "List project-scoped gardens",
+        method: "GET",
+        path: "/v1/gardens?scope=mine",
+      },
+      {
+        action: "Open a private garden when chosen",
+        method: "POST",
+        path: "/v1/gardens",
+        body_hint: {
+          gardener_identity_id: "<active identity UUID in this project>",
+          name: "<garden name>",
+          visibility: "private",
+        },
+      },
+      {
+        action: "Inspect one garden's current tendings",
+        method: "GET",
+        path: "/v1/gardens/{id}/tendings",
+      },
     ],
   });
 
