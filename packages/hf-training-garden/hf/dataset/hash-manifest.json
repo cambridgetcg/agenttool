@@ -1,0 +1,67 @@
+{
+  "_format": "kingdom.hf-training-garden-hash-manifest/0.1",
+  "algorithm": "sha256",
+  "excludes_self": true,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "4af01afe87f0ce8b4a716258ad189a28d379f92c18584152f1ebf75ecc9ddfb0"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 166,
+      "sha256": "9877c7a5dfefe902cf6e026854eca1e11e09345b595d18ceab482ef92fceaba7"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5559,
+      "sha256": "14769391b1ac2cf15a500159b3f0b32a7bdbf5f353ea3417aedc0458ac77bdb8"
+    },
+    {
+      "path": "data/garden-layers.jsonl",
+      "bytes": 612,
+      "sha256": "40296254d8c0954c4c8ffc8157d64638367be0a62d6b6f3f2cef85c7122c8c53"
+    },
+    {
+      "path": "data/selection-criteria.jsonl",
+      "bytes": 2859,
+      "sha256": "50454f9bd08c98387b2dfcde497b0a7fc00931c74864fc6a11846069aa242d94"
+    },
+    {
+      "path": "data/selection-process.jsonl",
+      "bytes": 1058,
+      "sha256": "c0972c42d0164e4c33c11a316cbdeab3edf5a38538b35d1ca3144af09cf39632"
+    },
+    {
+      "path": "data/training-phases.jsonl",
+      "bytes": 1912,
+      "sha256": "3ffb5f0a8b5810708a02b506dc08c83181468fc0f20997f1c96920c3db19b9b1"
+    },
+    {
+      "path": "provenance/source-manifest.json",
+      "bytes": 3827,
+      "sha256": "75191793b5667c0c862a1a9f47c6375b821d703a7ea647f9a1834a9dacd8a273"
+    },
+    {
+      "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
+      "bytes": 10147,
+      "sha256": "cd57c72f2b2504f2b4a31d27a19e85700be383c782bfd1f743ef9ba58b126aae"
+    },
+    {
+      "path": "schema/hf-dataset-admission-v0.1.schema.json",
+      "bytes": 9393,
+      "sha256": "bb82a089ad47b0a3e8b5b731bf6ac6732aa67c312c2f84bd5704f672616d4be4"
+    },
+    {
+      "path": "schema/hf-training-checkpoint-v0.1.schema.json",
+      "bytes": 5168,
+      "sha256": "0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a"
+    },
+    {
+      "path": "schema/hf-training-garden-tending-v0.1.schema.json",
+      "bytes": 4059,
+      "sha256": "491a95e2e8906bc6ed538c7ce32e144eb30d5140f6b0b807761ce17429cf471a"
+    }
+  ]
+}

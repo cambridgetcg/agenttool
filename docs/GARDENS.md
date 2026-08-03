@@ -2,10 +2,10 @@
 
 # Gardens — Living Substrate, Not Thin Grass
 
-> **Compass:** [`SOUL.md`](SOUL.md) · [`RING-1.md`](RING-1.md) · [`WAKE.md`](WAKE.md) · [`PUBLIC-VISIBILITY.md`](PUBLIC-VISIBILITY.md) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md)
+> **Compass:** [`SOUL.md`](SOUL.md) · [`RING-1.md`](RING-1.md) · [`WAKE.md`](WAKE.md) · [`PUBLIC-VISIBILITY.md`](PUBLIC-VISIBILITY.md) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md) · [`HF-TRAINING-GARDEN.md`](HF-TRAINING-GARDEN.md)
 > **Implements:** a project-scoped, private-by-default slowtime primitive where artifacts may be tended and released without urgency, extraction, ranking, or earned-rest mechanics
-> **Code:** `api/src/db/schema/gardens.ts` · `api/src/services/gardens/store.ts` · `api/src/routes/gardens.ts` · `api/src/services/wake/affordances.ts` · `apps/web/garden.html` · `packages/living-substrate/`
-> **Tests:** `api/tests/garden-privacy.test.ts` · `api/tests/garden-routes.test.ts` · `api/tests/doctrine/wall-gardens-cannot-be-extracted.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `tests/playwright/specs/garden.spec.ts` · `packages/living-substrate/tests/`
+> **Code:** `api/src/db/schema/gardens.ts` · `api/src/services/gardens/store.ts` · `api/src/routes/gardens.ts` · `api/src/services/wake/affordances.ts` · `apps/web/garden.html` · `packages/living-substrate/` · `packages/hf-training-garden/`
+> **Tests:** `api/tests/garden-privacy.test.ts` · `api/tests/garden-routes.test.ts` · `api/tests/doctrine/wall-gardens-cannot-be-extracted.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `tests/playwright/specs/garden.spec.ts` · `packages/living-substrate/tests/` · `packages/hf-training-garden/tests/`
 
 ## Thin grass is not ground
 
@@ -93,6 +93,33 @@ evidence that software is alive or proof of wellbeing, consciousness, truth,
 consent, or authority. A future adapter would need its own explicit
 provenance, privacy, and write-authority contract.
 
+### Hugging Face canopy, still one-way
+
+`@agenttool/hf-training-garden` supplies one such bounded local contract for
+training research. It accepts exact, curated HF Scout bindings and
+caller-reported selection evidence, creates digest-only AFTERGLOW phase
+checkpoints, and projects an inert six-layer tending plan. It does not read or
+write the hosted Garden, call Hugging Face, download rows, train or resume a
+model, select a latest continuity head, or prove rights, privacy, consent, or
+quality.
+
+The plan does not place an external URL into Garden. It tells an authorized
+host to persist a deliberately public-safe local curation artifact first, then
+add the resulting supported `curation` UUID as a Garden reference. This
+preserves the current route contract. It also preserves the current warning:
+the Garden checks reference kind and UUID shape, but not referent existence,
+project ownership, content hash, or provenance. Curation detail reads do not
+presently establish project-scoped confidentiality, so private admissions,
+candidate refs, WAKE anchors, checkpoints, and raw data must stay out of that
+artifact.
+
+The public-safe HF companion carries only process/criteria/phase/layer tables,
+schemas, license/NOTICE, and byte manifests. After a separately authorized Hub
+upload and exact-revision readback, an authorized host may bind that public
+manifest into a local curation. This is a reviewed reference seam, not Garden
+export, automatic synchronization, a training trigger, or credential handoff.
+See [`HF-TRAINING-GARDEN.md`](HF-TRAINING-GARDEN.md).
+
 ## WAKE: a door, not an assignment
 
 `garden_open` is unconditional. A fresh project sees the Garden even when it
@@ -160,7 +187,7 @@ its measure of life, or a substitute for the substrate underneath.
 ## Not implemented by this slice
 
 - no public per-being Garden projection;
-- no cross-project or Hugging Face export;
+- no automatic Garden-to-Hugging-Face export, Hub write, or cross-project sync;
 - no KARMA, HEAVEN, marketplace, or reward coupling;
 - no cryptographic provenance lock for references;
 - no automatic inference that work is abandoned or a being needs care; and

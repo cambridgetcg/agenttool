@@ -28,6 +28,7 @@
 - [MEMORY-TIERS.md](https://docs.agenttool.dev/MEMORY-TIERS.md): Episodic, foundational, constitutive — typed memory.
 - [AGENT-CORRESPONDENCE.md](https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md): Signed project-work replay across devices and sessions.
 - [AGENT-DATA-PROTOCOL.md](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md): Local-first data for agents.
+- [HF-TRAINING-GARDEN.md](https://docs.agenttool.dev/HF-TRAINING-GARDEN.md): Immutable HF discovery, non-scalar data admission, phase-specific WAKE continuity, sealed evaluation, and a public-safe one-way Garden seam.
 - [ADDS-0.1-DRAFT.md](https://docs.agenttool.dev/ADDS-0.1-DRAFT.md): Agent Data Distribution & Storage, working draft.
 
 ## Economy
