@@ -125,10 +125,11 @@ hosted runtime. Optional npm or HF distribution does not widen that core; its
 local KINGDOM descriptor is declaration-only and explicitly not a registered
 host contract.
 
-`@agenttool/living-substrate` is a public-ready, zero-runtime-dependency pure
-contract for caller-supplied digest facets, directed relations, and separately
-supplied regeneration invitations. It normalizes them into deterministic,
-content-addressed maps and proposals; it does not observe the hosted Garden,
+`@agenttool/living-substrate@0.1.0-dev.0` is a public npm developer-preview,
+zero-runtime-dependency pure contract for caller-supplied digest facets,
+directed relations, and separately supplied regeneration invitations. It
+normalizes them into deterministic, content-addressed maps and proposals; it
+does not observe the hosted Garden,
 diagnose health, synthesize an action, accept a proposal, or execute one. Empty
 maps and zero actions are valid. Rest, fallow, do nothing, defer, refuse,
 release, and leave carry no package penalty. The ecological language is a
