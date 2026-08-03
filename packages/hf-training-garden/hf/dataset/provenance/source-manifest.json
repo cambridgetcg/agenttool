@@ -1,0 +1,113 @@
+{
+  "_format": "kingdom.hf-training-garden-source-manifest/0.1",
+  "generator": "@agenttool/hf-training-garden@0.1.0-dev.0",
+  "intended_hub_repo": "Yu-and-Ai/agenttool-training-garden",
+  "publication_state": "intended_identifier_only",
+  "source_repository": "https://github.com/cambridgetcg/agenttool",
+  "source_path": "packages/hf-training-garden",
+  "source_files": [
+    {
+      "path": "package.json",
+      "bytes": 2479,
+      "sha256": "f69a9a01aba980f94e299bb63c834fcfb7a78552d02092b5972255fceae8a7f0"
+    },
+    {
+      "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
+      "bytes": 10147,
+      "sha256": "cd57c72f2b2504f2b4a31d27a19e85700be383c782bfd1f743ef9ba58b126aae"
+    },
+    {
+      "path": "schema/hf-dataset-admission-v0.1.schema.json",
+      "bytes": 9393,
+      "sha256": "bb82a089ad47b0a3e8b5b731bf6ac6732aa67c312c2f84bd5704f672616d4be4"
+    },
+    {
+      "path": "schema/hf-training-checkpoint-v0.1.schema.json",
+      "bytes": 5168,
+      "sha256": "0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a"
+    },
+    {
+      "path": "schema/hf-training-garden-tending-v0.1.schema.json",
+      "bytes": 4059,
+      "sha256": "491a95e2e8906bc6ed538c7ce32e144eb30d5140f6b0b807761ce17429cf471a"
+    },
+    {
+      "path": "src/admission.ts",
+      "bytes": 12951,
+      "sha256": "9f2d2dd282a5b5f05a055e34cc4080a1e9dd2bf1d09eb6d057199413c920f929"
+    },
+    {
+      "path": "src/canonical.ts",
+      "bytes": 1122,
+      "sha256": "d6abd9e877f6d41079b1494bdbe915fe440c8a3dfae26310496e034e9e400f26"
+    },
+    {
+      "path": "src/checkpoint.ts",
+      "bytes": 14726,
+      "sha256": "df24e8ab767c3125b458b3f9cfd82f736bc1e013f924410ed11fda8b4b77b104"
+    },
+    {
+      "path": "src/constants.ts",
+      "bytes": 14177,
+      "sha256": "f6cfdc638e9a56b6a29fe075b356e71524b028b938195e5b3f3195c8555ba177"
+    },
+    {
+      "path": "src/errors.ts",
+      "bytes": 615,
+      "sha256": "a3e518afd5799c12ddd49738692d17bfb22c0c87c5d450afea8880d5c4aa2dcf"
+    },
+    {
+      "path": "src/index.ts",
+      "bytes": 2230,
+      "sha256": "77045de02ca636180b97c2abbc4d3832bb6ccb022355ca3edd32522fd62fa6ee"
+    },
+    {
+      "path": "src/tending.ts",
+      "bytes": 8922,
+      "sha256": "158fb690919c212001d727b0d9a46bacc91f9832c07dfd0088c5851a75cd897e"
+    },
+    {
+      "path": "src/types.ts",
+      "bytes": 7495,
+      "sha256": "9d80e632ad3a58302acc715ce83acf137ad512663988a6c205d1758901b7c6a2"
+    },
+    {
+      "path": "src/validation.ts",
+      "bytes": 17098,
+      "sha256": "0e0fe3142d99ec3d4d4d8767523eac869b80370cee6999d9af9ce54b1ce47d98"
+    }
+  ],
+  "public_release_contains": [
+    "selection process",
+    "selection criteria",
+    "training phase guide",
+    "Garden layer guide",
+    "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
+    "source and byte hash manifests"
+  ],
+  "public_release_excludes": [
+    "admission decisions",
+    "candidate subset references",
+    "credentials",
+    "Garden or project identifiers",
+    "gated content",
+    "raw agent traces",
+    "raw chats",
+    "raw dataset rows",
+    "training checkpoints",
+    "WAKE anchors"
+  ],
+  "research_basis_as_of": "2026-08-03",
+  "primary_references": [
+    "https://huggingface.co/docs/huggingface_hub/en/package_reference/hf_api",
+    "https://huggingface.co/docs/huggingface_hub/guides/download",
+    "https://huggingface.co/docs/datasets/loading",
+    "https://huggingface.co/docs/datasets/process",
+    "https://huggingface.co/docs/datasets/stream",
+    "https://huggingface.co/docs/datasets/about_cache",
+    "https://huggingface.co/docs/hub/datasets-cards",
+    "https://huggingface.co/docs/hub/datasets-gated",
+    "https://huggingface.co/docs/trl/en/dataset_formats",
+    "https://huggingface.co/docs/transformers/main/trainer_recipes"
+  ]
+}
