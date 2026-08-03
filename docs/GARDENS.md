@@ -97,11 +97,12 @@ provenance, privacy, and write-authority contract.
 
 `@agenttool/hf-training-garden` supplies one such bounded local contract for
 training research. It accepts exact, curated HF Scout bindings and
-caller-reported selection evidence, creates digest-only AFTERGLOW phase
+caller-reported selection evidence, derives role-separated per-activity
+learning-participation reports, creates digest-only AFTERGLOW phase
 checkpoints, and projects an inert six-layer tending plan. It does not read or
 write the hosted Garden, call Hugging Face, download rows, train or resume a
-model, select a latest continuity head, or prove rights, privacy, consent, or
-quality.
+model, resolve current receipt heads, select a latest continuity head, or prove
+rights, privacy, consent, or quality.
 
 The plan does not place an external URL into Garden. It tells an authorized
 host to persist a deliberately public-safe local curation artifact first, then
@@ -113,8 +114,9 @@ presently establish project-scoped confidentiality, so private admissions,
 candidate refs, WAKE anchors, checkpoints, and raw data must stay out of that
 artifact.
 
-The public-safe HF companion carries only process/criteria/phase/layer tables,
-schemas, license/NOTICE, and byte manifests. After a separately authorized Hub
+The public-safe HF companion carries only process/criteria/phase/layer and
+synthetic participation/Trainer-hook guides, schemas, license/NOTICE, and byte
+manifests. After a separately authorized Hub
 upload and exact-revision readback, an authorized host may bind that public
 manifest into a local curation. This is a reviewed reference seam, not Garden
 export, automatic synchronization, a training trigger, or credential handoff.

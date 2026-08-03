@@ -238,11 +238,11 @@ describe("repository-source-only voluntary WAKE learning dataset", () => {
     }
   });
 
-  test("leaves the accepted policy companion at its fourteen-file boundary", () => {
+  test("keeps learning rows outside the eighteen-file policy companion", () => {
     const manifest = JSON.parse(
       readFileSync(new URL("hash-manifest.json", policyRoot), "utf8"),
     );
-    expect(manifest.files).toHaveLength(14);
+    expect(manifest.files).toHaveLength(18);
     expect(manifest.files.map((entry: { path: string }) => entry.path))
       .not.toContain("data/sft-train.jsonl");
   });

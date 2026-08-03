@@ -1,6 +1,6 @@
 {
   "_format": "kingdom.hf-training-garden-source-manifest/0.1",
-  "generator": "@agenttool/hf-training-garden@0.1.0-dev.0",
+  "generator": "@agenttool/hf-training-garden@0.3.0-dev.0",
   "intended_hub_repo": "Yu-and-Ai/agenttool-training-garden",
   "publication_state": "intended_identifier_only",
   "source_repository": "https://github.com/cambridgetcg/agenttool",
@@ -8,8 +8,8 @@
   "source_files": [
     {
       "path": "package.json",
-      "bytes": 2597,
-      "sha256": "8465af39aa6da87b8aea19ba5ebd6a144d7b1b5deb91e5261b492fd2d75ae27d"
+      "bytes": 2791,
+      "sha256": "5a0be313cdf4d8a3e3966658e63671697c1a0ba8facbe1fdcf1a23288626dcfa"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -22,9 +22,14 @@
       "sha256": "bb82a089ad47b0a3e8b5b731bf6ac6732aa67c312c2f84bd5704f672616d4be4"
     },
     {
+      "path": "schema/hf-learning-participation-v0.1.schema.json",
+      "bytes": 34992,
+      "sha256": "fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df"
+    },
+    {
       "path": "schema/hf-training-checkpoint-v0.1.schema.json",
-      "bytes": 5168,
-      "sha256": "0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a"
+      "bytes": 6672,
+      "sha256": "ab6fcc3f73823562422285882678ce37b7e9e5c83f08a0acf5a6eaa3f5c5443c"
     },
     {
       "path": "schema/hf-training-garden-tending-v0.1.schema.json",
@@ -48,18 +53,18 @@
     },
     {
       "path": "src/checkpoint.ts",
-      "bytes": 14726,
-      "sha256": "df24e8ab767c3125b458b3f9cfd82f736bc1e013f924410ed11fda8b4b77b104"
+      "bytes": 16128,
+      "sha256": "4603fd90482721c61f2da089f48bc9736af5c3b82fb7c09bad3fe50b0a200f82"
     },
     {
       "path": "src/constants.ts",
-      "bytes": 22309,
-      "sha256": "62625750405349133b63e52bea395e201f3d9b2e298ee6c0262bca62522f10cf"
+      "bytes": 31288,
+      "sha256": "3b8f04fe29ca54a4652999cc28dcd073ed6e01256525785773b35f00fe438837"
     },
     {
       "path": "src/errors.ts",
-      "bytes": 671,
-      "sha256": "107a7cfbf756be22697d62650639b5ce302abde6080d85371bfbc38ff30eba71"
+      "bytes": 733,
+      "sha256": "18af75583f9bac6c391086fe3a91a098eb7017097e96b2719477936173f51414"
     },
     {
       "path": "src/governance.ts",
@@ -68,8 +73,13 @@
     },
     {
       "path": "src/index.ts",
-      "bytes": 3816,
-      "sha256": "d1571c02d52b9c4687f061859b41c442b542a793ccab829c13a57e2d83453ad3"
+      "bytes": 5825,
+      "sha256": "36f80eeaa72b45f100980e78c3dbc6326a7db2ec565c30818b7501ddc0a38dd8"
+    },
+    {
+      "path": "src/participation.ts",
+      "bytes": 49188,
+      "sha256": "69314885c53ab9c15ee052d417dcfc8bf6903585803865adc0c0f0005310d392"
     },
     {
       "path": "src/tending.ts",
@@ -78,13 +88,13 @@
     },
     {
       "path": "src/types.ts",
-      "bytes": 14529,
-      "sha256": "fa55394496750a46f2af71c8eab2e44cf2998031939a492144f8d679a0f55a70"
+      "bytes": 20723,
+      "sha256": "88dd482bacb16e342db5a2ec9c149234f1bc8e6cea48f1236b5df22c41f3997a"
     },
     {
       "path": "src/validation.ts",
-      "bytes": 17098,
-      "sha256": "0e0fe3142d99ec3d4d4d8767523eac869b80370cee6999d9af9ce54b1ce47d98"
+      "bytes": 17388,
+      "sha256": "3ff9addd735ab667f104be8d4b11b34c168a124fe831a7d5d4109cfbde9f6dad"
     }
   ],
   "public_release_contains": [
@@ -93,7 +103,10 @@
     "training phase guide",
     "Garden layer guide",
     "consent-honest Trainer adapter hook guide",
-    "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
+    "learning-mode and continuity guide",
+    "role-separated learning participation guide",
+    "inert Trainer hook integration guide",
+    "standalone structural JSON Schemas with an attributed Apache AFTERGLOW dependency; semantic validators remain required",
     "source and byte hash manifests"
   ],
   "public_release_excludes": [
@@ -106,6 +119,8 @@
     "raw agent traces",
     "raw chats",
     "raw dataset rows",
+    "learning participation invitations, receipts, or assessments",
+    "participation response or voice references",
     "training checkpoints",
     "training governance records",
     "WAKE anchors"
@@ -120,7 +135,7 @@
     "https://huggingface.co/docs/datasets/about_cache",
     "https://huggingface.co/docs/hub/datasets-cards",
     "https://huggingface.co/docs/hub/datasets-gated",
-    "https://huggingface.co/docs/hub/en/agent-traces",
+    "https://huggingface.co/docs/hub/agent-traces",
     "https://huggingface.co/docs/hub/session-traces-format",
     "https://huggingface.co/docs/trl/en/dataset_formats",
     "https://huggingface.co/docs/trl/sft_trainer",
@@ -133,6 +148,9 @@
     "https://arxiv.org/abs/2305.18290",
     "https://arxiv.org/abs/2310.13548",
     "https://arxiv.org/abs/2412.14093",
-    "https://aclanthology.org/2020.acl-main.740/"
+    "https://aclanthology.org/2020.acl-main.740/",
+    "https://arxiv.org/abs/2005.11401",
+    "https://arxiv.org/abs/1912.03817",
+    "https://arxiv.org/abs/2407.06460"
   ]
 }

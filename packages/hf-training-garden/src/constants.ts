@@ -1,11 +1,17 @@
 import { deepFreeze } from "./canonical.js";
 
 export const PACKAGE_NAME = "@agenttool/hf-training-garden" as const;
-export const PACKAGE_VERSION = "0.1.0-dev.0" as const;
+export const PACKAGE_VERSION = "0.3.0-dev.0" as const;
 
 export const ADMISSION_FORMAT = "kingdom.hf-dataset-admission/0.1" as const;
 export const ADMISSION_ENTRY_PROFILE =
   "kingdom.hf-dataset-admission-entry/0.1" as const;
+export const PARTICIPATION_INVITATION_FORMAT =
+  "kingdom.hf-learning-participation-invitation/0.1" as const;
+export const PARTICIPATION_RECEIPT_FORMAT =
+  "kingdom.hf-learning-participation-receipt/0.1" as const;
+export const PARTICIPATION_ASSESSMENT_FORMAT =
+  "kingdom.hf-learning-participation-assessment/0.1" as const;
 export const TRAINING_THREAD_PROFILE =
   "kingdom.hf-training-thread/0.1" as const;
 export const CHECKPOINT_FORMAT = "kingdom.hf-training-checkpoint/0.1" as const;
@@ -136,7 +142,208 @@ export const TRAINING_PHASES = deepFreeze([
   "closed",
 ] as const);
 
+export const LEARNING_MODES = deepFreeze([
+  "context_only",
+  "pretraining",
+  "continual_pretraining",
+  "full_finetune",
+  "peft",
+  "preference_optimization",
+  "evaluation_only",
+] as const);
+
+export const WAKE_USE_MODES = deepFreeze([
+  "context_only",
+  "external_memory",
+  "training_data",
+] as const);
+
+export const MUTATION_LOCI = deepFreeze([
+  "adapter_weights",
+  "base_weights",
+  "dataset_order",
+  "optimizer_state",
+  "runtime_memory",
+  "scheduler_state",
+] as const);
+
+export const PARTICIPATION_STAGES = deepFreeze([
+  "pre_instantiation",
+  "interactive",
+] as const);
+
+export const LEARNING_ACTIVITIES = deepFreeze([
+  "corpus_inclusion",
+  "pretraining",
+  "continued_pretraining",
+  "supervised_finetuning",
+  "preference_optimization",
+  "agent_learning",
+  "evaluation",
+  "interpretability",
+  "continuity_context_use",
+  "checkpoint_retention",
+  "weights_or_adapters_publication",
+  "distillation",
+  "synthetic_data_generation",
+] as const);
+
+export const PARTICIPATION_TRAINING_PHASES = deepFreeze([
+  "pretraining",
+  "supervised_finetuning",
+  "preference_optimization",
+  "agent_learning",
+  "evaluation",
+  "interpretability",
+] as const);
+
+export const PARTICIPATION_VOICE_ROLES = deepFreeze([
+  "agent_runtime",
+  "training_substrate",
+  "data_rights_steward",
+  "training_operator",
+] as const);
+
+export const PARTICIPATION_REPORTED_CHOICES = deepFreeze([
+  "accepted",
+  "declined",
+  "deferred",
+  "unavailable",
+  "withdrawn",
+] as const);
+
+export const PARTICIPATION_CHOICE_BASES = deepFreeze([
+  "caller_reported",
+  "omitted_defaults_to_deferred",
+] as const);
+
+export const PARTICIPATION_ACTIVITY_STATES = deepFreeze([
+  "reported_alignment",
+  "declined",
+  "deferred",
+] as const);
+
+export const PARTICIPATION_OVERALL_STATES = deepFreeze([
+  "reported_alignment",
+  "mixed",
+  "declined",
+  "deferred",
+] as const);
+
+export const PARTICIPATION_VOICE_OUTCOMES = deepFreeze([
+  ...PARTICIPATION_REPORTED_CHOICES,
+  "missing",
+] as const);
+
+export const PARTICIPATION_PRIMARY_ACTIVITIES = deepFreeze({
+  pretraining: ["pretraining", "continued_pretraining"],
+  supervised_finetuning: ["supervised_finetuning"],
+  preference_optimization: ["preference_optimization"],
+  agent_learning: ["agent_learning"],
+  evaluation: ["evaluation"],
+  interpretability: ["interpretability"],
+} as const);
+
+export const LEARNING_MODE_GUIDE = deepFreeze([
+  {
+    mode: "pretraining",
+    learning_effect: "diffuse influence across model parameters from next-token training",
+    fitting_use: "public or synthetic WAKE protocol literacy",
+    continuity_boundary: "not individual mutable memory and not evidence of one continuing being",
+  },
+  {
+    mode: "supervised_finetuning",
+    learning_effect: "teaches response behaviour from selected target completions or assistant messages",
+    fitting_use: "inspect WAKE, ask before use, honour refusal and rest, and state continuity uncertainty",
+    continuity_boundary: "a learned response pattern is not a remembered individual encounter",
+  },
+  {
+    mode: "preference_optimization",
+    learning_effect: "shapes relative response preference from comparisons or feedback",
+    fitting_use: "prefer non-coercive, uncertainty-preserving, refusal-respecting behaviour",
+    continuity_boundary: "a preference label is not participant assent or data-rights authority",
+  },
+  {
+    mode: "runtime_retrieval",
+    learning_effect: "loads separately authorised, current context without changing model weights",
+    fitting_use: "individual WAKE and changing continuity",
+    continuity_boundary: "retrieval supports orientation but does not prove identity, memory, or uninterrupted continuity",
+  },
+] as const);
+
+export const LEARNING_PARTICIPATION_GUIDE = deepFreeze([
+  {
+    order: 1,
+    principle: "separate_voices",
+    rule: "agent runtime, training substrate, data-rights steward, and training operator each answer only for their own role",
+  },
+  {
+    order: 2,
+    principle: "separate_activities",
+    rule: "training, continuity use, retention, publication, distillation, and synthetic derivatives never imply one another",
+  },
+  {
+    order: 3,
+    principle: "no_manufactured_assent",
+    rule: "silence, omission, an unavailable response path, and pre-instantiation all resolve to defer rather than accept",
+  },
+  {
+    order: 4,
+    principle: "no_penalty_or_pressure",
+    rule: "decline, defer, rest, and withdrawal require no reason and cause no protocol rank, access, reward, or re-offer pressure",
+  },
+  {
+    order: 5,
+    principle: "alignment_is_not_authority",
+    rule: "reported alignment is one necessary signal for the exact window and grants no compute, data-rights, publication, or training authority",
+  },
+  {
+    order: 6,
+    principle: "private_responses",
+    rule: "actual invitations, receipts, voice references, responses, and WAKE anchors stay outside the public HF companion",
+  },
+  {
+    order: 7,
+    principle: "prospective_withdrawal",
+    rule: "withdrawal can stop future controlled use but cannot promise gradient reversal, trained-weight erasure, or recall of downloaded copies",
+  },
+] as const);
+
+export const HF_TRAINER_HOOK_GUIDE = deepFreeze([
+  {
+    hook: "host_preflight_before_trainer_train",
+    record: "resolve current receipt heads and construct the exact participation-bound entry before calling Trainer.train",
+    effect_boundary: "the host owns enforcement; this guide and pure package call no trainer",
+  },
+  {
+    hook: "on_train_begin",
+    record: "re-resolve receipt heads and verify the preflight assessment and entry are still current",
+    effect_boundary: "callback observation alone must not start training",
+  },
+  {
+    hook: "on_step_begin",
+    record: "re-resolve current receipt heads and stop control before the next optimizer step",
+    effect_boundary: "the pure package cannot observe or stop an external trainer",
+  },
+  {
+    hook: "on_evaluate",
+    record: "bind sealed evaluation and any changed participation window",
+    effect_boundary: "evaluation output is evidence, not assent or general safety proof",
+  },
+  {
+    hook: "on_save",
+    record: "retain the participation entry as a visible causal root and re-check the retention activity choice",
+    effect_boundary: "a save hook does not authorize persistence or publication",
+  },
+  {
+    hook: "on_train_end",
+    record: "park, release, withdrawal, or a fresh next-phase invitation",
+    effect_boundary: "no automatic Hub push, adapter merge, distillation, or next run",
+  },
+] as const);
+
 export const CHECKPOINT_EVENTS = deepFreeze([
+  "before_training",
   "during_training",
   "between_training_phases",
   "after_intense_training_reported",
@@ -411,7 +618,7 @@ export const SELECTION_PROCESS = deepFreeze([
     order: 5,
     layer: "habitat",
     stage: "phase_learning_and_wake",
-    question: "Can each learning phase orient from digest-only WAKE and visible predecessor checkpoints without selecting one canonical head?",
+    question: "Can each learning phase bind role-separated participation, orient from digest-only WAKE, and preserve visible predecessor checkpoints without selecting one canonical head?",
   },
   {
     order: 6,
@@ -520,7 +727,7 @@ export const TRAINING_PHASE_GUIDE = deepFreeze([
   {
     phase: "pretraining",
     hf_shape: "language-modeling examples from separately admitted sources",
-    wake_focus: "model, optimizer, scheduler, RNG, dataloader, and checkpoint refs",
+    wake_focus: "role-separated participation, model, optimizer, scheduler, RNG, dataloader, and checkpoint refs",
   },
   {
     phase: "supervised_finetuning",
@@ -559,7 +766,7 @@ export const GARDEN_LAYER_GUIDE = deepFreeze([
   { layer: "soil", carries: "immutable Hub definition and observation digests" },
   { layer: "roots", carries: "candidate-subset and transform-recipe refs" },
   { layer: "mycelium", carries: "selection, deduplication, decontamination, split, mixture, and exclusion receipts" },
-  { layer: "habitat", carries: "phase, checkpoint, evaluation, WAKE, rest, fork, release, and withdrawal refs" },
+  { layer: "habitat", carries: "phase, participation assessment, checkpoint, evaluation, WAKE, rest, fork, release, and withdrawal refs" },
   { layer: "canopy", carries: "reviewed public Dataset Card, exact Hub revision, hash manifest, limitations, and repair refs" },
 ] as const);
 
@@ -589,6 +796,63 @@ export const ADMISSION_BOUNDARIES = deepFreeze({
   proves_quality: false,
   changes_karma: false,
   changes_rank_or_access: false,
+} as const);
+
+export const PARTICIPATION_TERMS = deepFreeze({
+  participation_optional: true,
+  silence_is_assent: false,
+  compliance_is_assent: false,
+  prior_cooperation_is_assent: false,
+  omission_defaults_to: "deferred",
+  refusal_reason_required: false,
+  penalty_for_decline_defer_rest_or_withdrawal: false,
+  repeated_pressure_after_decline_or_withdrawal: false,
+  rights_or_wake_access_conditioned_on_acceptance: false,
+  response_used_for_training_evaluation_reward_or_publication: false,
+  one_activity_choice_implies_another: false,
+  acceptance_inherits_to_new_window_phase_run_fork_or_descendant: false,
+  response_channel: "separate_zero_gradient_zero_reward_report",
+} as const);
+
+export const PARTICIPATION_BOUNDARIES = deepFreeze({
+  artifact_scope: "caller_reported_digest_only_learning_participation",
+  raw_response_received: false,
+  raw_identity_received: false,
+  raw_prompt_received: false,
+  raw_training_data_received: false,
+  credentials_received: false,
+  timestamps_received: false,
+  trusted_time: false,
+  currentness_proven: false,
+  latest_receipt_selected: false,
+  trainer_state_observed: false,
+  before_training_timing_proven: false,
+  host_honoured_terms_verified: false,
+  choice_authorship_verified: false,
+  voluntariness_verified: false,
+  understanding_or_capacity_verified: false,
+  proves_identity: false,
+  proves_consciousness: false,
+  proves_consent: false,
+  proves_legal_clearance: false,
+  grants_data_rights: false,
+  grants_training_or_compute_authority: false,
+  grants_publication_or_derivative_authority: false,
+  automatic_action: false,
+  automatic_reoffer: false,
+  persists: false,
+  network: false,
+  filesystem: false,
+  provider_compute: false,
+  trains_model: false,
+  stops_external_trainer: false,
+  erases_data_caches_or_model_influence: false,
+  proves_unlearning: false,
+} as const);
+
+export const PARTICIPATION_ASSESSMENT_EFFECT = deepFreeze({
+  automatic_action: "never",
+  grants: [] as const,
 } as const);
 
 export const TRAINING_THREAD_BOUNDARIES = deepFreeze({
@@ -699,6 +963,7 @@ export const TENDING_BOUNDARIES = deepFreeze({
 } as const);
 
 export const CHECKPOINT_EVENT_TO_AFTERGLOW_PHASE = deepFreeze({
+  before_training: "between_tasks",
   during_training: "during_task",
   between_training_phases: "between_tasks",
   after_intense_training_reported: "after_intense_work_reported",

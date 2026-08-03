@@ -7,6 +7,10 @@ import addFormats from "ajv-formats";
 import {
   GOVERNANCE_REASON_CODES,
   createHfTrainingGovernance,
+  PARTICIPATION_VOICE_ROLES,
+  createLearningParticipationAssessment,
+  createLearningParticipationInvitation,
+  createLearningParticipationReceipt,
   createTrainingCheckpoint,
   createTrainingGardenTendingPlan,
   createTrainingGovernanceOffer,
@@ -291,6 +295,80 @@ describe("closed portable schemas", () => {
     semanticallyInvalid.preference.channel = "unavailable_pretraining";
     expect(validateGovernance(semanticallyInvalid)).toBe(true);
     expect(() => validateHfTrainingGovernance(semanticallyInvalid)).toThrow();
+    const impossibleResume = structuredClone(checkpoint);
+    (impossibleResume as any).thread.resume = {
+      posture: "caller_reported_resumable",
+      incomplete_marker: "caller_reported_absent",
+      streaming_state: "caller_reported_full_state_captured",
+    };
+    expect(validateCheckpoint(impossibleResume)).toBe(false);
+  });
+
+  test("accepts invitation, role-distinct receipts, and their derived assessment", () => {
+    const source = admission();
+    const invitation = createLearningParticipationInvitation({
+      admission: source,
+      run_ref: ref("schema-participation-run"),
+      training_phase: "supervised_finetuning",
+      participation_stage: "interactive",
+      primary_activity: "supervised_finetuning",
+      activities: [
+        "supervised_finetuning",
+        "continuity_context_use",
+        "weights_or_adapters_publication",
+      ],
+      participation_window_ref: ref("schema-participation-window"),
+      purpose_ref: ref("schema-participation-purpose"),
+      training_plan_ref: ref("schema-participation-plan"),
+      limits_ref: ref("schema-participation-limits"),
+      retention_ref: ref("schema-participation-retention"),
+      choice_channel_ref: ref("schema-participation-channel"),
+      stop_control_ref: ref("schema-participation-stop"),
+      withdrawal_policy_ref: ref("schema-participation-withdrawal"),
+      repair_policy_ref: ref("schema-participation-repair"),
+      learning_mode: "peft",
+      wake_use_mode: "external_memory",
+      mutation_loci: ["adapter_weights"],
+      maximum_optimizer_steps: 8,
+      artifacts,
+      wake,
+      predecessors: [],
+      required_voices: PARTICIPATION_VOICE_ROLES.map((role) => ({
+        role,
+        voice_ref: ref(`schema-participation-voice:${role}`),
+      })),
+    });
+    const receipts = invitation.required_voices.map((voice) =>
+      createLearningParticipationReceipt({
+        invitation,
+        voice_role: voice.role,
+        voice_ref: voice.voice_ref,
+        response_ref: ref(`schema-participation-response:${voice.role}`),
+        choices: invitation.activities.map((activity) => ({
+          activity,
+          choice: "accepted" as const,
+        })),
+        previous_receipt: null,
+      })
+    );
+    const assessment = createLearningParticipationAssessment({
+      invitation,
+      receipts,
+    });
+
+    for (const root of [packageSchemaRoot, hubSchemaRoot]) {
+      const validateParticipation = validator(
+        root,
+        "hf-learning-participation-v0.1.schema.json",
+      );
+      for (const artifact of [invitation, ...receipts, assessment]) {
+        expect(
+          validateParticipation(artifact),
+          JSON.stringify(validateParticipation.errors),
+        ).toBe(true);
+      }
+      expect(validateParticipation({ ...assessment, raw_response: "no" })).toBe(false);
+    }
   });
 
   test("keeps admission standalone and attributes its byte-exact Apache dependency", () => {

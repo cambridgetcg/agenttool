@@ -49,9 +49,9 @@ The separation is deliberate:
 The validator bridge is repository-only and is excluded from both Python
 distribution artifacts. The wheel carries the closed host-decision JSON Schema.
 
-The accepted `packages/hf-training-garden/hf/dataset/` policy companion—14
-payload files plus its hash manifest—remains a separate artifact. The host
-does not rewrite or widen it.
+The generated `packages/hf-training-garden/hf/dataset/` policy companion—18
+manifest-listed payload files plus its hash manifest—remains a separate
+artifact. The host does not rewrite or widen it.
 
 ## One bounded path through the host
 

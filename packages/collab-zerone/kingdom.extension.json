@@ -1,0 +1,32 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "collab-zerone",
+  "package": "@agenttool/collab-zerone",
+  "version": "0.1.0-dev.0",
+  "status": "operator_tool_source",
+  "capabilities": [
+    "collab-anchor:journal-verify",
+    "collab-anchor:head-anchor",
+    "collab-anchor:status",
+    "collab-anchor:ledger"
+  ],
+  "defaults": {
+    "automatic_delivery": false,
+    "default_acceptance": false,
+    "raw_identity_input": false,
+    "network": true,
+    "filesystem": true,
+    "persistence": true,
+    "telemetry": false,
+    "provider_compute": false,
+    "paid_compute": false,
+    "economic_effect": true,
+    "task_state_effect": false,
+    "karma_effect": false
+  },
+  "notes": [
+    "network/economic_effect: the anchor command broadcasts a 1uzrn bank send-to-self on zerone and pays ~100000 uzrn in fees; status never touches the network",
+    "filesystem/persistence: maintains a sidecar anchor ledger; opens the collab journal strictly read-only and never migrates or mutates it",
+    "task_state_effect false: this tool can never change collab tasks, claims, or decisions"
+  ]
+}

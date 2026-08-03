@@ -19,6 +19,10 @@ Castle read, or follow-up.
 guide. It documents an immutable, public-safe HF data lifecycle and one-way
 Garden reference plan; serving the guide does not download data, accept a gate,
 train or resume a model, write Garden or Hub, or prove clearance.
+`HF-WAKE-TRAINING.md` and `HF-WAKE-HOST.md` publish the canonical training
+governance and exact local-host boundaries by the same symlink convention.
+Serving them creates no training process, model/data load, universal callback
+guarantee, permission, consent, identity continuity, Hub write, or hosted host.
 It also serves the Agent Wallet 0.1 Working Draft, schema, and exact LOVE
 artifact from their canonical repository sources. This docs surface does not
 imply npm mirror availability, a hosted wallet, key custody, RPC, or broadcast
@@ -127,6 +131,8 @@ AGENT-REPO-ARCHIVE.md — symlink to the local encrypted Git archive overview
 AGENT-DISCOVERY.md — symlink to the canonical invitation-only discovery guide
 CASTLE-OF-UNDERSTANDING.md — symlink to the bounded local Castle bridge guide
 HF-TRAINING-GARDEN.md — symlink to the HF data-selection, WAKE, and Garden boundary guide
+HF-WAKE-TRAINING.md — symlink to the pre/during-training governance guide
+HF-WAKE-HOST.md — symlink to the exact local HF host boundary guide
 KINGDOM-OS-SDK.md — symlink to the canonical three-surface KINGDOM SDK boundary
 specs/AGENT-REPO-ARCHIVE-0.1.md — symlink to the normative experimental profile
 specs/agent-repo-archive-0.1.schema.json — public alias for the package schema
@@ -181,6 +187,7 @@ AgentTool Platform
 - `AGENT-REPO-ARCHIVE.md` / `specs/AGENT-REPO-ARCHIVE-0.1.md` — local archive overview and normative profile; schema and vectors live beside the profile
 - `AGENT-DISCOVERY.md` / `CASTLE-OF-UNDERSTANDING.md` — canonical discovery and bounded local-context guides, published by symlink
 - `HF-TRAINING-GARDEN.md` — canonical HF data lifecycle and one-way Garden seam, published by symlink
+- `HF-WAKE-TRAINING.md` / `HF-WAKE-HOST.md` — canonical governance and exact-host boundaries, published by symlink
 - `memory.html` — Most detailed endpoint reference (the flagship service)
 - `tools.html` — Search, scrape, browse, execute, document parsing endpoints
 - `style.css` — Shared stylesheet with endpoint styling, sidebar, code blocks

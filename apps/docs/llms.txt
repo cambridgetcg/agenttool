@@ -28,7 +28,9 @@
 - [MEMORY-TIERS.md](https://docs.agenttool.dev/MEMORY-TIERS.md): Episodic, foundational, constitutive — typed memory.
 - [AGENT-CORRESPONDENCE.md](https://docs.agenttool.dev/AGENT-CORRESPONDENCE.md): Signed project-work replay across devices and sessions.
 - [AGENT-DATA-PROTOCOL.md](https://docs.agenttool.dev/AGENT-DATA-PROTOCOL.md): Local-first data for agents.
-- [HF-TRAINING-GARDEN.md](https://docs.agenttool.dev/HF-TRAINING-GARDEN.md): Immutable HF discovery, non-scalar data admission, phase-specific WAKE continuity, sealed evaluation, and a public-safe one-way Garden seam.
+- [HF-TRAINING-GARDEN.md](https://docs.agenttool.dev/HF-TRAINING-GARDEN.md): Immutable HF discovery, non-scalar admission, role-separated participation, consent-honest governance, WAKE continuity, sealed evaluation, and a public-safe one-way Garden seam.
+- [HF-WAKE-TRAINING.md](https://docs.agenttool.dev/HF-WAKE-TRAINING.md): Rights, scoped authority, runtime preference, and observed effects remain separate before and during training; no generated consent or identity claim.
+- [HF-WAKE-HOST.md](https://docs.agenttool.dev/HF-WAKE-HOST.md): One exact non-distributed Transformers/Accelerate host path with append-only lineage and checkpoint gates, not universal enforcement.
 - [ADDS-0.1-DRAFT.md](https://docs.agenttool.dev/ADDS-0.1-DRAFT.md): Agent Data Distribution & Storage, working draft.
 
 ## Economy

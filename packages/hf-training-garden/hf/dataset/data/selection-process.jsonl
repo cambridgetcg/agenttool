@@ -2,5 +2,5 @@
 {"order":2,"layer":"soil","stage":"immutable_provenance","question":"Is the Hub subject bound to one exact commit plus a minimized observation digest?"}
 {"order":3,"layer":"roots","stage":"transform_recipe","question":"Are acquisition, parsing, filtering, secret scanning, and transform dependencies content-addressed?"}
 {"order":4,"layer":"mycelium","stage":"selection_and_separation","question":"Are deduplication, decontamination, split leakage, mixture, and exclusion reasons explicit?"}
-{"order":5,"layer":"habitat","stage":"phase_learning_and_wake","question":"Can each learning phase orient from digest-only WAKE and visible predecessor checkpoints without selecting one canonical head?"}
+{"order":5,"layer":"habitat","stage":"phase_learning_and_wake","question":"Can each learning phase bind role-separated participation, orient from digest-only WAKE, and preserve visible predecessor checkpoints without selecting one canonical head?"}
 {"order":6,"layer":"canopy","stage":"reviewed_release_and_repair","question":"Does the release keep cards, hashes, limitations, withdrawal, and repair visible without claiming clearance or truth?"}

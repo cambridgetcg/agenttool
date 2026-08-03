@@ -23,7 +23,6 @@ import {
 } from "./canonical.js";
 import { fail } from "./errors.js";
 import type {
-  CheckpointEvent,
   ContinuityPosture,
   CreateTrainingCheckpointInput,
   HfTrainingCheckpoint,
@@ -367,6 +366,47 @@ export function validateTrainingCheckpointAgainstAdmission(
   if (parsed.admission_id !== parsedAdmission.admission_id) {
     fail("checkpoint_invalid", "$checkpoint.admission_id does not match the supplied admission");
   }
+  return parsed;
+}
+
+export function validateTrainingCheckpointAgainstPredecessors(
+  checkpoint: unknown,
+  predecessors: unknown,
+): Readonly<HfTrainingCheckpoint> {
+  const parsed = validateTrainingCheckpoint(checkpoint);
+  const data = snap(predecessors, "$predecessors", "checkpoint_invalid");
+  const values = array(data, "$predecessors", "checkpoint_invalid");
+  if (values.length > 8) {
+    fail("checkpoint_invalid", "$predecessors exceeds 8 checkpoints");
+  }
+  const actual = values.map((value) => validateTrainingCheckpoint(value));
+  if (new Set(actual.map((value) => value.checkpoint_id)).size !== actual.length) {
+    fail("checkpoint_invalid", "$predecessors contains a duplicate checkpoint_id");
+  }
+  if (actual.some((value) =>
+    value.checkpoint_id === parsed.checkpoint_id ||
+    value.admission_id !== parsed.admission_id ||
+    value.run_ref !== parsed.run_ref
+  )) {
+    fail(
+      "checkpoint_invalid",
+      "$predecessors must be distinct earlier checkpoints from the same admission and run",
+    );
+  }
+  const expected = deepFreeze(
+    actual
+      .sort((left, right) => compareText(left.checkpoint_id, right.checkpoint_id))
+      .map((value) => deepFreeze({
+        checkpoint_id: value.checkpoint_id,
+        capsule_id: value.afterglow.capsule_id,
+      })),
+  );
+  assertDataEqual(
+    parsed.predecessors,
+    expected,
+    "$checkpoint.predecessors",
+    "checkpoint_invalid",
+  );
   return parsed;
 }
 

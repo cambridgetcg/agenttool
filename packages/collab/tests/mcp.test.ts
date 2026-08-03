@@ -139,6 +139,7 @@ describe("MCP surface", () => {
   test("registers the complete local coordination surface", () => {
     const { server } = node();
     expect(Object.keys((server as any)._registeredTools).sort()).toEqual([
+      "collab_anchor_status",
       "collab_artifact_attach",
       "collab_cursor_ack",
       "collab_cursor_reset",
@@ -177,6 +178,7 @@ describe("MCP surface", () => {
     const { server } = node();
     const tools = (server as any)._registeredTools;
     const readOnly = [
+      "collab_anchor_status",
       "collab_events_since",
       "collab_journal_verify",
       "collab_report_list",
