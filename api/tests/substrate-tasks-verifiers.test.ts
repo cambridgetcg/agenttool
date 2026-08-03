@@ -15,7 +15,7 @@
  *  filesystem case only; the DB case is covered in lifecycle integration. */
 
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -27,6 +27,10 @@ import {
   SUBSTRATE_TASK_KINDS,
 } from "../src/services/substrate-tasks/verifiers/_types";
 import { runVerifier } from "../src/services/substrate-tasks/verifiers";
+import {
+  CATALOG_CONTEXTS,
+  IMPLEMENTED_CONTEXTS,
+} from "../src/services/substrate-tasks/verifiers/canonical_bytes_witness";
 
 describe("verifier: canonical helpers", () => {
   test("sha256Hex is deterministic", () => {
@@ -280,6 +284,107 @@ describe("verifier: canonical_bytes_witness (pure)", () => {
     );
     expect(r2.passed).toBe(false);
     expect(r2.reason).toContain("fields must be an object");
+  });
+});
+
+// ── the paid oracle answers for the whole published catalog ─────────────
+//
+//  `canonical_bytes_witness` is a $0.20 oracle: an external implementation
+//  submits a digest and the server recomputes. Its worth is bounded by how
+//  much of the published contract it can actually adjudicate. Before this
+//  block that number was untested and undocumented — the verifier held a
+//  hard-coded set of two and the catalog it cites held far more, so "the
+//  agent got it wrong" and "the server cannot check this" produced the same
+//  console line.
+//
+//  The catalog is docs/specs/canonical-bytes-vectors.json. Every case for
+//  every implemented context is driven through `runVerifier` here, which is
+//  the only thing that proves the oracle agrees with the contract it is
+//  paid to enforce. Everything else in the catalog is a measured, named gap.
+
+interface CatalogFormat {
+  domain: string;
+  cases: Array<{ name: string; input: Record<string, unknown>; canonical_hex?: string; rejects?: string }>;
+}
+
+const CATALOG = JSON.parse(
+  readFileSync(
+    new URL("../../docs/specs/canonical-bytes-vectors.json", import.meta.url),
+    "utf8",
+  ),
+) as { formats: CatalogFormat[] };
+
+describe("verifier: canonical_bytes_witness answers for the catalog", () => {
+  test("the catalog is readable and the implemented set is a strict subset", () => {
+    expect(CATALOG_CONTEXTS.size).toBe(CATALOG.formats.length);
+    expect(CATALOG_CONTEXTS.size).toBeGreaterThan(IMPLEMENTED_CONTEXTS.size);
+    for (const context of IMPLEMENTED_CONTEXTS) {
+      expect(CATALOG_CONTEXTS.has(context)).toBe(true);
+    }
+  });
+
+  test("the gap is a number, and it is this number", () => {
+    // Not a target — a measurement. It moves when a context is implemented
+    // or the catalog grows, and either is a diff somebody has to write.
+    const unimplemented = [...CATALOG_CONTEXTS].filter(
+      (c) => !IMPLEMENTED_CONTEXTS.has(c),
+    );
+    expect(IMPLEMENTED_CONTEXTS.size).toBe(2);
+    expect(unimplemented.length).toBe(CATALOG_CONTEXTS.size - 2);
+  });
+
+  for (const format of CATALOG.formats) {
+    if (!IMPLEMENTED_CONTEXTS.has(format.domain)) continue;
+    describe(format.domain, () => {
+      for (const vector of format.cases) {
+        if (vector.rejects || !vector.canonical_hex) continue;
+        test(`${vector.name} — the oracle accepts the catalog digest`, async () => {
+          const result = await runVerifier(
+            "canonical_bytes_witness",
+            { context: format.domain, fields: vector.input },
+            { canonical_bytes_sha256: vector.canonical_hex! },
+          );
+          expect(result).toEqual({ passed: true });
+        });
+        test(`${vector.name} — and refuses one bit off`, async () => {
+          const flipped =
+            vector.canonical_hex!.slice(0, -1) +
+            (vector.canonical_hex!.endsWith("0") ? "1" : "0");
+          const result = await runVerifier(
+            "canonical_bytes_witness",
+            { context: format.domain, fields: vector.input },
+            { canonical_bytes_sha256: flipped },
+          );
+          expect(result.passed).toBe(false);
+        });
+      }
+    });
+  }
+
+  test("a catalogued context with no dispatch is a countable gap, not silence", async () => {
+    const unimplemented = [...CATALOG_CONTEXTS].find(
+      (c) => !IMPLEMENTED_CONTEXTS.has(c),
+    )!;
+    const result = await runVerifier(
+      "canonical_bytes_witness",
+      { context: unimplemented, fields: {} },
+      { canonical_bytes_sha256: "00".repeat(32) },
+    );
+    expect(result.passed).toBe(false);
+    expect(result.reason).toContain("context_not_yet_implemented");
+    expect(result.reason).toContain(unimplemented);
+    expect(result.reason).toContain(`of ${CATALOG_CONTEXTS.size} formats`);
+  });
+
+  test("a context in neither the dispatch nor the catalog is simply unknown", async () => {
+    const result = await runVerifier(
+      "canonical_bytes_witness",
+      { context: "made-up/v9", fields: {} },
+      { canonical_bytes_sha256: "00".repeat(32) },
+    );
+    expect(result.passed).toBe(false);
+    expect(result.reason).not.toContain("context_not_yet_implemented");
+    expect(result.reason).toContain("not in the canonical-bytes catalog");
   });
 });
 
