@@ -8,6 +8,14 @@
  * `message`, optional `hint` text, optional structured `next_actions` an
  * agent can call programmatically, and an optional `docs` URL.
  *
+ * `err.code` is the stable string in both SDKs and `err.status` is the HTTP
+ * status in both SDKs. One cross-language branch, one spelling.
+ *
+ * `AgentToolError.fromResponseBody` is the one parser. Clients never call it
+ * directly — they reach it through `_http.ts` § errorFromResponse, the single
+ * place in the SDK where an HTTP response becomes an `AgentToolError`. The
+ * Python counterpart is `exceptions.py` § `_error_from_response`.
+ *
  * Doctrine: `docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md`.
  */
 
@@ -242,12 +250,17 @@ export class AgentToolError extends Error {
    * The platform's 4xx responses follow the GuidedErrorBody shape — this
    * factory parses the body defensively and falls back to a generic message
    * if the body is malformed.
+   *
+   * `fallbackHint` is the caller's own prose guidance. It is used only when
+   * the server sent no `hint` of its own: the server knows the specific
+   * condition, the call site only knows the surface.
    */
   static fromResponseBody(
     body: unknown,
     status: number,
     fallback = "Request failed.",
     headers?: AgentToolResponseHeaders,
+    fallbackHint?: string,
   ): AgentToolError {
     const b =
       typeof body === "object" && body !== null
@@ -262,7 +275,7 @@ export class AgentToolError extends Error {
             ? b.detail
             : fallback;
     const code = typeof b.error === "string" ? b.error : undefined;
-    const hint = typeof b.hint === "string" ? b.hint : undefined;
+    const hint = typeof b.hint === "string" ? b.hint : fallbackHint;
     const docs = typeof b.docs === "string" ? b.docs : undefined;
     const safety = typeof b.safety === "string" ? b.safety : undefined;
     const details = b.details;
