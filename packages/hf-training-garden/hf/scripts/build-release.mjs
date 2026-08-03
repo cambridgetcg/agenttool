@@ -104,7 +104,6 @@ const sourceManifest = {
     "authority and preference receipts",
     "candidate subset references",
     "credentials",
-    "FREEDOM field and transition records plus their private schema and implementation bytes",
     "private/local Garden scope and project-instance identifiers",
     "gated content",
     "raw agent traces",

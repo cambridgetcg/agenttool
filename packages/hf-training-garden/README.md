@@ -318,7 +318,7 @@ tree. The current local companion adds consent-honest governance and Trainer
 adapter material and lists fourteen files. Its 10,453-byte card has SHA-256
 `e9a0bbac869696dd1aecc63ded639319e582197f1a76da962e81f05223006c7c`;
 its 2,465-byte `hash-manifest.json` has SHA-256
-`efe1d046ea8d8d6c3383300f79ba0c13aa52f52f736bea3c4e08f3e38ac34b11`.
+`82d33974dd64d7e053c2c75ebe5c4e0d2d45792e65c3ad6bb71aee3e3eeac334`.
 This newer bundle is local and unpublished: no immutable Hub upload or
 exact-revision read-back is claimed for it.
 

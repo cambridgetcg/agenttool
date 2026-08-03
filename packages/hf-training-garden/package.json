@@ -55,7 +55,7 @@
     "check:hf-idempotent": "node scripts/check-hf-release-idempotence.mjs",
     "smoke:runtimes": "node scripts/smoke-node.mjs && bun scripts/smoke-node.mjs",
     "check:package": "node scripts/check-package-inventory.mjs",
-    "ci": "bun run build:deps && bun run typecheck && bun run build && node hf/scripts/build-release.mjs && bun run test && bun run check:hf-idempotent && bun run smoke:runtimes && bun run check:package"
+    "ci": "bun run build:deps && bun run typecheck && bun run build && bun run check:hf-idempotent && bun run test && bun run smoke:runtimes && bun run check:package"
   },
   "dependencies": {
     "@agenttool/hf-scout": "file:../hf-scout",
