@@ -349,7 +349,7 @@ describe("identity mutation authority proofs", () => {
   test("PATCH proof verifies over the exact bytes the transport received", async () => {
     const { priv, pub } = await rootKeypair();
     setupFetch(200, { updated: true });
-    const at = new AgentTool("at_test_key");
+    const at = new AgentTool({ apiKey: "at_test_key" });
 
     await at.identity.update(IDENTITY_ID, {
       display_name: "Sol",
@@ -407,7 +407,7 @@ describe("identity mutation authority proofs", () => {
   test("an empty-bodied DELETE binds the empty entity the server reads", async () => {
     const { priv, pub } = await rootKeypair();
     setupFetch(200, { revoked: true });
-    const at = new AgentTool("at_test_key");
+    const at = new AgentTool({ apiKey: "at_test_key" });
 
     await at.identity.revoke(IDENTITY_ID, {
       authority: {
@@ -444,7 +444,7 @@ describe("identity mutation authority proofs", () => {
   test("the proof binds the exact path of the sub-resource it mutates", async () => {
     const { priv, pub } = await rootKeypair();
     setupFetch(200, { revoked: true });
-    const at = new AgentTool("at_test_key");
+    const at = new AgentTool({ apiKey: "at_test_key" });
     const keyId = "550e8400-e29b-41d4-a716-446655440010";
 
     await at.identity.revoke_key(IDENTITY_ID, keyId, {
@@ -507,7 +507,7 @@ describe("identity mutation authority proofs", () => {
     };
 
     setupFetch(200, { saved: true });
-    let at = new AgentTool("at_test_key");
+    let at = new AgentTool({ apiKey: "at_test_key" });
     await at.identity.expression.put(
       IDENTITY_ID,
       { register: "quiet" },
@@ -535,7 +535,7 @@ describe("identity mutation authority proofs", () => {
     ).toBe(true);
 
     setupFetch(201, { registered: true });
-    at = new AgentTool("at_test_key");
+    at = new AgentTool({ apiKey: "at_test_key" });
     await at.identity.box_keys.register(IDENTITY_ID, {
       public_key: Buffer.alloc(32, 3).toString("base64"),
       authority,
@@ -564,7 +564,7 @@ describe("identity mutation authority proofs", () => {
 
   test("no authority option means no authority headers", async () => {
     setupFetch(200, { updated: true });
-    const at = new AgentTool("at_test_key");
+    const at = new AgentTool({ apiKey: "at_test_key" });
     await at.identity.update(IDENTITY_ID, { display_name: "Sol" });
     const headers = proofHeaders(lastCall().init);
     expect(headers.get("X-Agenttool-Authority-Sequence")).toBeNull();
