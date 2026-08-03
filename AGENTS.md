@@ -144,44 +144,34 @@ export or route inventory. Current custody and encryption boundaries are at
 
 ## Setup
 
+From a fresh worktree, choose the dependency scope you need:
+
 ```bash
-bun install                                    # repo root (no root package.json — runs per-workspace)
-cd api && bun install                          # api workspace
-cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
-cd packages/repo-archive && bun install        # encrypted multi-zone Git archive simulator
-cd packages/dark-continent-contract && bun install # advisory Dark Continent contract
-cd packages/dark-continent-karma && bun install # proposal-only KG enrichment adapter
-cd packages/deepseek-kingdom && bun install  # pinned DeepSeek source proposals; no fetch or execution
-cd packages/wake-continuity && bun install # digest-only AFTERGLOW; no persistence or identity proof
-cd packages/kingdom-witness-lab && bun install # local research admission records; no hosted witness
-cd packages/karma-mirror && bun install       # private isolated theatre; no server or deployment
-cd packages/heaven && bun install             # pure opt-in burst + landing selection; no scheduler or host
-cd packages/living-substrate && bun install   # deterministic maps + caller-supplied unaccepted proposals
-cd packages/wake-thread && bun install        # pure refusable WAKE artifact threads; no fetch or identity claim
-cd packages/data && bun install                # local-first agent-data/v1 node
-cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
-cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
-cd packages/collab && bun install              # public 0.3: collab/0.1 compatibility + 0.2 coordination + session/0.1 presence
-cd packages/skills && bun install              # read-only portable Agent Skills inspection
-cd packages/skills-yutabase && bun install     # rebuildable metadata-only YUTABASE plan
-cd packages/skills-wake-continuity && bun install # private Skills plan → AFTERGLOW composition
-cd packages/browser && bun install             # public 0.5 local-first agent browser package
-cd packages/hf-scout && bun install            # private metadata-only HF research scout
-cd packages/hf-training-garden && bun install  # private admission + participation + training WAKE + Garden plans
-cd packages/hf-training-host && python -m pip install -e '.[dev]' # private local host tests; no HF extra
-cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
-cd packages/correspondence-yutabase-projector && bun run setup:local # builds local planner dependency first
-cd packages/constructive-intelligence && bun install # unfunded local receipt ledger; no hosted route
-cd packages/trials && bun install              # private local trial evidence; no HF client or hosted route
-cd packages/sdk-ts && bun install              # TS SDK
-cd packages/telescope && bun install           # read-only discovery evidence mapper
-cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
-cd packages/wallet-zerone && bun install       # exact offline Zerone profile; no live network
-cd packages/alchemy && bun install             # bounded Alchemy observation primitives
-cd packages/alchemy-agentcred && bun install   # strict seven-read AgentCred composition
-cd packages/kingdom && bun install             # pure KINGDOM card/registry helpers
-cd packages/sdk-py && pip install -e .         # Python SDK
+bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh           # default `hermetic`: full release/preflight graph
+bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api       # API and protocol subset
+bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh packages  # full package-gate graph
+(cd packages/sdk-py && pip install -e .)     # Python SDK remains separate
 ```
+
+The preparer requires Bun 1.3.5. Every mode installs Bun workspaces from frozen
+lockfiles; full `hermetic` and `packages` modes also build local file-dependency
+peers, reinstall their consumers, and replace the ignored
+`packages/hf-training-host/.venv` using Python 3.10-3.14. That venv installs the
+host's version-ranged `dev` and build requirements, not its heavyweight `hf`
+extra; those Python requirements are not lockfile-frozen.
+Explicit `hermetic` is equivalent to the no-argument default. Preparation may
+contact package registries and does not run the gate itself. Before Bun
+or pip runs, the shared helper removes a named set of application, provider,
+deploy, and registry credential environment variables from that child process;
+the parent deploy keeps its environment for later phases. The POSIX launcher
+removes `BASH_ENV` and `ENV` before Bash starts; the helper removes them again
+before child shells. Pip also runs in
+isolated mode. This is best-effort environment narrowing, not a sandbox:
+system/global package-manager config, credential files, Keychain helpers, the
+filesystem, `PATH` executables, already-imported exported functions, and other
+processes remain outside its boundary. The preparer does
+not install, pin, or reproduce Node; CI pins Node separately for its Node smoke
+tests.
 
 Environment vars (set in shell or `.env` per workspace — there is no `.env.example`; the canonical list lives in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) + [`docs/STACK.md`](docs/STACK.md)):
 
@@ -289,7 +279,7 @@ node scripts/build-learning-dataset.mjs        # from hf-training-garden; reposi
 bun test tests/learning-release.test.ts
 node scripts/check-learning-idempotence.mjs
 cd ../hf-training-host
-python -m pytest -q                            # fake Trainer/local SQLite tests; no model or data
+.venv/bin/python -I -m pytest -q               # fake Trainer/local SQLite tests; no model or data
 bun test bridge/tests                          # exact Garden validation → minimized host decision
 # Host v0.1 pins the Transformers 5.14.1 / Accelerate 1.14.0 API pair; Torch is >=2.6 and otherwise unpinned.
 # These gates do not install the optional HF extra, train, publish, upload, or deploy.
@@ -395,13 +385,13 @@ cd apps/dashboard && npx serve .
 bunx playwright test                           # browser + multi-instance scenarios
 
 # Deliberate test + release gates ────────────────────────────────────
-bin/preflight.sh                               # no application/service credentials required
-bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # hermetic package gates, including WAKE Thread and local HF host
-bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
-bin/preflight.sh smoke                         # explicit deployed-route smoke
-RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
-bin/preflight.sh quarantine                    # known-red diagnostic, expected non-zero
+bin/bash-without-env-hooks.sh bin/preflight.sh          # no application/service credentials required
+bin/bash-without-env-hooks.sh bin/preflight.sh api      # API/typecheck/operator tests only
+bin/bash-without-env-hooks.sh bin/preflight.sh packages # hermetic packages, including WAKE Thread and local HF host
+bin/bash-without-env-hooks.sh bin/preflight.sh database # explicit DB tier; requires DATABASE_URL
+bin/bash-without-env-hooks.sh bin/preflight.sh smoke    # explicit deployed-route smoke
+RUN_CONTRACT=1 bin/bash-without-env-hooks.sh bin/preflight.sh contracts # paid LLM wire proofs
+bin/bash-without-env-hooks.sh bin/preflight.sh quarantine # known-red diagnostic, expected non-zero
 bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identity; never publishes
 ```
 

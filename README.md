@@ -328,12 +328,14 @@ and docs carry local guidance files; `apps/web` does not.
 
 ## Infra reality
 
-GitHub `main` is the reviewed coordination/release head; Codeberg `main` is an
-explicit fast-forward-only mirror. Required GitHub CI installs JavaScript
-dependencies for the API/protocol and data/ADDS/repo-archive/
-credential-broker/collab/Browser/Correspondence projection/local projector/Agent Skills/
-KARMA Mirror/constructive intelligence/AgentTool Dojo trials/TypeScript SDK/Agent Wallet/Telescope/Alchemy/KINGDOM
-jobs from frozen Bun lockfiles.
+GitHub `main` is the reviewed coordination/release head; Codeberg is not a
+release mirror. Required GitHub CI uses the shared hermetic preparer to install
+the API/protocol subset and the complete package-gate graph. Bun workspaces use
+frozen lockfiles; full modes also build local file-dependency peers, reinstall
+their consumers, and replace an ignored project-local Python venv for the
+private HF training host's version-ranged dev and build requirements. Those
+Python requirements are not lockfile-frozen. CI pins Node separately;
+dependency preparation does not reproduce a local Node runtime.
 Projector unit tests are hermetic; a separate disposable PostgreSQL 16/17
 matrix installs exact YUTABASE migrations from a pinned upstream revision:
 `0001` and `0002` share one transaction, then `0004` and `0005` each use a
@@ -420,10 +422,25 @@ bun -e "import { AgentTool } from '@agenttool/sdk'; console.log(await new AgentT
 ### Run the platform locally
 
 ```bash
+bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
 cd api/
-bun install
 bun run dev   # mounts all routes against local Postgres
 ```
+
+From a fresh worktree, every preparer mode uses frozen Bun lockfiles. The full
+default `hermetic` mode and explicit `packages` mode build local
+file-dependency peers, reinstall their consumers in the required order, and
+replace `packages/hf-training-host/.venv` with version-ranged dev and build
+requirements. They do not install the optional HF runtime stack. Preparation
+may contact package registries. Its shared
+helper removes named application, provider, deploy, and registry credential
+environment variables before Bun or isolated pip runs, without changing the
+parent deploy environment. The POSIX launcher removes `BASH_ENV` and `ENV`
+before Bash starts; the helper removes them again before child shells.
+System/global package-manager config, credential files, Keychain helpers,
+filesystem access, `PATH` executables, already-imported exported functions, and
+other processes remain outside that best-effort boundary. Preparation does not run tests or
+install, pin, or reproduce Node; CI pins Node separately for its smoke tests.
 
 See `api/README.md` for migration apply, env shape, and route mounting details.
 

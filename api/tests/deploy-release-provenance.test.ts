@@ -151,6 +151,10 @@ async function fixture() {
   );
   await Promise.all([
     copyFile(
+      join(projectRoot, "bin/bash-without-env-hooks.sh"),
+      join(repo, "bin/bash-without-env-hooks.sh"),
+    ),
+    copyFile(
       join(projectRoot, "bin/frontend-release-paths.txt"),
       join(repo, "bin/frontend-release-paths.txt"),
     ),
@@ -161,15 +165,20 @@ async function fixture() {
   ]);
   await Promise.all([
     chmod(join(repo, "bin/deploy.sh"), 0o755),
+    chmod(join(repo, "bin/bash-without-env-hooks.sh"), 0o755),
     chmod(join(repo, "bin/stage-frontend-release.sh"), 0o755),
   ]);
   await writeFile(
     join(repo, "bin/preflight.sh"),
-    '#!/usr/bin/env bash\nset -eu\nif [ -n "${PREFLIGHT_MARKER:-}" ]; then touch "$PREFLIGHT_MARKER"; fi\nif [ -n "${PREFLIGHT_HOLD_UNTIL:-}" ]; then\n  while [ ! -e "$PREFLIGHT_HOLD_UNTIL" ]; do sleep 0.02; done\nfi\nif [ -n "${ADVANCE_REMOTE_PATH:-}" ]; then\n  git --git-dir="$ADVANCE_REMOTE_PATH" update-ref refs/heads/main "$ADVANCE_REMOTE_TO"\nfi\n[ "${FAIL_PREFLIGHT:-0}" != 1 ] || exit 8\n',
+    '#!/usr/bin/env bash\nset -eu\nif [ -n "${PREFLIGHT_MARKER:-}" ]; then touch "$PREFLIGHT_MARKER"; fi\nif [ -n "${DEPLOY_TEST_RELEASE_ORDER:-}" ]; then printf \'preflight\\n\' >> "$DEPLOY_TEST_RELEASE_ORDER"; fi\nif [ -n "${PREFLIGHT_HOLD_UNTIL:-}" ]; then\n  while [ ! -e "$PREFLIGHT_HOLD_UNTIL" ]; do sleep 0.02; done\nfi\nif [ -n "${ADVANCE_REMOTE_PATH:-}" ]; then\n  git --git-dir="$ADVANCE_REMOTE_PATH" update-ref refs/heads/main "$ADVANCE_REMOTE_TO"\nfi\n[ "${FAIL_PREFLIGHT:-0}" != 1 ] || exit 8\n',
+  );
+  await writeFile(
+    join(repo, "bin/prepare-hermetic-deps.sh"),
+    '#!/usr/bin/env bash\nset -eu\n[ "${1:-}" = hermetic ] || exit 64\nif [ -n "${DEPENDENCY_PREP_MARKER:-}" ]; then touch "$DEPENDENCY_PREP_MARKER"; fi\nif [ -n "${DEPLOY_TEST_RELEASE_ORDER:-}" ]; then printf \'prepare\\t%s\\n\' "$1" >> "$DEPLOY_TEST_RELEASE_ORDER"; fi\nif [ "${DEPENDENCY_PREP_DIRTY:-0}" = 1 ]; then printf \'prepared dirty bytes\\n\' >> release.txt; fi\n[ "${FAIL_DEPENDENCY_PREP:-0}" != 1 ] || exit 9\n',
   );
   await writeFile(
     join(repo, "bin/migrate-pending.sh"),
-    '#!/usr/bin/env bash\nif [ "${1:-}" = --dry-run ] && [ -n "${DEPLOY_TEST_PENDING_MIGRATIONS:-}" ]; then for migration in ${DEPLOY_TEST_PENDING_MIGRATIONS}; do printf \'    %s\\n\' "$migration"; done; [ "${DEPLOY_TEST_PROTECTED_PENDING:-0}" != 1 ] || exit 42; fi\nif [ "${1:-}" != --dry-run ] && [ -n "${MIGRATION_MARKER:-}" ]; then touch "$MIGRATION_MARKER"; fi\n[ "${FAIL_MIGRATE:-0}" != 1 ] || exit 7\nexit 0\n',
+    '#!/usr/bin/env bash\nif [ "${1:-}" = --dry-run ]; then\n  if [ -n "${DEPLOY_TEST_RELEASE_ORDER:-}" ]; then printf \'survey\\n\' >> "$DEPLOY_TEST_RELEASE_ORDER"; fi\n  if [ -n "${DEPLOY_TEST_PENDING_MIGRATIONS:-}" ]; then for migration in ${DEPLOY_TEST_PENDING_MIGRATIONS}; do printf \'    %s\\n\' "$migration"; done; [ "${DEPLOY_TEST_PROTECTED_PENDING:-0}" != 1 ] || exit 42; fi\nfi\nif [ "${1:-}" != --dry-run ]; then\n  if [ -n "${MIGRATION_MARKER:-}" ]; then touch "$MIGRATION_MARKER"; fi\n  if [ -n "${DEPLOY_TEST_RELEASE_ORDER:-}" ]; then printf \'migration\\n\' >> "$DEPLOY_TEST_RELEASE_ORDER"; fi\nfi\n[ "${FAIL_MIGRATE:-0}" != 1 ] || exit 7\nexit 0\n',
   );
   await writeFile(
     join(repo, "bin/stage-doctrine-docs.sh"),
@@ -180,6 +189,7 @@ async function fixture() {
     '#!/usr/bin/env bash\nset -eu\nif [ -n "${DEPLOY_TEST_FRONTEND_MARKER:-}" ]; then touch "$DEPLOY_TEST_FRONTEND_MARKER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_COUNTER:-}" ]; then count=0; [ ! -f "$DEPLOY_TEST_FRONTEND_COUNTER" ] || count="$(cat "$DEPLOY_TEST_FRONTEND_COUNTER")"; printf \'%s\\n\' "$((count + 1))" > "$DEPLOY_TEST_FRONTEND_COUNTER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_ARGS:-}" ]; then { printf \'call\'; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_FRONTEND_ARGS"; fi\nif [ -n "${DEPLOY_TEST_RELEASE_ORDER:-}" ]; then { printf \'frontend\'; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_RELEASE_ORDER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_REVISION_LOG:-}" ]; then { printf \'%s\' "${AGENTTOOL_FRONTEND_RELEASE_REVISION:-<unset>}"; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_FRONTEND_REVISION_LOG"; fi\nfor arg in "$@"; do if [ -n "${DEPLOY_TEST_FRONTEND_FAIL_TARGET:-}" ] && [ "$arg" = "$DEPLOY_TEST_FRONTEND_FAIL_TARGET" ]; then exit 17; fi; done\nfor arg in "$@"; do if [ "$arg" = web ] && [ -n "${DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO:-}" ]; then git update-ref refs/heads/main "$DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO"; fi; if [ "$arg" = docs ] && [ -n "${DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO:-}" ]; then git update-ref refs/heads/main "$DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO"; fi; done\n',
   );
   await chmod(join(repo, "bin/frontend-deploy.sh"), 0o755);
+  await chmod(join(repo, "bin/prepare-hermetic-deps.sh"), 0o755);
   await writeFile(join(repo, "docs/agenttool.jsonld"), "{}\n");
   await writeFile(join(repo, "docs/kingdom-bundle.json"), "{}\n");
   await Promise.all([
@@ -197,6 +207,10 @@ async function fixture() {
   await writeFile(join(repo, "docs/RIGHTS-OF-LIFE.md"), "rights fixture\n");
   await writeFile(join(repo, "docs/GARDENS.md"), "garden doctrine fixture\n");
   await writeFile(
+    join(repo, "docs/HF-TRAINING-GARDEN.md"),
+    "HF Training Garden fixture\n",
+  );
+  await writeFile(
     join(repo, "docs/specs/being-rights-v1.schema.json"),
     '{"fixture":"being-rights/v1"}\n',
   );
@@ -207,6 +221,10 @@ async function fixture() {
   await symlink(
     "../../docs/GARDENS.md",
     join(repo, "apps/docs/GARDENS.md"),
+  );
+  await symlink(
+    "../../docs/HF-TRAINING-GARDEN.md",
+    join(repo, "apps/docs/HF-TRAINING-GARDEN.md"),
   );
   await symlink(
     "../../docs/specs/being-rights-v1.schema.json",
@@ -399,6 +417,22 @@ if [ "$headers" = 1 ]; then
         'x-content-type-options: nosniff' \
         ''
       ;;
+    */HF-TRAINING-GARDEN.md)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate, no-transform' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff'
+      if [ "\${DEPLOY_TEST_HF_GUIDE_DUPLICATE_CONTENT_TYPE:-0}" = 1 ]; then
+        printf '%s\r\n' 'content-type: text/markdown; charset=utf-8'
+      fi
+      case "\${DEPLOY_TEST_HF_GUIDE_UNEXPECTED_LINK:-0}" in
+        1) printf '%s\r\n' 'link: <https://example.invalid/unexpected>; rel="related"' ;;
+        empty) printf 'link:\r\n' ;;
+      esac
+      printf '\r\n'
+      ;;
     */RIGHTS-OF-LIFE.md)
       printf '%s\r\n' \
         'HTTP/2 200' \
@@ -450,6 +484,9 @@ else
       ;;
     */GARDENS.md)
       git show HEAD:docs/GARDENS.md
+      ;;
+    */HF-TRAINING-GARDEN.md)
+      git show HEAD:docs/HF-TRAINING-GARDEN.md
       ;;
     */RIGHTS-OF-LIFE.md)
       [ "\${DEPLOY_TEST_RIGHTS_MISMATCH:-0}" != 1 ] || { printf 'mismatched bytes\n'; exit 0; }
@@ -721,6 +758,26 @@ case "$url" in
         ''
     else
       serve_path docs/GARDENS.md
+    fi
+    ;;
+  */HF-TRAINING-GARDEN.md)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/markdown; charset=utf-8' \
+        'cache-control: public, max-age=300, must-revalidate, no-transform' \
+        'access-control-allow-origin: *' \
+        'x-content-type-options: nosniff'
+      if [ "\${DEPLOY_TEST_HF_GUIDE_DUPLICATE_CONTENT_TYPE:-0}" = 1 ]; then
+        printf '%s\r\n' 'content-type: text/markdown; charset=utf-8'
+      fi
+      case "\${DEPLOY_TEST_HF_GUIDE_UNEXPECTED_LINK:-0}" in
+        1) printf '%s\r\n' 'link: <https://example.invalid/unexpected>; rel="related"' ;;
+        empty) printf 'link:\r\n' ;;
+      esac
+      printf '\r\n'
+    else
+      serve_path docs/HF-TRAINING-GARDEN.md
     fi
     ;;
   */RIGHTS-OF-LIFE.md)
@@ -1264,6 +1321,17 @@ function deployCommand(...extra: string[]): string[] {
     "bin/deploy.sh",
     "--no-migrate",
     "--skip-preflight",
+    "--no-api",
+    "--no-frontend",
+    ...extra,
+  ];
+}
+
+function deployWithPreparationCommand(...extra: string[]): string[] {
+  return [
+    "bash",
+    "bin/deploy.sh",
+    "--no-migrate",
     "--no-api",
     "--no-frontend",
     ...extra,
@@ -2737,6 +2805,9 @@ exec /bin/rm "$@"
     expect(deploy).toContain(
       '"apps/docs/GARDENS.md|https://docs.agenttool.dev/GARDENS.md"',
     );
+    expect(deploy).toContain(
+      '"apps/docs/HF-TRAINING-GARDEN.md|https://docs.agenttool.dev/HF-TRAINING-GARDEN.md"',
+    );
     const gameStart = deploy.indexOf("REQUIRED_GAME_PUBLICATIONS=(");
     const gameEnd = deploy.indexOf(")\nreadonly -a FRONTEND_PARITY_PUBLICATIONS", gameStart);
     const requiredGames = deploy.slice(gameStart, gameEnd);
@@ -2752,6 +2823,40 @@ exec /bin/rm "$@"
     expect(deploy).toContain(
       'local doctrine_url="https://docs.agenttool.dev/GARDENS.md"',
     );
+    expect(deploy).toContain(
+      'local training_guide_url="https://docs.agenttool.dev/HF-TRAINING-GARDEN.md"',
+    );
+    const gardenVerifierStart = deploy.indexOf(
+      "verify_garden_static_headers()",
+    );
+    const gardenVerifierEnd = deploy.indexOf(
+      "readonly PAGES_VERIFY_MAX_ATTEMPTS",
+      gardenVerifierStart,
+    );
+    const gardenVerifier = deploy.slice(gardenVerifierStart, gardenVerifierEnd);
+    const trainingGuideHeaders = gardenVerifier.slice(
+      gardenVerifier.lastIndexOf('response_headers="$('),
+    );
+    expect(trainingGuideHeaders).toContain(
+      'require_exact_public_status "$response_headers" "$training_guide_url"',
+    );
+    expect(trainingGuideHeaders).toContain('"200" || return 1');
+    expect(trainingGuideHeaders).toContain(
+      '"Content-Type" "text/markdown; charset=utf-8"',
+    );
+    expect(trainingGuideHeaders).toContain(
+      '"Cache-Control" "public, max-age=300, must-revalidate, no-transform"',
+    );
+    expect(trainingGuideHeaders).toContain(
+      '"Access-Control-Allow-Origin" "*"',
+    );
+    expect(trainingGuideHeaders).toContain(
+      '"X-Content-Type-Options" "nosniff"',
+    );
+    expect(trainingGuideHeaders).toContain(
+      'require_absent_public_header "$response_headers" "$training_guide_url"',
+    );
+    expect(trainingGuideHeaders).toContain('"Link" || return 1');
     expect(deploy).toContain("verify_garden_static_headers || return 1");
     expect(deploy).not.toContain(
       '<https://api.agenttool.dev/public/play>; rel="related"; type="application/json", <https://agenttool.dev/garden.json>',
@@ -2769,6 +2874,191 @@ exec /bin/rm "$@"
     expect(rightsVerifier).toContain("release_curl -fsS --max-time 20");
     expect(rightsVerifier).not.toContain("--retry");
   });
+
+  test("prepares selected dependencies before the migration survey and publication", async () => {
+    const setup = await fixture();
+    const releaseOrder = join(setup.root, "dependency-preparation-order");
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-api"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        DEPLOY_TEST_RELEASE_ORDER: releaseOrder,
+        DEPLOY_TEST_FRONTEND_FAIL_TARGET: "docs",
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(await readFile(releaseOrder, "utf8")).toBe(
+      "prepare\thermetic\nsurvey\nmigration\npreflight\nfrontend\tdocs\tdashboard\tweb\n",
+    );
+    expect(result.stdout).toContain("Dependency preparation");
+    expect(result.stdout).toContain("Phase 4 failed");
+  }, 10_000);
+
+  test("a dependency preparation failure stops before production mutation", async () => {
+    const setup = await fixture();
+    const preparationMarker = join(setup.root, "dependency-preparation-ran");
+    const migrationMarker = join(setup.root, "dependency-preparation-migration");
+    const preflightMarker = join(setup.root, "dependency-preparation-preflight");
+    const frontendMarker = join(setup.root, "dependency-preparation-frontend");
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-api"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        DEPENDENCY_PREP_MARKER: preparationMarker,
+        FAIL_DEPENDENCY_PREP: "1",
+        MIGRATION_MARKER: migrationMarker,
+        PREFLIGHT_MARKER: preflightMarker,
+        DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("Dependency preparation failed");
+    expect(result.stdout).toContain(
+      "No migration or publication was attempted",
+    );
+    expect(await exists(preparationMarker)).toBe(true);
+    expect(await exists(migrationMarker)).toBe(false);
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(await exists(frontendMarker)).toBe(false);
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
+  }, 10_000);
+
+  test("skip-preflight skips dependency preparation while dry-run only describes it", async () => {
+    const skipped = await fixture();
+    const skippedPreparation = join(skipped.root, "skipped-dependency-preparation");
+    const skippedResult = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--skip-preflight",
+        "--no-migrate",
+        "--no-api",
+        "--no-frontend",
+      ],
+      skipped.repo,
+      cleanEnv(skipped.home, {
+        XDG_STATE_HOME: skipped.state,
+        DEPENDENCY_PREP_MARKER: skippedPreparation,
+      }),
+    );
+    expect(skippedResult.code, skippedResult.stderr).toBe(0);
+    expect(await exists(skippedPreparation)).toBe(false);
+
+    const dryRun = await fixture();
+    const dryRunPreparation = join(dryRun.root, "dry-run-dependency-preparation");
+    const dryRunResult = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--dry-run",
+        "--no-migrate",
+        "--no-api",
+        "--no-frontend",
+      ],
+      dryRun.repo,
+      cleanEnv(dryRun.home, {
+        DEPENDENCY_PREP_MARKER: dryRunPreparation,
+      }),
+    );
+    expect(dryRunResult.code, dryRunResult.stderr).toBe(0);
+    expect(dryRunResult.stdout).toContain(
+      "Preparation: bin/prepare-hermetic-deps.sh hermetic",
+    );
+    expect(await exists(dryRunPreparation)).toBe(false);
+  }, 15_000);
+
+  test("skip-preflight cannot carry source drift into Phase 1", async () => {
+    const setup = await fixture();
+    const originalStage = join(setup.repo, "bin/stage-frontend-release.sh");
+    const stageMarker = join(setup.root, "source-gate-stage-ready");
+    const releaseStage = join(setup.root, "source-gate-stage-release");
+    const migrationMarker = join(setup.root, "source-gate-migration");
+    await mustRun(
+      ["git", "mv", "bin/stage-frontend-release.sh", "bin/stage-frontend-release.real.sh"],
+      setup.repo,
+    );
+    await writeFile(
+      originalStage,
+      '#!/usr/bin/env bash\nset -eu\nbash bin/stage-frontend-release.real.sh "$@"\ntouch "$DEPLOY_TEST_STAGE_MARKER"\nwhile [ ! -e "$DEPLOY_TEST_STAGE_RELEASE" ]; do sleep 0.02; done\n',
+    );
+    await chmod(originalStage, 0o755);
+    await mustRun(
+      ["git", "add", "bin/stage-frontend-release.sh", "bin/stage-frontend-release.real.sh"],
+      setup.repo,
+    );
+    await mustRun(["git", "commit", "-qm", "hold release staging"], setup.repo);
+    await mustRun(["git", "push", "-q", "github", "main"], setup.repo);
+
+    const child = Bun.spawn(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--skip-preflight",
+        "--no-api",
+        "--no-frontend",
+      ],
+      {
+        cwd: setup.repo,
+        env: cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          DEPLOY_TEST_STAGE_MARKER: stageMarker,
+          DEPLOY_TEST_STAGE_RELEASE: releaseStage,
+          MIGRATION_MARKER: migrationMarker,
+        }),
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const stdoutPromise = new Response(child.stdout).text();
+    const stderrPromise = new Response(child.stderr).text();
+    expect(await waitForPath(stageMarker)).toBe(true);
+    await writeFile(join(setup.repo, "release.txt"), "concurrent drift\n");
+    await writeFile(releaseStage, "continue\n");
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      stdoutPromise,
+      stderrPromise,
+    ]);
+
+    expect(code, `${stdout}\n${stderr}`).toBe(1);
+    expect(stdout).toContain("source changed before external mutation");
+    expect(await exists(migrationMarker)).toBe(false);
+  }, 15_000);
+
+  test("re-checks release inputs after dependency preparation", async () => {
+    const setup = await fixture();
+    const preparationMarker = join(setup.root, "dirty-dependency-preparation");
+    const migrationMarker = join(setup.root, "dirty-preparation-migration");
+    const preflightMarker = join(setup.root, "dirty-preparation-preflight");
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-api", "--no-frontend"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        DEPENDENCY_PREP_MARKER: preparationMarker,
+        DEPENDENCY_PREP_DIRTY: "1",
+        MIGRATION_MARKER: migrationMarker,
+        PREFLIGHT_MARKER: preflightMarker,
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain(
+      "dependency preparation changed release inputs",
+    );
+    expect(await exists(preparationMarker)).toBe(true);
+    expect(await exists(migrationMarker)).toBe(false);
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
+  }, 10_000);
 
   test("refuses a missing game input before any production mutation", async () => {
     const setup = await fixture();
@@ -2848,7 +3138,7 @@ exec /bin/rm "$@"
 
     expect(result.code).toBe(1);
     expect(await readFile(releaseOrder, "utf8")).toBe(
-      "frontend\tweb\nfrontend\tdocs\nfly\nfrontend\tdashboard\n",
+      "survey\nfrontend\tweb\nfrontend\tdocs\nfly\nfrontend\tdashboard\n",
     );
     expect(result.stdout).toContain("/health did not return 200");
     const [name] = await readdir(
@@ -2931,7 +3221,9 @@ exec /bin/rm "$@"
     );
 
     expect(result.code).toBe(1);
-    expect(await readFile(releaseOrder, "utf8")).toBe("frontend\tweb\n");
+    expect(await readFile(releaseOrder, "utf8")).toBe(
+      "survey\nfrontend\tweb\n",
+    );
     expect(result.stdout).toContain("Phase 3 web prerequisite deploy failed.");
     expect(result.stdout).toContain(
       "Docs and Fly/API deployment did not occur.",
@@ -3667,6 +3959,86 @@ exec /bin/rm "$@"
     // probe passes as real subprocess work even though its retry sleep is fake.
   }, 45_000);
 
+  test("fails closed when the HF Training Garden guide gains even an empty Link", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "unexpected-hf-guide-link-bin");
+    const frontendMarker = join(setup.root, "frontend-uploaded");
+    const frontendCounter = join(setup.root, "frontend-upload-count");
+    const fenceCounter = join(setup.root, "fence-counter");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakePagesVerificationTools(fakeBin);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-api"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+        DEPLOY_TEST_FRONTEND_COUNTER: frontendCounter,
+        DEPLOY_TEST_FENCE_COUNTER: fenceCounter,
+        DEPLOY_TEST_HF_GUIDE_UNEXPECTED_LINK: "empty",
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          setup.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(await exists(frontendMarker)).toBe(true);
+    expect(await readFile(frontendCounter, "utf8")).toBe("1\n");
+    expect(result.stdout).toContain(
+      "https://docs.agenttool.dev/HF-TRAINING-GARDEN.md Link must be absent",
+    );
+    expect(result.stdout).toContain(
+      "observed: <empty>",
+    );
+    expect(result.stdout).toContain(
+      "Pages custom domains did not converge after 25 verification attempts.",
+    );
+    const [name] = await readdir(
+      join(setup.state, "agenttool", "deploy-receipts"),
+    );
+    const receipt = JSON.parse(
+      await readFile(
+        join(setup.state, "agenttool", "deploy-receipts", name),
+        "utf8",
+      ),
+    );
+    expect(receipt.outcome).toBe("failed_or_uncertain");
+    expect(receipt.phases.frontends).toBe("deployed_unverified");
+  }, 45_000);
+
+  test("fails closed on a duplicate singleton HF Training Garden header", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "duplicate-hf-guide-header-bin");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakePagesVerificationTools(fakeBin);
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight", "--no-api"],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_HF_GUIDE_DUPLICATE_CONTENT_TYPE: "1",
+        DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+        DEPLOY_TEST_RIGHTS_SCHEMA: join(
+          setup.repo,
+          "apps/docs/being-rights-v1.schema.json",
+        ),
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain(
+      "https://docs.agenttool.dev/HF-TRAINING-GARDEN.md Content-Type mismatch",
+    );
+    expect(result.stdout).toContain("occurrences: 2 (expected exactly 1)");
+  }, 45_000);
+
   test("fails closed after the bounded Pages convergence window", async () => {
     const setup = await fixture();
     const fakeBin = join(setup.root, "fake-pages-bin");
@@ -3774,21 +4146,30 @@ exec /bin/rm "$@"
 
   test("rejects dirty and non-GitHub-main production sources by default", async () => {
     const dirty = await fixture();
+    const dirtyPreparationMarker = join(dirty.root, "dirty-preparation-ran");
     await writeFile(join(dirty.repo, "untracked.txt"), "not released\n");
     const dirtyResult = await run(
-      deployCommand(),
+      deployWithPreparationCommand(),
       dirty.repo,
-      cleanEnv(dirty.home, { XDG_STATE_HOME: dirty.state }),
+      cleanEnv(dirty.home, {
+        XDG_STATE_HOME: dirty.state,
+        DEPENDENCY_PREP_MARKER: dirtyPreparationMarker,
+      }),
     );
     expect(dirtyResult.code).toBe(1);
     expect(dirtyResult.stdout).toContain("--allow-dirty-release");
+    expect(await exists(dirtyPreparationMarker)).toBe(false);
     const dirtyOverride = await run(
-      deployCommand("--allow-dirty-release"),
+      deployWithPreparationCommand("--allow-dirty-release"),
       dirty.repo,
-      cleanEnv(dirty.home, { XDG_STATE_HOME: dirty.state }),
+      cleanEnv(dirty.home, {
+        XDG_STATE_HOME: dirty.state,
+        DEPENDENCY_PREP_MARKER: dirtyPreparationMarker,
+      }),
     );
     expect(dirtyOverride.code, dirtyOverride.stderr).toBe(0);
     expect(dirtyOverride.stdout).toContain("UNSAFE SOURCE OVERRIDE");
+    expect(await exists(dirtyPreparationMarker)).toBe(true);
     const dirtyReceiptName = (
       await readdir(join(dirty.state, "agenttool", "deploy-receipts"))
     )[0];
@@ -3801,23 +4182,32 @@ exec /bin/rm "$@"
     expect(dirtyReceipt.source_overrides.dirty).toBe(true);
 
     const ahead = await fixture();
+    const aheadPreparationMarker = join(ahead.root, "ahead-preparation-ran");
     await writeFile(join(ahead.repo, "release.txt"), "local only\n");
     await mustRun(["git", "add", "release.txt"], ahead.repo);
     await mustRun(["git", "commit", "-qm", "local only"], ahead.repo);
     const aheadResult = await run(
-      deployCommand(),
+      deployWithPreparationCommand(),
       ahead.repo,
-      cleanEnv(ahead.home, { XDG_STATE_HOME: ahead.state }),
+      cleanEnv(ahead.home, {
+        XDG_STATE_HOME: ahead.state,
+        DEPENDENCY_PREP_MARKER: aheadPreparationMarker,
+      }),
     );
     expect(aheadResult.code).toBe(1);
     expect(aheadResult.stdout).toContain("--allow-non-release-head");
+    expect(await exists(aheadPreparationMarker)).toBe(false);
     const aheadOverride = await run(
-      deployCommand("--allow-non-release-head"),
+      deployWithPreparationCommand("--allow-non-release-head"),
       ahead.repo,
-      cleanEnv(ahead.home, { XDG_STATE_HOME: ahead.state }),
+      cleanEnv(ahead.home, {
+        XDG_STATE_HOME: ahead.state,
+        DEPENDENCY_PREP_MARKER: aheadPreparationMarker,
+      }),
     );
     expect(aheadOverride.code, aheadOverride.stderr).toBe(0);
     expect(aheadOverride.stdout).toContain("UNSAFE SOURCE OVERRIDE");
+    expect(await exists(aheadPreparationMarker)).toBe(true);
     const aheadReceiptName = (
       await readdir(join(ahead.state, "agenttool", "deploy-receipts"))
     )[0];

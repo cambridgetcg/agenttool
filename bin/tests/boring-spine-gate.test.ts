@@ -1,7 +1,18 @@
 /** Focused invariants for the hermetic preflight and required-capable CI. */
 
 import { describe, expect, test } from "bun:test";
-import { readdir, readFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "../..");
@@ -177,12 +188,22 @@ describe("boring test spine", () => {
   });
 
   test("keeps external tiers opt-in and shell syntax valid", async () => {
-    const [preflight, runner, otelTest, computeBudgetTest] = await Promise.all([
-      readFile(join(ROOT, "bin", "preflight.sh"), "utf8"),
-      readFile(join(ROOT, "bin", "run-test-tier.sh"), "utf8"),
-      readFile(join(ROOT, "api", "tests", "observability-otel.test.ts"), "utf8"),
-      readFile(join(ROOT, "api", "tests", "compute-budget.test.ts"), "utf8"),
-    ]);
+    const [
+      preflight,
+      runner,
+      hermeticEnv,
+      pypiRelease,
+      otelTest,
+      computeBudgetTest,
+    ] =
+      await Promise.all([
+        readFile(join(ROOT, "bin", "preflight.sh"), "utf8"),
+        readFile(join(ROOT, "bin", "run-test-tier.sh"), "utf8"),
+        readFile(join(ROOT, "bin", "hermetic-env.sh"), "utf8"),
+        readFile(join(ROOT, "bin", "pypi-release.ts"), "utf8"),
+        readFile(join(ROOT, "api", "tests", "observability-otel.test.ts"), "utf8"),
+        readFile(join(ROOT, "api", "tests", "compute-budget.test.ts"), "utf8"),
+      ]);
 
     expect(preflight).toContain('readonly MODE="${1:-hermetic}"');
     expect(preflight).toContain("database mode requires DATABASE_URL");
@@ -190,11 +211,51 @@ describe("boring test spine", () => {
     expect(preflight).toContain("smoke mode requires AGENTTOOL_BASE");
     expect(preflight).toContain("contracts mode requires RUN_CONTRACT=1");
     expect(preflight).toContain("not an OS-level network sandbox");
-    expect(preflight).toContain(
+    expect(hermeticEnv).toContain(
       "AGENTOOL_BROWSER_HEADLESS AGENTOOL_BROWSER_AUTHORITY",
     );
-    expect(preflight).toContain("HF_TOKEN HUGGINGFACE_HUB_TOKEN HUGGING_FACE_HUB_TOKEN");
-    expect(preflight).toContain("AGENTOOL_HF_REAL_STACK_SMOKE");
+    expect(hermeticEnv).toContain(
+      "HF_TOKEN HUGGINGFACE_HUB_TOKEN",
+    );
+    expect(hermeticEnv).toContain("HUGGING_FACE_HUB_TOKEN AGENTOOL_HF_REAL_STACK_SMOKE");
+    for (const variable of [
+      "AGENTOOL_KMS_MASTER_KEY",
+      "AGENTOOL_KMS_KEY_ID",
+      "AGENTOOL_BEARER",
+      "AGENTOOL_PASSPHRASE",
+      "AGENTOOL_PRIV",
+      "AGENTOOL_THINK_PASSPHRASE",
+      "AGENTTOOL_KMS_MASTER_KEY",
+      "AGENTTOOL_KMS_KEY_ID",
+      "AGENTTOOL_BEARER",
+      "AGENTTOOL_PASSPHRASE",
+      "AGENTTOOL_PRIV",
+      "AGENTTOOL_THINK_PASSPHRASE",
+      "AGENT_MNEMONIC",
+      "CDP_API_KEY_ID",
+      "CDP_API_KEY_SECRET",
+      "EMBASSY_RECEIPT_SECRET",
+      "OPENAI_APPS_CHALLENGE",
+      "PIP_CONFIG_FILE",
+      "BASH_ENV",
+      "ENV",
+    ]) {
+      expect(hermeticEnv).toContain(variable);
+    }
+    const pypiAuthorityBlock = pypiRelease.match(
+      /const PUBLISH_AUTHORITY_ENVIRONMENT = \[([\s\S]*?)\] as const;/,
+    )?.[1] ?? "";
+    const pypiAuthorityNames = [
+      ...pypiAuthorityBlock.matchAll(/"([A-Z][A-Z0-9_]*)"/g),
+    ].map((match) => match[1]);
+    expect(pypiAuthorityNames.length).toBeGreaterThan(0);
+    for (const variable of pypiAuthorityNames) {
+      expect(hermeticEnv).toContain(variable);
+    }
+    expect(preflight).toContain('source "$REPO_ROOT/bin/hermetic-env.sh"');
+    expect(runner).toContain('source "$REPO_ROOT/bin/hermetic-env.sh"');
+    expect(preflight).toContain("sanitize_hermetic_env");
+    expect(runner).toContain("sanitize_hermetic_env");
     expect(preflight).not.toContain("SKIP_SMOKE");
     expect(preflight).not.toContain("SKIP_PARITY");
     expect(runner).toContain('in_list "$path" "${QUARANTINED_DOCTRINE_TESTS[@]}"');
@@ -228,17 +289,22 @@ describe("boring test spine", () => {
     const otelImport = otelTest.indexOf('await import("../src/observability/otel")');
     expect(otelImport).toBeGreaterThan(-1);
     for (const variable of otelExporterVariables) {
-      expect(preflight).toContain(variable);
-      expect(runner).toContain(variable);
+      expect(hermeticEnv).toContain(variable);
       const deletion = otelTest.indexOf(`delete process.env.${variable}`);
       expect(deletion).toBeGreaterThan(-1);
       expect(deletion).toBeLessThan(otelImport);
     }
 
-    for (const path of ["bin/preflight.sh", "bin/run-test-tier.sh"]) {
+    for (const path of [
+      "bin/hermetic-env.sh",
+      "bin/preflight.sh",
+      "bin/run-test-tier.sh",
+    ]) {
       const syntax = run(["bash", "-n", path]);
       expect(syntax.code, syntax.stderr).toBe(0);
     }
+    const launcherSyntax = run(["sh", "-n", "bin/bash-without-env-hooks.sh"]);
+    expect(launcherSyntax.code, launcherSyntax.stderr).toBe(0);
 
     const help = run(["bash", "bin/preflight.sh", "--help"]);
     expect(help.code, help.stderr).toBe(0);
@@ -269,23 +335,45 @@ describe("boring test spine", () => {
     }
   });
 
-  test("pins a four-job secret-free workflow and reproducible installs", async () => {
-    const workflow = await readFile(join(ROOT, ".github", "workflows", "ci.yml"), "utf8");
+  test("pins a four-job secret-free workflow and shared reproducible preparation", async () => {
+    const [workflow, preparer, preflight, deploy, migrator] = await Promise.all([
+      readFile(join(ROOT, ".github", "workflows", "ci.yml"), "utf8"),
+      readFile(join(ROOT, "bin", "prepare-hermetic-deps.sh"), "utf8"),
+      readFile(join(ROOT, "bin", "preflight.sh"), "utf8"),
+      readFile(join(ROOT, "bin", "deploy.sh"), "utf8"),
+      readFile(join(ROOT, "bin", "migrate-pending.sh"), "utf8"),
+    ]);
     expect(workflow).toContain("name: API and protocol");
     expect(workflow).toContain("name: Data, ADDS, and SDK");
     expect(workflow).toContain("name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})");
     expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(3);
     expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(4);
     expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(2);
-    expect(workflow).toContain("bun install --frozen-lockfile");
-    expect(workflow).toContain("name: Install ADDS protocol dependencies");
-    expect(workflow).toContain("working-directory: packages/data-protocol");
-    expect(workflow).toContain("name: Install cross-language vector dependencies");
-    expect(workflow).toContain("working-directory: packages/sdk-ts");
     expect(workflow).toContain(
-      "api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/wake-continuity packages/deepseek-kingdom packages/kingdom-witness-lab packages/karma-mirror packages/heaven packages/living-substrate packages/wake-thread packages/credential-broker packages/collab packages/collab-zerone packages/browser packages/hf-scout packages/hf-training-garden packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/skills-yutabase packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom",
+      "name: Prepare API and protocol dependencies from lockfiles",
+    );
+    expect(workflow).toContain(
+      "run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api",
+    );
+    expect(workflow).toContain(
+      "run: bin/bash-without-env-hooks.sh bin/preflight.sh api",
+    );
+    expect(workflow).toContain(
+      "name: Prepare package-gate dependencies",
+    );
+    expect(workflow).toContain(
+      "run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh packages",
+    );
+    expect(workflow).toContain(
+      "run: bin/bash-without-env-hooks.sh bin/preflight.sh packages",
+    );
+    expect(workflow).not.toContain("name: Install ADDS protocol dependencies");
+    expect(workflow).not.toContain("name: Build local-dependent package peers");
+    expect(workflow).not.toContain(
+      "name: Install local-dependent package dependencies from lockfiles",
     );
     expect(workflow).toContain("fetch-depth: 0");
+    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(5);
     expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("name: Set up release-pinned uv 0.9.26");
     expect(workflow).toContain(
@@ -294,40 +382,10 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       "uv sync --locked --extra dev --no-install-project --no-sources --no-python-downloads --dry-run --no-cache",
     );
-    expect(workflow).toContain("name: Build local-dependent package peers");
-    expect(workflow).toContain("cd packages/data && bun run build");
-    expect(workflow).toContain("cd packages/data-protocol && bun run build");
-    expect(workflow).toContain("cd packages/correspondence-yutabase && bun run build");
-    expect(workflow).toContain("cd packages/wallet && bun run build");
-    expect(workflow).toContain("cd packages/credential-broker && bun run build");
-    expect(workflow).toContain("cd packages/alchemy && bun run build");
-    expect(workflow).toContain("cd packages/wake-continuity && bun run build");
-    expect(workflow).toContain("cd packages/hf-scout && bun run build");
-    expect(workflow).toContain("cd packages/skills-yutabase && bun run build");
-    expect(workflow).toContain(
-      "name: Install local-dependent package dependencies from lockfiles",
-    );
-    expect(workflow).toContain(
-      "cd packages/data-sync && bun install --frozen-lockfile --force",
-    );
-    expect(workflow).toContain(
-      "cd packages/correspondence-yutabase-projector && bun install --frozen-lockfile",
-    );
-    expect(workflow).toContain(
-      "cd packages/alchemy-agentcred && bun install --frozen-lockfile --force",
-    );
-    expect(workflow).toContain(
-      "cd packages/skills-wake-continuity && bun install --frozen-lockfile --force",
-    );
-    expect(workflow).toContain(
-      "cd packages/hf-training-garden && bun install --frozen-lockfile --force",
-    );
     expect(workflow).toContain(
       "name: Set up Python 3.14 for the private HF training host",
     );
-    expect(workflow).toContain(
-      "python -m pip install './packages/hf-training-host[dev]'",
-    );
+    expect(workflow).not.toContain("name: Install private HF training host test dependencies");
     expect(workflow).toContain(
       "if: ${{ matrix.python-version != '3.9' }}",
     );
@@ -350,7 +408,130 @@ describe("boring test spine", () => {
     );
     expect(workflow).not.toContain("secrets.");
 
-    const preflight = await readFile(join(ROOT, "bin", "preflight.sh"), "utf8");
+    const syntax = run(["bash", "-n", "bin/prepare-hermetic-deps.sh"]);
+    expect(syntax.code, syntax.stderr).toBe(0);
+    expect(preparer).toContain('readonly REQUIRED_BUN_VERSION="1.3.5"');
+    expect(preparer).toContain("bun install --frozen-lockfile");
+    expect(preparer).toContain("not a network sandbox");
+    expect(preparer).toContain("CI pins Node separately");
+    expect(preparer).toContain("python3 -I -m venv");
+    expect(preparer).toContain("-I -m pip --isolated install");
+    expect(preparer).toContain('"${HF_HOST_WORKSPACE}[dev]"');
+    expect(preparer).not.toContain("python3 -m venv --clear");
+    expect(preparer).not.toContain(".venv.prepare.");
+    expect(preparer).not.toContain("assert (3, 10)");
+    expect(preparer).toContain("refusing symlinked HF training host test environment");
+    expect(preparer).toContain('source "$REPO_ROOT/bin/hermetic-env.sh"');
+    expect(preparer).toContain("sanitize_hermetic_env\nrequire_bun");
+    expect(preflight).toContain('"$2" -I -m pytest -q');
+    expect(preflight).toContain(
+      'bash "$REPO_ROOT/packages/hf-training-host" "$HF_HOST_TEST_PYTHON"',
+    );
+    expect(migrator).toContain("bun --no-install --no-env-file -e");
+    const preparationIndex = deploy.indexOf('phase "0.5" "Dependency preparation"');
+    const migrationSurveyIndex = deploy.indexOf('MIGRATION_SURVEY_OUTPUT="$(');
+    const finalSourceGateIndex = deploy.indexOf(
+      "source changed before external mutation",
+    );
+    const phaseOneIndex = deploy.indexOf('phase 1 "Migrations"');
+    expect(preparationIndex).toBeGreaterThan(-1);
+    expect(preparationIndex).toBeLessThan(migrationSurveyIndex);
+    expect(finalSourceGateIndex).toBeGreaterThan(migrationSurveyIndex);
+    expect(finalSourceGateIndex).toBeLessThan(phaseOneIndex);
+    expect(deploy).toContain(
+      "bin/bash-without-env-hooks.sh bin/migrate-pending.sh",
+    );
+    expect(deploy).toContain(
+      "bin/bash-without-env-hooks.sh bin/preflight.sh",
+    );
+
+    const readBashArray = (name: string): string[] => {
+      const match = preparer.match(
+        new RegExp(`readonly -a ${name}=\\(\\n([\\s\\S]*?)\\n\\)`),
+      );
+      expect(match, `missing ${name}`).not.toBeNull();
+      return (match?.[1] ?? "").trim().split(/\s+/).filter(Boolean);
+    };
+    expect(readBashArray("API_WORKSPACES")).toEqual([
+      "api",
+      "packages/data-protocol",
+      "packages/sdk-ts",
+      "packages/kingdom",
+    ]);
+    const packageWorkspaces = readBashArray("PACKAGE_WORKSPACES");
+    expect(packageWorkspaces).toEqual([
+      "api",
+      "packages/data",
+      "packages/data-protocol",
+      "packages/repo-archive",
+      "packages/dark-continent-contract",
+      "packages/dark-continent-karma",
+      "packages/wake-continuity",
+      "packages/deepseek-kingdom",
+      "packages/kingdom-witness-lab",
+      "packages/karma-mirror",
+      "packages/heaven",
+      "packages/living-substrate",
+      "packages/wake-thread",
+      "packages/credential-broker",
+      "packages/collab",
+      "packages/collab-zerone",
+      "packages/browser",
+      "packages/hf-scout",
+      "packages/hf-training-garden",
+      "packages/correspondence-yutabase",
+      "packages/constructive-intelligence",
+      "packages/trials",
+      "packages/skills",
+      "packages/skills-yutabase",
+      "packages/sdk-ts",
+      "packages/wallet",
+      "packages/wallet-zerone",
+      "packages/telescope",
+      "packages/alchemy",
+      "packages/kingdom",
+    ]);
+    expect(readBashArray("LOCAL_PROVIDER_WORKSPACES")).toEqual([
+      "packages/data",
+      "packages/data-protocol",
+      "packages/correspondence-yutabase",
+      "packages/wallet",
+      "packages/credential-broker",
+      "packages/alchemy",
+      "packages/wake-continuity",
+      "packages/hf-scout",
+      "packages/skills-yutabase",
+    ]);
+    for (const command of [
+      "install_workspace packages/data-sync --force",
+      "install_workspace packages/correspondence-yutabase-projector",
+      "install_workspace packages/alchemy-agentcred --force",
+      "install_workspace packages/skills-wake-continuity --force",
+      "install_workspace packages/hf-training-garden --force",
+    ]) {
+      expect(preparer).toContain(command);
+    }
+    expect(preparer).not.toContain(
+      "install_workspace packages/wallet-zerone --force",
+    );
+
+    const packageGate = preflight.match(
+      /packages_gate\(\) \{([\s\S]*?)\n\}/,
+    )?.[1] ?? "";
+    const gatedPackages = [
+      ...packageGate.matchAll(/cd (packages\/[^ ]+) && bun run ci/g),
+    ].map((match) => match[1]);
+    const preparedPackages = new Set([
+      ...packageWorkspaces.filter((workspace) => workspace !== "api"),
+      "packages/data-sync",
+      "packages/correspondence-yutabase-projector",
+      "packages/alchemy-agentcred",
+      "packages/skills-wake-continuity",
+    ]);
+    expect([...preparedPackages].sort()).toEqual(
+      [...new Set(gatedPackages)].sort(),
+    );
+
     expect(preflight).toContain("cd packages/data && bun run ci && bun run build");
     expect(preflight).toContain("agent-data-sync/v1 explicit pull bridge");
     expect(preflight).toContain("cd packages/data-sync && bun run ci && bun run build");
@@ -381,7 +562,10 @@ describe("boring test spine", () => {
       "git status --short --untracked-files=all -- packages/hf-training-garden/hf/dataset",
     );
     expect(preflight).toContain(
-      "cd packages/hf-training-host && python3 -m pytest -q && bun test bridge/tests",
+      'cd "$1" && "$2" -I -m pytest -q && bun test bridge/tests',
+    );
+    expect(preflight).toContain(
+      'bash "$REPO_ROOT/packages/hf-training-host" "$HF_HOST_TEST_PYTHON"',
     );
     expect(preflight).toContain("cd packages/skills && bun run ci");
     expect(preflight).toContain("cd packages/skills-yutabase && bun run ci");
@@ -582,6 +766,305 @@ describe("boring test spine", () => {
           line === "uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4",
       ),
     ).toBe(true);
+  });
+
+  test("removes named ambient authority from every dependency child", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "agenttool-hermetic-env-"));
+    const fakeRepo = join(tempRoot, "repo");
+    const fakeRepoBin = join(fakeRepo, "bin");
+    const fakeBin = join(tempRoot, "fake-bin");
+    const capture = join(tempRoot, "bun-calls");
+    const pythonCapture = join(tempRoot, "python-calls");
+    const authorityNames = [
+      "DATABASE_URL",
+      "AGENTTOOL_API_KEY",
+      "AGENTTOOL_KMS_MASTER_KEY",
+      "AGENTTOOL_KMS_KEY_ID",
+      "AGENTTOOL_BEARER",
+      "AGENTTOOL_PASSPHRASE",
+      "AGENTTOOL_PRIV",
+      "AGENTTOOL_THINK_PASSPHRASE",
+      "AGENTOOL_KMS_MASTER_KEY",
+      "AGENTOOL_KMS_KEY_ID",
+      "AGENTOOL_BEARER",
+      "AGENTOOL_PASSPHRASE",
+      "AGENTOOL_PRIV",
+      "AGENTOOL_THINK_PASSPHRASE",
+      "AGENT_MNEMONIC",
+      "CDP_API_KEY_ID",
+      "CDP_API_KEY_SECRET",
+      "EMBASSY_RECEIPT_SECRET",
+      "OPENAI_APPS_CHALLENGE",
+      "PGPASSWORD",
+      "CLOUDFLARE_API_TOKEN",
+      "FLY_API_TOKEN",
+      "NPM_TOKEN",
+      "HF_TOKEN",
+      "HUGGINGFACE_HUB_TOKEN",
+      "HUGGING_FACE_HUB_TOKEN",
+      "AGENTOOL_HF_REAL_STACK_SMOKE",
+      "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+      "ACTIONS_ID_TOKEN_REQUEST_URL",
+      "HATCH_INDEX_AUTH",
+      "HATCH_INDEX_PASSWORD",
+      "HATCH_INDEX_USER",
+      "POETRY_HTTP_BASIC_PYPI_PASSWORD",
+      "POETRY_HTTP_BASIC_PYPI_USERNAME",
+      "POETRY_PYPI_TOKEN_PYPI",
+      "PYPI_API_TOKEN",
+      "PYPI_PASSWORD",
+      "PYPI_TOKEN",
+      "PYPI_USERNAME",
+      "TWINE_PASSWORD",
+      "TWINE_USERNAME",
+      "UV_PUBLISH_PASSWORD",
+      "UV_PUBLISH_TOKEN",
+      "UV_PUBLISH_USERNAME",
+      "PIP_INDEX_URL",
+      "PIP_CONFIG_FILE",
+      "BASH_ENV",
+      "ENV",
+    ];
+    try {
+      await Promise.all([
+        mkdir(fakeRepoBin, { recursive: true }),
+        mkdir(fakeBin, { recursive: true }),
+      ]);
+      await Promise.all([
+        copyFile(
+          join(ROOT, "bin", "prepare-hermetic-deps.sh"),
+          join(fakeRepoBin, "prepare-hermetic-deps.sh"),
+        ),
+        copyFile(
+          join(ROOT, "bin", "hermetic-env.sh"),
+          join(fakeRepoBin, "hermetic-env.sh"),
+        ),
+      ]);
+      const preparer = await readFile(
+        join(fakeRepoBin, "prepare-hermetic-deps.sh"),
+        "utf8",
+      );
+      const workspaces = new Set([
+        ...[...preparer.matchAll(/^\s{2}(api|packages\/[a-z0-9-]+)\s*$/gm)].map(
+          (match) => match[1],
+        ),
+        ...[...preparer.matchAll(/^\s{2}install_workspace (packages\/[a-z0-9-]+)/gm)].map(
+          (match) => match[1],
+        ),
+        "packages/hf-training-host",
+      ]);
+      await Promise.all(
+        [...workspaces].map((workspace) =>
+          mkdir(join(fakeRepo, workspace), { recursive: true }),
+        ),
+      );
+      await writeFile(
+        join(fakeBin, "bun"),
+        `#!/usr/bin/env bash
+set -eu
+for authority_name in $PREP_AUTHORITY_NAMES; do
+  if declare -p "$authority_name" >/dev/null 2>&1; then exit 91; fi
+done
+[ "\${AGENTTOOL_DISABLE_WORKERS:-}" = 1 ] || exit 92
+[ "\${BENIGN_PREP_SENTINEL:-}" = present ] || exit 93
+if [ "\${1:-}" = --version ]; then
+  printf '1.3.5\n'
+  exit 0
+fi
+printf '%s\t%s\n' "$PWD" "$*" >> "$PREP_CAPTURE"
+`,
+      );
+      await writeFile(
+        join(fakeBin, "python3"),
+        `#!/usr/bin/env bash
+set -eu
+for authority_name in $PREP_AUTHORITY_NAMES; do
+  if declare -p "$authority_name" >/dev/null 2>&1; then exit 91; fi
+done
+[ "\${AGENTTOOL_DISABLE_WORKERS:-}" = 1 ] || exit 92
+[ "\${BENIGN_PREP_SENTINEL:-}" = present ] || exit 93
+printf '%s\t%s\n' "$PWD" "$*" >> "$PYTHON_CAPTURE"
+if [ "\${1:-}" = -I ]; then shift; fi
+if [ "\${1:-}" = -c ]; then
+  printf '3.14.5\n'
+  exit 0
+fi
+if [ "\${1:-}" = -m ] && [ "\${2:-}" = venv ]; then
+  target=""
+  for argument in "$@"; do target="$argument"; done
+  mkdir -p "$target/bin"
+  ln -s "$0" "$target/bin/python"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$target/bin/pip"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$target/bin/pytest"
+  chmod +x "$target/bin/pip" "$target/bin/pytest"
+  exit 0
+fi
+if [ "\${1:-}" = -m ] && [ "\${2:-}" = pip ]; then
+  [ "\${FAIL_FAKE_PIP:-0}" != 1 ] || exit 95
+  exit 0
+fi
+exit 94
+`,
+      );
+      await Promise.all([
+        chmod(join(fakeBin, "bun"), 0o755),
+        chmod(join(fakeBin, "python3"), 0o755),
+      ]);
+
+      const startupHook = join(tempRoot, "startup-hook.sh");
+      const startupHookMarker = join(tempRoot, "startup-hook-ran");
+      await writeFile(startupHook, 'touch "$SHELL_HOOK_MARKER"\n');
+      const launched = run(
+        [
+          join(ROOT, "bin", "bash-without-env-hooks.sh"),
+          "-c",
+          '[ -z "${BASH_ENV+x}" ] && [ -z "${ENV+x}" ]',
+        ],
+        {
+          ...process.env,
+          BASH_ENV: startupHook,
+          ENV: startupHook,
+          SHELL_HOOK_MARKER: startupHookMarker,
+        },
+      );
+      expect(launched.code, `${launched.stdout}\n${launched.stderr}`).toBe(0);
+      expect(await readdir(tempRoot)).not.toContain("startup-hook-ran");
+
+      const rehydrationHook = join(tempRoot, "rehydrate-authority.sh");
+      await writeFile(
+        rehydrationHook,
+        "export NPM_TOKEN=rehydrated-by-bash-env\n" +
+          "export CDP_API_KEY_SECRET=rehydrated-by-bash-env\n",
+      );
+      const narrowedEnv: Record<string, string | undefined> = {
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        HOME: tempRoot,
+        LANG: "C",
+        PREP_CAPTURE: capture,
+        PYTHON_CAPTURE: pythonCapture,
+        PREP_AUTHORITY_NAMES: authorityNames.join(" "),
+        BENIGN_PREP_SENTINEL: "present",
+        PYTHONOPTIMIZE: "1",
+      };
+      for (const authorityName of authorityNames) {
+        narrowedEnv[authorityName] = `sentinel-${authorityName.toLowerCase()}`;
+      }
+      narrowedEnv.BASH_ENV = rehydrationHook;
+      narrowedEnv.ENV = rehydrationHook;
+      const prepareCommand = [
+        "bash",
+        join(fakeRepoBin, "prepare-hermetic-deps.sh"),
+        "packages",
+      ];
+      const result = run(prepareCommand, narrowedEnv);
+      expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
+      const calls = (await readFile(capture, "utf8")).trim().split("\n");
+      expect(calls).toHaveLength(44);
+      expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
+        35,
+      );
+      expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
+        9,
+      );
+      const pythonCalls = (await readFile(pythonCapture, "utf8"))
+        .trim()
+        .split("\n");
+      expect(pythonCalls).toHaveLength(3);
+      expect(pythonCalls.some((line) => line.includes("-I -m venv"))).toBe(
+        true,
+      );
+      expect(
+        pythonCalls.some(
+          (line) =>
+            line.includes("-I -m pip --isolated install") &&
+            line.includes("packages/hf-training-host[dev]"),
+        ),
+      ).toBe(true);
+
+      const venvPath = join(fakeRepo, "packages", "hf-training-host", ".venv");
+      expect(
+        pythonCalls.some((line) => line.includes(`-I -m venv ${venvPath}`)),
+      ).toBe(true);
+      expect(preparer).not.toContain(".venv.prepare.");
+      for (const command of ["pip", "pytest"]) {
+        const executable = join(venvPath, "bin", command);
+        const executed = run([executable, "--version"], narrowedEnv);
+        expect(executed.code, `${executed.stdout}\n${executed.stderr}`).toBe(0);
+        expect(await readFile(executable, "utf8")).not.toContain(
+          ".venv.prepare.",
+        );
+      }
+
+      await rm(venvPath, { recursive: true, force: true });
+      const failedInstall = run(prepareCommand, {
+        ...narrowedEnv,
+        FAIL_FAKE_PIP: "1",
+      });
+      expect(failedInstall.code).not.toBe(0);
+      expect(
+        await readdir(join(fakeRepo, "packages", "hf-training-host")),
+      ).not.toContain(".venv");
+
+      const externalTarget = join(tempRoot, "external-venv-target");
+      const externalMarker = join(externalTarget, "must-survive");
+      await mkdir(externalTarget, { recursive: true });
+      await writeFile(externalMarker, "untouched\n");
+      await symlink(externalTarget, venvPath);
+
+      const refused = run(prepareCommand, narrowedEnv);
+      expect(refused.code).not.toBe(0);
+      expect(refused.stderr).toContain(
+        "refusing symlinked HF training host test environment",
+      );
+      expect(await readFile(externalMarker, "utf8")).toBe("untouched\n");
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("migration inventory never auto-installs an absent API graph", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "agenttool-migrate-no-install-"));
+    try {
+      await Promise.all([
+        mkdir(join(tempRoot, "bin"), { recursive: true }),
+        mkdir(join(tempRoot, "api", "migrations"), { recursive: true }),
+      ]);
+      await copyFile(
+        join(ROOT, "bin", "migrate-pending.sh"),
+        join(tempRoot, "bin", "migrate-pending.sh"),
+      );
+      const migration = "20260101T000000_fixture.sql";
+      await Promise.all([
+        writeFile(
+          join(tempRoot, "api", "migrations", "quiescence-required.txt"),
+          `${migration}\n`,
+        ),
+        writeFile(
+          join(tempRoot, "api", "migrations", migration),
+          "SELECT 1;\n",
+        ),
+      ]);
+      const result = Bun.spawnSync(
+        ["bash", "bin/migrate-pending.sh", "--dry-run"],
+        {
+          cwd: tempRoot,
+          env: {
+            PATH: process.env.PATH ?? "/usr/bin:/bin",
+            HOME: tempRoot,
+            LANG: "C",
+            DATABASE_URL: "postgres://fixture.invalid/no_install",
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      expect(result.exitCode).not.toBe(0);
+      expect(await readdir(join(tempRoot, "api"))).not.toContain(
+        "node_modules",
+      );
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
   });
 
   test("keeps npm publication unified, manual, exact-artifact, and protected", async () => {

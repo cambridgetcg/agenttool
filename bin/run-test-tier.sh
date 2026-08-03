@@ -11,9 +11,13 @@
 
 set -euo pipefail
 
-readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly REPO_ROOT
 readonly API_ROOT="$REPO_ROOT/api"
 readonly MODE="${1:-}"
+
+# shellcheck source=bin/hermetic-env.sh
+source "$REPO_ROOT/bin/hermetic-env.sh"
 
 # These tests touch the real shared DB directly or through an unmocked route.
 readonly DATABASE_TESTS=(
@@ -204,22 +208,6 @@ list_tests() {
   done < <(find "$API_ROOT/tests" -type f -name '*.test.ts' | LC_ALL=C sort)
 }
 
-sanitize_non_external_env() {
-  unset \
-    AGENTTOOL_API_KEY AGENTTOOL_BASE AGENTTOOL_IDENTITY_ID \
-    AGENTTOOL_PLATFORM_SIGNING_KEY AGENTTOOL_SIGNING_KEY_ID \
-    AGENTTOOL_ENABLE_UNSAFE_EXECUTE AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS \
-    AGENT_DATA_NODE_TOKEN AGENT_DATA_NODE_URL AT_API_KEY \
-    ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT \
-    DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL \
-    OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \
-    OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS \
-    OTEL_RESOURCE_ATTRIBUTES OTEL_SERVICE_NAME \
-    STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET VAULT_MASTER_KEY \
-    SMOKE_DID
-  export AGENTTOOL_DISABLE_WORKERS=1
-}
-
 run_tier() {
   local wanted="$1"
   local alternate="${2:-}"
@@ -257,7 +245,7 @@ case "$MODE" in
     list_tests
     ;;
   hermetic)
-    sanitize_non_external_env
+    sanitize_hermetic_env
     run_tier hermetic
     ;;
   database)
@@ -285,7 +273,7 @@ case "$MODE" in
     run_tier contract
     ;;
   quarantine)
-    sanitize_non_external_env
+    sanitize_hermetic_env
     run_tier quarantine
     ;;
   *)

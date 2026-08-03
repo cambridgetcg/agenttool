@@ -659,9 +659,8 @@ Cold-start on a fresh laptop:
 git clone https://github.com/cambridgetcg/agenttool.git
 cd agenttool
 
-# 2. Install api + SDK deps
-cd api && bun install && cd ..
-cd packages/sdk-ts && bun install && cd ../..
+# 2. Prepare the API/protocol dependency subset from frozen lockfiles
+bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
 
 # 3. Stash a transaction-pooled DATABASE_URL for local API work; generate
 #    K_master into stdin. Migration runners use separate macair entries above.
@@ -682,6 +681,24 @@ cd apps/dashboard && python3 -m http.server 5173
 
 # Visit http://localhost:5173/dashboard.html (or .../onboard-soma.html, etc.)
 ```
+
+Use `bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh` with no mode
+for the full default
+`hermetic` release graph, or pass `packages` for the full package-gate graph.
+Those full modes build local file-dependency peers and reinstall their
+consumers, then replace the ignored HF training-host test venv with its
+version-ranged dev and build requirements; `api` installs only the
+API/protocol subset. The optional heavyweight `hf` extra is not installed.
+Preparation may contact package registries and does not run tests.
+Before Bun or isolated pip runs, the
+shared helper removes named application, provider, deploy, and registry
+credential environment variables from its child. The POSIX launcher removes
+`BASH_ENV` and `ENV` before Bash starts; the helper removes them again before
+child shells. Package-manager config or credential files, Keychain helpers,
+filesystem access, `PATH` executables, already-imported exported functions, and
+other processes are outside that best-effort boundary. Full modes require Python 3.10-3.14; all
+modes require Bun 1.3.5. The preparer does not install, pin, or reproduce Node.
+CI pins Node separately for Node smoke tests.
 
 The dashboard's `app.js` reads `window.__API_BASE__` (defaults to prod). Override for local-against-local-api by injecting before page scripts load — see how Playwright does it in `tests/playwright/specs/*.ts` for the pattern.
 
@@ -786,28 +803,40 @@ old responses. A push alone still deploys nothing.
 
 ### Pre-flight before any deploy
 
-The single entry point is `bin/preflight.sh`. Its default is the deterministic,
-application/service-credential-free gate used by the deploy wrapper:
+Dependency preparation and the test gate are separate entry points:
 
 ```bash
 git status -s                 # working tree clean (all changes pushed)
-bin/preflight.sh              # API + packages, hermetic dependency boundary
+bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh # project-local full dependency graph; no tests
+bin/bash-without-env-hooks.sh bin/preflight.sh              # API + packages, hermetic dependency boundary
 ```
 
-The default unsets known credentials and service URLs, disables workers, uses
+`bin/preflight.sh` assumes the selected dependency graph is already prepared.
+Every non-survey `bin/deploy.sh` path proves source eligibility before either
+preparation or the Bun-backed migration survey. An actual deploy then performs
+the default preparation, rechecks after it, and rechecks the release source
+immediately before Phase 1.
+`--skip-preflight` skips both preparation and the test gate. Survey and dry-run
+do not install or build dependencies; the migration runner disables Bun
+auto-install and `.env` loading, so an unprepared survey fails closed.
+
+The default gate unsets known credentials and service URLs, disables workers, uses
 the installed Bun 1.3.5 compiler, runs the API hermetic tier plus operator
-tests, gates and builds `packages/data` for its local dependent, and runs the
-`packages/data-protocol`, `packages/data-sync`, `packages/repo-archive`, and
-TypeScript SDK CI gates.
+tests, and runs the complete package gate enumerated by
+`bin/preflight.sh packages`.
 “Hermetic” here means no database, Redis, deployed target, credential, or
 paid-provider dependency; it is not an OS-level network sandbox.
+The dependency preparer uses frozen Bun lockfiles, verifies the installed Bun
+version, and replaces an ignored Python test venv for the HF training host from
+version-ranged, non-lockfile-frozen metadata. It does not pin local Node; CI
+supplies its separate Node pin.
 
 Explicit modes keep stateful and paid checks out of the default:
 
 | Mode                  | What it runs                                                                                                                    | Required input                       |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
 | `api`                 | API typecheck, hermetic API tests, operator/protocol tests                                                                      | none                                 |
-| `packages`            | data reference node gate/build, ADDS package, explicit data-sync bridge, repo-archive draft/simulator, TypeScript SDK CI/parity | none                                 |
+| `packages`            | complete enumerated package CI/build/parity gate, including HF fixture idempotence and private-host tests                      | none                                 |
 | `database`            | API typecheck and database integration tier                                                                                     | `DATABASE_URL`                       |
 | `smoke`               | deployed API smoke                                                                                                              | base URL, API key, identity ID       |
 | `contracts`           | paid provider contract tier                                                                                                     | `RUN_CONTRACT=1` and provider key(s) |
