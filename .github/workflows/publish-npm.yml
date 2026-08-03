@@ -16,6 +16,7 @@ on:
           - wake-continuity
           - deepseek-kingdom
           - heaven
+          - living-substrate
           - credential-broker
           - sdk
           - wallet

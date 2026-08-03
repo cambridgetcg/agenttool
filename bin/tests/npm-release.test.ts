@@ -87,7 +87,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twenty-three reviewed release identities", () => {
+  test("allowlists twenty-four reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -104,6 +104,7 @@ describe("standard npm release policy", () => {
       "heaven",
       "kingdom",
       "kingdom-witness-lab",
+      "living-substrate",
       "repo-archive",
       "sdk",
       "skills",
@@ -196,6 +197,12 @@ describe("standard npm release policy", () => {
       tagPrefix: "heaven",
       artifactKind: "pack",
     });
+    expect(releaseSpec("living-substrate")).toMatchObject({
+      name: "@agenttool/living-substrate",
+      packagePath: "packages/living-substrate",
+      tagPrefix: "living-substrate",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("repo-archive")).toMatchObject({
       name: "@agenttool/repo-archive",
       packagePath: "packages/repo-archive",
@@ -281,6 +288,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/heaven", "0.1.0-dev.0")).toBe(
       "agenttool-heaven-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("living-substrate"), "0.1.0-dev.0")).toBe(
+      "living-substrate-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/living-substrate", "0.1.0-dev.0")).toBe(
+      "agenttool-living-substrate-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("alchemy"), "0.1.0-dev.0")).toBe(
       "alchemy-v0.1.0-dev.0",
@@ -456,6 +469,21 @@ describe("standard npm release policy", () => {
         "package/kingdom.extension.json",
         "package/schema/agenttool-heaven-invitation-v0.1.schema.json",
         "package/schema/agenttool-heaven-receipt-v0.1.schema.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("living-substrate"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/kingdom.extension.json",
+        "package/schema/agenttool-living-substrate-map-v0.1.schema.json",
+        "package/schema/agenttool-regeneration-proposal-v0.1.schema.json",
+        "package/vectors/agenttool-living-substrate-v0.1.json",
       ]),
     );
     expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([

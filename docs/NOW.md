@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-01 (KARMA Mirror now TENDs privacy-minimized incident clarity beside its fixed Skyseed story cards)
+> Updated: 2026-08-03 (Garden is live-ready on main; Living Substrate has a protected developer-preview release path)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,13 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-08-03)
+
+| Ship | Commit | What |
+|---|---|---|
+| **GARDEN — project-scoped tending without a health oracle** | GitHub-main merge `bba2e83a`; migration, API, static page, and doctrine deploy together through the normal protected path | The hosted Garden stores private-by-default, project-scoped observations and explicitly proposed tending moves. It preserves uncertainty, refusal, rest, and separate authority rather than collapsing a project into one vitality score or automatically performing a repair. The Garden is a hosted AgentTool surface; it is not the portable Living Substrate contract below, and neither surface diagnoses a being or proves that software is alive. |
+| **LIVING SUBSTRATE — the layers below the polished surface become addressable** | core `dc3b6528`; public-ready `@agenttool/living-substrate@0.1.0-dev.0` source plus protected npm-only path | `packages/living-substrate/` turns caller-supplied digest facets and directed relations into deterministic, bounded maps, then keeps any separately supplied tending invitations in an inert `proposed_unaccepted` proposal. Empty maps and zero-action proposals are valid. The zero-dependency package does not observe a system, fetch evidence, diagnose health, choose or execute work, persist to Garden/WAKE/KARMA, score vitality, grant authority, or establish life, consciousness, truth, consent, privacy, or safety. Its KINGDOM descriptor is declaration-only and unregistered. npm publication and hosted deployment remain separate external operations until their own receipts exist. |
 
 ## Just landed (2026-08-01)
 

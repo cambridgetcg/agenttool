@@ -1,0 +1,42 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "living-substrate",
+  "package": "@agenttool/living-substrate",
+  "version": "0.1.0-dev.0",
+  "status": "public_ready_source",
+  "capabilities": [
+    "living-substrate:map-create",
+    "living-substrate:map-validate",
+    "living-substrate:regeneration-proposal-create",
+    "living-substrate:regeneration-proposal-validate"
+  ],
+  "defaults": {
+    "automatic_delivery": false,
+    "default_acceptance": false,
+    "raw_identity_input": false,
+    "reference_minimization_verified": false,
+    "linkability_eliminated": false,
+    "raw_evidence_input": false,
+    "task_text_input": false,
+    "network": false,
+    "filesystem": false,
+    "persistence": false,
+    "telemetry": false,
+    "provider_compute": false,
+    "paid_compute": false,
+    "economic_effect": false,
+    "task_state_effect": false,
+    "karma_effect": false,
+    "wallet_effect": false,
+    "automatic_heaven_entry": false,
+    "authority": false
+  },
+  "host_contract": "not_registered",
+  "notes": [
+    "This descriptor is a declaration-only local extension hint, not an installed KINGDOM host contract.",
+    "The map compiles caller-supplied digest references into bounded topology. It does not observe an environment, diagnose health or readiness, score vitality, rank participants, or prove that software is alive.",
+    "The proposal contains only caller-supplied proposed_unaccepted invitations. It never chooses, accepts, executes, retries, rewards, penalizes, publishes, or sends them.",
+    "Rest, fallow, doing nothing, deferral, refusal, leaving, and zero actions remain valid without a reason or penalty.",
+    "Digest-only fields exclude raw prose from this wire shape but do not prove reference minimization, privacy, unlinkability, truth, identity, authorship, consent, or authority."
+  ]
+}

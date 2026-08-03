@@ -1,0 +1,95 @@
+{
+  "schema": "agenttool.living-substrate-vectors/0.1",
+  "vector": {
+    "name": "disturbed-layer-with-fallow-invitation",
+    "map_input": {
+      "scope_ref": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "facets": [
+        {
+          "facet_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "kind": "community",
+          "condition": "reported_constrained",
+          "evidence_refs": [
+            "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          ],
+          "assertion": "caller_asserted",
+          "verified_by_package": false
+        },
+        {
+          "facet_id": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "kind": "layer",
+          "condition": "reported_disturbed",
+          "evidence_refs": [
+            "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          ],
+          "assertion": "caller_asserted",
+          "verified_by_package": false
+        }
+      ],
+      "relations": [
+        {
+          "from_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "relation": "supports",
+          "to_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "evidence_refs": [],
+          "assertion": "caller_asserted",
+          "verified_by_package": false
+        },
+        {
+          "from_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "relation": "contains",
+          "to_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "evidence_refs": [
+            "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          ],
+          "assertion": "caller_asserted",
+          "verified_by_package": false
+        }
+      ]
+    },
+    "proposal_input": {
+      "actions": [
+        {
+          "action_ref": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+          "kind": "allow_fallow",
+          "target_refs": [
+            "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          "basis_refs": [
+            "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          ],
+          "reversibility": "reversible",
+          "state": "proposed_unaccepted",
+          "authority": "separate_authority_required",
+          "assertion": "caller_asserted",
+          "verified_by_package": false
+        },
+        {
+          "action_ref": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "kind": "observe_more",
+          "target_refs": [
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ],
+          "basis_refs": [],
+          "reversibility": "reversible",
+          "state": "proposed_unaccepted",
+          "authority": "separate_authority_required",
+          "assertion": "caller_asserted",
+          "verified_by_package": false
+        }
+      ]
+    },
+    "expected": {
+      "map_id": "sha256:af05ef35c51d3fcf95aa1daae7b608e30efd83d1feef82230255a127a7cf4589",
+      "proposal_id": "sha256:12258a50755497abbc239b19e24b8b7dc1ce20a4b293a0f5071bd277021c8799",
+      "map_bytes_sha256": "sha256:b3c627fcccf0759c57cde798d2b903b7dd76beada4c6fa80eb6dbf878aaaefaa",
+      "proposal_bytes_sha256": "sha256:5394467a1ed815965f1ca9a3b802787693f71453de75029397d28ffc4105e197",
+      "map_bytes_length": 2863,
+      "proposal_bytes_length": 2790
+    }
+  }
+}
