@@ -28283,6 +28283,9 @@ var StdioServerTransport = class {
 // bin/agenttool-collab-mcp.ts
 import { homedir } from "os";
 import { isAbsolute as isAbsolute2, join as join2, resolve as resolve4 } from "path";
+// src/anchor-status.ts
+import { closeSync, constants, fstatSync, openSync, readSync } from "fs";
+
 // src/errors.ts
 class CollabError extends Error {
   code;
@@ -28295,16 +28298,242 @@ class CollabError extends Error {
   }
 }
 
+// src/anchor-status.ts
+var ANCHOR_LEDGER_PROTOCOL = "agenttool.collab-zerone-ledger/0.1";
+var SCOPE_NOTE = "Anchor status reflects the local sidecar ledger only; it never proves remote chain state." + " Use @agenttool/collab-zerone `verify --check-chain` for on-chain confirmation.";
+var MAX_LEDGER_BYTES = 4 * 1024 * 1024;
+function defaultAnchorLedgerPath(env = process.env) {
+  if (env.AGENTOOL_COLLAB_ANCHOR_LEDGER)
+    return env.AGENTOOL_COLLAB_ANCHOR_LEDGER;
+  const dataHome = env.XDG_DATA_HOME && env.XDG_DATA_HOME.length > 0 ? env.XDG_DATA_HOME : `${env.HOME}/.local/share`;
+  return `${dataHome}/agenttool/collab-zerone-anchors.json`;
+}
+function isLedgerEntry(value) {
+  if (value === null || typeof value !== "object")
+    return false;
+  const entry = value;
+  return typeof entry.workspace_id === "string" && typeof entry.epoch_id === "string" && typeof entry.sequence === "number" && Number.isSafeInteger(entry.sequence) && typeof entry.head_hash === "string" && typeof entry.network === "string" && typeof entry.status === "string";
+}
+function clampText(value, max) {
+  if (typeof value !== "string")
+    return null;
+  const cleaned = value.replace(/[\u0000-\u001f\u007f]/g, " ");
+  return cleaned.length > max ? `${cleaned.slice(0, max)}\u2026` : cleaned;
+}
+function toAnchorRef(entry) {
+  return {
+    sequence: entry.sequence,
+    head_hash: clampText(entry.head_hash, 128) ?? "",
+    network: clampText(entry.network, 64) ?? "",
+    caip2: clampText(entry.caip2, 64),
+    tx_hash: clampText(entry.tx_hash, 128),
+    status: clampText(entry.status, 32) ?? "",
+    submitted_at: clampText(entry.submitted_at, 64),
+    confirmed_at: clampText(entry.confirmed_at, 64),
+    confirmed_height: typeof entry.confirmed_height === "number" ? entry.confirmed_height : null
+  };
+}
+function readLedgerFile(path) {
+  let fd;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
+  } catch {
+    return null;
+  }
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size > MAX_LEDGER_BYTES)
+      return null;
+    const buffer = Buffer.alloc(Number(stat.size));
+    let offset = 0;
+    while (offset < buffer.length) {
+      const read = readSync(fd, buffer, offset, buffer.length - offset, offset);
+      if (read <= 0)
+        break;
+      offset += read;
+    }
+    return buffer.subarray(0, offset).toString("utf8");
+  } catch {
+    return null;
+  } finally {
+    closeSync(fd);
+  }
+}
+function anchorStatusForWorkspace(store, workspaceId, ledgerPath) {
+  const workspace = store.getWorkspace(workspaceId);
+  if (!workspace) {
+    throw new CollabError("workspace_not_found", "Workspace was not found", {
+      workspace_id: workspaceId
+    });
+  }
+  const path = ledgerPath ?? defaultAnchorLedgerPath();
+  const base = {
+    workspace_id: workspaceId,
+    head_sequence: workspace.event_head_sequence,
+    head_hash: workspace.event_head_hash,
+    ledger_path: path,
+    scope_note: SCOPE_NOTE
+  };
+  const raw = readLedgerFile(path);
+  if (raw === null) {
+    return {
+      ...base,
+      status: "unanchored",
+      ledger_readable: false,
+      anchor: null,
+      lag_events: null,
+      reason: "no readable anchor ledger at this path (missing, non-regular, oversized, or unreadable)"
+    };
+  }
+  let entries;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.protocol !== ANCHOR_LEDGER_PROTOCOL || !Array.isArray(parsed.anchors)) {
+      throw new Error("wrong ledger protocol");
+    }
+    entries = parsed.anchors.filter(isLedgerEntry).filter((entry) => entry.workspace_id === workspaceId && entry.epoch_id === workspace.epoch_id);
+  } catch {
+    return {
+      ...base,
+      status: "unanchored",
+      ledger_readable: false,
+      anchor: null,
+      lag_events: null,
+      reason: "anchor ledger exists but is unreadable or has the wrong protocol; treating as unanchored"
+    };
+  }
+  if (entries.length === 0) {
+    return {
+      ...base,
+      status: "unanchored",
+      ledger_readable: true,
+      anchor: null,
+      lag_events: null,
+      reason: "no anchors recorded for this workspace and epoch"
+    };
+  }
+  const bySequence = [...entries].sort((left, right) => left.sequence - right.sequence);
+  const best = bySequence.filter((entry) => entry.status === "confirmed").at(-1) ?? null;
+  if (!best) {
+    const inFlight = bySequence.filter((entry) => entry.status === "submitted" || entry.status === "ambiguous").at(-1) ?? null;
+    if (!inFlight) {
+      return {
+        ...base,
+        status: "unanchored",
+        ledger_readable: true,
+        anchor: bySequence.at(-1) ? toAnchorRef(bySequence.at(-1)) : null,
+        lag_events: null,
+        reason: `all ${bySequence.length} anchor attempt(s) definitively failed; nothing in flight`
+      };
+    }
+    return {
+      ...base,
+      status: "anchor_pending",
+      ledger_readable: true,
+      anchor: toAnchorRef(inFlight),
+      lag_events: null,
+      reason: `latest unresolved anchor is ${toAnchorRef(inFlight).status}, not confirmed`
+    };
+  }
+  let journalValid;
+  try {
+    journalValid = store.verifyJournal(workspaceId);
+  } catch {
+    journalValid = false;
+  }
+  if (!journalValid) {
+    return {
+      ...base,
+      status: "anchor_conflict",
+      ledger_readable: true,
+      anchor: toAnchorRef(best),
+      lag_events: null,
+      reason: "journal fails full recomputation from genesis; anchored history cannot be vouched for"
+    };
+  }
+  if (best.sequence > workspace.event_head_sequence) {
+    return {
+      ...base,
+      status: "anchor_conflict",
+      ledger_readable: true,
+      anchor: toAnchorRef(best),
+      lag_events: null,
+      reason: "confirmed anchor is ahead of the local journal head (journal rewound or wrong database)"
+    };
+  }
+  if (best.sequence === workspace.event_head_sequence) {
+    if (best.head_hash === workspace.event_head_hash) {
+      return {
+        ...base,
+        status: "anchored",
+        ledger_readable: true,
+        anchor: toAnchorRef(best),
+        lag_events: 0,
+        reason: "journal recomputed from genesis; head equals the latest confirmed anchor"
+      };
+    }
+    return {
+      ...base,
+      status: "anchor_conflict",
+      ledger_readable: true,
+      anchor: toAnchorRef(best),
+      lag_events: null,
+      reason: "journal head hash differs from the confirmed anchor at the same sequence"
+    };
+  }
+  const lag = workspace.event_head_sequence - best.sequence;
+  const hashAtAnchor = journalHashAtSequence(store, workspaceId, best.sequence);
+  if (hashAtAnchor === null) {
+    return {
+      ...base,
+      status: "anchor_conflict",
+      ledger_readable: true,
+      anchor: toAnchorRef(best),
+      lag_events: null,
+      reason: "journal has no verifiable event at the anchored sequence"
+    };
+  }
+  if (hashAtAnchor !== best.head_hash) {
+    return {
+      ...base,
+      status: "anchor_conflict",
+      ledger_readable: true,
+      anchor: toAnchorRef(best),
+      lag_events: null,
+      reason: "journal hash at the anchored sequence differs from the anchor (history rewritten)"
+    };
+  }
+  return {
+    ...base,
+    status: "anchor_stale",
+    ledger_readable: true,
+    anchor: toAnchorRef(best),
+    lag_events: lag,
+    reason: `${lag} events recorded after the latest confirmed anchor (anchored prefix recomputed intact)`
+  };
+}
+function journalHashAtSequence(store, workspaceId, sequence) {
+  try {
+    const page = store.eventsSince(workspaceId, sequence - 1, 1);
+    const event = page.events[0];
+    if (!event || event.sequence !== sequence || !page.chain_valid)
+      return null;
+    return event.hash;
+  } catch {
+    return null;
+  }
+}
+
 // src/session-file.ts
 import {
   chmodSync,
-  closeSync,
+  closeSync as closeSync2,
   existsSync,
   fsyncSync,
   linkSync,
   lstatSync,
   mkdirSync,
-  openSync,
+  openSync as openSync2,
   readFileSync,
   renameSync,
   unlinkSync,
@@ -28364,13 +28593,13 @@ function writeSessionCredentialFile(pathInput, credential, options = {}) {
       last_cursor: credential.last_cursor
     };
     temporary = `${path}.tmp-${randomUUID()}`;
-    const descriptor = openSync(temporary, "wx", 384);
+    const descriptor = openSync2(temporary, "wx", 384);
     try {
       writeFileSync(descriptor, `${JSON.stringify(payload)}
 `, "utf8");
       fsyncSync(descriptor);
     } finally {
-      closeSync(descriptor);
+      closeSync2(descriptor);
     }
     if (options.replace) {
       renameSync(temporary, path);
@@ -29042,6 +29271,15 @@ Rationale: ${input.rationale}` : ""}`,
     chain_valid: store.verifyJournal(workspace_id),
     verification_scope: "full_journal"
   })));
+  server.registerTool("collab_anchor_status", {
+    title: "Report the journal's zerone anchor status",
+    description: "Compare the journal head against the local sidecar anchor ledger written by the" + " @agenttool/collab-zerone bridge, which witnesses head hashes on the zerone chain." + " Local file read only \u2014 never contacts a chain, and a missing bridge simply reports" + " unanchored. States: unanchored, anchor_pending, anchored, anchor_stale, anchor_conflict.",
+    annotations: localReadOnly,
+    inputSchema: {
+      workspace_id: workspaceId,
+      ledger_path: exports_external.string().min(1).max(500).optional().describe("Override the anchor ledger path; defaults to AGENTOOL_COLLAB_ANCHOR_LEDGER or the shared data directory")
+    }
+  }, async ({ workspace_id, ledger_path }) => call(() => anchorStatusForWorkspace(store, workspace_id, ledger_path)));
   return server;
 }
 function leaseMutationSchema(extra) {
@@ -29103,11 +29341,11 @@ import { Database } from "bun:sqlite";
 import { createHash as createHash2, randomBytes, randomUUID as randomUUID2, timingSafeEqual } from "crypto";
 import {
   chmodSync as chmodSync2,
-  closeSync as closeSync3,
+  closeSync as closeSync4,
   existsSync as existsSync3,
   lstatSync as lstatSync3,
   mkdirSync as mkdirSync2,
-  openSync as openSync3
+  openSync as openSync4
 } from "fs";
 import { dirname as dirname2, isAbsolute, join, posix, resolve as resolve3 } from "path";
 
@@ -29134,13 +29372,13 @@ var COLLAB_SESSION_PROTOCOL = "agenttool.collab.session/0.1";
 // src/repository.ts
 import { createHash } from "crypto";
 import {
-  closeSync as closeSync2,
+  closeSync as closeSync3,
   existsSync as existsSync2,
-  fstatSync,
+  fstatSync as fstatSync2,
   lstatSync as lstatSync2,
-  openSync as openSync2,
+  openSync as openSync3,
   readlinkSync,
-  readSync,
+  readSync as readSync2,
   realpathSync,
   statSync
 } from "fs";
@@ -29351,8 +29589,8 @@ function digestUntrackedContent(rootPath, paths) {
 function digestStableFile(path, budget) {
   let descriptor = null;
   try {
-    descriptor = openSync2(path, "r");
-    const before = fstatSync(descriptor);
+    descriptor = openSync3(path, "r");
+    const before = fstatSync2(descriptor);
     if (!before.isFile() || before.size > budget.remainingBytes || Date.now() > budget.deadline)
       return null;
     const hash2 = createHash("sha256");
@@ -29360,12 +29598,12 @@ function digestStableFile(path, budget) {
     while (true) {
       if (Date.now() > budget.deadline)
         return null;
-      const count = readSync(descriptor, buffer, 0, buffer.length, null);
+      const count = readSync2(descriptor, buffer, 0, buffer.length, null);
       if (count === 0)
         break;
       hash2.update(buffer.subarray(0, count));
     }
-    const after = fstatSync(descriptor);
+    const after = fstatSync2(descriptor);
     if (before.dev !== after.dev || before.ino !== after.ino || before.size !== after.size || before.mode !== after.mode || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs)
       return null;
     budget.remainingBytes -= before.size;
@@ -29374,7 +29612,7 @@ function digestStableFile(path, budget) {
     return null;
   } finally {
     if (descriptor !== null)
-      closeSync2(descriptor);
+      closeSync3(descriptor);
   }
 }
 function splitNul(value) {
@@ -29507,8 +29745,8 @@ class CollabStore {
         assertSafeDatabaseFile(databasePath);
       } else {
         try {
-          const descriptor = openSync3(databasePath, "wx", 384);
-          closeSync3(descriptor);
+          const descriptor = openSync4(databasePath, "wx", 384);
+          closeSync4(descriptor);
         } catch (error51) {
           if (error51.code !== "EEXIST")
             throw error51;

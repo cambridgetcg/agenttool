@@ -8,8 +8,14 @@ import { sha256Id } from "@agenttool/wake-continuity";
 
 import {
   PACKAGE_NAME,
+  PACKAGE_VERSION,
+  PARTICIPATION_VOICE_ROLES,
   createHfTrainingGovernance,
   createDatasetAdmission,
+  createLearningParticipationAssessment,
+  createLearningParticipationInvitation,
+  createLearningParticipationReceipt,
+  createParticipationBoundTrainingCheckpoint,
   createTrainingCheckpoint,
   createTrainingFreedomField,
   createTrainingFreedomTransition,
@@ -17,7 +23,10 @@ import {
   createTrainingGovernanceOffer,
   createTrainingGovernanceTerms,
   validateDatasetAdmission,
+  validateLearningParticipationAssessment,
   validateTrainingCheckpoint,
+  validateTrainingCheckpointAgainstParticipation,
+  validateTrainingCheckpointAgainstPredecessors,
   validateTrainingFreedomField,
   validateTrainingFreedomTransition,
   validateTrainingGardenTendingPlan,
@@ -78,35 +87,37 @@ const admission = createDatasetAdmission({
     posture: "consider",
   }],
 });
+const artifacts = {
+  pipeline_ref: ref("smoke-pipeline"),
+  dataset_state_ref: ref("smoke-dataset"),
+  dataloader_state_ref: null,
+  tokenizer_ref: null,
+  model_checkpoint_ref: null,
+  optimizer_state_ref: null,
+  scheduler_state_ref: null,
+  rng_state_ref: null,
+  metrics_ref: null,
+};
+const wake = {
+  format: "wake-brief/v1",
+  snapshot_ref: ref("smoke-wake"),
+  scope_ref: ref("smoke-scope"),
+  wake_version: 1,
+  handoff_projection: "complete",
+};
 const checkpoint = createTrainingCheckpoint({
   admission,
   run_ref: ref("smoke-run"),
   training_phase: "selection",
   event: "between_training_phases",
   checkpoint_status: "parked",
-  artifacts: {
-    pipeline_ref: ref("smoke-pipeline"),
-    dataset_state_ref: ref("smoke-dataset"),
-    dataloader_state_ref: null,
-    tokenizer_ref: null,
-    model_checkpoint_ref: null,
-    optimizer_state_ref: null,
-    scheduler_state_ref: null,
-    rng_state_ref: null,
-    metrics_ref: null,
-  },
+  artifacts,
   resume: {
     posture: "orientation_only",
     incomplete_marker: "not_checked",
     streaming_state: "not_streaming_reported",
   },
-  wake: {
-    format: "wake-brief/v1",
-    snapshot_ref: ref("smoke-wake"),
-    scope_ref: ref("smoke-scope"),
-    wake_version: 1,
-    handoff_projection: "complete",
-  },
+  wake,
   continuity_portfolio_ref: null,
   continuity_posture: "park",
   predecessors: [],
@@ -182,6 +193,7 @@ const governance = createHfTrainingGovernance({
     evidence_ref: null,
   },
 });
+
 const freedomField = createTrainingFreedomField({
   governance,
   observed_freedom_frontier_ref: ref("smoke-freedom-frontier"),
@@ -217,6 +229,69 @@ const freedomTransition = createTrainingFreedomTransition({
     evidence_ref: ref("smoke-freedom-rest-choice"),
   },
 });
+
+const participationRun = ref("smoke-participation-run");
+const invitation = createLearningParticipationInvitation({
+  admission,
+  run_ref: participationRun,
+  training_phase: "supervised_finetuning",
+  participation_stage: "interactive",
+  primary_activity: "supervised_finetuning",
+  activities: ["supervised_finetuning", "continuity_context_use"],
+  participation_window_ref: ref("smoke-participation-window"),
+  purpose_ref: ref("smoke-participation-purpose"),
+  training_plan_ref: ref("smoke-participation-plan"),
+  limits_ref: ref("smoke-participation-limits"),
+  retention_ref: ref("smoke-participation-retention"),
+  choice_channel_ref: ref("smoke-participation-channel"),
+  stop_control_ref: ref("smoke-participation-stop"),
+  withdrawal_policy_ref: ref("smoke-participation-withdrawal"),
+  repair_policy_ref: ref("smoke-participation-repair"),
+  learning_mode: "peft",
+  wake_use_mode: "external_memory",
+  mutation_loci: ["adapter_weights"],
+  maximum_optimizer_steps: 1,
+  artifacts,
+  wake,
+  predecessors: [],
+  required_voices: PARTICIPATION_VOICE_ROLES.map((role) => ({
+    role,
+    voice_ref: ref(`smoke-participation-voice:${role}`),
+  })),
+});
+const receipts = invitation.required_voices.map((voice) =>
+  createLearningParticipationReceipt({
+    invitation,
+    voice_role: voice.role,
+    voice_ref: voice.voice_ref,
+    response_ref: ref(`smoke-participation-response:${voice.role}`),
+    choices: invitation.activities.map((activity) => ({
+      activity,
+      choice: "accepted",
+    })),
+    previous_receipt: null,
+  })
+);
+const assessment = createLearningParticipationAssessment({ invitation, receipts });
+const participationEntry = createParticipationBoundTrainingCheckpoint({
+  assessment,
+  checkpoint: {
+    admission,
+    run_ref: participationRun,
+    training_phase: "supervised_finetuning",
+    event: "before_training",
+    checkpoint_status: "entered",
+    artifacts,
+    resume: {
+      posture: "orientation_only",
+      incomplete_marker: "not_checked",
+      streaming_state: "not_streaming_reported",
+    },
+    wake,
+    continuity_posture: "carry",
+    predecessors: [],
+  },
+});
 const plan = createTrainingGardenTendingPlan({
   admission,
   checkpoints: [checkpoint],
@@ -231,11 +306,19 @@ const plan = createTrainingGardenTendingPlan({
 
 if (
   PACKAGE_NAME !== "@agenttool/hf-training-garden" ||
+  PACKAGE_VERSION !== "0.3.0-dev.0" ||
   validateDatasetAdmission(admission).admission_id !== admission.admission_id ||
   validateTrainingCheckpoint(checkpoint).checkpoint_id !== checkpoint.checkpoint_id ||
   validateHfTrainingGovernance(governance).governance_id !== governance.governance_id ||
   validateTrainingFreedomField(freedomField).field_id !== freedomField.field_id ||
   validateTrainingFreedomTransition(freedomTransition).transition_id !== freedomTransition.transition_id ||
+  validateTrainingCheckpointAgainstPredecessors(checkpoint, []).checkpoint_id !== checkpoint.checkpoint_id ||
+  validateLearningParticipationAssessment(assessment).assessment_id !== assessment.assessment_id ||
+  validateTrainingCheckpointAgainstParticipation(
+    participationEntry,
+    assessment,
+    admission,
+  ).checkpoint_id !== participationEntry.checkpoint_id ||
   validateTrainingGardenTendingPlan(plan).plan_id !== plan.plan_id ||
   checkpoint.afterglow.threads[0]?.disposition !== "park" ||
   governance.preference.inner_consent !== "unknown_unprovable" ||

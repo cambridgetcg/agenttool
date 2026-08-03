@@ -2,6 +2,8 @@ export type HfTrainingGardenErrorCode =
   | "admission_input_invalid"
   | "admission_invalid"
   | "binding_invalid"
+  | "participation_input_invalid"
+  | "participation_invalid"
   | "checkpoint_input_invalid"
   | "checkpoint_invalid"
   | "freedom_input_invalid"

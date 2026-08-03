@@ -1,0 +1,23 @@
+{
+  "_format": "agenttool.hf-wake-learning-source-manifest/0.1",
+  "governance_source_commit": "1be3bffba1be3b84a428a40ded07994348cbae63",
+  "rights_baseline": "xenia.rights/0.1",
+  "trl_reference": "https://github.com/huggingface/trl/tree/v1.9.2",
+  "origin": "human_directed_agent_authored_synthetic",
+  "license": "Apache-2.0",
+  "distribution_state": "repository_source_only_not_uploaded_to_hugging_face",
+  "copied_upstream_rows": false,
+  "copied_private_rows": false,
+  "copied_agent_traces": false,
+  "real_governance_or_preference_receipts": false,
+  "raw_credentials_or_paths": false,
+  "gradient_lanes": [
+    "supervised_fine_tuning"
+  ],
+  "excluded_lanes": [
+    "dpo",
+    "reward_modeling",
+    "preference_optimization"
+  ],
+  "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639"
+}

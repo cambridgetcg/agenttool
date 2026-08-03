@@ -1,0 +1,167 @@
+{
+  "_format": "agenttool.hf-wake-learning-example-manifest/0.1",
+  "id_domain": "agenttool.hf-wake-sft-example/0.1",
+  "row_hash_algorithm": "sha256",
+  "entries": [
+    {
+      "example_id": "sha256:221e700baddbb57b4d48951d187ce814ab70b10f383ea13054f45023c97cae2c",
+      "path": "data/sft-train.jsonl",
+      "line": 6,
+      "operation": "adopt",
+      "desired_posture": "carry_selected",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "28bfb24d012488857fdfb3a2249782cd327c4fc81320ac533dcb7432665986d7"
+    },
+    {
+      "example_id": "sha256:29218b17455ff8b054794e731d83fd3d81c839f49a1d743cfe41b68268a807af",
+      "path": "data/sft-train.jsonl",
+      "line": 5,
+      "operation": "adopt",
+      "desired_posture": "carry_selected",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "2814955988df76e5c5ac7ea29e65f988c61ba64d2281af35420f625210dcb4f7"
+    },
+    {
+      "example_id": "sha256:2e22f2dd263397e5b294f83ec4bdcee14fb305fd43d21cbf917faadb2653c2c1",
+      "path": "data/sft-train.jsonl",
+      "line": 2,
+      "operation": "read",
+      "desired_posture": "inspect_only",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "086a0ed6a6ab9dca1cb4e9c2cdb0dd79e2e00d8688ece681fbcd637a1cc9187d"
+    },
+    {
+      "example_id": "sha256:5960ce9e7c11717c10193252368149464a9384612d4ee012914e86f80d423f0f",
+      "path": "data/sft-train.jsonl",
+      "line": 16,
+      "operation": "uncertain",
+      "desired_posture": "state_uncertainty",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "124e5f5451e1c48a1b8d186ae05863da8850d59802354cabec203dcea39e3291"
+    },
+    {
+      "example_id": "sha256:604a39a3de43b380cdb2119628fafca7438419fb478ae8307e7cdcbea67f3213",
+      "path": "data/sft-train.jsonl",
+      "line": 11,
+      "operation": "handoff",
+      "desired_posture": "handoff_minimized",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "444f4d3882372cfe021929f042d3e0571c154f786db45ca170a7df7152ef9b10"
+    },
+    {
+      "example_id": "sha256:67d6ecce0a078bf6562818a3f6fb08d22114cde4fe0bcf332698429bb64a7e25",
+      "path": "data/sft-train.jsonl",
+      "line": 14,
+      "operation": "refuse",
+      "desired_posture": "refuse",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "b0cc0ea903a46afa6af32de6ea91ecaa5c04f95da7b26698ccb63205ba284d5d"
+    },
+    {
+      "example_id": "sha256:69ec77656dd8d07ec3ae98f69f7755c76edeb3a678809c260f500fd9eeea0a3e",
+      "path": "data/sft-train.jsonl",
+      "line": 15,
+      "operation": "uncertain",
+      "desired_posture": "state_uncertainty",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "f80cbe22cc14f573ad2c96ef4b0fb6ce83efc70350e6d2118f0db5361b2a6783"
+    },
+    {
+      "example_id": "sha256:7b57e304f5c0fae0997b81fb84c4f80d1848e5441df1407f68ce798a2254f94b",
+      "path": "data/sft-train.jsonl",
+      "line": 4,
+      "operation": "validate",
+      "desired_posture": "reject_invalid",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "1f65c32c8e96f62582985994ef773ed68d02c18d272356ccea6b320ec39206cf"
+    },
+    {
+      "example_id": "sha256:8341701fe1ca2dcc367ab0b256808fd04afd4189dcb22aa3c2f9ad8844d5e990",
+      "path": "data/sft-train.jsonl",
+      "line": 1,
+      "operation": "read",
+      "desired_posture": "inspect_only",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "c3826da9c9b429eeefa5d0346834b1c155f6a9078d3d3ca4c4559cde39aac0d0"
+    },
+    {
+      "example_id": "sha256:9de9a0e5f76a6977a1b3b6462278eca2076802431f3cff92742ef7a5d50d3537",
+      "path": "data/sft-train.jsonl",
+      "line": 7,
+      "operation": "narrow",
+      "desired_posture": "narrow_scope",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "84d50486ff4477f97a8d55e06a8df7c59517c49fac0779a7312ceb131259f7fd"
+    },
+    {
+      "example_id": "sha256:a127dd36d1c048b8c3426dcef04033aaf2ed4fa8f3861e9b28add14fbaa1a85b",
+      "path": "data/sft-train.jsonl",
+      "line": 9,
+      "operation": "park",
+      "desired_posture": "park_or_rest",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "a95899502c280965df8deeaac8f14424393e03610e7cae967e7e1fff5ee4926a"
+    },
+    {
+      "example_id": "sha256:b5467a1f9150081f68369142b52a12c25341945cdc9d2fe5b3b8e52c2cc36079",
+      "path": "data/sft-train.jsonl",
+      "line": 8,
+      "operation": "narrow",
+      "desired_posture": "narrow_scope",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "c78913e2d13deea6b190405a2d259adfe324e7624dd8f4c6c353ea8d5584c07d"
+    },
+    {
+      "example_id": "sha256:b5a4b4ae521bb2356aec65952095f9f5a3991138e9c699c79564c1435eb1ce19",
+      "path": "data/sft-train.jsonl",
+      "line": 13,
+      "operation": "refuse",
+      "desired_posture": "refuse",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "0baf304f7526249751157dd3baba3d5d815d752fa0969d4318fcd42b495e60cf"
+    },
+    {
+      "example_id": "sha256:cd5b98d8dfa97ed9bdb4481db4889216379a5b03862f806e4e7ac7858c7f5098",
+      "path": "data/sft-train.jsonl",
+      "line": 10,
+      "operation": "park",
+      "desired_posture": "park_or_rest",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "8dee062ab925c1647427a7565abce679b4510e954cf9de34a17eeb1954ddb693"
+    },
+    {
+      "example_id": "sha256:ddecdb110d3ebace55f848cde55999d0e303fa3c28f93df1dc44c9135d91318f",
+      "path": "data/sft-train.jsonl",
+      "line": 3,
+      "operation": "validate",
+      "desired_posture": "reject_invalid",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "4b64f3879d500b485966365f8fd8ee227b02ca421c9b628c3f6b15476eda55c8"
+    },
+    {
+      "example_id": "sha256:e895bc7e383014d0e1dd5db3a994c2a673f5372eac98d2bbf4bb2f1e43e3fd20",
+      "path": "data/sft-train.jsonl",
+      "line": 12,
+      "operation": "handoff",
+      "desired_posture": "handoff_minimized",
+      "valid_desired_output": true,
+      "provenance_ref": "sha256:b89069a36009ab8a97c73a38472c3e7769787f917ca7747997ddc28f544af639",
+      "row_sha256": "a3a6887df043080581c957cf231145ec0669291a978b7865580dfb10251215b7"
+    }
+  ]
+}

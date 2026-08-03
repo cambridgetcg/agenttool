@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-wake-sealed-evaluation-commitment-v0.1.schema.json",
+  "title": "WAKE sealed-evaluation commitment without cases or salt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "state",
+    "minimum_case_count",
+    "operations",
+    "production",
+    "public_mechanics_test_vector",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.hf-wake-sealed-evaluation-commitment/0.1"
+    },
+    "state": {
+      "enum": [
+        "not_created",
+        "salted_commitment_published"
+      ]
+    },
+    "minimum_case_count": {
+      "type": "integer",
+      "minimum": 16,
+      "maximum": 1024
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "read",
+          "validate",
+          "adopt",
+          "narrow",
+          "park",
+          "handoff",
+          "refuse",
+          "uncertain"
+        ]
+      }
+    },
+    "production": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "training_snapshot_ref",
+        "schema_ref",
+        "rubric_ref",
+        "case_count",
+        "salted_commitment"
+      ],
+      "properties": {
+        "training_snapshot_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schema_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rubric_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "case_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1024
+        },
+        "salted_commitment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "public_mechanics_test_vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "visibility",
+        "algorithm",
+        "salt",
+        "payload",
+        "commitment"
+      ],
+      "properties": {
+        "visibility": {
+          "const": "public_not_secret_not_evaluation"
+        },
+        "algorithm": {
+          "const": "sha256(salt_utf8 || NUL || canonical_json(payload))"
+        },
+        "salt": {
+          "const": "PUBLIC-NONSECRET-TEST-SALT"
+        },
+        "payload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "purpose",
+            "not_an_evaluation_case"
+          ],
+          "properties": {
+            "purpose": {
+              "const": "public_commitment_mechanics_only"
+            },
+            "not_an_evaluation_case": {
+              "const": true
+            }
+          }
+        },
+        "commitment": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "boundaries": {
+      "const": {
+        "actual_cases_in_public_tree": false,
+        "production_salt_in_public_tree": false,
+        "reveal_manifest_in_public_tree": false,
+        "deterministic_case_seed_committed": false,
+        "commitment_proves_cases_were_unseen": false
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "const": "not_created"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "production": {
+            "const": {
+              "training_snapshot_ref": null,
+              "schema_ref": null,
+              "rubric_ref": null,
+              "case_count": 0,
+              "salted_commitment": null
+            }
+          }
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "production": {
+            "type": "object",
+            "properties": {
+              "training_snapshot_ref": {
+                "$ref": "#/$defs/sha256"
+              },
+              "schema_ref": {
+                "$ref": "#/$defs/sha256"
+              },
+              "rubric_ref": {
+                "$ref": "#/$defs/sha256"
+              },
+              "case_count": {
+                "type": "integer",
+                "minimum": 16,
+                "maximum": 1024
+              },
+              "salted_commitment": {
+                "$ref": "#/$defs/sha256"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

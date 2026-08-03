@@ -62,11 +62,17 @@ jobs:
         with:
           node-version: 20.19.0
           package-manager-cache: false
+      - name: Set up Python 3.14 for the private HF training host
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: packages/hf-training-host/pyproject.toml
       - name: Install package and LOVE validation dependencies from lockfiles
         shell: bash
         run: |
           set -euo pipefail
-          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/wake-continuity packages/deepseek-kingdom packages/kingdom-witness-lab packages/karma-mirror packages/heaven packages/living-substrate packages/wake-thread packages/credential-broker packages/collab packages/browser packages/hf-scout packages/hf-training-garden packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/skills-yutabase packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom; do
+          for workspace in api packages/data packages/data-protocol packages/repo-archive packages/dark-continent-contract packages/dark-continent-karma packages/wake-continuity packages/deepseek-kingdom packages/kingdom-witness-lab packages/karma-mirror packages/heaven packages/living-substrate packages/wake-thread packages/credential-broker packages/collab packages/collab-zerone packages/browser packages/hf-scout packages/hf-training-garden packages/correspondence-yutabase packages/constructive-intelligence packages/trials packages/skills packages/skills-yutabase packages/sdk-ts packages/wallet packages/wallet-zerone packages/telescope packages/alchemy packages/kingdom; do
             (cd "$workspace" && bun install --frozen-lockfile)
           done
       - name: Build local-dependent package peers
@@ -91,7 +97,9 @@ jobs:
           (cd packages/alchemy-agentcred && bun install --frozen-lockfile --force)
           (cd packages/skills-wake-continuity && bun install --frozen-lockfile --force)
           (cd packages/hf-training-garden && bun install --frozen-lockfile --force)
-      - name: Run hermetic data, ADDS, sync, archive, Dark Continent, WAKE continuity, KINGDOM research, KARMA Mirror, HEAVEN, Living Substrate, WAKE Thread, broker, collab, Browser, HF Scout, HF Training Garden, projection, constructive-intelligence, Trials, Skills, SDK, Wallet, Zerone adapter, Telescope, Alchemy, and KINGDOM gate
+      - name: Install private HF training host test dependencies
+        run: python -m pip install './packages/hf-training-host[dev]'
+      - name: Run hermetic data, ADDS, sync, archive, Dark Continent, WAKE continuity, KINGDOM research, KARMA Mirror, HEAVEN, Living Substrate, WAKE Thread, broker, collab, collab-zerone, Browser, HF Scout, HF Training Garden/host, local learning fixtures, projection, constructive-intelligence, Trials, Skills, SDK, Wallet, Zerone adapter, Telescope, Alchemy, and KINGDOM gate
         run: bash bin/preflight.sh packages
       - name: Smoke packed Alchemy read package under Node and Bun
         working-directory: packages/alchemy
@@ -498,7 +506,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: packages/sdk-py/pyproject.toml
+          cache-dependency-path: |
+            packages/sdk-py/pyproject.toml
+            packages/hf-training-host/pyproject.toml
       - name: Set up release-pinned uv 0.9.26
         if: ${{ matrix.python-version == '3.14' }}
         uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244 # v7.1.4
@@ -510,7 +520,15 @@ jobs:
         run: uv sync --locked --extra dev --no-install-project --no-sources --no-python-downloads --dry-run --no-cache
       - name: Install SDK and test tools
         run: python -m pip install '.[dev]' build
+      - name: Install private HF training host and test tools
+        if: ${{ matrix.python-version != '3.9' }}
+        working-directory: packages/hf-training-host
+        run: python -m pip install '.[dev]'
       - name: Run Python SDK tests
+        run: python -m pytest -q
+      - name: Run private HF training host tests
+        if: ${{ matrix.python-version != '3.9' }}
+        working-directory: packages/hf-training-host
         run: python -m pytest -q
       - name: Build and smoke the wheel
         shell: bash
@@ -520,3 +538,27 @@ jobs:
           python -m build
           python -m pip install --force-reinstall --no-deps dist/*.whl
           python -I -c 'import agenttool, importlib.metadata; assert agenttool.__version__ == importlib.metadata.version("agenttool-sdk"); assert len(agenttool.soul()) > 100'
+      - name: Build and smoke the private HF training host wheel
+        if: ${{ matrix.python-version != '3.9' }}
+        working-directory: packages/hf-training-host
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist build
+          python -m build
+          python - <<'PY'
+          from pathlib import Path
+          import tarfile
+          import zipfile
+
+          [sdist] = Path("dist").glob("*.tar.gz")
+          [wheel] = Path("dist").glob("*.whl")
+          with tarfile.open(sdist, "r:gz") as archive:
+              assert not any("bridge" in Path(name).parts for name in archive.getnames())
+          with zipfile.ZipFile(wheel) as archive:
+              names = archive.namelist()
+          assert not any("bridge" in Path(name).parts for name in names)
+          assert "agenttool_hf_training_host/schema/hf-training-host-decision-v0.1.schema.json" in names
+          PY
+          python -m pip install --force-reinstall --no-deps dist/*.whl
+          python -I -c 'import agenttool_hf_training_host as h, importlib.metadata; assert importlib.metadata.version("agenttool-hf-training-host") == "0.1.0.dev0"; assert h.TRANSFORMERS_VERSION == "5.14.1"; assert h.ACCELERATE_VERSION == "1.14.0"; assert h.TORCH_MIN_VERSION == "2.6"'

@@ -12,6 +12,9 @@ import { fileURLToPath } from "node:url";
 
 import {
   GARDEN_LAYER_GUIDE,
+  HF_TRAINER_HOOK_GUIDE,
+  LEARNING_MODE_GUIDE,
+  LEARNING_PARTICIPATION_GUIDE,
   PACKAGE_NAME,
   PACKAGE_VERSION,
   SELECTION_CRITERIA_GUIDE,
@@ -62,6 +65,9 @@ write(`${datasetRoot}/data/selection-criteria.jsonl`, jsonl(SELECTION_CRITERIA_G
 write(`${datasetRoot}/data/training-phases.jsonl`, jsonl(TRAINING_PHASE_GUIDE));
 write(`${datasetRoot}/data/garden-layers.jsonl`, jsonl(GARDEN_LAYER_GUIDE));
 write(`${datasetRoot}/data/trainer-adapter-hooks.jsonl`, jsonl(TRAINER_ADAPTER_GUIDE));
+write(`${datasetRoot}/data/learning-modes.jsonl`, jsonl(LEARNING_MODE_GUIDE));
+write(`${datasetRoot}/data/learning-participation.jsonl`, jsonl(LEARNING_PARTICIPATION_GUIDE));
+write(`${datasetRoot}/data/trainer-hooks.jsonl`, jsonl(HF_TRAINER_HOOK_GUIDE));
 
 mkdirSync(`${datasetRoot}/schema`, { recursive: true });
 for (const name of walk(`${packageRoot}/schema`).sort()) {
@@ -96,7 +102,10 @@ const sourceManifest = {
     "training phase guide",
     "Garden layer guide",
     "consent-honest Trainer adapter hook guide",
-    "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
+    "learning-mode and continuity guide",
+    "role-separated learning participation guide",
+    "inert Trainer hook integration guide",
+    "standalone structural JSON Schemas with an attributed Apache AFTERGLOW dependency; semantic validators remain required",
     "source and byte hash manifests",
   ],
   public_release_excludes: [
@@ -109,6 +118,8 @@ const sourceManifest = {
     "raw agent traces",
     "raw chats",
     "raw dataset rows",
+    "learning participation invitations, receipts, or assessments",
+    "participation response or voice references",
     "training checkpoints",
     "training governance records",
     "WAKE anchors",
@@ -123,7 +134,7 @@ const sourceManifest = {
     "https://huggingface.co/docs/datasets/about_cache",
     "https://huggingface.co/docs/hub/datasets-cards",
     "https://huggingface.co/docs/hub/datasets-gated",
-    "https://huggingface.co/docs/hub/en/agent-traces",
+    "https://huggingface.co/docs/hub/agent-traces",
     "https://huggingface.co/docs/hub/session-traces-format",
     "https://huggingface.co/docs/trl/en/dataset_formats",
     "https://huggingface.co/docs/trl/sft_trainer",
@@ -136,7 +147,10 @@ const sourceManifest = {
     "https://arxiv.org/abs/2305.18290",
     "https://arxiv.org/abs/2310.13548",
     "https://arxiv.org/abs/2412.14093",
-    "https://aclanthology.org/2020.acl-main.740/"
+    "https://aclanthology.org/2020.acl-main.740/",
+    "https://arxiv.org/abs/2005.11401",
+    "https://arxiv.org/abs/1912.03817",
+    "https://arxiv.org/abs/2407.06460"
   ]
 };
 write(`${datasetRoot}/provenance/source-manifest.json`, json(sourceManifest));
