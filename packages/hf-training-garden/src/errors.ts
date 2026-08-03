@@ -4,6 +4,8 @@ export type HfTrainingGardenErrorCode =
   | "binding_invalid"
   | "checkpoint_input_invalid"
   | "checkpoint_invalid"
+  | "freedom_input_invalid"
+  | "freedom_invalid"
   | "governance_input_invalid"
   | "governance_invalid"
   | "tending_input_invalid"

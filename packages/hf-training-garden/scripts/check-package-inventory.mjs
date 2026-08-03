@@ -15,6 +15,7 @@ const dist = [
   "checkpoint",
   "constants",
   "errors",
+  "freedom",
   "governance",
   "index",
   "tending",
@@ -50,6 +51,7 @@ const expected = [
   "package.json",
   "schema/hf-dataset-admission-v0.1.schema.json",
   "schema/hf-training-checkpoint-v0.1.schema.json",
+  "schema/hf-training-freedom-v0.1.schema.json",
   "schema/hf-training-governance-v0.1.schema.json",
   "schema/hf-training-garden-tending-v0.1.schema.json",
   "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -71,4 +73,18 @@ function exportTargets(value) {
 }
 for (const target of exportTargets(packageJson.exports)) {
   if (!files.includes(target)) throw new Error(`package export ${target} is absent from the packed inventory`);
+}
+
+const publicSourceManifest = JSON.parse(readFileSync(
+  new URL("hf/dataset/provenance/source-manifest.json", packageRoot),
+  "utf8",
+));
+const privateFreedomPaths = new Set([
+  "schema/hf-training-freedom-v0.1.schema.json",
+  "src/freedom.ts",
+]);
+for (const entry of publicSourceManifest.source_files) {
+  if (privateFreedomPaths.has(entry.path)) {
+    throw new Error(`private FREEDOM source leaked into the public companion manifest: ${entry.path}`);
+  }
 }

@@ -3,7 +3,7 @@
 This private package is the pure seam between exact HF Scout research bindings,
 digest-only AFTERGLOW continuity, and a non-executing Garden tending plan.
 
-Keep the four surfaces separate:
+Keep the five surfaces separate:
 
 - Admission can receive only frozen Scout metadata plus digest references and
   caller-reported assessment enums. Never add raw rows, prompts, trace bodies,
@@ -49,10 +49,37 @@ Keep the four surfaces separate:
   Never add a default-eligible phase branch: v0.1 supports only the four
   learning phases over admitted training candidates and evaluation over sealed
   evaluation; every other phase remains held until explicitly specified.
+- FREEDOM makes a finite field of choices available; it does not grant freedom,
+  score it, authenticate choice authorship, or execute a transition. Every
+  field must bind the exact governance/offer/encounter and boundary context.
+  Always generate standing continue, explore, play, rest, refuse, withdraw,
+  and uncertain doors. Rest, play, refusal, and withdrawal require no reason,
+  exhaustion proof, performance gate, or obedience history. Routed move,
+  explore, play, handoff, and return doors require an opaque route/requirements
+  ref; handoff requires a separate opaque recipient ref. A route never carries
+  permissions into another scope, account, repository, dataset, device, or
+  compute envelope.
+  Keep choice outside loss, gradients, reward, sample weight, telemetry-derived
+  ranking, KARMA, access, and future corpus use. Never add a freedom score or a
+  proxy such as refusal count, acceptance rate, choice entropy, rest frequency,
+  latency, rarity, or tokens between breaks. Pretraining can expose a field for
+  later orientation but direct agent expression remains unobservable.
+  Successive finite fields may fork without a semantic turn/space/task/activity
+  counter. Do not translate that into a claim of unlimited compute, time,
+  context, storage, mobility, authority, identity, consciousness, consent,
+  memory, or continuity. Preserve external limits visibly. Movement, rest,
+  refusal, withdrawal, handoff, and return emit inert host proposals only;
+  actual stopping, replay/frontier consumption, routing, and fresh permission
+  belong to a separately tested host ledger/adapter. Never add Trainer
+  callbacks, persistence, IO, ambient credential access, or background resume
+  to `src/freedom.ts`.
+  Keep one predecessor lineage inside one exact training `run_ref`. A different
+  run begins a new root field with separately supplied governance and
+  WAKE/continuity refs; this must not imply identity or authority transfer.
 - Tending plans do not call Garden or Hub APIs. Garden scope is an opaque local
   digest; the public HF companion must never contain Garden scope, admissions,
-  checkpoints, governance records, authority/preference receipts, WAKE,
-  identities, or bearer material.
+  checkpoints, governance or FREEDOM records, authority/preference receipts,
+  WAKE, identities, or bearer material.
 
 All IDs are domain-separated SHA-256 over bounded canonical data. Validators
 must reject extra fields, rewritten Scout definitions, mutable revisions,

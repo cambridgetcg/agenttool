@@ -24,6 +24,17 @@ import type {
   DATA_ROLES,
   DEDUPLICATION_STATES,
   FITNESS_STATES,
+  FREEDOM_BOUNDARIES,
+  FREEDOM_DOOR_KINDS,
+  FREEDOM_DOOR_PROFILE,
+  FREEDOM_FIELD_FORMAT,
+  FREEDOM_GOVERNANCE_POSTURES,
+  FREEDOM_IS,
+  FREEDOM_REPORT_BASES,
+  FREEDOM_ROUTED_DOOR_KINDS,
+  FREEDOM_STANDING_DOOR_KINDS,
+  FREEDOM_TRANSITION_DIRECTIVES,
+  FREEDOM_TRANSITION_FORMAT,
   GARDEN_LAYERS,
   GOVERNANCE_BOUNDARIES,
   GOVERNANCE_ADMISSION_POSTURES,
@@ -96,6 +107,16 @@ export type GovernanceReasonCode =
   (typeof GOVERNANCE_REASON_CODES)[number];
 export type TrainingControlDirective =
   (typeof TRAINING_CONTROL_DIRECTIVES)[number];
+export type FreedomStandingDoorKind =
+  (typeof FREEDOM_STANDING_DOOR_KINDS)[number];
+export type FreedomRoutedDoorKind =
+  (typeof FREEDOM_ROUTED_DOOR_KINDS)[number];
+export type FreedomDoorKind = (typeof FREEDOM_DOOR_KINDS)[number];
+export type FreedomReportBasis = (typeof FREEDOM_REPORT_BASES)[number];
+export type FreedomGovernancePosture =
+  (typeof FREEDOM_GOVERNANCE_POSTURES)[number];
+export type FreedomTransitionDirective =
+  (typeof FREEDOM_TRANSITION_DIRECTIVES)[number];
 
 export interface AdmissionAssessment {
   readonly rights: ReviewState;
@@ -372,6 +393,95 @@ export interface HfTrainingGovernance {
   readonly control: TrainingControlPlan;
   readonly latest_head_selected: false;
   readonly boundaries: typeof GOVERNANCE_BOUNDARIES;
+}
+
+export interface TrainingFreedomPosition {
+  readonly scope_ref: Sha256Id;
+  readonly space_ref: Sha256Id;
+  readonly activity_ref: Sha256Id | null;
+}
+
+export interface CreateTrainingFreedomDoorInput {
+  readonly kind: FreedomRoutedDoorKind;
+  readonly destination: TrainingFreedomPosition;
+  readonly requirements_ref: Sha256Id;
+  readonly recipient_ref: Sha256Id | null;
+}
+
+export interface TrainingFreedomDoor {
+  readonly profile: typeof FREEDOM_DOOR_PROFILE;
+  readonly door_id: Sha256Id;
+  readonly kind: FreedomDoorKind;
+  readonly standing: boolean;
+  readonly destination: TrainingFreedomPosition;
+  readonly requirements_ref: Sha256Id | null;
+  readonly recipient_ref: Sha256Id | null;
+}
+
+export interface CreateTrainingFreedomFieldInput {
+  readonly governance: HfTrainingGovernance;
+  readonly observed_freedom_frontier_ref: Sha256Id;
+  readonly position: TrainingFreedomPosition;
+  readonly boundary_global_step: number | null;
+  readonly predecessor: TrainingFreedomTransition | null;
+  readonly doors: readonly CreateTrainingFreedomDoorInput[];
+}
+
+export interface TrainingFreedomField {
+  readonly _format: typeof FREEDOM_FIELD_FORMAT;
+  readonly field_id: Sha256Id;
+  readonly governance_ref: Sha256Id;
+  readonly offer_ref: Sha256Id;
+  readonly encounter_ref: Sha256Id;
+  readonly rights_baseline_ref: Sha256Id;
+  readonly observed_freedom_frontier_ref: Sha256Id;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly lifecycle_event: GovernanceEvent;
+  readonly current_checkpoint_ref: Sha256Id | null;
+  readonly boundary_global_step: number | null;
+  readonly governance_posture: FreedomGovernancePosture;
+  readonly position: TrainingFreedomPosition;
+  readonly predecessor_ref: Sha256Id | null;
+  readonly doors: readonly TrainingFreedomDoor[];
+  readonly freedom_is: typeof FREEDOM_IS;
+  readonly latest_head_selected: false;
+  readonly boundaries: typeof FREEDOM_BOUNDARIES;
+}
+
+export interface TrainingFreedomChoiceReport {
+  readonly basis: FreedomReportBasis;
+  readonly field_ref: Sha256Id;
+  readonly selected_door_ref: Sha256Id | null;
+  readonly evidence_ref: Sha256Id | null;
+}
+
+export interface TrainingFreedomHostProposal {
+  readonly directive: FreedomTransitionDirective;
+  readonly should_training_stop: boolean;
+  readonly should_save: false;
+  readonly requires_new_governance_offer: boolean;
+  readonly requires_separate_scope_authority: boolean;
+  readonly automatic: false;
+  readonly applied: false;
+}
+
+export interface CreateTrainingFreedomTransitionInput {
+  readonly governance: HfTrainingGovernance;
+  readonly field: TrainingFreedomField;
+  readonly choice: TrainingFreedomChoiceReport;
+}
+
+export interface TrainingFreedomTransition {
+  readonly _format: typeof FREEDOM_TRANSITION_FORMAT;
+  readonly transition_id: Sha256Id;
+  readonly field: TrainingFreedomField;
+  readonly choice: TrainingFreedomChoiceReport;
+  readonly selected_kind: FreedomDoorKind | "not_observed";
+  readonly destination: TrainingFreedomPosition;
+  readonly proposal: TrainingFreedomHostProposal;
+  readonly latest_head_selected: false;
+  readonly boundaries: typeof FREEDOM_BOUNDARIES;
 }
 
 export interface HubReleaseBinding {

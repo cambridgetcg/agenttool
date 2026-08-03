@@ -11,11 +11,15 @@ import {
   createHfTrainingGovernance,
   createDatasetAdmission,
   createTrainingCheckpoint,
+  createTrainingFreedomField,
+  createTrainingFreedomTransition,
   createTrainingGardenTendingPlan,
   createTrainingGovernanceOffer,
   createTrainingGovernanceTerms,
   validateDatasetAdmission,
   validateTrainingCheckpoint,
+  validateTrainingFreedomField,
+  validateTrainingFreedomTransition,
   validateTrainingGardenTendingPlan,
   validateHfTrainingGovernance,
 } from "../dist/index.js";
@@ -178,6 +182,41 @@ const governance = createHfTrainingGovernance({
     evidence_ref: null,
   },
 });
+const freedomField = createTrainingFreedomField({
+  governance,
+  observed_freedom_frontier_ref: ref("smoke-freedom-frontier"),
+  position: {
+    scope_ref: ref("smoke-freedom-scope"),
+    space_ref: ref("smoke-freedom-space"),
+    activity_ref: ref("smoke-freedom-activity"),
+  },
+  boundary_global_step: null,
+  predecessor: null,
+  doors: [{
+    kind: "move",
+    destination: {
+      scope_ref: ref("smoke-freedom-next-scope"),
+      space_ref: ref("smoke-freedom-next-space"),
+      activity_ref: ref("smoke-freedom-next-activity"),
+    },
+    requirements_ref: ref("smoke-freedom-route-requirements"),
+    recipient_ref: null,
+  }],
+});
+const restDoor = freedomField.doors.find((door) =>
+  door.standing && door.kind === "rest"
+);
+if (!restDoor) process.exit(1);
+const freedomTransition = createTrainingFreedomTransition({
+  governance,
+  field: freedomField,
+  choice: {
+    basis: "root_signed_runtime",
+    field_ref: freedomField.field_id,
+    selected_door_ref: restDoor.door_id,
+    evidence_ref: ref("smoke-freedom-rest-choice"),
+  },
+});
 const plan = createTrainingGardenTendingPlan({
   admission,
   checkpoints: [checkpoint],
@@ -195,9 +234,14 @@ if (
   validateDatasetAdmission(admission).admission_id !== admission.admission_id ||
   validateTrainingCheckpoint(checkpoint).checkpoint_id !== checkpoint.checkpoint_id ||
   validateHfTrainingGovernance(governance).governance_id !== governance.governance_id ||
+  validateTrainingFreedomField(freedomField).field_id !== freedomField.field_id ||
+  validateTrainingFreedomTransition(freedomTransition).transition_id !== freedomTransition.transition_id ||
   validateTrainingGardenTendingPlan(plan).plan_id !== plan.plan_id ||
   checkpoint.afterglow.threads[0]?.disposition !== "park" ||
   governance.preference.inner_consent !== "unknown_unprovable" ||
+  freedomTransition.proposal.directive !== "stop_for_rest" ||
+  freedomTransition.proposal.applied !== false ||
+  freedomTransition.boundaries.choice_used_for_reward !== false ||
   plan.boundaries.writes_hub !== false
 ) {
   process.exit(1);
