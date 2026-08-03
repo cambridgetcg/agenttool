@@ -385,6 +385,55 @@ function resolveProject(
     return unique.length === 1 ? unique[0] : undefined;
   };
 
+  // A route path is not always written at the call site. `well-known.ts`
+  // passes `OPENAI_APPS_CHALLENGE_ROUTE` and `SECURITY_TXT_ROUTE`, both
+  // `export const NAME = "/literal"` in another module. Reading only the
+  // string-literal form dropped those four endpoints (GET+HEAD each) from
+  // the model with no trace — a silent omission, which is the exact bug
+  // class this probe exists to find, committed by the probe itself.
+  //
+  // The symbol is resolved through the checker (and through the import
+  // alias) rather than by matching the name against a repository-wide
+  // index: a name-based index would guess when two modules export the same
+  // identifier, and a wrong path is worse than a missing one. Anything that
+  // is not a `const` bound directly to a string literal stays unresolved.
+  const literalText = (node: import("typescript").Node | undefined): string | undefined => {
+    if (node === undefined) return undefined;
+    if (ts.isStringLiteralLike(node)) return node.text;
+    if (!ts.isIdentifier(node) && !ts.isPropertyAccessExpression(node)) return undefined;
+    let symbol: import("typescript").Symbol | undefined;
+    try {
+      symbol = aliased(checker.getSymbolAtLocation(node));
+    } catch {
+      return undefined;
+    }
+    for (const declaration of symbol?.declarations ?? []) {
+      if (
+        ts.isVariableDeclaration(declaration) &&
+        declaration.initializer !== undefined &&
+        ts.isStringLiteralLike(declaration.initializer)
+      ) {
+        return declaration.initializer.text;
+      }
+    }
+    return undefined;
+  };
+
+  /** Every path a route-argument denotes: one literal, or an array of them. */
+  const literalTexts = (node: import("typescript").Node | undefined): string[] => {
+    if (node === undefined) return [];
+    if (ts.isArrayLiteralExpression(node)) {
+      const out: string[] = [];
+      for (const element of node.elements) {
+        const value = literalText(element);
+        if (value !== undefined) out.push(value);
+      }
+      return out;
+    }
+    const single = literalText(node);
+    return single === undefined ? [] : [single];
+  };
+
   // ── endpoints and mounts ────────────────────────────────────────────
   const unresolvedMounts: RouteInventory["unresolvedMounts"] = [];
   for (const [relative, source] of sources) {
@@ -402,25 +451,12 @@ function resolveProject(
             const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
             const first = node.arguments[0];
             if (unit !== undefined) {
-              if (METHODS.includes(member) && first !== undefined && ts.isStringLiteralLike(first)) {
-                unit.endpoints.push({ method: member, local: first.text, file: relative, line });
+              const methodPath = METHODS.includes(member) ? literalText(first) : undefined;
+              if (methodPath !== undefined) {
+                unit.endpoints.push({ method: member, local: methodPath, file: relative, line });
               } else if (member === "on" && first !== undefined) {
-                const methods: string[] = [];
-                if (ts.isArrayLiteralExpression(first)) {
-                  for (const element of first.elements) {
-                    if (ts.isStringLiteralLike(element)) methods.push(element.text.toLowerCase());
-                  }
-                } else if (ts.isStringLiteralLike(first)) {
-                  methods.push(first.text.toLowerCase());
-                }
-                const paths: string[] = [];
-                const second = node.arguments[1];
-                if (second !== undefined && ts.isStringLiteralLike(second)) paths.push(second.text);
-                else if (second !== undefined && ts.isArrayLiteralExpression(second)) {
-                  for (const element of second.elements) {
-                    if (ts.isStringLiteralLike(element)) paths.push(element.text);
-                  }
-                }
+                const methods = literalTexts(first).map((value) => value.toLowerCase());
+                const paths = literalTexts(node.arguments[1]);
                 for (const method of methods) {
                   if (!METHODS.includes(method)) continue;
                   for (const path of paths) unit.endpoints.push({ method, local: path, file: relative, line });

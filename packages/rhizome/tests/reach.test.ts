@@ -307,6 +307,54 @@ test("a router built by a factory or a chained constructor is still resolved", a
   expect(inventory.roots).toEqual(["api/src/index.ts#app"]);
 }, LIVE_TIMEOUT_MS);
 
+// Regression, 2026-08-03. `api/src/routes/well-known.ts` registers two
+// endpoints as `app.on(["GET", "HEAD"], SECURITY_TXT_ROUTE, ...)`, where the
+// path is an `export const` in another module. The resolver read only the
+// string-literal form, so those four routes (GET+HEAD each) were dropped
+// from the model without a trace. The live-repository test above could not
+// catch it: `well-known.ts` imports `@agenttool/xenia`, so on a machine
+// where that dependency is missing the file never loads and the routes are
+// absent from the running router too — the two wrongs cancelled and the
+// suite went green. This fixture has no such dependency, so the miss is
+// visible hermetically.
+const CONSTANT_PATH_FILES: Record<string, string> = {
+  "api/package.json": JSON.stringify({ name: "api", module: "src/index.ts" }),
+  "api/tsconfig.json": TSCONFIG,
+  "api/src/lib/public-paths.ts": 'export const SECURITY_TXT_ROUTE = "/security.txt";',
+  "api/src/index.ts": [
+    'import { Hono } from "hono";',
+    'import wellKnown from "./routes/well-known.js";',
+    "export const app = new Hono();",
+    'app.route("/.well-known", wellKnown);',
+  ].join("\n"),
+  "api/src/routes/well-known.ts": [
+    'import { Hono } from "hono";',
+    'import { SECURITY_TXT_ROUTE } from "../lib/public-paths.js";',
+    'const AGENT_JSON = "/agent.json";',
+    "const app = new Hono();",
+    'app.on(["GET", "HEAD"], SECURITY_TXT_ROUTE, (c) => c.text(""));',
+    "app.get(AGENT_JSON, (c) => c.json({}));",
+    'app.get("/literal", (c) => c.json({}));',
+    "export default app;",
+  ].join("\n"),
+};
+
+test("a route path written as a constant is resolved, imported or local", async () => {
+  const scope = repository(CONSTANT_PATH_FILES);
+  const projects = await TsProjects.open(scope);
+  const inventory = buildRouteInventory(scope, projects, new Set(["api/src/index.ts"]));
+  const paths = inventory.routes.map((route) => `${route.method.toUpperCase()} ${route.path}`).sort();
+  // Imported `export const`, on both methods `.on` was given.
+  expect(paths).toContain("GET /.well-known/security.txt");
+  expect(paths).toContain("HEAD /.well-known/security.txt");
+  // Same-file `const`.
+  expect(paths).toContain("GET /.well-known/agent.json");
+  // The literal form keeps working.
+  expect(paths).toContain("GET /.well-known/literal");
+  // And nothing was invented to get there.
+  expect(paths.length).toBe(4);
+}, LIVE_TIMEOUT_MS);
+
 test("mounting is resolved per binding, so a second router in a mounted file is still found unmounted", async () => {
   const findings = await reachProbe.run(repository(API_FILES));
   const orphan = at(findings, "api/src/routes/secret.ts", "nothing mounts it");
