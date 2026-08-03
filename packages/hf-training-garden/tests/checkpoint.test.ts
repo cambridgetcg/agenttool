@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  CHECKPOINT_FORMAT,
   HfTrainingGardenError,
   createTrainingCheckpoint,
   validateTrainingCheckpoint,
   validateTrainingCheckpointAgainstAdmission,
+  validateTrainingCheckpointAgainstPredecessors,
 } from "../src/index.js";
+import { contentId, type DataValue } from "../src/canonical.js";
 import {
   admission,
   artifacts,
@@ -33,6 +36,15 @@ function checkpointInput(overrides: Record<string, unknown> = {}) {
 }
 
 describe("training phase WAKE checkpoints", () => {
+  test("maps before-training orientation onto the between-task AFTERGLOW phase", () => {
+    const value = createTrainingCheckpoint(checkpointInput({
+      event: "before_training",
+      checkpoint_status: "entered",
+    }));
+    expect(value.event).toBe("before_training");
+    expect(value.afterglow.phase).toBe("between_tasks");
+  });
+
   test("creates one minimized external thread inside the core AFTERGLOW capsule", () => {
     const input = checkpointInput();
     const value = createTrainingCheckpoint(input);
@@ -72,6 +84,23 @@ describe("training phase WAKE checkpoints", () => {
     expect(joined.predecessors).toHaveLength(2);
     expect(joined.afterglow.predecessors).toHaveLength(2);
     expect(joined.boundaries.selects_continuity_head).toBe(false);
+    expect(validateTrainingCheckpointAgainstPredecessors(joined, [first, second]))
+      .toEqual(joined);
+
+    const swapped = structuredClone(joined) as Record<string, any>;
+    const firstCapsule = swapped.predecessors[0].capsule_id;
+    swapped.predecessors[0].capsule_id = swapped.predecessors[1].capsule_id;
+    swapped.predecessors[1].capsule_id = firstCapsule;
+    const { checkpoint_id: _oldCheckpointId, ...swappedBody } = swapped;
+    swapped.checkpoint_id = contentId(
+      CHECKPOINT_FORMAT,
+      swappedBody as DataValue,
+    );
+    expect(validateTrainingCheckpoint(swapped)).toEqual(swapped);
+    expect(() => validateTrainingCheckpointAgainstPredecessors(
+      swapped,
+      [first, second],
+    )).toThrow(HfTrainingGardenError);
   });
 
   test("distinguishes digest orientation from a caller-reported resumable checkpoint", () => {
