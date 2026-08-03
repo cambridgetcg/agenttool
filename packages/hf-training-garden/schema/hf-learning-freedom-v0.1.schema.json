@@ -333,7 +333,9 @@
             { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
           ]
         },
-        "handoff_projection": { "enum": ["complete", "partial", "unavailable"] }
+        "handoff_projection": {
+          "enum": ["complete", "truncated", "unavailable", "not_provided"]
+        }
       }
     },
     "scope": {

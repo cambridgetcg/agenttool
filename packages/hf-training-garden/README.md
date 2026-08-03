@@ -286,7 +286,7 @@ while the five-voice wire advances to `/0.2`.
 The expanded v0.3 participation-and-freedom companion in this source tree has
 different bytes and remains local until it receives its own immutable Hub
 revision and exact read-back. Its current local manifest SHA-256 is
-`bb562566ff4e9d2328bf5084678c640ce109889e5f59fa931e39cb5c0c6ea3c3`.
+`161e5b22eec161b9755199503d3726f0a8fd63f348508c5db04ccef894968239`.
 The bundle's internal `intended_identifier_only` value remains a deliberately
 non-self-attesting build record: embedding a future revision inside the bytes
 that create that revision would be circular. This package performs no Hub

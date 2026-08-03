@@ -603,7 +603,7 @@ the exact published combined participation-v0.1 schema
 while versioning the five-voice successor as `/0.2`.
 
 The expanded v0.3 local companion has manifest SHA-256
-`bb562566ff4e9d2328bf5084678c640ce109889e5f59fa931e39cb5c0c6ea3c3`.
+`161e5b22eec161b9755199503d3726f0a8fd63f348508c5db04ccef894968239`.
 Those changed bytes have not been uploaded or verified at a new immutable Hub
 revision in this slice, so neither earlier proof may be reused as v0.3
 publication evidence.

@@ -61,7 +61,7 @@
     {
       "path": "provenance/source-manifest.json",
       "bytes": 6228,
-      "sha256": "aa9d56ad573e8db8e34829deb23fcd2a18d27b1c7ec8e560ce2598f911618dba"
+      "sha256": "13c1cc3435231af153c62cdf5682de060fd4c4998c21df3f279ac56b0ae29793"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -75,8 +75,8 @@
     },
     {
       "path": "schema/hf-learning-freedom-v0.1.schema.json",
-      "bytes": 33534,
-      "sha256": "a51794f59a3b5f7cc79f406351f53bd6fba0d5c73b5879438a8b55bf62b120b6"
+      "bytes": 33570,
+      "sha256": "5d3d713b3f470dc7f86514776fdced0239f76984e2064fce1b5d60866e6164ae"
     },
     {
       "path": "schema/hf-learning-participation-assessment-v0.2.schema.json",

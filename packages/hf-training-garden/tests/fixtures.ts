@@ -5,7 +5,10 @@ import {
   sha256Hex,
   type HfResearchBinding,
 } from "@agenttool/hf-scout";
-import { sha256Id } from "@agenttool/wake-continuity";
+import {
+  sha256Id,
+  type WakeBriefAnchor,
+} from "@agenttool/wake-continuity";
 
 import {
   createDatasetAdmission,
@@ -140,7 +143,7 @@ export const orientationOnly: TrainingResumeReport = {
   streaming_state: "not_streaming_reported",
 };
 
-export const wake = {
+export const wake: Readonly<WakeBriefAnchor> = {
   format: "wake-brief/v1" as const,
   snapshot_ref: ref("wake:snapshot"),
   scope_ref: ref("wake:scope"),
@@ -187,7 +190,7 @@ export function participation(
     choice?: ParticipationChoice;
     agentAvailability?: "interactive" | "not_obtainable_pre_instantiation";
     substrateAvailability?: "interactive" | "not_independently_available";
-    wakeValue?: typeof wake;
+    wakeValue?: Readonly<WakeBriefAnchor>;
     artifactsValue?: TrainingArtifactReferences;
     startingStateRef?: ReturnType<typeof ref>;
   } = {},

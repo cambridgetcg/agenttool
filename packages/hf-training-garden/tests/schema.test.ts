@@ -8,6 +8,7 @@ import addFormats from "ajv-formats";
 import {
   PARTICIPATION_ASSESSMENT_FORMAT,
   PARTICIPATION_INVITATION_FORMAT,
+  PARTICIPATION_PROMPT_ENVELOPE_PROFILE,
   PARTICIPATION_RECEIPT_FORMAT,
   createTrainingCheckpoint,
   createTrainingGardenTendingPlan,
@@ -102,6 +103,23 @@ describe("closed portable schemas", () => {
     expect(validateTending(plan), JSON.stringify(validateTending.errors)).toBe(true);
     expect(validateFreedom(freedom), JSON.stringify(validateFreedom.errors)).toBe(true);
 
+    for (const projection of ["truncated", "not_provided"] as const) {
+      const alternateParticipation = participation(source, {
+        runRef: ref(`schema-run:${projection}`),
+        wakeValue: { ...wake, handoff_projection: projection },
+      });
+      const alternateOffer = freedomOffer(alternateParticipation);
+      const alternateFreedom = resolveLearningFreedomOffer({
+        offer: alternateOffer,
+        state: "directed",
+        direction: "stay",
+        route_id: alternateOffer.routes.find((route) => route.direction === "stay")!.route_id,
+        proposal_ref: null,
+        choice_channel: freedomChoiceChannel(alternateOffer),
+      });
+      expect(validateFreedom(alternateFreedom), JSON.stringify(validateFreedom.errors)).toBe(true);
+    }
+
     const forgedProceed = structuredClone(checkpoint.participation) as any;
     forgedProceed.receipts = [];
     expect(validateAssessment(forgedProceed)).toBe(false);
@@ -138,6 +156,9 @@ describe("closed portable schemas", () => {
     const falseActiveResources = structuredClone(freedom) as any;
     falseActiveResources.offer.resources.dimensions[4].state = "caller_reported_unavailable";
     expect(validateFreedom(falseActiveResources)).toBe(false);
+    const obsoletePartialProjection = structuredClone(freedom) as any;
+    obsoletePartialProjection.offer.scope.wake.handoff_projection = "partial";
+    expect(validateFreedom(obsoletePartialProjection)).toBe(false);
     const interactiveAsUnavailable = structuredClone(freedom) as any;
     interactiveAsUnavailable.agent_direction = {
       state: "unavailable_pre_instantiation",
@@ -213,6 +234,9 @@ describe("closed portable schemas", () => {
     );
     expect(PARTICIPATION_ASSESSMENT_FORMAT).toBe(
       "kingdom.hf-learning-participation-assessment/0.2",
+    );
+    expect(PARTICIPATION_PROMPT_ENVELOPE_PROFILE).toBe(
+      "kingdom.hf-learning-participation-prompt-envelope/0.2",
     );
     const legacy = readFileSync(new URL(
       "hf-learning-participation-v0.1.schema.json",
