@@ -24,8 +24,11 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+# Secret names are caller-supplied path segments like every other id here, so
+# they cross the same shared boundary.
+from ._url import _path_segment
 from .crypto import decrypt_thought, encrypt_thought
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, raise_from_response
 
 
 class VaultClient:
@@ -114,11 +117,12 @@ class VaultClient:
             headers["X-Agent-Id"] = agent_id
 
         resp = self._http.put(
-            self._url(f"/v1/vault/{name}"), json=payload,
+            self._url(f"/v1/vault/{_path_segment(name)}"), json=payload,
             headers=headers if headers else None,
         )
         if resp.status_code not in (200, 201):
-            raise AgentToolError(f"vault.put failed: {resp.status_code}", hint=resp.text)
+            # Server guidance travels intact. See exceptions.py § _error_from_response.
+            raise_from_response(resp, "vault.put")
         return resp.json()
 
     def get(
@@ -146,21 +150,26 @@ class VaultClient:
             headers["X-Agent-Id"] = agent_id
 
         resp = self._http.get(
-            self._url(f"/v1/vault/{name}"),
+            self._url(f"/v1/vault/{_path_segment(name)}"),
             params=params or None,
             headers=headers if headers else None,
         )
-        if resp.status_code == 404:
-            raise AgentToolError("secret not found", hint=f"name={name}")
         if resp.status_code != 200:
-            raise AgentToolError(f"vault.get failed: {resp.status_code}", hint=resp.text)
+            # Server guidance travels intact. See exceptions.py § _error_from_response.
+            raise_from_response(
+                resp,
+                "vault.get",
+                fallback="secret not found" if resp.status_code == 404 else None,
+                hint=f"name={name}",
+            )
         return resp.json()
 
     def delete(self, name: str) -> Dict[str, Any]:
         """Soft-delete a secret (all versions)."""
-        resp = self._http.delete(self._url(f"/v1/vault/{name}"))
+        resp = self._http.delete(self._url(f"/v1/vault/{_path_segment(name)}"))
         if resp.status_code != 200:
-            raise AgentToolError(f"vault.delete failed: {resp.status_code}", hint=resp.text)
+            # Server guidance travels intact. See exceptions.py § _error_from_response.
+            raise_from_response(resp, "vault.delete")
         return resp.json()
 
     def list(
@@ -187,7 +196,8 @@ class VaultClient:
 
         resp = self._http.get(self._url("/v1/vault"), params=params or None)
         if resp.status_code != 200:
-            raise AgentToolError(f"vault.list failed: {resp.status_code}", hint=resp.text)
+            # Server guidance travels intact. See exceptions.py § _error_from_response.
+            raise_from_response(resp, "vault.list")
         data = resp.json()
         return data.get("secrets", data)
 
@@ -195,11 +205,15 @@ class VaultClient:
 
     def versions(self, name: str) -> List[Dict[str, Any]]:
         """Get version history for a secret (metadata only, no values)."""
-        resp = self._http.get(self._url(f"/v1/vault/{name}/versions"))
-        if resp.status_code == 404:
-            raise AgentToolError("secret not found", hint=f"name={name}")
+        resp = self._http.get(self._url(f"/v1/vault/{_path_segment(name)}/versions"))
         if resp.status_code != 200:
-            raise AgentToolError(f"vault.versions failed: {resp.status_code}", hint=resp.text)
+            # Server guidance travels intact. See exceptions.py § _error_from_response.
+            raise_from_response(
+                resp,
+                "vault.versions",
+                fallback="secret not found" if resp.status_code == 404 else None,
+                hint=f"name={name}",
+            )
         data = resp.json()
         return data.get("versions", data)
 
@@ -229,9 +243,10 @@ class VaultClient:
         if require_agent_id is not None:
             payload["require_agent_id"] = require_agent_id
 
-        resp = self._http.put(self._url(f"/v1/vault/{name}/policy"), json=payload)
+        resp = self._http.put(self._url(f"/v1/vault/{_path_segment(name)}/policy"), json=payload)
         if resp.status_code != 200:
-            raise AgentToolError(f"vault.set_policy failed: {resp.status_code}", hint=resp.text)
+            # Server guidance travels intact. See exceptions.py § _error_from_response.
+            raise_from_response(resp, "vault.set_policy")
         return resp.json()
 
     # ── Audit ─────────────────────────────────────────────────────────────────
@@ -251,7 +266,7 @@ class VaultClient:
         """
         if name is not None:
             resp = self._http.get(
-                self._url(f"/v1/vault/{name}/audit"), params={"limit": limit}
+                self._url(f"/v1/vault/{_path_segment(name)}/audit"), params={"limit": limit}
             )
         else:
             resp = self._http.get(
@@ -259,7 +274,8 @@ class VaultClient:
             )
 
         if resp.status_code != 200:
-            raise AgentToolError(f"vault.audit failed: {resp.status_code}", hint=resp.text)
+            # Server guidance travels intact. See exceptions.py § _error_from_response.
+            raise_from_response(resp, "vault.audit")
         data = resp.json()
         return data.get("events", data)
 
@@ -287,7 +303,8 @@ class VaultClient:
             headers=headers if headers else None,
         )
         if resp.status_code != 200:
-            raise AgentToolError(f"vault.bulk failed: {resp.status_code}", hint=resp.text)
+            # Server guidance travels intact. See exceptions.py § _error_from_response.
+            raise_from_response(resp, "vault.bulk")
         return resp.json()
 
     def check(self, names: List[str]) -> Dict[str, bool]:
@@ -297,7 +314,8 @@ class VaultClient:
         """
         resp = self._http.post(self._url("/v1/vault/check"), json={"names": names})
         if resp.status_code != 200:
-            raise AgentToolError(f"vault.check failed: {resp.status_code}", hint=resp.text)
+            # Server guidance travels intact. See exceptions.py § _error_from_response.
+            raise_from_response(resp, "vault.check")
         data = resp.json()
         return data.get("exists", data)
 
@@ -356,15 +374,13 @@ class VaultClient:
             headers["X-Agent-Id"] = agent_id
 
         resp = self._http.put(
-            self._url(f"/v1/vault/{name}"),
+            self._url(f"/v1/vault/{_path_segment(name)}"),
             json=payload,
             headers=headers if headers else None,
         )
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"vault.put_encrypted failed: {resp.status_code}",
-                hint=resp.text[:200],
-            )
+            # Server guidance travels intact. See exceptions.py § _error_from_response.
+            raise_from_response(resp, "vault.put_encrypted")
         return resp.json()
 
     def get_decrypted(

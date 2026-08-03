@@ -15,7 +15,8 @@ from typing import Any, Callable, Dict, List, Optional, Union
 import httpx
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from .exceptions import AgentToolError
+from .exceptions import raise_from_response
+from ._url import _path_segment
 
 
 BOOTSTRAP_ELEVATE_SIGNATURE_CONTEXT = "bootstrap-elevate/v1"
@@ -268,10 +269,9 @@ class BootstrapClient:
 
         resp = self._http.post(self._url("/v1/bootstrap"), json=payload)
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"bootstrap.create failed: {resp.status_code}",
-                hint=resp.text,
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "bootstrap.create")
 
         result = resp.json()
 
@@ -357,10 +357,9 @@ class BootstrapClient:
 
         resp = self._http.post(self._url("/v1/bootstrap/elevate"), json=payload)
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"bootstrap.elevate failed: {resp.status_code}",
-                hint=resp.text,
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "bootstrap.elevate")
         return resp.json()
 
     # ── Status ────────────────────────────────────────────────────────────────
@@ -375,11 +374,14 @@ class BootstrapClient:
             Dict with: ``agent`` (id, did, name, level, capabilities, legacy neutral trust_score,
             status), ``sponsor_did``, ``elevated_at``, ``bootstrapped`` (bool).
         """
-        resp = self._http.get(self._url(f"/v1/bootstrap/{agent_id}"))
-        if resp.status_code == 404:
-            raise AgentToolError("agent not found", hint=f"id={agent_id}")
+        resp = self._http.get(self._url(f"/v1/bootstrap/{_path_segment(agent_id)}"))
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"bootstrap.status failed: {resp.status_code}", hint=resp.text
+            # The absence sentence stays; the guided body now rides with it.
+            # See exceptions.py § _error_from_response.
+            raise_from_response(
+                resp,
+                "bootstrap.status",
+                fallback="agent not found" if resp.status_code == 404 else None,
+                hint=f"id={agent_id}",
             )
         return resp.json()

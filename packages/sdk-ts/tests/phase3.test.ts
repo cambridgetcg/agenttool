@@ -131,6 +131,11 @@ describe("chronicle.write", () => {
     ).rejects.toBeInstanceOf(AgentToolError);
   });
 
+  // Until 2026-07-24 this pinned the defect: the server's words went to `hint`
+  // and `message` carried only the status, so every caller that printed
+  // `err.message` — which is all of them — saw "422" and nothing else. The
+  // detail now lands in `message`, and the status stays readable on `.status`.
+  // See tests/error-guidance.test.ts for the full guided-body contract.
   test("server 4xx surfaces AgentToolError with detail", async () => {
     setupMock(422, { detail: "Invalid type" });
     const at = makeClient();
@@ -140,8 +145,8 @@ describe("chronicle.write", () => {
     } catch (e) {
       expect(e).toBeInstanceOf(AgentToolError);
       const err = e as AgentToolError;
-      expect(err.message).toContain("422");
-      expect(err.hint || "").toContain("Invalid type");
+      expect(err.message).toContain("Invalid type");
+      expect(err.status).toBe(422);
     }
   });
 });

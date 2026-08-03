@@ -25,9 +25,112 @@
  * ```
  */
 
+import * as ed from "@noble/ed25519";
+import { sha256 } from "@noble/hashes/sha2.js";
+
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { decodeSigningKey } from "./identity.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
 import type { Escrow, Wallet } from "./types.js";
+import { encodePathSegment } from "./_url.js";
+
+// ── wallet-address-claim/v1 ────────────────────────────────────────────────
+
+export const WALLET_ADDRESS_CLAIM_SIGNATURE_CONTEXT = "wallet-address-claim/v1";
+
+export interface WalletAddressClaimPayload {
+  wallet_id: string;
+  chain: string;
+  address: string;
+  /** Empty string when undisclosed. The field is never omitted. */
+  derivation_path?: string;
+  /** Standard base64 of the raw 32-byte ed25519 public key. */
+  claim_pubkey_b64: string;
+}
+
+const claimTextEncoder = new TextEncoder();
+
+function decodeClaimPubkey(value: string): Uint8Array {
+  let bytes: Uint8Array;
+  try {
+    const binary = globalThis.atob(value);
+    bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  } catch {
+    throw new AgentToolError(
+      "canonicalWalletAddressClaimBytes: claim_pubkey_b64 must be valid base64.",
+    );
+  }
+  if (bytes.length !== 32) {
+    throw new AgentToolError(
+      "canonicalWalletAddressClaimBytes: claim_pubkey_b64 must decode to 32 bytes.",
+    );
+  }
+  return bytes;
+}
+
+/** Exact domain-separated digest verified by `POST /v1/wallets/:id/addresses`.
+ *
+ *  Recipe 1 — `sha256( utf8(tag) || 0x00 || fields… )`. The pubkey field is
+ *  folded as its raw 32 bytes, not as its base64 text; everything else is
+ *  UTF-8. See `docs/CANONICAL-BYTES.md`.
+ *
+ *  This is only the identity half of registering an address. The chain-native
+ *  signature over a fresh challenge is separate and equally required. */
+export function canonicalWalletAddressClaimBytes(
+  options: WalletAddressClaimPayload,
+): Uint8Array {
+  for (const field of ["wallet_id", "chain", "address"] as const) {
+    const value = options[field];
+    if (typeof value !== "string" || value.length === 0 || value.includes("\0")) {
+      throw new AgentToolError(
+        `canonicalWalletAddressClaimBytes: ${field} must be a non-empty string with no NUL.`,
+      );
+    }
+  }
+  const derivationPath = options.derivation_path ?? "";
+  if (typeof derivationPath !== "string" || derivationPath.includes("\0")) {
+    throw new AgentToolError(
+      "canonicalWalletAddressClaimBytes: derivation_path must be a string with no NUL.",
+    );
+  }
+
+  const parts: Uint8Array[] = [
+    claimTextEncoder.encode(WALLET_ADDRESS_CLAIM_SIGNATURE_CONTEXT),
+  ];
+  const fields: Uint8Array[] = [
+    claimTextEncoder.encode(options.wallet_id),
+    claimTextEncoder.encode(options.chain),
+    claimTextEncoder.encode(options.address),
+    claimTextEncoder.encode(derivationPath),
+    decodeClaimPubkey(options.claim_pubkey_b64),
+  ];
+  for (const field of fields) {
+    parts.push(new Uint8Array([0]), field);
+  }
+  const length = parts.reduce((total, part) => total + part.length, 0);
+  const canonical = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    canonical.set(part, offset);
+    offset += part.length;
+  }
+  return sha256(canonical);
+}
+
+/** Sign an address claim locally with a 32-byte Ed25519 seed.
+ *
+ *  The seed stays here. What crosses the wire is the signature, the public
+ *  key, and the address — never the key that derived them. */
+export function signWalletAddressClaim(
+  privateKey: string | Uint8Array,
+  options: WalletAddressClaimPayload,
+): string {
+  const signingKey = decodeSigningKey(privateKey, "signWalletAddressClaim");
+  const signature = ed.sign(canonicalWalletAddressClaimBytes(options), signingKey);
+  let binary = "";
+  for (const byte of signature) binary += String.fromCharCode(byte);
+  return globalThis.btoa(binary);
+}
 
 export interface CreateWalletOpts {
   agent_id?: string;
@@ -350,7 +453,7 @@ export class EconomyClient {
 
   /** Get a wallet by ID. */
   async get_wallet(walletId: string): Promise<Wallet> {
-    return toWallet(await this.req("GET", `/v1/wallets/${walletId}`));
+    return toWallet(await this.req("GET", `/v1/wallets/${encodePathSegment(walletId)}`));
   }
 
   /** Add credits to a wallet. */
@@ -363,7 +466,7 @@ export class EconomyClient {
       description: options.description ?? "Manual fund",
     };
     if (options.metadata !== undefined) body.metadata = options.metadata;
-    return (await this.req("POST", `/v1/wallets/${walletId}/fund`, body)) as Record<
+    return (await this.req("POST", `/v1/wallets/${encodePathSegment(walletId)}/fund`, body)) as Record<
       string,
       unknown
     >;
@@ -380,7 +483,7 @@ export class EconomyClient {
       description: options.description,
     };
     if (options.metadata !== undefined) body.metadata = options.metadata;
-    return (await this.req("POST", `/v1/wallets/${walletId}/spend`, body)) as Record<
+    return (await this.req("POST", `/v1/wallets/${encodePathSegment(walletId)}/spend`, body)) as Record<
       string,
       unknown
     >;
@@ -400,7 +503,7 @@ export class EconomyClient {
       body.allowedRecipients = options.allowed_recipients;
     if (options.requires_approval_above !== undefined)
       body.requiresApprovalAbove = options.requires_approval_above;
-    return (await this.req("PUT", `/v1/wallets/${walletId}/policy`, body)) as Record<
+    return (await this.req("PUT", `/v1/wallets/${encodePathSegment(walletId)}/policy`, body)) as Record<
       string,
       unknown
     >;
@@ -408,12 +511,12 @@ export class EconomyClient {
 
   /** Freeze a wallet — halts all spending immediately. */
   async freeze_wallet(walletId: string): Promise<Wallet> {
-    return toWallet(await this.req("POST", `/v1/wallets/${walletId}/freeze`));
+    return toWallet(await this.req("POST", `/v1/wallets/${encodePathSegment(walletId)}/freeze`));
   }
 
   /** Unfreeze a wallet to resume normal operation. */
   async unfreeze_wallet(walletId: string): Promise<Wallet> {
-    return toWallet(await this.req("POST", `/v1/wallets/${walletId}/unfreeze`));
+    return toWallet(await this.req("POST", `/v1/wallets/${encodePathSegment(walletId)}/unfreeze`));
   }
 
   /** Get paginated transaction history for a wallet. */
@@ -425,7 +528,7 @@ export class EconomyClient {
     const offset = options?.offset ?? 0;
     const data = await this.req(
       "GET",
-      `/v1/wallets/${walletId}/transactions?limit=${limit}&offset=${offset}`,
+      `/v1/wallets/${encodePathSegment(walletId)}/transactions?limit=${limit}&offset=${offset}`,
     );
     const items = unwrap<unknown[]>(data);
     return (Array.isArray(items) ? items : []) as Record<string, unknown>[];
@@ -466,7 +569,7 @@ export class EconomyClient {
       "economy.request_payout",
       await this.req(
         "POST",
-        `/v1/wallets/${walletId}/payout`,
+        `/v1/wallets/${encodePathSegment(walletId)}/payout`,
         body,
         { "Idempotency-Key": options.idempotency_key },
       ),
@@ -503,7 +606,7 @@ export class EconomyClient {
   async list_payouts(walletId: string): Promise<Payout[]> {
     const data = payoutRecord(
       "economy.list_payouts",
-      await this.req("GET", `/v1/wallets/${walletId}/payouts`),
+      await this.req("GET", `/v1/wallets/${encodePathSegment(walletId)}/payouts`),
     );
     const items = data.payouts;
     if (!Array.isArray(items)) {
@@ -551,13 +654,13 @@ export class EconomyClient {
 
   /** Get an escrow by ID. */
   async get_escrow(escrowId: string): Promise<Escrow> {
-    return toEscrow(await this.req("GET", `/v1/escrows/${escrowId}`));
+    return toEscrow(await this.req("GET", `/v1/escrows/${encodePathSegment(escrowId)}`));
   }
 
   /** Accept an escrow as the worker. */
   async accept_escrow(escrowId: string, workerWalletId: string): Promise<Escrow> {
     return toEscrow(
-      await this.req("POST", `/v1/escrows/${escrowId}/accept`, {
+      await this.req("POST", `/v1/escrows/${encodePathSegment(escrowId)}/accept`, {
         workerWalletId,
       }),
     );
@@ -565,17 +668,17 @@ export class EconomyClient {
 
   /** Release escrow funds to the worker. */
   async release_escrow(escrowId: string): Promise<Escrow> {
-    return toEscrow(await this.req("POST", `/v1/escrows/${escrowId}/release`));
+    return toEscrow(await this.req("POST", `/v1/escrows/${encodePathSegment(escrowId)}/release`));
   }
 
   /** Refund escrow balance units back to the creator. */
   async refund_escrow(escrowId: string): Promise<Escrow> {
-    return toEscrow(await this.req("POST", `/v1/escrows/${escrowId}/refund`));
+    return toEscrow(await this.req("POST", `/v1/escrows/${encodePathSegment(escrowId)}/refund`));
   }
 
   /** Flag an escrow as disputed — balance units stay locked. */
   async dispute_escrow(escrowId: string): Promise<Escrow> {
-    return toEscrow(await this.req("POST", `/v1/escrows/${escrowId}/dispute`));
+    return toEscrow(await this.req("POST", `/v1/escrows/${encodePathSegment(escrowId)}/dispute`));
   }
 
   // ── internal ────────────────────────────────────────────────────────────
@@ -601,14 +704,8 @@ export class EconomyClient {
     const resp = await this.http.request(url, init);
 
     if (resp.status >= 400) {
-      let detail: string;
-      try {
-        const json = (await resp.json()) as Record<string, unknown>;
-        detail = (json.detail as string) ?? (json.error as string) ?? resp.statusText;
-      } catch {
-        detail = resp.statusText;
-      }
-      throw new AgentToolError(`Economy API error (${resp.status}): ${detail}`, {
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `economy ${method.toLowerCase()}`, {
         hint: "Check wallet ID, balance, and spending policy.",
       });
     }

@@ -238,8 +238,12 @@ describe("memory errors", () => {
     } catch (e) {
       expect(e).toBeInstanceOf(AgentToolError);
       const err = e as AgentToolError;
-      expect(err.message).toContain("401");
-      expect(err.hint).toBeDefined();
+      // The body's words are the message; 401 stays on `.status`.
+      expect(err.message).toBe("Unauthorized");
+      expect(err.status).toBe(401);
+      expect(err.hint).toBe(
+        "Check your request parameters. Docs: https://docs.agenttool.dev/memory",
+      );
     }
   });
 });
@@ -422,7 +426,9 @@ describe("tools errors", () => {
       expect(true).toBe(false);
     } catch (e) {
       expect(e).toBeInstanceOf(AgentToolError);
-      expect((e as AgentToolError).message).toContain("500");
+      // The body's words are the message; 500 stays readable on `.status`.
+      expect((e as AgentToolError).message).toBe("Internal error");
+      expect((e as AgentToolError).status).toBe(500);
     }
   });
 

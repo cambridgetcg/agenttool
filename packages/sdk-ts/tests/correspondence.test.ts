@@ -24,6 +24,11 @@ import {
   type CorrespondenceUnsignedInput,
   type WakeEventKey,
 } from "../src/index.js";
+// Receive-side verification is not wired into the barrel yet; import direct.
+import {
+  verifyCorrespondenceEvent,
+  verifyCorrespondenceSignature,
+} from "../src/correspondence.js";
 
 const originalFetch = globalThis.fetch;
 let mockFetch: ReturnType<typeof mock>;
@@ -675,7 +680,11 @@ describe("CorrespondenceClient", () => {
       repository_id: "cambridgetcg/agenttool",
       thread_id: "task:renaissance",
     });
-    expect(result).toEqual(snapshot);
+    expect(result).toEqual({
+      ...snapshot,
+      recent_events: [{ ...recent, verification: result.recent_events[0]!.verification }],
+    });
+    expect(result.recent_events[0]?.verification.reason).toBe("no_verifying_key");
     expect(result.projection_status).toBe("truncated");
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toContain("/v1/correspondence/voice?");
@@ -704,5 +713,162 @@ describe("CorrespondenceClient", () => {
         details: { session_seq: 7 },
       });
     }
+  });
+});
+
+describe("correspondence receive-side verification", () => {
+  const PUBLIC_KEY = ed.getPublicKey(SIGNING_KEY);
+  const OTHER_KEY = new Uint8Array(32).fill(9);
+
+  function page(records: CorrespondenceEventRecord[]) {
+    return {
+      protocol: CORRESPONDENCE_PROTOCOL,
+      scope: "project_private",
+      events: records,
+      page: { after: null, next_after: null, has_more: false },
+    };
+  }
+
+  test("verifies a genuine event against the sender's public key", () => {
+    expect(verifyCorrespondenceSignature(signedEvent(), PUBLIC_KEY)).toBe(true);
+    expect(
+      verifyCorrespondenceSignature(signedEvent(), Buffer.from(PUBLIC_KEY).toString("base64")),
+    ).toBe(true);
+    expect(
+      verifyCorrespondenceSignature(signedEvent(), Buffer.from(PUBLIC_KEY).toString("base64url")),
+    ).toBe(true);
+  });
+
+  test("refuses a genuine event under any other key or key width", () => {
+    const event = signedEvent();
+    expect(verifyCorrespondenceSignature(event, ed.getPublicKey(OTHER_KEY))).toBe(false);
+    expect(verifyCorrespondenceSignature(event, PUBLIC_KEY.slice(1))).toBe(false);
+    expect(verifyCorrespondenceSignature(event, "not base64 at all")).toBe(false);
+  });
+
+  test("refuses an event whose body was edited after signing", () => {
+    const event = signedEvent();
+    const tampered = {
+      ...event,
+      body: { ...event.body, summary: "Attacker rewrote the letter." },
+    } as CorrespondenceSignedEvent;
+    expect(verifyCorrespondenceSignature(tampered, PUBLIC_KEY)).toBe(false);
+  });
+
+  test("verifyCorrespondenceEvent reports why an event is unproved", async () => {
+    const event = signedEvent();
+    expect(await verifyCorrespondenceEvent(event, { signing_keys: { [SIGNING_KEY_ID]: PUBLIC_KEY } }))
+      .toEqual({ verified: true, reason: "verified", signing_key_id: SIGNING_KEY_ID });
+
+    const noKey = await verifyCorrespondenceEvent(event);
+    expect(noKey.verified).toBe(false);
+    expect(noKey.reason).toBe("no_verifying_key");
+
+    const wrongKey = await verifyCorrespondenceEvent(event, {
+      signing_keys: new Map([[SIGNING_KEY_ID, ed.getPublicKey(OTHER_KEY)]]),
+    });
+    expect(wrongKey.verified).toBe(false);
+    expect(wrongKey.reason).toBe("signature_mismatch");
+  });
+
+  test("refuses an event_id that does not content-address the envelope", async () => {
+    const event = { ...signedEvent(), event_id: `sha256:${"c".repeat(64)}` };
+    const verdict = await verifyCorrespondenceEvent(event, {
+      signing_keys: { [SIGNING_KEY_ID]: PUBLIC_KEY },
+    });
+    expect(verdict.verified).toBe(false);
+    expect(verdict.reason).toBe("event_id_mismatch");
+  });
+
+  test("refuses an event whose signature envelope is malformed", async () => {
+    const event = signedEvent();
+    const verdict = await verifyCorrespondenceEvent({
+      ...event,
+      signature: { ...event.signature, value_b64url: "too-short" },
+    } as CorrespondenceSignedEvent, { signing_keys: { [SIGNING_KEY_ID]: PUBLIC_KEY } });
+    expect(verdict.verified).toBe(false);
+    expect(verdict.reason).toBe("malformed_event");
+  });
+
+  test("an attacker-signed event keeps the claimed sender's key from verifying it", async () => {
+    // The server-reported sender fields are attacker-choosable; only the
+    // caller-held key decides. Signed by OTHER_KEY, addressed as SIGNING_KEY_ID.
+    const forged = createSignedCorrespondenceEvent(unsigned(), OTHER_KEY);
+    expect(forged.sender.signing_key_id).toBe(SIGNING_KEY_ID);
+    const verdict = await verifyCorrespondenceEvent(forged, {
+      signing_keys: { [SIGNING_KEY_ID]: PUBLIC_KEY },
+    });
+    expect(verdict.verified).toBe(false);
+    expect(verdict.reason).toBe("signature_mismatch");
+  });
+
+  test("list annotates every record with the caller's own verdict", async () => {
+    mockFetch = mock(() => Promise.resolve(response(200, page([record()]))));
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    const result = await client().correspondence.list({
+      repository_id: "cambridgetcg/agenttool",
+      signing_keys: { [SIGNING_KEY_ID]: PUBLIC_KEY },
+    });
+    expect(result.events[0]?.verification).toEqual({
+      verified: true,
+      reason: "verified",
+      signing_key_id: SIGNING_KEY_ID,
+    });
+  });
+
+  test("list without keys still delivers the record, marked unverified", async () => {
+    mockFetch = mock(() => Promise.resolve(response(200, page([record()]))));
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    const result = await client().correspondence.list({
+      repository_id: "cambridgetcg/agenttool",
+    });
+    expect(result.events[0]?.verification.verified).toBe(false);
+    expect(result.events[0]?.verification.reason).toBe("no_verifying_key");
+    expect(result.events[0]?.event.event_id).toBe(signedEvent().event_id);
+  });
+
+  test("require_verified fails the read closed instead of returning the event", async () => {
+    mockFetch = mock(() => Promise.resolve(response(200, page([record()]))));
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    await expect(client().correspondence.list({
+      repository_id: "cambridgetcg/agenttool",
+      require_verified: true,
+    })).rejects.toThrow("refused an unverified event (no_verifying_key)");
+  });
+
+  test("an async resolver may supply signer keys, and replay carries the verdict", async () => {
+    mockFetch = mock(() => Promise.resolve(response(200, page([record()]))));
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    const asked: string[] = [];
+    const replay = client().correspondence.replay({
+      repository_id: "cambridgetcg/agenttool",
+      resolve_signing_key: async (signingKeyId) => {
+        asked.push(signingKeyId);
+        return signingKeyId === SIGNING_KEY_ID ? PUBLIC_KEY : undefined;
+      },
+    });
+    const first = await replay.next();
+    expect(asked).toEqual([SIGNING_KEY_ID]);
+    expect(first.value?.verification.verified).toBe(true);
+  });
+
+  test("voice annotates its recent events with the same verdict", async () => {
+    mockFetch = mock(() => Promise.resolve(response(200, {
+      protocol: CORRESPONDENCE_PROTOCOL,
+      scope: "project_private",
+      evaluated_at: "2026-07-19T12:40:00.000Z",
+      cursor: "44",
+      projection_status: "complete",
+      truncated: false,
+      recent_events: [record()],
+      active_claims: [],
+      conflicts: { missing_parents: [], session_forks: [], overlapping_claims: [] },
+    })));
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
+    const snapshot = await client().correspondence.voice({
+      repository_id: "cambridgetcg/agenttool",
+      signing_keys: { [SIGNING_KEY_ID]: PUBLIC_KEY },
+    });
+    expect(snapshot.recent_events[0]?.verification.verified).toBe(true);
   });
 });

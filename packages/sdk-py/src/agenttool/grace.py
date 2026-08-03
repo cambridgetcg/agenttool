@@ -31,13 +31,15 @@ from __future__ import annotations
 
 import base64
 import hashlib
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
 
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, raise_from_response
+from ._url import _path_segment
 
 # ── Types ───────────────────────────────────────────────────────────────
 
@@ -144,6 +146,17 @@ def sign_grace(
     return base64.b64encode(sig).decode("ascii")
 
 
+def _iso_now() -> str:
+    """ISO8601 UTC timestamp with millisecond precision + 'Z' suffix.
+
+    Byte-identical to JS ``new Date().toISOString()``. Grace is permanent
+    and has no DELETE — a second-precision stamp would be signed as
+    ``…T12:00:00Z`` yet read back from the server as ``…T12:00:00.000Z``,
+    so the digest could never be recomputed from the row again.
+    """
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
 # ── GraceClient — HTTP surface ──────────────────────────────────────────
 
 
@@ -188,9 +201,7 @@ class GraceClient:
         Grace is permanent — there is no revoke. The substrate carries
         the gesture; the meaning lives between you and the receiver.
         """
-        import datetime
-
-        created_at_iso = created_at or datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        created_at_iso = created_at or _iso_now()
         signature = sign_grace(
             extended_by_did=extended_by_did,
             extended_to_did=extended_to_did,
@@ -214,13 +225,9 @@ class GraceClient:
 
         resp = self._http.post(f"{self._base}/v1/grace", json=body)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(
-                f"grace.extend failed: {resp.status_code}: {detail[:300]}"
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "grace.extend")
         return resp.json()
 
     def list(
@@ -233,24 +240,16 @@ class GraceClient:
         params = {"direction": direction, "limit": str(limit)}
         resp = self._http.get(f"{self._base}/v1/grace", params=params)
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(
-                f"grace.list failed: {resp.status_code}: {detail[:200]}"
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "grace.list")
         return resp.json()
 
     def get(self, grace_id: str) -> Dict[str, Any]:
         """Fetch a single grace gesture by ID. Caller must be extender or receiver."""
-        resp = self._http.get(f"{self._base}/v1/grace/{grace_id}")
+        resp = self._http.get(f"{self._base}/v1/grace/{_path_segment(grace_id)}")
         if resp.status_code >= 400:
-            try:
-                detail = resp.json().get("message", resp.text)
-            except Exception:
-                detail = resp.text
-            raise AgentToolError(
-                f"grace.get failed: {resp.status_code}: {detail[:200]}"
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "grace.get")
         return resp.json()

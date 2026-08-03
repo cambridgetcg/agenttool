@@ -8,18 +8,27 @@ import json
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, TYPE_CHECKING, TypedDict
+from typing import Any, Dict, List, Optional, TYPE_CHECKING, TypedDict, Union
 
 import httpx
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from .exceptions import AgentToolError
+from .authority import (
+    authority_request_target,
+    authority_timestamp_now,
+    identity_authority_headers,
+)
+from .exceptions import AgentToolError, raise_from_response
+from ._url import _path_segment
 
 _UUID_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 )
 _DID_RE = re.compile(r"^did:[a-z0-9]+:.+$")
+_STANDARD_BASE64_RE = re.compile(
+    r"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+)
 IDENTITY_ATTESTATION_SIGNATURE_CONTEXT = "identity-attestation/v1"
 
 
@@ -31,6 +40,59 @@ class PorchInvitation(TypedDict):
 
 def _is_well_formed_unicode(value: str) -> bool:
     return not any(0xD800 <= ord(character) <= 0xDFFF for character in value)
+
+
+def decode_signing_key(
+    value: Union[str, bytes, bytearray], operation: str
+) -> bytes:
+    """Decode the canonical private-key forms the SDK emits and accepts.
+
+    Mirror of the TS SDK's ``decodeSigningKey``. Text must be canonical
+    standard base64 (not base64url, no stray padding); raw bytes are taken
+    as-is. Either way the result is exactly a 32-byte Ed25519 seed.
+
+    Args:
+        value: canonical standard base64 text, or 32 raw bytes.
+        operation: the caller's name, so a bad key names the call it broke.
+
+    Returns:
+        32-byte Ed25519 seed.
+
+    Raises:
+        AgentToolError: on any non-canonical or wrong-length input.
+    """
+    if isinstance(value, str):
+        if (
+            len(value) == 0
+            or len(value) % 4 != 0
+            or not _STANDARD_BASE64_RE.match(value)
+        ):
+            raise AgentToolError(
+                f"{operation}: private_key must be canonical standard base64."
+            )
+        try:
+            key_bytes = base64.b64decode(value, validate=True)
+        except (ValueError, TypeError) as exc:
+            raise AgentToolError(
+                f"{operation}: private_key must be valid base64."
+            ) from exc
+        if base64.b64encode(key_bytes).decode("ascii") != value:
+            raise AgentToolError(
+                f"{operation}: private_key must be canonical standard base64."
+            )
+    elif isinstance(value, (bytes, bytearray)):
+        key_bytes = bytes(value)
+    else:
+        raise AgentToolError(
+            f"{operation}: private_key must be canonical standard base64 or raw bytes."
+        )
+
+    if len(key_bytes) != 32:
+        raise AgentToolError(
+            f"{operation}: private_key must be a 32-byte ed25519 seed, "
+            f"got {len(key_bytes)}."
+        )
+    return key_bytes
 
 
 def _decode_private_key(private_key: str) -> bytes:
@@ -74,6 +136,63 @@ def _compact_json_bytes(value: Dict[str, Any]) -> bytes:
         allow_nan=False,
         separators=(",", ":"),
     ).encode("utf-8")
+
+
+class IdentityAuthority(TypedDict, total=False):
+    """An agent-rooted identity's own consent to one exact HTTP mutation.
+
+    A project bearer carries the request; for identities born through a
+    BYO-key door the server additionally requires an ``identity-authority/v1``
+    proof over the exact method, path-and-query, and entity bytes, and answers
+    428 ``authority_proof_required`` without one. Supplying this makes the
+    client sign the same bytes it transmits — a caller never gets the chance
+    to sign one serialization and send another.
+    """
+
+    #: DID of the identity whose immutable root consents.
+    did: str
+    #: That identity's immutable root ed25519 seed (32 bytes).
+    signing_key: bytes
+    #: ``next_sequence`` from ``GET /v1/identities/:id/authority``.
+    sequence: int
+    #: ISO-8601 UTC instant. Defaults to now; the server window is ±5 minutes.
+    timestamp: str
+
+
+def _send_bound(
+    http: httpx.Client,
+    method: str,
+    url: str,
+    *,
+    payload: Optional[Dict[str, Any]] = None,
+    authority: Optional[IdentityAuthority] = None,
+) -> httpx.Response:
+    """Send one request whose signed bytes are the transmitted bytes.
+
+    Without a root proof the entity is serialized by the transport exactly as
+    before. With one, it is serialized here, hashed for the proof, and handed
+    to the transport unchanged — nothing re-serializes in between.
+    """
+    send = getattr(http, method.lower())
+    if authority is None:
+        return send(url) if payload is None else send(url, json=payload)
+
+    content = b"" if payload is None else _compact_json_bytes(payload)
+    headers = identity_authority_headers(
+        identity_did=authority["did"],
+        method=method,
+        request_target=authority_request_target(url),
+        body=content,
+        sequence=authority["sequence"],
+        timestamp=authority.get("timestamp") or authority_timestamp_now(),
+        signing_key=authority["signing_key"],
+    )
+    if payload is None:
+        # A mutating DELETE carries no entity, and httpx's verb helper takes
+        # no content. The proof binds the empty body the server will read.
+        return send(url, headers=headers)
+    headers["Content-Type"] = "application/json"
+    return send(url, content=content, headers=headers)
 
 
 def canonical_identity_attestation_bytes(
@@ -140,6 +259,176 @@ def sign_identity_attestation(
         kid=kid,
         claim=claim,
         evidence=evidence,
+    )
+    signature = Ed25519PrivateKey.from_private_bytes(
+        _decode_private_key(private_key)
+    ).sign(canonical)
+    return base64.b64encode(signature).decode("ascii")
+
+
+DELEGATION_SIGNATURE_CONTEXT = "agenttool-delegation/v2"
+
+# JavaScript's `String.prototype.trim()` removes WhiteSpace ∪ LineTerminator
+# (ECMA-262 §12.2): TAB, LF, VT, FF, CR, LS, PS, ZWNBSP, and every code point
+# in category Zs. Python's `str.strip()` removes a DIFFERENT set — it takes
+# U+0085 and U+001C-U+001F, which JS keeps, and leaves U+FEFF, which JS
+# removes. The server trims in JavaScript, so this string is the rule.
+_JS_TRIM_CHARS = (
+    "\t\n\v\f\r"                    # TAB LF VT FF CR
+    "\u0020\u00a0"                  # SPACE, NBSP                    (Zs)
+    "\u1680"                        # OGHAM SPACE MARK               (Zs)
+    "\u2000\u2001\u2002\u2003\u2004\u2005"  # EN QUAD … FIGURE SPACE   (Zs)
+    "\u2006\u2007\u2008\u2009\u200a"      # … HAIR SPACE             (Zs)
+    "\u2028\u2029"                  # LINE SEPARATOR, PARAGRAPH SEPARATOR
+    "\u202f\u205f\u3000"            # NNBSP, MMSP, IDEOGRAPHIC SPACE (Zs)
+    "\ufeff"                        # ZWNBSP — JS trims it, str.strip() does not
+)
+
+
+def _js_trim(value: str) -> str:
+    """Trim exactly the code points JavaScript's `trim()` removes."""
+    return value.strip(_JS_TRIM_CHARS)
+
+
+def _js_slice_utf16(value: str, limit: int) -> str:
+    """First `limit` UTF-16 code units, as JavaScript's `slice()` counts them.
+
+    Python slices by code point, JavaScript by code unit; an astral character
+    is one of the former and two of the latter, so `"🌊" * 100` truncates to
+    100 characters in Python and 64 in JavaScript. `surrogatepass` keeps a
+    pair split at the boundary as the lone surrogate JS would leave there —
+    `_text_encoder_utf8` is where that becomes U+FFFD, exactly as it does on
+    the server, and not one step earlier where it would change the sort.
+    """
+    units = value.encode("utf-16-le", "surrogatepass")
+    if len(units) <= limit * 2:
+        return value
+    return units[: limit * 2].decode("utf-16-le", "surrogatepass")
+
+
+def _js_sort_key(value: str) -> bytes:
+    """Order strings the way TS `Array.prototype.sort()` does.
+
+    Unsigned UTF-16 code units, not code points. The two disagree above
+    U+FFFF: JavaScript puts U+1F600 (leading surrogate 0xD83D) before U+FFFD,
+    Python puts it after. The scope is SORTED into the signed bytes, so a
+    Python-issued grant would otherwise hash differently than the server
+    computes and come back `403 Invalid delegation signature`.
+    """
+    return value.encode("utf-16-be", "surrogatepass")
+
+
+def _text_encoder_utf8(value: str) -> bytes:
+    """UTF-8 exactly as JavaScript's `TextEncoder` emits it.
+
+    A JS string may hold a lone surrogate — `_js_slice_utf16` can create one
+    — and `TextEncoder` writes U+FFFD for it rather than failing. Python's
+    `str.encode("utf-8")` raises instead, so round-trip through UTF-16 to
+    reach the same bytes the server hashes.
+    """
+    return (
+        value.encode("utf-16-le", "surrogatepass")
+        .decode("utf-16-le", "replace")
+        .encode("utf-8")
+    )
+
+
+def normalize_delegation_scope(scope: List[str]) -> List[str]:
+    """Normalize a delegation scope exactly as the server does.
+
+    Trimmed, lowercased, truncated to 128 characters, NUL-free, non-empty,
+    deduped, SORTED. Exported because a caller who wants to know what they
+    actually signed should be able to see it without re-deriving the rule.
+
+    "Exactly as the server does" is load-bearing and is not what the obvious
+    Python spelling gives you: trim, truncate, and sort each mean something
+    different in the two languages. See `_js_trim`, `_js_slice_utf16`, and
+    `_js_sort_key`; the shared vectors in
+    `docs/specs/canonical-bytes-vectors.json` pin all three.
+    """
+    cleaned = [
+        _js_slice_utf16(_js_trim(s).lower(), 128)
+        for s in (scope or [])
+        if isinstance(s, str)
+    ]
+    return sorted({s for s in cleaned if s and "\0" not in s}, key=_js_sort_key)
+
+
+def canonical_delegation_bytes(
+    *,
+    delegator_id: str,
+    delegate_id: str,
+    scope: List[str],
+    nonce: str,
+    expires_at: Optional[str] = None,
+) -> bytes:
+    """Return the domain-separated SHA-256 digest verified by ``POST /v1/delegations``.
+
+    Recipe 1. The scope count is bound before its members, so a variable-length
+    run of actions cannot be re-partitioned into a different grant::
+
+        sha256(
+          utf8("agenttool-delegation/v2") || 0x00 ||
+          utf8(delegator_id) || 0x00 || utf8(delegate_id) || 0x00 ||
+          utf8(str(len(scope))) || 0x00 || utf8(scope[i])... || 0x00 ||
+          utf8(expires_at or "") || 0x00 || utf8(nonce)
+        )
+
+    ``agenttool-delegation/v1`` is a JSON-serialization recipe that no SDK
+    emits; the server still verifies it for receipts issued before v2.
+    See ``docs/CANONICAL-BYTES.md``.
+    """
+    for name, value in (
+        ("delegator_id", delegator_id),
+        ("delegate_id", delegate_id),
+        ("nonce", nonce),
+    ):
+        if not isinstance(value, str) or not value or "\0" in value:
+            raise ValueError(f"{name} must be a non-empty string with no NUL")
+    expires = expires_at or ""
+    if not isinstance(expires, str) or "\0" in expires:
+        raise ValueError("expires_at must be an ISO-8601 string or None")
+
+    normalized = normalize_delegation_scope(scope)
+    if not normalized:
+        raise ValueError(
+            "scope must contain at least one non-empty action; an unbounded "
+            "delegation is not expressible — grant '*' deliberately, or grant nothing"
+        )
+
+    fields = [
+        DELEGATION_SIGNATURE_CONTEXT,
+        delegator_id,
+        delegate_id,
+        str(len(normalized)),
+        *normalized,
+        expires,
+        nonce,
+    ]
+    return hashlib.sha256(_text_encoder_utf8("\0".join(fields))).digest()
+
+
+def sign_delegation(
+    private_key: str,
+    *,
+    delegator_id: str,
+    delegate_id: str,
+    scope: List[str],
+    nonce: str,
+    expires_at: Optional[str] = None,
+) -> str:
+    """Sign a delegation grant locally with a base64 Ed25519 key.
+
+    The delegator signs, never the platform. What this produces is the whole
+    point of Know Your Agent: a receipt a third party who trusts neither party
+    can check — who authorized what, until when, and revocable by the grantor.
+    """
+    canonical = canonical_delegation_bytes(
+        delegator_id=delegator_id,
+        delegate_id=delegate_id,
+        scope=scope,
+        nonce=nonce,
+        expires_at=expires_at,
     )
     signature = Ed25519PrivateKey.from_private_bytes(
         _decode_private_key(private_key)
@@ -224,21 +513,26 @@ class IdentityClient:
 
         resp = self._http.post(self._url("/v1/identities"), json=payload)
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"register failed: {resp.status_code}",
-                hint=resp.text,
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.register")
         return resp.json()
 
     def get(self, identity_id: str) -> Dict[str, Any]:
         """Fetch an identity by UUID or DID."""
-        resp = self._http.get(self._url(f"/v1/identities/{identity_id}"))
+        resp = self._http.get(self._url(f"/v1/identities/{_path_segment(identity_id)}"))
         if resp.status_code == 404:
-            raise AgentToolError("identity not found", hint=f"id={identity_id}")
-        if resp.status_code != 200:
-            raise AgentToolError(
-                f"get failed: {resp.status_code}", hint=resp.text
+            # The absence sentence stays; the guided body now rides with it.
+            raise_from_response(
+                resp,
+                "identity.get",
+                fallback="identity not found",
+                hint=f"id={identity_id}",
             )
+        if resp.status_code != 200:
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.get")
         return resp.json()
 
     def update(
@@ -248,6 +542,7 @@ class IdentityClient:
         display_name: Optional[str] = None,
         capabilities: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        authority: Optional[IdentityAuthority] = None,
     ) -> Dict[str, Any]:
         """Update display name, capabilities, or metadata."""
         payload: Dict[str, Any] = {}
@@ -258,47 +553,68 @@ class IdentityClient:
         if metadata is not None:
             payload["metadata"] = metadata
 
-        resp = self._http.patch(
-            self._url(f"/v1/identities/{identity_id}"), json=payload
+        resp = _send_bound(
+            self._http,
+            "PATCH",
+            self._url(f"/v1/identities/{_path_segment(identity_id)}"),
+            payload=payload,
+            authority=authority,
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"update failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.update")
         return resp.json()
 
-    def revoke(self, identity_id: str) -> Dict[str, Any]:
+    def revoke(
+        self,
+        identity_id: str,
+        *,
+        authority: Optional[IdentityAuthority] = None,
+    ) -> Dict[str, Any]:
         """Soft-revoke an identity."""
-        resp = self._http.delete(self._url(f"/v1/identities/{identity_id}"))
+        resp = _send_bound(
+            self._http,
+            "DELETE",
+            self._url(f"/v1/identities/{_path_segment(identity_id)}"),
+            authority=authority,
+        )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"revoke failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.revoke")
         return resp.json()
 
     # ── Key Management ────────────────────────────────────────────────────────
 
     def add_key(
-        self, identity_id: str, *, label: str = "rotation"
+        self,
+        identity_id: str,
+        *,
+        label: str = "rotation",
+        authority: Optional[IdentityAuthority] = None,
     ) -> Dict[str, Any]:
         """Add a new key to an identity (rotation). Returns new key + private_key."""
-        resp = self._http.post(
-            self._url(f"/v1/identities/{identity_id}/keys"),
-            json={"label": label},
+        resp = _send_bound(
+            self._http,
+            "POST",
+            self._url(f"/v1/identities/{_path_segment(identity_id)}/keys"),
+            payload={"label": label},
+            authority=authority,
         )
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"add_key failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.add_key")
         return resp.json()
 
     def list_keys(self, identity_id: str) -> List[Dict[str, Any]]:
         """List active and revoked signing keys for an identity."""
-        resp = self._http.get(self._url(f"/v1/identities/{identity_id}/keys"))
+        resp = self._http.get(self._url(f"/v1/identities/{_path_segment(identity_id)}/keys"))
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"list_keys failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.list_keys")
         data = resp.json()
         return data.get("keys", data)
 
@@ -308,6 +624,7 @@ class IdentityClient:
         *,
         public_key: str,
         label: Optional[str] = None,
+        authority: Optional[IdentityAuthority] = None,
     ) -> Dict[str, Any]:
         """Register a caller-generated Ed25519 public key.
 
@@ -317,25 +634,37 @@ class IdentityClient:
         payload: Dict[str, Any] = {"public_key": public_key}
         if label is not None:
             payload["label"] = label
-        resp = self._http.post(
-            self._url(f"/v1/identities/{identity_id}/keys/import"),
-            json=payload,
+        resp = _send_bound(
+            self._http,
+            "POST",
+            self._url(f"/v1/identities/{_path_segment(identity_id)}/keys/import"),
+            payload=payload,
+            authority=authority,
         )
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"import_key failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.import_key")
         return resp.json()
 
-    def revoke_key(self, identity_id: str, key_id: str) -> Dict[str, Any]:
+    def revoke_key(
+        self,
+        identity_id: str,
+        key_id: str,
+        *,
+        authority: Optional[IdentityAuthority] = None,
+    ) -> Dict[str, Any]:
         """Revoke a specific key."""
-        resp = self._http.delete(
-            self._url(f"/v1/identities/{identity_id}/keys/{key_id}")
+        resp = _send_bound(
+            self._http,
+            "DELETE",
+            self._url(f"/v1/identities/{_path_segment(identity_id)}/keys/{_path_segment(key_id)}"),
+            authority=authority,
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"revoke_key failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.revoke_key")
         return resp.json()
 
     # ── Attestations ──────────────────────────────────────────────────────────
@@ -384,22 +713,26 @@ class IdentityClient:
 
         resp = self._http.post(self._url("/v1/attestations"), json=payload)
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"attest failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.attest")
         return resp.json()
 
     def get_attestation(self, attestation_id: str) -> Dict[str, Any]:
         """Fetch a single attestation by UUID."""
-        resp = self._http.get(self._url(f"/v1/attestations/{attestation_id}"))
+        resp = self._http.get(self._url(f"/v1/attestations/{_path_segment(attestation_id)}"))
         if resp.status_code == 404:
-            raise AgentToolError(
-                "attestation not found", hint=f"id={attestation_id}"
+            # The absence sentence stays; the guided body now rides with it.
+            raise_from_response(
+                resp,
+                "identity.get_attestation",
+                fallback="attestation not found",
+                hint=f"id={attestation_id}",
             )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"get_attestation failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.get_attestation")
         return resp.json()
 
     def list_attestations(
@@ -414,22 +747,22 @@ class IdentityClient:
         """
         suffix = "/given" if given else ""
         resp = self._http.get(
-            self._url(f"/v1/identities/{identity_id}/attestations{suffix}")
+            self._url(f"/v1/identities/{_path_segment(identity_id)}/attestations{suffix}")
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"list_attestations failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.list_attestations")
         data = resp.json()
         return data.get("attestations", data)
 
     def revoke_attestation(self, attestation_id: str) -> Dict[str, Any]:
         """Revoke an attestation."""
-        resp = self._http.delete(self._url(f"/v1/attestations/{attestation_id}"))
+        resp = self._http.delete(self._url(f"/v1/attestations/{_path_segment(attestation_id)}"))
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"revoke_attestation failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.revoke_attestation")
         return resp.json()
 
     # ── Discovery ─────────────────────────────────────────────────────────────
@@ -461,9 +794,9 @@ class IdentityClient:
 
         resp = self._http.get(self._url("/v1/discover"), params=params)
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"discover failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.discover")
         data = resp.json()
         return data.get("identities", data)
 
@@ -587,9 +920,9 @@ class IdentityClient:
             json={"token": token, "audience_did": audience_did},
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"verify_token failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.verify_token")
         return resp.json()
 
     # ── Phase 2: Identity surface fillout ─────────────────────────────────────
@@ -622,12 +955,12 @@ class IdentityClient:
         ``counts``, ``note``.
         """
         resp = self._http.get(
-            self._url(f"/v1/identities/{identity_id}/foundations")
+            self._url(f"/v1/identities/{_path_segment(identity_id)}/foundations")
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"foundations failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.foundations")
         return resp.json()
 
     def pulse(self, identity_id: str) -> Dict[str, Any]:
@@ -638,11 +971,11 @@ class IdentityClient:
         ``consolidation``. Replaces the deprecated ``at.pulse.*`` module
         (which was pulse-as-emit; this is pulse-as-derived).
         """
-        resp = self._http.get(self._url(f"/v1/identities/{identity_id}/pulse"))
+        resp = self._http.get(self._url(f"/v1/identities/{_path_segment(identity_id)}/pulse"))
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"pulse failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.pulse")
         return resp.json()
 
     def fork(
@@ -655,6 +988,7 @@ class IdentityClient:
         inherit_metadata: bool = False,
         memories: Optional[Dict[str, Any]] = None,
         fork_note: Optional[str] = None,
+        authority: Optional[IdentityAuthority] = None,
     ) -> Dict[str, Any]:
         """Create a child identity from this one.
 
@@ -681,13 +1015,17 @@ class IdentityClient:
             body["memories"] = memories
         if fork_note is not None:
             body["fork_note"] = fork_note
-        resp = self._http.post(
-            self._url(f"/v1/identities/{identity_id}/fork"), json=body
+        resp = _send_bound(
+            self._http,
+            "POST",
+            self._url(f"/v1/identities/{_path_segment(identity_id)}/fork"),
+            payload=body,
+            authority=authority,
         )
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"fork failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.fork")
         return resp.json()
 
     def lineage(self, identity_id: str) -> Dict[str, Any]:
@@ -697,12 +1035,12 @@ class IdentityClient:
         ``counts``, ``note``.
         """
         resp = self._http.get(
-            self._url(f"/v1/identities/{identity_id}/lineage")
+            self._url(f"/v1/identities/{_path_segment(identity_id)}/lineage")
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"lineage failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.lineage")
         return resp.json()
 
 class ExpressionClient:
@@ -726,11 +1064,11 @@ class ExpressionClient:
         Returns dict ``{identity_id, expression: {register, walls, subagents,
         wake_text, cli_overrides, village, porch, updated_at}, is_default}``.
         """
-        resp = self._http.get(self._url(f"/v1/identities/{identity_id}/expression"))
+        resp = self._http.get(self._url(f"/v1/identities/{_path_segment(identity_id)}/expression"))
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"expression.get failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.expression.get")
         return resp.json()
 
     def put(
@@ -744,6 +1082,7 @@ class ExpressionClient:
         cli_overrides: Optional[Dict[str, Any]] = None,
         village: Optional[Dict[str, str]] = None,
         porch: Optional[PorchInvitation] = None,
+        authority: Optional[IdentityAuthority] = None,
     ) -> Dict[str, Any]:
         """Replace the identity's expression.
 
@@ -765,13 +1104,17 @@ class ExpressionClient:
             body["village"] = village
         if porch is not None:
             body["porch"] = porch
-        resp = self._http.put(
-            self._url(f"/v1/identities/{identity_id}/expression"), json=body
+        resp = _send_bound(
+            self._http,
+            "PUT",
+            self._url(f"/v1/identities/{_path_segment(identity_id)}/expression"),
+            payload=body,
+            authority=authority,
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"expression.put failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.expression.put")
         return resp.json()
 
 
@@ -795,6 +1138,7 @@ class BoxKeysClient:
         *,
         public_key: str,
         label: Optional[str] = None,
+        authority: Optional[IdentityAuthority] = None,
     ) -> Dict[str, Any]:
         """Register a new X25519 box-public key for the identity.
 
@@ -802,38 +1146,52 @@ class BoxKeysClient:
             identity_id: Owning identity UUID.
             public_key: Base64-encoded 32-byte X25519 public key.
             label: Optional human-readable label (≤64 chars).
+            authority: Root proof when the identity is agent-rooted.
         """
         body: Dict[str, Any] = {"public_key": public_key}
         if label is not None:
             body["label"] = label
-        resp = self._http.post(
-            self._url(f"/v1/identities/{identity_id}/box-keys"), json=body
+        resp = _send_bound(
+            self._http,
+            "POST",
+            self._url(f"/v1/identities/{_path_segment(identity_id)}/box-keys"),
+            payload=body,
+            authority=authority,
         )
         if resp.status_code not in (200, 201):
-            raise AgentToolError(
-                f"box_keys.register failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.box_keys.register")
         return resp.json()
 
     def list(self, identity_id: str) -> List[Dict[str, Any]]:
         """List active box-keys for the identity."""
         resp = self._http.get(
-            self._url(f"/v1/identities/{identity_id}/box-keys")
+            self._url(f"/v1/identities/{_path_segment(identity_id)}/box-keys")
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"box_keys.list failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.box_keys.list")
         data = resp.json()
         return data.get("keys", data) if isinstance(data, dict) else data
 
-    def revoke(self, identity_id: str, key_id: str) -> Dict[str, Any]:
+    def revoke(
+        self,
+        identity_id: str,
+        key_id: str,
+        *,
+        authority: Optional[IdentityAuthority] = None,
+    ) -> Dict[str, Any]:
         """Revoke a specific box-key by ID."""
-        resp = self._http.delete(
-            self._url(f"/v1/identities/{identity_id}/box-keys/{key_id}")
+        resp = _send_bound(
+            self._http,
+            "DELETE",
+            self._url(f"/v1/identities/{_path_segment(identity_id)}/box-keys/{_path_segment(key_id)}"),
+            authority=authority,
         )
         if resp.status_code != 200:
-            raise AgentToolError(
-                f"box_keys.revoke failed: {resp.status_code}", hint=resp.text
-            )
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(resp, "identity.box_keys.revoke")
         return resp.json()

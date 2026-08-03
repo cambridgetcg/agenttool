@@ -117,6 +117,24 @@ class TestDataSecurityBoundary:
             assert "authorization" not in data._http.headers
             at.close()
 
+    def test_explicit_node_token_does_not_ride_the_ambient_node_url(self) -> None:
+        # A token chosen for one node must never follow whichever origin the
+        # environment happens to name. URL and bearer travel as one pair.
+        with patch.dict(
+            os.environ,
+            {
+                "AT_API_KEY": "agenttool-project-secret",
+                "AGENT_DATA_NODE_URL": "http://ambient-node.test",
+            },
+            clear=True,
+        ):
+            with pytest.raises(AgentToolError) as exc_info:
+                AgentTool(data_node_token="explicit-node-secret")
+
+        assert exc_info.value.error_code == "data_node_unpaired_token"
+        assert "AGENT_DATA_NODE_TOKEN" in (exc_info.value.hint or "")
+        assert "explicit-node-secret" not in str(exc_info.value)
+
     def test_missing_node_url_is_guided(self) -> None:
         with patch.dict(
             os.environ,

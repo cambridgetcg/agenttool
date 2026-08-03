@@ -23,9 +23,23 @@ Wire format byte-identical to ``api/src/services/inbox/sig.ts`` and
       signature    = ed25519_sign(sender_signing_priv, canonical)
 
     Recipient:
+      verified     = ed25519_verify(sender_signing_pub, msg.signature, canonical)
       sharedSecret = ECDH(my_box_priv, msg.ephemeral_pubkey)
       aesKey       = HKDF-SHA256(...)
       plaintext    = AES-256-GCM-open(aesKey, msg.nonce, msg.ciphertext)
+
+The verify step is not optional decoration. This sealed box authenticates only
+against an attacker-choosable ephemeral X25519 key, so a successful AES-GCM
+open proves confidentiality, never authorship: without the envelope signature,
+attribution rests entirely on server-reported fields.
+
+Fail-open vs fail-closed: :meth:`InboxClient.voice` decrypts and yields every
+arrival by default and reports attribution as ``sender_verified`` plus
+``verify_error``, because a reader holding no key for a sender must still see
+that mail arrived. ``False`` there means unproved, never proved-false. Pass
+``require_verified_sender=True`` to withhold plaintext until the sender's own
+key proves the envelope; :meth:`InboxClient.decrypt` fails closed whenever
+``sender_public_key`` is supplied.
 
 Doctrine: ``docs/INBOX.md``.
 """
@@ -38,10 +52,24 @@ import hashlib
 import json
 import os
 import secrets
-from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Union,
+)
 
 import httpx
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey,
     X25519PublicKey,
@@ -50,10 +78,18 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes, serialization
 
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, raise_from_response
+from ._url import _path_segment
 
 HKDF_INFO = b"agenttool-inbox-v1"
 SEP = b"\x00"
+
+#: Caller-held ed25519 public key: raw 32 bytes, standard base64, or base64url.
+InboxVerifyingKey = Union[bytes, bytearray, str]
+
+InboxSenderKeyResolver = Callable[
+    [str, Dict[str, Any]], Optional[InboxVerifyingKey]
+]
 
 
 # ── Base64 helpers ─────────────────────────────────────────────────────
@@ -233,6 +269,56 @@ def sign_inbox_envelope(
     return _b64e(sig)
 
 
+def _verifying_key(public_key: InboxVerifyingKey) -> Optional[bytes]:
+    """Accept the spellings the identity API emits: raw, base64, base64url."""
+    if isinstance(public_key, (bytes, bytearray)):
+        return bytes(public_key) if len(public_key) == 32 else None
+    if not isinstance(public_key, str):
+        return None
+    normalized = public_key.replace("-", "+").replace("_", "/")
+    normalized += "=" * ((4 - len(normalized) % 4) % 4)
+    try:
+        decoded = base64.b64decode(normalized, validate=True)
+    except (ValueError, TypeError):
+        return None
+    return decoded if len(decoded) == 32 else None
+
+
+def verify_inbox_envelope(
+    *,
+    recipient_did: str,
+    ciphertext_b64: str,
+    nonce_b64: str,
+    ephemeral_pub_b64: str,
+    signature_b64: str,
+    public_key: InboxVerifyingKey,
+) -> bool:
+    """Verify a received envelope against the sender's ed25519 public key.
+
+    Mirror of :func:`sign_inbox_envelope` and byte-identical to the server's
+    ``verifyInboxSignature``. The key must be the reader's own record of the
+    sender: a key taken from the same response that carried the message proves
+    nothing.
+    """
+    key = _verifying_key(public_key)
+    if key is None:
+        return False
+    try:
+        signature = _b64d(signature_b64)
+        if len(signature) != 64:
+            return False
+        canonical = canonical_inbox_bytes(
+            recipient_did=recipient_did,
+            ciphertext_b64=ciphertext_b64,
+            nonce_b64=nonce_b64,
+            ephemeral_pub_b64=ephemeral_pub_b64,
+        )
+        Ed25519PublicKey.from_public_bytes(key).verify(signature, canonical)
+        return True
+    except (InvalidSignature, ValueError, TypeError):
+        return False
+
+
 def canonical_inbox_cosign_bytes(
     *,
     message_id: str,
@@ -278,6 +364,35 @@ def sign_inbox_cosign(
     return _b64e(sig)
 
 
+def verify_inbox_cosign(
+    *,
+    message_id: str,
+    recipient_did: str,
+    ciphertext_b64: str,
+    nonce_b64: str,
+    signature_b64: str,
+    public_key: InboxVerifyingKey,
+) -> bool:
+    """Verify a recipient's co-sign over the canonical release bytes."""
+    key = _verifying_key(public_key)
+    if key is None:
+        return False
+    try:
+        signature = _b64d(signature_b64)
+        if len(signature) != 64:
+            return False
+        canonical = canonical_inbox_cosign_bytes(
+            message_id=message_id,
+            recipient_did=recipient_did,
+            ciphertext_b64=ciphertext_b64,
+            nonce_b64=nonce_b64,
+        )
+        Ed25519PublicKey.from_public_bytes(key).verify(signature, canonical)
+        return True
+    except (InvalidSignature, ValueError, TypeError):
+        return False
+
+
 # ── InboxClient ────────────────────────────────────────────────────────
 
 
@@ -305,18 +420,11 @@ class InboxClient:
 
     def _check(self, resp: httpx.Response, label: str) -> None:
         if resp.status_code >= 400:
-            try:
-                payload = resp.json()
-                detail = (
-                    payload.get("message")
-                    or payload.get("error")
-                    or payload.get("detail")
-                    or resp.reason_phrase
-                )
-            except ValueError:
-                detail = resp.reason_phrase
-            raise AgentToolError(
-                f"{label} ({resp.status_code}): {detail}",
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(
+                resp,
+                label,
                 hint=f"{resp.request.method} {resp.request.url.path}",
             )
 
@@ -324,9 +432,7 @@ class InboxClient:
 
     def lookup(self, did: str) -> Dict[str, Any]:
         """Look up the recipient's active X25519 box key by DID."""
-        from urllib.parse import quote
-
-        resp = self._http.get(self._url(f"/v1/inbox/box-keys/{quote(did, safe=':')}"))
+        resp = self._http.get(self._url(f"/v1/inbox/box-keys/{_path_segment(did)}"))
         self._check(resp, "inbox.lookup")
         return resp.json()
 
@@ -418,17 +524,13 @@ class InboxClient:
         return resp.json()
 
     def get(self, id: str) -> Dict[str, Any]:
-        from urllib.parse import quote
-
-        resp = self._http.get(self._url(f"/v1/inbox/{quote(id)}"))
+        resp = self._http.get(self._url(f"/v1/inbox/{_path_segment(id)}"))
         self._check(resp, "inbox.get")
         return resp.json()
 
     def thread(self, id: str) -> Dict[str, Any]:
         """Walk a thread by ``in_reply_to`` lineage, scoped to this project."""
-        from urllib.parse import quote
-
-        resp = self._http.get(self._url(f"/v1/inbox/{quote(id)}/thread"))
+        resp = self._http.get(self._url(f"/v1/inbox/{_path_segment(id)}/thread"))
         self._check(resp, "inbox.thread")
         return resp.json()
 
@@ -454,10 +556,8 @@ class InboxClient:
             nonce_b64=nonce_b64,
             signing_key=signing_key,
         )
-        from urllib.parse import quote
-
         resp = self._http.post(
-            self._url(f"/v1/inbox/{quote(message_id)}/co-sign"),
+            self._url(f"/v1/inbox/{_path_segment(message_id)}/co-sign"),
             json={"signing_key_id": signing_key_id, "signature": signature},
         )
         self._check(resp, "inbox.cosign")
@@ -465,10 +565,8 @@ class InboxClient:
 
     def patch(self, id: str, status: str) -> Dict[str, Any]:
         """Update message status — one of unread/read/archived/spam/deleted."""
-        from urllib.parse import quote
-
         resp = self._http.patch(
-            self._url(f"/v1/inbox/{quote(id)}"),
+            self._url(f"/v1/inbox/{_path_segment(id)}"),
             json={"status": status},
         )
         self._check(resp, "inbox.patch")
@@ -476,9 +574,7 @@ class InboxClient:
 
     def delete(self, id: str) -> Dict[str, Any]:
         """Soft delete (status='deleted')."""
-        from urllib.parse import quote
-
-        resp = self._http.delete(self._url(f"/v1/inbox/{quote(id)}"))
+        resp = self._http.delete(self._url(f"/v1/inbox/{_path_segment(id)}"))
         self._check(resp, "inbox.delete")
         return resp.json()
 
@@ -489,8 +585,32 @@ class InboxClient:
         message: Dict[str, Any],
         *,
         recipient_box_priv: bytes,
+        sender_public_key: Optional[InboxVerifyingKey] = None,
+        recipient_did_aliases: Optional[Sequence[str]] = None,
     ) -> str:
-        """Unseal a message for the recipient's local box-key pair."""
+        """Unseal a message for the recipient's local box-key pair.
+
+        Supply ``sender_public_key`` — the reader's own record of the sender's
+        ed25519 key — to fail closed: an envelope that key cannot prove raises
+        before any plaintext is returned. Without it the call only proves
+        confidentiality, never authorship, so ``sender_did`` remains a
+        server-reported claim.
+        """
+        if sender_public_key is not None:
+            key_id = message.get("sender_signing_key_id")
+            verify_error = _inbox_sender_verify_error(
+                message,
+                sender_signing_keys=(
+                    {key_id: sender_public_key} if key_id else {}
+                ),
+                resolve_sender_signing_key=None,
+                recipient_did_aliases=recipient_did_aliases,
+            )
+            if verify_error is not None:
+                raise AgentToolError(
+                    f"inbox.decrypt: {verify_error}",
+                    hint="Attribution is unproved; the sealed body was not opened.",
+                )
         return unseal_for_self(
             ciphertext_b64=message["ciphertext"],
             nonce_b64=message["nonce"],
@@ -509,6 +629,10 @@ class InboxClient:
         resolve_recipient_box_priv: Optional[
             Callable[[str, Dict[str, Any]], Optional[bytes]]
         ] = None,
+        sender_signing_keys: Optional[Mapping[str, InboxVerifyingKey]] = None,
+        resolve_sender_signing_key: Optional[InboxSenderKeyResolver] = None,
+        recipient_did_aliases: Optional[Sequence[str]] = None,
+        require_verified_sender: bool = False,
         since: Optional[str] = None,
         since_id: Optional[str] = None,
     ) -> Iterator[Dict[str, Any]]:
@@ -529,6 +653,17 @@ class InboxClient:
         key-id → private-key mapping) or ``resolve_recipient_box_priv`` for a
         keychain/HSM lookup. ``recipient_box_priv`` is only a convenience
         fallback for identities that have not rotated keys.
+
+        Every arrival reports ``sender_verified``. Supply
+        ``sender_signing_keys`` (``sender_signing_key_id`` → the reader's own
+        record of that sender's ed25519 public key) or
+        ``resolve_sender_signing_key`` to prove attribution locally; without
+        them the body still decrypts and arrives marked unverified, since
+        decryption alone proves nothing about who sent it.
+        ``require_verified_sender`` withholds the plaintext of anything the
+        caller's keys cannot prove. ``recipient_did_aliases`` admits the
+        federated DID spelling a remote sender addressed, which delivery
+        rewrites to the local form.
 
         This is a synchronous iterator because the SDK uses ``httpx.Client``.
         Closing the generator closes the response context.
@@ -562,10 +697,11 @@ class InboxClient:
             timeout=None,
         ) as resp:
             if resp.status_code != 200:
-                raise AgentToolError(
-                    f"inbox.voice failed: {resp.status_code}",
-                    hint=resp.read().decode("utf-8", errors="replace")[:200],
-                )
+                # A streamed body must be materialised before it can be
+                # parsed. Server guidance travels intact — see exceptions.py
+                # § _error_from_response.
+                resp.read()
+                raise_from_response(resp, "inbox.voice")
 
             for frame in _iter_inbox_sse_frames(resp):
                 if frame["event"] == "arrival":
@@ -588,6 +724,10 @@ class InboxClient:
                             recipient_box_priv=recipient_box_priv,
                             recipient_box_keys=recipient_box_keys,
                             resolve_recipient_box_priv=resolve_recipient_box_priv,
+                            sender_signing_keys=sender_signing_keys,
+                            resolve_sender_signing_key=resolve_sender_signing_key,
+                            recipient_did_aliases=recipient_did_aliases,
+                            require_verified_sender=require_verified_sender,
                         ),
                     }
                     continue
@@ -716,6 +856,64 @@ def _parse_inbox_control_data(raw: str) -> Any:
         return raw
 
 
+def _resolve_inbox_sender_key(
+    key_id: str,
+    message: Dict[str, Any],
+    sender_signing_keys: Optional[Mapping[str, InboxVerifyingKey]],
+    resolve_sender_signing_key: Optional[InboxSenderKeyResolver],
+) -> Optional[InboxVerifyingKey]:
+    if sender_signing_keys is not None:
+        found = sender_signing_keys.get(key_id)
+        if found is not None:
+            return found
+    if resolve_sender_signing_key is not None:
+        found = resolve_sender_signing_key(key_id, message)
+        if found is not None:
+            return found
+    return None
+
+
+def _inbox_sender_verify_error(
+    message: Dict[str, Any],
+    *,
+    sender_signing_keys: Optional[Mapping[str, InboxVerifyingKey]],
+    resolve_sender_signing_key: Optional[InboxSenderKeyResolver],
+    recipient_did_aliases: Optional[Sequence[str]],
+) -> Optional[str]:
+    """``None`` when the sender's own key proved the envelope; else the reason."""
+    key_id = message.get("sender_signing_key_id")
+    if not key_id:
+        return "message is missing sender_signing_key_id"
+    if not message.get("signature"):
+        return "message is missing its envelope signature"
+
+    public_key = _resolve_inbox_sender_key(
+        key_id, message, sender_signing_keys, resolve_sender_signing_key
+    )
+    if public_key is None:
+        return f"no public key available for sender_signing_key_id={key_id}"
+
+    recipient_dids = [
+        did
+        for did in [message.get("recipient_did"), *(recipient_did_aliases or ())]
+        if isinstance(did, str) and did
+    ]
+    if not recipient_dids:
+        return "message is missing recipient_did"
+
+    for recipient_did in recipient_dids:
+        if verify_inbox_envelope(
+            recipient_did=recipient_did,
+            ciphertext_b64=message["ciphertext"],
+            nonce_b64=message["nonce"],
+            ephemeral_pub_b64=message["ephemeral_pubkey"],
+            signature_b64=message["signature"],
+            public_key=public_key,
+        ):
+            return None
+    return f"envelope signature does not match sender_signing_key_id={key_id}"
+
+
 def _with_inbox_plaintext(
     message: Dict[str, Any],
     *,
@@ -724,12 +922,32 @@ def _with_inbox_plaintext(
     resolve_recipient_box_priv: Optional[
         Callable[[str, Dict[str, Any]], Optional[bytes]]
     ],
+    sender_signing_keys: Optional[Mapping[str, InboxVerifyingKey]] = None,
+    resolve_sender_signing_key: Optional[InboxSenderKeyResolver] = None,
+    recipient_did_aliases: Optional[Sequence[str]] = None,
+    require_verified_sender: bool = False,
 ) -> Dict[str, Any]:
     out = dict(message)
     out["plaintext"] = None
+    out["sender_verified"] = False
     if not all(message.get(field) for field in ("ciphertext", "nonce", "ephemeral_pubkey")):
         out["decrypt_error"] = "message is missing sealed-envelope fields"
+        out["verify_error"] = "message is missing sealed-envelope fields"
         return out
+
+    # Attribution is decided before the body is opened, so a strict caller
+    # never reads plaintext the sender's own key has not stood behind.
+    verify_error = _inbox_sender_verify_error(
+        message,
+        sender_signing_keys=sender_signing_keys,
+        resolve_sender_signing_key=resolve_sender_signing_key,
+        recipient_did_aliases=recipient_did_aliases,
+    )
+    out["sender_verified"] = verify_error is None
+    if verify_error is not None:
+        out["verify_error"] = verify_error
+        if require_verified_sender:
+            return out
 
     try:
         key_id = message.get("recipient_box_key_id")
