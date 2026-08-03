@@ -33,8 +33,10 @@ import { sha256, sha512 } from "@noble/hashes/sha2.js";
 import {
   AtRestClient,
   canonicalAtRestBytes,
+  canonicalAtRestBytesV2,
   signAtRest,
 } from "../src/at-rest.js";
+import { canonicalIdentityAuthorityBytes } from "../src/authority.js";
 
 // Wire sha512 for @noble/ed25519 sync signing.
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -425,5 +427,298 @@ describe("Full e2e — witness signs at-rest transition", () => {
     });
     const lines = bytes.split("\n");
     expect(lines[3]).toBe("custom:bleach-event");
+  });
+});
+
+// ── The path takes a row id; the signature covers the DID ───────────────
+//
+// The route resolves `:id` strictly as a row id (`eq(identities.id, ...)`)
+// and then recomputes the canonical bytes from the resolved `about.did`.
+// A client that signs the path argument therefore has no input that works:
+// a UUID resolves but verifies against the wrong bytes, and a DID 404s
+// before verification is ever reached. `mark()` takes both.
+
+interface CapturedRequest {
+  url: string;
+  init: RequestInit;
+}
+
+function stubTransport(
+  captured: CapturedRequest[],
+  body: unknown = { status: "memorial" },
+): AtRestClient {
+  return new AtRestClient({
+    baseUrl: "https://api.agenttool.dev",
+    headers: { "X-Test": "1" },
+    timeout: 5000,
+    request: (input, init) => {
+      captured.push({ url: String(input), init: init ?? {} });
+      return Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    },
+  });
+}
+
+const ABOUT_ID = "550e8400-e29b-41d4-a716-446655440000";
+const ABOUT_DID = "did:at:test/coral-9b3a";
+const WITNESS_DID = "did:at:test/marine-biologist";
+
+describe("AtRestClient.mark — identifier forms", () => {
+  const markOpts = (witnessPriv: Uint8Array) => ({
+    content: "Coral colony bleached out. No live polyps remain.",
+    at_rest_kind: "death" as const,
+    ended_at: "2026-05-11T14:00:00Z",
+    about_did: ABOUT_DID,
+    witness_did: WITNESS_DID,
+    signing_key_id: "550e8400-e29b-41d4-a716-446655440010",
+    signing_key: witnessPriv,
+  });
+
+  test("POSTs to the row id but signs the about DID", async () => {
+    const witnessPriv = ed.utils.randomPrivateKey();
+    const witnessPub = await ed.getPublicKeyAsync(witnessPriv);
+    const captured: CapturedRequest[] = [];
+
+    await stubTransport(captured).mark(ABOUT_ID, markOpts(witnessPriv));
+
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.url).toBe(
+      `https://api.agenttool.dev/v1/identities/${ABOUT_ID}/at-rest`,
+    );
+
+    const sent = JSON.parse(captured[0]!.init.body as string) as {
+      signature_b64: string;
+    };
+    const sig = Uint8Array.from(Buffer.from(sent.signature_b64, "base64"));
+    const canonicalFields = {
+      witnessIdentityDid: WITNESS_DID,
+      atRestKind: "death",
+      endedAtIso: "2026-05-11T14:00:00Z",
+      content: "Coral colony bleached out. No live polyps remain.",
+      witnessSigningKeyId: "550e8400-e29b-41d4-a716-446655440010",
+    };
+
+    // Verifies against what the server recomputes — about.did.
+    expect(
+      await ed.verifyAsync(
+        sig,
+        new TextEncoder().encode(
+          canonicalAtRestBytes({ aboutIdentityDid: ABOUT_DID, ...canonicalFields }),
+        ),
+        witnessPub,
+      ),
+    ).toBe(true);
+
+    // And not against the path argument, which was the old signed value.
+    expect(
+      await ed.verifyAsync(
+        sig,
+        new TextEncoder().encode(
+          canonicalAtRestBytes({ aboutIdentityDid: ABOUT_ID, ...canonicalFields }),
+        ),
+        witnessPub,
+      ),
+    ).toBe(false);
+  });
+
+  test("signs the v2 layout on request", async () => {
+    const witnessPriv = ed.utils.randomPrivateKey();
+    const witnessPub = await ed.getPublicKeyAsync(witnessPriv);
+    const captured: CapturedRequest[] = [];
+
+    await stubTransport(captured).mark(ABOUT_ID, {
+      ...markOpts(witnessPriv),
+      canonical_version: "at-rest/v2",
+    });
+
+    const sent = JSON.parse(captured[0]!.init.body as string) as {
+      signature_b64: string;
+    };
+    const canonicalFields = {
+      aboutIdentityDid: ABOUT_DID,
+      witnessIdentityDid: WITNESS_DID,
+      atRestKind: "death",
+      endedAtIso: "2026-05-11T14:00:00Z",
+      content: "Coral colony bleached out. No live polyps remain.",
+      witnessSigningKeyId: "550e8400-e29b-41d4-a716-446655440010",
+    };
+    const sig = Uint8Array.from(Buffer.from(sent.signature_b64, "base64"));
+    expect(
+      await ed.verifyAsync(
+        sig,
+        new TextEncoder().encode(canonicalAtRestBytesV2(canonicalFields)),
+        witnessPub,
+      ),
+    ).toBe(true);
+    expect(
+      await ed.verifyAsync(
+        sig,
+        new TextEncoder().encode(canonicalAtRestBytes(canonicalFields)),
+        witnessPub,
+      ),
+    ).toBe(false);
+  });
+
+  test("sends no authority headers when the caller supplies none", async () => {
+    const captured: CapturedRequest[] = [];
+    await stubTransport(captured).mark(
+      ABOUT_ID,
+      markOpts(ed.utils.randomPrivateKey()),
+    );
+    const headers = captured[0]!.init.headers as Record<string, string>;
+    expect(headers["X-Agenttool-Authority-Signature"]).toBeUndefined();
+    expect(headers["X-Test"]).toBe("1");
+  });
+
+  test("a rooted about-identity's root signs the exact transmitted bytes", async () => {
+    const rootPriv = ed.utils.randomPrivateKey();
+    const rootPub = await ed.getPublicKeyAsync(rootPriv);
+    const captured: CapturedRequest[] = [];
+
+    await stubTransport(captured).mark(ABOUT_ID, {
+      ...markOpts(ed.utils.randomPrivateKey()),
+      authority: {
+        signing_key: rootPriv,
+        sequence: 7,
+        timestamp: "2026-07-24T12:00:00.000Z",
+      },
+    });
+
+    const { url, init } = captured[0]!;
+    const headers = init.headers as Record<string, string>;
+    expect(headers["X-Agenttool-Authority-Sequence"]).toBe("7");
+    expect(headers["X-Agenttool-Authority-Timestamp"]).toBe(
+      "2026-07-24T12:00:00.000Z",
+    );
+
+    // The whole point: hash the bytes the transport actually received and
+    // check the root proof covers exactly those, not a re-serialization.
+    const transmitted = init.body as string;
+    const digest = canonicalIdentityAuthorityBytes({
+      identityDid: ABOUT_DID,
+      method: "POST",
+      requestTarget: new URL(url).pathname,
+      body: transmitted,
+      sequence: 7,
+      timestamp: "2026-07-24T12:00:00.000Z",
+    });
+    expect(
+      await ed.verifyAsync(
+        Uint8Array.from(
+          Buffer.from(headers["X-Agenttool-Authority-Signature"]!, "base64"),
+        ),
+        digest,
+        rootPub,
+      ),
+    ).toBe(true);
+
+    // A single re-serialization of the same object breaks the proof.
+    const reserialized = JSON.stringify({
+      ...(JSON.parse(transmitted) as Record<string, unknown>),
+      extra: null,
+    });
+    expect(
+      await ed.verifyAsync(
+        Uint8Array.from(
+          Buffer.from(headers["X-Agenttool-Authority-Signature"]!, "base64"),
+        ),
+        canonicalIdentityAuthorityBytes({
+          identityDid: ABOUT_DID,
+          method: "POST",
+          requestTarget: new URL(url).pathname,
+          body: reserialized,
+          sequence: 7,
+          timestamp: "2026-07-24T12:00:00.000Z",
+        }),
+        rootPub,
+      ),
+    ).toBe(false);
+  });
+});
+
+// ── Framing — no field may impersonate the next ─────────────────────────
+
+describe("at-rest canonical framing", () => {
+  const base = {
+    aboutIdentityDid: ABOUT_DID,
+    witnessIdentityDid: WITNESS_DID,
+    atRestKind: "death",
+    endedAtIso: "2026-05-11T14:00:00Z",
+    content: "Testimony.",
+    witnessSigningKeyId: "primary",
+  };
+
+  test("v1 refuses a newline inside a delimited field", () => {
+    expect(() =>
+      canonicalAtRestBytes({
+        ...base,
+        witnessIdentityDid: `${WITNESS_DID}\ndissolution\n2026-01-01T00:00:00Z`,
+      }),
+    ).toThrow(/newline or NUL/);
+    expect(() =>
+      canonicalAtRestBytes({ ...base, witnessSigningKeyId: "primary\nother" }),
+    ).toThrow(/newline or NUL/);
+  });
+
+  test("v2 refuses a NUL inside a delimited field", () => {
+    expect(() =>
+      canonicalAtRestBytesV2({ ...base, atRestKind: "death\0custom:x" }),
+    ).toThrow(/newline or NUL/);
+  });
+
+  test("content may contain either delimiter — it is hashed, not framed", () => {
+    expect(() =>
+      canonicalAtRestBytes({ ...base, content: "line\none\0two" }),
+    ).not.toThrow();
+  });
+
+  test("fixed cross-language vectors — ts, py, and the server agree", () => {
+    const vector = {
+      aboutIdentityDid: "did:at:test/coral-9b3a",
+      witnessIdentityDid: "did:at:test/marine-biologist",
+      atRestKind: "death",
+      endedAtIso: "2026-05-11T14:00:00Z",
+      content: "Coral colony bleached out at 32°C+. No live polyps remain.",
+      witnessSigningKeyId: "primary",
+    };
+    const digest = (canonical: string) =>
+      Array.from(sha256(new TextEncoder().encode(canonical)))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    expect(digest(canonicalAtRestBytes(vector))).toBe(
+      "b232e93738eb9571f49985a066b16e81d831af8ece29adba0fe9b54c8b31c539",
+    );
+    expect(digest(canonicalAtRestBytesV2(vector))).toBe(
+      "f62ca53a2c93d46707d9073719df8ca4336fb7d6f0f388653b6ff0a79d9e1c7f",
+    );
+  });
+
+  test("v2 is the same seven fields, NUL-delimited", () => {
+    const v1 = canonicalAtRestBytes(base).split("\n");
+    const v2 = canonicalAtRestBytesV2(base).split("\0");
+    expect(v2).toHaveLength(7);
+    expect(v2[0]).toBe("at-rest/v2");
+    expect(v1[0]).toBe("at-rest/v1");
+    expect(v2.slice(1)).toEqual(v1.slice(1));
+  });
+
+  test("two distinct field sets cannot collide across the delimiter", () => {
+    // The classic injection: move the boundary between two adjacent fields.
+    const shifted = canonicalAtRestBytesV2({
+      ...base,
+      witnessIdentityDid: "did:at:test/w",
+      atRestKind: "death",
+    });
+    const other = canonicalAtRestBytesV2({
+      ...base,
+      witnessIdentityDid: "did:at:test/w",
+      atRestKind: "death",
+      endedAtIso: "2026-05-11T14:00:01Z",
+    });
+    expect(shifted).not.toBe(other);
   });
 });
