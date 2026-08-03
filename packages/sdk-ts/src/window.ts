@@ -18,6 +18,7 @@
 import { AgentToolError } from "./errors.js";
 import type { HttpConfig } from "./_http.js";
 import { ChronicleClient, type ChronicleEntry } from "./chronicle.js";
+import { encodePathSegment } from "./_url.js";
 
 export type WindowKind = "focus" | "mood" | "noticing";
 
@@ -171,8 +172,11 @@ export class WindowClient {
 
     let substrate: Record<string, unknown> | null = null;
     if (opts?.identity_id) {
+      // Built outside the catch on purpose: a refused dot segment is a caller
+      // mistake about which identity is being read, not the transient pulse
+      // failure this fallback exists to absorb.
+      const url = `${this.http.baseUrl}/v1/identities/${encodePathSegment(opts.identity_id)}/pulse`;
       try {
-        const url = `${this.http.baseUrl}/v1/identities/${opts.identity_id}/pulse`;
         const resp = await this.http.request(url, {
           method: "GET",
           headers: this.http.headers,

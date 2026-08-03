@@ -119,7 +119,10 @@ describe("register() — anonymous front-door", () => {
     } catch (e) {
       expect(e).toBeInstanceOf(AgentToolError);
       const err = e as AgentToolError;
-      expect(err.message).toContain("register failed (422)");
+      // The server's own sentence is the message; the status stays readable
+      // on `.status` rather than eating the line every caller prints.
+      expect(err.message).toBe("name too long");
+      expect(err.status).toBe(422);
       expect(err.hint || "").toContain("name length");
     }
   });

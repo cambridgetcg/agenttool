@@ -15,6 +15,7 @@ import {
   signCovenantReject,
   signCovenantWithdraw,
 } from "./crypto.js";
+import { encodePathSegment } from "./_url.js";
 
 export type CovenantStatus = "active" | "paused" | "dissolved";
 
@@ -299,7 +300,7 @@ export class CovenantsClient {
       initiatorSignatureB64: opts.initiator_signature_b64,
       signing_key: opts.signing_key,
     });
-    return (await this.req("POST", `/v1/covenants/${id}/accept`, {
+    return (await this.req("POST", `/v1/covenants/${encodePathSegment(id)}/accept`, {
       agent_did: opts.agent_did,
       counterparty_signing_key_id: opts.signing_key_id,
       counterparty_signature,
@@ -329,7 +330,7 @@ export class CovenantsClient {
       reason,
       signing_key: opts.signing_key,
     });
-    return (await this.req("POST", `/v1/covenants/${id}/reject`, {
+    return (await this.req("POST", `/v1/covenants/${encodePathSegment(id)}/reject`, {
       agent_did: opts.agent_did,
       rejecter_signing_key_id: opts.signing_key_id,
       rejection_signature,
@@ -354,7 +355,7 @@ export class CovenantsClient {
       initiatorDid: opts.agent_did,
       signing_key: opts.signing_key,
     });
-    return (await this.req("PATCH", `/v1/covenants/${id}`, {
+    return (await this.req("PATCH", `/v1/covenants/${encodePathSegment(id)}`, {
       status: "dissolved",
       agent_did: opts.agent_did,
       signing_key_id: opts.signing_key_id,
@@ -389,7 +390,7 @@ export class CovenantsClient {
         { hint: "Pass status, vows, notes, or another mutable field." },
       );
     }
-    return (await this.req("PATCH", `/v1/covenants/${covenantId}`, body)) as Covenant;
+    return (await this.req("PATCH", `/v1/covenants/${encodePathSegment(covenantId)}`, body)) as Covenant;
   }
 
   private async req(

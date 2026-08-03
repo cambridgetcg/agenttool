@@ -9,7 +9,7 @@ import type {
   ScrapeResult,
   StaticToolResponseMetadata,
 } from "./types.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
 
 type DocumentBaseContentType =
   | "text/plain"
@@ -245,40 +245,10 @@ export class ToolsClient {
     });
 
     if (resp.status >= 400) {
-      let responseBody: unknown;
-      try {
-        responseBody = await resp.json();
-      } catch {
-        responseBody = undefined;
-      }
-      const parsed = AgentToolError.fromResponseBody(
-        responseBody,
-        resp.status,
-        resp.statusText,
-        resp.headers,
-      );
-      throw new AgentToolError(
-        `Tools API error (${resp.status}): ${parsed.message}`,
-        {
-          hint:
-            parsed.hint ?? "Check your API key and request parameters.",
-          code: parsed.code,
-          next_actions: parsed.next_actions,
-          docs: parsed.docs,
-          safety: parsed.safety,
-          details: parsed.details,
-          status: resp.status,
-          x402Version: parsed.x402Version,
-          accepts: parsed.accepts,
-          resource: parsed.resource,
-          extensions: parsed.extensions,
-          paymentRequired: parsed.paymentRequired,
-          paymentResponse: parsed.paymentResponse,
-          paymentStatusLink: parsed.paymentStatusLink,
-          retryAfter: parsed.retryAfter,
-          creditsBalance: parsed.creditsBalance,
-        },
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, "tools", {
+        hint: "Check your API key and request parameters.",
+      });
     }
 
     return {

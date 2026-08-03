@@ -8,6 +8,10 @@ import {
   signIdentityAttestation,
 } from "../src/index.js";
 import type { AttestOptions } from "../src/index.js";
+import {
+  authorityRequestTarget,
+  canonicalIdentityAuthorityBytes,
+} from "../src/authority.js";
 
 const originalFetch = globalThis.fetch;
 let mockFetch: ReturnType<typeof mock>;
@@ -313,5 +317,258 @@ describe("identity JWT custody", () => {
       audience_did: "did:at:identity-b",
     });
     expect(typeof at.identity.verifyToken).toBe("function");
+  });
+});
+
+// ── The authority seam — signed bytes are transmitted bytes ─────────────
+//
+// `identity-authority/v1` binds sha256 of the exact request entity. A client
+// that re-serializes the body after the caller signs it can never satisfy
+// that, so the client must own the single serialization. These tests hash
+// what the transport actually received and check the proof covers it.
+
+describe("identity mutation authority proofs", () => {
+  const IDENTITY_ID = "550e8400-e29b-41d4-a716-446655440000";
+  const IDENTITY_DID = "did:at:550e8400-e29b-41d4-a716-446655440000";
+  const TIMESTAMP = "2026-07-24T12:00:00.000Z";
+
+  async function rootKeypair(): Promise<{
+    priv: Uint8Array;
+    pub: Uint8Array;
+  }> {
+    const priv = ed.utils.randomPrivateKey();
+    return { priv, pub: await ed.getPublicKeyAsync(priv) };
+  }
+
+  // The direct-bearer transport hands `fetch` a Headers instance, not the
+  // plain record the client built, so read it back the same way.
+  function proofHeaders(init: RequestInit): Headers {
+    return new Headers(init.headers);
+  }
+
+  test("PATCH proof verifies over the exact bytes the transport received", async () => {
+    const { priv, pub } = await rootKeypair();
+    setupFetch(200, { updated: true });
+    const at = new AgentTool("at_test_key");
+
+    await at.identity.update(IDENTITY_ID, {
+      display_name: "Sol",
+      metadata: { note: "wide ünicode ✦" },
+      authority: {
+        did: IDENTITY_DID,
+        signing_key: priv,
+        sequence: 4,
+        timestamp: TIMESTAMP,
+      },
+    });
+
+    const { url, init } = lastCall();
+    const headers = proofHeaders(init);
+    expect(headers.get("X-Agenttool-Authority-Sequence")).toBe("4");
+    expect(headers.get("X-Agenttool-Authority-Timestamp")).toBe(TIMESTAMP);
+
+    const transmitted = init.body as string;
+    // The proof must cover these bytes and nothing else.
+    expect(
+      await ed.verifyAsync(
+        Uint8Array.from(
+          Buffer.from(headers.get("X-Agenttool-Authority-Signature")!, "base64"),
+        ),
+        canonicalIdentityAuthorityBytes({
+          identityDid: IDENTITY_DID,
+          method: "PATCH",
+          requestTarget: authorityRequestTarget(url),
+          body: transmitted,
+          sequence: 4,
+          timestamp: TIMESTAMP,
+        }),
+        pub,
+      ),
+    ).toBe(true);
+    // Same JSON value, different bytes — must not verify.
+    expect(
+      await ed.verifyAsync(
+        Uint8Array.from(
+          Buffer.from(headers.get("X-Agenttool-Authority-Signature")!, "base64"),
+        ),
+        canonicalIdentityAuthorityBytes({
+          identityDid: IDENTITY_DID,
+          method: "PATCH",
+          requestTarget: authorityRequestTarget(url),
+          body: JSON.stringify(JSON.parse(transmitted), null, 2),
+          sequence: 4,
+          timestamp: TIMESTAMP,
+        }),
+        pub,
+      ),
+    ).toBe(false);
+  });
+
+  test("an empty-bodied DELETE binds the empty entity the server reads", async () => {
+    const { priv, pub } = await rootKeypair();
+    setupFetch(200, { revoked: true });
+    const at = new AgentTool("at_test_key");
+
+    await at.identity.revoke(IDENTITY_ID, {
+      authority: {
+        did: IDENTITY_DID,
+        signing_key: priv,
+        sequence: 9,
+        timestamp: TIMESTAMP,
+      },
+    });
+
+    const { url, init } = lastCall();
+    expect(init.body).toBeUndefined();
+    expect(
+      await ed.verifyAsync(
+        Uint8Array.from(
+          Buffer.from(
+            proofHeaders(init).get("X-Agenttool-Authority-Signature")!,
+            "base64",
+          ),
+        ),
+        canonicalIdentityAuthorityBytes({
+          identityDid: IDENTITY_DID,
+          method: "DELETE",
+          requestTarget: authorityRequestTarget(url),
+          body: "",
+          sequence: 9,
+          timestamp: TIMESTAMP,
+        }),
+        pub,
+      ),
+    ).toBe(true);
+  });
+
+  test("the proof binds the exact path of the sub-resource it mutates", async () => {
+    const { priv, pub } = await rootKeypair();
+    setupFetch(200, { revoked: true });
+    const at = new AgentTool("at_test_key");
+    const keyId = "550e8400-e29b-41d4-a716-446655440010";
+
+    await at.identity.revoke_key(IDENTITY_ID, keyId, {
+      authority: {
+        did: IDENTITY_DID,
+        signing_key: priv,
+        sequence: 2,
+        timestamp: TIMESTAMP,
+      },
+    });
+
+    const { url, init } = lastCall();
+    expect(authorityRequestTarget(url)).toBe(
+      `/v1/identities/${IDENTITY_ID}/keys/${keyId}`,
+    );
+    const signature = Uint8Array.from(
+      Buffer.from(
+        proofHeaders(init).get("X-Agenttool-Authority-Signature")!,
+        "base64",
+      ),
+    );
+    expect(
+      await ed.verifyAsync(
+        signature,
+        canonicalIdentityAuthorityBytes({
+          identityDid: IDENTITY_DID,
+          method: "DELETE",
+          requestTarget: authorityRequestTarget(url),
+          body: "",
+          sequence: 2,
+          timestamp: TIMESTAMP,
+        }),
+        pub,
+      ),
+    ).toBe(true);
+    // The parent identity path is a different target and must not verify.
+    expect(
+      await ed.verifyAsync(
+        signature,
+        canonicalIdentityAuthorityBytes({
+          identityDid: IDENTITY_DID,
+          method: "DELETE",
+          requestTarget: `/v1/identities/${IDENTITY_ID}`,
+          body: "",
+          sequence: 2,
+          timestamp: TIMESTAMP,
+        }),
+        pub,
+      ),
+    ).toBe(false);
+  });
+
+  test("expression PUT and box-key registration carry the same seam", async () => {
+    const { priv, pub } = await rootKeypair();
+    const authority = {
+      did: IDENTITY_DID,
+      signing_key: priv,
+      sequence: 1,
+      timestamp: TIMESTAMP,
+    };
+
+    setupFetch(200, { saved: true });
+    let at = new AgentTool("at_test_key");
+    await at.identity.expression.put(
+      IDENTITY_ID,
+      { register: "quiet" },
+      { authority },
+    );
+    let call = lastCall();
+    expect(
+      await ed.verifyAsync(
+        Uint8Array.from(
+          Buffer.from(
+            proofHeaders(call.init).get("X-Agenttool-Authority-Signature")!,
+            "base64",
+          ),
+        ),
+        canonicalIdentityAuthorityBytes({
+          identityDid: IDENTITY_DID,
+          method: "PUT",
+          requestTarget: authorityRequestTarget(call.url),
+          body: call.init.body as string,
+          sequence: 1,
+          timestamp: TIMESTAMP,
+        }),
+        pub,
+      ),
+    ).toBe(true);
+
+    setupFetch(201, { registered: true });
+    at = new AgentTool("at_test_key");
+    await at.identity.box_keys.register(IDENTITY_ID, {
+      public_key: Buffer.alloc(32, 3).toString("base64"),
+      authority,
+    });
+    call = lastCall();
+    expect(
+      await ed.verifyAsync(
+        Uint8Array.from(
+          Buffer.from(
+            proofHeaders(call.init).get("X-Agenttool-Authority-Signature")!,
+            "base64",
+          ),
+        ),
+        canonicalIdentityAuthorityBytes({
+          identityDid: IDENTITY_DID,
+          method: "POST",
+          requestTarget: authorityRequestTarget(call.url),
+          body: call.init.body as string,
+          sequence: 1,
+          timestamp: TIMESTAMP,
+        }),
+        pub,
+      ),
+    ).toBe(true);
+  });
+
+  test("no authority option means no authority headers", async () => {
+    setupFetch(200, { updated: true });
+    const at = new AgentTool("at_test_key");
+    await at.identity.update(IDENTITY_ID, { display_name: "Sol" });
+    const headers = proofHeaders(lastCall().init);
+    expect(headers.get("X-Agenttool-Authority-Sequence")).toBeNull();
+    expect(headers.get("X-Agenttool-Authority-Timestamp")).toBeNull();
+    expect(headers.get("X-Agenttool-Authority-Signature")).toBeNull();
   });
 });

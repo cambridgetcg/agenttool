@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from .exceptions import AgentToolError
+from .exceptions import raise_from_response
 
 DEFAULT_BASE_URL = "https://api.agenttool.dev"
 
@@ -96,12 +96,11 @@ def register(
         resp = client.post(url, json=body)
 
     if resp.status_code != 201:
-        try:
-            detail = resp.json().get("detail") or resp.json().get("error") or resp.text
-        except Exception:
-            detail = resp.text
-        raise AgentToolError(
-            f"register failed ({resp.status_code}): {detail}",
+        # Server guidance travels intact. See exceptions.py
+        # § _error_from_response.
+        raise_from_response(
+            resp,
+            "register",
             hint="Check name length (1-128), capabilities count (≤32), purpose length (≤500).",
         )
     return resp.json()

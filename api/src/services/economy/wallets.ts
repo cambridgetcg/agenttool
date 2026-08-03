@@ -20,8 +20,17 @@ export async function createWallet(
     agentId?: string;
     identityId?: string;
     currency?: string;
+    /** 'agent' means the agent derives and holds this wallet's chain keys;
+     *  AgentTool never can. Custody is fixed here and never converted later —
+     *  flipping a funded wallet would strand whatever sits at the addresses
+     *  minted under the previous model. The caller must have already verified
+     *  that agentSigningPubB64 is an active registered key of the identity. */
+    ownerType?: "platform" | "agent";
+    agentSigningPubB64?: string;
+    agentWalletIndex?: number;
   },
 ) {
+  const ownerType = input.ownerType ?? "platform";
   const [wallet] = await db
     .insert(wallets)
     .values({
@@ -32,6 +41,9 @@ export async function createWallet(
       currency: input.currency ?? "GBP",
       status: "active",
       balance: 0,
+      ownerType,
+      agentSigningPubB64: ownerType === "agent" ? (input.agentSigningPubB64 ?? null) : null,
+      agentWalletIndex: ownerType === "agent" ? (input.agentWalletIndex ?? null) : null,
     })
     .returning();
   return wallet;

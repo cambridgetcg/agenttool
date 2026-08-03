@@ -15,8 +15,11 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
 import { decryptThought, encryptThought } from "./crypto.js";
+// Secret names are caller-supplied path segments like every other id here, so
+// they cross the same shared boundary.
+import { encodePathSegment } from "./_url.js";
 
 export interface PutSecretOptions {
   description?: string;
@@ -85,19 +88,19 @@ export class VaultClient {
     if (options?.ttl_seconds !== undefined) body.ttl_seconds = options.ttl_seconds;
     if (options?.rotation_days !== undefined) body.rotation_days = options.rotation_days;
     const extra: Record<string, string> = options?.agent_id ? { "X-Agent-Id": options.agent_id } : {};
-    return this.req("PUT", `/v1/vault/${name}`, body, extra);
+    return this.req("PUT", `/v1/vault/${encodePathSegment(name)}`, body, extra);
   }
 
   /** Retrieve a secret's plaintext value. */
   async get(name: string, options?: GetSecretOptions): Promise<Record<string, unknown>> {
     const qs = options?.version !== undefined ? `?version=${options.version}` : "";
     const extra: Record<string, string> = options?.agent_id ? { "X-Agent-Id": options.agent_id } : {};
-    return this.req("GET", `/v1/vault/${name}${qs}`, undefined, extra);
+    return this.req("GET", `/v1/vault/${encodePathSegment(name)}${qs}`, undefined, extra);
   }
 
   /** Soft-delete a secret (all versions). */
   async delete(name: string): Promise<Record<string, unknown>> {
-    return this.req("DELETE", `/v1/vault/${name}`);
+    return this.req("DELETE", `/v1/vault/${encodePathSegment(name)}`);
   }
 
   /** List all secrets (names + metadata — values never returned). */
@@ -114,7 +117,7 @@ export class VaultClient {
 
   /** Get version history for a secret (metadata only, no values). */
   async versions(name: string): Promise<Record<string, unknown>[]> {
-    const data = await this.req("GET", `/v1/vault/${name}/versions`);
+    const data = await this.req("GET", `/v1/vault/${encodePathSegment(name)}/versions`);
     const d = data as { versions?: Record<string, unknown>[] };
     return d.versions ?? (data as unknown as Record<string, unknown>[]);
   }
@@ -125,13 +128,13 @@ export class VaultClient {
     if (options.allowed_agents !== undefined) body.allowed_agents = options.allowed_agents;
     if (options.read_only !== undefined) body.read_only = options.read_only;
     if (options.require_agent_id !== undefined) body.require_agent_id = options.require_agent_id;
-    return this.req("PUT", `/v1/vault/${name}/policy`, body);
+    return this.req("PUT", `/v1/vault/${encodePathSegment(name)}/policy`, body);
   }
 
   /** Retrieve the audit log for a secret or project-wide. */
   async audit(name?: string, options?: { limit?: number }): Promise<Record<string, unknown>[]> {
     const qs = `?limit=${options?.limit ?? 50}`;
-    const path = name ? `/v1/vault/${name}/audit${qs}` : `/v1/vault/audit${qs}`;
+    const path = name ? `/v1/vault/${encodePathSegment(name)}/audit${qs}` : `/v1/vault/audit${qs}`;
     const data = await this.req("GET", path);
     const d = data as { events?: Record<string, unknown>[] };
     return d.events ?? (data as unknown as Record<string, unknown>[]);
@@ -179,7 +182,7 @@ export class VaultClient {
     const extra: Record<string, string> = options.agent_id
       ? { "X-Agent-Id": options.agent_id }
       : {};
-    return this.req("PUT", `/v1/vault/${name}`, body, extra);
+    return this.req("PUT", `/v1/vault/${encodePathSegment(name)}`, body, extra);
   }
 
   /**
@@ -237,10 +240,12 @@ export class VaultClient {
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(this.http.timeout),
     });
-    if (resp.status === 404) throw new AgentToolError("not found", { hint: path });
     if (!resp.ok) {
-      const text = await resp.text();
-      throw new AgentToolError(`${method} ${path} failed: ${resp.status}`, { hint: text.slice(0, 200) });
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `vault ${method.toLowerCase()}`, {
+        fallback: resp.status === 404 ? "not found" : undefined,
+        hint: `${method} ${path}`,
+      });
     }
     return resp.json() as Promise<Record<string, unknown>>;
   }

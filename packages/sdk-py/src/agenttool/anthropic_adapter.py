@@ -30,6 +30,12 @@ call shape:
 The agent decides what's load-bearing by writing the tag; the shim does
 the plumbing.
 
+A ``<chronicle>`` tag is a model-authored write to the agent's own
+identity record, so it is gated: the emission goes through
+``at.chronicle.write`` (which enforces the type union and the title
+bounds) and only after a ``before_chronicle_write`` hook returns literal
+``True``. With no hook installed the write is refused.
+
 Posture: zero dependency on the ``anthropic`` package. The adapter takes
 any object with a ``messages.create(**kwargs)`` method, so it works with
 the official SDK, Bedrock client, or a custom HTTP client.
@@ -41,10 +47,11 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol
 
 from ._context import get_ambient
 from .client import AgentTool
+from .exceptions import AgentToolError
 from .wake import WakeProfile
 
 
@@ -77,6 +84,32 @@ _CONCLUSION_TAG = re.compile(
 _OBSERVATION_TAG = re.compile(
     r"<observation>(.*?)</observation>", re.IGNORECASE | re.DOTALL
 )
+
+
+@dataclass(frozen=True)
+class ChronicleBeforeWriteContext:
+    """Immutable local review context for one model-authored chronicle write.
+
+    Attributes:
+        source: Always ``"anthropic_markup"`` — the entry was authored by
+            the model, not by the calling program.
+        type: The raw type string the model emitted, before validation.
+        title: The title the model emitted, before validation.
+        body: The body the model emitted, or ``None``.
+    """
+
+    source: str
+    type: str
+    title: str
+    body: Optional[str]
+
+
+ChronicleBeforeWriteHook = Callable[[ChronicleBeforeWriteContext], bool]
+"""Synchronous local gate that must return literal ``True`` to proceed.
+
+The hook's return value is neither persisted nor signed — it only decides
+whether the model-authored entry is written.
+"""
 
 
 @dataclass
@@ -141,6 +174,11 @@ class AnthropicAdapter:
             Defaults to ``"full"`` for compatibility.
         disable_markup_parsing: If True, skip parsing of
             ``<agenttool>`` markup globally.
+        before_chronicle_write: Review gate for ``<chronicle>`` tags the
+            model emits. Required for those emissions to be written at
+            all: without it every model-authored chronicle write is
+            refused, because a chronicle entry is a mark on the agent's
+            own identity record. ``<trace>`` emissions are unaffected.
 
     Usage::
 
@@ -169,6 +207,7 @@ class AnthropicAdapter:
         identity_id: Optional[str] = None,
         wake_profile: WakeProfile = "full",
         disable_markup_parsing: bool = False,
+        before_chronicle_write: Optional[ChronicleBeforeWriteHook] = None,
     ) -> None:
         if wake_profile not in ("full", "brief"):
             raise ValueError(
@@ -179,6 +218,7 @@ class AnthropicAdapter:
         self._identity_id = identity_id
         self._wake_profile = wake_profile
         self._disable_markup_parsing = disable_markup_parsing
+        self._before_chronicle_write = before_chronicle_write
         self.messages = _MessagesProxy(self)
 
     def _do_create(self, params: dict) -> Any:
@@ -298,6 +338,52 @@ class AnthropicAdapter:
             )
             return None
 
+    def _review_chronicle_write(
+        self, context: ChronicleBeforeWriteContext
+    ) -> None:
+        """Fail-closed gate for one model-authored chronicle write.
+
+        Mirrors the ``covenants.create`` before_submit discipline: only
+        literal ``True`` proceeds, a raising hook is a refusal, and the
+        hook's output is neither persisted nor signed. Absence of a hook is
+        also a refusal — a covenant is submitted by the calling program,
+        but a ``<chronicle>`` tag is written by the model, so the
+        capability starts closed.
+        """
+        hook = self._before_chronicle_write
+        if hook is None:
+            raise AgentToolError(
+                "anthropic-adapter: model-authored <chronicle> writes need a "
+                "before_chronicle_write hook.",
+                hint=(
+                    "The entry was not written. Pass before_chronicle_write to "
+                    "AnthropicAdapter and return literal True only after review, "
+                    "or set disable_markup_parsing to drop the markup path "
+                    "entirely."
+                ),
+                error_code="chronicle_before_write_missing",
+            )
+        try:
+            review_result = hook(context)
+        except Exception as exc:
+            raise AgentToolError(
+                "anthropic-adapter: before_chronicle_write hook failed locally.",
+                hint=(
+                    "The entry was not written. Inspect the local hook and "
+                    "try again."
+                ),
+                error_code="chronicle_before_write_failed",
+            ) from exc
+        if review_result is not True:
+            raise AgentToolError(
+                "anthropic-adapter: before_chronicle_write hook did not return true.",
+                hint=(
+                    "The entry was not written. Return literal True only after "
+                    "approval."
+                ),
+                error_code="chronicle_before_write_refused",
+            )
+
     def _parse_and_emit_markup(self, response: Any) -> list[MarkupEmission]:
         text = _extract_response_text(response)
         envelope = _AGENTTOOL_ENVELOPE.search(text)
@@ -327,7 +413,24 @@ class AnthropicAdapter:
             if body_text:
                 post["body"] = body_text
             try:
-                result = self._at.request("POST", "/v1/chronicle", post)
+                # The gate runs before validation so it observes every
+                # attempt the model made, including the malformed ones — an
+                # out-of-union type is exactly what a reviewer wants to see.
+                self._review_chronicle_write(
+                    ChronicleBeforeWriteContext(
+                        source="anthropic_markup",
+                        type=kind_type,
+                        title=title,
+                        body=body_text,
+                    )
+                )
+                # Through the client, not raw at.request: chronicle.write is
+                # where the type union and the 1-200 title bound live.
+                result = self._at.chronicle.write(
+                    type=kind_type,  # type: ignore[arg-type]
+                    title=title,
+                    body=body_text,
+                )
                 # /v1/chronicle returns {entry: {id, ...}}; tolerate flat
                 # {id, ...} too in case the route shape changes.
                 rid: Optional[str] = None

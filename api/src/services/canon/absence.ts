@@ -38,8 +38,20 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
+import { SCAN_ROOTS } from "./annotations";
+
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..", "..");
-const SCAN_DIRS = [join(REPO_ROOT, "api", "src"), join(REPO_ROOT, "bin")];
+/** The same roots the `@enforces` scan walks, not a second private copy.
+ *
+ *  This file used to hard-code `[api/src, bin]` on its own — the identical
+ *  blind spot `annotations.ts` carried until 2026-07-26, in a second place
+ *  where nobody would think to look for it. Sharing the list means a future
+ *  root is added once and both scanners see it. No `@absence` contract lives
+ *  outside `api/src`/`bin` today, so this widening changes nothing now; it
+ *  changes what happens when the first one does.
+ *
+ *  `SCAN_ROOTS` is repo-relative; this scanner works in absolute paths. */
+const SCAN_DIRS = SCAN_ROOTS.map((root) => join(REPO_ROOT, root));
 const SKIP_DIRS = new Set(["node_modules", "dist", ".bun", "coverage"]);
 
 /** This module documents the annotation format by example, so it would

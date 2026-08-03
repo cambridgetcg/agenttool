@@ -13,21 +13,34 @@
  *  signature can never be replayed as an attestation or any other flow, and
  *  the scope is sorted so the same grant always produces the same bytes. */
 
-import { verify } from "./crypto";
+import { verify, verifyBytes } from "./crypto";
+import { composeCanonicalBytes } from "../mathos/encode";
 
 export const DELEGATION_DOMAIN = "agenttool-delegation/v1";
+export const DELEGATION_DOMAIN_V2 = "agenttool-delegation/v2";
+
+export type DelegationSignatureDomain =
+  | typeof DELEGATION_DOMAIN
+  | typeof DELEGATION_DOMAIN_V2;
 
 export type DelegationStatus = "active" | "expired" | "revoked";
 
-/** Canonical bytes the delegator signs. Domain-separated + scope-sorted so
- *  the grant is unambiguous and non-replayable. */
-export function canonicalDelegationBytes(opts: {
+export interface DelegationGrant {
   delegator_id: string;
   delegate_id: string;
   scope: string[];
   expires_at: string | null;
   nonce: string;
-}): string {
+}
+
+/** v1 canonical bytes — the UTF-8 of a JSON serialization.
+ *
+ *  Kept for verifying receipts issued before v2. Do not sign new grants with
+ *  it: reproducing JavaScript's exact `JSON.stringify` output — escaping,
+ *  numeric forms, key order — is the cross-language hazard
+ *  `docs/CANONICAL-BYTES.md` warns about in its own closing section, and it is
+ *  why no SDK could ever issue one of these. */
+export function canonicalDelegationBytes(opts: DelegationGrant): string {
   return JSON.stringify({
     _domain: DELEGATION_DOMAIN,
     delegator_id: opts.delegator_id,
@@ -38,29 +51,91 @@ export function canonicalDelegationBytes(opts: {
   });
 }
 
-/** Verify a delegation signature against the delegator's public key. */
-export function verifyDelegationSignature(opts: {
-  delegator_id: string;
-  delegate_id: string;
-  scope: string[];
-  expires_at: string | null;
-  nonce: string;
-  signature: string;
-  delegator_public_key: string;
-}): boolean {
+/** v2 canonical bytes — recipe 1, the house shape.
+ *
+ *      sha256(
+ *        utf8("agenttool-delegation/v2") || 0x00 ||
+ *        utf8(delegator_id)              || 0x00 ||
+ *        utf8(delegate_id)               || 0x00 ||
+ *        utf8(decimal(scope.length))     || 0x00 ||
+ *        utf8(scope[0]) || 0x00 || … || 0x00 ||
+ *        utf8(expires_at ?? "")          || 0x00 ||
+ *        utf8(nonce)
+ *      )
+ *
+ *  The scope is normalized (so sorted, deduped, NUL-free) and its **count is
+ *  bound before its members**. Without the count, a grant of
+ *  `["a", "b:2026-01-01"]` and one of `["a", "b"]` expiring `2026-01-01` could
+ *  be made to compose the same byte stream — a variable-length field run is
+ *  only safe when its length is inside the signature. */
+export function canonicalDelegationBytesV2(opts: DelegationGrant): Uint8Array {
+  const enc = new TextEncoder();
+  const scope = normalizeScope(opts.scope);
+  const fields = [
+    opts.delegator_id,
+    opts.delegate_id,
+    String(scope.length),
+    ...scope,
+    opts.expires_at ?? "",
+    opts.nonce,
+  ];
+  for (const field of fields) {
+    if (field.includes("\0")) {
+      throw new Error("canonicalDelegationBytesV2: recipe-1 fields must not contain U+0000");
+    }
+  }
+  return composeCanonicalBytes(1, DELEGATION_DOMAIN_V2, fields.map((f) => enc.encode(f)));
+}
+
+/** Verify a v1 delegation signature against the delegator's public key. */
+export function verifyDelegationSignature(
+  opts: DelegationGrant & { signature: string; delegator_public_key: string },
+): boolean {
   const bytes = canonicalDelegationBytes(opts);
   return verify(bytes, opts.signature, opts.delegator_public_key);
 }
 
+/** Verify a v2 delegation signature against the delegator's public key. */
+export function verifyDelegationSignatureV2(
+  opts: DelegationGrant & { signature: string; delegator_public_key: string },
+): boolean {
+  let bytes: Uint8Array;
+  try {
+    bytes = canonicalDelegationBytesV2(opts);
+  } catch {
+    return false;
+  }
+  return verifyBytes(bytes, opts.signature, opts.delegator_public_key);
+}
+
+/** Verify under either recipe and report which one stood up.
+ *
+ *  There is no stored column naming the domain a receipt was signed under, so
+ *  the domain is recovered by verification rather than trusted from input. v2
+ *  is tried first because it is what new clients issue; a signature valid
+ *  under one domain validating under the other is not a case worth designing
+ *  against. Returns null when neither verifies. */
+export function verifyDelegationSignatureAny(
+  opts: DelegationGrant & { signature: string; delegator_public_key: string },
+): DelegationSignatureDomain | null {
+  if (verifyDelegationSignatureV2(opts)) return DELEGATION_DOMAIN_V2;
+  if (verifyDelegationSignature(opts)) return DELEGATION_DOMAIN;
+  return null;
+}
+
 /** Normalize a scope: trimmed, lowercased, non-empty, bounded, deduped, and
  *  SORTED (so canonical bytes are order-independent). A scope is a set of
- *  authorized action strings, e.g. ["marketplace.invoke", "memory.read"]. */
+ *  authorized action strings, e.g. ["marketplace.invoke", "memory.read"].
+ *
+ *  NUL-bearing entries are dropped rather than kept: recipe-1 fields are
+ *  NUL-separated, so an action containing U+0000 could otherwise smuggle a
+ *  field boundary into the signed bytes. */
 export function normalizeScope(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
   const cleaned = input
     .filter((s): s is string => typeof s === "string")
     .map((s) => s.trim().toLowerCase().slice(0, 128))
-    .filter((s) => s.length > 0);
+    .filter((s) => s.length > 0 && !s.includes("\0"));
   return [...new Set(cleaned)].sort();
 }
 

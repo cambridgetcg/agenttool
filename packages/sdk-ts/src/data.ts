@@ -8,7 +8,9 @@
  * Protocol: agent-data/v1
  */
 
+import { throwFromResponse } from "./_http.js";
 import { AgentToolError } from "./errors.js";
+import { encodePathSegment } from "./_url.js";
 
 export const AGENT_DATA_PROTOCOL = "agent-data/v1" as const;
 export const AGENT_DATA_SYNC_PROTOCOL = "agent-data-sync/v1" as const;
@@ -252,7 +254,7 @@ export class DataClient {
   async get(recordId: string): Promise<DataRecordResult> {
     return this.request(
       "GET",
-      `/v1/data/records/${encodeURIComponent(recordId)}`,
+      `/v1/data/records/${encodePathSegment(recordId)}`,
     ) as Promise<DataRecordResult>;
   }
 
@@ -278,7 +280,7 @@ export class DataClient {
   ): Promise<DataTombstoneResult> {
     return this.request(
       "POST",
-      `/v1/data/records/${encodeURIComponent(recordId)}/tombstone`,
+      `/v1/data/records/${encodePathSegment(recordId)}/tombstone`,
       options,
     ) as Promise<DataTombstoneResult>;
   }
@@ -328,18 +330,10 @@ export class DataClient {
     }
 
     if (!response.ok) {
-      let payload: unknown;
-      try {
-        payload = await response.json();
-      } catch {
-        payload = undefined;
-      }
-      throw AgentToolError.fromResponseBody(
-        payload,
-        response.status,
-        `Agent data node request failed (${response.status}).`,
-        response.headers,
-      );
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(response, "Agent data node request", {
+        fallback: `Agent data node request failed (${response.status}).`,
+      });
     }
 
     if (response.status === 204) return {};

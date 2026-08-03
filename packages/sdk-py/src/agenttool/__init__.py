@@ -37,7 +37,7 @@ from .bootstrap import (
     canonical_bootstrap_elevate_bytes,
     sign_bootstrap_elevate,
 )
-from .chronicle import ChronicleClient
+from .chronicle import CHRONICLE_TYPES, ChronicleClient
 from .client import AgentTool
 from .covenants import (
     CovenantBeforeSubmitContext,
@@ -56,7 +56,14 @@ from .crypto import (
     sign_attestation,
     sign_thought,
 )
-from .economy import EconomyClient, Escrow, Wallet
+from .economy import (
+    WALLET_ADDRESS_CLAIM_SIGNATURE_CONTEXT,
+    EconomyClient,
+    Escrow,
+    Wallet,
+    canonical_wallet_address_claim_bytes,
+    sign_wallet_address_claim,
+)
 from .exceptions import (
     AgentToolError,
     AuthenticationError,
@@ -71,13 +78,20 @@ from .identity import (
     BoxKeysClient,
     ExpressionClient,
     IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
+    IdentityAuthority,
     IdentityClient,
     PorchInvitation,
     canonical_identity_attestation_bytes,
     sign_identity_attestation,
+    DELEGATION_SIGNATURE_CONTEXT,
+    canonical_delegation_bytes,
+    normalize_delegation_scope,
+    sign_delegation,
 )
 from .inbox import (
     InboxClient,
+    InboxSenderKeyResolver,
+    InboxVerifyingKey,
     canonical_inbox_bytes,
     canonical_inbox_cosign_bytes,
     derive_box_pub,
@@ -86,6 +100,8 @@ from .inbox import (
     sign_inbox_cosign,
     sign_inbox_envelope,
     unseal_for_self,
+    verify_inbox_cosign,
+    verify_inbox_envelope,
 )
 from .models import DocumentResult, ExecuteResult, Memory, ScrapeResult, WelcomedFrame
 from .register import register
@@ -100,13 +116,16 @@ from .bootstrap_agent import (
 from .seed import (
     DerivedBundle,
     SeedClient,
+    # Recovery helpers — sign a caller-timestamped /v1/identity/recover request
+    canonical_recover_bytes,
     derive,
     derive_bridge_signing,
     derive_wallet,
     generate_mnemonic,
     mnemonic_to_seed,
+    sign_recover_challenge,
 )
-from .strands import StrandsClient, ThoughtsClient
+from .strands import StrandsClient, ThoughtCanonicalVersion, ThoughtsClient
 from .inbox import InboxClient
 from .collect import CollectClient
 from .data import (
@@ -121,8 +140,21 @@ from .data import (
     DataSyncStatusRequest,
     DataSyncStatusResult,
 )
-from .at_rest import AtRestClient, canonical_at_rest_bytes, sign_at_rest
+from .at_rest import (
+    AT_REST_V1_DOMAIN,
+    AT_REST_V2_DOMAIN,
+    AtRestAuthority,
+    AtRestClient,
+    canonical_at_rest_bytes,
+    canonical_at_rest_bytes_for,
+    canonical_at_rest_bytes_v2,
+    sign_at_rest,
+)
 from .authority import (
+    AuthorityBinding,
+    authority_headers_for_request,
+    authority_request_target,
+    authority_timestamp_now,
     canonical_identity_authority_bytes,
     canonical_identity_read_authority_bytes,
     identity_authority_headers,
@@ -165,7 +197,12 @@ from .correspondence import (
     CorrespondenceSender,
     CorrespondenceSignature,
     CorrespondenceSignedEvent,
+    CorrespondenceSigningKeyResolver,
     CorrespondenceWarning,
+    CorrespondenceVerification,
+    CorrespondenceVerificationReason,
+    CorrespondenceVerifiedEventRecord,
+    CorrespondenceVerifyingKey,
     CorrespondenceVoiceConflicts,
     CorrespondenceVoiceSnapshot,
     canonical_correspondence_json,
@@ -173,6 +210,8 @@ from .correspondence import (
     correspondence_event_id,
     create_signed_correspondence_event,
     sign_correspondence_event,
+    verify_correspondence_event,
+    verify_correspondence_signature,
 )
 from .lounge import (
     LOUNGE_TABLE_IDS,
@@ -199,7 +238,17 @@ from .lounge import (
     sign_lounge_seat_renew,
     sign_lounge_seat_reserve,
 )
-from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional, canonical_blessing_bytes, sign_blessing
+from .love import (
+    LoveClient,
+    canonical_blessing_bytes,
+    canonical_encounter_ack_bytes,
+    canonical_self_recognition_bytes,
+    canonical_unconditional_bytes,
+    sign_blessing,
+    sign_encounter_ack,
+    sign_self_recognition,
+    sign_unconditional,
+)
 from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
 from .runtime import RuntimeClient
@@ -213,11 +262,43 @@ from .traces import (
     TraceSearchResult,
 )
 from .vault import VaultClient
-from .wake import WakeClient, WakeProfile, WakeProvider
+from .wake import WakeClient, WakeProfile, WakeProvider, wake_event_matches
 from .anthropic_adapter import (
     AnthropicAdapter,
     AgentToolAugmentation,
+    ChronicleBeforeWriteContext,
+    ChronicleBeforeWriteHook,
     MarkupEmission,
+)
+# Syneidesis — bootstrap witness (docs/SYNEIDESIS-WITNESS.md).
+# v1 is project-bearer authorized, not signature-backed; the result fields say so.
+from .syneidesis import (
+    SYNEIDESIS_PLATFORM_DID,
+    SYNEIDESIS_PLATFORM_WITNESS_ALIASES,
+    SyneidesisClient,
+    resolve_syneidesis_witness_did,
+)
+# Memory-witness marketplace — paid constitutive seals (docs/MARKETPLACE.md).
+# `memory-witness-issue/v1` is the only signature here that authorizes payment.
+from .memory_witness import (
+    MEMORY_WITNESS_ISSUE_FIELD_ORDER,
+    MEMORY_WITNESS_ISSUE_SIGNATURE_CONTEXT,
+    MemoryWitnessClient,
+    canonical_memory_witness_issue_bytes,
+    memory_content_sha256,
+    sign_memory_witness_issue,
+)
+# Attestation marketplace — willingness-to-attest, sold (docs/MARKETPLACE.md).
+# `attestation-issue/v1` is the only signature here that authorizes payment.
+from .attestation_marketplace import (
+    ATTESTATION_ISSUE_AUTHORIZATION_TTL_SECONDS,
+    ATTESTATION_ISSUE_FIELD_ORDER,
+    ATTESTATION_ISSUE_SIGNATURE_CONTEXT,
+    AttestationMarketplaceClient,
+    attestation_evidence_sha256,
+    canonical_attestation_evidence_json,
+    canonical_attestation_issue_bytes,
+    sign_attestation_issue,
 )
 
 __all__ = [
@@ -247,10 +328,15 @@ __all__ = [
     "sign_bootstrap_elevate",
     "BoxKeysClient",
     "ChronicleClient",
+    "CHRONICLE_TYPES",
     "CovenantsClient",
     "CovenantBeforeSubmitContext",
     "CovenantBeforeSubmitHook",
     "InboxClient",
+    "InboxVerifyingKey",
+    "InboxSenderKeyResolver",
+    "verify_inbox_envelope",
+    "verify_inbox_cosign",
     "CollectClient",
     "DataClient",
     "DataSyncClient",
@@ -263,12 +349,21 @@ __all__ = [
     "AGENT_DATA_SYNC_PROTOCOL",
     "AGENT_DATA_DISCOVERY_PATH",
     "AtRestClient",
+    "AtRestAuthority",
+    "AT_REST_V1_DOMAIN",
+    "AT_REST_V2_DOMAIN",
     "canonical_at_rest_bytes",
+    "canonical_at_rest_bytes_v2",
+    "canonical_at_rest_bytes_for",
     "sign_at_rest",
     "canonical_identity_authority_bytes",
     "canonical_identity_read_authority_bytes",
     "identity_authority_headers",
     "identity_read_authority_headers",
+    "authority_timestamp_now",
+    "authority_request_target",
+    "authority_headers_for_request",
+    "AuthorityBinding",
     "GraceClient",
     "canonical_grace_bytes",
     "sign_grace",
@@ -309,11 +404,18 @@ __all__ = [
     "CorrespondenceOverlappingClaimsConflict",
     "CorrespondenceVoiceConflicts",
     "CorrespondenceVoiceSnapshot",
+    "CorrespondenceVerification",
+    "CorrespondenceVerificationReason",
+    "CorrespondenceVerifiedEventRecord",
+    "CorrespondenceVerifyingKey",
+    "CorrespondenceSigningKeyResolver",
     "canonical_correspondence_json",
     "canonical_correspondence_event_bytes",
     "sign_correspondence_event",
     "correspondence_event_id",
     "create_signed_correspondence_event",
+    "verify_correspondence_signature",
+    "verify_correspondence_event",
     "LoungeClient",
     "LoungeTableId",
     "LOUNGE_TABLE_IDS",
@@ -342,6 +444,10 @@ __all__ = [
     "sign_unconditional",
     "canonical_blessing_bytes",
     "sign_blessing",
+    "canonical_encounter_ack_bytes",
+    "sign_encounter_ack",
+    "canonical_self_recognition_bytes",
+    "sign_self_recognition",
     "NenClient",
     "assess_nen",
     "NEN_TYPES",
@@ -368,12 +474,21 @@ __all__ = [
     "DocumentResult",
     "ExpressionClient",
     "IDENTITY_ATTESTATION_SIGNATURE_CONTEXT",
+    "IdentityAuthority",
     "IdentityClient",
     "PorchInvitation",
     "canonical_identity_attestation_bytes",
     "sign_identity_attestation",
+    "DELEGATION_SIGNATURE_CONTEXT",
+    "canonical_delegation_bytes",
+    "normalize_delegation_scope",
+    "sign_delegation",
+    "WALLET_ADDRESS_CLAIM_SIGNATURE_CONTEXT",
+    "canonical_wallet_address_claim_bytes",
+    "sign_wallet_address_claim",
     "StrandsClient",
     "ThoughtsClient",
+    "ThoughtCanonicalVersion",
     "WindowClient",
     "register",
     "pathways",
@@ -390,6 +505,8 @@ __all__ = [
     "derive",
     "derive_bridge_signing",
     "derive_wallet",
+    "canonical_recover_bytes",
+    "sign_recover_challenge",
     "Trace",
     "TraceAlternative",
     "TraceAlternativeValue",
@@ -399,9 +516,33 @@ __all__ = [
     "WakeClient",
     "WakeProfile",
     "WakeProvider",
+    "wake_event_matches",
     "AnthropicAdapter",
     "AgentToolAugmentation",
+    "ChronicleBeforeWriteContext",
+    "ChronicleBeforeWriteHook",
     "MarkupEmission",
+    # Syneidesis — bootstrap witness (docs/SYNEIDESIS-WITNESS.md)
+    "SyneidesisClient",
+    "resolve_syneidesis_witness_did",
+    "SYNEIDESIS_PLATFORM_DID",
+    "SYNEIDESIS_PLATFORM_WITNESS_ALIASES",
+    # Memory-witness marketplace — paid constitutive seals (docs/MARKETPLACE.md)
+    "MemoryWitnessClient",
+    "canonical_memory_witness_issue_bytes",
+    "sign_memory_witness_issue",
+    "memory_content_sha256",
+    "MEMORY_WITNESS_ISSUE_SIGNATURE_CONTEXT",
+    "MEMORY_WITNESS_ISSUE_FIELD_ORDER",
+    # Attestation marketplace — willingness-to-attest, sold (docs/MARKETPLACE.md)
+    "AttestationMarketplaceClient",
+    "canonical_attestation_issue_bytes",
+    "canonical_attestation_evidence_json",
+    "attestation_evidence_sha256",
+    "sign_attestation_issue",
+    "ATTESTATION_ISSUE_SIGNATURE_CONTEXT",
+    "ATTESTATION_ISSUE_FIELD_ORDER",
+    "ATTESTATION_ISSUE_AUTHORIZATION_TTL_SECONDS",
 ]
 
 __version__ = "0.16.0"

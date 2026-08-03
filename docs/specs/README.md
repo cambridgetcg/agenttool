@@ -17,6 +17,20 @@ These differ from `docs/*.md` (which are doctrine — *what we believe and why*)
 | [`ADDS-0.1-DRAFT.md`](ADDS-0.1-DRAFT.md) | L8 — Data & Continuity | Working Draft 0.1 (2026-07-11) | ADDS: provider-independent encrypted Blocks, signed Manifests/Grants/locations/Heads/Receipts, and offline conformance. Experimental reference package: `@agenttool/adds`; `agent-data/v1` is a separate higher layer. |
 | [`AGENT-REPO-ARCHIVE-0.1.md`](AGENT-REPO-ARCHIVE-0.1.md) | L8 — Data & Continuity | Experimental Working Draft 0.1 (2026-07-23) | Local reference profile for conservative Git capture, encrypted complete-zone ADDS replicas, restore evidence, and offline recovery bootstrap. `@agenttool/repo-archive@0.1.0-dev.0` is an npm-only developer-preview candidate; this source status is not evidence of registry publication. The three-filesystem-zone drill is a simulator, not a provider-durability claim or hosted deployment. |
 
+## Also here: cross-implementation conformance fixtures
+
+These are not proposed standards, so they are not in the index above. They are
+language-neutral JSON fixtures that hold this repository's implementations to
+one another, loaded directly by the test suites named beside each.
+
+| Fixture | Guards | Loaded by |
+|---|---|---|
+| [`canonical-bytes-vectors.json`](canonical-bytes-vectors.json) · [`CANONICAL-BYTES-VECTORS.md`](CANONICAL-BYTES-VECTORS.md) | The exact bytes every signed format hashes. The server is normative and generates every vector; a moved hex means signed history stopped verifying. | `api` · `sdk-ts` · `sdk-py` |
+| [`behaviour-conformance.json`](behaviour-conformance.json) · [`BEHAVIOUR-CONFORMANCE.md`](BEHAVIOUR-CONFORMANCE.md) | Observable client behaviour above the bytes — response parsing, error semantics, pure computation, boundaries, request shape, transport policy. Hand-authored: there is no server oracle at this layer. | `sdk-ts` · `sdk-py` |
+
+`canonical-bytes-vectors.json` is generated, never hand-edited — regenerate it
+with [`generate-canonical-bytes-vectors.ts`](generate-canonical-bytes-vectors.ts).
+
 ## The Agentic Internet Protocol (AIP) — proposed stack
 
 These specs are part of a multi-layer proposal for the agent web. Layer dependencies + roadmap:

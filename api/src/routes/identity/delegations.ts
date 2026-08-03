@@ -19,7 +19,7 @@ import {
   deriveDelegationStatus,
   normalizeScope,
   scopeAuthorizes,
-  verifyDelegationSignature,
+  verifyDelegationSignatureAny,
 } from "../../services/identity/delegation";
 
 const app = new Hono<ProjectContext>();
@@ -106,17 +106,22 @@ app.post("/", async (c) => {
   }
 
   const expiresAtStr = body.expires_at ?? null;
-  if (
-    !verifyDelegationSignature({
-      delegator_id: body.delegator_id,
-      delegate_id: body.delegate_id,
-      scope,
-      expires_at: expiresAtStr,
-      nonce: body.nonce,
-      signature: body.signature,
-      delegator_public_key: key.publicKey,
-    })
-  ) {
+  if (body.nonce.includes("\0")) {
+    return c.json({ error: "nonce must not contain U+0000" }, 400);
+  }
+  // Either recipe is accepted; which one signed is recovered by verification,
+  // never taken from the caller. v1 stays open so receipts issued before the
+  // recipe-1 migration keep working.
+  const signatureDomain = verifyDelegationSignatureAny({
+    delegator_id: body.delegator_id,
+    delegate_id: body.delegate_id,
+    scope,
+    expires_at: expiresAtStr,
+    nonce: body.nonce,
+    signature: body.signature,
+    delegator_public_key: key.publicKey,
+  });
+  if (!signatureDomain) {
     return c.json({ error: "Invalid delegation signature" }, 403);
   }
 
@@ -138,7 +143,10 @@ app.post("/", async (c) => {
     })
     .returning();
 
-  return c.json(delegationReceipt(row!, new Date()), 201);
+  return c.json(
+    { ...delegationReceipt(row!, new Date()), signature_domain: signatureDomain },
+    201,
+  );
 });
 
 /** GET /v1/delegations/:id — fetch a receipt + its derived status. */
@@ -149,9 +157,12 @@ app.get("/:id", async (c) => {
 });
 
 /** GET /v1/delegations/:id/verify[?action=marketplace.invoke] — the KYA check.
+ *
  *  Is this delegation currently good, and (optionally) does it authorize an
- *  action? Honest: the signature was verified at issue; here we report current
- *  status (active|expired|revoked) and scope authorization. */
+ *  action? The signature is re-verified here, at read time, against the key
+ *  the receipt names — not merely trusted because it passed at issue. Telling
+ *  a caller "we checked once, go check it again yourself" is a worse answer
+ *  than one key lookup and an ed25519 verify. */
 app.get("/:id/verify", async (c) => {
   const [row] = await db.select().from(delegations).where(eq(delegations.id, c.req.param("id")));
   if (!row) return c.json({ error: "Delegation not found" }, 404);
@@ -165,6 +176,29 @@ app.get("/:id/verify", async (c) => {
   const scope = row.scope as string[];
   const action = c.req.query("action");
 
+  // Re-verify against the signing key as it stands NOW. A key revoked since
+  // issue is reported rather than silently treated as fine: the grant was
+  // real, and the key behind it is no longer live. Those are different facts
+  // and a relying party may weigh them differently.
+  let signingKey: typeof identityKeys.$inferSelect | undefined;
+  if (row.signingKeyId) {
+    [signingKey] = await db
+      .select()
+      .from(identityKeys)
+      .where(eq(identityKeys.id, row.signingKeyId));
+  }
+  const signatureDomain = signingKey
+    ? verifyDelegationSignatureAny({
+        delegator_id: row.delegatorId,
+        delegate_id: row.delegateId,
+        scope,
+        expires_at: row.expiresAt ? row.expiresAt.toISOString() : null,
+        nonce: row.nonce,
+        signature: row.signature,
+        delegator_public_key: signingKey.publicKey,
+      })
+    : null;
+
   return c.json({
     valid: status === "active",
     status,
@@ -176,10 +210,18 @@ app.get("/:id/verify", async (c) => {
       ? { action, authorizes: status === "active" && scopeAuthorizes(scope, action) }
       : {}),
     signature: row.signature,
+    signature_verified: signatureDomain !== null,
+    signature_domain: signatureDomain,
+    signing_key_id: row.signingKeyId,
+    signing_key_active: signingKey ? signingKey.active && !signingKey.revokedAt : null,
     _note:
-      "Signature was verified at issue. 'valid' = currently active (not expired, not revoked). " +
-      "Re-verify the signature independently against the delegator's key + canonical bytes " +
-      "(domain agenttool-delegation/v1) if you need cryptographic assurance at read time.",
+      "'valid' = currently active (not expired, not revoked). 'signature_verified' is a " +
+      "read-time ed25519 check against the key this receipt names, under the domain reported " +
+      "in 'signature_domain'. A false value with an existing key means the stored bytes no " +
+      "longer verify; a null domain with signing_key_id set means the key row is gone. " +
+      "Recipes: docs/CANONICAL-BYTES.md. This proves the delegator's key signed this grant. " +
+      "It does not prove the delegator had authority to grant it, nor that the delegate is " +
+      "the party now using it.",
   });
 });
 

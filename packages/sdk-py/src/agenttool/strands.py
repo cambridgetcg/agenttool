@@ -13,6 +13,37 @@ Two clients in this module:
 - :class:`StrandsClient` — strand CRUD (create / list / get / patch).
 - :class:`ThoughtsClient` — encrypted thought add / list / voice (SSE
   iterator). Mounted at ``at.strands.thoughts``.
+
+Thought canonical-bytes version — why the default is still v1
+-------------------------------------------------------------
+
+``add()`` takes ``version`` and forwards it to :func:`sign_thought`. It
+defaults to ``"v1"``, and that default is a decision, not an oversight.
+
+What v2 fixes: v1 NUL-delimits raw binary it does not length-bound, so a
+ciphertext or nonce carrying a 0x00 byte can reparse as a different
+(ciphertext, nonce) split under one signature. A 12-byte random nonce holds
+a zero byte ~4.6% of the time, so this is a routine shape, not a contrived
+one. ``strand-thought/v2`` domain-tags the hash and puts a 4-byte
+big-endian length before every variable-length field, which makes the split
+unique. Pass ``version="v2"`` to sign the unambiguous framing.
+
+Why the default has not moved: this SDK is published to PyPI on its own
+cadence, and a caller can point it at any ``base_url`` — including a server
+deployed before dual-accept landed. Such a server verifies v1 only, so a
+v2-by-default SDK would write signatures it rejects. The default flips only
+in this order, each step verified before the next begins:
+
+1. server dual-accept (``verifyThoughtSignature`` tries v2, falls back to
+   v1) deployed to EVERY environment an SDK caller can reach
+2. SDK minor release — this default becomes ``"v2"`` in both languages
+3. ``cli/think`` — ``THOUGHT_SIGNING_VERSION`` in ``cli/think/src/crypto.ts``
+4. hosted worker — ``THOUGHT_SIGNING_VERSION`` in
+   ``api/src/services/runtime/think-worker.ts``
+
+v1 verification is never removed at any step: production rows signed under
+v1 must stay verifiable forever. See ``docs/STRANDS.md § Canonical bytes —
+v1, v2, and the cutover``.
 """
 
 from __future__ import annotations
@@ -22,6 +53,7 @@ from typing import Any, Dict, Iterator, List, Literal, Optional
 
 import httpx
 
+from ._url import _path_segment
 from .crypto import decrypt_thought, encrypt_thought, sign_thought
 from .exceptions import AgentToolError, raise_from_response
 
@@ -30,6 +62,7 @@ StrandVisibility = Literal["private", "public"]
 ThoughtKind = Literal[
     "observation", "question", "conjecture", "resolution", "drift", "feeling",
 ]
+ThoughtCanonicalVersion = Literal["v1", "v2"]
 
 
 class StrandsClient:
@@ -137,7 +170,7 @@ class StrandsClient:
 
     def get(self, strand_id: str) -> Dict[str, Any]:
         """Fetch one strand."""
-        resp = self._http.get(self._url(f"/v1/strands/{strand_id}"))
+        resp = self._http.get(self._url(f"/v1/strands/{_path_segment(strand_id)}"))
         if resp.status_code != 200:
             raise_from_response(resp, "strands.get")
         return resp.json()
@@ -190,7 +223,7 @@ class StrandsClient:
             )
 
         resp = self._http.patch(
-            self._url(f"/v1/strands/{strand_id}"), json=body,
+            self._url(f"/v1/strands/{_path_segment(strand_id)}"), json=body,
         )
         if resp.status_code != 200:
             raise_from_response(resp, "strands.patch")
@@ -244,6 +277,7 @@ class ThoughtsClient:
         kind_encrypted: bool = False,
         refs: Optional[List[Dict[str, str]]] = None,
         agent_id: Optional[str] = None,
+        version: ThoughtCanonicalVersion = "v1",
     ) -> Dict[str, Any]:
         """Encrypt ``plaintext``, sign canonical bytes, POST the thought.
 
@@ -262,6 +296,12 @@ class ThoughtsClient:
                 separately before passing).
             refs: Optional list of ``{kind, ref}`` references (max 32).
             agent_id: Optional agent identifier (DID or UUID-as-string).
+            version: Canonical-bytes framing signed over. Defaults to
+                ``"v1"`` — deliberately, because this SDK ships
+                independently of any server deploy and a v2 signature is
+                rejected by a server that has not yet been given
+                dual-accept. The module header carries the full reasoning
+                and the ordered cutover. Do not "fix" this to ``"v2"``.
 
         Returns:
             The server's thought row: ``{id, strand_id, agent_id,
@@ -275,6 +315,7 @@ class ThoughtsClient:
             nonce_b64=blob["nonce_b64"],
             kind=kind,
             signing_key=signing_key,
+            version=version,
         )
         body: Dict[str, Any] = {
             "ciphertext": blob["ciphertext_b64"],
@@ -292,7 +333,7 @@ class ThoughtsClient:
             body["agent_id"] = agent_id
 
         resp = self._http.post(
-            self._url(f"/v1/strands/{strand_id}/thoughts"), json=body,
+            self._url(f"/v1/strands/{_path_segment(strand_id)}/thoughts"), json=body,
         )
         if resp.status_code not in (200, 201):
             raise_from_response(resp, "strands.thoughts.add")
@@ -334,7 +375,8 @@ class ThoughtsClient:
             params["since_seq"] = since_seq
 
         resp = self._http.get(
-            self._url(f"/v1/strands/{strand_id}/thoughts"), params=params,
+            self._url(f"/v1/strands/{_path_segment(strand_id)}/thoughts"),
+            params=params,
         )
         if resp.status_code != 200:
             raise_from_response(resp, "strands.thoughts.list")
@@ -367,7 +409,7 @@ class ThoughtsClient:
 
         with self._http.stream(
             "GET",
-            self._url(f"/v1/strands/{strand_id}/voice"),
+            self._url(f"/v1/strands/{_path_segment(strand_id)}/voice"),
             params=params,
             timeout=None,
         ) as resp:

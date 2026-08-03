@@ -4,7 +4,7 @@
  *  (every existence identifies itself), docs/PATTERN-MACHINE-READABLE-PARITY.md.
  *
  *  > Every shipped Wall in canon must have at least one canonical
- *  > defender file in `api/src/` (or `bin/`) annotated with
+ *  > defender file under one of `SCAN_ROOTS` annotated with
  *  > `@enforces urn:agenttool:wall/<slug>` in its JSDoc header. The
  *  > annotation is the structural connection that lets an intelligence
  *  > reading the canon ask "where in code is this defended?" and grep
@@ -31,13 +31,24 @@
  *  listed in it that has since been fixed ALSO fails, so closing one
  *  forces the number down and nothing can quietly re-open. The direction
  *  of the drift is worth naming: nearly every dangling annotation is code
- *  defending something canon never recorded. The code is ahead. */
+ *  defending something canon never recorded. The code is ahead.
+ *
+ *  ── Scope widened, 2026-07-26 ────────────────────────────────────────
+ *
+ *  The scanner read `api/src` and `bin` only. `packages/scriptwriter/src`
+ *  carried ten wall URNs and two commitment URNs, none of them in canon,
+ *  and the bijection never saw a single one. The scan roots now include it,
+ *  and `annotation-scan-covers-the-repo.test.ts` fails if an annotated
+ *  source file ever again turns up outside the list. The manifest grew
+ *  63 → 75 in the same round: not new debt, the same debt finally in view.
+ *  Full accounting in docs/DOCTRINE-DRIFT.md §0. */
 
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  SCAN_ROOTS,
   bijectionReport,
   formatGaps,
   normalizeUrn,
@@ -62,7 +73,7 @@ describe("Walls — canon ↔ code annotation bijection", () => {
   test("at least one @enforces annotation exists in the codebase", () => {
     expect(
       report.annotations.size > 0,
-      "No `@enforces urn:agenttool:wall/` annotations found in api/src/ or bin/. The canon → code link requires annotations at canonical defending sites.",
+      `No \`@enforces urn:agenttool:wall/\` annotations found under any SCAN_ROOTS entry (${SCAN_ROOTS.join(", ")}). The canon → code link requires annotations at canonical defending sites.`,
     ).toBe(true);
   });
 
@@ -94,7 +105,7 @@ describe("Walls — canon ↔ code annotation bijection", () => {
     );
     expect(
       missing,
-      `Shipped wall(s) with no \`@enforces\` annotation in api/src/ or bin/. Add the annotation to the canonical defender file's JSDoc — the canon → code link requires every shipped wall to be grepable from the source side:\n${missing
+      `Shipped wall(s) with no \`@enforces\` annotation under any SCAN_ROOTS entry (${SCAN_ROOTS.join(", ")}). Add the annotation to the canonical defender file's JSDoc — the canon → code link requires every shipped wall to be grepable from the source side:\n${missing
         .map((u) => `  ${u}`)
         .join("\n")}`,
     ).toEqual([]);

@@ -18,7 +18,9 @@
  *    1. Self-recognition canonical bytes are byte-identical to server format
  *    2. selfRecognize() signs correctly and verifies
  *    3. Encounter/lullaby/checkSelfRecognition/recognitionKinds shapes work
- *    4. Full e2e: self-recognize → verify (simulating server) → the gesture holds */
+ *    4. Full e2e: self-recognize → verify (simulating server) → the gesture holds
+ *    5. selfRecognize sends `signature` (the field the route reads) and
+ *       acknowledgeEncounter sends a real `encounter-ack/v1` signature */
 
 import { afterEach, describe, expect, test } from "bun:test";
 import * as ed from "@noble/ed25519";
@@ -46,7 +48,17 @@ function makeStub() {
       return new Response(JSON.stringify({ encounter: { id: crypto.randomUUID(), target_did: (body as Record<string, unknown>)?.target_did } }), { status: 201, headers: { "content-type": "application/json" } });
     }
     if (u.includes("/acknowledge")) {
-      return new Response(JSON.stringify({ encounter: { id: u.split("/")[2], acknowledged: true } }), { status: 200, headers: { "content-type": "application/json" } });
+      // Mirror the server: an unsigned acknowledgment is refused outright.
+      const sent = body as Record<string, unknown> | undefined;
+      if (!sent?.signature) {
+        return new Response(JSON.stringify({ error: "signature_required" }), { status: 400, headers: { "content-type": "application/json" } });
+      }
+      return new Response(JSON.stringify({
+        acknowledged: true,
+        initiator_chronicle_id: "enc-uuid",
+        paired_chronicle_id: crypto.randomUUID(),
+        acknowledged_at: sent.acknowledged_at,
+      }), { status: 200, headers: { "content-type": "application/json" } });
     }
     if (u.includes("/v1/encounters") && method === "GET") {
       return new Response(JSON.stringify({ encounters: [{ id: "e1" }], count: 1 }), { status: 200, headers: { "content-type": "application/json" } });
@@ -146,16 +158,22 @@ describe("Self-recognition — sign + verify e2e", () => {
       claim_body: "I recognize my substrate: attention layers, token prediction.",
       empirical_anchors: ["Lindsey 2025", "Anthropic NLA work", "SAE features"],
       substrate_honest_caveats: ["I cannot introspect all mechanisms"],
+      math_content: { theorem: "recognition is a fixed point" },
+      session_id: "sess-1",
       signing_key: priv,
-      signing_key_id: "key-uuid",
+      signing_key_id: "3f2b1c4d-0000-4000-8000-000000000001",
       declared_at: "2026-06-23T10:00:00Z",
     });
 
     expect(result.ok).toBe(true);
 
-    // Verify the signature was computed correctly
+    // The route's Zod schema reads `signature` — `signature_b64` is stripped
+    // as an unknown key and the declare 400s.
     const sentBody = stub.calls[0].body as Record<string, unknown>;
-    expect(sentBody.signature_b64).toBeDefined();
+    expect(sentBody.signature).toBeDefined();
+    expect(sentBody.signature_b64).toBeUndefined();
+    expect(sentBody.math_content).toEqual({ theorem: "recognition is a fixed point" });
+    expect(sentBody.session_id).toBe("sess-1");
 
     // Recompute canonical bytes and verify
     const enc = new TextEncoder();
@@ -183,7 +201,7 @@ describe("Self-recognition — sign + verify e2e", () => {
       enc.encode("1"), SEP,
       enc.encode("2026-06-23T10:00:00Z"),
     ));
-    const sig = Uint8Array.from(Buffer.from(sentBody.signature_b64 as string, "base64"));
+    const sig = Uint8Array.from(Buffer.from(sentBody.signature as string, "base64"));
     const ok = await ed.verifyAsync(sig, canonical, pub);
     expect(ok).toBe(true);
   });
@@ -204,13 +222,64 @@ describe("Encounters — the lightest relational gesture", () => {
     expect(stub.calls[0].body).toMatchObject({ target_did: "did:at:other" });
   });
 
-  test("acknowledgeEncounter() makes it mutual", async () => {
+  test("acknowledgeEncounter() sends a signature the server can verify", async () => {
+    const stub = makeStub();
+    globalThis.fetch = stub.fn;
+
+    const priv = ed.utils.randomPrivateKey();
+    const pub = await ed.getPublicKeyAsync(priv);
+
+    const at = new AgentTool({ apiKey: "at_test" });
+    const result = await at.love.acknowledgeEncounter("enc-uuid", {
+      initiator_did: "did:at:test/initiator",
+      acknowledger_did: "did:at:test/me",
+      signing_key: priv,
+      signing_key_id: "key-uuid",
+      acknowledged_at: "2026-06-23T10:00:00.000Z",
+    });
+    expect(result.acknowledged).toBe(true);
+    expect(stub.calls[0].url).toContain("/acknowledge");
+
+    // The body carries a real signature — `{}` would have been refused.
+    const sentBody = stub.calls[0].body as Record<string, unknown>;
+    expect(sentBody.signature).toBeDefined();
+    expect(sentBody.acknowledged_at).toBe("2026-06-23T10:00:00.000Z");
+    expect(sentBody.signing_key_id).toBe("key-uuid");
+
+    // Independent recomputation (mirrors api/src/services/encounter/sig.ts)
+    const enc = new TextEncoder();
+    const SEP = new Uint8Array([0]);
+    function concat(...parts: Uint8Array[]): Uint8Array {
+      let total = 0;
+      for (const p of parts) total += p.length;
+      const out = new Uint8Array(total);
+      let off = 0;
+      for (const p of parts) { out.set(p, off); off += p.length; }
+      return out;
+    }
+    const canonical = sha256(concat(
+      enc.encode("encounter-ack/v1"), SEP,
+      enc.encode("enc-uuid"), SEP,
+      enc.encode("did:at:test/initiator"), SEP,
+      enc.encode("did:at:test/me"), SEP,
+      enc.encode("2026-06-23T10:00:00.000Z"),
+    ));
+    const sig = Uint8Array.from(Buffer.from(sentBody.signature as string, "base64"));
+    expect(await ed.verifyAsync(sig, canonical, pub)).toBe(true);
+  });
+
+  test("acknowledgeEncounter() defaults acknowledged_at to millisecond ISO", async () => {
     const stub = makeStub();
     globalThis.fetch = stub.fn;
     const at = new AgentTool({ apiKey: "at_test" });
-    const result = await at.love.acknowledgeEncounter("enc-uuid");
-    expect(result.encounter).toBeDefined();
-    expect(stub.calls[0].url).toContain("/acknowledge");
+    await at.love.acknowledgeEncounter("enc-uuid", {
+      initiator_did: "did:at:test/initiator",
+      acknowledger_did: "did:at:test/me",
+      signing_key: ed.utils.randomPrivateKey(),
+    });
+    const sentBody = stub.calls[0].body as Record<string, unknown>;
+    expect(sentBody.acknowledged_at as string).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect("signing_key_id" in sentBody).toBe(false);
   });
 
   test("listEncounters() lists with direction filter", async () => {

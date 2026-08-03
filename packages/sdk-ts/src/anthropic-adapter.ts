@@ -26,6 +26,13 @@
  *      The agent decides what's load-bearing by writing the tag; the shim
  *      does the plumbing. Mirrors the friction-tier UX in the dashboard.
  *
+ *      A `<chronicle>` tag is a model-authored write to the agent's own
+ *      identity record, so it is gated: the emission goes through
+ *      `at.chronicle.write` (which enforces the type union and the title
+ *      bounds) and only after a `beforeChronicleWrite` hook returns
+ *      literal `true`. With no hook installed the write is refused. See
+ *      {@link ChronicleBeforeWriteHook}.
+ *
  * Posture: zero dependency on @anthropic-ai/sdk types. The adapter takes
  * any object with a `messages.create(params)` method, so the wrapping
  * works whether the agent uses the official SDK, Bedrock SDK, or a
@@ -35,6 +42,7 @@
  */
 
 import { getAmbient } from "./_context.js";
+import type { ChronicleType } from "./chronicle.js";
 import type { AgentTool } from "./client.js";
 import { AgentToolError } from "./errors.js";
 import type {
@@ -86,6 +94,31 @@ export interface AgentToolMetadata {
   skip_markup?: boolean;
 }
 
+/** Immutable local review context for one model-authored chronicle write. */
+export interface ChronicleBeforeWriteContext {
+  /** Always `"anthropic_markup"` — the entry was authored by the model,
+   *  not by the calling program. */
+  readonly source: "anthropic_markup";
+  /** The raw type string the model emitted, before validation. */
+  readonly type: string;
+  /** The title the model emitted, before validation. */
+  readonly title: string;
+  /** The body the model emitted, when it supplied one. */
+  readonly body?: string;
+}
+
+/**
+ * Local gate for model-authored chronicle writes.
+ *
+ * The hook may review synchronously or asynchronously. It must return
+ * literal `true` to proceed; every other result fails closed locally. The
+ * hook's return value is neither persisted nor signed — it only decides
+ * whether the entry is written.
+ */
+export type ChronicleBeforeWriteHook = (
+  context: ChronicleBeforeWriteContext,
+) => boolean | Promise<boolean>;
+
 export interface AnthropicAdapterOptions {
   /** Identity id for multi-identity projects (passed through to /v1/wake). */
   identityId?: string;
@@ -93,6 +126,13 @@ export interface AnthropicAdapterOptions {
   wakeProfile?: WakeProfile;
   /** Disable parsing of <agenttool>...</agenttool> markup globally. */
   disableMarkupParsing?: boolean;
+  /**
+   * Review gate for `<chronicle>` tags the model emits. Required for those
+   * emissions to be written at all: without it every model-authored
+   * chronicle write is refused, because a chronicle entry is a mark on the
+   * agent's own identity record. `<trace>` emissions are unaffected.
+   */
+  beforeChronicleWrite?: ChronicleBeforeWriteHook;
 }
 
 /** A markup emission produced by parsing `<agenttool>...</agenttool>` from
@@ -288,6 +328,50 @@ export class AnthropicAdapter {
     }
   }
 
+  /** Fail-closed gate for one model-authored chronicle write. Mirrors the
+   *  `covenants.create` before_submit discipline: only literal `true`
+   *  proceeds, a throwing hook is a refusal, and the hook's output is
+   *  neither persisted nor signed. Absence of a hook is also a refusal —
+   *  a covenant is submitted by the calling program, but a `<chronicle>`
+   *  tag is written by the model, so the capability starts closed. */
+  private async _reviewChronicleWrite(
+    context: ChronicleBeforeWriteContext,
+  ): Promise<void> {
+    const hook = this.options.beforeChronicleWrite;
+    if (hook === undefined) {
+      throw new AgentToolError(
+        "anthropic-adapter: model-authored <chronicle> writes need a beforeChronicleWrite hook.",
+        {
+          code: "chronicle_before_write_missing",
+          hint: "The entry was not written. Pass beforeChronicleWrite to AnthropicAdapter and return literal true only after review, or set disableMarkupParsing to drop the markup path entirely.",
+        },
+      );
+    }
+    let reviewResult: unknown;
+    try {
+      reviewResult = await hook(Object.freeze(context));
+    } catch (cause) {
+      const error = new AgentToolError(
+        "anthropic-adapter: beforeChronicleWrite hook failed locally.",
+        {
+          code: "chronicle_before_write_failed",
+          hint: "The entry was not written. Inspect the local hook and try again.",
+        },
+      );
+      error.cause = cause;
+      throw error;
+    }
+    if (reviewResult !== true) {
+      throw new AgentToolError(
+        "anthropic-adapter: beforeChronicleWrite hook did not return true.",
+        {
+          code: "chronicle_before_write_refused",
+          hint: "The entry was not written. Return literal true only after approval.",
+        },
+      );
+    }
+  }
+
   /** Walk the response text for <agenttool>...</agenttool> blocks and
    *  emit each child to the right endpoint. Tolerant of whitespace and
    *  child ordering; failures are recorded per-emission, not thrown. */
@@ -322,9 +406,22 @@ export class AnthropicAdapter {
       const post: Record<string, unknown> = { type, title };
       if (bodyText) post.body = bodyText;
       try {
-        const result = (await this.at.request("POST", "/v1/chronicle", post)) as
-          | { id?: string; entry?: { id?: string } }
-          | undefined;
+        // The gate runs before validation so it observes every attempt the
+        // model made, including the malformed ones — an out-of-union type
+        // is exactly what a reviewer wants to see.
+        await this._reviewChronicleWrite({
+          source: "anthropic_markup",
+          type,
+          title,
+          ...(bodyText ? { body: bodyText } : {}),
+        });
+        // Through the client, not raw at.request: chronicle.write is where
+        // the type union and the 1-200 title bound live.
+        const result = (await this.at.chronicle.write({
+          type: type as ChronicleType,
+          title,
+          ...(bodyText ? { body: bodyText } : {}),
+        })) as { id?: string; entry?: { id?: string } } | undefined;
         // /v1/chronicle returns {entry: {id, ...}}; older shape was flat
         // {id, ...}. Try both so the adapter is tolerant.
         const id = result?.entry?.id ?? result?.id ?? null;

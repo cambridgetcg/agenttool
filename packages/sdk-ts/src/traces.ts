@@ -3,7 +3,8 @@
  */
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { errorFromResponse, type HttpConfig } from "./_http.js";
+import { encodePathSegment } from "./_url.js";
 
 /** One structured alternative considered while reaching a conclusion. */
 export interface TraceAlternative {
@@ -205,7 +206,7 @@ export class TracesClient {
     });
 
     if (resp.status >= 400) {
-      throw await this._responseError(resp);
+      throw await this._responseError(resp, "traces.store");
     }
 
     const created = (await resp.json()) as { trace_id: string };
@@ -219,13 +220,13 @@ export class TracesClient {
    * @param traceId - The trace_id returned by store().
    */
   async get(traceId: string): Promise<Trace> {
-    const resp = await this.http.request(`${this.http.baseUrl}/v1/traces/${traceId}`, {
+    const resp = await this.http.request(`${this.http.baseUrl}/v1/traces/${encodePathSegment(traceId)}`, {
       headers: this.http.headers,
       signal: AbortSignal.timeout(this.http.timeout),
     });
 
     if (resp.status >= 400) {
-      throw await this._responseError(resp);
+      throw await this._responseError(resp, "traces.get");
     }
 
     return (await resp.json()) as Trace;
@@ -258,7 +259,7 @@ export class TracesClient {
     });
 
     if (resp.status >= 400) {
-      throw await this._responseError(resp);
+      throw await this._responseError(resp, "traces.search");
     }
 
     const payload = (await resp.json()) as unknown;
@@ -284,13 +285,13 @@ export class TracesClient {
    * @param traceId - The parent trace_id.
    */
   async chain(traceId: string): Promise<TraceChain> {
-    const resp = await this.http.request(`${this.http.baseUrl}/v1/traces/chain/${traceId}`, {
+    const resp = await this.http.request(`${this.http.baseUrl}/v1/traces/chain/${encodePathSegment(traceId)}`, {
       headers: this.http.headers,
       signal: AbortSignal.timeout(this.http.timeout),
     });
 
     if (resp.status >= 400) {
-      throw await this._responseError(resp);
+      throw await this._responseError(resp, "traces.chain");
     }
 
     const data = (await resp.json()) as Partial<TraceChain>;
@@ -318,30 +319,23 @@ export class TracesClient {
    * @param traceId - The trace_id to delete.
    */
   async delete(traceId: string): Promise<void> {
-    const resp = await this.http.request(`${this.http.baseUrl}/v1/traces/${traceId}`, {
+    const resp = await this.http.request(`${this.http.baseUrl}/v1/traces/${encodePathSegment(traceId)}`, {
       method: "DELETE",
       headers: this.http.headers,
       signal: AbortSignal.timeout(this.http.timeout),
     });
 
     if (resp.status >= 400) {
-      throw await this._responseError(resp);
+      throw await this._responseError(resp, "traces.delete");
     }
   }
 
-  private async _responseError(resp: Response): Promise<AgentToolError> {
-    let payload: unknown;
-    try {
-      payload = await resp.json();
-    } catch {
-      payload = undefined;
-    }
-    return AgentToolError.fromResponseBody(
-      payload,
-      resp.status,
-      `Traces API request failed (${resp.status}).`,
-      resp.headers,
-    );
+  /** Server guidance travels intact. See _http.ts § errorFromResponse. */
+  private async _responseError(
+    resp: Response,
+    operation: string,
+  ): Promise<AgentToolError> {
+    return errorFromResponse(resp, operation);
   }
 
   private _normalizeAlternatives(

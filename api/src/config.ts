@@ -18,12 +18,22 @@ export const config = {
   logLevel: env("LOG_LEVEL", "info"),
 
   // ── Data plane ──────────────────────────────────────────────────────────
+  //
+  // Local-dev defaults address 127.0.0.1, not "localhost". The name has to go
+  // through a resolver, and in sandboxed or container-bridged environments it
+  // either fails outright — `getaddrinfo ENOTFOUND`, which is what a wall of
+  // DB-backed test failures on this repo actually was — or resolves to ::1,
+  // where a port-mapped Postgres published on 0.0.0.0 is not listening. The
+  // literal needs no resolver and cannot pick the wrong family. Production
+  // always sets these explicitly, so this only ever governs local runs.
+  // Bring one up with `bin/test-db.sh up`.
+  //
   // databaseUrl: transaction-pooled (Supabase port 6543 in prod). Used by
   //   the main shared client + every route + worker. Multiplexes across
   //   transactions; do NOT use for LISTEN/NOTIFY or session-scoped state.
   databaseUrl: env(
     "DATABASE_URL",
-    "postgres://postgres:postgres@localhost:5432/agenttool",
+    "postgres://postgres:postgres@127.0.0.1:5432/agenttool",
   ),
   // databaseSessionUrl: session-pooled (Supabase port 5432 in prod), or
   //   the same as databaseUrl in local dev. Used by LISTEN backplanes
@@ -31,9 +41,9 @@ export const config = {
   //   across many notifications. Falls back to databaseUrl if unset.
   databaseSessionUrl: env(
     "DATABASE_SESSION_URL",
-    env("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/agenttool"),
+    env("DATABASE_URL", "postgres://postgres:postgres@127.0.0.1:5432/agenttool"),
   ),
-  redisUrl: env("REDIS_URL", "redis://localhost:6379/0"),
+  redisUrl: env("REDIS_URL", "redis://127.0.0.1:6379/0"),
 
   // ── Provider keys stay agent-owned ──────────────────────────────────────
   // Self runtimes call providers from the user's machine. Bridged/trusted

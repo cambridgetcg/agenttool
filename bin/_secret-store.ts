@@ -55,13 +55,27 @@ export async function getSecret(service: string): Promise<string | null> {
   }
 }
 
-/** Write a secret. Overwrites if it already exists. */
+/** Write a secret. Overwrites if it already exists.
+ *
+ *  Always reads the value back and compares before returning. Callers rotate
+ *  K_master and stash bearers through here; a store that reports success while
+ *  holding something else is worse than one that fails loudly, because the
+ *  caller has usually already destroyed the only other copy. Never log `value`
+ *  or the read-back in the failure path. */
 export async function setSecret(service: string, value: string): Promise<void> {
   switch (platform()) {
-    case "darwin": return macosSet(service, value);
-    case "linux":  return linuxSet(service, value);
-    case "win32":  return windowsSet(service, value);
+    case "darwin": macosSet(service, value); break;
+    case "linux":  await linuxSet(service, value); break;
+    case "win32":  await windowsSet(service, value); break;
     default:       throw new Error(`setSecret: platform ${process.platform} unsupported`);
+  }
+  const readBack = await getSecret(service);
+  if (readBack !== value) {
+    throw new Error(
+      `setSecret: read-back mismatch for "${service}" — the credential store did not ` +
+        `retain the value (stored ${readBack === null ? "nothing" : `${readBack.length} bytes`}, ` +
+        `expected ${value.length}). Do not treat this secret as saved.`,
+    );
   }
 }
 
@@ -92,9 +106,27 @@ function macosGet(service: string): string | null {
   return out || null;
 }
 
+/** `security`'s password prompt reads into a fixed buffer and silently
+ *  truncates past this, still exiting 0. Measured on macOS 15 (Darwin 24.6). */
+const MACOS_PROMPT_MAX_BYTES = 128;
+
 function macosSet(service: string, value: string): void {
+  const byteLength = new TextEncoder().encode(value).length;
+  if (byteLength > MACOS_PROMPT_MAX_BYTES) {
+    throw new Error(
+      `macosSet: ${byteLength} bytes exceeds the ${MACOS_PROMPT_MAX_BYTES}-byte macOS ` +
+        `password-prompt limit for "${service}"; \`security\` would truncate it and exit 0. ` +
+        `Store a compact encoding instead — e.g. a BIP-39 mnemonic as its 32-byte entropy ` +
+        `in base64 (44 chars), regenerated with entropyToMnemonic() on read.`,
+    );
+  }
   // Keep -w last with no argv value: `security` reads the password from
   // stdin, so it never appears in the process argument list.
+  //
+  // It prompts TWICE — "password data for new item:" then "retype password
+  // for new item:". Feeding the value once makes the retype read EOF, and
+  // `security` then stores an EMPTY password while still exiting 0. Send it
+  // twice, newline-terminated, and let setSecret's read-back catch the rest.
   const p = Bun.spawnSync(
     [
       "security", "add-generic-password",
@@ -103,7 +135,7 @@ function macosSet(service: string, value: string): void {
       "-a", ACCT,
       "-w",
     ],
-    { stdin: new TextEncoder().encode(value), stderr: "ignore" },
+    { stdin: new TextEncoder().encode(`${value}\n${value}\n`), stderr: "ignore" },
   );
   if (p.exitCode !== 0) {
     throw new Error(`macosSet: security add-generic-password exit=${p.exitCode}`);

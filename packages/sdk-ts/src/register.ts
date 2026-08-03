@@ -14,7 +14,7 @@
  * an `AgentToolError` whose `detail` carries the 410's `next_actions`.
  */
 
-import { AgentToolError } from "./errors.js";
+import { throwFromResponse } from "./_http.js";
 
 export const DEFAULT_BASE_URL = "https://api.agenttool.dev";
 
@@ -87,15 +87,8 @@ export async function register(options: RegisterOptions): Promise<RegisterRespon
   });
 
   if (resp.status !== 201) {
-    let detail: string;
-    try {
-      const json = (await resp.json()) as Record<string, unknown>;
-      detail =
-        (json.detail as string) ?? (json.error as string) ?? resp.statusText;
-    } catch {
-      detail = resp.statusText;
-    }
-    throw new AgentToolError(`register failed (${resp.status}): ${detail}`, {
+    // Server guidance travels intact. See _http.ts § errorFromResponse.
+    await throwFromResponse(resp, "register", {
       hint:
         "Check name length (1-128), capabilities count (≤32), purpose length (≤500).",
     });

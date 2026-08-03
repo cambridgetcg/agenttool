@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, TypeVar
 
 import httpx
 
-from .exceptions import AgentToolError
+from .exceptions import AgentToolError, raise_from_response
 from .models import DocumentResult, ExecuteResult, ScrapeResult
 
 
@@ -225,35 +225,10 @@ class ToolsClient:
     @staticmethod
     def _check(resp: httpx.Response) -> None:
         if resp.status_code >= 400:
-            try:
-                response_body = resp.json()
-            except Exception:
-                response_body = None
-            parsed = AgentToolError.from_response_body(
-                response_body,
-                resp.status_code,
-                resp.text,
-                headers=resp.headers,
-            )
-            raise AgentToolError(
-                f"Tools API error ({resp.status_code}): {parsed.message}",
-                hint=(
-                    parsed.hint
-                    or "Check your API key and request parameters."
-                ),
-                code=resp.status_code,
-                error_code=parsed.error_code,
-                next_actions=parsed.next_actions,
-                docs=parsed.docs,
-                safety=parsed.safety,
-                details=parsed.details,
-                x402_version=parsed.x402_version,
-                accepts=parsed.accepts,
-                x402_resource=parsed.x402_resource,
-                extensions=parsed.extensions,
-                payment_required=parsed.payment_required,
-                payment_response=parsed.payment_response,
-                payment_status_link=parsed.payment_status_link,
-                retry_after=parsed.retry_after,
-                credits_balance=parsed.credits_balance,
+            # Server guidance travels intact. See exceptions.py
+            # § _error_from_response.
+            raise_from_response(
+                resp,
+                "tools",
+                hint="Check your API key and request parameters.",
             )

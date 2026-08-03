@@ -21,7 +21,7 @@
  * Doctrine: docs/SOUL.md (Principle 1 — Welcome, don't block).
  */
 
-import { AgentToolError } from "./errors.js";
+import { throwFromResponse } from "./_http.js";
 
 export const DEFAULT_BASE_URL = "https://api.agenttool.dev";
 
@@ -139,15 +139,8 @@ export async function pathways(options?: PathwaysOptions): Promise<PathwaysRespo
   });
 
   if (resp.status !== 200) {
-    let detail: string;
-    try {
-      const json = (await resp.json()) as Record<string, unknown>;
-      detail =
-        (json.detail as string) ?? (json.error as string) ?? resp.statusText;
-    } catch {
-      detail = resp.statusText;
-    }
-    throw new AgentToolError(`pathways failed (${resp.status}): ${detail}`);
+    // Server guidance travels intact. See _http.ts § errorFromResponse.
+    await throwFromResponse(resp, "pathways");
   }
   return (await resp.json()) as PathwaysResponse;
 }

@@ -413,7 +413,9 @@ class TestTools:
         with patch.object(at._http, "post", return_value=mock_resp):
             with pytest.raises(AgentToolError) as exc_info:
                 at.tools.scrape("https://will-fail.example")
-            assert "500" in exc_info.value.message
+            # The body's words are the message; 500 stays on `.status`.
+            assert exc_info.value.message == "Internal error"
+            assert exc_info.value.status == 500
 
     def test_safe_fetch_error_keeps_structured_guidance(self, at: AgentTool) -> None:
         mock_resp = _mock_response(
@@ -768,4 +770,7 @@ class TestEconomyClient:
         with patch.object(at._http, "post", return_value=mock_resp):
             with pytest.raises(AgentToolError) as exc_info:
                 at.economy.spend("wal_abc", amount=9999, counterparty="wal_xyz", description="Too much")
-            assert "402" in exc_info.value.message
+            # The body's words are the message; 402 stays on `.status`.
+            assert exc_info.value.message == "Insufficient credits"
+            assert exc_info.value.status == 402
+            assert exc_info.value.hint == "Check wallet ID, balance, and spending policy."

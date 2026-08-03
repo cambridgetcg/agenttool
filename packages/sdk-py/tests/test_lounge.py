@@ -230,6 +230,10 @@ def test_public_look_disables_httpx_auth_flow_and_refuses_redirects() -> None:
     finally:
         shared.close()
 
+    # `code` is the stable string and `status` is the HTTP status, exactly
+    # as sdk-ts spells them. Pinned in sdk-ts/tests/lounge.test.ts.
+    assert caught.value.code == "lounge_public_redirect_refused"
+    assert caught.value.status == 302
     assert caught.value.error_code == "lounge_public_redirect_refused"
     assert captured == []
     options = client_type.call_args.kwargs
@@ -598,7 +602,10 @@ def test_guided_api_errors_preserve_code_hint_and_docs(at: AgentTool) -> None:
                 **_signer(), lease_id=LEASE_ID, signed_at=SIGNED_AT
             )
 
-    assert caught.value.code == 409
+    # Pinned byte-for-byte against sdk-ts's
+    # "a guided API error carries the stable code and the status apart".
+    assert caught.value.code == "lounge_gesture_superseded"
+    assert caught.value.status == 409
     assert caught.value.error_code == "lounge_gesture_superseded"
     assert caught.value.hint == "Read the current lease before signing again."
     assert caught.value.docs == "https://docs.agenttool.dev/lounge"

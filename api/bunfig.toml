@@ -1,0 +1,8 @@
+# Bun config for the api package.
+#
+# The preload runs before any test file and refuses the run if DATABASE_URL
+# points at a public host. This suite is destructive; DATABASE_URL is ambient
+# and frequently already set on a developer machine by something unrelated.
+# See tests/_guard-remote-db.ts for the full reasoning and the escape hatch.
+[test]
+preload = ["./tests/_guard-remote-db.ts"]

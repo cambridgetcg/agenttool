@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from typing import Dict, Union
+from datetime import datetime, timezone
+from typing import Any, Dict, Mapping, TypedDict, Union
+from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -17,6 +19,26 @@ IDENTITY_READ_AUTHORITY_DOMAIN = "identity-read-authority/v1"
 AUTHORITY_SEQUENCE_HEADER = "X-Agenttool-Authority-Sequence"
 AUTHORITY_TIMESTAMP_HEADER = "X-Agenttool-Authority-Timestamp"
 AUTHORITY_SIGNATURE_HEADER = "X-Agenttool-Authority-Signature"
+
+
+def authority_timestamp_now() -> str:
+    """Default freshness stamp for a proof. The server window is ±5 minutes."""
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+
+def authority_request_target(url: str) -> str:
+    """Return the exact origin-form request target an authority proof covers.
+
+    Byte-identical to ``authorityRequestTarget`` in the API service. The proof
+    binds path-and-query, so derive it from the same absolute URL the
+    transport will actually fetch.
+    """
+    parsed = urlsplit(url)
+    return f"{parsed.path}?{parsed.query}" if parsed.query else parsed.path
 
 
 def canonical_identity_authority_bytes(
@@ -82,6 +104,53 @@ def identity_authority_headers(
         AUTHORITY_TIMESTAMP_HEADER: timestamp,
         AUTHORITY_SIGNATURE_HEADER: base64.b64encode(signature).decode("ascii"),
     }
+
+
+class AuthorityBinding(TypedDict, total=False):
+    """An agent-rooted identity's consent to one exact HTTP mutation.
+
+    ``IdentityAuthority`` in identity.py is this shape. It lives here so that
+    any client — identity, at-rest, memory — can bind a proof without
+    importing the identity module.
+    """
+
+    #: DID of the identity whose immutable root consents.
+    did: str
+    #: That identity's immutable root ed25519 seed (32 bytes).
+    signing_key: bytes
+    #: ``next_sequence`` from ``GET /v1/identities/:id/authority``.
+    sequence: int
+    #: ISO-8601 UTC instant. Defaults to now; the server window is ±5 minutes.
+    timestamp: str
+
+
+def authority_headers_for_request(
+    *,
+    method: str,
+    url: str,
+    body: Union[str, bytes, bytearray],
+    authority: Mapping[str, Any],
+) -> Dict[str, str]:
+    """Return the three proof headers for the exact request about to be sent.
+
+    ``authority`` is an :class:`AuthorityBinding` — ``did``, ``signing_key``,
+    ``sequence``, and an optional ``timestamp``.
+
+    ``url`` must be the absolute URL the transport will fetch, query string
+    included, and ``body`` the exact entity it will carry (``b""`` for a
+    body-less mutation, which is what the server reads there). The proof
+    hashes those bytes: serialize once, call this, and transmit the same
+    value unchanged — any re-serialization in between invalidates it.
+    """
+    return identity_authority_headers(
+        identity_did=authority["did"],
+        method=method,
+        request_target=authority_request_target(url),
+        body=body,
+        sequence=authority["sequence"],
+        timestamp=authority.get("timestamp") or authority_timestamp_now(),
+        signing_key=authority["signing_key"],
+    )
 
 
 def canonical_identity_read_authority_bytes(

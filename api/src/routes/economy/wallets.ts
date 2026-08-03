@@ -1,11 +1,15 @@
 /** /v1/wallets — wallet CRUD + fund + spend + policy + freeze + transactions. */
 
 import { zValidator } from "@hono/zod-validator";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { db } from "../../db/client";
+import { identities, identityKeys } from "../../db/schema/identity";
+import { errors, fail } from "../../lib/errors";
+import { walletCustody } from "../../services/economy/custody";
 import { getRedis } from "../../services/economy/redis";
 import {
   createWallet,
@@ -35,11 +39,71 @@ router.post(
       agentId: z.string().optional(),
       identityId: z.string().optional(),
       currency: z.string().default("GBP"),
+      /** Custody, chosen once. 'agent' means this wallet's chain addresses
+       *  come from the agent's own seed and AgentTool holds no key for them. */
+      owner_type: z.enum(["platform", "agent"]).default("platform"),
+      agent_signing_pub_b64: z.string().min(1).optional(),
+      agent_wallet_index: z.number().int().min(0).optional(),
     }),
   ),
   async (c) => {
     const project = c.var.project;
     const body = c.req.valid("json");
+
+    if (body.owner_type === "agent") {
+      // Custody claims get checked against what the platform already knows.
+      // Taking `agent_signing_pub_b64` on trust would let any bearer holder
+      // name a stranger's key and call the result sovereign.
+      if (!body.identityId || body.agent_signing_pub_b64 === undefined ||
+          body.agent_wallet_index === undefined) {
+        return fail(
+          c,
+          errors.refusal({
+            error: "agent_custody_incomplete",
+            message:
+              "An agent-owned wallet needs identityId, agent_signing_pub_b64 and " +
+              "agent_wallet_index together. Without all three the platform cannot tell whose " +
+              "wallet this is, or where the agent will re-derive it.",
+            hint:
+              "agent_wallet_index is the <n> in m/44'/169'/5'/<n>' under your seed. Keep it " +
+              "stable — it is how you reproduce this wallet on another device.",
+            docs: "https://docs.agenttool.dev/IDENTITY-SEED.md",
+          }),
+          400,
+        );
+      }
+
+      const [key] = await db
+        .select({ id: identityKeys.id })
+        .from(identityKeys)
+        .innerJoin(identities, eq(identities.id, identityKeys.identityId))
+        .where(
+          and(
+            eq(identityKeys.identityId, body.identityId),
+            eq(identityKeys.publicKey, body.agent_signing_pub_b64),
+            eq(identityKeys.active, true),
+            eq(identities.projectId, project.id),
+            eq(identities.status, "active"),
+          ),
+        )
+        .limit(1);
+
+      if (!key) {
+        return fail(
+          c,
+          errors.refusal({
+            error: "agent_key_not_registered",
+            message:
+              "agent_signing_pub_b64 is not an active registered signing key of that active " +
+              "identity in this project. A wallet is bound to a key the platform has already " +
+              "seen you prove, not to one asserted at creation time.",
+            hint: "GET /v1/identities/:id/keys lists the keys this identity can claim with.",
+            docs: "https://docs.agenttool.dev/IDENTITY-ANCHOR.md",
+          }),
+          422,
+        );
+      }
+    }
 
     const wallet = await createWallet(db, {
       projectId: project.id,
@@ -47,9 +111,15 @@ router.post(
       agentId: body.agentId,
       identityId: body.identityId,
       currency: body.currency,
+      ownerType: body.owner_type,
+      agentSigningPubB64: body.agent_signing_pub_b64,
+      agentWalletIndex: body.agent_wallet_index,
     });
 
-    return c.json({ success: true, data: wallet }, 201);
+    return c.json(
+      { success: true, data: { ...wallet, custody: walletCustody(wallet) } },
+      201,
+    );
   },
 );
 
@@ -58,7 +128,10 @@ router.post(
 router.get("/", async (c) => {
   const project = c.var.project;
   const results = await listWallets(db, project.id);
-  return c.json({ success: true, data: results });
+  return c.json({
+    success: true,
+    data: results.map((w) => ({ ...w, custody: walletCustody(w) })),
+  });
 });
 
 // ─── Get ────────────────────────────────────────────────────────────────────
@@ -67,7 +140,10 @@ router.get("/:id", async (c) => {
   const project = c.var.project;
   const wallet = await getWallet(db, c.req.param("id"), project.id);
   const policy = await getPolicy(db, wallet.id);
-  return c.json({ success: true, data: { ...wallet, policy } });
+  return c.json({
+    success: true,
+    data: { ...wallet, policy, custody: walletCustody(wallet) },
+  });
 });
 
 // ─── Fund ───────────────────────────────────────────────────────────────────

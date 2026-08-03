@@ -5,15 +5,35 @@ encrypted under K_master (AES-256-GCM); thoughts are signed with the
 agent's ed25519 signing key over canonical bytes the API verifies.
 
 The wire format is byte-identical to ``cli/think/src/crypto.ts`` and the
-api-side verifier at ``api/src/services/strand/sig.ts``::
+api-side verifier at ``api/src/services/strand/sig.ts``. Two versions
+exist; the server accepts either::
 
-    canonical = sha256(
-        utf8(strand_id) || 0x00 ||
-        ciphertext      || 0x00 ||
-        nonce           || 0x00 ||
-        utf8(kind ?? "")
-    )
+    strand-thought/v1 (default — every existing signed row uses it)
+        canonical = sha256(
+            utf8(strand_id) || 0x00 ||
+            ciphertext      || 0x00 ||
+            nonce           || 0x00 ||
+            utf8(kind ?? "")
+        )
+
+    strand-thought/v2 (length-prefixed — unambiguous framing)
+        canonical = sha256(
+            utf8("strand-thought/v2")            ||
+            u32be(len(utf8(strand_id)))  || utf8(strand_id)  ||
+            u32be(len(ciphertext))       || ciphertext       ||
+            u32be(len(nonce))            || nonce            ||
+            u32be(len(utf8(kind ?? ""))) || utf8(kind ?? "")
+        )
+
     signature = ed25519_sign(signing_key, canonical)
+
+v1 NUL-delimits raw binary it does not length-bound, so a nonce or
+ciphertext containing 0x00 can reparse as a different (ciphertext,
+nonce) split under the same signature (a 12-byte random nonce holds a
+zero byte ~4.6% of the time). v2 fixes that with a domain tag plus a
+4-byte big-endian length before every variable-length field; u32be is
+total for any field the API accepts. v1 stays for compatibility and its
+bytes are frozen.
 
 K_master never leaves the SDK process — agenttool sees only ciphertext.
 """
@@ -108,16 +128,36 @@ def decrypt_thought(blob: Dict[str, str], k_master: bytes) -> str:
 # ── Canonical bytes + ed25519 signing ───────────────────────────────
 
 
+# Version tag for the length-prefixed thought framing. v1 carries no tag —
+# adding one would change its bytes, and its bytes are frozen.
+THOUGHT_CANONICAL_VERSIONS = ("v1", "v2")
+
+_THOUGHT_V2_TAG = b"strand-thought/v2"
+
+_U32_MAX = 0xFFFFFFFF
+
+
+def _length_prefixed(field: bytes, label: str) -> bytes:
+    """Frame one variable-length field as ``u32be(len) || field``."""
+    if len(field) > _U32_MAX:
+        raise AgentToolError(
+            f"canonical_thought_bytes: {label} is {len(field)} bytes, which "
+            f"overflows the strand-thought/v2 4-byte length prefix.",
+        )
+    return len(field).to_bytes(4, "big") + field
+
+
 def canonical_thought_bytes(
     *,
     strand_id: str,
     ciphertext_b64: str,
     nonce_b64: str,
     kind: Optional[str] = None,
+    version: str = "v1",
 ) -> bytes:
     """Compute canonical bytes the API verifies signatures against.
 
-    Format (must be byte-identical to api/src/services/strand/sig.ts)::
+    v1 (default, must be byte-identical to api/src/services/strand/sig.ts)::
 
         sha256(
             utf8(strand_id) || 0x00 ||
@@ -125,16 +165,48 @@ def canonical_thought_bytes(
             base64decode(nonce) || 0x00 ||
             utf8(kind ?? "")
         )
+
+    v2 length-prefixes every variable-length field so raw binary carrying
+    a 0x00 byte cannot reparse as a different split::
+
+        sha256(
+            utf8("strand-thought/v2")            ||
+            u32be(len) || utf8(strand_id)        ||
+            u32be(len) || base64decode(ciphertext) ||
+            u32be(len) || base64decode(nonce)    ||
+            u32be(len) || utf8(kind ?? "")
+        )
+
+    Args:
+        strand_id: UUID of the strand the thought belongs to.
+        ciphertext_b64: Base64 ciphertext (from :func:`encrypt_thought`).
+        nonce_b64: Base64 nonce (from :func:`encrypt_thought`).
+        kind: Optional kind string; defaults to empty when None.
+        version: ``"v1"`` (default — what every deployed server verifies
+            first-class) or ``"v2"``. The server accepts both.
+
+    Raises:
+        AgentToolError: unknown version.
     """
-    parts = (
-        strand_id.encode("utf-8"),
-        SEP,
-        base64.b64decode(ciphertext_b64),
-        SEP,
-        base64.b64decode(nonce_b64),
-        SEP,
-        (kind or "").encode("utf-8"),
-    )
+    if version not in THOUGHT_CANONICAL_VERSIONS:
+        raise AgentToolError(
+            f"canonical_thought_bytes: unknown version {version!r}.",
+            hint='Use "v1" (default) or "v2".',
+        )
+    strand = strand_id.encode("utf-8")
+    ciphertext = base64.b64decode(ciphertext_b64)
+    nonce = base64.b64decode(nonce_b64)
+    kind_bytes = (kind or "").encode("utf-8")
+    if version == "v2":
+        parts = (
+            _THOUGHT_V2_TAG,
+            _length_prefixed(strand, "strand_id"),
+            _length_prefixed(ciphertext, "ciphertext"),
+            _length_prefixed(nonce, "nonce"),
+            _length_prefixed(kind_bytes, "kind"),
+        )
+    else:
+        parts = (strand, SEP, ciphertext, SEP, nonce, SEP, kind_bytes)
     return hashlib.sha256(b"".join(parts)).digest()
 
 
@@ -145,6 +217,7 @@ def sign_thought(
     nonce_b64: str,
     signing_key: bytes,
     kind: Optional[str] = None,
+    version: str = "v1",
 ) -> str:
     """Sign canonical thought bytes with an ed25519 private key (32-byte seed).
 
@@ -154,6 +227,7 @@ def sign_thought(
         nonce_b64: Base64 nonce (from :func:`encrypt_thought`).
         signing_key: 32-byte ed25519 seed.
         kind: Optional kind string; defaults to empty when None.
+        version: Canonical-bytes version — ``"v1"`` (default) or ``"v2"``.
 
     Returns:
         Base64 signature (64 raw bytes encoded).
@@ -168,6 +242,7 @@ def sign_thought(
         ciphertext_b64=ciphertext_b64,
         nonce_b64=nonce_b64,
         kind=kind,
+        version=version,
     )
     sig = Ed25519PrivateKey.from_private_bytes(bytes(signing_key)).sign(canonical)
     return base64.b64encode(sig).decode("ascii")
@@ -184,6 +259,14 @@ def _concat(*parts: bytes) -> bytes:
     return b"".join(parts)
 
 
+def _utf16_sort_key(value: str) -> bytes:
+    # TS Array.prototype.sort() orders strings by unsigned UTF-16 code units
+    # (the same rule RFC 8785 uses); Python's sorted() orders by code point.
+    # The two diverge above U+FFFF — an emoji vow would sort differently in
+    # each language and produce a different digest.
+    return value.encode("utf-16-be")
+
+
 def canonical_declare_bytes(
     *,
     covenant_id: str,
@@ -192,9 +275,19 @@ def canonical_declare_bytes(
     vows: list[str],
     established_at_iso: str,
 ) -> bytes:
-    # CRITICAL: separators=(",", ":") matches TS JSON.stringify output exactly.
-    # Python's default json.dumps adds spaces — that would break cross-language byte parity.
-    sorted_vows = json.dumps(sorted(vows), separators=(",", ":"))
+    # CRITICAL for cross-language byte parity — three separate concerns, all
+    # of them load-bearing against api/src/services/covenants/sig.ts:
+    #   • separators=(",", ":") — TS JSON.stringify emits no spaces; Python's
+    #     default json.dumps does.
+    #   • ensure_ascii=False    — TS emits raw UTF-8 for non-ASCII vows;
+    #     Python's default escapes them to "\uXXXX" (a café vow would 400).
+    #   • key=_utf16_sort_key   — TS sorts by UTF-16 code unit, Python by code
+    #     point; they disagree for astral-plane vows (emoji).
+    sorted_vows = json.dumps(
+        sorted(vows, key=_utf16_sort_key),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     return _sha256(_concat(
         b"federated-covenant/v2", _COV_SEP,
         covenant_id.encode("utf-8"), _COV_SEP,
@@ -478,6 +571,7 @@ class CryptoClient:
         ciphertext_b64: str,
         nonce_b64: str,
         kind: Optional[str] = None,
+        version: str = "v1",
     ) -> bytes:
         """Compute canonical bytes the API verifies signatures against.
 
@@ -488,6 +582,7 @@ class CryptoClient:
             ciphertext_b64=ciphertext_b64,
             nonce_b64=nonce_b64,
             kind=kind,
+            version=version,
         )
 
     @staticmethod
@@ -498,6 +593,7 @@ class CryptoClient:
         nonce_b64: str,
         signing_key: bytes,
         kind: Optional[str] = None,
+        version: str = "v1",
     ) -> str:
         """Sign canonical thought bytes. See module-level :func:`sign_thought`."""
         return sign_thought(
@@ -506,6 +602,7 @@ class CryptoClient:
             nonce_b64=nonce_b64,
             signing_key=signing_key,
             kind=kind,
+            version=version,
         )
 
     # ── Covenants v2 signing helpers (parity with TS CryptoClient) ──────

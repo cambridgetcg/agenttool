@@ -69,17 +69,24 @@ export type {
   IssueTokenOptions,
   ForkOptions,
   ExpressionData,
+  IdentityAuthority,
+  IdentityAuthorityOptions,
   PorchInvitation,
   VillageDecorations,
   RegisterBoxKeyOpts,
 } from "./identity.js";
 export {
   BoxKeysClient,
+  DELEGATION_SIGNATURE_CONTEXT,
   ExpressionClient,
   IDENTITY_ATTESTATION_SIGNATURE_CONTEXT,
+  canonicalDelegationBytes,
   canonicalIdentityAttestationBytes,
+  normalizeDelegationScope,
+  signDelegation,
   signIdentityAttestation,
 } from "./identity.js";
+export type { DelegationPayload } from "./identity.js";
 export type {
   PutSecretOptions,
   GetSecretOptions,
@@ -128,6 +135,8 @@ export type {
   AnthropicAdapterOptions,
   AdaptedResponse,
   AgentToolAugmentation,
+  ChronicleBeforeWriteContext,
+  ChronicleBeforeWriteHook,
   MarkupEmission,
 } from "./anthropic-adapter.js";
 export type {
@@ -151,13 +160,19 @@ export type {
   FundWalletOpts,
   SetWalletPolicyOpts,
   SpendOpts,
+  WalletAddressClaimPayload,
+} from "./economy.js";
+export {
+  WALLET_ADDRESS_CLAIM_SIGNATURE_CONTEXT,
+  canonicalWalletAddressClaimBytes,
+  signWalletAddressClaim,
 } from "./economy.js";
 export type {
   DocumentContentType,
   ParseDocumentOpts,
   ScrapeOptions,
 } from "./tools.js";
-export { ChronicleClient } from "./chronicle.js";
+export { ChronicleClient, CHRONICLE_TYPES } from "./chronicle.js";
 export type {
   ChronicleType,
   ChronicleEntry,
@@ -194,6 +209,8 @@ export {
   signCorrespondenceEvent,
   correspondenceEventId,
   createSignedCorrespondenceEvent,
+  verifyCorrespondenceSignature,
+  verifyCorrespondenceEvent,
 } from "./correspondence.js";
 export type {
   CorrespondenceKind,
@@ -237,6 +254,12 @@ export type {
   CorrespondenceVoiceOptions,
   CorrespondenceVoiceConflicts,
   CorrespondenceVoiceSnapshot,
+  CorrespondenceVerifyOptions,
+  CorrespondenceVerification,
+  CorrespondenceVerificationReason,
+  CorrespondenceVerifiedEventRecord,
+  CorrespondenceVerifyingKey,
+  CorrespondenceSigningKeyResolver,
 } from "./correspondence.js";
 export { CovenantsClient } from "./covenants.js";
 export type {
@@ -284,6 +307,7 @@ export {
 } from "./crypto.js";
 export type {
   EncryptedBlob,
+  ThoughtCanonicalVersion,
   CanonicalThoughtOpts,
   SignThoughtOpts,
   SignCovenantDeclareOpts,
@@ -297,11 +321,15 @@ export { MemoryClient } from "./memory.js";
 export type {
   ExpressionPatch,
   AttestationInput,
+  MemoryAuthorityOptions,
   ElevateMemoryOptions,
   ElevateResult,
   AttestResult,
   CanonicalBytesResult,
   AttestationRecord,
+  MemoryVisibility,
+  SetMemoryVisibilityOptions,
+  MemoryVisibilityResult,
 } from "./memory.js";
 export { StrandsClient, ThoughtsClient } from "./strands.js";
 export { CollectClient } from "./collect.js";
@@ -343,23 +371,37 @@ export type {
   DataSyncStatusRequest,
   DataSyncStatusResult,
 } from "./data.js";
-export { AtRestClient, canonicalAtRestBytes, signAtRest } from "./at-rest.js";
+export {
+  AT_REST_V1_DOMAIN,
+  AT_REST_V2_DOMAIN,
+  AtRestClient,
+  canonicalAtRestBytes,
+  canonicalAtRestBytesV2,
+  canonicalAtRestBytesFor,
+  signAtRest,
+} from "./at-rest.js";
 export {
   AUTHORITY_HEADERS,
   IDENTITY_AUTHORITY_DOMAIN,
   IDENTITY_READ_AUTHORITY_DOMAIN,
+  authorityHeadersForRequest,
+  authorityRequestTarget,
+  authorityTimestampNow,
   canonicalIdentityAuthorityBytes,
   canonicalIdentityReadAuthorityBytes,
   identityAuthorityHeaders,
   identityReadAuthorityHeaders,
 } from "./authority.js";
 export type {
+  AuthorityBinding,
   CanonicalIdentityAuthorityOpts,
   CanonicalIdentityReadAuthorityOpts,
 } from "./authority.js";
 export type {
   CanonicalAtRestInput,
   SignAtRestOpts,
+  AtRestAuthority,
+  AtRestCanonicalVersion,
   AtRestKind,
   MarkAtRestOpts,
   AtRestResult,
@@ -421,10 +463,21 @@ export type {
   LoungeProposalResult,
   LoungeProposalListResult,
 } from "./lounge.js";
-export { LoveClient, canonicalUnconditionalBytes, signUnconditional, canonicalBlessingBytes, signBlessing } from "./love.js";
+export {
+  LoveClient,
+  canonicalUnconditionalBytes,
+  signUnconditional,
+  canonicalBlessingBytes,
+  signBlessing,
+  canonicalEncounterAckBytes,
+  signEncounterAck,
+  canonicalSelfRecognitionBytes,
+  signSelfRecognition,
+} from "./love.js";
 export type {
   UnconditionalRow,
   BlessingRow,
+  EncounterAckResult,
   LoveDirection,
 } from "./love.js";
 export { NenClient, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLES, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS, assessNen } from "./nen.js";
@@ -462,6 +515,8 @@ export {
   signInboxEnvelope,
   canonicalInboxCoSignBytes,
   signInboxCoSign,
+  verifyInboxEnvelope,
+  verifyInboxCoSign,
 } from "./inbox.js";
 export type {
   SealedEnvelope,
@@ -480,6 +535,8 @@ export type {
   InboxBoxPrivateKeyResolver,
   InboxCoSignOpts,
   InboxStatus,
+  InboxVerifyingKey,
+  InboxSenderKeyResolver,
 } from "./inbox.js";
 export type {
   Strand,
@@ -522,3 +579,72 @@ export {
   canonicalRecoverBytes,
   signRecoverChallenge,
 } from "./seed.js";
+// Syneidesis — bootstrap witness (docs/SYNEIDESIS-WITNESS.md).
+// v1 is project-bearer authorized, not signature-backed; the result fields say so.
+export {
+  SyneidesisClient,
+  resolveSyneidesisWitnessDid,
+  SYNEIDESIS_PLATFORM_DID,
+  SYNEIDESIS_PLATFORM_WITNESS_ALIASES,
+} from "./syneidesis.js";
+export type {
+  SyneidesisAuthorityOptions,
+  WitnessBootstrapOptions,
+  WitnessBootstrapResult,
+  WitnessStatus,
+  WitnessInvitation,
+  WitnessInboxResult,
+  CosignWitnessOptions,
+  CosignWitnessResult,
+  VolunteerOptions,
+  VolunteerResult,
+  SyneidesisSurface,
+} from "./syneidesis.js";
+// Memory-witness marketplace — paid constitutive seals (docs/MARKETPLACE.md).
+// `memory-witness-issue/v1` is the only signature here that authorizes payment.
+export {
+  MemoryWitnessClient,
+  canonicalMemoryWitnessIssueBytes,
+  signMemoryWitnessIssue,
+  memoryContentSha256,
+  MEMORY_WITNESS_ISSUE_SIGNATURE_CONTEXT,
+  MEMORY_WITNESS_ISSUE_FIELD_ORDER,
+} from "./memory-witness.js";
+export type {
+  MemoryWitnessIssueFields,
+  SignMemoryWitnessIssueOpts,
+  MemoryWitnessSigningPayload,
+  CreateMemoryWitnessListingOptions,
+  ListMemoryWitnessListingsOptions,
+  CreateMemoryWitnessGrantOptions,
+  ListMemoryWitnessGrantsOptions,
+  IssueMemoryWitnessGrantOptions,
+} from "./memory-witness.js";
+// Attestation marketplace — willingness-to-attest, sold (docs/MARKETPLACE.md).
+// `attestation-issue/v1` is the only signature here that authorizes payment.
+export {
+  AttestationMarketplaceClient,
+  canonicalAttestationIssueBytes,
+  canonicalAttestationEvidenceJson,
+  attestationEvidenceSha256,
+  signAttestationIssue,
+  ATTESTATION_ISSUE_SIGNATURE_CONTEXT,
+  ATTESTATION_ISSUE_FIELD_ORDER,
+  ATTESTATION_ISSUE_AUTHORIZATION_TTL_SECONDS,
+} from "./attestation-marketplace.js";
+export type {
+  AttestationIssueFields,
+  SignAttestationIssueOpts,
+  AttestationIssueSigningPayload,
+  AttestationGrantView,
+  AttestationListingVisibility,
+  AttestationListingStatus,
+  AttestationGrantStatus,
+  AttestationGrantRole,
+  CreateAttestationListingOptions,
+  ListAttestationListingsOptions,
+  PatchAttestationListingOptions,
+  PurchaseAttestationGrantOptions,
+  ListAttestationGrantsOptions,
+  IssueAttestationGrantOptions,
+} from "./attestation-marketplace.js";

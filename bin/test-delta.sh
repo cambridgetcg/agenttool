@@ -59,7 +59,13 @@ esac
 cd "$REPO_ROOT/api"
 
 echo "Running bun test (this may take ~60s)..." >&2
-bun test tests/ > "$RAW" 2>&1 || true
+# `env -u DATABASE_URL` on purpose. The variable is ambient — a shell profile
+# or a user-wide `launchctl setenv` from an unrelated project will supply one,
+# and then every DB-backed test fails identically against a database that was
+# never meant to be here. That turns this tool's entire output into noise and
+# hides the one signal it exists to produce. Unset it and config.ts's local
+# default applies; bring that database up with `bin/test-db.sh up`.
+env -u DATABASE_URL bun test tests/ > "$RAW" 2>&1 || true
 
 # Strip [N.NNms] time suffix so identity is stable run-to-run.
 grep -E "^\(fail\)" "$RAW" \

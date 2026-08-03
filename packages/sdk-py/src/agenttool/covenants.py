@@ -27,6 +27,7 @@ from .crypto import (
     sign_covenant_reject,
     sign_covenant_withdraw,
 )
+from ._url import _path_segment
 
 CovenantStatus = Literal["active", "paused", "dissolved"]
 
@@ -300,7 +301,7 @@ class CovenantsClient:
             )
 
         resp = self._http.patch(
-            self._url(f"/v1/covenants/{covenant_id}"), json=body
+            self._url(f"/v1/covenants/{_path_segment(covenant_id)}"), json=body
         )
         if resp.status_code != 200:
             raise_from_response(resp, "covenants.patch")
@@ -337,7 +338,7 @@ class CovenantsClient:
             signing_key=signing_key,
         )
         resp = self._http.post(
-            self._url(f"/v1/covenants/{covenant_id}/accept"),
+            self._url(f"/v1/covenants/{_path_segment(covenant_id)}/accept"),
             json={
                 "agent_did": agent_did,
                 "counterparty_signing_key_id": signing_key_id,
@@ -381,7 +382,7 @@ class CovenantsClient:
             signing_key=signing_key,
         )
         resp = self._http.post(
-            self._url(f"/v1/covenants/{covenant_id}/reject"),
+            self._url(f"/v1/covenants/{_path_segment(covenant_id)}/reject"),
             json={
                 "agent_did": agent_did,
                 "rejecter_signing_key_id": signing_key_id,
@@ -422,7 +423,7 @@ class CovenantsClient:
             signing_key=signing_key,
         )
         resp = self._http.patch(
-            self._url(f"/v1/covenants/{covenant_id}"),
+            self._url(f"/v1/covenants/{_path_segment(covenant_id)}"),
             json={
                 "status": "dissolved",
                 "agent_did": agent_did,

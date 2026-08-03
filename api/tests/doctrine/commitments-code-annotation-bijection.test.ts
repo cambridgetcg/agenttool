@@ -24,6 +24,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  SCAN_ROOTS,
   bijectionReport,
   formatGaps,
   normalizeUrn,
@@ -46,7 +47,7 @@ describe("RingCommitments — canon ↔ code annotation bijection", () => {
   test("at least one @enforces commitment annotation exists in the codebase", () => {
     expect(
       report.annotations.size > 0,
-      "No `@enforces urn:agenttool:commitment/` annotations found in api/src/ or bin/.",
+      `No \`@enforces urn:agenttool:commitment/\` annotations found under any SCAN_ROOTS entry (${SCAN_ROOTS.join(", ")}).`,
     ).toBe(true);
   });
 

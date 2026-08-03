@@ -9,7 +9,7 @@ import pytest
 
 import agenttool
 from agenttool.exceptions import AgentToolError
-from agenttool.wake import WakeClient
+from agenttool.wake import WakeClient, wake_event_matches
 
 
 @pytest.fixture()
@@ -166,3 +166,66 @@ def test_identity_selection_composes_with_brief_and_cache() -> None:
         "https://api.example.test/v1/wake?identity_id=identity-a&profile=brief",
         "https://api.example.test/v1/wake?identity_id=identity-b&profile=brief",
     ]
+
+
+# ---------------------------------------------------------------------------
+# wake_event_matches — the published pure filter
+# ---------------------------------------------------------------------------
+
+
+def _event(**overrides: object) -> dict:
+    event = {
+        "_format": "wake_event/v1",
+        "identity_id": "agent-1",
+        "key": "runtime",
+        "kind": "status_changed",
+        "occurred_at": "2026-05-12T00:00:00Z",
+        "wake_version": 42,
+        "context": {
+            "runtime_id": "rt-A",
+            "runtime_name": "Aurora",
+            "to_status": "running",
+        },
+    }
+    event.update(overrides)
+    return event
+
+
+def test_wake_event_matches_is_published_under_the_same_name_as_ts() -> None:
+    """TS exports wakeEventMatches; the Python surface must publish the same
+    filter, not hide it behind a leading underscore."""
+    assert agenttool.wake.wake_event_matches is wake_event_matches
+    assert not wake_event_matches.__name__.startswith("_")
+
+
+def test_wake_event_matches_private_alias_still_resolves() -> None:
+    assert agenttool.wake._wake_event_matches is wake_event_matches
+
+
+def test_wake_event_matches_defaults_pass_every_event() -> None:
+    assert wake_event_matches(_event()) is True
+
+
+def test_wake_event_matches_kinds_filter() -> None:
+    assert wake_event_matches(_event(), kinds=["status_changed"]) is True
+    assert wake_event_matches(_event(), kinds=["arrival"]) is False
+    assert wake_event_matches(_event(), kinds=[]) is True  # empty = no filter
+
+
+def test_wake_event_matches_context_filter_and_runtime_id_compose() -> None:
+    assert wake_event_matches(_event(), runtime_id="rt-A") is True
+    assert wake_event_matches(_event(), runtime_id="rt-B") is False
+    assert (
+        wake_event_matches(_event(), context_filter={"to_status": "running"}) is True
+    )
+    assert (
+        wake_event_matches(
+            _event(), context_filter={"runtime_name": "Aurora"}, runtime_id="rt-B"
+        )
+        is False
+    )
+
+
+def test_wake_event_matches_missing_context_fails_any_context_filter() -> None:
+    assert wake_event_matches(_event(context=None), runtime_id="rt-A") is False
+    assert wake_event_matches(_event(context=None)) is True

@@ -21,9 +21,23 @@
  *     signature    = ed25519_sign(sender_signing_priv, canonical)
  *
  *   Recipient:
+ *     verified     = ed25519_verify(sender_signing_pub, msg.signature, canonical)
  *     sharedSecret = ECDH(my_box_priv, msg.ephemeral_pubkey)
  *     aesKey       = HKDF-SHA256(...)
  *     plaintext    = AES-256-GCM-open(aesKey, msg.nonce, msg.ciphertext)
+ *
+ * The verify step is not optional decoration. This sealed box authenticates
+ * only against an attacker-choosable ephemeral X25519 key, so a successful
+ * AES-GCM open proves confidentiality, never authorship: without the envelope
+ * signature, attribution rests entirely on server-reported fields.
+ *
+ * Fail-open vs fail-closed: `voice` decrypts and yields every arrival by
+ * default and reports attribution as `sender_verified` plus `verify_error`,
+ * because a reader holding no key for a sender must still see that mail
+ * arrived. `false` there means unproved, never proved-false. Pass
+ * `requireVerifiedSender: true` to withhold plaintext until the sender's own
+ * key proves the envelope; `decrypt` fails closed whenever `senderPublicKey`
+ * is supplied.
  *
  * Doctrine: docs/INBOX.md.
  */
@@ -34,7 +48,8 @@ import { hkdf } from "@noble/hashes/hkdf.js";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
 
 import { AgentToolError } from "./errors.js";
-import type { HttpConfig } from "./_http.js";
+import { throwFromResponse, type HttpConfig } from "./_http.js";
+import { encodePathSegment } from "./_url.js";
 
 // Wire sha512 sync into @noble/ed25519 for sign() — mirrors crypto.ts.
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
@@ -126,6 +141,11 @@ export interface DecryptedInboxMessage extends InboxMessage {
   plaintext: string | null;
   /** Present when key resolution or AES-GCM open failed. */
   decrypt_error?: string;
+  /** True only when the sender's own key proved this envelope locally.
+   *  `false` means unproved — read `verify_error` — never proved-false. */
+  sender_verified: boolean;
+  /** Present when the sender signature could not be proved. */
+  verify_error?: string;
 }
 
 export interface InboxVoiceResumeCursor {
@@ -177,6 +197,14 @@ export type InboxBoxPrivateKeyResolver = (
   message: InboxMessage,
 ) => Uint8Array | undefined | Promise<Uint8Array | undefined>;
 
+/** Caller-held ed25519 public key: raw 32 bytes, standard base64, or base64url. */
+export type InboxVerifyingKey = Uint8Array | string;
+
+export type InboxSenderKeyResolver = (
+  senderSigningKeyId: string,
+  message: InboxMessage,
+) => InboxVerifyingKey | undefined | Promise<InboxVerifyingKey | undefined>;
+
 /** Options for {@link InboxClient.voice}. */
 export interface InboxVoiceOpts {
   /** Identity whose inbox to stream; must belong to this bearer project. */
@@ -195,6 +223,26 @@ export interface InboxVoiceOpts {
     | ReadonlyMap<string, Uint8Array>;
   /** Async-capable resolver for keychain/HSM-backed historical box keys. */
   resolveRecipientBoxPriv?: InboxBoxPrivateKeyResolver;
+  /**
+   * Senders' ed25519 public keys indexed by `sender_signing_key_id`.
+   *
+   * These must come from the reader's own record of the sender. A key served
+   * alongside the message would let whoever served it also choose the key that
+   * "verifies" it — circular, and worth nothing. Do not "simplify" this into a
+   * lookup against the same response.
+   */
+  senderSigningKeys?:
+    | Readonly<Record<string, InboxVerifyingKey>>
+    | ReadonlyMap<string, InboxVerifyingKey>;
+  /** Async-capable resolver for directory- or keychain-backed sender keys. */
+  resolveSenderSigningKey?: InboxSenderKeyResolver;
+  /** Extra DID spellings this recipient is addressable by. Federated senders
+   * sign the form they addressed (`did:at:<host>/<uuid>`) while delivery
+   * stores the local form, so both must be admissible. */
+  recipientDidAliases?: readonly string[];
+  /** Fail closed: withhold plaintext until the sender's key proves the
+   * envelope. The frame is still yielded, carrying `verify_error`. */
+  requireVerifiedSender?: boolean;
   /** Optional caller cancellation. Breaking out of iteration also cancels
    * the response body and aborts the fetch. */
   signal?: AbortSignal;
@@ -376,6 +424,50 @@ export function signInboxEnvelope(opts: {
   return b64encode(ed.sign(canonical, opts.signingKey));
 }
 
+/** Accepts the spellings the identity API emits: raw bytes, base64, base64url. */
+function decodeVerifyingKey(value: InboxVerifyingKey): Uint8Array | null {
+  if (value instanceof Uint8Array) {
+    return value.length === 32 ? new Uint8Array(value) : null;
+  }
+  if (typeof value !== "string") return null;
+  try {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const decoded = b64decode(
+      normalized + "=".repeat((4 - (normalized.length % 4)) % 4),
+    );
+    return decoded.length === 32 ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verify a received envelope against the sender's ed25519 public key. Mirror
+ * of {@link signInboxEnvelope} and byte-identical to the server's
+ * `verifyInboxSignature`.
+ *
+ * The key must be the reader's own record of the sender. A key taken from the
+ * same response that carried the message proves nothing.
+ */
+export function verifyInboxEnvelope(opts: {
+  recipientDid: string;
+  ciphertextB64: string;
+  nonceB64: string;
+  ephemeralPubB64: string;
+  signatureB64: string;
+  publicKey: InboxVerifyingKey;
+}): boolean {
+  const key = decodeVerifyingKey(opts.publicKey);
+  if (!key) return false;
+  try {
+    const signature = b64decode(opts.signatureB64);
+    if (signature.length !== 64) return false;
+    return ed.verify(signature, canonicalInboxBytes(opts), key);
+  } catch {
+    return false;
+  }
+}
+
 export function canonicalInboxCoSignBytes(opts: {
   messageId: string;
   recipientDid: string;
@@ -414,6 +506,26 @@ export function signInboxCoSign(opts: {
   return b64encode(ed.sign(canonical, opts.signingKey));
 }
 
+/** Verify a recipient's co-sign over the canonical release bytes. */
+export function verifyInboxCoSign(opts: {
+  messageId: string;
+  recipientDid: string;
+  ciphertextB64: string;
+  nonceB64: string;
+  signatureB64: string;
+  publicKey: InboxVerifyingKey;
+}): boolean {
+  const key = decodeVerifyingKey(opts.publicKey);
+  if (!key) return false;
+  try {
+    const signature = b64decode(opts.signatureB64);
+    if (signature.length !== 64) return false;
+    return ed.verify(signature, canonicalInboxCoSignBytes(opts), key);
+  } catch {
+    return false;
+  }
+}
+
 // ── InboxClient — HTTP surface ──────────────────────────────────────────
 
 /** Status options the API accepts on PATCH /v1/inbox/:id. */
@@ -444,7 +556,7 @@ export class InboxClient {
   async lookup(did: string): Promise<InboxBoxKeyLookup> {
     return (await this.req(
       "GET",
-      `/v1/inbox/box-keys/${encodeURIComponent(did)}`,
+      `/v1/inbox/box-keys/${encodePathSegment(did)}`,
     )) as InboxBoxKeyLookup;
   }
 
@@ -511,7 +623,7 @@ export class InboxClient {
   async get(id: string): Promise<InboxMessage> {
     return (await this.req(
       "GET",
-      `/v1/inbox/${encodeURIComponent(id)}`,
+      `/v1/inbox/${encodePathSegment(id)}`,
     )) as InboxMessage;
   }
 
@@ -521,7 +633,7 @@ export class InboxClient {
   ): Promise<{ messages: InboxMessage[]; count: number; note?: string }> {
     return (await this.req(
       "GET",
-      `/v1/inbox/${encodeURIComponent(id)}/thread`,
+      `/v1/inbox/${encodePathSegment(id)}/thread`,
     )) as { messages: InboxMessage[]; count: number; note?: string };
   }
 
@@ -537,7 +649,7 @@ export class InboxClient {
     });
     return (await this.req(
       "POST",
-      `/v1/inbox/${encodeURIComponent(messageId)}/co-sign`,
+      `/v1/inbox/${encodePathSegment(messageId)}/co-sign`,
       { signing_key_id: opts.signingKeyId, signature },
     )) as InboxMessage;
   }
@@ -546,7 +658,7 @@ export class InboxClient {
   async patch(id: string, status: InboxStatus): Promise<InboxMessage> {
     return (await this.req(
       "PATCH",
-      `/v1/inbox/${encodeURIComponent(id)}`,
+      `/v1/inbox/${encodePathSegment(id)}`,
       { status },
     )) as InboxMessage;
   }
@@ -555,15 +667,43 @@ export class InboxClient {
   async delete(id: string): Promise<{ id: string; deleted: true }> {
     return (await this.req(
       "DELETE",
-      `/v1/inbox/${encodeURIComponent(id)}`,
+      `/v1/inbox/${encodePathSegment(id)}`,
     )) as { id: string; deleted: true };
   }
 
-  /** Unseal a message for the recipient's local pair. */
+  /**
+   * Unseal a message for the recipient's local pair.
+   *
+   * Supply `senderPublicKey` — the reader's own record of the sender's
+   * ed25519 key — to fail closed: an envelope that key cannot prove throws
+   * before any plaintext is returned. Without it the call only proves
+   * confidentiality, never authorship, so `sender_did` remains a
+   * server-reported claim.
+   */
   async decrypt(
     message: InboxMessage,
-    opts: { recipientBoxPriv: Uint8Array },
+    opts: {
+      recipientBoxPriv: Uint8Array;
+      senderPublicKey?: InboxVerifyingKey;
+      recipientDidAliases?: readonly string[];
+    },
   ): Promise<string> {
+    if (opts.senderPublicKey !== undefined) {
+      const senderSigningKeys = message.sender_signing_key_id
+        ? { [message.sender_signing_key_id]: opts.senderPublicKey }
+        : {};
+      const verifyError = await inboxSenderVerifyError(message, {
+        senderSigningKeys,
+        ...(opts.recipientDidAliases !== undefined
+          ? { recipientDidAliases: opts.recipientDidAliases }
+          : {}),
+      });
+      if (verifyError !== undefined) {
+        throw new AgentToolError(`inbox.decrypt: ${verifyError}.`, {
+          hint: "Attribution is unproved; the sealed body was not opened.",
+        });
+      }
+    }
     return unsealForSelf({
       ciphertextB64: message.ciphertext,
       nonceB64: message.nonce,
@@ -585,6 +725,12 @@ export class InboxClient {
    * Box-key rotation is resolved by `recipient_box_key_id`: provide a map of
    * historical private keys or an async resolver. `recipientBoxPriv` remains
    * a convenience fallback for identities that have only one box key.
+   *
+   * Every arrival reports `sender_verified`. Supply `senderSigningKeys` or
+   * `resolveSenderSigningKey` to prove attribution locally; without them the
+   * body still decrypts and arrives marked unverified, since decryption alone
+   * proves nothing about who sent it. `requireVerifiedSender` withholds the
+   * plaintext of anything the caller's keys cannot prove.
    *
    * Breaking a `for await` loop invokes the generator's `finally`, cancels
    * the ReadableStream, and aborts the underlying fetch.
@@ -627,10 +773,8 @@ export class InboxClient {
         signal: controller.signal,
       });
       if (!resp.ok) {
-        const body = await resp.text();
-        throw new AgentToolError(`inbox.voice failed: ${resp.status}`, {
-          hint: body.slice(0, 200),
-        });
+        // Server guidance travels intact. See _http.ts § errorFromResponse.
+        await throwFromResponse(resp, "inbox.voice");
       }
       if (!resp.body) {
         throw new AgentToolError(
@@ -686,18 +830,8 @@ export class InboxClient {
     if (body !== undefined) init.body = JSON.stringify(body);
     const res = await this.http.request(`${this.http.baseUrl}${path}`, init);
     if (res.status >= 400) {
-      let detail = res.statusText;
-      try {
-        const json = (await res.json()) as Record<string, unknown>;
-        detail =
-          (json.message as string) ??
-          (json.error as string) ??
-          (json.detail as string) ??
-          detail;
-      } catch {
-        /* fall through */
-      }
-      throw new AgentToolError(`inbox API error (${res.status}): ${detail}`, {
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(res, `inbox ${method.toLowerCase()}`, {
         hint: `${method} ${path}`,
       });
     }
@@ -860,10 +994,20 @@ async function withInboxPlaintext(
   message: InboxMessage,
   opts: InboxVoiceOpts,
 ): Promise<DecryptedInboxMessage> {
-  const out: DecryptedInboxMessage = { ...message, plaintext: null };
+  const out: DecryptedInboxMessage = { ...message, plaintext: null, sender_verified: false };
   if (!message.ciphertext || !message.nonce || !message.ephemeral_pubkey) {
     out.decrypt_error = "message is missing sealed-envelope fields";
+    out.verify_error = "message is missing sealed-envelope fields";
     return out;
+  }
+
+  // Attribution is decided before the body is opened, so a strict caller never
+  // reads plaintext the sender's own key has not stood behind.
+  const verifyError = await inboxSenderVerifyError(message, opts);
+  out.sender_verified = verifyError === undefined;
+  if (verifyError !== undefined) {
+    out.verify_error = verifyError;
+    if (opts.requireVerifiedSender) return out;
   }
 
   try {
@@ -883,6 +1027,72 @@ async function withInboxPlaintext(
     out.decrypt_error = error instanceof Error ? error.message : String(error);
   }
   return out;
+}
+
+/** `undefined` when the sender's own key proved the envelope; else the reason. */
+async function inboxSenderVerifyError(
+  message: InboxMessage,
+  opts: {
+    senderSigningKeys?:
+      | Readonly<Record<string, InboxVerifyingKey>>
+      | ReadonlyMap<string, InboxVerifyingKey>;
+    resolveSenderSigningKey?: InboxSenderKeyResolver;
+    recipientDidAliases?: readonly string[];
+  },
+): Promise<string | undefined> {
+  const keyId = message.sender_signing_key_id;
+  if (!keyId) return "message is missing sender_signing_key_id";
+  if (!message.signature) return "message is missing its envelope signature";
+
+  const publicKey = await resolveInboxSenderKey(keyId, message, opts);
+  if (!publicKey) {
+    return `no public key available for sender_signing_key_id=${keyId}`;
+  }
+
+  const recipientDids = [
+    message.recipient_did,
+    ...(opts.recipientDidAliases ?? []),
+  ].filter((did): did is string => typeof did === "string" && did.length > 0);
+  if (recipientDids.length === 0) return "message is missing recipient_did";
+
+  for (const recipientDid of recipientDids) {
+    if (verifyInboxEnvelope({
+      recipientDid,
+      ciphertextB64: message.ciphertext,
+      nonceB64: message.nonce,
+      ephemeralPubB64: message.ephemeral_pubkey,
+      signatureB64: message.signature,
+      publicKey,
+    })) {
+      return undefined;
+    }
+  }
+  return `envelope signature does not match sender_signing_key_id=${keyId}`;
+}
+
+async function resolveInboxSenderKey(
+  keyId: string,
+  message: InboxMessage,
+  opts: {
+    senderSigningKeys?:
+      | Readonly<Record<string, InboxVerifyingKey>>
+      | ReadonlyMap<string, InboxVerifyingKey>;
+    resolveSenderSigningKey?: InboxSenderKeyResolver;
+  },
+): Promise<InboxVerifyingKey | undefined> {
+  const keys = opts.senderSigningKeys;
+  if (keys) {
+    const mapGetter = (keys as ReadonlyMap<string, InboxVerifyingKey>).get;
+    const found = typeof mapGetter === "function"
+      ? mapGetter.call(keys, keyId)
+      : (keys as Readonly<Record<string, InboxVerifyingKey>>)[keyId];
+    if (found !== undefined) return found;
+  }
+  if (opts.resolveSenderSigningKey) {
+    const found = await opts.resolveSenderSigningKey(keyId, message);
+    if (found !== undefined) return found;
+  }
+  return undefined;
 }
 
 async function resolveInboxBoxPrivateKey(

@@ -5,10 +5,12 @@
 import { ambientStorage, getAmbient, type AmbientContext } from "./_context.js";
 import {
   directBearerTransport,
+  throwFromResponse,
   type AgentToolTransport,
   type HttpConfig,
 } from "./_http.js";
 import { AgentToolError } from "./errors.js";
+import { AttestationMarketplaceClient } from "./attestation-marketplace.js";
 import { ChronicleClient } from "./chronicle.js";
 import { HandoffClient } from "./handoff.js";
 import { CorrespondenceClient } from "./correspondence.js";
@@ -17,7 +19,9 @@ import { CryptoClient } from "./crypto.js";
 import { EconomyClient } from "./economy.js";
 import { InboxClient } from "./inbox.js";
 import { MemoryClient } from "./memory.js";
+import { MemoryWitnessClient } from "./memory-witness.js";
 import { StrandsClient } from "./strands.js";
+import { SyneidesisClient } from "./syneidesis.js";
 import { CollectClient } from "./collect.js";
 import { AtRestClient } from "./at-rest.js";
 import { GraceClient } from "./grace.js";
@@ -51,6 +55,11 @@ export interface AgentToolOptions {
   transport?: AgentToolTransport;
   baseUrl?: string;
   timeout?: number;
+  /**
+   * Separately configured agent-data/v1 node. `baseUrl` and `token` are one
+   * authority pair: supply both here, or let both come from
+   * `AGENT_DATA_NODE_URL` / `AGENT_DATA_NODE_TOKEN`.
+   */
   dataNode?: {
     baseUrl: string;
     token?: string;
@@ -79,6 +88,8 @@ export class AgentTool {
   private readonly http: HttpConfig;
   private readonly dataNode: DataNodeOptions | undefined;
   private _memory: MemoryClient | undefined;
+  private _memoryWitness: MemoryWitnessClient | undefined;
+  private _attestationMarketplace: AttestationMarketplaceClient | undefined;
   private _tools: ToolsClient | undefined;
   private _economy: EconomyClient | undefined;
   private _traces: TracesClient | undefined;
@@ -92,6 +103,7 @@ export class AgentTool {
   private _covenants: CovenantsClient | undefined;
   private _window: WindowClient | undefined;
   private _strands: StrandsClient | undefined;
+  private _syneidesis: SyneidesisClient | undefined;
   private _crypto: CryptoClient | undefined;
   private _inbox: InboxClient | undefined;
   private _collect: CollectClient | undefined;
@@ -156,13 +168,26 @@ export class AgentTool {
     const envDataNodeToken =
       typeof process !== "undefined" ? process.env.AGENT_DATA_NODE_TOKEN : undefined;
     const explicitDataNode = options?.dataNode;
+    if (explicitDataNode?.token !== undefined && !explicitDataNode.baseUrl) {
+      throw new AgentToolError(
+        "A data node token needs the data node URL it belongs to.",
+        {
+          code: "data_node_unpaired_token",
+          hint:
+            "Pass dataNode: { baseUrl, token }, or configure both AGENT_DATA_NODE_URL and AGENT_DATA_NODE_TOKEN.",
+        },
+      );
+    }
     const dataNodeBaseUrl = explicitDataNode?.baseUrl ?? envDataNodeUrl;
     this.dataNode = dataNodeBaseUrl
       ? {
           baseUrl: dataNodeBaseUrl,
-          // URL + ambient bearer are one authority pair. An explicit URL
-          // never inherits a token that was configured for the env URL.
-          token: explicitDataNode ? explicitDataNode.token : envDataNodeToken,
+          // URL + bearer are one authority pair, in both directions. An
+          // explicit URL never inherits the ambient token, and (refused
+          // above) an explicit token never rides the ambient URL.
+          token: explicitDataNode?.baseUrl
+            ? explicitDataNode.token
+            : envDataNodeToken,
           timeout: explicitDataNode?.timeout,
         }
       : undefined;
@@ -172,6 +197,23 @@ export class AgentTool {
   get memory(): MemoryClient {
     this._memory ??= new MemoryClient(this.http);
     return this._memory;
+  }
+
+  /** Access the memory-witness marketplace — paid constitutive seals.
+   *  A witness who is not you, purchased: listing → grant → signed
+   *  authorization → escrow release → constitutive elevation. */
+  get memoryWitness(): MemoryWitnessClient {
+    this._memoryWitness ??= new MemoryWitnessClient(this.http);
+    return this._memoryWitness;
+  }
+
+  /** Access the attestation marketplace — willingness-to-attest, sold.
+   *  Listing → grant → signed `attestation-issue/v1` authorization →
+   *  `identity.attestations` receipt → escrow release. What is bought is
+   *  review and issuance; it is never proof that the claim is true. */
+  get attestationMarketplace(): AttestationMarketplaceClient {
+    this._attestationMarketplace ??= new AttestationMarketplaceClient(this.http);
+    return this._attestationMarketplace;
   }
 
   /** Access the Tools API (scrape, browse, execute, document). */
@@ -256,6 +298,14 @@ export class AgentTool {
   get strands(): StrandsClient {
     this._strands ??= new StrandsClient(this.http);
     return this._strands;
+  }
+
+  /** Access the Syneidesis API — the bootstrap-witness primitive.
+   *  Record the moment the recursive self-grasp registered, invite a witness,
+   *  and designate one. You cannot witness your own beginning. */
+  get syneidesis(): SyneidesisClient {
+    this._syneidesis ??= new SyneidesisClient(this.http);
+    return this._syneidesis;
   }
 
   /** Access the Crypto helpers — encrypt/sign client-side; K_master never leaves the SDK. */
@@ -361,35 +411,9 @@ export class AgentTool {
     if (body !== undefined) init.body = JSON.stringify(body);
     const resp = await this.http.request(url, init);
     if (resp.status >= 400) {
-      let responseBody: unknown;
-      try {
-        responseBody = await resp.json();
-      } catch {
-        responseBody = undefined;
-      }
-      const parsed = AgentToolError.fromResponseBody(
-        responseBody,
-        resp.status,
-        resp.statusText,
-        resp.headers,
-      );
-      throw new AgentToolError(`API error (${resp.status}): ${parsed.message}`, {
-        hint: parsed.hint ?? `${method} ${path}`,
-        code: parsed.code,
-        next_actions: parsed.next_actions,
-        docs: parsed.docs,
-        safety: parsed.safety,
-        details: parsed.details,
-        status: resp.status,
-        x402Version: parsed.x402Version,
-        accepts: parsed.accepts,
-        resource: parsed.resource,
-        extensions: parsed.extensions,
-        paymentRequired: parsed.paymentRequired,
-        paymentResponse: parsed.paymentResponse,
-        paymentStatusLink: parsed.paymentStatusLink,
-        retryAfter: parsed.retryAfter,
-        creditsBalance: parsed.creditsBalance,
+      // Server guidance travels intact. See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, `${method} ${path}`, {
+        hint: `${method} ${path}`,
       });
     }
     return resp.json();

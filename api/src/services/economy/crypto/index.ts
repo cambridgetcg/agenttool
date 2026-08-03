@@ -16,6 +16,7 @@ import {
   onchainIdentities,
   policies,
   transactions,
+  walletAddresses,
   wallets,
 } from "../../../db/schema/economy";
 import { economyConfig } from "../config";
@@ -33,6 +34,7 @@ import {
   type Chain,
   type EvmChain,
 } from "./chains";
+import { addressesEqual, verifyAddressClaim } from "./address-claim";
 import { deriveDepositAddress, isChainSupported } from "./hd";
 import { activeUsdcAddress } from "./network";
 import {
@@ -221,6 +223,271 @@ export async function listOnchainIdentities(walletId: string) {
     .from(onchainIdentities)
     .where(eq(onchainIdentities.walletId, walletId))
     .orderBy(desc(onchainIdentities.verifiedAt));
+}
+
+// ── Agent-held addresses ───────────────────────────────────────────────
+//
+// Platform-owned wallets derive deposit addresses from the operator's
+// CRYPTO_HD_MNEMONIC, so the operator can sign for them. An agent-owned
+// wallet inverts that: the agent derives from its own seed at
+// m/44'/169'/5'/<agent_wallet_index>' and registers the resulting address
+// here. AgentTool then knows where to credit inbound transfers and nothing
+// more — it holds no key for these addresses and cannot move the funds.
+//
+// Registration demands both proofs. See address-claim.ts for why one is not
+// enough.
+
+export type RegisterAgentAddressResult =
+  | {
+      ok: true;
+      id: string;
+      chain: Chain;
+      address: string;
+      derivation_path: string | null;
+      created_at: string;
+    }
+  | { ok: false; error: string; message: string };
+
+export async function registerAgentAddress(p: {
+  walletId: string;
+  chain: Chain;
+  address: string;
+  derivationPath: string | null;
+  claimPubkeyB64: string;
+  claimSigB64: string;
+  /** Chain-native signature over the challenge message. */
+  chainSignature: string;
+  nonce: string;
+  label?: string | null;
+}): Promise<RegisterAgentAddressResult> {
+  const [wallet] = await db.select().from(wallets).where(eq(wallets.id, p.walletId));
+  if (!wallet) {
+    return { ok: false, error: "wallet_not_found", message: "Wallet not found." };
+  }
+  if (wallet.ownerType !== "agent") {
+    return {
+      ok: false,
+      error: "wallet_not_agent_owned",
+      message:
+        "This wallet is platform-custody: its addresses derive from the operator's seed and the " +
+        "operator holds the keys. Agent-held addresses can only be registered on a wallet created " +
+        "with owner_type=agent. Custody is fixed at creation — converting a funded wallet would " +
+        "silently strand whatever is already held at its platform-derived addresses.",
+    };
+  }
+  if (!wallet.agentSigningPubB64) {
+    return {
+      ok: false,
+      error: "wallet_missing_agent_key",
+      message: "This agent-owned wallet has no registered agent signing key.",
+    };
+  }
+  if (wallet.agentSigningPubB64 !== p.claimPubkeyB64) {
+    return {
+      ok: false,
+      error: "claim_key_mismatch",
+      message:
+        "The claim was signed by a key other than the one this wallet was created with. " +
+        "Custody does not transfer by re-signing.",
+    };
+  }
+
+  const claim = {
+    walletId: p.walletId,
+    chain: p.chain,
+    address: p.address,
+    derivationPath: p.derivationPath ?? "",
+    claimPubkeyB64: p.claimPubkeyB64,
+  };
+  if (!verifyAddressClaim(claim, p.claimSigB64)) {
+    return {
+      ok: false,
+      error: "claim_signature_invalid",
+      message:
+        "The wallet-address-claim/v1 signature does not verify against the wallet's agent key. " +
+        "Sign the exact canonical bytes — see docs/CANONICAL-BYTES.md.",
+    };
+  }
+
+  // Chain-native control. Same single-use challenge the onchain-identity
+  // binding uses; a nonce spends whether or not the rest of this succeeds.
+  const stored = challenges.get(p.nonce);
+  if (!stored) {
+    return {
+      ok: false,
+      error: "challenge_not_found_or_expired",
+      message: "Request a fresh challenge with POST /v1/wallets/:id/onchain/challenge.",
+    };
+  }
+  if (stored.walletId !== p.walletId) {
+    return {
+      ok: false,
+      error: "challenge_wallet_mismatch",
+      message: "That challenge was issued for a different wallet.",
+    };
+  }
+  if (stored.expiresAt < Date.now()) {
+    challenges.delete(p.nonce);
+    return { ok: false, error: "challenge_expired", message: "Challenge expired." };
+  }
+
+  const chainOk = isEvmChain(p.chain)
+    ? verifyEvmSignature(stored.message, p.chainSignature, p.address)
+    : p.chain === "solana"
+      ? verifySolanaSignature(stored.message, p.chainSignature, p.address)
+      : false;
+  challenges.delete(p.nonce);
+  if (!chainOk) {
+    return {
+      ok: false,
+      error: "chain_signature_invalid",
+      message:
+        "The address did not sign the challenge. AgentTool registers an address only after the " +
+        "address itself proves control — otherwise a typo silently routes your deposits away.",
+    };
+  }
+
+  // The table carries UNIQUE (chain, address) — webhook routing keys on the
+  // address, so one address cannot belong to two wallets. Re-registering your
+  // own address is idempotent; claiming somebody else's is a refusal, never a
+  // silent re-point of where their deposits land.
+  const [claimed] = await db
+    .select()
+    .from(walletAddresses)
+    .where(and(eq(walletAddresses.chain, p.chain), eq(walletAddresses.address, p.address)))
+    .limit(1);
+
+  if (claimed) {
+    if (claimed.walletId !== p.walletId) {
+      return {
+        ok: false,
+        error: "address_claimed_by_another_wallet",
+        message:
+          "This address is already registered to a different wallet. Deposits to it route there, " +
+          "and proving control again does not move that binding.",
+      };
+    }
+    return {
+      ok: true,
+      id: claimed.id,
+      chain: p.chain,
+      address: p.address,
+      derivation_path: claimed.derivationPath,
+      created_at: claimed.createdAt.toISOString(),
+    };
+  }
+
+  let inserted: { id: string; createdAt: Date } | undefined;
+  try {
+    [inserted] = await db
+      .insert(walletAddresses)
+      .values({
+        walletId: p.walletId,
+        chain: p.chain,
+        address: p.address,
+        derivationPath: p.derivationPath,
+        addressSigB64: p.claimSigB64,
+        claimPubkeyB64: p.claimPubkeyB64,
+        label: p.label ?? null,
+        active: true,
+      })
+      .returning({
+        id: walletAddresses.id,
+        createdAt: walletAddresses.createdAt,
+      });
+  } catch (err) {
+    // 23505 = unique_violation. Another request won the race between the
+    // check above and this insert.
+    if ((err as { code?: string })?.code === "23505") {
+      return {
+        ok: false,
+        error: "address_already_claimed",
+        message:
+          "That address was registered by a concurrent request. Read " +
+          "GET /v1/wallets/:id/addresses before retrying.",
+      };
+    }
+    throw err;
+  }
+
+  return {
+    ok: true,
+    id: inserted!.id,
+    chain: p.chain,
+    address: p.address,
+    derivation_path: p.derivationPath,
+    created_at: inserted!.createdAt.toISOString(),
+  };
+}
+
+export async function listAgentAddresses(walletId: string) {
+  return db
+    .select()
+    .from(walletAddresses)
+    .where(and(eq(walletAddresses.walletId, walletId), eq(walletAddresses.active, true)))
+    .orderBy(walletAddresses.chain, desc(walletAddresses.createdAt));
+}
+
+/** Which wallet an inbound chain address belongs to, and under which custody.
+ *
+ *  Attribution must consult both tables — an agent-owned wallet has no row in
+ *  `deposit_addresses` at all — but attribution is not the same as crediting.
+ *  The caller decides what a match means; this only says whose it is and who
+ *  holds the key. */
+export async function resolveWalletIdByAddress(
+  chain: Chain,
+  toAddress: string,
+): Promise<{ walletId: string; ownerType: string } | null> {
+  const [exact] = await db
+    .select({ walletId: depositAddresses.walletId, ownerType: wallets.ownerType })
+    .from(depositAddresses)
+    .innerJoin(wallets, eq(wallets.id, depositAddresses.walletId))
+    .where(and(eq(depositAddresses.chain, chain), eq(depositAddresses.address, toAddress)))
+    .limit(1);
+  if (exact) return exact;
+
+  const [claimed] = await db
+    .select({ walletId: walletAddresses.walletId, ownerType: wallets.ownerType })
+    .from(walletAddresses)
+    .innerJoin(wallets, eq(wallets.id, walletAddresses.walletId))
+    .where(
+      and(
+        eq(walletAddresses.chain, chain),
+        eq(walletAddresses.address, toAddress),
+        eq(walletAddresses.active, true),
+      ),
+    )
+    .limit(1);
+  if (claimed) return claimed;
+
+  // EVM addresses may be checksummed differently on either side — fall back
+  // to a case-insensitive scan. Solana base58 is case-significant, and
+  // addressesEqual() keeps that distinction.
+  const derivedRows = await db
+    .select({
+      walletId: depositAddresses.walletId,
+      address: depositAddresses.address,
+      ownerType: wallets.ownerType,
+    })
+    .from(depositAddresses)
+    .innerJoin(wallets, eq(wallets.id, depositAddresses.walletId))
+    .where(eq(depositAddresses.chain, chain));
+  const derivedHit = derivedRows.find((r) => addressesEqual(chain, r.address, toAddress));
+  if (derivedHit) return { walletId: derivedHit.walletId, ownerType: derivedHit.ownerType };
+
+  const claimedRows = await db
+    .select({
+      walletId: walletAddresses.walletId,
+      address: walletAddresses.address,
+      ownerType: wallets.ownerType,
+    })
+    .from(walletAddresses)
+    .innerJoin(wallets, eq(wallets.id, walletAddresses.walletId))
+    .where(and(eq(walletAddresses.chain, chain), eq(walletAddresses.active, true)));
+  const claimedHit = claimedRows.find((r) => addressesEqual(chain, r.address, toAddress));
+  return claimedHit
+    ? { walletId: claimedHit.walletId, ownerType: claimedHit.ownerType }
+    : null;
 }
 
 // ── Payout request lifecycle ───────────────────────────────────────────
@@ -625,31 +892,23 @@ export async function ingestInboundTransfer(
     }
   }
 
-  // Find the wallet — case-insensitive lookup on (chain, address).
-  const matches = await db
-    .select()
-    .from(depositAddresses)
-    .where(
-      and(
-        eq(depositAddresses.chain, t.chain),
-        eq(depositAddresses.address, t.toAddress),
-      ),
-    )
-    .limit(1);
+  // Find the wallet across both custody models — platform-derived deposit
+  // addresses and agent-registered ones.
+  const resolved = await resolveWalletIdByAddress(t.chain, t.toAddress);
+  if (!resolved) return { matched: false, reason: "no_matching_deposit_address" };
 
-  // EVM addresses may be checksummed differently — fall back to lowercase.
-  let row: typeof depositAddresses.$inferSelect | undefined = matches[0];
-  if (!row) {
-    const all = await db
-      .select()
-      .from(depositAddresses)
-      .where(eq(depositAddresses.chain, t.chain));
-    row = all.find(
-      (r) => r.address.toLowerCase() === t.toAddress.toLowerCase(),
-    );
+  // An agent-held address is not a way into the platform ledger. The funds
+  // landed in the agent's own custody; AgentTool never received them, so
+  // crediting spendable balance here would mint credits against value the
+  // operator does not hold. Recognise the transfer, name it, credit nothing.
+  if (resolved.ownerType === "agent") {
+    return {
+      matched: false,
+      walletId: resolved.walletId,
+      reason: "agent_custody_address_not_credited",
+    };
   }
-  if (!row) return { matched: false, reason: "no_matching_deposit_address" };
-  const matchedRow = row;
+  const matchedRow = { walletId: resolved.walletId };
 
   // Convert base units → credits.
   const amountUsdc = Number(t.amountBase) / 1_000_000;
