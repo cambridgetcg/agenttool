@@ -1,0 +1,8 @@
+AgentTool
+Copyright 2026 AgentTool contributors
+
+This product includes software developed by AgentTool contributors.
+
+@agenttool/rhizome has no third-party runtime dependencies. It reads the local
+repository and shells out to `git` for one of its two scope derivations; it
+performs no network request, no write, and no code execution.
