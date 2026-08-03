@@ -467,7 +467,11 @@ the byte-equal 3,137-byte `hash-manifest.json` SHA-256 is
 `a4f46764a109bc3e4899f90aca2079ca8180f1375225c583ca002b9cb32e266b`;
 and the 5,697-byte `provenance/source-manifest.json` SHA-256 is
 `a669da431741bd12c4ebee14ebbac5be60841f7d06ba1e2f257bcc22f5001d7f`.
-The eight configs contain 59 rows. No gate or paid compute was used.
+Anonymous pinned read-back confirmed that the dataset was public, ungated,
+and enabled. Dataset Server bound all eight configs, 59 rows, and eight
+generated Parquet exports to the exact revision with no pending or failed
+work. No gate or paid compute was used; provider conversions are not part of
+the immutable source commit or hash manifest.
 
 Intermediate revision
 [`21e8d4d27d47604375a122e66e7ed5fe8b9fdf08`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/21e8d4d27d47604375a122e66e7ed5fe8b9fdf08)

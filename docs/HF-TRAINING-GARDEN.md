@@ -500,9 +500,13 @@ manifest. The card is 16,673 bytes with SHA-256
 and `provenance/source-manifest.json` is 5,697 bytes with SHA-256
 `a669da431741bd12c4ebee14ebbac5be60841f7d06ba1e2f257bcc22f5001d7f`.
 The provider-managed `.gitattributes` is the only extra repository file,
-making twenty remote files total. Eight configs contain 59 rows. No gate was
-accepted and no paid compute was invoked. Provider-derived Dataset Viewer
-conversions are not part of the immutable source commit or its hash manifest.
+making twenty remote files total. Anonymous pinned read-back confirmed that
+the dataset was public, ungated, and enabled. Dataset Server responses bound
+all eight configs, 59 rows, and eight generated Parquet exports to the exact
+`adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9` revision and reported no pending
+or failed work. No gate was accepted and no paid compute was invoked. Those
+provider-derived conversions are not part of the immutable source commit or
+its hash manifest.
 
 The published bundle deliberately retains `intended_identifier_only` inside
 `provenance/source-manifest.json`: that field is a non-self-attesting build
