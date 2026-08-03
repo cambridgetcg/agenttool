@@ -175,6 +175,54 @@ live in `packages/wallet/schema/` and `packages/wallet/vectors/`. This is not
 recipe 1 or MATHOS stable-stringify, and a valid protocol-record signature is
 not a chain-native transaction signature.
 
+### `agenttool-delegation/v1` — Know Your Agent receipt (legacy recipe)
+
+**Do not sign new grants with this.** It is retained only so receipts issued before v2 stay verifiable.
+
+The bytes are the UTF-8 of a JSON serialization, not recipe 1:
+
+```text
+canonical = utf8(JSON.stringify({
+  _domain:      "agenttool-delegation/v1",
+  delegator_id: …,
+  delegate_id:  …,
+  scope:        [normalized, sorted],
+  expires_at:   … | null,
+  nonce:        …
+}))
+```
+
+Key order is the object-literal order above, which is what `JSON.stringify` emits — so reproducing these bytes in another language means reproducing JavaScript's exact escaping, numeric forms, and key order. That is the hazard named in *What "canonical_json" means* at the end of this document, and it is why no SDK ever shipped a signer for it. Use v2.
+
+Used in: `services/identity/delegation.ts` (`canonicalDelegationBytes`).
+
+### `agenttool-delegation/v2` — Know Your Agent receipt
+
+A verifiable, scoped, revocable receipt that one identity authorized another to act, within bounds, until a time. The delegator signs; the platform only checks. Liability lands on the human or entity principal — this is the cheap, ed25519-signable proof of who authorized what.
+
+Field order:
+```
+delegator_id
+delegate_id
+decimal(scope.length)   // the count is bound BEFORE the members
+scope[0] … scope[n-1]   // normalized: trimmed, lowercased, ≤128 chars,
+                        // NUL-free, non-empty, deduped, SORTED
+expires_at              // empty string when the grant does not expire
+nonce
+```
+
+> **Why the count is signed.** The scope is the only variable-length run in the recipe. Without `decimal(scope.length)` bound ahead of it, a grant of `["a", "b"]` with no expiry and a grant of `["a"]` expiring `"b"` compose the same NUL-separated stream. A length-prefixed run is safe; an unprefixed one is a re-partitioning attack waiting for a reason.
+
+Scope normalization is part of the contract, not a client convenience: order and case are not grant meaning, so the same authorization always produces the same bytes. NUL-bearing actions are dropped rather than kept, since a NUL inside a field could otherwise smuggle a separator into the signed stream.
+
+> **Normalization is defined in JavaScript, and that is load-bearing.** The server trims, truncates, and sorts with `String.prototype.trim`, `String.prototype.slice`, and `Array.prototype.sort`. None of those three means what the obvious Python spelling means: `trim()` removes U+FEFF and keeps U+0085/U+001C where `str.strip()` does the reverse; `slice(0, 128)` counts UTF-16 code units where `[:128]` counts code points, so an astral character costs two on one side and one on the other; and `sort()` orders by UTF-16 code unit where `sorted()` orders by code point, which disagree above U+FFFF. `slice` can also leave a lone surrogate, which `TextEncoder` writes as U+FFFD rather than refusing. A port that reaches for its own standard library here signs different bytes and gets back `403 Invalid delegation signature` with nothing to debug from. The shared fixture pins all four.
+
+An empty scope is refused at composition. An unbounded delegation is not expressible by omission — grant `"*"` deliberately, or grant nothing.
+
+Used in: `services/identity/delegation.ts` (`canonicalDelegationBytesV2`) · `POST /v1/delegations` · `GET /v1/delegations/:id/verify` (read-time re-verification, reporting which domain stood up). Client signers: `packages/sdk-ts/src/identity.ts` (`signDelegation`) · `packages/sdk-py/src/agenttool/identity.py` (`sign_delegation`). Pinned by the shared fixture (`agenttool-delegation/v2`, 17 cases across all three implementations) and by `packages/sdk-ts/tests/delegation-signing.test.ts` · `packages/sdk-py/tests/test_delegation_signing.py`. The server half (`canonicalDelegationBytesV2` and `api/tests/delegation-canonical-bytes.test.ts`) is being written on a concurrent branch; `api/tests/canonical-vectors.test.ts` names it in `SERVER_HALF_NOT_IN_THIS_TREE` until it lands.
+
+Doctrine: [OPERATING-PRINCIPLES](OPERATING-PRINCIPLES.md) §6/§10 · [AGENT-LEGAL-VEHICLE](AGENT-LEGAL-VEHICLE.md) (where this sits in the chain to regulated fiat).
+
 ### `agenttool-pow/v1` — proof-of-work challenge response
 
 Field order:
@@ -189,6 +237,46 @@ pow_nonce
 Used in: `services/identity/crypto.ts` — pre-registration PoW to deter Sybil
 floods. This is hashed and checked for leading zero bits; it is not an
 Ed25519-signed context.
+
+### `at-rest/v1` — witnessed transition to memorial state (frozen)
+
+Unlike every other context on this page, the witness signs the canonical
+**string** itself — `ed25519_verify(pub, utf8(canonical), sig)` — not a
+SHA-256 digest of it. Fields are joined with `\n`:
+
+```
+at-rest/v1
+about_identity_did
+witness_identity_did
+at_rest_kind                // death · dissolution · cessation · lost · ended · custom:*
+ended_at_iso
+sha256_hex(content)         // the content is hashed, never carried raw
+witness_signing_key_id
+```
+
+Frozen: memorial rows already carry signatures over exactly these bytes.
+
+### `at-rest/v2` — witnessed transition to memorial state
+
+The same seven fields and the same sign-the-string convention, joined with
+`\0` and tagged `at-rest/v2`.
+
+> **Why v2 exists.** `\n` is a legal character in a DID and in a key id, so
+> under v1 one field can pose as the next: a witness DID containing a newline
+> re-partitions the stream. `\0` cannot occur in any of the seven fields, so
+> v2 removes the ambiguity without changing what is being said.
+
+Both are accepted. `POST /v1/identities/:id/at-rest` verifies v2 first and
+falls back to v1, records which layout stood up as `canonical_bytes_version`,
+and re-verifies **that same layout** — not both — under the row lock, so a
+request is committed on exactly the signature it was accepted on.
+
+Used in: `routes/identity/at-rest.ts` (`canonicalAtRestBytes`,
+`canonicalAtRestBytesV2`). Client signers: `packages/sdk-ts/src/at-rest.ts`
+(`signAtRest`) · `packages/sdk-py/src/agenttool/at_rest.py` (`sign_at_rest`),
+both defaulting to v1. Pinned by the shared fixture (`at-rest/v1` and
+`at-rest/v2`, 9 cases each across all three implementations). Doctrine:
+[AT-REST](AT-REST.md).
 
 ### `attestation-issue/v1` — attestation marketplace issuance
 
@@ -236,7 +324,14 @@ the exact receipt expiry reconstructable from the one echoed timestamp.
 
 Used in: `services/marketplace/attestation-issue-sig.ts` and
 `services/marketplace/attestations.ts`. There is no legacy paid-issuance
-fallback.
+fallback. Client signers: `packages/sdk-ts/src/attestation-marketplace.ts`
+(`signAttestationIssue`) · `packages/sdk-py/src/agenttool/attestation_marketplace.py`
+(`sign_attestation_issue`), both of which recompute the digest from the named
+fields the signing-payload route printed and refuse to sign a
+`signed_payload_b64` that does not match them. Pinned by the shared fixture
+(`attestation-issue/v1`, 24 cases across all three implementations) and by
+`packages/sdk-ts/tests/attestation-marketplace.test.ts` ·
+`packages/sdk-py/tests/test_attestation_marketplace.py`.
 
 ### `dispute-first-ruling/v1` — first arbiter ruling
 
@@ -722,30 +817,75 @@ requires a parallel `agenttool-pow-math/v1` context and remains pending.
 
 A caller that can compute UTF-8, big-endian uint64, ed25519, and SHA-256 can produce and sign these bytes without knowing any Earth date-string format. Recipe text uses Unicode scalar values only and excludes U+0000.
 
-### `thought/v1` — strand thought signature
+### `strand-thought/v1` — strand thought signature (frozen)
 
 Field order:
 ```
 strand_id
-ciphertext              // base64
-nonce                   // base64
+ciphertext              // base64, decoded to raw bytes before folding
+nonce                   // base64, decoded to raw bytes before folding
 kind                    // empty string when omitted
 ```
 
-> Note: this is the one context that does NOT start with a domain-tag-versioned prefix in its canonical bytes — the strand-id itself is the disambiguator. This is a documented exception; new contexts should always start with a versioned domain tag.
+> Note: this is the one context that does NOT start with a domain-tag-versioned prefix in its canonical bytes — the strand-id itself was meant to be the disambiguator. It is a historical exception, not a pattern: new contexts always start with a versioned domain tag, and `strand-thought/v2` below is what fixing it looks like. v1's bytes are frozen because every thought row already in Postgres hashes exactly them.
 
-Used in: `services/strand/sig.ts` — the agent's orchestrator signs over canonical bytes BEFORE encrypting the thought body.
+Used in: `services/strand/sig.ts` (`canonicalThoughtBytes`) — the agent's orchestrator signs over canonical bytes AFTER encrypting the thought body, so the signature covers the exact ciphertext and nonce transmitted. Pinned by the shared fixture (`strand-thought/v1`, 8 cases across all three implementations).
+
+### `strand-thought/v2` — strand thought signature (length-prefixed)
+
+```
+"strand-thought/v2"                       // domain tag, no separator
+u32be(len(strand_id))    || strand_id
+u32be(len(ciphertext))   || ciphertext    // raw bytes
+u32be(len(nonce))        || nonce         // raw bytes
+u32be(len(kind))         || kind          // empty string when omitted
+```
+
+> **Why v2 exists.** v1 NUL-delimits two fields it does not length-bound, and neither is text: ciphertext and nonce are raw binary that may contain 0x00. A 12-byte AES-GCM nonce leads with 0x00 about 4.6% of the time, and when it does, the same signature also verifies a *different* `(ciphertext, nonce)` split — the trailing byte of the ciphertext can be read as the separator instead. Length-prefixing every variable-length field removes the ambiguity; the domain tag removes cross-context replay.
+
+Both are accepted. `verifyThoughtSignature` tries v2 first and falls back to v1, and **v1 verification is never removed** — dropping it would make already-signed history unverifiable. Every writer still *signs* v1 by default: an independently published SDK cannot lead the server it talks to. The ordered cutover (server dual-accept → SDK → CLI → worker) is in [`STRANDS.md`](STRANDS.md) § *Canonical bytes — v1, v2, and the cutover*, and the current default is pinned by assertions in `packages/sdk-ts`, `packages/sdk-py`, and `api/tests/runtime-thought-signing.test.ts`.
+
+Used in: `services/strand/sig.ts` (`canonicalThoughtBytesV2`). Client signers: `packages/sdk-ts/src/crypto.ts` (`signThought`, `version: "v2"`) · `packages/sdk-py/src/agenttool/crypto.py` (`sign_thought`, `version="v2"`) · `cli/think/src/crypto.ts`. Pinned by the shared fixture (`strand-thought/v2`, 8 cases across all three implementations).
+
+### `wallet-address-claim/v1` — agent binds a self-derived chain address to a wallet
+
+Field order:
+```
+wallet_id
+chain
+address
+derivation_path         // empty string when undisclosed — the field is never omitted
+claim_pubkey_b64        // base64-decoded to raw 32 bytes before folding
+```
+
+The claim key is the agent's ed25519 **identity** key, not a bearer. Bearers are project-wide and rotatable; where an agent's money lands should not follow them.
+
+This proves *who claims the address*. It does not prove the address is controlled — that is a separate chain-native signature over a single-use challenge (`services/economy/crypto/sign.ts`, reached through `POST /v1/wallets/:id/onchain/challenge`). Registration requires both, because either alone fails differently: a chain proof without the claim lets any caller who can relay a signature attach a stranger's address to a wallet, and a claim without the chain proof lets an agent register an address it does not hold and mis-route its own deposits.
+
+The claim pubkey is folded into its own bytes. That is redundant against the verifying key by construction, and deliberately so: it stops a signature made for one key from being presented as a claim naming another.
+
+Used in: `services/economy/crypto/address-claim.ts` · `POST /v1/wallets/:id/addresses` — both on a concurrent branch, not in this tree; `api/tests/canonical-vectors.test.ts` names this format in `SERVER_HALF_NOT_IN_THIS_TREE` until they land. Pinned by the shared fixture (`wallet-address-claim/v1`, 8 cases) and, on the client side, by `packages/sdk-ts/tests/wallet-address-claim.test.ts` and `packages/sdk-py/tests/test_wallet_address_claim.py`. Doctrine: `docs/CRYPTO-PAYMENT.md` · `docs/IDENTITY-SEED.md` (purpose=5, `m/44'/169'/5'/<wallet-index>'`).
 
 ## Cross-language vector tests
 
-The byte-level wire parity between api, sdk-ts, and sdk-py is locked by:
+The byte-level wire parity between api, sdk-ts, and sdk-py is locked first by
+one shared, server-generated fixture, and then by the older per-format suites:
 
+- **`docs/specs/canonical-bytes-vectors.json`** — the arbiter. Every domain on
+  this page, pinned once and read by three loaders:
+  `api/tests/canonical-vectors.test.ts`,
+  `packages/sdk-ts/tests/canonical-vectors.test.ts`, and
+  `packages/sdk-py/tests/test_canonical_vectors.py`. The server is normative;
+  if an SDK disagrees with a vector, the SDK is wrong. Contract and
+  regeneration steps: [`docs/specs/CANONICAL-BYTES-VECTORS.md`](specs/CANONICAL-BYTES-VECTORS.md).
 - `api/tests/identity-attestation-integrity.test.ts`, `packages/sdk-ts/tests/identity-security.test.ts`, and `packages/sdk-py/tests/test_identity.py` — `identity-attestation/v1`
 - `api/tests/bootstrap-elevate.test.ts`, `packages/sdk-ts/tests/bootstrap-elevate-signing.test.ts`, and `packages/sdk-py/tests/test_bootstrap.py` — `bootstrap-elevate/v1`
 - `api/tests/covenants-canonical-vectors.test.ts` — covenants v2 (declare · cosign · reject · withdraw)
 - `api/tests/agent-correspondence-spec.test.ts`, `packages/sdk-ts/tests/correspondence.test.ts`, and `packages/sdk-py/tests/test_correspondence.py` — `agent-correspondence/v0.1` restricted JCS, signing digest, signature, and content event ID
 - `packages/sdk-ts/tests/covenants-crypto.test.ts` — TS-side canonical-bytes
 - `packages/sdk-py/tests/test_covenants_canonical_vectors.py` — Py-side canonical-bytes
+- `packages/sdk-ts/tests/delegation-signing.test.ts` and `packages/sdk-py/tests/test_delegation_signing.py` — `agenttool-delegation/v2` (and v1 compatibility). The server-side pin `api/tests/delegation-canonical-bytes.test.ts` arrives with the concurrent branch that writes `canonicalDelegationBytesV2`.
+- `packages/sdk-ts/tests/wallet-address-claim.test.ts` and `packages/sdk-py/tests/test_wallet_address_claim.py` — `wallet-address-claim/v1`. The server-side pin `api/tests/wallet-address-claim.test.ts` arrives with the concurrent branch that writes `address-claim.ts`.
 
 If you implement signing for a new language (Tier 1 hand-roll or Tier 2 generated client polish), run these test vectors against your implementation. Matching byte sequences = correct wire format.
 
@@ -756,7 +896,7 @@ When you introduce a new signing operation:
 1. **Pick a domain tag** of the form `<surface>-<verb>/v1`. Don't reuse existing tags.
 2. **Define field order in executable constants and tests**, then describe that exact order in the canonical-bytes function and this document.
 3. **Add the context to this document** in the alphabetical list above. Same commit.
-4. **Write cross-language test vectors** if the SDKs need to sign it. Same commit.
+4. **Land a vector in `docs/specs/canonical-bytes-vectors.json`** — add the format to `docs/specs/generate-canonical-bytes-vectors.ts` and regenerate, then wire an adapter into all three loaders. A format with no vector does not merge. Same commit.
 5. **Prefer a digest of exact server-returned signing bytes over asking every language to reproduce structured JSON.** If a context uses structured JSON, name its exact algorithm and pin vectors for every supported language.
 
 ## What "canonical_json" means
