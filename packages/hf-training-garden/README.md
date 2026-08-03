@@ -454,27 +454,31 @@ Generate the deterministic companion tree with:
 bun run build:hf
 ```
 
-The verified v0.2 public companion generated from GitHub-main merge
-[`4fb84f92318fd68082ccf4e9b1235bf341657b28`](https://github.com/cambridgetcg/agenttool/commit/4fb84f92318fd68082ccf4e9b1235bf341657b28)
+The verified v0.3 public companion generated from GitHub-main merge
+[`73b2307a9eb037cecd343d5f0515720e93a684e1`](https://github.com/cambridgetcg/agenttool/commit/73b2307a9eb037cecd343d5f0515720e93a684e1)
 is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden)
 at immutable Hub revision
-[`9406aa1ce6b9ee435da9d688899aa4dbca32605c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/9406aa1ce6b9ee435da9d688899aa4dbca32605c).
-Exact-revision read-back matched all sixteen manifest-listed files in the
-seventeen-file local companion; provider-managed `.gitattributes` is the sole
-extra remote file. The card SHA-256 is
-`a69685dc3cd0430493c9721b418a2679180d10cbaeb4bc5801bf30f6c843cb9a`, the
-byte-equal `hash-manifest.json` SHA-256 is
-`c1fc9bf46b6abc0550caac70ffe601a8e4c47a06b0cb7f02cc80b9ad7eeb361b`, and
-the `provenance/source-manifest.json` SHA-256 is
-`73c073f6a23c11f595204720ee4925e76622e73fcfcfff4020a440687baef2a0`.
-The seven configs contain 52 rows. No gate or paid compute was used.
+[`adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9).
+Exact-revision read-back matched all nineteen repo-owned files, including all
+eighteen self-excluding manifest entries; provider-managed `.gitattributes` is
+the sole extra remote file. The card is 16,673 bytes with SHA-256
+`67e89cccfa3f5ee8a1c538936e3a2f5cb8d804c1e6446eb0b510342bfdbc5bfe`;
+the byte-equal 3,137-byte `hash-manifest.json` SHA-256 is
+`a4f46764a109bc3e4899f90aca2079ca8180f1375225c583ca002b9cb32e266b`;
+and the 5,697-byte `provenance/source-manifest.json` SHA-256 is
+`a669da431741bd12c4ebee14ebbac5be60841f7d06ba1e2f257bcc22f5001d7f`.
+Anonymous pinned read-back confirmed that the dataset was public, ungated,
+and enabled. Dataset Server bound all eight configs, 59 rows, and eight
+generated Parquet exports to the exact revision with no pending or failed
+work. No gate or paid compute was used; provider conversions are not part of
+the immutable source commit or hash manifest.
 
-That is a historical release receipt, not a hash claim for the current
-generated tree. The current v0.3 candidate adds consent-honest governance,
-Trainer-adapter material, and a private unscored FREEDOM plane alongside the
-v0.2 participation surface. The public companion remains FREEDOM-free. Until a
-new immutable Hub revision is uploaded and read back, the candidate remains
-local and unpublished.
+Intermediate revision
+[`21e8d4d27d47604375a122e66e7ed5fe8b9fdf08`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/21e8d4d27d47604375a122e66e7ed5fe8b9fdf08)
+remains immutable evidence for the pre-FREEDOM GitHub-main merge `74aeaa13`.
+It was superseded after the accepted FREEDOM union changed only the public
+source and byte-hash manifests; private FREEDOM source, schema, choices, and
+the repository-source-only learning dataset were not uploaded.
 
 The bundle's internal `intended_identifier_only` value remains a deliberately
 non-self-attesting build record. The exact Hub revision is later external

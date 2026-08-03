@@ -38,8 +38,8 @@ packages/
   skills-wake-continuity/ — private Skills/YUTABASE → AFTERGLOW composition
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
   hf-scout/    — private read-only HF metadata/provenance scout + pinned research leads
-  hf-training-garden/ — private exact-admission, learning-participation, consent-honest governance, training-continuity, and inert Garden-planning contracts
-  hf-training-host/ — private HF-API-pinned non-distributed Python seam + append-only local ledger
+  hf-training-garden/ — private exact-admission, learning-participation, consent-honest governance, unscored FREEDOM, training-continuity, and inert Garden-planning contracts
+  hf-training-host/ — private HF-API-pinned non-distributed Python seam + append-only local ledger + opt-in minimized FREEDOM validation seam
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   constructive-intelligence/ — private local tree-pinned typed-receipt shadow ledger
@@ -207,8 +207,10 @@ write to the Hub, publish npm, or expose a hosted route.
 `@agenttool/hf-training-garden` is the private pure bridge from one exact
 HF Scout observation to a role-specific admission record, a four-voice
 per-activity learning-participation report, digest-only AFTERGLOW training
-checkpoint, and inert six-layer Garden tending plan. It can generate a
-deterministic public-safe companion for separately authorized Hub publication.
+checkpoint, an unscored FREEDOM field, and inert six-layer Garden tending plan.
+It can generate a deterministic public-safe companion for separately
+authorized Hub publication; the FREEDOM source, schema, and choices remain
+private and absent from that companion.
 It does not download data, accept a gate, train or restore a run, observe
 current receipt heads, mutate Garden or Hub state, select a latest continuity
 head, publish npm, or prove rights, privacy, consent, provenance truth,
@@ -220,7 +222,10 @@ after the TypeScript Garden validators run, requires caller-attested live
 execution refs to match the exact Garden terms, records encounter/evidence
 replay, frontiers, forks, and checkpoint effects in an append-only local
 SQLite ledger, and gates pre-load, pre-train, completed optimizer boundaries,
-and one ticketed checkpoint path. Host v0.1 pins and verifies only Transformers
+and one ticketed checkpoint path. An opt-in FREEDOM parser binds one minimized
+transition and can only narrow the existing governance decision; it is not yet
+wired into the ledger, Trainer adapter, or Accelerate adapter. Host v0.1 pins
+and verifies only Transformers
 5.14.1 plus Accelerate 1.14.0 in one non-distributed training process; Torch
 must be at least 2.6 but is otherwise resolver-selected and unpinned, and
 `trainer_stack_ref` does not prove live bytes. POSIX final-component checks

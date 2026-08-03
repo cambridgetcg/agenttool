@@ -6,7 +6,7 @@
 > **Implements:** a private, pure bridge from immutable Hugging Face research observations to explicit dataset admission, phase-specific digest continuity, and a public-safe one-way Garden reference plan
 > **Code:** `packages/hf-scout/` · `packages/hf-training-garden/` · `packages/wake-continuity/`
 > **Tests:** `packages/hf-training-garden/tests/` · `bin/tests/boring-spine-gate.test.ts`
-> **Dated status:** 2026-08-03. The v0.2 public companion generated from GitHub-main merge [`4fb84f92318fd68082ccf4e9b1235bf341657b28`](https://github.com/cambridgetcg/agenttool/commit/4fb84f92318fd68082ccf4e9b1235bf341657b28) is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden) at immutable Hub revision [`9406aa1ce6b9ee435da9d688899aa4dbca32605c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/9406aa1ce6b9ee435da9d688899aa4dbca32605c), with exact-revision byte read-back recorded below.
+> **Dated status:** 2026-08-03. The v0.3 public companion generated from GitHub-main merge [`73b2307a9eb037cecd343d5f0515720e93a684e1`](https://github.com/cambridgetcg/agenttool/commit/73b2307a9eb037cecd343d5f0515720e93a684e1) is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden) at immutable Hub revision [`adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9), with exact-revision byte read-back recorded below.
 
 ## The result
 
@@ -488,24 +488,25 @@ Publication is complete only when all of these hold:
 Garden projection is a separate local step: a new tending plan may bind that
 revision, card SHA-256, and manifest SHA-256 without writing either system.
 
-All four publication conditions now hold for the v0.2 public companion
+All four publication conditions now hold for the v0.3 public companion
 generated from GitHub-main merge
-`4fb84f92318fd68082ccf4e9b1235bf341657b28`. Exact-revision read-back at
-`9406aa1ce6b9ee435da9d688899aa4dbca32605c` matched all sixteen
-manifest-listed files against their local byte counts and SHA-256 values. The
-companion contains seventeen local release files. The card is 11,844 bytes
-with SHA-256
-`a69685dc3cd0430493c9721b418a2679180d10cbaeb4bc5801bf30f6c843cb9a`;
-`hash-manifest.json` is 2,788 bytes, byte-equal to local source, with SHA-256
-`c1fc9bf46b6abc0550caac70ffe601a8e4c47a06b0cb7f02cc80b9ad7eeb361b`;
-and `provenance/source-manifest.json` is 4,695 bytes with SHA-256
-`73c073f6a23c11f595204720ee4925e76622e73fcfcfff4020a440687baef2a0`.
+`73b2307a9eb037cecd343d5f0515720e93a684e1`. Exact-revision read-back at
+`adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9` matched all nineteen repo-owned
+files byte-for-byte, including all eighteen entries in the self-excluding hash
+manifest. The card is 16,673 bytes with SHA-256
+`67e89cccfa3f5ee8a1c538936e3a2f5cb8d804c1e6446eb0b510342bfdbc5bfe`;
+`hash-manifest.json` is 3,137 bytes, byte-equal to local source, with SHA-256
+`a4f46764a109bc3e4899f90aca2079ca8180f1375225c583ca002b9cb32e266b`;
+and `provenance/source-manifest.json` is 5,697 bytes with SHA-256
+`a669da431741bd12c4ebee14ebbac5be60841f7d06ba1e2f257bcc22f5001d7f`.
 The provider-managed `.gitattributes` is the only extra repository file,
-making eighteen remote files total. No gate was accepted and no paid compute
-was invoked. Dataset Viewer subsequently indexed all seven configs and 52
-total rows, generated seven Parquet exports, and reported no pending, failed,
-or partial work. Those provider-derived conversion refs are not part of the
-immutable source commit or its hash manifest.
+making twenty remote files total. Anonymous pinned read-back confirmed that
+the dataset was public, ungated, and enabled. Dataset Server responses bound
+all eight configs, 59 rows, and eight generated Parquet exports to the exact
+`adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9` revision and reported no pending
+or failed work. No gate was accepted and no paid compute was invoked. Those
+provider-derived conversions are not part of the immutable source commit or
+its hash manifest.
 
 The published bundle deliberately retains `intended_identifier_only` inside
 `provenance/source-manifest.json`: that field is a non-self-attesting build
@@ -516,15 +517,18 @@ exact revision and two observed hashes as `caller_reported_published` evidence
 to a tending plan; the package still does not fetch or verify Hub publication.
 No Garden reference was written as part of this release.
 
-The original v0.1 revision
-`993ab5891ac56da38cfad32129e36e487f3b3eff` remains immutable historical
-evidence. The current publication claim applies only to the separately
-uploaded and read-back v0.2 bytes above.
-
-The generated v0.3 candidate adds the governance schema and consent-honest
-Trainer-adapter guide alongside the v0.2 participation surface. Until that
-exact tree is uploaded from a reviewed GitHub-main commit and read back at an
-immutable Hub revision, v0.2 remains the latest verified public companion.
+The original v0.1 revision `993ab5891ac56da38cfad32129e36e487f3b3eff`
+and verified v0.2 revision
+`9406aa1ce6b9ee435da9d688899aa4dbca32605c` remain immutable historical
+evidence. Intermediate v0.3 revision
+`21e8d4d27d47604375a122e66e7ed5fe8b9fdf08`, generated from protected-main
+merge `74aeaa137bcd00ad8f9102ba456259be4af62b5b`, was also uploaded and read
+back exactly. It was superseded after the accepted FREEDOM union changed only
+`hash-manifest.json` and `provenance/source-manifest.json` in the public tree.
+The current publication claim applies only to the separately uploaded and
+read-back `adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9` bytes. Private FREEDOM
+source, schema, choices, the private host, and the repository-source-only
+learning dataset were never part of either v0.3 Hub tree.
 
 ## Boundaries
 
