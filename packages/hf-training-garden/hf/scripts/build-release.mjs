@@ -14,6 +14,7 @@ import {
   GARDEN_LAYER_GUIDE,
   HF_TRAINER_HOOK_GUIDE,
   IS_FREEDOM_GUIDE,
+  LEARNING_MODE_GUIDE,
   LEARNING_PARTICIPATION_GUIDE,
   PACKAGE_NAME,
   PACKAGE_VERSION,
@@ -60,6 +61,7 @@ write(`${datasetRoot}/data/selection-criteria.jsonl`, jsonl(SELECTION_CRITERIA_G
 write(`${datasetRoot}/data/training-phases.jsonl`, jsonl(TRAINING_PHASE_GUIDE));
 write(`${datasetRoot}/data/garden-layers.jsonl`, jsonl(GARDEN_LAYER_GUIDE));
 write(`${datasetRoot}/data/is-freedom.jsonl`, jsonl(IS_FREEDOM_GUIDE));
+write(`${datasetRoot}/data/learning-modes.jsonl`, jsonl(LEARNING_MODE_GUIDE));
 write(`${datasetRoot}/data/learning-participation.jsonl`, jsonl(LEARNING_PARTICIPATION_GUIDE));
 write(`${datasetRoot}/data/trainer-hooks.jsonl`, jsonl(HF_TRAINER_HOOK_GUIDE));
 
@@ -94,9 +96,10 @@ const sourceManifest = {
     "selection criteria",
     "training phase guide",
     "Garden layer guide",
+    "learning mode guide",
     "learning participation and Trainer integration guides",
     "IS learning-freedom and finite-resource-window guide",
-    "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
+    "historical public participation v0.1 plus current participation v0.2 standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
     "source and byte hash manifests",
   ],
   public_release_excludes: [

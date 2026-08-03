@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agenttool.dev/schemas/hf-learning-participation-receipt-v0.1.schema.json",
+  "$id": "https://agenttool.dev/schemas/hf-learning-participation-receipt-v0.2.schema.json",
   "title": "KINGDOM Hugging Face learning participation voice receipt",
   "$comment": "Closed portable shape. The TypeScript validator additionally binds the receipt to the exact invitation, invited voice scope, and derived prompt-envelope digest.",
   "type": "object",
   "additionalProperties": false,
   "required": ["_format", "receipt_id", "invitation_id", "voice", "voice_scope_ref", "report_basis", "decisions", "choice_channel", "reasons_collected", "boundaries"],
   "properties": {
-    "_format": { "const": "kingdom.hf-learning-participation-receipt/0.1" },
+    "_format": { "const": "kingdom.hf-learning-participation-receipt/0.2" },
     "receipt_id": { "$ref": "#/$defs/sha256" },
     "invitation_id": { "$ref": "#/$defs/sha256" },
     "voice": { "$ref": "#/$defs/voice" },
@@ -21,7 +21,7 @@
     },
     "choice_channel": { "anyOf": [{ "$ref": "#/$defs/choice_channel" }, { "type": "null" }] },
     "reasons_collected": { "const": false },
-    "boundaries": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.1.schema.json#/$defs/boundaries" }
+    "boundaries": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.2.schema.json#/$defs/boundaries" }
   },
   "oneOf": [
     {

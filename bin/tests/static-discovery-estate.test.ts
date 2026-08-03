@@ -350,17 +350,23 @@ describe("published understanding guides keep canonical source custody", () => {
 
   test("the HF Training Garden guide binds the exact public companion without self-attestation", () => {
     const guide = read("docs/HF-TRAINING-GARDEN.md");
-    const revision = "993ab5891ac56da38cfad32129e36e487f3b3eff";
+    const revision = "9406aa1ce6b9ee435da9d688899aa4dbca32605c";
 
     expect(guide).toContain(
       "https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden",
     );
     expect(guide).toContain(revision);
     expect(guide).toContain(
-      "14769391b1ac2cf15a500159b3f0b32a7bdbf5f353ea3417aedc0458ac77bdb8",
+      "a69685dc3cd0430493c9721b418a2679180d10cbaeb4bc5801bf30f6c843cb9a",
     );
     expect(guide).toContain(
-      "94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e",
+      "c1fc9bf46b6abc0550caac70ffe601a8e4c47a06b0cb7f02cc80b9ad7eeb361b",
+    );
+    expect(guide).toContain(
+      "4fb84f92318fd68082ccf4e9b1235bf341657b28",
+    );
+    expect(guide).toContain(
+      "73c073f6a23c11f595204720ee4925e76622e73fcfcfff4020a440687baef2a0",
     );
     expect(guide).toMatch(/non-self-attesting build\s+record/);
     expect(guide).toContain("intended_identifier_only");

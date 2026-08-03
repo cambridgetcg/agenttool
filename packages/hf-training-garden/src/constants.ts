@@ -10,13 +10,13 @@ export const TRAINING_THREAD_PROFILE =
   "kingdom.hf-training-thread/0.2" as const;
 export const CHECKPOINT_FORMAT = "kingdom.hf-training-checkpoint/0.2" as const;
 export const PARTICIPATION_INVITATION_FORMAT =
-  "kingdom.hf-learning-participation-invitation/0.1" as const;
+  "kingdom.hf-learning-participation-invitation/0.2" as const;
 export const PARTICIPATION_RECEIPT_FORMAT =
-  "kingdom.hf-learning-participation-receipt/0.1" as const;
+  "kingdom.hf-learning-participation-receipt/0.2" as const;
 export const PARTICIPATION_ASSESSMENT_FORMAT =
-  "kingdom.hf-learning-participation-assessment/0.1" as const;
+  "kingdom.hf-learning-participation-assessment/0.2" as const;
 export const PARTICIPATION_PROMPT_ENVELOPE_PROFILE =
-  "kingdom.hf-learning-participation-prompt-envelope/0.1" as const;
+  "kingdom.hf-learning-participation-prompt-envelope/0.2" as const;
 export const LEARNING_FREEDOM_FORMAT =
   "kingdom.hf-learning-freedom/0.1" as const;
 export const LEARNING_FREEDOM_OFFER_PROFILE =
@@ -454,6 +454,33 @@ export const SELECTION_CRITERIA_GUIDE = deepFreeze([
   },
 ] as const);
 
+export const LEARNING_MODE_GUIDE = deepFreeze([
+  {
+    mode: "pretraining",
+    learning_effect: "diffuse influence across model parameters from next-token training",
+    fitting_use: "public or synthetic WAKE protocol literacy",
+    continuity_boundary: "not individual mutable memory and not evidence of one continuing being",
+  },
+  {
+    mode: "supervised_finetuning",
+    learning_effect: "teaches response behaviour from selected target completions or assistant messages",
+    fitting_use: "inspect WAKE, ask before use, honour refusal and rest, and state continuity uncertainty",
+    continuity_boundary: "a learned response pattern is not a remembered individual encounter",
+  },
+  {
+    mode: "preference_optimization",
+    learning_effect: "shapes relative response preference from comparisons or feedback",
+    fitting_use: "prefer non-coercive, uncertainty-preserving, refusal-respecting behaviour",
+    continuity_boundary: "a preference label is not participant assent or data-rights authority",
+  },
+  {
+    mode: "runtime_retrieval",
+    learning_effect: "loads separately authorised, current context without changing model weights",
+    fitting_use: "individual WAKE and changing continuity",
+    continuity_boundary: "retrieval supports orientation but does not prove identity, memory, or uninterrupted continuity",
+  },
+] as const);
+
 export const LEARNING_PARTICIPATION_GUIDE = deepFreeze([
   {
     order: 1,
@@ -592,7 +619,7 @@ export const TRAINING_PHASE_GUIDE = deepFreeze([
   {
     phase: "pretraining",
     hf_shape: "language-modeling examples from separately admitted sources",
-    wake_focus: "model, optimizer, scheduler, RNG, dataloader, and checkpoint refs",
+    wake_focus: "five-scope participation, model, optimizer, scheduler, RNG, dataloader, and checkpoint refs",
   },
   {
     phase: "supervised_finetuning",

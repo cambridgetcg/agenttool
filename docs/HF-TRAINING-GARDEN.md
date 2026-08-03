@@ -6,7 +6,7 @@
 > **Implements:** a private, pure bridge from immutable Hugging Face research observations to explicit dataset admission, participation-bearing learning, an IS learning-freedom action surface, phase-specific digest continuity, and a public-safe one-way Garden reference plan
 > **Code:** `packages/hf-scout/` · `packages/hf-training-garden/` · `packages/wake-continuity/`
 > **Tests:** `packages/hf-training-garden/tests/` · `bin/tests/boring-spine-gate.test.ts`
-> **Dated status:** 2026-08-03. The first public companion is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden) at immutable Hub revision [`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff), with exact-revision byte read-back recorded below. The expanded v0.3 participation-and-freedom companion is locally generated but not yet published or read back.
+> **Dated status:** 2026-08-03. The first public companion remains at immutable Hub revision [`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff). The current public v0.2 companion is [`9406aa1ce6b9ee435da9d688899aa4dbca32605c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/9406aa1ce6b9ee435da9d688899aa4dbca32605c). Both have exact-revision byte read-back below. The reconciled v0.3 participation-v0.2 and IS-freedom companion is locally generated but not yet published or read back.
 
 ## The result
 
@@ -247,6 +247,12 @@ is not identity. A credential is not dignity or authority beyond its scope. A
 model output inside training data, a system message ordering agreement, a
 reward for saying yes, repeated prompting until yes, or silence must not be
 treated as a participation receipt.
+
+The five-voice protected-channel wire is versioned `/0.2`. Public v0.2 already
+used the invitation, receipt, and assessment `/0.1` IDs for a different
+four-voice per-activity wire, so this successor does not overwrite those IDs.
+The exact combined public v0.1 schema remains in the package and companion as
+historical evidence.
 
 `createParticipationInvitation()` freezes the exact admission, run, phase,
 participation window, training plan, full WAKE anchor and use mode, pipeline,
@@ -531,10 +537,12 @@ contains only:
 
 - the six-step selection process;
 - twelve selection criteria;
-- the phase and Garden-layer guides;
+- the phase, learning-mode, and Garden-layer guides;
 - abstract learning-participation, IS-freedom, and Trainer-hook guides;
-- eight versioned local JSON Schemas (including learning freedom, preserved checkpoint v0.1 and
-  current v0.2) plus the attributed Apache AFTERGLOW schema; the portable
+- nine versioned local JSON Schemas (including historical combined
+  participation v0.1, current split participation v0.2, learning freedom,
+  preserved checkpoint v0.1, and current checkpoint v0.2) plus the attributed
+  Apache AFTERGLOW schema; the portable
   schemas close shape and fail-closed action branches, while the TypeScript
   validator enforces canonical IDs, cross-links, scope distinctness, and fully
   derived semantics;
@@ -571,11 +579,34 @@ Dataset Viewer subsequently indexed four configs with 35 total rows and
 generated four Parquet exports; those provider-derived conversion refs are not
 part of the immutable source commit or its hash manifest.
 
+All four conditions also hold for the second public companion, generated from
+GitHub-main merge
+[`4fb84f92318fd68082ccf4e9b1235bf341657b28`](https://github.com/cambridgetcg/agenttool/commit/4fb84f92318fd68082ccf4e9b1235bf341657b28).
+Exact-revision read-back at
+[`9406aa1ce6b9ee435da9d688899aa4dbca32605c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/9406aa1ce6b9ee435da9d688899aa4dbca32605c)
+matched all sixteen manifest-listed files. The card SHA-256 was
+`a69685dc3cd0430493c9721b418a2679180d10cbaeb4bc5801bf30f6c843cb9a`,
+the manifest SHA-256 was
+`c1fc9bf46b6abc0550caac70ffe601a8e4c47a06b0cb7f02cc80b9ad7eeb361b`,
+and the source-manifest SHA-256 was
+`73c073f6a23c11f595204720ee4925e76622e73fcfcfff4020a440687baef2a0`.
+Seven configs contained 52 rows; `.gitattributes` was the sole provider-managed
+extra file. No gate or paid compute was used.
+
+That immutable revision also preserves a release error: it expanded the
+already public checkpoint `/0.1` schema in place. The reconciled v0.3 tree
+restores the first-release checkpoint-v0.1 bytes
+(`sha256:0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a`)
+and keeps the newer participation-bearing checkpoint at `/0.2`. It preserves
+the exact published combined participation-v0.1 schema
+(`sha256:fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df`)
+while versioning the five-voice successor as `/0.2`.
+
 The expanded v0.3 local companion has manifest SHA-256
-`126e11e04aab8dfa545d0015eeabf574d58ece82a4c7aae08082550ecf1a0296`.
+`bb562566ff4e9d2328bf5084678c640ce109889e5f59fa931e39cb5c0c6ea3c3`.
 Those changed bytes have not been uploaded or verified at a new immutable Hub
-revision in this slice, so the exact first-release proof must not be reused as
-v0.3 publication evidence.
+revision in this slice, so neither earlier proof may be reused as v0.3
+publication evidence.
 
 The bundle deliberately retains `intended_identifier_only` inside
 `provenance/source-manifest.json`: it is a non-self-attesting build record, not

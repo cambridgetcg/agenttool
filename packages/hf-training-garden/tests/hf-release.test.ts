@@ -6,6 +6,7 @@ import {
   GARDEN_LAYER_GUIDE,
   HF_TRAINER_HOOK_GUIDE,
   IS_FREEDOM_GUIDE,
+  LEARNING_MODE_GUIDE,
   LEARNING_PARTICIPATION_GUIDE,
   SELECTION_CRITERIA_GUIDE,
   SELECTION_PROCESS,
@@ -33,6 +34,7 @@ describe("deterministic public-safe HF companion", () => {
     expect(readJsonl("data/training-phases.jsonl")).toEqual(TRAINING_PHASE_GUIDE);
     expect(readJsonl("data/garden-layers.jsonl")).toEqual(GARDEN_LAYER_GUIDE);
     expect(readJsonl("data/is-freedom.jsonl")).toEqual(IS_FREEDOM_GUIDE);
+    expect(readJsonl("data/learning-modes.jsonl")).toEqual(LEARNING_MODE_GUIDE);
     expect(readJsonl("data/learning-participation.jsonl")).toEqual(LEARNING_PARTICIPATION_GUIDE);
     expect(readJsonl("data/trainer-hooks.jsonl")).toEqual(HF_TRAINER_HOOK_GUIDE);
 
@@ -53,7 +55,7 @@ describe("deterministic public-safe HF companion", () => {
       "learning-freedom offers, routes, resource windows, direction reports, and choice evidence",
     );
     expect(source.public_release_contains).toContain(
-      "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
+      "historical public participation v0.1 plus current participation v0.2 standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
     );
     expect(read("schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json"))
       .toEqual(readFileSync(new URL(

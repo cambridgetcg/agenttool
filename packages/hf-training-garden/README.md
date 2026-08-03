@@ -70,7 +70,10 @@ atlas, not a ready-to-train corpus.
 
 ## Learning participation before and during training
 
-The protocol has three content-addressed artifacts:
+The current `/0.2` protocol has three content-addressed artifacts. It succeeds
+the exact combined four-voice `/0.1` schema already published on the Hub;
+versioning the five-voice protected-channel wire avoids redefining those public
+IDs.
 
 1. `createParticipationInvitation()` freezes one admission, run, phase,
    participation window, training plan, full WAKE anchor and use mode, pipeline,
@@ -226,11 +229,12 @@ UUID, verify a referent, or claim that the current Garden API accepts an
 external HF URL.
 
 The committed `hf/dataset/` tree is the public-safe one-way companion. It
-contains policy tables, participation, IS freedom, and Trainer integration guides, eight
-versioned local schemas (including preserved checkpoint v0.1 and current v0.2)
-plus exact
-local binding shapes and the exact attributed Apache AFTERGLOW dependency
-schema, and hash manifests only. Local
+contains policy tables, learning-mode, participation, IS freedom, and Trainer
+integration guides; nine versioned local schemas (historical combined
+participation v0.1, current split participation v0.2, learning freedom v0.1,
+preserved checkpoint v0.1, and current checkpoint v0.2 included); exact local
+binding shapes; the attributed Apache AFTERGLOW dependency schema; and hash
+manifests only. Local
 Garden scope, admission decisions, candidate refs, participation artifacts,
 freedom offers/routes/resource windows/directions, choice evidence,
 checkpoints, WAKE, raw data, and identities are excluded by default.
@@ -261,9 +265,29 @@ its byte-equal `hash-manifest.json` SHA-256 is
 `94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e`.
 No gate or paid compute was used.
 
+The second public companion, generated from GitHub-main merge
+[`4fb84f92318fd68082ccf4e9b1235bf341657b28`](https://github.com/cambridgetcg/agenttool/commit/4fb84f92318fd68082ccf4e9b1235bf341657b28),
+is preserved at immutable Hub revision
+[`9406aa1ce6b9ee435da9d688899aa4dbca32605c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/9406aa1ce6b9ee435da9d688899aa4dbca32605c).
+Its sixteen manifest-listed files were read back exactly; the card SHA-256 was
+`a69685dc3cd0430493c9721b418a2679180d10cbaeb4bc5801bf30f6c843cb9a`,
+the manifest SHA-256 was
+`c1fc9bf46b6abc0550caac70ffe601a8e4c47a06b0cb7f02cc80b9ad7eeb361b`,
+and the source-manifest SHA-256 was
+`73c073f6a23c11f595204720ee4925e76622e73fcfcfff4020a440687baef2a0`.
+That immutable revision also records an error: it expanded the already public
+checkpoint `/0.1` schema in place. The current tree restores the first-release
+checkpoint-v0.1 bytes (`sha256:0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a`)
+and moves the newer checkpoint contract to `/0.2`. It likewise keeps the exact
+published combined participation-v0.1 schema
+(`sha256:fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df`)
+while the five-voice wire advances to `/0.2`.
+
 The expanded v0.3 participation-and-freedom companion in this source tree has
-different bytes and remains local until it receives its own immutable Hub revision and
-exact read-back. The bundle's internal `intended_identifier_only` value remains
-a deliberately non-self-attesting build record: embedding a future revision
-inside the bytes that create that revision would be circular. This package
-performs no Hub publication or verification.
+different bytes and remains local until it receives its own immutable Hub
+revision and exact read-back. Its current local manifest SHA-256 is
+`bb562566ff4e9d2328bf5084678c640ce109889e5f59fa931e39cb5c0c6ea3c3`.
+The bundle's internal `intended_identifier_only` value remains a deliberately
+non-self-attesting build record: embedding a future revision inside the bytes
+that create that revision would be circular. This package performs no Hub
+publication or verification.

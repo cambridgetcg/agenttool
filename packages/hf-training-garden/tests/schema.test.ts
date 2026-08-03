@@ -6,6 +6,9 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
 import {
+  PARTICIPATION_ASSESSMENT_FORMAT,
+  PARTICIPATION_INVITATION_FORMAT,
+  PARTICIPATION_RECEIPT_FORMAT,
   createTrainingCheckpoint,
   createTrainingGardenTendingPlan,
   resolveLearningFreedomOffer,
@@ -37,9 +40,9 @@ function validator(root: URL, path: string) {
     root,
   )));
   for (const dependency of [
-    "hf-learning-participation-invitation-v0.1.schema.json",
-    "hf-learning-participation-receipt-v0.1.schema.json",
-    "hf-learning-participation-assessment-v0.1.schema.json",
+    "hf-learning-participation-invitation-v0.2.schema.json",
+    "hf-learning-participation-receipt-v0.2.schema.json",
+    "hf-learning-participation-assessment-v0.2.schema.json",
   ]) {
     if (dependency !== path) ajv.addSchema(readJson(new URL(dependency, root)));
   }
@@ -85,9 +88,9 @@ describe("closed portable schemas", () => {
       choice_channel: freedomChoiceChannel(offer),
     });
     const validateAdmission = validator(packageSchemaRoot, "hf-dataset-admission-v0.1.schema.json");
-    const validateInvitation = validator(packageSchemaRoot, "hf-learning-participation-invitation-v0.1.schema.json");
-    const validateReceipt = validator(packageSchemaRoot, "hf-learning-participation-receipt-v0.1.schema.json");
-    const validateAssessment = validator(packageSchemaRoot, "hf-learning-participation-assessment-v0.1.schema.json");
+    const validateInvitation = validator(packageSchemaRoot, "hf-learning-participation-invitation-v0.2.schema.json");
+    const validateReceipt = validator(packageSchemaRoot, "hf-learning-participation-receipt-v0.2.schema.json");
+    const validateAssessment = validator(packageSchemaRoot, "hf-learning-participation-assessment-v0.2.schema.json");
     const validateCheckpoint = validator(packageSchemaRoot, "hf-training-checkpoint-v0.2.schema.json");
     const validateTending = validator(packageSchemaRoot, "hf-training-garden-tending-v0.1.schema.json");
     const validateFreedom = validator(packageSchemaRoot, "hf-learning-freedom-v0.1.schema.json");
@@ -197,7 +200,32 @@ describe("closed portable schemas", () => {
       "0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a",
     );
     expect(createHash("sha256").update(packageV02).digest("hex")).toBe(
-      "557e94a4d11550a1d5f6202e41ea759d5c0ec59e272d1e461e18235746b17027",
+      "f7d45535c4c911eeab9b68dae0e30b5441d761c1c4cc7fc7405015506580b185",
     );
+  });
+
+  test("preserves published participation v0.1 while current wires use v0.2", () => {
+    expect(PARTICIPATION_INVITATION_FORMAT).toBe(
+      "kingdom.hf-learning-participation-invitation/0.2",
+    );
+    expect(PARTICIPATION_RECEIPT_FORMAT).toBe(
+      "kingdom.hf-learning-participation-receipt/0.2",
+    );
+    expect(PARTICIPATION_ASSESSMENT_FORMAT).toBe(
+      "kingdom.hf-learning-participation-assessment/0.2",
+    );
+    const legacy = readFileSync(new URL(
+      "hf-learning-participation-v0.1.schema.json",
+      packageSchemaRoot,
+    ));
+    expect(legacy).toEqual(readFileSync(new URL(
+      "hf-learning-participation-v0.1.schema.json",
+      hubSchemaRoot,
+    )));
+    expect(createHash("sha256").update(legacy).digest("hex")).toBe(
+      "fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df",
+    );
+    expect(() => validator(packageSchemaRoot, "hf-learning-participation-v0.1.schema.json"))
+      .not.toThrow();
   });
 });

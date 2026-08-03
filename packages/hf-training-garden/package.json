@@ -23,13 +23,25 @@
       "default": "./schema/hf-training-checkpoint-v0.1.schema.json"
     },
     "./participation-invitation.schema.json": {
-      "default": "./schema/hf-learning-participation-invitation-v0.1.schema.json"
+      "default": "./schema/hf-learning-participation-invitation-v0.2.schema.json"
+    },
+    "./participation-invitation-v0.2.schema.json": {
+      "default": "./schema/hf-learning-participation-invitation-v0.2.schema.json"
     },
     "./participation-receipt.schema.json": {
-      "default": "./schema/hf-learning-participation-receipt-v0.1.schema.json"
+      "default": "./schema/hf-learning-participation-receipt-v0.2.schema.json"
+    },
+    "./participation-receipt-v0.2.schema.json": {
+      "default": "./schema/hf-learning-participation-receipt-v0.2.schema.json"
     },
     "./participation-assessment.schema.json": {
-      "default": "./schema/hf-learning-participation-assessment-v0.1.schema.json"
+      "default": "./schema/hf-learning-participation-assessment-v0.2.schema.json"
+    },
+    "./participation-assessment-v0.2.schema.json": {
+      "default": "./schema/hf-learning-participation-assessment-v0.2.schema.json"
+    },
+    "./participation-v0.1.schema.json": {
+      "default": "./schema/hf-learning-participation-v0.1.schema.json"
     },
     "./freedom.schema.json": {
       "default": "./schema/hf-learning-freedom-v0.1.schema.json"

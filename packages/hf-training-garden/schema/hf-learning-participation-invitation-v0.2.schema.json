@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.1.schema.json",
+  "$id": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.2.schema.json",
   "title": "KINGDOM Hugging Face learning participation invitation",
   "$comment": "Closed portable shape. The TypeScript validator additionally enforces canonical content IDs, distinct invited voice scopes, and cross-field semantics.",
   "type": "object",
   "additionalProperties": false,
   "required": ["_format", "invitation_id", "admission_id", "run_ref", "training_phase", "participation_window_ref", "training_plan_ref", "wake", "wake_use_mode", "pipeline_ref", "dataset_state_ref", "starting_state_ref", "offered_activities", "required_voices", "agent_availability", "substrate_availability", "voice_scope_refs", "authorities", "safeguards", "terms", "boundaries"],
   "properties": {
-    "_format": { "const": "kingdom.hf-learning-participation-invitation/0.1" },
+    "_format": { "const": "kingdom.hf-learning-participation-invitation/0.2" },
     "invitation_id": { "$ref": "#/$defs/sha256" },
     "admission_id": { "$ref": "#/$defs/sha256" },
     "run_ref": { "$ref": "#/$defs/sha256" },

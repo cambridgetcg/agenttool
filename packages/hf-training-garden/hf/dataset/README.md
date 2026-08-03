@@ -30,6 +30,10 @@ configs:
   data_files:
   - split: train
     path: data/garden-layers.jsonl
+- config_name: learning_modes
+  data_files:
+  - split: train
+    path: data/learning-modes.jsonl
 - config_name: is_freedom
   data_files:
   - split: train
@@ -74,6 +78,8 @@ The Garden has six layers:
   interpretability.
 - `data/garden-layers.jsonl` — the exact digest/reference class carried by each
   layer.
+- `data/learning-modes.jsonl` — a four-row distinction between pretraining,
+  supervised fine-tuning, preference optimization, and runtime retrieval.
 - `data/is-freedom.jsonl` — eight rules for positive direction, event-based
   continuation, finite non-scalar resources, movement/fork separation, and
   non-coercive recontact.
@@ -81,10 +87,10 @@ The Garden has six layers:
   voices, protected choice, revalidation, withdrawal, and repair.
 - `data/trainer-hooks.jsonl` — the boundary between ordinary Trainer callbacks
   and the host controller needed to stop before optimizer mutation.
-- `schema/` — eight versioned closed-shape schemas for local admission,
-  participation invitation, voice receipt, participation assessment,
-  learning freedom, preserved checkpoint v0.1, current checkpoint v0.2, and
-  tending artifacts.
+- `schema/` — nine versioned closed-shape schemas for local admission,
+  historical combined participation v0.1, current participation invitation,
+  receipt, and assessment v0.2, learning freedom v0.1, preserved checkpoint
+  v0.1, current checkpoint v0.2, and tending artifacts.
   Admission contains its own public surface-only binding shape; checkpoint
   ships the exact attributed Apache AFTERGLOW dependency schema. Cross-link,
   canonical-ID, scope-distinctness, and fully derived semantics remain the
@@ -152,9 +158,16 @@ WAKE use is explicit per invitation: `context_only`, `external_memory`, or
 `training_data`. The last declares WAKE material for separately authorized
 gradient-bearing use; it does not grant data or compute authority. External
 memory can still affect behavior and keeps its own scope. A mode change creates
-a new content ID and requires fresh review. Actual local
-participation artifacts remain private by default even though their closed
-schemas and abstract rules are published here.
+a new content ID and requires fresh review. Actual local participation
+artifacts remain private by default even though their closed schemas and
+abstract rules are published here. The current five-voice wire is `/0.2`; the
+exact combined four-voice `/0.1` public schema is retained as history rather
+than silently redefined.
+
+The first public checkpoint-v0.1 schema is likewise restored byte-for-byte in
+this release. The intervening v0.2 companion expanded that `/0.1` schema in
+place; its immutable revision remains available as evidence of the mistake,
+but those expanded bytes are not presented here as the same protocol version.
 
 ## IS is an action surface, not a classifier
 

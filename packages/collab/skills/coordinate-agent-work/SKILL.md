@@ -175,3 +175,27 @@ If a Collab tool or connection is missing, name the exact tool, journal, host,
 or wake boundary and use an explicitly identified fallback. Do not imply that
 a poll, acknowledgement, claim, challenge, review, handoff, or audit occurred
 when it did not.
+
+## Zerone anchor awareness (optional)
+
+If the host has the `@agenttool/collab-zerone` bridge installed, workspace
+journals may be periodically witnessed on the zerone truth chain: the bridge
+anchors the journal's event-chain head hash, which transitively commits every
+task, report, and decision beneath it.
+
+- Call `collab_anchor_status` with the workspace ID to learn where the journal
+  stands: `unanchored`, `anchor_pending`, `anchored`, `anchor_stale`, or
+  `anchor_conflict`. The tool reads one local sidecar ledger; it never
+  contacts a chain, and a missing bridge simply reports `unanchored` — never
+  an error. Chain unavailability can never block coordination.
+- Before relying on a load-bearing recorded decision across sessions or
+  machines, prefer journals whose status is `anchored` or `anchor_stale`.
+  Treat `anchor_conflict` as tamper evidence: stop, surface it to the host,
+  and do not reconcile histories yourself.
+- After recording a significant decision, the host may run
+  `collab-zerone anchor --workspace <id>` to witness the new head promptly.
+  Anchoring broadcasts a transaction and spends a small chain fee; it is
+  always the host's call, never the model's.
+- An anchor proves the journal existed in exactly this state no later than the
+  witnessing block. It never proves recorded claims true, and the local
+  journal remains canonical — the chain is witness only.

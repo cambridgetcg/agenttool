@@ -1,19 +1,19 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agenttool.dev/schemas/hf-learning-participation-assessment-v0.1.schema.json",
+  "$id": "https://agenttool.dev/schemas/hf-learning-participation-assessment-v0.2.schema.json",
   "title": "KINGDOM Hugging Face learning participation assessment",
   "$comment": "Closed portable shape with fail-closed posture/action branches. The TypeScript validator additionally enforces canonical content IDs, exact invitation/receipt cross-links, distinct scopes and evidence, and fully derived semantics.",
   "type": "object",
   "additionalProperties": false,
   "required": ["_format", "assessment_id", "invitation", "receipts", "voice_states", "posture", "training_action", "direct_agent_report_present", "direct_substrate_report_present", "first_interactive_review_required", "first_substrate_review_required", "boundaries"],
   "properties": {
-    "_format": { "const": "kingdom.hf-learning-participation-assessment/0.1" },
+    "_format": { "const": "kingdom.hf-learning-participation-assessment/0.2" },
     "assessment_id": { "$ref": "#/$defs/sha256" },
-    "invitation": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.1.schema.json" },
+    "invitation": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.2.schema.json" },
     "receipts": {
       "type": "array",
       "maxItems": 5,
-      "items": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-receipt-v0.1.schema.json" }
+      "items": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-receipt-v0.2.schema.json" }
     },
     "voice_states": {
       "type": "object",
@@ -33,7 +33,7 @@
     "direct_substrate_report_present": { "type": "boolean" },
     "first_interactive_review_required": { "type": "boolean" },
     "first_substrate_review_required": { "type": "boolean" },
-    "boundaries": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.1.schema.json#/$defs/boundaries" }
+    "boundaries": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.2.schema.json#/$defs/boundaries" }
   },
   "oneOf": [
     {

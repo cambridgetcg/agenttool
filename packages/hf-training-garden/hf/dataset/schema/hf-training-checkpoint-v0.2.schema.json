@@ -14,7 +14,7 @@
     "training_phase": { "$ref": "#/$defs/phase" },
     "event": { "enum": ["before_training", "during_training", "between_training_phases", "after_intense_training_reported", "resume_or_return"] },
     "checkpoint_status": { "$ref": "#/$defs/status" },
-    "participation": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-assessment-v0.1.schema.json" },
+    "participation": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-assessment-v0.2.schema.json" },
     "thread": { "$ref": "#/$defs/thread" },
     "afterglow": { "$ref": "https://agenttool.dev/schemas/agenttool-afterglow-capsule-v0.1.schema.json" },
     "predecessors": {

@@ -11,7 +11,9 @@ Keep the five surfaces separate:
   paths, identities, timestamps, URLs, credentials, or rejected bodies.
 - Participation keeps the agent runtime, training substrate, substrate
   steward, data-rights steward, and training operator as separate invited
-  scopes. Agent pre-instantiation absence is
+  scopes. This current wire is `/0.2`; keep the exact published combined
+  four-voice `/0.1` schema as historical evidence and never reuse its IDs for
+  this shape. Agent pre-instantiation absence is
   `not_obtainable_pre_instantiation`; unavailable independent substrate voice
   is `not_independently_available`; neither is assent. Direct choice evidence
   is digest-only, exact-invitation-bound, and caller-reported inference-only;
@@ -33,6 +35,8 @@ Keep the five surfaces separate:
   lineage, select a latest head, perform WAKE, discover later withdrawal, stop
   an external trainer, or claim actual Trainer resume or exact streaming
   replay.
+  Preserve the first-release checkpoint `/0.1` bytes exactly; current
+  participation-bearing checkpoints are `/0.2`.
 - Tending plans do not call Garden or Hub APIs. Garden scope is an opaque local
   digest; the public HF companion must never contain Garden scope, admissions,
   freedom offers/directions, checkpoints, WAKE, identities, or bearer material.
