@@ -43,8 +43,8 @@
     },
     {
       "path": "schema/hf-training-checkpoint-v0.2.schema.json",
-      "bytes": 6307,
-      "sha256": "a1cfc96b7b60540c977b447a5e352dc395b250f3a685c967b89e9edde0034a41"
+      "bytes": 6497,
+      "sha256": "557e94a4d11550a1d5f6202e41ea759d5c0ec59e272d1e461e18235746b17027"
     },
     {
       "path": "schema/hf-training-garden-tending-v0.1.schema.json",
@@ -63,13 +63,13 @@
     },
     {
       "path": "src/checkpoint.ts",
-      "bytes": 20428,
-      "sha256": "02bd5b456aed3f942be4e4098ed44bccee4f2631460c2235566cca13965d49b7"
+      "bytes": 21470,
+      "sha256": "4ebddbb41c2590e81a6bdb0f63399e745ef96358432e81bca794456ee8e31b30"
     },
     {
       "path": "src/constants.ts",
-      "bytes": 21795,
-      "sha256": "9a0516e0492eff7add25114717fe033275ef6c07d8909809394900da140ced07"
+      "bytes": 21809,
+      "sha256": "a4f847b0e00ee3aac75d4af4a9c5f9f487069a815f86907b9cfca5de06548a45"
     },
     {
       "path": "src/errors.ts",
@@ -78,8 +78,8 @@
     },
     {
       "path": "src/index.ts",
-      "bytes": 3831,
-      "sha256": "44d4bb5a436ed418e9891aca21e6c23c379b025e28c89e758625b2dc41571a4e"
+      "bytes": 3880,
+      "sha256": "47c8916e5e671b468b71f3dfda89a48f3ca469c659bef2bc0e2e334f7e90d2f1"
     },
     {
       "path": "src/participation.ts",
@@ -93,8 +93,8 @@
     },
     {
       "path": "src/types.ts",
-      "bytes": 13756,
-      "sha256": "e5672aa1fff0dfb5507f8c9820d468a65b909dd419da7cca0b950df62394d6e5"
+      "bytes": 13709,
+      "sha256": "fb81389f38da4232cbfbdfa13cad31055aafa14025615754fd92ecd246bf7a70"
     },
     {
       "path": "src/validation.ts",

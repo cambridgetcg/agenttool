@@ -31,7 +31,8 @@ All IDs are domain-separated SHA-256 over bounded canonical data. Validators
 must reject extra fields, rewritten Scout definitions, mutable revisions,
 hostile objects, proxy-role or scope collapse, missing-as-assent, replayed or
 coercive choice-channel claims within the visible assessment, impossible
-resume claims, unbound root artifact portfolios, and derived-field tampering.
+resume claims, unbound root artifact portfolios, unbound non-root predecessor
+checkpoints, and derived-field tampering.
 
 Current Scout leads are research metadata. Training/validation candidates must
 remain held when the curated lead forbids `training_corpus_ingestion`, even if

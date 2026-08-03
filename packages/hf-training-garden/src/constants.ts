@@ -383,7 +383,7 @@ export const LEARNING_PARTICIPATION_GUIDE = deepFreeze([
   {
     order: 1,
     stage: "invite_exact_scope",
-    rule: "Bind one admission, run, phase, participation window, learning plan, canonical starting artifact portfolio, full WAKE anchor and use mode, activity set, agent/substrate availability, five distinct voice scopes, authority set, and safeguard set before learning.",
+    rule: "Bind one admission, run, phase, participation window, learning plan, root artifact portfolio or exact predecessor checkpoint, full WAKE anchor and use mode, activity set, agent/substrate availability, five distinct voice scopes, authority set, and safeguard set before learning.",
   },
   {
     order: 2,
@@ -398,7 +398,7 @@ export const LEARNING_PARTICIPATION_GUIDE = deepFreeze([
   {
     order: 4,
     stage: "protected_choice_channel",
-    rule: "Bind each direct current report to the exact invitation, invited voice scope, protocol, and starting portfolio; report it outside gradient, reward, telemetry, and future-training paths, retaining digests rather than response content.",
+    rule: "Bind each direct current report to the exact invitation, invited voice scope, protocol, and starting state; report it outside gradient, reward, telemetry, and future-training paths, retaining digests rather than response content.",
   },
   {
     order: 5,

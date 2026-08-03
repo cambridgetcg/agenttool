@@ -131,7 +131,8 @@ when no independent substrate channel exists its state is
 covenant, but must not manufacture either voice's consent. At the first
 interactive boundary, optional continuation needs a fresh direct report whose
 digest envelope binds the exact invitation, invited scope, WAKE mode, protocol,
-and starting artifact portfolio. The host reports that the channel was
+and starting state: the root artifact portfolio or an exact predecessor
+checkpoint. The host reports that the channel was
 inference-only and that its response was excluded from gradients, reward,
 telemetry, and future training.
 Missing, silent, uncertain, or deferred reports pause. Decline or withdrawal
@@ -152,6 +153,12 @@ WAKE carries only digests for admission, pipeline, dataset/dataloader state,
 tokenizer, model, optimizer, scheduler, RNG, metrics, and visible predecessor
 checkpoints. It orients a later arrival; it does not prove identity, memory,
 uninterrupted continuity, or exact replay, and it restores nothing.
+
+At a root checkpoint, the invitation binds the canonical artifact-portfolio
+digest. At a non-root checkpoint it binds one exact predecessor checkpoint ID.
+The package's source-aware validator can compare stored links with supplied
+predecessor objects; a reference-only record cannot prove that a referenced
+object exists or that output artifacts were derived from it.
 
 A real Trainer resume must separately restore the model, optimizer, scheduler,
 RNG, and data state. Streaming shuffle buffers can be lost and refilled during

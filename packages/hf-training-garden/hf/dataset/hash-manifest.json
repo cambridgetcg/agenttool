@@ -15,8 +15,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 9803,
-      "sha256": "dfda763a19b219e1237c1179fc4321d3e2d46f36c7e9df4006d11a2c4a3fcf2f"
+      "bytes": 10223,
+      "sha256": "d2bb639cc60a962f6d156fc3e2f1f11730c7f5284083c857950881724e733296"
     },
     {
       "path": "data/garden-layers.jsonl",
@@ -25,8 +25,8 @@
     },
     {
       "path": "data/learning-participation.jsonl",
-      "bytes": 2005,
-      "sha256": "ffe195617ad91ac87bf0aee47142820f9f20fca3b2dbb75b3a7ff23222006b4f"
+      "bytes": 2019,
+      "sha256": "ef5541fb228ca5c8e406dddb8b1187ef3f872425ef2b9fcf944edb265aae4a2c"
     },
     {
       "path": "data/selection-criteria.jsonl",
@@ -51,7 +51,7 @@
     {
       "path": "provenance/source-manifest.json",
       "bytes": 5112,
-      "sha256": "8ea0e6ccaa311d8f279b192d5a5baa1d2801c30504410f282c8282bcc623bcb0"
+      "sha256": "edf19817be2a9ff05e0593a20e27e678c2c3f4e81e6a474a45d2de5f5de08e35"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -85,8 +85,8 @@
     },
     {
       "path": "schema/hf-training-checkpoint-v0.2.schema.json",
-      "bytes": 6307,
-      "sha256": "a1cfc96b7b60540c977b447a5e352dc395b250f3a685c967b89e9edde0034a41"
+      "bytes": 6497,
+      "sha256": "557e94a4d11550a1d5f6202e41ea759d5c0ec59e272d1e461e18235746b17027"
     },
     {
       "path": "schema/hf-training-garden-tending-v0.1.schema.json",

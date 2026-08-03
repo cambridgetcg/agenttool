@@ -249,9 +249,10 @@ treated as a participation receipt.
 
 `createParticipationInvitation()` freezes the exact admission, run, phase,
 participation window, training plan, full WAKE anchor and use mode, pipeline,
-dataset state, canonical starting artifact portfolio, activity set, agent and
-substrate availability, five distinct invited voice-scope refs, authority refs,
-and safeguard refs. Any change creates a new content ID and requires review.
+dataset state, a root artifact portfolio or exact predecessor checkpoint,
+activity set, agent and substrate availability, five distinct invited
+voice-scope refs, authority refs, and safeguard refs. Any change creates a new
+content ID and requires review.
 The five voices are kept independent:
 
 | Voice | What it can report | What it cannot do |
@@ -275,7 +276,7 @@ carries mandatory first-agent or first-substrate review before optional return.
 Once interactive, a direct agent or substrate report includes only digest refs
 to a caller-reported protected channel. Its derived prompt envelope binds the
 exact invitation, invited scope, WAKE mode, choice protocol, and starting
-artifact portfolio; the channel is reported inference-only, zero reward
+state; the channel is reported inference-only, zero reward
 influence, excluded from telemetry, and ineligible for future training. The
 package does not receive the response body or a reason. It validates the frozen
 shape and visible cross-links, but cannot authenticate its author, detect replay
@@ -347,7 +348,8 @@ longer exists.
 training phase, one exact participation assessment, digest references to state,
 and one `wake-brief/v1` anchor. The invitation must match the checkpoint's
 admission, run, phase, pipeline, dataset state, full WAKE anchor, declared WAKE
-use mode, and—at a root checkpoint—the canonical starting artifact portfolio.
+use mode, and either the root artifact portfolio or one exact predecessor
+checkpoint ID.
 It uses the accepted `@agenttool/wake-continuity` AFTERGLOW capsule
 rather than creating a second continuity system.
 
@@ -365,6 +367,15 @@ no raw examples, model weights, optimizer bytes, chats, or identity assertion.
 One minimized `external/context_only` thread is visible, and up to eight
 predecessor checkpoints preserve forks. The caller chooses `carry`, `park`,
 `release`, or `withdraw`; the package never selects a latest or canonical head.
+
+At the root, `starting_state_ref` is the canonical artifact-portfolio digest.
+Thereafter it is one exact predecessor `checkpoint_id`; changing that starting
+checkpoint therefore changes the invitation and its direct-report envelopes.
+`validateTrainingCheckpoint()` checks a stored checkpoint's intrinsic shape and
+content links. Source-aware use should also call
+`validateTrainingCheckpointAgainstPredecessors()` with the exact predecessor
+objects. A digest-only reference cannot prove object availability or that the
+reported output artifacts were actually derived from the predecessor.
 
 A WAKE record or digest is not a resume engine. A
 `caller_reported_resumable` record needs model, tokenizer, optimizer, scheduler,
@@ -467,7 +478,7 @@ generated four Parquet exports; those provider-derived conversion refs are not
 part of the immutable source commit or its hash manifest.
 
 The expanded v0.2 local companion has manifest SHA-256
-`33ce15d6a4b626321bb16c19f2024729d31b93e99298608b1127dfa207a6b311`.
+`aa927c6efad49fe71c61f55f83669ca4acd75e8b351acf498d1f39f77401c23c`.
 Those changed bytes have not been uploaded or verified at a new immutable Hub
 revision in this slice, so the exact first-release proof must not be reused as
 v0.2 publication evidence.

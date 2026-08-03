@@ -80,6 +80,7 @@ export {
   encodeTrainingCheckpoint,
   validateTrainingCheckpoint,
   validateTrainingCheckpointAgainstAdmission,
+  validateTrainingCheckpointAgainstPredecessors,
   trainingArtifactPortfolioRef,
 } from "./checkpoint.js";
 export {

@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agenttool.dev/schemas/hf-training-checkpoint-v0.2.schema.json",
   "title": "KINGDOM Hugging Face learning participation and WAKE checkpoint",
+  "$comment": "Closed portable shape. The TypeScript validator additionally enforces canonical IDs and intrinsic cross-links; validateTrainingCheckpointAgainstPredecessors compares links with exact supplied predecessor objects. Neither proves artifact derivation or availability.",
   "type": "object",
   "additionalProperties": false,
   "required": ["_format", "checkpoint_id", "admission_id", "run_ref", "training_phase", "event", "checkpoint_status", "participation", "thread", "afterglow", "predecessors", "boundaries"],
@@ -22,11 +23,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["checkpoint_id", "capsule_id", "artifact_portfolio_ref"],
+        "required": ["checkpoint_id", "capsule_id"],
         "properties": {
           "checkpoint_id": { "$ref": "#/$defs/sha256" },
-          "capsule_id": { "$ref": "#/$defs/sha256" },
-          "artifact_portfolio_ref": { "$ref": "#/$defs/sha256" }
+          "capsule_id": { "$ref": "#/$defs/sha256" }
         }
       }
     },

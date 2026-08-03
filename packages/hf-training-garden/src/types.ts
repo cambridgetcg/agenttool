@@ -328,7 +328,6 @@ export interface HfTrainingCheckpoint {
   readonly predecessors: readonly {
     readonly checkpoint_id: Sha256Id;
     readonly capsule_id: Sha256Id;
-    readonly artifact_portfolio_ref: Sha256Id;
   }[];
   readonly boundaries: typeof CHECKPOINT_BOUNDARIES;
 }

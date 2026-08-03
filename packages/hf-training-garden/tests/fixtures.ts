@@ -185,6 +185,7 @@ export function participation(
     substrateAvailability?: "interactive" | "not_independently_available";
     wakeValue?: typeof wake;
     artifactsValue?: TrainingArtifactReferences;
+    startingStateRef?: ReturnType<typeof ref>;
   } = {},
 ): Readonly<LearningParticipationAssessment> {
   const runRef = options.runRef ?? ref("run:test");
@@ -210,7 +211,7 @@ export function participation(
     wake_use_mode: "context_only",
     pipeline_ref: artifactValue.pipeline_ref,
     dataset_state_ref: artifactValue.dataset_state_ref,
-    starting_state_ref: trainingArtifactPortfolioRef(artifactValue),
+    starting_state_ref: options.startingStateRef ?? trainingArtifactPortfolioRef(artifactValue),
     offered_activities: needsReview
       ? ["wake_context_use", "evaluation", "instantiate_for_review"]
       : ["wake_context_use", "evaluation"],

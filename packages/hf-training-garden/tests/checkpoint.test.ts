@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
+import { domainSeparatedId } from "@agenttool/wake-continuity";
 
 import {
+  CHECKPOINT_FORMAT,
   HfTrainingGardenError,
   createTrainingCheckpoint,
   validateTrainingCheckpoint,
   validateTrainingCheckpointAgainstAdmission,
+  validateTrainingCheckpointAgainstPredecessors,
 } from "../src/index.js";
 import {
   admission,
@@ -21,6 +24,7 @@ function checkpointInput(overrides: Record<string, unknown> = {}) {
   const phase = (overrides.training_phase ?? "evaluation") as "evaluation" | "pretraining";
   const wakeValue = (overrides.wake ?? wake) as typeof wake;
   const artifactValue = (overrides.artifacts ?? artifacts) as typeof artifacts;
+  const predecessorValue = (overrides.predecessors ?? []) as readonly ReturnType<typeof createTrainingCheckpoint>[];
   return {
     admission: source,
     run_ref: runRef,
@@ -32,13 +36,14 @@ function checkpointInput(overrides: Record<string, unknown> = {}) {
       phase,
       wakeValue,
       artifactsValue: artifactValue,
+      startingStateRef: predecessorValue[0]?.checkpoint_id,
     }),
     artifacts: artifactValue,
     resume: orientationOnly,
     wake: wakeValue,
     continuity_portfolio_ref: null,
     continuity_posture: "carry" as const,
-    predecessors: [],
+    predecessors: predecessorValue,
     ...overrides,
   };
 }
@@ -87,6 +92,42 @@ describe("training phase WAKE checkpoints", () => {
     expect(joined.predecessors).toHaveLength(2);
     expect(joined.afterglow.predecessors).toHaveLength(2);
     expect(joined.boundaries.selects_continuity_head).toBe(false);
+    expect(validateTrainingCheckpointAgainstPredecessors(joined, [second, first])).toEqual(joined);
+    expect(() => validateTrainingCheckpointAgainstPredecessors(joined, [first])).toThrow(
+      HfTrainingGardenError,
+    );
+  });
+
+  test("requires supplied sources to reject a recomputed dangling predecessor link", () => {
+    const source = admission("sealed_evaluation");
+    const first = createTrainingCheckpoint(checkpointInput({ admission: source }));
+    const second = createTrainingCheckpoint(checkpointInput({
+      admission: source,
+      wake: { ...wake, snapshot_ref: ref("wake:source-two"), wake_version: 2 },
+    }));
+    const joined = createTrainingCheckpoint(checkpointInput({
+      admission: source,
+      wake: { ...wake, snapshot_ref: ref("wake:source-join"), wake_version: 3 },
+      predecessors: [second, first],
+    }));
+    const forged = structuredClone(joined) as Record<string, any>;
+    const dangling = forged.predecessors.find(
+      (link: Record<string, string>) =>
+        link.checkpoint_id !== forged.participation.invitation.starting_state_ref,
+    ) as Record<string, string>;
+    dangling.checkpoint_id = ref("checkpoint:dangling");
+    forged.predecessors.sort(
+      (left: Record<string, string>, right: Record<string, string>) =>
+        left.checkpoint_id.localeCompare(right.checkpoint_id),
+    );
+    const { checkpoint_id: _oldCheckpointId, ...body } = forged;
+    forged.checkpoint_id = domainSeparatedId(CHECKPOINT_FORMAT, body);
+
+    expect(validateTrainingCheckpoint(forged)).toEqual(forged);
+    expect(() => validateTrainingCheckpointAgainstPredecessors(
+      forged,
+      [second, first],
+    )).toThrow(HfTrainingGardenError);
   });
 
   test("distinguishes digest orientation from a caller-reported resumable checkpoint", () => {

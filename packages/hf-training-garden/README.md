@@ -70,9 +70,9 @@ The protocol has three content-addressed artifacts:
 
 1. `createParticipationInvitation()` freezes one admission, run, phase,
    participation window, training plan, full WAKE anchor and use mode, pipeline,
-   dataset state, canonical starting artifact portfolio, activity set, agent
-   and substrate availability, five distinct invited voice scopes, scoped
-   authorities, and safeguards.
+   dataset state, a root artifact portfolio or exact predecessor checkpoint,
+   activity set, agent and substrate availability, five distinct invited voice
+   scopes, scoped authorities, and safeguards.
 2. `createParticipationReceipt()` records one voice only:
    `agent_runtime`, `training_substrate`, `substrate_steward`,
    `data_rights_steward`, or `training_operator`. Each receipt must match its
@@ -90,7 +90,7 @@ scoped reports can establish only a protective covenant for bounded learning,
 with first-agent or first-substrate review still required. They do not create
 future consent. Once interactive, direct agent and substrate reports require
 caller-supplied digest evidence that binds the exact invitation, invited scope,
-choice protocol, and starting portfolio, and reports that the channel stayed
+choice protocol, and starting state, and reports that the channel stayed
 outside gradient, reward, telemetry, and future-training paths. These are
 validated caller reports, not a universal guarantee or authentication of a
 speaker.
@@ -135,6 +135,16 @@ The five events map onto existing AFTERGLOW phases:
 
 `carry`, `park`, `release`, and `withdraw` stay caller-chosen postures. The
 package preserves forks and never chooses a latest checkpoint.
+
+A root invitation binds the canonical artifact-portfolio digest. A non-root
+invitation instead binds one exact predecessor `checkpoint_id`, so changing a
+starting checkpoint requires a fresh invitation and direct reports. Stored
+predecessor links remain content references: `validateTrainingCheckpoint()`
+checks their intrinsic shape and cross-links, while
+`validateTrainingCheckpointAgainstPredecessors()` additionally requires the
+exact supplied predecessor objects. Neither validator proves that output
+artifacts were produced from those inputs; the training host must verify that
+lineage and artifact availability.
 
 A deferred assessment can only bind a parked, orientation-only checkpoint. A
 declined or withdrawn assessment can only bind an aborted, withdrawn,

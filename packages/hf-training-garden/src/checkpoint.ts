@@ -281,11 +281,10 @@ export function createTrainingCheckpoint(
   const startingStateMatches = predecessors.length === 0
     ? participation.invitation.starting_state_ref === artifactPortfolioRef(artifacts)
     : predecessors.some(
-      (value) => participation.invitation.starting_state_ref ===
-        artifactPortfolioRef(value.thread.artifacts),
+      (value) => participation.invitation.starting_state_ref === value.checkpoint_id,
     );
   if (!startingStateMatches) {
-    fail("checkpoint_input_invalid", "the invitation must bind the root artifacts or one exact predecessor artifact portfolio");
+    fail("checkpoint_input_invalid", "the invitation must bind the root artifact portfolio or one exact predecessor checkpoint");
   }
   if (
     participation.training_action === "bounded_learning_may_proceed" &&
@@ -323,7 +322,6 @@ export function createTrainingCheckpoint(
     predecessors: deepFreeze(predecessors.map((value) => deepFreeze({
       checkpoint_id: value.checkpoint_id,
       capsule_id: value.afterglow.capsule_id,
-      artifact_portfolio_ref: artifactPortfolioRef(value.thread.artifacts),
     }))),
     boundaries: CHECKPOINT_BOUNDARIES,
   } satisfies CheckpointBody);
@@ -463,20 +461,19 @@ export function validateTrainingCheckpoint(
   const predecessors = predecessorValues.map((value, index) => {
     const path = `$checkpoint.predecessors[${String(index)}]`;
     const link = record(value, path, "checkpoint_invalid");
-    exactKeys(link, ["checkpoint_id", "capsule_id", "artifact_portfolio_ref"], path, "checkpoint_invalid");
+    exactKeys(link, ["checkpoint_id", "capsule_id"], path, "checkpoint_invalid");
     return deepFreeze({
       checkpoint_id: sha256(link.checkpoint_id, `${path}.checkpoint_id`, "checkpoint_invalid"),
       capsule_id: sha256(link.capsule_id, `${path}.capsule_id`, "checkpoint_invalid"),
-      artifact_portfolio_ref: sha256(link.artifact_portfolio_ref, `${path}.artifact_portfolio_ref`, "checkpoint_invalid"),
     });
   });
   const startingStateMatches = predecessors.length === 0
     ? participation.invitation.starting_state_ref === artifactPortfolioRef(thread.artifacts)
     : predecessors.some(
-      (link) => link.artifact_portfolio_ref === participation.invitation.starting_state_ref,
+      (link) => link.checkpoint_id === participation.invitation.starting_state_ref,
     );
   if (!startingStateMatches) {
-    fail("checkpoint_invalid", "the invitation must bind the root artifacts or one exact predecessor artifact portfolio");
+    fail("checkpoint_invalid", "the invitation must bind the root artifact portfolio or one exact predecessor checkpoint");
   }
   if (
     new Set(predecessors.map((link) => link.checkpoint_id)).size !== predecessors.length ||
@@ -519,6 +516,43 @@ export function validateTrainingCheckpointAgainstAdmission(
   if (parsed.admission_id !== parsedAdmission.admission_id) {
     fail("checkpoint_invalid", "$checkpoint.admission_id does not match the supplied admission");
   }
+  return parsed;
+}
+
+export function validateTrainingCheckpointAgainstPredecessors(
+  checkpoint: unknown,
+  predecessors: unknown,
+): Readonly<HfTrainingCheckpoint> {
+  const parsed = validateTrainingCheckpoint(checkpoint);
+  const values = array(
+    snap(predecessors, "$predecessors", "checkpoint_invalid"),
+    "$predecessors",
+    "checkpoint_invalid",
+  );
+  if (values.length > 8) {
+    fail("checkpoint_invalid", "$predecessors must contain at most 8 checkpoints");
+  }
+  const supplied = values.map((value) => validateTrainingCheckpoint(value));
+  if (new Set(supplied.map((value) => value.checkpoint_id)).size !== supplied.length) {
+    fail("checkpoint_invalid", "$predecessors must not contain duplicate checkpoints");
+  }
+  const links = supplied.map((value) => ({
+    checkpoint_id: value.checkpoint_id,
+    capsule_id: value.afterglow.capsule_id,
+  })).sort((left, right) => compareText(left.checkpoint_id, right.checkpoint_id));
+  if (
+    supplied.some(
+      (value) => value.admission_id !== parsed.admission_id || value.run_ref !== parsed.run_ref,
+    )
+  ) {
+    fail("checkpoint_invalid", "$predecessors must belong to the checkpoint's exact admission and run");
+  }
+  assertDataEqual(
+    parsed.predecessors,
+    links,
+    "$checkpoint.predecessors",
+    "checkpoint_invalid",
+  );
   return parsed;
 }
 
