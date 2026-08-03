@@ -3,7 +3,7 @@
 This private package is the pure seam between exact HF Scout research bindings,
 digest-only AFTERGLOW continuity, and a non-executing Garden tending plan.
 
-Keep the four surfaces separate:
+Keep the five surfaces separate:
 
 - Admission can receive only frozen Scout metadata plus digest references and
   caller-reported assessment enums. Never add raw rows, prompts, trace bodies,
@@ -54,7 +54,7 @@ Keep the four surfaces separate:
   checkpoints, governance records, authority/preference receipts, WAKE,
   identities, or bearer material.
 
-Learning Participation is a fourth, separate governance surface. It uses one
+Learning Participation is a fifth, separate governance surface. It uses one
 exact invitation, up to one current receipt per role, and a derived assessment;
 all four receipts are required for alignment. Runtime and substrate
 participation reports, data-rights review, and operator authority do not
