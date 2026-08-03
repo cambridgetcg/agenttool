@@ -222,6 +222,27 @@ Generate the deterministic companion tree with:
 bun run build:hf
 ```
 
-The intended Hub target is `Yu-and-Ai/agenttool-training-garden`. A publication
-is not complete until the uploaded tree is read back at an exact 40-character
-Hub revision and its card/hash-manifest bytes are verified.
+The first public companion snapshot is
+[`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden)
+at immutable Hub revision
+[`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff).
+Exact-revision read-back at publication matched all twelve files listed by
+that snapshot's manifest. Its card SHA-256 is
+`14769391b1ac2cf15a500159b3f0b32a7bdbf5f353ea3417aedc0458ac77bdb8` and
+its then-local, byte-equal `hash-manifest.json` SHA-256 is
+`94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e`.
+No gate or paid compute was used.
+
+Those are historical release receipts, not hashes for the current generated
+tree. The current local companion adds consent-honest governance and Trainer
+adapter material and lists fourteen files. Its 10,453-byte card has SHA-256
+`e9a0bbac869696dd1aecc63ded639319e582197f1a76da962e81f05223006c7c`;
+its 2,465-byte `hash-manifest.json` has SHA-256
+`efe1d046ea8d8d6c3383300f79ba0c13aa52f52f736bea3c4e08f3e38ac34b11`.
+This newer bundle is local and unpublished: no immutable Hub upload or
+exact-revision read-back is claimed for it.
+
+The bundle's internal `intended_identifier_only` value remains a deliberately
+non-self-attesting build record. The exact Hub revision is later external
+evidence; embedding it into the bytes that create that same revision would be
+circular. This package still performs no Hub publication or verification.

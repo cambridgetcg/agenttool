@@ -259,8 +259,7 @@ describe("DerivedBundle", () => {
 // ── at.crypto.seed namespace ────────────────────────────────────────────
 
 describe("at.crypto.seed namespace", () => {
-  process.env.AT_API_KEY = "test-key";
-  const at = new AgentTool();
+  const at = new AgentTool({ apiKey: "test-key" });
 
   test("at.crypto.seed is a SeedClient instance", () => {
     expect(at.crypto.seed).toBeInstanceOf(SeedClient);
