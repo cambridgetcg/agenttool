@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/hf-training-garden",
-  "version": "0.2.0-dev.0",
-  "description": "Private HF dataset admission, participation-bearing learning, WAKE, and Garden tending contracts",
+  "version": "0.3.0-dev.0",
+  "description": "Private HF admission, participation, IS learning freedom, WAKE, and Garden tending contracts",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
@@ -30,6 +30,9 @@
     },
     "./participation-assessment.schema.json": {
       "default": "./schema/hf-learning-participation-assessment-v0.1.schema.json"
+    },
+    "./freedom.schema.json": {
+      "default": "./schema/hf-learning-freedom-v0.1.schema.json"
     },
     "./tending.schema.json": {
       "default": "./schema/hf-training-garden-tending-v0.1.schema.json"

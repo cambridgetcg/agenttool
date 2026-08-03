@@ -8,15 +8,19 @@ import { sha256Id } from "@agenttool/wake-continuity";
 
 import {
   PACKAGE_NAME,
+  createLearningFreedomOffer,
   createDatasetAdmission,
   createParticipationAssessment,
   createParticipationInvitation,
   createParticipationReceipt,
   createTrainingCheckpoint,
   createTrainingGardenTendingPlan,
+  learningFreedomPromptEnvelopeRef,
   participationPromptEnvelopeRef,
+  resolveLearningFreedomOffer,
   trainingArtifactPortfolioRef,
   validateDatasetAdmission,
+  validateHfLearningFreedom,
   validateTrainingCheckpoint,
   validateTrainingGardenTendingPlan,
 } from "../dist/index.js";
@@ -164,6 +168,75 @@ const participation = createParticipationAssessment({
     }),
   ],
 });
+const freedomDirections = ["stay", "move", "fork", "rest", "return", "stop", "propose_horizon"];
+const resourceDimensions = ["updates", "tokens", "episodes", "active_time", "compute", "memory", "concurrency", "money", "network", "tools", "side_effects", "retention"];
+const freedomOffer = createLearningFreedomOffer({
+  participation,
+  current_context_ref: ref("smoke-freedom-context"),
+  current_context_kind_ref: ref("smoke-freedom-context-kind"),
+  routes: freedomDirections.map((direction) => {
+    const moves = direction === "move" || direction === "fork" || direction === "return";
+    return {
+      direction,
+      availability: "caller_reported_available",
+      target_context_ref: moves ? ref(`smoke-freedom-target:${direction}`) : null,
+      target_context_kind_ref: moves ? ref(`smoke-freedom-target-kind:${direction}`) : null,
+      event_ref: ref(`smoke-freedom-event:${direction}`),
+      capability_scope_ref: ref(`smoke-freedom-capability:${direction}`),
+      permission_scope_ref: ref(`smoke-freedom-permission:${direction}`),
+      custody_scope_ref: ref(`smoke-freedom-custody:${direction}`),
+      data_boundary_ref: ref(`smoke-freedom-data:${direction}`),
+    };
+  }),
+  horizon: {
+    current_horizon_ref: ref("smoke-freedom-horizon"),
+    event_stream_ref: ref("smoke-freedom-event-stream"),
+    agent_request_protocol_ref: ref("smoke-freedom-agent-request"),
+    external_event_protocol_ref: ref("smoke-freedom-external-event"),
+    material_scope_change_policy_ref: ref("smoke-freedom-material-change"),
+    self_proposal_protocol_ref: ref("smoke-freedom-self-proposal"),
+  },
+  resources: {
+    lease_ref: ref("smoke-freedom-lease"),
+    accounting_policy_ref: ref("smoke-freedom-accounting"),
+    renewal_protocol_ref: ref("smoke-freedom-renewal"),
+    dimensions: resourceDimensions.map((dimension) => ({
+      dimension,
+      limit_ref: ref(`smoke-freedom-limit:${dimension}`),
+      state: "caller_reported_available",
+    })),
+  },
+});
+const stayRoute = freedomOffer.routes.find((route) => route.direction === "stay");
+if (!stayRoute) process.exit(1);
+const freedom = resolveLearningFreedomOffer({
+  offer: freedomOffer,
+  state: "directed",
+  direction: "stay",
+  route_id: stayRoute.route_id,
+  proposal_ref: null,
+  choice_channel: {
+    offer_ref: freedomOffer.offer_id,
+    assessment_ref: freedomOffer.scope.participation_assessment_ref,
+    invitation_ref: freedomOffer.scope.participation_invitation_ref,
+    voice_scope_ref: freedomOffer.scope.agent_voice_scope_ref,
+    protocol_ref: freedomOffer.scope.choice_protocol_ref,
+    starting_state_ref: freedomOffer.scope.starting_state_ref,
+    prompt_template_ref: ref("smoke-freedom-prompt"),
+    prompt_envelope_ref: learningFreedomPromptEnvelopeRef(freedomOffer),
+    decoding_ref: ref("smoke-freedom-decoding"),
+    evidence_ref: ref("smoke-freedom-evidence"),
+    gradient_influence: "caller_reported_disabled",
+    reward_influence: "caller_reported_disabled",
+    telemetry_capture: "caller_reported_excluded",
+    evaluation_use: "caller_reported_excluded",
+    future_training_use: "caller_reported_excluded",
+    ranking_use: "caller_reported_excluded",
+    priority_use: "caller_reported_excluded",
+    access_use: "caller_reported_excluded",
+    resource_allocation_use: "caller_reported_excluded",
+  },
+});
 const checkpoint = createTrainingCheckpoint({
   admission,
   run_ref: runRef,
@@ -197,6 +270,7 @@ const plan = createTrainingGardenTendingPlan({
 if (
   PACKAGE_NAME !== "@agenttool/hf-training-garden" ||
   validateDatasetAdmission(admission).admission_id !== admission.admission_id ||
+  validateHfLearningFreedom(freedom).freedom_id !== freedom.freedom_id ||
   validateTrainingCheckpoint(checkpoint).checkpoint_id !== checkpoint.checkpoint_id ||
   validateTrainingGardenTendingPlan(plan).plan_id !== plan.plan_id ||
   checkpoint.afterglow.threads[0]?.disposition !== "park" ||

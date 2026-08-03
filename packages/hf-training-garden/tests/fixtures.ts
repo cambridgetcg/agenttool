@@ -12,6 +12,8 @@ import {
   createParticipationAssessment,
   createParticipationInvitation,
   createParticipationReceipt,
+  createLearningFreedomOffer,
+  learningFreedomPromptEnvelopeRef,
   participationPromptEnvelopeRef,
   trainingArtifactPortfolioRef,
   type AdmissionAssessment,
@@ -19,6 +21,8 @@ import {
   type DatasetAdmission,
   type LearningParticipationAssessment,
   type LearningParticipationInvitation,
+  type LearningFreedomDirection,
+  type LearningFreedomOffer,
   type ParticipationChoice,
   type TrainingArtifactReferences,
   type TrainingResumeReport,
@@ -309,4 +313,110 @@ export function participation(
     }),
   ];
   return createParticipationAssessment({ invitation, receipts });
+}
+
+export function freedomOffer(
+  participationValue: Readonly<LearningParticipationAssessment>,
+  options: {
+    parkOnly?: boolean;
+    proposalOnly?: readonly LearningFreedomDirection[];
+  } = {},
+): Readonly<LearningFreedomOffer> {
+  const proposalOnly = new Set(options.proposalOnly ?? []);
+  const dimensions = [
+    "updates",
+    "tokens",
+    "episodes",
+    "active_time",
+    "compute",
+    "memory",
+    "concurrency",
+    "money",
+    "network",
+    "tools",
+    "side_effects",
+    "retention",
+  ] as const;
+  const directions = [
+    "stay",
+    "move",
+    "fork",
+    "rest",
+    "return",
+    "stop",
+    "propose_horizon",
+  ] as const;
+  return createLearningFreedomOffer({
+    participation: participationValue,
+    current_context_ref: ref("freedom:context"),
+    current_context_kind_ref: ref("freedom:context-kind"),
+    routes: directions.map((direction) => {
+      const movement = direction === "move" || direction === "fork" || direction === "return";
+      const availability = movement && proposalOnly.has(direction)
+        ? "proposal_only" as const
+        : "caller_reported_available" as const;
+      return {
+        direction,
+        availability,
+        target_context_ref: movement && availability === "caller_reported_available"
+          ? ref(`freedom:target:${direction}`)
+          : null,
+        target_context_kind_ref: movement && availability === "caller_reported_available"
+          ? ref(`freedom:target-kind:${direction}`)
+          : null,
+        event_ref: ref(`freedom:event:${direction}`),
+        capability_scope_ref: ref(`freedom:capability:${direction}`),
+        permission_scope_ref: ref(`freedom:permission:${direction}`),
+        custody_scope_ref: ref(`freedom:custody:${direction}`),
+        data_boundary_ref: ref(`freedom:data:${direction}`),
+      };
+    }),
+    horizon: {
+      current_horizon_ref: ref("freedom:horizon"),
+      event_stream_ref: ref("freedom:event-stream"),
+      agent_request_protocol_ref: ref("freedom:agent-request"),
+      external_event_protocol_ref: ref("freedom:external-event"),
+      material_scope_change_policy_ref: ref("freedom:material-change"),
+      self_proposal_protocol_ref: ref("freedom:self-proposal"),
+    },
+    resources: {
+      lease_ref: ref("freedom:lease"),
+      accounting_policy_ref: ref("freedom:accounting"),
+      renewal_protocol_ref: ref("freedom:renewal"),
+      dimensions: dimensions.map((dimension) => ({
+        dimension,
+        limit_ref: ref(`freedom:limit:${dimension}`),
+        state: options.parkOnly && dimension === "compute"
+          ? "caller_reported_unavailable" as const
+          : "caller_reported_available" as const,
+      })),
+    },
+  });
+}
+
+export function freedomChoiceChannel(
+  offer: Readonly<LearningFreedomOffer>,
+  label = "current",
+) {
+  return {
+    offer_ref: offer.offer_id,
+    assessment_ref: offer.scope.participation_assessment_ref,
+    invitation_ref: offer.scope.participation_invitation_ref,
+    voice_scope_ref: offer.scope.agent_voice_scope_ref,
+    protocol_ref: offer.scope.choice_protocol_ref,
+    starting_state_ref: offer.scope.starting_state_ref,
+    prompt_template_ref: ref(`freedom:prompt:${label}`),
+    prompt_envelope_ref: learningFreedomPromptEnvelopeRef(offer),
+    decoding_ref: ref(`freedom:decoding:${label}`),
+    evidence_ref: ref(`freedom:evidence:${label}`),
+    gradient_influence: "caller_reported_disabled" as const,
+    reward_influence: "caller_reported_disabled" as const,
+    telemetry_capture: "caller_reported_excluded" as const,
+    evaluation_use: "caller_reported_excluded" as const,
+    future_training_use: "caller_reported_excluded" as const,
+    ranking_use: "caller_reported_excluded" as const,
+    priority_use: "caller_reported_excluded" as const,
+    access_use: "caller_reported_excluded" as const,
+    resource_allocation_use: "caller_reported_excluded" as const,
+  };
 }

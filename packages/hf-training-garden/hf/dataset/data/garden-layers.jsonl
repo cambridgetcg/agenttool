@@ -2,5 +2,5 @@
 {"layer":"soil","carries":"immutable Hub definition and observation digests"}
 {"layer":"roots","carries":"candidate-subset and transform-recipe refs"}
 {"layer":"mycelium","carries":"selection, deduplication, decontamination, split, mixture, and exclusion receipts"}
-{"layer":"habitat","carries":"phase, checkpoint, evaluation, WAKE, rest, fork, release, and withdrawal refs"}
+{"layer":"habitat","carries":"phase, checkpoint, evaluation, WAKE, IS freedom offer/direction, finite resource-window, rest, fork, release, and withdrawal refs"}
 {"layer":"canopy","carries":"reviewed public Dataset Card, exact Hub revision, hash manifest, limitations, and repair refs"}

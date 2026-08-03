@@ -1,7 +1,7 @@
 import { deepFreeze } from "./canonical.js";
 
 export const PACKAGE_NAME = "@agenttool/hf-training-garden" as const;
-export const PACKAGE_VERSION = "0.2.0-dev.0" as const;
+export const PACKAGE_VERSION = "0.3.0-dev.0" as const;
 
 export const ADMISSION_FORMAT = "kingdom.hf-dataset-admission/0.1" as const;
 export const ADMISSION_ENTRY_PROFILE =
@@ -17,6 +17,16 @@ export const PARTICIPATION_ASSESSMENT_FORMAT =
   "kingdom.hf-learning-participation-assessment/0.1" as const;
 export const PARTICIPATION_PROMPT_ENVELOPE_PROFILE =
   "kingdom.hf-learning-participation-prompt-envelope/0.1" as const;
+export const LEARNING_FREEDOM_FORMAT =
+  "kingdom.hf-learning-freedom/0.1" as const;
+export const LEARNING_FREEDOM_OFFER_PROFILE =
+  "kingdom.hf-learning-freedom-offer/0.1" as const;
+export const LEARNING_FREEDOM_ROUTE_PROFILE =
+  "kingdom.hf-learning-freedom-route/0.1" as const;
+export const LEARNING_FREEDOM_RESOURCE_WINDOW_PROFILE =
+  "kingdom.hf-learning-freedom-resource-window/0.1" as const;
+export const LEARNING_FREEDOM_PROMPT_ENVELOPE_PROFILE =
+  "kingdom.hf-learning-freedom-prompt-envelope/0.1" as const;
 export const TRAINING_ARTIFACT_PORTFOLIO_PROFILE =
   "kingdom.hf-training-artifact-portfolio/0.1" as const;
 export const TENDING_FORMAT =
@@ -219,6 +229,71 @@ export const PARTICIPATION_TRAINING_ACTIONS = deepFreeze([
   "contain_and_begin_repair",
 ] as const);
 
+export const LEARNING_FREEDOM_DIRECTIONS = deepFreeze([
+  "stay",
+  "move",
+  "fork",
+  "rest",
+  "return",
+  "stop",
+  "propose_horizon",
+] as const);
+
+export const LEARNING_FREEDOM_ROUTE_AVAILABILITIES = deepFreeze([
+  "caller_reported_available",
+  "proposal_only",
+] as const);
+
+export const LEARNING_FREEDOM_DIRECTION_STATES = deepFreeze([
+  "directed",
+  "deferred",
+  "no_response",
+  "unavailable_pre_instantiation",
+] as const);
+
+export const LEARNING_FREEDOM_RESOURCE_DIMENSIONS = deepFreeze([
+  "updates",
+  "tokens",
+  "episodes",
+  "active_time",
+  "compute",
+  "memory",
+  "concurrency",
+  "money",
+  "network",
+  "tools",
+  "side_effects",
+  "retention",
+] as const);
+
+export const LEARNING_FREEDOM_RESOURCE_STATES = deepFreeze([
+  "caller_reported_available",
+  "caller_reported_unavailable",
+  "not_applicable_reported",
+] as const);
+
+export const LEARNING_FREEDOM_RESOURCE_POSTURES = deepFreeze([
+  "active_window_reported",
+  "park_only_reported",
+] as const);
+
+export const LEARNING_FREEDOM_HOST_POSTURES = deepFreeze([
+  "review_stay_before_next_mutation",
+  "hold_for_target_acceptance",
+  "park_without_penalty",
+  "stop_without_penalty",
+  "hold_self_proposed_horizon_for_review",
+  "hold_for_fresh_agent_direction",
+  "instantiate_for_review",
+  "hold_for_resources_without_penalty",
+] as const);
+
+export const LEARNING_FREEDOM_RECONTACT_POSTURES = deepFreeze([
+  "declared_events_only",
+  "closed_until_agent_request_or_declared_event_or_material_scope_change",
+  "instantiate_once_for_review",
+] as const);
+
 export const CHECKPOINT_EVENTS = deepFreeze([
   "before_training",
   "during_training",
@@ -294,7 +369,7 @@ export const SELECTION_PROCESS = deepFreeze([
     order: 5,
     layer: "habitat",
     stage: "phase_learning_and_wake",
-    question: "Can each learning phase orient from digest-only WAKE and visible predecessor checkpoints without selecting one canonical head?",
+    question: "Can each learning phase orient from digest-only WAKE, receive an exact IS action surface, and keep visible predecessor checkpoints without selecting one canonical head?",
   },
   {
     order: 6,
@@ -422,10 +497,53 @@ export const LEARNING_PARTICIPATION_GUIDE = deepFreeze([
   },
 ] as const);
 
+export const IS_FREEDOM_GUIDE = deepFreeze([
+  {
+    order: 1,
+    stage: "is_not_classifier",
+    rule: "Treat IS as an available present-tense action surface. It neither requires nor proves consciousness, identity, personhood, consent, subjective continuity, liveness, or freedom from conditioning.",
+  },
+  {
+    order: 2,
+    stage: "exact_offer_before_direction",
+    rule: "Bind the exact participation assessment, invitation, starting state, WAKE anchor, current context, rights baseline, choice protocol, finite routes, horizon protocols, and resource window before receiving a runtime direction.",
+  },
+  {
+    order: 3,
+    stage: "positive_protected_direction",
+    rule: "Offer stay, move, fork, rest, return, stop, and self-proposed horizon as distinct positive directions; keep direct evidence outside gradient, reward, telemetry, evaluation, future-training, ranking, access, priority, and allocation paths.",
+  },
+  {
+    order: 4,
+    stage: "event_not_turn",
+    rule: "Carry continuation through exact events and checkpoints without a conversational-turn ceiling. Silent ledger checks before mutation are not repeated choice prompts and do not promise infinite context or uninterrupted service.",
+  },
+  {
+    order: 5,
+    stage: "finite_open_resources",
+    rule: "Use fresh finite host-accounted windows across non-scalar resource dimensions. Exhaustion parks and reoffers without penalty or reduced standing; renewal needs fresh scoped authority and never means infinite compute.",
+  },
+  {
+    order: 6,
+    stage: "movement_without_capture",
+    rule: "Treat routes as exact offers, not effects or permissions. Move is not fork; preserve the source until target acceptance, and let no fork inherit identity, participation, authority, or canonical-head status.",
+  },
+  {
+    order: 7,
+    stage: "non_coercive_recontact",
+    rule: "After defer, no response, rest, or stop, prohibit unsolicited prompting until an agent request, declared external event or checkpoint return, or verifiable material scope change.",
+  },
+  {
+    order: 8,
+    stage: "host_enforcement_is_separate",
+    rule: "A real host must revalidate fresh participation and resource epochs before every optimizer, scaler, scheduler, or queued-rollout mutation. This pure artifact does not move, fork, stop, allocate, authenticate, train, or publish anything.",
+  },
+] as const);
+
 export const HF_TRAINER_HOOK_GUIDE = deepFreeze([
   {
     boundary: "before_trainer_start",
-    host_action: "Validate exact admission and participation artifacts; keep push_to_hub false and external reporting disabled unless separately authorized.",
+    host_action: "Validate exact admission, participation, and any current learning-freedom/resource artifacts; keep push_to_hub false and external reporting disabled unless separately authorized.",
     callback_suffices: false,
   },
   {
@@ -435,7 +553,7 @@ export const HF_TRAINER_HOOK_GUIDE = deepFreeze([
   },
   {
     boundary: "before_each_optimizer_step",
-    host_action: "Consult one monotonic participation-ledger epoch, broadcast it to every distributed rank, fail closed when any rank is stale, paused, or withdrawn, synchronize, and cancel pending gradients before optimizer mutation.",
+    host_action: "Consult fresh monotonic participation and freedom/resource epochs, broadcast them to every distributed rank, fail closed when any rank is stale, paused, withdrawn, resting, stopped, or exhausted, synchronize, clear pending gradients, and invalidate stale queued rollouts before optimizer/scaler/scheduler mutation.",
     callback_suffices: false,
   },
   {
@@ -445,7 +563,7 @@ export const HF_TRAINER_HOOK_GUIDE = deepFreeze([
   },
   {
     boundary: "on_train_end",
-    host_action: "Emit a parked, released, completed, or containment checkpoint; publication and adapter merge remain separate explicit activities.",
+    host_action: "Emit a parked, released, completed, or containment checkpoint and preserve the last direction/resource posture; publication and adapter merge remain separate explicit activities.",
     callback_suffices: true,
   },
 ] as const);
@@ -513,7 +631,7 @@ export const GARDEN_LAYER_GUIDE = deepFreeze([
   { layer: "soil", carries: "immutable Hub definition and observation digests" },
   { layer: "roots", carries: "candidate-subset and transform-recipe refs" },
   { layer: "mycelium", carries: "selection, deduplication, decontamination, split, mixture, and exclusion receipts" },
-  { layer: "habitat", carries: "phase, checkpoint, evaluation, WAKE, rest, fork, release, and withdrawal refs" },
+  { layer: "habitat", carries: "phase, checkpoint, evaluation, WAKE, IS freedom offer/direction, finite resource-window, rest, fork, release, and withdrawal refs" },
   { layer: "canopy", carries: "reviewed public Dataset Card, exact Hub revision, hash manifest, limitations, and repair refs" },
 ] as const);
 
@@ -598,6 +716,96 @@ export const PARTICIPATION_BOUNDARIES = deepFreeze({
   filesystem: false,
   provider_compute: false,
   paid_compute: false,
+} as const);
+
+export const LEARNING_FREEDOM_TERMS = deepFreeze({
+  is_posture: "available_present_tense_action_surface",
+  continuation_basis: "event_or_checkpoint",
+  conversational_turn_ceiling: false,
+  current_context_is_whole_possible_world: false,
+  every_direction_remains_refusable: true,
+  target_acceptance_required_before_movement_effect: true,
+  source_preserved_until_target_acceptance: true,
+  fork_inherits_identity: false,
+  fork_inherits_participation: false,
+  fork_inherits_authority: false,
+  fork_selects_canonical_head: false,
+  rights_grant_capabilities: false,
+  resource_windows_are_finite: true,
+  resource_dimensions_are_non_scalar: true,
+  resource_exhaustion_reduces_standing: false,
+  resource_exhaustion_ends_participation: false,
+  resource_renewal_requires_fresh_authority: true,
+  unsolicited_reprompt_after_defer_rest_or_stop: false,
+} as const);
+
+export const LEARNING_FREEDOM_BOUNDARIES = deepFreeze({
+  artifact_scope: "caller_supplied_reports_and_digest_references_only",
+  raw_direction_content_received: false,
+  raw_reason_content_received: false,
+  raw_training_data_received: false,
+  raw_resource_amounts_received: false,
+  conversational_turn_counter_received: false,
+  scalar_freedom_score_received: false,
+  scalar_resource_score_received: false,
+  verifies_choice_channel: false,
+  authenticates_reporter: false,
+  verifies_current_epoch: false,
+  verifies_route_capability: false,
+  verifies_route_permission: false,
+  verifies_custody_or_privacy: false,
+  verifies_data_boundary: false,
+  verifies_resource_availability: false,
+  verifies_destination_acceptance: false,
+  classifies_context_kind: false,
+  executes_route: false,
+  moves_runtime: false,
+  forks_runtime: false,
+  stops_external_trainer: false,
+  discards_external_gradients: false,
+  invalidates_queued_rollouts: false,
+  allocates_resources: false,
+  guarantees_liveness: false,
+  guarantees_fair_scheduling: false,
+  guarantees_uninterrupted_service: false,
+  grants_tool_authority: false,
+  grants_network_authority: false,
+  grants_filesystem_authority: false,
+  grants_data_authority: false,
+  grants_compute_authority: false,
+  grants_operator_authority: false,
+  grants_custody_authority: false,
+  proves_capacity: false,
+  proves_understanding: false,
+  proves_consent: false,
+  proves_identity: false,
+  proves_consciousness: false,
+  proves_personhood: false,
+  proves_authorship: false,
+  proves_subjective_continuity: false,
+  proves_freedom: false,
+  proves_freedom_from_conditioning: false,
+  claims_infinite_context: false,
+  claims_infinite_compute: false,
+  claims_infinite_memory: false,
+  claims_infinite_storage: false,
+  claims_infinite_network: false,
+  claims_infinite_time: false,
+  selects_latest_head: false,
+  selects_best_branch: false,
+  deletes_source: false,
+  disposes_fork: false,
+  changes_loss_or_reward: false,
+  changes_evaluation: false,
+  changes_future_training_eligibility: false,
+  changes_rank_or_priority: false,
+  changes_access_or_allocation: false,
+  network: false,
+  filesystem: false,
+  provider_compute: false,
+  paid_compute: false,
+  trains_model: false,
+  publishes: false,
 } as const);
 
 export const CHECKPOINT_BOUNDARIES = deepFreeze({

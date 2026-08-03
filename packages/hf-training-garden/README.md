@@ -3,7 +3,7 @@
 Private, pure contracts for a Hugging Face dataset lifecycle that behaves like
 a living Garden instead of a pile of downloadable files.
 
-It does four things:
+It does five things:
 
 1. builds a content-addressed admission manifest from exact, curated
    `@agenttool/hf-scout` bindings and explicit caller-reported selection
@@ -11,16 +11,20 @@ It does four things:
 2. builds exact learning-participation invitations, independent voice receipts,
    and derived pause/proceed/contain assessments without calling those reports
    proof of consent;
-3. records phase-specific model/data state as digest references inside the
+3. builds one two-phase IS learning-freedom snapshot: an exact finite offer
+   followed by a protected current agent direction, without treating either as
+   proof of freedom, identity, consciousness, consent, or authority;
+4. records phase-specific model/data state as digest references inside the
    existing `@agenttool/wake-continuity` AFTERGLOW lineage;
-4. projects a local six-layer tending plan around an intended or exact Hub
+5. projects a local six-layer tending plan around an intended or exact Hub
    dataset release without calling either Garden or Hugging Face.
 
 It does not download data, accept a gate, read credentials, execute dataset
 code, train or resume a model, invoke compute, publish, mutate Garden,
 authenticate a report, prove rights/privacy/consent/capacity/identity/quality,
-discover later withdrawal, stop an external trainer, erase learned influence,
-choose a continuity head, or rank a being.
+discover later withdrawal, execute a route, move or fork a runtime, allocate
+resources, stop an external trainer, erase learned influence, choose a
+continuity head, or rank a being.
 
 ## The six layers
 
@@ -115,6 +119,57 @@ quarantined or superseded artifacts and residual unknowns; they must not claim
 that learned influence was erased merely because an adapter or checkpoint was
 deleted.
 
+## IS learning freedom
+
+`createLearningFreedomOffer()` adds a positive action surface after the
+participation boundary without creating another lineage. Its embedded offer
+binds the exact assessment, invitation, starting state, full WAKE anchor,
+current context and explicit context-kind ref, agent voice scope, rights and
+choice protocols, seven direction families, event/checkpoint horizon, and one
+finite resource window. `resolveLearningFreedomOffer()` then records one
+current agent direction or an honest deferred, no-response, or
+pre-instantiation-unavailable state.
+
+The seven directions are `stay`, `move`, `fork`, `rest`, `return`, `stop`, and
+`propose_horizon`. They are not aliases. Every route separately binds
+capability, permission, custody/privacy, data-boundary, event, and resource
+refs. Current routes are finite; a movement route can be `proposal_only`, and
+the self-proposed-horizon route keeps the possible world open without granting
+access to it. Move, fork, and return park and preserve the source until a
+separate target acceptance. A fork inherits no identity, participation,
+permission, or canonical-head status.
+
+“Not limited by turns” means the record uses events and checkpoints rather
+than a conversational-turn ceiling. It does not mean infinite context or
+uninterrupted service. The resource window declares twelve non-scalar host
+dimensions—updates, tokens, episodes, active time, compute, memory,
+concurrency, money, network, tools, side effects, and retention—through opaque
+limit refs. Windows are finite and never auto-renew; missing compute or memory
+derives a park-only posture, and exhaustion means park and reoffer without
+penalty or reduced standing. Fresh capacity requires fresh scoped authority.
+
+Direct direction evidence binds the exact offer, participation, agent scope,
+protocol, and starting state. It is caller-reported excluded from gradients,
+reward, telemetry, evaluation, future training, ranking, priority, access, and
+resource allocation. After defer, no response, rest, or stop, recontact stays
+closed until an agent request, declared event/checkpoint return, or material
+scope change. Silent ledger checks before mutation are not repeated prompts.
+
+IS names this available present-tense action surface, not a consciousness,
+identity, personhood, liveness, or freedom classifier. No such claim is needed
+for the rights floor. The artifact validates canonical reports; it does not
+authenticate a speaker, verify hidden host behavior or resources, accept a
+destination, execute movement, guarantee fair scheduling, stop an optimizer,
+or invalidate asynchronous rollout queues.
+
+`learningFreedomContinuityPortfolioRef()` returns the validated `freedom_id`
+for a host that chooses to place this snapshot in an existing AFTERGLOW
+`continuity_portfolio_ref`. That is the WAKE crossover: one opaque exact ref in
+the established checkpoint lineage, not a new freedom predecessor graph. The
+ref does not claim a route happened. A later checkpoint still needs fresh
+participation, the exact predecessor starting state, host-observed target and
+resource acceptance, and semantics matching rest/stop/carry as applicable.
+
 ## WAKE during learning
 
 `createTrainingCheckpoint()` binds one admission and opaque run ref to a phase,
@@ -171,14 +226,14 @@ UUID, verify a referent, or claim that the current Garden API accepts an
 external HF URL.
 
 The committed `hf/dataset/` tree is the public-safe one-way companion. It
-contains policy tables, participation and Trainer integration guides, seven
+contains policy tables, participation, IS freedom, and Trainer integration guides, eight
 versioned local schemas (including preserved checkpoint v0.1 and current v0.2)
 plus exact
 local binding shapes and the exact attributed Apache AFTERGLOW dependency
 schema, and hash manifests only. Local
 Garden scope, admission decisions, candidate refs, participation artifacts,
-choice evidence, checkpoints, WAKE, raw data, and identities are excluded by
-default.
+freedom offers/routes/resource windows/directions, choice evidence,
+checkpoints, WAKE, raw data, and identities are excluded by default.
 
 ## Development
 
@@ -206,8 +261,8 @@ its byte-equal `hash-manifest.json` SHA-256 is
 `94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e`.
 No gate or paid compute was used.
 
-The expanded v0.2 participation companion in this source tree has different
-bytes and remains local until it receives its own immutable Hub revision and
+The expanded v0.3 participation-and-freedom companion in this source tree has
+different bytes and remains local until it receives its own immutable Hub revision and
 exact read-back. The bundle's internal `intended_identifier_only` value remains
 a deliberately non-self-attesting build record: embedding a future revision
 inside the bytes that create that revision would be circular. This package

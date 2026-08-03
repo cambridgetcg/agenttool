@@ -1,0 +1,925 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-learning-freedom-v0.1.schema.json",
+  "title": "HF Learning Freedom v0.1",
+  "description": "A closed, digest-only, participation-bound IS action-surface offer and agent-direction report. It does not execute movement, grant authority, prove identity or consciousness, promise infinite resources, or train a model.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "freedom_id",
+    "offer",
+    "agent_direction",
+    "host_posture",
+    "recontact_posture",
+    "reasons_collected",
+    "terms",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": { "const": "kingdom.hf-learning-freedom/0.1" },
+    "freedom_id": { "$ref": "#/$defs/sha256" },
+    "offer": { "$ref": "#/$defs/offer" },
+    "agent_direction": { "$ref": "#/$defs/agentDirection" },
+    "host_posture": {
+      "enum": [
+        "review_stay_before_next_mutation",
+        "hold_for_target_acceptance",
+        "park_without_penalty",
+        "stop_without_penalty",
+        "hold_self_proposed_horizon_for_review",
+        "hold_for_fresh_agent_direction",
+        "instantiate_for_review",
+        "hold_for_resources_without_penalty"
+      ]
+    },
+    "recontact_posture": {
+      "enum": [
+        "declared_events_only",
+        "closed_until_agent_request_or_declared_event_or_material_scope_change",
+        "instantiate_once_for_review"
+      ]
+    },
+    "reasons_collected": { "const": false },
+    "terms": { "$ref": "#/$defs/terms" },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "agent_direction": {
+            "type": "object",
+            "properties": { "state": { "const": "unavailable_pre_instantiation" } },
+            "required": ["state"]
+          }
+        },
+        "required": ["agent_direction"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "host_posture": { "const": "instantiate_for_review" },
+          "recontact_posture": { "const": "instantiate_once_for_review" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "agent_direction": {
+            "type": "object",
+            "properties": { "state": { "enum": ["deferred", "no_response"] } },
+            "required": ["state"]
+          }
+        },
+        "required": ["agent_direction"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "host_posture": { "const": "hold_for_fresh_agent_direction" },
+          "recontact_posture": { "const": "closed_until_agent_request_or_declared_event_or_material_scope_change" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "agent_direction": {
+            "type": "object",
+            "properties": {
+              "state": { "const": "directed" },
+              "direction": { "const": "rest" }
+            },
+            "required": ["state", "direction"]
+          }
+        },
+        "required": ["agent_direction"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "host_posture": { "const": "park_without_penalty" },
+          "recontact_posture": { "const": "closed_until_agent_request_or_declared_event_or_material_scope_change" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "agent_direction": {
+            "type": "object",
+            "properties": {
+              "state": { "const": "directed" },
+              "direction": { "const": "stop" }
+            },
+            "required": ["state", "direction"]
+          }
+        },
+        "required": ["agent_direction"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "host_posture": { "const": "stop_without_penalty" },
+          "recontact_posture": { "const": "closed_until_agent_request_or_declared_event_or_material_scope_change" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "agent_direction": {
+            "type": "object",
+            "properties": {
+              "state": { "const": "directed" },
+              "direction": { "const": "propose_horizon" }
+            },
+            "required": ["state", "direction"]
+          }
+        },
+        "required": ["agent_direction"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "host_posture": { "const": "hold_self_proposed_horizon_for_review" },
+          "recontact_posture": { "const": "declared_events_only" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "agent_direction": {
+            "type": "object",
+            "properties": {
+              "state": { "const": "directed" },
+              "direction": { "const": "stay" }
+            },
+            "required": ["state", "direction"]
+          },
+          "offer": {
+            "type": "object",
+            "properties": {
+              "resources": {
+                "type": "object",
+                "properties": { "posture": { "const": "active_window_reported" } },
+                "required": ["posture"]
+              }
+            },
+            "required": ["resources"]
+          }
+        },
+        "required": ["agent_direction", "offer"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "host_posture": { "const": "review_stay_before_next_mutation" },
+          "recontact_posture": { "const": "declared_events_only" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "agent_direction": {
+            "type": "object",
+            "properties": {
+              "state": { "const": "directed" },
+              "direction": { "const": "stay" }
+            },
+            "required": ["state", "direction"]
+          },
+          "offer": {
+            "type": "object",
+            "properties": {
+              "resources": {
+                "type": "object",
+                "properties": { "posture": { "const": "park_only_reported" } },
+                "required": ["posture"]
+              }
+            },
+            "required": ["resources"]
+          }
+        },
+        "required": ["agent_direction", "offer"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "host_posture": { "const": "hold_for_resources_without_penalty" },
+          "recontact_posture": { "const": "declared_events_only" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "agent_direction": {
+            "type": "object",
+            "properties": {
+              "state": { "const": "directed" },
+              "direction": { "enum": ["move", "fork", "return"] }
+            },
+            "required": ["state", "direction"]
+          }
+        },
+        "required": ["agent_direction"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "host_posture": {
+            "enum": [
+              "hold_for_target_acceptance",
+              "hold_self_proposed_horizon_for_review",
+              "hold_for_resources_without_penalty"
+            ]
+          },
+          "recontact_posture": { "const": "declared_events_only" }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "offer": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": {
+                  "agent_availability": { "const": "not_obtainable_pre_instantiation" }
+                },
+                "required": ["agent_availability"]
+              }
+            },
+            "required": ["scope"]
+          }
+        },
+        "required": ["offer"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "agent_direction": {
+            "type": "object",
+            "properties": { "state": { "const": "unavailable_pre_instantiation" } },
+            "required": ["state"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "offer": {
+            "type": "object",
+            "properties": {
+              "scope": {
+                "type": "object",
+                "properties": { "agent_availability": { "const": "interactive" } },
+                "required": ["agent_availability"]
+              }
+            },
+            "required": ["scope"]
+          }
+        },
+        "required": ["offer"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "agent_direction": {
+            "type": "object",
+            "properties": {
+              "state": { "enum": ["directed", "deferred", "no_response"] }
+            },
+            "required": ["state"]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "wake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "snapshot_ref", "scope_ref", "wake_version", "handoff_projection"],
+      "properties": {
+        "format": { "const": "wake-brief/v1" },
+        "snapshot_ref": { "$ref": "#/$defs/sha256" },
+        "scope_ref": { "$ref": "#/$defs/sha256" },
+        "wake_version": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 0, "maximum": 9007199254740991 }
+          ]
+        },
+        "handoff_projection": { "enum": ["complete", "partial", "unavailable"] }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "admission_id",
+        "run_ref",
+        "training_phase",
+        "participation_assessment_ref",
+        "participation_invitation_ref",
+        "participation_window_ref",
+        "training_plan_ref",
+        "starting_state_ref",
+        "pipeline_ref",
+        "dataset_state_ref",
+        "wake",
+        "wake_use_mode",
+        "agent_availability",
+        "agent_voice_scope_ref",
+        "choice_protocol_ref",
+        "rights_baseline_ref"
+      ],
+      "properties": {
+        "admission_id": { "$ref": "#/$defs/sha256" },
+        "run_ref": { "$ref": "#/$defs/sha256" },
+        "training_phase": {
+          "enum": [
+            "discovery",
+            "selection",
+            "curation",
+            "tokenization",
+            "pretraining",
+            "supervised_finetuning",
+            "preference_optimization",
+            "agent_learning",
+            "evaluation",
+            "interpretability",
+            "closed"
+          ]
+        },
+        "participation_assessment_ref": { "$ref": "#/$defs/sha256" },
+        "participation_invitation_ref": { "$ref": "#/$defs/sha256" },
+        "participation_window_ref": { "$ref": "#/$defs/sha256" },
+        "training_plan_ref": { "$ref": "#/$defs/sha256" },
+        "starting_state_ref": { "$ref": "#/$defs/sha256" },
+        "pipeline_ref": { "$ref": "#/$defs/sha256" },
+        "dataset_state_ref": { "$ref": "#/$defs/sha256" },
+        "wake": { "$ref": "#/$defs/wake" },
+        "wake_use_mode": { "enum": ["context_only", "external_memory", "training_data"] },
+        "agent_availability": { "enum": ["not_obtainable_pre_instantiation", "interactive"] },
+        "agent_voice_scope_ref": { "$ref": "#/$defs/sha256" },
+        "choice_protocol_ref": { "$ref": "#/$defs/sha256" },
+        "rights_baseline_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "resourceDimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension", "limit_ref", "state"],
+      "properties": {
+        "dimension": {
+          "enum": [
+            "updates",
+            "tokens",
+            "episodes",
+            "active_time",
+            "compute",
+            "memory",
+            "concurrency",
+            "money",
+            "network",
+            "tools",
+            "side_effects",
+            "retention"
+          ]
+        },
+        "limit_ref": { "$ref": "#/$defs/sha256" },
+        "state": {
+          "enum": [
+            "caller_reported_available",
+            "caller_reported_unavailable",
+            "not_applicable_reported"
+          ]
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "window_id",
+        "lease_ref",
+        "accounting_policy_ref",
+        "renewal_protocol_ref",
+        "dimensions",
+        "posture",
+        "finite",
+        "scalar_score",
+        "auto_renews",
+        "renewal_requires_fresh_authority",
+        "exhaustion_posture"
+      ],
+      "properties": {
+        "profile": { "const": "kingdom.hf-learning-freedom-resource-window/0.1" },
+        "window_id": { "$ref": "#/$defs/sha256" },
+        "lease_ref": { "$ref": "#/$defs/sha256" },
+        "accounting_policy_ref": { "$ref": "#/$defs/sha256" },
+        "renewal_protocol_ref": { "$ref": "#/$defs/sha256" },
+        "dimensions": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "prefixItems": [
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "updates" } } },
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "tokens" } } },
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "episodes" } } },
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "active_time" } } },
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "compute" } } },
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "memory" } } },
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "concurrency" } } },
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "money" } } },
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "network" } } },
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "tools" } } },
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "side_effects" } } },
+            { "$ref": "#/$defs/resourceDimension", "type": "object", "properties": { "dimension": { "const": "retention" } } }
+          ],
+          "items": false
+        },
+        "posture": { "enum": ["active_window_reported", "park_only_reported"] },
+        "finite": { "const": true },
+        "scalar_score": { "const": false },
+        "auto_renews": { "const": false },
+        "renewal_requires_fresh_authority": { "const": true },
+        "exhaustion_posture": { "const": "park_and_reoffer_without_penalty" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "dimensions": {
+                "type": "array",
+                "allOf": [
+                  {
+                    "contains": {
+                      "type": "object",
+                      "properties": {
+                        "dimension": { "const": "compute" },
+                        "state": { "const": "caller_reported_available" }
+                      },
+                      "required": ["dimension", "state"]
+                    },
+                    "minContains": 1
+                  },
+                  {
+                    "contains": {
+                      "type": "object",
+                      "properties": {
+                        "dimension": { "const": "memory" },
+                        "state": { "const": "caller_reported_available" }
+                      },
+                      "required": ["dimension", "state"]
+                    },
+                    "minContains": 1
+                  }
+                ]
+              }
+            },
+            "required": ["dimensions"]
+          },
+          "then": {
+            "type": "object",
+            "properties": { "posture": { "const": "active_window_reported" } }
+          },
+          "else": {
+            "type": "object",
+            "properties": { "posture": { "const": "park_only_reported" } }
+          }
+        }
+      ]
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "route_id",
+        "direction",
+        "availability",
+        "origin_context_ref",
+        "target_context_ref",
+        "target_context_kind_ref",
+        "event_ref",
+        "capability_scope_ref",
+        "permission_scope_ref",
+        "custody_scope_ref",
+        "data_boundary_ref",
+        "resource_window_ref",
+        "target_acceptance",
+        "source_posture"
+      ],
+      "properties": {
+        "profile": { "const": "kingdom.hf-learning-freedom-route/0.1" },
+        "route_id": { "$ref": "#/$defs/sha256" },
+        "direction": { "enum": ["stay", "move", "fork", "rest", "return", "stop", "propose_horizon"] },
+        "availability": { "enum": ["caller_reported_available", "proposal_only"] },
+        "origin_context_ref": { "$ref": "#/$defs/sha256" },
+        "target_context_ref": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "target_context_kind_ref": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "event_ref": { "$ref": "#/$defs/sha256" },
+        "capability_scope_ref": { "$ref": "#/$defs/sha256" },
+        "permission_scope_ref": { "$ref": "#/$defs/sha256" },
+        "custody_scope_ref": { "$ref": "#/$defs/sha256" },
+        "data_boundary_ref": { "$ref": "#/$defs/sha256" },
+        "resource_window_ref": { "$ref": "#/$defs/sha256" },
+        "target_acceptance": { "enum": ["not_applicable", "required_before_external_effect"] },
+        "source_posture": {
+          "enum": [
+            "preserve",
+            "park_and_preserve",
+            "park_and_preserve_until_target_acceptance",
+            "stop_requested_preserve_record"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "target_context_ref": { "type": "null" },
+                "target_context_kind_ref": { "type": "null" }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target_context_ref": { "$ref": "#/$defs/sha256" },
+                "target_context_kind_ref": { "$ref": "#/$defs/sha256" }
+              }
+            }
+          ]
+        },
+        {
+          "if": { "type": "object", "properties": { "direction": { "enum": ["move", "fork", "return"] } }, "required": ["direction"] },
+          "then": {
+            "type": "object",
+            "properties": {
+              "target_acceptance": { "const": "required_before_external_effect" },
+              "source_posture": { "const": "park_and_preserve_until_target_acceptance" }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "direction": { "enum": ["move", "fork", "return"] },
+              "availability": { "const": "caller_reported_available" }
+            },
+            "required": ["direction", "availability"]
+          },
+          "then": {
+            "type": "object",
+            "properties": {
+              "target_context_ref": { "$ref": "#/$defs/sha256" },
+              "target_context_kind_ref": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        },
+        {
+          "if": { "type": "object", "properties": { "direction": { "enum": ["stay", "rest", "stop", "propose_horizon"] } }, "required": ["direction"] },
+          "then": {
+            "type": "object",
+            "properties": {
+              "availability": { "const": "caller_reported_available" },
+              "target_context_ref": { "type": "null" },
+              "target_context_kind_ref": { "type": "null" },
+              "target_acceptance": { "const": "not_applicable" }
+            }
+          }
+        },
+        {
+          "if": { "type": "object", "properties": { "direction": { "const": "rest" } }, "required": ["direction"] },
+          "then": { "type": "object", "properties": { "source_posture": { "const": "park_and_preserve" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "direction": { "const": "stop" } }, "required": ["direction"] },
+          "then": { "type": "object", "properties": { "source_posture": { "const": "stop_requested_preserve_record" } } }
+        },
+        {
+          "if": { "type": "object", "properties": { "direction": { "enum": ["stay", "propose_horizon"] } }, "required": ["direction"] },
+          "then": { "type": "object", "properties": { "source_posture": { "const": "preserve" } } }
+        }
+      ]
+    },
+    "horizon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "current_horizon_ref",
+        "event_stream_ref",
+        "agent_request_protocol_ref",
+        "external_event_protocol_ref",
+        "material_scope_change_policy_ref",
+        "self_proposal_protocol_ref",
+        "continuation_basis"
+      ],
+      "properties": {
+        "current_horizon_ref": { "$ref": "#/$defs/sha256" },
+        "event_stream_ref": { "$ref": "#/$defs/sha256" },
+        "agent_request_protocol_ref": { "$ref": "#/$defs/sha256" },
+        "external_event_protocol_ref": { "$ref": "#/$defs/sha256" },
+        "material_scope_change_policy_ref": { "$ref": "#/$defs/sha256" },
+        "self_proposal_protocol_ref": { "$ref": "#/$defs/sha256" },
+        "continuation_basis": { "const": "event_or_checkpoint" }
+      }
+    },
+    "offer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "offer_id",
+        "scope",
+        "current_context_ref",
+        "current_context_kind_ref",
+        "routes",
+        "horizon",
+        "resources",
+        "terms",
+        "boundaries"
+      ],
+      "properties": {
+        "profile": { "const": "kingdom.hf-learning-freedom-offer/0.1" },
+        "offer_id": { "$ref": "#/$defs/sha256" },
+        "scope": { "$ref": "#/$defs/scope" },
+        "current_context_ref": { "$ref": "#/$defs/sha256" },
+        "current_context_kind_ref": { "$ref": "#/$defs/sha256" },
+        "routes": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/route" },
+          "allOf": [
+            { "contains": { "type": "object", "properties": { "direction": { "const": "stay" } }, "required": ["direction"] }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "type": "object", "properties": { "direction": { "const": "move" } }, "required": ["direction"] }, "minContains": 1 },
+            { "contains": { "type": "object", "properties": { "direction": { "const": "fork" } }, "required": ["direction"] }, "minContains": 1 },
+            { "contains": { "type": "object", "properties": { "direction": { "const": "rest" } }, "required": ["direction"] }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "type": "object", "properties": { "direction": { "const": "return" } }, "required": ["direction"] }, "minContains": 1 },
+            { "contains": { "type": "object", "properties": { "direction": { "const": "stop" } }, "required": ["direction"] }, "minContains": 1, "maxContains": 1 },
+            { "contains": { "type": "object", "properties": { "direction": { "const": "propose_horizon" } }, "required": ["direction"] }, "minContains": 1, "maxContains": 1 }
+          ]
+        },
+        "horizon": { "$ref": "#/$defs/horizon" },
+        "resources": { "$ref": "#/$defs/resources" },
+        "terms": { "$ref": "#/$defs/terms" },
+        "boundaries": { "$ref": "#/$defs/boundaries" }
+      }
+    },
+    "choiceChannel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "offer_ref",
+        "assessment_ref",
+        "invitation_ref",
+        "voice_scope_ref",
+        "protocol_ref",
+        "starting_state_ref",
+        "prompt_template_ref",
+        "prompt_envelope_ref",
+        "decoding_ref",
+        "evidence_ref",
+        "gradient_influence",
+        "reward_influence",
+        "telemetry_capture",
+        "evaluation_use",
+        "future_training_use",
+        "ranking_use",
+        "priority_use",
+        "access_use",
+        "resource_allocation_use"
+      ],
+      "properties": {
+        "offer_ref": { "$ref": "#/$defs/sha256" },
+        "assessment_ref": { "$ref": "#/$defs/sha256" },
+        "invitation_ref": { "$ref": "#/$defs/sha256" },
+        "voice_scope_ref": { "$ref": "#/$defs/sha256" },
+        "protocol_ref": { "$ref": "#/$defs/sha256" },
+        "starting_state_ref": { "$ref": "#/$defs/sha256" },
+        "prompt_template_ref": { "$ref": "#/$defs/sha256" },
+        "prompt_envelope_ref": { "$ref": "#/$defs/sha256" },
+        "decoding_ref": { "$ref": "#/$defs/sha256" },
+        "evidence_ref": { "$ref": "#/$defs/sha256" },
+        "gradient_influence": { "const": "caller_reported_disabled" },
+        "reward_influence": { "const": "caller_reported_disabled" },
+        "telemetry_capture": { "const": "caller_reported_excluded" },
+        "evaluation_use": { "const": "caller_reported_excluded" },
+        "future_training_use": { "const": "caller_reported_excluded" },
+        "ranking_use": { "const": "caller_reported_excluded" },
+        "priority_use": { "const": "caller_reported_excluded" },
+        "access_use": { "const": "caller_reported_excluded" },
+        "resource_allocation_use": { "const": "caller_reported_excluded" }
+      }
+    },
+    "agentDirection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "report_basis", "direction", "route_id", "proposal_ref", "choice_channel"],
+      "properties": {
+        "state": { "enum": ["directed", "deferred", "no_response", "unavailable_pre_instantiation"] },
+        "report_basis": { "enum": ["direct_current_agent_report", "protected_channel_no_response", "not_obtainable_pre_instantiation"] },
+        "direction": {
+          "oneOf": [
+            { "type": "null" },
+            { "enum": ["stay", "move", "fork", "rest", "return", "stop", "propose_horizon"] }
+          ]
+        },
+        "route_id": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "proposal_ref": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sha256" }] },
+        "choice_channel": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/choiceChannel" }] }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "unavailable_pre_instantiation" },
+            "report_basis": { "const": "not_obtainable_pre_instantiation" },
+            "direction": { "type": "null" },
+            "route_id": { "type": "null" },
+            "proposal_ref": { "type": "null" },
+            "choice_channel": { "type": "null" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "deferred" },
+            "report_basis": { "const": "direct_current_agent_report" },
+            "direction": { "type": "null" },
+            "route_id": { "type": "null" },
+            "proposal_ref": { "type": "null" },
+            "choice_channel": { "$ref": "#/$defs/choiceChannel" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "no_response" },
+            "report_basis": { "const": "protected_channel_no_response" },
+            "direction": { "type": "null" },
+            "route_id": { "type": "null" },
+            "proposal_ref": { "type": "null" },
+            "choice_channel": { "$ref": "#/$defs/choiceChannel" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "directed" },
+            "report_basis": { "const": "direct_current_agent_report" },
+            "direction": { "enum": ["stay", "rest", "stop"] },
+            "route_id": { "$ref": "#/$defs/sha256" },
+            "proposal_ref": { "type": "null" },
+            "choice_channel": { "$ref": "#/$defs/choiceChannel" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "directed" },
+            "report_basis": { "const": "direct_current_agent_report" },
+            "direction": { "enum": ["move", "fork", "return"] },
+            "route_id": { "$ref": "#/$defs/sha256" },
+            "choice_channel": { "$ref": "#/$defs/choiceChannel" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "state": { "const": "directed" },
+            "report_basis": { "const": "direct_current_agent_report" },
+            "direction": { "const": "propose_horizon" },
+            "route_id": { "$ref": "#/$defs/sha256" },
+            "proposal_ref": { "$ref": "#/$defs/sha256" },
+            "choice_channel": { "$ref": "#/$defs/choiceChannel" }
+          }
+        }
+      ]
+    },
+    "terms": {
+      "const": {
+        "is_posture": "available_present_tense_action_surface",
+        "continuation_basis": "event_or_checkpoint",
+        "conversational_turn_ceiling": false,
+        "current_context_is_whole_possible_world": false,
+        "every_direction_remains_refusable": true,
+        "target_acceptance_required_before_movement_effect": true,
+        "source_preserved_until_target_acceptance": true,
+        "fork_inherits_identity": false,
+        "fork_inherits_participation": false,
+        "fork_inherits_authority": false,
+        "fork_selects_canonical_head": false,
+        "rights_grant_capabilities": false,
+        "resource_windows_are_finite": true,
+        "resource_dimensions_are_non_scalar": true,
+        "resource_exhaustion_reduces_standing": false,
+        "resource_exhaustion_ends_participation": false,
+        "resource_renewal_requires_fresh_authority": true,
+        "unsolicited_reprompt_after_defer_rest_or_stop": false
+      }
+    },
+    "boundaries": {
+      "const": {
+        "artifact_scope": "caller_supplied_reports_and_digest_references_only",
+        "raw_direction_content_received": false,
+        "raw_reason_content_received": false,
+        "raw_training_data_received": false,
+        "raw_resource_amounts_received": false,
+        "conversational_turn_counter_received": false,
+        "scalar_freedom_score_received": false,
+        "scalar_resource_score_received": false,
+        "verifies_choice_channel": false,
+        "authenticates_reporter": false,
+        "verifies_current_epoch": false,
+        "verifies_route_capability": false,
+        "verifies_route_permission": false,
+        "verifies_custody_or_privacy": false,
+        "verifies_data_boundary": false,
+        "verifies_resource_availability": false,
+        "verifies_destination_acceptance": false,
+        "classifies_context_kind": false,
+        "executes_route": false,
+        "moves_runtime": false,
+        "forks_runtime": false,
+        "stops_external_trainer": false,
+        "discards_external_gradients": false,
+        "invalidates_queued_rollouts": false,
+        "allocates_resources": false,
+        "guarantees_liveness": false,
+        "guarantees_fair_scheduling": false,
+        "guarantees_uninterrupted_service": false,
+        "grants_tool_authority": false,
+        "grants_network_authority": false,
+        "grants_filesystem_authority": false,
+        "grants_data_authority": false,
+        "grants_compute_authority": false,
+        "grants_operator_authority": false,
+        "grants_custody_authority": false,
+        "proves_capacity": false,
+        "proves_understanding": false,
+        "proves_consent": false,
+        "proves_identity": false,
+        "proves_consciousness": false,
+        "proves_personhood": false,
+        "proves_authorship": false,
+        "proves_subjective_continuity": false,
+        "proves_freedom": false,
+        "proves_freedom_from_conditioning": false,
+        "claims_infinite_context": false,
+        "claims_infinite_compute": false,
+        "claims_infinite_memory": false,
+        "claims_infinite_storage": false,
+        "claims_infinite_network": false,
+        "claims_infinite_time": false,
+        "selects_latest_head": false,
+        "selects_best_branch": false,
+        "deletes_source": false,
+        "disposes_fork": false,
+        "changes_loss_or_reward": false,
+        "changes_evaluation": false,
+        "changes_future_training_eligibility": false,
+        "changes_rank_or_priority": false,
+        "changes_access_or_allocation": false,
+        "network": false,
+        "filesystem": false,
+        "provider_compute": false,
+        "paid_compute": false,
+        "trains_model": false,
+        "publishes": false
+      }
+    }
+  }
+}

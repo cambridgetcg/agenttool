@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import Ajv2020 from "ajv/dist/2020.js";
@@ -7,10 +8,13 @@ import addFormats from "ajv-formats";
 import {
   createTrainingCheckpoint,
   createTrainingGardenTendingPlan,
+  resolveLearningFreedomOffer,
 } from "../src/index.js";
 import {
   admission,
   artifacts,
+  freedomChoiceChannel,
+  freedomOffer,
   orientationOnly,
   participation,
   ref,
@@ -70,18 +74,30 @@ describe("closed portable schemas", () => {
         hash_manifest_sha256: null,
       },
     });
+    const offer = freedomOffer(checkpoint.participation);
+    const stay = offer.routes.find((route) => route.direction === "stay")!;
+    const freedom = resolveLearningFreedomOffer({
+      offer,
+      state: "directed",
+      direction: "stay",
+      route_id: stay.route_id,
+      proposal_ref: null,
+      choice_channel: freedomChoiceChannel(offer),
+    });
     const validateAdmission = validator(packageSchemaRoot, "hf-dataset-admission-v0.1.schema.json");
     const validateInvitation = validator(packageSchemaRoot, "hf-learning-participation-invitation-v0.1.schema.json");
     const validateReceipt = validator(packageSchemaRoot, "hf-learning-participation-receipt-v0.1.schema.json");
     const validateAssessment = validator(packageSchemaRoot, "hf-learning-participation-assessment-v0.1.schema.json");
     const validateCheckpoint = validator(packageSchemaRoot, "hf-training-checkpoint-v0.2.schema.json");
     const validateTending = validator(packageSchemaRoot, "hf-training-garden-tending-v0.1.schema.json");
+    const validateFreedom = validator(packageSchemaRoot, "hf-learning-freedom-v0.1.schema.json");
     expect(validateAdmission(source), JSON.stringify(validateAdmission.errors)).toBe(true);
     expect(validateInvitation(checkpoint.participation.invitation), JSON.stringify(validateInvitation.errors)).toBe(true);
     expect(validateReceipt(checkpoint.participation.receipts[0]), JSON.stringify(validateReceipt.errors)).toBe(true);
     expect(validateAssessment(checkpoint.participation), JSON.stringify(validateAssessment.errors)).toBe(true);
     expect(validateCheckpoint(checkpoint), JSON.stringify(validateCheckpoint.errors)).toBe(true);
     expect(validateTending(plan), JSON.stringify(validateTending.errors)).toBe(true);
+    expect(validateFreedom(freedom), JSON.stringify(validateFreedom.errors)).toBe(true);
 
     const forgedProceed = structuredClone(checkpoint.participation) as any;
     forgedProceed.receipts = [];
@@ -97,12 +113,51 @@ describe("closed portable schemas", () => {
     const validateHubAdmission = validator(hubSchemaRoot, "hf-dataset-admission-v0.1.schema.json");
     const validateHubCheckpoint = validator(hubSchemaRoot, "hf-training-checkpoint-v0.2.schema.json");
     const validateHubTending = validator(hubSchemaRoot, "hf-training-garden-tending-v0.1.schema.json");
+    const validateHubFreedom = validator(hubSchemaRoot, "hf-learning-freedom-v0.1.schema.json");
     expect(validateHubAdmission(source), JSON.stringify(validateHubAdmission.errors)).toBe(true);
     expect(validateHubCheckpoint(checkpoint), JSON.stringify(validateHubCheckpoint.errors)).toBe(true);
     expect(validateHubTending(plan), JSON.stringify(validateHubTending.errors)).toBe(true);
+    expect(validateHubFreedom(freedom), JSON.stringify(validateHubFreedom.errors)).toBe(true);
 
     const extra = { ...plan, raw_rows: [] };
     expect(validateTending(extra)).toBe(false);
+    const turnLimited = { ...freedom, max_turns: 100 };
+    expect(validateFreedom(turnLimited)).toBe(false);
+    const rewardCaptured = structuredClone(freedom) as any;
+    rewardCaptured.agent_direction.choice_channel.reward_influence = "enabled";
+    expect(validateFreedom(rewardCaptured)).toBe(false);
+    const stayWithProposal = structuredClone(freedom) as any;
+    stayWithProposal.agent_direction.proposal_ref = ref("schema:smuggled-stay-proposal");
+    expect(validateFreedom(stayWithProposal)).toBe(false);
+    const wrongStayPosture = structuredClone(freedom) as any;
+    wrongStayPosture.host_posture = "hold_for_target_acceptance";
+    expect(validateFreedom(wrongStayPosture)).toBe(false);
+    const falseActiveResources = structuredClone(freedom) as any;
+    falseActiveResources.offer.resources.dimensions[4].state = "caller_reported_unavailable";
+    expect(validateFreedom(falseActiveResources)).toBe(false);
+    const interactiveAsUnavailable = structuredClone(freedom) as any;
+    interactiveAsUnavailable.agent_direction = {
+      state: "unavailable_pre_instantiation",
+      report_basis: "not_obtainable_pre_instantiation",
+      direction: null,
+      route_id: null,
+      proposal_ref: null,
+      choice_channel: null,
+    };
+    interactiveAsUnavailable.host_posture = "instantiate_for_review";
+    interactiveAsUnavailable.recontact_posture = "instantiate_once_for_review";
+    expect(validateFreedom(interactiveAsUnavailable)).toBe(false);
+    const unavailableAsDirected = structuredClone(freedom) as any;
+    unavailableAsDirected.offer.scope.agent_availability = "not_obtainable_pre_instantiation";
+    expect(validateFreedom(unavailableAsDirected)).toBe(false);
+    const duplicateStay = structuredClone(freedom) as any;
+    duplicateStay.offer.routes.push({
+      ...structuredClone(stay),
+      route_id: ref("schema:duplicate-stay-route"),
+    });
+    expect(validateFreedom(duplicateStay)).toBe(false);
+    expect(() => validator(packageSchemaRoot, "hf-learning-freedom-v0.1.schema.json"))
+      .not.toThrow();
   });
 
   test("keeps admission standalone and attributes its byte-exact Apache dependency", () => {
@@ -134,5 +189,15 @@ describe("closed portable schemas", () => {
     });
     expect(() => validator(packageSchemaRoot, "hf-training-checkpoint-v0.1.schema.json"))
       .not.toThrow();
+    const packageV02 = readFileSync(new URL(
+      "hf-training-checkpoint-v0.2.schema.json",
+      packageSchemaRoot,
+    ));
+    expect(createHash("sha256").update(packageV01).digest("hex")).toBe(
+      "0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a",
+    );
+    expect(createHash("sha256").update(packageV02).digest("hex")).toBe(
+      "557e94a4d11550a1d5f6202e41ea759d5c0ec59e272d1e461e18235746b17027",
+    );
   });
 });

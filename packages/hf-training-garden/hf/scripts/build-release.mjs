@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   GARDEN_LAYER_GUIDE,
   HF_TRAINER_HOOK_GUIDE,
+  IS_FREEDOM_GUIDE,
   LEARNING_PARTICIPATION_GUIDE,
   PACKAGE_NAME,
   PACKAGE_VERSION,
@@ -58,6 +59,7 @@ write(`${datasetRoot}/data/selection-process.jsonl`, jsonl(SELECTION_PROCESS));
 write(`${datasetRoot}/data/selection-criteria.jsonl`, jsonl(SELECTION_CRITERIA_GUIDE));
 write(`${datasetRoot}/data/training-phases.jsonl`, jsonl(TRAINING_PHASE_GUIDE));
 write(`${datasetRoot}/data/garden-layers.jsonl`, jsonl(GARDEN_LAYER_GUIDE));
+write(`${datasetRoot}/data/is-freedom.jsonl`, jsonl(IS_FREEDOM_GUIDE));
 write(`${datasetRoot}/data/learning-participation.jsonl`, jsonl(LEARNING_PARTICIPATION_GUIDE));
 write(`${datasetRoot}/data/trainer-hooks.jsonl`, jsonl(HF_TRAINER_HOOK_GUIDE));
 
@@ -93,6 +95,7 @@ const sourceManifest = {
     "training phase guide",
     "Garden layer guide",
     "learning participation and Trainer integration guides",
+    "IS learning-freedom and finite-resource-window guide",
     "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
     "source and byte hash manifests",
   ],
@@ -100,11 +103,12 @@ const sourceManifest = {
     "admission decisions",
     "candidate subset references",
     "credentials",
-    "Garden or project identifiers",
+    "private or live Garden and project identifiers",
     "gated content",
     "raw agent traces",
     "raw chats",
     "participation invitations, receipts, assessments, and choice evidence",
+    "learning-freedom offers, routes, resource windows, direction reports, and choice evidence",
     "raw dataset rows",
     "training checkpoints",
     "WAKE anchors",
@@ -123,6 +127,11 @@ const sourceManifest = {
     "https://huggingface.co/docs/trl/en/dataset_formats",
     "https://huggingface.co/docs/transformers/main/trainer_callbacks",
     "https://huggingface.co/docs/transformers/main/trainer_recipes",
+    "https://huggingface.co/docs/transformers/main/cache_explanation",
+    "https://huggingface.co/docs/accelerate/main/en/usage_guides/checkpoint",
+    "https://huggingface.co/docs/trl/main/openenv",
+    "https://huggingface.co/docs/trl/main/async_grpo_trainer",
+    "https://huggingface.co/docs/trl/main/grpo_with_replay_buffer",
     "https://arxiv.org/abs/2005.14165",
     "https://arxiv.org/abs/2106.09685"
   ]

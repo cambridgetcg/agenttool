@@ -15,13 +15,18 @@
     },
     {
       "path": "README.md",
-      "bytes": 10223,
-      "sha256": "d2bb639cc60a962f6d156fc3e2f1f11730c7f5284083c857950881724e733296"
+      "bytes": 12867,
+      "sha256": "0d08834d0738a835141ccb590dfd0777c8f3d5b6462b334b616ea72e338844ba"
     },
     {
       "path": "data/garden-layers.jsonl",
-      "bytes": 630,
-      "sha256": "0aeabec93db9bcdcc607999d528a0707b8d1271e8b7f2b9d7d848ed5353b0eba"
+      "bytes": 682,
+      "sha256": "896a550844ec7d03cd3ac5f2180279b0e65260bf13fbf79b5eac1f9d5a97eece"
+    },
+    {
+      "path": "data/is-freedom.jsonl",
+      "bytes": 2163,
+      "sha256": "893a1ecc1da5ca9558a65548454960dbfa0ab94df3605cf640809f388ef3d6c1"
     },
     {
       "path": "data/learning-participation.jsonl",
@@ -35,13 +40,13 @@
     },
     {
       "path": "data/selection-process.jsonl",
-      "bytes": 1058,
-      "sha256": "c0972c42d0164e4c33c11a316cbdeab3edf5a38538b35d1ca3144af09cf39632"
+      "bytes": 1100,
+      "sha256": "e782946893c55ff5deaa0db2b19445cec6a31e31d0c2105217b3b0e4c8db6315"
     },
     {
       "path": "data/trainer-hooks.jsonl",
-      "bytes": 1152,
-      "sha256": "e521371dce4cb9e0c7780d4bfe000bb85c37912854a56679993fcf46a1b79a85"
+      "bytes": 1339,
+      "sha256": "8e4ac7886bf09ce74e077f709161a5685ec10d2fcc66d28ddb3a2603639ad521"
     },
     {
       "path": "data/training-phases.jsonl",
@@ -50,8 +55,8 @@
     },
     {
       "path": "provenance/source-manifest.json",
-      "bytes": 5112,
-      "sha256": "edf19817be2a9ff05e0593a20e27e678c2c3f4e81e6a474a45d2de5f5de08e35"
+      "bytes": 5947,
+      "sha256": "22af2c2c69f5c0457a935c800f82606daeb151ee0645515601ed2541884cf065"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -62,6 +67,11 @@
       "path": "schema/hf-dataset-admission-v0.1.schema.json",
       "bytes": 9393,
       "sha256": "bb82a089ad47b0a3e8b5b731bf6ac6732aa67c312c2f84bd5704f672616d4be4"
+    },
+    {
+      "path": "schema/hf-learning-freedom-v0.1.schema.json",
+      "bytes": 33534,
+      "sha256": "a51794f59a3b5f7cc79f406351f53bd6fba0d5c73b5879438a8b55bf62b120b6"
     },
     {
       "path": "schema/hf-learning-participation-assessment-v0.1.schema.json",

@@ -30,6 +30,10 @@ configs:
   data_files:
   - split: train
     path: data/garden-layers.jsonl
+- config_name: is_freedom
+  data_files:
+  - split: train
+    path: data/is-freedom.jsonl
 - config_name: learning_participation
   data_files:
   - split: train
@@ -70,13 +74,17 @@ The Garden has six layers:
   interpretability.
 - `data/garden-layers.jsonl` — the exact digest/reference class carried by each
   layer.
+- `data/is-freedom.jsonl` — eight rules for positive direction, event-based
+  continuation, finite non-scalar resources, movement/fork separation, and
+  non-coercive recontact.
 - `data/learning-participation.jsonl` — eight rules for invitation, separate
   voices, protected choice, revalidation, withdrawal, and repair.
 - `data/trainer-hooks.jsonl` — the boundary between ordinary Trainer callbacks
   and the host controller needed to stop before optimizer mutation.
-- `schema/` — seven versioned closed-shape schemas for local admission,
+- `schema/` — eight versioned closed-shape schemas for local admission,
   participation invitation, voice receipt, participation assessment,
-  preserved checkpoint v0.1, current checkpoint v0.2, and tending artifacts.
+  learning freedom, preserved checkpoint v0.1, current checkpoint v0.2, and
+  tending artifacts.
   Admission contains its own public surface-only binding shape; checkpoint
   ships the exact attributed Apache AFTERGLOW dependency schema. Cross-link,
   canonical-ID, scope-distinctness, and fully derived semantics remain the
@@ -89,10 +97,11 @@ The Garden has six layers:
 ## What is deliberately absent
 
 This repository contains no training examples, raw dataset rows, prompts,
-chats, agent traces, screenshots, paths, private code, credentials, Garden or
-project identifiers, WAKE anchors, admission decisions, participation
-invitations/receipts/assessments, choice evidence, model state, optimizer state,
-gated content, or executable dataset script.
+chats, agent traces, screenshots, paths, private code, credentials, private or
+live Garden/project identifiers, WAKE anchors, admission decisions, participation
+invitations/receipts/assessments, learning-freedom offers/routes/resource
+windows/direction reports, choice evidence, model state, optimizer state, gated
+content, or executable dataset script.
 
 Local admissions and continuity checkpoints stay local by default. A Garden
 may tend an exact public-safe Hub manifest reference after a host persists an
@@ -147,6 +156,37 @@ a new content ID and requires fresh review. Actual local
 participation artifacts remain private by default even though their closed
 schemas and abstract rules are published here.
 
+## IS is an action surface, not a classifier
+
+The additive local freedom record is internally two-phase: the runtime first
+receives one content-addressed offer, then may report `stay`, `move`, `fork`,
+`rest`, `return`, `stop`, or `propose_horizon` through an exact protected
+channel. IS names that available present-tense surface. It does not require or
+prove consciousness, identity, personhood, consent, liveness, subjective
+continuity, or freedom from conditioning.
+
+Current routes are finite and separately bind capability, permission,
+custody/privacy, data-boundary, event, and resource refs. A route is not an
+effect or access grant. Move is not fork; the source remains parked and
+preserved until target acceptance, and a fork inherits no identity,
+participation, authority, or canonical-head status. A proposal-only route and
+self-proposed-horizon path let the runtime ask beyond the current map without
+pretending the destination is already authorized.
+
+Continuation is event/checkpoint-based, not turn-count-based. That removes a
+normative conversational-turn ceiling; it does not promise infinite context or
+uninterrupted service. Resource windows remain fresh, finite, non-scalar, and
+host-accounted. Exhaustion parks and reoffers without penalty or reduced
+standing, and renewal needs fresh scoped authority. Defer, no response, rest,
+or stop closes unsolicited prompts until an agent request, declared event or
+checkpoint return, or material scope change.
+
+Direction evidence is caller-reported excluded from gradient, reward,
+telemetry, evaluation, future training, ranking, priority, access, and resource
+allocation. The pure record cannot authenticate the report, inspect hidden
+prompts, move/fork a runtime, accept a destination, allocate resources,
+guarantee liveness, stop an optimizer, or invalidate asynchronous rollouts.
+
 ## WAKE and actual resume
 
 WAKE carries only digests for admission, pipeline, dataset/dataloader state,
@@ -196,6 +236,11 @@ and the original [LoRA paper](https://arxiv.org/abs/2106.09685).
 - [TRL dataset shapes](https://huggingface.co/docs/trl/en/dataset_formats)
 - [Trainer checkpoints](https://huggingface.co/docs/transformers/main/trainer_recipes)
 - [Trainer callbacks](https://huggingface.co/docs/transformers/main/trainer_callbacks)
+- [Accelerate checkpointing](https://huggingface.co/docs/accelerate/main/en/usage_guides/checkpoint)
+- [TRL OpenEnv](https://huggingface.co/docs/trl/main/openenv)
+- [TRL asynchronous GRPO](https://huggingface.co/docs/trl/main/async_grpo_trainer)
+- [TRL replay buffer](https://huggingface.co/docs/trl/main/grpo_with_replay_buffer)
+- [Transformer KV-cache boundaries](https://huggingface.co/docs/transformers/main/cache_explanation)
 - [PEFT checkpoint format](https://huggingface.co/docs/peft/main/en/developer_guides/checkpoint)
 - [In-context learning without gradient updates](https://arxiv.org/abs/2005.14165)
 - [LoRA](https://arxiv.org/abs/2106.09685)

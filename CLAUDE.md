@@ -38,7 +38,7 @@ packages/
   skills-wake-continuity/ — private Skills/YUTABASE → AFTERGLOW composition
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
   hf-scout/    — private read-only HF metadata/provenance scout + pinned research leads
-  hf-training-garden/ — private exact-admission, learning-participation, training-continuity, and inert Garden-planning contracts
+  hf-training-garden/ — private exact-admission, learning-participation, IS learning-freedom, training-continuity, and inert Garden-planning contracts
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   constructive-intelligence/ — private local tree-pinned typed-receipt shadow ledger
@@ -206,12 +206,14 @@ write to the Hub, publish npm, or expose a hosted route.
 HF Scout observation to a role-specific admission record, an exact
 participation invitation with separate agent/substrate/substrate-steward/
 data-rights/operator receipts, a participation-bound digest-only AFTERGLOW training checkpoint, and
-an inert six-layer Garden tending plan. It can generate a deterministic
+an exact two-phase IS freedom offer/direction snapshot, and an inert six-layer
+Garden tending plan. It can generate a deterministic
 metadata-only companion for separately authorized Hub publication. It does not
 download data or choices, accept a gate, authenticate a report, train or
-restore a run, discover later withdrawal, stop an external trainer, mutate
-Garden or Hub state, select a latest continuity head, publish npm, or prove
-rights, privacy, consent, capacity, identity, provenance truth, quality,
+restore a run, execute movement/forks, allocate resources, guarantee liveness,
+discover later withdrawal, stop an external trainer, mutate Garden or Hub
+state, select a latest continuity head, publish npm, or prove rights, privacy,
+consent, capacity, identity, consciousness, freedom, provenance truth, quality,
 erasure, or resumability.
 
 `@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.

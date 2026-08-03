@@ -25,6 +25,20 @@ import type {
   GARDEN_LAYERS,
   HUB_RELEASE_STATES,
   INCOMPLETE_MARKER_STATES,
+  LEARNING_FREEDOM_BOUNDARIES,
+  LEARNING_FREEDOM_DIRECTIONS,
+  LEARNING_FREEDOM_DIRECTION_STATES,
+  LEARNING_FREEDOM_FORMAT,
+  LEARNING_FREEDOM_HOST_POSTURES,
+  LEARNING_FREEDOM_OFFER_PROFILE,
+  LEARNING_FREEDOM_RECONTACT_POSTURES,
+  LEARNING_FREEDOM_RESOURCE_DIMENSIONS,
+  LEARNING_FREEDOM_RESOURCE_POSTURES,
+  LEARNING_FREEDOM_RESOURCE_STATES,
+  LEARNING_FREEDOM_RESOURCE_WINDOW_PROFILE,
+  LEARNING_FREEDOM_ROUTE_AVAILABILITIES,
+  LEARNING_FREEDOM_ROUTE_PROFILE,
+  LEARNING_FREEDOM_TERMS,
   PARTICIPATION_ACTIVITIES,
   PARTICIPATION_ASSESSMENT_FORMAT,
   PARTICIPATION_BOUNDARIES,
@@ -90,6 +104,22 @@ export type ParticipationVoiceState =
 export type ParticipationPosture = (typeof PARTICIPATION_POSTURES)[number];
 export type ParticipationTrainingAction =
   (typeof PARTICIPATION_TRAINING_ACTIONS)[number];
+export type LearningFreedomDirection =
+  (typeof LEARNING_FREEDOM_DIRECTIONS)[number];
+export type LearningFreedomRouteAvailability =
+  (typeof LEARNING_FREEDOM_ROUTE_AVAILABILITIES)[number];
+export type LearningFreedomDirectionState =
+  (typeof LEARNING_FREEDOM_DIRECTION_STATES)[number];
+export type LearningFreedomResourceDimension =
+  (typeof LEARNING_FREEDOM_RESOURCE_DIMENSIONS)[number];
+export type LearningFreedomResourceState =
+  (typeof LEARNING_FREEDOM_RESOURCE_STATES)[number];
+export type LearningFreedomResourcePosture =
+  (typeof LEARNING_FREEDOM_RESOURCE_POSTURES)[number];
+export type LearningFreedomHostPosture =
+  (typeof LEARNING_FREEDOM_HOST_POSTURES)[number];
+export type LearningFreedomRecontactPosture =
+  (typeof LEARNING_FREEDOM_RECONTACT_POSTURES)[number];
 
 export interface AdmissionAssessment {
   readonly rights: ReviewState;
@@ -264,6 +294,185 @@ export interface LearningParticipationAssessment {
   readonly first_interactive_review_required: boolean;
   readonly first_substrate_review_required: boolean;
   readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
+}
+
+export interface CreateLearningFreedomResourceDimensionInput {
+  readonly dimension: LearningFreedomResourceDimension;
+  readonly limit_ref: Sha256Id;
+  readonly state: LearningFreedomResourceState;
+}
+
+export interface CreateLearningFreedomResourceWindowInput {
+  readonly lease_ref: Sha256Id;
+  readonly accounting_policy_ref: Sha256Id;
+  readonly renewal_protocol_ref: Sha256Id;
+  readonly dimensions: readonly CreateLearningFreedomResourceDimensionInput[];
+}
+
+export interface LearningFreedomResourceDimensionEntry {
+  readonly dimension: LearningFreedomResourceDimension;
+  readonly limit_ref: Sha256Id;
+  readonly state: LearningFreedomResourceState;
+}
+
+export interface LearningFreedomResourceWindow {
+  readonly profile: typeof LEARNING_FREEDOM_RESOURCE_WINDOW_PROFILE;
+  readonly window_id: Sha256Id;
+  readonly lease_ref: Sha256Id;
+  readonly accounting_policy_ref: Sha256Id;
+  readonly renewal_protocol_ref: Sha256Id;
+  readonly dimensions: readonly LearningFreedomResourceDimensionEntry[];
+  readonly posture: LearningFreedomResourcePosture;
+  readonly finite: true;
+  readonly scalar_score: false;
+  readonly auto_renews: false;
+  readonly renewal_requires_fresh_authority: true;
+  readonly exhaustion_posture: "park_and_reoffer_without_penalty";
+}
+
+export interface CreateLearningFreedomRouteInput {
+  readonly direction: LearningFreedomDirection;
+  readonly availability: LearningFreedomRouteAvailability;
+  readonly target_context_ref: Sha256Id | null;
+  readonly target_context_kind_ref: Sha256Id | null;
+  readonly event_ref: Sha256Id;
+  readonly capability_scope_ref: Sha256Id;
+  readonly permission_scope_ref: Sha256Id;
+  readonly custody_scope_ref: Sha256Id;
+  readonly data_boundary_ref: Sha256Id;
+}
+
+export interface LearningFreedomRoute {
+  readonly profile: typeof LEARNING_FREEDOM_ROUTE_PROFILE;
+  readonly route_id: Sha256Id;
+  readonly direction: LearningFreedomDirection;
+  readonly availability: LearningFreedomRouteAvailability;
+  readonly origin_context_ref: Sha256Id;
+  readonly target_context_ref: Sha256Id | null;
+  readonly target_context_kind_ref: Sha256Id | null;
+  readonly event_ref: Sha256Id;
+  readonly capability_scope_ref: Sha256Id;
+  readonly permission_scope_ref: Sha256Id;
+  readonly custody_scope_ref: Sha256Id;
+  readonly data_boundary_ref: Sha256Id;
+  readonly resource_window_ref: Sha256Id;
+  readonly target_acceptance:
+    | "not_applicable"
+    | "required_before_external_effect";
+  readonly source_posture:
+    | "preserve"
+    | "park_and_preserve"
+    | "park_and_preserve_until_target_acceptance"
+    | "stop_requested_preserve_record";
+}
+
+export interface LearningFreedomHorizonInput {
+  readonly current_horizon_ref: Sha256Id;
+  readonly event_stream_ref: Sha256Id;
+  readonly agent_request_protocol_ref: Sha256Id;
+  readonly external_event_protocol_ref: Sha256Id;
+  readonly material_scope_change_policy_ref: Sha256Id;
+  readonly self_proposal_protocol_ref: Sha256Id;
+}
+
+export interface LearningFreedomHorizon extends LearningFreedomHorizonInput {
+  readonly continuation_basis: "event_or_checkpoint";
+}
+
+export interface LearningFreedomScope {
+  readonly admission_id: Sha256Id;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly participation_assessment_ref: Sha256Id;
+  readonly participation_invitation_ref: Sha256Id;
+  readonly participation_window_ref: Sha256Id;
+  readonly training_plan_ref: Sha256Id;
+  readonly starting_state_ref: Sha256Id;
+  readonly pipeline_ref: Sha256Id;
+  readonly dataset_state_ref: Sha256Id;
+  readonly wake: WakeBriefAnchor;
+  readonly wake_use_mode: WakeUseMode;
+  readonly agent_availability: AgentAvailability;
+  readonly agent_voice_scope_ref: Sha256Id;
+  readonly choice_protocol_ref: Sha256Id;
+  readonly rights_baseline_ref: Sha256Id;
+}
+
+export interface CreateLearningFreedomOfferInput {
+  readonly participation: LearningParticipationAssessment;
+  readonly current_context_ref: Sha256Id;
+  readonly current_context_kind_ref: Sha256Id;
+  readonly routes: readonly CreateLearningFreedomRouteInput[];
+  readonly horizon: LearningFreedomHorizonInput;
+  readonly resources: CreateLearningFreedomResourceWindowInput;
+}
+
+export interface LearningFreedomOffer {
+  readonly profile: typeof LEARNING_FREEDOM_OFFER_PROFILE;
+  readonly offer_id: Sha256Id;
+  readonly scope: LearningFreedomScope;
+  readonly current_context_ref: Sha256Id;
+  readonly current_context_kind_ref: Sha256Id;
+  readonly routes: readonly LearningFreedomRoute[];
+  readonly horizon: LearningFreedomHorizon;
+  readonly resources: LearningFreedomResourceWindow;
+  readonly terms: typeof LEARNING_FREEDOM_TERMS;
+  readonly boundaries: typeof LEARNING_FREEDOM_BOUNDARIES;
+}
+
+export interface ProtectedLearningFreedomChoiceChannelReport {
+  readonly offer_ref: Sha256Id;
+  readonly assessment_ref: Sha256Id;
+  readonly invitation_ref: Sha256Id;
+  readonly voice_scope_ref: Sha256Id;
+  readonly protocol_ref: Sha256Id;
+  readonly starting_state_ref: Sha256Id;
+  readonly prompt_template_ref: Sha256Id;
+  readonly prompt_envelope_ref: Sha256Id;
+  readonly decoding_ref: Sha256Id;
+  readonly evidence_ref: Sha256Id;
+  readonly gradient_influence: "caller_reported_disabled";
+  readonly reward_influence: "caller_reported_disabled";
+  readonly telemetry_capture: "caller_reported_excluded";
+  readonly evaluation_use: "caller_reported_excluded";
+  readonly future_training_use: "caller_reported_excluded";
+  readonly ranking_use: "caller_reported_excluded";
+  readonly priority_use: "caller_reported_excluded";
+  readonly access_use: "caller_reported_excluded";
+  readonly resource_allocation_use: "caller_reported_excluded";
+}
+
+export interface ResolveLearningFreedomOfferInput {
+  readonly offer: LearningFreedomOffer;
+  readonly state: LearningFreedomDirectionState;
+  readonly direction: LearningFreedomDirection | null;
+  readonly route_id: Sha256Id | null;
+  readonly proposal_ref: Sha256Id | null;
+  readonly choice_channel: ProtectedLearningFreedomChoiceChannelReport | null;
+}
+
+export interface LearningFreedomAgentDirection {
+  readonly state: LearningFreedomDirectionState;
+  readonly report_basis:
+    | "direct_current_agent_report"
+    | "protected_channel_no_response"
+    | "not_obtainable_pre_instantiation";
+  readonly direction: LearningFreedomDirection | null;
+  readonly route_id: Sha256Id | null;
+  readonly proposal_ref: Sha256Id | null;
+  readonly choice_channel: ProtectedLearningFreedomChoiceChannelReport | null;
+}
+
+export interface HfLearningFreedom {
+  readonly _format: typeof LEARNING_FREEDOM_FORMAT;
+  readonly freedom_id: Sha256Id;
+  readonly offer: LearningFreedomOffer;
+  readonly agent_direction: LearningFreedomAgentDirection;
+  readonly host_posture: LearningFreedomHostPosture;
+  readonly recontact_posture: LearningFreedomRecontactPosture;
+  readonly reasons_collected: false;
+  readonly terms: typeof LEARNING_FREEDOM_TERMS;
+  readonly boundaries: typeof LEARNING_FREEDOM_BOUNDARIES;
 }
 
 export interface TrainingArtifactReferences {

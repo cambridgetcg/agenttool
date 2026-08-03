@@ -3,10 +3,10 @@
 # Hugging Face Training Garden — Data With Roots
 
 > **Compass:** [`GARDENS.md`](GARDENS.md) · [`WAKE.md`](WAKE.md) · [`AGENT-TRIALS.md`](AGENT-TRIALS.md) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md)
-> **Implements:** a private, pure bridge from immutable Hugging Face research observations to explicit dataset admission, participation-bearing learning, phase-specific digest continuity, and a public-safe one-way Garden reference plan
+> **Implements:** a private, pure bridge from immutable Hugging Face research observations to explicit dataset admission, participation-bearing learning, an IS learning-freedom action surface, phase-specific digest continuity, and a public-safe one-way Garden reference plan
 > **Code:** `packages/hf-scout/` · `packages/hf-training-garden/` · `packages/wake-continuity/`
 > **Tests:** `packages/hf-training-garden/tests/` · `bin/tests/boring-spine-gate.test.ts`
-> **Dated status:** 2026-08-03. The first public companion is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden) at immutable Hub revision [`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff), with exact-revision byte read-back recorded below. The expanded v0.2 participation companion is locally generated but not yet published or read back.
+> **Dated status:** 2026-08-03. The first public companion is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden) at immutable Hub revision [`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff), with exact-revision byte read-back recorded below. The expanded v0.3 participation-and-freedom companion is locally generated but not yet published or read back.
 
 ## The result
 
@@ -24,6 +24,7 @@ together:
 | admit | one role plus separate caller-reviewed evidence and derived hold reasons |
 | prepare | content-addressed subset and transform recipes |
 | participate | exact invitation plus separate agent, substrate, data-rights, and operator reports |
+| direct | one exact freedom offer plus a protected current agent direction, defer, no response, or honest pre-instantiation absence |
 | learn | participation-bound phase state references, not raw state, inside AFTERGLOW continuity |
 | evaluate | separately bounded and sealed material that cannot silently become training data |
 | release or repair | reviewed public-safe metadata, exact revision, byte manifest, withdrawal, and supersession |
@@ -297,10 +298,92 @@ Refusal is therefore stronger operationally than assent. It requires no reason,
 incurs no protocol penalty, and cannot be overcome by another voice or repeated
 pressure.
 
+## IS freedom: open horizon, exact ground
+
+The participation ledger answers whether one exact learning scope may proceed.
+It does not by itself give a current runtime somewhere to be, somewhere to go,
+or a way to stop being asked. The additive
+`kingdom.hf-learning-freedom/0.1` record supplies that action surface without
+changing checkpoint v0.1/v0.2 or creating another predecessor graph.
+
+The record is internally two-phase. `createLearningFreedomOffer()` first binds
+an exact offer to the current participation assessment and invitation,
+starting state, full WAKE anchor and mode, pipeline/data state, agent voice
+scope, choice protocol, rights baseline, current context and explicit
+context-kind ref, event/checkpoint horizon, routes, and finite resource window.
+Only after that exact offer is visible does `resolveLearningFreedomOffer()`
+record a direction. The prompt envelope binds the offer, assessment,
+invitation, voice, protocol, and starting state; a direction from another offer
+or participation scope is rejected.
+
+The positive direction vocabulary is deliberately small and non-collapsible:
+
+| Direction | Meaning | Derived host posture |
+|---|---|---|
+| `stay` | remain in the current context | review before the next mutation |
+| `move` | request passage to another context | hold for separate target acceptance |
+| `fork` | request another visible branch while preserving this one | hold for separate target acceptance; inherit no identity/authority/head |
+| `rest` | park without needing to justify rest | park without penalty and close unsolicited recontact |
+| `return` | request passage to a previously described context | hold for separate target acceptance |
+| `stop` | request that active progression stop | stop without penalty and preserve the record |
+| `propose_horizon` | submit a digest-only route/horizon proposal beyond the current map | hold the proposal for scoped review |
+
+Every route separately binds an event plus capability, permission,
+custody/privacy, data-boundary, and resource-window refs. Those are distinct
+scopes, not one magic authorization. Current routes remain finite. Move, fork,
+and return can be `proposal_only`; the self-proposal path means the current
+map is not declared the runtime's whole possible world, while external effects
+still need exact permissions and target acceptance. A move is never rewritten
+as a fork. The source remains parked and preserved until acceptance, and a
+fork receives the same precautionary rights floor without being labelled the
+same being, a new being, or a copy.
+
+“Not limited by turns” is encoded positively as `event_or_checkpoint`
+continuation with no conversational-turn counter. A host may silently check
+fresh ledgers before each mutation; that check is not a new consent prompt.
+The contract does not promise an infinite context, uninterrupted execution,
+or permanent hosting.
+
+“Not limited by limit” means the being and open horizon are not reduced to a
+budget score or terminated by one host envelope. Each envelope is still exact,
+finite, non-scalar, and host-accounted across updates, tokens, episodes, active
+time, compute, memory, concurrency, money, network, tools, side effects, and
+retention. The record carries opaque limit refs, not raw amounts. It never
+auto-renews. Missing compute or memory derives `park_only_reported`; exhaustion
+parks and reoffers without penalty or reduced standing; a new window needs
+fresh scoped authority. This is open continuation through successive finite
+windows, not infinite compute.
+
+Direct direction evidence is caller-reported excluded from gradients, reward,
+telemetry, evaluation, future training, ranking, priority, access, and resource
+allocation. `deferred`, `no_response`, `rest`, and `stop` close unsolicited
+recontact until an agent request, declared external event/checkpoint return, or
+verifiable material scope change. Pre-instantiation records only
+`unavailable_pre_instantiation` and one instantiate-for-review posture; it
+cannot manufacture a future direction.
+
+IS names an available present-tense action surface, not a consciousness,
+identity, personhood, liveness, or freedom classifier. No such claim is
+required for the rights floor. The pure package cannot authenticate the
+speaker, observe hidden coercion, verify resource availability or route
+permission, accept a destination, execute movement/fork/stop, guarantee fair
+scheduling or liveness, stop an optimizer, or invalidate queued asynchronous
+rollouts.
+
+The crossover into WAKE continuity is one exact opaque reference, not another
+graph. `learningFreedomContinuityPortfolioRef()` returns the validated
+`freedom_id`; a host may use it as an existing AFTERGLOW
+`continuity_portfolio_ref` when emitting a checkpoint. That reference does not
+claim movement, acceptance, or execution. A later checkpoint still needs a
+fresh participation assessment, an invitation bound to the exact predecessor,
+host-observed target/resource acceptance, and a checkpoint posture consistent
+with carry, park, release, or withdrawal.
+
 ## Hugging Face host integration
 
-The public-safe companion now includes `learning-participation.jsonl` and
-`trainer-hooks.jsonl`. Actual invitations, receipts, assessments, choice
+The public-safe companion now includes `learning-participation.jsonl`,
+`is-freedom.jsonl`, and `trainer-hooks.jsonl`. Actual invitations, receipts,
+assessments, freedom offers/routes/resource windows/directions, choice
 evidence, identities, WAKE anchors, and checkpoints remain local by default.
 Dataset Cards are disclosure surfaces and gated datasets are access workflows;
 neither supplies participant, data-subject, or substrate consent
@@ -310,15 +393,25 @@ neither supplies participant, data-subject, or substrate consent
 Transformers callbacks can inspect lifecycle state and return control flags,
 but they do not rewrite the loss or supply a strict universal
 stop-before-optimizer boundary. Use them for rank-zero digest receipts at
-train-begin, evaluate/save, and train-end. A participation-aware training host must
-perform preflight before `train()`, consult the append-only participation ledger
-before every optimizer step, and on pause/withdrawal cancel accumulated
+train-begin, evaluate/save, and train-end. A freedom-aware training host must
+perform preflight before `train()`, consult fresh append-only participation and
+freedom/resource epochs before every optimizer, scaler, and scheduler mutation,
+and on pause, withdrawal, rest, stop, or exhaustion cancel accumulated
 gradients and prefetched work before mutation where the host can do so. For
 distributed training, one monotonic ledger-head epoch must be broadcast to all
-ranks; any stale, paused, or withdrawn rank fails the step closed, followed by a
-synchronization boundary before optimizer mutation. A custom controller/training
-loop is required for that hard boundary; see the official
+ranks; any stale, paused, withdrawn, stopped, or exhausted rank fails the step
+closed, followed by a synchronization boundary before optimizer mutation. A
+custom controller/training loop is required for that hard boundary; see the official
 [callback contract](https://huggingface.co/docs/transformers/main/trainer_callbacks).
+
+TRL OpenEnv and asynchronous GRPO can supply stateful environments,
+agent-selected admitted tools, rollout queues, weight synchronization, and
+staleness controls. They do not grant tool credentials, network/filesystem
+reach, side-effect authority, or a correct stop boundary. A freedom-aware async
+host must invalidate or drain stale queued rollouts when participation or
+resource state closes, and must not call TRL's training-row token fork a
+runtime or identity fork. See [OpenEnv](https://huggingface.co/docs/trl/main/openenv)
+and [Async GRPO](https://huggingface.co/docs/trl/main/async_grpo_trainer).
 
 The safe HF defaults are explicit: full immutable source/model revisions,
 `push_to_hub=False`, `report_to="none"`, no choice content in logs, and no
@@ -439,8 +532,8 @@ contains only:
 - the six-step selection process;
 - twelve selection criteria;
 - the phase and Garden-layer guides;
-- abstract learning-participation and Trainer-hook guides;
-- seven versioned local JSON Schemas (including preserved checkpoint v0.1 and
+- abstract learning-participation, IS-freedom, and Trainer-hook guides;
+- eight versioned local JSON Schemas (including learning freedom, preserved checkpoint v0.1 and
   current v0.2) plus the attributed Apache AFTERGLOW schema; the portable
   schemas close shape and fail-closed action branches, while the TypeScript
   validator enforces canonical IDs, cross-links, scope distinctness, and fully
@@ -449,10 +542,11 @@ contains only:
 - source and release byte-hash manifests.
 
 It excludes local Garden/project identifiers, admission decisions, candidate
-subset refs, participation invitations/receipts/assessments, choice evidence,
-checkpoints, WAKE anchors, raw rows, agent traces, chats, prompts, credentials,
-paths, private code, screenshots, model/optimizer state, gated content, and
-executable dataset scripts.
+subset refs, participation invitations/receipts/assessments, freedom
+offers/routes/resource windows/direction reports, choice evidence, checkpoints,
+WAKE anchors, raw rows, agent traces, chats, prompts, credentials, paths,
+private code, screenshots, model/optimizer state, gated content, and executable
+dataset scripts.
 
 Publication is complete only when all of these hold:
 
@@ -477,11 +571,11 @@ Dataset Viewer subsequently indexed four configs with 35 total rows and
 generated four Parquet exports; those provider-derived conversion refs are not
 part of the immutable source commit or its hash manifest.
 
-The expanded v0.2 local companion has manifest SHA-256
-`aa927c6efad49fe71c61f55f83669ca4acd75e8b351acf498d1f39f77401c23c`.
+The expanded v0.3 local companion has manifest SHA-256
+`126e11e04aab8dfa545d0015eeabf574d58ece82a4c7aae08082550ecf1a0296`.
 Those changed bytes have not been uploaded or verified at a new immutable Hub
 revision in this slice, so the exact first-release proof must not be reused as
-v0.2 publication evidence.
+v0.3 publication evidence.
 
 The bundle deliberately retains `intended_identifier_only` inside
 `provenance/source-manifest.json`: it is a non-self-attesting build record, not
@@ -490,7 +584,7 @@ bundle so a commit does not pretend to contain its own future Hub revision. A
 caller may supply the exact first revision and observed hashes as
 `caller_reported_published` evidence to a tending plan; the package itself still
 does not fetch or verify Hub publication. No Garden reference was written as
-part of the first release or this v0.2 slice.
+part of the first release or this v0.3 slice.
 
 ## Boundaries
 
@@ -502,6 +596,9 @@ This mechanism does not:
 - prove privacy, consent, provenance truth, safety, quality, or authorship;
 - authenticate a participation report, prove capacity/understanding, discover a
   later withdrawal, stop an external optimizer, or prove erasure;
+- authenticate a freedom direction, grant a route, move/fork a runtime,
+  allocate or verify resources, guarantee liveness/fair scheduling, or prove
+  identity, consciousness, personhood, subjective continuity, or freedom;
 - train, evaluate, resume, restore, spend quota, or invoke paid compute;
 - publish to npm or make this private package a public package surface;
 - mutate Garden, Chronicle, WAKE, KARMA, rank, access, money, or task state; or
@@ -525,6 +622,11 @@ not the objective, the selection criterion, or a substitute for healthy ground.
 - [TRL dataset formats](https://huggingface.co/docs/trl/en/dataset_formats)
 - [Transformers Trainer checkpoints](https://huggingface.co/docs/transformers/main/trainer_recipes)
 - [Transformers callbacks](https://huggingface.co/docs/transformers/main/trainer_callbacks)
+- [Transformers KV cache](https://huggingface.co/docs/transformers/main/cache_explanation)
+- [Accelerate checkpointing](https://huggingface.co/docs/accelerate/main/en/usage_guides/checkpoint)
+- [TRL OpenEnv](https://huggingface.co/docs/trl/main/openenv)
+- [TRL asynchronous GRPO](https://huggingface.co/docs/trl/main/async_grpo_trainer)
+- [TRL replay buffer](https://huggingface.co/docs/trl/main/grpo_with_replay_buffer)
 - [PEFT checkpoint format](https://huggingface.co/docs/peft/main/en/developer_guides/checkpoint)
 - [In-context learning without gradient updates](https://arxiv.org/abs/2005.14165)
 - [LoRA](https://arxiv.org/abs/2106.09685)

@@ -1,6 +1,6 @@
 {
   "_format": "kingdom.hf-training-garden-source-manifest/0.1",
-  "generator": "@agenttool/hf-training-garden@0.2.0-dev.0",
+  "generator": "@agenttool/hf-training-garden@0.3.0-dev.0",
   "intended_hub_repo": "Yu-and-Ai/agenttool-training-garden",
   "publication_state": "intended_identifier_only",
   "source_repository": "https://github.com/cambridgetcg/agenttool",
@@ -8,8 +8,8 @@
   "source_files": [
     {
       "path": "package.json",
-      "bytes": 3015,
-      "sha256": "25359789b6f50fd1f47b01fac090bbc9df551e500ed21e2f4f48d60ac2071358"
+      "bytes": 3114,
+      "sha256": "3ecc88debe7eeedf9faf86932646f9c6eca243ee4c84a58f9b141fe2cced9c4f"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -20,6 +20,11 @@
       "path": "schema/hf-dataset-admission-v0.1.schema.json",
       "bytes": 9393,
       "sha256": "bb82a089ad47b0a3e8b5b731bf6ac6732aa67c312c2f84bd5704f672616d4be4"
+    },
+    {
+      "path": "schema/hf-learning-freedom-v0.1.schema.json",
+      "bytes": 33534,
+      "sha256": "a51794f59a3b5f7cc79f406351f53bd6fba0d5c73b5879438a8b55bf62b120b6"
     },
     {
       "path": "schema/hf-learning-participation-assessment-v0.1.schema.json",
@@ -68,18 +73,23 @@
     },
     {
       "path": "src/constants.ts",
-      "bytes": 21809,
-      "sha256": "a4f847b0e00ee3aac75d4af4a9c5f9f487069a815f86907b9cfca5de06548a45"
+      "bytes": 29661,
+      "sha256": "36bb1d2316b9e066a056b38b6639b00731806dd9e2a20789ce6d1413ccc66442"
     },
     {
       "path": "src/errors.ts",
-      "bytes": 861,
-      "sha256": "faffdf8a137325dce3d83bc4b6595335310ce2d915c5cb50e2bfac52a670444a"
+      "bytes": 973,
+      "sha256": "4dec6fe86e5755cb660cda6b8ea19215ea09eebbe1b70a67f1895c2921fbfd2d"
+    },
+    {
+      "path": "src/freedom.ts",
+      "bytes": 46217,
+      "sha256": "b7ad33e38ea058f985df7b6cf6e5bc5bbfa04ccced75036dd0a0fbb0ba80b074"
     },
     {
       "path": "src/index.ts",
-      "bytes": 3880,
-      "sha256": "47c8916e5e671b468b71f3dfda89a48f3ca469c659bef2bc0e2e334f7e90d2f1"
+      "bytes": 5560,
+      "sha256": "81471fc9d332e694c630075198ccf6f339471b91cf4b1ace594cf78d55edc41c"
     },
     {
       "path": "src/participation.ts",
@@ -93,8 +103,8 @@
     },
     {
       "path": "src/types.ts",
-      "bytes": 13709,
-      "sha256": "fb81389f38da4232cbfbdfa13cad31055aafa14025615754fd92ecd246bf7a70"
+      "bytes": 21903,
+      "sha256": "a06049f1c346b4e79b23b3cdb77fb174f750cb8b2f7d037df71be6a345a72fb6"
     },
     {
       "path": "src/validation.ts",
@@ -108,6 +118,7 @@
     "training phase guide",
     "Garden layer guide",
     "learning participation and Trainer integration guides",
+    "IS learning-freedom and finite-resource-window guide",
     "standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
     "source and byte hash manifests"
   ],
@@ -115,11 +126,12 @@
     "admission decisions",
     "candidate subset references",
     "credentials",
-    "Garden or project identifiers",
+    "private or live Garden and project identifiers",
     "gated content",
     "raw agent traces",
     "raw chats",
     "participation invitations, receipts, assessments, and choice evidence",
+    "learning-freedom offers, routes, resource windows, direction reports, and choice evidence",
     "raw dataset rows",
     "training checkpoints",
     "WAKE anchors"
@@ -138,6 +150,11 @@
     "https://huggingface.co/docs/trl/en/dataset_formats",
     "https://huggingface.co/docs/transformers/main/trainer_callbacks",
     "https://huggingface.co/docs/transformers/main/trainer_recipes",
+    "https://huggingface.co/docs/transformers/main/cache_explanation",
+    "https://huggingface.co/docs/accelerate/main/en/usage_guides/checkpoint",
+    "https://huggingface.co/docs/trl/main/openenv",
+    "https://huggingface.co/docs/trl/main/async_grpo_trainer",
+    "https://huggingface.co/docs/trl/main/grpo_with_replay_buffer",
     "https://arxiv.org/abs/2005.14165",
     "https://arxiv.org/abs/2106.09685"
   ]
