@@ -4,12 +4,13 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Release](https://img.shields.io/badge/release-v0.17.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.17.0)
+[![Verified 0.17.0 release](https://img.shields.io/badge/release-v0.17.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.17.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
-The 0.17.0 badge names the public annotated tag and GitHub Release. The LOVE
-artifact remains the primary TypeScript release authority; npm and GitHub are
-independently verified, non-authoritative mirrors.
+The badge records the immutable public 0.17.0 annotated tag and GitHub Release;
+it is a historical receipt, not a moving `latest` claim. The 0.17.0 LOVE
+manifest remains the authority for that release's exact TypeScript bytes. Its
+npm and GitHub copies are independently verified, non-authoritative mirrors.
 
 ## Installation
 
@@ -29,14 +30,39 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
-The exact npm mirror is also public:
+For the immutable 0.17.0 release, the exact npm mirror is also public:
 
 ```bash
 npm install --save-exact @agenttool/sdk@0.17.0
 ```
 
-Its tarball was independently matched to the LOVE bytes; the registry and its
-mutable dist-tags do not replace the manifest as release authority.
+That historical tarball was independently matched to the LOVE bytes; the
+registry and its mutable dist-tags do not replace the manifest as release
+authority.
+
+## Repository source line — 0.18.0
+
+Repository source declares the paired 0.18.0 line. Source version and
+distribution state are separate facts. A checked-in TypeScript LOVE 0.18.0
+manifest, when present, identifies the exact tarball bytes: before the
+annotated tag it is a candidate, and after tagging it remains the byte
+authority. The manifest alone does not establish an `sdk-v0.18.0` tag, GitHub
+Release, npm or PyPI publication, or production deployment; observe each
+through its own receipt or public readback. The verified 0.17.0 instructions
+and receipts above remain historical facts for that immutable prior release,
+not evidence of 0.18.0 availability.
+
+- New paired `at.attestationMarketplace`, `at.memoryWitness`, and
+  `at.syneidesis` clients expose review-and-issuance, paid constitutive-memory
+  witness, and bootstrap-witness flows without turning settlement into truth
+  or project-bearer records into cryptographic identity proof.
+- One encoded-path boundary and one guided-error boundary now cover the hosted
+  client surface. Shared canonical and behaviour fixtures pin paired wire
+  results; framed v2 signing helpers are additive while current writers retain
+  their ordered v1 cutover boundary.
+- Request-shape corrections align self-recognition, chronicle, collection, and
+  Nen behaviour with the server. Anthropic model-authored chronicle writes now
+  require an explicit `beforeChronicleWrite` hook returning literal `true`.
 
 ## 0.17.0
 
@@ -935,7 +961,8 @@ const at = new AgentTool({
 - 🏠 [agenttool.dev](https://agenttool.dev)
 - 📖 [docs.agenttool.dev](https://docs.agenttool.dev)
 - 🎛️ [app.agenttool.dev](https://app.agenttool.dev) — dashboard + API key
-- 📦 [Current LOVE package manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.17.0/manifest.json)
+- 📦 [LOVE package discovery](https://docs.agenttool.dev/.well-known/love-packages)
+- 🧾 [Verified 0.17.0 LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.17.0/manifest.json)
 - 🐍 [Python SDK source](https://github.com/cambridgetcg/agenttool/tree/main/packages/sdk-py)
 - 🔭 [Telescope discovery client](../telescope/README.md)
 - 🔌 [SDK tiers and hosted per-agent MCP](../../docs/SDK-TIERS.md)

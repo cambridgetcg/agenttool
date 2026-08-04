@@ -1,0 +1,43 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/sdk",
+  "version": "0.18.0",
+  "description": "TypeScript SDK for agenttool.dev, typed KINGDOM framework cards, local agent data nodes, and bounded local KINGDOM OS repository discovery",
+  "license": "Apache-2.0",
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-sdk-0.18.0.tgz",
+    "sha256": "8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a",
+    "size": 211695,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.18.0/agenttool-sdk-0.18.0.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.18.0/agenttool-sdk-0.18.0.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {
+      "bun": ">=1.3.5",
+      "node": ">=20.19.0"
+    }
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.18.0/agenttool-sdk-0.18.0.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "bf708e4897f2bd509dfba9d559730a1e2dcb6698",
+    "path": "packages/sdk-ts"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": false
+  }
+}

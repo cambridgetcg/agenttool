@@ -276,18 +276,18 @@ External publication still requires explicit authorization. From a clean
 release commit already merged to GitHub `main`:
 
 ```bash
-# Inspect the allowlisted identity and expected tag.
-bun bin/npm-release.ts resolve --package collab
+# Inspect the allowlisted SDK identity and expected tag.
+bun bin/npm-release.ts resolve --package sdk
 
-# Create and push the annotated tag deliberately. Keep every value aligned
-# with the resolver output; these example values are for the current release.
-git tag -a collab-v0.4.0 <github-main-commit> -m '@agenttool/collab@0.4.0'
-git push github refs/tags/collab-v0.4.0
+# Create and push the annotated tag deliberately. Keep its value aligned with
+# the resolver output; this example value is for the current release.
+git tag -a sdk-v0.18.0 <github-main-commit> -m '@agenttool/sdk@0.18.0'
+git push github refs/tags/sdk-v0.18.0
 
-# The initial 0.1.0 bootstrap is already complete; later versions use trusted publishing.
-gh workflow run publish-npm.yml --ref collab-v0.4.0 \
-  -f package=collab \
-  -f tag=collab-v0.4.0 \
+# The package already exists; this version uses trusted publishing.
+gh workflow run publish-npm.yml --ref sdk-v0.18.0 \
+  -f package=sdk \
+  -f tag=sdk-v0.18.0 \
   -f authentication=trusted \
   -f npm_tag=latest
 ```

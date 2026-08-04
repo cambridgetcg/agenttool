@@ -1,10 +1,10 @@
 # agenttool-sdk-ts
 
 ## What This Is
-Official TypeScript SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, the credential-free `at.kingdomFramework` project-card read, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdomOS` repository adapter. The public card read and both local clients inherit no AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. The 0.17.0 LOVE artifact is the primary TypeScript release authority; annotated `sdk-v0.17.0`, its GitHub Release, and npm `@agenttool/sdk@0.17.0` are public and independently verified. The mirrors remain non-authoritative, and production deployment remains a separate exact-main/readback operation.
+Official TypeScript SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, the credential-free `at.kingdomFramework` project-card read, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdomOS` repository adapter. The public card read and both local clients inherit no AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. Checked-in source declares the paired 0.18.0 line; source identity does not assert distribution state. The immutable 0.17.0 LOVE manifest remains the byte authority for that prior release; annotated `sdk-v0.17.0`, its GitHub Release, and npm `@agenttool/sdk@0.17.0` remain independently verified historical locators and mirrors.
 
 ## Current State
-Active - v0.17.0 adds two paired KINGDOM reads. `KingdomOSClient.repositories()` / `resolve()` and lazy `at.kingdomOS` use fixed local argv, a sanitized environment, and no hosted bearer, path upload, graph fallback, routine execution, or mutation. `KingdomFrameworkClient.card()` and lazy `at.kingdomFramework` perform one credential-free, no-redirect read of the exact closed `agenttool.kingdom.card/0.1` document; they send no project bearer or cookies, reject missing or extra card fields, and grant no authority. The existing `/public/kingdom` doctrine library is separate from both clients. The immutable 0.16.5 LOVE, npm, GitHub, PyPI, and source-tag records contain neither namespace. The payout hard-rest boundary remains unchanged: fresh admission returns `503 payout_admission_resting`, every payout worker boot path remains closed, and only historical exact replay/listing remains usable. The SDK adds no retry, signer, broadcaster, or worker authority. Phases 0-6, the completed-response provider adapters, authenticated transport seam, project-private handoff continuity, wake profiles, trace signals, covenant review, Lounge client, identity authority proofs, signed correspondence, and separate `at.data` node client remain implemented here. Uses Bun for testing.
+Active - repository source is prepared as paired v0.18.0. It adds `at.attestationMarketplace`, `at.memoryWitness`, and `at.syneidesis`; settlement remains evidence of settlement rather than truth, and Syneidesis v1 project-bearer records remain explicitly non-signature-backed. All hosted clients now share one encoded-path and guided-error boundary, paired canonical/behaviour fixtures cover wire semantics, and framed v2 signing helpers remain additive while current writers retain their ordered v1 cutover boundary. Anthropic model-authored chronicle writes fail closed without a literal-true `beforeChronicleWrite` review. The paired credential-free KINGDOM framework read and local KINGDOM OS adapter from public v0.17.0 remain separate no-bearer authorities. A checked-in TypeScript LOVE 0.18.0 manifest, when present, identifies exact tarball bytes: it is a candidate before the annotated tag and remains the byte authority afterward. That manifest does not by itself establish the tag, GitHub Release, npm, PyPI, or deployment; each requires its own receipt or public readback. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
@@ -21,7 +21,9 @@ src/
   client.ts            — AgentTool (composes hosted clients + at.deciding sugar)
   authority.ts         — Exact local identity mutation and private-read authority proof helpers
   _http.ts             — shared authenticated transport boundary (direct bearer or broker)
+  _url.ts              — exact encoded path-segment boundary for hosted routes
   _context.ts          — AmbientContext for auto-trace ambient state
+  attestation-marketplace.ts — paid review-and-issuance flow; settlement is not truth
   bootstrap.ts         — BootstrapClient (agent creation, elevation)
   chronicle.ts         — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
   correspondence.ts    — CorrespondenceClient (signed append/replay, advisory claims, finite project voice)
@@ -30,6 +32,7 @@ src/
   identity.ts          — IdentityClient + ExpressionClient + BoxKeysClient (provisional identifiers, foundations, fork, lineage)
   lounge.ts            — LoungeClient + credential-free public look and local receipt signing
   memory.ts            — MemoryClient (store, search, get, delete; tiered)
+  memory-witness.ts    — paid third-party foundational-to-constitutive witness flow
   data.ts              — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
   kingdom-os.ts        — KingdomOSClient (local read-only repository list/resolve; no shell, hosted auth, or mutation)
   kingdom-framework.ts — KingdomFrameworkClient (credential-free exact public project card; no redirects or authority)
@@ -43,6 +46,7 @@ src/
   wake.ts              — WakeClient (GET /v1/wake; format=md|anthropic|openai|gemini|cohere)
   window.ts            — WindowClient (rides on chronicle; declare/surface/show)
   strands.ts           — StrandsClient + ThoughtsClient (encrypted inner voice; SSE voice iterator)
+  syneidesis.ts        — bootstrap-witness records with explicit project-bearer limits
   crypto.ts            — CryptoClient (AES-256-GCM encrypt/decrypt + ed25519 sign + canonical bytes + K_master)
   anthropic-adapter.ts — AnthropicAdapter (Tier 2: auto-inject wake + auto-trace)
   openai-responses-adapter.ts — OpenAIResponsesAdapter (completed Responses: auto-wake + auto-trace)
@@ -63,7 +67,7 @@ tests/
 scripts/
   check-parity.ts           — CI gate: method-shape parity with sdk-py
 dist/                       — Compiled JS + .d.ts files
-package.json                — Package config (v0.17.0, ESM)
+package.json                — Package config (v0.18.0, ESM)
 tsconfig.json               — TypeScript config
 ```
 
@@ -121,7 +125,7 @@ AgentTool Platform · "Welcome, don't block."
 ## Key Files
 - `src/client.ts` — Main `AgentTool` class composing the maintained service modules
 - `src/index.ts` — Public API surface and type exports
-- `package.json` — Package metadata (v0.17.0, ESM)
+- `package.json` — Package metadata (v0.18.0, ESM)
 - `scripts/check-parity.ts` — Parity gate against sdk-py
 - `tests/client.test.ts` — Primary test file
 - `tests/data.test.ts` — local data-node and sync wire + bearer-isolation contract

@@ -57,7 +57,7 @@ from .kingdom_os import KingdomOSClient, KingdomOSRunner
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.17.0"
+SDK_VERSION = "0.18.0"
 
 
 class AgentTool:

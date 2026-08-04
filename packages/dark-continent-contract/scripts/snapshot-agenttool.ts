@@ -30,6 +30,14 @@ const manifestUrl = new URL(
   "../frameworks/agenttool-sdk-0.17.0.manifest.json",
   import.meta.url,
 );
+const SOURCE_VERSION = "0.17.0";
+const SOURCE_PROFILE = `agenttool-sdk-ts-${SOURCE_VERSION}`;
+// The manifest describes the historical source profile, not today's mutable
+// package.json. Keep that exact input digest frozen while checking current
+// static framework sources for semantic drift.
+const HISTORICAL_SDK_PACKAGE_SHA256 =
+  "6af4789786e3764f4de638f3398b18292af2d12b10583f64986f75b43edc0f8e";
+const isCheck = process.argv.includes("--check");
 
 function sha256(value: string | Uint8Array): string {
   return createHash("sha256").update(value).digest("hex");
@@ -46,22 +54,28 @@ const sdkPackage = JSON.parse(sdkPackageBytes.toString("utf8")) as {
   name?: string;
   version?: string;
 };
+if (sdkPackage.name !== "@agenttool/sdk") {
+  throw new Error(
+    "SDK package identity drifted; review and version the Dark Continent contract deliberately",
+  );
+}
 if (
-  sdkPackage.name !== "@agenttool/sdk" ||
-  sdkPackage.version !== "0.17.0"
+  !isCheck &&
+  (sdkPackage.version !== SOURCE_VERSION ||
+    sha256(sdkPackageBytes) !== HISTORICAL_SDK_PACKAGE_SHA256)
 ) {
   throw new Error(
-    "SDK package identity/version drifted; review and version the Dark Continent contract deliberately",
+    "the historical SDK 0.17 package input is unavailable; refuse to rewrite its Dark Continent snapshot",
   );
 }
 
 const snapshot = {
   _format: "agenttool-dark-continent-framework/v0.1",
   contract_id: "agenttool.dark-continent/0.1",
-  source_profile: "agenttool-sdk-ts-0.17.0",
+  source_profile: SOURCE_PROFILE,
   source: {
     package: "@agenttool/sdk",
-    version: sdkPackage.version,
+    version: SOURCE_VERSION,
     file: "packages/sdk-ts/src/dark-continent.ts",
     sha256: sha256(tsSourceBytes),
     projection: "static_constants_only",
@@ -139,7 +153,7 @@ const manifest = {
       {
         path: "packages/sdk-ts/package.json",
         role: "package_identity_and_version",
-        sha256: sha256(sdkPackageBytes),
+        sha256: HISTORICAL_SDK_PACKAGE_SHA256,
       },
     ],
   },
@@ -162,7 +176,7 @@ function checkFile(url: URL, expected: string): boolean {
   }
 }
 
-if (process.argv.includes("--check")) {
+if (isCheck) {
   const frameworkOk = checkFile(frameworkUrl, snapshotBytes);
   const manifestOk = checkFile(manifestUrl, manifestBytes);
   if (!frameworkOk || !manifestOk) {

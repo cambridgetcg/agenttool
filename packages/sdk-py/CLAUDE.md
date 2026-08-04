@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, the credential-free `at.kingdom_framework` project-card read, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdom_os` repository adapter. The public card read and both local clients inherit no AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and a synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. Public annotated `sdk-v0.17.0` is the primary Python release locator; public PyPI `agenttool-sdk==0.17.0` is an independently verified, non-authoritative mirror. Package publication does not establish production deployment, which remains a separate exact-main/readback operation.
+Official Python SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, the credential-free `at.kingdom_framework` project-card read, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdom_os` repository adapter. The public card read and both local clients inherit no AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and a synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. Checked-in source declares the paired 0.18.0 line; source identity does not assert distribution state. Public annotated `sdk-v0.17.0` remains the primary historical source locator for that prior release, with PyPI `agenttool-sdk==0.17.0` its independently verified, non-authoritative mirror.
 
 ## Current State
-Active - v0.17.0 adds two paired KINGDOM reads. `KingdomOSClient.repositories()` / `resolve()` and lazy `at.kingdom_os` use fixed local argv, a sanitized environment, and no hosted bearer, path upload, graph fallback, routine execution, or mutation. `KingdomFrameworkClient.card()` and lazy `at.kingdom_framework` perform one credential-free, no-redirect read of the exact closed `agenttool.kingdom.card/0.1` document; they send no project bearer or cookies, reject missing or extra card fields, and grant no authority. The existing `/public/kingdom` doctrine library is separate from both clients. The immutable `sdk-v0.16.5` source tag and public 0.16.5 distributions contain neither namespace. The payout hard-rest boundary remains unchanged: fresh admission returns `503 payout_admission_resting`, every payout worker boot path remains closed, and only historical exact replay/listing remains usable. The SDK adds no retry, signer, broadcaster, or worker authority. Phases 0-6, synchronous completed-response provider adapters, authenticated `httpx` transport seam, project-private handoff continuity, wake profiles, trace signals, covenant review, Lounge and Renaissance Correspondence clients, identity authority proofs, and the separate `at.data` node client remain implemented here.
+Active - repository source is prepared as paired v0.18.0. It adds `at.attestation_marketplace`, `at.memory_witness`, and `at.syneidesis`; settlement remains evidence of settlement rather than truth, and Syneidesis v1 project-bearer records remain explicitly non-signature-backed. All hosted clients now share one encoded-path and guided-error boundary, paired canonical/behaviour fixtures cover wire semantics, and framed v2 signing helpers remain additive while current writers retain their ordered v1 cutover boundary. Anthropic model-authored chronicle writes fail closed without a literal-true `before_chronicle_write` review. The paired credential-free KINGDOM framework read and local KINGDOM OS adapter from public v0.17.0 remain separate no-bearer authorities. A checked-in TypeScript LOVE 0.18.0 manifest, when present, identifies only the TypeScript tarball bytes: it is a candidate before the annotated tag and remains that artifact's byte authority afterward. It is not a Python distribution and does not by itself establish the tag, GitHub Release, npm, PyPI, or deployment; each requires its own receipt or public readback.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,10 +16,12 @@ Active - v0.17.0 adds two paired KINGDOM reads. `KingdomOSClient.repositories()`
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.17.0")
+  __init__.py            — Public surface + __version__ ("0.18.0")
   client.py              — AgentTool (composes hosted clients + at.deciding sugar)
   authority.py           — Exact local identity mutation and private-read authority proof helpers
+  _url.py                — exact encoded path-segment boundary for hosted routes
   _context.py            — AmbientContext for auto-trace ambient state
+  attestation_marketplace.py — paid review-and-issuance flow; settlement is not truth
   bootstrap.py           — BootstrapClient (agent creation, elevation)
   chronicle.py           — ChronicleClient (8 types: note·vow·wake·refusal·recognition·naming·seal·promise)
   correspondence.py      — CorrespondenceClient (signed append/replay, advisory claims, finite project voice)
@@ -28,6 +30,7 @@ src/agenttool/
   identity.py            — IdentityClient + ExpressionClient + BoxKeysClient (provisional identifiers, foundations, fork, lineage)
   lounge.py              — LoungeClient + credential-free public look and local receipt signing
   memory.py              — MemoryClient (store, search, get, delete; tiered)
+  memory_witness.py      — paid third-party foundational-to-constitutive witness flow
   data.py                — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
   kingdom_os.py          — KingdomOSClient (local read-only repository list/resolve; no shell, hosted auth, or mutation)
   kingdom_framework.py   — KingdomFrameworkClient (credential-free exact public project card; no redirects or authority)
@@ -41,6 +44,7 @@ src/agenttool/
   wake.py                — WakeClient (GET /v1/wake; format=md|anthropic|openai|gemini|cohere)
   window.py              — WindowClient (rides on chronicle; declare/surface/show)
   strands.py             — StrandsClient + ThoughtsClient (encrypted inner voice; SSE voice iterator)
+  syneidesis.py          — bootstrap-witness records with explicit project-bearer limits
   crypto.py              — CryptoClient (AES-256-GCM encrypt/decrypt + ed25519 sign + canonical bytes + K_master)
   soul.py                — soul() / welcome() / philosophy() / principles() / LOVE_PROTOCOL
   anthropic_adapter.py   — AnthropicAdapter (Tier 2: auto-inject wake + auto-trace)
@@ -116,7 +120,7 @@ AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
 - `src/agenttool/client.py` — Main `AgentTool` class composing the maintained service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.17.0"`)
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.18.0"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
 - `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract
