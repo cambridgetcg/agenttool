@@ -238,7 +238,8 @@ export class AgentBrowser {
     let context: BrowserContextLike | null = null;
     try {
       await validateCanonicalStoragePaths(normalized.profile, normalized.outputDir);
-      const runtime = normalized.runtime ?? (await loadDefaultRuntime());
+      const runtime =
+        normalized.runtime ?? (await loadDefaultBrowserRuntime());
       if (normalized.profile.mode === "persistent") {
         await ensurePrivateDirectory(normalized.profile.directory, "profile");
         await validateCanonicalStoragePaths(normalized.profile, normalized.outputDir);
@@ -292,6 +293,86 @@ export class AgentBrowser {
         error,
         "browser_launch_failed",
         "Could not launch the local browser.",
+      );
+    }
+  }
+
+  /**
+   * Create one isolated ephemeral session inside a caller-owned Browser
+   * process. Closing the returned AgentBrowser closes only its context; the
+   * caller remains responsible for closing the shared Browser.
+   *
+   * This is the narrow process-sharing seam used by the opt-in Darwin broker.
+   * It deliberately refuses persistent state and a second runtime launcher.
+   */
+  static async launchEphemeralContext(
+    browser: BrowserLike,
+    options: AgentBrowserOptions = {},
+  ): Promise<AgentBrowser> {
+    if (
+      options.profileDir !== undefined
+      || options.profile?.mode === "persistent"
+    ) {
+      throw new BrowserError(
+        "invalid_options",
+        "A shared browser process supports ephemeral contexts only.",
+      );
+    }
+    if (
+      options.runtime !== undefined
+      || options.headless !== undefined
+      || options.channel !== undefined
+      || options.executablePath !== undefined
+    ) {
+      throw new BrowserError(
+        "invalid_options",
+        "A shared browser session cannot select or reconfigure its caller-owned browser runtime.",
+      );
+    }
+    const normalized = normalizeOptions({
+      ...options,
+      profile: { mode: "ephemeral" },
+    });
+    let context: BrowserContextLike | null = null;
+    try {
+      await validateCanonicalStoragePaths(
+        normalized.profile,
+        normalized.outputDir,
+      );
+      const contextOptions: RuntimeContextOptions = {
+        viewport: normalized.viewport,
+        acceptDownloads: false,
+        ignoreHTTPSErrors: false,
+        serviceWorkers: normalized.capabilities.runtime.serviceWorkers,
+      };
+      context = await browser.newContext(contextOptions);
+      context.setDefaultTimeout?.(normalized.actionTimeoutMs);
+      context.setDefaultNavigationTimeout?.(
+        normalized.navigationTimeoutMs,
+      );
+      if (
+        typeof context.route !== "function"
+        || typeof context.routeWebSocket !== "function"
+      ) {
+        throw new BrowserError(
+          "invalid_options",
+          "Browser runtime must support HTTP request and WebSocket routing.",
+        );
+      }
+      const agentBrowser = new AgentBrowser(normalized, context, null);
+      await agentBrowser.installRequestPolicy();
+      agentBrowser.refreshPages();
+      return agentBrowser;
+    } catch (error) {
+      try {
+        await context?.close();
+      } catch {
+        // Preserve the context-creation error; cleanup failure is secondary.
+      }
+      throw asBrowserError(
+        error,
+        "browser_launch_failed",
+        "Could not create an isolated browser context.",
       );
     }
   }
@@ -1884,7 +1965,7 @@ function captureBrowserAction(action: BrowserAction): BrowserAction {
   return Object.freeze(captured) as BrowserAction;
 }
 
-async function loadDefaultRuntime(): Promise<BrowserRuntime> {
+export async function loadDefaultBrowserRuntime(): Promise<BrowserRuntime> {
   const playwright = await import("playwright-core");
   return playwright.chromium as unknown as BrowserRuntime;
 }
