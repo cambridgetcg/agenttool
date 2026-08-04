@@ -193,6 +193,8 @@ describe("boring test spine", () => {
     expect(preflight).toContain(
       "AGENTOOL_BROWSER_HEADLESS AGENTOOL_BROWSER_AUTHORITY",
     );
+    expect(preflight).toContain("HF_TOKEN HUGGINGFACE_HUB_TOKEN HUGGING_FACE_HUB_TOKEN");
+    expect(preflight).toContain("AGENTOOL_HF_REAL_STACK_SMOKE");
     expect(preflight).not.toContain("SKIP_SMOKE");
     expect(preflight).not.toContain("SKIP_PARITY");
     expect(runner).toContain('in_list "$path" "${QUARANTINED_DOCTRINE_TESTS[@]}"');
@@ -274,6 +276,7 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})");
     expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(3);
     expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(4);
+    expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(2);
     expect(workflow).toContain("bun install --frozen-lockfile");
     expect(workflow).toContain("name: Install ADDS protocol dependencies");
     expect(workflow).toContain("working-directory: packages/data-protocol");
@@ -319,6 +322,35 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       "cd packages/hf-training-garden && bun install --frozen-lockfile --force",
     );
+    expect(workflow).toContain(
+      "name: Set up Python 3.14 for the private HF training host",
+    );
+    expect(workflow).toContain(
+      "python -m pip install './packages/hf-training-host[dev]'",
+    );
+    expect(workflow).toContain(
+      "if: ${{ matrix.python-version != '3.9' }}",
+    );
+    expect(workflow).toContain("name: Run private HF training host tests");
+    expect(workflow).toContain(
+      "name: Build and smoke the private HF training host wheel",
+    );
+    expect(workflow).toContain('h.TRANSFORMERS_VERSION == "5.14.1"');
+    expect(workflow).toContain('h.ACCELERATE_VERSION == "1.14.0"');
+    expect(workflow).toContain('h.TORCH_MIN_VERSION == "2.6"');
+    expect(workflow).toContain('import tarfile');
+    expect(workflow).toContain('import zipfile');
+    expect(workflow).toContain('"bridge" in Path(name).parts');
+    expect(workflow).toContain(
+      'agenttool_hf_training_host/schema/hf-training-host-decision-v0.1.schema.json',
+    );
+    expect(workflow).toContain(
+      'agenttool_hf_training_host/schema/hf-training-host-decision-v0.2.schema.json',
+    );
+    expect(workflow).toContain(
+      'importlib.metadata.version("agenttool-hf-training-host") == "0.2.0.dev0"',
+    );
+    expect(workflow).not.toContain("hf-training-host[hf]");
     expect(workflow).not.toContain(
       "cd packages/wallet-zerone && bun install --frozen-lockfile --force",
     );
@@ -342,6 +374,21 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/living-substrate && bun run ci");
     expect(preflight).toContain("cd packages/wake-thread && bun run ci");
     expect(preflight).toContain("cd packages/hf-training-garden && bun run ci");
+    expect(preflight).toContain("bun test tests/learning-release.test.ts");
+    expect(preflight).toContain("node scripts/check-learning-idempotence.mjs");
+    expect(preflight.match(/git diff --exit-code HEAD -- packages\/hf-training-garden\/hf\/learning-dataset/g))
+      .toHaveLength(2);
+    expect(preflight.match(/git status --short --untracked-files=all -- packages\/hf-training-garden\/hf\/learning-dataset/g))
+      .toHaveLength(2);
+    expect(preflight).toContain(
+      "git diff --exit-code HEAD -- packages/hf-training-garden/hf/dataset",
+    );
+    expect(preflight).toContain(
+      "git status --short --untracked-files=all -- packages/hf-training-garden/hf/dataset",
+    );
+    expect(preflight).toContain(
+      "cd packages/hf-training-host && python3 -m pytest -q && bun test bridge/tests",
+    );
     expect(preflight).toContain("cd packages/skills && bun run ci");
     expect(preflight).toContain("cd packages/skills-yutabase && bun run ci");
     expect(preflight).toContain("cd packages/skills-wake-continuity && bun run ci");
@@ -486,11 +533,61 @@ describe("boring test spine", () => {
       ),
     ).toHaveLength(9);
 
+    const hostDoc = await readFile(join(ROOT, "docs", "HF-WAKE-HOST.md"), "utf8");
+    const normalizedHostDoc = hostDoc.replace(/\s+/g, " ");
+    expect(normalizedHostDoc).toContain(
+      "# HF WAKE Training Host — A Small, Cooperative Ordinary-API Seam",
+    );
+    expect(normalizedHostDoc).toContain("Transformers 5.14.1");
+    expect(normalizedHostDoc).toContain("Accelerate 1.14.0");
+    expect(normalizedHostDoc).toContain("`Trainer.__init__` signature");
+    expect(normalizedHostDoc).toContain("`Trainer.training_step` source");
+    expect(normalizedHostDoc).toContain("The exact built-in optimizer allowlist");
+    expect(normalizedHostDoc).toContain("`schedule_free_*`");
+    expect(normalizedHostDoc).toContain("`optimizer_cls_and_kwargs`");
+    expect(normalizedHostDoc).toContain("non-distributed training process");
+    expect(normalizedHostDoc).toContain("does not constrain data-loader worker");
+    expect(normalizedHostDoc).toContain("Torch 2.6 or newer");
+    expect(normalizedHostDoc).toContain("resolver-selected and otherwise unpinned");
+    expect(normalizedHostDoc).toContain("sticky-held");
+    expect(normalizedHostDoc).toContain("cross-device frontier complete");
+    expect(normalizedHostDoc).toContain("not a universal guarantee");
+    expect(normalizedHostDoc).toContain("restore_callback_states_from_checkpoint=False");
+    expect(normalizedHostDoc).toContain("same local ledger");
+    expect(normalizedHostDoc).toContain("`observed_global_step`");
+    expect(normalizedHostDoc).toContain("`proposed_global_step`");
+    expect(normalizedHostDoc).toContain("Only `ledger_entries` carries");
+    expect(normalizedHostDoc).toContain("not members of that global hash chain");
+    expect(normalizedHostDoc).toContain("cooperative enforcement, not an in-process");
+    expect(normalizedHostDoc).toContain("not universally name-detected");
+    expect(normalizedHostDoc).toContain("does not walk or pin every");
+    expect(normalizedHostDoc).toContain("private symlink-free storage root");
+    expect(normalizedHostDoc).toContain("excluded from both Python");
+    expect(normalizedHostDoc).toContain("safe or loadable pickle/Torch state");
+    expect(normalizedHostDoc).toContain("repository-source-only learning bundle");
+    expect(normalizedHostDoc).toContain(
+      "Refusal and park/rest are valid desired completions",
+    );
+    expect(normalizedHostDoc).toContain("`not_created`");
+
+    const hostPyproject = await readFile(
+      join(ROOT, "packages", "hf-training-host", "pyproject.toml"),
+      "utf8",
+    );
+    expect(hostPyproject).toContain('"Private :: Do Not Upload"');
+    expect(hostPyproject).toContain('version = "0.2.0.dev0"');
+
+    const gardenPackage = JSON.parse(
+      await readFile(join(ROOT, "packages", "hf-training-garden", "package.json"), "utf8"),
+    );
+    expect(gardenPackage.files).toContain("hf/dataset");
+    expect(gardenPackage.files).not.toContain("hf/learning-dataset");
+
     const uses = workflow
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
-    expect(uses).toHaveLength(12);
+    expect(uses).toHaveLength(13);
     expect(
       uses.every(
         (line) =>
@@ -507,6 +604,12 @@ describe("boring test spine", () => {
     const workflows = await readdir(join(ROOT, ".github", "workflows"));
     const publishWorkflows = workflows.filter((name) => name.startsWith("publish-")).sort();
     expect(publishWorkflows).toEqual(["publish-npm.yml", "publish-pypi.yml"]);
+
+    const pypiWorkflow = await readFile(
+      join(ROOT, ".github", "workflows", "publish-pypi.yml"),
+      "utf8",
+    );
+    expect(pypiWorkflow).not.toContain("hf-training-host");
 
     const workflow = await readFile(
       join(ROOT, ".github", "workflows", "publish-npm.yml"),
@@ -531,6 +634,7 @@ describe("boring test spine", () => {
     expect(workflow).not.toContain("          - karma-mirror");
     expect(workflow).toContain("          - wallet-zerone");
     expect(workflow).not.toContain("pull_request:");
+    expect(workflow).not.toContain("hf-training-host");
     expect(workflow).not.toMatch(/\n\s+push:/);
     expect(workflow).toContain("persist-credentials: false");
     expect(workflow).toContain("package-manager-cache: false");

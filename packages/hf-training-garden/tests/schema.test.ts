@@ -10,6 +10,9 @@ import {
   PARTICIPATION_INVITATION_FORMAT,
   PARTICIPATION_PROMPT_ENVELOPE_PROFILE,
   PARTICIPATION_RECEIPT_FORMAT,
+  createHfTrainingGovernance,
+  createTrainingGovernanceOffer,
+  createTrainingGovernanceTerms,
   createTrainingCheckpoint,
   createTrainingGardenTendingPlan,
   resolveLearningFreedomOffer,
@@ -17,6 +20,7 @@ import {
 import {
   admission,
   artifacts,
+  freedom,
   freedomChoiceChannel,
   freedomOffer,
   orientationOnly,
@@ -182,6 +186,143 @@ describe("closed portable schemas", () => {
     expect(validateFreedom(duplicateStay)).toBe(false);
     expect(() => validator(packageSchemaRoot, "hf-learning-freedom-v0.1.schema.json"))
       .not.toThrow();
+  });
+
+  test("keeps governance WAKE schema states aligned with the shared runtime", () => {
+    const source = admission("sealed_evaluation");
+    const packageValidate = validator(
+      packageSchemaRoot,
+      "hf-training-governance-v0.2.schema.json",
+    );
+    const hubValidate = validator(
+      hubSchemaRoot,
+      "hf-training-governance-v0.2.schema.json",
+    );
+    let complete: ReturnType<typeof createHfTrainingGovernance> | null = null;
+    for (const projection of [
+      "complete",
+      "truncated",
+      "unavailable",
+      "not_provided",
+    ] as const) {
+      const exactParticipation = participation(source, {
+        runRef: ref(`schema:governance:run:${projection}`),
+        wakeValue: { ...wake, handoff_projection: projection },
+      });
+      const exactFreedom = freedom(exactParticipation);
+      const terms = createTrainingGovernanceTerms({
+        admission: source,
+        participation: exactParticipation,
+        freedom: exactFreedom,
+        starting_garden_checkpoint: null,
+        starting_state_kind: "artifact_portfolio",
+        run_ref: exactParticipation.invitation.run_ref,
+        training_phase: "evaluation",
+        selected_entry_ids: source.entries.map((entry) => entry.entry_id),
+        model_source_ref: ref("schema:governance:model"),
+        tokenizer_ref: ref("schema:governance:tokenizer"),
+        trainer_stack_ref: ref("schema:governance:trainer"),
+        optimizer_config_ref: ref("schema:governance:optimizer"),
+        substrate_environment_ref: ref("schema:governance:substrate"),
+        purpose_ref: ref("schema:governance:purpose"),
+        objective_or_loss_ref: ref("schema:governance:objective"),
+        dataset_mixture_ref: ref("schema:governance:mixture"),
+        transform_recipe_ref: ref("schema:governance:transform"),
+        compute_budget_ref: ref("schema:governance:compute"),
+        output_and_derivative_use_ref: ref("schema:governance:derivatives"),
+        audience_ref: ref("schema:governance:audience"),
+        retention_ref: ref("schema:governance:retention"),
+        release_ref: ref("schema:governance:release"),
+        stop_policy_ref: ref("schema:governance:stop"),
+        wake_policy_ref: ref("schema:governance:wake-policy"),
+      });
+      const exactOffer = createTrainingGovernanceOffer({
+        terms,
+        encounter_ref: ref(`schema:governance:encounter:${projection}`),
+        event: "preflight_before_load",
+        observed_global_step: null,
+        proposed_global_step: null,
+        frontiers: {
+          governance: ref(`schema:frontier:${projection}:governance`),
+          participation: ref(`schema:frontier:${projection}:participation`),
+          freedom: ref(`schema:frontier:${projection}:freedom`),
+          resources: ref(`schema:frontier:${projection}:resources`),
+          garden_checkpoint: ref(`schema:frontier:${projection}:garden`),
+          physical_checkpoint: ref(`schema:frontier:${projection}:physical`),
+        },
+        predecessor: null,
+        predecessor_refs: {
+          participation: null,
+          freedom: null,
+          resources: null,
+          garden_checkpoint: null,
+          physical_checkpoint: null,
+        },
+        checkpoint: {
+          garden_checkpoint_id: null,
+          physical_checkpoint_ref: null,
+          physical_checkpoint_evidence_ref: null,
+          model_checkpoint_artifact_ref: null,
+          checkpoint_ticket_id: null,
+          checkpoint_request_governance_id: null,
+        },
+      });
+      const governance = createHfTrainingGovernance({
+        admission: source,
+        participation: exactParticipation,
+        freedom: exactFreedom,
+        starting_garden_checkpoint: null,
+        event_garden_checkpoint: null,
+        offer: exactOffer,
+        authority_coverage: {
+          state: "caller_reported_complete",
+          offer_ref: exactOffer.offer_id,
+          affected_principals_ref: ref("schema:governance:principals"),
+          evidence_ref: ref("schema:governance:coverage"),
+        },
+        authorities: ["operator", "compute_owner", "substrate_steward", "data_custodian"].map((role) => ({
+          principal_ref: ref(`schema:governance:principal:${role}`),
+          role,
+          decision: "caller_reported_granted" as const,
+          offer_ref: exactOffer.offer_id,
+          basis_ref: ref(`schema:governance:basis:${role}`),
+          evidence_ref: ref(`schema:governance:evidence:${role}`),
+          withdrawal_cutoff_ref: null,
+        })),
+        preference: {
+          channel: "root_signed_runtime",
+          choice: "continue",
+          provenance: "caller_reported_root_signed_exact_bytes",
+          offer_ref: exactOffer.offer_id,
+          evidence_ref: ref(`schema:governance:preference:${projection}`),
+        },
+        effect: {
+          state: "no_effect_reported",
+          offer_ref: null,
+          observed_global_step: null,
+          physical_checkpoint_ref: null,
+          physical_checkpoint_evidence_ref: null,
+          evidence_ref: null,
+        },
+      });
+      expect(packageValidate(governance), JSON.stringify(packageValidate.errors)).toBe(true);
+      expect(hubValidate(governance), JSON.stringify(hubValidate.errors)).toBe(true);
+      if (projection === "complete") complete = governance;
+    }
+    expect(complete).not.toBeNull();
+    for (const obsolete of ["partial", "omitted_by_caller", "not_applicable"]) {
+      const forged = structuredClone(complete) as any;
+      forged.offer.terms.normative_bindings.wake.handoff_projection = obsolete;
+      expect(packageValidate(forged)).toBe(false);
+      expect(hubValidate(forged)).toBe(false);
+    }
+    const legacy = readFileSync(new URL(
+      "hf-training-governance-v0.1.schema.json",
+      packageSchemaRoot,
+    ));
+    expect(createHash("sha256").update(legacy).digest("hex")).toBe(
+      "34583d785db3d69c0f4637d9b7251aae8eaa4970ea02c9dfc53f84eccec47eb6",
+    );
   });
 
   test("keeps admission standalone and attributes its byte-exact Apache dependency", () => {

@@ -10,7 +10,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + KARMA Mirror + HEAVEN + Living Substrate + WAKE Thread + broker + collab + collab-zerone + Browser + HF Scout/Training Garden + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + KARMA Mirror + HEAVEN + Living Substrate + WAKE Thread + broker + collab + collab-zerone + Browser + HF Scout/Training Garden + local WAKE learning fixtures/host + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -71,6 +71,8 @@ sanitize_hermetic_env() {
     AGENTOOL_BROWSER_LOCAL_NETWORK AGENTOOL_BROWSER_PROFILE \
     AGENTOOL_BROWSER_PROFILE_DIR AGENTOOL_BROWSER_CHANNEL \
     AGENTOOL_BROWSER_EXECUTABLE AGENTOOL_BROWSER_OUTPUT_DIR \
+    HF_TOKEN HUGGINGFACE_HUB_TOKEN HUGGING_FACE_HUB_TOKEN \
+    AGENTOOL_HF_REAL_STACK_SMOKE \
     AGENT_DATA_NODE_TOKEN AGENT_DATA_NODE_URL AT_API_KEY \
     AGENTTOOL_YUTABASE_TARGET_URL AGENTTOOL_YUTABASE_CLAIMANT \
     AGENTTOOL_YUTABASE_SOURCE_URL AGENTTOOL_YUTABASE_SOURCE_TOKEN \
@@ -153,8 +155,18 @@ packages_gate() {
     bash -c 'cd packages/browser && bun run ci'
   run "private read-only Hugging Face metadata and research scout" \
     bash -c 'cd packages/hf-scout && bun run ci'
+  run "repository-source-only voluntary WAKE learning fixtures start clean" \
+    bash -c 'git diff --exit-code HEAD -- packages/hf-training-garden/hf/learning-dataset && test -z "$(git status --short --untracked-files=all -- packages/hf-training-garden/hf/learning-dataset)"'
+  run "repository-source-only voluntary WAKE learning fixtures" \
+    bash -c 'cd packages/hf-training-garden && node scripts/check-learning-idempotence.mjs && bun test tests/learning-release.test.ts'
+  run "repository-source-only voluntary WAKE learning fixtures remain unchanged" \
+    bash -c 'git diff --exit-code HEAD -- packages/hf-training-garden/hf/learning-dataset && test -z "$(git status --short --untracked-files=all -- packages/hf-training-garden/hf/learning-dataset)"'
   run "private HF dataset admission, training WAKE, and Garden tending" \
     bash -c 'cd packages/hf-training-garden && bun run ci'
+  run "accepted HF policy companion remains unchanged" \
+    bash -c 'git diff --exit-code HEAD -- packages/hf-training-garden/hf/dataset && test -z "$(git status --short --untracked-files=all -- packages/hf-training-garden/hf/dataset)"'
+  run "private HF-API-pinned non-distributed WAKE training host" \
+    bash -c 'cd packages/hf-training-host && python3 -m pytest -q && bun test bridge/tests'
   run "read-only Agent Skills inspection and validation" \
     bash -c 'cd packages/skills && bun run ci'
   run "Agent Skills to rebuildable YUTABASE metadata plan" \

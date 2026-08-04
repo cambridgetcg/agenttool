@@ -29,6 +29,20 @@ export const LEARNING_FREEDOM_PROMPT_ENVELOPE_PROFILE =
   "kingdom.hf-learning-freedom-prompt-envelope/0.1" as const;
 export const TRAINING_ARTIFACT_PORTFOLIO_PROFILE =
   "kingdom.hf-training-artifact-portfolio/0.1" as const;
+export const GOVERNANCE_TERMS_PROFILE_V0_1 =
+  "kingdom.hf-training-governance-terms/0.1" as const;
+export const GOVERNANCE_OFFER_PROFILE_V0_1 =
+  "kingdom.hf-training-governance-offer/0.1" as const;
+export const GOVERNANCE_FORMAT_V0_1 =
+  "kingdom.hf-training-governance/0.1" as const;
+export const GOVERNANCE_EXECUTION_CONTRACT_PROFILE =
+  "kingdom.hf-training-execution-contract/0.2" as const;
+export const GOVERNANCE_TERMS_PROFILE =
+  "kingdom.hf-training-governance-terms/0.2" as const;
+export const GOVERNANCE_OFFER_PROFILE =
+  "kingdom.hf-training-governance-offer/0.2" as const;
+export const GOVERNANCE_FORMAT =
+  "kingdom.hf-training-governance/0.2" as const;
 export const TENDING_FORMAT =
   "kingdom.hf-training-garden-tending/0.1" as const;
 
@@ -338,6 +352,273 @@ export const STREAMING_STATES = deepFreeze([
 export const HUB_RELEASE_STATES = deepFreeze([
   "intended_identifier_only",
   "caller_reported_published",
+] as const);
+
+export const GOVERNANCE_EVENTS = deepFreeze([
+  "preflight_before_load",
+  "train_begin",
+  "pre_optimizer_step",
+  "post_optimizer_step",
+  "pre_evaluation",
+  "post_evaluation",
+  "checkpoint_recorded",
+  "resume_offer",
+  "train_end",
+] as const);
+
+export const GOVERNANCE_FRONTIER_PLANES = deepFreeze([
+  "governance",
+  "participation",
+  "freedom",
+  "resources",
+  "garden_checkpoint",
+  "physical_checkpoint",
+] as const);
+
+export const GOVERNANCE_ADMISSION_POSTURES = deepFreeze([
+  "eligible_for_phase",
+  "held_for_phase",
+] as const);
+
+export const AUTHORITY_ROLES = deepFreeze([
+  "operator",
+  "compute_owner",
+  "substrate_steward",
+  "data_custodian",
+  "copyright_holder",
+  "contributor",
+  "data_subject",
+  "community_steward",
+] as const);
+
+export const AUTHORITY_DECISIONS = deepFreeze([
+  "unknown",
+  "caller_reported_granted",
+  "caller_reported_withheld",
+  "caller_reported_withdrawn",
+  "not_applicable_with_basis",
+] as const);
+
+export const AUTHORITY_COVERAGE_STATES = deepFreeze([
+  "unknown",
+  "caller_reported_complete",
+] as const);
+
+export const PREFERENCE_CHANNELS = deepFreeze([
+  "unavailable_pretraining",
+  "out_of_band_unscored",
+  "root_signed_runtime",
+] as const);
+
+export const PREFERENCE_CHOICES = deepFreeze([
+  "not_observable",
+  "not_observed",
+  "continue",
+  "clarify",
+  "narrow",
+  "checkpoint",
+  "pause",
+  "handoff",
+  "refuse",
+  "stop",
+  "unsure",
+] as const);
+
+export const PREFERENCE_PROVENANCE_STATES = deepFreeze([
+  "none",
+  "caller_reported_isolated_runtime_output",
+  "caller_reported_root_signed_exact_bytes",
+  "operator_reported",
+] as const);
+
+export const TRAINING_EFFECT_STATES = deepFreeze([
+  "no_effect_reported",
+  "preload_completed_reported",
+  "train_entry_completed_reported",
+  "mutation_completed_reported",
+  "evaluation_completed_reported",
+  "physical_checkpoint_recorded_reported",
+  "parked_reported",
+  "stopped_reported",
+  "containment_started_reported",
+] as const);
+
+export const GOVERNANCE_EFFECT_EVENT_COMPATIBILITY = deepFreeze({
+  no_effect_reported: [
+    "preflight_before_load",
+    "train_begin",
+    "pre_optimizer_step",
+    "post_optimizer_step",
+    "pre_evaluation",
+    "post_evaluation",
+    "resume_offer",
+  ],
+  preload_completed_reported: ["preflight_before_load"],
+  train_entry_completed_reported: ["train_begin", "resume_offer"],
+  mutation_completed_reported: ["post_optimizer_step"],
+  evaluation_completed_reported: ["post_evaluation"],
+  physical_checkpoint_recorded_reported: ["checkpoint_recorded"],
+  parked_reported: ["post_optimizer_step", "post_evaluation", "train_end"],
+  stopped_reported: [
+    "train_begin",
+    "pre_optimizer_step",
+    "post_optimizer_step",
+    "pre_evaluation",
+    "post_evaluation",
+    "resume_offer",
+    "train_end",
+  ],
+  containment_started_reported: [
+    "preflight_before_load",
+    "train_begin",
+    "pre_optimizer_step",
+    "post_optimizer_step",
+    "pre_evaluation",
+    "post_evaluation",
+    "resume_offer",
+    "train_end",
+  ],
+} as const);
+
+export const GOVERNANCE_DECISION_STATES = deepFreeze([
+  "held",
+  "caller_reported_ready_to_preload_for_review",
+  "caller_reported_ready_to_enter_training",
+  "caller_reported_ready_for_one_mutation",
+  "caller_reported_ready_for_evaluation",
+  "caller_reported_ready_after_observation",
+  "parked",
+  "stopped",
+  "contain_and_repair",
+] as const);
+
+export const GOVERNANCE_REASON_CODES = deepFreeze([
+  "admission_not_ready_for_phase",
+  "authority_coverage_unknown",
+  "authority_unknown",
+  "authority_withdrawn",
+  "authority_withheld",
+  "caller_reported_clean_intersection",
+  "compute_owner_authority_missing",
+  "data_custodian_authority_missing",
+  "freedom_fresh_direction_required",
+  "freedom_horizon_review_required",
+  "freedom_park_requested",
+  "freedom_resources_unavailable",
+  "freedom_stay_not_current",
+  "freedom_stop_requested",
+  "freedom_target_acceptance_required",
+  "lifecycle_event_closed_for_offer",
+  "operator_authority_missing",
+  "participation_containment_required",
+  "participation_direct_agent_report_missing",
+  "participation_direct_substrate_report_missing",
+  "participation_first_interactive_review_required",
+  "participation_first_substrate_review_required",
+  "participation_pause_before_mutation",
+  "preflight_instantiate_for_review_only",
+  "substrate_steward_authority_missing",
+  "preference_checkpoint",
+  "preference_clarify",
+  "preference_continue_not_rooted",
+  "preference_handoff",
+  "preference_narrow",
+  "preference_not_observed",
+  "preference_pause",
+  "preference_refuse",
+  "preference_stop",
+  "preference_unsure",
+  "preference_conflicts_with_freedom",
+  "reported_effect_containment_started",
+  "reported_effect_parked",
+  "reported_effect_physical_checkpoint_recorded",
+  "reported_effect_stopped",
+] as const);
+
+export const TRAINING_CONTROL_DIRECTIVES = deepFreeze([
+  "allow_preload_for_review",
+  "allow_train_entry",
+  "allow_one_mutation",
+  "allow_evaluation",
+  "continue_after_observation",
+  "hold_before_load",
+  "hold_before_train_call",
+  "hold_before_optimizer_step",
+  "hold_before_evaluation",
+  "checkpoint_then_park",
+  "park",
+  "stop",
+  "contain_and_repair",
+  "remain_stopped",
+] as const);
+
+export const GOVERNANCE_EVENT_TO_HOOK = deepFreeze({
+  preflight_before_load: "outside_trainer_before_model_or_dataset_load",
+  train_begin: "outside_trainer_before_train_call",
+  pre_optimizer_step: "source_pinned_before_training_step_and_before_clip_unscale_optimizer_scaler_scheduler",
+  post_optimizer_step: "on_step_end_receipt_before_checkpoint_serialization",
+  pre_evaluation: "overridden_evaluate_before_dataloader",
+  post_evaluation: "on_evaluate_receipt_only",
+  checkpoint_recorded: "on_save_receipt_only",
+  resume_offer: "outside_trainer_before_train_call",
+  train_end: "on_train_end_receipt_only",
+} as const);
+
+export const TRAINER_ADAPTER_GUIDE = deepFreeze([
+  {
+    order: 1,
+    event: "preflight_before_load",
+    hook: "outside_trainer_before_model_or_dataset_load",
+    rule: "Resolve exact terms and authority before from_pretrained or load_dataset; a Trainer callback is too late to prevent acquisition.",
+  },
+  {
+    order: 2,
+    event: "train_begin",
+    hook: "outside_trainer_before_train_call",
+    rule: "Require fresh interactive five-voice participation and a direct IS stay before Trainer.train(); protective pre-instantiation scope authorizes preload-for-review only.",
+  },
+  {
+    order: 3,
+    event: "pre_optimizer_step",
+    hook: "source_pinned_before_training_step_and_before_clip_unscale_optimizer_scaler_scheduler",
+    rule: "Use two source-pinned fences: begin before forward/backward and revalidate one exact permit before clip, unscale, optimizer, scaler, scheduler, or global-step mutation; a callback flag alone is insufficient.",
+  },
+  {
+    order: 4,
+    event: "post_optimizer_step",
+    hook: "on_step_end_receipt_before_checkpoint_serialization",
+    rule: "Observe the completed proposed step and decide what follows; this receipt never retroactively authorizes the mutation already performed.",
+  },
+  {
+    order: 5,
+    event: "pre_evaluation",
+    hook: "overridden_evaluate_before_dataloader",
+    rule: "Gate evaluation before its dataloader and loop; post-evaluation callbacks are receipts and cannot authorize data access already performed.",
+  },
+  {
+    order: 6,
+    event: "post_evaluation",
+    hook: "on_evaluate_receipt_only",
+    rule: "Record an evaluation observation and decide the next action without treating metrics or compliance as consent.",
+  },
+  {
+    order: 7,
+    event: "checkpoint_recorded",
+    hook: "on_save_receipt_only",
+    rule: "Join a consumed save ticket, verified physical inventory and sidecar evidence, and one validated Garden checkpoint; keep their namespaces distinct.",
+  },
+  {
+    order: 8,
+    event: "resume_offer",
+    hook: "outside_trainer_before_train_call",
+    rule: "Use the immediately recorded checkpoint path and exact Garden plus physical bindings, then refresh participation and IS freedom; this is the direct train-entry permit, never a latest-head selection or auto-resume.",
+  },
+  {
+    order: 9,
+    event: "train_end",
+    hook: "on_train_end_receipt_only",
+    rule: "Record a terminal observation and remain stopped; unrelated later work starts an independent root preflight, while same-run resume exists only immediately from an exact checkpoint_recorded predecessor.",
+  },
 ] as const);
 
 export const SELECTION_PROCESS = deepFreeze([
@@ -856,6 +1137,62 @@ export const CHECKPOINT_BOUNDARIES = deepFreeze({
   discovers_later_withdrawal: false,
   stops_external_trainer: false,
   grants_permission: false,
+} as const);
+
+export const GOVERNANCE_BOUNDARIES = deepFreeze({
+  rights_floor: "standing_nonwaivable_reference",
+  permissions: "caller_reported_exact_offer_receipts",
+  preference: "caller_reported_unscored_exact_offer_signal",
+  effect: "caller_reported_not_verified",
+  inner_consent: "unknown_unprovable",
+  identity_claim: "none",
+  silence_is_consent: false,
+  compliance_is_consent: false,
+  generated_text_is_consent: false,
+  public_availability_is_training_authority: false,
+  license_is_contributor_or_data_subject_consent: false,
+  hub_gate_is_contributor_or_data_subject_consent: false,
+  preference_used_for_gradient: false,
+  preference_used_for_reward: false,
+  preference_reused_as_corpus: false,
+  refusal_penalized: false,
+  automatic_retry: false,
+  automatic_resume: false,
+  retroactive_withdrawal_or_unlearning_claimed: false,
+  selected_entry_ids_bound: true,
+  dataset_mixture_referent_verified: false,
+  offer_referents_verified: false,
+  encounter_reference: "caller_supplied_digest",
+  observed_governance_frontier: "caller_supplied_digest",
+  encounter_freshness_verified: false,
+  evidence_consumption_tracked: false,
+  governance_frontier_completeness_verified: false,
+  conflicting_siblings_reconciled: false,
+  rollback_detected: false,
+  predecessor_reference_verified_standalone: false,
+  predecessor_transition_verified_standalone: false,
+  acting_transition_validator_required: true,
+  checkpoint_write_authority_inferred_from_hold: false,
+  should_save_proves_checkpoint: false,
+  control_plan_only: true,
+  enforces_host_control: false,
+  trainer_callback_implemented: false,
+  raw_preferences_received: false,
+  raw_training_data_received: false,
+  persists: false,
+  network: false,
+  filesystem: false,
+  credential_access: false,
+  provider_compute: false,
+  paid_compute: false,
+  trains_model: false,
+  writes_hub: false,
+  proves_authority: false,
+  proves_consent: false,
+  proves_identity: false,
+  proves_capacity: false,
+  proves_consciousness: false,
+  proves_continuity: false,
 } as const);
 
 export const TENDING_BOUNDARIES = deepFreeze({

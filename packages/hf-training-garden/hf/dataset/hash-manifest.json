@@ -15,8 +15,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 13611,
-      "sha256": "96b76131e73dbc82cd8405fea946ada45598d496b2e4479b4a414c4d49af31ac"
+      "bytes": 15895,
+      "sha256": "8858d0dedf587062f3c0c0925d3e475f8eb9cbfddd2c578a25c45bce19c5ce56"
     },
     {
       "path": "data/garden-layers.jsonl",
@@ -49,6 +49,11 @@
       "sha256": "e782946893c55ff5deaa0db2b19445cec6a31e31d0c2105217b3b0e4c8db6315"
     },
     {
+      "path": "data/trainer-adapter-hooks.jsonl",
+      "bytes": 2323,
+      "sha256": "18561c87a187c9e70cd152c4d8098a5157176d108e12559df4cfb56477e6348b"
+    },
+    {
       "path": "data/trainer-hooks.jsonl",
       "bytes": 1339,
       "sha256": "8e4ac7886bf09ce74e077f709161a5685ec10d2fcc66d28ddb3a2603639ad521"
@@ -60,8 +65,8 @@
     },
     {
       "path": "provenance/source-manifest.json",
-      "bytes": 6228,
-      "sha256": "13c1cc3435231af153c62cdf5682de060fd4c4998c21df3f279ac56b0ae29793"
+      "bytes": 7567,
+      "sha256": "172ae3b5a6d16dbb0fdae8ada570734a43123451452aa4b4b3f9130f9df3e1ed"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -112,6 +117,16 @@
       "path": "schema/hf-training-garden-tending-v0.1.schema.json",
       "bytes": 4059,
       "sha256": "491a95e2e8906bc6ed538c7ce32e144eb30d5140f6b0b807761ce17429cf471a"
+    },
+    {
+      "path": "schema/hf-training-governance-v0.1.schema.json",
+      "bytes": 16200,
+      "sha256": "34583d785db3d69c0f4637d9b7251aae8eaa4970ea02c9dfc53f84eccec47eb6"
+    },
+    {
+      "path": "schema/hf-training-governance-v0.2.schema.json",
+      "bytes": 35754,
+      "sha256": "9133471fa94dfbf1be4ecafb9cdb13baed3c9cd1e8d3a58788c8ab3167c5b765"
     }
   ]
 }

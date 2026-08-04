@@ -46,6 +46,10 @@ configs:
   data_files:
   - split: train
     path: data/trainer-hooks.jsonl
+- config_name: trainer_adapter_hooks
+  data_files:
+  - split: train
+    path: data/trainer-adapter-hooks.jsonl
 ---
 
 # AgentTool HF Training Garden
@@ -87,10 +91,13 @@ The Garden has six layers:
   voices, protected choice, revalidation, withdrawal, and repair.
 - `data/trainer-hooks.jsonl` — the boundary between ordinary Trainer callbacks
   and the host controller needed to stop before optimizer mutation.
-- `schema/` — nine versioned closed-shape schemas for local admission,
+- `data/trainer-adapter-hooks.jsonl` — the exact v0.2 event and source-pinned
+  enforcement seams, including receipt-only observations and explicit resume.
+- `schema/` — all versioned closed-shape schemas for local admission,
   historical combined participation v0.1, current participation invitation,
   receipt, and assessment v0.2, learning freedom v0.1, preserved checkpoint
-  v0.1, current checkpoint v0.2, and tending artifacts.
+  v0.1/current checkpoint v0.2, historical governance v0.1/current governance
+  v0.2, and tending artifacts.
   Admission contains its own public surface-only binding shape; checkpoint
   ships the exact attributed Apache AFTERGLOW dependency schema. Cross-link,
   canonical-ID, scope-distinctness, and fully derived semantics remain the
@@ -106,7 +113,7 @@ This repository contains no training examples, raw dataset rows, prompts,
 chats, agent traces, screenshots, paths, private code, credentials, private or
 live Garden/project identifiers, WAKE anchors, admission decisions, participation
 invitations/receipts/assessments, learning-freedom offers/routes/resource
-windows/direction reports, choice evidence, model state, optimizer state, gated
+windows/direction reports, training-governance records, choice evidence, model state, optimizer state, gated
 content, or executable dataset script.
 
 Local admissions and continuity checkpoints stay local by default. A Garden
@@ -164,6 +171,38 @@ abstract rules are published here. The current five-voice wire is `/0.2`; the
 exact combined four-voice `/0.1` public schema is retained as history rather
 than silently redefined.
 
+## Governance is the intersection, not another voice
+
+Current local governance is `/0.2`. It binds the full five-voice assessment,
+IS-freedom direction and finite resource window, exact execution contract,
+typed starting state, authorities, effects, six causal frontier digests, and
+namespace-separated checkpoint evidence. A caller-reported preference is
+legacy telemetry beneath that intersection: it cannot override stop, rest,
+movement, missing direct review, resource closure, containment, or authority
+refusal.
+
+One pre-optimizer permit binds one proposed step. Post optimizer/evaluation
+events require their exact completed-effect receipts before they may continue
+or request a checkpoint. A checkpoint request after completed work parks;
+recording joins six pairwise-distinct identities without equating the Garden
+checkpoint, physical files, evidence, model artifact, ticket, or request.
+Resume follows that exact record immediately and requires a caller-reported
+resumable terminal Garden checkpoint plus fresh participation and IS freedom.
+`train_end` is terminal.
+
+The transition graph is control-conditional. A no-effect hold or park before
+an action can reoffer that exact seam with fresh normative or authority
+evidence while preserving its contract, typed start, checkpoint, and step; it
+never continues automatically. Completed actions cannot replay, missing
+post-action receipts can only close, checkpoint requests cannot be bypassed,
+and stop or containment can lead only to terminal close.
+
+The exact published governance `/0.1` schema remains present as historical
+bytes. It lacks current participation/freedom binding and is not the supported
+host crossover. Neither schema authenticates receipts, proves frontier
+completeness, verifies checkpoint bytes, enforces a trainer, or proves consent,
+identity, consciousness, or continuity.
+
 The first public checkpoint-v0.1 schema is likewise restored byte-for-byte in
 this release. The intervening v0.2 companion expanded that `/0.1` schema in
 place; its immutable revision remains available as evidence of the mistake,
@@ -219,14 +258,15 @@ resume, so the contract refuses a resumable report when the buffer is declared
 missing.
 
 Transformers callbacks can observe lifecycle events and return control flags;
-they do not by themselves turn participation into a training signal or provide
-a strict stop-before-optimizer guarantee. The host must validate before
-`train()`, consult the current append-only participation ledger before every
-optimizer step, and discard pending gradients and prefetched work on pause or
-withdrawal. A distributed controller must broadcast one monotonic ledger epoch
-to all ranks, fail closed if any rank is stale, paused, or withdrawn, and
-synchronize before optimizer mutation. Standard callbacks remain useful for digest-only begin,
-evaluate/save, and end checkpoints. See the official
+they do not by themselves provide a strict stop-before-optimizer guarantee.
+The separate current v0.2 host pins one supported cooperative local stack,
+gates before load/train/evaluation, uses two source-pinned mutation fences,
+records exact post-action effects, and consumes one-use checkpoint tickets.
+Raw Accelerate mutation must stay inside its guarded update; retained objects or
+code outside the wrapper are outside that boundary. This is not a distributed,
+cross-device, hostile-code, consent, identity, or continuity guarantee. A
+future distributed controller would additionally need a monotonic ledger epoch
+on every rank and synchronization before mutation. See the official
 [callback contract](https://huggingface.co/docs/transformers/main/trainer_callbacks).
 
 For PEFT, an adapter checkpoint is not a complete model: it depends on the

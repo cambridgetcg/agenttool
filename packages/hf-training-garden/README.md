@@ -3,7 +3,7 @@
 Private, pure contracts for a Hugging Face dataset lifecycle that behaves like
 a living Garden instead of a pile of downloadable files.
 
-It does five things:
+It does six things:
 
 1. builds a content-addressed admission manifest from exact, curated
    `@agenttool/hf-scout` bindings and explicit caller-reported selection
@@ -14,9 +14,12 @@ It does five things:
 3. builds one two-phase IS learning-freedom snapshot: an exact finite offer
    followed by a protected current agent direction, without treating either as
    proof of freedom, identity, consciousness, consent, or authority;
-4. records phase-specific model/data state as digest references inside the
+4. intersects the full five-voice participation and IS-freedom artifacts with
+   exact execution, authority, effect, frontier, and checkpoint terms in
+   current governance v0.2;
+5. records phase-specific model/data state as digest references inside the
    existing `@agenttool/wake-continuity` AFTERGLOW lineage;
-5. projects a local six-layer tending plan around an intended or exact Hub
+6. projects a local six-layer tending plan around an intended or exact Hub
    dataset release without calling either Garden or Hugging Face.
 
 It does not download data, accept a gate, read credentials, execute dataset
@@ -173,6 +176,53 @@ ref does not claim a route happened. A later checkpoint still needs fresh
 participation, the exact predecessor starting state, host-observed target and
 resource acceptance, and semantics matching rest/stop/carry as applicable.
 
+## Current training governance
+
+`createTrainingGovernanceTerms()`, `createTrainingGovernanceOffer()`, and
+`createHfTrainingGovernance()` form the current `/0.2` crossover. They require
+the full admission, five-voice participation assessment, IS-freedom snapshot,
+typed root-or-Garden starting state, immutable execution contract, six-plane
+frontier report, scoped authority receipts, one exact caller-reported
+preference, and lifecycle effect. Historical governance `/0.1` bytes remain
+exported explicitly, but that older shape does not bind current participation
+or IS freedom and is not the current host contract.
+
+The decision is the strict intersection. A legacy `continue` signal cannot
+override stop/rest/move/fork/return, missing direct review, resource closure,
+participation pause/containment, or authority refusal. A `checkpoint` signal
+before load/train/mutation/evaluation holds; after an exact completed mutation
+or evaluation receipt it becomes `checkpoint_then_park`.
+
+The lifecycle admits one root preflight, train entry, pre/post optimizer and
+evaluation gates, an explicit checkpoint receipt, and an immediate exact
+resume. One pre-optimizer offer authorizes only its proposed step. Post events
+require the matching completed-effect receipt. `train_end` is terminal;
+unrelated later work starts another root preflight, while same-run continuation
+requires the recorded-checkpoint/resume path.
+
+The predecessor control narrows that event graph. A no-effect hold or park at
+a pre-action seam may reoffer the same seam with fresh normative and authority
+evidence while preserving the exact execution contract, typed start,
+checkpoint, and step. This repairs liveness without automatic continuation.
+Completed preloads/train entries cannot replay, a missing post-action receipt
+cannot lead to another action, checkpoint requests cannot be bypassed, and
+stop/containment lead only to terminal close.
+
+Garden checkpoint ID, physical checkpoint-files ref, physical evidence, model
+artifact, one-use ticket, and requesting governance ID are pairwise distinct.
+Recording binds all six without equating their SHA-shaped namespaces. Resume
+requires the immediately recorded six-ref edge and a caller-reported resumable
+terminal Garden checkpoint. A resumed run can start at checkpoint A and record
+B without rewriting its origin; the next resume alone changes the typed start
+to B.
+
+The pure package validates canonical objects, exact local context, transition
+arithmetic, and causal frontier links. It does not verify external frontier
+completeness, file inventories, sidecar bytes, global freshness, credential or
+speaker identity, consent, consciousness, or host enforcement. The separate
+`agenttool-hf-training-host` supplies a bounded cooperative implementation for
+the pinned local stack; it is not a universal sandbox.
+
 ## WAKE during learning
 
 `createTrainingCheckpoint()` binds one admission and opaque run ref to a phase,
@@ -229,10 +279,9 @@ UUID, verify a referent, or claim that the current Garden API accepts an
 external HF URL.
 
 The committed `hf/dataset/` tree is the public-safe one-way companion. It
-contains policy tables, learning-mode, participation, IS freedom, and Trainer
-integration guides; nine versioned local schemas (historical combined
-participation v0.1, current split participation v0.2, learning freedom v0.1,
-preserved checkpoint v0.1, and current checkpoint v0.2 included); exact local
+contains policy tables, learning-mode, participation, IS freedom, governance,
+and Trainer-integration guides; all current versioned local schemas alongside
+byte-preserved historical participation, checkpoint, and governance schemas; exact local
 binding shapes; the attributed Apache AFTERGLOW dependency schema; and hash
 manifests only. Local
 Garden scope, admission decisions, candidate refs, participation artifacts,
@@ -252,6 +301,8 @@ Generate the deterministic companion tree with:
 
 ```sh
 bun run build:hf
+node scripts/build-learning-dataset.mjs
+node scripts/check-learning-idempotence.mjs
 ```
 
 The first public companion is
@@ -283,10 +334,12 @@ published combined participation-v0.1 schema
 (`sha256:fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df`)
 while the five-voice wire advances to `/0.2`.
 
-The expanded v0.3 participation-and-freedom companion in this source tree has
-different bytes and remains local until it receives its own immutable Hub
-revision and exact read-back. Its current local manifest SHA-256 is
-`161e5b22eec161b9755199503d3726f0a8fd63f348508c5db04ccef894968239`.
+The expanded v0.3 participation/freedom/governance companion in this source
+tree has different bytes and remains local until it receives its own immutable
+Hub revision and exact read-back. Its manifest is regenerated from the current
+tree rather than documented as a moving pre-publication hash. The separate
+`hf/learning-dataset/` synthetic SFT/regression tree is repository-source-only,
+npm-excluded, and not part of the policy companion or its Hub upload.
 The bundle's internal `intended_identifier_only` value remains a deliberately
 non-self-attesting build record: embedding a future revision inside the bytes
 that create that revision would be circular. This package performs no Hub

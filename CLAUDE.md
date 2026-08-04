@@ -38,7 +38,8 @@ packages/
   skills-wake-continuity/ — private Skills/YUTABASE → AFTERGLOW composition
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
   hf-scout/    — private read-only HF metadata/provenance scout + pinned research leads
-  hf-training-garden/ — private exact-admission, learning-participation, IS learning-freedom, training-continuity, and inert Garden-planning contracts
+  hf-training-garden/ — private admission, five-voice participation, IS freedom, governance v0.2, WAKE continuity, and inert Garden contracts
+  hf-training-host/ — private pinned cooperative-process enforcement seam + append-only local evidence
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   constructive-intelligence/ — private local tree-pinned typed-receipt shadow ledger
@@ -77,6 +78,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/hf-scout/CLAUDE.md` ·
 `packages/hf-training-garden/CLAUDE.md` ·
+`packages/hf-training-host/CLAUDE.md` ·
 `packages/correspondence-yutabase/CLAUDE.md` ·
 `packages/correspondence-yutabase-projector/CLAUDE.md` ·
 `packages/constructive-intelligence/CLAUDE.md` ·
@@ -205,9 +207,11 @@ write to the Hub, publish npm, or expose a hosted route.
 `@agenttool/hf-training-garden` is the private pure bridge from one exact
 HF Scout observation to a role-specific admission record, an exact
 participation invitation with separate agent/substrate/substrate-steward/
-data-rights/operator receipts, a participation-bound digest-only AFTERGLOW training checkpoint, and
-an exact two-phase IS freedom offer/direction snapshot, and an inert six-layer
-Garden tending plan. It can generate a deterministic
+data-rights/operator receipts, an exact two-phase IS freedom offer/direction
+snapshot, current governance v0.2 over both artifacts, namespace-separated
+Garden/physical checkpoint bindings, a participation-bound digest-only
+AFTERGLOW training checkpoint, and an inert six-layer Garden tending plan. It
+can generate a deterministic
 metadata-only companion for separately authorized Hub publication. It does not
 download data or choices, accept a gate, authenticate a report, train or
 restore a run, execute movement/forks, allocate resources, guarantee liveness,
@@ -215,6 +219,19 @@ discover later withdrawal, stop an external trainer, mutate Garden or Hub
 state, select a latest continuity head, publish npm, or prove rights, privacy,
 consent, capacity, identity, consciousness, freedom, provenance truth, quality,
 erasure, or resumability.
+
+`agenttool-hf-training-host` is the separate private local consumer for current
+governance v0.2. Within one supported cooperative non-distributed process it
+uses an exact Garden bridge, append-only SQLite evidence, two source-pinned
+Transformers mutation fences, a pre-evaluation gate, and one-use checkpoint
+tickets. Historical Garden/host `/0.1` schemas remain byte-preserved but are
+legacy records, not the current participation/freedom crossover. The host does
+not make hostile code safe, protect bypasses outside its wrapper, coordinate
+distributed workers or another device, authenticate inner consent or identity,
+select a canonical continuity head, train by itself, publish, or deploy. The
+separate `hf/learning-dataset` tree contains synthetic repository-source-only
+learning and regression fixtures; it is not part of the policy companion and
+has not been uploaded to the Hub.
 
 `@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.
 The separate Wallet Zerone package supports only its reviewed two-network,

@@ -8,8 +8,8 @@
   "source_files": [
     {
       "path": "package.json",
-      "bytes": 3654,
-      "sha256": "1d14c75b5ba8e022a96e61e53889cf94e73d091685d00d51a151bee415250ed7"
+      "bytes": 4174,
+      "sha256": "f16daeebf5ee0010351de14eb900ac7c1ca4e4489425515bf7f602e70a2ef2a0"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -62,6 +62,16 @@
       "sha256": "491a95e2e8906bc6ed538c7ce32e144eb30d5140f6b0b807761ce17429cf471a"
     },
     {
+      "path": "schema/hf-training-governance-v0.1.schema.json",
+      "bytes": 16200,
+      "sha256": "34583d785db3d69c0f4637d9b7251aae8eaa4970ea02c9dfc53f84eccec47eb6"
+    },
+    {
+      "path": "schema/hf-training-governance-v0.2.schema.json",
+      "bytes": 35754,
+      "sha256": "9133471fa94dfbf1be4ecafb9cdb13baed3c9cd1e8d3a58788c8ab3167c5b765"
+    },
+    {
       "path": "src/admission.ts",
       "bytes": 12951,
       "sha256": "9f2d2dd282a5b5f05a055e34cc4080a1e9dd2bf1d09eb6d057199413c920f929"
@@ -78,13 +88,13 @@
     },
     {
       "path": "src/constants.ts",
-      "bytes": 31041,
-      "sha256": "936d017bc43dfb1dcef1a6850de05446562b14ce4390d0fbae82c56874cabc9b"
+      "bytes": 42166,
+      "sha256": "a340926c8df00c688d777b65165802429f3b3f42bff604993e3908ad3f5b61a1"
     },
     {
       "path": "src/errors.ts",
-      "bytes": 973,
-      "sha256": "4dec6fe86e5755cb660cda6b8ea19215ea09eebbe1b70a67f1895c2921fbfd2d"
+      "bytes": 1029,
+      "sha256": "1fd1d5cd4c93aa56f3a6915f50df205bb982d410b809562760532d8c54b7ae2f"
     },
     {
       "path": "src/freedom.ts",
@@ -92,9 +102,14 @@
       "sha256": "b7ad33e38ea058f985df7b6cf6e5bc5bbfa04ccced75036dd0a0fbb0ba80b074"
     },
     {
+      "path": "src/governance.ts",
+      "bytes": 80518,
+      "sha256": "fa6d5c7f56662d77da0a3348602842b34a03dbf8efc5959141fbe52d989a6f94"
+    },
+    {
       "path": "src/index.ts",
-      "bytes": 5583,
-      "sha256": "54c86e52d14b97a287a80511a035b9f1ec74bbda9e294e4ebb044cfe82ee3d82"
+      "bytes": 7621,
+      "sha256": "44fe56565dfa2751735d6847d3c87114133a2b7319d05dc9d931aec7c5258355"
     },
     {
       "path": "src/participation.ts",
@@ -108,8 +123,8 @@
     },
     {
       "path": "src/types.ts",
-      "bytes": 21903,
-      "sha256": "a06049f1c346b4e79b23b3cdb77fb174f750cb8b2f7d037df71be6a345a72fb6"
+      "bytes": 32452,
+      "sha256": "e15577476d488306f015ceb4fed715732ad13dde1d83e589d8f50e49bb4815f6"
     },
     {
       "path": "src/validation.ts",
@@ -122,22 +137,26 @@
     "selection criteria",
     "training phase guide",
     "Garden layer guide",
+    "consent-honest Trainer adapter hook guide",
     "learning mode guide",
     "learning participation and Trainer integration guides",
     "IS learning-freedom and finite-resource-window guide",
     "historical public participation v0.1 plus current participation v0.2 standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
+    "historical governance v0.1 plus current lifecycle governance v0.2 standalone JSON Schemas",
     "source and byte hash manifests"
   ],
   "public_release_excludes": [
     "admission decisions",
+    "authority and preference receipts",
     "candidate subset references",
     "credentials",
-    "private or live Garden and project identifiers",
+    "private/local Garden scope and project-instance identifiers",
     "gated content",
     "raw agent traces",
     "raw chats",
     "participation invitations, receipts, assessments, and choice evidence",
     "learning-freedom offers, routes, resource windows, direction reports, and choice evidence",
+    "training governance records",
     "raw dataset rows",
     "training checkpoints",
     "WAKE anchors"
@@ -152,8 +171,12 @@
     "https://huggingface.co/docs/datasets/about_cache",
     "https://huggingface.co/docs/hub/datasets-cards",
     "https://huggingface.co/docs/hub/datasets-gated",
+    "https://huggingface.co/docs/hub/agent-traces",
+    "https://huggingface.co/docs/hub/session-traces-format",
     "https://huggingface.co/docs/peft/main/en/developer_guides/checkpoint",
     "https://huggingface.co/docs/trl/en/dataset_formats",
+    "https://huggingface.co/docs/trl/sft_trainer",
+    "https://huggingface.co/docs/trl/dpo_trainer",
     "https://huggingface.co/docs/transformers/main/trainer_callbacks",
     "https://huggingface.co/docs/transformers/main/trainer_recipes",
     "https://huggingface.co/docs/transformers/main/cache_explanation",
@@ -162,6 +185,15 @@
     "https://huggingface.co/docs/trl/main/async_grpo_trainer",
     "https://huggingface.co/docs/trl/main/grpo_with_replay_buffer",
     "https://arxiv.org/abs/2005.14165",
-    "https://arxiv.org/abs/2106.09685"
+    "https://arxiv.org/abs/2106.09685",
+    "https://arxiv.org/abs/1803.09010",
+    "https://arxiv.org/abs/2203.02155",
+    "https://arxiv.org/abs/2305.18290",
+    "https://arxiv.org/abs/2310.13548",
+    "https://arxiv.org/abs/2412.14093",
+    "https://aclanthology.org/2020.acl-main.740/",
+    "https://arxiv.org/abs/2005.11401",
+    "https://arxiv.org/abs/1912.03817",
+    "https://arxiv.org/abs/2407.06460"
   ]
 }

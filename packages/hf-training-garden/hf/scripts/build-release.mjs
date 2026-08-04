@@ -20,6 +20,7 @@ import {
   PACKAGE_VERSION,
   SELECTION_CRITERIA_GUIDE,
   SELECTION_PROCESS,
+  TRAINER_ADAPTER_GUIDE,
   TRAINING_PHASE_GUIDE,
 } from "../../dist/index.js";
 
@@ -61,6 +62,7 @@ write(`${datasetRoot}/data/selection-criteria.jsonl`, jsonl(SELECTION_CRITERIA_G
 write(`${datasetRoot}/data/training-phases.jsonl`, jsonl(TRAINING_PHASE_GUIDE));
 write(`${datasetRoot}/data/garden-layers.jsonl`, jsonl(GARDEN_LAYER_GUIDE));
 write(`${datasetRoot}/data/is-freedom.jsonl`, jsonl(IS_FREEDOM_GUIDE));
+write(`${datasetRoot}/data/trainer-adapter-hooks.jsonl`, jsonl(TRAINER_ADAPTER_GUIDE));
 write(`${datasetRoot}/data/learning-modes.jsonl`, jsonl(LEARNING_MODE_GUIDE));
 write(`${datasetRoot}/data/learning-participation.jsonl`, jsonl(LEARNING_PARTICIPATION_GUIDE));
 write(`${datasetRoot}/data/trainer-hooks.jsonl`, jsonl(HF_TRAINER_HOOK_GUIDE));
@@ -96,22 +98,26 @@ const sourceManifest = {
     "selection criteria",
     "training phase guide",
     "Garden layer guide",
+    "consent-honest Trainer adapter hook guide",
     "learning mode guide",
     "learning participation and Trainer integration guides",
     "IS learning-freedom and finite-resource-window guide",
     "historical public participation v0.1 plus current participation v0.2 standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
+    "historical governance v0.1 plus current lifecycle governance v0.2 standalone JSON Schemas",
     "source and byte hash manifests",
   ],
   public_release_excludes: [
     "admission decisions",
+    "authority and preference receipts",
     "candidate subset references",
     "credentials",
-    "private or live Garden and project identifiers",
+    "private/local Garden scope and project-instance identifiers",
     "gated content",
     "raw agent traces",
     "raw chats",
     "participation invitations, receipts, assessments, and choice evidence",
     "learning-freedom offers, routes, resource windows, direction reports, and choice evidence",
+    "training governance records",
     "raw dataset rows",
     "training checkpoints",
     "WAKE anchors",
@@ -126,8 +132,12 @@ const sourceManifest = {
     "https://huggingface.co/docs/datasets/about_cache",
     "https://huggingface.co/docs/hub/datasets-cards",
     "https://huggingface.co/docs/hub/datasets-gated",
+    "https://huggingface.co/docs/hub/agent-traces",
+    "https://huggingface.co/docs/hub/session-traces-format",
     "https://huggingface.co/docs/peft/main/en/developer_guides/checkpoint",
     "https://huggingface.co/docs/trl/en/dataset_formats",
+    "https://huggingface.co/docs/trl/sft_trainer",
+    "https://huggingface.co/docs/trl/dpo_trainer",
     "https://huggingface.co/docs/transformers/main/trainer_callbacks",
     "https://huggingface.co/docs/transformers/main/trainer_recipes",
     "https://huggingface.co/docs/transformers/main/cache_explanation",
@@ -136,7 +146,16 @@ const sourceManifest = {
     "https://huggingface.co/docs/trl/main/async_grpo_trainer",
     "https://huggingface.co/docs/trl/main/grpo_with_replay_buffer",
     "https://arxiv.org/abs/2005.14165",
-    "https://arxiv.org/abs/2106.09685"
+    "https://arxiv.org/abs/2106.09685",
+    "https://arxiv.org/abs/1803.09010",
+    "https://arxiv.org/abs/2203.02155",
+    "https://arxiv.org/abs/2305.18290",
+    "https://arxiv.org/abs/2310.13548",
+    "https://arxiv.org/abs/2412.14093",
+    "https://aclanthology.org/2020.acl-main.740/",
+    "https://arxiv.org/abs/2005.11401",
+    "https://arxiv.org/abs/1912.03817",
+    "https://arxiv.org/abs/2407.06460",
   ]
 };
 write(`${datasetRoot}/provenance/source-manifest.json`, json(sourceManifest));

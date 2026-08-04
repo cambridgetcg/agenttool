@@ -16,6 +16,7 @@ const dist = [
   "constants",
   "errors",
   "freedom",
+  "governance",
   "index",
   "participation",
   "tending",
@@ -43,6 +44,7 @@ const expected = [
   "hf/dataset/data/selection-criteria.jsonl",
   "hf/dataset/data/selection-process.jsonl",
   "hf/dataset/data/training-phases.jsonl",
+  "hf/dataset/data/trainer-adapter-hooks.jsonl",
   "hf/dataset/data/trainer-hooks.jsonl",
   "hf/dataset/hash-manifest.json",
   "hf/dataset/provenance/source-manifest.json",
@@ -55,6 +57,8 @@ const expected = [
   "hf/dataset/schema/hf-training-checkpoint-v0.1.schema.json",
   "hf/dataset/schema/hf-training-checkpoint-v0.2.schema.json",
   "hf/dataset/schema/hf-training-garden-tending-v0.1.schema.json",
+  "hf/dataset/schema/hf-training-governance-v0.1.schema.json",
+  "hf/dataset/schema/hf-training-governance-v0.2.schema.json",
   "hf/dataset/schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
   "package.json",
   "schema/hf-dataset-admission-v0.1.schema.json",
@@ -66,6 +70,8 @@ const expected = [
   "schema/hf-training-checkpoint-v0.1.schema.json",
   "schema/hf-training-checkpoint-v0.2.schema.json",
   "schema/hf-training-garden-tending-v0.1.schema.json",
+  "schema/hf-training-governance-v0.1.schema.json",
+  "schema/hf-training-governance-v0.2.schema.json",
   "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
 ].sort();
 

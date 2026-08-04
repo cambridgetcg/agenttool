@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
-import { readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 
 import {
   GARDEN_LAYER_GUIDE,
@@ -10,6 +10,7 @@ import {
   LEARNING_PARTICIPATION_GUIDE,
   SELECTION_CRITERIA_GUIDE,
   SELECTION_PROCESS,
+  TRAINER_ADAPTER_GUIDE,
   TRAINING_PHASE_GUIDE,
 } from "../src/index.js";
 
@@ -27,6 +28,14 @@ function readJsonl(path: string) {
   return read(path).toString("utf8").trimEnd().split("\n").map((line) => JSON.parse(line));
 }
 
+function walk(path: URL, relative = ""): string[] {
+  const current = new URL(relative || ".", path);
+  return readdirSync(current, { withFileTypes: true }).flatMap((entry) => {
+    const child = relative ? `${relative}/${entry.name}` : entry.name;
+    return entry.isDirectory() ? walk(path, child) : [child];
+  });
+}
+
 describe("deterministic public-safe HF companion", () => {
   test("contains exact policy guides but no local continuity or decision rows", () => {
     expect(readJsonl("data/selection-process.jsonl")).toEqual(SELECTION_PROCESS);
@@ -34,6 +43,7 @@ describe("deterministic public-safe HF companion", () => {
     expect(readJsonl("data/training-phases.jsonl")).toEqual(TRAINING_PHASE_GUIDE);
     expect(readJsonl("data/garden-layers.jsonl")).toEqual(GARDEN_LAYER_GUIDE);
     expect(readJsonl("data/is-freedom.jsonl")).toEqual(IS_FREEDOM_GUIDE);
+    expect(readJsonl("data/trainer-adapter-hooks.jsonl")).toEqual(TRAINER_ADAPTER_GUIDE);
     expect(readJsonl("data/learning-modes.jsonl")).toEqual(LEARNING_MODE_GUIDE);
     expect(readJsonl("data/learning-participation.jsonl")).toEqual(LEARNING_PARTICIPATION_GUIDE);
     expect(readJsonl("data/trainer-hooks.jsonl")).toEqual(HF_TRAINER_HOOK_GUIDE);
@@ -46,7 +56,7 @@ describe("deterministic public-safe HF companion", () => {
     expect(source.publication_state).toBe("intended_identifier_only");
     expect(source.public_release_excludes).toContain("raw agent traces");
     expect(source.public_release_excludes).toContain(
-      "private or live Garden and project identifiers",
+      "private/local Garden scope and project-instance identifiers",
     );
     expect(source.public_release_excludes).toContain(
       "participation invitations, receipts, assessments, and choice evidence",
@@ -54,9 +64,19 @@ describe("deterministic public-safe HF companion", () => {
     expect(source.public_release_excludes).toContain(
       "learning-freedom offers, routes, resource windows, direction reports, and choice evidence",
     );
+    expect(source.public_release_excludes).toContain("authority and preference receipts");
+    expect(source.public_release_excludes).toContain("training governance records");
     expect(source.public_release_contains).toContain(
       "historical public participation v0.1 plus current participation v0.2 standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
     );
+    expect(source.public_release_contains).toContain(
+      "historical governance v0.1 plus current lifecycle governance v0.2 standalone JSON Schemas",
+    );
+    expect(read("schema/hf-training-governance-v0.2.schema.json"))
+      .toEqual(readFileSync(new URL(
+        "../../schema/hf-training-governance-v0.2.schema.json",
+        root,
+      )));
     expect(read("schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json"))
       .toEqual(readFileSync(new URL(
         "../../../wake-continuity/schema/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -70,6 +90,7 @@ describe("deterministic public-safe HF companion", () => {
     const paths = manifest.files.map((entry: { path: string }) => entry.path);
     expect(paths).toEqual([...paths].sort());
     expect(paths).not.toContain("hash-manifest.json");
+    expect(walk(root).sort()).toEqual([...paths, "hash-manifest.json"].sort());
     for (const entry of manifest.files as { path: string; bytes: number; sha256: string }[]) {
       const bytes = read(entry.path);
       expect(statSync(new URL(entry.path, root)).size).toBe(entry.bytes);

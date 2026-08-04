@@ -8,6 +8,8 @@ export type HfTrainingGardenErrorCode =
   | "freedom_offer_invalid"
   | "freedom_input_invalid"
   | "freedom_invalid"
+  | "governance_input_invalid"
+  | "governance_invalid"
   | "participation_invitation_input_invalid"
   | "participation_invitation_invalid"
   | "participation_receipt_input_invalid"

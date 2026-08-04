@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/hf-training-garden",
   "version": "0.3.0-dev.0",
-  "description": "Private HF admission, participation, IS learning freedom, WAKE, and Garden tending contracts",
+  "description": "Private HF admission, five-voice learning participation, IS learning freedom, consent-honest governance, WAKE, and Garden tending contracts",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
@@ -21,6 +21,18 @@
     },
     "./checkpoint-v0.1.schema.json": {
       "default": "./schema/hf-training-checkpoint-v0.1.schema.json"
+    },
+    "./governance.schema.json": {
+      "default": "./schema/hf-training-governance-v0.2.schema.json"
+    },
+    "./governance-v0.2.schema.json": {
+      "default": "./schema/hf-training-governance-v0.2.schema.json"
+    },
+    "./governance-v0.1.schema.json": {
+      "default": "./schema/hf-training-governance-v0.1.schema.json"
+    },
+    "./participation.schema.json": {
+      "default": "./schema/hf-learning-participation-v0.1.schema.json"
     },
     "./participation-invitation.schema.json": {
       "default": "./schema/hf-learning-participation-invitation-v0.2.schema.json"
@@ -95,6 +107,7 @@
     "garden",
     "huggingface",
     "provenance",
+    "participation",
     "training",
     "wake"
   ],

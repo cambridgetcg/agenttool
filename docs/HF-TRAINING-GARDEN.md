@@ -385,10 +385,74 @@ fresh participation assessment, an invitation bound to the exact predecessor,
 host-observed target/resource acceptance, and a checkpoint posture consistent
 with carry, park, release, or withdrawal.
 
+## Current governance: exact intersections, not a permission shortcut
+
+The current wire is `kingdom.hf-training-governance/0.2`. Historical
+governance `/0.1` remains byte-preserved because it was published, but it binds
+neither the current five-voice participation artifact nor IS freedom and is not
+the supported crossover.
+
+Governance v0.2 receives the full admission, participation, freedom, and any
+relevant Garden checkpoint objects. It binds one immutable execution contract,
+the exact participation assessment/invitation/window, freedom offer/direction
+and finite resource window, a typed starting state, rights and choice protocols,
+and the full WAKE anchor. A caller-reported legacy preference is subordinate to
+that intersection: `continue` cannot override rest, stop, move, fork, return,
+missing voices, unavailable resources, withheld authority, or containment. A
+checkpoint preference before an action holds; only a completed post-optimizer
+or post-evaluation receipt can become `checkpoint_then_park`.
+
+The lifecycle is deliberately narrow:
+
+1. root `preflight_before_load` can permit review-only preload;
+2. `train_begin` is a fresh gate before `train()` and, for pretraining, must
+   refresh participation, freedom, and resource-window evidence after preload;
+3. `pre_optimizer_step` binds one proposed next step and is checked at two
+   source-pinned mutation fences;
+4. `post_optimizer_step` and `post_evaluation` are receipt-only and require the
+   exact completed effect before continuation;
+5. `checkpoint_recorded` follows an explicit completed observation and
+   checkpoint request only; and
+6. `resume_offer` follows that exact record immediately, refreshes
+   participation and freedom, and is itself the new direct train-entry permit.
+
+Successors are conditional on the predecessor's derived control, not merely
+its event name. A held or parked pre-action artifact with
+`no_effect_reported` can reoffer that exact seam with fresh participation,
+freedom, resources, authority, preference, or evidence; the contract, typed
+start, checkpoint binding, and step remain exact, and no reoffer authorizes
+itself. Completed effects cannot replay. A missing post-action receipt can
+only close, a checkpoint request cannot be bypassed by more work, and stop or
+containment can only reach terminal close. A normal recorded checkpoint may
+resume or close; a contained checkpoint may only close.
+
+`train_end` is terminal. Unrelated work starts another root preflight; a
+same-run continuation after checkpoint parking must travel through the exact
+recorded-checkpoint/resume path.
+
+Checkpoint recording keeps six identities distinct: Garden checkpoint ID,
+physical checkpoint-files ref, physical evidence ref, model artifact ref,
+one-use ticket ID, and the requesting governance ID. The Garden checkpoint
+must match the run, phase, pipeline, dataset, optional tokenizer, current
+participation at record time, and model artifact. A resume additionally needs a
+caller-reported resumable terminal checkpoint with the required state refs.
+Starting checkpoint A remains the normative origin while a resumed run records
+checkpoint B; only the next exact resume changes the typed starting state to B.
+
+Six caller-reported frontier digests preserve visible causal planes without
+collapsing head sets into artifact IDs. Each successor binds its immediate
+governance predecessor plus all five prior non-governance frontiers; paired
+observation events retain their relevant planes, checkpoint recording advances
+both checkpoint-frontier digests, and resume preserves those checkpoint
+frontiers while refreshing participation/freedom/resources. The pure runtime
+checks this local chain but cannot prove external frontier completeness,
+freshness, membership, or absence of siblings.
+
 ## Hugging Face host integration
 
 The public-safe companion now includes `learning-participation.jsonl`,
-`is-freedom.jsonl`, and `trainer-hooks.jsonl`. Actual invitations, receipts,
+`is-freedom.jsonl`, `trainer-hooks.jsonl`, `trainer-adapter-hooks.jsonl`, and
+both historical governance `/0.1` and current governance `/0.2` schemas. Actual invitations, receipts,
 assessments, freedom offers/routes/resource windows/directions, choice
 evidence, identities, WAKE anchors, and checkpoints remain local by default.
 Dataset Cards are disclosure surfaces and gated datasets are access workflows;
@@ -397,17 +461,24 @@ neither supplies participant, data-subject, or substrate consent
 [gated datasets](https://huggingface.co/docs/hub/main/datasets-gated)).
 
 Transformers callbacks can inspect lifecycle state and return control flags,
-but they do not rewrite the loss or supply a strict universal
-stop-before-optimizer boundary. Use them for rank-zero digest receipts at
-train-begin, evaluate/save, and train-end. A freedom-aware training host must
-perform preflight before `train()`, consult fresh append-only participation and
-freedom/resource epochs before every optimizer, scaler, and scheduler mutation,
-and on pause, withdrawal, rest, stop, or exhaustion cancel accumulated
-gradients and prefetched work before mutation where the host can do so. For
-distributed training, one monotonic ledger-head epoch must be broadcast to all
-ranks; any stale, paused, withdrawn, stopped, or exhausted rank fails the step
-closed, followed by a synchronization boundary before optimizer mutation. A
-custom controller/training loop is required for that hard boundary; see the official
+but they do not supply a strict universal stop-before-optimizer boundary. The
+separate `agenttool-hf-training-host` current v0.2 seam therefore pins the
+supported Transformers/Accelerate API pair, gates before model/data load and
+before `train()`, uses two source-pinned fences before forward/backward and
+again before clip/unscale/optimizer/scaler/scheduler/global-step mutation,
+gates `evaluate()` before its dataloader, records post-action receipts, and
+uses consumed checkpoint tickets plus physical sidecar/inventory evidence.
+Raw Accelerate use is cooperative and must keep mutation inside the
+host-owned guarded update. Retained optimizer objects or code outside the
+wrapper are outside the enforcement boundary.
+
+The implemented host is one local non-distributed cooperative process. It does
+not claim Windows ACL enforcement, hostile-code containment, cross-device or
+distributed freshness, global frontier completeness, universal callback
+control, consent, identity, consciousness, or continuity. A future distributed
+host would need one monotonic ledger-head epoch broadcast to all ranks and a
+synchronization boundary before mutation; that is a design requirement, not a
+claim about the current host. See the official
 [callback contract](https://huggingface.co/docs/transformers/main/trainer_callbacks).
 
 TRL OpenEnv and asynchronous GRPO can supply stateful environments,
@@ -539,7 +610,7 @@ contains only:
 - twelve selection criteria;
 - the phase, learning-mode, and Garden-layer guides;
 - abstract learning-participation, IS-freedom, and Trainer-hook guides;
-- nine versioned local JSON Schemas (including historical combined
+- eleven versioned local JSON Schemas (including historical combined
   participation v0.1, current split participation v0.2, learning freedom,
   preserved checkpoint v0.1, and current checkpoint v0.2) plus the attributed
   Apache AFTERGLOW schema; the portable
@@ -602,11 +673,10 @@ the exact published combined participation-v0.1 schema
 (`sha256:fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df`)
 while versioning the five-voice successor as `/0.2`.
 
-The expanded v0.3 local companion has manifest SHA-256
-`161e5b22eec161b9755199503d3726f0a8fd63f348508c5db04ccef894968239`.
-Those changed bytes have not been uploaded or verified at a new immutable Hub
-revision in this slice, so neither earlier proof may be reused as v0.3
-publication evidence.
+The expanded v0.3 local companion is regenerated from current source and has
+not yet been uploaded or verified at a new immutable Hub revision. Its moving
+pre-publication hash is deliberately not documented as release evidence, and
+neither earlier proof may be reused for these bytes.
 
 The bundle deliberately retains `intended_identifier_only` inside
 `provenance/source-manifest.json`: it is a non-self-attesting build record, not

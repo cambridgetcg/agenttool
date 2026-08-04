@@ -4,7 +4,7 @@ This private package is the pure seam between exact HF Scout research bindings,
 learning-participation reports, IS learning-freedom offers/directions,
 digest-only AFTERGLOW continuity, and a non-executing Garden tending plan.
 
-Keep the five surfaces separate:
+Keep the six surfaces separate:
 
 - Admission can receive only frozen Scout metadata plus digest references and
   caller-reported assessment enums. Never add raw rows, prompts, trace bodies,
@@ -30,6 +30,23 @@ Keep the five surfaces separate:
   selection, repeated prompting after rest/refusal, or claims that the package
   moves/forks/stops/allocates/authenticates/proves freedom or guarantees
   liveness. Resource exhaustion parks; it does not reduce standing.
+- Current Governance `/0.2` consumes full admission, five-voice participation,
+  IS freedom, typed starting checkpoint context, execution terms, authorities,
+  effects, and six causal frontiers. Preserve published governance `/0.1`
+  bytes exactly but never present that legacy admission/WAKE-only shape as the
+  current crossover. One mutation permit binds one proposed step. Completed
+  pre-load/train-entry effects never re-authorize themselves; post mutation or
+  evaluation requires the exact completed receipt; checkpoint preference is
+  restrictive before work. Keep Garden checkpoint, physical files, physical
+  evidence, model artifact, ticket, and request-governance namespaces distinct.
+  Condition successors on the predecessor control and effect: a no-effect
+  pre-action hold/park may reoffer only its exact seam; missing post effects,
+  checkpoint requests, stop, and containment must not be bypassed by new work.
+  Resume only from the immediately recorded caller-reported resumable terminal
+  checkpoint. Freeze the typed starting state until that resume, preserve all
+  predecessor frontier edges, and keep `train_end` terminal. Never claim the
+  pure runtime proves frontier completeness, checkpoint bytes, consent,
+  identity, continuity, or host enforcement.
 - Checkpoints return one core AFTERGLOW capsule with one minimized external
   thread and bind one exact participation assessment. Do not add a second
   lineage, select a latest head, perform WAKE, discover later withdrawal, stop
@@ -65,3 +82,10 @@ bun run ci
 The second install refreshes Bun's local `file:` dependency snapshot after
 building those dependencies in a clean standalone checkout. Repository-wide
 preflight may already have built them.
+
+The sibling `hf/learning-dataset/` is a separate synthetic
+repository-source-only release root. Do not copy it into `hf/dataset/`, the npm
+package, or a policy-companion upload. The separate Python host consumes current
+governance v0.2 only within its documented cooperative stack; its preserved
+v0.1 schema is legacy evidence, not permission to bypass participation or IS
+freedom.

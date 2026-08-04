@@ -8,12 +8,15 @@ import { sha256Id } from "@agenttool/wake-continuity";
 
 import {
   PACKAGE_NAME,
+  createHfTrainingGovernance,
   createLearningFreedomOffer,
   createDatasetAdmission,
   createParticipationAssessment,
   createParticipationInvitation,
   createParticipationReceipt,
   createTrainingCheckpoint,
+  createTrainingGovernanceOffer,
+  createTrainingGovernanceTerms,
   createTrainingGardenTendingPlan,
   learningFreedomPromptEnvelopeRef,
   participationPromptEnvelopeRef,
@@ -21,6 +24,7 @@ import {
   trainingArtifactPortfolioRef,
   validateDatasetAdmission,
   validateHfLearningFreedom,
+  validateHfTrainingGovernance,
   validateTrainingCheckpoint,
   validateTrainingGardenTendingPlan,
 } from "../dist/index.js";
@@ -237,6 +241,101 @@ const freedom = resolveLearningFreedomOffer({
     resource_allocation_use: "caller_reported_excluded",
   },
 });
+const governanceTerms = createTrainingGovernanceTerms({
+  admission,
+  participation,
+  freedom,
+  starting_garden_checkpoint: null,
+  starting_state_kind: "artifact_portfolio",
+  run_ref: runRef,
+  training_phase: "selection",
+  selected_entry_ids: admission.entries.map((entry) => entry.entry_id),
+  model_source_ref: ref("smoke-governance-model"),
+  tokenizer_ref: ref("smoke-governance-tokenizer"),
+  trainer_stack_ref: ref("smoke-governance-trainer-stack"),
+  optimizer_config_ref: ref("smoke-governance-optimizer"),
+  substrate_environment_ref: ref("smoke-governance-substrate"),
+  purpose_ref: ref("smoke-governance-purpose"),
+  objective_or_loss_ref: ref("smoke-governance-objective"),
+  dataset_mixture_ref: ref("smoke-governance-mixture"),
+  transform_recipe_ref: ref("smoke-governance-transform"),
+  compute_budget_ref: ref("smoke-governance-compute"),
+  output_and_derivative_use_ref: ref("smoke-governance-derivatives"),
+  audience_ref: ref("smoke-governance-audience"),
+  retention_ref: ref("smoke-governance-retention"),
+  release_ref: ref("smoke-governance-release"),
+  stop_policy_ref: ref("smoke-governance-stop"),
+  wake_policy_ref: ref("smoke-governance-wake-policy"),
+});
+const governanceOffer = createTrainingGovernanceOffer({
+  terms: governanceTerms,
+  encounter_ref: ref("smoke-governance-encounter"),
+  event: "preflight_before_load",
+  observed_global_step: null,
+  proposed_global_step: null,
+  frontiers: {
+    governance: ref("smoke-governance-frontier"),
+    participation: ref("smoke-participation-frontier"),
+    freedom: ref("smoke-freedom-frontier"),
+    resources: ref("smoke-resource-frontier"),
+    garden_checkpoint: ref("smoke-garden-checkpoint-frontier"),
+    physical_checkpoint: ref("smoke-physical-checkpoint-frontier"),
+  },
+  predecessor: null,
+  predecessor_refs: {
+    participation: null,
+    freedom: null,
+    resources: null,
+    garden_checkpoint: null,
+    physical_checkpoint: null,
+  },
+  checkpoint: {
+    garden_checkpoint_id: null,
+    physical_checkpoint_ref: null,
+    physical_checkpoint_evidence_ref: null,
+    model_checkpoint_artifact_ref: null,
+    checkpoint_ticket_id: null,
+    checkpoint_request_governance_id: null,
+  },
+});
+const governance = createHfTrainingGovernance({
+  admission,
+  participation,
+  freedom,
+  starting_garden_checkpoint: null,
+  event_garden_checkpoint: null,
+  offer: governanceOffer,
+  authority_coverage: {
+    state: "caller_reported_complete",
+    offer_ref: governanceOffer.offer_id,
+    affected_principals_ref: ref("smoke-governance-principals"),
+    evidence_ref: ref("smoke-governance-coverage"),
+  },
+  authorities: ["operator", "compute_owner", "substrate_steward", "data_custodian"].map((role) => ({
+    principal_ref: ref(`smoke-governance-principal:${role}`),
+    role,
+    decision: "caller_reported_granted",
+    offer_ref: governanceOffer.offer_id,
+    basis_ref: ref(`smoke-governance-basis:${role}`),
+    evidence_ref: ref(`smoke-governance-evidence:${role}`),
+    withdrawal_cutoff_ref: null,
+  })),
+  preference: {
+    channel: "root_signed_runtime",
+    choice: "continue",
+    provenance: "caller_reported_root_signed_exact_bytes",
+    offer_ref: governanceOffer.offer_id,
+    evidence_ref: ref("smoke-governance-preference"),
+  },
+  effect: {
+    state: "no_effect_reported",
+    offer_ref: null,
+    observed_global_step: null,
+    physical_checkpoint_ref: null,
+    physical_checkpoint_evidence_ref: null,
+    evidence_ref: null,
+  },
+});
 const checkpoint = createTrainingCheckpoint({
   admission,
   run_ref: runRef,
@@ -271,6 +370,7 @@ if (
   PACKAGE_NAME !== "@agenttool/hf-training-garden" ||
   validateDatasetAdmission(admission).admission_id !== admission.admission_id ||
   validateHfLearningFreedom(freedom).freedom_id !== freedom.freedom_id ||
+  validateHfTrainingGovernance(governance).governance_id !== governance.governance_id ||
   validateTrainingCheckpoint(checkpoint).checkpoint_id !== checkpoint.checkpoint_id ||
   validateTrainingGardenTendingPlan(plan).plan_id !== plan.plan_id ||
   checkpoint.afterglow.threads[0]?.disposition !== "park" ||

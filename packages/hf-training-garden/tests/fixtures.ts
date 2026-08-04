@@ -18,6 +18,7 @@ import {
   createLearningFreedomOffer,
   learningFreedomPromptEnvelopeRef,
   participationPromptEnvelopeRef,
+  resolveLearningFreedomOffer,
   trainingArtifactPortfolioRef,
   type AdmissionAssessment,
   type DataRole,
@@ -25,6 +26,7 @@ import {
   type LearningParticipationAssessment,
   type LearningParticipationInvitation,
   type LearningFreedomDirection,
+  type HfLearningFreedom,
   type LearningFreedomOffer,
   type ParticipationChoice,
   type TrainingArtifactReferences,
@@ -193,6 +195,7 @@ export function participation(
     wakeValue?: Readonly<WakeBriefAnchor>;
     artifactsValue?: TrainingArtifactReferences;
     startingStateRef?: ReturnType<typeof ref>;
+    participationWindowRef?: ReturnType<typeof ref>;
   } = {},
 ): Readonly<LearningParticipationAssessment> {
   const runRef = options.runRef ?? ref("run:test");
@@ -212,7 +215,7 @@ export function participation(
     admission: source,
     run_ref: runRef,
     training_phase: phase,
-    participation_window_ref: ref(`window:${phase}`),
+    participation_window_ref: options.participationWindowRef ?? ref(`window:${phase}`),
     training_plan_ref: ref(`training-plan:${phase}`),
     wake: options.wakeValue ?? wake,
     wake_use_mode: "context_only",
@@ -323,9 +326,11 @@ export function freedomOffer(
   options: {
     parkOnly?: boolean;
     proposalOnly?: readonly LearningFreedomDirection[];
+    resourceSuffix?: string;
   } = {},
 ): Readonly<LearningFreedomOffer> {
   const proposalOnly = new Set(options.proposalOnly ?? []);
+  const resourceSuffix = options.resourceSuffix ?? "base";
   const dimensions = [
     "updates",
     "tokens",
@@ -383,12 +388,12 @@ export function freedomOffer(
       self_proposal_protocol_ref: ref("freedom:self-proposal"),
     },
     resources: {
-      lease_ref: ref("freedom:lease"),
-      accounting_policy_ref: ref("freedom:accounting"),
-      renewal_protocol_ref: ref("freedom:renewal"),
+      lease_ref: ref(`freedom:lease:${resourceSuffix}`),
+      accounting_policy_ref: ref(`freedom:accounting:${resourceSuffix}`),
+      renewal_protocol_ref: ref(`freedom:renewal:${resourceSuffix}`),
       dimensions: dimensions.map((dimension) => ({
         dimension,
-        limit_ref: ref(`freedom:limit:${dimension}`),
+        limit_ref: ref(`freedom:limit:${resourceSuffix}:${dimension}`),
         state: options.parkOnly && dimension === "compute"
           ? "caller_reported_unavailable" as const
           : "caller_reported_available" as const,
@@ -422,4 +427,24 @@ export function freedomChoiceChannel(
     access_use: "caller_reported_excluded" as const,
     resource_allocation_use: "caller_reported_excluded" as const,
   };
+}
+
+export function freedom(
+  participationValue: Readonly<LearningParticipationAssessment>,
+  direction: LearningFreedomDirection = "stay",
+  options: Parameters<typeof freedomOffer>[1] = {},
+): Readonly<HfLearningFreedom> {
+  const offer = freedomOffer(participationValue, options);
+  const route = offer.routes.find((candidate) => candidate.direction === direction);
+  if (!route) throw new Error(`missing ${direction} route`);
+  return resolveLearningFreedomOffer({
+    offer,
+    state: "directed",
+    direction,
+    route_id: route.route_id,
+    proposal_ref: direction === "propose_horizon" || route.availability === "proposal_only"
+      ? ref(`freedom:proposal:${direction}`)
+      : null,
+    choice_channel: freedomChoiceChannel(offer, direction),
+  });
 }

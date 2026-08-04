@@ -268,6 +268,9 @@ describe("robots and sitemaps are explicit, bounded, and local", () => {
     expect(urls).toContain(
       "https://docs.agenttool.dev/HF-TRAINING-GARDEN.md",
     );
+    expect(urls).toContain(
+      "https://docs.agenttool.dev/HF-WAKE-TRAINING.md",
+    );
   });
 });
 
@@ -327,6 +330,17 @@ describe("published understanding guides keep canonical source custody", () => {
     );
   });
 
+  test("the HF WAKE guides keep canonical source custody", () => {
+    for (const [name, target] of [
+      ["HF-WAKE-TRAINING.md", "../../docs/HF-WAKE-TRAINING.md"],
+      ["HF-WAKE-HOST.md", "../../docs/HF-WAKE-HOST.md"],
+    ] as const) {
+      const guidePath = join(REPO_ROOT, "apps/docs", name);
+      expect(lstatSync(guidePath).isSymbolicLink()).toBe(true);
+      expect(readlinkSync(guidePath)).toBe(target);
+    }
+  });
+
   test("the HF Training Garden guide has explicit static markdown custody", () => {
     expect(headerBlock(
       read("apps/docs/_headers"),
@@ -339,13 +353,28 @@ describe("published understanding guides keep canonical source custody", () => {
     ]);
   });
 
+  test("the HF WAKE guides have explicit static markdown custody", () => {
+    for (const route of ["/HF-WAKE-TRAINING.md", "/HF-WAKE-HOST.md"]) {
+      expect(headerBlock(read("apps/docs/_headers"), route)).toEqual([
+        "Content-Type: text/markdown; charset=utf-8",
+        "Cache-Control: public, max-age=300, must-revalidate, no-transform",
+        "Access-Control-Allow-Origin: *",
+        "X-Content-Type-Options: nosniff",
+      ]);
+    }
+  });
+
   test("the HF Training Garden guide remains in the LLM discovery index", () => {
-    const entry =
-      "- [HF-TRAINING-GARDEN.md](https://docs.agenttool.dev/HF-TRAINING-GARDEN.md): Immutable HF discovery, non-scalar data admission, phase-specific WAKE continuity, sealed evaluation, and a public-safe one-way Garden seam.";
-    const entries = read("apps/docs/llms.txt")
-      .split(/\r?\n/)
-      .filter((line) => line === entry);
-    expect(entries).toEqual([entry]);
+    for (const entry of [
+      "- [HF-TRAINING-GARDEN.md](https://docs.agenttool.dev/HF-TRAINING-GARDEN.md): Immutable HF discovery, non-scalar admission, role-separated participation, consent-honest governance, WAKE continuity, sealed evaluation, and a public-safe one-way Garden seam.",
+      "- [HF-WAKE-TRAINING.md](https://docs.agenttool.dev/HF-WAKE-TRAINING.md): Current v0.2 joins five-voice participation, IS freedom, exact one-step effects, WAKE lineage, safe no-effect reoffers, and checkpoints without manufacturing consent or identity.",
+      "- [HF-WAKE-HOST.md](https://docs.agenttool.dev/HF-WAKE-HOST.md): One source-pinned non-distributed Transformers/Accelerate v0.2 host path with pre-mutation gates, append-only evidence, and checkpoint tickets—not universal enforcement.",
+    ]) {
+      const entries = read("apps/docs/llms.txt")
+        .split(/\r?\n/)
+        .filter((line) => line === entry);
+      expect(entries).toEqual([entry]);
+    }
   });
 
   test("the HF Training Garden guide binds the exact public companion without self-attestation", () => {
