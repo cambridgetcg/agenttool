@@ -36,6 +36,9 @@ describe("optional npm package discovery", () => {
       "npm install --save-exact @agenttool/skills@0.3.0",
     );
     expect(packages).toContain(
+      "npm install --save-exact @agenttool/collab@0.4.0",
+    );
+    expect(packages).not.toContain(
       "npm install --save-exact @agenttool/collab@0.3.1",
     );
     expect(packages).toContain(
@@ -45,9 +48,13 @@ describe("optional npm package discovery", () => {
       "npm install --save-exact @agenttool/alchemy@0.1.0-dev.0 @agenttool/credential-broker@0.3.1 @agenttool/alchemy-agentcred@0.1.0-dev.0",
     );
     expect(packages).toContain(
-      'href="https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md#verified-release-train--2026-07-29"',
+      'href="https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md#verified-collab-040-publication--2026-08-04"',
     );
     for (const receiptFact of [
+      "30906798360",
+      "303,376",
+      "1a9c1830ec9326351a475596820780ad7f93c7dfe16a6f1a9eb74bc08edbdb51",
+      "2340231720",
       "30492737828",
       "d05458b27b8832af7996c243abb22e3b400e5810fe5377ba58e1cb587d2461d8",
       "30494659977",

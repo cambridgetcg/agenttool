@@ -102,25 +102,41 @@ and has byte-identical 26,474-byte GitHub/npm tarballs with SHA-256
 `67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`.
 Both npm `latest` tags resolved to those exact versions at readback.
 
-## Collab 0.4.0 source candidate — publication pending
+## Verified Collab 0.4.0 publication — 2026-08-04
 
-The Collab source package and its Codex/Claude/Hermes plugin surfaces now
-identify `@agenttool/collab@0.4.0`. It adds one exported read-only
-anchor-status API and a 32nd local MCP tool, `collab_anchor_status`, over the
-optional sidecar maintained by the separate `@agenttool/collab-zerone` bridge.
-It does not contact a chain, broadcast, spend a fee, carry a key or RPC, or add
-a hosted surface. The database schema and coordination protocols are
-unchanged, so the package artifact itself requires no migration, LOVE artifact,
-or Fly deploy. After exact public readback, a separate receipt follow-up must
-update the existing static package-discovery page and deploy Pages; until then,
-that page must continue to advertise the verified 0.3.1 release.
+The authorized Collab release completed through protected trusted
+[workflow run `30906798360`](https://github.com/cambridgetcg/agenttool/actions/runs/30906798360).
+Its final `agenttool.npm-release/1` receipt reports `status: published`,
+`npm_tag: latest`, and public registry observation at
+`2026-08-04T11:56:59.816Z`.
 
-At source preparation on 2026-08-04, public npm `latest` remained the exact
-0.3.1 release recorded above. This source commit does not claim that a
-`collab-v0.4.0` tag, GitHub Release, npm version, provenance record, or public
-readback exists. Complete the protected trusted workflow below from an
-annotated tag on GitHub `main`, then append the observed run, byte hashes,
-dist-tag, and provenance instead of filling them speculatively.
+- Annotated tag and one-asset
+  [GitHub Release `collab-v0.4.0`](https://github.com/cambridgetcg/agenttool/releases/tag/collab-v0.4.0)
+  peel to GitHub `main` merge
+  `e6302579e7f815ee03f1024df2c725ed36189715`.
+- The prepared tarball transferred through the workflow, GitHub Release, and
+  public npm `@agenttool/collab@0.4.0` tarballs are byte-identical: `303,376` bytes,
+  SHA-256
+  `1a9c1830ec9326351a475596820780ad7f93c7dfe16a6f1a9eb74bc08edbdb51`.
+- Anonymous readback resolved npm `latest` to `0.4.0`. Its SLSA provenance
+  statement binds that package, tag, repository, workflow, GitHub-hosted
+  builder, and exact merge commit; the statement's SHA-512 subject matched the
+  downloaded tarball. The provenance is recorded at
+  [Sigstore log index `2340231720`](https://search.sigstore.dev/?logIndex=2340231720).
+  A clean `npm audit signatures` install with lifecycle scripts disabled
+  independently verified all four registry signatures and four attestations in
+  the resulting dependency graph.
+
+Version 0.4.0 adds one exported read-only anchor-status API and the 32nd local
+MCP tool, `collab_anchor_status`, over the optional sidecar maintained by the
+separate `@agenttool/collab-zerone` bridge. Model-callable input cannot select
+or discover the sidecar path, and local anchor status is not remote chain
+proof. Collab does not contact a chain, broadcast, spend a fee, carry a key or
+RPC, or add a hosted surface. The database schema and coordination protocols
+are unchanged, so this release required no migration, LOVE artifact, or Fly
+deploy. Its packaged README honestly preserves its preparation-time 0.3.1 and
+publication observations because those bytes are immutable; this dated receipt
+supersedes that observation without rewriting the package.
 
 ## Verified Agent Browser 0.6.0 publication and deployment — 2026-07-30
 
