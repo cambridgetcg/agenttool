@@ -110,8 +110,10 @@ anchor-status API and a 32nd local MCP tool, `collab_anchor_status`, over the
 optional sidecar maintained by the separate `@agenttool/collab-zerone` bridge.
 It does not contact a chain, broadcast, spend a fee, carry a key or RPC, or add
 a hosted surface. The database schema and coordination protocols are
-unchanged, so this npm-only release requires no migration, LOVE artifact, Fly
-deploy, or Cloudflare deploy.
+unchanged, so the package artifact itself requires no migration, LOVE artifact,
+or Fly deploy. After exact public readback, a separate receipt follow-up must
+update the existing static package-discovery page and deploy Pages; until then,
+that page must continue to advertise the verified 0.3.1 release.
 
 At source preparation on 2026-08-04, public npm `latest` remained the exact
 0.3.1 release recorded above. This source commit does not claim that a

@@ -434,4 +434,6 @@ any of them succeeded. Collab remains local plaintext software, not a hosted
 service, remote relay, VPN, private model channel, chain client, anchoring
 bridge, or LOVE release. npm distributes the local skills, plugin manifests,
 source, and bundled MCP runtime; this release adds no Fly, migration, or
-Cloudflare surface.
+new Cloudflare runtime surface. After verified npm readback, the repository's
+separate receipt follow-up updates and deploys the existing static package
+discovery; it is not part of this package's authority or runtime.
