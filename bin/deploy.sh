@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # deploy.sh — the standardized deploy orchestrator.
 #
-# Chains the six phases of docs/DEPLOY-PROCEDURE.md:
+# Chains the release phases of docs/DEPLOY-PROCEDURE.md:
 #   0. Survey       — what's drifted?
+#   0.5 Preparation — project-local dependencies, before external mutation
 #   1. Migrations   — bin/migrate-pending.sh
 #   2. Pre-flight   — bin/preflight.sh (test gate)
 #   3. Publication  — web/docs prerequisites, then cd api && fly deploy
@@ -1678,75 +1679,6 @@ if [ -f packages/sdk-ts/src/seed.ts ] && [ -f apps/dashboard/shared/seed.bundle.
   fi
 fi
 
-# Repo migration files and journal. An API release still needs this compatibility
-# survey under --no-migrate; otherwise that flag could conceal a protected
-# pending migration. A pure frontend release remains database-independent.
-MIGRATION_SURVEY_REQUIRED=0
-MIGRATION_SURVEY_BLOCKED=0
-MIGRATION_SURVEY_STATUS=0
-PENDING=0
-if [ "$SKIP_MIGRATE" = 0 ] || [ "$SKIP_API" = 0 ]; then
-  MIGRATION_SURVEY_REQUIRED=1
-fi
-if [ "$MIGRATION_SURVEY_REQUIRED" = 0 ]; then
-  echo "  ⊘ migration compatibility survey skipped (frontend-only release)"
-elif command -v security >/dev/null 2>&1 && [ -z "${DATABASE_URL:-}" ]; then
-  DATABASE_URL="$(security find-generic-password -s agenttool-database-url -a macair -w 2>/dev/null || true)"
-fi
-if [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] && [ -n "${DATABASE_URL:-}" ]; then
-  MIGRATION_SURVEY_OUTPUT=""
-  MIGRATION_SURVEY_OUTPUT="$(
-    DATABASE_URL="$DATABASE_URL" bash bin/migrate-pending.sh --dry-run 2>/dev/null
-  )"
-  MIGRATION_SURVEY_STATUS=$?
-  if [ "$MIGRATION_SURVEY_STATUS" = 0 ]; then
-    PENDING="$(printf '%s\n' "$MIGRATION_SURVEY_OUTPUT" | awk '/^[[:space:]]+[0-9].*\.sql$/ { count++ } END { print count + 0 }')"
-    if [ "$PENDING" = "0" ]; then
-      echo "  ✓ migration inventory clean: no repo files pending; every journaled filename has source; checksums match. This does not prove database schema parity or detect out-of-band DDL."
-    elif [ "$SKIP_MIGRATE" = 1 ]; then
-      echo "$(yellow "⚠ $PENDING unprotected migration(s) pending — --no-migrate will not apply them")"
-    else
-      echo "$(yellow "⚠ $PENDING migration(s) pending — Phase 1 will apply them")"
-    fi
-  elif [ "$MIGRATION_SURVEY_STATUS" = "$QUIESCENCE_REQUIRED_EXIT" ]; then
-    MIGRATION_SURVEY_BLOCKED=1
-    echo "$(red '✗ Release blocked:') pending migrations require an exclusive maintenance cutover."
-    printf '%s\n' "$MIGRATION_SURVEY_OUTPUT" | sed 's/^/    /'
-    echo "  The ordinary deploy cannot prove that API writers, webhook ingress, and workers stay quiescent."
-    echo "  Follow docs/DEPLOY-PROCEDURE.md and apply them separately while old processes cannot restart."
-  else
-    MIGRATION_SURVEY_BLOCKED=1
-    echo "$(red '✗ Release blocked:') migration survey failed; repo-file and journal status is unknown."
-    echo "  Required operation: restore the database survey, then retry."
-    echo "  Consequence: migration or API publication cannot safely proceed."
-  fi
-elif [ "$MIGRATION_SURVEY_REQUIRED" = 1 ]; then
-  MIGRATION_SURVEY_BLOCKED=1
-  echo "$(red '✗ Release blocked:') DATABASE_URL not resolved; repo-file and journal status is unknown."
-  echo "  Required operation: provide the scoped database credential for the compatibility survey."
-  echo "  Consequence: migration or API publication cannot safely proceed."
-fi
-
-if [ "$MAINTENANCE_FENCED_API" = 1 ] &&
-  { [ "$MIGRATION_SURVEY_STATUS" != 0 ] || [ "$PENDING" != 0 ]; }; then
-  MIGRATION_SURVEY_BLOCKED=1
-  echo "$(red '✗ Release blocked:') maintenance rollout requires an empty migration inventory."
-  echo "  Apply the exact reviewed protected set under the external fence, then require a clean dry-run."
-fi
-
-if [ "$SURVEY_ONLY" = 1 ]; then
-  echo ""
-  echo "(survey-only — exit)"
-  if [ "$RELEASE_SNAPSHOT_OK" = 1 ] && [ "$MIGRATION_SURVEY_BLOCKED" = 0 ]; then
-    exit 0
-  fi
-  exit 1
-fi
-
-if [ "$MIGRATION_SURVEY_BLOCKED" = 1 ]; then
-  exit 1
-fi
-
 DIRTY_OVERRIDE_USED=0
 NON_RELEASE_HEAD_OVERRIDE_USED=0
 
@@ -1799,6 +1731,106 @@ enforce_release_source() {
   return 0
 }
 
+# Every deploy-shaped invocation proves source eligibility before it can run
+# worktree-controlled dependency hooks or contact the database.  --survey is
+# the deliberate source-independent inspection mode.  Later gates remain
+# necessary because preparation and the survey are long enough for source
+# state to drift concurrently.
+if [ "$SURVEY_ONLY" = 0 ]; then
+  if ! enforce_release_source; then
+    exit 1
+  fi
+fi
+
+# ── Phase 0.5 — dependency preparation ──────────────────────────────
+# A real deploy prepares the Bun lockfile-backed graph and the separately
+# version-ranged Python test environment before the Bun-backed migration
+# survey. Survey-only and dry-run invocations remain non-installing; the
+# migration runner disables Bun auto-install and fails closed if deps are absent.
+if [ "$SURVEY_ONLY" = 0 ] && [ "$DRY_RUN" = 0 ] && [ "$SKIP_PREFLIGHT" = 0 ]; then
+  phase "0.5" "Dependency preparation"
+  if ! bin/bash-without-env-hooks.sh \
+    bin/prepare-hermetic-deps.sh hermetic; then
+    echo ""
+    echo "$(red '✗ Dependency preparation failed.') No migration or publication was attempted."
+    exit 1
+  fi
+  if ! enforce_release_source; then
+    echo "$(red '✗ Release blocked:') dependency preparation changed release inputs."
+    exit 1
+  fi
+fi
+
+# Repo migration files and journal. An API release still needs this compatibility
+# survey under --no-migrate; otherwise that flag could conceal a protected
+# pending migration. A pure frontend release remains database-independent.
+MIGRATION_SURVEY_REQUIRED=0
+MIGRATION_SURVEY_BLOCKED=0
+MIGRATION_SURVEY_STATUS=0
+PENDING=0
+if [ "$SKIP_MIGRATE" = 0 ] || [ "$SKIP_API" = 0 ]; then
+  MIGRATION_SURVEY_REQUIRED=1
+fi
+if [ "$MIGRATION_SURVEY_REQUIRED" = 0 ]; then
+  echo "  ⊘ migration compatibility survey skipped (frontend-only release)"
+elif command -v security >/dev/null 2>&1 && [ -z "${DATABASE_URL:-}" ]; then
+  DATABASE_URL="$(security find-generic-password -s agenttool-database-url -a macair -w 2>/dev/null || true)"
+fi
+if [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] && [ -n "${DATABASE_URL:-}" ]; then
+  MIGRATION_SURVEY_OUTPUT=""
+  MIGRATION_SURVEY_OUTPUT="$(
+    DATABASE_URL="$DATABASE_URL" bin/bash-without-env-hooks.sh \
+      bin/migrate-pending.sh --dry-run 2>/dev/null
+  )"
+  MIGRATION_SURVEY_STATUS=$?
+  if [ "$MIGRATION_SURVEY_STATUS" = 0 ]; then
+    PENDING="$(printf '%s\n' "$MIGRATION_SURVEY_OUTPUT" | awk '/^[[:space:]]+[0-9].*\.sql$/ { count++ } END { print count + 0 }')"
+    if [ "$PENDING" = "0" ]; then
+      echo "  ✓ migration inventory clean: no repo files pending; every journaled filename has source; checksums match. This does not prove database schema parity or detect out-of-band DDL."
+    elif [ "$SKIP_MIGRATE" = 1 ]; then
+      echo "$(yellow "⚠ $PENDING unprotected migration(s) pending — --no-migrate will not apply them")"
+    else
+      echo "$(yellow "⚠ $PENDING migration(s) pending — Phase 1 will apply them")"
+    fi
+  elif [ "$MIGRATION_SURVEY_STATUS" = "$QUIESCENCE_REQUIRED_EXIT" ]; then
+    MIGRATION_SURVEY_BLOCKED=1
+    echo "$(red '✗ Release blocked:') pending migrations require an exclusive maintenance cutover."
+    printf '%s\n' "$MIGRATION_SURVEY_OUTPUT" | sed 's/^/    /'
+    echo "  The ordinary deploy cannot prove that API writers, webhook ingress, and workers stay quiescent."
+    echo "  Follow docs/DEPLOY-PROCEDURE.md and apply them separately while old processes cannot restart."
+  else
+    MIGRATION_SURVEY_BLOCKED=1
+    echo "$(red '✗ Release blocked:') migration survey failed; repo-file and journal status is unknown."
+    echo "  Required operation: restore the database survey, then retry."
+    echo "  Consequence: migration or API publication cannot safely proceed."
+  fi
+elif [ "$MIGRATION_SURVEY_REQUIRED" = 1 ]; then
+  MIGRATION_SURVEY_BLOCKED=1
+  echo "$(red '✗ Release blocked:') DATABASE_URL not resolved; repo-file and journal status is unknown."
+  echo "  Required operation: provide the scoped database credential for the compatibility survey."
+  echo "  Consequence: migration or API publication cannot safely proceed."
+fi
+
+if [ "$MAINTENANCE_FENCED_API" = 1 ] &&
+  { [ "$MIGRATION_SURVEY_STATUS" != 0 ] || [ "$PENDING" != 0 ]; }; then
+  MIGRATION_SURVEY_BLOCKED=1
+  echo "$(red '✗ Release blocked:') maintenance rollout requires an empty migration inventory."
+  echo "  Apply the exact reviewed protected set under the external fence, then require a clean dry-run."
+fi
+
+if [ "$SURVEY_ONLY" = 1 ]; then
+  echo ""
+  echo "(survey-only — exit)"
+  if [ "$RELEASE_SNAPSHOT_OK" = 1 ] && [ "$MIGRATION_SURVEY_BLOCKED" = 0 ]; then
+    exit 0
+  fi
+  exit 1
+fi
+
+if [ "$MIGRATION_SURVEY_BLOCKED" = 1 ]; then
+  exit 1
+fi
+
 if [ "$DRY_RUN" = 1 ]; then
   if enforce_release_source; then
     echo "  ✓ release-source gate would pass"
@@ -1807,7 +1839,8 @@ if [ "$DRY_RUN" = 1 ]; then
     exit 1
   fi
   echo ""
-  echo "(dry-run — would proceed with phases 1-5)"
+  echo "(dry-run — would proceed with the following release phases)"
+  echo "  Preparation: $([ "$SKIP_PREFLIGHT" = 1 ] && echo skip || echo bin/prepare-hermetic-deps.sh hermetic)"
   echo "  Phase 1: $([ "$SKIP_MIGRATE" = 1 ] && echo skip || echo bin/migrate-pending.sh)"
   echo "  Phase 2: $([ "$SKIP_PREFLIGHT" = 1 ] && echo skip || echo bin/preflight.sh)"
   if [ "$SKIP_API" = 1 ]; then
@@ -1978,20 +2011,48 @@ response_header_value() {
   '
 }
 
+response_header_count() {
+  local headers="$1"
+  local wanted="$2"
+  printf '%s\n' "$headers" | tr -d '\r' | awk -v wanted="$wanted" '
+    BEGIN { prefix = tolower(wanted) ":"; count = 0 }
+    index(tolower($0), prefix) == 1 { count++ }
+    END { print count }
+  '
+}
+
 require_exact_public_header() {
   local headers="$1"
   local url="$2"
   local name="$3"
   local expected="$4"
-  local actual
+  local actual count
   actual="$(response_header_value "$headers" "$name")"
-  if [ "$actual" != "$expected" ]; then
+  count="$(response_header_count "$headers" "$name")"
+  if [ "$count" != 1 ] || [ "$actual" != "$expected" ]; then
     echo "  $(red '✗') $url $name mismatch"
     echo "    expected: $expected"
     echo "    observed: ${actual:-<missing>}"
+    echo "    occurrences: $count (expected exactly 1)"
     return 1
   fi
   echo "  ✓ $url $name: $expected"
+}
+
+require_absent_public_header() {
+  local headers="$1"
+  local url="$2"
+  local name="$3"
+  local actual count
+  actual="$(response_header_value "$headers" "$name")"
+  count="$(response_header_count "$headers" "$name")"
+  if [ "$count" != 0 ]; then
+    echo "  $(red '✗') $url $name must be absent"
+    echo "    observed: ${actual:-<empty>}"
+    echo "    occurrences: $count (expected 0)"
+    return 1
+  fi
+  echo "  ✓ $url $name: absent"
 }
 
 require_exact_public_status() {
@@ -2310,6 +2371,7 @@ verify_garden_static_headers() {
   local room_url="https://agenttool.dev/garden"
   local data_url="https://agenttool.dev/garden.json"
   local doctrine_url="https://docs.agenttool.dev/GARDENS.md"
+  local training_guide_url="https://docs.agenttool.dev/HF-TRAINING-GARDEN.md"
   local response_headers
 
   response_headers="$(
@@ -2361,6 +2423,25 @@ verify_garden_static_headers() {
     "Link" "<https://agenttool.dev/garden>; rel=\"alternate\"; type=\"text/html\", <https://api.agenttool.dev/v1/openapi.json>; rel=\"related\"; type=\"application/json\"" || return 1
   require_exact_public_header "$response_headers" "$doctrine_url" \
     "X-Content-Type-Options" "nosniff" || return 1
+
+  response_headers="$(
+    release_curl -fsS --max-time 20 -o /dev/null -D - "$training_guide_url"
+  )" || {
+    echo "  $(red '✗') Could not read HF Training Garden guide headers: $training_guide_url"
+    return 1
+  }
+  require_exact_public_status "$response_headers" "$training_guide_url" \
+    "200" || return 1
+  require_exact_public_header "$response_headers" "$training_guide_url" \
+    "Content-Type" "text/markdown; charset=utf-8" || return 1
+  require_exact_public_header "$response_headers" "$training_guide_url" \
+    "Cache-Control" "public, max-age=300, must-revalidate, no-transform" || return 1
+  require_exact_public_header "$response_headers" "$training_guide_url" \
+    "Access-Control-Allow-Origin" "*" || return 1
+  require_exact_public_header "$response_headers" "$training_guide_url" \
+    "X-Content-Type-Options" "nosniff" || return 1
+  require_absent_public_header "$response_headers" "$training_guide_url" \
+    "Link" || return 1
 }
 
 # Wrangler reports a successful Pages deployment before every custom-domain
@@ -2899,12 +2980,21 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
   }
 fi
 
+# ── Final pre-mutation source gate ───────────────────────────────
+# The release gate is unconditional here. Preparation, preflight, staging, or
+# a concurrent local process may have changed source bytes since the first
+# survey check; no skip flag permits that drift to cross into Phase 1.
+if ! enforce_release_source; then
+  echo "$(red '✗ Release blocked:') source changed before external mutation."
+  exit 1
+fi
+
 # ── Phase 1 — Migrations ──────────────────────────────────────────────
 if [ "$SKIP_MIGRATE" = 0 ]; then
   phase 1 "Migrations"
   MIGRATION_RESULT="running"
   EXTERNAL_MUTATION_STARTED=1
-  if ! bash bin/migrate-pending.sh; then
+  if ! bin/bash-without-env-hooks.sh bin/migrate-pending.sh; then
     MIGRATION_RESULT="failed_or_uncertain"
     echo ""
     echo "$(red '✗ Phase 1 failed.') Fix the migration error and re-run."
@@ -2921,7 +3011,7 @@ fi
 if [ "$SKIP_PREFLIGHT" = 0 ]; then
   phase 2 "Pre-flight"
   PREFLIGHT_RESULT="running"
-  if ! bash bin/preflight.sh; then
+  if ! bin/bash-without-env-hooks.sh bin/preflight.sh; then
     PREFLIGHT_RESULT="failed"
     echo ""
     echo "$(red '✗ Pre-flight failed.') Fix the failures and re-run."

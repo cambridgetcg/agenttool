@@ -6,6 +6,10 @@
 # credential variables are removed. This is not an OS-level network sandbox.
 # Stateful and paid tiers are explicit. Contract mode accepts one of
 # ANTHROPIC_API_KEY, OPENAI_API_KEY, or OLLAMA_API_KEY.
+# This gate does not install dependencies. On a fresh worktree, run
+# bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh first; the deploy
+# orchestrator does this before its migration survey and any external mutation
+# when preflight is enabled.
 #
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
@@ -22,11 +26,16 @@
 
 set -euo pipefail
 
-readonly REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly REPO_ROOT
 readonly REQUIRED_BUN_VERSION="1.3.5"
 readonly MODE="${1:-hermetic}"
+readonly HF_HOST_TEST_PYTHON="$REPO_ROOT/packages/hf-training-host/.venv/bin/python"
 
 cd "$REPO_ROOT"
+
+# shellcheck source=bin/hermetic-env.sh
+source "$REPO_ROOT/bin/hermetic-env.sh"
 
 usage() {
   sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
@@ -56,55 +65,9 @@ require_bun() {
     die "Bun $REQUIRED_BUN_VERSION is required; found $actual"
 }
 
-sanitize_hermetic_env() {
-  unset \
-    AGENTTOOL_API_KEY AGENTTOOL_BASE AGENTTOOL_IDENTITY_ID \
-    AGENTTOOL_PLATFORM_SIGNING_KEY AGENTTOOL_SIGNING_KEY_ID \
-    AGENTTOOL_ENABLE_UNSAFE_EXECUTE AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS \
-    AGENTTOOL_WHITEHACK_S3_ACCESS_KEY_ID \
-    AGENTTOOL_WHITEHACK_S3_SECRET_ACCESS_KEY \
-    AGENTTOOL_WHITEHACK_S3_SESSION_TOKEN \
-    AGENTTOOL_WHITEHACK_RECIPIENT_ID \
-    AGENTTOOL_WHITEHACK_RECIPIENT_X25519_PRIVATE_KEY \
-    AGENTOOL_BROWSER_HEADLESS AGENTOOL_BROWSER_AUTHORITY \
-    AGENTOOL_BROWSER_PUBLIC_WEB \
-    AGENTOOL_BROWSER_LOCAL_NETWORK AGENTOOL_BROWSER_PROFILE \
-    AGENTOOL_BROWSER_PROFILE_DIR AGENTOOL_BROWSER_CHANNEL \
-    AGENTOOL_BROWSER_EXECUTABLE AGENTOOL_BROWSER_OUTPUT_DIR \
-    HF_TOKEN HUGGINGFACE_HUB_TOKEN HUGGING_FACE_HUB_TOKEN \
-    AGENTOOL_HF_REAL_STACK_SMOKE \
-    AGENT_DATA_NODE_TOKEN AGENT_DATA_NODE_URL AT_API_KEY \
-    AGENTTOOL_YUTABASE_TARGET_URL AGENTTOOL_YUTABASE_CLAIMANT \
-    AGENTTOOL_YUTABASE_SOURCE_URL AGENTTOOL_YUTABASE_SOURCE_TOKEN \
-    AGENTTOOL_YUTABASE_PROJECT_ID AGENTTOOL_YUTABASE_REPOSITORY_ID \
-    AGENTTOOL_YUTABASE_TEST_DATABASE_URL \
-    ANTHROPIC_API_KEY OPENAI_API_KEY OLLAMA_API_KEY RUN_CONTRACT \
-    DATABASE_URL DATABASE_SESSION_URL POSTGRES_URL REDIS_URL \
-    OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_TRACES_ENDPOINT \
-    OTEL_EXPORTER_OTLP_HEADERS OTEL_EXPORTER_OTLP_TRACES_HEADERS \
-    OTEL_RESOURCE_ATTRIBUTES OTEL_SERVICE_NAME \
-    STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET VAULT_MASTER_KEY \
-    ALCHEMY_API_KEY ALCHEMY_NOTIFY_AUTH_TOKEN \
-    ALCHEMY_WEBHOOK_SIGNING_KEY_ETHEREUM \
-    ALCHEMY_WEBHOOK_SIGNING_KEY_BASE \
-    ALCHEMY_WEBHOOK_SIGNING_KEY_POLYGON \
-    ALCHEMY_WEBHOOK_SIGNING_KEY_ARBITRUM \
-    ALCHEMY_WEBHOOK_SIGNING_KEY_OPTIMISM \
-    ALCHEMY_WEBHOOK_ID_ETHEREUM ALCHEMY_WEBHOOK_ID_BASE \
-    ALCHEMY_WEBHOOK_ID_POLYGON ALCHEMY_WEBHOOK_ID_ARBITRUM \
-    ALCHEMY_WEBHOOK_ID_OPTIMISM \
-    HELIUS_API_KEY HELIUS_WEBHOOK_SECRET \
-    CRYPTO_HD_MNEMONIC CRYPTO_HD_MNEMONIC_TESTNET \
-    CRYPTO_WEBHOOK_ALLOW_UNSIGNED \
-    PAYOUT_WORKER_ENABLED PAYOUT_NETWORK PAYOUT_GBP_USD_RATE \
-    RPC_URL_ETHEREUM_MAINNET RPC_URL_ETHEREUM_TESTNET \
-    RPC_URL_BASE_MAINNET RPC_URL_BASE_TESTNET \
-    RPC_URL_POLYGON_MAINNET RPC_URL_POLYGON_TESTNET \
-    RPC_URL_ARBITRUM_MAINNET RPC_URL_ARBITRUM_TESTNET \
-    RPC_URL_OPTIMISM_MAINNET RPC_URL_OPTIMISM_TESTNET \
-    RPC_URL_SOLANA_MAINNET RPC_URL_SOLANA_TESTNET \
-    SMOKE_DID
-  export AGENTTOOL_DISABLE_WORKERS=1
+require_hf_host_test_env() {
+  [ -x "$HF_HOST_TEST_PYTHON" ] ||
+    die "HF training host test environment is missing; run bin/prepare-hermetic-deps.sh packages"
 }
 
 api_typecheck() {
@@ -155,18 +118,25 @@ packages_gate() {
     bash -c 'cd packages/browser && bun run ci'
   run "private read-only Hugging Face metadata and research scout" \
     bash -c 'cd packages/hf-scout && bun run ci'
+  # The command substitutions intentionally run inside the credential-narrowed child.
+  # shellcheck disable=SC2016
   run "repository-source-only voluntary WAKE learning fixtures start clean" \
     bash -c 'git diff --exit-code HEAD -- packages/hf-training-garden/hf/learning-dataset && test -z "$(git status --short --untracked-files=all -- packages/hf-training-garden/hf/learning-dataset)"'
   run "repository-source-only voluntary WAKE learning fixtures" \
     bash -c 'cd packages/hf-training-garden && node scripts/check-learning-idempotence.mjs && bun test tests/learning-release.test.ts'
+  # shellcheck disable=SC2016
   run "repository-source-only voluntary WAKE learning fixtures remain unchanged" \
     bash -c 'git diff --exit-code HEAD -- packages/hf-training-garden/hf/learning-dataset && test -z "$(git status --short --untracked-files=all -- packages/hf-training-garden/hf/learning-dataset)"'
   run "private HF dataset admission, training WAKE, and Garden tending" \
     bash -c 'cd packages/hf-training-garden && bun run ci'
+  # shellcheck disable=SC2016
   run "accepted HF policy companion remains unchanged" \
     bash -c 'git diff --exit-code HEAD -- packages/hf-training-garden/hf/dataset && test -z "$(git status --short --untracked-files=all -- packages/hf-training-garden/hf/dataset)"'
+  # Positional arguments intentionally expand inside the child shell.
+  # shellcheck disable=SC2016
   run "private HF-API-pinned non-distributed WAKE training host" \
-    bash -c 'cd packages/hf-training-host && python3 -m pytest -q && bun test bridge/tests'
+    bash -c 'cd "$1" && "$2" -I -m pytest -q && bun test bridge/tests' \
+    bash "$REPO_ROOT/packages/hf-training-host" "$HF_HOST_TEST_PYTHON"
   run "read-only Agent Skills inspection and validation" \
     bash -c 'cd packages/skills && bun run ci'
   run "Agent Skills to rebuildable YUTABASE metadata plan" \
@@ -200,21 +170,23 @@ packages_gate() {
 case "$MODE" in
   hermetic)
     [ "$#" -le 1 ] || die "hermetic accepts no additional arguments"
-    require_bun
     sanitize_hermetic_env
+    require_bun
+    require_hf_host_test_env
     api_gate
     packages_gate
     ;;
   api)
     [ "$#" -eq 1 ] || die "api accepts no additional arguments"
-    require_bun
     sanitize_hermetic_env
+    require_bun
     api_gate
     ;;
   packages)
     [ "$#" -eq 1 ] || die "packages accepts no additional arguments"
-    require_bun
     sanitize_hermetic_env
+    require_bun
+    require_hf_host_test_env
     packages_gate
     ;;
   database)
