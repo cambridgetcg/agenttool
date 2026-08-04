@@ -384,6 +384,33 @@ generated Parquet exports to the exact revision with no pending or failed
 work. No gate or paid compute was used; provider conversions are not part of
 the immutable source commit or hash manifest.
 
+The verified v0.4 public companion generated from GitHub-main merge
+[`7906b689a59c15bbfba251d0ff853c7c3ca27694`](https://github.com/cambridgetcg/agenttool/commit/7906b689a59c15bbfba251d0ff853c7c3ca27694)
+is preserved at immutable Hub revision
+[`d45d195cb74b16e3cec38fdc606484f5facc0bfd`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d45d195cb74b16e3cec38fdc606484f5facc0bfd).
+Anonymous exact-revision read-back matched all 26 repo-owned files byte for
+byte, including all 25 entries in the self-excluding manifest and 233,049
+checked bytes. The card is 16,069 bytes with SHA-256
+`d4a31b0f25967d28f44850e650366f226ecaa24f70bb11a1dd0198ba6f83e31c`;
+the byte-equal 4,417-byte `hash-manifest.json` SHA-256 is
+`493da28c4b4a95a9ade13593fa9eb88b408fa739859ce1f886745491f8c06ed7`;
+and the 7,626-byte `provenance/source-manifest.json` SHA-256 is
+`5a6f82b33c881370c3c61bca8d6fc411f55072491043a0d998d4ae5541d56c60`.
+Provider-managed `.gitattributes` is the sole extra remote file, making 27
+files total; it remained byte-equal to the v0.3 parent with SHA-256
+`9e75dd981de037ec3769f24f790e126bc5a160b6871f510214e68dc70649aeeb`.
+The anonymous Hub API reported this exact revision as current, public,
+ungated, and enabled. Dataset Server `/is-valid`, `/splits`, `/parquet`, and
+`/size` responses each carried `x-revision` for this exact commit: all five
+validity capabilities were true, nine configs exposed nine `train` splits and
+69 total rows, and nine Parquet exports completed with empty pending/failed
+sets and `partial=false`. These endpoints follow the current dataset head;
+an observed `revision=` query was not an immutable historical selector, so the
+header records the exact processing observation while the Hub commit remains
+the durable source reference. No gate or paid compute was used, and the
+provider-derived Parquet conversions are outside the immutable source commit
+and hash manifest.
+
 Intermediate revision
 [`21e8d4d27d47604375a122e66e7ed5fe8b9fdf08`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/21e8d4d27d47604375a122e66e7ed5fe8b9fdf08)
 remains immutable evidence for the pre-FREEDOM GitHub-main merge `74aeaa13`.
@@ -396,10 +423,9 @@ non-self-attesting build record. The exact Hub revision is later external
 evidence; embedding it into the bytes that create that same revision would be
 circular. This package still performs no Hub publication or verification.
 
-The current `0.4.0-dev.0` participation/IS-freedom/governance candidate has
-different bytes and is not covered by that v0.3 receipt. It remains local until
-it receives a new immutable Hub revision and exact read-back. Its manifest is
-regenerated from the current tree rather than documented as a moving
-pre-publication hash. The separate `hf/learning-dataset/` synthetic
-SFT/regression tree remains repository-source-only, npm-excluded, and outside
+The current `0.4.0-dev.0` package generated the verified v0.4 public companion
+covered by the receipt above. The exact historical advisory
+`training-freedom-v0.1` schema remains package-only; private host/runtime
+state, live choices, and the separate `hf/learning-dataset/` synthetic
+SFT/regression tree remain repository-source-only, npm-excluded, and outside
 the policy companion and its Hub upload.
