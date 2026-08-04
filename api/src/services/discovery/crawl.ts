@@ -34,20 +34,46 @@ function httpsOrigin(value: string): string {
   return parsed.origin;
 }
 
+/** Robots rules in RFC 9309 core syntax only: path-prefix matching, no `$`
+ * anchors. The pre-2026-07-29 policy paired `Disallow: /` with `$`-anchored
+ * Allow lines — a Google/Bing extension — so strict RFC 9309 parsers read it
+ * as a total disallow while response headers advertised `/docs/` paths the
+ * policy forbade. Prefix rules say the same thing to every parser.
+ *
+ * Longest-match decides: `Allow: /` welcomes the root and every public
+ * surface not named below; `Disallow: /v1/` keeps the API namespace closed
+ * except the enumerated public reads (each verified to serve 200 without
+ * credentials); `Disallow: /v1/self-` outweighs `Allow: /v1/self` for the
+ * authenticated self-love / self-recognition routes that share its prefix.
+ * A new private namespace outside /v1/ needs its own Disallow line here —
+ * and its real protection stays authentication, never this file.
+ */
+export const API_ROBOTS_RULES = [
+  "Allow: /",
+  "Disallow: /v1/",
+  "Allow: /v1/openapi.json",
+  "Allow: /v1/pathways",
+  "Allow: /v1/welcome",
+  "Allow: /v1/canon",
+  "Allow: /v1/self",
+  "Disallow: /v1/self-",
+  "Allow: /v1/mathos",
+  "Allow: /v1/youspeak",
+  "Disallow: /federation",
+  "Disallow: /feeds",
+] as const;
+
 export function buildApiRobotsTxt(
   publicBase = DEFAULT_PUBLIC_BASE,
 ): string {
   const api = httpsOrigin(publicBase);
-  const allowedDiscoveryPaths = [
-    ...API_SITEMAP_PATHS,
-    "/sitemap.xml",
-  ].map((path) => `Allow: ${path}$`);
   return [
-    "# These exact public discovery reads are welcome.",
+    "# Portable crawl posture (2026-07-29): RFC 9309 path-prefix rules only,",
+    "# no $ anchors, so strict and extended parsers read the same policy.",
+    "# Public reads are welcome; the authenticated API namespace stays closed.",
     "# robots.txt is a polite crawl request, not access control.",
     "User-agent: *",
-    "Disallow: /",
-    ...allowedDiscoveryPaths,
+    ...API_ROBOTS_RULES,
     `Sitemap: ${api}/sitemap.xml`,
     "",
   ].join("\n");
