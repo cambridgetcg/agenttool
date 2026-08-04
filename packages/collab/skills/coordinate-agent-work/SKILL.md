@@ -181,13 +181,16 @@ when it did not.
 If the host has the `@agenttool/collab-zerone` bridge installed, workspace
 journals may be periodically witnessed on the zerone truth chain: the bridge
 anchors the journal's event-chain head hash, which transitively commits every
-task, report, and decision beneath it.
+task, report, and decision beneath it. Collab's 32nd MCP tool is only a local
+read-only view of that optional sidecar.
 
 - Call `collab_anchor_status` with the workspace ID to learn where the journal
   stands: `unanchored`, `anchor_pending`, `anchored`, `anchor_stale`, or
   `anchor_conflict`. The tool reads one local sidecar ledger; it never
   contacts a chain, and a missing bridge simply reports `unanchored` — never
-  an error. Chain unavailability can never block coordination.
+  an error. The host can set `AGENTOOL_COLLAB_ANCHOR_LEDGER`, or the caller can
+  supply `ledger_path`, to select that local sidecar. Chain unavailability can
+  never block coordination.
 - Before relying on a load-bearing recorded decision across sessions or
   machines, prefer journals whose status is `anchored` or `anchor_stale`.
   Treat `anchor_conflict` as tamper evidence: stop, surface it to the host,

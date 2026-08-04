@@ -1,7 +1,7 @@
 {
   "name": "agenttool-collab",
-  "version": "0.3.1",
-  "description": "Local presence and credential-bound coordination across agent sessions",
+  "version": "0.4.0",
+  "description": "Local coordination and optional read-only witness status across agent sessions",
   "author": {
     "name": "AgentTool contributors",
     "url": "https://agenttool.dev"
@@ -30,7 +30,7 @@
   "interface": {
     "displayName": "AgentTool Collab",
     "shortDescription": "Coordinate agent sessions with local evidence.",
-    "longDescription": "Adds separate self-declared presence and credential-bound coordination planes over one local plaintext SQLite journal, including resumable cursors, advisory path claims, reports and challenges, reviewed edit completion, Git checkpoints, and refusable handoffs. MCP arguments and results remain visible to the active model provider, and the host still owns agent lifecycle and wake-up.",
+    "longDescription": "Adds separate self-declared presence and credential-bound coordination planes over one local plaintext SQLite journal, including resumable cursors, advisory path claims, reports and challenges, reviewed edit completion, Git checkpoints, refusable handoffs, and read-only status for an optional Zerone witness sidecar. It never contacts a chain or creates an anchor. MCP arguments and results remain visible to the active model provider, and the host still owns agent lifecycle and wake-up.",
     "developerName": "AgentTool contributors",
     "category": "Productivity",
     "capabilities": [
@@ -38,12 +38,14 @@
       "Self-declared presence",
       "Multi-session coordination",
       "Linked-worktree awareness",
+      "Read-only Zerone witness status",
       "MCP tools"
     ],
     "defaultPrompt": [
       "Start credential-bound coordination for these sessions.",
       "List optional self-declared presence without treating it as identity.",
-      "Reconcile reports and review completed edit tasks."
+      "Reconcile reports and review completed edit tasks.",
+      "Check optional local witness status without contacting a chain."
     ]
   }
 }

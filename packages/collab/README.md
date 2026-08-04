@@ -6,7 +6,10 @@ repository workspace with two explicit planes: self-declared presence for
 routing hints, and credential-bound sessions for resumable coordination,
 transactional task leases, linked Git worktree awareness, path-conflict
 projection, structured reports, reviewed edit completion, refusable handoffs,
-Git checkpoints, and a hash-chained event journal.
+Git checkpoints, and a hash-chained event journal. Its 32nd local MCP tool is
+a read-only view of an optional Zerone witness sidecar, so a participant can
+distinguish an unwitnessed, pending, current, stale, or conflicting journal
+without contacting a chain.
 
 It does **not** spawn, steer, wake, or stop agents; lock files; authenticate the
 local user; grant external authority; or create a channel hidden from a remote
@@ -306,6 +309,26 @@ detects accidental or unsophisticated changes. It is not a signature: a local
 attacker able to rewrite the database can recompute the chain, and a valid
 chain does not prove that recorded claims are true.
 
+### Optional Zerone witness status
+
+`collab_anchor_status` compares one workspace head with the local
+`agenttool.collab-zerone-ledger/0.1` sidecar maintained by the separate
+`@agenttool/collab-zerone` bridge. It returns `unanchored`, `anchor_pending`,
+`anchored`, `anchor_stale`, or `anchor_conflict`. Before reporting an anchored
+or stale state, it recomputes the full local journal from genesis and checks the
+hash at the witnessed sequence. A missing, unreadable, malformed, or
+all-failed sidecar reports honestly as `unanchored`; it never blocks ordinary
+coordination.
+
+The default sidecar is
+`$XDG_DATA_HOME/agenttool/collab-zerone-anchors.json`, falling back to the
+platform data directory. `AGENTOOL_COLLAB_ANCHOR_LEDGER` or the tool's explicit
+`ledger_path` selects another local file. This read-only tool never contacts a
+chain, submits or confirms a transaction, spends a fee, supplies a key or RPC,
+repairs history, or turns a witness into truth, consent, identity, permission,
+or authority. Treat `anchor_conflict` as a reason to stop and surface the
+evidence to the host; reconciliation remains an explicit operator decision.
+
 ## Privacy and authority boundary
 
 Keep credentials, secrets, prompts, transcripts, chain-of-thought or private
@@ -329,7 +352,8 @@ enforce their own repository, account, and publication boundaries.
 ## Codex, Claude Code, and Hermes Agent
 
 The npm package root is the plugin root for both hosts, so the same
-`skills/coordinate-agent-work/SKILL.md` and standalone MCP server ship once:
+`skills/coordinate-agent-work/SKILL.md` and 32-tool standalone MCP server ship
+once:
 
 - Codex reads `.codex-plugin/plugin.json`. Its MCP declaration uses `cwd: "."`
   and starts the bundled executable relative to the installed plugin root.
@@ -347,7 +371,8 @@ Hermes uses the same bundled stdio MCP server as a configuration adapter; this
 package does not patch Hermes core. Register the MCP server under the exact
 name `agenttool` so Hermes exposes prefixed tools such as
 `mcp_agenttool_collab_session_start` and
-`mcp_agenttool_collab_session_join`. Install the packaged
+`mcp_agenttool_collab_session_join`, plus the read-only
+`mcp_agenttool_collab_anchor_status`. Install the packaged
 `integrations/hermes/skills/coordinate-agent-work-hermes` adapter into the
 selected Hermes profile. Its workflow keeps the credential-bound and
 self-declared presence planes separate and never asks the model to read a
@@ -391,20 +416,22 @@ Maintainer publication uses the repository's protected `publish-npm.yml`
 workflow and `bin/npm-release.ts`, not a local `npm publish`. See
 [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md).
 
-Version 0.1.0 is the initial public npm release, and version 0.2.0 remains a
-historical public release. Version 0.3.0 is the last independently verified
-public npm release before this 0.3.1 source release. Protected trusted workflow
-run `30010457955` published 0.3.0 with SLSA provenance; independently
+Version 0.1.0 is the initial public npm release, and versions 0.2.0 and 0.3.0
+remain historical public releases. Version 0.3.1 is the last independently
+verified public npm release before this 0.4.0 source release. Protected trusted
+workflow run `30389483811` published 0.3.1 with provenance; independently
 downloaded npm and
-[GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/collab-v0.3.0)
-tarballs were byte-identical
-(`sha256:9c605ebe4cdc87eda1b0eede6bba0a6591a3dd62badd364463b01521401def7f`).
+[GitHub Release](https://github.com/cambridgetcg/agenttool/releases/tag/collab-v0.3.1)
+tarballs were byte-identical (296,260 bytes;
+`sha256:dd0b0a0897a6d414e013e7f80b29ed9b200f94b3bcfe9d79598bc50b619db6ee`).
 
-Version 0.3.1 adds bounded `collab_next` event pages while preserving routed
-reports, cursor authority, acknowledgements, and hash verification. Its
-annotated source tag, GitHub Release, npm publication, and `latest` dist-tag
-remain separately verifiable release acts; this source statement does not
-claim that any of them succeeded. Collab remains local plaintext software, not
-a hosted service, remote relay, VPN, private model channel, or LOVE release.
-npm distributes the local skills, plugin manifests, source, and bundled MCP
-runtime; this release adds no Fly or Cloudflare surface.
+Version 0.4.0 keeps the v0.3.1 coordination, database, paging, and cursor
+contracts and adds the exported anchor-status API plus the 32nd read-only MCP
+tool described above. Its annotated source tag, GitHub Release, npm
+publication, provenance, public byte readback, and `latest` dist-tag remain
+separately verifiable release acts; this source statement does not claim that
+any of them succeeded. Collab remains local plaintext software, not a hosted
+service, remote relay, VPN, private model channel, chain client, anchoring
+bridge, or LOVE release. npm distributes the local skills, plugin manifests,
+source, and bundled MCP runtime; this release adds no Fly, migration, or
+Cloudflare surface.

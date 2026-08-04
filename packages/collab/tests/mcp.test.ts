@@ -806,8 +806,8 @@ describe("MCP surface", () => {
     const reviewer = new StdioMcpHarness(bundlePath, databasePath);
     cleanup.push(() => reviewer.close());
     const reviewerInit = await reviewer.initialize();
-    expect(implementerInit.serverInfo.version).toBe("0.3.1");
-    expect(reviewerInit.serverInfo.version).toBe("0.3.1");
+    expect(implementerInit.serverInfo.version).toBe("0.4.0");
+    expect(reviewerInit.serverInfo.version).toBe("0.4.0");
 
     const implementerJoin = await implementer.callTool("collab_session_start", {
       root_path: root,

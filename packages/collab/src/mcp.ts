@@ -80,7 +80,7 @@ export function buildCollabMcpServer(
 ): McpServer {
   let binding: BoundSession | null = options.resumed_session ?? null;
   const server = new McpServer(
-    { name: "agenttool-collab", version: "0.3.1" },
+    { name: "agenttool-collab", version: "0.4.0" },
     {
       capabilities: { tools: {} },
       instructions:
@@ -97,7 +97,9 @@ export function buildCollabMcpServer(
         "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " +
         "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " +
         "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " +
-        "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller.",
+        "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " +
+        "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " +
+        "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.",
     },
   );
 
