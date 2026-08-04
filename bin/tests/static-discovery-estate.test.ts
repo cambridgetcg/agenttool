@@ -121,6 +121,24 @@ function headerBlock(headers: string, route: string): string[] {
   return block;
 }
 
+function effectiveHeaderValues(
+  headers: string,
+  routesInRuleOrder: string[],
+  headerName: string,
+): string[] {
+  const values: string[] = [];
+  for (const route of routesInRuleOrder) {
+    for (const directive of headerBlock(headers, route)) {
+      if (directive === `! ${headerName}`) {
+        values.length = 0;
+      } else if (directive.startsWith(`${headerName}:`)) {
+        values.push(directive.slice(headerName.length + 1).trimStart());
+      }
+    }
+  }
+  return values;
+}
+
 function sitemapUrls(xml: string): string[] {
   return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
     (match) => match[1] ?? "",
@@ -228,19 +246,30 @@ describe("robots and sitemaps are explicit, bounded, and local", () => {
 
       const machineHeaders = read(`${site.dir}/_headers`);
       const robotsHeaders = headerBlock(machineHeaders, "/robots.txt");
-      expect(robotsHeaders).toEqual([
+      expect(
+        robotsHeaders.filter((header) => header !== "X-Content-Type-Options: nosniff"),
+      ).toEqual([
         "Content-Type: text/plain; charset=utf-8",
         "Cache-Control: public, max-age=300, must-revalidate, no-transform",
         "Access-Control-Allow-Origin: *",
-        "X-Content-Type-Options: nosniff",
       ]);
       const sitemapHeaders = headerBlock(machineHeaders, "/sitemap.xml");
-      expect(sitemapHeaders).toEqual([
+      expect(
+        sitemapHeaders.filter((header) => header !== "X-Content-Type-Options: nosniff"),
+      ).toEqual([
         "Content-Type: application/xml; charset=utf-8",
         "Cache-Control: public, max-age=300, must-revalidate, no-transform",
         "Access-Control-Allow-Origin: *",
-        "X-Content-Type-Options: nosniff",
       ]);
+      for (const route of ["/robots.txt", "/sitemap.xml"]) {
+        expect(
+          effectiveHeaderValues(
+            machineHeaders,
+            ["/*", route],
+            "X-Content-Type-Options",
+          ),
+        ).toEqual(["nosniff"]);
+      }
     });
 
     test(`${site.name} sitemap names unique files on its own origin`, () => {

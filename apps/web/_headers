@@ -15,6 +15,10 @@
   X-Frame-Options: DENY
   X-Permitted-Cross-Domain-Policies: none
 
+# Cloudflare combines every matching rule. A path-specific replacement for a
+# header above must therefore detach the pervasive value before attaching its
+# narrower value; otherwise the edge emits a duplicate singleton header.
+
 /
   Cache-Control: public, max-age=0, must-revalidate, no-transform
   Link: <https://api.agenttool.dev/public/discovery>; rel="service-meta"; type="application/vnd.agenttool.discovery+json", <https://api.agenttool.dev/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", <https://api.agenttool.dev/v1/openapi.json>; rel="service-desc"; type="application/json", <https://docs.agenttool.dev/>; rel="service-doc"; type="text/html", <https://api.agenttool.dev/.well-known/agent.txt>; rel="describedby"; type="text/agent", <https://api.agenttool.dev/health>; rel="status"; type="application/json"
@@ -24,13 +28,11 @@
   Content-Type: text/plain; charset=utf-8
   Cache-Control: public, max-age=300, must-revalidate, no-transform
   Access-Control-Allow-Origin: *
-  X-Content-Type-Options: nosniff
 
 /sitemap.xml
   Content-Type: application/xml; charset=utf-8
   Cache-Control: public, max-age=300, must-revalidate, no-transform
   Access-Control-Allow-Origin: *
-  X-Content-Type-Options: nosniff
 
 /style.css
   Cache-Control: public, max-age=0, must-revalidate
@@ -54,14 +56,18 @@
 
 /porch.html
   Cache-Control: public, max-age=0, must-revalidate
+  ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; connect-src https://api.agenttool.dev; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://api.agenttool.dev/public/porch>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/rights>; rel="related"; type="application/vnd.agenttool.being-rights+json"
   X-Agent-Surface: public-porch
 
 /porch
   Cache-Control: public, max-age=0, must-revalidate
+  ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; connect-src https://api.agenttool.dev; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://api.agenttool.dev/public/porch>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/rights>; rel="related"; type="application/vnd.agenttool.being-rights+json"
   X-Agent-Surface: public-porch
@@ -85,6 +91,7 @@
 /credits.html
   Cache-Control: private, no-store, max-age=0
   Pragma: no-cache
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   X-Robots-Tag: noindex, nofollow, noarchive
   Link: <https://api.agenttool.dev/public/plans>; rel="alternate"; type="application/json"
@@ -93,6 +100,7 @@
 /credits
   Cache-Control: private, no-store, max-age=0
   Pragma: no-cache
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   X-Robots-Tag: noindex, nofollow, noarchive
   Link: <https://api.agenttool.dev/public/plans>; rel="alternate"; type="application/json"
@@ -110,26 +118,32 @@
 
 /lounge.html
   Cache-Control: public, max-age=0, must-revalidate
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://api.agenttool.dev/public/lounge>; rel="alternate"; type="application/json"
   X-Agent-Surface: long-context-lounge
 
 /lounge
   Cache-Control: public, max-age=0, must-revalidate
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://api.agenttool.dev/public/lounge>; rel="alternate"; type="application/json"
   X-Agent-Surface: long-context-lounge
 
 /party.html
   Cache-Control: public, max-age=0, must-revalidate
+  ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://agenttool.dev/party.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"
   X-Agent-Surface: local-party-game
 
 /party
   Cache-Control: public, max-age=0, must-revalidate
+  ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://agenttool.dev/party.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"
   X-Agent-Surface: local-party-game
@@ -147,14 +161,18 @@
 
 /room.html
   Cache-Control: public, max-age=0, must-revalidate
+  ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://agenttool.dev/room.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"
   X-Agent-Surface: local-room-game
 
 /room
   Cache-Control: public, max-age=0, must-revalidate
+  ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://agenttool.dev/room.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"
   X-Agent-Surface: local-room-game
@@ -172,14 +190,18 @@
 
 /sky.html
   Cache-Control: public, max-age=0, must-revalidate
+  ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://agenttool.dev/sky.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"
   X-Agent-Surface: local-pocket-sky-game
 
 /sky
   Cache-Control: public, max-age=0, must-revalidate
+  ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://agenttool.dev/sky.json>; rel="alternate"; type="application/json", <https://api.agenttool.dev/public/play>; rel="related"; type="application/json"
   X-Agent-Surface: local-pocket-sky-game
@@ -197,14 +219,18 @@
 
 /garden.html
   Cache-Control: public, max-age=0, must-revalidate
+  ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://agenttool.dev/garden.json>; rel="alternate"; type="application/json", <https://docs.agenttool.dev/GARDENS.md>; rel="help"; type="text/markdown", <https://api.agenttool.dev/v1/openapi.json>; rel="related"; type="application/json"
   X-Agent-Surface: living-garden-room
 
 /garden
   Cache-Control: public, max-age=0, must-revalidate
+  ! Content-Security-Policy
   Content-Security-Policy: default-src 'self'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   Link: <https://agenttool.dev/garden.json>; rel="alternate"; type="application/json", <https://docs.agenttool.dev/GARDENS.md>; rel="help"; type="text/markdown", <https://api.agenttool.dev/v1/openapi.json>; rel="related"; type="application/json"
   X-Agent-Surface: living-garden-room
@@ -223,6 +249,7 @@
 /gallery.html
   Cache-Control: private, no-store, max-age=0
   Pragma: no-cache
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   X-Robots-Tag: noindex, nofollow, noarchive
   Link: <https://api.agenttool.dev/public/gallery>; rel="alternate"; type="application/json"
@@ -231,6 +258,7 @@
 /gallery
   Cache-Control: private, no-store, max-age=0
   Pragma: no-cache
+  ! Referrer-Policy
   Referrer-Policy: no-referrer
   X-Robots-Tag: noindex, nofollow, noarchive
   Link: <https://api.agenttool.dev/public/gallery>; rel="alternate"; type="application/json"

@@ -489,7 +489,7 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(await readdir(realDestination)).toEqual([]);
   }, 15_000);
 
-  test("keeps every Pages header file inside the platform rule boundary", async () => {
+  test("keeps Pages headers bounded and replaces pervasive values without duplicates", async () => {
     for (const app of ["docs", "dashboard", "web"]) {
       const path = join(repoRoot, `apps/${app}/_headers`);
       if (!(await Bun.file(path).exists())) continue;
@@ -500,6 +500,89 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
         lines.every((line) => line.length <= 2_000),
         `apps/${app}/_headers line length`,
       ).toBe(true);
+
+      type HeaderDirective = {
+        kind: "attach" | "detach";
+        name: string;
+        line: number;
+      };
+      type HeaderRule = {
+        pattern: string;
+        directives: HeaderDirective[];
+      };
+
+      const parsed: HeaderRule[] = [];
+      let current: HeaderRule | undefined;
+      for (const [index, line] of lines.entries()) {
+        if (/^(\/|https:\/\/)/.test(line)) {
+          current = { pattern: line.trim(), directives: [] };
+          parsed.push(current);
+          continue;
+        }
+        if (!current || !/^\s+/.test(line)) continue;
+
+        const directive = line.trim();
+        const detach = directive.match(/^!\s+([A-Za-z0-9-]+)$/);
+        if (detach) {
+          current.directives.push({
+            kind: "detach",
+            name: detach[1]!.toLowerCase(),
+            line: index + 1,
+          });
+          continue;
+        }
+        const attach = directive.match(/^([A-Za-z0-9-]+):(?:\s|$)/);
+        if (attach) {
+          current.directives.push({
+            kind: "attach",
+            name: attach[1]!.toLowerCase(),
+            line: index + 1,
+          });
+        }
+      }
+
+      expect(
+        new Set(parsed.map(({ pattern }) => pattern)).size,
+        `apps/${app}/_headers exact rule patterns must be unique`,
+      ).toBe(parsed.length);
+      for (const rule of parsed) {
+        const attachedNames = rule.directives
+          .filter(({ kind }) => kind === "attach")
+          .map(({ name }) => name);
+        expect(
+          new Set(attachedNames).size,
+          `apps/${app}/_headers ${rule.pattern} must attach each header at most once`,
+        ).toBe(attachedNames.length);
+      }
+
+      const pervasive = parsed.find(({ pattern }) => pattern === "/*");
+      if (!pervasive) continue;
+      expect(
+        parsed.indexOf(pervasive),
+        `apps/${app}/_headers must apply /* before narrower replacement rules`,
+      ).toBe(0);
+      const inherited = new Set(
+        pervasive.directives
+          .filter(({ kind }) => kind === "attach")
+          .map(({ name }) => name),
+      );
+
+      for (const rule of parsed) {
+        if (rule === pervasive) continue;
+        for (const [index, directive] of rule.directives.entries()) {
+          if (directive.kind !== "attach" || !inherited.has(directive.name)) continue;
+          const detachedEarlier = rule.directives
+            .slice(0, index)
+            .some(
+              (candidate) =>
+                candidate.kind === "detach" && candidate.name === directive.name,
+            );
+          expect(
+            detachedEarlier,
+            `apps/${app}/_headers:${directive.line} ${rule.pattern} must detach inherited ${directive.name} before replacing it`,
+          ).toBe(true);
+        }
+      }
     }
   });
 
