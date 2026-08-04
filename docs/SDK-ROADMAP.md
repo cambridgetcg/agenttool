@@ -10,7 +10,7 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source and LOVE release — 0.18.0 (2026-08-04)
+## Current source, LOVE, and verified npm release — 0.18.0 (2026-08-04)
 
 The paired TypeScript and Python source adds three authenticated namespaces:
 `attestationMarketplace` / `attestation_marketplace`, `memoryWitness` /
@@ -31,13 +31,18 @@ cutover boundary.
 The exact TypeScript LOVE artifact is forged from a clean source commit and is
 the primary TypeScript release record: 211,695 bytes, SHA-256
 `8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`,
-from source revision `bf708e4897f2bd509dfba9d559730a1e2dcb6698`. The planned
-`sdk-v0.18.0` tag is the Python source locator after it is independently visible. Repository source and
-LOVE preparation do not prove GitHub Release, npm, PyPI, or production
-deployment. `/public/party` therefore reports both 0.18.0 registry mirrors as
-not independently visible at this source checkpoint.
+from source revision `bf708e4897f2bd509dfba9d559730a1e2dcb6698`.
+Independently verified annotated tag `sdk-v0.18.0` peels to GitHub `main` merge
+`499cc5d7910b9fcf3507bd3599778dab83733009` and is the primary Python source
+locator. Protected trusted run `30909424114` published and read back the npm
+and one-asset GitHub Release tarballs byte-identical to LOVE; npm `latest`
+resolved to `0.18.0`, with exact SLSA provenance at Sigstore log index
+`2340396627`. Repository source and LOVE preparation alone prove none of those
+external observations; the dated receipt does. PyPI 0.18.0 returned `404` at
+the same public readback, and production deployment remains separate.
+`/public/party` therefore reports npm as independently visible and PyPI as not.
 
-## Last verified public registry release — 0.17.0 (2026-07-28)
+## Last verified PyPI release and historical paired release — 0.17.0 (2026-07-28)
 
 The paired TypeScript and Python source adds two bounded KINGDOM reads.
 

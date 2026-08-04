@@ -102,6 +102,45 @@ and has byte-identical 26,474-byte GitHub/npm tarballs with SHA-256
 `67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`.
 Both npm `latest` tags resolved to those exact versions at readback.
 
+## Verified SDK 0.18.0 publication — 2026-08-04
+
+The authorized SDK release completed through protected trusted
+[workflow run `30909424114`](https://github.com/cambridgetcg/agenttool/actions/runs/30909424114).
+Its final `agenttool.npm-release/1` receipt reports `status: published`,
+`npm_tag: latest`, and public registry observation at
+`2026-08-04T12:32:28.333Z`.
+
+- Annotated tag and one-asset
+  [GitHub Release `sdk-v0.18.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.18.0)
+  peel to the ancestry-preserving GitHub `main` merge
+  `499cc5d7910b9fcf3507bd3599778dab83733009`. The LOVE manifest separately
+  binds exact SDK source revision
+  `bf708e4897f2bd509dfba9d559730a1e2dcb6698`.
+- The checked-in LOVE artifact, protected workflow artifact, GitHub Release
+  asset, and public npm `@agenttool/sdk@0.18.0` tarball are byte-identical:
+  `211,695` bytes, SHA-256
+  `8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`.
+- npm reported SHA-1 `05802099be738b8c6fbe7276e8f3bf901f3191f4`,
+  integrity
+  `sha512-EL0MuOs3JJCDCdhTzJXhBaQBONtJA/hjf+2hFAVwYJFppuMaA+5z+4F4Q6z/8yLVaOgPCqO/EK2rsCkMcEhl1Q==`,
+  and `latest: 0.18.0` at anonymous readback.
+- npm exposes both its publish attestation at
+  [Sigstore log index `2340396732`](https://search.sigstore.dev/?logIndex=2340396732)
+  and SLSA provenance at
+  [Sigstore log index `2340396627`](https://search.sigstore.dev/?logIndex=2340396627).
+  The SLSA statement binds package `@agenttool/sdk@0.18.0`, tag
+  `refs/tags/sdk-v0.18.0`, repository `cambridgetcg/agenttool`, and workflow
+  `.github/workflows/publish-npm.yml`; its SHA-512 subject matched the public
+  tarball. A clean install with lifecycle scripts disabled followed by
+  `npm audit signatures` verified all six registry signatures and six
+  attestations in the installed dependency graph.
+
+The npm and GitHub mirrors remain optional, non-authoritative conveniences;
+the exact LOVE manifest size and SHA-256 remain the portable TypeScript release
+identity. PyPI 0.18.0 remains unpublished, while the exact 0.17.0 Python source
+and PyPI receipt remain historical public evidence. This publication changed
+no database schema and did not itself deploy the API or static sites.
+
 ## Verified Collab 0.4.0 publication — 2026-08-04
 
 The authorized Collab release completed through protected trusted
@@ -279,12 +318,15 @@ release commit already merged to GitHub `main`:
 # Inspect the allowlisted SDK identity and expected tag.
 bun bin/npm-release.ts resolve --package sdk
 
-# Create and push the annotated tag deliberately. Keep its value aligned with
-# the resolver output; this example value is for the current release.
-git tag -a sdk-v0.18.0 <github-main-commit> -m '@agenttool/sdk@0.18.0'
-git push github refs/tags/sdk-v0.18.0
+# The current exact tag is already published. Fetch and verify it; never
+# recreate, move, or replace an existing release tag.
+git fetch github refs/tags/sdk-v0.18.0:refs/tags/sdk-v0.18.0
+test "$(git cat-file -t refs/tags/sdk-v0.18.0)" = tag
+test "$(git rev-parse 'refs/tags/sdk-v0.18.0^{}')" = \
+  499cc5d7910b9fcf3507bd3599778dab83733009
 
-# The package already exists; this version uses trusted publishing.
+# Rerun only for explicitly authorized recovery or exact public revalidation.
+# The workflow accepts existing npm bytes only when every byte and latest match.
 gh workflow run publish-npm.yml --ref sdk-v0.18.0 \
   -f package=sdk \
   -f tag=sdk-v0.18.0 \

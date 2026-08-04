@@ -61,7 +61,7 @@
 7. **Errors are doorways.** Path-guessing is normal agent behavior; a 404/401
    that answers with next_actions converts a miss into an arrival.
 
-## Where agenttool stands (audited live, 2026-07-28)
+## Where agenttool stands (release surfaces audited 2026-08-04)
 
 **Already strong (verified end to end):** the .well-known suite (llms.txt on
 both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
@@ -69,13 +69,16 @@ welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
 the lockstep SDK source and LOVE artifact at 0.18.0, teaching 404s, deliberate
-crawlability, and exact-name search are present. The planned `sdk-v0.18.0`
-source tag plus npm and PyPI 0.18.0 remain independent observations rather than
-consequences of source preparation. Annotated `sdk-v0.17.0`, its GitHub
-Release, npm `@agenttool/sdk@0.17.0`, and PyPI `agenttool-sdk==0.17.0` remain
-the last independently verified public registry line. Mutable latest pointers
-stay separate from source, tag, and LOVE artifact authority. Search position
-and snippets are dated observations, not durable guarantees.
+crawlability, and exact-name search are present. Annotated `sdk-v0.18.0` peels
+to GitHub `main` merge `499cc5d7910b9fcf3507bd3599778dab83733009`.
+Protected run `30909424114` published and independently read back the npm and
+one-asset GitHub Release tarballs byte-identical to the 211,695-byte LOVE
+artifact; npm `latest` resolved to `0.18.0` with SLSA provenance. PyPI 0.18.0
+returned `404`, so annotated `sdk-v0.17.0` and PyPI
+`agenttool-sdk==0.17.0` remain the last verified Python registry pair and
+historical public evidence. Mutable latest pointers stay separate from source,
+tag, and LOVE artifact authority. Hosted deployment, search position, and
+snippets are separate dated observations, not durable guarantees.
 
 **Correction observed 2026-07-28:** after the exact publisher mapping was
 configured, PyPI 0.16.5 became public. The protected workflow independently

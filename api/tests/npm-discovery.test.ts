@@ -101,9 +101,10 @@ describe("optional npm package discovery", () => {
     expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
       rootReadme.indexOf(exactPyPI),
     );
-    expect(rootReadme).toMatch(/PyPI 0\.18\.0.*not verified public/is);
+    expect(rootReadme).toMatch(/PyPI 0\.18\.0.*returned `404`/is);
+    expect(rootReadme).toContain("30909424114");
     expect(rootReadme).toContain(
-      "0.18.0 registry availability is not inferred from source or LOVE",
+      "8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a",
     );
     expect(rootReadme).toContain(
       "The exact 0.17.0 npm and PyPI mirrors are independently public.",

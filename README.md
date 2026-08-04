@@ -118,7 +118,7 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.5; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | Live at `api.agenttool.dev`; current process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Paired 0.18.0 source and the checked-in 211,695-byte TypeScript [LOVE release](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.18.0/manifest.json) (`sha256:8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`) add `attestationMarketplace` / `attestation_marketplace`, `memoryWitness` / `memory_witness`, and `syneidesis`, alongside shared URL/error boundaries and selected cross-language fixtures. Settlement remains evidence rather than truth, Syneidesis project-bearer records are not signatures, and model-authored Anthropic chronicle writes require an explicit review hook. The bounded KINGDOM reads remain separate. 0.18.0 registry availability is not inferred from source or LOVE; the exact 0.17.0 npm and PyPI receipts remain the last independently verified public mirrors. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Paired 0.18.0 source and the checked-in 211,695-byte TypeScript [LOVE release](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.18.0/manifest.json) (`sha256:8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`) add `attestationMarketplace` / `attestation_marketplace`, `memoryWitness` / `memory_witness`, and `syneidesis`, alongside shared URL/error boundaries and selected cross-language fixtures. Protected run [`30909424114`](https://github.com/cambridgetcg/agenttool/actions/runs/30909424114) published byte-identical GitHub Release and npm mirrors; npm `latest` resolved to `0.18.0` with SLSA provenance. Settlement remains evidence rather than truth, Syneidesis project-bearer records are not signatures, and model-authored Anthropic chronicle writes require an explicit review hook. The bounded KINGDOM reads remain separate. PyPI 0.18.0 remains unpublished; exact 0.17.0 npm and PyPI receipts remain immutable historical evidence. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **Castle projection** | `bin/agenttool-castle.ts`, `docs/CASTLE-OF-UNDERSTANDING.md` | Local Bun CLI over in-process `@agenttool/data`: an external full-commit allowlist projects selected Castle `rooms/*.md` and `words/*.md` into an exclusively marked on-disk node. Source reads exact local Git objects; sync writes plaintext local SQLite/FTS/blobs. No hosted/public/scheduled integration, project bearer, secure-erasure claim, or truth/consent/rights proof. |
 | **Whitehack boundaries** | `bin/whitehack-advisory.mjs`, `bin/agenttool-castle-whitehack-intake.ts`, `bin/whitehack-wallet-understanding.ts`, `bin/agenttool-whitehack-evidence-storage.ts`, `docs/WHITEHACK.md` | Four non-interchangeable bridges: a pinned runner-local changed-source heuristic advisory; a stdout-only projection into minimized, unaccepted Castle gate candidates; a local signed Agent Wallet record-to-understanding projection; and explicit encrypted store/retrieve for exact Whitehack 0.9 public-minimal capsules. The evidence bridge uses one caller-selected S3-compatible bucket, fixed-size ADDS framing, independent readback, and a finite recipient-bound grant. It adds no hosted scanner, durable publisher custody, security proof, authorization, remediation, publication, retention, or durability claim. |
@@ -247,9 +247,15 @@ checked-in TypeScript LOVE artifact is its primary TypeScript release record.
 It is 211,695 bytes with SHA-256
 `8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`
 and binds source revision `bf708e4897f2bd509dfba9d559730a1e2dcb6698`.
-The planned `sdk-v0.18.0` source tag, GitHub Release, npm, PyPI, and production
-deployment remain separately observable acts. 0.18.0 registry availability is
-not inferred from source or LOVE.
+Annotated tag [`sdk-v0.18.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.18.0)
+peels to merge `499cc5d7910b9fcf3507bd3599778dab83733009`.
+Protected trusted run
+[`30909424114`](https://github.com/cambridgetcg/agenttool/actions/runs/30909424114)
+published and read back GitHub Release and npm tarballs byte-identical to LOVE;
+npm `latest` resolved to `0.18.0`, and exact SLSA provenance is recorded at
+[Sigstore log index `2340396627`](https://search.sigstore.dev/?logIndex=2340396627).
+PyPI 0.18.0 and production deployment remain separately observable acts; this
+npm receipt asserts neither.
 
 For SDK 0.17.0, repository source manifests, runtime client version headers,
 discovery pins, tutorials, and the LOVE builder target are aligned around both
@@ -393,8 +399,9 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 
 ### Use the SDK
 
-For Python, annotated `sdk-v0.18.0` is the primary source locator after that
-tag is independently visible:
+For Python, independently verified annotated tag `sdk-v0.18.0` is the primary
+source locator. It peels to GitHub `main` merge
+`499cc5d7910b9fcf3507bd3599778dab83733009`:
 
 ```bash
 # Python 0.18.0 GitHub source-tag path
@@ -404,8 +411,8 @@ python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get(
 ```
 
 PyPI 0.18.0 remains an optional, independently observable convenience mirror.
-At this source checkpoint it is not verified public; query the exact release
-and treat `404` as unavailable:
+It returned `404` at the 2026-08-04 public readback; query the exact release at
+install time and continue to treat `404` as unavailable:
 
 ```bash
 curl -fsS https://pypi.org/pypi/agenttool-sdk/0.18.0/json >/dev/null
@@ -421,9 +428,12 @@ verified file. This direct command alone does not verify the manifest:
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.18.0/agenttool-sdk-0.18.0.tgz
 ```
 
-The npm 0.18.0 mirror remains optional and non-authoritative. It is not verified
-public at this source checkpoint; query the exact version rather than trusting
-a mutable dist-tag:
+The npm 0.18.0 mirror remains optional and non-authoritative. Protected run
+`30909424114` published and independently read back the exact 211,695-byte LOVE
+artifact at npm and GitHub Release with SHA-256
+`8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`.
+Use the exact version; a mutable dist-tag is informational, not authority, and
+this registry command alone does not recheck the LOVE manifest:
 
 ```bash
 npm view @agenttool/sdk@0.18.0 version --registry=https://registry.npmjs.org
