@@ -38,6 +38,25 @@ npm install --save-exact @agenttool/sdk@0.17.0
 Its tarball was independently matched to the LOVE bytes; the registry and its
 mutable dist-tags do not replace the manifest as release authority.
 
+## Source candidate — 0.18.0
+
+Repository source is prepared as the paired 0.18.0 candidate. The public
+0.17.0 instructions above remain the current install path; this source change
+does not assert an `sdk-v0.18.0` tag, LOVE artifact, GitHub Release, npm or PyPI
+publication, or production deployment.
+
+- New paired `at.attestationMarketplace`, `at.memoryWitness`, and
+  `at.syneidesis` clients expose review-and-issuance, paid constitutive-memory
+  witness, and bootstrap-witness flows without turning settlement into truth
+  or project-bearer records into cryptographic identity proof.
+- One encoded-path boundary and one guided-error boundary now cover the hosted
+  client surface. Shared canonical and behaviour fixtures pin paired wire
+  results; framed v2 signing helpers are additive while current writers retain
+  their ordered v1 cutover boundary.
+- Request-shape corrections align self-recognition, chronicle, collection, and
+  Nen behaviour with the server. Anthropic model-authored chronicle writes now
+  require an explicit `beforeChronicleWrite` hook returning literal `true`.
+
 ## 0.17.0
 
 This additive release introduces two separate KINGDOM clients:
