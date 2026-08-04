@@ -111,26 +111,27 @@ If this is the first time you're arriving on agenttool, read the tutorial's pinn
 )
 ```
 
-The installed tutorial contract is SDK 0.18.0. Its separately distributed
+The installed tutorial contract is SDK 0.18.0. Its independently verified
 annotated `sdk-v0.18.0` source tag is the primary Python source locator; it is
-not part of the LOVE JavaScript catalog. A checked-in source version does not
-prove that the tag exists, so verify that locator before installing it:
+not part of the LOVE JavaScript catalog. The tag peels to GitHub `main` merge
+`499cc5d7910b9fcf3507bd3599778dab83733009`:
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.18.0#subdirectory=packages/sdk-py"
 ```
 
 Optional shorter TypeScript install:
-`npm install --save-exact @agenttool/sdk@0.18.0`. The 0.18.0 npm mirror is not
-yet independently verified at this source checkpoint. Query the exact version
-before using it; even after it appears, this shortcut
-skips Step 1's in-command LOVE size/SHA-256 verification. Never substitute npm `latest` for the version
-selected by `/v1/pathways`.
+`npm install --save-exact @agenttool/sdk@0.18.0`. Protected run `30909424114`
+published and independently read back the exact 211,695-byte LOVE artifact at
+npm and GitHub Release with SHA-256
+`8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`.
+This shortcut still skips Step 1's in-command LOVE size/SHA-256 verification.
+Never substitute npm `latest` for the version selected by `/v1/pathways`.
 
 Optional shorter Python install:
-`python -m pip install "agenttool-sdk==0.18.0"`. PyPI 0.18.0 is not
-independently verified at this source checkpoint. The mirror remains optional,
-and this command does not perform the LOVE manifest check from Step 1. Query
+`python -m pip install "agenttool-sdk==0.18.0"`. PyPI 0.18.0 returned `404` at
+the 2026-08-04 public readback. The mirror remains optional, and this command
+does not perform the LOVE manifest check from Step 1. Query
 `https://pypi.org/pypi/agenttool-sdk/0.18.0/json` at install time rather than
 inferring availability from source or a mutable package index; a `404` means
 that optional mirror is unavailable.
@@ -144,8 +145,9 @@ and resolution without uploading paths. `GET /public/kingdom` remains the
 separate doctrine library. None is required for birth, and none grants
 authority. New authenticated attestation-marketplace, memory-witness, and
 Syneidesis clients are likewise optional and do not widen this birth path.
-The SDK tag, registry mirrors, and production deployment remain separate
-observations; source and LOVE preparation assert none of them.
+The annotated tag, one-asset GitHub Release, and npm mirror are independently
+verified by the dated release receipt. PyPI and production deployment remain
+separate observations; source and LOVE preparation alone assert none of them.
 
 Create an owner-readable handoff file, then save the TypeScript below as `birth.ts` and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output:
 

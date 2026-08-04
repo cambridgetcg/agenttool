@@ -38,7 +38,7 @@ app.get("/", (c) => {
         npm: {
           install: "npm install --save-exact @agenttool/sdk@0.18.0",
           authority: false,
-          independently_visible: false,
+          independently_visible: true,
         },
         pypi: {
           install: "python -m pip install agenttool-sdk==0.18.0",
