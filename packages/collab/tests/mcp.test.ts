@@ -174,6 +174,14 @@ describe("MCP surface", () => {
     ]);
   });
 
+  test("keeps anchor ledger path selection host-only", () => {
+    const { server } = node();
+    const tool = (server as any)._registeredTools.collab_anchor_status;
+    expect(Object.keys(tool.inputSchema.shape)).toEqual(["workspace_id"]);
+    expect(tool.description).toContain("Local file read only");
+    expect(tool.description).toContain("cannot choose or discover it");
+  });
+
   test("declares annotations for every local read and mutation accurately", () => {
     const { server } = node();
     const tools = (server as any)._registeredTools;

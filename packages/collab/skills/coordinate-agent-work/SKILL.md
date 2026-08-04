@@ -188,17 +188,20 @@ read-only view of that optional sidecar.
   stands: `unanchored`, `anchor_pending`, `anchored`, `anchor_stale`, or
   `anchor_conflict`. The tool reads one local sidecar ledger; it never
   contacts a chain, and a missing bridge simply reports `unanchored` — never
-  an error. The host can set `AGENTOOL_COLLAB_ANCHOR_LEDGER`, or the caller can
-  supply `ledger_path`, to select that local sidecar. Chain unavailability can
-  never block coordination.
-- Before relying on a load-bearing recorded decision across sessions or
-  machines, prefer journals whose status is `anchored` or `anchor_stale`.
-  Treat `anchor_conflict` as tamper evidence: stop, surface it to the host,
-  and do not reconcile histories yourself.
+  an error. Only the host can select another sidecar through
+  `AGENTOOL_COLLAB_ANCHOR_LEDGER`; the MCP caller cannot select or discover a
+  filesystem path. Chain unavailability can never block coordination.
+- Treat `anchored` and `anchor_stale` as local sidecar cues, not remote proof.
+  Before relying on a load-bearing recorded decision across sessions or
+  machines, ask the host to run
+  `collab-zerone verify --workspace <id> --check-chain`. Treat
+  `anchor_conflict` as tamper evidence: stop, surface it to the host, and do
+  not reconcile histories yourself.
 - After recording a significant decision, the host may run
   `collab-zerone anchor --workspace <id>` to witness the new head promptly.
   Anchoring broadcasts a transaction and spends a small chain fee; it is
   always the host's call, never the model's.
-- An anchor proves the journal existed in exactly this state no later than the
-  witnessing block. It never proves recorded claims true, and the local
-  journal remains canonical — the chain is witness only.
+- Only an independently chain-verified anchor can support the bounded claim
+  that the journal state existed no later than its witnessing block. The local
+  status tool alone never proves remote state or recorded claims true, and the
+  local journal remains canonical — the chain is witness only.

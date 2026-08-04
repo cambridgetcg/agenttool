@@ -91,7 +91,10 @@ has configured the optional `@agenttool/collab-zerone` sidecar. It reports
 It never contacts a chain, broadcasts, spends a fee, repairs history, or turns
 a witness into truth or authority. A missing or unreadable sidecar reports
 `unanchored` and never blocks coordination. Surface `anchor_conflict` to the
-host instead of reconciling histories automatically.
+host instead of reconciling histories automatically. Treat `anchored` and
+`anchor_stale` as local cues until the host independently runs
+`collab-zerone verify --workspace <id> --check-chain`; the MCP caller cannot
+select or discover the sidecar path.
 
 ## Preserve the boundary
 

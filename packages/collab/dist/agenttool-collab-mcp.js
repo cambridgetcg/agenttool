@@ -28300,7 +28300,7 @@ class CollabError extends Error {
 
 // src/anchor-status.ts
 var ANCHOR_LEDGER_PROTOCOL = "agenttool.collab-zerone-ledger/0.1";
-var SCOPE_NOTE = "Anchor status reflects the local sidecar ledger only; it never proves remote chain state." + " Use @agenttool/collab-zerone `verify --check-chain` for on-chain confirmation.";
+var SCOPE_NOTE = "Anchor status reflects the local sidecar ledger only; it never proves remote chain state." + " Use @agenttool/collab-zerone `verify --workspace <id> --check-chain` for on-chain confirmation.";
 var MAX_LEDGER_BYTES = 4 * 1024 * 1024;
 function defaultAnchorLedgerPath(env = process.env) {
   if (env.AGENTOOL_COLLAB_ANCHOR_LEDGER)
@@ -28371,7 +28371,6 @@ function anchorStatusForWorkspace(store, workspaceId, ledgerPath) {
     workspace_id: workspaceId,
     head_sequence: workspace.event_head_sequence,
     head_hash: workspace.event_head_hash,
-    ledger_path: path,
     scope_note: SCOPE_NOTE
   };
   const raw = readLedgerFile(path);
@@ -29273,13 +29272,10 @@ Rationale: ${input.rationale}` : ""}`,
   })));
   server.registerTool("collab_anchor_status", {
     title: "Report the journal's zerone anchor status",
-    description: "Compare the journal head against the local sidecar anchor ledger written by the" + " @agenttool/collab-zerone bridge, which witnesses head hashes on the zerone chain." + " Local file read only \u2014 never contacts a chain, and a missing bridge simply reports" + " unanchored. States: unanchored, anchor_pending, anchored, anchor_stale, anchor_conflict.",
+    description: "Compare the journal head against the local sidecar anchor ledger written by the" + " @agenttool/collab-zerone bridge, which witnesses head hashes on the zerone chain." + " Local file read only \u2014 never contacts a chain. The host selects the path; the MCP caller" + " cannot choose or discover it. A missing bridge simply reports unanchored." + " States: unanchored, anchor_pending, anchored, anchor_stale, anchor_conflict.",
     annotations: localReadOnly,
-    inputSchema: {
-      workspace_id: workspaceId,
-      ledger_path: exports_external.string().min(1).max(500).optional().describe("Override the anchor ledger path; defaults to AGENTOOL_COLLAB_ANCHOR_LEDGER or the shared data directory")
-    }
-  }, async ({ workspace_id, ledger_path }) => call(() => anchorStatusForWorkspace(store, workspace_id, ledger_path)));
+    inputSchema: { workspace_id: workspaceId }
+  }, async ({ workspace_id }) => call(() => anchorStatusForWorkspace(store, workspace_id)));
   return server;
 }
 function leaseMutationSchema(extra) {

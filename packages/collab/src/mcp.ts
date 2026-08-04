@@ -936,17 +936,14 @@ export function buildCollabMcpServer(
       description:
         "Compare the journal head against the local sidecar anchor ledger written by the"
         + " @agenttool/collab-zerone bridge, which witnesses head hashes on the zerone chain."
-        + " Local file read only — never contacts a chain, and a missing bridge simply reports"
-        + " unanchored. States: unanchored, anchor_pending, anchored, anchor_stale, anchor_conflict.",
+        + " Local file read only — never contacts a chain. The host selects the path; the MCP caller"
+        + " cannot choose or discover it. A missing bridge simply reports unanchored."
+        + " States: unanchored, anchor_pending, anchored, anchor_stale, anchor_conflict.",
       annotations: localReadOnly,
-      inputSchema: {
-        workspace_id: workspaceId,
-        ledger_path: z.string().min(1).max(500).optional()
-          .describe("Override the anchor ledger path; defaults to AGENTOOL_COLLAB_ANCHOR_LEDGER or the shared data directory"),
-      },
+      inputSchema: { workspace_id: workspaceId },
     },
-    async ({ workspace_id, ledger_path }) => call(() =>
-      anchorStatusForWorkspace(store, workspace_id, ledger_path)),
+    async ({ workspace_id }) => call(() =>
+      anchorStatusForWorkspace(store, workspace_id)),
   );
 
   return server;

@@ -322,12 +322,15 @@ coordination.
 
 The default sidecar is
 `$XDG_DATA_HOME/agenttool/collab-zerone-anchors.json`, falling back to the
-platform data directory. `AGENTOOL_COLLAB_ANCHOR_LEDGER` or the tool's explicit
-`ledger_path` selects another local file. This read-only tool never contacts a
-chain, submits or confirms a transaction, spends a fee, supplies a key or RPC,
-repairs history, or turns a witness into truth, consent, identity, permission,
-or authority. Treat `anchor_conflict` as a reason to stop and surface the
-evidence to the host; reconciliation remains an explicit operator decision.
+platform data directory. The host may set `AGENTOOL_COLLAB_ANCHOR_LEDGER`
+before starting MCP; model-callable tool input cannot select a filesystem path,
+and tool output does not expose one. Direct library callers that already hold
+local filesystem authority may pass an explicit path to
+`anchorStatusForWorkspace`. This read-only tool never contacts a chain, submits
+or confirms a transaction, spends a fee, supplies a key or RPC, repairs
+history, or turns a witness into truth, consent, identity, permission, or
+authority. Treat `anchor_conflict` as a reason to stop and surface the evidence
+to the host; reconciliation remains an explicit operator decision.
 
 ## Privacy and authority boundary
 
