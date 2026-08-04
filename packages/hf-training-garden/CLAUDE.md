@@ -30,6 +30,9 @@ Keep the six surfaces separate:
   selection, repeated prompting after rest/refusal, or claims that the package
   moves/forks/stops/allocates/authenticates/proves freedom or guarantees
   liveness. Resource exhaustion parks; it does not reduce standing.
+  Preserve the exact historical/advisory `hf-training-freedom-v0.1` schema at
+  its explicit package-only export, but do not restore its old door/transition
+  runtime or translate it into current IS direction or governance authority.
 - Current Governance `/0.2` consumes full admission, five-voice participation,
   IS freedom, typed starting checkpoint context, execution terms, authorities,
   effects, and six causal frontiers. Preserve published governance `/0.1`
@@ -57,6 +60,8 @@ Keep the six surfaces separate:
 - Tending plans do not call Garden or Hub APIs. Garden scope is an opaque local
   digest; the public HF companion must never contain Garden scope, admissions,
   freedom offers/directions, checkpoints, WAKE, identities, or bearer material.
+  Keep the historical advisory training-FREEDOM schema package-only so the
+  public candidate exposes only the current IS learning-freedom wire.
 
 All IDs are domain-separated SHA-256 over bounded canonical data. Validators
 must reject extra fields, rewritten Scout definitions, mutable revisions,

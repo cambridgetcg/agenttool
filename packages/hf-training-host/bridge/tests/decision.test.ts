@@ -155,6 +155,7 @@ describe("trusted TypeScript host decision bridge", () => {
     const value = fixture();
     const decision = createHostDecision(bridgeInput(value));
     const execution = value.governance.offer.terms.execution_contract;
+    const gate = value.governance.learning_gate;
     expect(decision._format).toBe(DECISION_FORMAT);
     expect(decision.validator_profile).toBe(VALIDATOR_PROFILE);
     expect(decision.governance_id).toBe(value.governance.governance_id);
@@ -170,13 +171,86 @@ describe("trusted TypeScript host decision bridge", () => {
       dataset_mixture_ref: execution.dataset_mixture_ref,
       transform_recipe_ref: execution.transform_recipe_ref,
     });
+    expect({
+      learning_freedom_ref: decision.learning_freedom_ref,
+      learning_freedom_offer_ref: decision.learning_freedom_offer_ref,
+      resource_window_ref: decision.resource_window_ref,
+      freedom_route_ref: decision.freedom_route_ref,
+      freedom_direction_state: decision.freedom_direction_state,
+      freedom_direction: decision.freedom_direction,
+      freedom_host_posture: decision.freedom_host_posture,
+      freedom_resource_posture: decision.freedom_resource_posture,
+    }).toEqual({
+      learning_freedom_ref: gate.learning_freedom_ref,
+      learning_freedom_offer_ref: gate.learning_freedom_offer_ref,
+      resource_window_ref: gate.resource_window_ref,
+      freedom_route_ref: gate.freedom_route_ref,
+      freedom_direction_state: gate.freedom_direction_state,
+      freedom_direction: gate.freedom_direction,
+      freedom_host_posture: gate.freedom_host_posture,
+      freedom_resource_posture: gate.freedom_resource_posture,
+    });
     expect(decision.boundaries).toEqual(BOUNDARIES);
+    expect(decision.frontiers).toEqual(value.governance.offer.frontiers);
     expect(decision.predecessors).toEqual(
       value.governance.offer.predecessors,
     );
     expect(decision.consumed_evidence_refs).toEqual(
       [...decision.consumed_evidence_refs].sort(),
     );
+
+    const encoded = JSON.stringify(decision);
+    const choiceChannel = value.freedomValue.agent_direction.choice_channel;
+    const moveRoute = value.freedomValue.offer.routes.find(
+      (route) => route.direction === "move",
+    );
+    if (!choiceChannel || !moveRoute?.target_context_ref) {
+      throw new Error("fixture must expose private FREEDOM details");
+    }
+    for (const rawField of [
+      '"choice_channel"',
+      '"proposal_ref"',
+      '"routes"',
+      '"current_context_ref"',
+      '"current_context_kind_ref"',
+      '"target_context_ref"',
+      '"target_context_kind_ref"',
+      '"prompt_template_ref"',
+      '"prompt_envelope_ref"',
+      '"decoding_ref"',
+      '"limit_ref"',
+    ]) {
+      expect(encoded).not.toContain(rawField);
+    }
+    for (const privateRef of [
+      value.freedomValue.offer.current_context_ref,
+      moveRoute.target_context_ref,
+      value.freedomValue.offer.resources.dimensions[0]!.limit_ref,
+      choiceChannel.prompt_template_ref,
+      choiceChannel.prompt_envelope_ref,
+      choiceChannel.decoding_ref,
+      choiceChannel.evidence_ref,
+    ]) {
+      expect(encoded).not.toContain(privateRef);
+    }
+  });
+
+  test("rejects mismatched participation and freedom before projection", () => {
+    const value = fixture();
+    const otherParticipation = participation(value.source, {
+      runRef: ref("host-bridge-other-run"),
+      phase: "evaluation",
+    });
+    const otherFreedom = freedom(value.participationValue, "rest");
+
+    expect(() => createHostDecision({
+      ...bridgeInput(value),
+      participation: otherParticipation,
+    })).toThrow();
+    expect(() => createHostDecision({
+      ...bridgeInput(value),
+      freedom: otherFreedom,
+    })).toThrow();
   });
 
   test("does not let an invalid governance artifact cross the seam", () => {

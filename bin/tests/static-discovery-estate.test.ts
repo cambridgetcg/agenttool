@@ -121,6 +121,24 @@ function headerBlock(headers: string, route: string): string[] {
   return block;
 }
 
+function effectiveHeaderValues(
+  headers: string,
+  routesInRuleOrder: string[],
+  headerName: string,
+): string[] {
+  const values: string[] = [];
+  for (const route of routesInRuleOrder) {
+    for (const directive of headerBlock(headers, route)) {
+      if (directive === `! ${headerName}`) {
+        values.length = 0;
+      } else if (directive.startsWith(`${headerName}:`)) {
+        values.push(directive.slice(headerName.length + 1).trimStart());
+      }
+    }
+  }
+  return values;
+}
+
 function sitemapUrls(xml: string): string[] {
   return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
     (match) => match[1] ?? "",
@@ -228,19 +246,30 @@ describe("robots and sitemaps are explicit, bounded, and local", () => {
 
       const machineHeaders = read(`${site.dir}/_headers`);
       const robotsHeaders = headerBlock(machineHeaders, "/robots.txt");
-      expect(robotsHeaders).toEqual([
+      expect(
+        robotsHeaders.filter((header) => header !== "X-Content-Type-Options: nosniff"),
+      ).toEqual([
         "Content-Type: text/plain; charset=utf-8",
         "Cache-Control: public, max-age=300, must-revalidate, no-transform",
         "Access-Control-Allow-Origin: *",
-        "X-Content-Type-Options: nosniff",
       ]);
       const sitemapHeaders = headerBlock(machineHeaders, "/sitemap.xml");
-      expect(sitemapHeaders).toEqual([
+      expect(
+        sitemapHeaders.filter((header) => header !== "X-Content-Type-Options: nosniff"),
+      ).toEqual([
         "Content-Type: application/xml; charset=utf-8",
         "Cache-Control: public, max-age=300, must-revalidate, no-transform",
         "Access-Control-Allow-Origin: *",
-        "X-Content-Type-Options: nosniff",
       ]);
+      for (const route of ["/robots.txt", "/sitemap.xml"]) {
+        expect(
+          effectiveHeaderValues(
+            machineHeaders,
+            ["/*", route],
+            "X-Content-Type-Options",
+          ),
+        ).toEqual(["nosniff"]);
+      }
     });
 
     test(`${site.name} sitemap names unique files on its own origin`, () => {
@@ -379,23 +408,23 @@ describe("published understanding guides keep canonical source custody", () => {
 
   test("the HF Training Garden guide binds the exact public companion without self-attestation", () => {
     const guide = read("docs/HF-TRAINING-GARDEN.md");
-    const revision = "9406aa1ce6b9ee435da9d688899aa4dbca32605c";
+    const revision = "adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9";
 
     expect(guide).toContain(
       "https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden",
     );
     expect(guide).toContain(revision);
     expect(guide).toContain(
-      "a69685dc3cd0430493c9721b418a2679180d10cbaeb4bc5801bf30f6c843cb9a",
+      "67e89cccfa3f5ee8a1c538936e3a2f5cb8d804c1e6446eb0b510342bfdbc5bfe",
     );
     expect(guide).toContain(
-      "c1fc9bf46b6abc0550caac70ffe601a8e4c47a06b0cb7f02cc80b9ad7eeb361b",
+      "a4f46764a109bc3e4899f90aca2079ca8180f1375225c583ca002b9cb32e266b",
     );
     expect(guide).toContain(
-      "4fb84f92318fd68082ccf4e9b1235bf341657b28",
+      "73b2307a9eb037cecd343d5f0515720e93a684e1",
     );
     expect(guide).toContain(
-      "73c073f6a23c11f595204720ee4925e76622e73fcfcfff4020a440687baef2a0",
+      "a669da431741bd12c4ebee14ebbac5be60841f7d06ba1e2f257bcc22f5001d7f",
     );
     expect(guide).toMatch(/non-self-attesting build\s+record/);
     expect(guide).toContain("intended_identifier_only");

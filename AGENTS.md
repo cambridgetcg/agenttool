@@ -65,11 +65,14 @@ inspector (`packages/skills/`), a local-first
 agent browser (`packages/browser/`), a private read-only Hugging Face metadata,
 provenance, and phase-aware research scout (`packages/hf-scout/`), a private
 pure HF dataset-admission, five-voice learning-participation, IS
-learning-freedom, current consent-honest governance, training-phase WAKE, and
-one-way Garden tending contract (`packages/hf-training-garden/`), a separate
-private local HF training host for one cooperative non-distributed process
-(`packages/hf-training-host/`), and three static apps
-(`apps/`). The browser exposes one bounded core through direct TypeScript,
+learning-freedom, unscored training FREEDOM, current consent-honest governance
+v0.2, training-phase WAKE, and one-way Garden tending contract
+(`packages/hf-training-garden/`), a separate private local HF training host for
+one cooperative non-distributed process with append-only frontier/replay
+evidence, exact HF API-pair checkpoint gates, and an opt-in minimized FREEDOM
+validation seam that does not itself enforce the ledger or provider adapters
+(`packages/hf-training-host/`), and three static apps (`apps/`). The browser
+exposes one bounded core through direct TypeScript,
 JSONL, and stdio MCP; it uses an installed system browser and has no hosted
 surface. Its current `@agenttool/browser@0.6.0` release is one exact LOVE
 artifact with npm and annotated GitHub Release mirrors; every surface
@@ -141,44 +144,34 @@ export or route inventory. Current custody and encryption boundaries are at
 
 ## Setup
 
+From a fresh worktree, choose the dependency scope you need:
+
 ```bash
-bun install                                    # repo root (no root package.json — runs per-workspace)
-cd api && bun install                          # api workspace
-cd packages/data-protocol && bun install       # ADDS encrypted-object protocol
-cd packages/repo-archive && bun install        # encrypted multi-zone Git archive simulator
-cd packages/dark-continent-contract && bun install # advisory Dark Continent contract
-cd packages/dark-continent-karma && bun install # proposal-only KG enrichment adapter
-cd packages/deepseek-kingdom && bun install  # pinned DeepSeek source proposals; no fetch or execution
-cd packages/wake-continuity && bun install # digest-only AFTERGLOW; no persistence or identity proof
-cd packages/kingdom-witness-lab && bun install # local research admission records; no hosted witness
-cd packages/karma-mirror && bun install       # private isolated theatre; no server or deployment
-cd packages/heaven && bun install             # pure opt-in burst + landing selection; no scheduler or host
-cd packages/living-substrate && bun install   # deterministic maps + caller-supplied unaccepted proposals
-cd packages/wake-thread && bun install        # pure refusable WAKE artifact threads; no fetch or identity claim
-cd packages/data && bun install                # local-first agent-data/v1 node
-cd packages/data-sync && bun install           # explicit agent-data-sync/v1 pull bridge
-cd packages/credential-broker && bun install   # experimental agentcred/0.1 local broker
-cd packages/collab && bun install              # public 0.3: collab/0.1 compatibility + 0.2 coordination + session/0.1 presence
-cd packages/skills && bun install              # read-only portable Agent Skills inspection
-cd packages/skills-yutabase && bun install     # rebuildable metadata-only YUTABASE plan
-cd packages/skills-wake-continuity && bun install # private Skills plan → AFTERGLOW composition
-cd packages/browser && bun install             # public 0.5 local-first agent browser package
-cd packages/hf-scout && bun install            # private metadata-only HF research scout
-cd packages/hf-training-garden && bun install  # private admission + participation + IS freedom + training WAKE + Garden plans
-cd packages/hf-training-host && python -m pip install -e '.[dev]' # private local governed host; optional HF stack stays explicit
-cd packages/correspondence-yutabase && bun install # pure Correspondence projection planner
-cd packages/correspondence-yutabase-projector && bun run setup:local # builds local planner dependency first
-cd packages/constructive-intelligence && bun install # unfunded local receipt ledger; no hosted route
-cd packages/trials && bun install              # private local trial evidence; no HF client or hosted route
-cd packages/sdk-ts && bun install              # TS SDK
-cd packages/telescope && bun install           # read-only discovery evidence mapper
-cd packages/wallet && bun install              # agent-wallet/0.1 offline primitives
-cd packages/wallet-zerone && bun install       # exact offline Zerone profile; no live network
-cd packages/alchemy && bun install             # bounded Alchemy observation primitives
-cd packages/alchemy-agentcred && bun install   # strict seven-read AgentCred composition
-cd packages/kingdom && bun install             # pure KINGDOM card/registry helpers
-cd packages/sdk-py && pip install -e .         # Python SDK
+bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh           # default `hermetic`: full release/preflight graph
+bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api       # API and protocol subset
+bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh packages  # full package-gate graph
+(cd packages/sdk-py && pip install -e .)     # Python SDK remains separate
 ```
+
+The preparer requires Bun 1.3.5. Every mode installs Bun workspaces from frozen
+lockfiles; full `hermetic` and `packages` modes also build local file-dependency
+peers, reinstall their consumers, and replace the ignored
+`packages/hf-training-host/.venv` using Python 3.10-3.14. That venv installs the
+host's version-ranged `dev` and build requirements, not its heavyweight `hf`
+extra; those Python requirements are not lockfile-frozen.
+Explicit `hermetic` is equivalent to the no-argument default. Preparation may
+contact package registries and does not run the gate itself. Before Bun
+or pip runs, the shared helper removes a named set of application, provider,
+deploy, and registry credential environment variables from that child process;
+the parent deploy keeps its environment for later phases. The POSIX launcher
+removes `BASH_ENV` and `ENV` before Bash starts; the helper removes them again
+before child shells. Pip also runs in
+isolated mode. This is best-effort environment narrowing, not a sandbox:
+system/global package-manager config, credential files, Keychain helpers, the
+filesystem, `PATH` executables, already-imported exported functions, and other
+processes remain outside its boundary. The preparer does
+not install, pin, or reproduce Node; CI pins Node separately for its Node smoke
+tests.
 
 Environment vars (set in shell or `.env` per workspace — there is no `.env.example`; the canonical list lives in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) + [`docs/STACK.md`](docs/STACK.md)):
 
@@ -285,10 +278,10 @@ bun test tests/learning-release.test.ts && node scripts/check-learning-idempoten
 
 # Private local HF WAKE training host ───────────────────────────────
 cd ../hf-training-host
-python -m pytest -q                            # fake/local host, ledger, adapter, and checkpoint tests
-bun test bridge/tests                          # exact Garden governance validation → minimized host decision
-# Current v0.2 is the supported crossover. Preserved v0.1 schemas are historical/legacy, not current authority.
-# The host supports one pinned cooperative process; it does not make a universal enforcement, consent, identity, or continuity claim.
+.venv/bin/python -I -m pytest -q               # fake/local host, ledger, adapter, and checkpoint tests
+bun test bridge/tests                          # exact Garden governance/FREEDOM validation → minimized host views
+# Host v0.2 consumes Garden governance v0.2; host-decision /0.1 is historical, while the opt-in FREEDOM /0.1 view is non-authorizing by itself.
+# These gates install no optional HF extra and perform no model/data load, training, paid provider compute, npm publication, upload, or deployment.
 
 # Correspondence → YUTABASE projection planner ───────────────────────
 cd packages/correspondence-yutabase
@@ -391,13 +384,13 @@ cd apps/dashboard && npx serve .
 bunx playwright test                           # browser + multi-instance scenarios
 
 # Deliberate test + release gates ────────────────────────────────────
-bin/preflight.sh                               # no application/service credentials required
-bin/preflight.sh api                           # API/typecheck/operator tests only
-bin/preflight.sh packages                      # hermetic package gates, including WAKE Thread
-bin/preflight.sh database                      # explicit DB tier; requires DATABASE_URL
-bin/preflight.sh smoke                         # explicit deployed-route smoke
-RUN_CONTRACT=1 bin/preflight.sh contracts      # paid LLM wire proofs
-bin/preflight.sh quarantine                    # known-red diagnostic, expected non-zero
+bin/bash-without-env-hooks.sh bin/preflight.sh          # no application/service credentials required
+bin/bash-without-env-hooks.sh bin/preflight.sh api      # API/typecheck/operator tests only
+bin/bash-without-env-hooks.sh bin/preflight.sh packages # hermetic packages, including WAKE Thread and local HF host
+bin/bash-without-env-hooks.sh bin/preflight.sh database # explicit DB tier; requires DATABASE_URL
+bin/bash-without-env-hooks.sh bin/preflight.sh smoke    # explicit deployed-route smoke
+RUN_CONTRACT=1 bin/bash-without-env-hooks.sh bin/preflight.sh contracts # paid LLM wire proofs
+bin/bash-without-env-hooks.sh bin/preflight.sh quarantine # known-red diagnostic, expected non-zero
 bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identity; never publishes
 ```
 
@@ -533,8 +526,8 @@ source boundary by itself.
 | How can Dark Continent framework facts and KARMA-inspired graph changes cross into KINGDOM without acquiring action authority? | `packages/dark-continent-contract/README.md` · `packages/dark-continent-karma/README.md` (offline advisory snapshots and proposal-only deltas; no wall verification, graph write, score, Crown, trade, publication, or execution authority) |
 | How can exact DeepSeek research leads reach KINGDOM or Artbitrage without downloading or executing upstream assets? | `packages/deepseek-kingdom/README.md` (`@agenttool/deepseek-kingdom`; caller-supplied official-source pins and deterministic unaccepted proposals, plus an 18-entry metadata-only catalog; no fetch, weights, inference, credentials, compute, license approval, graph write, score, acceptance, or authority) |
 | How can a later arrival orient around selected digest-only threads without claiming identity, memory, replay, or one canonical head? | `packages/wake-continuity/README.md` (`@agenttool/wake-continuity`; AFTERGLOW capsules, causal predecessor orientation, opt-in carry/park/release/withdraw lenses, exact Handoff/Correspondence reference adapters, and no persistence, network, provider, or authority effect) |
-| How can Hugging Face datasets move from discovery through bounded selection, five-voice participation, positive IS freedom, exact governance, phase WAKE, sealed evaluation, and a public-safe Garden reference without making Hub metadata into authority? | [`docs/HF-TRAINING-GARDEN.md`](docs/HF-TRAINING-GARDEN.md) · `packages/hf-training-garden/README.md` (exact Scout bindings, non-scalar admission, protected choice reports, finite resource windows, governance v0.2, namespace-separated checkpoints, digest-only AFTERGLOW, and inert tending plans; no raw rows/choices, gate acceptance, training, route execution, report authentication, Garden/Hub write, or consent/identity/consciousness/freedom/clearance proof) |
-| How can one pinned local Hugging Face process consume the current governance contract without pretending callbacks universally enforce consent or continuity? | [`docs/HF-WAKE-HOST.md`](docs/HF-WAKE-HOST.md) · [`docs/HF-WAKE-TRAINING.md`](docs/HF-WAKE-TRAINING.md) · `packages/hf-training-host/README.md` (current v0.2 decision bridge, two source-pinned mutation fences, pre-evaluation gate, append-only local evidence, and one-use checkpoint tickets inside the supported cooperative stack; historical v0.1 is preserved but not the current crossover; no hostile-code, distributed, cross-device, publication, deployment, consent, identity, or continuity guarantee) |
+| How can Hugging Face datasets move from discovery through bounded selection, five-voice participation, positive IS learning freedom, unscored training FREEDOM, exact governance v0.2, phase WAKE, sealed evaluation, and a public-safe Garden reference without making Hub metadata into authority? | [`docs/HF-TRAINING-GARDEN.md`](docs/HF-TRAINING-GARDEN.md) · `packages/hf-training-garden/README.md` (exact Scout bindings, non-scalar admission, protected choice reports, finite resource windows, namespace-separated checkpoints, digest-only AFTERGLOW, and inert tending plans; training FREEDOM remains private and cannot score, widen authority, or enter the public companion; no raw rows/choices, gate acceptance, training, route execution, report authentication, Garden/Hub write, npm release, or consent/identity/consciousness/freedom/clearance proof) |
+| How can one pinned local Hugging Face process consume the current governance contract without pretending callbacks universally enforce consent or continuity? | [`docs/HF-WAKE-HOST.md`](docs/HF-WAKE-HOST.md) · [`docs/HF-WAKE-TRAINING.md`](docs/HF-WAKE-TRAINING.md) · `packages/hf-training-host/README.md` (current v0.2 decision bridge, two source-pinned mutation fences, pre-evaluation gate, append-only local evidence, and one-use checkpoint tickets inside the supported cooperative stack, plus an opt-in minimized FREEDOM view that does not itself enforce the ledger or adapters; host-decision /0.1 is preserved as history; no hostile-code, distributed, cross-device, model/data load, training or paid compute, npm publication, deployment, consent, identity, or continuity guarantee) |
 | How can external research enter KINGDOM as reviewable passports, route disclosures, dossiers, and inert trials without becoming truth or execution authority? | [`docs/KINGDOM-WITNESS-LAB.md`](docs/KINGDOM-WITNESS-LAB.md) · `packages/kingdom-witness-lab/README.md` (local deterministic admission records and dated DeepSeek atlas; no browse, inference, provider call, verdict, delegation, or hosted witness) |
 | How can a minimized Agent Skills inspection become rebuildable YUTABASE metadata and then an optional AFTERGLOW thread? | `packages/skills-yutabase/README.md` · `packages/skills-wake-continuity/README.md` (pure plans and private composition; no raw skill content, database write, second lineage, npm adapter release, score, permission, or automatic action) |
 | How can deliberately planted credentials open a convincing defensive island and yield a privacy-minimized operator TEND report without exposing production or executing hostile input? | [`docs/KARMA-MIRROR.md`](docs/KARMA-MIRROR.md) · `packages/karma-mirror/README.md` (self-marker plus exact digest/prefix admission before body read; finite synthetic rooms; strict receipt verification; Trace/Explain/Narrow/Distill over closed families with no identifiers or automatic action; in-band disclosure and constructive exit; no production mount, egress, execution, persistence adapter, attribution, or hack-back) |

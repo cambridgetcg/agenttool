@@ -151,7 +151,12 @@ compute_pending() {
   (
     cd "$REPO_ROOT/api"
     # shellcheck disable=SC2016 # Single-quoted JavaScript must not expand in Bash.
-    DATABASE_INVENTORY_URL="$database_inventory_url" bun -e '
+    # Survey/apply inventory must never trigger Bun's default auto-install or
+    # import a workspace .env file. A real deploy prepares the frozen API
+    # dependency graph first; read-only survey/dry-run calls fail closed when
+    # it is absent instead of mutating the worktree or contacting a registry.
+    DATABASE_INVENTORY_URL="$database_inventory_url" \
+      bun --no-install --no-env-file -e '
 import { createHash } from "node:crypto";
 import postgres from "postgres";
 import { readdirSync } from "node:fs";

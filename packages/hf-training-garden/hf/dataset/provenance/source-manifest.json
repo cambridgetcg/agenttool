@@ -1,6 +1,6 @@
 {
   "_format": "kingdom.hf-training-garden-source-manifest/0.1",
-  "generator": "@agenttool/hf-training-garden@0.3.0-dev.0",
+  "generator": "@agenttool/hf-training-garden@0.4.0-dev.0",
   "intended_hub_repo": "Yu-and-Ai/agenttool-training-garden",
   "publication_state": "intended_identifier_only",
   "source_repository": "https://github.com/cambridgetcg/agenttool",
@@ -8,8 +8,8 @@
   "source_files": [
     {
       "path": "package.json",
-      "bytes": 4174,
-      "sha256": "f16daeebf5ee0010351de14eb900ac7c1ca4e4489425515bf7f602e70a2ef2a0"
+      "bytes": 4306,
+      "sha256": "d7175a14f032646e27eea7f55fcdce6012c5a2efb958c1ba38ad9fd1e08a731e"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -89,7 +89,7 @@
     {
       "path": "src/constants.ts",
       "bytes": 42166,
-      "sha256": "a340926c8df00c688d777b65165802429f3b3f42bff604993e3908ad3f5b61a1"
+      "sha256": "8f7d51c4196b22a223faddfc16e8f81a1afd0419baf93a2a296b3dcd0c745ca3"
     },
     {
       "path": "src/errors.ts",
@@ -156,6 +156,7 @@
     "raw chats",
     "participation invitations, receipts, assessments, and choice evidence",
     "learning-freedom offers, routes, resource windows, direction reports, and choice evidence",
+    "historical advisory hf-training-freedom-v0.1 schema",
     "training governance records",
     "raw dataset rows",
     "training checkpoints",

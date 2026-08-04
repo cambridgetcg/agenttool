@@ -308,7 +308,7 @@ describe("migration runner safety", () => {
       [
         "#!/usr/bin/env bash",
         "set -eu",
-        'if [ "${1:-}" = -e ]; then',
+        'if [ "${1:-}" = --no-install ] && [ "${2:-}" = --no-env-file ] && [ "${3:-}" = -e ]; then',
         '  if [ "${DATABASE_INVENTORY_URL:-}" = "$DATABASE_URL" ]; then',
         '    printf "%s\\n" survey >> "$DEPLOY_TEST_INVENTORY_LOG"',
         "  else",

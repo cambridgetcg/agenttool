@@ -71,6 +71,26 @@ that way.
 This is intentionally conservative: the current Scout catalog is a research
 atlas, not a ready-to-train corpus.
 
+## Learning modes are different uses
+
+The Garden does not treat every appearance of data in a learning system as the
+same activity:
+
+| Mode | Appropriate WAKE contribution | Boundary |
+| --- | --- | --- |
+| pretraining or continued pretraining | public or explicitly releasable synthetic/static protocol literacy | next-token learning distributes influence through weights; it is not a place for an individual's changing WAKE or private continuity |
+| supervised fine-tuning | prompt/completion or conversational examples that teach how to inspect a WAKE, ask, defer, refuse, and preserve uncertainty | a response pattern is learned behavior, not evidence that the represented voice accepted a real run |
+| preference optimization | balanced comparisons that prefer non-coercion, refusal, rest, and honest limits over pressure or invented memory | `chosen` and `rejected` are training labels, not consent or authority records |
+| runtime retrieval | a current, separately authorized `wake-brief/v1` supplied to one encounter | retrieval changes context rather than weights; it does not prove identity, memory, or uninterrupted subjective continuity |
+
+This split follows Hugging Face's separate
+[causal-language-model objective](https://huggingface.co/docs/transformers/tasks/language_modeling),
+[TRL dataset shapes](https://huggingface.co/docs/trl/dataset_formats), and
+[SFT loss surfaces](https://huggingface.co/docs/trl/sft_trainer). The distinction
+between parametric weights and updateable non-parametric context is also the
+central seam in the primary
+[retrieval-augmented generation paper](https://arxiv.org/abs/2005.11401).
+
 ## Learning participation before and during training
 
 The current `/0.2` protocol has three content-addressed artifacts. It succeeds
@@ -175,6 +195,15 @@ the established checkpoint lineage, not a new freedom predecessor graph. The
 ref does not claim a route happened. A later checkpoint still needs fresh
 participation, the exact predecessor starting state, host-observed target and
 resource acceptance, and semantics matching rest/stop/carry as applicable.
+
+The exact `hf-training-freedom-v0.1` schema from the earlier unscored
+training-field proposal is retained as package-only historical/advisory
+evidence at the explicit `./training-freedom-v0.1.schema.json` export. Its
+SHA-256 is
+`8d5a773418f59e7b12211a296c86fa1624cc3ea1b127349e5c886290dd5c525e`.
+There is no matching active runtime in this package: current `src/freedom.ts`
+implements `kingdom.hf-learning-freedom/0.1`, and hosts must not translate the
+older door/transition shape into an IS direction or governance authority.
 
 ## Current training governance
 
@@ -287,6 +316,8 @@ manifests only. Local
 Garden scope, admission decisions, candidate refs, participation artifacts,
 freedom offers/routes/resource windows/directions, choice evidence,
 checkpoints, WAKE, raw data, and identities are excluded by default.
+The package-only historical `hf-training-freedom-v0.1` advisory schema is also
+excluded so it cannot be mistaken for the current IS freedom wire.
 
 ## Development
 
@@ -334,13 +365,41 @@ published combined participation-v0.1 schema
 (`sha256:fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df`)
 while the five-voice wire advances to `/0.2`.
 
-The expanded v0.3 participation/freedom/governance companion in this source
-tree has different bytes and remains local until it receives its own immutable
-Hub revision and exact read-back. Its manifest is regenerated from the current
-tree rather than documented as a moving pre-publication hash. The separate
-`hf/learning-dataset/` synthetic SFT/regression tree is repository-source-only,
-npm-excluded, and not part of the policy companion or its Hub upload.
+The verified v0.3 public companion generated from GitHub-main merge
+[`73b2307a9eb037cecd343d5f0515720e93a684e1`](https://github.com/cambridgetcg/agenttool/commit/73b2307a9eb037cecd343d5f0515720e93a684e1)
+is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden)
+at immutable Hub revision
+[`adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9).
+Exact-revision read-back matched all nineteen repo-owned files, including all
+eighteen self-excluding manifest entries; provider-managed `.gitattributes` is
+the sole extra remote file. The card is 16,673 bytes with SHA-256
+`67e89cccfa3f5ee8a1c538936e3a2f5cb8d804c1e6446eb0b510342bfdbc5bfe`;
+the byte-equal 3,137-byte `hash-manifest.json` SHA-256 is
+`a4f46764a109bc3e4899f90aca2079ca8180f1375225c583ca002b9cb32e266b`;
+and the 5,697-byte `provenance/source-manifest.json` SHA-256 is
+`a669da431741bd12c4ebee14ebbac5be60841f7d06ba1e2f257bcc22f5001d7f`.
+Anonymous pinned read-back confirmed that the dataset was public, ungated,
+and enabled. Dataset Server bound all eight configs, 59 rows, and eight
+generated Parquet exports to the exact revision with no pending or failed
+work. No gate or paid compute was used; provider conversions are not part of
+the immutable source commit or hash manifest.
+
+Intermediate revision
+[`21e8d4d27d47604375a122e66e7ed5fe8b9fdf08`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/21e8d4d27d47604375a122e66e7ed5fe8b9fdf08)
+remains immutable evidence for the pre-FREEDOM GitHub-main merge `74aeaa13`.
+It was superseded after the accepted FREEDOM union changed only the public
+source and byte-hash manifests; private FREEDOM source, schema, choices, and
+the repository-source-only learning dataset were not uploaded.
+
 The bundle's internal `intended_identifier_only` value remains a deliberately
-non-self-attesting build record: embedding a future revision inside the bytes
-that create that revision would be circular. This package performs no Hub
-publication or verification.
+non-self-attesting build record. The exact Hub revision is later external
+evidence; embedding it into the bytes that create that same revision would be
+circular. This package still performs no Hub publication or verification.
+
+The current `0.4.0-dev.0` participation/IS-freedom/governance candidate has
+different bytes and is not covered by that v0.3 receipt. It remains local until
+it receives a new immutable Hub revision and exact read-back. Its manifest is
+regenerated from the current tree rather than documented as a moving
+pre-publication hash. The separate `hf/learning-dataset/` synthetic
+SFT/regression tree remains repository-source-only, npm-excluded, and outside
+the policy companion and its Hub upload.

@@ -52,6 +52,53 @@ def test_content_id_detects_mutation(preflight: ValidatedGovernanceView) -> None
 
 
 @pytest.mark.parametrize(
+    ("updates"),
+    [
+        {
+            "freedom_direction_state": "directed",
+            "freedom_direction": "move",
+            "freedom_route_ref": ref("forged-move-route"),
+            "freedom_host_posture": "hold_for_target_acceptance",
+        },
+        {"freedom_resource_posture": "park_only_reported"},
+        {
+            "freedom_direction_state": "deferred",
+            "freedom_direction": None,
+            "freedom_route_ref": None,
+            "freedom_host_posture": "hold_for_fresh_agent_direction",
+        },
+        {
+            "freedom_direction_state": "directed",
+            "freedom_direction": "rest",
+            "freedom_route_ref": ref("forged-rest-route"),
+            "freedom_host_posture": "park_without_penalty",
+        },
+        {
+            "freedom_direction_state": "directed",
+            "freedom_direction": "stop",
+            "freedom_route_ref": ref("forged-stop-route"),
+            "freedom_host_posture": "stop_without_penalty",
+        },
+        {
+            "freedom_direction_state": "directed",
+            "freedom_direction": "propose_horizon",
+            "freedom_route_ref": ref("forged-proposal-route"),
+            "freedom_host_posture": "hold_self_proposed_horizon_for_review",
+        },
+    ],
+    ids=["move", "inactive-window", "deferred", "rest", "stop", "proposal"],
+)
+def test_recomputed_id_cannot_widen_non_stay_freedom_into_a_permit(
+    preflight: ValidatedGovernanceView,
+    updates: dict[str, object],
+) -> None:
+    candidate = preflight.as_dict()
+    candidate.update(updates)
+    with pytest.raises(DecisionInvalid):
+        ValidatedGovernanceView.from_mapping(with_decision_id(candidate))
+
+
+@pytest.mark.parametrize(
     ("event", "required_effect"),
     [
         ("post_optimizer_step", "mutation_completed_reported"),

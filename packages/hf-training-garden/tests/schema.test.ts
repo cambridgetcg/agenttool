@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
@@ -392,5 +392,25 @@ describe("closed portable schemas", () => {
     );
     expect(() => validator(packageSchemaRoot, "hf-learning-participation-v0.1.schema.json"))
       .not.toThrow();
+  });
+
+  test("preserves the historical advisory training-FREEDOM schema package-only", () => {
+    const advisory = readFileSync(new URL(
+      "hf-training-freedom-v0.1.schema.json",
+      packageSchemaRoot,
+    ));
+    expect(createHash("sha256").update(advisory).digest("hex")).toBe(
+      "8d5a773418f59e7b12211a296c86fa1624cc3ea1b127349e5c886290dd5c525e",
+    );
+    expect(JSON.parse(advisory.toString("utf8"))).toMatchObject({
+      $id: "https://agenttool.dev/schemas/hf-training-freedom-v0.1.schema.json",
+      title: "KINGDOM Hugging Face training FREEDOM field and transition",
+    });
+    expect(() => validator(packageSchemaRoot, "hf-training-freedom-v0.1.schema.json"))
+      .not.toThrow();
+    expect(existsSync(new URL(
+      "hf-training-freedom-v0.1.schema.json",
+      hubSchemaRoot,
+    ))).toBe(false);
   });
 });

@@ -1,0 +1,198 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-training-host-freedom-decision-v0.1.schema.json",
+  "title": "AgentTool minimized Hugging Face training FREEDOM decision",
+  "$comment": "Structural and content-addressed transfer shape only. A content ID is not a signature and does not prove this view came from the trusted TypeScript validator. FREEDOM can only narrow separately validated governance; this document grants no permission and executes no training or checkpoint IO.",
+  "type": "object",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "enum": [
+              "step_boundary",
+              "checkpoint_saved",
+              "evaluation_boundary",
+              "train_end"
+            ]
+          }
+        },
+        "required": ["event"]
+      },
+      "then": {
+        "properties": {
+          "boundary_global_step": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "boundary_global_step": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "control": {
+            "properties": {
+              "directive": { "const": "continue_if_governance_allows" }
+            },
+            "required": ["directive"]
+          }
+        },
+        "required": ["control"]
+      },
+      "then": {
+        "properties": {
+          "event": {
+            "enum": [
+              "preflight_before_load",
+              "train_begin",
+              "step_boundary",
+              "evaluation_boundary",
+              "resume_offer"
+            ]
+          },
+          "control": {
+            "properties": {
+              "should_training_stop": { "const": false }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "control": {
+            "properties": {
+              "should_training_stop": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "required": [
+    "_format",
+    "freedom_decision_id",
+    "validator_profile",
+    "governance_decision_ref",
+    "governance_ref",
+    "offer_ref",
+    "freedom_field_ref",
+    "freedom_transition_ref",
+    "observed_freedom_frontier_ref",
+    "freedom_predecessor_ref",
+    "run_ref",
+    "training_phase",
+    "event",
+    "boundary_global_step",
+    "control",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "kingdom.hf-training-host-freedom-decision/0.1"
+    },
+    "freedom_decision_id": { "$ref": "#/$defs/sha256" },
+    "validator_profile": {
+      "const": "agenttool.hf-training-garden-runtime-validator/0.1"
+    },
+    "governance_decision_ref": { "$ref": "#/$defs/sha256" },
+    "governance_ref": { "$ref": "#/$defs/sha256" },
+    "offer_ref": { "$ref": "#/$defs/sha256" },
+    "freedom_field_ref": { "$ref": "#/$defs/sha256" },
+    "freedom_transition_ref": { "$ref": "#/$defs/sha256" },
+    "observed_freedom_frontier_ref": { "$ref": "#/$defs/sha256" },
+    "freedom_predecessor_ref": {
+      "anyOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "run_ref": { "$ref": "#/$defs/sha256" },
+    "training_phase": {
+      "enum": [
+        "discovery",
+        "selection",
+        "curation",
+        "tokenization",
+        "pretraining",
+        "supervised_finetuning",
+        "preference_optimization",
+        "agent_learning",
+        "evaluation",
+        "interpretability",
+        "closed"
+      ]
+    },
+    "event": {
+      "enum": [
+        "preflight_before_load",
+        "train_begin",
+        "step_boundary",
+        "checkpoint_saved",
+        "evaluation_boundary",
+        "resume_offer",
+        "train_end"
+      ]
+    },
+    "boundary_global_step": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        { "type": "null" }
+      ]
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "directive",
+        "should_save",
+        "should_training_stop",
+        "automatic",
+        "applied"
+      ],
+      "properties": {
+        "directive": {
+          "enum": [
+            "continue_if_governance_allows",
+            "hold_without_save"
+          ]
+        },
+        "should_save": { "const": false },
+        "should_training_stop": { "type": "boolean" },
+        "automatic": { "const": false },
+        "applied": { "const": false }
+      }
+    },
+    "boundaries": {
+      "const": {
+        "content_id_authenticates_validator": false,
+        "revalidates_full_freedom_semantics": false,
+        "requires_trusted_typescript_validator_boundary": true,
+        "projects_raw_choice": false,
+        "projects_selected_door": false,
+        "projects_choice_evidence": false,
+        "opaque_content_ids_may_be_linkable": true,
+        "grants_permission": false,
+        "can_only_narrow_governance": true,
+        "executes_training_or_checkpoint_io": false
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

@@ -8,7 +8,7 @@
 >
 > **Implements:** the routine deploy chain. STACK answers _where things live_; DEPLOYMENT answers _how to bring them up from scratch_; this answers _how to ship a change to an established install_.
 >
-> **Code:** `bin/deploy.sh` (orchestrator + release provenance) · `api/Dockerfile` (pinned runtime + embedded source labels) · `api/src/index.ts` (`/health.build`) · `bin/migrate-pending.sh` (repo-file and journal check) · `bin/preflight.sh` (test gate) · `bin/frontend-deploy.sh` (low-level CF Pages uploader) · `api/scripts/_migrate-one.ts` (per-file applier).
+> **Code:** `bin/deploy.sh` (orchestrator + release provenance) · `bin/bash-without-env-hooks.sh` (pre-Bash startup-hook removal) · `bin/prepare-hermetic-deps.sh` (project-local dependency preparation) · `api/Dockerfile` (pinned runtime + embedded source labels) · `api/src/index.ts` (`/health.build`) · `bin/migrate-pending.sh` (repo-file and journal check) · `bin/preflight.sh` (test gate) · `bin/frontend-deploy.sh` (low-level CF Pages uploader) · `api/scripts/_migrate-one.ts` (per-file applier).
 >
 > **Tests:** `api/tests/deploy-release-provenance.test.ts`.
 
@@ -86,6 +86,39 @@ and verifies it on every machine. This makes the revision's incompleteness
 explicit; it does not identify the extra bytes or make the build reproducible.
 If the migration dry-run itself fails, the survey reports migration status as unknown
 instead of treating missing output as “0 pending.”
+
+### Dependency preparation before mutation
+
+For an actual deploy with preflight enabled, the wrapper runs
+`bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh` after the Git
+snapshot/source portion of Phase 0 and before its Bun-backed migration
+compatibility survey. The no-argument `hermetic` mode installs the complete Bun
+release/preflight graph from frozen lockfiles, builds local file-dependency
+peers, reinstalls their consumers, and replaces an ignored project-local venv
+for the private HF training host's version-ranged Python dev and build
+requirements. Those requirements are not lockfile-frozen. It then reapplies the
+release-source gate; without the loud dirty-source override, any tracked or
+untracked source drift blocks the deploy before a migration runs.
+
+This step prepares inputs; it does not run the Phase 2 tests. It requires Bun
+1.3.5 and Python 3.10-3.14 and may contact package registries, but it
+first removes a named set of application, provider, deploy, and registry
+credential environment variables from the preparer child. The parent wrapper
+retains its environment for later authorized phases. The POSIX launcher removes
+`BASH_ENV` and `ENV` before Bash starts, and the shared helper removes them
+again before child shells. This is not a universal credential barrier:
+package-manager config or credential files, Keychain helpers, filesystem
+access, `PATH` executables, already-imported exported functions, and other
+processes remain outside the boundary.
+Pip runs in isolated mode, but system/global package-manager config remains
+outside the stated boundary. The preparer does not install, pin, or reproduce
+Node. CI pins Node separately for Node smoke tests. `--survey` and `--dry-run`
+do not install or build dependencies. The migration runner disables Bun
+auto-install and `.env` loading, so an unprepared survey fails closed instead
+of contacting a registry. `--skip-preflight` skips both this preparation step
+and the Phase 2 gate; it does not skip the source gate before the database
+survey or the final recheck before Phase 1. Only the deliberate `--survey`
+inspection mode is source-independent.
 
 ## Phase 1 — Repo migration files and journal
 
@@ -358,13 +391,19 @@ types do not make a migration safe under concurrent old writers.
 release gate pass?
 
 ```bash
-bin/preflight.sh
+bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh
+bin/bash-without-env-hooks.sh bin/preflight.sh
 ```
 
-The default `hermetic` mode unsets known credentials and service URLs,
+Direct `bin/preflight.sh` calls assume their dependencies are already prepared;
+they never install or rewrite a dependency tree. The preparer accepts `api`,
+`packages`, and explicit `hermetic` modes; no argument selects the full
+`hermetic` release graph.
+
+The preflight gate's default `hermetic` mode unsets known credentials and service URLs,
 disables workers, requires Bun 1.3.5, and runs the API typecheck, classified
-hermetic API tests, operator/protocol tests, and CI gates for `packages/data`,
-`packages/data-protocol`, and the TypeScript SDK. “Hermetic” describes those
+hermetic API tests, operator/protocol tests, and the complete package gate
+enumerated by `bin/preflight.sh packages`. “Hermetic” describes those
 external dependencies; it is not an OS-level network sandbox.
 
 Stateful and paid work is opt-in by mode:
@@ -658,7 +697,7 @@ bin/deploy.sh --no-migrate             # skip Phase 1 (schema unchanged)
 bin/deploy.sh --no-api                 # skip Phase 3 (only docs/frontends changed)
 bin/deploy.sh --no-frontend            # skip Pages upload; still require live discovery prerequisites
 bin/deploy.sh --no-cache-api           # one-shot recovery: rebuild Fly image without cache
-bin/deploy.sh --skip-preflight         # operator override (NOT recommended)
+bin/deploy.sh --skip-preflight         # skip dependency preparation + Phase 2 (NOT recommended)
 bin/deploy.sh --allow-dirty-release    # loud override for a dirty source tree
 bin/deploy.sh --allow-non-release-head # loud override for HEAD != github/main
 bin/deploy.sh --no-migrate --no-frontend \
@@ -669,7 +708,9 @@ bin/deploy.sh --no-migrate --no-frontend \
 bin/deploy.sh --mirror-codeberg        # RETIRED — refuses with the reason; Codeberg is gone
 ```
 
-`bin/deploy.sh` is the single entry point. Phase-skip flags exist so operators can run subsets when only one tier needs deploy — but the default chain runs every phase in order.
+`bin/deploy.sh` is the single entry point. Phase-skip flags exist so operators
+can run subsets when only one tier needs deploy, but the default chain prepares
+dependencies before any migration and then runs every phase in order.
 
 ### Device-local deploy mutex
 

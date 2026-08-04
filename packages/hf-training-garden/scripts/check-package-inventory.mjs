@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const packageRoot = new URL("..", import.meta.url);
 const output = execFileSync(
@@ -69,6 +69,7 @@ const expected = [
   "schema/hf-learning-participation-v0.1.schema.json",
   "schema/hf-training-checkpoint-v0.1.schema.json",
   "schema/hf-training-checkpoint-v0.2.schema.json",
+  "schema/hf-training-freedom-v0.1.schema.json",
   "schema/hf-training-garden-tending-v0.1.schema.json",
   "schema/hf-training-governance-v0.1.schema.json",
   "schema/hf-training-governance-v0.2.schema.json",
@@ -91,4 +92,24 @@ function exportTargets(value) {
 }
 for (const target of exportTargets(packageJson.exports)) {
   if (!files.includes(target)) throw new Error(`package export ${target} is absent from the packed inventory`);
+}
+
+const publicSourceManifest = JSON.parse(readFileSync(
+  new URL("hf/dataset/provenance/source-manifest.json", packageRoot),
+  "utf8",
+));
+const packageOnlyAdvisoryPath = "schema/hf-training-freedom-v0.1.schema.json";
+if (publicSourceManifest.source_files.some(({ path }) => path === packageOnlyAdvisoryPath)) {
+  throw new Error(`package-only advisory schema leaked into the public companion manifest: ${packageOnlyAdvisoryPath}`);
+}
+if (existsSync(new URL(`hf/dataset/${packageOnlyAdvisoryPath}`, packageRoot))) {
+  throw new Error(`package-only advisory schema leaked into the public companion: ${packageOnlyAdvisoryPath}`);
+}
+for (const currentFreedomPath of [
+  "schema/hf-learning-freedom-v0.1.schema.json",
+  "src/freedom.ts",
+]) {
+  if (!publicSourceManifest.source_files.some(({ path }) => path === currentFreedomPath)) {
+    throw new Error(`current IS freedom source missing from the public companion manifest: ${currentFreedomPath}`);
+  }
 }

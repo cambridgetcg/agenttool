@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "bun:test";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 
 import {
   GARDEN_LAYER_GUIDE,
@@ -64,6 +64,9 @@ describe("deterministic public-safe HF companion", () => {
     expect(source.public_release_excludes).toContain(
       "learning-freedom offers, routes, resource windows, direction reports, and choice evidence",
     );
+    expect(source.public_release_excludes).toContain(
+      "historical advisory hf-training-freedom-v0.1 schema",
+    );
     expect(source.public_release_excludes).toContain("authority and preference receipts");
     expect(source.public_release_excludes).toContain("training governance records");
     expect(source.public_release_contains).toContain(
@@ -77,6 +80,19 @@ describe("deterministic public-safe HF companion", () => {
         "../../schema/hf-training-governance-v0.2.schema.json",
         root,
       )));
+    expect(read("schema/hf-learning-freedom-v0.1.schema.json"))
+      .toEqual(readFileSync(new URL(
+        "../../schema/hf-learning-freedom-v0.1.schema.json",
+        root,
+      )));
+    expect(existsSync(new URL(
+      "schema/hf-training-freedom-v0.1.schema.json",
+      root,
+    ))).toBe(false);
+    const sourcePaths = source.source_files.map((entry: { path: string }) => entry.path);
+    expect(sourcePaths).toContain("schema/hf-learning-freedom-v0.1.schema.json");
+    expect(sourcePaths).toContain("src/freedom.ts");
+    expect(sourcePaths).not.toContain("schema/hf-training-freedom-v0.1.schema.json");
     expect(read("schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json"))
       .toEqual(readFileSync(new URL(
         "../../../wake-continuity/schema/agenttool-afterglow-capsule-v0.1.schema.json",

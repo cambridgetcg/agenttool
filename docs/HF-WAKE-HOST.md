@@ -11,8 +11,9 @@
 > `kingdom.hf-training-host-decision/0.2` → local one-use permits and
 > append-only evidence.
 >
-> **History:** host-decision v0.1 and its schema remain exact historical
-> evidence. The v0.2 parser rejects v0.1 rather than silently upgrading it.
+> **History:** host-decision v0.1 and host-FREEDOM-decision v0.1 schemas remain
+> exact historical evidence. The current v0.2 parser rejects cross-version
+> shapes rather than silently upgrading or translating them.
 >
 > **Code:** `packages/hf-training-host/` ·
 > `packages/hf-training-garden/src/governance.ts`
@@ -56,8 +57,10 @@ operational authority.
 | local host | enforces the supported ordinary-API seams and records evidence | sandbox hostile in-process code or prove global consistency |
 | caller | supplies storage, exact live-reference attestations, provider objects, and separately authorized execution | inherit permission from package installation or old receipts |
 
-The bridge is excluded from both Python wheel and sdist. Both historical v0.1
-and current v0.2 closed schemas ship in the distribution.
+The bridge is excluded from both Python wheel and sdist. The historical
+host-decision v0.1 and host-FREEDOM-decision v0.1 schemas ship beside the
+current host-decision v0.2 schema. Historical schema custody does not activate
+an obsolete parser or silently translate its vocabulary.
 
 ## Decision projection
 
@@ -84,6 +87,14 @@ Pre-instantiation pretraining may permit only preload-for-review. A fresh
 interactive participation assessment, freedom artifact, and resource window
 are required before entering training. The host treats these as validated
 caller reports, never manufactured consent.
+
+The separately published `kingdom.hf-training-host-freedom-decision/0.1`
+schema remains exact historical evidence from an earlier advisory seam. Its
+field/door vocabulary and seven-event lifecycle do not have a lossless mapping
+to current IS learning freedom or the nine-event governance graph. The active
+v0.2 host therefore enforces learning freedom inside its single closed decision
+instead of reviving that obsolete parallel runtime. Any future translation
+needs a new format and review; old content IDs are never reinterpreted.
 
 ## Liveness without bypass
 

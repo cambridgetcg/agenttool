@@ -18,6 +18,10 @@ Private Python enforcement seam for accepted
 - Preserve the v0.1 decision schema byte-for-byte. V0.2 ledgers are new-ledger
   only: never auto-migrate or rewrite v0.1 evidence. Historical reading needs a
   separate read-only old runtime.
+- Preserve the historical FREEDOM-decision v0.1 schema byte-for-byte for
+  inspection and package inventory only. Do not export or reactivate its old
+  bridge/parser runtime: active IS-freedom is the integrated v0.2 learning gate,
+  frontier, lifecycle, and permit seam in `createHostDecision`.
 - Keep all six frontier planes and all six checkpoint binding namespaces exact
   and distinct. Resume uses the physical ref for files and the Garden ref only
   as a typed continuity starting state.

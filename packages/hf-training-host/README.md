@@ -173,6 +173,16 @@ The historical
 `schema/hf-training-host-decision-v0.1.schema.json` is also preserved byte for
 byte. It documents what v0.1 accepted; it is not accepted by the v0.2 parser.
 
+The separately preserved
+`schema/hf-training-host-freedom-decision-v0.1.schema.json` is historical-only
+evidence from the earlier experimental FREEDOM bridge. It is shipped in the
+wheel and sdist so those exact transfer bytes remain inspectable, but the v0.2
+bridge, parser, ledger, Trainer adapter, and Accelerate adapter neither import,
+accept, emit, nor enforce it. The obsolete `create-freedom-decision.mjs` and
+`freedom.py` runtimes are deliberately not retained. Active IS-freedom remains
+inside the v0.2 `createHostDecision` projection and its current learning-gate,
+frontier, lifecycle, checkpoint, and permit checks.
+
 ## Development
 
 ```bash

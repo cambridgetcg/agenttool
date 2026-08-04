@@ -15,8 +15,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 15895,
-      "sha256": "8858d0dedf587062f3c0c0925d3e475f8eb9cbfddd2c578a25c45bce19c5ce56"
+      "bytes": 16069,
+      "sha256": "d4a31b0f25967d28f44850e650366f226ecaa24f70bb11a1dd0198ba6f83e31c"
     },
     {
       "path": "data/garden-layers.jsonl",
@@ -65,8 +65,8 @@
     },
     {
       "path": "provenance/source-manifest.json",
-      "bytes": 7567,
-      "sha256": "172ae3b5a6d16dbb0fdae8ada570734a43123451452aa4b4b3f9130f9df3e1ed"
+      "bytes": 7626,
+      "sha256": "5a6f82b33c881370c3c61bca8d6fc411f55072491043a0d998d4ae5541d56c60"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",

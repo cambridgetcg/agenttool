@@ -93,11 +93,13 @@ The Garden has six layers:
   and the host controller needed to stop before optimizer mutation.
 - `data/trainer-adapter-hooks.jsonl` — the exact v0.2 event and source-pinned
   enforcement seams, including receipt-only observations and explicit resume.
-- `schema/` — all versioned closed-shape schemas for local admission,
+- `schema/` — the public current and byte-preserved closed-shape schemas for admission,
   historical combined participation v0.1, current participation invitation,
   receipt, and assessment v0.2, learning freedom v0.1, preserved checkpoint
   v0.1/current checkpoint v0.2, historical governance v0.1/current governance
-  v0.2, and tending artifacts.
+  v0.2, and tending artifacts. The separate historical advisory
+  `hf-training-freedom-v0.1` schema stays package-only so it cannot be mistaken
+  for the active IS learning-freedom wire.
   Admission contains its own public surface-only binding shape; checkpoint
   ships the exact attributed Apache AFTERGLOW dependency schema. Cross-link,
   canonical-ID, scope-distinctness, and fully derived semantics remain the

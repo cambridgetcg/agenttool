@@ -6,7 +6,16 @@
 > **Implements:** a private, pure bridge from immutable Hugging Face research observations to explicit dataset admission, participation-bearing learning, an IS learning-freedom action surface, phase-specific digest continuity, and a public-safe one-way Garden reference plan
 > **Code:** `packages/hf-scout/` · `packages/hf-training-garden/` · `packages/wake-continuity/`
 > **Tests:** `packages/hf-training-garden/tests/` · `bin/tests/boring-spine-gate.test.ts`
-> **Dated status:** 2026-08-03. The first public companion remains at immutable Hub revision [`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff). The current public v0.2 companion is [`9406aa1ce6b9ee435da9d688899aa4dbca32605c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/9406aa1ce6b9ee435da9d688899aa4dbca32605c). Both have exact-revision byte read-back below. The reconciled v0.3 participation-v0.2 and IS-freedom companion is locally generated but not yet published or read back.
+> **Dated status:** 2026-08-04. The verified public v0.3 companion generated
+> from GitHub-main merge
+> [`73b2307a9eb037cecd343d5f0515720e93a684e1`](https://github.com/cambridgetcg/agenttool/commit/73b2307a9eb037cecd343d5f0515720e93a684e1)
+> is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden)
+> at immutable Hub revision
+> [`adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9).
+> Earlier v0.1 and v0.2 receipts remain below. The next governance-v0.2,
+> WAKE-host, and IS-freedom companion is locally generated but is not public
+> release evidence until a reviewed GitHub merge, immutable upload, and exact
+> byte read-back complete.
 
 ## The result
 
@@ -15,7 +24,7 @@ the authority that decides whether data may be collected, whether people
 consented, whether a license assertion is correct, whether a benchmark leaked,
 or whether one quality score makes a source fit for every phase.
 
-The Training Garden therefore separates six operations that are often blurred
+The Training Garden therefore separates eight operations that are often blurred
 together:
 
 | Operation | Record |
@@ -23,7 +32,7 @@ together:
 | discover | exact repository/card/file observation through HF Scout |
 | admit | one role plus separate caller-reviewed evidence and derived hold reasons |
 | prepare | content-addressed subset and transform recipes |
-| participate | exact invitation plus separate agent, substrate, data-rights, and operator reports |
+| participate | exact invitation plus separate agent, substrate, substrate-steward, data-rights, and operator reports |
 | direct | one exact freedom offer plus a protected current agent direction, defer, no response, or honest pre-instantiation absence |
 | learn | participation-bound phase state references, not raw state, inside AFTERGLOW continuity |
 | evaluate | separately bounded and sealed material that cannot silently become training data |
@@ -664,28 +673,71 @@ and the source-manifest SHA-256 was
 Seven configs contained 52 rows; `.gitattributes` was the sole provider-managed
 extra file. No gate or paid compute was used.
 
-That immutable revision also preserves a release error: it expanded the
-already public checkpoint `/0.1` schema in place. The reconciled v0.3 tree
-restores the first-release checkpoint-v0.1 bytes
-(`sha256:0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a`)
-and keeps the newer participation-bearing checkpoint at `/0.2`. It preserves
-the exact published combined participation-v0.1 schema
-(`sha256:fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df`)
-while versioning the five-voice successor as `/0.2`.
+All four publication conditions now hold for the v0.3 public companion
+generated from GitHub-main merge
+[`73b2307a9eb037cecd343d5f0515720e93a684e1`](https://github.com/cambridgetcg/agenttool/commit/73b2307a9eb037cecd343d5f0515720e93a684e1).
+Exact-revision read-back at
+[`adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9)
+matched all nineteen repo-owned
+files byte-for-byte, including all eighteen entries in the self-excluding hash
+manifest. The card is 16,673 bytes with SHA-256
+`67e89cccfa3f5ee8a1c538936e3a2f5cb8d804c1e6446eb0b510342bfdbc5bfe`;
+`hash-manifest.json` is 3,137 bytes, byte-equal to local source, with SHA-256
+`a4f46764a109bc3e4899f90aca2079ca8180f1375225c583ca002b9cb32e266b`;
+and `provenance/source-manifest.json` is 5,697 bytes with SHA-256
+`a669da431741bd12c4ebee14ebbac5be60841f7d06ba1e2f257bcc22f5001d7f`.
+The provider-managed `.gitattributes` is the only extra repository file,
+making twenty remote files total. Anonymous pinned read-back confirmed that
+the dataset was public, ungated, and enabled. Dataset Server responses bound
+all eight configs, 59 rows, and eight generated Parquet exports to the exact
+`adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9` revision and reported no pending
+or failed work. No gate was accepted and no paid compute was invoked. Those
+provider-derived conversions are not part of the immutable source commit or
+its hash manifest.
 
-The expanded v0.3 local companion is regenerated from current source and has
-not yet been uploaded or verified at a new immutable Hub revision. Its moving
-pre-publication hash is deliberately not documented as release evidence, and
-neither earlier proof may be reused for these bytes.
+The immutable v0.2 and verified v0.3 revisions both preserve a release error:
+they expanded the already public checkpoint `/0.1` schema in place. Their
+checkpoint-v0.1 SHA-256 is
+`ab6fcc3f73823562422285882678ce37b7e9e5c83f08a0acf5a6eaa3f5c5443c`;
+neither public tree contains checkpoint `/0.2` or the five-voice participation
+`/0.2` schemas. The local v0.4 candidate performs that repair: it restores the
+first-release checkpoint-v0.1 bytes
+(`sha256:0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a`),
+keeps the newer participation-bearing checkpoint at `/0.2`, preserves the
+exact published combined participation-v0.1 schema
+(`sha256:fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df`),
+and versions the five-voice successor as `/0.2`.
+
+The original v0.1 revision `993ab5891ac56da38cfad32129e36e487f3b3eff`
+and verified v0.2 revision
+`9406aa1ce6b9ee435da9d688899aa4dbca32605c` remain immutable historical
+evidence. Intermediate v0.3 revision
+`21e8d4d27d47604375a122e66e7ed5fe8b9fdf08`, generated from protected-main
+merge `74aeaa137bcd00ad8f9102ba456259be4af62b5b`, was also uploaded and read
+back exactly. It was superseded after the accepted FREEDOM union changed only
+`hash-manifest.json` and `provenance/source-manifest.json` in the public tree.
+The current publication claim applies only to the separately uploaded and
+read-back `adf7780f8f73d625eb7d6f02fbb9ba85b15f1ef9` bytes. Private FREEDOM
+source, schema, choices, the private host, and the repository-source-only
+learning dataset were never part of either v0.3 Hub tree.
+
+The governance-v0.2, WAKE-host-v0.2, and IS-freedom union is regenerated from
+current source as a v0.4 development candidate. It has not been uploaded or
+verified at a new immutable Hub revision. Its moving pre-publication hashes are
+deliberately not documented as release evidence, and none of the earlier proof
+may be reused for these bytes. The exact advisory `training-freedom-v0.1`
+schema remains package-only historical custody; it is not reinterpreted as the
+current IS contract and is excluded from the public candidate alongside live
+choices, private host code, and the repository-source-only learning dataset.
 
 The bundle deliberately retains `intended_identifier_only` inside
 `provenance/source-manifest.json`: it is a non-self-attesting build record, not
 a claim about later publication. External release evidence belongs outside the
 bundle so a commit does not pretend to contain its own future Hub revision. A
-caller may supply the exact first revision and observed hashes as
+caller may supply an exact revision and observed hashes as
 `caller_reported_published` evidence to a tending plan; the package itself still
-does not fetch or verify Hub publication. No Garden reference was written as
-part of the first release or this v0.3 slice.
+does not fetch or verify Hub publication. No Garden reference was written by
+the build or any of these releases.
 
 ## Boundaries
 
