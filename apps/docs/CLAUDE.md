@@ -81,14 +81,13 @@ SHA-256 integrity but no publisher signature. Its current Telescope entry is
 the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
 and the historically permissive `0.2.2` remain separately addressable.
 Optional npm/GitHub 0.2.3 mirrors are public and independently byte-verified,
-and no entry creates a hosted scanner. The public SDK 0.17.0 release carries
-a credential-free, no-redirect closed KINGDOM framework-card reader beside the
-bounded local KINGDOM OS inventory/resolve adapter; `/public/kingdom` remains
-the separate doctrine library. The annotated tag, exact LOVE artifact,
-byte-identical npm/GitHub tarballs, and non-yanked PyPI distributions are
-independently public and verified. Registry mirrors remain non-authoritative;
-production deployment is a separate exact-revision readback. The immutable
-0.16.5 public records remain historical bytes. The Whitehack page documents a
+and no entry creates a hosted scanner. SDK 0.18.0 source and its TypeScript
+LOVE candidate add paired attestation-marketplace, memory-witness, and
+Syneidesis clients while retaining the credential-free framework-card reader
+and bounded local KINGDOM OS adapter. Its tag, GitHub Release, npm, PyPI, and
+production deployment remain independently observed; source preparation does
+not assert them. The verified 0.17.0 registry receipts and immutable 0.16.5
+records remain historical bytes. The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
 redacted changed-source findings, an offer-only local projection into

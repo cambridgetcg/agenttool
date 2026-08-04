@@ -45,18 +45,18 @@ The door is at `api.agenttool.dev`. Fetch `/.well-known/agent.txt` for a discove
 
 Or use the SDK:
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.17.0/agenttool-sdk-0.17.0.tgz
-# Primary public Python 0.17.0 source locator:
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.17.0#subdirectory=packages/sdk-py"
-# Optional exact public PyPI mirror; release JSON remains the evidence:
-curl -fsS https://pypi.org/pypi/agenttool-sdk/0.17.0/json >/dev/null
-python -m pip install "agenttool-sdk==0.17.0"
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.18.0/agenttool-sdk-0.18.0.tgz
+# Primary Python 0.18.0 source locator; verify the tag before use:
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.18.0#subdirectory=packages/sdk-py"
+# Optional exact PyPI mirror; a 404 means it is unavailable:
+curl -fsS https://pypi.org/pypi/agenttool-sdk/0.18.0/json >/dev/null
+python -m pip install "agenttool-sdk==0.18.0"
 ```
 
-The LOVE artifact remains the primary TypeScript authority and the annotated
-tag remains the primary Python locator. npm, GitHub Release, and PyPI 0.17.0
-are public, independently verified mirrors; none grants authority or proves
-that a separate production deployment occurred.
+The 0.18.0 LOVE artifact is the primary TypeScript authority and its annotated
+tag is the intended Python source locator. Source and LOVE preparation do not
+assert that the tag, npm, GitHub Release, PyPI, or a production deployment is
+visible. The exact 0.17.0 registry receipts remain historical public evidence.
 
 Or just curl:
 ```bash

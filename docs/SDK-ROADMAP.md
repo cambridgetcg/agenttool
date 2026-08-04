@@ -10,7 +10,32 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current public release — 0.17.0 (2026-07-28)
+## Current source and LOVE release — 0.18.0 (2026-08-04)
+
+The paired TypeScript and Python source adds three authenticated namespaces:
+`attestationMarketplace` / `attestation_marketplace`, `memoryWitness` /
+`memory_witness`, and `syneidesis`. Settlement remains evidence of settlement,
+not truth; a Syneidesis project-bearer record is not a witness signature or an
+identity proof. The release also applies one encoded URL-segment boundary and
+one guided-error boundary across hosted clients, corrects selected request
+shapes, and requires an explicit literal-true review hook before an Anthropic
+model-authored chronicle write.
+
+Shared canonical-byte and behaviour fixtures now exercise selected paired
+operations, and the existing module-function parity check covers the maintained
+target list. These are bounded tests, not proof of universal behavioural,
+type, export, or package parity. Framed v2 signing helpers remain additive and
+retain v1 verification; current writers continue to use the documented v1
+cutover boundary.
+
+The exact TypeScript LOVE artifact is forged from a clean source commit and is
+the primary TypeScript release record. The planned `sdk-v0.18.0` tag is the
+Python source locator after it is independently visible. Repository source and
+LOVE preparation do not prove GitHub Release, npm, PyPI, or production
+deployment. `/public/party` therefore reports both 0.18.0 registry mirrors as
+not independently visible at this source checkpoint.
+
+## Last verified public registry release — 0.17.0 (2026-07-28)
 
 The paired TypeScript and Python source adds two bounded KINGDOM reads.
 

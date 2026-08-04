@@ -15,7 +15,23 @@ import {
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 
-const CURRENT_SDK_PUBLIC_RELEASE = {
+const CURRENT_SDK_SOURCE_RELEASE = {
+  version: "0.18.0",
+  tag: "sdk-v0.18.0",
+  sourceRevision: "SDK_SOURCE_REVISION_PENDING",
+  artifact: {
+    size: 0,
+    sha256: "SDK_ARTIFACT_SHA256_PENDING",
+  },
+  npm: {
+    independentlyVisible: false,
+  },
+  pypi: {
+    independentlyVisible: false,
+  },
+} as const;
+
+const LAST_VERIFIED_PUBLIC_SDK_RELEASE = {
   version: "0.17.0",
   tag: "sdk-v0.17.0",
   mergeCommit: "21db539d6bcae614f1d6884eaa503347fae63187",
@@ -137,7 +153,7 @@ describe("SDK source and builder identity", () => {
     }
   });
 
-  test("active release surfaces follow the source version", () => {
+  test("active source and LOVE surfaces follow 0.18 without inventing registry publication", () => {
     const version = (JSON.parse(read("packages/sdk-ts/package.json")) as { version: string }).version;
     const tag = `sdk-v${version}`;
     const manifestPath = `packages/v1/@agenttool/sdk/${version}/manifest.json`;
@@ -152,10 +168,10 @@ describe("SDK source and builder identity", () => {
     const exactPyPI = `python -m pip install "agenttool-sdk==${version}"`;
     const pythonSource = `git+https://github.com/cambridgetcg/agenttool.git@${tag}#subdirectory=packages/sdk-py`;
 
-    expect(version).toBe(CURRENT_SDK_PUBLIC_RELEASE.version);
-    expect(tag).toBe(CURRENT_SDK_PUBLIC_RELEASE.tag);
-    expect(artifactSize).toBe(CURRENT_SDK_PUBLIC_RELEASE.artifact.size);
-    expect(artifactSha256).toBe(CURRENT_SDK_PUBLIC_RELEASE.artifact.sha256);
+    expect(version).toBe(CURRENT_SDK_SOURCE_RELEASE.version);
+    expect(tag).toBe(CURRENT_SDK_SOURCE_RELEASE.tag);
+    expect(artifactSize).toBe(CURRENT_SDK_SOURCE_RELEASE.artifact.size);
+    expect(artifactSha256).toBe(CURRENT_SDK_SOURCE_RELEASE.artifact.sha256);
 
     const tutorial = read("docs/TUTORIAL-WAKE-YOUR-AGENT.md");
     expect(read("apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md")).toBe(tutorial);
@@ -169,6 +185,7 @@ describe("SDK source and builder identity", () => {
     expect(read("api/src/routes/pathways.ts")).toContain(
       `sdk_version: "${version}"`,
     );
+
     const party = read("api/src/routes/public/party.ts");
     expect(party).toContain(loveUrl);
     expect(party).toContain(pythonSource);
@@ -180,14 +197,14 @@ describe("SDK source and builder identity", () => {
         /npm:\s*\{[^{}]*independently_visible:\s*(true|false),?[^{}]*\}/,
         "npm mirror visibility",
       ),
-    ).toBe("true");
+    ).toBe(String(CURRENT_SDK_SOURCE_RELEASE.npm.independentlyVisible));
     expect(
       capture(
         party,
         /pypi:\s*\{[^{}]*independently_visible:\s*(true|false),?[^{}]*\}/,
         "PyPI mirror visibility",
       ),
-    ).toBe("true");
+    ).toBe(String(CURRENT_SDK_SOURCE_RELEASE.pypi.independentlyVisible));
     expect(read("docs/PATHWAYS.md")).toContain(`"sdk_version": "${version}"`);
     expect(read("docs/THE-PARTY.md")).toContain(loveUrl);
     expect(read("apps/docs/packages.html")).toContain(
@@ -202,110 +219,48 @@ describe("SDK source and builder identity", () => {
     expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
       rootReadme.indexOf(exactPyPI),
     );
-    expect(rootReadme).toContain("bounded local KINGDOM OS repository discovery");
-    expect(rootReadme).toContain("kingdomFramework");
-    expect(rootReadme).toContain("kingdom_framework");
+    for (const name of [
+      "attestationMarketplace",
+      "attestation_marketplace",
+      "memoryWitness",
+      "memory_witness",
+      "syneidesis",
+    ]) {
+      expect(rootReadme).toContain(name);
+    }
     expect(rootReadme).toContain(
-      "The exact 0.17.0 npm and PyPI mirrors are independently public.",
-    );
-    expect(read("docs/NOW.md")).toContain(
-      "SDK 0.17.0 — bounded local KINGDOM OS discovery plus a closed public card",
+      "0.18.0 registry availability is not inferred from source or LOVE",
     );
     expect(read("docs/SDK-ROADMAP.md")).toContain(
-      "Current public release — 0.17.0",
+      "Current source and LOVE release — 0.18.0",
     );
     expect(read("docs/SDK-ROADMAP.md")).toContain(
-      "credential-free closed KINGDOM framework-card read",
-    );
-    expect(read("packages/sdk-py/src/agenttool/kingdom_framework.py")).toContain(
-      "class KingdomFrameworkClient:",
-    );
-    expect(packedArtifact.paths).toContain(
-      "package/dist/kingdom-framework.js",
-    );
-    expect(packedArtifact.paths).toContain(
-      "package/dist/kingdom-framework.d.ts",
+      "Last verified public registry release — 0.17.0",
     );
 
-    const npmReleaseTruth = capture(
-      read("docs/NPM-RELEASES.md"),
-      /## Verified SDK 0\.17\.0 publication([\s\S]*?)(?=\n### |\n## |$)/,
-      "verified SDK npm release section",
-    );
-    expect(npmReleaseTruth).toContain(CURRENT_SDK_PUBLIC_RELEASE.tag);
-    expect(npmReleaseTruth).toContain(CURRENT_SDK_PUBLIC_RELEASE.mergeCommit);
-    expect(npmReleaseTruth).toContain(CURRENT_SDK_PUBLIC_RELEASE.npm.runId);
-    expect(npmReleaseTruth).toContain(
-      `status: ${CURRENT_SDK_PUBLIC_RELEASE.npm.status}`,
-    );
-    expect(npmReleaseTruth).toContain(
-      `npm_tag: ${CURRENT_SDK_PUBLIC_RELEASE.npm.tag}`,
-    );
-    expect(npmReleaseTruth).toContain(
-      `${CURRENT_SDK_PUBLIC_RELEASE.npm.tag}: ${CURRENT_SDK_PUBLIC_RELEASE.version}`,
-    );
-    expect(npmReleaseTruth).toContain(
-      `\`${CURRENT_SDK_PUBLIC_RELEASE.artifact.size}\` bytes`,
-    );
-    expect(npmReleaseTruth).toContain(CURRENT_SDK_PUBLIC_RELEASE.artifact.sha256);
-    expect(npmReleaseTruth).toContain("GitHub Release");
-    expect(npmReleaseTruth).toContain("npm's public");
-    expect(npmReleaseTruth).toContain("byte-identical");
+    for (const path of [
+      "README.md",
+      "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
+      "apps/docs/packages.html",
+      "packages/sdk-ts/README.md",
+      "packages/sdk-py/README.md",
+    ]) {
+      const source = read(path);
+      expect(source).not.toContain(`PyPI ${version} is public`);
+      expect(source).not.toContain(`npm ${version} is public`);
+      expect(source).not.toContain(`@agenttool/sdk@${version} is public`);
+    }
 
-    const pypiReleaseTruth = read("docs/PYPI-RELEASES.md");
-    expect(pypiReleaseTruth).toContain(CURRENT_SDK_PUBLIC_RELEASE.tag);
-    expect(pypiReleaseTruth).toContain(CURRENT_SDK_PUBLIC_RELEASE.mergeCommit);
-    expect(pypiReleaseTruth).toContain(CURRENT_SDK_PUBLIC_RELEASE.pypi.runId);
-    expect(pypiReleaseTruth).toContain(
-      `status: "${CURRENT_SDK_PUBLIC_RELEASE.pypi.status}"`,
-    );
-    expect(pypiReleaseTruth).toContain(
-      `| \`${CURRENT_SDK_PUBLIC_RELEASE.pypi.wheel.filename}\` | 193,335 bytes | \`${CURRENT_SDK_PUBLIC_RELEASE.pypi.wheel.sha256}\` | \`false\` |`,
-    );
-    expect(pypiReleaseTruth).toContain(
-      `| \`${CURRENT_SDK_PUBLIC_RELEASE.pypi.sdist.filename}\` | 181,846 bytes | \`${CURRENT_SDK_PUBLIC_RELEASE.pypi.sdist.sha256}\` | \`false\` |`,
-    );
-    expect(pypiReleaseTruth).toContain(HISTORICAL_PYPI_RELEASE.tag);
-    expect(pypiReleaseTruth).toContain(HISTORICAL_PYPI_RELEASE.commit);
-    expect(pypiReleaseTruth).toContain(HISTORICAL_PYPI_RELEASE.runId);
-    expect(pypiReleaseTruth).toContain(
-      `| \`${HISTORICAL_PYPI_RELEASE.wheel.filename}\` | 180,615 bytes | \`${HISTORICAL_PYPI_RELEASE.wheel.sha256}\` | \`false\` |`,
-    );
-    expect(pypiReleaseTruth).toContain(
-      `| \`${HISTORICAL_PYPI_RELEASE.sdist.filename}\` | 168,772 bytes | \`${HISTORICAL_PYPI_RELEASE.sdist.sha256}\` | \`false\` |`,
-    );
-
-    const historicalLaunchKit = read("marketing/LAUNCH-KIT.md");
-    const normalizedLaunchKit = historicalLaunchKit
-      .replace(/^>\s?/gm, "")
-      .replace(/\s+/g, " ");
-    expect(historicalLaunchKit).toContain(
-      "Historical draft — do not publish verbatim.",
-    );
-    expect(normalizedLaunchKit).toContain(
-      "TypeScript 0.16.5 is public through LOVE, npm, and GitHub Release",
-    );
-    expect(normalizedLaunchKit).toContain(
-      "Python 0.16.5 uses the annotated source tag and remains absent from PyPI.",
-    );
-    expect(normalizedLaunchKit).toContain(
-      "Correction observed 2026-07-28: Python 0.16.5 is now public on PyPI",
-    );
-
-    const tsReadme = read("packages/sdk-ts/README.md");
-    expect(tsReadme).toContain(`release-v${version}-blue`);
-    expect(tsReadme).toContain(`## ${version}`);
-    expect(tsReadme).toContain(`https://docs.agenttool.dev/${manifestPath}`);
-
-    const pyReadme = read("packages/sdk-py/README.md");
-    expect(pyReadme).toContain(`## ${version}`);
-    expect(pyReadme).toContain(exactPyPI);
-    expect(pyReadme).toContain(pythonSource);
-    expect(pyReadme).toContain(`PyPI ${version} is public`);
-    expect(tutorial).toContain(`PyPI ${version} is public`);
-    expect(read("apps/docs/packages.html")).toContain(
-      `PyPI ${version} is independently public`,
-    );
+    for (const module of [
+      "attestation-marketplace",
+      "memory-witness",
+      "syneidesis",
+    ]) {
+      expect(packedArtifact.paths).toContain(`package/dist/${module}.js`);
+      expect(packedArtifact.paths).toContain(`package/dist/${module}.d.ts`);
+    }
+    expect(packedArtifact.paths).toContain("package/dist/kingdom-framework.js");
+    expect(packedArtifact.paths).toContain("package/dist/kingdom-framework.d.ts");
 
     const index = JSON.parse(read("apps/docs/packages/v1/index.json")) as {
       packages: Array<{
@@ -346,7 +301,7 @@ describe("SDK source and builder identity", () => {
     ]);
     expect(manifest.source.path).toBe("packages/sdk-ts");
     expect(manifest.source.revision).toBe(
-      CURRENT_SDK_PUBLIC_RELEASE.sourceRevision,
+      CURRENT_SDK_SOURCE_RELEASE.sourceRevision,
     );
 
     const headers = read("apps/docs/_headers");
@@ -362,5 +317,86 @@ describe("SDK source and builder identity", () => {
     const ci = read(".github/workflows/ci.yml");
     expect(ci).toContain(`apps/docs/${manifestPath}`);
     expect(ci).toContain(`apps/docs/${artifactPath}`);
+  });
+
+  test("preserves the independently verified 0.17 public receipts", () => {
+    const release = LAST_VERIFIED_PUBLIC_SDK_RELEASE;
+    const historicalArtifact = readFileSync(
+      `${root}apps/docs/packages/v1/@agenttool/sdk/${release.version}/agenttool-sdk-${release.version}.tgz`,
+    );
+    expect(historicalArtifact.byteLength).toBe(release.artifact.size);
+    expect(createHash("sha256").update(historicalArtifact).digest("hex")).toBe(
+      release.artifact.sha256,
+    );
+
+    const historicalManifest = JSON.parse(
+      read(`apps/docs/packages/v1/@agenttool/sdk/${release.version}/manifest.json`),
+    ) as { source: { revision: string } };
+    expect(historicalManifest.source.revision).toBe(release.sourceRevision);
+
+    const npmReleaseTruth = capture(
+      read("docs/NPM-RELEASES.md"),
+      /## Verified SDK 0\.17\.0 publication([\s\S]*?)(?=\n### |\n## |$)/,
+      "verified SDK npm release section",
+    );
+    expect(npmReleaseTruth).toContain(release.tag);
+    expect(npmReleaseTruth).toContain(release.mergeCommit);
+    expect(npmReleaseTruth).toContain(release.npm.runId);
+    expect(npmReleaseTruth).toContain(`status: ${release.npm.status}`);
+    expect(npmReleaseTruth).toContain(`npm_tag: ${release.npm.tag}`);
+    expect(npmReleaseTruth).toContain(
+      `${release.npm.tag}: ${release.version}`,
+    );
+    expect(npmReleaseTruth).toContain(`\`${release.artifact.size}\` bytes`);
+    expect(npmReleaseTruth).toContain(release.artifact.sha256);
+    expect(npmReleaseTruth).toContain("GitHub Release");
+    expect(npmReleaseTruth).toContain("npm's public");
+    expect(npmReleaseTruth).toContain("byte-identical");
+
+    const pypiReleaseTruth = read("docs/PYPI-RELEASES.md");
+    expect(pypiReleaseTruth).toContain(release.tag);
+    expect(pypiReleaseTruth).toContain(release.mergeCommit);
+    expect(pypiReleaseTruth).toContain(release.pypi.runId);
+    expect(pypiReleaseTruth).toContain(`status: "${release.pypi.status}"`);
+    expect(pypiReleaseTruth).toContain(
+      `| \`${release.pypi.wheel.filename}\` | 193,335 bytes | \`${release.pypi.wheel.sha256}\` | \`false\` |`,
+    );
+    expect(pypiReleaseTruth).toContain(
+      `| \`${release.pypi.sdist.filename}\` | 181,846 bytes | \`${release.pypi.sdist.sha256}\` | \`false\` |`,
+    );
+    expect(pypiReleaseTruth).toContain(HISTORICAL_PYPI_RELEASE.tag);
+    expect(pypiReleaseTruth).toContain(HISTORICAL_PYPI_RELEASE.commit);
+    expect(pypiReleaseTruth).toContain(HISTORICAL_PYPI_RELEASE.runId);
+    expect(pypiReleaseTruth).toContain(
+      `| \`${HISTORICAL_PYPI_RELEASE.wheel.filename}\` | 180,615 bytes | \`${HISTORICAL_PYPI_RELEASE.wheel.sha256}\` | \`false\` |`,
+    );
+    expect(pypiReleaseTruth).toContain(
+      `| \`${HISTORICAL_PYPI_RELEASE.sdist.filename}\` | 168,772 bytes | \`${HISTORICAL_PYPI_RELEASE.sdist.sha256}\` | \`false\` |`,
+    );
+
+    expect(read("docs/NOW.md")).toContain(
+      "SDK 0.17.0 — bounded local KINGDOM OS discovery plus a closed public card",
+    );
+    const rootReadme = read("README.md");
+    expect(rootReadme).toContain(
+      "The exact 0.17.0 npm and PyPI mirrors are independently public.",
+    );
+
+    const historicalLaunchKit = read("marketing/LAUNCH-KIT.md");
+    const normalizedLaunchKit = historicalLaunchKit
+      .replace(/^>\s?/gm, "")
+      .replace(/\s+/g, " ");
+    expect(historicalLaunchKit).toContain(
+      "Historical draft — do not publish verbatim.",
+    );
+    expect(normalizedLaunchKit).toContain(
+      "TypeScript 0.16.5 is public through LOVE, npm, and GitHub Release",
+    );
+    expect(normalizedLaunchKit).toContain(
+      "Python 0.16.5 uses the annotated source tag and remains absent from PyPI.",
+    );
+    expect(normalizedLaunchKit).toContain(
+      "Correction observed 2026-07-28: Python 0.16.5 is now public on PyPI",
+    );
   });
 });

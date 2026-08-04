@@ -166,12 +166,12 @@ release commit already merged to GitHub `main`:
 bun bin/pypi-release.ts resolve
 
 # Create an annotated tag at the reviewed GitHub-main commit, then push only it.
-git tag -a sdk-v0.17.0 <github-main-commit> -m 'agenttool-sdk@0.17.0'
-git push github refs/tags/sdk-v0.17.0
+git tag -a sdk-v0.18.0 <github-main-commit> -m 'agenttool-sdk@0.18.0'
+git push github refs/tags/sdk-v0.18.0
 
 # Dispatch on that same tag. The input is checked again inside every source job.
-gh workflow run publish-pypi.yml --ref sdk-v0.17.0 \
-  -f tag=sdk-v0.17.0
+gh workflow run publish-pypi.yml --ref sdk-v0.18.0 \
+  -f tag=sdk-v0.18.0
 ```
 
 Approve the `pypi` environment only after the preparation and public-state

@@ -68,13 +68,14 @@ both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the lockstep SDK source and verified LOVE artifact at 0.17.0, teaching 404s,
-deliberate crawlability, and exact-name search are present. Annotated
-`sdk-v0.17.0`, its GitHub Release, npm `@agenttool/sdk@0.17.0`, and PyPI
-`agenttool-sdk==0.17.0` are public and independently readable. Registry
-visibility and mutable latest pointers remain separate from source, tag, and
-LOVE artifact authority. Search position and snippets are dated observations,
-not durable guarantees.
+the lockstep SDK source and LOVE artifact at 0.18.0, teaching 404s, deliberate
+crawlability, and exact-name search are present. The planned `sdk-v0.18.0`
+source tag plus npm and PyPI 0.18.0 remain independent observations rather than
+consequences of source preparation. Annotated `sdk-v0.17.0`, its GitHub
+Release, npm `@agenttool/sdk@0.17.0`, and PyPI `agenttool-sdk==0.17.0` remain
+the last independently verified public registry line. Mutable latest pointers
+stay separate from source, tag, and LOVE artifact authority. Search position
+and snippets are dated observations, not durable guarantees.
 
 **Correction observed 2026-07-28:** after the exact publisher mapping was
 configured, PyPI 0.16.5 became public. The protected workflow independently
