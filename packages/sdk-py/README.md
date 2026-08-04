@@ -23,8 +23,8 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-The public annotated `sdk-v0.17.0` source tag is the primary Python 0.17.0
-release locator:
+For the immutable Python 0.17.0 release, the public annotated
+`sdk-v0.17.0` source tag remains its primary source locator:
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.17.0#subdirectory=packages/sdk-py"
@@ -39,12 +39,18 @@ and 181,846-byte sdist
 (`sha256:7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c`).
 The registry remains a non-authoritative convenience.
 
-## Source candidate — 0.18.0
+## Repository source line — 0.18.0
 
-Repository source is prepared as the paired 0.18.0 candidate. The public
-0.17.0 instructions above remain the current install path; this source change
-does not assert an `sdk-v0.18.0` tag, LOVE artifact, GitHub Release, npm or PyPI
-publication, or production deployment.
+Repository source declares the paired 0.18.0 line. Source version and
+distribution state are separate facts. A checked-in TypeScript LOVE 0.18.0
+manifest, when present, identifies only the TypeScript tarball bytes: before
+the annotated tag it is a candidate, and after tagging it remains that
+artifact's byte authority. It is not a Python package artifact. Neither it nor
+the Python source version alone establishes an `sdk-v0.18.0` tag, GitHub
+Release, npm or PyPI publication, or production deployment; observe each
+through its own receipt or public readback. The verified 0.17.0 instructions
+and receipts above remain historical facts for that immutable prior release,
+not evidence of 0.18.0 availability.
 
 - New paired `at.attestation_marketplace`, `at.memory_witness`, and
   `at.syneidesis` clients expose review-and-issuance, paid constitutive-memory
