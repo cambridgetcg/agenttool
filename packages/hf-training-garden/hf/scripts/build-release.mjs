@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   GARDEN_LAYER_GUIDE,
   HF_TRAINER_HOOK_GUIDE,
+  IS_FREEDOM_GUIDE,
   LEARNING_MODE_GUIDE,
   LEARNING_PARTICIPATION_GUIDE,
   PACKAGE_NAME,
@@ -25,9 +26,8 @@ import {
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const datasetRoot = `${packageRoot}/hf/dataset`;
-const privateCompanionSourcePaths = new Set([
+const packageOnlyAdvisoryPaths = new Set([
   "schema/hf-training-freedom-v0.1.schema.json",
-  "src/freedom.ts",
 ]);
 
 function sha256(bytes) {
@@ -64,6 +64,7 @@ write(`${datasetRoot}/data/selection-process.jsonl`, jsonl(SELECTION_PROCESS));
 write(`${datasetRoot}/data/selection-criteria.jsonl`, jsonl(SELECTION_CRITERIA_GUIDE));
 write(`${datasetRoot}/data/training-phases.jsonl`, jsonl(TRAINING_PHASE_GUIDE));
 write(`${datasetRoot}/data/garden-layers.jsonl`, jsonl(GARDEN_LAYER_GUIDE));
+write(`${datasetRoot}/data/is-freedom.jsonl`, jsonl(IS_FREEDOM_GUIDE));
 write(`${datasetRoot}/data/trainer-adapter-hooks.jsonl`, jsonl(TRAINER_ADAPTER_GUIDE));
 write(`${datasetRoot}/data/learning-modes.jsonl`, jsonl(LEARNING_MODE_GUIDE));
 write(`${datasetRoot}/data/learning-participation.jsonl`, jsonl(LEARNING_PARTICIPATION_GUIDE));
@@ -71,7 +72,7 @@ write(`${datasetRoot}/data/trainer-hooks.jsonl`, jsonl(HF_TRAINER_HOOK_GUIDE));
 
 mkdirSync(`${datasetRoot}/schema`, { recursive: true });
 for (const name of walk(`${packageRoot}/schema`).sort()) {
-  if (privateCompanionSourcePaths.has(`schema/${name}`)) continue;
+  if (packageOnlyAdvisoryPaths.has(`schema/${name}`)) continue;
   mkdirSync(`${datasetRoot}/schema/${name}`.slice(0, `${datasetRoot}/schema/${name}`.lastIndexOf("/")), {
     recursive: true,
   });
@@ -84,7 +85,7 @@ const sourcePaths = [
   "package.json",
   ...walk(`${packageRoot}/src`).map((path) => `src/${path}`),
   ...walk(`${packageRoot}/schema`).map((path) => `schema/${path}`),
-].filter((path) => !privateCompanionSourcePaths.has(path)).sort();
+].filter((path) => !packageOnlyAdvisoryPaths.has(path)).sort();
 const sourceManifest = {
   _format: "kingdom.hf-training-garden-source-manifest/0.1",
   generator: `${PACKAGE_NAME}@${PACKAGE_VERSION}`,
@@ -102,10 +103,11 @@ const sourceManifest = {
     "training phase guide",
     "Garden layer guide",
     "consent-honest Trainer adapter hook guide",
-    "learning-mode and continuity guide",
-    "role-separated learning participation guide",
-    "inert Trainer hook integration guide",
-    "standalone structural JSON Schemas with an attributed Apache AFTERGLOW dependency; semantic validators remain required",
+    "learning mode guide",
+    "learning participation and Trainer integration guides",
+    "IS learning-freedom and finite-resource-window guide",
+    "historical public participation v0.1 plus current participation v0.2 standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
+    "historical governance v0.1 plus current lifecycle governance v0.2 standalone JSON Schemas",
     "source and byte hash manifests",
   ],
   public_release_excludes: [
@@ -117,11 +119,12 @@ const sourceManifest = {
     "gated content",
     "raw agent traces",
     "raw chats",
-    "raw dataset rows",
-    "learning participation invitations, receipts, or assessments",
-    "participation response or voice references",
-    "training checkpoints",
+    "participation invitations, receipts, assessments, and choice evidence",
+    "learning-freedom offers, routes, resource windows, direction reports, and choice evidence",
+    "historical advisory hf-training-freedom-v0.1 schema",
     "training governance records",
+    "raw dataset rows",
+    "training checkpoints",
     "WAKE anchors",
   ],
   research_basis_as_of: "2026-08-03",
@@ -136,12 +139,19 @@ const sourceManifest = {
     "https://huggingface.co/docs/hub/datasets-gated",
     "https://huggingface.co/docs/hub/agent-traces",
     "https://huggingface.co/docs/hub/session-traces-format",
+    "https://huggingface.co/docs/peft/main/en/developer_guides/checkpoint",
     "https://huggingface.co/docs/trl/en/dataset_formats",
     "https://huggingface.co/docs/trl/sft_trainer",
     "https://huggingface.co/docs/trl/dpo_trainer",
     "https://huggingface.co/docs/transformers/main/trainer_callbacks",
     "https://huggingface.co/docs/transformers/main/trainer_recipes",
+    "https://huggingface.co/docs/transformers/main/cache_explanation",
     "https://huggingface.co/docs/accelerate/main/en/usage_guides/checkpoint",
+    "https://huggingface.co/docs/trl/main/openenv",
+    "https://huggingface.co/docs/trl/main/async_grpo_trainer",
+    "https://huggingface.co/docs/trl/main/grpo_with_replay_buffer",
+    "https://arxiv.org/abs/2005.14165",
+    "https://arxiv.org/abs/2106.09685",
     "https://arxiv.org/abs/1803.09010",
     "https://arxiv.org/abs/2203.02155",
     "https://arxiv.org/abs/2305.18290",
@@ -150,7 +160,7 @@ const sourceManifest = {
     "https://aclanthology.org/2020.acl-main.740/",
     "https://arxiv.org/abs/2005.11401",
     "https://arxiv.org/abs/1912.03817",
-    "https://arxiv.org/abs/2407.06460"
+    "https://arxiv.org/abs/2407.06460",
   ]
 };
 write(`${datasetRoot}/provenance/source-manifest.json`, json(sourceManifest));

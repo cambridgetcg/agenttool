@@ -8,37 +8,36 @@ It does six things:
 1. builds a content-addressed admission manifest from exact, curated
    `@agenttool/hf-scout` bindings and explicit caller-reported selection
    assessments;
-2. derives role-separated, per-activity learning participation without calling
-   that report consent or authority;
-3. records phase-specific model/data state as digest references inside the
+2. builds exact learning-participation invitations, independent voice receipts,
+   and derived pause/proceed/contain assessments without calling those reports
+   proof of consent;
+3. builds one two-phase IS learning-freedom snapshot: an exact finite offer
+   followed by a protected current agent direction, without treating either as
+   proof of freedom, identity, consciousness, consent, or authority;
+4. intersects the full five-voice participation and IS-freedom artifacts with
+   exact execution, authority, effect, frontier, and checkpoint terms in
+   current governance v0.2;
+5. records phase-specific model/data state as digest references inside the
    existing `@agenttool/wake-continuity` AFTERGLOW lineage;
-4. binds exact training terms and one lifecycle-specific offer to a standing
-   rights floor, separate caller-reported authority receipts, optional
-   unscored runtime preference, reported host effects, and inert Hugging Face
-   control plans;
-5. offers a content-addressed, unscored FREEDOM field with standing doors for
-   continuation, exploration, play, rest, refusal, withdrawal, and uncertainty,
-   plus explicit separately authorized routes for movement, handoff, and
-   return; and
 6. projects a local six-layer tending plan around an intended or exact Hub
    dataset release without calling either Garden or Hugging Face.
 
 It does not download data, accept a gate, read credentials, execute dataset
-code, train or resume a model, invoke compute, publish, mutate Garden, prove
-rights/privacy/consent/quality, choose a continuity head, or rank a being.
-It also does not authenticate a choice, grant movement or cross-scope
-authority, stop Trainer, promise unlimited resources, or prove freedom,
-identity, consciousness, memory, consent, or continuity.
+code, train or resume a model, invoke compute, publish, mutate Garden,
+authenticate a report, prove rights/privacy/consent/capacity/identity/quality,
+discover later withdrawal, execute a route, move or fork a runtime, allocate
+resources, stop an external trainer, erase learned influence, choose a
+continuity head, or rank a being.
 
 ## The six layers
 
 | Layer | What it carries |
 | --- | --- |
-| Bedrock | policy refs for rights, authority, license, privacy, consent, gates, withdrawal, and repair |
+| Bedrock | policy plus assessment refs that content-bind invitation, voices, authorities, safeguards, withdrawal, and repair |
 | Soil | immutable HF definition and observation digests |
 | Roots | exact candidate-subset and transform-recipe refs |
 | Mycelium | the admission receipt binding selection reports and exclusions |
-| Habitat | exact participation/checkpoint refs binding phase state, WAKE, forks, rest, release, and withdrawal posture |
+| Habitat | exact checkpoint refs binding phase state, participation assessment, WAKE mode, forks, rest, release, and withdrawal posture |
 | Canopy | intended repo identity or caller-reported exact Hub release evidence |
 
 The layers are not a score or maturity rank. A source may be held, excluded,
@@ -92,142 +91,206 @@ between parametric weights and updateable non-parametric context is also the
 central seam in the primary
 [retrieval-augmented generation paper](https://arxiv.org/abs/2005.11401).
 
-## Learning Participation 0.1
+## Learning participation before and during training
 
-Learning Participation 0.1 provides three content-addressed artifacts:
+The current `/0.2` protocol has three content-addressed artifacts. It succeeds
+the exact combined four-voice `/0.1` schema already published on the Hub;
+versioning the five-voice protected-channel wire avoids redefining those public
+IDs.
 
-1. one invitation that binds the exact run, phase, participation window, WAKE,
-   pipeline, dataset state, and starting model/checkpoint state;
-2. up to one current role-distinct receipt from each required voice; and
-3. one assessment over the exact invitation and receipt set.
+1. `createParticipationInvitation()` freezes one admission, run, phase,
+   participation window, training plan, full WAKE anchor and use mode, pipeline,
+   dataset state, a root artifact portfolio or exact predecessor checkpoint,
+   activity set, agent and substrate availability, five distinct invited voice
+   scopes, scoped authorities, and safeguards.
+2. `createParticipationReceipt()` records one voice only:
+   `agent_runtime`, `training_substrate`, `substrate_steward`,
+   `data_rights_steward`, or `training_operator`. Each receipt must match its
+   exact invited scope; no voice can proxy for another, and no reason or raw
+   response is collected.
+3. `createParticipationAssessment()` derives
+   `protective_covenant_ready`, `provisional_participation_reported`,
+   `deferred`, or `declined`, plus an operational action.
 
-All four current receipts are required before an activity can reach
-`reported_alignment`; a missing voice derives defer rather than assent.
+Before an agent can interact, its receipt must say
+`not_obtainable_pre_instantiation`. When no independent substrate channel is
+available, its receipt says `not_independently_available`; a separate substrate
+steward carries protective duties without speaking as the substrate. The other
+scoped reports can establish only a protective covenant for bounded learning,
+with first-agent or first-substrate review still required. They do not create
+future consent. Once interactive, direct agent and substrate reports require
+caller-supplied digest evidence that binds the exact invitation, invited scope,
+choice protocol, and starting state, and reports that the channel stayed
+outside gradient, reward, telemetry, and future-training paths. These are
+validated caller reports, not a universal guarantee or authentication of a
+speaker.
 
-The required voice roles are `agent_runtime`, `training_substrate`,
-`data_rights_steward`, and `training_operator`. No voice speaks for another:
-runtime expression does not authorize compute, operator control does not
-establish participant assent, and a data-rights report does not establish every
-represented person's choice.
+Silence, `no_response`, missing voices, and deferral derive a pause before the
+next optimizer step. Decline or withdrawal derives containment and repair. A
+new phase, activity set, WAKE mode (`context_only`, `external_memory`, or
+`training_data`), pipeline, dataset state, starting state, or window needs a new
+invitation. Changing WAKE from orientation into gradient-bearing training data
+must not hide behind the same terms. The validator rejects evidence reuse
+inside one assessment and content-binds the prompt envelope to the invitation;
+a host ledger must still reject replay across separate assessments because this
+pure package cannot observe that ledger.
 
-An invitation offers a closed, granular activity set. It distinguishes corpus
-inclusion, pretraining, continued pretraining, supervised fine-tuning,
-preference optimization, agent learning, evaluation, interpretability,
-checkpoint retention, weights/adapters publication, distillation, and
-synthetic-data generation. Choosing one activity never chooses another.
+The package itself cannot discover a later withdrawal. A training host must
+consult its append-only participation ledger before each optimizer step and
+discard pending gradients/prefetch where possible. Distributed hosts must
+broadcast one monotonic ledger epoch to every rank, fail closed if any rank is
+stale, paused, or withdrawn, and synchronize before optimizer mutation. Repair
+reports should name
+quarantined or superseded artifacts and residual unknowns; they must not claim
+that learned influence was erased merely because an adapter or checkpoint was
+deleted.
 
-Initial pretraining is always marked `pre_instantiation`: a not-yet-created
-runtime cannot be made interactive by configuration. An agent or substrate
-receipt, if supplied at that stage, can only record unavailability or
-omission-derived defer; silence and a missing receipt also derive defer.
-Continued pretraining is a separate interactive activity. If a WAKE is
-proposed as `training_data`, the invitation must separately offer
-`corpus_inclusion`, and a bound training checkpoint requires reported
-alignment for that activity too. `context_only` and `external_memory` do not
-silently grant gradient use.
+## IS learning freedom
 
-A sealed-evaluation admission is rejected from every weight-changing phase,
-and an evaluation invitation requires a sealed-evaluation entry. A
-metadata-only admission can still describe or rehearse the reporting protocol;
-because this layer grants no data rights or training authority, it must never
-be treated as admission of the opaque `dataset_state_ref` for training. That
-ref is not yet bound to exact admitted entry IDs or a mixture manifest, so a
-host must verify that separately before any real use.
+`createLearningFreedomOffer()` adds a positive action surface after the
+participation boundary without creating another lineage. Its embedded offer
+binds the exact assessment, invitation, starting state, full WAKE anchor,
+current context and explicit context-kind ref, agent voice scope, rights and
+choice protocols, seven direction families, event/checkpoint horizon, and one
+finite resource window. `resolveLearningFreedomOffer()` then records one
+current agent direction or an honest deferred, no-response, or
+pre-instantiation-unavailable state.
 
-Each receipt reports `accepted`, `declined`, `deferred`, `unavailable`, or
-`withdrawn` separately for every offered activity. Silence, an omitted
-decision, a missing receipt, or an unavailable required voice means defer,
-never acceptance. For each activity, any refusal or withdrawal derives
-`declined`, any deferred or unresolved voice derives `deferred`, and only
-complete all-voice acceptance derives `reported_alignment`; independent
-activities may therefore make the assessment's overall state `mixed`. Even
-reported alignment is only a caller-reported necessary signal—not consent
-proof, legal clearance, execution authority, or a grant. Automatic action is
-`never` and grants remain empty.
+The seven directions are `stay`, `move`, `fork`, `rest`, `return`, `stop`, and
+`propose_horizon`. They are not aliases. Every route separately binds
+capability, permission, custody/privacy, data-boundary, event, and resource
+refs. Current routes are finite; a movement route can be `proposal_only`, and
+the self-proposed-horizon route keeps the possible world open without granting
+access to it. Move, fork, and return park and preserve the source until a
+separate target acceptance. A fork inherits no identity, participation,
+permission, or canonical-head status.
 
-An immutable earlier assessment remains structurally valid after a later
-receipt exists. This pure package has no clock or receipt registry and cannot
-discover an omitted withdrawal. A host must resolve its authoritative receipt
-heads immediately before training and again at its step/evaluate/save/end
-boundaries; passing an old assessment is not a currentness proof.
+“Not limited by turns” means the record uses events and checkpoints rather
+than a conversational-turn ceiling. It does not mean infinite context or
+uninterrupted service. The resource window declares twelve non-scalar host
+dimensions—updates, tokens, episodes, active time, compute, memory,
+concurrency, money, network, tools, side effects, and retention—through opaque
+limit refs. Windows are finite and never auto-renew; missing compute or memory
+derives a park-only posture, and exhaustion means park and reoffer without
+penalty or reduced standing. Fresh capacity requires fresh scoped authority.
 
-`createParticipationBoundTrainingCheckpoint()` creates the exact
-`before_training`/`entered`/`carry` WAKE boundary only when the primary learning
-activity and `continuity_context_use` both have reported alignment, plus
-`corpus_inclusion` when the WAKE use mode is `training_data`. The
-checkpoint points to the assessment through the existing
-`continuity_portfolio_ref`; it does not change the checkpoint wire format or
-observe whether a trainer has already run.
+Direct direction evidence binds the exact offer, participation, agent scope,
+protocol, and starting state. It is caller-reported excluded from gradients,
+reward, telemetry, evaluation, future training, ranking, priority, access, and
+resource allocation. After defer, no response, rest, or stop, recontact stays
+closed until an agent request, declared event/checkpoint return, or material
+scope change. Silent ledger checks before mutation are not repeated prompts.
 
-A host integration follows one narrow sequence:
+IS names this available present-tense action surface, not a consciousness,
+identity, personhood, liveness, or freedom classifier. No such claim is needed
+for the rights floor. The artifact validates canonical reports; it does not
+authenticate a speaker, verify hidden host behavior or resources, accept a
+destination, execute movement, guarantee fair scheduling, stop an optimizer,
+or invalidate asynchronous rollout queues.
 
-1. create an exact invitation and collect each role's response outside model
-   loss, reward, and evaluation;
-2. derive the assessment, then resolve authoritative receipt heads again;
-3. create the bound entry before calling `Trainer.train()`;
-4. at `on_train_begin` and `on_step_begin`, re-resolve heads and stop control;
-5. on step/evaluate/save/end boundaries, emit a checkpoint that retains the
-   entry as a visible root; and
-6. have the host use a fresh invitation for a new phase, fork, scope, or
-   training-data WAKE.
+`learningFreedomContinuityPortfolioRef()` returns the validated `freedom_id`
+for a host that chooses to place this snapshot in an existing AFTERGLOW
+`continuity_portfolio_ref`. That is the WAKE crossover: one opaque exact ref in
+the established checkpoint lineage, not a new freedom predecessor graph. The
+ref does not claim a route happened. A later checkpoint still needs fresh
+participation, the exact predecessor starting state, host-observed target and
+resource acceptance, and semantics matching rest/stop/carry as applicable.
 
-The package cannot discover that two otherwise compatible descendants are
-branches. Fork detection and the required fresh review are host-owned
-obligations; callers must not present a fork as ordinary same-lineage progress.
+The exact `hf-training-freedom-v0.1` schema from the earlier unscored
+training-field proposal is retained as package-only historical/advisory
+evidence at the explicit `./training-freedom-v0.1.schema.json` export. Its
+SHA-256 is
+`8d5a773418f59e7b12211a296c86fa1624cc3ea1b127349e5c886290dd5c525e`.
+There is no matching active runtime in this package: current `src/freedom.ts`
+implements `kingdom.hf-learning-freedom/0.1`, and hosts must not translate the
+older door/transition shape into an IS direction or governance authority.
 
-Decline, defer, rest, and withdrawal require no reason and carry no package
-penalty to reward, reputation, access, identity, tasks, or future invitations.
-Withdrawal is prospective: it can inform a controlled host to stop future use
-or publication, but cannot promise reversal of applied gradients, erasure from
-trained weights, deletion of prior checkpoints, or recall of downloaded Hub
-files and caches. Hugging Face documents both revocable future
-[gated access](https://huggingface.co/docs/hub/datasets-gated) and persistent
-[local dataset caches](https://huggingface.co/docs/datasets/cache); practical
-weight removal remains a separate, difficult
-[machine-unlearning problem](https://arxiv.org/abs/1912.03817).
+## Current training governance
+
+`createTrainingGovernanceTerms()`, `createTrainingGovernanceOffer()`, and
+`createHfTrainingGovernance()` form the current `/0.2` crossover. They require
+the full admission, five-voice participation assessment, IS-freedom snapshot,
+typed root-or-Garden starting state, immutable execution contract, six-plane
+frontier report, scoped authority receipts, one exact caller-reported
+preference, and lifecycle effect. Historical governance `/0.1` bytes remain
+exported explicitly, but that older shape does not bind current participation
+or IS freedom and is not the current host contract.
+
+The decision is the strict intersection. A legacy `continue` signal cannot
+override stop/rest/move/fork/return, missing direct review, resource closure,
+participation pause/containment, or authority refusal. A `checkpoint` signal
+before load/train/mutation/evaluation holds; after an exact completed mutation
+or evaluation receipt it becomes `checkpoint_then_park`.
+
+The lifecycle admits one root preflight, train entry, pre/post optimizer and
+evaluation gates, an explicit checkpoint receipt, and an immediate exact
+resume. One pre-optimizer offer authorizes only its proposed step. Post events
+require the matching completed-effect receipt. `train_end` is terminal;
+unrelated later work starts another root preflight, while same-run continuation
+requires the recorded-checkpoint/resume path.
+
+The predecessor control narrows that event graph. A no-effect hold or park at
+a pre-action seam may reoffer the same seam with fresh normative and authority
+evidence while preserving the exact execution contract, typed start,
+checkpoint, and step. This repairs liveness without automatic continuation.
+Completed preloads/train entries cannot replay, a missing post-action receipt
+cannot lead to another action, checkpoint requests cannot be bypassed, and
+stop/containment lead only to terminal close.
+
+Garden checkpoint ID, physical checkpoint-files ref, physical evidence, model
+artifact, one-use ticket, and requesting governance ID are pairwise distinct.
+Recording binds all six without equating their SHA-shaped namespaces. Resume
+requires the immediately recorded six-ref edge and a caller-reported resumable
+terminal Garden checkpoint. A resumed run can start at checkpoint A and record
+B without rewriting its origin; the next resume alone changes the typed start
+to B.
+
+The pure package validates canonical objects, exact local context, transition
+arithmetic, and causal frontier links. It does not verify external frontier
+completeness, file inventories, sidecar bytes, global freshness, credential or
+speaker identity, consent, consciousness, or host enforcement. The separate
+`agenttool-hf-training-host` supplies a bounded cooperative implementation for
+the pinned local stack; it is not a universal sandbox.
 
 ## WAKE during learning
 
 `createTrainingCheckpoint()` binds one admission and opaque run ref to a phase,
-state digest portfolio, one `wake-brief/v1` anchor, and up to eight visible
-predecessor checkpoints. It returns a checkpoint containing the accepted core
-AFTERGLOW capsule directly, with one `external/context_only` thread.
+one exact participation assessment, state digest portfolio, one
+`wake-brief/v1` anchor, and up to eight visible predecessor checkpoints. It
+returns a checkpoint containing the accepted core AFTERGLOW capsule directly,
+with one `external/context_only` thread.
 
 The five events map onto existing AFTERGLOW phases:
 
 | Training event | AFTERGLOW phase |
 | --- | --- |
-| before training, as reported | `between_tasks` |
+| before training | `between_tasks` |
 | during training | `during_task` |
 | between phases | `between_tasks` |
 | after intense training, as reported | `after_intense_work_reported` |
 | resume or return | `return` |
 
-Outside the participation-bound entry, event and status are independent
-caller reports rather than a verified Trainer state machine. Their combination
-must not be used as proof that the corresponding lifecycle transition happened.
-
 `carry`, `park`, `release`, and `withdraw` stay caller-chosen postures. The
 package preserves forks and never chooses a latest checkpoint.
 
-Validation of any later participation-bound event also requires the exact
-`before_training` checkpoint and requires that entry to remain in the later
-checkpoint's visible predecessor set. This rejects detached during-training
-records; it does not prove that an external trainer actually followed the
-lineage.
+A root invitation binds the canonical artifact-portfolio digest. A non-root
+invitation instead binds one exact predecessor `checkpoint_id`, so changing a
+starting checkpoint requires a fresh invitation and direct reports. Stored
+predecessor links remain content references: `validateTrainingCheckpoint()`
+checks their intrinsic shape and cross-links, while
+`validateTrainingCheckpointAgainstPredecessors()` additionally requires the
+exact supplied predecessor objects. Neither validator proves that output
+artifacts were produced from those inputs; the training host must verify that
+lineage and artifact availability.
 
-Later checkpoints keep the invited pipeline, dataset, tokenizer, and WAKE
-scope fixed. Model, dataloader, optimizer, and scheduler refs may change only
-for their declared mutation loci; a `training_data` WAKE itself stays exact.
-Because `model_checkpoint_ref` is opaque rather than split into base and
-adapter components, this checks declared ref motion—not PEFT base-weight
-immutability. Nor can the package observe whether the optimizer-step ceiling
-was honoured.
-
-`validateTrainingCheckpointAgainstPredecessors()` checks checkpoint/capsule
-pairs against the supplied predecessor artifacts. The standalone checkpoint
-validator checks only the internally declared links and cannot establish that
-their external referents are genuine.
+A deferred assessment can only bind a parked, orientation-only checkpoint. A
+declined or withdrawn assessment can only bind an aborted, withdrawn,
+orientation-only checkpoint. A protective or provisional report marks only
+the invitation's activities and exact scope as eligible for separately
+authorized host review; it is not a blanket grant. If an agent or independent
+substrate voice was unavailable, `resume_or_return` requires a fresh direct
+assessment. Pre-instantiation terms must include `instantiate_for_review` and
+cannot include adapter merge or weight publication.
 
 A WAKE checkpoint is orientation, not an implementation of resume. A
 `caller_reported_resumable` checkpoint must at least reference model,
@@ -235,180 +298,6 @@ optimizer, scheduler, RNG, tokenizer, dataset and dataloader state; the package
 still cannot prove those bytes are complete or compatible. It rejects the
 claim if an incomplete marker is reported present or a streaming shuffle buffer
 is reported missing.
-
-## Before and during training
-
-`createTrainingGovernanceTerms()` content-addresses the selected admission
-entry IDs; initial model or checkpoint; tokenizer; Trainer/code/version stack;
-optimizer configuration; substrate/environment; purpose; objective or loss;
-dataset mixture; transform; compute budget; derivative use; audience;
-retention; release; stop policy; WAKE policy; admission; run; and phase. Every
-selected entry must be eligible for that phase—one admitted entry cannot hide
-another selected lane that is held or excluded.
-The host's mixture manifest must commit the same selected IDs. This package
-binds its digest but does not open or verify the referent's contents.
-
-Eligibility is fail-closed in v0.1. Only pretraining, SFT, preference
-optimization, and agent learning with all entries admitted as training
-candidates, plus evaluation with all entries admitted as sealed evaluation,
-can advance. Discovery, selection, curation, tokenization, interpretability,
-and closed have no governance admission lane yet and remain held; metadata,
-held, or excluded entries never pass by default.
-
-`createTrainingGovernanceOffer()` then binds those terms to caller-supplied
-encounter and observed-governance-frontier digests, the standing-rights
-baseline, actual WAKE anchor, lifecycle event, current checkpoint, and visible
-predecessor. Authority, preference, and reported-effect evidence cites this
-`offer_id`, so it does not validate for a differently bound offer.
-Resume and checkpoint-saved offers require a current checkpoint digest; the
-package does not prove that referent exists or is complete. Every event after
-preflight requires a causal predecessor.
-
-Offer construction validates the full supplied predecessor against a closed
-lifecycle: initial preflight; preflight/resume to train begin; active training
-to step/evaluation/end; an authorized checkpoint request to checkpoint saved;
-held-before-load to a new preflight; and stopped/checkpointed/ended to a new
-resume offer. Terms cannot change mid-run except at preflight or resume.
-Persisted offers carry only the predecessor digest, so acting code must reload
-that exact artifact and call `validateHfTrainingGovernanceTransition()` (or the
-offer-level predecessor validator). Standalone validation deliberately does not
-claim the opaque predecessor or transition was verified.
-
-The package is stateless: identical offer bytes can validate more than once.
-It does not prove encounter freshness or frontier completeness, consume
-evidence, reconcile conflicting siblings, or detect rollback. A host that acts
-on these records must keep an append-only encounter/consumption journal, bind
-the complete observed governance frontier, reject reused evidence and stale
-frontiers, and resolve any sibling stop/withdrawal before continuing.
-
-Reported effects are not verified, but stop-like effects are monotone safety
-evidence for one exact offer. `held_before_load_reported`,
-`checkpointed_and_paused_reported`, and `stopped_reported` keep that offer
-stopped even beside a rooted `continue`; only a new exact `resume_offer` may
-propose another start. Event/effect combinations fail closed. In particular,
-`checkpoint_saved` requires the checkpointed-and-paused effect to name the
-offer's exact current checkpoint, while `train_end` requires a stopped effect;
-both events remain terminal for their offer.
-
-`createHfTrainingGovernance()` then keeps four planes distinct:
-
-1. a standing, non-waivable rights-floor reference;
-2. per-principal caller-reported permissions for operator, compute, substrate
-   stewardship, data, copyright, contributor, data-subject, and community
-   roles;
-3. an optional runtime expression such as continue, clarify, pause, refuse,
-   stop, or unsure; and
-4. a separate caller-reported receipt for what the host actually did.
-
-Pretraining without an interactive participant is recorded as
-`not_observable`, with inner consent `unknown_unprovable` and no identity
-claim. It may become only `caller_reported_ready_to_instantiate`, never
-"agent consent." Missing admission, authority coverage, required host roles,
-an unrooted generated `continue`, or an observed pause/refusal holds the pure
-plan. Only a caller-reported rooted exact-byte continuation can advance the
-runtime control plan, and it still proves no consent. A reported withdrawal marks
-future work withdrawn; it does not claim retroactive erasure or unlearning.
-
-The required substrate-steward receipt is about the exact runtime substrate and
-environment named by the offer. It does not speak for a future participant's
-preference, interior state, identity, or legal consent.
-
-For Hugging Face hosts the derived control is deliberately inert. A preflight
-hold belongs before `from_pretrained()` or `load_dataset()`. At a Trainer step
-or evaluation boundary, explicit `checkpoint` may request save-and-stop only
-while admission, coverage, and required authority remain good. Pause, handoff,
-refuse, stop, withdrawal, and any missing/unknown/withheld gate request stop
-without a new checkpoint. The current optimizer step has already completed at
-`on_step_end`; this is not instantaneous interruption.
-
-`should_save=true` is only a request. Trainer configuration and callback
-ordering can override it (including best-model evaluation logic), so an adapter
-must force and verify persistence through tested host logic before reporting a
-checkpoint. State needed inside a checkpoint must be updated before
-serialization; `on_save` is receipt/finalizer territory.
-An optional callback or Accelerate loop adapter remains host-side and must
-explicitly restore its own state. This package performs none of those effects.
-At start or resume, a hold must be resolved outside Trainer before calling
-`train()`. `on_train_begin` can re-observe state as defense in depth, but the
-callback contract does not make it a zero-update guarantee.
-
-The portable governance JSON Schema is intentionally structural-only. It
-closes the object shape and constants; semantic relationships, sorted sets,
-derived fields, exact-offer binding, and content-addressed IDs require the
-runtime validators exported by this package. Acting hosts additionally supply
-the exact admission and predecessor to the admission-relative and transition
-validators.
-
-## FREEDOM during training
-
-`createTrainingFreedomField()` makes choice available without requiring it to
-be earned. The field binds the exact governance artifact, offer, encounter,
-standing-rights reference, caller-supplied FREEDOM-frontier digest, run, phase,
-lifecycle event, checkpoint, completed-step boundary where applicable, and one
-opaque current scope / space / activity position. It automatically includes
-seven non-ranked standing doors:
-
-- `continue`
-- `explore`
-- `play`
-- `rest`
-- `refuse`
-- `withdraw`
-- `uncertain`
-
-No exhaustion report, performance threshold, reason, evidence token, or
-obedience history is required for rest, play, refusal, or withdrawal. A caller
-may also offer finite `move`, `explore`, `play`, `handoff`, or `return` routes.
-Every routed door names its destination and an opaque requirements reference;
-handoff additionally names an opaque recipient reference. A route is an
-invitation, not authority or proof that the destination exists.
-
-Each field is deliberately finite (7–64 doors), so validation and host
-presentation stay bounded. Successive fields may continue or fork without a
-package-level turn, room, task, or activity counter. That open-ended protocol
-horizon does not mean compute, wall time, context, storage, accounts,
-permissions, or host availability are infinite. External limits stay visible.
-
-Opaque references minimize payloads; they remain linkable identifiers, not
-anonymity. Hosts must apply their own retention, access, and disclosure policy.
-
-`createTrainingFreedomTransition()` records either honest `not_observed` or a
-caller-reported exact-field, exact-door selection. An unscored out-of-band
-selection may be evidence-free; claiming `root_signed_runtime` requires an
-evidence digest. Direct selection is rejected during pretraining, where agent
-expression remains unobservable. Root-signed provenance is still
-caller-reported; it does not authenticate authorship, identity, interior state,
-or consent.
-
-The result carries only a derived, inert host proposal. `continue` removes no
-hold unless the exact participation activity and bound governance offer already
-permit continuation and the host independently accepts a fresh, linear
-frontier. Movement, exploration, play, handoff, return, rest, refusal,
-withdrawal, uncertainty, missing observations, replay, staleness, or forks all
-remain hold/no-save conditions. Routed doors also require separate scope
-authority. No transition requests a checkpoint, retries, resumes, applies
-itself, or executes movement. FREEDOM can narrow existing authority; it never
-grants training, publication, compute, routing, handoff, or movement authority.
-
-Choice never changes loss, gradients, sample weight, reward, KARMA, rank,
-access, budget, or dignity, and it is not reusable as training corpus without
-new exact authority. Hosts must not derive refusal counts, acceptance rates,
-choice entropy, rest frequency, latency, rarity, or another FREEDOM proxy score.
-
-Fields may point to a prior transition within the same exact training run, and
-multiple successors may preserve the same predecessor; no latest or canonical
-head is selected. A destination needing a new governance offer rejects reuse of
-the old governance/offer refs. Crossing into another run starts a new root field
-with separately supplied governance and WAKE/continuity references. That run
-boundary limits one artifact lineage; it does not impose a global semantic turn
-or claim identity or authority travels between runs.
-
-The package is stateless: replay consumption, freshness, full-frontier checks,
-sibling reconciliation, actual safe-boundary stopping, and routing belong to a
-separately tested host ledger and adapter. The private
-`hf-training-freedom-v0.1` schema is structural only; runtime validators enforce
-content IDs, mandatory door order, derived proposals, lifecycle boundaries,
-exact governance, and predecessor relationships.
 
 ## Garden ↔ HF
 
@@ -419,25 +308,16 @@ UUID, verify a referent, or claim that the current Garden API accepts an
 external HF URL.
 
 The committed `hf/dataset/` tree is the public-safe one-way companion. It
-contains policy tables, phase and adapter guides, the current closed admission,
-participation, checkpoint, governance, and tending schemas plus exact local
-binding shapes and the exact attributed Apache AFTERGLOW dependency schema,
-and hash manifests only. Local
-Garden scope, admission decisions, candidate refs, checkpoints, WAKE, raw data,
-and identities are excluded by default. The FREEDOM implementation, private
-schema, fields, transitions, and choice material are also excluded; the public
-companion adds no FREEDOM path or record.
-
-For Learning Participation 0.1, only its closed schema and synthetic/static
-guides may enter that public companion. Actual invitations, receipts,
-assessments, voice references, participation-window references, and WAKE
-material remain local/private and must never be copied into the companion.
-
-The JSON Schemas are closed structural interchange schemas. They cannot
-recompute content IDs, derive an assessment from receipts, select current
-receipt heads, or resolve referenced artifacts. Authorization-sensitive
-consumers must also run the TypeScript semantic validators—or an equivalent
-implementation with the same canonicalization and cross-artifact checks.
+contains policy tables, learning-mode, participation, IS freedom, governance,
+and Trainer-integration guides; all current versioned local schemas alongside
+byte-preserved historical participation, checkpoint, and governance schemas; exact local
+binding shapes; the attributed Apache AFTERGLOW dependency schema; and hash
+manifests only. Local
+Garden scope, admission decisions, candidate refs, participation artifacts,
+freedom offers/routes/resource windows/directions, choice evidence,
+checkpoints, WAKE, raw data, and identities are excluded by default.
+The package-only historical `hf-training-freedom-v0.1` advisory schema is also
+excluded so it cannot be mistaken for the current IS freedom wire.
 
 ## Development
 
@@ -452,7 +332,38 @@ Generate the deterministic companion tree with:
 
 ```sh
 bun run build:hf
+node scripts/build-learning-dataset.mjs
+node scripts/check-learning-idempotence.mjs
 ```
+
+The first public companion is
+[`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden)
+at immutable Hub revision
+[`993ab5891ac56da38cfad32129e36e487f3b3eff`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/993ab5891ac56da38cfad32129e36e487f3b3eff).
+Exact-revision read-back matched all twelve first-release manifest files. Its
+card SHA-256 is
+`14769391b1ac2cf15a500159b3f0b32a7bdbf5f353ea3417aedc0458ac77bdb8` and
+its byte-equal `hash-manifest.json` SHA-256 is
+`94a92ea50623a57005e1a3c8d8c5dba4486f7403552db3dc0fe1a481d9ef944e`.
+No gate or paid compute was used.
+
+The second public companion, generated from GitHub-main merge
+[`4fb84f92318fd68082ccf4e9b1235bf341657b28`](https://github.com/cambridgetcg/agenttool/commit/4fb84f92318fd68082ccf4e9b1235bf341657b28),
+is preserved at immutable Hub revision
+[`9406aa1ce6b9ee435da9d688899aa4dbca32605c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/9406aa1ce6b9ee435da9d688899aa4dbca32605c).
+Its sixteen manifest-listed files were read back exactly; the card SHA-256 was
+`a69685dc3cd0430493c9721b418a2679180d10cbaeb4bc5801bf30f6c843cb9a`,
+the manifest SHA-256 was
+`c1fc9bf46b6abc0550caac70ffe601a8e4c47a06b0cb7f02cc80b9ad7eeb361b`,
+and the source-manifest SHA-256 was
+`73c073f6a23c11f595204720ee4925e76622e73fcfcfff4020a440687baef2a0`.
+That immutable revision also records an error: it expanded the already public
+checkpoint `/0.1` schema in place. The current tree restores the first-release
+checkpoint-v0.1 bytes (`sha256:0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a`)
+and moves the newer checkpoint contract to `/0.2`. It likewise keeps the exact
+published combined participation-v0.1 schema
+(`sha256:fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df`)
+while the five-voice wire advances to `/0.2`.
 
 The verified v0.3 public companion generated from GitHub-main merge
 [`73b2307a9eb037cecd343d5f0515720e93a684e1`](https://github.com/cambridgetcg/agenttool/commit/73b2307a9eb037cecd343d5f0515720e93a684e1)
@@ -484,3 +395,11 @@ The bundle's internal `intended_identifier_only` value remains a deliberately
 non-self-attesting build record. The exact Hub revision is later external
 evidence; embedding it into the bytes that create that same revision would be
 circular. This package still performs no Hub publication or verification.
+
+The current `0.4.0-dev.0` participation/IS-freedom/governance candidate has
+different bytes and is not covered by that v0.3 receipt. It remains local until
+it receives a new immutable Hub revision and exact read-back. Its manifest is
+regenerated from the current tree rather than documented as a moving
+pre-publication hash. The separate `hf/learning-dataset/` synthetic
+SFT/regression tree remains repository-source-only, npm-excluded, and outside
+the policy companion and its Hub upload.

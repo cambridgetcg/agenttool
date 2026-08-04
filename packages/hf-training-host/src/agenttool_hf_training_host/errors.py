@@ -31,7 +31,15 @@ class CheckpointTicketError(HfTrainingHostError):
 
 
 class HfCompatibilityError(HfTrainingHostError):
-    """The installed HF stack or requested execution mode is outside v0.1."""
+    """The installed HF stack or requested execution mode is outside v0.2."""
+
+
+class MutationUnitFailed(HfTrainingHostError):
+    """A claimed non-atomic mutation unit failed and the adapter latched closed."""
+
+
+class EvaluationUnitFailed(HfTrainingHostError):
+    """A claimed evaluation unit failed and the adapter latched closed."""
 
 
 class CheckpointIncomplete(HfTrainingHostError):

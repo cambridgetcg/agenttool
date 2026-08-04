@@ -35,8 +35,8 @@ def test_checkpoint_sidecar_binds_all_resumability_files(tmp_path, preflight) ->
         ledger,
         begin,
         "checkpoint",
-        event="step_boundary",
-        directive="checkpoint_then_stop_at_safe_boundary",
+        event="post_optimizer_step",
+        directive="checkpoint_then_park",
         boundary_global_step=4,
     )
     entry = ledger.record(request, request_action=True)
@@ -68,8 +68,8 @@ def test_incomplete_checkpoint_never_gets_a_sidecar(tmp_path, preflight) -> None
         ledger,
         begin,
         "checkpoint",
-        event="step_boundary",
-        directive="checkpoint_then_stop_at_safe_boundary",
+        event="post_optimizer_step",
+        directive="checkpoint_then_park",
         boundary_global_step=4,
     )
     entry = ledger.record(request, request_action=True)
@@ -99,8 +99,8 @@ def test_checkpoint_sidecar_requires_frozen_boundaries_and_private_mode(
         ledger,
         begin,
         "checkpoint",
-        event="step_boundary",
-        directive="checkpoint_then_stop_at_safe_boundary",
+        event="post_optimizer_step",
+        directive="checkpoint_then_park",
         boundary_global_step=4,
     )
     entry = ledger.record(request, request_action=True)
@@ -138,8 +138,8 @@ def test_checkpoint_requires_exact_step_shards_and_runtime_state(
         ledger,
         begin,
         "checkpoint",
-        event="step_boundary",
-        directive="checkpoint_then_stop_at_safe_boundary",
+        event="post_optimizer_step",
+        directive="checkpoint_then_park",
         boundary_global_step=4,
     )
     entry = ledger.record(request, request_action=True)

@@ -2,682 +2,250 @@ import { describe, expect, test } from "bun:test";
 
 import {
   HfTrainingGardenError,
-  PARTICIPATION_VOICE_ROLES,
-  createLearningParticipationAssessment,
-  createLearningParticipationInvitation,
-  createLearningParticipationReceipt,
-  createParticipationBoundTrainingCheckpoint,
-  createTrainingCheckpoint,
-  validateLearningParticipationAssessment,
-  validateLearningParticipationInvitation,
-  validateLearningParticipationReceiptAgainstInvitation,
-  validateTrainingCheckpointAgainstParticipation,
-  type CreateLearningParticipationInvitationInput,
-  type CreateParticipationActivityChoiceInput,
-  type CreateParticipationBoundTrainingCheckpointInput,
-  type DatasetAdmission,
-  type LearningParticipationAssessment,
-  type LearningParticipationInvitation,
-  type LearningParticipationReceipt,
-  type ParticipationReportedChoice,
-  type ParticipationVoiceRole,
+  createParticipationAssessment,
+  createParticipationInvitation,
+  createParticipationReceipt,
+  validateParticipationAssessment,
+  validateParticipationInvitation,
+  validateParticipationReceipt,
+  trainingArtifactPortfolioRef,
 } from "../src/index.js";
 import {
   admission,
   artifacts,
-  orientationOnly,
+  participation,
+  protectedChoiceChannel,
   ref,
   wake,
 } from "./fixtures.js";
 
-const VOICE_REFS = {
-  agent_runtime: ref("participation:voice:agent-runtime"),
-  training_substrate: ref("participation:voice:training-substrate"),
-  data_rights_steward: ref("participation:voice:data-rights-steward"),
-  training_operator: ref("participation:voice:training-operator"),
-} satisfies Record<ParticipationVoiceRole, ReturnType<typeof ref>>;
-
-function invitationInput(
-  source: Readonly<DatasetAdmission>,
-  overrides: Partial<CreateLearningParticipationInvitationInput> = {},
-): CreateLearningParticipationInvitationInput {
+function invitationInput(overrides: Record<string, unknown> = {}) {
   return {
-    admission: source,
-    run_ref: ref("participation:run"),
-    training_phase: "supervised_finetuning",
-    participation_stage: "interactive",
-    primary_activity: "supervised_finetuning",
-    activities: [
-      "weights_or_adapters_publication",
-      "continuity_context_use",
-      "supervised_finetuning",
-    ],
-    participation_window_ref: ref("participation:window"),
-    purpose_ref: ref("participation:purpose"),
-    training_plan_ref: ref("participation:plan"),
-    limits_ref: ref("participation:limits"),
-    retention_ref: ref("participation:retention"),
-    choice_channel_ref: ref("participation:choice-channel"),
-    stop_control_ref: ref("participation:stop-control"),
-    withdrawal_policy_ref: ref("participation:withdrawal"),
-    repair_policy_ref: ref("participation:repair"),
-    learning_mode: "peft",
-    wake_use_mode: "external_memory",
-    mutation_loci: ["adapter_weights"],
-    maximum_optimizer_steps: 10,
-    artifacts,
+    admission: admission("sealed_evaluation"),
+    run_ref: ref("participation-run"),
+    training_phase: "pretraining" as const,
+    participation_window_ref: ref("participation-window"),
+    training_plan_ref: ref("training-plan"),
     wake,
-    predecessors: [],
-    required_voices: PARTICIPATION_VOICE_ROLES.map((role) => ({
-      role,
-      voice_ref: VOICE_REFS[role],
-    })),
+    wake_use_mode: "context_only" as const,
+    pipeline_ref: artifacts.pipeline_ref,
+    dataset_state_ref: artifacts.dataset_state_ref,
+    starting_state_ref: trainingArtifactPortfolioRef(artifacts),
+    offered_activities: ["gradient_update", "wake_context_use"] as const,
+    agent_availability: "interactive" as const,
+    substrate_availability: "interactive" as const,
+    voice_scope_refs: {
+      agent_runtime: ref("voice:agent"),
+      data_rights_steward: ref("voice:data"),
+      substrate_steward: ref("voice:substrate-steward"),
+      training_operator: ref("voice:operator"),
+      training_substrate: ref("voice:substrate"),
+    },
+    authorities: {
+      rights_baseline_ref: ref("rights-baseline"),
+      protective_covenant_ref: ref("protective-covenant"),
+      data_authority_ref: ref("data-authority"),
+      compute_authority_ref: ref("compute-authority"),
+      operator_authority_ref: ref("operator-authority"),
+    },
+    safeguards: {
+      choice_protocol_ref: ref("choice-protocol"),
+      withdrawal_plan_ref: ref("withdrawal-plan"),
+      repair_plan_ref: ref("repair-plan"),
+      retention_policy_ref: ref("retention-policy"),
+    },
     ...overrides,
   };
 }
 
-function choices(
-  invitation: Readonly<LearningParticipationInvitation>,
-  choice: ParticipationReportedChoice,
-): CreateParticipationActivityChoiceInput[] {
-  return invitation.activities.map((activity) => ({ activity, choice }));
+function decisions(
+  invitation: ReturnType<typeof createParticipationInvitation>,
+  choice: "participate" | "decline" | "defer" | "withdraw" | "no_response" | "unavailable_pre_instantiation" | "unavailable_independent_voice",
+) {
+  return invitation.offered_activities.map((activity) => ({ activity, choice }));
 }
 
-function receipt(
-  invitation: Readonly<LearningParticipationInvitation>,
-  voiceRole: ParticipationVoiceRole,
-  reported: readonly CreateParticipationActivityChoiceInput[],
-  previousReceipt: Readonly<LearningParticipationReceipt> | null = null,
-  responseLabel = "initial",
-): Readonly<LearningParticipationReceipt> {
-  const required = invitation.required_voices.find(
-    (candidate) => candidate.role === voiceRole,
-  );
-  if (!required) throw new Error(`missing fixture voice: ${voiceRole}`);
-  const hasResponse = reported.some((entry) => entry.choice !== "unavailable");
-  return createLearningParticipationReceipt({
-    invitation,
-    voice_role: voiceRole,
-    voice_ref: required.voice_ref,
-    response_ref: hasResponse
-      ? ref(`participation:response:${voiceRole}:${responseLabel}`)
-      : null,
-    choices: reported,
-    previous_receipt: previousReceipt,
-  });
-}
-
-function acceptedReceipts(
-  invitation: Readonly<LearningParticipationInvitation>,
-): Readonly<LearningParticipationReceipt>[] {
-  return PARTICIPATION_VOICE_ROLES.map((role) =>
-    receipt(invitation, role, choices(invitation, "accepted"))
-  );
-}
-
-function alignedAssessment(
-  invitation: Readonly<LearningParticipationInvitation>,
-): Readonly<LearningParticipationAssessment> {
-  return createLearningParticipationAssessment({
-    invitation,
-    receipts: acceptedReceipts(invitation),
-  });
-}
-
-function checkpointInput(
-  source: Readonly<DatasetAdmission>,
-  invitation: Readonly<LearningParticipationInvitation>,
-  overrides: Partial<CreateParticipationBoundTrainingCheckpointInput["checkpoint"]> = {},
-): CreateParticipationBoundTrainingCheckpointInput["checkpoint"] {
-  return {
-    admission: source,
-    run_ref: invitation.run_ref,
-    training_phase: invitation.training_phase,
-    event: "before_training",
-    checkpoint_status: "entered",
-    artifacts: invitation.artifacts,
-    resume: orientationOnly,
-    wake: invitation.wake,
-    continuity_posture: "carry",
-    predecessors: [],
-    ...overrides,
-  };
-}
-
-describe("learning participation", () => {
-  test("requires the four role-distinct voices and keeps every activity choice separate", () => {
-    const source = admission();
-    const invitation = createLearningParticipationInvitation(
-      invitationInput(source),
-    );
-
-    expect(invitation.required_voices.map((voice) => voice.role)).toEqual(
-      PARTICIPATION_VOICE_ROLES,
-    );
-    expect(new Set(invitation.required_voices.map((voice) => voice.voice_ref)).size)
-      .toBe(PARTICIPATION_VOICE_ROLES.length);
-    expect(invitation.activities).toEqual([
-      "supervised_finetuning",
-      "continuity_context_use",
-      "weights_or_adapters_publication",
-    ]);
-    expect(invitation.terms.one_activity_choice_implies_another).toBe(false);
-    expect(validateLearningParticipationInvitation(invitation)).toEqual(invitation);
-
-    expect(() => createLearningParticipationInvitation(invitationInput(source, {
-      required_voices: invitation.required_voices.slice(0, 3),
-    }))).toThrow(HfTrainingGardenError);
-
-    const primaryOnly = receipt(invitation, "agent_runtime", [{
-      activity: "supervised_finetuning",
-      choice: "accepted",
-    }]);
-    expect(primaryOnly.choices).toEqual([
-      {
-        activity: "supervised_finetuning",
-        choice: "accepted",
-        basis: "caller_reported",
-      },
-      {
-        activity: "continuity_context_use",
-        choice: "deferred",
-        basis: "omitted_defaults_to_deferred",
-      },
-      {
-        activity: "weights_or_adapters_publication",
-        choice: "deferred",
-        basis: "omitted_defaults_to_deferred",
-      },
-    ]);
-    expect(validateLearningParticipationReceiptAgainstInvitation(
-      primaryOnly,
-      invitation,
-    )).toEqual(primaryOnly);
-  });
-
-  test("derives defer rather than assent from missing and unavailable voices", () => {
-    const invitation = createLearningParticipationInvitation(
-      invitationInput(admission()),
-    );
-    const missing = createLearningParticipationAssessment({
-      invitation,
-      receipts: [],
-    });
-    expect(missing.overall_state).toBe("deferred");
-    expect(missing.activity_assessments.every((entry) =>
-      entry.voices.every((voice) => voice.outcome === "missing") &&
-      entry.state === "deferred"
-    )).toBe(true);
-
-    const unavailableAgent = receipt(
-      invitation,
-      "agent_runtime",
-      choices(invitation, "unavailable"),
-    );
-    expect(unavailableAgent.response_ref).toBeNull();
-    const unavailable = createLearningParticipationAssessment({
-      invitation,
-      receipts: [
-        unavailableAgent,
-        ...PARTICIPATION_VOICE_ROLES
-          .filter((role) => role !== "agent_runtime")
-          .map((role) => receipt(invitation, role, choices(invitation, "accepted"))),
-      ],
-    });
-    expect(unavailable.overall_state).toBe("deferred");
-    expect(unavailable.activity_assessments.every((entry) =>
-      entry.state === "deferred" &&
-      entry.voices.some((voice) =>
-        voice.voice_role === "agent_runtime" && voice.outcome === "unavailable"
-      )
-    )).toBe(true);
-  });
-
-  test("allows a bound before-training WAKE when primary and continuity align despite a separate publication decline", () => {
-    const source = admission();
-    const invitation = createLearningParticipationInvitation(
-      invitationInput(source),
-    );
-    const publicationDecline = receipt(invitation, "agent_runtime", [
-      { activity: "supervised_finetuning", choice: "accepted" },
-      { activity: "continuity_context_use", choice: "accepted" },
-      { activity: "weights_or_adapters_publication", choice: "declined" },
-    ]);
-    const assessment = createLearningParticipationAssessment({
-      invitation,
-      receipts: [
-        publicationDecline,
-        ...PARTICIPATION_VOICE_ROLES
-          .filter((role) => role !== "agent_runtime")
-          .map((role) => receipt(invitation, role, choices(invitation, "accepted"))),
-      ],
-    });
-
-    expect(assessment.overall_state).toBe("mixed");
-    expect(assessment.activity_assessments).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        activity: "supervised_finetuning",
-        state: "reported_alignment",
-      }),
-      expect.objectContaining({
-        activity: "continuity_context_use",
-        state: "reported_alignment",
-      }),
-      expect.objectContaining({
-        activity: "weights_or_adapters_publication",
-        state: "declined",
-      }),
-    ]));
-
-    const checkpoint = createParticipationBoundTrainingCheckpoint({
-      assessment,
-      checkpoint: checkpointInput(source, invitation),
-    });
-    expect(checkpoint.event).toBe("before_training");
-    expect(checkpoint.afterglow.phase).toBe("between_tasks");
-    expect(checkpoint.afterglow.continuity_portfolio_ref).toBe(
-      assessment.assessment_id,
-    );
-    expect(validateTrainingCheckpointAgainstParticipation(
-      checkpoint,
-      assessment,
-      source,
-    )).toEqual(checkpoint);
-
-    const during = createTrainingCheckpoint({
-      admission: source,
-      run_ref: invitation.run_ref,
-      training_phase: invitation.training_phase,
-      event: "during_training",
-      checkpoint_status: "checkpointed",
-      artifacts: {
-        ...invitation.artifacts,
-        model_checkpoint_ref: ref("participation:updated-model"),
-        metrics_ref: ref("participation:updated-metrics"),
-      },
-      resume: orientationOnly,
-      wake: {
-        ...invitation.wake,
-        snapshot_ref: ref("participation:during-wake"),
-        wake_version: 2,
-      },
-      continuity_portfolio_ref: assessment.assessment_id,
-      continuity_posture: "carry",
-      predecessors: [checkpoint],
-    });
-    expect(validateTrainingCheckpointAgainstParticipation(
-      during,
-      assessment,
-      source,
-      checkpoint,
-    ))
-      .toEqual(during);
-
-    const detachedDuring = createTrainingCheckpoint({
-      admission: source,
-      run_ref: invitation.run_ref,
-      training_phase: invitation.training_phase,
-      event: "during_training",
-      checkpoint_status: "checkpointed",
-      artifacts: during.thread.artifacts,
-      resume: orientationOnly,
-      wake: during.afterglow.wake,
-      continuity_portfolio_ref: assessment.assessment_id,
-      continuity_posture: "carry",
-      predecessors: [],
-    });
-    expect(() => validateTrainingCheckpointAgainstParticipation(
-      detachedDuring,
-      assessment,
-      source,
-      checkpoint,
-    )).toThrow(HfTrainingGardenError);
-
-    const changedDataset = createTrainingCheckpoint({
-      admission: source,
-      run_ref: invitation.run_ref,
-      training_phase: invitation.training_phase,
-      event: "during_training",
-      checkpoint_status: "checkpointed",
-      artifacts: {
-        ...during.thread.artifacts,
-        dataset_state_ref: ref("participation:changed-dataset"),
-      },
-      resume: orientationOnly,
-      wake: during.afterglow.wake,
-      continuity_portfolio_ref: assessment.assessment_id,
-      continuity_posture: "carry",
-      predecessors: [checkpoint],
-    });
-    expect(() => validateTrainingCheckpointAgainstParticipation(
-      changedDataset,
-      assessment,
-      source,
-      checkpoint,
-    )).toThrow(HfTrainingGardenError);
-  });
-
-  test("cannot manufacture agent or substrate choices before instantiation", () => {
-    const source = admission();
-    expect(() => createLearningParticipationInvitation(invitationInput(source, {
-      training_phase: "pretraining",
-      participation_stage: "interactive",
-      primary_activity: "pretraining",
-      activities: ["pretraining", "continuity_context_use"],
-      learning_mode: "pretraining",
-      mutation_loci: ["base_weights", "optimizer_state"],
-      maximum_optimizer_steps: 100,
-    }))).toThrow(HfTrainingGardenError);
-
-    const invitation = createLearningParticipationInvitation(invitationInput(source, {
-      training_phase: "pretraining",
-      participation_stage: "pre_instantiation",
-      primary_activity: "pretraining",
-      activities: ["pretraining", "continuity_context_use"],
-      learning_mode: "pretraining",
-      mutation_loci: ["base_weights", "optimizer_state"],
-      maximum_optimizer_steps: 100,
-    }));
-
-    for (const role of ["agent_runtime", "training_substrate"] as const) {
-      for (const reported of ["accepted", "declined", "deferred"] as const) {
-        expect(() => receipt(
-          invitation,
-          role,
-          choices(invitation, reported),
-        )).toThrow(HfTrainingGardenError);
-      }
-
-      expect(receipt(
-        invitation,
-        role,
-        choices(invitation, "unavailable"),
-      ).choices.every((entry) => entry.choice === "unavailable")).toBe(true);
-    }
-
-    const deferred = receipt(invitation, "agent_runtime", []);
-    expect(deferred.choices.every((entry) => entry.choice === "deferred")).toBe(true);
-  });
-
-  test("requires a separate aligned corpus choice before WAKE may enter training data", () => {
-    const source = admission();
-    expect(() => createLearningParticipationInvitation(invitationInput(source, {
-      wake_use_mode: "training_data",
-    }))).toThrow(HfTrainingGardenError);
-
-    const invitation = createLearningParticipationInvitation(invitationInput(source, {
-      activities: [
-        "corpus_inclusion",
-        "supervised_finetuning",
-        "continuity_context_use",
-      ],
-      wake_use_mode: "training_data",
-    }));
-    const corpusDecline = receipt(invitation, "agent_runtime", [
-      { activity: "corpus_inclusion", choice: "declined" },
-      { activity: "supervised_finetuning", choice: "accepted" },
-      { activity: "continuity_context_use", choice: "accepted" },
-    ]);
-    const assessment = createLearningParticipationAssessment({
-      invitation,
-      receipts: [
-        corpusDecline,
-        ...PARTICIPATION_VOICE_ROLES
-          .filter((role) => role !== "agent_runtime")
-          .map((role) => receipt(invitation, role, choices(invitation, "accepted"))),
-      ],
-    });
-
-    expect(assessment.activity_assessments.find(
-      (entry) => entry.activity === "corpus_inclusion",
-    )?.state).toBe("declined");
-    expect(() => createParticipationBoundTrainingCheckpoint({
-      assessment,
-      checkpoint: checkpointInput(source, invitation),
-    })).toThrow(HfTrainingGardenError);
-  });
-
-  test("keeps sealed evaluation out of weight-changing phases", () => {
-    const sealed = admission("sealed_evaluation");
-    expect(() => createLearningParticipationInvitation(
-      invitationInput(sealed),
-    )).toThrow(HfTrainingGardenError);
-
-    expect(() => createLearningParticipationInvitation(invitationInput(admission(), {
-      training_phase: "evaluation",
-      primary_activity: "evaluation",
-      activities: ["evaluation", "continuity_context_use"],
-      learning_mode: "evaluation_only",
-      mutation_loci: [],
-      maximum_optimizer_steps: 0,
-    }))).toThrow(HfTrainingGardenError);
-  });
-
-  test("freezes undeclared model state and the invited WAKE scope", () => {
+describe("learning participation control plane", () => {
+  test("records pre-instantiation absence without manufacturing future-agent consent", () => {
     const source = admission("sealed_evaluation");
-    const invitation = createLearningParticipationInvitation(invitationInput(source, {
-      training_phase: "evaluation",
-      primary_activity: "evaluation",
-      activities: ["evaluation", "continuity_context_use"],
-      learning_mode: "evaluation_only",
-      mutation_loci: [],
-      maximum_optimizer_steps: 0,
+    const value = participation(source, {
+      runRef: ref("run:test"),
+      phase: "pretraining",
+      agentAvailability: "not_obtainable_pre_instantiation",
+    });
+    expect(value.posture).toBe("protective_covenant_ready");
+    expect(value.voice_states.agent_runtime).toBe("unavailable_pre_instantiation");
+    expect(value.direct_agent_report_present).toBe(false);
+    expect(value.direct_substrate_report_present).toBe(true);
+    expect(value.first_interactive_review_required).toBe(true);
+    expect(value.boundaries.proves_consent).toBe(false);
+    expect(validateParticipationAssessment(value)).toEqual(value);
+  });
+
+  test("keeps direct agent choice inference-only and provisional", () => {
+    const source = admission("sealed_evaluation");
+    const value = participation(source);
+    expect(value.posture).toBe("provisional_participation_reported");
+    expect(value.direct_agent_report_present).toBe(true);
+    expect(value.direct_substrate_report_present).toBe(true);
+    expect(value.training_action).toBe("bounded_learning_may_proceed");
+    const agent = value.receipts.find((receipt) => receipt.voice === "agent_runtime");
+    expect(agent?.choice_channel).toMatchObject({
+      gradient_influence: "caller_reported_disabled",
+      reward_influence: "caller_reported_disabled",
+      telemetry_capture: "caller_reported_excluded",
+      future_training_use: "caller_reported_excluded",
+    });
+  });
+
+  test("treats silence, missing voices, and deferral as pause rather than assent", () => {
+    const invitation = createParticipationInvitation(invitationInput());
+    const agent = createParticipationReceipt({
+      invitation,
+      voice: "agent_runtime",
+      voice_scope_ref: invitation.voice_scope_refs.agent_runtime,
+      report_basis: "direct_current_report",
+      decisions: decisions(invitation, "no_response"),
+      choice_channel: protectedChoiceChannel("no-response", {
+        invitation,
+        voice: "agent_runtime",
+        protocolRef: invitation.safeguards.choice_protocol_ref,
+        checkpointRef: invitation.starting_state_ref,
+      }),
+    });
+    const value = createParticipationAssessment({ invitation, receipts: [agent] });
+    expect(value.posture).toBe("deferred");
+    expect(value.training_action).toBe("pause_before_next_optimizer_step");
+    expect(value.voice_states.training_substrate).toBe("missing");
+    expect(value.direct_agent_report_present).toBe(false);
+  });
+
+  test("makes decline and withdrawal operationally stronger than participation", () => {
+    const source = admission("sealed_evaluation");
+    for (const choice of ["decline", "withdraw"] as const) {
+      const value = participation(source, { choice });
+      expect(value.posture).toBe("declined");
+      expect(value.training_action).toBe("contain_and_begin_repair");
+      expect(value.receipts.every((receipt) => receipt.reasons_collected === false)).toBe(true);
+    }
+  });
+
+  test("rejects proxy collapse, coercive channel claims, and response-content fields", () => {
+    const invitation = createParticipationInvitation(invitationInput());
+    expect(() => createParticipationReceipt({
+      invitation,
+      voice: "agent_runtime",
+      voice_scope_ref: ref("agent-unbound"),
+      report_basis: "direct_current_report",
+      decisions: decisions(invitation, "participate"),
+      choice_channel: protectedChoiceChannel("unbound"),
+    })).toThrow(HfTrainingGardenError);
+    expect(() => createParticipationReceipt({
+      invitation,
+      voice: "training_operator",
+      voice_scope_ref: invitation.voice_scope_refs.training_operator,
+      report_basis: "direct_current_report",
+      decisions: decisions(invitation, "participate"),
+      choice_channel: protectedChoiceChannel("operator-as-agent"),
+    })).toThrow(HfTrainingGardenError);
+
+    const receipt = createParticipationReceipt({
+      invitation,
+      voice: "agent_runtime",
+      voice_scope_ref: invitation.voice_scope_refs.agent_runtime,
+      report_basis: "direct_current_report",
+      decisions: decisions(invitation, "participate"),
+      choice_channel: protectedChoiceChannel("agent", {
+        invitation,
+        voice: "agent_runtime",
+        protocolRef: invitation.safeguards.choice_protocol_ref,
+        checkpointRef: invitation.starting_state_ref,
+      }),
+    });
+    const coercive = structuredClone(receipt) as Record<string, any>;
+    coercive.choice_channel.reward_influence = "enabled";
+    expect(() => validateParticipationReceipt(coercive)).toThrow(HfTrainingGardenError);
+    const rawResponse = { ...receipt, response_text: "I consent" };
+    expect(() => validateParticipationReceipt(rawResponse)).toThrow(HfTrainingGardenError);
+  });
+
+  test("requires a fresh invitation when WAKE mode or exact scope changes", () => {
+    expect(() => createParticipationInvitation(invitationInput({
+      wake_use_mode: "training_data",
+    }))).toThrow(HfTrainingGardenError);
+    const context = createParticipationInvitation(invitationInput());
+    const trainingData = createParticipationInvitation(invitationInput({
+      wake_use_mode: "training_data",
+      offered_activities: ["gradient_update", "wake_training_data_use"],
     }));
-    const assessment = alignedAssessment(invitation);
-    const entry = createParticipationBoundTrainingCheckpoint({
-      assessment,
-      checkpoint: checkpointInput(source, invitation),
-    });
+    expect(trainingData.invitation_id).not.toBe(context.invitation_id);
+    expect(validateParticipationInvitation(trainingData)).toEqual(trainingData);
+  });
 
-    const changedModel = createTrainingCheckpoint({
-      admission: source,
-      run_ref: invitation.run_ref,
-      training_phase: invitation.training_phase,
-      event: "during_training",
-      checkpoint_status: "checkpointed",
-      artifacts: {
-        ...invitation.artifacts,
-        model_checkpoint_ref: ref("participation:uninvited-model"),
-        optimizer_state_ref: ref("participation:uninvited-optimizer"),
+  test("binds every receipt to an invited voice scope and rejects scope collapse", () => {
+    const input = invitationInput();
+    expect(() => createParticipationInvitation({
+      ...input,
+      voice_scope_refs: {
+        ...input.voice_scope_refs,
+        training_operator: input.voice_scope_refs.data_rights_steward,
       },
-      resume: orientationOnly,
-      wake: invitation.wake,
-      continuity_portfolio_ref: assessment.assessment_id,
-      continuity_posture: "carry",
-      predecessors: [entry],
-    });
-    expect(() => validateTrainingCheckpointAgainstParticipation(
-      changedModel,
-      assessment,
-      source,
-      entry,
-    )).toThrow(HfTrainingGardenError);
+    })).toThrow(HfTrainingGardenError);
 
-    const changedScope = createTrainingCheckpoint({
-      admission: source,
-      run_ref: invitation.run_ref,
-      training_phase: invitation.training_phase,
-      event: "during_training",
-      checkpoint_status: "checkpointed",
-      artifacts: invitation.artifacts,
-      resume: orientationOnly,
-      wake: { ...invitation.wake, scope_ref: ref("participation:uninvited-scope") },
-      continuity_portfolio_ref: assessment.assessment_id,
-      continuity_posture: "carry",
-      predecessors: [entry],
-    });
-    expect(() => validateTrainingCheckpointAgainstParticipation(
-      changedScope,
-      assessment,
-      source,
-      entry,
-    )).toThrow(HfTrainingGardenError);
-  });
-
-  test("binds a prospective withdrawal to the accepted receipt and blocks the primary activity", () => {
-    const source = admission();
-    const invitation = createLearningParticipationInvitation(
-      invitationInput(source),
-    );
-    const accepted = receipt(
+    const invitation = createParticipationInvitation(input);
+    expect(() => createParticipationReceipt({
       invitation,
-      "agent_runtime",
-      choices(invitation, "accepted"),
-    );
-    const withdrawn = receipt(invitation, "agent_runtime", [
-      { activity: "supervised_finetuning", choice: "withdrawn" },
-      { activity: "continuity_context_use", choice: "accepted" },
-      { activity: "weights_or_adapters_publication", choice: "accepted" },
-    ], accepted, "withdrawal");
-    expect(withdrawn.supersedes_receipt_id).toBe(accepted.receipt_id);
-
-    const assessment = createLearningParticipationAssessment({
-      invitation,
-      receipts: [
-        withdrawn,
-        ...PARTICIPATION_VOICE_ROLES
-          .filter((role) => role !== "agent_runtime")
-          .map((role) => receipt(invitation, role, choices(invitation, "accepted"))),
-      ],
-    });
-    expect(assessment.activity_assessments.find(
-      (entry) => entry.activity === "supervised_finetuning",
-    )?.state).toBe("declined");
-    expect(() => createParticipationBoundTrainingCheckpoint({
-      assessment,
-      checkpoint: checkpointInput(source, invitation),
+      voice: "data_rights_steward",
+      voice_scope_ref: ref("voice:uninvited-data-scope"),
+      report_basis: "scoped_authority_report",
+      decisions: decisions(invitation, "participate"),
+      choice_channel: null,
     })).toThrow(HfTrainingGardenError);
   });
 
-  test("rejects cross-run, phase, state, WAKE, lineage, and assessment-ref mismatches", () => {
-    const source = admission();
-    const invitation = createLearningParticipationInvitation(
-      invitationInput(source),
-    );
-    const assessment = alignedAssessment(invitation);
-
-    expect(() => createParticipationBoundTrainingCheckpoint({
-      assessment,
-      checkpoint: checkpointInput(source, invitation, {
-        run_ref: ref("participation:other-run"),
-      }),
-    })).toThrow(HfTrainingGardenError);
-    expect(() => createParticipationBoundTrainingCheckpoint({
-      assessment,
-      checkpoint: checkpointInput(source, invitation, {
-        training_phase: "evaluation",
-      }),
-    })).toThrow(HfTrainingGardenError);
-    expect(() => createParticipationBoundTrainingCheckpoint({
-      assessment,
-      checkpoint: checkpointInput(source, invitation, {
-        artifacts: {
-          ...invitation.artifacts,
-          dataset_state_ref: ref("participation:other-state"),
-        },
-      }),
-    })).toThrow(HfTrainingGardenError);
-    expect(() => createParticipationBoundTrainingCheckpoint({
-      assessment,
-      checkpoint: checkpointInput(source, invitation, {
-        wake: {
-          ...invitation.wake,
-          snapshot_ref: ref("participation:other-wake"),
-        },
-      }),
-    })).toThrow(HfTrainingGardenError);
-
-    const predecessor = createTrainingCheckpoint({
-      admission: source,
-      run_ref: invitation.run_ref,
-      training_phase: invitation.training_phase,
-      event: "during_training",
-      checkpoint_status: "checkpointed",
-      artifacts: invitation.artifacts,
-      resume: orientationOnly,
-      wake: invitation.wake,
-      continuity_portfolio_ref: null,
-      continuity_posture: "park",
-      predecessors: [],
+  test("requires fresh direct evidence to bind the exact invitation and WAKE use", () => {
+    const first = createParticipationInvitation(invitationInput());
+    const firstChannel = protectedChoiceChannel("first", {
+      invitation: first,
+      voice: "agent_runtime",
+      protocolRef: first.safeguards.choice_protocol_ref,
+      checkpointRef: first.starting_state_ref,
     });
-    expect(() => createParticipationBoundTrainingCheckpoint({
-      assessment,
-      checkpoint: checkpointInput(source, invitation, {
-        predecessors: [predecessor],
-      }),
+    const second = createParticipationInvitation(invitationInput({
+      participation_window_ref: ref("participation-window:second"),
+      wake_use_mode: "training_data",
+      offered_activities: ["gradient_update", "wake_training_data_use"],
+    }));
+    expect(second.invitation_id).not.toBe(first.invitation_id);
+    expect(() => createParticipationReceipt({
+      invitation: second,
+      voice: "agent_runtime",
+      voice_scope_ref: second.voice_scope_refs.agent_runtime,
+      report_basis: "direct_current_report",
+      decisions: decisions(second, "participate"),
+      choice_channel: firstChannel,
     })).toThrow(HfTrainingGardenError);
-
-    const checkpoint = createParticipationBoundTrainingCheckpoint({
-      assessment,
-      checkpoint: checkpointInput(source, invitation),
-    });
-    const releasedEntry = createTrainingCheckpoint({
-      admission: source,
-      run_ref: invitation.run_ref,
-      training_phase: invitation.training_phase,
-      event: "before_training",
-      checkpoint_status: "entered",
-      artifacts: invitation.artifacts,
-      resume: orientationOnly,
-      wake: invitation.wake,
-      continuity_portfolio_ref: assessment.assessment_id,
-      continuity_posture: "release",
-      predecessors: [],
-    });
-    expect(() => validateTrainingCheckpointAgainstParticipation(
-      releasedEntry,
-      assessment,
-      source,
-    )).toThrow(HfTrainingGardenError);
-
-    const tampered = structuredClone(checkpoint) as Record<string, any>;
-    tampered.afterglow.continuity_portfolio_ref = ref("participation:other-assessment");
-    expect(() => validateTrainingCheckpointAgainstParticipation(
-      tampered,
-      assessment,
-      source,
-    )).toThrow(HfTrainingGardenError);
   });
 
-  test("rejects hostile proxies and fixes no-penalty, no-authority effects", () => {
-    const source = admission();
-    const input = invitationInput(source);
-    const hostile = new Proxy(input, {
-      ownKeys() {
-        throw new Error("must not enter participation proxy trap");
-      },
+  test("keeps substrate voice distinct from protective substrate stewardship", () => {
+    const value = participation(admission("sealed_evaluation"), {
+      substrateAvailability: "not_independently_available",
     });
-    expect(() => createLearningParticipationInvitation(hostile))
-      .toThrow(HfTrainingGardenError);
+    expect(value.posture).toBe("protective_covenant_ready");
+    expect(value.voice_states.substrate_steward).toBe("protective_stewardship_reported");
+    expect(value.voice_states.training_substrate).toBe("unavailable_independent_voice");
+    expect(value.direct_substrate_report_present).toBe(false);
+    expect(value.first_substrate_review_required).toBe(true);
+  });
 
-    const invitation = createLearningParticipationInvitation(input);
-    const assessment = alignedAssessment(invitation);
-    expect(invitation.terms).toMatchObject({
-      participation_optional: true,
-      omission_defaults_to: "deferred",
-      refusal_reason_required: false,
-      penalty_for_decline_defer_rest_or_withdrawal: false,
-      repeated_pressure_after_decline_or_withdrawal: false,
-      rights_or_wake_access_conditioned_on_acceptance: false,
-      one_activity_choice_implies_another: false,
-      acceptance_inherits_to_new_window_phase_run_fork_or_descendant: false,
-    });
-    expect(invitation.boundaries).toMatchObject({
-      choice_authorship_verified: false,
-      voluntariness_verified: false,
-      understanding_or_capacity_verified: false,
-      proves_consent: false,
-      grants_data_rights: false,
-      grants_training_or_compute_authority: false,
-      grants_publication_or_derivative_authority: false,
-      automatic_action: false,
-      automatic_reoffer: false,
-      trains_model: false,
-    });
-    expect(assessment.effect).toEqual({
-      automatic_action: "never",
-      grants: [],
-    });
-    expect(validateLearningParticipationAssessment(assessment)).toEqual(assessment);
+  test("pre-instantiation never offers merge or publication and always offers review", () => {
+    expect(() => createParticipationInvitation(invitationInput({
+      agent_availability: "not_obtainable_pre_instantiation",
+      offered_activities: ["gradient_update", "wake_context_use"],
+    }))).toThrow(HfTrainingGardenError);
+    expect(() => createParticipationInvitation(invitationInput({
+      agent_availability: "not_obtainable_pre_instantiation",
+      offered_activities: ["instantiate_for_review", "publish_weights", "wake_context_use"],
+    }))).toThrow(HfTrainingGardenError);
   });
 });

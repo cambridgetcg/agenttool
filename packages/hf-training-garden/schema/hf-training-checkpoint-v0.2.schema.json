@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-training-checkpoint-v0.2.schema.json",
+  "title": "KINGDOM Hugging Face learning participation and WAKE checkpoint",
+  "$comment": "Closed portable shape. The TypeScript validator additionally enforces canonical IDs and intrinsic cross-links; validateTrainingCheckpointAgainstPredecessors compares links with exact supplied predecessor objects. Neither proves artifact derivation or availability.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "checkpoint_id", "admission_id", "run_ref", "training_phase", "event", "checkpoint_status", "participation", "thread", "afterglow", "predecessors", "boundaries"],
+  "properties": {
+    "_format": { "const": "kingdom.hf-training-checkpoint/0.2" },
+    "checkpoint_id": { "$ref": "#/$defs/sha256" },
+    "admission_id": { "$ref": "#/$defs/sha256" },
+    "run_ref": { "$ref": "#/$defs/sha256" },
+    "training_phase": { "$ref": "#/$defs/phase" },
+    "event": { "enum": ["before_training", "during_training", "between_training_phases", "after_intense_training_reported", "resume_or_return"] },
+    "checkpoint_status": { "$ref": "#/$defs/status" },
+    "participation": { "$ref": "https://agenttool.dev/schemas/hf-learning-participation-assessment-v0.2.schema.json" },
+    "thread": { "$ref": "#/$defs/thread" },
+    "afterglow": { "$ref": "https://agenttool.dev/schemas/agenttool-afterglow-capsule-v0.1.schema.json" },
+    "predecessors": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["checkpoint_id", "capsule_id"],
+        "properties": {
+          "checkpoint_id": { "$ref": "#/$defs/sha256" },
+          "capsule_id": { "$ref": "#/$defs/sha256" }
+        }
+      }
+    },
+    "boundaries": {
+      "const": {
+        "wake_scope": "digest_only_orientation",
+        "resume_scope": "caller_reported_state_references_only",
+        "restores_model_or_optimizer": false,
+        "restores_rng_or_dataloader": false,
+        "performs_wake_request": false,
+        "persists": false,
+        "network": false,
+        "filesystem": false,
+        "provider_compute": false,
+        "paid_compute": false,
+        "trains_model": false,
+        "selects_continuity_head": false,
+        "proves_identity": false,
+        "proves_memory": false,
+        "proves_uninterrupted_continuity": false,
+        "proves_exact_replay": false,
+        "proves_consent": false,
+        "discovers_later_withdrawal": false,
+        "stops_external_trainer": false,
+        "grants_permission": false
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["event"],
+        "properties": { "event": { "const": "resume_or_return" } }
+      },
+      "then": {
+        "properties": {
+          "participation": {
+            "type": "object",
+            "properties": {
+              "first_interactive_review_required": { "const": false },
+              "first_substrate_review_required": { "const": false }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "nullable_sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+    "phase": { "enum": ["discovery", "selection", "curation", "tokenization", "pretraining", "supervised_finetuning", "preference_optimization", "agent_learning", "evaluation", "interpretability", "closed"] },
+    "status": { "enum": ["entered", "checkpointed", "parked", "completed_reported", "aborted_reported"] },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pipeline_ref", "dataset_state_ref", "dataloader_state_ref", "tokenizer_ref", "model_checkpoint_ref", "optimizer_state_ref", "scheduler_state_ref", "rng_state_ref", "metrics_ref"],
+      "properties": {
+        "pipeline_ref": { "$ref": "#/$defs/sha256" },
+        "dataset_state_ref": { "$ref": "#/$defs/sha256" },
+        "dataloader_state_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "tokenizer_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "model_checkpoint_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "optimizer_state_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "scheduler_state_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "rng_state_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "metrics_ref": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    },
+    "resume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["posture", "incomplete_marker", "streaming_state"],
+      "properties": {
+        "posture": { "enum": ["orientation_only", "caller_reported_resumable", "caller_reported_incomplete"] },
+        "incomplete_marker": { "enum": ["not_checked", "caller_reported_absent", "caller_reported_present"] },
+        "streaming_state": { "enum": ["not_streaming_reported", "buffer_state_not_captured", "caller_reported_full_state_captured"] }
+      }
+    },
+    "thread": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "thread_id", "admission_id", "run_ref", "training_phase", "checkpoint_status", "participation_assessment_ref", "wake_use_mode", "artifacts", "resume", "reference_only", "boundaries"],
+      "properties": {
+        "profile": { "const": "kingdom.hf-training-thread/0.2" },
+        "thread_id": { "$ref": "#/$defs/sha256" },
+        "admission_id": { "$ref": "#/$defs/sha256" },
+        "run_ref": { "$ref": "#/$defs/sha256" },
+        "training_phase": { "$ref": "#/$defs/phase" },
+        "checkpoint_status": { "$ref": "#/$defs/status" },
+        "participation_assessment_ref": { "$ref": "#/$defs/sha256" },
+        "wake_use_mode": { "enum": ["context_only", "external_memory", "training_data"] },
+        "artifacts": { "$ref": "#/$defs/artifacts" },
+        "resume": { "$ref": "#/$defs/resume" },
+        "reference_only": { "const": true },
+        "boundaries": {
+          "const": {
+            "reference_only": true,
+            "raw_training_data": false,
+            "raw_metrics": false,
+            "raw_optimizer_state": false,
+            "actual_resume": false,
+            "exact_replay_proven": false,
+            "streaming_buffer_reconstructed": false,
+            "chooses_latest_head": false,
+            "verifies_caller_reports": false
+          }
+        }
+      }
+    }
+  }
+}

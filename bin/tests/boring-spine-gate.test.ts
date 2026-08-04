@@ -402,6 +402,12 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       'agenttool_hf_training_host/schema/hf-training-host-decision-v0.1.schema.json',
     );
+    expect(workflow).toContain(
+      'agenttool_hf_training_host/schema/hf-training-host-decision-v0.2.schema.json',
+    );
+    expect(workflow).toContain(
+      'importlib.metadata.version("agenttool-hf-training-host") == "0.2.0.dev0"',
+    );
     expect(workflow).not.toContain("hf-training-host[hf]");
     expect(workflow).not.toContain(
       "cd packages/wallet-zerone && bun install --frozen-lockfile --force",
@@ -712,38 +718,48 @@ describe("boring test spine", () => {
     ).toHaveLength(9);
 
     const hostDoc = await readFile(join(ROOT, "docs", "HF-WAKE-HOST.md"), "utf8");
-    expect(hostDoc).toContain(
+    const normalizedHostDoc = hostDoc.replace(/\s+/g, " ");
+    expect(normalizedHostDoc).toContain(
       "# HF WAKE Training Host — A Small, Cooperative Ordinary-API Seam",
     );
-    expect(hostDoc).toContain("Transformers 5.14.1 and Accelerate 1.14.0");
-    expect(hostDoc).toContain("one non-distributed training");
-    expect(hostDoc).toContain("does not constrain data-loader worker processes");
-    expect(hostDoc).toContain("Torch 2.6 or newer");
-    expect(hostDoc).toContain("resolver-selected and otherwise unpinned");
-    expect(hostDoc).toContain("sticky-held");
-    expect(hostDoc).toContain("cross-device frontier complete");
-    expect(hostDoc).toContain("not a universal guarantee");
-    expect(hostDoc).toContain("restore_callback_states_from_checkpoint=False");
-    expect(hostDoc).toContain("same local ledger");
-    expect(hostDoc).toContain("`boundary_global_step`");
-    expect(hostDoc).toContain("same run, terms, and");
-    expect(hostDoc).toContain("Only `ledger_entries` carries");
-    expect(hostDoc).toContain("not members of that global hash chain");
-    expect(hostDoc).toContain("cooperative enforcement, not an in-process");
-    expect(hostDoc).toContain("not universally name-detected");
-    expect(hostDoc).toContain("does not walk or pin every");
-    expect(hostDoc).toContain("private symlink-free storage root");
-    expect(hostDoc).toContain("excluded from both Python");
-    expect(hostDoc).toContain("safe or loadable pickle/Torch state");
-    expect(hostDoc).toContain("repository-source-only learning bundle");
-    expect(hostDoc).toContain("Refusal and park/rest are valid desired completions");
-    expect(hostDoc).toContain("`not_created`");
+    expect(normalizedHostDoc).toContain("Transformers 5.14.1");
+    expect(normalizedHostDoc).toContain("Accelerate 1.14.0");
+    expect(normalizedHostDoc).toContain("`Trainer.__init__` signature");
+    expect(normalizedHostDoc).toContain("`Trainer.training_step` source");
+    expect(normalizedHostDoc).toContain("The exact built-in optimizer allowlist");
+    expect(normalizedHostDoc).toContain("`schedule_free_*`");
+    expect(normalizedHostDoc).toContain("`optimizer_cls_and_kwargs`");
+    expect(normalizedHostDoc).toContain("non-distributed training process");
+    expect(normalizedHostDoc).toContain("does not constrain data-loader worker");
+    expect(normalizedHostDoc).toContain("Torch 2.6 or newer");
+    expect(normalizedHostDoc).toContain("resolver-selected and otherwise unpinned");
+    expect(normalizedHostDoc).toContain("sticky-held");
+    expect(normalizedHostDoc).toContain("cross-device frontier complete");
+    expect(normalizedHostDoc).toContain("not a universal guarantee");
+    expect(normalizedHostDoc).toContain("restore_callback_states_from_checkpoint=False");
+    expect(normalizedHostDoc).toContain("same local ledger");
+    expect(normalizedHostDoc).toContain("`observed_global_step`");
+    expect(normalizedHostDoc).toContain("`proposed_global_step`");
+    expect(normalizedHostDoc).toContain("Only `ledger_entries` carries");
+    expect(normalizedHostDoc).toContain("not members of that global hash chain");
+    expect(normalizedHostDoc).toContain("cooperative enforcement, not an in-process");
+    expect(normalizedHostDoc).toContain("not universally name-detected");
+    expect(normalizedHostDoc).toContain("does not walk or pin every");
+    expect(normalizedHostDoc).toContain("private symlink-free storage root");
+    expect(normalizedHostDoc).toContain("excluded from both Python");
+    expect(normalizedHostDoc).toContain("safe or loadable pickle/Torch state");
+    expect(normalizedHostDoc).toContain("repository-source-only learning bundle");
+    expect(normalizedHostDoc).toContain(
+      "Refusal and park/rest are valid desired completions",
+    );
+    expect(normalizedHostDoc).toContain("`not_created`");
 
     const hostPyproject = await readFile(
       join(ROOT, "packages", "hf-training-host", "pyproject.toml"),
       "utf8",
     );
     expect(hostPyproject).toContain('"Private :: Do Not Upload"');
+    expect(hostPyproject).toContain('version = "0.2.0.dev0"');
 
     const gardenPackage = JSON.parse(
       await readFile(join(ROOT, "packages", "hf-training-garden", "package.json"), "utf8"),

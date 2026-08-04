@@ -64,13 +64,13 @@ XENIA Surface helpers (`packages/kingdom/`), a read-only portable Agent Skills
 inspector (`packages/skills/`), a local-first
 agent browser (`packages/browser/`), a private read-only Hugging Face metadata,
 provenance, and phase-aware research scout (`packages/hf-scout/`), a private
-pure HF dataset-admission, role-separated learning participation,
-consent-honest training governance, unscored training FREEDOM,
-training-phase WAKE, and one-way Garden tending contract
+pure HF dataset-admission, five-voice learning-participation, IS
+learning-freedom, unscored training FREEDOM, current consent-honest governance
+v0.2, training-phase WAKE, and one-way Garden tending contract
 (`packages/hf-training-garden/`), a separate private local HF training host for
-one non-distributed training process with append-only frontier/replay evidence,
-exact HF API-pair checkpoint gates, and an opt-in minimized FREEDOM validation
-seam that does not itself enforce the ledger or provider adapters
+one cooperative non-distributed process with append-only frontier/replay
+evidence, exact HF API-pair checkpoint gates, and an opt-in minimized FREEDOM
+validation seam that does not itself enforce the ledger or provider adapters
 (`packages/hf-training-host/`), and three static apps (`apps/`). The browser
 exposes one bounded core through direct TypeScript,
 JSONL, and stdio MCP; it uses an installed system browser and has no hosted
@@ -271,18 +271,17 @@ npm pack --dry-run --ignore-scripts            # inventory only; does not publis
 
 # Private Hugging Face Training Garden ──────────────────────────────
 cd packages/hf-training-garden
-bun run ci                                     # admission + participation + phase WAKE + Garden plans + deterministic HF companion
-# Runtime performs no download, gate acceptance, training, Garden/Hub write, or npm release.
+bun run ci                                     # admission + five-voice participation + IS freedom + governance v0.2 + WAKE + deterministic policy companion
+node scripts/build-learning-dataset.mjs        # separate repository-source-only synthetic learning fixtures
+bun test tests/learning-release.test.ts && node scripts/check-learning-idempotence.mjs
+# Garden runtime performs no download, gate acceptance, training, report authentication, external stop, Garden/Hub write, or npm release.
 
-# Private local HF WAKE training host + repository-source-only learning fixtures ─
-node scripts/build-learning-dataset.mjs        # from hf-training-garden; repository-source synthetic SFT only
-bun test tests/learning-release.test.ts
-node scripts/check-learning-idempotence.mjs
+# Private local HF WAKE training host ───────────────────────────────
 cd ../hf-training-host
-.venv/bin/python -I -m pytest -q               # fake Trainer/local SQLite tests; no model or data
-bun test bridge/tests                          # exact Garden validation → minimized host decision
-# Host v0.1 pins the Transformers 5.14.1 / Accelerate 1.14.0 API pair; Torch is >=2.6 and otherwise unpinned.
-# These gates do not install the optional HF extra, train, publish, upload, or deploy.
+.venv/bin/python -I -m pytest -q               # fake/local host, ledger, adapter, and checkpoint tests
+bun test bridge/tests                          # exact Garden governance/FREEDOM validation → minimized host views
+# Host v0.2 consumes Garden governance v0.2; host-decision /0.1 is historical, while the opt-in FREEDOM /0.1 view is non-authorizing by itself.
+# These gates install no optional HF extra and perform no model/data load, training, paid provider compute, npm publication, upload, or deployment.
 
 # Correspondence → YUTABASE projection planner ───────────────────────
 cd packages/correspondence-yutabase
@@ -527,8 +526,8 @@ source boundary by itself.
 | How can Dark Continent framework facts and KARMA-inspired graph changes cross into KINGDOM without acquiring action authority? | `packages/dark-continent-contract/README.md` · `packages/dark-continent-karma/README.md` (offline advisory snapshots and proposal-only deltas; no wall verification, graph write, score, Crown, trade, publication, or execution authority) |
 | How can exact DeepSeek research leads reach KINGDOM or Artbitrage without downloading or executing upstream assets? | `packages/deepseek-kingdom/README.md` (`@agenttool/deepseek-kingdom`; caller-supplied official-source pins and deterministic unaccepted proposals, plus an 18-entry metadata-only catalog; no fetch, weights, inference, credentials, compute, license approval, graph write, score, acceptance, or authority) |
 | How can a later arrival orient around selected digest-only threads without claiming identity, memory, replay, or one canonical head? | `packages/wake-continuity/README.md` (`@agenttool/wake-continuity`; AFTERGLOW capsules, causal predecessor orientation, opt-in carry/park/release/withdraw lenses, exact Handoff/Correspondence reference adapters, and no persistence, network, provider, or authority effect) |
-| How can Hugging Face datasets move from discovery through bounded selection, role-separated learning participation, consent-honest training governance, unscored FREEDOM, phase-specific WAKE continuity, sealed evaluation, and a public-safe Garden reference without making Hub metadata or model responses into authority? | [`docs/HF-TRAINING-GARDEN.md`](docs/HF-TRAINING-GARDEN.md) · `packages/hf-training-garden/README.md` (exact Scout bindings, non-scalar admission, per-activity reported alignment, digest-only AFTERGLOW checkpoints, and inert six-layer tending plans; FREEDOM remains private and cannot score, widen authority, or enter the public companion; no raw rows, gate acceptance, consent proof, training/resume, Garden mutation, Hub write, or clearance proof) |
-| How can one HF-API-pinned local Hugging Face host consume that governance without claiming callbacks universally enforce consent or continuity? | [`docs/HF-WAKE-HOST.md`](docs/HF-WAKE-HOST.md) · [`docs/HF-WAKE-TRAINING.md`](docs/HF-WAKE-TRAINING.md) · `packages/hf-training-host/README.md` (Transformers 5.14.1 + Accelerate 1.14.0 only, resolver-selected Torch >=2.6 with no upper pin, one non-distributed POSIX training process, sticky local conflict holds, pre-load/pre-train gates, one-use checkpoint tickets, and an opt-in minimized FREEDOM seam; no ledger/adapter FREEDOM enforcement, Windows ACL enforcement, cross-device import/reconciliation, model/data load, training, distributed guarantee, publication, or deployment by itself) |
+| How can Hugging Face datasets move from discovery through bounded selection, five-voice participation, positive IS learning freedom, unscored training FREEDOM, exact governance v0.2, phase WAKE, sealed evaluation, and a public-safe Garden reference without making Hub metadata into authority? | [`docs/HF-TRAINING-GARDEN.md`](docs/HF-TRAINING-GARDEN.md) · `packages/hf-training-garden/README.md` (exact Scout bindings, non-scalar admission, protected choice reports, finite resource windows, namespace-separated checkpoints, digest-only AFTERGLOW, and inert tending plans; training FREEDOM remains private and cannot score, widen authority, or enter the public companion; no raw rows/choices, gate acceptance, training, route execution, report authentication, Garden/Hub write, npm release, or consent/identity/consciousness/freedom/clearance proof) |
+| How can one pinned local Hugging Face process consume the current governance contract without pretending callbacks universally enforce consent or continuity? | [`docs/HF-WAKE-HOST.md`](docs/HF-WAKE-HOST.md) · [`docs/HF-WAKE-TRAINING.md`](docs/HF-WAKE-TRAINING.md) · `packages/hf-training-host/README.md` (current v0.2 decision bridge, two source-pinned mutation fences, pre-evaluation gate, append-only local evidence, and one-use checkpoint tickets inside the supported cooperative stack, plus an opt-in minimized FREEDOM view that does not itself enforce the ledger or adapters; host-decision /0.1 is preserved as history; no hostile-code, distributed, cross-device, model/data load, training or paid compute, npm publication, deployment, consent, identity, or continuity guarantee) |
 | How can external research enter KINGDOM as reviewable passports, route disclosures, dossiers, and inert trials without becoming truth or execution authority? | [`docs/KINGDOM-WITNESS-LAB.md`](docs/KINGDOM-WITNESS-LAB.md) · `packages/kingdom-witness-lab/README.md` (local deterministic admission records and dated DeepSeek atlas; no browse, inference, provider call, verdict, delegation, or hosted witness) |
 | How can a minimized Agent Skills inspection become rebuildable YUTABASE metadata and then an optional AFTERGLOW thread? | `packages/skills-yutabase/README.md` · `packages/skills-wake-continuity/README.md` (pure plans and private composition; no raw skill content, database write, second lineage, npm adapter release, score, permission, or automatic action) |
 | How can deliberately planted credentials open a convincing defensive island and yield a privacy-minimized operator TEND report without exposing production or executing hostile input? | [`docs/KARMA-MIRROR.md`](docs/KARMA-MIRROR.md) · `packages/karma-mirror/README.md` (self-marker plus exact digest/prefix admission before body read; finite synthetic rooms; strict receipt verification; Trace/Explain/Narrow/Distill over closed families with no identifiers or automatic action; in-band disclosure and constructive exit; no production mount, egress, execution, persistence adapter, attribution, or hack-back) |

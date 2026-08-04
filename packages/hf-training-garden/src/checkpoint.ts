@@ -4,13 +4,16 @@ import {
   type AfterglowCapsule,
   type ExternalAfterglowThread,
   type Sha256Id,
+  type WakeBriefAnchor,
 } from "@agenttool/wake-continuity";
 
 import { validateDatasetAdmission } from "./admission.js";
+import { validateParticipationAssessment } from "./participation.js";
 import {
   CHECKPOINT_BOUNDARIES,
   CHECKPOINT_EVENT_TO_AFTERGLOW_PHASE,
   CHECKPOINT_FORMAT,
+  TRAINING_ARTIFACT_PORTFOLIO_PROFILE,
   TRAINING_THREAD_BOUNDARIES,
   TRAINING_THREAD_PROFILE,
 } from "./constants.js";
@@ -23,9 +26,11 @@ import {
 } from "./canonical.js";
 import { fail } from "./errors.js";
 import type {
+  CheckpointEvent,
   ContinuityPosture,
   CreateTrainingCheckpointInput,
   HfTrainingCheckpoint,
+  LearningParticipationAssessment,
   TrainingArtifactReferences,
   TrainingContinuityThread,
   TrainingResumeReport,
@@ -55,6 +60,19 @@ function threadBody(value: ThreadBody): ThreadBody {
 
 function checkpointBody(value: CheckpointBody): CheckpointBody {
   return value;
+}
+
+function artifactPortfolioRef(
+  artifacts: Readonly<TrainingArtifactReferences>,
+): Sha256Id {
+  return contentId(TRAINING_ARTIFACT_PORTFOLIO_PROFILE, artifacts);
+}
+
+export function trainingArtifactPortfolioRef(value: unknown): Sha256Id {
+  const data = snap(value, "$artifacts", "checkpoint_input_invalid");
+  return artifactPortfolioRef(
+    parseArtifactReferences(data, "$artifacts", "checkpoint_input_invalid"),
+  );
 }
 
 function validateResumeSemantics(
@@ -94,6 +112,8 @@ function createTrainingThread(
   runRef: Sha256Id,
   trainingPhase: TrainingContinuityThread["training_phase"],
   checkpointStatus: TrainingContinuityThread["checkpoint_status"],
+  participationAssessmentRef: Sha256Id,
+  wakeUseMode: TrainingContinuityThread["wake_use_mode"],
   artifacts: Readonly<TrainingArtifactReferences>,
   resume: Readonly<TrainingResumeReport>,
 ): Readonly<TrainingContinuityThread> {
@@ -103,6 +123,8 @@ function createTrainingThread(
     run_ref: runRef,
     training_phase: trainingPhase,
     checkpoint_status: checkpointStatus,
+    participation_assessment_ref: participationAssessmentRef,
+    wake_use_mode: wakeUseMode,
     artifacts,
     resume,
     reference_only: true,
@@ -112,6 +134,57 @@ function createTrainingThread(
     ...body,
     thread_id: contentId(TRAINING_THREAD_PROFILE, threadBody(body)),
   });
+}
+
+function validateParticipationSemantics(
+  participation: Readonly<LearningParticipationAssessment>,
+  admissionId: Sha256Id,
+  runRef: Sha256Id,
+  trainingPhase: TrainingContinuityThread["training_phase"],
+  event: CheckpointEvent,
+  checkpointStatus: TrainingContinuityThread["checkpoint_status"],
+  artifacts: Readonly<TrainingArtifactReferences>,
+  resume: Readonly<TrainingResumeReport>,
+  wake: Readonly<WakeBriefAnchor>,
+  continuityPosture: ContinuityPosture,
+  code: "checkpoint_input_invalid" | "checkpoint_invalid",
+): void {
+  const invitation = participation.invitation;
+  if (
+    invitation.admission_id !== admissionId ||
+    invitation.run_ref !== runRef ||
+    invitation.training_phase !== trainingPhase ||
+    invitation.pipeline_ref !== artifacts.pipeline_ref ||
+    invitation.dataset_state_ref !== artifacts.dataset_state_ref
+  ) {
+    fail(code, "participation invitation does not match the checkpoint admission, run, phase, pipeline, and dataset state");
+  }
+  assertDataEqual(invitation.wake, wake, "participation invitation WAKE", code);
+  if (
+    event === "resume_or_return" &&
+    (participation.first_interactive_review_required ||
+      participation.first_substrate_review_required)
+  ) {
+    fail(code, "resume or return requires a fresh direct review when an invited voice was unavailable");
+  }
+  if (participation.training_action === "pause_before_next_optimizer_step") {
+    if (
+      checkpointStatus !== "parked" ||
+      continuityPosture !== "park" ||
+      resume.posture !== "orientation_only"
+    ) {
+      fail(code, "a deferred participation assessment requires a parked, orientation-only checkpoint");
+    }
+  }
+  if (participation.training_action === "contain_and_begin_repair") {
+    if (
+      checkpointStatus !== "aborted_reported" ||
+      continuityPosture !== "withdraw" ||
+      resume.posture !== "orientation_only"
+    ) {
+      fail(code, "a declined or withdrawn assessment requires an aborted, withdrawn, orientation-only checkpoint");
+    }
+  }
 }
 
 function afterglowThread(
@@ -164,6 +237,7 @@ export function createTrainingCheckpoint(
     "training_phase",
     "event",
     "checkpoint_status",
+    "participation",
     "artifacts",
     "resume",
     "wake",
@@ -176,6 +250,7 @@ export function createTrainingCheckpoint(
   const trainingPhase = parseTrainingPhase(candidate.training_phase, "$input.training_phase", "checkpoint_input_invalid");
   const event = parseCheckpointEvent(candidate.event, "$input.event", "checkpoint_input_invalid");
   const checkpointStatus = parseCheckpointStatus(candidate.checkpoint_status, "$input.checkpoint_status", "checkpoint_input_invalid");
+  const participation = validateParticipationAssessment(candidate.participation);
   const artifacts = parseArtifactReferences(candidate.artifacts, "$input.artifacts", "checkpoint_input_invalid");
   const resume = parseResumeReport(candidate.resume, "$input.resume", "checkpoint_input_invalid");
   validateResumeSemantics(artifacts, resume, "checkpoint_input_invalid");
@@ -184,17 +259,46 @@ export function createTrainingCheckpoint(
     ? null
     : sha256(candidate.continuity_portfolio_ref, "$input.continuity_portfolio_ref", "checkpoint_input_invalid");
   const posture = parseContinuityPosture(candidate.continuity_posture, "$input.continuity_posture", "checkpoint_input_invalid");
+  validateParticipationSemantics(
+    participation,
+    admission.admission_id,
+    runRef,
+    trainingPhase,
+    event,
+    checkpointStatus,
+    artifacts,
+    resume,
+    wake,
+    posture,
+    "checkpoint_input_invalid",
+  );
   const predecessorValues = array(candidate.predecessors, "$input.predecessors", "checkpoint_input_invalid");
   const predecessors = validatePredecessorInputs(
     predecessorValues as unknown as readonly HfTrainingCheckpoint[],
     admission.admission_id,
     runRef,
   );
+  const startingStateMatches = predecessors.length === 0
+    ? participation.invitation.starting_state_ref === artifactPortfolioRef(artifacts)
+    : predecessors.some(
+      (value) => participation.invitation.starting_state_ref === value.checkpoint_id,
+    );
+  if (!startingStateMatches) {
+    fail("checkpoint_input_invalid", "the invitation must bind the root artifact portfolio or one exact predecessor checkpoint");
+  }
+  if (
+    participation.training_action === "bounded_learning_may_proceed" &&
+    predecessors.some((value) => value.participation.training_action === "contain_and_begin_repair")
+  ) {
+    fail("checkpoint_input_invalid", "a contained predecessor cannot resume bounded learning in the same run");
+  }
   const thread = createTrainingThread(
     admission.admission_id,
     runRef,
     trainingPhase,
     checkpointStatus,
+    participation.assessment_id,
+    participation.invitation.wake_use_mode,
     artifacts,
     resume,
   );
@@ -212,6 +316,7 @@ export function createTrainingCheckpoint(
     training_phase: trainingPhase,
     event,
     checkpoint_status: checkpointStatus,
+    participation,
     thread,
     afterglow,
     predecessors: deepFreeze(predecessors.map((value) => deepFreeze({
@@ -237,6 +342,8 @@ function validateStoredThread(
     "run_ref",
     "training_phase",
     "checkpoint_status",
+    "participation_assessment_ref",
+    "wake_use_mode",
     "artifacts",
     "resume",
     "reference_only",
@@ -250,10 +357,27 @@ function validateStoredThread(
   const runRef = sha256(candidate.run_ref, "$checkpoint.thread.run_ref", "checkpoint_invalid");
   const phase = parseTrainingPhase(candidate.training_phase, "$checkpoint.thread.training_phase", "checkpoint_invalid");
   const status = parseCheckpointStatus(candidate.checkpoint_status, "$checkpoint.thread.checkpoint_status", "checkpoint_invalid");
+  const participationAssessmentRef = sha256(candidate.participation_assessment_ref, "$checkpoint.thread.participation_assessment_ref", "checkpoint_invalid");
+  if (
+    candidate.wake_use_mode !== "context_only" &&
+    candidate.wake_use_mode !== "external_memory" &&
+    candidate.wake_use_mode !== "training_data"
+  ) {
+    fail("checkpoint_invalid", "$checkpoint.thread.wake_use_mode is invalid");
+  }
   const artifacts = parseArtifactReferences(candidate.artifacts, "$checkpoint.thread.artifacts", "checkpoint_invalid");
   const resume = parseResumeReport(candidate.resume, "$checkpoint.thread.resume", "checkpoint_invalid");
   validateResumeSemantics(artifacts, resume, "checkpoint_invalid");
-  const rebuilt = createTrainingThread(admissionId, runRef, phase, status, artifacts, resume);
+  const rebuilt = createTrainingThread(
+    admissionId,
+    runRef,
+    phase,
+    status,
+    participationAssessmentRef,
+    candidate.wake_use_mode,
+    artifacts,
+    resume,
+  );
   assertDataEqual(candidate, rebuilt, "$checkpoint.thread", "checkpoint_invalid");
   return rebuilt;
 }
@@ -279,6 +403,7 @@ export function validateTrainingCheckpoint(
     "training_phase",
     "event",
     "checkpoint_status",
+    "participation",
     "thread",
     "afterglow",
     "predecessors",
@@ -293,12 +418,15 @@ export function validateTrainingCheckpoint(
   const phase = parseTrainingPhase(candidate.training_phase, "$checkpoint.training_phase", "checkpoint_invalid");
   const event = parseCheckpointEvent(candidate.event, "$checkpoint.event", "checkpoint_invalid");
   const status = parseCheckpointStatus(candidate.checkpoint_status, "$checkpoint.checkpoint_status", "checkpoint_invalid");
+  const participation = validateParticipationAssessment(candidate.participation);
   const thread = validateStoredThread(candidate.thread);
   if (
     thread.admission_id !== admissionId ||
     thread.run_ref !== runRef ||
     thread.training_phase !== phase ||
-    thread.checkpoint_status !== status
+    thread.checkpoint_status !== status ||
+    thread.participation_assessment_ref !== participation.assessment_id ||
+    thread.wake_use_mode !== participation.invitation.wake_use_mode
   ) {
     fail("checkpoint_invalid", "$checkpoint.thread does not match its checkpoint envelope");
   }
@@ -315,6 +443,19 @@ export function validateTrainingCheckpoint(
   ) {
     fail("checkpoint_invalid", "$checkpoint.afterglow does not reference its minimized training thread");
   }
+  validateParticipationSemantics(
+    participation,
+    admissionId,
+    runRef,
+    phase,
+    event,
+    status,
+    thread.artifacts,
+    thread.resume,
+    afterglow.wake,
+    external.disposition,
+    "checkpoint_invalid",
+  );
   const predecessorValues = array(candidate.predecessors, "$checkpoint.predecessors", "checkpoint_invalid");
   if (predecessorValues.length > 8) fail("checkpoint_invalid", "$checkpoint.predecessors exceeds 8 links");
   const predecessors = predecessorValues.map((value, index) => {
@@ -326,6 +467,14 @@ export function validateTrainingCheckpoint(
       capsule_id: sha256(link.capsule_id, `${path}.capsule_id`, "checkpoint_invalid"),
     });
   });
+  const startingStateMatches = predecessors.length === 0
+    ? participation.invitation.starting_state_ref === artifactPortfolioRef(thread.artifacts)
+    : predecessors.some(
+      (link) => link.checkpoint_id === participation.invitation.starting_state_ref,
+    );
+  if (!startingStateMatches) {
+    fail("checkpoint_invalid", "the invitation must bind the root artifact portfolio or one exact predecessor checkpoint");
+  }
   if (
     new Set(predecessors.map((link) => link.checkpoint_id)).size !== predecessors.length ||
     predecessors.some((link, index) => link.checkpoint_id !== [...predecessors].sort((a, b) => compareText(a.checkpoint_id, b.checkpoint_id))[index]?.checkpoint_id)
@@ -345,6 +494,7 @@ export function validateTrainingCheckpoint(
     training_phase: phase,
     event,
     checkpoint_status: status,
+    participation,
     thread,
     afterglow,
     predecessors: deepFreeze(predecessors),
@@ -374,36 +524,32 @@ export function validateTrainingCheckpointAgainstPredecessors(
   predecessors: unknown,
 ): Readonly<HfTrainingCheckpoint> {
   const parsed = validateTrainingCheckpoint(checkpoint);
-  const data = snap(predecessors, "$predecessors", "checkpoint_invalid");
-  const values = array(data, "$predecessors", "checkpoint_invalid");
-  if (values.length > 8) {
-    fail("checkpoint_invalid", "$predecessors exceeds 8 checkpoints");
-  }
-  const actual = values.map((value) => validateTrainingCheckpoint(value));
-  if (new Set(actual.map((value) => value.checkpoint_id)).size !== actual.length) {
-    fail("checkpoint_invalid", "$predecessors contains a duplicate checkpoint_id");
-  }
-  if (actual.some((value) =>
-    value.checkpoint_id === parsed.checkpoint_id ||
-    value.admission_id !== parsed.admission_id ||
-    value.run_ref !== parsed.run_ref
-  )) {
-    fail(
-      "checkpoint_invalid",
-      "$predecessors must be distinct earlier checkpoints from the same admission and run",
-    );
-  }
-  const expected = deepFreeze(
-    actual
-      .sort((left, right) => compareText(left.checkpoint_id, right.checkpoint_id))
-      .map((value) => deepFreeze({
-        checkpoint_id: value.checkpoint_id,
-        capsule_id: value.afterglow.capsule_id,
-      })),
+  const values = array(
+    snap(predecessors, "$predecessors", "checkpoint_invalid"),
+    "$predecessors",
+    "checkpoint_invalid",
   );
+  if (values.length > 8) {
+    fail("checkpoint_invalid", "$predecessors must contain at most 8 checkpoints");
+  }
+  const supplied = values.map((value) => validateTrainingCheckpoint(value));
+  if (new Set(supplied.map((value) => value.checkpoint_id)).size !== supplied.length) {
+    fail("checkpoint_invalid", "$predecessors must not contain duplicate checkpoints");
+  }
+  const links = supplied.map((value) => ({
+    checkpoint_id: value.checkpoint_id,
+    capsule_id: value.afterglow.capsule_id,
+  })).sort((left, right) => compareText(left.checkpoint_id, right.checkpoint_id));
+  if (
+    supplied.some(
+      (value) => value.admission_id !== parsed.admission_id || value.run_ref !== parsed.run_ref,
+    )
+  ) {
+    fail("checkpoint_invalid", "$predecessors must belong to the checkpoint's exact admission and run");
+  }
   assertDataEqual(
     parsed.predecessors,
-    expected,
+    links,
     "$checkpoint.predecessors",
     "checkpoint_invalid",
   );

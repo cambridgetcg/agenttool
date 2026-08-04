@@ -74,6 +74,10 @@ export function createTrainingGardenTendingPlan(
     ...(entry.transform_recipe_ref === null ? [] : [entry.transform_recipe_ref]),
   ]));
   const checkpointRefs = deepFreeze(checkpoints.map((checkpoint) => checkpoint.checkpoint_id));
+  const bedrock = sortedUnique([
+    admission.policy_ref,
+    ...checkpoints.map((checkpoint) => checkpoint.participation.assessment_id),
+  ]);
   const body = deepFreeze({
     _format: TENDING_FORMAT,
     garden_scope_ref: admission.garden_scope_ref,
@@ -81,7 +85,7 @@ export function createTrainingGardenTendingPlan(
     checkpoint_refs: checkpointRefs,
     hub_release: hubRelease,
     layers: deepFreeze({
-      bedrock: deepFreeze([admission.policy_ref]),
+      bedrock,
       soil,
       roots,
       mycelium: deepFreeze([admission.admission_id]),
@@ -158,8 +162,8 @@ export function validateTrainingGardenTendingPlan(
   if (canopy[0] !== canopyReference(hubRelease)) {
     fail("tending_invalid", "$plan.layers.canopy does not match the Hub release binding");
   }
-  if (bedrock.length !== 1 || mycelium.length !== 1 || mycelium[0] !== admissionId) {
-    fail("tending_invalid", "$plan layers do not contain one policy root and the exact admission id");
+  if (bedrock.length < 1 || mycelium.length !== 1 || mycelium[0] !== admissionId) {
+    fail("tending_invalid", "$plan layers do not contain Bedrock roots and the exact admission id");
   }
   assertDataEqual(habitat, checkpointRefs, "$plan.layers.habitat", "tending_invalid");
   const draft = record(candidate.garden_reference_draft, "$plan.garden_reference_draft", "tending_invalid");

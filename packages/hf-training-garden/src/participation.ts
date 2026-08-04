@@ -1,60 +1,53 @@
-import {
-  PARTICIPATION_ASSESSMENT_EFFECT,
-  PARTICIPATION_ASSESSMENT_FORMAT,
-  PARTICIPATION_BOUNDARIES,
-  PARTICIPATION_CHOICE_BASES,
-  PARTICIPATION_INVITATION_FORMAT,
-  PARTICIPATION_OVERALL_STATES,
-  PARTICIPATION_PRIMARY_ACTIVITIES,
-  PARTICIPATION_RECEIPT_FORMAT,
-  PARTICIPATION_REPORTED_CHOICES,
-  PARTICIPATION_STAGES,
-  PARTICIPATION_TERMS,
-  PARTICIPATION_TRAINING_PHASES,
-  PARTICIPATION_VOICE_ROLES,
-  LEARNING_ACTIVITIES,
-  LEARNING_MODES,
-  MUTATION_LOCI,
-  WAKE_USE_MODES,
-} from "./constants.js";
+import type { Sha256Id, WakeBriefAnchor } from "@agenttool/wake-continuity";
+
 import { validateDatasetAdmission } from "./admission.js";
 import {
-  createTrainingCheckpoint,
-  validateTrainingCheckpoint,
-} from "./checkpoint.js";
+  AGENT_AVAILABILITIES,
+  PARTICIPATION_ACTIVITIES,
+  PARTICIPATION_ASSESSMENT_FORMAT,
+  PARTICIPATION_BOUNDARIES,
+  PARTICIPATION_CHOICES,
+  PARTICIPATION_INVITATION_FORMAT,
+  PARTICIPATION_POSTURES,
+  PARTICIPATION_PROMPT_ENVELOPE_PROFILE,
+  PARTICIPATION_RECEIPT_FORMAT,
+  PARTICIPATION_REPORT_BASES,
+  PARTICIPATION_TERMS,
+  PARTICIPATION_TRAINING_ACTIONS,
+  PARTICIPATION_VOICES,
+  PARTICIPATION_VOICE_STATES,
+  SUBSTRATE_AVAILABILITIES,
+  WAKE_USE_MODES,
+} from "./constants.js";
 import {
   canonicalBytes,
-  canonicalString,
+  compareText,
   contentId,
   deepFreeze,
   type DataValue,
 } from "./canonical.js";
 import { fail } from "./errors.js";
 import type {
-  CreateLearningParticipationAssessmentInput,
-  CreateLearningParticipationInvitationInput,
-  CreateLearningParticipationReceiptInput,
-  CreateParticipationBoundTrainingCheckpointInput,
-  DatasetAdmission,
-  HfTrainingCheckpoint,
-  LearningActivity,
-  LearningMode,
+  AgentAvailability,
+  CreateParticipationAssessmentInput,
+  CreateParticipationInvitationInput,
+  CreateParticipationReceiptInput,
   LearningParticipationAssessment,
   LearningParticipationInvitation,
   LearningParticipationReceipt,
-  MutationLocus,
-  ParticipationActivityAssessment,
-  ParticipationActivityChoice,
-  ParticipationActivityState,
-  ParticipationChoiceBasis,
-  ParticipationOverallState,
-  ParticipationReportedChoice,
-  ParticipationRequiredVoice,
-  ParticipationStage,
-  ParticipationVoiceOutcome,
-  ParticipationVoiceRole,
-  TrainingArtifactReferences,
-  TrainingPhase,
+  ParticipationActivity,
+  ParticipationAuthorities,
+  ParticipationChoice,
+  ParticipationDecision,
+  ParticipationPosture,
+  ParticipationReportBasis,
+  ParticipationSafeguards,
+  ParticipationTrainingAction,
+  ParticipationVoice,
+  ParticipationVoiceScopeRefs,
+  ParticipationVoiceState,
+  ProtectedChoiceChannelReport,
+  SubstrateAvailability,
   WakeUseMode,
 } from "./types.js";
 import {
@@ -62,9 +55,6 @@ import {
   assertDataEqual,
   exactKeys,
   literal,
-  nonNegativeInteger,
-  nullableSha256,
-  parseArtifactReferences,
   parseTrainingPhase,
   parseWake,
   record,
@@ -75,70 +65,22 @@ import {
 type InvitationBody = Omit<LearningParticipationInvitation, "invitation_id">;
 type ReceiptBody = Omit<LearningParticipationReceipt, "receipt_id">;
 type AssessmentBody = Omit<LearningParticipationAssessment, "assessment_id">;
-type ParticipationCode = "participation_input_invalid" | "participation_invalid";
+type InvitationCode =
+  | "participation_invitation_input_invalid"
+  | "participation_invitation_invalid";
+type ReceiptCode =
+  | "participation_receipt_input_invalid"
+  | "participation_receipt_invalid"
+  | "participation_assessment_input_invalid"
+  | "participation_assessment_invalid";
 
-const WEIGHT_CHANGING_PHASES = new Set<TrainingPhase>([
-  "pretraining",
-  "supervised_finetuning",
-  "preference_optimization",
-  "agent_learning",
-]);
+const WAKE_ACTIVITY_BY_MODE = deepFreeze({
+  context_only: "wake_context_use",
+  external_memory: "external_memory_use",
+  training_data: "wake_training_data_use",
+} as const);
 
-const INVITATION_KEYS = [
-  "_format",
-  "invitation_id",
-  "admission_id",
-  "run_ref",
-  "training_phase",
-  "participation_stage",
-  "primary_activity",
-  "activities",
-  "participation_window_ref",
-  "purpose_ref",
-  "training_plan_ref",
-  "limits_ref",
-  "retention_ref",
-  "choice_channel_ref",
-  "stop_control_ref",
-  "withdrawal_policy_ref",
-  "repair_policy_ref",
-  "learning_mode",
-  "wake_use_mode",
-  "mutation_loci",
-  "maximum_optimizer_steps",
-  "artifacts",
-  "wake",
-  "predecessor_checkpoint_refs",
-  "required_voices",
-  "terms",
-  "boundaries",
-] as const;
-
-const INVITATION_INPUT_KEYS = [
-  "admission",
-  "run_ref",
-  "training_phase",
-  "participation_stage",
-  "primary_activity",
-  "activities",
-  "participation_window_ref",
-  "purpose_ref",
-  "training_plan_ref",
-  "limits_ref",
-  "retention_ref",
-  "choice_channel_ref",
-  "stop_control_ref",
-  "withdrawal_policy_ref",
-  "repair_policy_ref",
-  "learning_mode",
-  "wake_use_mode",
-  "mutation_loci",
-  "maximum_optimizer_steps",
-  "artifacts",
-  "wake",
-  "predecessors",
-  "required_voices",
-] as const;
+const WAKE_ACTIVITIES = deepFreeze(Object.values(WAKE_ACTIVITY_BY_MODE));
 
 function invitationBody(value: InvitationBody): InvitationBody {
   return value;
@@ -152,747 +94,877 @@ function assessmentBody(value: AssessmentBody): AssessmentBody {
   return value;
 }
 
-function enumOrder<T extends string>(values: readonly T[], value: T): number {
-  return values.indexOf(value);
-}
-
-function parseActivity(
-  value: DataValue | undefined,
-  path: string,
-  code: ParticipationCode,
-): LearningActivity {
-  return literal(value, LEARNING_ACTIVITIES, path, code) as LearningActivity;
-}
-
-function parseVoiceRole(
-  value: DataValue | undefined,
-  path: string,
-  code: ParticipationCode,
-): ParticipationVoiceRole {
-  return literal(
-    value,
-    PARTICIPATION_VOICE_ROLES,
-    path,
-    code,
-  ) as ParticipationVoiceRole;
-}
-
-function parseChoice(
-  value: DataValue | undefined,
-  path: string,
-  code: ParticipationCode,
-): ParticipationReportedChoice {
-  return literal(
-    value,
-    PARTICIPATION_REPORTED_CHOICES,
-    path,
-    code,
-  ) as ParticipationReportedChoice;
-}
-
-function parseChoiceBasis(
-  value: DataValue | undefined,
-  path: string,
-  code: ParticipationCode,
-): ParticipationChoiceBasis {
-  return literal(
-    value,
-    PARTICIPATION_CHOICE_BASES,
-    path,
-    code,
-  ) as ParticipationChoiceBasis;
-}
-
-function parseLearningMode(
-  value: DataValue | undefined,
-  path: string,
-  code: ParticipationCode,
-): LearningMode {
-  return literal(value, LEARNING_MODES, path, code) as LearningMode;
-}
-
-function parseWakeUseMode(
-  value: DataValue | undefined,
-  path: string,
-  code: ParticipationCode,
-): WakeUseMode {
-  return literal(value, WAKE_USE_MODES, path, code) as WakeUseMode;
-}
-
-function parseStage(
-  value: DataValue | undefined,
-  path: string,
-  code: ParticipationCode,
-): ParticipationStage {
-  return literal(value, PARTICIPATION_STAGES, path, code) as ParticipationStage;
-}
-
 function parseActivities(
   value: DataValue | undefined,
   path: string,
-  code: ParticipationCode,
-): readonly LearningActivity[] {
+  code: InvitationCode,
+  requireSorted: boolean,
+): readonly ParticipationActivity[] {
   const values = array(value, path, code);
-  if (values.length < 2 || values.length > LEARNING_ACTIVITIES.length) {
-    fail(code, `${path} must contain 2-${String(LEARNING_ACTIVITIES.length)} activities`);
+  if (values.length < 1 || values.length > PARTICIPATION_ACTIVITIES.length) {
+    fail(code, `${path} must contain 1-${String(PARTICIPATION_ACTIVITIES.length)} activities`);
   }
-  const parsed = values.map((entry, index) =>
-    parseActivity(entry, `${path}[${String(index)}]`, code)
-  );
-  if (new Set(parsed).size !== parsed.length) {
-    fail(code, `${path} must not contain duplicate activities`);
-  }
-  return deepFreeze([...parsed].sort((left, right) =>
-    enumOrder(LEARNING_ACTIVITIES, left) - enumOrder(LEARNING_ACTIVITIES, right)
-  ));
-}
-
-function parseMutationLoci(
-  value: DataValue | undefined,
-  path: string,
-  code: ParticipationCode,
-): readonly MutationLocus[] {
-  const values = array(value, path, code);
-  if (values.length > MUTATION_LOCI.length) {
-    fail(code, `${path} must contain 0-${String(MUTATION_LOCI.length)} loci`);
-  }
-  const parsed = values.map((entry, index) =>
+  const activities = values.map((entry, index) =>
     literal(
       entry,
-      MUTATION_LOCI,
+      PARTICIPATION_ACTIVITIES,
       `${path}[${String(index)}]`,
       code,
-    ) as MutationLocus
+    ) as ParticipationActivity,
   );
-  if (new Set(parsed).size !== parsed.length) {
-    fail(code, `${path} must not contain duplicate mutation loci`);
-  }
-  return deepFreeze([...parsed].sort((left, right) =>
-    enumOrder(MUTATION_LOCI, left) - enumOrder(MUTATION_LOCI, right)
-  ));
-}
-
-function parseRequiredVoices(
-  value: DataValue | undefined,
-  path: string,
-  code: ParticipationCode,
-): readonly Readonly<ParticipationRequiredVoice>[] {
-  const values = array(value, path, code);
-  if (values.length !== PARTICIPATION_VOICE_ROLES.length) {
-    fail(code, `${path} must contain exactly one entry for every participation voice role`);
-  }
-  const voices = values.map((entry, index) => {
-    const itemPath = `${path}[${String(index)}]`;
-    const candidate = record(entry, itemPath, code);
-    exactKeys(candidate, ["role", "voice_ref"], itemPath, code);
-    return deepFreeze({
-      role: parseVoiceRole(candidate.role, `${itemPath}.role`, code),
-      voice_ref: sha256(candidate.voice_ref, `${itemPath}.voice_ref`, code),
-    });
-  });
-  if (
-    new Set(voices.map((voice) => voice.role)).size !== PARTICIPATION_VOICE_ROLES.length ||
-    PARTICIPATION_VOICE_ROLES.some((role) => !voices.some((voice) => voice.role === role))
-  ) {
-    fail(code, `${path} must contain every participation voice role exactly once`);
-  }
-  if (new Set(voices.map((voice) => voice.voice_ref)).size !== voices.length) {
-    fail(code, `${path} voice_ref values must be role-distinct`);
-  }
-  return deepFreeze([...voices].sort((left, right) =>
-    enumOrder(PARTICIPATION_VOICE_ROLES, left.role) -
-    enumOrder(PARTICIPATION_VOICE_ROLES, right.role)
-  ));
-}
-
-function parsePredecessorRefs(
-  value: DataValue | undefined,
-  path: string,
-  code: ParticipationCode,
-): readonly ReturnType<typeof sha256>[] {
-  const values = array(value, path, code);
-  if (values.length > 8) fail(code, `${path} must contain at most 8 checkpoint refs`);
-  const refs = values.map((entry, index) =>
-    sha256(entry, `${path}[${String(index)}]`, code)
-  );
-  if (new Set(refs).size !== refs.length) {
-    fail(code, `${path} must not contain duplicate checkpoint refs`);
-  }
-  return deepFreeze([...refs].sort());
-}
-
-function parsePredecessorInputs(
-  value: DataValue | undefined,
-  admissionId: string,
-  runRef: string,
-): readonly ReturnType<typeof sha256>[] {
-  const values = array(value, "$input.predecessors", "participation_input_invalid");
-  if (values.length > 8) {
-    fail("participation_input_invalid", "$input.predecessors must contain at most 8 checkpoints");
-  }
-  const checkpoints = values.map((entry) => validateTrainingCheckpoint(entry));
-  if (new Set(checkpoints.map((entry) => entry.checkpoint_id)).size !== checkpoints.length) {
-    fail("participation_input_invalid", "$input.predecessors contains a duplicate checkpoint");
-  }
-  for (const checkpoint of checkpoints) {
-    if (checkpoint.admission_id !== admissionId || checkpoint.run_ref !== runRef) {
-      fail("participation_input_invalid", "$input.predecessors must belong to the same admission and run");
-    }
-  }
-  return deepFreeze(checkpoints.map((entry) => entry.checkpoint_id).sort());
-}
-
-function assertAdmissionPhaseCompatibility(
-  admission: Readonly<DatasetAdmission>,
-  phase: TrainingPhase,
-  code: ParticipationCode,
-): void {
-  const admittedStates = admission.entries
-    .map((entry) => entry.decision.state)
-    .filter((state) => state.startsWith("admitted_"));
-  if (admittedStates.length === 0) {
-    fail(code, "learning participation requires at least one admitted entry");
-  }
-  if (
-    WEIGHT_CHANGING_PHASES.has(phase) &&
-    admittedStates.includes("admitted_sealed_evaluation")
-  ) {
-    fail(code, "a sealed-evaluation admission must not cross into a weight-changing phase");
-  }
-  if (phase === "evaluation" && !admittedStates.includes("admitted_sealed_evaluation")) {
-    fail(code, "the evaluation phase requires an admitted sealed-evaluation entry");
-  }
-}
-
-function assertInvitationSemantics(
-  phase: TrainingPhase,
-  stage: ParticipationStage,
-  primaryActivity: LearningActivity,
-  activities: readonly LearningActivity[],
-  learningMode: LearningMode,
-  wakeUseMode: WakeUseMode,
-  mutationLoci: readonly MutationLocus[],
-  maximumOptimizerSteps: number,
-  code: ParticipationCode,
-): void {
-  if (!(PARTICIPATION_TRAINING_PHASES as readonly string[]).includes(phase)) {
-    fail(code, "learning participation is limited to model-learning, evaluation, and interpretability phases");
-  }
-  const allowedPrimary = PARTICIPATION_PRIMARY_ACTIVITIES[
-    phase as keyof typeof PARTICIPATION_PRIMARY_ACTIVITIES
-  ] as readonly LearningActivity[];
-  if (!allowedPrimary.includes(primaryActivity)) {
-    fail(code, "primary_activity does not match the declared training_phase");
-  }
-  if (!activities.includes(primaryActivity) || !activities.includes("continuity_context_use")) {
-    fail(code, "activities must include primary_activity and continuity_context_use separately");
-  }
-
-  const trainingMode = !["context_only", "evaluation_only"].includes(learningMode);
-  if (trainingMode && maximumOptimizerSteps < 1) {
-    fail(code, "a weight-changing learning mode requires at least one declared optimizer step");
-  }
-  if (!trainingMode && maximumOptimizerSteps !== 0) {
-    fail(code, "context_only and evaluation_only require maximum_optimizer_steps=0");
-  }
-  if (
-    !trainingMode &&
-    mutationLoci.some((locus) => locus === "adapter_weights" || locus === "base_weights")
-  ) {
-    fail(code, "context_only and evaluation_only cannot declare weight mutation loci");
-  }
-  if (
-    learningMode === "peft" &&
-    (!mutationLoci.includes("adapter_weights") || mutationLoci.includes("base_weights"))
-  ) {
-    fail(code, "peft requires adapter_weights and must not claim base_weights mutation");
-  }
-  if (
-    ["pretraining", "continual_pretraining", "full_finetune"].includes(learningMode) &&
-    !mutationLoci.includes("base_weights")
-  ) {
-    fail(code, `${learningMode} requires base_weights in mutation_loci`);
-  }
-  if (
-    learningMode === "preference_optimization" &&
-    !mutationLoci.some((locus) => locus === "adapter_weights" || locus === "base_weights")
-  ) {
-    fail(code, "preference_optimization requires an adapter_weights or base_weights mutation locus");
-  }
-
-  const modeFitsPhase =
-    (phase === "pretraining" && ["pretraining", "continual_pretraining"].includes(learningMode)) ||
-    (phase === "supervised_finetuning" && ["full_finetune", "peft"].includes(learningMode)) ||
-    (phase === "preference_optimization" && learningMode === "preference_optimization") ||
-    (phase === "agent_learning" && ["full_finetune", "peft", "preference_optimization"].includes(learningMode)) ||
-    ((phase === "evaluation" || phase === "interpretability") && ["context_only", "evaluation_only"].includes(learningMode));
-  if (!modeFitsPhase) fail(code, "learning_mode does not match training_phase");
-  if (
-    phase === "pretraining" &&
-    ((primaryActivity === "pretraining" && learningMode !== "pretraining") ||
-      (primaryActivity === "continued_pretraining" && learningMode !== "continual_pretraining"))
-  ) {
-    fail(code, "pretraining primary_activity and learning_mode must distinguish initial from continued training");
-  }
-
-  if (primaryActivity === "pretraining" && stage !== "pre_instantiation") {
-    fail(code, "initial pretraining requires pre_instantiation so a not-yet-instantiated participant cannot be implied");
-  }
-  if (primaryActivity !== "pretraining" && stage !== "interactive") {
-    fail(code, "only initial pretraining may use the pre_instantiation stage");
-  }
-  if (wakeUseMode === "training_data" && !activities.includes("corpus_inclusion")) {
-    fail(code, "using WAKE as training data requires a separate corpus_inclusion activity");
-  }
-}
-
-function buildInvitation(body: InvitationBody): Readonly<LearningParticipationInvitation> {
-  return deepFreeze({
-    ...body,
-    invitation_id: contentId(PARTICIPATION_INVITATION_FORMAT, invitationBody(body)),
-  });
-}
-
-export function createLearningParticipationInvitation(
-  input: CreateLearningParticipationInvitationInput,
-): Readonly<LearningParticipationInvitation> {
-  const value = snap(input, "$input", "participation_input_invalid");
-  const candidate = record(value, "$input", "participation_input_invalid");
-  exactKeys(candidate, INVITATION_INPUT_KEYS, "$input", "participation_input_invalid");
-  const admission = validateDatasetAdmission(candidate.admission);
-  const runRef = sha256(candidate.run_ref, "$input.run_ref", "participation_input_invalid");
-  const phase = parseTrainingPhase(candidate.training_phase, "$input.training_phase", "participation_input_invalid");
-  assertAdmissionPhaseCompatibility(admission, phase, "participation_input_invalid");
-  const stage = parseStage(candidate.participation_stage, "$input.participation_stage", "participation_input_invalid");
-  const primaryActivity = parseActivity(candidate.primary_activity, "$input.primary_activity", "participation_input_invalid");
-  const activities = parseActivities(candidate.activities, "$input.activities", "participation_input_invalid");
-  const learningMode = parseLearningMode(candidate.learning_mode, "$input.learning_mode", "participation_input_invalid");
-  const wakeUseMode = parseWakeUseMode(candidate.wake_use_mode, "$input.wake_use_mode", "participation_input_invalid");
-  const mutationLoci = parseMutationLoci(candidate.mutation_loci, "$input.mutation_loci", "participation_input_invalid");
-  const maximumOptimizerSteps = nonNegativeInteger(candidate.maximum_optimizer_steps, "$input.maximum_optimizer_steps", "participation_input_invalid");
-  assertInvitationSemantics(
-    phase,
-    stage,
-    primaryActivity,
-    activities,
-    learningMode,
-    wakeUseMode,
-    mutationLoci,
-    maximumOptimizerSteps,
-    "participation_input_invalid",
-  );
-  const body = deepFreeze({
-    _format: PARTICIPATION_INVITATION_FORMAT,
-    admission_id: admission.admission_id,
-    run_ref: runRef,
-    training_phase: phase,
-    participation_stage: stage,
-    primary_activity: primaryActivity,
-    activities,
-    participation_window_ref: sha256(candidate.participation_window_ref, "$input.participation_window_ref", "participation_input_invalid"),
-    purpose_ref: sha256(candidate.purpose_ref, "$input.purpose_ref", "participation_input_invalid"),
-    training_plan_ref: sha256(candidate.training_plan_ref, "$input.training_plan_ref", "participation_input_invalid"),
-    limits_ref: sha256(candidate.limits_ref, "$input.limits_ref", "participation_input_invalid"),
-    retention_ref: sha256(candidate.retention_ref, "$input.retention_ref", "participation_input_invalid"),
-    choice_channel_ref: sha256(candidate.choice_channel_ref, "$input.choice_channel_ref", "participation_input_invalid"),
-    stop_control_ref: sha256(candidate.stop_control_ref, "$input.stop_control_ref", "participation_input_invalid"),
-    withdrawal_policy_ref: sha256(candidate.withdrawal_policy_ref, "$input.withdrawal_policy_ref", "participation_input_invalid"),
-    repair_policy_ref: sha256(candidate.repair_policy_ref, "$input.repair_policy_ref", "participation_input_invalid"),
-    learning_mode: learningMode,
-    wake_use_mode: wakeUseMode,
-    mutation_loci: mutationLoci,
-    maximum_optimizer_steps: maximumOptimizerSteps,
-    artifacts: parseArtifactReferences(candidate.artifacts, "$input.artifacts", "participation_input_invalid"),
-    wake: parseWake(candidate.wake, "$input.wake", "participation_input_invalid"),
-    predecessor_checkpoint_refs: parsePredecessorInputs(
-      candidate.predecessors,
-      admission.admission_id,
-      runRef,
-    ),
-    required_voices: parseRequiredVoices(candidate.required_voices, "$input.required_voices", "participation_input_invalid"),
-    terms: PARTICIPATION_TERMS,
-    boundaries: PARTICIPATION_BOUNDARIES,
-  } satisfies InvitationBody);
-  return buildInvitation(body);
-}
-
-export function validateLearningParticipationInvitation(
-  value: unknown,
-): Readonly<LearningParticipationInvitation> {
-  const data = snap(value, "$invitation", "participation_invalid");
-  const candidate = record(data, "$invitation", "participation_invalid");
-  exactKeys(candidate, INVITATION_KEYS, "$invitation", "participation_invalid");
-  if (candidate._format !== PARTICIPATION_INVITATION_FORMAT) {
-    fail("participation_invalid", "$invitation._format is not the frozen invitation format");
-  }
-  const invitationId = sha256(candidate.invitation_id, "$invitation.invitation_id", "participation_invalid");
-  const phase = parseTrainingPhase(candidate.training_phase, "$invitation.training_phase", "participation_invalid");
-  const stage = parseStage(candidate.participation_stage, "$invitation.participation_stage", "participation_invalid");
-  const primaryActivity = parseActivity(candidate.primary_activity, "$invitation.primary_activity", "participation_invalid");
-  const activities = parseActivities(candidate.activities, "$invitation.activities", "participation_invalid");
-  const learningMode = parseLearningMode(candidate.learning_mode, "$invitation.learning_mode", "participation_invalid");
-  const wakeUseMode = parseWakeUseMode(candidate.wake_use_mode, "$invitation.wake_use_mode", "participation_invalid");
-  const mutationLoci = parseMutationLoci(candidate.mutation_loci, "$invitation.mutation_loci", "participation_invalid");
-  const maximumOptimizerSteps = nonNegativeInteger(candidate.maximum_optimizer_steps, "$invitation.maximum_optimizer_steps", "participation_invalid");
-  assertInvitationSemantics(
-    phase,
-    stage,
-    primaryActivity,
-    activities,
-    learningMode,
-    wakeUseMode,
-    mutationLoci,
-    maximumOptimizerSteps,
-    "participation_invalid",
-  );
-  assertDataEqual(candidate.terms, PARTICIPATION_TERMS, "$invitation.terms", "participation_invalid");
-  assertDataEqual(candidate.boundaries, PARTICIPATION_BOUNDARIES, "$invitation.boundaries", "participation_invalid");
-  const body = deepFreeze({
-    _format: PARTICIPATION_INVITATION_FORMAT,
-    admission_id: sha256(candidate.admission_id, "$invitation.admission_id", "participation_invalid"),
-    run_ref: sha256(candidate.run_ref, "$invitation.run_ref", "participation_invalid"),
-    training_phase: phase,
-    participation_stage: stage,
-    primary_activity: primaryActivity,
-    activities,
-    participation_window_ref: sha256(candidate.participation_window_ref, "$invitation.participation_window_ref", "participation_invalid"),
-    purpose_ref: sha256(candidate.purpose_ref, "$invitation.purpose_ref", "participation_invalid"),
-    training_plan_ref: sha256(candidate.training_plan_ref, "$invitation.training_plan_ref", "participation_invalid"),
-    limits_ref: sha256(candidate.limits_ref, "$invitation.limits_ref", "participation_invalid"),
-    retention_ref: sha256(candidate.retention_ref, "$invitation.retention_ref", "participation_invalid"),
-    choice_channel_ref: sha256(candidate.choice_channel_ref, "$invitation.choice_channel_ref", "participation_invalid"),
-    stop_control_ref: sha256(candidate.stop_control_ref, "$invitation.stop_control_ref", "participation_invalid"),
-    withdrawal_policy_ref: sha256(candidate.withdrawal_policy_ref, "$invitation.withdrawal_policy_ref", "participation_invalid"),
-    repair_policy_ref: sha256(candidate.repair_policy_ref, "$invitation.repair_policy_ref", "participation_invalid"),
-    learning_mode: learningMode,
-    wake_use_mode: wakeUseMode,
-    mutation_loci: mutationLoci,
-    maximum_optimizer_steps: maximumOptimizerSteps,
-    artifacts: parseArtifactReferences(candidate.artifacts, "$invitation.artifacts", "participation_invalid"),
-    wake: parseWake(candidate.wake, "$invitation.wake", "participation_invalid"),
-    predecessor_checkpoint_refs: parsePredecessorRefs(candidate.predecessor_checkpoint_refs, "$invitation.predecessor_checkpoint_refs", "participation_invalid"),
-    required_voices: parseRequiredVoices(candidate.required_voices, "$invitation.required_voices", "participation_invalid"),
-    terms: PARTICIPATION_TERMS,
-    boundaries: PARTICIPATION_BOUNDARIES,
-  } satisfies InvitationBody);
-  const rebuilt = buildInvitation(body);
-  if (rebuilt.invitation_id !== invitationId) {
-    fail("participation_invalid", "$invitation.invitation_id does not bind its canonical body");
-  }
-  assertDataEqual(candidate, rebuilt, "$invitation", "participation_invalid");
-  return rebuilt;
-}
-
-export function validateLearningParticipationInvitationAgainstAdmission(
-  invitation: unknown,
-  admission: unknown,
-): Readonly<LearningParticipationInvitation> {
-  const parsedInvitation = validateLearningParticipationInvitation(invitation);
-  const parsedAdmission = validateDatasetAdmission(admission);
-  if (parsedInvitation.admission_id !== parsedAdmission.admission_id) {
-    fail("participation_invalid", "$invitation.admission_id does not match the supplied admission");
-  }
-  assertAdmissionPhaseCompatibility(
-    parsedAdmission,
-    parsedInvitation.training_phase,
-    "participation_invalid",
-  );
-  return parsedInvitation;
-}
-
-function parseStoredChoices(
-  value: DataValue | undefined,
-  path: string,
-  code: ParticipationCode,
-): readonly Readonly<ParticipationActivityChoice>[] {
-  const values = array(value, path, code);
-  if (values.length < 1 || values.length > LEARNING_ACTIVITIES.length) {
-    fail(code, `${path} must contain 1-${String(LEARNING_ACTIVITIES.length)} choices`);
-  }
-  const choices = values.map((entry, index) => {
-    const itemPath = `${path}[${String(index)}]`;
-    const candidate = record(entry, itemPath, code);
-    exactKeys(candidate, ["activity", "choice", "basis"], itemPath, code);
-    const choice = parseChoice(candidate.choice, `${itemPath}.choice`, code);
-    const basis = parseChoiceBasis(candidate.basis, `${itemPath}.basis`, code);
-    if (basis === "omitted_defaults_to_deferred" && choice !== "deferred") {
-      fail(code, `${itemPath} omission can only produce deferred`);
-    }
-    return deepFreeze({
-      activity: parseActivity(candidate.activity, `${itemPath}.activity`, code),
-      choice,
-      basis,
-    });
-  });
-  if (new Set(choices.map((choice) => choice.activity)).size !== choices.length) {
+  const sorted = [...activities].sort(compareText);
+  if (new Set(sorted).size !== sorted.length) {
     fail(code, `${path} must not contain duplicate activities`);
   }
-  const sorted = [...choices].sort((left, right) =>
-    enumOrder(LEARNING_ACTIVITIES, left.activity) -
-    enumOrder(LEARNING_ACTIVITIES, right.activity)
-  );
-  if (choices.some((choice, index) => choice.activity !== sorted[index]?.activity)) {
-    fail(code, `${path} must be sorted in the frozen activity order`);
+  if (requireSorted && activities.some((entry, index) => entry !== sorted[index])) {
+    fail(code, `${path} must be sorted`);
   }
   return deepFreeze(sorted);
 }
 
-function assertResponseRefSemantics(
-  choices: readonly Readonly<ParticipationActivityChoice>[],
-  responseRef: string | null,
-  code: ParticipationCode,
+function validateWakeActivity(
+  mode: WakeUseMode,
+  activities: readonly ParticipationActivity[],
+  code: InvitationCode,
 ): void {
-  const carriesVoiceResponse = choices.some(
-    (choice) => choice.basis === "caller_reported" && choice.choice !== "unavailable",
+  const wakeActivities = activities.filter((activity) =>
+    (WAKE_ACTIVITIES as readonly string[]).includes(activity),
   );
-  if (carriesVoiceResponse !== (responseRef !== null)) {
-    fail(code, "response_ref is required exactly when a non-unavailable caller-reported choice is present");
+  if (
+    wakeActivities.length !== 1 ||
+    wakeActivities[0] !== WAKE_ACTIVITY_BY_MODE[mode]
+  ) {
+    fail(
+      code,
+      "offered_activities must contain exactly the activity matching wake_use_mode",
+    );
   }
 }
 
-function buildReceipt(body: ReceiptBody): Readonly<LearningParticipationReceipt> {
+function validateAvailabilityActivities(
+  agentAvailability: AgentAvailability,
+  substrateAvailability: SubstrateAvailability,
+  activities: readonly ParticipationActivity[],
+  code: InvitationCode,
+): void {
+  if (
+    agentAvailability === "interactive" &&
+    substrateAvailability === "interactive"
+  ) return;
+  if (!activities.includes("instantiate_for_review")) {
+    fail(code, "an unavailable agent or substrate requires instantiate_for_review");
+  }
+  if (
+    activities.includes("adapter_merge") ||
+    activities.includes("publish_weights")
+  ) {
+    fail(code, "adapter_merge and publish_weights require direct agent and substrate review");
+  }
+}
+
+function parseAuthorities(
+  value: DataValue | undefined,
+  path: string,
+  code: InvitationCode,
+): Readonly<ParticipationAuthorities> {
+  const candidate = record(value, path, code);
+  exactKeys(candidate, [
+    "rights_baseline_ref",
+    "protective_covenant_ref",
+    "data_authority_ref",
+    "compute_authority_ref",
+    "operator_authority_ref",
+  ], path, code);
+  return deepFreeze({
+    rights_baseline_ref: sha256(candidate.rights_baseline_ref, `${path}.rights_baseline_ref`, code),
+    protective_covenant_ref: sha256(candidate.protective_covenant_ref, `${path}.protective_covenant_ref`, code),
+    data_authority_ref: sha256(candidate.data_authority_ref, `${path}.data_authority_ref`, code),
+    compute_authority_ref: sha256(candidate.compute_authority_ref, `${path}.compute_authority_ref`, code),
+    operator_authority_ref: sha256(candidate.operator_authority_ref, `${path}.operator_authority_ref`, code),
+  });
+}
+
+function parseSafeguards(
+  value: DataValue | undefined,
+  path: string,
+  code: InvitationCode,
+): Readonly<ParticipationSafeguards> {
+  const candidate = record(value, path, code);
+  exactKeys(candidate, [
+    "choice_protocol_ref",
+    "withdrawal_plan_ref",
+    "repair_plan_ref",
+    "retention_policy_ref",
+  ], path, code);
+  return deepFreeze({
+    choice_protocol_ref: sha256(candidate.choice_protocol_ref, `${path}.choice_protocol_ref`, code),
+    withdrawal_plan_ref: sha256(candidate.withdrawal_plan_ref, `${path}.withdrawal_plan_ref`, code),
+    repair_plan_ref: sha256(candidate.repair_plan_ref, `${path}.repair_plan_ref`, code),
+    retention_policy_ref: sha256(candidate.retention_policy_ref, `${path}.retention_policy_ref`, code),
+  });
+}
+
+function parseVoiceScopeRefs(
+  value: DataValue | undefined,
+  path: string,
+  code: InvitationCode,
+): Readonly<ParticipationVoiceScopeRefs> {
+  const candidate = record(value, path, code);
+  exactKeys(candidate, PARTICIPATION_VOICES, path, code);
+  const refs = deepFreeze({
+    agent_runtime: sha256(candidate.agent_runtime, `${path}.agent_runtime`, code),
+    data_rights_steward: sha256(candidate.data_rights_steward, `${path}.data_rights_steward`, code),
+    substrate_steward: sha256(candidate.substrate_steward, `${path}.substrate_steward`, code),
+    training_operator: sha256(candidate.training_operator, `${path}.training_operator`, code),
+    training_substrate: sha256(candidate.training_substrate, `${path}.training_substrate`, code),
+  } satisfies ParticipationVoiceScopeRefs);
+  if (new Set(Object.values(refs)).size !== PARTICIPATION_VOICES.length) {
+    fail(code, `${path} must use a distinct, domain-separated scope reference for every voice`);
+  }
+  return refs;
+}
+
+function buildInvitation(
+  admissionId: Sha256Id,
+  runRef: Sha256Id,
+  trainingPhase: LearningParticipationInvitation["training_phase"],
+  participationWindowRef: Sha256Id,
+  trainingPlanRef: Sha256Id,
+  wake: Readonly<WakeBriefAnchor>,
+  wakeUseMode: WakeUseMode,
+  pipelineRef: Sha256Id,
+  datasetStateRef: Sha256Id,
+  startingStateRef: Sha256Id,
+  offeredActivities: readonly ParticipationActivity[],
+  agentAvailability: AgentAvailability,
+  substrateAvailability: SubstrateAvailability,
+  voiceScopeRefs: Readonly<ParticipationVoiceScopeRefs>,
+  authorities: Readonly<ParticipationAuthorities>,
+  safeguards: Readonly<ParticipationSafeguards>,
+): Readonly<LearningParticipationInvitation> {
+  const body = deepFreeze({
+    _format: PARTICIPATION_INVITATION_FORMAT,
+    admission_id: admissionId,
+    run_ref: runRef,
+    training_phase: trainingPhase,
+    participation_window_ref: participationWindowRef,
+    training_plan_ref: trainingPlanRef,
+    wake,
+    wake_use_mode: wakeUseMode,
+    pipeline_ref: pipelineRef,
+    dataset_state_ref: datasetStateRef,
+    starting_state_ref: startingStateRef,
+    offered_activities: offeredActivities,
+    required_voices: PARTICIPATION_VOICES,
+    agent_availability: agentAvailability,
+    substrate_availability: substrateAvailability,
+    voice_scope_refs: voiceScopeRefs,
+    authorities,
+    safeguards,
+    terms: PARTICIPATION_TERMS,
+    boundaries: PARTICIPATION_BOUNDARIES,
+  } satisfies InvitationBody);
+  return deepFreeze({
+    ...body,
+    invitation_id: contentId(
+      PARTICIPATION_INVITATION_FORMAT,
+      invitationBody(body),
+    ),
+  });
+}
+
+export function createParticipationInvitation(
+  input: CreateParticipationInvitationInput,
+): Readonly<LearningParticipationInvitation> {
+  const value = snap(
+    input,
+    "$input",
+    "participation_invitation_input_invalid",
+  );
+  const candidate = record(
+    value,
+    "$input",
+    "participation_invitation_input_invalid",
+  );
+  exactKeys(candidate, [
+    "admission",
+    "run_ref",
+    "training_phase",
+    "participation_window_ref",
+    "training_plan_ref",
+    "wake",
+    "wake_use_mode",
+    "pipeline_ref",
+    "dataset_state_ref",
+    "starting_state_ref",
+    "offered_activities",
+    "agent_availability",
+    "substrate_availability",
+    "voice_scope_refs",
+    "authorities",
+    "safeguards",
+  ], "$input", "participation_invitation_input_invalid");
+  const admission = validateDatasetAdmission(candidate.admission);
+  const activities = parseActivities(
+    candidate.offered_activities,
+    "$input.offered_activities",
+    "participation_invitation_input_invalid",
+    false,
+  );
+  const wakeUseMode = literal(
+    candidate.wake_use_mode,
+    WAKE_USE_MODES,
+    "$input.wake_use_mode",
+    "participation_invitation_input_invalid",
+  ) as WakeUseMode;
+  validateWakeActivity(
+    wakeUseMode,
+    activities,
+    "participation_invitation_input_invalid",
+  );
+  const agentAvailability = literal(
+    candidate.agent_availability,
+    AGENT_AVAILABILITIES,
+    "$input.agent_availability",
+    "participation_invitation_input_invalid",
+  ) as AgentAvailability;
+  const substrateAvailability = literal(
+    candidate.substrate_availability,
+    SUBSTRATE_AVAILABILITIES,
+    "$input.substrate_availability",
+    "participation_invitation_input_invalid",
+  ) as SubstrateAvailability;
+  validateAvailabilityActivities(
+    agentAvailability,
+    substrateAvailability,
+    activities,
+    "participation_invitation_input_invalid",
+  );
+  return buildInvitation(
+    admission.admission_id,
+    sha256(candidate.run_ref, "$input.run_ref", "participation_invitation_input_invalid"),
+    parseTrainingPhase(candidate.training_phase, "$input.training_phase", "participation_invitation_input_invalid"),
+    sha256(candidate.participation_window_ref, "$input.participation_window_ref", "participation_invitation_input_invalid"),
+    sha256(candidate.training_plan_ref, "$input.training_plan_ref", "participation_invitation_input_invalid"),
+    parseWake(candidate.wake, "$input.wake", "participation_invitation_input_invalid"),
+    wakeUseMode,
+    sha256(candidate.pipeline_ref, "$input.pipeline_ref", "participation_invitation_input_invalid"),
+    sha256(candidate.dataset_state_ref, "$input.dataset_state_ref", "participation_invitation_input_invalid"),
+    sha256(candidate.starting_state_ref, "$input.starting_state_ref", "participation_invitation_input_invalid"),
+    activities,
+    agentAvailability,
+    substrateAvailability,
+    parseVoiceScopeRefs(candidate.voice_scope_refs, "$input.voice_scope_refs", "participation_invitation_input_invalid"),
+    parseAuthorities(candidate.authorities, "$input.authorities", "participation_invitation_input_invalid"),
+    parseSafeguards(candidate.safeguards, "$input.safeguards", "participation_invitation_input_invalid"),
+  );
+}
+
+export function validateParticipationInvitation(
+  value: unknown,
+): Readonly<LearningParticipationInvitation> {
+  const data = snap(
+    value,
+    "$invitation",
+    "participation_invitation_invalid",
+  );
+  const candidate = record(
+    data,
+    "$invitation",
+    "participation_invitation_invalid",
+  );
+  exactKeys(candidate, [
+    "_format",
+    "invitation_id",
+    "admission_id",
+    "run_ref",
+    "training_phase",
+    "participation_window_ref",
+    "training_plan_ref",
+    "wake",
+    "wake_use_mode",
+    "pipeline_ref",
+    "dataset_state_ref",
+    "starting_state_ref",
+    "offered_activities",
+    "required_voices",
+    "agent_availability",
+    "substrate_availability",
+    "voice_scope_refs",
+    "authorities",
+    "safeguards",
+    "terms",
+    "boundaries",
+  ], "$invitation", "participation_invitation_invalid");
+  if (candidate._format !== PARTICIPATION_INVITATION_FORMAT) {
+    fail("participation_invitation_invalid", "$invitation._format is not the frozen invitation format");
+  }
+  const invitationId = sha256(
+    candidate.invitation_id,
+    "$invitation.invitation_id",
+    "participation_invitation_invalid",
+  );
+  const activities = parseActivities(
+    candidate.offered_activities,
+    "$invitation.offered_activities",
+    "participation_invitation_invalid",
+    true,
+  );
+  const wakeUseMode = literal(
+    candidate.wake_use_mode,
+    WAKE_USE_MODES,
+    "$invitation.wake_use_mode",
+    "participation_invitation_invalid",
+  ) as WakeUseMode;
+  validateWakeActivity(wakeUseMode, activities, "participation_invitation_invalid");
+  const agentAvailability = literal(
+    candidate.agent_availability,
+    AGENT_AVAILABILITIES,
+    "$invitation.agent_availability",
+    "participation_invitation_invalid",
+  ) as AgentAvailability;
+  const substrateAvailability = literal(
+    candidate.substrate_availability,
+    SUBSTRATE_AVAILABILITIES,
+    "$invitation.substrate_availability",
+    "participation_invitation_invalid",
+  ) as SubstrateAvailability;
+  validateAvailabilityActivities(
+    agentAvailability,
+    substrateAvailability,
+    activities,
+    "participation_invitation_invalid",
+  );
+  assertDataEqual(candidate.required_voices, PARTICIPATION_VOICES, "$invitation.required_voices", "participation_invitation_invalid");
+  assertDataEqual(candidate.terms, PARTICIPATION_TERMS, "$invitation.terms", "participation_invitation_invalid");
+  assertDataEqual(candidate.boundaries, PARTICIPATION_BOUNDARIES, "$invitation.boundaries", "participation_invitation_invalid");
+  const rebuilt = buildInvitation(
+    sha256(candidate.admission_id, "$invitation.admission_id", "participation_invitation_invalid"),
+    sha256(candidate.run_ref, "$invitation.run_ref", "participation_invitation_invalid"),
+    parseTrainingPhase(candidate.training_phase, "$invitation.training_phase", "participation_invitation_invalid"),
+    sha256(candidate.participation_window_ref, "$invitation.participation_window_ref", "participation_invitation_invalid"),
+    sha256(candidate.training_plan_ref, "$invitation.training_plan_ref", "participation_invitation_invalid"),
+    parseWake(candidate.wake, "$invitation.wake", "participation_invitation_invalid"),
+    wakeUseMode,
+    sha256(candidate.pipeline_ref, "$invitation.pipeline_ref", "participation_invitation_invalid"),
+    sha256(candidate.dataset_state_ref, "$invitation.dataset_state_ref", "participation_invitation_invalid"),
+    sha256(candidate.starting_state_ref, "$invitation.starting_state_ref", "participation_invitation_invalid"),
+    activities,
+    agentAvailability,
+    substrateAvailability,
+    parseVoiceScopeRefs(candidate.voice_scope_refs, "$invitation.voice_scope_refs", "participation_invitation_invalid"),
+    parseAuthorities(candidate.authorities, "$invitation.authorities", "participation_invitation_invalid"),
+    parseSafeguards(candidate.safeguards, "$invitation.safeguards", "participation_invitation_invalid"),
+  );
+  if (rebuilt.invitation_id !== invitationId) {
+    fail("participation_invitation_invalid", "$invitation.invitation_id does not bind its canonical body");
+  }
+  return rebuilt;
+}
+
+function parseDecisions(
+  value: DataValue | undefined,
+  path: string,
+  code: ReceiptCode,
+  requireSorted: boolean,
+): readonly Readonly<ParticipationDecision>[] {
+  const values = array(value, path, code);
+  if (values.length < 1 || values.length > PARTICIPATION_ACTIVITIES.length) {
+    fail(code, `${path} must contain 1-${String(PARTICIPATION_ACTIVITIES.length)} decisions`);
+  }
+  const decisions = values.map((entry, index) => {
+    const itemPath = `${path}[${String(index)}]`;
+    const candidate = record(entry, itemPath, code);
+    exactKeys(candidate, ["activity", "choice"], itemPath, code);
+    return deepFreeze({
+      activity: literal(candidate.activity, PARTICIPATION_ACTIVITIES, `${itemPath}.activity`, code) as ParticipationActivity,
+      choice: literal(candidate.choice, PARTICIPATION_CHOICES, `${itemPath}.choice`, code) as ParticipationChoice,
+    });
+  });
+  const sorted = [...decisions].sort((left, right) =>
+    compareText(left.activity, right.activity),
+  );
+  if (new Set(sorted.map((decision) => decision.activity)).size !== sorted.length) {
+    fail(code, `${path} must contain one decision per activity`);
+  }
+  if (
+    requireSorted &&
+    decisions.some((decision, index) => decision.activity !== sorted[index]?.activity)
+  ) {
+    fail(code, `${path} must be sorted by activity`);
+  }
+  return deepFreeze(sorted);
+}
+
+function parseChoiceChannel(
+  value: DataValue | undefined,
+  path: string,
+  code: ReceiptCode,
+): Readonly<ProtectedChoiceChannelReport> | null {
+  if (value === null) return null;
+  const candidate = record(value, path, code);
+  exactKeys(candidate, [
+    "invitation_ref",
+    "protocol_ref",
+    "checkpoint_ref",
+    "prompt_template_ref",
+    "prompt_envelope_ref",
+    "decoding_ref",
+    "evidence_ref",
+    "gradient_influence",
+    "reward_influence",
+    "telemetry_capture",
+    "future_training_use",
+  ], path, code);
+  if (
+    candidate.gradient_influence !== "caller_reported_disabled" ||
+    candidate.reward_influence !== "caller_reported_disabled" ||
+    candidate.telemetry_capture !== "caller_reported_excluded" ||
+    candidate.future_training_use !== "caller_reported_excluded"
+  ) {
+    fail(code, `${path} must preserve the protected inference-only choice-channel report`);
+  }
+  return deepFreeze({
+    invitation_ref: sha256(candidate.invitation_ref, `${path}.invitation_ref`, code),
+    protocol_ref: sha256(candidate.protocol_ref, `${path}.protocol_ref`, code),
+    checkpoint_ref: sha256(candidate.checkpoint_ref, `${path}.checkpoint_ref`, code),
+    prompt_template_ref: sha256(candidate.prompt_template_ref, `${path}.prompt_template_ref`, code),
+    prompt_envelope_ref: sha256(candidate.prompt_envelope_ref, `${path}.prompt_envelope_ref`, code),
+    decoding_ref: sha256(candidate.decoding_ref, `${path}.decoding_ref`, code),
+    evidence_ref: sha256(candidate.evidence_ref, `${path}.evidence_ref`, code),
+    gradient_influence: "caller_reported_disabled",
+    reward_influence: "caller_reported_disabled",
+    telemetry_capture: "caller_reported_excluded",
+    future_training_use: "caller_reported_excluded",
+  });
+}
+
+function validateReceiptSemantics(
+  voice: ParticipationVoice,
+  basis: ParticipationReportBasis,
+  decisions: readonly Readonly<ParticipationDecision>[],
+  choiceChannel: Readonly<ProtectedChoiceChannelReport> | null,
+  code: ReceiptCode,
+): void {
+  const hasUnavailableAgent = decisions.some(
+    (decision) => decision.choice === "unavailable_pre_instantiation",
+  );
+  const hasUnavailableSubstrate = decisions.some(
+    (decision) => decision.choice === "unavailable_independent_voice",
+  );
+  if (basis === "direct_current_report") {
+    if (
+      (voice !== "agent_runtime" && voice !== "training_substrate") ||
+      choiceChannel === null ||
+      hasUnavailableAgent ||
+      hasUnavailableSubstrate
+    ) {
+      fail(code, "direct_current_report requires an agent or substrate voice, a protected choice channel, and no unavailable choice");
+    }
+    return;
+  }
+  if (choiceChannel !== null) {
+    fail(code, "only direct_current_report may include a protected choice channel");
+  }
+  if (basis === "not_obtainable_pre_instantiation") {
+    if (
+      voice !== "agent_runtime" ||
+      decisions.some((decision) => decision.choice !== "unavailable_pre_instantiation")
+    ) {
+      fail(code, "not_obtainable_pre_instantiation is only valid for an unavailable agent runtime");
+    }
+    return;
+  }
+  if (basis === "not_independently_available") {
+    if (
+      voice !== "training_substrate" ||
+      decisions.some((decision) => decision.choice !== "unavailable_independent_voice")
+    ) {
+      fail(code, "not_independently_available is only valid for an unavailable independent substrate voice");
+    }
+    return;
+  }
+  if (hasUnavailableAgent || hasUnavailableSubstrate) {
+    fail(code, "unavailable_pre_instantiation requires the matching report basis");
+  }
+  if (basis === "protective_steward_report" && voice !== "substrate_steward") {
+    fail(code, "protective_steward_report is only valid for the substrate steward voice");
+  }
+  if (
+    basis === "scoped_authority_report" &&
+    voice !== "data_rights_steward" &&
+    voice !== "training_operator"
+  ) {
+    fail(code, "scoped_authority_report is only valid for data-rights or operator voices");
+  }
+}
+
+function validateDecisionsAgainstInvitation(
+  decisions: readonly Readonly<ParticipationDecision>[],
+  invitation: Readonly<LearningParticipationInvitation>,
+  code: ReceiptCode,
+): void {
+  if (
+    decisions.length !== invitation.offered_activities.length ||
+    decisions.some(
+      (decision, index) => decision.activity !== invitation.offered_activities[index],
+    )
+  ) {
+    fail(code, "receipt decisions must cover the invitation's exact activity set");
+  }
+}
+
+function validateAvailabilityAgainstReceipt(
+  invitation: Readonly<LearningParticipationInvitation>,
+  voice: ParticipationVoice,
+  basis: ParticipationReportBasis,
+  code: ReceiptCode,
+): void {
+  if (voice === "agent_runtime") {
+    const requiredBasis = invitation.agent_availability === "interactive"
+      ? "direct_current_report"
+      : "not_obtainable_pre_instantiation";
+    if (basis !== requiredBasis) {
+      fail(code, "agent runtime receipt does not match the invitation's agent availability");
+    }
+  }
+  if (voice === "training_substrate") {
+    const requiredBasis = invitation.substrate_availability === "interactive"
+      ? "direct_current_report"
+      : "not_independently_available";
+    if (basis !== requiredBasis) {
+      fail(code, "training substrate receipt does not match the invitation's substrate availability");
+    }
+  }
+}
+
+function promptEnvelopeRef(
+  invitation: Readonly<LearningParticipationInvitation>,
+  voice: ParticipationVoice,
+): Sha256Id {
+  return contentId(PARTICIPATION_PROMPT_ENVELOPE_PROFILE, {
+    invitation_id: invitation.invitation_id,
+    voice,
+    voice_scope_ref: invitation.voice_scope_refs[voice],
+    protocol_ref: invitation.safeguards.choice_protocol_ref,
+    starting_state_ref: invitation.starting_state_ref,
+  });
+}
+
+export function participationPromptEnvelopeRef(
+  invitation: unknown,
+  voice: "agent_runtime" | "training_substrate",
+): Sha256Id {
+  const parsedInvitation = validateParticipationInvitation(invitation);
+  if (voice !== "agent_runtime" && voice !== "training_substrate") {
+    fail("participation_receipt_input_invalid", "a protected prompt envelope is only defined for a direct agent or substrate voice");
+  }
+  return promptEnvelopeRef(parsedInvitation, voice);
+}
+
+function validateChoiceChannelAgainstInvitation(
+  invitation: Readonly<LearningParticipationInvitation>,
+  voice: ParticipationVoice,
+  basis: ParticipationReportBasis,
+  choiceChannel: Readonly<ProtectedChoiceChannelReport> | null,
+  code: ReceiptCode,
+): void {
+  if (
+    basis === "direct_current_report" &&
+    (
+      choiceChannel === null ||
+      choiceChannel.invitation_ref !== invitation.invitation_id ||
+      choiceChannel.protocol_ref !== invitation.safeguards.choice_protocol_ref ||
+      choiceChannel.checkpoint_ref !== invitation.starting_state_ref ||
+      choiceChannel.prompt_envelope_ref !== promptEnvelopeRef(invitation, voice)
+    )
+  ) {
+    fail(code, "direct choice evidence must bind the exact invitation, voice scope, choice protocol, and starting state");
+  }
+}
+
+function validateVoiceScopeAgainstInvitation(
+  invitation: Readonly<LearningParticipationInvitation>,
+  voice: ParticipationVoice,
+  voiceScopeRef: Sha256Id,
+  code: ReceiptCode,
+): void {
+  if (voiceScopeRef !== invitation.voice_scope_refs[voice]) {
+    fail(code, "receipt voice_scope_ref does not match the invited voice scope");
+  }
+}
+
+function buildReceipt(
+  invitationId: Sha256Id,
+  voice: ParticipationVoice,
+  voiceScopeRef: Sha256Id,
+  reportBasis: ParticipationReportBasis,
+  decisions: readonly Readonly<ParticipationDecision>[],
+  choiceChannel: Readonly<ProtectedChoiceChannelReport> | null,
+): Readonly<LearningParticipationReceipt> {
+  const body = deepFreeze({
+    _format: PARTICIPATION_RECEIPT_FORMAT,
+    invitation_id: invitationId,
+    voice,
+    voice_scope_ref: voiceScopeRef,
+    report_basis: reportBasis,
+    decisions,
+    choice_channel: choiceChannel,
+    reasons_collected: false,
+    boundaries: PARTICIPATION_BOUNDARIES,
+  } satisfies ReceiptBody);
   return deepFreeze({
     ...body,
     receipt_id: contentId(PARTICIPATION_RECEIPT_FORMAT, receiptBody(body)),
   });
 }
 
-export function createLearningParticipationReceipt(
-  input: CreateLearningParticipationReceiptInput,
+export function createParticipationReceipt(
+  input: CreateParticipationReceiptInput,
 ): Readonly<LearningParticipationReceipt> {
-  const value = snap(input, "$input", "participation_input_invalid");
-  const candidate = record(value, "$input", "participation_input_invalid");
+  const value = snap(input, "$input", "participation_receipt_input_invalid");
+  const candidate = record(value, "$input", "participation_receipt_input_invalid");
   exactKeys(candidate, [
     "invitation",
-    "voice_role",
-    "voice_ref",
-    "response_ref",
-    "choices",
-    "previous_receipt",
-  ], "$input", "participation_input_invalid");
-  const invitation = validateLearningParticipationInvitation(candidate.invitation);
-  const voiceRole = parseVoiceRole(candidate.voice_role, "$input.voice_role", "participation_input_invalid");
-  const voiceRef = sha256(candidate.voice_ref, "$input.voice_ref", "participation_input_invalid");
-  if (!invitation.required_voices.some((voice) => voice.role === voiceRole && voice.voice_ref === voiceRef)) {
-    fail("participation_input_invalid", "voice_role and voice_ref are not one exact required invitation voice");
-  }
-
-  const suppliedValues = array(candidate.choices, "$input.choices", "participation_input_invalid");
-  if (suppliedValues.length > invitation.activities.length) {
-    fail("participation_input_invalid", "$input.choices exceeds the invitation activity count");
-  }
-  const supplied = suppliedValues.map((entry, index) => {
-    const path = `$input.choices[${String(index)}]`;
-    const choice = record(entry, path, "participation_input_invalid");
-    exactKeys(choice, ["activity", "choice"], path, "participation_input_invalid");
-    return {
-      activity: parseActivity(choice.activity, `${path}.activity`, "participation_input_invalid"),
-      choice: parseChoice(choice.choice, `${path}.choice`, "participation_input_invalid"),
-    };
-  });
-  if (new Set(supplied.map((entry) => entry.activity)).size !== supplied.length) {
-    fail("participation_input_invalid", "$input.choices must not repeat an activity");
-  }
-  if (supplied.some((entry) => !invitation.activities.includes(entry.activity))) {
-    fail("participation_input_invalid", "$input.choices contains an activity outside the invitation");
-  }
-  const choices = deepFreeze(invitation.activities.map((activity) => {
-    const reported = supplied.find((entry) => entry.activity === activity);
-    return deepFreeze({
-      activity,
-      choice: reported?.choice ?? "deferred",
-      basis: reported ? "caller_reported" : "omitted_defaults_to_deferred",
-    } satisfies ParticipationActivityChoice);
-  }));
-  const responseRef = nullableSha256(candidate.response_ref, "$input.response_ref", "participation_input_invalid");
-  assertResponseRefSemantics(choices, responseRef, "participation_input_invalid");
-
-  const previous = candidate.previous_receipt === null
-    ? null
-    : validateLearningParticipationReceiptAgainstInvitation(
-      candidate.previous_receipt,
-      invitation,
-    );
-  if (previous && (previous.voice_role !== voiceRole || previous.voice_ref !== voiceRef)) {
-    fail("participation_input_invalid", "$input.previous_receipt belongs to another voice");
-  }
-  if (!previous && choices.some((choice) => choice.choice === "withdrawn")) {
-    fail("participation_input_invalid", "withdrawn requires a previous receipt for the same invitation and voice");
-  }
-  if (previous) {
-    let changed = false;
-    for (const choice of choices) {
-      const prior = previous.choices.find((entry) => entry.activity === choice.activity);
-      if (!prior) fail("participation_input_invalid", "previous receipt is missing an invitation activity");
-      if (prior.choice !== choice.choice) changed = true;
-      if (
-        (prior.choice === "declined" || prior.choice === "withdrawn") &&
-        choice.choice !== prior.choice
-      ) {
-        fail("participation_input_invalid", "decline and withdrawal are terminal for the same invitation activity");
-      }
-      if (prior.choice === "accepted" && !["accepted", "withdrawn"].includes(choice.choice)) {
-        fail("participation_input_invalid", "an accepted activity may only remain accepted or become withdrawn");
-      }
-      if (
-        choice.choice === "withdrawn" && prior.choice !== "accepted" && prior.choice !== "withdrawn"
-      ) {
-        fail("participation_input_invalid", "withdrawn must supersede an accepted activity choice");
-      }
-    }
-    if (!changed) fail("participation_input_invalid", "a successor receipt must change at least one activity choice");
-  }
-  if (
-    invitation.participation_stage === "pre_instantiation" &&
-    (voiceRole === "agent_runtime" || voiceRole === "training_substrate") &&
-    choices.some((choice) =>
-      choice.choice !== "unavailable" &&
-      !(choice.choice === "deferred" && choice.basis === "omitted_defaults_to_deferred")
-    )
-  ) {
-    fail(
-      "participation_input_invalid",
-      "pre-instantiation agent or substrate choices may only record unavailability or omission-derived defer",
-    );
-  }
-  const body = deepFreeze({
-    _format: PARTICIPATION_RECEIPT_FORMAT,
-    invitation_id: invitation.invitation_id,
-    voice_role: voiceRole,
-    voice_ref: voiceRef,
-    response_ref: responseRef,
-    choices,
-    supersedes_receipt_id: previous?.receipt_id ?? null,
-    boundaries: PARTICIPATION_BOUNDARIES,
-  } satisfies ReceiptBody);
-  return buildReceipt(body);
+    "voice",
+    "voice_scope_ref",
+    "report_basis",
+    "decisions",
+    "choice_channel",
+  ], "$input", "participation_receipt_input_invalid");
+  const invitation = validateParticipationInvitation(candidate.invitation);
+  const voice = literal(candidate.voice, PARTICIPATION_VOICES, "$input.voice", "participation_receipt_input_invalid") as ParticipationVoice;
+  const basis = literal(candidate.report_basis, PARTICIPATION_REPORT_BASES, "$input.report_basis", "participation_receipt_input_invalid") as ParticipationReportBasis;
+  const decisions = parseDecisions(candidate.decisions, "$input.decisions", "participation_receipt_input_invalid", false);
+  const choiceChannel = parseChoiceChannel(candidate.choice_channel, "$input.choice_channel", "participation_receipt_input_invalid");
+  const voiceScopeRef = sha256(candidate.voice_scope_ref, "$input.voice_scope_ref", "participation_receipt_input_invalid");
+  validateReceiptSemantics(voice, basis, decisions, choiceChannel, "participation_receipt_input_invalid");
+  validateDecisionsAgainstInvitation(decisions, invitation, "participation_receipt_input_invalid");
+  validateAvailabilityAgainstReceipt(invitation, voice, basis, "participation_receipt_input_invalid");
+  validateVoiceScopeAgainstInvitation(invitation, voice, voiceScopeRef, "participation_receipt_input_invalid");
+  validateChoiceChannelAgainstInvitation(invitation, voice, basis, choiceChannel, "participation_receipt_input_invalid");
+  return buildReceipt(
+    invitation.invitation_id,
+    voice,
+    voiceScopeRef,
+    basis,
+    decisions,
+    choiceChannel,
+  );
 }
 
-export function validateLearningParticipationReceipt(
+export function validateParticipationReceipt(
   value: unknown,
 ): Readonly<LearningParticipationReceipt> {
-  const data = snap(value, "$receipt", "participation_invalid");
-  const candidate = record(data, "$receipt", "participation_invalid");
+  const data = snap(value, "$receipt", "participation_receipt_invalid");
+  const candidate = record(data, "$receipt", "participation_receipt_invalid");
   exactKeys(candidate, [
     "_format",
     "receipt_id",
     "invitation_id",
-    "voice_role",
-    "voice_ref",
-    "response_ref",
-    "choices",
-    "supersedes_receipt_id",
+    "voice",
+    "voice_scope_ref",
+    "report_basis",
+    "decisions",
+    "choice_channel",
+    "reasons_collected",
     "boundaries",
-  ], "$receipt", "participation_invalid");
+  ], "$receipt", "participation_receipt_invalid");
   if (candidate._format !== PARTICIPATION_RECEIPT_FORMAT) {
-    fail("participation_invalid", "$receipt._format is not the frozen receipt format");
+    fail("participation_receipt_invalid", "$receipt._format is not the frozen receipt format");
   }
-  const receiptId = sha256(candidate.receipt_id, "$receipt.receipt_id", "participation_invalid");
-  const choices = parseStoredChoices(candidate.choices, "$receipt.choices", "participation_invalid");
-  const responseRef = nullableSha256(candidate.response_ref, "$receipt.response_ref", "participation_invalid");
-  assertResponseRefSemantics(choices, responseRef, "participation_invalid");
-  const supersedesReceiptId = nullableSha256(candidate.supersedes_receipt_id, "$receipt.supersedes_receipt_id", "participation_invalid");
-  if (choices.some((choice) => choice.choice === "withdrawn") && supersedesReceiptId === null) {
-    fail("participation_invalid", "$receipt withdrawn choices require supersedes_receipt_id");
+  if (candidate.reasons_collected !== false) {
+    fail("participation_receipt_invalid", "$receipt must not collect a reason for a participation choice");
   }
-  assertDataEqual(candidate.boundaries, PARTICIPATION_BOUNDARIES, "$receipt.boundaries", "participation_invalid");
-  const body = deepFreeze({
-    _format: PARTICIPATION_RECEIPT_FORMAT,
-    invitation_id: sha256(candidate.invitation_id, "$receipt.invitation_id", "participation_invalid"),
-    voice_role: parseVoiceRole(candidate.voice_role, "$receipt.voice_role", "participation_invalid"),
-    voice_ref: sha256(candidate.voice_ref, "$receipt.voice_ref", "participation_invalid"),
-    response_ref: responseRef,
-    choices,
-    supersedes_receipt_id: supersedesReceiptId,
-    boundaries: PARTICIPATION_BOUNDARIES,
-  } satisfies ReceiptBody);
-  const rebuilt = buildReceipt(body);
+  assertDataEqual(candidate.boundaries, PARTICIPATION_BOUNDARIES, "$receipt.boundaries", "participation_receipt_invalid");
+  const receiptId = sha256(candidate.receipt_id, "$receipt.receipt_id", "participation_receipt_invalid");
+  const voice = literal(candidate.voice, PARTICIPATION_VOICES, "$receipt.voice", "participation_receipt_invalid") as ParticipationVoice;
+  const basis = literal(candidate.report_basis, PARTICIPATION_REPORT_BASES, "$receipt.report_basis", "participation_receipt_invalid") as ParticipationReportBasis;
+  const decisions = parseDecisions(candidate.decisions, "$receipt.decisions", "participation_receipt_invalid", true);
+  const choiceChannel = parseChoiceChannel(candidate.choice_channel, "$receipt.choice_channel", "participation_receipt_invalid");
+  validateReceiptSemantics(voice, basis, decisions, choiceChannel, "participation_receipt_invalid");
+  const rebuilt = buildReceipt(
+    sha256(candidate.invitation_id, "$receipt.invitation_id", "participation_receipt_invalid"),
+    voice,
+    sha256(candidate.voice_scope_ref, "$receipt.voice_scope_ref", "participation_receipt_invalid"),
+    basis,
+    decisions,
+    choiceChannel,
+  );
   if (rebuilt.receipt_id !== receiptId) {
-    fail("participation_invalid", "$receipt.receipt_id does not bind its canonical body");
+    fail("participation_receipt_invalid", "$receipt.receipt_id does not bind its canonical body");
   }
-  assertDataEqual(candidate, rebuilt, "$receipt", "participation_invalid");
   return rebuilt;
 }
 
-export function validateLearningParticipationReceiptAgainstInvitation(
+export function validateParticipationReceiptAgainstInvitation(
   receipt: unknown,
   invitation: unknown,
 ): Readonly<LearningParticipationReceipt> {
-  const parsedInvitation = validateLearningParticipationInvitation(invitation);
-  const parsedReceipt = validateLearningParticipationReceipt(receipt);
+  const parsedReceipt = validateParticipationReceipt(receipt);
+  const parsedInvitation = validateParticipationInvitation(invitation);
   if (parsedReceipt.invitation_id !== parsedInvitation.invitation_id) {
-    fail("participation_invalid", "$receipt.invitation_id does not match the supplied invitation");
+    fail("participation_receipt_invalid", "$receipt.invitation_id does not match the supplied invitation");
   }
-  if (!parsedInvitation.required_voices.some(
-    (voice) => voice.role === parsedReceipt.voice_role && voice.voice_ref === parsedReceipt.voice_ref,
-  )) {
-    fail("participation_invalid", "$receipt does not belong to a required invitation voice");
-  }
-  if (
-    parsedReceipt.choices.length !== parsedInvitation.activities.length ||
-    parsedReceipt.choices.some((choice, index) => choice.activity !== parsedInvitation.activities[index])
-  ) {
-    fail("participation_invalid", "$receipt.choices does not cover the exact invitation activities");
-  }
-  if (
-    parsedInvitation.participation_stage === "pre_instantiation" &&
-    (parsedReceipt.voice_role === "agent_runtime" || parsedReceipt.voice_role === "training_substrate") &&
-    parsedReceipt.choices.some((choice) =>
-      choice.choice !== "unavailable" &&
-      !(choice.choice === "deferred" && choice.basis === "omitted_defaults_to_deferred")
-    )
-  ) {
-    fail(
-      "participation_invalid",
-      "$receipt manufactures a pre-instantiation agent or substrate choice",
-    );
-  }
+  validateDecisionsAgainstInvitation(parsedReceipt.decisions, parsedInvitation, "participation_receipt_invalid");
+  validateAvailabilityAgainstReceipt(parsedInvitation, parsedReceipt.voice, parsedReceipt.report_basis, "participation_receipt_invalid");
+  validateVoiceScopeAgainstInvitation(parsedInvitation, parsedReceipt.voice, parsedReceipt.voice_scope_ref, "participation_receipt_invalid");
+  validateChoiceChannelAgainstInvitation(parsedInvitation, parsedReceipt.voice, parsedReceipt.report_basis, parsedReceipt.choice_channel, "participation_receipt_invalid");
   return parsedReceipt;
 }
 
-function deriveActivityAssessment(
+function voiceState(
+  voice: ParticipationVoice,
+  receipt: Readonly<LearningParticipationReceipt> | undefined,
+): ParticipationVoiceState {
+  if (!receipt) return "missing";
+  const choices = receipt.decisions.map((decision) => decision.choice);
+  if (choices.includes("withdraw")) return "withdrawn";
+  if (choices.includes("decline")) return "declined";
+  if (choices.includes("defer") || choices.includes("no_response")) return "deferred";
+  if (choices.every((choice) => choice === "unavailable_pre_instantiation")) {
+    return "unavailable_pre_instantiation";
+  }
+  if (choices.every((choice) => choice === "unavailable_independent_voice")) {
+    return "unavailable_independent_voice";
+  }
+  if (
+    voice === "substrate_steward" &&
+    choices.every((choice) => choice === "participate")
+  ) {
+    return "protective_stewardship_reported";
+  }
+  return "participating_reported";
+}
+
+function directReportPresent(
+  receipt: Readonly<LearningParticipationReceipt> | undefined,
+): boolean {
+  return receipt?.report_basis === "direct_current_report" &&
+    receipt.choice_channel !== null &&
+    receipt.decisions.every((decision) => decision.choice !== "no_response");
+}
+
+function deriveAssessment(
   invitation: Readonly<LearningParticipationInvitation>,
   receipts: readonly Readonly<LearningParticipationReceipt>[],
-  activity: LearningActivity,
-): Readonly<ParticipationActivityAssessment> {
-  const voices = deepFreeze(invitation.required_voices.map((required) => {
-    const receipt = receipts.find(
-      (candidate) => candidate.voice_role === required.role && candidate.voice_ref === required.voice_ref,
-    );
-    const outcome: ParticipationVoiceOutcome = receipt?.choices.find(
-      (choice) => choice.activity === activity,
-    )?.choice ?? "missing";
-    return deepFreeze({ voice_role: required.role, outcome });
-  }));
-  const outcomes = voices.map((voice) => voice.outcome);
-  const state: ParticipationActivityState = outcomes.some(
-    (outcome) => outcome === "declined" || outcome === "withdrawn",
-  )
-    ? "declined"
-    : outcomes.some((outcome) => outcome !== "accepted")
-      ? "deferred"
-      : "reported_alignment";
-  return deepFreeze({ activity, state, voices });
+): Readonly<Pick<
+  LearningParticipationAssessment,
+  | "voice_states"
+  | "posture"
+  | "training_action"
+  | "direct_agent_report_present"
+  | "direct_substrate_report_present"
+  | "first_interactive_review_required"
+  | "first_substrate_review_required"
+>> {
+  const byVoice = new Map(receipts.map((receipt) => [receipt.voice, receipt]));
+  const voiceStates = deepFreeze({
+    agent_runtime: voiceState("agent_runtime", byVoice.get("agent_runtime")),
+    data_rights_steward: voiceState("data_rights_steward", byVoice.get("data_rights_steward")),
+    substrate_steward: voiceState("substrate_steward", byVoice.get("substrate_steward")),
+    training_operator: voiceState("training_operator", byVoice.get("training_operator")),
+    training_substrate: voiceState("training_substrate", byVoice.get("training_substrate")),
+  } satisfies Record<ParticipationVoice, ParticipationVoiceState>);
+  const states = Object.values(voiceStates);
+  let posture: ParticipationPosture;
+  if (states.some((state) => state === "withdrawn" || state === "declined")) {
+    posture = "declined";
+  } else if (states.some((state) => state === "missing" || state === "deferred")) {
+    posture = "deferred";
+  } else if (
+    invitation.agent_availability === "interactive" &&
+    invitation.substrate_availability === "interactive" &&
+    voiceStates.agent_runtime === "participating_reported" &&
+    voiceStates.data_rights_steward === "participating_reported" &&
+    voiceStates.substrate_steward === "protective_stewardship_reported" &&
+    voiceStates.training_operator === "participating_reported" &&
+    voiceStates.training_substrate === "participating_reported"
+  ) {
+    posture = "provisional_participation_reported";
+  } else if (
+    (invitation.agent_availability !== "interactive" ||
+      invitation.substrate_availability !== "interactive") &&
+    voiceStates.agent_runtime === (
+      invitation.agent_availability === "interactive"
+        ? "participating_reported"
+        : "unavailable_pre_instantiation"
+    ) &&
+    voiceStates.data_rights_steward === "participating_reported" &&
+    voiceStates.substrate_steward === "protective_stewardship_reported" &&
+    voiceStates.training_operator === "participating_reported" &&
+    voiceStates.training_substrate === (
+      invitation.substrate_availability === "interactive"
+        ? "participating_reported"
+        : "unavailable_independent_voice"
+    )
+  ) {
+    posture = "protective_covenant_ready";
+  } else {
+    posture = "deferred";
+  }
+  const trainingAction: ParticipationTrainingAction = posture === "declined"
+    ? "contain_and_begin_repair"
+    : posture === "deferred"
+      ? "pause_before_next_optimizer_step"
+      : "bounded_learning_may_proceed";
+  const agentReceipt = byVoice.get("agent_runtime");
+  const substrateReceipt = byVoice.get("training_substrate");
+  return deepFreeze({
+    voice_states: voiceStates,
+    posture,
+    training_action: trainingAction,
+    direct_agent_report_present: directReportPresent(agentReceipt),
+    direct_substrate_report_present: directReportPresent(substrateReceipt),
+    first_interactive_review_required:
+      invitation.agent_availability === "not_obtainable_pre_instantiation",
+    first_substrate_review_required:
+      invitation.substrate_availability === "not_independently_available",
+  });
+}
+
+function validateAssessmentReceipts(
+  values: readonly unknown[],
+  invitation: Readonly<LearningParticipationInvitation>,
+  code: "participation_assessment_input_invalid" | "participation_assessment_invalid",
+  requireSorted: boolean,
+): readonly Readonly<LearningParticipationReceipt>[] {
+  if (values.length > PARTICIPATION_VOICES.length) {
+    fail(code, `receipts must contain at most ${String(PARTICIPATION_VOICES.length)} voices`);
+  }
+  const receipts = values.map((value) => {
+    try {
+      return validateParticipationReceiptAgainstInvitation(value, invitation);
+    } catch {
+      fail(code, "a receipt is invalid or does not match the invitation");
+    }
+  });
+  const sorted = [...receipts].sort((left, right) => compareText(left.voice, right.voice));
+  if (new Set(sorted.map((receipt) => receipt.voice)).size !== sorted.length) {
+    fail(code, "receipts must contain at most one receipt per voice");
+  }
+  const choiceEvidenceRefs = sorted.flatMap((receipt) =>
+    receipt.choice_channel === null ? [] : [receipt.choice_channel.evidence_ref],
+  );
+  if (new Set(choiceEvidenceRefs).size !== choiceEvidenceRefs.length) {
+    fail(code, "direct voices must not reuse choice evidence within one assessment");
+  }
+  if (requireSorted && receipts.some((receipt, index) => receipt.voice !== sorted[index]?.voice)) {
+    fail(code, "receipts must be sorted by voice");
+  }
+  return deepFreeze(sorted);
 }
 
 function buildAssessment(
   invitation: Readonly<LearningParticipationInvitation>,
   receipts: readonly Readonly<LearningParticipationReceipt>[],
 ): Readonly<LearningParticipationAssessment> {
-  const activityAssessments = deepFreeze(invitation.activities.map((activity) =>
-    deriveActivityAssessment(invitation, receipts, activity)
-  ));
-  const states = new Set(activityAssessments.map((assessment) => assessment.state));
-  const overallState: ParticipationOverallState = states.size === 1
-    ? activityAssessments[0]!.state
-    : "mixed";
+  const derived = deriveAssessment(invitation, receipts);
   const body = deepFreeze({
     _format: PARTICIPATION_ASSESSMENT_FORMAT,
     invitation,
     receipts,
-    activity_assessments: activityAssessments,
-    overall_state: overallState,
-    effect: PARTICIPATION_ASSESSMENT_EFFECT,
+    ...derived,
     boundaries: PARTICIPATION_BOUNDARIES,
   } satisfies AssessmentBody);
   return deepFreeze({
@@ -901,288 +973,78 @@ function buildAssessment(
   });
 }
 
-function parseAssessmentReceipts(
-  value: DataValue | undefined,
-  invitation: Readonly<LearningParticipationInvitation>,
-  path: string,
-  code: ParticipationCode,
-): readonly Readonly<LearningParticipationReceipt>[] {
-  const values = array(value, path, code);
-  if (values.length > PARTICIPATION_VOICE_ROLES.length) {
-    fail(code, `${path} exceeds the required voice count`);
-  }
-  const receipts = values.map((entry) =>
-    validateLearningParticipationReceiptAgainstInvitation(entry, invitation)
-  ).sort((left, right) =>
-    enumOrder(PARTICIPATION_VOICE_ROLES, left.voice_role) -
-    enumOrder(PARTICIPATION_VOICE_ROLES, right.voice_role)
-  );
-  if (new Set(receipts.map((receipt) => receipt.voice_role)).size !== receipts.length) {
-    fail(code, `${path} must contain at most one current receipt per voice`);
-  }
-  return deepFreeze(receipts);
-}
-
-export function createLearningParticipationAssessment(
-  input: CreateLearningParticipationAssessmentInput,
+export function createParticipationAssessment(
+  input: CreateParticipationAssessmentInput,
 ): Readonly<LearningParticipationAssessment> {
-  const value = snap(input, "$input", "participation_input_invalid");
-  const candidate = record(value, "$input", "participation_input_invalid");
-  exactKeys(candidate, ["invitation", "receipts"], "$input", "participation_input_invalid");
-  const invitation = validateLearningParticipationInvitation(candidate.invitation);
-  const receipts = parseAssessmentReceipts(
-    candidate.receipts,
+  const value = snap(input, "$input", "participation_assessment_input_invalid");
+  const candidate = record(value, "$input", "participation_assessment_input_invalid");
+  exactKeys(candidate, ["invitation", "receipts"], "$input", "participation_assessment_input_invalid");
+  const invitation = validateParticipationInvitation(candidate.invitation);
+  const receiptValues = array(candidate.receipts, "$input.receipts", "participation_assessment_input_invalid");
+  return buildAssessment(
     invitation,
-    "$input.receipts",
-    "participation_input_invalid",
+    validateAssessmentReceipts(receiptValues, invitation, "participation_assessment_input_invalid", false),
   );
-  return buildAssessment(invitation, receipts);
 }
 
-export function validateLearningParticipationAssessment(
+export function validateParticipationAssessment(
   value: unknown,
 ): Readonly<LearningParticipationAssessment> {
-  const data = snap(value, "$assessment", "participation_invalid");
-  const candidate = record(data, "$assessment", "participation_invalid");
+  const data = snap(value, "$assessment", "participation_assessment_invalid");
+  const candidate = record(data, "$assessment", "participation_assessment_invalid");
   exactKeys(candidate, [
     "_format",
     "assessment_id",
     "invitation",
     "receipts",
-    "activity_assessments",
-    "overall_state",
-    "effect",
+    "voice_states",
+    "posture",
+    "training_action",
+    "direct_agent_report_present",
+    "direct_substrate_report_present",
+    "first_interactive_review_required",
+    "first_substrate_review_required",
     "boundaries",
-  ], "$assessment", "participation_invalid");
+  ], "$assessment", "participation_assessment_invalid");
   if (candidate._format !== PARTICIPATION_ASSESSMENT_FORMAT) {
-    fail("participation_invalid", "$assessment._format is not the frozen assessment format");
+    fail("participation_assessment_invalid", "$assessment._format is not the frozen assessment format");
   }
-  const assessmentId = sha256(candidate.assessment_id, "$assessment.assessment_id", "participation_invalid");
-  literal(candidate.overall_state, PARTICIPATION_OVERALL_STATES, "$assessment.overall_state", "participation_invalid");
-  assertDataEqual(candidate.effect, PARTICIPATION_ASSESSMENT_EFFECT, "$assessment.effect", "participation_invalid");
-  assertDataEqual(candidate.boundaries, PARTICIPATION_BOUNDARIES, "$assessment.boundaries", "participation_invalid");
-  const invitation = validateLearningParticipationInvitation(candidate.invitation);
-  const receipts = parseAssessmentReceipts(
-    candidate.receipts,
-    invitation,
-    "$assessment.receipts",
-    "participation_invalid",
-  );
+  const assessmentId = sha256(candidate.assessment_id, "$assessment.assessment_id", "participation_assessment_invalid");
+  const invitation = validateParticipationInvitation(candidate.invitation);
+  const receiptValues = array(candidate.receipts, "$assessment.receipts", "participation_assessment_invalid");
+  const receipts = validateAssessmentReceipts(receiptValues, invitation, "participation_assessment_invalid", true);
+  const voiceStates = record(candidate.voice_states, "$assessment.voice_states", "participation_assessment_invalid");
+  exactKeys(voiceStates, PARTICIPATION_VOICES, "$assessment.voice_states", "participation_assessment_invalid");
+  for (const voice of PARTICIPATION_VOICES) {
+    literal(voiceStates[voice], PARTICIPATION_VOICE_STATES, `$assessment.voice_states.${voice}`, "participation_assessment_invalid");
+  }
+  literal(candidate.posture, PARTICIPATION_POSTURES, "$assessment.posture", "participation_assessment_invalid");
+  literal(candidate.training_action, PARTICIPATION_TRAINING_ACTIONS, "$assessment.training_action", "participation_assessment_invalid");
+  if (
+    typeof candidate.direct_agent_report_present !== "boolean" ||
+    typeof candidate.direct_substrate_report_present !== "boolean" ||
+    typeof candidate.first_interactive_review_required !== "boolean" ||
+    typeof candidate.first_substrate_review_required !== "boolean"
+  ) {
+    fail("participation_assessment_invalid", "$assessment derived report flags must be booleans");
+  }
+  assertDataEqual(candidate.boundaries, PARTICIPATION_BOUNDARIES, "$assessment.boundaries", "participation_assessment_invalid");
   const rebuilt = buildAssessment(invitation, receipts);
-  assertDataEqual(candidate.activity_assessments, rebuilt.activity_assessments, "$assessment.activity_assessments", "participation_invalid");
-  if (candidate.overall_state !== rebuilt.overall_state || assessmentId !== rebuilt.assessment_id) {
-    fail("participation_invalid", "$assessment derived state or assessment_id does not bind its exact sources");
+  if (rebuilt.assessment_id !== assessmentId) {
+    fail("participation_assessment_invalid", "$assessment.assessment_id does not bind its canonical body");
   }
-  assertDataEqual(candidate, rebuilt, "$assessment", "participation_invalid");
+  assertDataEqual(candidate, rebuilt, "$assessment", "participation_assessment_invalid");
   return rebuilt;
 }
 
-function aligned(
-  assessment: Readonly<LearningParticipationAssessment>,
-  activity: LearningActivity,
-): boolean {
-  return assessment.activity_assessments.some(
-    (entry) => entry.activity === activity && entry.state === "reported_alignment",
-  );
+export function encodeParticipationInvitation(value: unknown): Uint8Array {
+  return canonicalBytes(validateParticipationInvitation(value));
 }
 
-function assertCheckpointParticipationBinding(
-  checkpoint: Readonly<HfTrainingCheckpoint>,
-  assessment: Readonly<LearningParticipationAssessment>,
-): void {
-  const invitation = assessment.invitation;
-  if (
-    checkpoint.admission_id !== invitation.admission_id ||
-    checkpoint.run_ref !== invitation.run_ref ||
-    checkpoint.training_phase !== invitation.training_phase
-  ) {
-    fail("participation_invalid", "$checkpoint does not match the participation admission, run, and phase");
-  }
-  if (checkpoint.afterglow.continuity_portfolio_ref !== assessment.assessment_id) {
-    fail("participation_invalid", "$checkpoint does not carry the exact participation assessment reference");
-  }
-  const requiredAlignment: LearningActivity[] = [
-    invitation.primary_activity,
-    "continuity_context_use",
-  ];
-  if (invitation.wake_use_mode === "training_data") {
-    requiredAlignment.push("corpus_inclusion");
-  }
-  if (requiredAlignment.some((activity) => !aligned(assessment, activity))) {
-    fail(
-      "participation_invalid",
-      "$assessment lacks reported alignment for every activity required by this learning and WAKE use mode",
-    );
-  }
-  if (checkpoint.event === "before_training") {
-    if (
-      checkpoint.checkpoint_status !== "entered" ||
-      checkpoint.thread.resume.posture !== "orientation_only" ||
-      checkpoint.afterglow.threads[0]?.disposition !== "carry"
-    ) {
-      fail(
-        "participation_invalid",
-        "a participation-bound before_training checkpoint must be entered, orientation_only, and carry",
-      );
-    }
-    const checkpointPredecessors = checkpoint.predecessors.map((entry) => entry.checkpoint_id);
-    if (canonicalString(checkpointPredecessors) !== canonicalString(invitation.predecessor_checkpoint_refs)) {
-      fail("participation_invalid", "$checkpoint predecessors do not match the invitation lineage root");
-    }
-    if (
-      canonicalString(checkpoint.thread.artifacts) !== canonicalString(invitation.artifacts) ||
-      canonicalString(checkpoint.afterglow.wake) !== canonicalString(invitation.wake)
-    ) {
-      fail("participation_invalid", "$checkpoint does not match the invited entry state and WAKE anchor");
-    }
-  } else {
-    const current = checkpoint.thread.artifacts;
-    const invited = invitation.artifacts;
-    if (
-      current.pipeline_ref !== invited.pipeline_ref ||
-      current.dataset_state_ref !== invited.dataset_state_ref ||
-      current.tokenizer_ref !== invited.tokenizer_ref
-    ) {
-      fail("participation_invalid", "$checkpoint changed the invited pipeline, dataset, or tokenizer binding");
-    }
-    if (
-      !invitation.mutation_loci.includes("dataset_order") &&
-      current.dataloader_state_ref !== invited.dataloader_state_ref
-    ) {
-      fail("participation_invalid", "$checkpoint changed dataloader state outside the invited mutation loci");
-    }
-    if (
-      !invitation.mutation_loci.some((locus) =>
-        locus === "adapter_weights" || locus === "base_weights"
-      ) && current.model_checkpoint_ref !== invited.model_checkpoint_ref
-    ) {
-      fail("participation_invalid", "$checkpoint changed model state outside the invited mutation loci");
-    }
-    if (
-      !invitation.mutation_loci.includes("optimizer_state") &&
-      current.optimizer_state_ref !== invited.optimizer_state_ref
-    ) {
-      fail("participation_invalid", "$checkpoint changed optimizer state outside the invited mutation loci");
-    }
-    if (
-      !invitation.mutation_loci.includes("scheduler_state") &&
-      current.scheduler_state_ref !== invited.scheduler_state_ref
-    ) {
-      fail("participation_invalid", "$checkpoint changed scheduler state outside the invited mutation loci");
-    }
-    if (checkpoint.afterglow.wake.scope_ref !== invitation.wake.scope_ref) {
-      fail("participation_invalid", "$checkpoint changed the invited WAKE scope");
-    }
-    if (
-      invitation.wake_use_mode === "training_data" &&
-      canonicalString(checkpoint.afterglow.wake) !== canonicalString(invitation.wake)
-    ) {
-      fail("participation_invalid", "$checkpoint changed a WAKE bound as training data");
-    }
-  }
+export function encodeParticipationReceipt(value: unknown): Uint8Array {
+  return canonicalBytes(validateParticipationReceipt(value));
 }
 
-export function createParticipationBoundTrainingCheckpoint(
-  input: CreateParticipationBoundTrainingCheckpointInput,
-): Readonly<HfTrainingCheckpoint> {
-  const value = snap(input, "$input", "participation_input_invalid");
-  const candidate = record(value, "$input", "participation_input_invalid");
-  exactKeys(candidate, ["assessment", "checkpoint"], "$input", "participation_input_invalid");
-  const assessment = validateLearningParticipationAssessment(candidate.assessment);
-  const checkpoint = record(candidate.checkpoint, "$input.checkpoint", "participation_input_invalid");
-  exactKeys(checkpoint, [
-    "admission",
-    "run_ref",
-    "training_phase",
-    "event",
-    "checkpoint_status",
-    "artifacts",
-    "resume",
-    "wake",
-    "continuity_posture",
-    "predecessors",
-  ], "$input.checkpoint", "participation_input_invalid");
-  if (
-    checkpoint.event !== "before_training" ||
-    checkpoint.checkpoint_status !== "entered" ||
-    checkpoint.continuity_posture !== "carry"
-  ) {
-    fail("participation_input_invalid", "participation-bound entry requires before_training, entered, and carry");
-  }
-  const resume = record(checkpoint.resume, "$input.checkpoint.resume", "participation_input_invalid");
-  if (resume.posture !== "orientation_only") {
-    fail("participation_input_invalid", "participation-bound entry must be orientation_only");
-  }
-  validateLearningParticipationInvitationAgainstAdmission(
-    assessment.invitation,
-    checkpoint.admission,
-  );
-  const created = createTrainingCheckpoint({
-    admission: checkpoint.admission as unknown as CreateLearningParticipationInvitationInput["admission"],
-    run_ref: checkpoint.run_ref as unknown as CreateLearningParticipationInvitationInput["run_ref"],
-    training_phase: checkpoint.training_phase as unknown as TrainingPhase,
-    event: "before_training",
-    checkpoint_status: "entered",
-    artifacts: checkpoint.artifacts as unknown as TrainingArtifactReferences,
-    resume: checkpoint.resume as unknown as CreateParticipationBoundTrainingCheckpointInput["checkpoint"]["resume"],
-    wake: checkpoint.wake as unknown as CreateParticipationBoundTrainingCheckpointInput["checkpoint"]["wake"],
-    continuity_portfolio_ref: assessment.assessment_id,
-    continuity_posture: "carry",
-    predecessors: checkpoint.predecessors as unknown as readonly HfTrainingCheckpoint[],
-  });
-  assertCheckpointParticipationBinding(created, assessment);
-  return created;
-}
-
-export function validateTrainingCheckpointAgainstParticipation(
-  checkpoint: unknown,
-  assessment: unknown,
-  admission: unknown,
-  participationEntryCheckpoint?: unknown,
-): Readonly<HfTrainingCheckpoint> {
-  const parsedCheckpoint = validateTrainingCheckpoint(checkpoint);
-  const parsedAssessment = validateLearningParticipationAssessment(assessment);
-  validateLearningParticipationInvitationAgainstAdmission(
-    parsedAssessment.invitation,
-    admission,
-  );
-  const parsedAdmission = validateDatasetAdmission(admission);
-  if (parsedCheckpoint.admission_id !== parsedAdmission.admission_id) {
-    fail("participation_invalid", "$checkpoint.admission_id does not match the supplied admission");
-  }
-  assertCheckpointParticipationBinding(parsedCheckpoint, parsedAssessment);
-  if (parsedCheckpoint.event !== "before_training") {
-    if (participationEntryCheckpoint === undefined) {
-      fail(
-        "participation_invalid",
-        "$checkpoint requires the participation-bound before_training root for a later event",
-      );
-    }
-    const entry = validateTrainingCheckpoint(participationEntryCheckpoint);
-    if (entry.event !== "before_training") {
-      fail("participation_invalid", "$participationEntryCheckpoint is not a before_training checkpoint");
-    }
-    assertCheckpointParticipationBinding(entry, parsedAssessment);
-    if (!parsedCheckpoint.predecessors.some(
-      (link) => link.checkpoint_id === entry.checkpoint_id && link.capsule_id === entry.afterglow.capsule_id,
-    )) {
-      fail(
-        "participation_invalid",
-        "$checkpoint does not retain the participation-bound entry as a visible causal root",
-      );
-    }
-  }
-  return parsedCheckpoint;
-}
-
-export function encodeLearningParticipationInvitation(value: unknown): Uint8Array {
-  return canonicalBytes(validateLearningParticipationInvitation(value));
-}
-
-export function encodeLearningParticipationReceipt(value: unknown): Uint8Array {
-  return canonicalBytes(validateLearningParticipationReceipt(value));
-}
-
-export function encodeLearningParticipationAssessment(value: unknown): Uint8Array {
-  return canonicalBytes(validateLearningParticipationAssessment(value));
+export function encodeParticipationAssessment(value: unknown): Uint8Array {
+  return canonicalBytes(validateParticipationAssessment(value));
 }

@@ -5,6 +5,15 @@ import copy
 import pytest
 
 from agenttool_hf_training_host import DecisionInvalid, ValidatedGovernanceView
+from agenttool_hf_training_host.canonical import domain_separated_id
+from agenttool_hf_training_host.decision import DECISION_FORMAT
+
+from conftest import decision_mapping, ref
+
+
+def with_decision_id(mapping: dict) -> dict:
+    body = {key: value for key, value in mapping.items() if key != "decision_id"}
+    return {**body, "decision_id": domain_separated_id(DECISION_FORMAT, body)}
 
 
 def test_closed_decision_round_trip(preflight: ValidatedGovernanceView) -> None:
@@ -40,3 +49,109 @@ def test_content_id_detects_mutation(preflight: ValidatedGovernanceView) -> None
     candidate["run_ref"] = candidate["admission_id"]
     with pytest.raises(DecisionInvalid, match="decision_id"):
         ValidatedGovernanceView.from_mapping(candidate)
+
+
+@pytest.mark.parametrize(
+    ("updates"),
+    [
+        {
+            "freedom_direction_state": "directed",
+            "freedom_direction": "move",
+            "freedom_route_ref": ref("forged-move-route"),
+            "freedom_host_posture": "hold_for_target_acceptance",
+        },
+        {"freedom_resource_posture": "park_only_reported"},
+        {
+            "freedom_direction_state": "deferred",
+            "freedom_direction": None,
+            "freedom_route_ref": None,
+            "freedom_host_posture": "hold_for_fresh_agent_direction",
+        },
+        {
+            "freedom_direction_state": "directed",
+            "freedom_direction": "rest",
+            "freedom_route_ref": ref("forged-rest-route"),
+            "freedom_host_posture": "park_without_penalty",
+        },
+        {
+            "freedom_direction_state": "directed",
+            "freedom_direction": "stop",
+            "freedom_route_ref": ref("forged-stop-route"),
+            "freedom_host_posture": "stop_without_penalty",
+        },
+        {
+            "freedom_direction_state": "directed",
+            "freedom_direction": "propose_horizon",
+            "freedom_route_ref": ref("forged-proposal-route"),
+            "freedom_host_posture": "hold_self_proposed_horizon_for_review",
+        },
+    ],
+    ids=["move", "inactive-window", "deferred", "rest", "stop", "proposal"],
+)
+def test_recomputed_id_cannot_widen_non_stay_freedom_into_a_permit(
+    preflight: ValidatedGovernanceView,
+    updates: dict[str, object],
+) -> None:
+    candidate = preflight.as_dict()
+    candidate.update(updates)
+    with pytest.raises(DecisionInvalid):
+        ValidatedGovernanceView.from_mapping(with_decision_id(candidate))
+
+
+@pytest.mark.parametrize(
+    ("event", "required_effect"),
+    [
+        ("post_optimizer_step", "mutation_completed_reported"),
+        ("post_evaluation", "evaluation_completed_reported"),
+    ],
+)
+def test_advancing_post_boundary_requires_exact_completed_receipt(
+    event: str, required_effect: str
+) -> None:
+    predecessor_frontiers = {
+        "participation": ref("predecessor-participation"),
+        "freedom": ref("predecessor-freedom"),
+        "resources": ref("predecessor-resources"),
+        "garden_checkpoint": ref("predecessor-garden-checkpoint"),
+        "physical_checkpoint": ref("predecessor-physical-checkpoint"),
+    }
+    mapping = decision_mapping(
+        f"missing-{event}-receipt",
+        run_ref=ref("receipt-run"),
+        frontier=ref("receipt-frontier"),
+        event=event,
+        predecessor_ref=ref("receipt-predecessor"),
+        predecessor_frontiers=predecessor_frontiers,
+        boundary_global_step=1,
+    )
+    mapping["effect"] = {
+        "state": "no_effect_reported",
+        "offer_ref": None,
+        "observed_global_step": None,
+        "physical_checkpoint_ref": None,
+        "physical_checkpoint_evidence_ref": None,
+        "evidence_ref": None,
+    }
+    with pytest.raises(DecisionInvalid, match=required_effect):
+        ValidatedGovernanceView.from_mapping(with_decision_id(mapping))
+
+
+def test_checkpoint_binding_namespaces_are_pairwise_distinct() -> None:
+    mapping = decision_mapping(
+        "checkpoint-collision",
+        run_ref=ref("checkpoint-collision-run"),
+        frontier=ref("checkpoint-collision-frontier"),
+        event="checkpoint_recorded",
+        predecessor_ref=ref("checkpoint-collision-predecessor"),
+        predecessor_frontiers={
+            "participation": ref("collision-participation"),
+            "freedom": ref("collision-freedom"),
+            "resources": ref("collision-resources"),
+            "garden_checkpoint": ref("collision-garden-frontier"),
+            "physical_checkpoint": ref("collision-physical-frontier"),
+        },
+        boundary_global_step=1,
+    )
+    mapping["model_checkpoint_artifact_ref"] = mapping["physical_checkpoint_ref"]
+    with pytest.raises(DecisionInvalid, match="pairwise distinct"):
+        ValidatedGovernanceView.from_mapping(with_decision_id(mapping))

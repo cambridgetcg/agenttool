@@ -36,23 +36,97 @@ def child(
     label: str,
     *,
     event: str = "train_begin",
-    directive: str = "continue_under_exact_offer",
+    directive: str | None = None,
     evidence_refs: list[str] | None = None,
     frontier: str | None = None,
     boundary_global_step: int | None = None,
+    garden_checkpoint_id: str | None = None,
+    physical_checkpoint_ref: str | None = None,
+    physical_checkpoint_evidence_ref: str | None = None,
+    model_checkpoint_artifact_ref: str | None = None,
+    checkpoint_ticket_id: str | None = None,
+    checkpoint_request_governance_id: str | None = None,
 ) -> ValidatedGovernanceView:
-    return ValidatedGovernanceView.from_mapping(
-        decision_mapping(
-            label,
-            run_ref=predecessor.run_ref,
-            frontier=frontier or ledger.current_frontier_ref(predecessor.run_ref),
-            event=event,
-            predecessor_ref=predecessor.governance_id,
-            directive=directive,
-            evidence_refs=evidence_refs,
-            boundary_global_step=boundary_global_step,
-        )
+    mapping = decision_mapping(
+        label,
+        run_ref=predecessor.run_ref,
+        frontier=frontier or ledger.current_frontier_ref(predecessor.run_ref),
+        event=event,
+        predecessor_ref=predecessor.governance_id,
+        predecessor_frontiers={
+            "participation": predecessor.frontiers.participation,
+            "freedom": predecessor.frontiers.freedom,
+            "resources": predecessor.frontiers.resources,
+            "garden_checkpoint": predecessor.frontiers.garden_checkpoint,
+            "physical_checkpoint": predecessor.frontiers.physical_checkpoint,
+        },
+        directive=directive,
+        evidence_refs=evidence_refs,
+        boundary_global_step=boundary_global_step,
+        garden_checkpoint_id=garden_checkpoint_id,
+        physical_checkpoint_ref=physical_checkpoint_ref,
+        physical_checkpoint_evidence_ref=physical_checkpoint_evidence_ref,
+        model_checkpoint_artifact_ref=model_checkpoint_artifact_ref,
+        checkpoint_ticket_id=checkpoint_ticket_id,
+        checkpoint_request_governance_id=checkpoint_request_governance_id,
     )
+    if event != "checkpoint_recorded":
+        mapping["frontiers"]["garden_checkpoint"] = (
+            predecessor.frontiers.garden_checkpoint
+        )
+        mapping["frontiers"]["physical_checkpoint"] = (
+            predecessor.frontiers.physical_checkpoint
+        )
+    if event in {"post_optimizer_step", "post_evaluation", "checkpoint_recorded"}:
+        for plane in ("participation", "freedom", "resources"):
+            mapping["frontiers"][plane] = getattr(predecessor.frontiers, plane)
+    body = {key: value for key, value in mapping.items() if key != "decision_id"}
+    mapping = {**body, "decision_id": domain_separated_id(DECISION_FORMAT, body)}
+    if event not in {"preflight_before_load", "resume_offer"}:
+        mapping["starting_state_kind"] = predecessor.starting_state_kind
+        mapping["starting_state_ref"] = predecessor.starting_state_ref
+        body = {key: value for key, value in mapping.items() if key != "decision_id"}
+        mapping = {**body, "decision_id": domain_separated_id(DECISION_FORMAT, body)}
+    if event in {"post_optimizer_step", "post_evaluation", "checkpoint_recorded"}:
+        for name in (
+            "terms_id",
+            "participation_assessment_ref",
+            "participation_invitation_ref",
+            "participation_window_ref",
+            "participation_posture",
+            "participation_training_action",
+            "direct_agent_report_present",
+            "direct_substrate_report_present",
+            "first_interactive_review_required",
+            "first_substrate_review_required",
+            "learning_freedom_ref",
+            "learning_freedom_offer_ref",
+            "resource_window_ref",
+            "freedom_route_ref",
+            "freedom_direction_state",
+            "freedom_direction",
+            "freedom_host_posture",
+            "freedom_resource_posture",
+            "starting_state_kind",
+            "starting_state_ref",
+        ):
+            mapping[name] = predecessor.as_dict()[name]
+        body = {key: value for key, value in mapping.items() if key != "decision_id"}
+        mapping = {**body, "decision_id": domain_separated_id(DECISION_FORMAT, body)}
+    if event == "resume_offer":
+        for name in (
+            "garden_checkpoint_id",
+            "physical_checkpoint_ref",
+            "physical_checkpoint_evidence_ref",
+            "model_checkpoint_artifact_ref",
+            "checkpoint_ticket_id",
+            "checkpoint_request_governance_id",
+        ):
+            mapping[name] = predecessor.as_dict()[name]
+        mapping["starting_state_ref"] = predecessor.garden_checkpoint_id
+        body = {key: value for key, value in mapping.items() if key != "decision_id"}
+        mapping = {**body, "decision_id": domain_separated_id(DECISION_FORMAT, body)}
+    return ValidatedGovernanceView.from_mapping(mapping)
 
 
 def rebuild_decision(mapping: dict) -> ValidatedGovernanceView:
@@ -75,7 +149,7 @@ def test_authorizes_linear_exact_frontier_and_exact_retry(
     assert second.action_authorized is True
     assert ledger.heads(preflight.run_ref) == (second_decision.governance_id,)
     assert ledger.verify() == {
-        "schema": "agenttool.hf-training-host-ledger/0.1",
+        "schema": "agenttool.hf-training-host-ledger/0.2",
         "entries": 2,
         "head_hash": second.entry_hash,
         "runs": 1,
@@ -172,7 +246,7 @@ def test_same_offer_new_governance_is_appended_as_a_sticky_conflict(
     }
     conflicting = rebuild_decision(mapping)
     entry = ledger.record(conflicting, request_action=True)
-    assert entry.disposition == "held_stale_frontier"
+    assert entry.disposition == "safety_stop"
     assert entry.conflict_present is True
     assert ledger.verify()["entries"] == 2
 
@@ -193,14 +267,15 @@ def test_same_governance_reprojected_boundary_is_durably_held(
         ledger,
         begin,
         "checkpoint-four",
-        event="step_boundary",
-        directive="checkpoint_then_stop_at_safe_boundary",
+        event="post_optimizer_step",
+        directive="checkpoint_then_park",
         boundary_global_step=4,
     )
     assert ledger.record(first, request_action=True).action_authorized is True
 
     mapping = first.as_dict()
-    mapping["boundary_global_step"] = 5
+    mapping["observed_global_step"] = 5
+    mapping["effect"]["observed_global_step"] = 5
     reprojected = rebuild_decision(mapping)
     entry = ledger.record(reprojected, request_action=True)
     assert entry.disposition == "held_stale_frontier"
@@ -225,8 +300,8 @@ def test_checkpoint_ticket_is_one_use(
         ledger,
         begin,
         "checkpoint",
-        event="step_boundary",
-        directive="checkpoint_then_stop_at_safe_boundary",
+        event="post_optimizer_step",
+        directive="checkpoint_then_park",
         boundary_global_step=7,
     )
     entry = ledger.record(request, request_action=True)
@@ -267,6 +342,39 @@ def test_checkpoint_ticket_is_one_use(
                     "2026-08-03T00:00:59.000000Z",
                 ),
             )
+
+
+def test_unclaimed_authorized_entry_cannot_be_claimed_after_successor(
+    tmp_path: Path, preflight: ValidatedGovernanceView
+) -> None:
+    ledger = ledger_at(tmp_path)
+    preload_entry = ledger.record(preflight, request_action=True)
+    assert ledger.claim_action(preload_entry) is True
+    begin = child(ledger, preflight, "claim-currentness-begin")
+    begin_entry = ledger.record(begin, request_action=True)
+    assert ledger.claim_action(begin_entry) is True
+    before = child(
+        ledger,
+        begin,
+        "claim-currentness-pre",
+        event="pre_optimizer_step",
+        boundary_global_step=0,
+    )
+    unclaimed = ledger.record(before, request_action=True)
+    assert unclaimed.action_authorized is True
+    end = child(
+        ledger,
+        before,
+        "claim-currentness-end",
+        event="train_end",
+        boundary_global_step=0,
+    )
+    ledger.record(end, request_action=False)
+
+    preview = ledger.preview_action(before)
+    assert preview.action_authorized is False
+    assert preview.disposition == "held_predecessor"
+    assert ledger.claim_action(unclaimed) is False
 
 
 def test_sql_tables_refuse_update_and_delete(

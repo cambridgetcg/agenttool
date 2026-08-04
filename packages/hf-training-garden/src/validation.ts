@@ -172,17 +172,6 @@ export function nullableSha256(
   return value === null ? null : sha256(value, path, code);
 }
 
-export function nonNegativeInteger(
-  value: DataValue | undefined,
-  path: string,
-  code: HfTrainingGardenErrorCode,
-): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) {
-    fail(code, `${path} must be a non-negative safe integer`);
-  }
-  return value as number;
-}
-
 export function hexSha256(
   value: DataValue | undefined,
   path: string,

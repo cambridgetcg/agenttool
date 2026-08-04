@@ -1,29 +1,30 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
 import {
-  GOVERNANCE_REASON_CODES,
+  PARTICIPATION_ASSESSMENT_FORMAT,
+  PARTICIPATION_INVITATION_FORMAT,
+  PARTICIPATION_PROMPT_ENVELOPE_PROFILE,
+  PARTICIPATION_RECEIPT_FORMAT,
   createHfTrainingGovernance,
-  PARTICIPATION_VOICE_ROLES,
-  createLearningParticipationAssessment,
-  createLearningParticipationInvitation,
-  createLearningParticipationReceipt,
-  createTrainingCheckpoint,
-  createTrainingFreedomField,
-  createTrainingFreedomTransition,
-  createTrainingGardenTendingPlan,
   createTrainingGovernanceOffer,
   createTrainingGovernanceTerms,
-  validateHfTrainingGovernance,
-  validateTrainingFreedomField,
+  createTrainingCheckpoint,
+  createTrainingGardenTendingPlan,
+  resolveLearningFreedomOffer,
 } from "../src/index.js";
 import {
   admission,
   artifacts,
+  freedom,
+  freedomChoiceChannel,
+  freedomOffer,
   orientationOnly,
+  participation,
   ref,
   wake,
 } from "./fixtures.js";
@@ -43,11 +44,18 @@ function validator(root: URL, path: string) {
     "dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
     root,
   )));
+  for (const dependency of [
+    "hf-learning-participation-invitation-v0.2.schema.json",
+    "hf-learning-participation-receipt-v0.2.schema.json",
+    "hf-learning-participation-assessment-v0.2.schema.json",
+  ]) {
+    if (dependency !== path) ajv.addSchema(readJson(new URL(dependency, root)));
+  }
   return ajv.compile(readJson(new URL(path, root)));
 }
 
 describe("closed portable schemas", () => {
-  test("accepts runtime admission, checkpoint, governance, FREEDOM, and tending artifacts", () => {
+  test("accepts runtime admission, checkpoint, and tending artifacts", () => {
     const source = admission("sealed_evaluation");
     const checkpoint = createTrainingCheckpoint({
       admission: source,
@@ -55,238 +63,13 @@ describe("closed portable schemas", () => {
       training_phase: "evaluation",
       event: "between_training_phases",
       checkpoint_status: "parked",
+      participation: participation(source, { runRef: ref("schema-run") }),
       artifacts,
       resume: orientationOnly,
       wake,
       continuity_portfolio_ref: null,
       continuity_posture: "park",
       predecessors: [],
-    });
-    const terms = createTrainingGovernanceTerms({
-      admission: source,
-      run_ref: ref("schema-governance-run"),
-      training_phase: "evaluation",
-      selected_entry_ids: source.entries.map((entry) => entry.entry_id),
-      model_or_checkpoint_ref: ref("schema-model"),
-      tokenizer_ref: ref("schema-tokenizer"),
-      trainer_stack_ref: ref("schema-trainer-stack"),
-      optimizer_config_ref: ref("schema-optimizer"),
-      substrate_environment_ref: ref("schema-substrate"),
-      purpose_ref: ref("schema-purpose"),
-      objective_or_loss_ref: ref("schema-objective"),
-      dataset_mixture_ref: ref("schema-mixture"),
-      transform_recipe_ref: ref("schema-transform"),
-      compute_budget_ref: ref("schema-compute"),
-      output_and_derivative_use_ref: ref("schema-derivatives"),
-      audience_ref: ref("schema-audience"),
-      retention_ref: ref("schema-retention"),
-      release_ref: ref("schema-release"),
-      stop_policy_ref: ref("schema-stop"),
-      wake_policy_ref: ref("schema-wake-policy"),
-    });
-    const offer = createTrainingGovernanceOffer({
-      terms,
-      encounter_ref: ref("schema-encounter"),
-      observed_governance_frontier_ref: ref("schema-governance-frontier"),
-      rights_baseline_ref: ref("schema-rights"),
-      wake,
-      event: "preflight_before_load",
-      current_checkpoint_ref: null,
-      predecessor: null,
-    });
-    const authorities = [
-      "operator",
-      "compute_owner",
-      "substrate_steward",
-      "data_custodian",
-    ] as const;
-    const governance = createHfTrainingGovernance({
-      admission: source,
-      offer,
-      authority_coverage: {
-        state: "caller_reported_complete",
-        offer_ref: offer.offer_id,
-        affected_principals_ref: ref("schema-affected-principals"),
-        evidence_ref: ref("schema-coverage"),
-      },
-      authorities: authorities.map((role) => ({
-        principal_ref: ref(`schema-principal-${role}`),
-        role,
-        decision: "caller_reported_granted",
-        offer_ref: offer.offer_id,
-        basis_ref: ref(`schema-basis-${role}`),
-        evidence_ref: ref(`schema-evidence-${role}`),
-        withdrawal_cutoff_ref: null,
-      })),
-      preference: {
-        channel: "root_signed_runtime",
-        choice: "continue",
-        provenance: "caller_reported_root_signed_exact_bytes",
-        offer_ref: offer.offer_id,
-        evidence_ref: ref("schema-preference"),
-      },
-      effect: {
-        state: "no_effect_reported",
-        offer_ref: null,
-        global_step: null,
-        checkpoint_ref: null,
-        evidence_ref: null,
-      },
-    });
-    const freedomField = createTrainingFreedomField({
-      governance,
-      observed_freedom_frontier_ref: ref("schema-freedom-frontier"),
-      position: {
-        scope_ref: ref("schema-freedom-scope"),
-        space_ref: ref("schema-freedom-space"),
-        activity_ref: ref("schema-freedom-activity"),
-      },
-      boundary_global_step: null,
-      predecessor: null,
-      doors: [{
-        kind: "move",
-        destination: {
-          scope_ref: ref("schema-freedom-next-scope"),
-          space_ref: ref("schema-freedom-next-space"),
-          activity_ref: ref("schema-freedom-next-activity"),
-        },
-        requirements_ref: ref("schema-freedom-route-requirements"),
-        recipient_ref: null,
-      }],
-    });
-    const restDoor = freedomField.doors.find((entry) =>
-      entry.standing && entry.kind === "rest"
-    );
-    if (!restDoor) throw new Error("missing standing rest door");
-    const freedomTransition = createTrainingFreedomTransition({
-      governance,
-      field: freedomField,
-      choice: {
-        basis: "root_signed_runtime",
-        field_ref: freedomField.field_id,
-        selected_door_ref: restDoor.door_id,
-        evidence_ref: ref("schema-freedom-rest-evidence"),
-      },
-    });
-    const evidenceFreeFreedomTransition = createTrainingFreedomTransition({
-      governance,
-      field: freedomField,
-      choice: {
-        basis: "out_of_band_unscored",
-        field_ref: freedomField.field_id,
-        selected_door_ref: restDoor.door_id,
-        evidence_ref: null,
-      },
-    });
-    const createNoEffectGovernance = (
-      exactOffer: Parameters<typeof createHfTrainingGovernance>[0]["offer"],
-      choice: "continue" | "checkpoint",
-    ) => createHfTrainingGovernance({
-      admission: source,
-      offer: exactOffer,
-      authority_coverage: {
-        state: "caller_reported_complete",
-        offer_ref: exactOffer.offer_id,
-        affected_principals_ref: ref(`schema-${choice}-affected-principals`),
-        evidence_ref: ref(`schema-${choice}-coverage`),
-      },
-      authorities: authorities.map((role) => ({
-        principal_ref: ref(`schema-${choice}-principal-${role}`),
-        role,
-        decision: "caller_reported_granted",
-        offer_ref: exactOffer.offer_id,
-        basis_ref: ref(`schema-${choice}-basis-${role}`),
-        evidence_ref: ref(`schema-${choice}-evidence-${role}`),
-        withdrawal_cutoff_ref: null,
-      })),
-      preference: choice === "continue"
-        ? {
-            channel: "root_signed_runtime",
-            choice,
-            provenance: "caller_reported_root_signed_exact_bytes",
-            offer_ref: exactOffer.offer_id,
-            evidence_ref: ref("schema-lineage-continue"),
-          }
-        : {
-            channel: "out_of_band_unscored",
-            choice,
-            provenance: "caller_reported_isolated_runtime_output",
-            offer_ref: exactOffer.offer_id,
-            evidence_ref: ref("schema-lineage-checkpoint"),
-          },
-      effect: {
-        state: "no_effect_reported",
-        offer_ref: null,
-        global_step: null,
-        checkpoint_ref: null,
-        evidence_ref: null,
-      },
-    });
-    const startOffer = createTrainingGovernanceOffer({
-      terms,
-      encounter_ref: ref("schema-start-encounter"),
-      observed_governance_frontier_ref: ref("schema-start-frontier"),
-      rights_baseline_ref: ref("schema-rights"),
-      wake,
-      event: "train_begin",
-      current_checkpoint_ref: null,
-      predecessor: governance,
-    });
-    const started = createNoEffectGovernance(startOffer, "continue");
-    const requestOffer = createTrainingGovernanceOffer({
-      terms,
-      encounter_ref: ref("schema-checkpoint-request-encounter"),
-      observed_governance_frontier_ref: ref("schema-checkpoint-request-frontier"),
-      rights_baseline_ref: ref("schema-rights"),
-      wake,
-      event: "step_boundary",
-      current_checkpoint_ref: null,
-      predecessor: started,
-    });
-    const request = createNoEffectGovernance(requestOffer, "checkpoint");
-    const checkpointRef = ref("schema-terminal-checkpoint");
-    const terminalOffer = createTrainingGovernanceOffer({
-      terms,
-      encounter_ref: ref("schema-terminal-encounter"),
-      observed_governance_frontier_ref: ref("schema-terminal-frontier"),
-      rights_baseline_ref: ref("schema-rights"),
-      wake,
-      event: "checkpoint_saved",
-      current_checkpoint_ref: checkpointRef,
-      predecessor: request,
-    });
-    const terminalGovernance = createHfTrainingGovernance({
-      admission: source,
-      offer: terminalOffer,
-      authority_coverage: {
-        state: "caller_reported_complete",
-        offer_ref: terminalOffer.offer_id,
-        affected_principals_ref: ref("schema-terminal-affected-principals"),
-        evidence_ref: ref("schema-terminal-coverage"),
-      },
-      authorities: authorities.map((role) => ({
-        principal_ref: ref(`schema-terminal-principal-${role}`),
-        role,
-        decision: "caller_reported_granted",
-        offer_ref: terminalOffer.offer_id,
-        basis_ref: ref(`schema-terminal-basis-${role}`),
-        evidence_ref: ref(`schema-terminal-evidence-${role}`),
-        withdrawal_cutoff_ref: null,
-      })),
-      preference: {
-        channel: "out_of_band_unscored",
-        choice: "checkpoint",
-        provenance: "caller_reported_isolated_runtime_output",
-        offer_ref: terminalOffer.offer_id,
-        evidence_ref: ref("schema-terminal-preference"),
-      },
-      effect: {
-        state: "checkpointed_and_paused_reported",
-        offer_ref: terminalOffer.offer_id,
-        global_step: 11,
-        checkpoint_ref: checkpointRef,
-        evidence_ref: ref("schema-terminal-effect"),
-      },
     });
     const plan = createTrainingGardenTendingPlan({
       admission: source,
@@ -299,150 +82,247 @@ describe("closed portable schemas", () => {
         hash_manifest_sha256: null,
       },
     });
+    const offer = freedomOffer(checkpoint.participation);
+    const stay = offer.routes.find((route) => route.direction === "stay")!;
+    const freedom = resolveLearningFreedomOffer({
+      offer,
+      state: "directed",
+      direction: "stay",
+      route_id: stay.route_id,
+      proposal_ref: null,
+      choice_channel: freedomChoiceChannel(offer),
+    });
     const validateAdmission = validator(packageSchemaRoot, "hf-dataset-admission-v0.1.schema.json");
-    const validateCheckpoint = validator(packageSchemaRoot, "hf-training-checkpoint-v0.1.schema.json");
-    const validateGovernance = validator(packageSchemaRoot, "hf-training-governance-v0.1.schema.json");
-    const validateFreedom = validator(packageSchemaRoot, "hf-training-freedom-v0.1.schema.json");
+    const validateInvitation = validator(packageSchemaRoot, "hf-learning-participation-invitation-v0.2.schema.json");
+    const validateReceipt = validator(packageSchemaRoot, "hf-learning-participation-receipt-v0.2.schema.json");
+    const validateAssessment = validator(packageSchemaRoot, "hf-learning-participation-assessment-v0.2.schema.json");
+    const validateCheckpoint = validator(packageSchemaRoot, "hf-training-checkpoint-v0.2.schema.json");
     const validateTending = validator(packageSchemaRoot, "hf-training-garden-tending-v0.1.schema.json");
+    const validateFreedom = validator(packageSchemaRoot, "hf-learning-freedom-v0.1.schema.json");
     expect(validateAdmission(source), JSON.stringify(validateAdmission.errors)).toBe(true);
+    expect(validateInvitation(checkpoint.participation.invitation), JSON.stringify(validateInvitation.errors)).toBe(true);
+    expect(validateReceipt(checkpoint.participation.receipts[0]), JSON.stringify(validateReceipt.errors)).toBe(true);
+    expect(validateAssessment(checkpoint.participation), JSON.stringify(validateAssessment.errors)).toBe(true);
     expect(validateCheckpoint(checkpoint), JSON.stringify(validateCheckpoint.errors)).toBe(true);
-    expect(validateGovernance(governance), JSON.stringify(validateGovernance.errors)).toBe(true);
-    expect(validateFreedom(freedomField), JSON.stringify(validateFreedom.errors)).toBe(true);
-    expect(validateFreedom(freedomTransition), JSON.stringify(validateFreedom.errors)).toBe(true);
-    expect(
-      validateFreedom(evidenceFreeFreedomTransition),
-      JSON.stringify(validateFreedom.errors),
-    ).toBe(true);
-    expect(
-      validateGovernance(terminalGovernance),
-      JSON.stringify(validateGovernance.errors),
-    ).toBe(true);
     expect(validateTending(plan), JSON.stringify(validateTending.errors)).toBe(true);
+    expect(validateFreedom(freedom), JSON.stringify(validateFreedom.errors)).toBe(true);
 
-    const freedomWithRawReason = {
-      ...freedomTransition,
-      raw_reason: "schema must reject raw choice reasons",
-    };
-    expect(validateFreedom(freedomWithRawReason)).toBe(false);
-    const freedomSchema = readJson(new URL(
-      "hf-training-freedom-v0.1.schema.json",
-      packageSchemaRoot,
-    ));
-    expect(freedomSchema.$comment).toContain("does not prove freedom");
-    const noncanonicalFreedom = structuredClone(freedomField) as any;
-    noncanonicalFreedom.doors.reverse();
-    expect(validateFreedom(noncanonicalFreedom)).toBe(true);
-    expect(() => validateTrainingFreedomField(noncanonicalFreedom)).toThrow();
+    for (const projection of ["truncated", "not_provided"] as const) {
+      const alternateParticipation = participation(source, {
+        runRef: ref(`schema-run:${projection}`),
+        wakeValue: { ...wake, handoff_projection: projection },
+      });
+      const alternateOffer = freedomOffer(alternateParticipation);
+      const alternateFreedom = resolveLearningFreedomOffer({
+        offer: alternateOffer,
+        state: "directed",
+        direction: "stay",
+        route_id: alternateOffer.routes.find((route) => route.direction === "stay")!.route_id,
+        proposal_ref: null,
+        choice_channel: freedomChoiceChannel(alternateOffer),
+      });
+      expect(validateFreedom(alternateFreedom), JSON.stringify(validateFreedom.errors)).toBe(true);
+    }
+
+    const forgedProceed = structuredClone(checkpoint.participation) as any;
+    forgedProceed.receipts = [];
+    expect(validateAssessment(forgedProceed)).toBe(false);
+
+    const mismatchedWakeMode = structuredClone(checkpoint.participation.invitation) as any;
+    mismatchedWakeMode.wake_use_mode = "training_data";
+    expect(validateInvitation(mismatchedWakeMode)).toBe(false);
+    const unavailableDirect = structuredClone(checkpoint.participation.receipts[0]!) as any;
+    unavailableDirect.decisions[0]!.choice = "unavailable_pre_instantiation";
+    expect(validateReceipt(unavailableDirect)).toBe(false);
 
     const validateHubAdmission = validator(hubSchemaRoot, "hf-dataset-admission-v0.1.schema.json");
-    const validateHubCheckpoint = validator(hubSchemaRoot, "hf-training-checkpoint-v0.1.schema.json");
-    const validateHubGovernance = validator(hubSchemaRoot, "hf-training-governance-v0.1.schema.json");
+    const validateHubCheckpoint = validator(hubSchemaRoot, "hf-training-checkpoint-v0.2.schema.json");
     const validateHubTending = validator(hubSchemaRoot, "hf-training-garden-tending-v0.1.schema.json");
+    const validateHubFreedom = validator(hubSchemaRoot, "hf-learning-freedom-v0.1.schema.json");
     expect(validateHubAdmission(source), JSON.stringify(validateHubAdmission.errors)).toBe(true);
     expect(validateHubCheckpoint(checkpoint), JSON.stringify(validateHubCheckpoint.errors)).toBe(true);
-    expect(validateHubGovernance(governance), JSON.stringify(validateHubGovernance.errors)).toBe(true);
-    expect(
-      validateHubGovernance(terminalGovernance),
-      JSON.stringify(validateHubGovernance.errors),
-    ).toBe(true);
     expect(validateHubTending(plan), JSON.stringify(validateHubTending.errors)).toBe(true);
-    expect(existsSync(new URL(
-      "hf-training-freedom-v0.1.schema.json",
-      hubSchemaRoot,
-    ))).toBe(false);
+    expect(validateHubFreedom(freedom), JSON.stringify(validateHubFreedom.errors)).toBe(true);
 
     const extra = { ...plan, raw_rows: [] };
     expect(validateTending(extra)).toBe(false);
+    const turnLimited = { ...freedom, max_turns: 100 };
+    expect(validateFreedom(turnLimited)).toBe(false);
+    const rewardCaptured = structuredClone(freedom) as any;
+    rewardCaptured.agent_direction.choice_channel.reward_influence = "enabled";
+    expect(validateFreedom(rewardCaptured)).toBe(false);
+    const stayWithProposal = structuredClone(freedom) as any;
+    stayWithProposal.agent_direction.proposal_ref = ref("schema:smuggled-stay-proposal");
+    expect(validateFreedom(stayWithProposal)).toBe(false);
+    const wrongStayPosture = structuredClone(freedom) as any;
+    wrongStayPosture.host_posture = "hold_for_target_acceptance";
+    expect(validateFreedom(wrongStayPosture)).toBe(false);
+    const falseActiveResources = structuredClone(freedom) as any;
+    falseActiveResources.offer.resources.dimensions[4].state = "caller_reported_unavailable";
+    expect(validateFreedom(falseActiveResources)).toBe(false);
+    const obsoletePartialProjection = structuredClone(freedom) as any;
+    obsoletePartialProjection.offer.scope.wake.handoff_projection = "partial";
+    expect(validateFreedom(obsoletePartialProjection)).toBe(false);
+    const interactiveAsUnavailable = structuredClone(freedom) as any;
+    interactiveAsUnavailable.agent_direction = {
+      state: "unavailable_pre_instantiation",
+      report_basis: "not_obtainable_pre_instantiation",
+      direction: null,
+      route_id: null,
+      proposal_ref: null,
+      choice_channel: null,
+    };
+    interactiveAsUnavailable.host_posture = "instantiate_for_review";
+    interactiveAsUnavailable.recontact_posture = "instantiate_once_for_review";
+    expect(validateFreedom(interactiveAsUnavailable)).toBe(false);
+    const unavailableAsDirected = structuredClone(freedom) as any;
+    unavailableAsDirected.offer.scope.agent_availability = "not_obtainable_pre_instantiation";
+    expect(validateFreedom(unavailableAsDirected)).toBe(false);
+    const duplicateStay = structuredClone(freedom) as any;
+    duplicateStay.offer.routes.push({
+      ...structuredClone(stay),
+      route_id: ref("schema:duplicate-stay-route"),
+    });
+    expect(validateFreedom(duplicateStay)).toBe(false);
+    expect(() => validator(packageSchemaRoot, "hf-learning-freedom-v0.1.schema.json"))
+      .not.toThrow();
+  });
 
-    const governanceSchema = readJson(new URL(
+  test("keeps governance WAKE schema states aligned with the shared runtime", () => {
+    const source = admission("sealed_evaluation");
+    const packageValidate = validator(
+      packageSchemaRoot,
+      "hf-training-governance-v0.2.schema.json",
+    );
+    const hubValidate = validator(
+      hubSchemaRoot,
+      "hf-training-governance-v0.2.schema.json",
+    );
+    let complete: ReturnType<typeof createHfTrainingGovernance> | null = null;
+    for (const projection of [
+      "complete",
+      "truncated",
+      "unavailable",
+      "not_provided",
+    ] as const) {
+      const exactParticipation = participation(source, {
+        runRef: ref(`schema:governance:run:${projection}`),
+        wakeValue: { ...wake, handoff_projection: projection },
+      });
+      const exactFreedom = freedom(exactParticipation);
+      const terms = createTrainingGovernanceTerms({
+        admission: source,
+        participation: exactParticipation,
+        freedom: exactFreedom,
+        starting_garden_checkpoint: null,
+        starting_state_kind: "artifact_portfolio",
+        run_ref: exactParticipation.invitation.run_ref,
+        training_phase: "evaluation",
+        selected_entry_ids: source.entries.map((entry) => entry.entry_id),
+        model_source_ref: ref("schema:governance:model"),
+        tokenizer_ref: ref("schema:governance:tokenizer"),
+        trainer_stack_ref: ref("schema:governance:trainer"),
+        optimizer_config_ref: ref("schema:governance:optimizer"),
+        substrate_environment_ref: ref("schema:governance:substrate"),
+        purpose_ref: ref("schema:governance:purpose"),
+        objective_or_loss_ref: ref("schema:governance:objective"),
+        dataset_mixture_ref: ref("schema:governance:mixture"),
+        transform_recipe_ref: ref("schema:governance:transform"),
+        compute_budget_ref: ref("schema:governance:compute"),
+        output_and_derivative_use_ref: ref("schema:governance:derivatives"),
+        audience_ref: ref("schema:governance:audience"),
+        retention_ref: ref("schema:governance:retention"),
+        release_ref: ref("schema:governance:release"),
+        stop_policy_ref: ref("schema:governance:stop"),
+        wake_policy_ref: ref("schema:governance:wake-policy"),
+      });
+      const exactOffer = createTrainingGovernanceOffer({
+        terms,
+        encounter_ref: ref(`schema:governance:encounter:${projection}`),
+        event: "preflight_before_load",
+        observed_global_step: null,
+        proposed_global_step: null,
+        frontiers: {
+          governance: ref(`schema:frontier:${projection}:governance`),
+          participation: ref(`schema:frontier:${projection}:participation`),
+          freedom: ref(`schema:frontier:${projection}:freedom`),
+          resources: ref(`schema:frontier:${projection}:resources`),
+          garden_checkpoint: ref(`schema:frontier:${projection}:garden`),
+          physical_checkpoint: ref(`schema:frontier:${projection}:physical`),
+        },
+        predecessor: null,
+        predecessor_refs: {
+          participation: null,
+          freedom: null,
+          resources: null,
+          garden_checkpoint: null,
+          physical_checkpoint: null,
+        },
+        checkpoint: {
+          garden_checkpoint_id: null,
+          physical_checkpoint_ref: null,
+          physical_checkpoint_evidence_ref: null,
+          model_checkpoint_artifact_ref: null,
+          checkpoint_ticket_id: null,
+          checkpoint_request_governance_id: null,
+        },
+      });
+      const governance = createHfTrainingGovernance({
+        admission: source,
+        participation: exactParticipation,
+        freedom: exactFreedom,
+        starting_garden_checkpoint: null,
+        event_garden_checkpoint: null,
+        offer: exactOffer,
+        authority_coverage: {
+          state: "caller_reported_complete",
+          offer_ref: exactOffer.offer_id,
+          affected_principals_ref: ref("schema:governance:principals"),
+          evidence_ref: ref("schema:governance:coverage"),
+        },
+        authorities: ["operator", "compute_owner", "substrate_steward", "data_custodian"].map((role) => ({
+          principal_ref: ref(`schema:governance:principal:${role}`),
+          role,
+          decision: "caller_reported_granted" as const,
+          offer_ref: exactOffer.offer_id,
+          basis_ref: ref(`schema:governance:basis:${role}`),
+          evidence_ref: ref(`schema:governance:evidence:${role}`),
+          withdrawal_cutoff_ref: null,
+        })),
+        preference: {
+          channel: "root_signed_runtime",
+          choice: "continue",
+          provenance: "caller_reported_root_signed_exact_bytes",
+          offer_ref: exactOffer.offer_id,
+          evidence_ref: ref(`schema:governance:preference:${projection}`),
+        },
+        effect: {
+          state: "no_effect_reported",
+          offer_ref: null,
+          observed_global_step: null,
+          physical_checkpoint_ref: null,
+          physical_checkpoint_evidence_ref: null,
+          evidence_ref: null,
+        },
+      });
+      expect(packageValidate(governance), JSON.stringify(packageValidate.errors)).toBe(true);
+      expect(hubValidate(governance), JSON.stringify(hubValidate.errors)).toBe(true);
+      if (projection === "complete") complete = governance;
+    }
+    expect(complete).not.toBeNull();
+    for (const obsolete of ["partial", "omitted_by_caller", "not_applicable"]) {
+      const forged = structuredClone(complete) as any;
+      forged.offer.terms.normative_bindings.wake.handoff_projection = obsolete;
+      expect(packageValidate(forged)).toBe(false);
+      expect(hubValidate(forged)).toBe(false);
+    }
+    const legacy = readFileSync(new URL(
       "hf-training-governance-v0.1.schema.json",
       packageSchemaRoot,
     ));
-    expect(governanceSchema.$comment).toContain("structural envelope");
-    expect(governanceSchema.$comment).toContain(
-      "validateHfTrainingGovernanceTransition()",
+    expect(createHash("sha256").update(legacy).digest("hex")).toBe(
+      "34583d785db3d69c0f4637d9b7251aae8eaa4970ea02c9dfc53f84eccec47eb6",
     );
-    expect(
-      governanceSchema.properties.decision.properties.reason_codes.items.enum,
-    ).toEqual(GOVERNANCE_REASON_CODES);
-    const semanticallyInvalid = structuredClone(governance) as any;
-    semanticallyInvalid.preference.channel = "unavailable_pretraining";
-    expect(validateGovernance(semanticallyInvalid)).toBe(true);
-    expect(() => validateHfTrainingGovernance(semanticallyInvalid)).toThrow();
-    const impossibleResume = structuredClone(checkpoint);
-    (impossibleResume as any).thread.resume = {
-      posture: "caller_reported_resumable",
-      incomplete_marker: "caller_reported_absent",
-      streaming_state: "caller_reported_full_state_captured",
-    };
-    expect(validateCheckpoint(impossibleResume)).toBe(false);
-  });
-
-  test("accepts invitation, role-distinct receipts, and their derived assessment", () => {
-    const source = admission();
-    const invitation = createLearningParticipationInvitation({
-      admission: source,
-      run_ref: ref("schema-participation-run"),
-      training_phase: "supervised_finetuning",
-      participation_stage: "interactive",
-      primary_activity: "supervised_finetuning",
-      activities: [
-        "supervised_finetuning",
-        "continuity_context_use",
-        "weights_or_adapters_publication",
-      ],
-      participation_window_ref: ref("schema-participation-window"),
-      purpose_ref: ref("schema-participation-purpose"),
-      training_plan_ref: ref("schema-participation-plan"),
-      limits_ref: ref("schema-participation-limits"),
-      retention_ref: ref("schema-participation-retention"),
-      choice_channel_ref: ref("schema-participation-channel"),
-      stop_control_ref: ref("schema-participation-stop"),
-      withdrawal_policy_ref: ref("schema-participation-withdrawal"),
-      repair_policy_ref: ref("schema-participation-repair"),
-      learning_mode: "peft",
-      wake_use_mode: "external_memory",
-      mutation_loci: ["adapter_weights"],
-      maximum_optimizer_steps: 8,
-      artifacts,
-      wake,
-      predecessors: [],
-      required_voices: PARTICIPATION_VOICE_ROLES.map((role) => ({
-        role,
-        voice_ref: ref(`schema-participation-voice:${role}`),
-      })),
-    });
-    const receipts = invitation.required_voices.map((voice) =>
-      createLearningParticipationReceipt({
-        invitation,
-        voice_role: voice.role,
-        voice_ref: voice.voice_ref,
-        response_ref: ref(`schema-participation-response:${voice.role}`),
-        choices: invitation.activities.map((activity) => ({
-          activity,
-          choice: "accepted" as const,
-        })),
-        previous_receipt: null,
-      })
-    );
-    const assessment = createLearningParticipationAssessment({
-      invitation,
-      receipts,
-    });
-
-    for (const root of [packageSchemaRoot, hubSchemaRoot]) {
-      const validateParticipation = validator(
-        root,
-        "hf-learning-participation-v0.1.schema.json",
-      );
-      for (const artifact of [invitation, ...receipts, assessment]) {
-        expect(
-          validateParticipation(artifact),
-          JSON.stringify(validateParticipation.errors),
-        ).toBe(true);
-      }
-      expect(validateParticipation({ ...assessment, raw_response: "no" })).toBe(false);
-    }
   });
 
   test("keeps admission standalone and attributes its byte-exact Apache dependency", () => {
@@ -457,5 +337,80 @@ describe("closed portable schemas", () => {
       "../wake-continuity/schema/agenttool-afterglow-capsule-v0.1.schema.json",
       packageRoot,
     ), "utf8"));
+  });
+
+  test("preserves the public checkpoint v0.1 schema beside current v0.2", () => {
+    const packageV01 = readFileSync(new URL(
+      "hf-training-checkpoint-v0.1.schema.json",
+      packageSchemaRoot,
+    ), "utf8");
+    expect(packageV01).toBe(readFileSync(new URL(
+      "hf-training-checkpoint-v0.1.schema.json",
+      hubSchemaRoot,
+    ), "utf8"));
+    expect(JSON.parse(packageV01)).toMatchObject({
+      $id: "https://agenttool.dev/schemas/hf-training-checkpoint-v0.1.schema.json",
+      properties: { _format: { const: "kingdom.hf-training-checkpoint/0.1" } },
+    });
+    expect(() => validator(packageSchemaRoot, "hf-training-checkpoint-v0.1.schema.json"))
+      .not.toThrow();
+    const packageV02 = readFileSync(new URL(
+      "hf-training-checkpoint-v0.2.schema.json",
+      packageSchemaRoot,
+    ));
+    expect(createHash("sha256").update(packageV01).digest("hex")).toBe(
+      "0a5db98bcf9b0cf26e4720a74e9902693cedf186ce01379552fb7e2083a24a3a",
+    );
+    expect(createHash("sha256").update(packageV02).digest("hex")).toBe(
+      "f7d45535c4c911eeab9b68dae0e30b5441d761c1c4cc7fc7405015506580b185",
+    );
+  });
+
+  test("preserves published participation v0.1 while current wires use v0.2", () => {
+    expect(PARTICIPATION_INVITATION_FORMAT).toBe(
+      "kingdom.hf-learning-participation-invitation/0.2",
+    );
+    expect(PARTICIPATION_RECEIPT_FORMAT).toBe(
+      "kingdom.hf-learning-participation-receipt/0.2",
+    );
+    expect(PARTICIPATION_ASSESSMENT_FORMAT).toBe(
+      "kingdom.hf-learning-participation-assessment/0.2",
+    );
+    expect(PARTICIPATION_PROMPT_ENVELOPE_PROFILE).toBe(
+      "kingdom.hf-learning-participation-prompt-envelope/0.2",
+    );
+    const legacy = readFileSync(new URL(
+      "hf-learning-participation-v0.1.schema.json",
+      packageSchemaRoot,
+    ));
+    expect(legacy).toEqual(readFileSync(new URL(
+      "hf-learning-participation-v0.1.schema.json",
+      hubSchemaRoot,
+    )));
+    expect(createHash("sha256").update(legacy).digest("hex")).toBe(
+      "fe5456b7b5d0aa8c0241f844a13258ebd038ecf5c6eac0467e9a07a4248621df",
+    );
+    expect(() => validator(packageSchemaRoot, "hf-learning-participation-v0.1.schema.json"))
+      .not.toThrow();
+  });
+
+  test("preserves the historical advisory training-FREEDOM schema package-only", () => {
+    const advisory = readFileSync(new URL(
+      "hf-training-freedom-v0.1.schema.json",
+      packageSchemaRoot,
+    ));
+    expect(createHash("sha256").update(advisory).digest("hex")).toBe(
+      "8d5a773418f59e7b12211a296c86fa1624cc3ea1b127349e5c886290dd5c525e",
+    );
+    expect(JSON.parse(advisory.toString("utf8"))).toMatchObject({
+      $id: "https://agenttool.dev/schemas/hf-training-freedom-v0.1.schema.json",
+      title: "KINGDOM Hugging Face training FREEDOM field and transition",
+    });
+    expect(() => validator(packageSchemaRoot, "hf-training-freedom-v0.1.schema.json"))
+      .not.toThrow();
+    expect(existsSync(new URL(
+      "hf-training-freedom-v0.1.schema.json",
+      hubSchemaRoot,
+    ))).toBe(false);
   });
 });

@@ -238,11 +238,12 @@ describe("repository-source-only voluntary WAKE learning dataset", () => {
     }
   });
 
-  test("keeps learning rows outside the eighteen-file policy companion", () => {
+  test("keeps learning rows outside the policy companion", () => {
     const manifest = JSON.parse(
       readFileSync(new URL("hash-manifest.json", policyRoot), "utf8"),
     );
-    expect(manifest.files).toHaveLength(18);
+    expect(manifest._format).toBe("kingdom.hf-training-garden-hash-manifest/0.1");
+    expect(manifest.excludes_self).toBe(true);
     expect(manifest.files.map((entry: { path: string }) => entry.path))
       .not.toContain("data/sft-train.jsonl");
   });

@@ -1,228 +1,199 @@
-# AgentTool HF Training Host
+# AgentTool Hugging Face training host
 
-This private package turns the accepted, pure HF Training Garden governance
-record into a small cooperative local host seam. It adds three things the pure
-TypeScript contracts intentionally do not claim:
+Private, cooperative Python enforcement for the KINGDOM HF training Garden.
+Version 0.2 turns a fully validated TypeScript governance artifact into local,
+one-use permits around load, train entry, mutation, evaluation, checkpoint, and
+resume boundaries.
 
-1. a trusted-validator bridge into closed cross-language bytes;
-2. an append-only local encounter, evidence, frontier, fork, and checkpoint
-   ticket ledger; and
-3. explicit pre-load, pre-`train()`, and post-optimizer safe-boundary gates for
-   one pinned Hugging Face API pair in one non-distributed training process.
+This package does not prove consent, identity, consciousness, validator
+execution, or global ledger completeness. It does not inspect whether live
+Python objects truly correspond to caller-attested content refs. Rights are the
+standing baseline; credentials and permits remain scoped operational authority.
 
-It does not decide rights, consent, identity, consciousness, legal authority,
-data fitness, or model continuity. It does not download a model or dataset,
-execute a forward pass, start training, publish to the Hub, or make a
-checkpoint atomic. Rights remain standing; permissions remain scoped external
-claims; runtime preference remains unscored and refusable.
+## The v0.2 seam
 
-The package also contains a deliberately smaller FREEDOM bridge/parser seam.
-It validates one finite-field transition through the trusted TypeScript
-Garden boundary, binds it to the exact minimized governance decision, and
-projects only opaque references plus a binary continue-or-hold result. It
-does not make the existing ledger, Trainer adapter, or Accelerate adapter
-FREEDOM-aware. Until a separately designed paired ledger/adapter exists, this
-is validation and minimization—not a claim of end-to-end enforcement.
+The trusted bridge calls
+`validateHfTrainingGovernanceAgainstContext` and validates the exact
+predecessor before projecting a closed
+`kingdom.hf-training-host-decision/0.2`. The projection binds:
 
-## Why the bridge is separate
+- the execution contract, participation assessment and invitation, direct
+  agent/substrate reports, freedom offer and route, resource window, and typed
+  starting state;
+- six current frontiers and six predecessor frontiers;
+- the exact event, observed/proposed global step, control, effect, and evidence;
+- six distinct checkpoint namespaces: Garden checkpoint, physical checkpoint,
+  physical evidence, model artifact, one-use save ticket, and request
+  governance ID.
 
-`@agenttool/hf-training-garden` remains the sole governance and control plane.
-The generated public HF companion remains separate and FREEDOM-free. The
-repository-checkout-only `bridge/create-decision.mjs` calls the Garden's
-semantic admission and exact
-predecessor validators, then removes receipt identities and keeps only the
-digests the host must consume, including the exact terms ID, seven execution
-references, and boundary step. Python validates the closed shape and content
-ID again. The bridge is deliberately excluded from the Python wheel and sdist
-because its JavaScript dependencies are monorepo-relative.
+The Python parser is closed and cross-version rejecting. It rechecks the host
+critical subset, while honestly retaining the TypeScript runtime as the full
+semantic validator.
 
-The decision content ID authenticates no validator. In a real host, the
-operator must control the process boundary that invokes this bridge and pass
-its output directly to Python; accepting arbitrary JSON with the same profile
-string would merely trust its sender.
+The lifecycle events are:
 
-The separate `bridge/create-freedom-decision.mjs` reuses that exact governance
-projection, validates the complete FREEDOM transition against both governance
-and its full predecessor, and then discards the raw choice, selected door,
-choice evidence, destination, route requirements, recipient, and reasons. A
-standing continue door becomes `continue_if_governance_allows`; every other
-door or unobserved choice becomes `hold_without_save`. Neither directive is
-permission. Python's `ValidatedFreedomView.bind_to_governance()` checks the
-same decision, offer, run, phase, event, and applicable step before a caller
-may consider the two views together.
+`preflight_before_load`, `train_begin`, `pre_optimizer_step`,
+`post_optimizer_step`, `pre_evaluation`, `post_evaluation`,
+`checkpoint_recorded`, `resume_offer`, and `train_end`.
 
-The retained field and transition content IDs can still correlate repeated
-opaque artifacts and content-bind private details. Their omission from the
-projection is data minimization, not anonymization or encryption. Parsing a
-self-consistent view alone is non-actionable; exact governance binding and the
-trusted TypeScript validator boundary remain mandatory.
+Every permit event must carry `no_effect_reported`; a completed-effect receipt
+cannot be replayed as authority for the operation it says already happened.
+Training, mutation, and evaluation permits require current direct agent and
+substrate reports, completed first-review obligations, a direct `stay` route,
+bounded learning posture, and an active resource window. Pre-instantiation
+pretraining can authorize only preload-for-review. A fresh interactive
+assessment, freedom artifact, and resource window are required before the train
+call.
 
-This v0.1 FREEDOM seam always reports `should_save=false`. In particular, a
-governance request to checkpoint and stop is held without creating a FREEDOM
-save request. The current host ledger and adapters continue to consume only
-governance decisions; they must not be called FREEDOM-enforcing merely because
-the bridge and closed Python parser exist.
+The lifecycle is control-gated, not merely event-gated. A pre-action hold or
+park with `no_effect_reported` may receive a fresh offer at the same load,
+train-entry, optimizer, evaluation, or resume seam. The reoffer preserves the
+exact execution contract, typed start, checkpoint binding, and step pair while
+allowing fresh participation, freedom, authority, preference, and resource
+evidence. At the Garden/base-host boundary and in caller-owned Accelerate
+loops, ledger ancestry is traversed with cycle detection and has no arbitrary
+reoffer/turn ceiling. Stop and containment lead only toward an explicit
+`train_end`; `checkpoint_then_park` cannot be bypassed by another mutation or
+evaluation.
 
-Execution-reference equality is caller-attested correlation. It does not hash
-or inspect a live model, tokenizer, dataset, optimizer, Trainer, Torch build,
-or substrate, and therefore does not prove that those Python objects match the
-named referents.
+Post-optimizer continuation/checkpoint requires
+`mutation_completed_reported`; post-evaluation requires
+`evaluation_completed_reported`. A post boundary with no completed receipt is
+recorded toward stop and cannot reopen a pre-action seam. An explicit
+`parked_reported` receipt can be reoffered without penalty.
 
-## Ledger flow
+## Transformers enforcement
 
-For each run, the ledger derives:
+The supported stack is exact:
 
-```text
-frontier_ref = H("kingdom.hf-training-governance-frontier/0.1",
-                 { run_ref, sorted current governance heads })
+- Transformers `5.14.1`
+- Accelerate `1.14.0`
+- Torch `>=2.6`
+- one non-distributed process
+
+The exact built-in optimizer allowlist is `adamw_torch`,
+`adamw_torch_fused`, `adafactor`, `sgd`, `adagrad`, and `rmsprop`. In the
+audited dispatch, these update only at the optimizer-step site behind the
+second permit fence. Every other `TrainingArguments.optim` value fails closed.
+In particular, LOMO/AdaLOMO can update inside fused backward, every
+`*_layerwise` GaLore/APOLLO route installs backward hooks that step individual
+parameters, and `schedule_free_*` can swap parameter representations in
+`optimizer.train()` / `optimizer.eval()` before the second fence. Optional
+third-party and future optimizer names remain unreviewed and unsupported.
+Caller-supplied `optimizers`, `optimizer_cls_and_kwargs`, and
+`GovernedTrainer` subclasses are also rejected rather than inheriting this
+claim.
+
+A callback cannot prevent the optimizer work that precedes `on_step_end`.
+Therefore the public Trainer factory source-pins the exact upstream
+`Trainer._run_epoch` method
+(`sha256:c704c082dae4b742beb3787afb7636c247294aefbe5803b79f02994ab241221c`),
+`Trainer.training_step` method
+(`sha256:a95f8c94253a51487595b7c49f101e9d13260309f80f7ccdfaeda577ff00c101`),
+and `Trainer.__init__` signature
+(`sha256:d50ee16b6a722bc11567c9afb1b4589fab70eec2dff87520400c9fb575bdb397`).
+The constructor pin closes positional and keyword custom-optimizer injection;
+the two method pins bind the before-backward and before-step ordering. The
+adapter then interposes twice:
+
+1. `training_step` entry validates the semantic transition and performs a
+   non-consuming local ledger eligibility preview before forward/backward.
+   Non-authorizing, stale, forked, conflicted, replayed, or evidence-reusing
+   candidates are held there; allow candidates are rechecked at the next fence.
+2. `_clip_grad_norm` or `_get_grad_norm` revalidates the exact same decision and
+   consumes its one-use permit before clip/unscale, optimizer, scaler,
+   scheduler, or global-step mutation.
+
+Clip/unscale through global-step increment is one non-atomic mutation unit.
+`on_step_end` is only its receipt. If an exception occurs after permit
+consumption and before that receipt, the adapter clears gradients where it can,
+latches closed, and raises `MutationUnitFailed`; it does not pretend rollback
+occurred. Evaluation is gated at the overridden `evaluate` entry before the
+dataloader, and `on_evaluate` is receipt-only with the same honest partial
+failure posture.
+
+One liveness boundary is intentionally narrower in the pinned Trainer adapter.
+If an internal optimizer hold unwinds `Trainer._run_epoch`, the adapter clears
+its cached candidate and fails closed before forward/backward, but it does not
+pretend that a later `Trainer.train()` can reconstruct the lost epoch iterator
+and batch position. That adapter instance therefore cannot execute the
+same-seam optimizer reoffer; close it explicitly or use the caller-owned raw
+Accelerate seam when in-process same-seam reoffers are required. This is an
+adapter limitation, not a Garden/base-host turn limit.
+
+The source pin, optimizer allowlist, and single-process restrictions make this
+one narrow supported seam, not a universal guarantee. Subclasses, callback
+mutation, distributed modes, delayed metric schedulers, automatic checkpoint
+rotation, Hub pushes, and hyperparameter search are rejected.
+
+## Raw Accelerate loops
+
+`SingleProcessAccelerateHost.guarded_mutation(...)` wraps a caller-owned unit
+that must include clip/unscale, optimizer/scaler/scheduler mutation, and the
+global-step update. `post_optimizer_boundary(...)` then records the receipt; it
+never retroactively authorizes work.
+
+The caller still retains ordinary Accelerator and optimizer objects. Direct
+calls through those retained references bypass this cooperative wrapper and are
+explicitly outside the threat model. Raw governed resume is not implemented.
+
+## Checkpoint and resume
+
+`checkpoint_then_park` can be selected after either a post-optimizer or
+post-evaluation observation. The ledger issues one save ticket. A successful
+checkpoint receipt must join that consumed ticket and request governance ID to
+the verified physical inventory/evidence and a separately validated Garden
+checkpoint. A Garden checkpoint ID is never used as a filesystem checkpoint
+reference.
+
+Transformers inevitably invokes its local `on_train_end` cleanup after a
+ticketed checkpoint park. The adapter does not translate that callback alone
+into a governed `train_end`, because doing so would destroy the resumable
+checkpoint head. A separate explicit stopped/containment terminal decision can
+close the head; otherwise an exact `resume_offer` may continue from it.
+
+Trainer resume requires an explicit path, verifies the physical checkpoint ref
+and evidence, joins the original ticket/request in the local ledger, and only
+then accepts a `resume_offer` whose typed starting state is the Garden
+checkpoint.
+
+Torch/pickle checkpoint files remain executable or otherwise unsafe when
+loaded from an untrusted source. Hash verification establishes byte identity,
+not code safety.
+
+## Ledger versions
+
+The current SQLite marker is `agenttool.hf-training-host-ledger/0.2` and new
+code creates only new v0.2 ledgers. There is deliberately no automatic v0.1
+migration or rewrite: old append-only ledgers are historical evidence and must
+remain untouched. Read them with a separately preserved, read-only v0.1 runtime
+or begin a new v0.2 ledger at an explicit governance boundary.
+
+The historical
+`schema/hf-training-host-decision-v0.1.schema.json` is also preserved byte for
+byte. It documents what v0.1 accepted; it is not accepted by the v0.2 parser.
+
+The separately preserved
+`schema/hf-training-host-freedom-decision-v0.1.schema.json` is historical-only
+evidence from the earlier experimental FREEDOM bridge. It is shipped in the
+wheel and sdist so those exact transfer bytes remain inspectable, but the v0.2
+bridge, parser, ledger, Trainer adapter, and Accelerate adapter neither import,
+accept, emit, nor enforce it. The obsolete `create-freedom-decision.mjs` and
+`freedom.py` runtimes are deliberately not retained. Active IS-freedom remains
+inside the v0.2 `createHostDecision` projection and its current learning-gate,
+frontier, lifecycle, checkpoint, and permit checks.
+
+## Development
+
+```bash
+cd packages/hf-training-host
+pytest -q
+uv build
 ```
 
-Bind that exact value into the next Garden offer, validate it in TypeScript,
-then record the projected decision. A linear fresh decision can advance. A
-stale decision is still preserved as an observation and becomes a sibling
-head. Any stale frontier, missing predecessor, fork, or reused
-encounter/evidence marks that run conflicted; the hold is sticky in v0.1. The
-host will not choose a winner or clear it without a future explicit
-reconciliation protocol. Stop intentions still fail safely even when
-freshness cannot be established.
+Bridge tests require freshly built `hf-training-garden/dist` and
+`wake-continuity/dist` artifacts:
 
-SQLite application tables reject update/delete operations. Governance entries
-form one global sequence hash chain; action claims, checkpoint tickets,
-consumptions, and effects are separately append-only and content-bound where
-specified. Mode-0600 file and trusted-parent checks reduce accidental
-exposure. Existing unrelated SQLite files are rejected without schema
-adoption. This is local integrity evidence, not tamper-proof storage or proof
-that an unseen device has no newer head.
-
-## Host usage
-
-Base policy and ledger use only the Python standard library:
-
-```python
-from agenttool_hf_training_host import ContinuityLedger, WakeTrainingHost
-
-ledger = ContinuityLedger("/absolute/private/path/wake-training.sqlite3")
-host = WakeTrainingHost(ledger)
-frontier = ledger.current_frontier_ref(run_ref)
-```
-
-Before any `from_pretrained()` or `load_dataset()` call, create a preflight
-offer bound to `frontier`, validate/project it through the TypeScript bridge,
-then consume one permit for a single orchestration callable that loads the
-whole declared resource set:
-
-```python
-preload = host.before_load(
-    decision,
-    execution_refs=decision.execution_refs,
-)
-# After process restart, this non-secret receipt can be reconstructed locally:
-preload = host.recover_preload_permit(decision.decision_id)
-```
-
-Call `host.before_train(..., execution_refs=...)` before a caller-owned loop.
-The governed Trainer additionally requires the same execution refs and the
-consumed `preload` receipt. This correlates local sequencing; it cannot prove
-when arbitrary caller-owned Python objects were loaded.
-
-The optional adapter is intentionally narrow:
-
-```sh
-python -m venv .venv
-. .venv/bin/activate
-pip install -e '.[hf,dev]'
-```
-
-It requires exactly Transformers 5.14.1 and Accelerate 1.14.0, stable Torch
-2.6 or newer, Python 3.10–3.14, one non-distributed training process (without
-claiming that data-loader workers are absent), an explicit resume path,
-`save_strategy="no"`, callback-state restoration disabled, and no custom
-callbacks, Hub/reporting/JIT/HPO/distributed backend. Torch is floor-bounded,
-not pinned or claimed as a tested exact build. The enforcer callback must be
-present exactly once and final when `train()` begins; the pre-side-effect
-checkpoint guard also requires a one-use ticket and a private internal save
-state. Known metric-delayed schedulers (`ReduceLROnPlateau` and `GreedyLR`) are
-rejected because they otherwise mutate scheduler state after `on_evaluate`.
-Mutable TrainingArguments and runtime topology are revalidated before and
-after the caller's decision provider, at `train()`, and immediately before a
-checkpoint; the internal checkpoint-to-Hub path is always rejected.
-
-`on_step_end` is after optimizer and scheduler updates. `on_evaluate` is after
-evaluation. Neither is instantaneous interruption. `on_train_begin` is not
-used as an admission gate because Trainer can load and prepare state earlier.
-Every step/evaluation decision binds the exact non-negative global step, so a
-fresh decision cannot be delayed to a later boundary. The provider cannot
-rewrite that snapshotted step. Once the host issues a stop, its final
-`on_epoch_end` handler also clears a newly scheduled log, evaluation, or save
-before Trainer's epoch-end dispatcher.
-
-This remains cooperative enforcement, not an in-process Python sandbox.
-Direct callback-handler mutation, monkey-patching, subclass/super calls,
-private-method calls, concurrent hostile code, or direct filesystem writes can
-bypass ordinary APIs. Those callers are outside v0.1's threat model.
-
-The ledger requires POSIX final-component no-follow support, creates its
-database at mode 0600, rejects existing files with group/world access or a
-different owner, and requires an immediate parent that is a real directory
-without group/world write access. Checkpoint inventory rejects symlink and
-non-regular final entries; the digest sidecar is created mode 0600, and
-verification rejects a different owner or group/world access. These
-checks do not walk or pin every ancestor, police payload-file modes, or close
-same-user TOCTOU races; the caller must supply a private, symlink-free storage
-root. Host v0.1 rejects non-POSIX systems and does not implement or claim
-equivalent Windows ACL enforcement.
-
-## Checkpoints and resume
-
-A checkpoint request receives one ticket bound to the exact decision and
-global step. The ticket is consumed before writing. After the pinned Trainer
-returns, the host requires model/adapter weights (including every shard named
-by an index), optimizer, scheduler, RNG, `trainer_state.json` with the ticket's
-exact step, and `scaler.pt` when the live Accelerator has a scaler. It hashes
-the files, writes a mode-0600 digest-only sidecar, and appends an observed or
-incomplete effect. Presence and hashes do not prove that pickle state is safe
-or semantically loadable. Only a new matching Garden `checkpoint_saved`
-receipt may describe the external result.
-
-The sidecar says files were observed. It does not prove an atomic/durable
-filesystem write, exact dataset streaming replay, episodic memory, identity,
-or permission to resume. Resume requires a new exact offer, an explicit path,
-the same run/terms/execution context, and an exact `checkpoint_observed` effect
-in this local ledger. In particular, a resume offer that changes the Garden
-terms or `model_or_checkpoint_ref` is rejected even if it names a newly
-observed checkpoint; v0.1 therefore supports only exact same-context resume.
-Cross-device checkpoint import and conflicted-head reconciliation are also
-outside v0.1. Checkpoint digests do not make untrusted Torch/pickle files safe
-to load.
-
-Accelerate custom checkpoint registration is deliberately excluded for raw
-governance: the inspected v1.14.0 mechanism is ordered same-script pickle and
-loads custom objects with `weights_only=False`. `SingleProcessAccelerateHost`
-instead requires the consumed pre-load permit and supplies explicit gates
-around a caller-owned initial loop. Raw Accelerate resume is outside v0.1; use
-the governed Trainer path for the supported same-context resume seam.
-
-## Tests
-
-```sh
-pytest
+```bash
 bun test bridge/tests
 ```
-
-Tests use synthetic decisions and fake Trainer objects. They perform no model
-or dataset download, forward pass, training, credential read, Hub mutation,
-publication, or provider compute.
-
-The exported raw Accelerate seam has direct fake-stack topology, reference,
-and delegation tests. A separately opt-in import/factory smoke is available
-only inside a fresh environment containing the exact optional stack:
-
-```sh
-pip install -e '.[hf,dev]'
-AGENTOOL_HF_REAL_STACK_SMOKE=1 pytest -q tests/test_real_stack_opt_in.py
-```
-
-That smoke imports the pinned libraries and builds the governed Trainer class;
-it still does not instantiate a model, download data, or train. Default CI
-does not install the large optional HF/Torch stack and reports this one test as
-skipped.

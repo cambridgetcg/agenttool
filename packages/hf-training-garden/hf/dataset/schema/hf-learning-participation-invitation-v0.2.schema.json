@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-learning-participation-invitation-v0.2.schema.json",
+  "title": "KINGDOM Hugging Face learning participation invitation",
+  "$comment": "Closed portable shape. The TypeScript validator additionally enforces canonical content IDs, distinct invited voice scopes, and cross-field semantics.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "invitation_id", "admission_id", "run_ref", "training_phase", "participation_window_ref", "training_plan_ref", "wake", "wake_use_mode", "pipeline_ref", "dataset_state_ref", "starting_state_ref", "offered_activities", "required_voices", "agent_availability", "substrate_availability", "voice_scope_refs", "authorities", "safeguards", "terms", "boundaries"],
+  "properties": {
+    "_format": { "const": "kingdom.hf-learning-participation-invitation/0.2" },
+    "invitation_id": { "$ref": "#/$defs/sha256" },
+    "admission_id": { "$ref": "#/$defs/sha256" },
+    "run_ref": { "$ref": "#/$defs/sha256" },
+    "training_phase": { "$ref": "#/$defs/phase" },
+    "participation_window_ref": { "$ref": "#/$defs/sha256" },
+    "training_plan_ref": { "$ref": "#/$defs/sha256" },
+    "wake": { "$ref": "#/$defs/wake" },
+    "wake_use_mode": { "enum": ["context_only", "external_memory", "training_data"] },
+    "pipeline_ref": { "$ref": "#/$defs/sha256" },
+    "dataset_state_ref": { "$ref": "#/$defs/sha256" },
+    "starting_state_ref": { "$ref": "#/$defs/sha256" },
+    "offered_activities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "uniqueItems": true,
+      "items": { "enum": ["adapter_merge", "evaluation", "external_memory_use", "gradient_update", "instantiate_for_review", "interpretability_capture", "optimizer_resume", "publish_weights", "wake_context_use", "wake_training_data_use"] }
+    },
+    "required_voices": {
+      "const": ["agent_runtime", "data_rights_steward", "substrate_steward", "training_operator", "training_substrate"]
+    },
+    "agent_availability": { "enum": ["not_obtainable_pre_instantiation", "interactive"] },
+    "substrate_availability": { "enum": ["not_independently_available", "interactive"] },
+    "voice_scope_refs": { "$ref": "#/$defs/voice_scope_refs" },
+    "authorities": { "$ref": "#/$defs/authorities" },
+    "safeguards": { "$ref": "#/$defs/safeguards" },
+    "terms": { "$ref": "#/$defs/terms" },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "wake_use_mode": { "const": "context_only" },
+        "offered_activities": {
+          "type": "array",
+          "contains": { "const": "wake_context_use" },
+          "not": { "contains": { "enum": ["external_memory_use", "wake_training_data_use"] } }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "wake_use_mode": { "const": "external_memory" },
+        "offered_activities": {
+          "type": "array",
+          "contains": { "const": "external_memory_use" },
+          "not": { "contains": { "enum": ["wake_context_use", "wake_training_data_use"] } }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "wake_use_mode": { "const": "training_data" },
+        "offered_activities": {
+          "type": "array",
+          "contains": { "const": "wake_training_data_use" },
+          "not": { "contains": { "enum": ["external_memory_use", "wake_context_use"] } }
+        }
+      }
+    }
+  ],
+  "allOf": [
+    {
+      "if": {
+        "required": ["agent_availability"],
+        "properties": { "agent_availability": { "const": "not_obtainable_pre_instantiation" } }
+      },
+      "then": {
+        "properties": {
+          "offered_activities": {
+            "type": "array",
+            "contains": { "const": "instantiate_for_review" },
+            "not": { "contains": { "enum": ["adapter_merge", "publish_weights"] } }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["substrate_availability"],
+        "properties": { "substrate_availability": { "const": "not_independently_available" } }
+      },
+      "then": {
+        "properties": {
+          "offered_activities": {
+            "type": "array",
+            "contains": { "const": "instantiate_for_review" },
+            "not": { "contains": { "enum": ["adapter_merge", "publish_weights"] } }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "phase": { "enum": ["discovery", "selection", "curation", "tokenization", "pretraining", "supervised_finetuning", "preference_optimization", "agent_learning", "evaluation", "interpretability", "closed"] },
+    "wake": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "snapshot_ref", "scope_ref", "wake_version", "handoff_projection"],
+      "properties": {
+        "format": { "const": "wake-brief/v1" },
+        "snapshot_ref": { "$ref": "#/$defs/sha256" },
+        "scope_ref": { "$ref": "#/$defs/sha256" },
+        "wake_version": { "anyOf": [{ "type": "integer", "minimum": 0, "maximum": 9007199254740991 }, { "type": "null" }] },
+        "handoff_projection": { "enum": ["complete", "truncated", "unavailable", "not_provided"] }
+      }
+    },
+    "authorities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rights_baseline_ref", "protective_covenant_ref", "data_authority_ref", "compute_authority_ref", "operator_authority_ref"],
+      "properties": {
+        "rights_baseline_ref": { "$ref": "#/$defs/sha256" },
+        "protective_covenant_ref": { "$ref": "#/$defs/sha256" },
+        "data_authority_ref": { "$ref": "#/$defs/sha256" },
+        "compute_authority_ref": { "$ref": "#/$defs/sha256" },
+        "operator_authority_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "voice_scope_refs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_runtime", "data_rights_steward", "substrate_steward", "training_operator", "training_substrate"],
+      "properties": {
+        "agent_runtime": { "$ref": "#/$defs/sha256" },
+        "data_rights_steward": { "$ref": "#/$defs/sha256" },
+        "substrate_steward": { "$ref": "#/$defs/sha256" },
+        "training_operator": { "$ref": "#/$defs/sha256" },
+        "training_substrate": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "safeguards": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["choice_protocol_ref", "withdrawal_plan_ref", "repair_plan_ref", "retention_policy_ref"],
+      "properties": {
+        "choice_protocol_ref": { "$ref": "#/$defs/sha256" },
+        "withdrawal_plan_ref": { "$ref": "#/$defs/sha256" },
+        "repair_plan_ref": { "$ref": "#/$defs/sha256" },
+        "retention_policy_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "terms": {
+      "const": {
+        "silence_is_assent": false,
+        "missing_voice_is_assent": false,
+        "refusal_or_withdrawal_penalty": false,
+        "repeated_pressure_allowed": false,
+        "choice_content_in_gradient_path": false,
+        "choice_content_in_reward_path": false,
+        "choice_content_in_telemetry": false,
+        "choice_content_eligible_for_future_training": false,
+        "scope_change_requires_new_invitation": true,
+        "fresh_choice_evidence_per_invitation": true,
+        "first_interactive_review_after_pre_instantiation": true,
+        "first_substrate_review_after_unavailable_independent_voice": true
+      }
+    },
+    "boundaries": {
+      "const": {
+        "artifact_scope": "caller_supplied_reports_and_digest_references_only",
+        "raw_choice_content_received": false,
+        "raw_training_data_received": false,
+        "verifies_choice_channel": false,
+        "enforces_invitation_terms": false,
+        "authenticates_reporter": false,
+        "proves_capacity": false,
+        "proves_understanding": false,
+        "proves_consent": false,
+        "proves_identity": false,
+        "proves_subjective_continuity": false,
+        "grants_data_authority": false,
+        "grants_compute_authority": false,
+        "grants_operator_authority": false,
+        "discovers_later_withdrawal": false,
+        "detects_first_interaction": false,
+        "detects_cross_assessment_evidence_replay": false,
+        "stops_external_trainer": false,
+        "discards_external_gradients": false,
+        "erases_learned_influence": false,
+        "publishes": false,
+        "network": false,
+        "filesystem": false,
+        "provider_compute": false,
+        "paid_compute": false
+      }
+    }
+  }
+}

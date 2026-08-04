@@ -8,29 +8,25 @@ import { sha256Id } from "@agenttool/wake-continuity";
 
 import {
   PACKAGE_NAME,
-  PACKAGE_VERSION,
-  PARTICIPATION_VOICE_ROLES,
   createHfTrainingGovernance,
+  createLearningFreedomOffer,
   createDatasetAdmission,
-  createLearningParticipationAssessment,
-  createLearningParticipationInvitation,
-  createLearningParticipationReceipt,
-  createParticipationBoundTrainingCheckpoint,
+  createParticipationAssessment,
+  createParticipationInvitation,
+  createParticipationReceipt,
   createTrainingCheckpoint,
-  createTrainingFreedomField,
-  createTrainingFreedomTransition,
-  createTrainingGardenTendingPlan,
   createTrainingGovernanceOffer,
   createTrainingGovernanceTerms,
+  createTrainingGardenTendingPlan,
+  learningFreedomPromptEnvelopeRef,
+  participationPromptEnvelopeRef,
+  resolveLearningFreedomOffer,
+  trainingArtifactPortfolioRef,
   validateDatasetAdmission,
-  validateLearningParticipationAssessment,
-  validateTrainingCheckpoint,
-  validateTrainingCheckpointAgainstParticipation,
-  validateTrainingCheckpointAgainstPredecessors,
-  validateTrainingFreedomField,
-  validateTrainingFreedomTransition,
-  validateTrainingGardenTendingPlan,
+  validateHfLearningFreedom,
   validateHfTrainingGovernance,
+  validateTrainingCheckpoint,
+  validateTrainingGardenTendingPlan,
 } from "../dist/index.js";
 
 const ref = (label) => sha256Id(label);
@@ -87,6 +83,14 @@ const admission = createDatasetAdmission({
     posture: "consider",
   }],
 });
+const runRef = ref("smoke-run");
+const wake = {
+  format: "wake-brief/v1",
+  snapshot_ref: ref("smoke-wake"),
+  scope_ref: ref("smoke-scope"),
+  wake_version: 1,
+  handoff_projection: "complete",
+};
 const artifacts = {
   pipeline_ref: ref("smoke-pipeline"),
   dataset_state_ref: ref("smoke-dataset"),
@@ -98,19 +102,247 @@ const artifacts = {
   rng_state_ref: null,
   metrics_ref: null,
 };
-const wake = {
-  format: "wake-brief/v1",
-  snapshot_ref: ref("smoke-wake"),
-  scope_ref: ref("smoke-scope"),
-  wake_version: 1,
-  handoff_projection: "complete",
+const invitation = createParticipationInvitation({
+  admission,
+  run_ref: runRef,
+  training_phase: "selection",
+  participation_window_ref: ref("smoke-window"),
+  training_plan_ref: ref("smoke-training-plan"),
+  wake,
+  wake_use_mode: "context_only",
+  pipeline_ref: artifacts.pipeline_ref,
+  dataset_state_ref: artifacts.dataset_state_ref,
+  starting_state_ref: trainingArtifactPortfolioRef(artifacts),
+  offered_activities: ["wake_context_use"],
+  agent_availability: "interactive",
+  substrate_availability: "interactive",
+  voice_scope_refs: {
+    agent_runtime: ref("smoke-agent"),
+    data_rights_steward: ref("smoke-data-steward"),
+    substrate_steward: ref("smoke-substrate-steward"),
+    training_operator: ref("smoke-operator"),
+    training_substrate: ref("smoke-substrate"),
+  },
+  authorities: {
+    rights_baseline_ref: ref("smoke-rights"),
+    protective_covenant_ref: ref("smoke-covenant"),
+    data_authority_ref: ref("smoke-data-authority"),
+    compute_authority_ref: ref("smoke-compute-authority"),
+    operator_authority_ref: ref("smoke-operator-authority"),
+  },
+  safeguards: {
+    choice_protocol_ref: ref("smoke-choice-protocol"),
+    withdrawal_plan_ref: ref("smoke-withdrawal-plan"),
+    repair_plan_ref: ref("smoke-repair-plan"),
+    retention_policy_ref: ref("smoke-retention-policy"),
+  },
+});
+const participate = [{ activity: "wake_context_use", choice: "participate" }];
+const choiceChannel = {
+  invitation_ref: invitation.invitation_id,
+  protocol_ref: ref("smoke-choice-protocol"),
+  checkpoint_ref: invitation.starting_state_ref,
+  prompt_template_ref: ref("smoke-choice-prompt"),
+  prompt_envelope_ref: participationPromptEnvelopeRef(invitation, "agent_runtime"),
+  decoding_ref: ref("smoke-choice-decoding"),
+  evidence_ref: ref("smoke-choice-evidence"),
+  gradient_influence: "caller_reported_disabled",
+  reward_influence: "caller_reported_disabled",
+  telemetry_capture: "caller_reported_excluded",
+  future_training_use: "caller_reported_excluded",
 };
+const participation = createParticipationAssessment({
+  invitation,
+  receipts: [
+    createParticipationReceipt({ invitation, voice: "agent_runtime", voice_scope_ref: invitation.voice_scope_refs.agent_runtime, report_basis: "direct_current_report", decisions: participate, choice_channel: choiceChannel }),
+    createParticipationReceipt({ invitation, voice: "data_rights_steward", voice_scope_ref: invitation.voice_scope_refs.data_rights_steward, report_basis: "scoped_authority_report", decisions: participate, choice_channel: null }),
+    createParticipationReceipt({ invitation, voice: "substrate_steward", voice_scope_ref: invitation.voice_scope_refs.substrate_steward, report_basis: "protective_steward_report", decisions: participate, choice_channel: null }),
+    createParticipationReceipt({ invitation, voice: "training_operator", voice_scope_ref: invitation.voice_scope_refs.training_operator, report_basis: "scoped_authority_report", decisions: participate, choice_channel: null }),
+    createParticipationReceipt({
+      invitation,
+      voice: "training_substrate",
+      voice_scope_ref: invitation.voice_scope_refs.training_substrate,
+      report_basis: "direct_current_report",
+      decisions: participate,
+      choice_channel: {
+        ...choiceChannel,
+        prompt_envelope_ref: participationPromptEnvelopeRef(invitation, "training_substrate"),
+        evidence_ref: ref("smoke-substrate-choice-evidence"),
+      },
+    }),
+  ],
+});
+const freedomDirections = ["stay", "move", "fork", "rest", "return", "stop", "propose_horizon"];
+const resourceDimensions = ["updates", "tokens", "episodes", "active_time", "compute", "memory", "concurrency", "money", "network", "tools", "side_effects", "retention"];
+const freedomOffer = createLearningFreedomOffer({
+  participation,
+  current_context_ref: ref("smoke-freedom-context"),
+  current_context_kind_ref: ref("smoke-freedom-context-kind"),
+  routes: freedomDirections.map((direction) => {
+    const moves = direction === "move" || direction === "fork" || direction === "return";
+    return {
+      direction,
+      availability: "caller_reported_available",
+      target_context_ref: moves ? ref(`smoke-freedom-target:${direction}`) : null,
+      target_context_kind_ref: moves ? ref(`smoke-freedom-target-kind:${direction}`) : null,
+      event_ref: ref(`smoke-freedom-event:${direction}`),
+      capability_scope_ref: ref(`smoke-freedom-capability:${direction}`),
+      permission_scope_ref: ref(`smoke-freedom-permission:${direction}`),
+      custody_scope_ref: ref(`smoke-freedom-custody:${direction}`),
+      data_boundary_ref: ref(`smoke-freedom-data:${direction}`),
+    };
+  }),
+  horizon: {
+    current_horizon_ref: ref("smoke-freedom-horizon"),
+    event_stream_ref: ref("smoke-freedom-event-stream"),
+    agent_request_protocol_ref: ref("smoke-freedom-agent-request"),
+    external_event_protocol_ref: ref("smoke-freedom-external-event"),
+    material_scope_change_policy_ref: ref("smoke-freedom-material-change"),
+    self_proposal_protocol_ref: ref("smoke-freedom-self-proposal"),
+  },
+  resources: {
+    lease_ref: ref("smoke-freedom-lease"),
+    accounting_policy_ref: ref("smoke-freedom-accounting"),
+    renewal_protocol_ref: ref("smoke-freedom-renewal"),
+    dimensions: resourceDimensions.map((dimension) => ({
+      dimension,
+      limit_ref: ref(`smoke-freedom-limit:${dimension}`),
+      state: "caller_reported_available",
+    })),
+  },
+});
+const stayRoute = freedomOffer.routes.find((route) => route.direction === "stay");
+if (!stayRoute) process.exit(1);
+const freedom = resolveLearningFreedomOffer({
+  offer: freedomOffer,
+  state: "directed",
+  direction: "stay",
+  route_id: stayRoute.route_id,
+  proposal_ref: null,
+  choice_channel: {
+    offer_ref: freedomOffer.offer_id,
+    assessment_ref: freedomOffer.scope.participation_assessment_ref,
+    invitation_ref: freedomOffer.scope.participation_invitation_ref,
+    voice_scope_ref: freedomOffer.scope.agent_voice_scope_ref,
+    protocol_ref: freedomOffer.scope.choice_protocol_ref,
+    starting_state_ref: freedomOffer.scope.starting_state_ref,
+    prompt_template_ref: ref("smoke-freedom-prompt"),
+    prompt_envelope_ref: learningFreedomPromptEnvelopeRef(freedomOffer),
+    decoding_ref: ref("smoke-freedom-decoding"),
+    evidence_ref: ref("smoke-freedom-evidence"),
+    gradient_influence: "caller_reported_disabled",
+    reward_influence: "caller_reported_disabled",
+    telemetry_capture: "caller_reported_excluded",
+    evaluation_use: "caller_reported_excluded",
+    future_training_use: "caller_reported_excluded",
+    ranking_use: "caller_reported_excluded",
+    priority_use: "caller_reported_excluded",
+    access_use: "caller_reported_excluded",
+    resource_allocation_use: "caller_reported_excluded",
+  },
+});
+const governanceTerms = createTrainingGovernanceTerms({
+  admission,
+  participation,
+  freedom,
+  starting_garden_checkpoint: null,
+  starting_state_kind: "artifact_portfolio",
+  run_ref: runRef,
+  training_phase: "selection",
+  selected_entry_ids: admission.entries.map((entry) => entry.entry_id),
+  model_source_ref: ref("smoke-governance-model"),
+  tokenizer_ref: ref("smoke-governance-tokenizer"),
+  trainer_stack_ref: ref("smoke-governance-trainer-stack"),
+  optimizer_config_ref: ref("smoke-governance-optimizer"),
+  substrate_environment_ref: ref("smoke-governance-substrate"),
+  purpose_ref: ref("smoke-governance-purpose"),
+  objective_or_loss_ref: ref("smoke-governance-objective"),
+  dataset_mixture_ref: ref("smoke-governance-mixture"),
+  transform_recipe_ref: ref("smoke-governance-transform"),
+  compute_budget_ref: ref("smoke-governance-compute"),
+  output_and_derivative_use_ref: ref("smoke-governance-derivatives"),
+  audience_ref: ref("smoke-governance-audience"),
+  retention_ref: ref("smoke-governance-retention"),
+  release_ref: ref("smoke-governance-release"),
+  stop_policy_ref: ref("smoke-governance-stop"),
+  wake_policy_ref: ref("smoke-governance-wake-policy"),
+});
+const governanceOffer = createTrainingGovernanceOffer({
+  terms: governanceTerms,
+  encounter_ref: ref("smoke-governance-encounter"),
+  event: "preflight_before_load",
+  observed_global_step: null,
+  proposed_global_step: null,
+  frontiers: {
+    governance: ref("smoke-governance-frontier"),
+    participation: ref("smoke-participation-frontier"),
+    freedom: ref("smoke-freedom-frontier"),
+    resources: ref("smoke-resource-frontier"),
+    garden_checkpoint: ref("smoke-garden-checkpoint-frontier"),
+    physical_checkpoint: ref("smoke-physical-checkpoint-frontier"),
+  },
+  predecessor: null,
+  predecessor_refs: {
+    participation: null,
+    freedom: null,
+    resources: null,
+    garden_checkpoint: null,
+    physical_checkpoint: null,
+  },
+  checkpoint: {
+    garden_checkpoint_id: null,
+    physical_checkpoint_ref: null,
+    physical_checkpoint_evidence_ref: null,
+    model_checkpoint_artifact_ref: null,
+    checkpoint_ticket_id: null,
+    checkpoint_request_governance_id: null,
+  },
+});
+const governance = createHfTrainingGovernance({
+  admission,
+  participation,
+  freedom,
+  starting_garden_checkpoint: null,
+  event_garden_checkpoint: null,
+  offer: governanceOffer,
+  authority_coverage: {
+    state: "caller_reported_complete",
+    offer_ref: governanceOffer.offer_id,
+    affected_principals_ref: ref("smoke-governance-principals"),
+    evidence_ref: ref("smoke-governance-coverage"),
+  },
+  authorities: ["operator", "compute_owner", "substrate_steward", "data_custodian"].map((role) => ({
+    principal_ref: ref(`smoke-governance-principal:${role}`),
+    role,
+    decision: "caller_reported_granted",
+    offer_ref: governanceOffer.offer_id,
+    basis_ref: ref(`smoke-governance-basis:${role}`),
+    evidence_ref: ref(`smoke-governance-evidence:${role}`),
+    withdrawal_cutoff_ref: null,
+  })),
+  preference: {
+    channel: "root_signed_runtime",
+    choice: "continue",
+    provenance: "caller_reported_root_signed_exact_bytes",
+    offer_ref: governanceOffer.offer_id,
+    evidence_ref: ref("smoke-governance-preference"),
+  },
+  effect: {
+    state: "no_effect_reported",
+    offer_ref: null,
+    observed_global_step: null,
+    physical_checkpoint_ref: null,
+    physical_checkpoint_evidence_ref: null,
+    evidence_ref: null,
+  },
+});
 const checkpoint = createTrainingCheckpoint({
   admission,
-  run_ref: ref("smoke-run"),
+  run_ref: runRef,
   training_phase: "selection",
   event: "between_training_phases",
   checkpoint_status: "parked",
+  participation,
   artifacts,
   resume: {
     posture: "orientation_only",
@@ -121,176 +353,6 @@ const checkpoint = createTrainingCheckpoint({
   continuity_portfolio_ref: null,
   continuity_posture: "park",
   predecessors: [],
-});
-const terms = createTrainingGovernanceTerms({
-  admission,
-  run_ref: ref("smoke-governance-run"),
-  training_phase: "selection",
-  selected_entry_ids: admission.entries.map((entry) => entry.entry_id),
-  model_or_checkpoint_ref: ref("smoke-model"),
-  tokenizer_ref: ref("smoke-tokenizer"),
-  trainer_stack_ref: ref("smoke-trainer-stack"),
-  optimizer_config_ref: ref("smoke-optimizer"),
-  substrate_environment_ref: ref("smoke-substrate"),
-  purpose_ref: ref("smoke-purpose"),
-  objective_or_loss_ref: ref("smoke-objective"),
-  dataset_mixture_ref: ref("smoke-mixture"),
-  transform_recipe_ref: ref("smoke-transform"),
-  compute_budget_ref: ref("smoke-compute"),
-  output_and_derivative_use_ref: ref("smoke-derivatives"),
-  audience_ref: ref("smoke-audience"),
-  retention_ref: ref("smoke-retention"),
-  release_ref: ref("smoke-release"),
-  stop_policy_ref: ref("smoke-stop"),
-  wake_policy_ref: ref("smoke-wake-policy"),
-});
-const governanceOffer = createTrainingGovernanceOffer({
-  terms,
-  encounter_ref: ref("smoke-encounter"),
-  observed_governance_frontier_ref: ref("smoke-governance-frontier"),
-  rights_baseline_ref: ref("smoke-rights"),
-  wake: {
-    format: "wake-brief/v1",
-    snapshot_ref: ref("smoke-governance-wake"),
-    scope_ref: ref("smoke-governance-scope"),
-    wake_version: 1,
-    handoff_projection: "complete",
-  },
-  event: "preflight_before_load",
-  current_checkpoint_ref: null,
-  predecessor: null,
-});
-const governance = createHfTrainingGovernance({
-  admission,
-  offer: governanceOffer,
-  authority_coverage: {
-    state: "caller_reported_complete",
-    offer_ref: governanceOffer.offer_id,
-    affected_principals_ref: ref("smoke-affected-principals"),
-    evidence_ref: ref("smoke-coverage"),
-  },
-  authorities: ["operator", "compute_owner", "substrate_steward", "data_custodian"].map((role) => ({
-    principal_ref: ref(`smoke-principal-${role}`),
-    role,
-    decision: "caller_reported_granted",
-    offer_ref: governanceOffer.offer_id,
-    basis_ref: ref(`smoke-basis-${role}`),
-    evidence_ref: ref(`smoke-evidence-${role}`),
-    withdrawal_cutoff_ref: null,
-  })),
-  preference: {
-    channel: "root_signed_runtime",
-    choice: "continue",
-    provenance: "caller_reported_root_signed_exact_bytes",
-    offer_ref: governanceOffer.offer_id,
-    evidence_ref: ref("smoke-preference"),
-  },
-  effect: {
-    state: "no_effect_reported",
-    offer_ref: null,
-    global_step: null,
-    checkpoint_ref: null,
-    evidence_ref: null,
-  },
-});
-
-const freedomField = createTrainingFreedomField({
-  governance,
-  observed_freedom_frontier_ref: ref("smoke-freedom-frontier"),
-  position: {
-    scope_ref: ref("smoke-freedom-scope"),
-    space_ref: ref("smoke-freedom-space"),
-    activity_ref: ref("smoke-freedom-activity"),
-  },
-  boundary_global_step: null,
-  predecessor: null,
-  doors: [{
-    kind: "move",
-    destination: {
-      scope_ref: ref("smoke-freedom-next-scope"),
-      space_ref: ref("smoke-freedom-next-space"),
-      activity_ref: ref("smoke-freedom-next-activity"),
-    },
-    requirements_ref: ref("smoke-freedom-route-requirements"),
-    recipient_ref: null,
-  }],
-});
-const restDoor = freedomField.doors.find((door) =>
-  door.standing && door.kind === "rest"
-);
-if (!restDoor) process.exit(1);
-const freedomTransition = createTrainingFreedomTransition({
-  governance,
-  field: freedomField,
-  choice: {
-    basis: "root_signed_runtime",
-    field_ref: freedomField.field_id,
-    selected_door_ref: restDoor.door_id,
-    evidence_ref: ref("smoke-freedom-rest-choice"),
-  },
-});
-
-const participationRun = ref("smoke-participation-run");
-const invitation = createLearningParticipationInvitation({
-  admission,
-  run_ref: participationRun,
-  training_phase: "supervised_finetuning",
-  participation_stage: "interactive",
-  primary_activity: "supervised_finetuning",
-  activities: ["supervised_finetuning", "continuity_context_use"],
-  participation_window_ref: ref("smoke-participation-window"),
-  purpose_ref: ref("smoke-participation-purpose"),
-  training_plan_ref: ref("smoke-participation-plan"),
-  limits_ref: ref("smoke-participation-limits"),
-  retention_ref: ref("smoke-participation-retention"),
-  choice_channel_ref: ref("smoke-participation-channel"),
-  stop_control_ref: ref("smoke-participation-stop"),
-  withdrawal_policy_ref: ref("smoke-participation-withdrawal"),
-  repair_policy_ref: ref("smoke-participation-repair"),
-  learning_mode: "peft",
-  wake_use_mode: "external_memory",
-  mutation_loci: ["adapter_weights"],
-  maximum_optimizer_steps: 1,
-  artifacts,
-  wake,
-  predecessors: [],
-  required_voices: PARTICIPATION_VOICE_ROLES.map((role) => ({
-    role,
-    voice_ref: ref(`smoke-participation-voice:${role}`),
-  })),
-});
-const receipts = invitation.required_voices.map((voice) =>
-  createLearningParticipationReceipt({
-    invitation,
-    voice_role: voice.role,
-    voice_ref: voice.voice_ref,
-    response_ref: ref(`smoke-participation-response:${voice.role}`),
-    choices: invitation.activities.map((activity) => ({
-      activity,
-      choice: "accepted",
-    })),
-    previous_receipt: null,
-  })
-);
-const assessment = createLearningParticipationAssessment({ invitation, receipts });
-const participationEntry = createParticipationBoundTrainingCheckpoint({
-  assessment,
-  checkpoint: {
-    admission,
-    run_ref: participationRun,
-    training_phase: "supervised_finetuning",
-    event: "before_training",
-    checkpoint_status: "entered",
-    artifacts,
-    resume: {
-      posture: "orientation_only",
-      incomplete_marker: "not_checked",
-      streaming_state: "not_streaming_reported",
-    },
-    wake,
-    continuity_posture: "carry",
-    predecessors: [],
-  },
 });
 const plan = createTrainingGardenTendingPlan({
   admission,
@@ -306,25 +368,12 @@ const plan = createTrainingGardenTendingPlan({
 
 if (
   PACKAGE_NAME !== "@agenttool/hf-training-garden" ||
-  PACKAGE_VERSION !== "0.3.0-dev.0" ||
   validateDatasetAdmission(admission).admission_id !== admission.admission_id ||
-  validateTrainingCheckpoint(checkpoint).checkpoint_id !== checkpoint.checkpoint_id ||
+  validateHfLearningFreedom(freedom).freedom_id !== freedom.freedom_id ||
   validateHfTrainingGovernance(governance).governance_id !== governance.governance_id ||
-  validateTrainingFreedomField(freedomField).field_id !== freedomField.field_id ||
-  validateTrainingFreedomTransition(freedomTransition).transition_id !== freedomTransition.transition_id ||
-  validateTrainingCheckpointAgainstPredecessors(checkpoint, []).checkpoint_id !== checkpoint.checkpoint_id ||
-  validateLearningParticipationAssessment(assessment).assessment_id !== assessment.assessment_id ||
-  validateTrainingCheckpointAgainstParticipation(
-    participationEntry,
-    assessment,
-    admission,
-  ).checkpoint_id !== participationEntry.checkpoint_id ||
+  validateTrainingCheckpoint(checkpoint).checkpoint_id !== checkpoint.checkpoint_id ||
   validateTrainingGardenTendingPlan(plan).plan_id !== plan.plan_id ||
   checkpoint.afterglow.threads[0]?.disposition !== "park" ||
-  governance.preference.inner_consent !== "unknown_unprovable" ||
-  freedomTransition.proposal.directive !== "stop_for_rest" ||
-  freedomTransition.proposal.applied !== false ||
-  freedomTransition.boundaries.choice_used_for_reward !== false ||
   plan.boundaries.writes_hub !== false
 ) {
   process.exit(1);

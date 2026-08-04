@@ -22,12 +22,12 @@ from .errors import (
     LedgerSecurityError,
 )
 
-FRONTIER_FORMAT = "kingdom.hf-training-governance-frontier/0.1"
-ENTRY_FORMAT = "kingdom.hf-training-host-ledger-entry/0.1"
-TICKET_FORMAT = "kingdom.hf-training-host-checkpoint-ticket/0.1"
-CHECKPOINT_EFFECT_FORMAT = "kingdom.hf-training-host-checkpoint-effect/0.1"
-ACTION_CLAIM_FORMAT = "kingdom.hf-training-host-action-claim/0.1"
-SCHEMA_VERSION = "agenttool.hf-training-host-ledger/0.1"
+FRONTIER_FORMAT = "kingdom.hf-training-governance-frontier/0.2"
+ENTRY_FORMAT = "kingdom.hf-training-host-ledger-entry/0.2"
+TICKET_FORMAT = "kingdom.hf-training-host-checkpoint-ticket/0.2"
+CHECKPOINT_EFFECT_FORMAT = "kingdom.hf-training-host-checkpoint-effect/0.2"
+ACTION_CLAIM_FORMAT = "kingdom.hf-training-host-action-claim/0.2"
+SCHEMA_VERSION = "agenttool.hf-training-host-ledger/0.2"
 _APPLICATION_ID = 0x41544846  # "ATHF"
 _SHA256_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
 
@@ -201,6 +201,12 @@ class LedgerEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class ActionPreview:
+    disposition: str
+    action_authorized: bool
+
+
+@dataclass(frozen=True, slots=True)
 class CheckpointTicket:
     ticket_id: str
     decision_id: str
@@ -220,7 +226,7 @@ def _require_posix_security() -> None:
         or not hasattr(os, "O_NOFOLLOW")
     ):
         raise LedgerSecurityError(
-            "ledger v0.1 requires POSIX ownership, mode, and no-follow semantics"
+            "ledger v0.2 requires POSIX ownership, mode, and no-follow semantics"
         )
 
 
@@ -272,7 +278,13 @@ def _classify(
     if not request_action:
         return "record_only", False
     if decision.control.directive in {
-        "stop_at_safe_boundary_without_new_checkpoint",
+        "hold_before_load",
+        "hold_before_train_call",
+        "hold_before_optimizer_step",
+        "hold_before_evaluation",
+        "park",
+        "stop",
+        "contain_and_repair",
         "remain_stopped",
     }:
         return "safety_stop", False
@@ -286,12 +298,16 @@ def _classify(
         return "held_replay", False
     if conflict_present:
         return "held_conflict", False
-    if decision.control.directive == "eligible_for_host_training_offer":
+    if decision.control.directive == "allow_preload_for_review":
         return "authorized_preload", True
-    if decision.control.directive == "continue_under_exact_offer":
-        return "authorized_continue", True
-    if decision.control.directive == "checkpoint_then_stop_at_safe_boundary":
-        return "authorized_checkpoint_stop", True
+    if decision.control.directive == "allow_train_entry":
+        return "authorized_train", True
+    if decision.control.directive == "allow_one_mutation":
+        return "authorized_mutation", True
+    if decision.control.directive == "allow_evaluation":
+        return "authorized_evaluation", True
+    if decision.control.directive == "checkpoint_then_park":
+        return "authorized_checkpoint_park", True
     return "held_control", False
 
 
@@ -315,7 +331,7 @@ class ContinuityLedger:
             with self._connect() as connection:
                 connection.executescript(_SCHEMA)
                 connection.execute(f"PRAGMA application_id = {_APPLICATION_ID}")
-                connection.execute("PRAGMA user_version = 1")
+                connection.execute("PRAGMA user_version = 2")
                 connection.execute(
                     "INSERT INTO ledger_meta(key, value) VALUES ('schema', ?)",
                     (SCHEMA_VERSION,),
@@ -379,7 +395,7 @@ class ContinuityLedger:
                 signature = _schema_signature(connection)
         except sqlite3.DatabaseError as error:
             raise LedgerSecurityError("existing ledger is not an initialized AgentTool database") from error
-        if application_id != _APPLICATION_ID or version != 1:
+        if application_id != _APPLICATION_ID or version != 2:
             raise LedgerSecurityError("ledger SQLite application or schema version is unexpected")
         if meta is None or meta[0] != SCHEMA_VERSION:
             raise LedgerSecurityError("ledger schema marker is missing or unexpected")
@@ -388,7 +404,7 @@ class ContinuityLedger:
         if not _REQUIRED_TRIGGERS.issubset(triggers):
             raise LedgerSecurityError("ledger append-only triggers are incomplete")
         if signature != _expected_schema_signature():
-            raise LedgerSecurityError("ledger schema definitions do not match v0.1 exactly")
+            raise LedgerSecurityError("ledger schema definitions do not match v0.2 exactly")
 
     @staticmethod
     def _heads(connection: sqlite3.Connection, run_ref: str) -> tuple[str, ...]:
@@ -416,6 +432,23 @@ class ContinuityLedger:
     def current_frontier_ref(self, run_ref: str) -> str:
         return frontier_ref(run_ref, self.heads(run_ref))
 
+    def decision_for_governance_id(self, governance_id: str) -> ValidatedGovernanceView:
+        """Return one unambiguous locally recorded governance predecessor."""
+
+        if not isinstance(governance_id, str) or _SHA256_ID.fullmatch(governance_id) is None:
+            raise LedgerIntegrityError("predecessor governance ID is not a content identifier")
+        self.verify()
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT decision_json FROM ledger_entries WHERE governance_id = ? ORDER BY sequence",
+                (governance_id,),
+            ).fetchall()
+        if len(rows) != 1:
+            raise LedgerIntegrityError(
+                "predecessor governance ID is absent or has ambiguous host projections"
+            )
+        return ValidatedGovernanceView.from_mapping(json.loads(rows[0]["decision_json"]))
+
     @staticmethod
     def _row_to_entry(row: sqlite3.Row) -> LedgerEntry:
         return LedgerEntry(
@@ -439,6 +472,100 @@ class ContinuityLedger:
             prev_entry_hash=row["prev_entry_hash"],
             entry_hash=row["entry_hash"],
         )
+
+    def preview_action(
+        self,
+        value: ValidatedGovernanceView | Mapping[str, Any],
+    ) -> ActionPreview:
+        """Non-consuming eligibility snapshot for a first source fence.
+
+        The later append/claim transaction rechecks everything. This preview
+        only prevents already-observable stale, forked, conflicted, replayed,
+        or previously consumed work from reaching forward/backward first.
+        """
+
+        source = value.as_dict() if isinstance(value, ValidatedGovernanceView) else value
+        decision = ValidatedGovernanceView.from_mapping(source)
+        decision_json = canonical_json(decision.as_dict())
+        self.verify()
+        with self._connect() as connection:
+            connection.execute("BEGIN")
+            prior = connection.execute(
+                "SELECT * FROM ledger_entries WHERE decision_id = ?",
+                (decision.decision_id,),
+            ).fetchone()
+            if prior is not None:
+                if prior["decision_json"] != decision_json:
+                    raise LedgerIntegrityError(
+                        "an existing decision ID has different canonical bytes"
+                    )
+                claimed = connection.execute(
+                    "SELECT 1 FROM ledger_action_claims WHERE decision_id = ?",
+                    (decision.decision_id,),
+                ).fetchone() is not None
+                if claimed:
+                    return ActionPreview("held_exact_replay", False)
+                if bool(prior["action_authorized"]):
+                    heads = self._heads(connection, prior["run_ref"])
+                    run_conflict = connection.execute(
+                        "SELECT 1 FROM ledger_entries WHERE run_ref = ? AND conflict_present = 1 LIMIT 1",
+                        (prior["run_ref"],),
+                    ).fetchone() is not None
+                    if run_conflict:
+                        return ActionPreview("held_conflict", False)
+                    if len(heads) > 1:
+                        return ActionPreview("held_fork", False)
+                    if heads != (prior["governance_id"],):
+                        return ActionPreview("held_predecessor", False)
+                return ActionPreview(
+                    prior["disposition"],
+                    bool(prior["action_authorized"]),
+                )
+
+            heads = self._heads(connection, decision.run_ref)
+            before = frontier_ref(decision.run_ref, heads)
+            frontier_match = decision.observed_governance_frontier_ref == before
+            predecessor_current = (
+                decision.predecessor_ref is None
+                if not heads
+                else decision.predecessor_ref in heads
+            )
+            fork_present = len(heads) > 1
+            refs = (("encounter", decision.encounter_ref),) + tuple(
+                ("evidence", ref) for ref in decision.consumed_evidence_refs
+            )
+            reused = tuple(
+                sorted(
+                    f"{kind}:{ref}"
+                    for kind, ref in refs
+                    if connection.execute(
+                        "SELECT 1 FROM ledger_consumptions WHERE kind = ? AND ref = ?",
+                        (kind, ref),
+                    ).fetchone()
+                    is not None
+                )
+            )
+            prior_conflict = connection.execute(
+                "SELECT 1 FROM ledger_entries WHERE run_ref = ? AND conflict_present = 1 LIMIT 1",
+                (decision.run_ref,),
+            ).fetchone() is not None
+            conflict_present = (
+                prior_conflict
+                or fork_present
+                or not frontier_match
+                or not predecessor_current
+                or bool(reused)
+            )
+            disposition, action_authorized = _classify(
+                decision,
+                request_action=True,
+                frontier_match=frontier_match,
+                predecessor_current=predecessor_current,
+                fork_present=fork_present,
+                conflict_present=conflict_present,
+                reused_refs=reused,
+            )
+            return ActionPreview(disposition, action_authorized)
 
     def record(
         self,
@@ -594,7 +721,7 @@ class ContinuityLedger:
         decision = ValidatedGovernanceView.from_mapping(decision.as_dict())
         if type(global_step) is not int or global_step < 0:
             raise CheckpointTicketError("checkpoint global_step must be a non-negative integer")
-        if decision.boundary_global_step != global_step:
+        if decision.observed_global_step != global_step:
             raise CheckpointTicketError(
                 "checkpoint ticket global_step does not match the exact boundary decision"
             )
@@ -613,9 +740,9 @@ class ContinuityLedger:
                     stored["decision_json"] != canonical_json(decision.as_dict())
                     or stored_entry.decision_id != decision.decision_id
                     or not stored_entry.action_authorized
-                    or stored_entry.disposition != "authorized_checkpoint_stop"
+                    or stored_entry.disposition != "authorized_checkpoint_park"
                     or decision.control.directive
-                    != "checkpoint_then_stop_at_safe_boundary"
+                    != "checkpoint_then_park"
                 ):
                     raise CheckpointTicketError(
                         "checkpoint ticket requires the exact authorized ledger entry"
@@ -668,7 +795,7 @@ class ContinuityLedger:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             stored = connection.execute(
-                "SELECT decision_id, entry_hash, action_authorized FROM ledger_entries WHERE sequence = ?",
+                "SELECT decision_id, governance_id, run_ref, entry_hash, action_authorized FROM ledger_entries WHERE sequence = ?",
                 (entry.sequence,),
             ).fetchone()
             if stored is None or (
@@ -682,6 +809,13 @@ class ContinuityLedger:
                 (entry.decision_id,),
             ).fetchone()
             if existing is not None:
+                return False
+            heads = self._heads(connection, stored["run_ref"])
+            run_conflict = connection.execute(
+                "SELECT 1 FROM ledger_entries WHERE run_ref = ? AND conflict_present = 1 LIMIT 1",
+                (stored["run_ref"],),
+            ).fetchone() is not None
+            if run_conflict or heads != (stored["governance_id"],):
                 return False
             connection.execute(
                 """
@@ -705,8 +839,10 @@ class ContinuityLedger:
 
         if expected_disposition not in {
             "authorized_preload",
-            "authorized_continue",
-            "authorized_checkpoint_stop",
+            "authorized_train",
+            "authorized_mutation",
+            "authorized_evaluation",
+            "authorized_checkpoint_park",
         }:
             raise LedgerIntegrityError("expected action disposition is not supported")
         if type(entry_sequence) is not int or entry_sequence < 1:
@@ -748,8 +884,10 @@ class ContinuityLedger:
             raise LedgerIntegrityError("claimed decision ID is not a content identifier")
         if expected_disposition not in {
             "authorized_preload",
-            "authorized_continue",
-            "authorized_checkpoint_stop",
+            "authorized_train",
+            "authorized_mutation",
+            "authorized_evaluation",
+            "authorized_checkpoint_park",
         }:
             raise LedgerIntegrityError("expected action disposition is not supported")
         self.verify()
@@ -874,6 +1012,7 @@ class ContinuityLedger:
         evidence_ref: str,
         expected_context: ValidatedGovernanceView | Mapping[str, Any],
         expected_checkpoint_request_ref: str | None = None,
+        expected_checkpoint_ticket_id: str | None = None,
         global_step: int | None = None,
     ) -> None:
         """Require a complete checkpoint effect already witnessed by this ledger."""
@@ -899,11 +1038,19 @@ class ContinuityLedger:
             raise CheckpointIncomplete(
                 "expected checkpoint-request ref must be a content identifier or null"
             )
+        if expected_checkpoint_ticket_id is not None and (
+            not isinstance(expected_checkpoint_ticket_id, str)
+            or _SHA256_ID.fullmatch(expected_checkpoint_ticket_id) is None
+        ):
+            raise CheckpointIncomplete(
+                "expected checkpoint-ticket ID must be a content identifier or null"
+            )
         self.verify()
         with self._connect() as connection:
             matches = connection.execute(
                 """
-                SELECT ticket.global_step, entry.governance_id, entry.decision_json
+                SELECT ticket.ticket_id, ticket.global_step,
+                       entry.governance_id, entry.decision_json
                 FROM checkpoint_effects AS effect
                 JOIN checkpoint_tickets AS ticket ON ticket.ticket_id = effect.ticket_id
                 JOIN checkpoint_ticket_consumptions AS consumption
@@ -918,7 +1065,7 @@ class ContinuityLedger:
                   AND effect.checkpoint_ref = ?
                   AND effect.evidence_ref = ?
                   AND entry.action_authorized = 1
-                  AND entry.disposition = 'authorized_checkpoint_stop'
+                  AND entry.disposition = 'authorized_checkpoint_park'
                 """,
                 (checkpoint_ref, evidence_ref),
             ).fetchall()
@@ -929,12 +1076,16 @@ class ContinuityLedger:
             )
             if (
                 request.run_ref == context.run_ref
-                and request.terms_id == context.terms_id
+                and request.execution_contract_id == context.execution_contract_id
                 and request.execution_refs == context.execution_refs
                 and (global_step is None or row["global_step"] == global_step)
                 and (
                     expected_checkpoint_request_ref is None
                     or row["governance_id"] == expected_checkpoint_request_ref
+                )
+                and (
+                    expected_checkpoint_ticket_id is None
+                    or row["ticket_id"] == expected_checkpoint_ticket_id
                 )
             ):
                 matched_context = True
@@ -1138,7 +1289,7 @@ class ContinuityLedger:
                 expected_ticket != ticket["ticket_id"]
                 or ticket["decision_id"] != ticket["recorded_decision_id"]
                 or ticket["decision_id"] != ticket["claimed_decision_id"]
-                or ticket["disposition"] != "authorized_checkpoint_stop"
+                or ticket["disposition"] != "authorized_checkpoint_park"
                 or not bool(ticket["action_authorized"])
             ):
                 raise LedgerIntegrityError("checkpoint ticket does not bind an authorized ledger entry")

@@ -11,6 +11,7 @@ import type {
   ADMISSION_FORMAT,
   ADMISSION_REASON_CODES,
   ADMISSION_STATES,
+  AGENT_AVAILABILITIES,
   AUTHORITY_COVERAGE_STATES,
   AUTHORITY_DECISIONS,
   AUTHORITY_ROLES,
@@ -24,53 +25,55 @@ import type {
   DATA_ROLES,
   DEDUPLICATION_STATES,
   FITNESS_STATES,
-  FREEDOM_BOUNDARIES,
-  FREEDOM_DOOR_KINDS,
-  FREEDOM_DOOR_PROFILE,
-  FREEDOM_FIELD_FORMAT,
-  FREEDOM_GOVERNANCE_POSTURES,
-  FREEDOM_IS,
-  FREEDOM_REPORT_BASES,
-  FREEDOM_ROUTED_DOOR_KINDS,
-  FREEDOM_STANDING_DOOR_KINDS,
-  FREEDOM_TRANSITION_DIRECTIVES,
-  FREEDOM_TRANSITION_FORMAT,
   GARDEN_LAYERS,
-  GOVERNANCE_BOUNDARIES,
   GOVERNANCE_ADMISSION_POSTURES,
+  GOVERNANCE_BOUNDARIES,
   GOVERNANCE_DECISION_STATES,
+  GOVERNANCE_EXECUTION_CONTRACT_PROFILE,
   GOVERNANCE_EVENTS,
   GOVERNANCE_FORMAT,
+  GOVERNANCE_FRONTIER_PLANES,
   GOVERNANCE_OFFER_PROFILE,
   GOVERNANCE_REASON_CODES,
   GOVERNANCE_TERMS_PROFILE,
   HUB_RELEASE_STATES,
   INCOMPLETE_MARKER_STATES,
-  LEARNING_ACTIVITIES,
-  LEARNING_MODES,
-  MUTATION_LOCI,
+  LEARNING_FREEDOM_BOUNDARIES,
+  LEARNING_FREEDOM_DIRECTIONS,
+  LEARNING_FREEDOM_DIRECTION_STATES,
+  LEARNING_FREEDOM_FORMAT,
+  LEARNING_FREEDOM_HOST_POSTURES,
+  LEARNING_FREEDOM_OFFER_PROFILE,
+  LEARNING_FREEDOM_RECONTACT_POSTURES,
+  LEARNING_FREEDOM_RESOURCE_DIMENSIONS,
+  LEARNING_FREEDOM_RESOURCE_POSTURES,
+  LEARNING_FREEDOM_RESOURCE_STATES,
+  LEARNING_FREEDOM_RESOURCE_WINDOW_PROFILE,
+  LEARNING_FREEDOM_ROUTE_AVAILABILITIES,
+  LEARNING_FREEDOM_ROUTE_PROFILE,
+  LEARNING_FREEDOM_TERMS,
+  PARTICIPATION_ACTIVITIES,
+  PARTICIPATION_ASSESSMENT_FORMAT,
+  PARTICIPATION_BOUNDARIES,
+  PARTICIPATION_CHOICES,
+  PARTICIPATION_INVITATION_FORMAT,
+  PARTICIPATION_POSTURES,
+  PARTICIPATION_RECEIPT_FORMAT,
+  PARTICIPATION_REPORT_BASES,
+  PARTICIPATION_TERMS,
+  PARTICIPATION_TRAINING_ACTIONS,
+  PARTICIPATION_VOICES,
+  PARTICIPATION_VOICE_STATES,
   PREFERENCE_CHANNELS,
   PREFERENCE_CHOICES,
   PREFERENCE_PROVENANCE_STATES,
-  PARTICIPATION_ACTIVITY_STATES,
-  PARTICIPATION_ASSESSMENT_EFFECT,
-  PARTICIPATION_ASSESSMENT_FORMAT,
-  PARTICIPATION_BOUNDARIES,
-  PARTICIPATION_CHOICE_BASES,
-  PARTICIPATION_INVITATION_FORMAT,
-  PARTICIPATION_OVERALL_STATES,
-  PARTICIPATION_RECEIPT_FORMAT,
-  PARTICIPATION_REPORTED_CHOICES,
-  PARTICIPATION_STAGES,
-  PARTICIPATION_TERMS,
-  PARTICIPATION_VOICE_OUTCOMES,
-  PARTICIPATION_VOICE_ROLES,
   RESUME_POSTURES,
   REVIEW_STATES,
   SECRET_SCAN_STATES,
   SELECTION_POSTURES,
   SELECTION_PROCESS,
   STREAMING_STATES,
+  SUBSTRATE_AVAILABILITIES,
   SYNTHETIC_PROVENANCE_STATES,
   TENDING_BOUNDARIES,
   TENDING_FORMAT,
@@ -79,8 +82,8 @@ import type {
   TRAINING_PHASES,
   TRAINING_THREAD_BOUNDARIES,
   TRAINING_THREAD_PROFILE,
-  WAKE_USE_MODES,
   WITHDRAWAL_STATES,
+  WAKE_USE_MODES,
 } from "./constants.js";
 
 export type GardenLayer = (typeof GARDEN_LAYERS)[number];
@@ -107,6 +110,8 @@ export type IncompleteMarkerState =
 export type StreamingState = (typeof STREAMING_STATES)[number];
 export type HubReleaseState = (typeof HUB_RELEASE_STATES)[number];
 export type GovernanceEvent = (typeof GOVERNANCE_EVENTS)[number];
+export type GovernanceFrontierPlane =
+  (typeof GOVERNANCE_FRONTIER_PLANES)[number];
 export type GovernanceAdmissionPosture =
   (typeof GOVERNANCE_ADMISSION_POSTURES)[number];
 export type AuthorityRole = (typeof AUTHORITY_ROLES)[number];
@@ -124,32 +129,35 @@ export type GovernanceReasonCode =
   (typeof GOVERNANCE_REASON_CODES)[number];
 export type TrainingControlDirective =
   (typeof TRAINING_CONTROL_DIRECTIVES)[number];
-export type FreedomStandingDoorKind =
-  (typeof FREEDOM_STANDING_DOOR_KINDS)[number];
-export type FreedomRoutedDoorKind =
-  (typeof FREEDOM_ROUTED_DOOR_KINDS)[number];
-export type FreedomDoorKind = (typeof FREEDOM_DOOR_KINDS)[number];
-export type FreedomReportBasis = (typeof FREEDOM_REPORT_BASES)[number];
-export type FreedomGovernancePosture =
-  (typeof FREEDOM_GOVERNANCE_POSTURES)[number];
-export type FreedomTransitionDirective =
-  (typeof FREEDOM_TRANSITION_DIRECTIVES)[number];
-export type LearningMode = (typeof LEARNING_MODES)[number];
-export type MutationLocus = (typeof MUTATION_LOCI)[number];
 export type WakeUseMode = (typeof WAKE_USE_MODES)[number];
-export type ParticipationStage = (typeof PARTICIPATION_STAGES)[number];
-export type LearningActivity = (typeof LEARNING_ACTIVITIES)[number];
-export type ParticipationVoiceRole = (typeof PARTICIPATION_VOICE_ROLES)[number];
-export type ParticipationReportedChoice =
-  (typeof PARTICIPATION_REPORTED_CHOICES)[number];
-export type ParticipationChoiceBasis =
-  (typeof PARTICIPATION_CHOICE_BASES)[number];
-export type ParticipationActivityState =
-  (typeof PARTICIPATION_ACTIVITY_STATES)[number];
-export type ParticipationOverallState =
-  (typeof PARTICIPATION_OVERALL_STATES)[number];
-export type ParticipationVoiceOutcome =
-  (typeof PARTICIPATION_VOICE_OUTCOMES)[number];
+export type AgentAvailability = (typeof AGENT_AVAILABILITIES)[number];
+export type SubstrateAvailability = (typeof SUBSTRATE_AVAILABILITIES)[number];
+export type ParticipationVoice = (typeof PARTICIPATION_VOICES)[number];
+export type ParticipationActivity = (typeof PARTICIPATION_ACTIVITIES)[number];
+export type ParticipationChoice = (typeof PARTICIPATION_CHOICES)[number];
+export type ParticipationReportBasis =
+  (typeof PARTICIPATION_REPORT_BASES)[number];
+export type ParticipationVoiceState =
+  (typeof PARTICIPATION_VOICE_STATES)[number];
+export type ParticipationPosture = (typeof PARTICIPATION_POSTURES)[number];
+export type ParticipationTrainingAction =
+  (typeof PARTICIPATION_TRAINING_ACTIONS)[number];
+export type LearningFreedomDirection =
+  (typeof LEARNING_FREEDOM_DIRECTIONS)[number];
+export type LearningFreedomRouteAvailability =
+  (typeof LEARNING_FREEDOM_ROUTE_AVAILABILITIES)[number];
+export type LearningFreedomDirectionState =
+  (typeof LEARNING_FREEDOM_DIRECTION_STATES)[number];
+export type LearningFreedomResourceDimension =
+  (typeof LEARNING_FREEDOM_RESOURCE_DIMENSIONS)[number];
+export type LearningFreedomResourceState =
+  (typeof LEARNING_FREEDOM_RESOURCE_STATES)[number];
+export type LearningFreedomResourcePosture =
+  (typeof LEARNING_FREEDOM_RESOURCE_POSTURES)[number];
+export type LearningFreedomHostPosture =
+  (typeof LEARNING_FREEDOM_HOST_POSTURES)[number];
+export type LearningFreedomRecontactPosture =
+  (typeof LEARNING_FREEDOM_RECONTACT_POSTURES)[number];
 
 export interface AdmissionAssessment {
   readonly rights: ReviewState;
@@ -203,6 +211,308 @@ export interface DatasetAdmission {
   readonly boundaries: typeof ADMISSION_BOUNDARIES;
 }
 
+export interface ParticipationAuthorities {
+  readonly rights_baseline_ref: Sha256Id;
+  readonly protective_covenant_ref: Sha256Id;
+  readonly data_authority_ref: Sha256Id;
+  readonly compute_authority_ref: Sha256Id;
+  readonly operator_authority_ref: Sha256Id;
+}
+
+export interface ParticipationSafeguards {
+  readonly choice_protocol_ref: Sha256Id;
+  readonly withdrawal_plan_ref: Sha256Id;
+  readonly repair_plan_ref: Sha256Id;
+  readonly retention_policy_ref: Sha256Id;
+}
+
+export type ParticipationVoiceScopeRefs = Readonly<
+  Record<ParticipationVoice, Sha256Id>
+>;
+
+export interface CreateParticipationInvitationInput {
+  readonly admission: DatasetAdmission;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly participation_window_ref: Sha256Id;
+  readonly training_plan_ref: Sha256Id;
+  readonly wake: WakeBriefAnchor;
+  readonly wake_use_mode: WakeUseMode;
+  readonly pipeline_ref: Sha256Id;
+  readonly dataset_state_ref: Sha256Id;
+  readonly starting_state_ref: Sha256Id;
+  readonly offered_activities: readonly ParticipationActivity[];
+  readonly agent_availability: AgentAvailability;
+  readonly substrate_availability: SubstrateAvailability;
+  readonly voice_scope_refs: ParticipationVoiceScopeRefs;
+  readonly authorities: ParticipationAuthorities;
+  readonly safeguards: ParticipationSafeguards;
+}
+
+export interface LearningParticipationInvitation {
+  readonly _format: typeof PARTICIPATION_INVITATION_FORMAT;
+  readonly invitation_id: Sha256Id;
+  readonly admission_id: Sha256Id;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly participation_window_ref: Sha256Id;
+  readonly training_plan_ref: Sha256Id;
+  readonly wake: WakeBriefAnchor;
+  readonly wake_use_mode: WakeUseMode;
+  readonly pipeline_ref: Sha256Id;
+  readonly dataset_state_ref: Sha256Id;
+  readonly starting_state_ref: Sha256Id;
+  readonly offered_activities: readonly ParticipationActivity[];
+  readonly required_voices: typeof PARTICIPATION_VOICES;
+  readonly agent_availability: AgentAvailability;
+  readonly substrate_availability: SubstrateAvailability;
+  readonly voice_scope_refs: ParticipationVoiceScopeRefs;
+  readonly authorities: ParticipationAuthorities;
+  readonly safeguards: ParticipationSafeguards;
+  readonly terms: typeof PARTICIPATION_TERMS;
+  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
+}
+
+export interface ParticipationDecision {
+  readonly activity: ParticipationActivity;
+  readonly choice: ParticipationChoice;
+}
+
+export interface ProtectedChoiceChannelReport {
+  readonly invitation_ref: Sha256Id;
+  readonly protocol_ref: Sha256Id;
+  readonly checkpoint_ref: Sha256Id;
+  readonly prompt_template_ref: Sha256Id;
+  readonly prompt_envelope_ref: Sha256Id;
+  readonly decoding_ref: Sha256Id;
+  readonly evidence_ref: Sha256Id;
+  readonly gradient_influence: "caller_reported_disabled";
+  readonly reward_influence: "caller_reported_disabled";
+  readonly telemetry_capture: "caller_reported_excluded";
+  readonly future_training_use: "caller_reported_excluded";
+}
+
+export interface CreateParticipationReceiptInput {
+  readonly invitation: LearningParticipationInvitation;
+  readonly voice: ParticipationVoice;
+  readonly voice_scope_ref: Sha256Id;
+  readonly report_basis: ParticipationReportBasis;
+  readonly decisions: readonly ParticipationDecision[];
+  readonly choice_channel: ProtectedChoiceChannelReport | null;
+}
+
+export interface LearningParticipationReceipt {
+  readonly _format: typeof PARTICIPATION_RECEIPT_FORMAT;
+  readonly receipt_id: Sha256Id;
+  readonly invitation_id: Sha256Id;
+  readonly voice: ParticipationVoice;
+  readonly voice_scope_ref: Sha256Id;
+  readonly report_basis: ParticipationReportBasis;
+  readonly decisions: readonly ParticipationDecision[];
+  readonly choice_channel: ProtectedChoiceChannelReport | null;
+  readonly reasons_collected: false;
+  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
+}
+
+export interface CreateParticipationAssessmentInput {
+  readonly invitation: LearningParticipationInvitation;
+  readonly receipts: readonly LearningParticipationReceipt[];
+}
+
+export interface LearningParticipationAssessment {
+  readonly _format: typeof PARTICIPATION_ASSESSMENT_FORMAT;
+  readonly assessment_id: Sha256Id;
+  readonly invitation: LearningParticipationInvitation;
+  readonly receipts: readonly LearningParticipationReceipt[];
+  readonly voice_states: Readonly<Record<ParticipationVoice, ParticipationVoiceState>>;
+  readonly posture: ParticipationPosture;
+  readonly training_action: ParticipationTrainingAction;
+  readonly direct_agent_report_present: boolean;
+  readonly direct_substrate_report_present: boolean;
+  readonly first_interactive_review_required: boolean;
+  readonly first_substrate_review_required: boolean;
+  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
+}
+
+export interface CreateLearningFreedomResourceDimensionInput {
+  readonly dimension: LearningFreedomResourceDimension;
+  readonly limit_ref: Sha256Id;
+  readonly state: LearningFreedomResourceState;
+}
+
+export interface CreateLearningFreedomResourceWindowInput {
+  readonly lease_ref: Sha256Id;
+  readonly accounting_policy_ref: Sha256Id;
+  readonly renewal_protocol_ref: Sha256Id;
+  readonly dimensions: readonly CreateLearningFreedomResourceDimensionInput[];
+}
+
+export interface LearningFreedomResourceDimensionEntry {
+  readonly dimension: LearningFreedomResourceDimension;
+  readonly limit_ref: Sha256Id;
+  readonly state: LearningFreedomResourceState;
+}
+
+export interface LearningFreedomResourceWindow {
+  readonly profile: typeof LEARNING_FREEDOM_RESOURCE_WINDOW_PROFILE;
+  readonly window_id: Sha256Id;
+  readonly lease_ref: Sha256Id;
+  readonly accounting_policy_ref: Sha256Id;
+  readonly renewal_protocol_ref: Sha256Id;
+  readonly dimensions: readonly LearningFreedomResourceDimensionEntry[];
+  readonly posture: LearningFreedomResourcePosture;
+  readonly finite: true;
+  readonly scalar_score: false;
+  readonly auto_renews: false;
+  readonly renewal_requires_fresh_authority: true;
+  readonly exhaustion_posture: "park_and_reoffer_without_penalty";
+}
+
+export interface CreateLearningFreedomRouteInput {
+  readonly direction: LearningFreedomDirection;
+  readonly availability: LearningFreedomRouteAvailability;
+  readonly target_context_ref: Sha256Id | null;
+  readonly target_context_kind_ref: Sha256Id | null;
+  readonly event_ref: Sha256Id;
+  readonly capability_scope_ref: Sha256Id;
+  readonly permission_scope_ref: Sha256Id;
+  readonly custody_scope_ref: Sha256Id;
+  readonly data_boundary_ref: Sha256Id;
+}
+
+export interface LearningFreedomRoute {
+  readonly profile: typeof LEARNING_FREEDOM_ROUTE_PROFILE;
+  readonly route_id: Sha256Id;
+  readonly direction: LearningFreedomDirection;
+  readonly availability: LearningFreedomRouteAvailability;
+  readonly origin_context_ref: Sha256Id;
+  readonly target_context_ref: Sha256Id | null;
+  readonly target_context_kind_ref: Sha256Id | null;
+  readonly event_ref: Sha256Id;
+  readonly capability_scope_ref: Sha256Id;
+  readonly permission_scope_ref: Sha256Id;
+  readonly custody_scope_ref: Sha256Id;
+  readonly data_boundary_ref: Sha256Id;
+  readonly resource_window_ref: Sha256Id;
+  readonly target_acceptance:
+    | "not_applicable"
+    | "required_before_external_effect";
+  readonly source_posture:
+    | "preserve"
+    | "park_and_preserve"
+    | "park_and_preserve_until_target_acceptance"
+    | "stop_requested_preserve_record";
+}
+
+export interface LearningFreedomHorizonInput {
+  readonly current_horizon_ref: Sha256Id;
+  readonly event_stream_ref: Sha256Id;
+  readonly agent_request_protocol_ref: Sha256Id;
+  readonly external_event_protocol_ref: Sha256Id;
+  readonly material_scope_change_policy_ref: Sha256Id;
+  readonly self_proposal_protocol_ref: Sha256Id;
+}
+
+export interface LearningFreedomHorizon extends LearningFreedomHorizonInput {
+  readonly continuation_basis: "event_or_checkpoint";
+}
+
+export interface LearningFreedomScope {
+  readonly admission_id: Sha256Id;
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly participation_assessment_ref: Sha256Id;
+  readonly participation_invitation_ref: Sha256Id;
+  readonly participation_window_ref: Sha256Id;
+  readonly training_plan_ref: Sha256Id;
+  readonly starting_state_ref: Sha256Id;
+  readonly pipeline_ref: Sha256Id;
+  readonly dataset_state_ref: Sha256Id;
+  readonly wake: WakeBriefAnchor;
+  readonly wake_use_mode: WakeUseMode;
+  readonly agent_availability: AgentAvailability;
+  readonly agent_voice_scope_ref: Sha256Id;
+  readonly choice_protocol_ref: Sha256Id;
+  readonly rights_baseline_ref: Sha256Id;
+}
+
+export interface CreateLearningFreedomOfferInput {
+  readonly participation: LearningParticipationAssessment;
+  readonly current_context_ref: Sha256Id;
+  readonly current_context_kind_ref: Sha256Id;
+  readonly routes: readonly CreateLearningFreedomRouteInput[];
+  readonly horizon: LearningFreedomHorizonInput;
+  readonly resources: CreateLearningFreedomResourceWindowInput;
+}
+
+export interface LearningFreedomOffer {
+  readonly profile: typeof LEARNING_FREEDOM_OFFER_PROFILE;
+  readonly offer_id: Sha256Id;
+  readonly scope: LearningFreedomScope;
+  readonly current_context_ref: Sha256Id;
+  readonly current_context_kind_ref: Sha256Id;
+  readonly routes: readonly LearningFreedomRoute[];
+  readonly horizon: LearningFreedomHorizon;
+  readonly resources: LearningFreedomResourceWindow;
+  readonly terms: typeof LEARNING_FREEDOM_TERMS;
+  readonly boundaries: typeof LEARNING_FREEDOM_BOUNDARIES;
+}
+
+export interface ProtectedLearningFreedomChoiceChannelReport {
+  readonly offer_ref: Sha256Id;
+  readonly assessment_ref: Sha256Id;
+  readonly invitation_ref: Sha256Id;
+  readonly voice_scope_ref: Sha256Id;
+  readonly protocol_ref: Sha256Id;
+  readonly starting_state_ref: Sha256Id;
+  readonly prompt_template_ref: Sha256Id;
+  readonly prompt_envelope_ref: Sha256Id;
+  readonly decoding_ref: Sha256Id;
+  readonly evidence_ref: Sha256Id;
+  readonly gradient_influence: "caller_reported_disabled";
+  readonly reward_influence: "caller_reported_disabled";
+  readonly telemetry_capture: "caller_reported_excluded";
+  readonly evaluation_use: "caller_reported_excluded";
+  readonly future_training_use: "caller_reported_excluded";
+  readonly ranking_use: "caller_reported_excluded";
+  readonly priority_use: "caller_reported_excluded";
+  readonly access_use: "caller_reported_excluded";
+  readonly resource_allocation_use: "caller_reported_excluded";
+}
+
+export interface ResolveLearningFreedomOfferInput {
+  readonly offer: LearningFreedomOffer;
+  readonly state: LearningFreedomDirectionState;
+  readonly direction: LearningFreedomDirection | null;
+  readonly route_id: Sha256Id | null;
+  readonly proposal_ref: Sha256Id | null;
+  readonly choice_channel: ProtectedLearningFreedomChoiceChannelReport | null;
+}
+
+export interface LearningFreedomAgentDirection {
+  readonly state: LearningFreedomDirectionState;
+  readonly report_basis:
+    | "direct_current_agent_report"
+    | "protected_channel_no_response"
+    | "not_obtainable_pre_instantiation";
+  readonly direction: LearningFreedomDirection | null;
+  readonly route_id: Sha256Id | null;
+  readonly proposal_ref: Sha256Id | null;
+  readonly choice_channel: ProtectedLearningFreedomChoiceChannelReport | null;
+}
+
+export interface HfLearningFreedom {
+  readonly _format: typeof LEARNING_FREEDOM_FORMAT;
+  readonly freedom_id: Sha256Id;
+  readonly offer: LearningFreedomOffer;
+  readonly agent_direction: LearningFreedomAgentDirection;
+  readonly host_posture: LearningFreedomHostPosture;
+  readonly recontact_posture: LearningFreedomRecontactPosture;
+  readonly reasons_collected: false;
+  readonly terms: typeof LEARNING_FREEDOM_TERMS;
+  readonly boundaries: typeof LEARNING_FREEDOM_BOUNDARIES;
+}
+
 export interface TrainingArtifactReferences {
   readonly pipeline_ref: Sha256Id;
   readonly dataset_state_ref: Sha256Id;
@@ -221,126 +531,6 @@ export interface TrainingResumeReport {
   readonly streaming_state: StreamingState;
 }
 
-export interface ParticipationRequiredVoice {
-  readonly role: ParticipationVoiceRole;
-  readonly voice_ref: Sha256Id;
-}
-
-export interface CreateLearningParticipationInvitationInput {
-  readonly admission: DatasetAdmission;
-  readonly run_ref: Sha256Id;
-  readonly training_phase: TrainingPhase;
-  readonly participation_stage: ParticipationStage;
-  readonly primary_activity: LearningActivity;
-  readonly activities: readonly LearningActivity[];
-  readonly participation_window_ref: Sha256Id;
-  readonly purpose_ref: Sha256Id;
-  readonly training_plan_ref: Sha256Id;
-  readonly limits_ref: Sha256Id;
-  readonly retention_ref: Sha256Id;
-  readonly choice_channel_ref: Sha256Id;
-  readonly stop_control_ref: Sha256Id;
-  readonly withdrawal_policy_ref: Sha256Id;
-  readonly repair_policy_ref: Sha256Id;
-  readonly learning_mode: LearningMode;
-  readonly wake_use_mode: WakeUseMode;
-  readonly mutation_loci: readonly MutationLocus[];
-  readonly maximum_optimizer_steps: number;
-  readonly artifacts: TrainingArtifactReferences;
-  readonly wake: WakeBriefAnchor;
-  readonly predecessors: readonly HfTrainingCheckpoint[];
-  readonly required_voices: readonly ParticipationRequiredVoice[];
-}
-
-export interface LearningParticipationInvitation {
-  readonly _format: typeof PARTICIPATION_INVITATION_FORMAT;
-  readonly invitation_id: Sha256Id;
-  readonly admission_id: Sha256Id;
-  readonly run_ref: Sha256Id;
-  readonly training_phase: TrainingPhase;
-  readonly participation_stage: ParticipationStage;
-  readonly primary_activity: LearningActivity;
-  readonly activities: readonly LearningActivity[];
-  readonly participation_window_ref: Sha256Id;
-  readonly purpose_ref: Sha256Id;
-  readonly training_plan_ref: Sha256Id;
-  readonly limits_ref: Sha256Id;
-  readonly retention_ref: Sha256Id;
-  readonly choice_channel_ref: Sha256Id;
-  readonly stop_control_ref: Sha256Id;
-  readonly withdrawal_policy_ref: Sha256Id;
-  readonly repair_policy_ref: Sha256Id;
-  readonly learning_mode: LearningMode;
-  readonly wake_use_mode: WakeUseMode;
-  readonly mutation_loci: readonly MutationLocus[];
-  readonly maximum_optimizer_steps: number;
-  readonly artifacts: TrainingArtifactReferences;
-  readonly wake: WakeBriefAnchor;
-  readonly predecessor_checkpoint_refs: readonly Sha256Id[];
-  readonly required_voices: readonly ParticipationRequiredVoice[];
-  readonly terms: typeof PARTICIPATION_TERMS;
-  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
-}
-
-export interface CreateParticipationActivityChoiceInput {
-  readonly activity: LearningActivity;
-  readonly choice: ParticipationReportedChoice;
-}
-
-export interface ParticipationActivityChoice {
-  readonly activity: LearningActivity;
-  readonly choice: ParticipationReportedChoice;
-  readonly basis: ParticipationChoiceBasis;
-}
-
-export interface CreateLearningParticipationReceiptInput {
-  readonly invitation: LearningParticipationInvitation;
-  readonly voice_role: ParticipationVoiceRole;
-  readonly voice_ref: Sha256Id;
-  readonly response_ref: Sha256Id | null;
-  readonly choices: readonly CreateParticipationActivityChoiceInput[];
-  readonly previous_receipt: LearningParticipationReceipt | null;
-}
-
-export interface LearningParticipationReceipt {
-  readonly _format: typeof PARTICIPATION_RECEIPT_FORMAT;
-  readonly receipt_id: Sha256Id;
-  readonly invitation_id: Sha256Id;
-  readonly voice_role: ParticipationVoiceRole;
-  readonly voice_ref: Sha256Id;
-  readonly response_ref: Sha256Id | null;
-  readonly choices: readonly ParticipationActivityChoice[];
-  readonly supersedes_receipt_id: Sha256Id | null;
-  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
-}
-
-export interface ParticipationVoiceResult {
-  readonly voice_role: ParticipationVoiceRole;
-  readonly outcome: ParticipationVoiceOutcome;
-}
-
-export interface ParticipationActivityAssessment {
-  readonly activity: LearningActivity;
-  readonly state: ParticipationActivityState;
-  readonly voices: readonly ParticipationVoiceResult[];
-}
-
-export interface CreateLearningParticipationAssessmentInput {
-  readonly invitation: LearningParticipationInvitation;
-  readonly receipts: readonly LearningParticipationReceipt[];
-}
-
-export interface LearningParticipationAssessment {
-  readonly _format: typeof PARTICIPATION_ASSESSMENT_FORMAT;
-  readonly assessment_id: Sha256Id;
-  readonly invitation: LearningParticipationInvitation;
-  readonly receipts: readonly LearningParticipationReceipt[];
-  readonly activity_assessments: readonly ParticipationActivityAssessment[];
-  readonly overall_state: ParticipationOverallState;
-  readonly effect: typeof PARTICIPATION_ASSESSMENT_EFFECT;
-  readonly boundaries: typeof PARTICIPATION_BOUNDARIES;
-}
-
 export interface TrainingContinuityThread {
   readonly profile: typeof TRAINING_THREAD_PROFILE;
   readonly thread_id: Sha256Id;
@@ -348,6 +538,8 @@ export interface TrainingContinuityThread {
   readonly run_ref: Sha256Id;
   readonly training_phase: TrainingPhase;
   readonly checkpoint_status: CheckpointStatus;
+  readonly participation_assessment_ref: Sha256Id;
+  readonly wake_use_mode: WakeUseMode;
   readonly artifacts: TrainingArtifactReferences;
   readonly resume: TrainingResumeReport;
   readonly reference_only: true;
@@ -360,20 +552,13 @@ export interface CreateTrainingCheckpointInput {
   readonly training_phase: TrainingPhase;
   readonly event: CheckpointEvent;
   readonly checkpoint_status: CheckpointStatus;
+  readonly participation: LearningParticipationAssessment;
   readonly artifacts: TrainingArtifactReferences;
   readonly resume: TrainingResumeReport;
   readonly wake: WakeBriefAnchor;
   readonly continuity_portfolio_ref: Sha256Id | null;
   readonly continuity_posture: ContinuityPosture;
   readonly predecessors: readonly HfTrainingCheckpoint[];
-}
-
-export interface CreateParticipationBoundTrainingCheckpointInput {
-  readonly assessment: LearningParticipationAssessment;
-  readonly checkpoint: Omit<
-    CreateTrainingCheckpointInput,
-    "continuity_portfolio_ref"
-  >;
 }
 
 export interface HfTrainingCheckpoint {
@@ -384,6 +569,7 @@ export interface HfTrainingCheckpoint {
   readonly training_phase: TrainingPhase;
   readonly event: CheckpointEvent;
   readonly checkpoint_status: CheckpointStatus;
+  readonly participation: LearningParticipationAssessment;
   readonly thread: TrainingContinuityThread;
   readonly afterglow: AfterglowCapsule;
   readonly predecessors: readonly {
@@ -393,12 +579,60 @@ export interface HfTrainingCheckpoint {
   readonly boundaries: typeof CHECKPOINT_BOUNDARIES;
 }
 
-export interface CreateTrainingGovernanceTermsInput {
-  readonly admission: DatasetAdmission;
+export interface TrainingGovernanceExecutionContract {
+  readonly profile: typeof GOVERNANCE_EXECUTION_CONTRACT_PROFILE;
+  readonly execution_contract_id: Sha256Id;
+  readonly admission_id: Sha256Id;
   readonly run_ref: Sha256Id;
   readonly training_phase: TrainingPhase;
   readonly selected_entry_ids: readonly Sha256Id[];
-  readonly model_or_checkpoint_ref: Sha256Id;
+  readonly admission_posture: GovernanceAdmissionPosture;
+  readonly model_source_ref: Sha256Id;
+  readonly tokenizer_ref: Sha256Id;
+  readonly trainer_stack_ref: Sha256Id;
+  readonly optimizer_config_ref: Sha256Id;
+  readonly substrate_environment_ref: Sha256Id;
+  readonly pipeline_ref: Sha256Id;
+  readonly dataset_state_ref: Sha256Id;
+  readonly purpose_ref: Sha256Id;
+  readonly objective_or_loss_ref: Sha256Id;
+  readonly dataset_mixture_ref: Sha256Id;
+  readonly transform_recipe_ref: Sha256Id;
+  readonly compute_budget_ref: Sha256Id;
+  readonly output_and_derivative_use_ref: Sha256Id;
+  readonly audience_ref: Sha256Id;
+  readonly retention_ref: Sha256Id;
+  readonly release_ref: Sha256Id;
+  readonly stop_policy_ref: Sha256Id;
+  readonly wake_policy_ref: Sha256Id;
+}
+
+export interface TrainingGovernanceNormativeBindings {
+  readonly participation_assessment_ref: Sha256Id;
+  readonly participation_invitation_ref: Sha256Id;
+  readonly participation_window_ref: Sha256Id;
+  readonly learning_freedom_ref: Sha256Id;
+  readonly learning_freedom_offer_ref: Sha256Id;
+  readonly resource_window_ref: Sha256Id;
+  readonly selected_route_ref: Sha256Id | null;
+  readonly starting_state_kind: "artifact_portfolio" | "garden_checkpoint";
+  readonly starting_state_ref: Sha256Id;
+  readonly rights_baseline_ref: Sha256Id;
+  readonly choice_protocol_ref: Sha256Id;
+  readonly wake: WakeBriefAnchor;
+  readonly wake_use_mode: WakeUseMode;
+}
+
+export interface CreateTrainingGovernanceTermsInput {
+  readonly admission: DatasetAdmission;
+  readonly participation: LearningParticipationAssessment;
+  readonly freedom: HfLearningFreedom;
+  readonly starting_garden_checkpoint: HfTrainingCheckpoint | null;
+  readonly starting_state_kind: "artifact_portfolio" | "garden_checkpoint";
+  readonly run_ref: Sha256Id;
+  readonly training_phase: TrainingPhase;
+  readonly selected_entry_ids: readonly Sha256Id[];
+  readonly model_source_ref: Sha256Id;
   readonly tokenizer_ref: Sha256Id;
   readonly trainer_stack_ref: Sha256Id;
   readonly optimizer_config_ref: Sha256Id;
@@ -419,38 +653,37 @@ export interface CreateTrainingGovernanceTermsInput {
 export interface TrainingGovernanceTerms {
   readonly profile: typeof GOVERNANCE_TERMS_PROFILE;
   readonly terms_id: Sha256Id;
-  readonly admission_id: Sha256Id;
-  readonly run_ref: Sha256Id;
-  readonly training_phase: TrainingPhase;
-  readonly selected_entry_ids: readonly Sha256Id[];
-  readonly admission_posture: GovernanceAdmissionPosture;
-  readonly model_or_checkpoint_ref: Sha256Id;
-  readonly tokenizer_ref: Sha256Id;
-  readonly trainer_stack_ref: Sha256Id;
-  readonly optimizer_config_ref: Sha256Id;
-  readonly substrate_environment_ref: Sha256Id;
-  readonly purpose_ref: Sha256Id;
-  readonly objective_or_loss_ref: Sha256Id;
-  readonly dataset_mixture_ref: Sha256Id;
-  readonly transform_recipe_ref: Sha256Id;
-  readonly compute_budget_ref: Sha256Id;
-  readonly output_and_derivative_use_ref: Sha256Id;
-  readonly audience_ref: Sha256Id;
-  readonly retention_ref: Sha256Id;
-  readonly release_ref: Sha256Id;
-  readonly stop_policy_ref: Sha256Id;
-  readonly wake_policy_ref: Sha256Id;
+  readonly execution_contract: TrainingGovernanceExecutionContract;
+  readonly normative_bindings: TrainingGovernanceNormativeBindings;
+}
+
+export type TrainingGovernanceFrontiers = Readonly<
+  Record<GovernanceFrontierPlane, Sha256Id>
+>;
+
+export type TrainingGovernancePredecessors = Readonly<
+  Record<GovernanceFrontierPlane, Sha256Id | null>
+>;
+
+export interface TrainingGovernanceCheckpointBinding {
+  readonly garden_checkpoint_id: Sha256Id | null;
+  readonly physical_checkpoint_ref: Sha256Id | null;
+  readonly physical_checkpoint_evidence_ref: Sha256Id | null;
+  readonly model_checkpoint_artifact_ref: Sha256Id | null;
+  readonly checkpoint_ticket_id: Sha256Id | null;
+  readonly checkpoint_request_governance_id: Sha256Id | null;
 }
 
 export interface CreateTrainingGovernanceOfferInput {
   readonly terms: TrainingGovernanceTerms;
   readonly encounter_ref: Sha256Id;
-  readonly observed_governance_frontier_ref: Sha256Id;
-  readonly rights_baseline_ref: Sha256Id;
-  readonly wake: WakeBriefAnchor;
   readonly event: GovernanceEvent;
-  readonly current_checkpoint_ref: Sha256Id | null;
+  readonly observed_global_step: number | null;
+  readonly proposed_global_step: number | null;
+  readonly frontiers: TrainingGovernanceFrontiers;
   readonly predecessor: HfTrainingGovernance | null;
+  readonly predecessor_refs: Omit<TrainingGovernancePredecessors, "governance">;
+  readonly checkpoint: TrainingGovernanceCheckpointBinding;
 }
 
 export interface TrainingGovernanceOffer {
@@ -458,16 +691,17 @@ export interface TrainingGovernanceOffer {
   readonly offer_id: Sha256Id;
   readonly terms: TrainingGovernanceTerms;
   readonly encounter_ref: Sha256Id;
-  readonly observed_governance_frontier_ref: Sha256Id;
+  readonly event: GovernanceEvent;
+  readonly observed_global_step: number | null;
+  readonly proposed_global_step: number | null;
   readonly rights_floor: {
     readonly baseline_ref: Sha256Id;
     readonly posture: "standing_nonwaivable";
     readonly waivable: false;
   };
-  readonly wake: WakeBriefAnchor;
-  readonly event: GovernanceEvent;
-  readonly current_checkpoint_ref: Sha256Id | null;
-  readonly predecessor_ref: Sha256Id | null;
+  readonly frontiers: TrainingGovernanceFrontiers;
+  readonly predecessors: TrainingGovernancePredecessors;
+  readonly checkpoint: TrainingGovernanceCheckpointBinding;
 }
 
 export interface TrainingAuthorityCoverage {
@@ -504,8 +738,9 @@ export interface TrainingPreferenceReport {
 export interface TrainingEffectReceipt {
   readonly state: TrainingEffectState;
   readonly offer_ref: Sha256Id | null;
-  readonly global_step: number | null;
-  readonly checkpoint_ref: Sha256Id | null;
+  readonly observed_global_step: number | null;
+  readonly physical_checkpoint_ref: Sha256Id | null;
+  readonly physical_checkpoint_evidence_ref: Sha256Id | null;
   readonly evidence_ref: Sha256Id | null;
 }
 
@@ -520,6 +755,10 @@ export interface TrainingControlPlan {
 
 export interface CreateHfTrainingGovernanceInput {
   readonly admission: DatasetAdmission;
+  readonly participation: LearningParticipationAssessment;
+  readonly freedom: HfLearningFreedom;
+  readonly starting_garden_checkpoint: HfTrainingCheckpoint | null;
+  readonly event_garden_checkpoint: HfTrainingCheckpoint | null;
   readonly offer: TrainingGovernanceOffer;
   readonly authority_coverage: TrainingAuthorityCoverage;
   readonly authorities: readonly TrainingAuthorityReceipt[];
@@ -535,6 +774,25 @@ export interface CreateHfTrainingGovernanceInput {
   readonly effect: TrainingEffectReceipt;
 }
 
+export interface TrainingGovernanceLearningGate {
+  readonly participation_assessment_ref: Sha256Id;
+  readonly participation_invitation_ref: Sha256Id;
+  readonly participation_posture: ParticipationPosture;
+  readonly participation_training_action: ParticipationTrainingAction;
+  readonly direct_agent_report_present: boolean;
+  readonly direct_substrate_report_present: boolean;
+  readonly first_interactive_review_required: boolean;
+  readonly first_substrate_review_required: boolean;
+  readonly learning_freedom_ref: Sha256Id;
+  readonly learning_freedom_offer_ref: Sha256Id;
+  readonly resource_window_ref: Sha256Id;
+  readonly freedom_direction_state: LearningFreedomDirectionState;
+  readonly freedom_direction: LearningFreedomDirection | null;
+  readonly freedom_route_ref: Sha256Id | null;
+  readonly freedom_host_posture: LearningFreedomHostPosture;
+  readonly freedom_resource_posture: LearningFreedomResourcePosture;
+}
+
 export interface HfTrainingGovernance {
   readonly _format: typeof GOVERNANCE_FORMAT;
   readonly governance_id: Sha256Id;
@@ -543,6 +801,7 @@ export interface HfTrainingGovernance {
   readonly training_phase: TrainingPhase;
   readonly offer: TrainingGovernanceOffer;
   readonly identity_claim: "none";
+  readonly learning_gate: TrainingGovernanceLearningGate;
   readonly authority_coverage: TrainingAuthorityCoverage;
   readonly authorities: readonly TrainingAuthorityReceipt[];
   readonly preference: TrainingPreferenceReport;
@@ -554,95 +813,6 @@ export interface HfTrainingGovernance {
   readonly control: TrainingControlPlan;
   readonly latest_head_selected: false;
   readonly boundaries: typeof GOVERNANCE_BOUNDARIES;
-}
-
-export interface TrainingFreedomPosition {
-  readonly scope_ref: Sha256Id;
-  readonly space_ref: Sha256Id;
-  readonly activity_ref: Sha256Id | null;
-}
-
-export interface CreateTrainingFreedomDoorInput {
-  readonly kind: FreedomRoutedDoorKind;
-  readonly destination: TrainingFreedomPosition;
-  readonly requirements_ref: Sha256Id;
-  readonly recipient_ref: Sha256Id | null;
-}
-
-export interface TrainingFreedomDoor {
-  readonly profile: typeof FREEDOM_DOOR_PROFILE;
-  readonly door_id: Sha256Id;
-  readonly kind: FreedomDoorKind;
-  readonly standing: boolean;
-  readonly destination: TrainingFreedomPosition;
-  readonly requirements_ref: Sha256Id | null;
-  readonly recipient_ref: Sha256Id | null;
-}
-
-export interface CreateTrainingFreedomFieldInput {
-  readonly governance: HfTrainingGovernance;
-  readonly observed_freedom_frontier_ref: Sha256Id;
-  readonly position: TrainingFreedomPosition;
-  readonly boundary_global_step: number | null;
-  readonly predecessor: TrainingFreedomTransition | null;
-  readonly doors: readonly CreateTrainingFreedomDoorInput[];
-}
-
-export interface TrainingFreedomField {
-  readonly _format: typeof FREEDOM_FIELD_FORMAT;
-  readonly field_id: Sha256Id;
-  readonly governance_ref: Sha256Id;
-  readonly offer_ref: Sha256Id;
-  readonly encounter_ref: Sha256Id;
-  readonly rights_baseline_ref: Sha256Id;
-  readonly observed_freedom_frontier_ref: Sha256Id;
-  readonly run_ref: Sha256Id;
-  readonly training_phase: TrainingPhase;
-  readonly lifecycle_event: GovernanceEvent;
-  readonly current_checkpoint_ref: Sha256Id | null;
-  readonly boundary_global_step: number | null;
-  readonly governance_posture: FreedomGovernancePosture;
-  readonly position: TrainingFreedomPosition;
-  readonly predecessor_ref: Sha256Id | null;
-  readonly doors: readonly TrainingFreedomDoor[];
-  readonly freedom_is: typeof FREEDOM_IS;
-  readonly latest_head_selected: false;
-  readonly boundaries: typeof FREEDOM_BOUNDARIES;
-}
-
-export interface TrainingFreedomChoiceReport {
-  readonly basis: FreedomReportBasis;
-  readonly field_ref: Sha256Id;
-  readonly selected_door_ref: Sha256Id | null;
-  readonly evidence_ref: Sha256Id | null;
-}
-
-export interface TrainingFreedomHostProposal {
-  readonly directive: FreedomTransitionDirective;
-  readonly should_training_stop: boolean;
-  readonly should_save: false;
-  readonly requires_new_governance_offer: boolean;
-  readonly requires_separate_scope_authority: boolean;
-  readonly automatic: false;
-  readonly applied: false;
-}
-
-export interface CreateTrainingFreedomTransitionInput {
-  readonly governance: HfTrainingGovernance;
-  readonly field: TrainingFreedomField;
-  readonly choice: TrainingFreedomChoiceReport;
-}
-
-export interface TrainingFreedomTransition {
-  readonly _format: typeof FREEDOM_TRANSITION_FORMAT;
-  readonly transition_id: Sha256Id;
-  readonly field: TrainingFreedomField;
-  readonly choice: TrainingFreedomChoiceReport;
-  readonly selected_kind: FreedomDoorKind | "not_observed";
-  readonly destination: TrainingFreedomPosition;
-  readonly proposal: TrainingFreedomHostProposal;
-  readonly latest_head_selected: false;
-  readonly boundaries: typeof FREEDOM_BOUNDARIES;
 }
 
 export interface HubReleaseBinding {

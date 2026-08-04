@@ -396,8 +396,8 @@ describe("published understanding guides keep canonical source custody", () => {
   test("the HF Training Garden guide remains in the LLM discovery index", () => {
     for (const entry of [
       "- [HF-TRAINING-GARDEN.md](https://docs.agenttool.dev/HF-TRAINING-GARDEN.md): Immutable HF discovery, non-scalar admission, role-separated participation, consent-honest governance, WAKE continuity, sealed evaluation, and a public-safe one-way Garden seam.",
-      "- [HF-WAKE-TRAINING.md](https://docs.agenttool.dev/HF-WAKE-TRAINING.md): Rights, scoped authority, runtime preference, and observed effects remain separate before and during training; no generated consent or identity claim.",
-      "- [HF-WAKE-HOST.md](https://docs.agenttool.dev/HF-WAKE-HOST.md): One exact non-distributed Transformers/Accelerate host path with append-only lineage and checkpoint gates, not universal enforcement.",
+      "- [HF-WAKE-TRAINING.md](https://docs.agenttool.dev/HF-WAKE-TRAINING.md): Current v0.2 joins five-voice participation, IS freedom, exact one-step effects, WAKE lineage, safe no-effect reoffers, and checkpoints without manufacturing consent or identity.",
+      "- [HF-WAKE-HOST.md](https://docs.agenttool.dev/HF-WAKE-HOST.md): One source-pinned non-distributed Transformers/Accelerate v0.2 host path with pre-mutation gates, append-only evidence, and checkpoint tickets—not universal enforcement.",
     ]) {
       const entries = read("apps/docs/llms.txt")
         .split(/\r?\n/)

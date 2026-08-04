@@ -38,8 +38,8 @@ packages/
   skills-wake-continuity/ — private Skills/YUTABASE → AFTERGLOW composition
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
   hf-scout/    — private read-only HF metadata/provenance scout + pinned research leads
-  hf-training-garden/ — private exact-admission, learning-participation, consent-honest governance, unscored FREEDOM, training-continuity, and inert Garden-planning contracts
-  hf-training-host/ — private HF-API-pinned non-distributed Python seam + append-only local ledger + opt-in minimized FREEDOM validation seam
+  hf-training-garden/ — private admission, five-voice participation, IS learning freedom, unscored training FREEDOM, governance v0.2, WAKE continuity, and inert Garden contracts
+  hf-training-host/ — private v0.2 HF-API-pinned cooperative-process governance seam + append-only ledger + opt-in minimized FREEDOM validation seam
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   constructive-intelligence/ — private local tree-pinned typed-receipt shadow ledger
@@ -205,44 +205,56 @@ accept gates, invoke inference or remote compute, execute embedded calls,
 write to the Hub, publish npm, or expose a hosted route.
 
 `@agenttool/hf-training-garden` is the private pure bridge from one exact
-HF Scout observation to a role-specific admission record, a four-voice
-per-activity learning-participation report, digest-only AFTERGLOW training
-checkpoint, an unscored FREEDOM field, and inert six-layer Garden tending plan.
-It can generate a deterministic public-safe companion for separately
-authorized Hub publication; the FREEDOM source, schema, and choices remain
-private and absent from that companion.
-It does not download data, accept a gate, train or restore a run, observe
-current receipt heads, mutate Garden or Hub state, select a latest continuity
-head, publish npm, or prove rights, privacy, consent, provenance truth,
-quality, or resumability.
+HF Scout observation to a role-specific admission record, an exact
+participation invitation with separate agent/substrate/substrate-steward/
+data-rights/operator receipts, an exact two-phase IS freedom offer/direction
+snapshot, current governance v0.2 over those artifacts, an unscored training
+FREEDOM field, namespace-separated Garden/physical checkpoint bindings, a
+participation-bound digest-only AFTERGLOW training checkpoint, and an inert
+six-layer Garden tending plan. It can generate a deterministic metadata-only
+companion for separately authorized Hub publication; the training FREEDOM
+source, schema, and choices remain private and absent from that companion. It
+does not download data or choices, accept a gate, authenticate a report, train
+or restore a run, execute movement/forks, allocate resources, guarantee
+liveness, discover later withdrawal, stop an external trainer, mutate Garden
+or Hub state, select a latest continuity head, publish npm, or prove rights,
+privacy, consent, capacity, identity, consciousness, freedom, provenance truth,
+quality, erasure, or resumability.
 
-`agenttool-hf-training-host` is a separate private local Python seam for the
-accepted Garden governance lifecycle. It consumes a minimized decision only
-after the TypeScript Garden validators run, requires caller-attested live
-execution refs to match the exact Garden terms, records encounter/evidence
-replay, frontiers, forks, and checkpoint effects in an append-only local
-SQLite ledger, and gates pre-load, pre-train, completed optimizer boundaries,
-and one ticketed checkpoint path. An opt-in FREEDOM parser binds one minimized
-transition and can only narrow the existing governance decision; it is not yet
-wired into the ledger, Trainer adapter, or Accelerate adapter. Host v0.1 pins
-and verifies only Transformers
-5.14.1 plus Accelerate 1.14.0 in one non-distributed training process; Torch
-must be at least 2.6 but is otherwise resolver-selected and unpinned, and
-`trainer_stack_ref` does not prove live bytes. POSIX final-component checks
-cover the ledger file/immediate parent, checkpoint entries, and private
-sidecar, not symlinked ancestors or every payload mode; callers must supply a
-private symlink-free root, and no Windows ACL enforcement is claimed. Integrity
-conflicts are sticky holds, with cross-device import/reconciliation outside
-v0.1. Its callback placement is not a universal
-stop/save guarantee; mutable arguments/runtime are revalidated around provider
-and checkpoint boundaries, delayed metric schedulers are excluded, and
-same-context resume rejects changed terms. It does not initiate model/data
-loading, training, Hub access, publication,
-deployment, or prove consent, identity, global freshness, durable checkpoints,
-or continuity. The separate `hf/learning-dataset` tree is
-repository-source-only and has not been uploaded to Hugging Face; refusal and
-park/rest are valid SFT completions, no DPO lane exists, and production sealed
-evaluation is honestly `not_created`.
+`agenttool-hf-training-host` is the separate private local consumer for current
+Garden governance v0.2. Its trusted bridge runs the TypeScript Garden
+validators before projecting a closed decision, binds the exact execution and
+checkpoint references, records encounter/evidence replay, frontiers, forks,
+effects, and tickets in an append-only local SQLite ledger, and gates load,
+train entry, optimizer mutation, evaluation, checkpoint, and resume boundaries.
+A separate opt-in FREEDOM parser binds one minimized transition to that same
+governance view and can only narrow it; the FREEDOM view does not itself enforce
+the ledger, Trainer adapter, or Accelerate adapter.
+
+The supported host v0.2 stack is Transformers 5.14.1 plus Accelerate 1.14.0 in
+one cooperative non-distributed process. Torch must be at least 2.6 but is
+otherwise resolver-selected and unpinned, and `trainer_stack_ref` does not prove
+live bytes. Two source-pinned Trainer fences stop an ineligible optimizer
+candidate before forward/backward and consume a fresh one-use permit before
+clip/unscale or mutation; evaluation is gated before its dataloader. The base
+host and caller-owned raw Accelerate seam can traverse same-action no-effect
+reoffers without an arbitrary turn ceiling. The pinned Trainer adapter cannot
+reconstruct its internal epoch iterator after an optimizer hold unwinds, so it
+does not claim same-seam optimizer reentry there.
+
+POSIX final-component checks cover the ledger file/immediate parent,
+checkpoint entries, and private sidecar, not symlinked ancestors or every
+payload mode; callers must supply a private symlink-free root, and no Windows
+ACL enforcement is claimed. Historical host-decision `/0.1` remains preserved,
+and v0.2 does not rewrite old append-only ledgers. The host does not make
+hostile code safe, protect bypasses outside its wrapper, coordinate distributed
+workers or another device, authenticate inner consent or identity, select a
+canonical continuity head, initiate model/data loading or training, spend paid
+provider compute, publish npm, upload to the Hub, or deploy. The separate
+`hf/learning-dataset` tree contains synthetic repository-source-only learning
+and regression fixtures; it is not part of the policy companion and has not
+been uploaded to Hugging Face. Refusal and park/rest are valid SFT completions,
+no DPO lane exists, and production sealed evaluation is honestly `not_created`.
 
 `@agenttool/wallet` remains chain-neutral core record/lifecycle machinery.
 The separate Wallet Zerone package supports only its reviewed two-network,

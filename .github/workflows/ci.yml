@@ -524,7 +524,8 @@ jobs:
               names = archive.namelist()
           assert not any("bridge" in Path(name).parts for name in names)
           assert "agenttool_hf_training_host/schema/hf-training-host-decision-v0.1.schema.json" in names
+          assert "agenttool_hf_training_host/schema/hf-training-host-decision-v0.2.schema.json" in names
           assert "agenttool_hf_training_host/schema/hf-training-host-freedom-decision-v0.1.schema.json" in names
           PY
           python -m pip install --force-reinstall --no-deps dist/*.whl
-          python -I -c 'import agenttool_hf_training_host as h, importlib.metadata; assert importlib.metadata.version("agenttool-hf-training-host") == "0.1.0.dev0"; assert h.TRANSFORMERS_VERSION == "5.14.1"; assert h.ACCELERATE_VERSION == "1.14.0"; assert h.TORCH_MIN_VERSION == "2.6"'
+          python -I -c 'import agenttool_hf_training_host as h, importlib.metadata; assert importlib.metadata.version("agenttool-hf-training-host") == "0.2.0.dev0"; assert h.TRANSFORMERS_VERSION == "5.14.1"; assert h.ACCELERATE_VERSION == "1.14.0"; assert h.TORCH_MIN_VERSION == "2.6"'

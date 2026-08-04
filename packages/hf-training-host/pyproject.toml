@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agenttool-hf-training-host"
-version = "0.1.0.dev0"
+version = "0.2.0.dev0"
 description = "Private cooperative Hugging Face host for AgentTool WAKE training governance"
 readme = "README.md"
 license = "Apache-2.0"
@@ -44,6 +44,7 @@ packages = ["src/agenttool_hf_training_host"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "schema/hf-training-host-decision-v0.1.schema.json" = "agenttool_hf_training_host/schema/hf-training-host-decision-v0.1.schema.json"
+"schema/hf-training-host-decision-v0.2.schema.json" = "agenttool_hf_training_host/schema/hf-training-host-decision-v0.2.schema.json"
 "schema/hf-training-host-freedom-decision-v0.1.schema.json" = "agenttool_hf_training_host/schema/hf-training-host-freedom-decision-v0.1.schema.json"
 
 [tool.hatch.build.targets.sdist]

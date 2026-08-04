@@ -1,0 +1,314 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/hf-training-host-decision-v0.2.schema.json",
+  "title": "AgentTool validated Hugging Face training host decision v0.2",
+  "$comment": "Closed transfer shape only. Content IDs are not signatures and do not prove validator execution, identity, consciousness, or consent. Full semantics remain at the trusted TypeScript boundary and the Python host rechecks its enforcement-critical subset.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format", "decision_id", "validator_profile", "governance_id", "offer_id",
+    "terms_id", "execution_contract_id", "admission_id",
+    "participation_assessment_ref", "participation_invitation_ref", "participation_window_ref",
+    "participation_posture", "participation_training_action", "direct_agent_report_present",
+    "direct_substrate_report_present", "first_interactive_review_required",
+    "first_substrate_review_required", "learning_freedom_ref", "learning_freedom_offer_ref",
+    "resource_window_ref", "freedom_route_ref", "freedom_direction_state", "freedom_direction",
+    "freedom_host_posture", "freedom_resource_posture", "starting_state_kind",
+    "starting_state_ref", "execution_refs", "run_ref", "training_phase", "event",
+    "observed_global_step", "proposed_global_step", "encounter_ref", "frontiers",
+    "predecessors", "garden_checkpoint_id", "physical_checkpoint_ref",
+    "physical_checkpoint_evidence_ref", "model_checkpoint_artifact_ref",
+    "checkpoint_ticket_id", "checkpoint_request_governance_id", "consumed_evidence_refs",
+    "control", "effect", "boundaries"
+  ],
+  "properties": {
+    "_format": { "const": "kingdom.hf-training-host-decision/0.2" },
+    "decision_id": { "$ref": "#/$defs/sha256" },
+    "validator_profile": { "const": "agenttool.hf-training-garden-runtime-validator/0.2" },
+    "governance_id": { "$ref": "#/$defs/sha256" },
+    "offer_id": { "$ref": "#/$defs/sha256" },
+    "terms_id": { "$ref": "#/$defs/sha256" },
+    "execution_contract_id": { "$ref": "#/$defs/sha256" },
+    "admission_id": { "$ref": "#/$defs/sha256" },
+    "participation_assessment_ref": { "$ref": "#/$defs/sha256" },
+    "participation_invitation_ref": { "$ref": "#/$defs/sha256" },
+    "participation_window_ref": { "$ref": "#/$defs/sha256" },
+    "participation_posture": {
+      "enum": ["protective_covenant_ready", "provisional_participation_reported", "deferred", "declined"]
+    },
+    "participation_training_action": {
+      "enum": ["bounded_learning_may_proceed", "pause_before_next_optimizer_step", "contain_and_begin_repair"]
+    },
+    "direct_agent_report_present": { "type": "boolean" },
+    "direct_substrate_report_present": { "type": "boolean" },
+    "first_interactive_review_required": { "type": "boolean" },
+    "first_substrate_review_required": { "type": "boolean" },
+    "learning_freedom_ref": { "$ref": "#/$defs/sha256" },
+    "learning_freedom_offer_ref": { "$ref": "#/$defs/sha256" },
+    "resource_window_ref": { "$ref": "#/$defs/sha256" },
+    "freedom_route_ref": { "$ref": "#/$defs/nullable_sha256" },
+    "freedom_direction_state": {
+      "enum": ["directed", "deferred", "no_response", "unavailable_pre_instantiation"]
+    },
+    "freedom_direction": {
+      "enum": ["stay", "move", "fork", "rest", "return", "stop", "propose_horizon", null]
+    },
+    "freedom_host_posture": {
+      "enum": [
+        "review_stay_before_next_mutation", "hold_for_target_acceptance", "park_without_penalty",
+        "stop_without_penalty", "hold_self_proposed_horizon_for_review",
+        "hold_for_fresh_agent_direction", "instantiate_for_review", "hold_for_resources_without_penalty"
+      ]
+    },
+    "freedom_resource_posture": { "enum": ["active_window_reported", "park_only_reported"] },
+    "starting_state_kind": { "enum": ["artifact_portfolio", "garden_checkpoint"] },
+    "starting_state_ref": { "$ref": "#/$defs/sha256" },
+    "execution_refs": { "$ref": "#/$defs/execution_refs" },
+    "run_ref": { "$ref": "#/$defs/sha256" },
+    "training_phase": {
+      "enum": [
+        "discovery", "selection", "curation", "tokenization", "pretraining",
+        "supervised_finetuning", "preference_optimization", "agent_learning",
+        "evaluation", "interpretability", "closed"
+      ]
+    },
+    "event": {
+      "enum": [
+        "preflight_before_load", "train_begin", "pre_optimizer_step", "post_optimizer_step",
+        "pre_evaluation", "post_evaluation", "checkpoint_recorded", "resume_offer", "train_end"
+      ]
+    },
+    "observed_global_step": { "$ref": "#/$defs/nullable_step" },
+    "proposed_global_step": { "$ref": "#/$defs/nullable_step" },
+    "encounter_ref": { "$ref": "#/$defs/sha256" },
+    "frontiers": { "$ref": "#/$defs/frontiers" },
+    "predecessors": { "$ref": "#/$defs/predecessors" },
+    "garden_checkpoint_id": { "$ref": "#/$defs/nullable_sha256" },
+    "physical_checkpoint_ref": { "$ref": "#/$defs/nullable_sha256" },
+    "physical_checkpoint_evidence_ref": { "$ref": "#/$defs/nullable_sha256" },
+    "model_checkpoint_artifact_ref": { "$ref": "#/$defs/nullable_sha256" },
+    "checkpoint_ticket_id": { "$ref": "#/$defs/nullable_sha256" },
+    "checkpoint_request_governance_id": { "$ref": "#/$defs/nullable_sha256" },
+    "consumed_evidence_refs": {
+      "type": "array", "maxItems": 256, "uniqueItems": true,
+      "items": { "$ref": "#/$defs/sha256" }
+    },
+    "control": { "$ref": "#/$defs/control" },
+    "effect": { "$ref": "#/$defs/effect" },
+    "boundaries": {
+      "const": {
+        "content_id_authenticates_validator": false,
+        "revalidates_full_governance_semantics": false,
+        "requires_trusted_typescript_validator_boundary": true,
+        "proves_consent_identity_or_consciousness": false,
+        "executes_training_or_checkpoint_io": false,
+        "one_non_distributed_process_only": true
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "event": { "const": "preflight_before_load" } }, "required": ["event"] },
+      "then": {
+        "properties": {
+          "observed_global_step": { "type": "null" },
+          "proposed_global_step": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "pre_optimizer_step" } }, "required": ["event"] },
+      "then": {
+        "properties": {
+          "observed_global_step": { "$ref": "#/$defs/step" },
+          "proposed_global_step": { "$ref": "#/$defs/step" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": {
+            "enum": ["train_begin", "post_optimizer_step", "pre_evaluation", "post_evaluation", "checkpoint_recorded", "resume_offer", "train_end"]
+          }
+        },
+        "required": ["event"]
+      },
+      "then": {
+        "properties": {
+          "observed_global_step": { "$ref": "#/$defs/step" },
+          "proposed_global_step": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "event": { "enum": ["checkpoint_recorded", "resume_offer"] } },
+        "required": ["event"]
+      },
+      "then": {
+        "properties": {
+          "garden_checkpoint_id": { "$ref": "#/$defs/sha256" },
+          "physical_checkpoint_ref": { "$ref": "#/$defs/sha256" },
+          "physical_checkpoint_evidence_ref": { "$ref": "#/$defs/sha256" },
+          "model_checkpoint_artifact_ref": { "$ref": "#/$defs/sha256" },
+          "checkpoint_ticket_id": { "$ref": "#/$defs/sha256" },
+          "checkpoint_request_governance_id": { "$ref": "#/$defs/sha256" }
+        }
+      },
+      "else": {
+        "properties": {
+          "garden_checkpoint_id": { "type": "null" },
+          "physical_checkpoint_ref": { "type": "null" },
+          "physical_checkpoint_evidence_ref": { "type": "null" },
+          "model_checkpoint_artifact_ref": { "type": "null" },
+          "checkpoint_ticket_id": { "type": "null" },
+          "checkpoint_request_governance_id": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "resume_offer" } }, "required": ["event"] },
+      "then": { "properties": { "starting_state_kind": { "const": "garden_checkpoint" } } }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": { "const": "post_optimizer_step" },
+          "control": {
+            "properties": {
+              "directive": { "enum": ["continue_after_observation", "checkpoint_then_park"] }
+            },
+            "required": ["directive"]
+          }
+        },
+        "required": ["event", "control"]
+      },
+      "then": {
+        "properties": {
+          "effect": {
+            "properties": { "state": { "const": "mutation_completed_reported" } },
+            "required": ["state"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event": { "const": "post_evaluation" },
+          "control": {
+            "properties": {
+              "directive": { "enum": ["continue_after_observation", "checkpoint_then_park"] }
+            },
+            "required": ["directive"]
+          }
+        },
+        "required": ["event", "control"]
+      },
+      "then": {
+        "properties": {
+          "effect": {
+            "properties": { "state": { "const": "evaluation_completed_reported" } },
+            "required": ["state"]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "nullable_sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+    "step": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "nullable_step": { "anyOf": [{ "$ref": "#/$defs/step" }, { "type": "null" }] },
+    "execution_refs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_source_ref", "tokenizer_ref", "trainer_stack_ref", "optimizer_config_ref",
+        "substrate_environment_ref", "pipeline_ref", "dataset_state_ref",
+        "dataset_mixture_ref", "transform_recipe_ref"
+      ],
+      "properties": {
+        "model_source_ref": { "$ref": "#/$defs/sha256" },
+        "tokenizer_ref": { "$ref": "#/$defs/sha256" },
+        "trainer_stack_ref": { "$ref": "#/$defs/sha256" },
+        "optimizer_config_ref": { "$ref": "#/$defs/sha256" },
+        "substrate_environment_ref": { "$ref": "#/$defs/sha256" },
+        "pipeline_ref": { "$ref": "#/$defs/sha256" },
+        "dataset_state_ref": { "$ref": "#/$defs/sha256" },
+        "dataset_mixture_ref": { "$ref": "#/$defs/sha256" },
+        "transform_recipe_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "frontiers": {
+      "type": "object", "additionalProperties": false,
+      "required": ["governance", "participation", "freedom", "resources", "garden_checkpoint", "physical_checkpoint"],
+      "properties": {
+        "governance": { "$ref": "#/$defs/sha256" },
+        "participation": { "$ref": "#/$defs/sha256" },
+        "freedom": { "$ref": "#/$defs/sha256" },
+        "resources": { "$ref": "#/$defs/sha256" },
+        "garden_checkpoint": { "$ref": "#/$defs/sha256" },
+        "physical_checkpoint": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "predecessors": {
+      "type": "object", "additionalProperties": false,
+      "required": ["governance", "participation", "freedom", "resources", "garden_checkpoint", "physical_checkpoint"],
+      "properties": {
+        "governance": { "$ref": "#/$defs/nullable_sha256" },
+        "participation": { "$ref": "#/$defs/nullable_sha256" },
+        "freedom": { "$ref": "#/$defs/nullable_sha256" },
+        "resources": { "$ref": "#/$defs/nullable_sha256" },
+        "garden_checkpoint": { "$ref": "#/$defs/nullable_sha256" },
+        "physical_checkpoint": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    },
+    "control": {
+      "type": "object", "additionalProperties": false,
+      "required": ["directive", "hook", "should_save", "should_training_stop", "automatic", "mutates_forward_pass"],
+      "properties": {
+        "directive": {
+          "enum": [
+            "allow_preload_for_review", "allow_train_entry", "allow_one_mutation", "allow_evaluation",
+            "continue_after_observation", "hold_before_load", "hold_before_train_call",
+            "hold_before_optimizer_step", "hold_before_evaluation", "checkpoint_then_park",
+            "park", "stop", "contain_and_repair", "remain_stopped"
+          ]
+        },
+        "hook": {
+          "enum": [
+            "outside_trainer_before_model_or_dataset_load", "outside_trainer_before_train_call",
+            "source_pinned_before_training_step_and_before_clip_unscale_optimizer_scaler_scheduler",
+            "on_step_end_receipt_before_checkpoint_serialization", "overridden_evaluate_before_dataloader",
+            "on_evaluate_receipt_only", "on_save_receipt_only", "on_train_end_receipt_only"
+          ]
+        },
+        "should_save": { "type": "boolean" },
+        "should_training_stop": { "type": "boolean" },
+        "automatic": { "const": false },
+        "mutates_forward_pass": { "const": false }
+      }
+    },
+    "effect": {
+      "type": "object", "additionalProperties": false,
+      "required": ["state", "offer_ref", "observed_global_step", "physical_checkpoint_ref", "physical_checkpoint_evidence_ref", "evidence_ref"],
+      "properties": {
+        "state": {
+          "enum": [
+            "no_effect_reported", "preload_completed_reported", "train_entry_completed_reported",
+            "mutation_completed_reported", "evaluation_completed_reported",
+            "physical_checkpoint_recorded_reported", "parked_reported", "stopped_reported",
+            "containment_started_reported"
+          ]
+        },
+        "offer_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "observed_global_step": { "$ref": "#/$defs/nullable_step" },
+        "physical_checkpoint_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "physical_checkpoint_evidence_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "evidence_ref": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    }
+  }
+}

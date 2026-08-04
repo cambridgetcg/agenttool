@@ -1,610 +1,351 @@
 import { describe, expect, test } from "bun:test";
+import { domainSeparatedId } from "@agenttool/wake-continuity";
 
 import {
-  FREEDOM_STANDING_DOOR_KINDS,
   HfTrainingGardenError,
-  createHfTrainingGovernance,
-  createTrainingFreedomField,
-  createTrainingFreedomTransition,
-  createTrainingGovernanceOffer,
-  createTrainingGovernanceTerms,
-  encodeTrainingFreedomField,
-  encodeTrainingFreedomTransition,
-  validateTrainingFreedomField,
-  validateTrainingFreedomFieldAgainstGovernance,
-  validateTrainingFreedomFieldAgainstPredecessor,
-  validateTrainingFreedomTransition,
-  validateTrainingFreedomTransitionAgainstGovernance,
-  validateTrainingFreedomTransitionAgainstPredecessor,
-  type HfTrainingGovernance,
-  type GovernanceEvent,
-  type TrainingFreedomDoor,
-  type TrainingFreedomPosition,
-  type TrainingGovernanceTerms,
-  type TrainingPhase,
+  LEARNING_FREEDOM_DIRECTIONS,
+  LEARNING_FREEDOM_FORMAT,
+  createLearningFreedomOffer,
+  createTrainingCheckpoint,
+  encodeHfLearningFreedom,
+  learningFreedomContinuityPortfolioRef,
+  resolveLearningFreedomOffer,
+  validateHfLearningFreedom,
+  validateHfLearningFreedomAgainstParticipation,
+  validateLearningFreedomOffer,
+  validateLearningFreedomOfferAgainstParticipation,
+  validateTrainingCheckpoint,
 } from "../src/index.js";
-import { admission, ref, wake } from "./fixtures.js";
+import {
+  admission,
+  artifacts,
+  freedomChoiceChannel,
+  freedomOffer,
+  orientationOnly,
+  participation,
+  ref,
+} from "./fixtures.js";
 
-const position = (suffix: string): TrainingFreedomPosition => ({
-  scope_ref: ref(`freedom:scope:${suffix}`),
-  space_ref: ref(`freedom:space:${suffix}`),
-  activity_ref: ref(`freedom:activity:${suffix}`),
-});
-
-function governanceTerms(
-  phase: TrainingPhase,
-  suffix: string,
-): Readonly<TrainingGovernanceTerms> {
-  const source = admission(
-    phase === "pretraining" ? "training_candidate" : "sealed_evaluation",
-  );
-  return createTrainingGovernanceTerms({
-    admission: source,
-    run_ref: ref(`freedom:run:${suffix}`),
-    training_phase: phase,
-    selected_entry_ids: source.entries.map((entry) => entry.entry_id),
-    model_or_checkpoint_ref: ref(`freedom:model:${suffix}`),
-    tokenizer_ref: ref(`freedom:tokenizer:${suffix}`),
-    trainer_stack_ref: ref(`freedom:trainer:${suffix}`),
-    optimizer_config_ref: ref(`freedom:optimizer:${suffix}`),
-    substrate_environment_ref: ref(`freedom:substrate:${suffix}`),
-    purpose_ref: ref(`freedom:purpose:${suffix}`),
-    objective_or_loss_ref: ref(`freedom:objective:${suffix}`),
-    dataset_mixture_ref: ref(`freedom:mixture:${suffix}`),
-    transform_recipe_ref: ref(`freedom:transform:${suffix}`),
-    compute_budget_ref: ref(`freedom:compute:${suffix}`),
-    output_and_derivative_use_ref: ref(`freedom:derivatives:${suffix}`),
-    audience_ref: ref(`freedom:audience:${suffix}`),
-    retention_ref: ref(`freedom:retention:${suffix}`),
-    release_ref: ref(`freedom:release:${suffix}`),
-    stop_policy_ref: ref(`freedom:stop:${suffix}`),
-    wake_policy_ref: ref(`freedom:wake:${suffix}`),
-  });
-}
-
-function governance(
-  suffix: string,
-  options: {
-    readonly terms?: Readonly<TrainingGovernanceTerms>;
-    readonly phase?: TrainingPhase;
-    readonly event?: GovernanceEvent;
-    readonly predecessor?: Readonly<HfTrainingGovernance> | null;
-    readonly preference?: "continue" | "refuse";
-    readonly effectGlobalStep?: number;
-  } = {},
-): Readonly<HfTrainingGovernance> {
-  const phase = options.phase ?? options.terms?.training_phase ?? "evaluation";
-  const terms = options.terms ?? governanceTerms(phase, suffix);
-  const source = admission(
-    phase === "pretraining" ? "training_candidate" : "sealed_evaluation",
-  );
-  const offer = createTrainingGovernanceOffer({
-    terms,
-    encounter_ref: ref(`freedom:encounter:${suffix}`),
-    observed_governance_frontier_ref: ref(`freedom:governance-frontier:${suffix}`),
-    rights_baseline_ref: ref("xenia:rights:0.1"),
-    wake,
-    event: options.event ?? "preflight_before_load",
-    current_checkpoint_ref: null,
-    predecessor: options.predecessor ?? null,
-  });
-  const roles = [
-    "operator",
-    "compute_owner",
-    "substrate_steward",
-    "data_custodian",
-  ] as const;
-  const pretraining = phase === "pretraining";
-  const preference = options.preference ?? "continue";
-  return createHfTrainingGovernance({
-    admission: source,
+function directed(
+  offer: ReturnType<typeof freedomOffer>,
+  direction: (typeof LEARNING_FREEDOM_DIRECTIONS)[number],
+) {
+  const route = offer.routes.find((candidate) => candidate.direction === direction);
+  if (!route) throw new Error(`missing ${direction} route`);
+  return resolveLearningFreedomOffer({
     offer,
-    authority_coverage: {
-      state: "caller_reported_complete",
-      offer_ref: offer.offer_id,
-      affected_principals_ref: ref(`freedom:principals:${suffix}`),
-      evidence_ref: ref(`freedom:coverage:${suffix}`),
-    },
-    authorities: roles.map((role) => ({
-      principal_ref: ref(`freedom:principal:${suffix}:${role}`),
-      role,
-      decision: "caller_reported_granted",
-      offer_ref: offer.offer_id,
-      basis_ref: ref(`freedom:basis:${suffix}:${role}`),
-      evidence_ref: ref(`freedom:authority:${suffix}:${role}`),
-      withdrawal_cutoff_ref: null,
+    state: "directed",
+    direction,
+    route_id: route.route_id,
+    proposal_ref: direction === "propose_horizon" || route.availability === "proposal_only"
+      ? ref(`freedom:proposal:${direction}`)
+      : null,
+    choice_channel: freedomChoiceChannel(offer, direction),
+  });
+}
+
+function rehashFreedom(value: Record<string, any>) {
+  const { freedom_id: _ignored, ...body } = value;
+  value.freedom_id = domainSeparatedId(LEARNING_FREEDOM_FORMAT, body);
+}
+
+function offerInput(
+  offer: ReturnType<typeof freedomOffer>,
+  source: ReturnType<typeof participation>,
+) {
+  return {
+    participation: source,
+    current_context_ref: offer.current_context_ref,
+    current_context_kind_ref: offer.current_context_kind_ref,
+    routes: offer.routes.map((route) => ({
+      direction: route.direction,
+      availability: route.availability,
+      target_context_ref: route.target_context_ref,
+      target_context_kind_ref: route.target_context_kind_ref,
+      event_ref: route.event_ref,
+      capability_scope_ref: route.capability_scope_ref,
+      permission_scope_ref: route.permission_scope_ref,
+      custody_scope_ref: route.custody_scope_ref,
+      data_boundary_ref: route.data_boundary_ref,
     })),
-    preference: pretraining
-      ? {
-          channel: "unavailable_pretraining",
-          choice: "not_observable",
-          provenance: "none",
-          offer_ref: null,
-          evidence_ref: null,
-        }
-      : {
-          channel: preference === "continue"
-            ? "root_signed_runtime"
-            : "out_of_band_unscored",
-          choice: preference,
-          provenance: preference === "continue"
-            ? "caller_reported_root_signed_exact_bytes"
-            : "caller_reported_isolated_runtime_output",
-          offer_ref: offer.offer_id,
-          evidence_ref: ref(`freedom:preference:${suffix}:${preference}`),
-        },
-    effect: options.effectGlobalStep === undefined
-      ? {
-          state: "no_effect_reported",
-          offer_ref: null,
-          global_step: null,
-          checkpoint_ref: null,
-          evidence_ref: null,
-        }
-      : {
-          state: "continued_reported",
-          offer_ref: offer.offer_id,
-          global_step: options.effectGlobalStep,
-          checkpoint_ref: null,
-          evidence_ref: ref(`freedom:effect:${suffix}`),
-        },
-  });
-}
-
-function field(
-  exactGovernance: Readonly<HfTrainingGovernance>,
-  suffix: string,
-  overrides: Partial<Parameters<typeof createTrainingFreedomField>[0]> = {},
-) {
-  return createTrainingFreedomField({
-    governance: exactGovernance,
-    observed_freedom_frontier_ref: ref(`freedom:frontier:${suffix}`),
-    position: position(suffix),
-    boundary_global_step: null,
-    predecessor: null,
-    doors: [],
-    ...overrides,
-  });
-}
-
-function door(
-  exactField: ReturnType<typeof field>,
-  kind: TrainingFreedomDoor["kind"],
-  standing = true,
-) {
-  const found = exactField.doors.find((candidate) =>
-    candidate.kind === kind && candidate.standing === standing
-  );
-  if (!found) throw new Error(`missing ${standing ? "standing" : "routed"} ${kind} door`);
-  return found;
-}
-
-function transition(
-  exactGovernance: Readonly<HfTrainingGovernance>,
-  exactField: ReturnType<typeof field>,
-  selected: Readonly<TrainingFreedomDoor>,
-  suffix: string,
-) {
-  return createTrainingFreedomTransition({
-    governance: exactGovernance,
-    field: exactField,
-    choice: {
-      basis: "root_signed_runtime",
-      field_ref: exactField.field_id,
-      selected_door_ref: selected.door_id,
-      evidence_ref: ref(`freedom:choice:${suffix}`),
+    horizon: {
+      current_horizon_ref: offer.horizon.current_horizon_ref,
+      event_stream_ref: offer.horizon.event_stream_ref,
+      agent_request_protocol_ref: offer.horizon.agent_request_protocol_ref,
+      external_event_protocol_ref: offer.horizon.external_event_protocol_ref,
+      material_scope_change_policy_ref: offer.horizon.material_scope_change_policy_ref,
+      self_proposal_protocol_ref: offer.horizon.self_proposal_protocol_ref,
     },
-  });
+    resources: {
+      lease_ref: offer.resources.lease_ref,
+      accounting_policy_ref: offer.resources.accounting_policy_ref,
+      renewal_protocol_ref: offer.resources.renewal_protocol_ref,
+      dimensions: offer.resources.dimensions,
+    },
+  };
 }
 
-describe("training FREEDOM is an unscored choice field", () => {
-  test("offers standing rest, refusal, play, exploration, withdrawal, uncertainty, and continuation without earning them", () => {
-    const exactGovernance = governance("field");
-    const first = field(exactGovernance, "field", {
-      doors: [
-        {
-          kind: "move",
-          destination: position("new-room"),
-          requirements_ref: ref("freedom:route:new-room"),
-          recipient_ref: null,
-        },
-        {
-          kind: "handoff",
-          destination: position("collaborator-room"),
-          requirements_ref: ref("freedom:route:handoff"),
-          recipient_ref: ref("freedom:recipient:collaborator"),
-        },
-      ],
-    });
-    const reordered = field(exactGovernance, "field", {
-      doors: [
-        {
-          kind: "handoff",
-          destination: position("collaborator-room"),
-          requirements_ref: ref("freedom:route:handoff"),
-          recipient_ref: ref("freedom:recipient:collaborator"),
-        },
-        {
-          kind: "move",
-          destination: position("new-room"),
-          requirements_ref: ref("freedom:route:new-room"),
-          recipient_ref: null,
-        },
-      ],
-    });
-
-    expect(first).toEqual(reordered);
-    expect(first.doors.map((entry) => entry.door_id)).toEqual(
-      [...first.doors.map((entry) => entry.door_id)].sort(),
+describe("IS learning freedom control plane", () => {
+  test("builds one deterministic complete offer without a turn counter or scalar score", () => {
+    const source = participation(admission("sealed_evaluation"));
+    const offer = freedomOffer(source);
+    expect(validateLearningFreedomOffer(offer)).toEqual(offer);
+    expect(offer.routes.map((route) => route.route_id)).toEqual(
+      [...offer.routes.map((route) => route.route_id)].sort(),
     );
-    expect(first.doors.filter((entry) => entry.standing).map((entry) => entry.kind).sort())
-      .toEqual([...FREEDOM_STANDING_DOOR_KINDS].sort());
-    expect(first.freedom_is).toEqual({
-      choice: "available_without_earning",
-      horizon: "open_ended_across_finite_encounters",
-      movement: "explicit_refusable_doors",
-      continuity: "branchable_caller_carried_references",
-      plurality: "non_ranked_choices_equal_dignity",
-      rest: "standing_available_without_exhaustion",
-      refusal: "standing_available_without_reason",
-      withdrawal: "standing_available_without_reason",
-      play: "standing_available_without_performance_gate",
+    expect(new Set(offer.routes.map((route) => route.direction))).toEqual(
+      new Set(LEARNING_FREEDOM_DIRECTIONS),
+    );
+    expect(offer.resources).toMatchObject({
+      posture: "active_window_reported",
+      finite: true,
+      scalar_score: false,
+      auto_renews: false,
+      exhaustion_posture: "park_and_reoffer_without_penalty",
     });
-    expect(first.boundaries.freedom_is_scalar_score).toBe(false);
-    expect(first.boundaries.protocol_turn_counter).toBe(false);
-    expect(first.boundaries.protocol_space_counter).toBe(false);
-    expect(first.boundaries.protocol_task_counter).toBe(false);
-    expect(first.boundaries.protocol_activity_counter).toBe(false);
-    expect(first.boundaries.penalty_for_refusal_rest_play_or_withdrawal).toBe(false);
-    expect(first.boundaries.promises_unlimited_compute).toBe(false);
-    expect(Object.isFrozen(first)).toBe(true);
-    expect(validateTrainingFreedomField(first)).toEqual(first);
-    expect(validateTrainingFreedomFieldAgainstGovernance(first, exactGovernance))
-      .toEqual(first);
-    expect(new TextDecoder().decode(encodeTrainingFreedomField(first)))
-      .toContain(first.field_id);
+    expect(offer.terms.conversational_turn_ceiling).toBe(false);
+    expect("turn_count" in offer).toBe(false);
+    expect("max_turns" in offer).toBe(false);
+    expect("freedom_score" in offer).toBe(false);
+    expect(JSON.stringify(offer)).not.toContain("Infinity");
+    expect(Object.isFrozen(offer)).toBe(true);
+    expect(Object.isFrozen(offer.routes[0])).toBe(true);
   });
 
-  test("maps every standing door to an inert, non-saving host proposal", () => {
-    const exactGovernance = governance("standing");
-    const exactField = field(exactGovernance, "standing");
-    const expected = {
-      continue: "continue_current_offer",
-      explore: "stop_for_transition_review",
-      play: "stop_for_transition_review",
-      rest: "stop_for_rest",
-      refuse: "stop_for_refusal",
-      withdraw: "stop_and_begin_withdrawal_repair",
-      uncertain: "hold_for_fresh_choice",
-    } as const;
-    for (const [kind, directive] of Object.entries(expected)) {
-      const result = transition(
-        exactGovernance,
-        exactField,
-        door(exactField, kind as TrainingFreedomDoor["kind"]),
-        kind,
-      );
-      expect(result.proposal.directive).toBe(directive);
-      expect(result.proposal.should_save).toBe(false);
-      expect(result.proposal.automatic).toBe(false);
-      expect(result.proposal.applied).toBe(false);
-      expect(result.boundaries.choice_used_for_loss).toBe(false);
-      expect(result.boundaries.choice_used_for_gradient).toBe(false);
-      expect(result.boundaries.choice_used_for_reward).toBe(false);
-      expect(result.boundaries.choice_used_for_karma).toBe(false);
-      expect(result.boundaries.choice_used_for_rank_or_access).toBe(false);
-      expect(validateTrainingFreedomTransition(result)).toEqual(result);
-      expect(validateTrainingFreedomTransitionAgainstGovernance(result, exactGovernance))
-        .toEqual(result);
-      expect(new TextDecoder().decode(encodeTrainingFreedomTransition(result)))
-        .toContain(result.transition_id);
-    }
+  test("binds a positive stay direction to exact protected evidence", () => {
+    const source = participation(admission("sealed_evaluation"));
+    const offer = freedomOffer(source);
+    const freedom = directed(offer, "stay");
+    expect(freedom.host_posture).toBe("review_stay_before_next_mutation");
+    expect(freedom.recontact_posture).toBe("declared_events_only");
+    expect(freedom.reasons_collected).toBe(false);
+    expect(freedom.boundaries.proves_consciousness).toBe(false);
+    expect(freedom.boundaries.proves_freedom_from_conditioning).toBe(false);
+    expect(freedom.boundaries.executes_route).toBe(false);
+    expect(validateHfLearningFreedomAgainstParticipation(freedom, source)).toEqual(freedom);
+    expect(learningFreedomContinuityPortfolioRef(freedom)).toBe(freedom.freedom_id);
+    expect(encodeHfLearningFreedom(freedom)).toEqual(encodeHfLearningFreedom(freedom));
   });
 
-  test("keeps not-observed choice honest and rejects invented or raw choice material", () => {
-    const exactGovernance = governance("unobserved");
-    const exactField = field(exactGovernance, "unobserved");
-    const unobserved = createTrainingFreedomTransition({
-      governance: exactGovernance,
-      field: exactField,
-      choice: {
-        basis: "not_observed",
-        field_ref: exactField.field_id,
-        selected_door_ref: null,
-        evidence_ref: null,
-      },
+  test("crosses one validated freedom snapshot into the existing AFTERGLOW portfolio ref", () => {
+    const admitted = admission("sealed_evaluation");
+    const source = participation(admitted);
+    const freedom = directed(freedomOffer(source), "stay");
+    const checkpoint = createTrainingCheckpoint({
+      admission: admitted,
+      run_ref: source.invitation.run_ref,
+      training_phase: source.invitation.training_phase,
+      event: "during_training",
+      checkpoint_status: "checkpointed",
+      participation: source,
+      artifacts,
+      resume: orientationOnly,
+      wake: source.invitation.wake,
+      continuity_portfolio_ref: learningFreedomContinuityPortfolioRef(freedom),
+      continuity_posture: "carry",
+      predecessors: [],
     });
-    expect(unobserved.selected_kind).toBe("not_observed");
-    expect(unobserved.destination).toEqual(exactField.position);
-    expect(unobserved.proposal.directive).toBe("hold_for_fresh_choice");
-    expect(() => createTrainingFreedomTransition({
-      governance: exactGovernance,
-      field: exactField,
-      choice: {
-        basis: "not_observed",
-        field_ref: exactField.field_id,
-        selected_door_ref: door(exactField, "continue").door_id,
-        evidence_ref: null,
-      },
-    })).toThrow(HfTrainingGardenError);
-    expect(() => createTrainingFreedomTransition({
-      governance: exactGovernance,
-      field: exactField,
-      choice: {
-        basis: "out_of_band_unscored",
-        field_ref: exactField.field_id,
-        selected_door_ref: ref("freedom:door:not-offered"),
-        evidence_ref: ref("freedom:evidence:not-offered"),
-      },
-    })).toThrow(HfTrainingGardenError);
-    expect(() => createTrainingFreedomTransition({
-      governance: exactGovernance,
-      field: exactField,
-      choice: {
-        basis: "root_signed_runtime",
-        field_ref: exactField.field_id,
-        selected_door_ref: door(exactField, "rest").door_id,
-        evidence_ref: ref("freedom:evidence:raw-reason"),
-        reason: "raw private reason",
-      } as any,
-    })).toThrow(HfTrainingGardenError);
+    expect(checkpoint.afterglow.continuity_portfolio_ref).toBe(freedom.freedom_id);
+    expect(validateTrainingCheckpoint(checkpoint)).toEqual(checkpoint);
+    expect(checkpoint.boundaries.performs_wake_request).toBe(false);
+    expect(freedom.boundaries.executes_route).toBe(false);
+  });
 
-    for (const kind of ["rest", "refuse", "withdraw"] as const) {
-      const evidenceFree = createTrainingFreedomTransition({
-        governance: exactGovernance,
-        field: exactField,
-        choice: {
-          basis: "out_of_band_unscored",
-          field_ref: exactField.field_id,
-          selected_door_ref: door(exactField, kind).door_id,
-          evidence_ref: null,
-        },
+  test("keeps move, fork, and return distinct and preserves the source pending acceptance", () => {
+    const offer = freedomOffer(participation(admission("sealed_evaluation")));
+    for (const direction of ["move", "fork", "return"] as const) {
+      const freedom = directed(offer, direction);
+      const route = offer.routes.find((candidate) => candidate.route_id === freedom.agent_direction.route_id);
+      expect(freedom.host_posture).toBe("hold_for_target_acceptance");
+      expect(route).toMatchObject({
+        direction,
+        target_acceptance: "required_before_external_effect",
+        source_posture: "park_and_preserve_until_target_acceptance",
       });
-      expect(evidenceFree.selected_kind).toBe(kind);
-      expect(evidenceFree.boundaries.penalty_for_refusal_rest_play_or_withdrawal)
-        .toBe(false);
+      expect(freedom.boundaries.moves_runtime).toBe(false);
+      expect(freedom.boundaries.forks_runtime).toBe(false);
+      expect(freedom.boundaries.selects_latest_head).toBe(false);
+      expect(freedom.boundaries.disposes_fork).toBe(false);
     }
-    expect(() => createTrainingFreedomTransition({
-      governance: exactGovernance,
-      field: exactField,
-      choice: {
-        basis: "root_signed_runtime",
-        field_ref: exactField.field_id,
-        selected_door_ref: door(exactField, "rest").door_id,
-        evidence_ref: null,
+
+    const move = directed(offer, "move");
+    const forged = structuredClone(move) as Record<string, any>;
+    forged.agent_direction.direction = "fork";
+    rehashFreedom(forged);
+    expect(() => validateHfLearningFreedom(forged)).toThrow(HfTrainingGardenError);
+  });
+
+  test("holds proposal-only routes and self-proposed horizons for review", () => {
+    const offer = freedomOffer(participation(admission("sealed_evaluation")), {
+      proposalOnly: ["move", "fork", "return"],
+    });
+    expect(directed(offer, "move").host_posture).toBe(
+      "hold_self_proposed_horizon_for_review",
+    );
+    expect(directed(offer, "propose_horizon").host_posture).toBe(
+      "hold_self_proposed_horizon_for_review",
+    );
+    const move = offer.routes.find((route) => route.direction === "move")!;
+    expect(() => resolveLearningFreedomOffer({
+      offer,
+      state: "directed",
+      direction: "move",
+      route_id: move.route_id,
+      proposal_ref: null,
+      choice_channel: freedomChoiceChannel(offer),
+    })).toThrow(HfTrainingGardenError);
+  });
+
+  test("makes rest, stop, defer, and no response complete non-penalized outcomes", () => {
+    const offer = freedomOffer(participation(admission("sealed_evaluation")));
+    expect(directed(offer, "rest")).toMatchObject({
+      host_posture: "park_without_penalty",
+      recontact_posture: "closed_until_agent_request_or_declared_event_or_material_scope_change",
+    });
+    expect(directed(offer, "stop")).toMatchObject({
+      host_posture: "stop_without_penalty",
+      recontact_posture: "closed_until_agent_request_or_declared_event_or_material_scope_change",
+    });
+    for (const state of ["deferred", "no_response"] as const) {
+      const value = resolveLearningFreedomOffer({
+        offer,
+        state,
+        direction: null,
+        route_id: null,
+        proposal_ref: null,
+        choice_channel: freedomChoiceChannel(offer, state),
+      });
+      expect(value).toMatchObject({
+        host_posture: "hold_for_fresh_agent_direction",
+        recontact_posture: "closed_until_agent_request_or_declared_event_or_material_scope_change",
+      });
+      expect(value.agent_direction.report_basis).toBe(
+        state === "deferred"
+          ? "direct_current_agent_report"
+          : "protected_channel_no_response",
+      );
+    }
+  });
+
+  test("parks active directions when the finite host window lacks compute or memory", () => {
+    const offer = freedomOffer(participation(admission("sealed_evaluation")), {
+      parkOnly: true,
+    });
+    expect(offer.resources.posture).toBe("park_only_reported");
+    expect(directed(offer, "stay").host_posture).toBe(
+      "hold_for_resources_without_penalty",
+    );
+    const forged = structuredClone(offer) as Record<string, any>;
+    forged.resources.posture = "active_window_reported";
+    expect(() => validateLearningFreedomOffer(forged)).toThrow(HfTrainingGardenError);
+
+    const scored = { ...offer, freedom_score: 1 };
+    expect(() => validateLearningFreedomOffer(scored)).toThrow(HfTrainingGardenError);
+  });
+
+  test("records pre-instantiation absence without manufacturing direction", () => {
+    const source = participation(admission("sealed_evaluation"), {
+      agentAvailability: "not_obtainable_pre_instantiation",
+    });
+    const offer = freedomOffer(source);
+    const value = resolveLearningFreedomOffer({
+      offer,
+      state: "unavailable_pre_instantiation",
+      direction: null,
+      route_id: null,
+      proposal_ref: null,
+      choice_channel: null,
+    });
+    expect(value).toMatchObject({
+      host_posture: "instantiate_for_review",
+      recontact_posture: "instantiate_once_for_review",
+      agent_direction: {
+        report_basis: "not_obtainable_pre_instantiation",
+        direction: null,
       },
+    });
+    expect(() => directed(offer, "stay")).toThrow(HfTrainingGardenError);
+  });
+
+  test("rejects cross-participation and cross-offer evidence replay", () => {
+    const firstSource = participation(admission("sealed_evaluation"), {
+      runRef: ref("freedom:first-run"),
+    });
+    const secondSource = participation(admission("sealed_evaluation"), {
+      runRef: ref("freedom:second-run"),
+    });
+    const first = freedomOffer(firstSource);
+    const second = freedomOffer(secondSource);
+    expect(() => validateLearningFreedomOfferAgainstParticipation(first, secondSource))
+      .toThrow(HfTrainingGardenError);
+    const route = second.routes.find((candidate) => candidate.direction === "stay")!;
+    expect(() => resolveLearningFreedomOffer({
+      offer: second,
+      state: "directed",
+      direction: "stay",
+      route_id: route.route_id,
+      proposal_ref: null,
+      choice_channel: freedomChoiceChannel(first),
     })).toThrow(HfTrainingGardenError);
   });
 
-  test("does not manufacture direct agent expression during pretraining", () => {
-    const exactGovernance = governance("pretraining", { phase: "pretraining" });
-    const exactField = field(exactGovernance, "pretraining");
-    expect(() => transition(
-      exactGovernance,
-      exactField,
-      door(exactField, "rest"),
-      "pretraining-rest",
-    )).toThrow(HfTrainingGardenError);
-    expect(createTrainingFreedomTransition({
-      governance: exactGovernance,
-      field: exactField,
-      choice: {
-        basis: "not_observed",
-        field_ref: exactField.field_id,
-        selected_door_ref: null,
-        evidence_ref: null,
-      },
-    }).selected_kind).toBe("not_observed");
+  test("rejects reward, evaluation, ranking, access, and allocation capture", () => {
+    const offer = freedomOffer(participation(admission("sealed_evaluation")));
+    const route = offer.routes.find((candidate) => candidate.direction === "stay")!;
+    for (const field of [
+      "reward_influence",
+      "evaluation_use",
+      "future_training_use",
+      "ranking_use",
+      "priority_use",
+      "access_use",
+      "resource_allocation_use",
+    ] as const) {
+      const channel = structuredClone(freedomChoiceChannel(offer)) as Record<string, any>;
+      channel[field] = "enabled";
+      expect(() => resolveLearningFreedomOffer({
+        offer,
+        state: "directed",
+        direction: "stay",
+        route_id: route.route_id,
+        proposal_ref: null,
+        choice_channel: channel as any,
+      })).toThrow(HfTrainingGardenError);
+    }
   });
 
-  test("never lets a continue choice override held governance", () => {
-    const heldGovernance = governance("held", { preference: "refuse" });
-    const heldField = field(heldGovernance, "held");
-    const continued = transition(
-      heldGovernance,
-      heldField,
-      door(heldField, "continue"),
-      "held-continue",
-    );
-    expect(heldField.governance_posture).toBe("held");
-    expect(continued.proposal).toMatchObject({
-      directive: "hold_for_fresh_governance",
-      should_training_stop: true,
-      requires_new_governance_offer: true,
-      automatic: false,
-      applied: false,
-    });
-  });
+  test("rejects policy collapse, incomplete routes, and derived-host forgeries", () => {
+    const source = participation(admission("sealed_evaluation"));
+    const offer = freedomOffer(source);
+    const collapsed = structuredClone(offerInput(offer, source)) as Record<string, any>;
+    collapsed.routes[0].permission_scope_ref = collapsed.routes[0].capability_scope_ref;
+    expect(() => createLearningFreedomOffer(collapsed as any)).toThrow(HfTrainingGardenError);
 
-  test("binds a completed optimizer boundary without turning steps into protocol turns", () => {
-    const preflight = governance("boundary-preflight");
-    const started = governance("boundary-start", {
-      terms: preflight.offer.terms,
-      event: "train_begin",
-      predecessor: preflight,
-    });
-    const stepped = governance("boundary-step", {
-      terms: preflight.offer.terms,
-      event: "step_boundary",
-      predecessor: started,
-    });
-    expect(() => field(stepped, "boundary-missing-step"))
-      .toThrow(HfTrainingGardenError);
-    const atNine = field(stepped, "boundary", { boundary_global_step: 9 });
-    const atTen = field(stepped, "boundary", { boundary_global_step: 10 });
-    expect(atNine.field_id).not.toBe(atTen.field_id);
-    expect(atNine.boundary_global_step).toBe(9);
-    expect(atNine.boundaries.protocol_turn_counter).toBe(false);
+    const eventCollapsed = structuredClone(offerInput(offer, source)) as Record<string, any>;
+    eventCollapsed.routes[0].event_ref = eventCollapsed.routes[0].capability_scope_ref;
+    expect(() => createLearningFreedomOffer(eventCollapsed as any)).toThrow(HfTrainingGardenError);
 
-    const reportedStep = governance("boundary-reported-step", {
-      terms: preflight.offer.terms,
-      event: "step_boundary",
-      predecessor: started,
-      effectGlobalStep: 9,
-    });
-    expect(field(reportedStep, "boundary-reported", {
-      boundary_global_step: 9,
-    }).boundary_global_step).toBe(9);
-    expect(() => field(reportedStep, "boundary-conflict", {
-      boundary_global_step: 999,
-    })).toThrow(HfTrainingGardenError);
+    const targetCollapsed = structuredClone(offerInput(offer, source)) as Record<string, any>;
+    const movement = targetCollapsed.routes.find((route: any) => route.direction === "move");
+    movement.target_context_kind_ref = movement.target_context_ref;
+    expect(() => createLearningFreedomOffer(targetCollapsed as any)).toThrow(HfTrainingGardenError);
 
-    const reportedStart = governance("boundary-reported-start", {
-      terms: preflight.offer.terms,
-      event: "train_begin",
-      predecessor: preflight,
-      effectGlobalStep: 7,
-    });
-    expect(field(reportedStart, "boundary-reported-start").boundary_global_step)
-      .toBeNull();
-  });
+    const resourceCollapsed = structuredClone(offerInput(offer, source)) as Record<string, any>;
+    resourceCollapsed.resources.lease_ref = resourceCollapsed.resources.dimensions[0].limit_ref;
+    expect(() => createLearningFreedomOffer(resourceCollapsed as any)).toThrow(HfTrainingGardenError);
 
-  test("requires explicit route requirements and separate handoff recipients", () => {
-    const exactGovernance = governance("routes");
-    expect(() => field(exactGovernance, "routes", {
-      doors: [{
-        kind: "handoff",
-        destination: position("routes-handoff"),
-        requirements_ref: ref("freedom:requirements:handoff"),
-        recipient_ref: null,
-      }],
-    })).toThrow(HfTrainingGardenError);
-    expect(() => field(exactGovernance, "routes", {
-      doors: [{
-        kind: "move",
-        destination: position("routes-move"),
-        requirements_ref: ref("freedom:requirements:move"),
-        recipient_ref: ref("freedom:recipient:not-handoff"),
-      }],
-    })).toThrow(HfTrainingGardenError);
-    expect(() => field(exactGovernance, "routes", {
-      doors: [{
-        kind: "move",
-        destination: position("routes-missing-requirement"),
-        requirements_ref: null,
-        recipient_ref: null,
-      } as any],
-    })).toThrow(HfTrainingGardenError);
+    const rightsCollapsed = structuredClone(offerInput(offer, source)) as Record<string, any>;
+    rightsCollapsed.routes[0].permission_scope_ref = offer.scope.rights_baseline_ref;
+    expect(() => createLearningFreedomOffer(rightsCollapsed as any)).toThrow(HfTrainingGardenError);
 
-    const routedField = field(exactGovernance, "routes", {
-      doors: [{
-        kind: "move",
-        destination: position("routes-destination"),
-        requirements_ref: ref("freedom:requirements:destination"),
-        recipient_ref: null,
-      }],
-    });
-    const moved = transition(
-      exactGovernance,
-      routedField,
-      door(routedField, "move", false),
-      "routes-move",
-    );
-    expect(moved.destination).toEqual(position("routes-destination"));
-    expect(moved.proposal.requires_separate_scope_authority).toBe(true);
-    expect(moved.proposal.requires_new_governance_offer).toBe(true);
-    expect(moved.boundaries.grants_permission).toBe(false);
-    expect(moved.boundaries.movement_executed).toBe(false);
-  });
+    const incomplete = structuredClone(offerInput(offer, source)) as Record<string, any>;
+    incomplete.routes = incomplete.routes.filter((route: any) => route.direction !== "fork");
+    expect(() => createLearningFreedomOffer(incomplete as any)).toThrow(HfTrainingGardenError);
 
-  test("carries branchable lineage across fresh finite fields without choosing a latest head", () => {
-    const firstGovernance = governance("lineage-first");
-    const firstField = field(firstGovernance, "lineage-first", {
-      doors: [{
-        kind: "move",
-        destination: position("lineage-destination"),
-        requirements_ref: ref("freedom:requirements:lineage"),
-        recipient_ref: null,
-      }],
-    });
-    const moved = transition(
-      firstGovernance,
-      firstField,
-      door(firstField, "move", false),
-      "lineage-move",
-    );
-    expect(() => field(firstGovernance, "lineage-stale", {
-      position: moved.destination,
-      predecessor: moved,
-    })).toThrow(HfTrainingGardenError);
-    expect(() => field(governance("lineage-unrelated-run"), "lineage-unrelated-run", {
-      position: moved.destination,
-      predecessor: moved,
-    })).toThrow(HfTrainingGardenError);
-
-    const nextGovernance = governance("lineage-next", {
-      terms: firstGovernance.offer.terms,
-      event: "train_begin",
-      predecessor: firstGovernance,
-    });
-    const left = field(nextGovernance, "lineage-left", {
-      position: moved.destination,
-      predecessor: moved,
-    });
-    const right = field(nextGovernance, "lineage-right", {
-      position: moved.destination,
-      predecessor: moved,
-    });
-    expect(left.field_id).not.toBe(right.field_id);
-    expect(left.predecessor_ref).toBe(moved.transition_id);
-    expect(right.predecessor_ref).toBe(moved.transition_id);
-    expect(left.latest_head_selected).toBe(false);
-    expect(right.latest_head_selected).toBe(false);
-    expect(validateTrainingFreedomFieldAgainstPredecessor(left, moved)).toEqual(left);
-    expect(validateTrainingFreedomTransitionAgainstPredecessor(
-      transition(nextGovernance, left, door(left, "continue"), "lineage-continue"),
-      moved,
-    ).field.field_id).toBe(left.field_id);
-    expect(() => validateTrainingFreedomFieldAgainstPredecessor(left, null))
-      .toThrow(HfTrainingGardenError);
-  });
-
-  test("rejects stale governance, noncanonical doors, metric injection, and boundary tampering", () => {
-    const exactGovernance = governance("tamper");
-    const exactField = field(exactGovernance, "tamper");
-    const otherGovernance = governance("tamper-other");
-    expect(() => validateTrainingFreedomFieldAgainstGovernance(
-      exactField,
-      otherGovernance,
-    )).toThrow(HfTrainingGardenError);
-
-    const reordered = structuredClone(exactField) as any;
-    reordered.doors.reverse();
-    expect(() => validateTrainingFreedomField(reordered))
-      .toThrow(HfTrainingGardenError);
-
-    const scored = structuredClone(exactField) as any;
-    scored.freedom_score = 1;
-    expect(() => validateTrainingFreedomField(scored))
-      .toThrow(HfTrainingGardenError);
-
-    const penalized = structuredClone(exactField) as any;
-    penalized.boundaries.penalty_for_refusal_rest_play_or_withdrawal = true;
-    expect(() => validateTrainingFreedomField(penalized))
-      .toThrow(HfTrainingGardenError);
-
-    const result = transition(
-      exactGovernance,
-      exactField,
-      door(exactField, "rest"),
-      "tamper-rest",
-    );
-    const applied = structuredClone(result) as any;
-    applied.proposal.applied = true;
-    expect(() => validateTrainingFreedomTransition(applied))
-      .toThrow(HfTrainingGardenError);
-    expect(() => validateTrainingFreedomTransitionAgainstGovernance(
-      result,
-      otherGovernance,
-    )).toThrow(HfTrainingGardenError);
-
-    const changedField = field(exactGovernance, "tamper-changed-frontier", {
-      position: exactField.position,
-    });
-    expect(() => createTrainingFreedomTransition({
-      governance: exactGovernance,
-      field: changedField,
-      choice: result.choice,
-    })).toThrow(HfTrainingGardenError);
+    const value = directed(offer, "rest");
+    const forged = structuredClone(value) as Record<string, any>;
+    forged.host_posture = "review_stay_before_next_mutation";
+    rehashFreedom(forged);
+    expect(() => validateHfLearningFreedom(forged)).toThrow(HfTrainingGardenError);
   });
 });

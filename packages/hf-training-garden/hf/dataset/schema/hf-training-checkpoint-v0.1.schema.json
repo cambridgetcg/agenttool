@@ -11,7 +11,7 @@
     "admission_id": { "$ref": "#/$defs/sha256" },
     "run_ref": { "$ref": "#/$defs/sha256" },
     "training_phase": { "$ref": "#/$defs/phase" },
-    "event": { "enum": ["before_training", "during_training", "between_training_phases", "after_intense_training_reported", "resume_or_return"] },
+    "event": { "enum": ["during_training", "between_training_phases", "after_intense_training_reported", "resume_or_return"] },
     "checkpoint_status": { "$ref": "#/$defs/status" },
     "thread": { "$ref": "#/$defs/thread" },
     "afterglow": { "$ref": "https://agenttool.dev/schemas/agenttool-afterglow-capsule-v0.1.schema.json" },
@@ -77,16 +77,7 @@
         "posture": { "enum": ["orientation_only", "caller_reported_resumable", "caller_reported_incomplete"] },
         "incomplete_marker": { "enum": ["not_checked", "caller_reported_absent", "caller_reported_present"] },
         "streaming_state": { "enum": ["not_streaming_reported", "buffer_state_not_captured", "caller_reported_full_state_captured"] }
-      },
-      "allOf": [{
-        "if": {
-          "properties": { "incomplete_marker": { "const": "caller_reported_present" } },
-          "required": ["incomplete_marker"]
-        },
-        "then": {
-          "properties": { "posture": { "const": "caller_reported_incomplete" } }
-        }
-      }]
+      }
     },
     "thread": {
       "type": "object",
@@ -113,41 +104,7 @@
           "chooses_latest_head": false,
           "verifies_caller_reports": false
         } }
-      },
-      "allOf": [{
-        "if": {
-          "properties": {
-            "resume": {
-              "type": "object",
-              "properties": { "posture": { "const": "caller_reported_resumable" } },
-              "required": ["posture"]
-            }
-          },
-          "required": ["resume"]
-        },
-        "then": {
-          "properties": {
-            "artifacts": {
-              "type": "object",
-              "properties": {
-                "dataloader_state_ref": { "$ref": "#/$defs/sha256" },
-                "tokenizer_ref": { "$ref": "#/$defs/sha256" },
-                "model_checkpoint_ref": { "$ref": "#/$defs/sha256" },
-                "optimizer_state_ref": { "$ref": "#/$defs/sha256" },
-                "scheduler_state_ref": { "$ref": "#/$defs/sha256" },
-                "rng_state_ref": { "$ref": "#/$defs/sha256" }
-              }
-            },
-            "resume": {
-              "type": "object",
-              "properties": {
-                "incomplete_marker": { "const": "caller_reported_absent" },
-                "streaming_state": { "not": { "const": "buffer_state_not_captured" } }
-              }
-            }
-          }
-        }
-      }]
+      }
     }
   }
 }

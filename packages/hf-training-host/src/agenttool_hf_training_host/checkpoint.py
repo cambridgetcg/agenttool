@@ -50,7 +50,7 @@ def _require_posix_security() -> None:
         or not hasattr(os, "O_NOFOLLOW")
     ):
         raise CheckpointIncomplete(
-            "checkpoint v0.1 requires POSIX ownership, mode, and no-follow semantics"
+            "checkpoint v0.2 requires POSIX ownership, mode, and no-follow semantics"
         )
 
 
@@ -153,7 +153,7 @@ def _inventory(
             raise CheckpointIncomplete("checkpoint files must not be symlinks")
         if stat.S_ISDIR(info.st_mode):
             # A sharded model may use subdirectories in future HF releases;
-            # v0.1 intentionally refuses shapes it did not test.
+            # v0.2 intentionally refuses shapes it did not test.
             raise CheckpointIncomplete("checkpoint contains an unsupported nested directory")
         if not stat.S_ISREG(info.st_mode):
             raise CheckpointIncomplete("checkpoint contains a non-regular entry")

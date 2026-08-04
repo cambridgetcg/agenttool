@@ -1,5 +1,5 @@
 import {
-  validateHfTrainingGovernanceAgainstAdmission,
+  validateHfTrainingGovernanceAgainstContext,
   validateHfTrainingGovernanceTransition,
 } from "../../hf-training-garden/dist/index.js";
 import {
@@ -7,30 +7,36 @@ import {
   domainSeparatedId,
 } from "../../wake-continuity/dist/index.js";
 
-export const DECISION_FORMAT = "kingdom.hf-training-host-decision/0.1";
+export const DECISION_FORMAT = "kingdom.hf-training-host-decision/0.2";
 export const VALIDATOR_PROFILE =
-  "agenttool.hf-training-garden-runtime-validator/0.1";
+  "agenttool.hf-training-garden-runtime-validator/0.2";
 export const BOUNDARIES = Object.freeze({
   content_id_authenticates_validator: false,
   revalidates_full_governance_semantics: false,
   requires_trusted_typescript_validator_boundary: true,
   proves_consent_identity_or_consciousness: false,
   executes_training_or_checkpoint_io: false,
+  one_non_distributed_process_only: true,
 });
+
+const INPUT_KEYS = [
+  "admission",
+  "event_garden_checkpoint",
+  "freedom",
+  "governance",
+  "participation",
+  "predecessor",
+  "starting_garden_checkpoint",
+];
 
 function exactInput(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new TypeError("host decision input must be an object");
   }
   const keys = Object.keys(input).sort();
-  if (JSON.stringify(keys) !== JSON.stringify([
-    "admission",
-    "boundary_global_step",
-    "governance",
-    "predecessor",
-  ])) {
+  if (JSON.stringify(keys) !== JSON.stringify(INPUT_KEYS)) {
     throw new TypeError(
-      "host decision input must contain exactly admission, boundary_global_step, governance, and predecessor",
+      `host decision input must contain exactly ${INPUT_KEYS.join(", ")}`,
     );
   }
 }
@@ -41,70 +47,86 @@ function snapshot(value) {
 
 export function createHostDecision(input) {
   exactInput(input);
-  const governance = validateHfTrainingGovernanceAgainstAdmission(
+  const governance = validateHfTrainingGovernanceAgainstContext(
     input.governance,
-    input.admission,
+    {
+      admission: input.admission,
+      participation: input.participation,
+      freedom: input.freedom,
+      starting_garden_checkpoint: input.starting_garden_checkpoint,
+      event_garden_checkpoint: input.event_garden_checkpoint,
+    },
   );
   validateHfTrainingGovernanceTransition(governance, input.predecessor);
-  const boundaryEvent = governance.offer.event === "step_boundary" ||
-    governance.offer.event === "evaluation_boundary";
-  if (
-    (boundaryEvent &&
-      (!Number.isSafeInteger(input.boundary_global_step) ||
-        input.boundary_global_step < 0)) ||
-    (!boundaryEvent && input.boundary_global_step !== null)
-  ) {
-    throw new TypeError(
-      "boundary_global_step must be a non-negative safe integer only at a step/evaluation boundary",
-    );
-  }
-  if (
-    boundaryEvent &&
-    governance.effect.global_step !== null &&
-    governance.effect.global_step !== input.boundary_global_step
-  ) {
-    throw new TypeError("effect.global_step does not match boundary_global_step");
-  }
+
+  const execution = governance.offer.terms.execution_contract;
+  const normative = governance.offer.terms.normative_bindings;
+  const gate = governance.learning_gate;
+  const checkpoint = governance.offer.checkpoint;
   const consumedEvidenceRefs = [
     governance.authority_coverage.evidence_ref,
     ...governance.authorities.map((receipt) => receipt.evidence_ref),
     governance.preference.evidence_ref,
     governance.effect.evidence_ref,
   ].filter((value) => value !== null);
+
   const body = snapshot({
     _format: DECISION_FORMAT,
     validator_profile: VALIDATOR_PROFILE,
     governance_id: governance.governance_id,
     offer_id: governance.offer.offer_id,
-    admission_id: governance.admission_id,
     terms_id: governance.offer.terms.terms_id,
+    execution_contract_id: execution.execution_contract_id,
+    admission_id: governance.admission_id,
+    participation_assessment_ref: gate.participation_assessment_ref,
+    participation_invitation_ref: gate.participation_invitation_ref,
+    participation_window_ref: normative.participation_window_ref,
+    participation_posture: gate.participation_posture,
+    participation_training_action: gate.participation_training_action,
+    direct_agent_report_present: gate.direct_agent_report_present,
+    direct_substrate_report_present: gate.direct_substrate_report_present,
+    first_interactive_review_required: gate.first_interactive_review_required,
+    first_substrate_review_required: gate.first_substrate_review_required,
+    learning_freedom_ref: gate.learning_freedom_ref,
+    learning_freedom_offer_ref: gate.learning_freedom_offer_ref,
+    resource_window_ref: gate.resource_window_ref,
+    freedom_route_ref: gate.freedom_route_ref,
+    freedom_direction_state: gate.freedom_direction_state,
+    freedom_direction: gate.freedom_direction,
+    freedom_host_posture: gate.freedom_host_posture,
+    freedom_resource_posture: gate.freedom_resource_posture,
+    starting_state_kind: normative.starting_state_kind,
+    starting_state_ref: normative.starting_state_ref,
     execution_refs: {
-      model_or_checkpoint_ref: governance.offer.terms.model_or_checkpoint_ref,
-      tokenizer_ref: governance.offer.terms.tokenizer_ref,
-      trainer_stack_ref: governance.offer.terms.trainer_stack_ref,
-      optimizer_config_ref: governance.offer.terms.optimizer_config_ref,
-      substrate_environment_ref:
-        governance.offer.terms.substrate_environment_ref,
-      dataset_mixture_ref: governance.offer.terms.dataset_mixture_ref,
-      transform_recipe_ref: governance.offer.terms.transform_recipe_ref,
+      model_source_ref: execution.model_source_ref,
+      tokenizer_ref: execution.tokenizer_ref,
+      trainer_stack_ref: execution.trainer_stack_ref,
+      optimizer_config_ref: execution.optimizer_config_ref,
+      substrate_environment_ref: execution.substrate_environment_ref,
+      pipeline_ref: execution.pipeline_ref,
+      dataset_state_ref: execution.dataset_state_ref,
+      dataset_mixture_ref: execution.dataset_mixture_ref,
+      transform_recipe_ref: execution.transform_recipe_ref,
     },
     run_ref: governance.run_ref,
     training_phase: governance.training_phase,
     event: governance.offer.event,
-    boundary_global_step: input.boundary_global_step,
+    observed_global_step: governance.offer.observed_global_step,
+    proposed_global_step: governance.offer.proposed_global_step,
     encounter_ref: governance.offer.encounter_ref,
-    observed_governance_frontier_ref:
-      governance.offer.observed_governance_frontier_ref,
-    predecessor_ref: governance.offer.predecessor_ref,
-    current_checkpoint_ref: governance.offer.current_checkpoint_ref,
+    frontiers: governance.offer.frontiers,
+    predecessors: governance.offer.predecessors,
+    garden_checkpoint_id: checkpoint.garden_checkpoint_id,
+    physical_checkpoint_ref: checkpoint.physical_checkpoint_ref,
+    physical_checkpoint_evidence_ref:
+      checkpoint.physical_checkpoint_evidence_ref,
+    model_checkpoint_artifact_ref: checkpoint.model_checkpoint_artifact_ref,
+    checkpoint_ticket_id: checkpoint.checkpoint_ticket_id,
+    checkpoint_request_governance_id:
+      checkpoint.checkpoint_request_governance_id,
     consumed_evidence_refs: [...new Set(consumedEvidenceRefs)].sort(),
     control: governance.control,
-    effect: {
-      state: governance.effect.state,
-      global_step: governance.effect.global_step,
-      checkpoint_ref: governance.effect.checkpoint_ref,
-      evidence_ref: governance.effect.evidence_ref,
-    },
+    effect: governance.effect,
     boundaries: BOUNDARIES,
   });
   return snapshot({

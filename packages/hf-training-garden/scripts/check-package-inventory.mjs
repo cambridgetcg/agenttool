@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const packageRoot = new URL("..", import.meta.url);
 const output = execFileSync(
@@ -38,6 +38,7 @@ const expected = [
   "hf/dataset/NOTICE",
   "hf/dataset/README.md",
   "hf/dataset/data/garden-layers.jsonl",
+  "hf/dataset/data/is-freedom.jsonl",
   "hf/dataset/data/learning-modes.jsonl",
   "hf/dataset/data/learning-participation.jsonl",
   "hf/dataset/data/selection-criteria.jsonl",
@@ -48,18 +49,30 @@ const expected = [
   "hf/dataset/hash-manifest.json",
   "hf/dataset/provenance/source-manifest.json",
   "hf/dataset/schema/hf-dataset-admission-v0.1.schema.json",
+  "hf/dataset/schema/hf-learning-freedom-v0.1.schema.json",
+  "hf/dataset/schema/hf-learning-participation-assessment-v0.2.schema.json",
+  "hf/dataset/schema/hf-learning-participation-invitation-v0.2.schema.json",
+  "hf/dataset/schema/hf-learning-participation-receipt-v0.2.schema.json",
   "hf/dataset/schema/hf-learning-participation-v0.1.schema.json",
   "hf/dataset/schema/hf-training-checkpoint-v0.1.schema.json",
-  "hf/dataset/schema/hf-training-governance-v0.1.schema.json",
+  "hf/dataset/schema/hf-training-checkpoint-v0.2.schema.json",
   "hf/dataset/schema/hf-training-garden-tending-v0.1.schema.json",
+  "hf/dataset/schema/hf-training-governance-v0.1.schema.json",
+  "hf/dataset/schema/hf-training-governance-v0.2.schema.json",
   "hf/dataset/schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
   "package.json",
   "schema/hf-dataset-admission-v0.1.schema.json",
+  "schema/hf-learning-freedom-v0.1.schema.json",
+  "schema/hf-learning-participation-assessment-v0.2.schema.json",
+  "schema/hf-learning-participation-invitation-v0.2.schema.json",
+  "schema/hf-learning-participation-receipt-v0.2.schema.json",
   "schema/hf-learning-participation-v0.1.schema.json",
   "schema/hf-training-checkpoint-v0.1.schema.json",
+  "schema/hf-training-checkpoint-v0.2.schema.json",
   "schema/hf-training-freedom-v0.1.schema.json",
-  "schema/hf-training-governance-v0.1.schema.json",
   "schema/hf-training-garden-tending-v0.1.schema.json",
+  "schema/hf-training-governance-v0.1.schema.json",
+  "schema/hf-training-governance-v0.2.schema.json",
   "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
 ].sort();
 
@@ -85,12 +98,18 @@ const publicSourceManifest = JSON.parse(readFileSync(
   new URL("hf/dataset/provenance/source-manifest.json", packageRoot),
   "utf8",
 ));
-const privateFreedomPaths = new Set([
-  "schema/hf-training-freedom-v0.1.schema.json",
+const packageOnlyAdvisoryPath = "schema/hf-training-freedom-v0.1.schema.json";
+if (publicSourceManifest.source_files.some(({ path }) => path === packageOnlyAdvisoryPath)) {
+  throw new Error(`package-only advisory schema leaked into the public companion manifest: ${packageOnlyAdvisoryPath}`);
+}
+if (existsSync(new URL(`hf/dataset/${packageOnlyAdvisoryPath}`, packageRoot))) {
+  throw new Error(`package-only advisory schema leaked into the public companion: ${packageOnlyAdvisoryPath}`);
+}
+for (const currentFreedomPath of [
+  "schema/hf-learning-freedom-v0.1.schema.json",
   "src/freedom.ts",
-]);
-for (const entry of publicSourceManifest.source_files) {
-  if (privateFreedomPaths.has(entry.path)) {
-    throw new Error(`private FREEDOM source leaked into the public companion manifest: ${entry.path}`);
+]) {
+  if (!publicSourceManifest.source_files.some(({ path }) => path === currentFreedomPath)) {
+    throw new Error(`current IS freedom source missing from the public companion manifest: ${currentFreedomPath}`);
   }
 }

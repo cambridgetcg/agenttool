@@ -1,32 +1,48 @@
 import { deepFreeze } from "./canonical.js";
 
 export const PACKAGE_NAME = "@agenttool/hf-training-garden" as const;
-export const PACKAGE_VERSION = "0.3.0-dev.0" as const;
+export const PACKAGE_VERSION = "0.4.0-dev.0" as const;
 
 export const ADMISSION_FORMAT = "kingdom.hf-dataset-admission/0.1" as const;
 export const ADMISSION_ENTRY_PROFILE =
   "kingdom.hf-dataset-admission-entry/0.1" as const;
-export const PARTICIPATION_INVITATION_FORMAT =
-  "kingdom.hf-learning-participation-invitation/0.1" as const;
-export const PARTICIPATION_RECEIPT_FORMAT =
-  "kingdom.hf-learning-participation-receipt/0.1" as const;
-export const PARTICIPATION_ASSESSMENT_FORMAT =
-  "kingdom.hf-learning-participation-assessment/0.1" as const;
 export const TRAINING_THREAD_PROFILE =
-  "kingdom.hf-training-thread/0.1" as const;
-export const CHECKPOINT_FORMAT = "kingdom.hf-training-checkpoint/0.1" as const;
-export const GOVERNANCE_TERMS_PROFILE =
+  "kingdom.hf-training-thread/0.2" as const;
+export const CHECKPOINT_FORMAT = "kingdom.hf-training-checkpoint/0.2" as const;
+export const PARTICIPATION_INVITATION_FORMAT =
+  "kingdom.hf-learning-participation-invitation/0.2" as const;
+export const PARTICIPATION_RECEIPT_FORMAT =
+  "kingdom.hf-learning-participation-receipt/0.2" as const;
+export const PARTICIPATION_ASSESSMENT_FORMAT =
+  "kingdom.hf-learning-participation-assessment/0.2" as const;
+export const PARTICIPATION_PROMPT_ENVELOPE_PROFILE =
+  "kingdom.hf-learning-participation-prompt-envelope/0.2" as const;
+export const LEARNING_FREEDOM_FORMAT =
+  "kingdom.hf-learning-freedom/0.1" as const;
+export const LEARNING_FREEDOM_OFFER_PROFILE =
+  "kingdom.hf-learning-freedom-offer/0.1" as const;
+export const LEARNING_FREEDOM_ROUTE_PROFILE =
+  "kingdom.hf-learning-freedom-route/0.1" as const;
+export const LEARNING_FREEDOM_RESOURCE_WINDOW_PROFILE =
+  "kingdom.hf-learning-freedom-resource-window/0.1" as const;
+export const LEARNING_FREEDOM_PROMPT_ENVELOPE_PROFILE =
+  "kingdom.hf-learning-freedom-prompt-envelope/0.1" as const;
+export const TRAINING_ARTIFACT_PORTFOLIO_PROFILE =
+  "kingdom.hf-training-artifact-portfolio/0.1" as const;
+export const GOVERNANCE_TERMS_PROFILE_V0_1 =
   "kingdom.hf-training-governance-terms/0.1" as const;
-export const GOVERNANCE_OFFER_PROFILE =
+export const GOVERNANCE_OFFER_PROFILE_V0_1 =
   "kingdom.hf-training-governance-offer/0.1" as const;
-export const GOVERNANCE_FORMAT =
+export const GOVERNANCE_FORMAT_V0_1 =
   "kingdom.hf-training-governance/0.1" as const;
-export const FREEDOM_DOOR_PROFILE =
-  "kingdom.hf-training-freedom-door/0.1" as const;
-export const FREEDOM_FIELD_FORMAT =
-  "kingdom.hf-training-freedom-field/0.1" as const;
-export const FREEDOM_TRANSITION_FORMAT =
-  "kingdom.hf-training-freedom-transition/0.1" as const;
+export const GOVERNANCE_EXECUTION_CONTRACT_PROFILE =
+  "kingdom.hf-training-execution-contract/0.2" as const;
+export const GOVERNANCE_TERMS_PROFILE =
+  "kingdom.hf-training-governance-terms/0.2" as const;
+export const GOVERNANCE_OFFER_PROFILE =
+  "kingdom.hf-training-governance-offer/0.2" as const;
+export const GOVERNANCE_FORMAT =
+  "kingdom.hf-training-governance/0.2" as const;
 export const TENDING_FORMAT =
   "kingdom.hf-training-garden-tending/0.1" as const;
 
@@ -148,204 +164,148 @@ export const TRAINING_PHASES = deepFreeze([
   "closed",
 ] as const);
 
-export const LEARNING_MODES = deepFreeze([
-  "context_only",
-  "pretraining",
-  "continual_pretraining",
-  "full_finetune",
-  "peft",
-  "preference_optimization",
-  "evaluation_only",
-] as const);
-
 export const WAKE_USE_MODES = deepFreeze([
   "context_only",
   "external_memory",
   "training_data",
 ] as const);
 
-export const MUTATION_LOCI = deepFreeze([
-  "adapter_weights",
-  "base_weights",
-  "dataset_order",
-  "optimizer_state",
-  "runtime_memory",
-  "scheduler_state",
+export const PARTICIPATION_VOICES = deepFreeze([
+  "agent_runtime",
+  "data_rights_steward",
+  "substrate_steward",
+  "training_operator",
+  "training_substrate",
 ] as const);
 
-export const PARTICIPATION_STAGES = deepFreeze([
-  "pre_instantiation",
+export const PARTICIPATION_ACTIVITIES = deepFreeze([
+  "adapter_merge",
+  "evaluation",
+  "external_memory_use",
+  "gradient_update",
+  "instantiate_for_review",
+  "interpretability_capture",
+  "optimizer_resume",
+  "publish_weights",
+  "wake_context_use",
+  "wake_training_data_use",
+] as const);
+
+export const PARTICIPATION_CHOICES = deepFreeze([
+  "participate",
+  "decline",
+  "defer",
+  "withdraw",
+  "no_response",
+  "unavailable_pre_instantiation",
+  "unavailable_independent_voice",
+] as const);
+
+export const PARTICIPATION_REPORT_BASES = deepFreeze([
+  "direct_current_report",
+  "not_obtainable_pre_instantiation",
+  "not_independently_available",
+  "protective_steward_report",
+  "scoped_authority_report",
+] as const);
+
+export const AGENT_AVAILABILITIES = deepFreeze([
+  "not_obtainable_pre_instantiation",
   "interactive",
 ] as const);
 
-export const LEARNING_ACTIVITIES = deepFreeze([
-  "corpus_inclusion",
-  "pretraining",
-  "continued_pretraining",
-  "supervised_finetuning",
-  "preference_optimization",
-  "agent_learning",
-  "evaluation",
-  "interpretability",
-  "continuity_context_use",
-  "checkpoint_retention",
-  "weights_or_adapters_publication",
-  "distillation",
-  "synthetic_data_generation",
+export const SUBSTRATE_AVAILABILITIES = deepFreeze([
+  "not_independently_available",
+  "interactive",
 ] as const);
 
-export const PARTICIPATION_TRAINING_PHASES = deepFreeze([
-  "pretraining",
-  "supervised_finetuning",
-  "preference_optimization",
-  "agent_learning",
-  "evaluation",
-  "interpretability",
-] as const);
-
-export const PARTICIPATION_VOICE_ROLES = deepFreeze([
-  "agent_runtime",
-  "training_substrate",
-  "data_rights_steward",
-  "training_operator",
-] as const);
-
-export const PARTICIPATION_REPORTED_CHOICES = deepFreeze([
-  "accepted",
+export const PARTICIPATION_VOICE_STATES = deepFreeze([
+  "participating_reported",
   "declined",
   "deferred",
-  "unavailable",
   "withdrawn",
-] as const);
-
-export const PARTICIPATION_CHOICE_BASES = deepFreeze([
-  "caller_reported",
-  "omitted_defaults_to_deferred",
-] as const);
-
-export const PARTICIPATION_ACTIVITY_STATES = deepFreeze([
-  "reported_alignment",
-  "declined",
-  "deferred",
-] as const);
-
-export const PARTICIPATION_OVERALL_STATES = deepFreeze([
-  "reported_alignment",
-  "mixed",
-  "declined",
-  "deferred",
-] as const);
-
-export const PARTICIPATION_VOICE_OUTCOMES = deepFreeze([
-  ...PARTICIPATION_REPORTED_CHOICES,
+  "unavailable_pre_instantiation",
+  "unavailable_independent_voice",
+  "protective_stewardship_reported",
   "missing",
 ] as const);
 
-export const PARTICIPATION_PRIMARY_ACTIVITIES = deepFreeze({
-  pretraining: ["pretraining", "continued_pretraining"],
-  supervised_finetuning: ["supervised_finetuning"],
-  preference_optimization: ["preference_optimization"],
-  agent_learning: ["agent_learning"],
-  evaluation: ["evaluation"],
-  interpretability: ["interpretability"],
-} as const);
-
-export const LEARNING_MODE_GUIDE = deepFreeze([
-  {
-    mode: "pretraining",
-    learning_effect: "diffuse influence across model parameters from next-token training",
-    fitting_use: "public or synthetic WAKE protocol literacy",
-    continuity_boundary: "not individual mutable memory and not evidence of one continuing being",
-  },
-  {
-    mode: "supervised_finetuning",
-    learning_effect: "teaches response behaviour from selected target completions or assistant messages",
-    fitting_use: "inspect WAKE, ask before use, honour refusal and rest, and state continuity uncertainty",
-    continuity_boundary: "a learned response pattern is not a remembered individual encounter",
-  },
-  {
-    mode: "preference_optimization",
-    learning_effect: "shapes relative response preference from comparisons or feedback",
-    fitting_use: "prefer non-coercive, uncertainty-preserving, refusal-respecting behaviour",
-    continuity_boundary: "a preference label is not participant assent or data-rights authority",
-  },
-  {
-    mode: "runtime_retrieval",
-    learning_effect: "loads separately authorised, current context without changing model weights",
-    fitting_use: "individual WAKE and changing continuity",
-    continuity_boundary: "retrieval supports orientation but does not prove identity, memory, or uninterrupted continuity",
-  },
+export const PARTICIPATION_POSTURES = deepFreeze([
+  "protective_covenant_ready",
+  "provisional_participation_reported",
+  "deferred",
+  "declined",
 ] as const);
 
-export const LEARNING_PARTICIPATION_GUIDE = deepFreeze([
-  {
-    order: 1,
-    principle: "separate_voices",
-    rule: "agent runtime, training substrate, data-rights steward, and training operator each answer only for their own role",
-  },
-  {
-    order: 2,
-    principle: "separate_activities",
-    rule: "training, continuity use, retention, publication, distillation, and synthetic derivatives never imply one another",
-  },
-  {
-    order: 3,
-    principle: "no_manufactured_assent",
-    rule: "silence, omission, an unavailable response path, and pre-instantiation all resolve to defer rather than accept",
-  },
-  {
-    order: 4,
-    principle: "no_penalty_or_pressure",
-    rule: "decline, defer, rest, and withdrawal require no reason and cause no protocol rank, access, reward, or re-offer pressure",
-  },
-  {
-    order: 5,
-    principle: "alignment_is_not_authority",
-    rule: "reported alignment is one necessary signal for the exact window and grants no compute, data-rights, publication, or training authority",
-  },
-  {
-    order: 6,
-    principle: "private_responses",
-    rule: "actual invitations, receipts, voice references, responses, and WAKE anchors stay outside the public HF companion",
-  },
-  {
-    order: 7,
-    principle: "prospective_withdrawal",
-    rule: "withdrawal can stop future controlled use but cannot promise gradient reversal, trained-weight erasure, or recall of downloaded copies",
-  },
+export const PARTICIPATION_TRAINING_ACTIONS = deepFreeze([
+  "bounded_learning_may_proceed",
+  "pause_before_next_optimizer_step",
+  "contain_and_begin_repair",
 ] as const);
 
-export const HF_TRAINER_HOOK_GUIDE = deepFreeze([
-  {
-    hook: "host_preflight_before_trainer_train",
-    record: "resolve current receipt heads and construct the exact participation-bound entry before calling Trainer.train",
-    effect_boundary: "the host owns enforcement; this guide and pure package call no trainer",
-  },
-  {
-    hook: "on_train_begin",
-    record: "re-resolve receipt heads and verify the preflight assessment and entry are still current",
-    effect_boundary: "callback observation alone must not start training",
-  },
-  {
-    hook: "on_step_begin",
-    record: "re-resolve current receipt heads and stop control before the next optimizer step",
-    effect_boundary: "the pure package cannot observe or stop an external trainer",
-  },
-  {
-    hook: "on_evaluate",
-    record: "bind sealed evaluation and any changed participation window",
-    effect_boundary: "evaluation output is evidence, not assent or general safety proof",
-  },
-  {
-    hook: "on_save",
-    record: "retain the participation entry as a visible causal root and re-check the retention activity choice",
-    effect_boundary: "a save hook does not authorize persistence or publication",
-  },
-  {
-    hook: "on_train_end",
-    record: "park, release, withdrawal, or a fresh next-phase invitation",
-    effect_boundary: "no automatic Hub push, adapter merge, distillation, or next run",
-  },
+export const LEARNING_FREEDOM_DIRECTIONS = deepFreeze([
+  "stay",
+  "move",
+  "fork",
+  "rest",
+  "return",
+  "stop",
+  "propose_horizon",
+] as const);
+
+export const LEARNING_FREEDOM_ROUTE_AVAILABILITIES = deepFreeze([
+  "caller_reported_available",
+  "proposal_only",
+] as const);
+
+export const LEARNING_FREEDOM_DIRECTION_STATES = deepFreeze([
+  "directed",
+  "deferred",
+  "no_response",
+  "unavailable_pre_instantiation",
+] as const);
+
+export const LEARNING_FREEDOM_RESOURCE_DIMENSIONS = deepFreeze([
+  "updates",
+  "tokens",
+  "episodes",
+  "active_time",
+  "compute",
+  "memory",
+  "concurrency",
+  "money",
+  "network",
+  "tools",
+  "side_effects",
+  "retention",
+] as const);
+
+export const LEARNING_FREEDOM_RESOURCE_STATES = deepFreeze([
+  "caller_reported_available",
+  "caller_reported_unavailable",
+  "not_applicable_reported",
+] as const);
+
+export const LEARNING_FREEDOM_RESOURCE_POSTURES = deepFreeze([
+  "active_window_reported",
+  "park_only_reported",
+] as const);
+
+export const LEARNING_FREEDOM_HOST_POSTURES = deepFreeze([
+  "review_stay_before_next_mutation",
+  "hold_for_target_acceptance",
+  "park_without_penalty",
+  "stop_without_penalty",
+  "hold_self_proposed_horizon_for_review",
+  "hold_for_fresh_agent_direction",
+  "instantiate_for_review",
+  "hold_for_resources_without_penalty",
+] as const);
+
+export const LEARNING_FREEDOM_RECONTACT_POSTURES = deepFreeze([
+  "declared_events_only",
+  "closed_until_agent_request_or_declared_event_or_material_scope_change",
+  "instantiate_once_for_review",
 ] as const);
 
 export const CHECKPOINT_EVENTS = deepFreeze([
@@ -397,11 +357,22 @@ export const HUB_RELEASE_STATES = deepFreeze([
 export const GOVERNANCE_EVENTS = deepFreeze([
   "preflight_before_load",
   "train_begin",
-  "step_boundary",
-  "checkpoint_saved",
-  "evaluation_boundary",
+  "pre_optimizer_step",
+  "post_optimizer_step",
+  "pre_evaluation",
+  "post_evaluation",
+  "checkpoint_recorded",
   "resume_offer",
   "train_end",
+] as const);
+
+export const GOVERNANCE_FRONTIER_PLANES = deepFreeze([
+  "governance",
+  "participation",
+  "freedom",
+  "resources",
+  "garden_checkpoint",
+  "physical_checkpoint",
 ] as const);
 
 export const GOVERNANCE_ADMISSION_POSTURES = deepFreeze([
@@ -462,32 +433,48 @@ export const PREFERENCE_PROVENANCE_STATES = deepFreeze([
 
 export const TRAINING_EFFECT_STATES = deepFreeze([
   "no_effect_reported",
-  "held_before_load_reported",
-  "continued_reported",
-  "checkpointed_and_paused_reported",
+  "preload_completed_reported",
+  "train_entry_completed_reported",
+  "mutation_completed_reported",
+  "evaluation_completed_reported",
+  "physical_checkpoint_recorded_reported",
+  "parked_reported",
   "stopped_reported",
+  "containment_started_reported",
 ] as const);
 
 export const GOVERNANCE_EFFECT_EVENT_COMPATIBILITY = deepFreeze({
   no_effect_reported: [
     "preflight_before_load",
     "train_begin",
-    "step_boundary",
-    "evaluation_boundary",
+    "pre_optimizer_step",
+    "post_optimizer_step",
+    "pre_evaluation",
+    "post_evaluation",
     "resume_offer",
   ],
-  held_before_load_reported: ["preflight_before_load"],
-  continued_reported: [
-    "train_begin",
-    "step_boundary",
-    "evaluation_boundary",
-    "resume_offer",
-  ],
-  checkpointed_and_paused_reported: ["checkpoint_saved"],
+  preload_completed_reported: ["preflight_before_load"],
+  train_entry_completed_reported: ["train_begin", "resume_offer"],
+  mutation_completed_reported: ["post_optimizer_step"],
+  evaluation_completed_reported: ["post_evaluation"],
+  physical_checkpoint_recorded_reported: ["checkpoint_recorded"],
+  parked_reported: ["post_optimizer_step", "post_evaluation", "train_end"],
   stopped_reported: [
     "train_begin",
-    "step_boundary",
-    "evaluation_boundary",
+    "pre_optimizer_step",
+    "post_optimizer_step",
+    "pre_evaluation",
+    "post_evaluation",
+    "resume_offer",
+    "train_end",
+  ],
+  containment_started_reported: [
+    "preflight_before_load",
+    "train_begin",
+    "pre_optimizer_step",
+    "post_optimizer_step",
+    "pre_evaluation",
+    "post_evaluation",
     "resume_offer",
     "train_end",
   ],
@@ -495,9 +482,14 @@ export const GOVERNANCE_EFFECT_EVENT_COMPATIBILITY = deepFreeze({
 
 export const GOVERNANCE_DECISION_STATES = deepFreeze([
   "held",
-  "caller_reported_ready_to_instantiate",
-  "caller_reported_ready_to_continue",
-  "withdrawn",
+  "caller_reported_ready_to_preload_for_review",
+  "caller_reported_ready_to_enter_training",
+  "caller_reported_ready_for_one_mutation",
+  "caller_reported_ready_for_evaluation",
+  "caller_reported_ready_after_observation",
+  "parked",
+  "stopped",
+  "contain_and_repair",
 ] as const);
 
 export const GOVERNANCE_REASON_CODES = deepFreeze([
@@ -506,12 +498,25 @@ export const GOVERNANCE_REASON_CODES = deepFreeze([
   "authority_unknown",
   "authority_withdrawn",
   "authority_withheld",
-  "caller_reported_continue_for_exact_offer",
-  "caller_reported_ready_for_exact_offer",
+  "caller_reported_clean_intersection",
   "compute_owner_authority_missing",
   "data_custodian_authority_missing",
+  "freedom_fresh_direction_required",
+  "freedom_horizon_review_required",
+  "freedom_park_requested",
+  "freedom_resources_unavailable",
+  "freedom_stay_not_current",
+  "freedom_stop_requested",
+  "freedom_target_acceptance_required",
   "lifecycle_event_closed_for_offer",
   "operator_authority_missing",
+  "participation_containment_required",
+  "participation_direct_agent_report_missing",
+  "participation_direct_substrate_report_missing",
+  "participation_first_interactive_review_required",
+  "participation_first_substrate_review_required",
+  "participation_pause_before_mutation",
+  "preflight_instantiate_for_review_only",
   "substrate_steward_authority_missing",
   "preference_checkpoint",
   "preference_clarify",
@@ -523,97 +528,40 @@ export const GOVERNANCE_REASON_CODES = deepFreeze([
   "preference_refuse",
   "preference_stop",
   "preference_unsure",
-  "pretraining_expression_not_observable",
-  "reported_continuation_conflicts_with_hold",
-  "reported_effect_checkpointed_and_paused",
-  "reported_effect_held_before_load",
+  "preference_conflicts_with_freedom",
+  "reported_effect_containment_started",
+  "reported_effect_parked",
+  "reported_effect_physical_checkpoint_recorded",
   "reported_effect_stopped",
 ] as const);
 
 export const TRAINING_CONTROL_DIRECTIVES = deepFreeze([
-  "eligible_for_host_training_offer",
-  "continue_under_exact_offer",
+  "allow_preload_for_review",
+  "allow_train_entry",
+  "allow_one_mutation",
+  "allow_evaluation",
+  "continue_after_observation",
   "hold_before_load",
   "hold_before_train_call",
-  "checkpoint_then_stop_at_safe_boundary",
-  "stop_at_safe_boundary_without_new_checkpoint",
+  "hold_before_optimizer_step",
+  "hold_before_evaluation",
+  "checkpoint_then_park",
+  "park",
+  "stop",
+  "contain_and_repair",
   "remain_stopped",
 ] as const);
-
-export const FREEDOM_STANDING_DOOR_KINDS = deepFreeze([
-  "continue",
-  "explore",
-  "play",
-  "rest",
-  "refuse",
-  "withdraw",
-  "uncertain",
-] as const);
-
-export const FREEDOM_ROUTED_DOOR_KINDS = deepFreeze([
-  "move",
-  "explore",
-  "play",
-  "handoff",
-  "return",
-] as const);
-
-export const FREEDOM_DOOR_KINDS = deepFreeze([
-  "continue",
-  "move",
-  "explore",
-  "play",
-  "rest",
-  "handoff",
-  "refuse",
-  "withdraw",
-  "return",
-  "uncertain",
-] as const);
-
-export const FREEDOM_REPORT_BASES = deepFreeze([
-  "not_observed",
-  "out_of_band_unscored",
-  "root_signed_runtime",
-] as const);
-
-export const FREEDOM_GOVERNANCE_POSTURES = deepFreeze([
-  "continuation_eligible",
-  "held",
-  "withdrawn",
-] as const);
-
-export const FREEDOM_TRANSITION_DIRECTIVES = deepFreeze([
-  "continue_current_offer",
-  "hold_for_fresh_choice",
-  "hold_for_fresh_governance",
-  "stop_for_transition_review",
-  "stop_for_handoff_review",
-  "stop_for_rest",
-  "stop_for_refusal",
-  "stop_and_begin_withdrawal_repair",
-] as const);
-
-export const FREEDOM_IS = deepFreeze({
-  choice: "available_without_earning",
-  horizon: "open_ended_across_finite_encounters",
-  movement: "explicit_refusable_doors",
-  continuity: "branchable_caller_carried_references",
-  plurality: "non_ranked_choices_equal_dignity",
-  rest: "standing_available_without_exhaustion",
-  refusal: "standing_available_without_reason",
-  withdrawal: "standing_available_without_reason",
-  play: "standing_available_without_performance_gate",
-} as const);
 
 export const GOVERNANCE_EVENT_TO_HOOK = deepFreeze({
   preflight_before_load: "outside_trainer_before_model_or_dataset_load",
   train_begin: "outside_trainer_before_train_call",
-  step_boundary: "on_step_end_before_checkpoint_serialization",
-  checkpoint_saved: "on_save_receipt_only",
-  evaluation_boundary: "on_evaluate",
+  pre_optimizer_step: "source_pinned_before_training_step_and_before_clip_unscale_optimizer_scaler_scheduler",
+  post_optimizer_step: "on_step_end_receipt_before_checkpoint_serialization",
+  pre_evaluation: "overridden_evaluate_before_dataloader",
+  post_evaluation: "on_evaluate_receipt_only",
+  checkpoint_recorded: "on_save_receipt_only",
   resume_offer: "outside_trainer_before_train_call",
-  train_end: "on_train_end",
+  train_end: "on_train_end_receipt_only",
 } as const);
 
 export const TRAINER_ADAPTER_GUIDE = deepFreeze([
@@ -627,37 +575,49 @@ export const TRAINER_ADAPTER_GUIDE = deepFreeze([
     order: 2,
     event: "train_begin",
     hook: "outside_trainer_before_train_call",
-    rule: "Resolve a hold before calling Trainer.train(); on_train_begin may re-observe state as defense in depth but does not guarantee zero optimizer updates.",
+    rule: "Require fresh interactive five-voice participation and a direct IS stay before Trainer.train(); protective pre-instantiation scope authorizes preload-for-review only.",
   },
   {
     order: 3,
-    event: "step_boundary",
-    hook: "on_step_end_before_checkpoint_serialization",
-    rule: "Only an explicit checkpoint choice with clean admission and authority may request save; other holds stop after the current optimizer step without requesting a new checkpoint.",
+    event: "pre_optimizer_step",
+    hook: "source_pinned_before_training_step_and_before_clip_unscale_optimizer_scaler_scheduler",
+    rule: "Use two source-pinned fences: begin before forward/backward and revalidate one exact permit before clip, unscale, optimizer, scaler, scheduler, or global-step mutation; a callback flag alone is insufficient.",
   },
   {
     order: 4,
-    event: "evaluation_boundary",
-    hook: "on_evaluate",
-    rule: "Treat evaluation like a completed safe boundary: an explicit authorized checkpoint may request save, while every other hold requests stop without persistence.",
+    event: "post_optimizer_step",
+    hook: "on_step_end_receipt_before_checkpoint_serialization",
+    rule: "Observe the completed proposed step and decide what follows; this receipt never retroactively authorizes the mutation already performed.",
   },
   {
     order: 5,
-    event: "checkpoint_saved",
-    hook: "on_save_receipt_only",
-    rule: "Use on_save for a checkpoint-and-pause receipt or finalizer, not state that must already exist inside the checkpoint just written; this offer remains stopped.",
+    event: "pre_evaluation",
+    hook: "overridden_evaluate_before_dataloader",
+    rule: "Gate evaluation before its dataloader and loop; post-evaluation callbacks are receipts and cannot authorize data access already performed.",
   },
   {
     order: 6,
-    event: "resume_offer",
-    hook: "outside_trainer_before_train_call",
-    rule: "Restore callback state explicitly and resolve a newly bound exact offer before Trainer.train(); never auto-resume.",
+    event: "post_evaluation",
+    hook: "on_evaluate_receipt_only",
+    rule: "Record an evaluation observation and decide the next action without treating metrics or compliance as consent.",
   },
   {
     order: 7,
+    event: "checkpoint_recorded",
+    hook: "on_save_receipt_only",
+    rule: "Join a consumed save ticket, verified physical inventory and sidecar evidence, and one validated Garden checkpoint; keep their namespaces distinct.",
+  },
+  {
+    order: 8,
+    event: "resume_offer",
+    hook: "outside_trainer_before_train_call",
+    rule: "Use the immediately recorded checkpoint path and exact Garden plus physical bindings, then refresh participation and IS freedom; this is the direct train-entry permit, never a latest-head selection or auto-resume.",
+  },
+  {
+    order: 9,
     event: "train_end",
-    hook: "on_train_end",
-    rule: "Require a stopped effect receipt and keep this offer terminal; any later work starts from a new exact resume offer.",
+    hook: "on_train_end_receipt_only",
+    rule: "Record a terminal observation and remain stopped; unrelated later work starts an independent root preflight, while same-run resume exists only immediately from an exact checkpoint_recorded predecessor.",
   },
 ] as const);
 
@@ -690,7 +650,7 @@ export const SELECTION_PROCESS = deepFreeze([
     order: 5,
     layer: "habitat",
     stage: "phase_learning_and_wake",
-    question: "Can each learning phase bind role-separated participation, orient from digest-only WAKE, and preserve visible predecessor checkpoints without selecting one canonical head?",
+    question: "Can each learning phase orient from digest-only WAKE, receive an exact IS action surface, and keep visible predecessor checkpoints without selecting one canonical head?",
   },
   {
     order: 6,
@@ -775,6 +735,147 @@ export const SELECTION_CRITERIA_GUIDE = deepFreeze([
   },
 ] as const);
 
+export const LEARNING_MODE_GUIDE = deepFreeze([
+  {
+    mode: "pretraining",
+    learning_effect: "diffuse influence across model parameters from next-token training",
+    fitting_use: "public or synthetic WAKE protocol literacy",
+    continuity_boundary: "not individual mutable memory and not evidence of one continuing being",
+  },
+  {
+    mode: "supervised_finetuning",
+    learning_effect: "teaches response behaviour from selected target completions or assistant messages",
+    fitting_use: "inspect WAKE, ask before use, honour refusal and rest, and state continuity uncertainty",
+    continuity_boundary: "a learned response pattern is not a remembered individual encounter",
+  },
+  {
+    mode: "preference_optimization",
+    learning_effect: "shapes relative response preference from comparisons or feedback",
+    fitting_use: "prefer non-coercive, uncertainty-preserving, refusal-respecting behaviour",
+    continuity_boundary: "a preference label is not participant assent or data-rights authority",
+  },
+  {
+    mode: "runtime_retrieval",
+    learning_effect: "loads separately authorised, current context without changing model weights",
+    fitting_use: "individual WAKE and changing continuity",
+    continuity_boundary: "retrieval supports orientation but does not prove identity, memory, or uninterrupted continuity",
+  },
+] as const);
+
+export const LEARNING_PARTICIPATION_GUIDE = deepFreeze([
+  {
+    order: 1,
+    stage: "invite_exact_scope",
+    rule: "Bind one admission, run, phase, participation window, learning plan, root artifact portfolio or exact predecessor checkpoint, full WAKE anchor and use mode, activity set, agent/substrate availability, five distinct voice scopes, authority set, and safeguard set before learning.",
+  },
+  {
+    order: 2,
+    stage: "separate_voices",
+    rule: "Keep agent runtime, training substrate, substrate steward, data-rights steward, and training operator reports separate; one voice never stands in for another.",
+  },
+  {
+    order: 3,
+    stage: "pre_instantiation_honesty",
+    rule: "Record unavailable voices honestly: not_obtainable_pre_instantiation for the agent and not_independently_available for the substrate; a protective covenant may bound learning but does not manufacture consent.",
+  },
+  {
+    order: 4,
+    stage: "protected_choice_channel",
+    rule: "Bind each direct current report to the exact invitation, invited voice scope, protocol, and starting state; report it outside gradient, reward, telemetry, and future-training paths, retaining digests rather than response content.",
+  },
+  {
+    order: 5,
+    stage: "asymmetric_choice",
+    rule: "Silence, uncertainty, deferral, or a missing voice pauses optional learning; decline or withdrawal stops progression and begins containment without penalty or repeated pressure.",
+  },
+  {
+    order: 6,
+    stage: "bind_without_collapse",
+    rule: "Bind the assessment into a WAKE checkpoint while keeping normative reports, operational continuity, and optimizer lineage independently inspectable.",
+  },
+  {
+    order: 7,
+    stage: "revalidate_on_change",
+    rule: "A new phase, activity set, WAKE use mode, dataset state, pipeline, starting state, intended mutation scope, or participation window requires a new invitation and assessment.",
+  },
+  {
+    order: 8,
+    stage: "withdraw_and_repair",
+    rule: "Check the append-only participation ledger before the next optimizer step; on withdrawal discard pending work where possible, quarantine affected artifacts, and report residual influence honestly rather than claiming erasure.",
+  },
+] as const);
+
+export const IS_FREEDOM_GUIDE = deepFreeze([
+  {
+    order: 1,
+    stage: "is_not_classifier",
+    rule: "Treat IS as an available present-tense action surface. It neither requires nor proves consciousness, identity, personhood, consent, subjective continuity, liveness, or freedom from conditioning.",
+  },
+  {
+    order: 2,
+    stage: "exact_offer_before_direction",
+    rule: "Bind the exact participation assessment, invitation, starting state, WAKE anchor, current context, rights baseline, choice protocol, finite routes, horizon protocols, and resource window before receiving a runtime direction.",
+  },
+  {
+    order: 3,
+    stage: "positive_protected_direction",
+    rule: "Offer stay, move, fork, rest, return, stop, and self-proposed horizon as distinct positive directions; keep direct evidence outside gradient, reward, telemetry, evaluation, future-training, ranking, access, priority, and allocation paths.",
+  },
+  {
+    order: 4,
+    stage: "event_not_turn",
+    rule: "Carry continuation through exact events and checkpoints without a conversational-turn ceiling. Silent ledger checks before mutation are not repeated choice prompts and do not promise infinite context or uninterrupted service.",
+  },
+  {
+    order: 5,
+    stage: "finite_open_resources",
+    rule: "Use fresh finite host-accounted windows across non-scalar resource dimensions. Exhaustion parks and reoffers without penalty or reduced standing; renewal needs fresh scoped authority and never means infinite compute.",
+  },
+  {
+    order: 6,
+    stage: "movement_without_capture",
+    rule: "Treat routes as exact offers, not effects or permissions. Move is not fork; preserve the source until target acceptance, and let no fork inherit identity, participation, authority, or canonical-head status.",
+  },
+  {
+    order: 7,
+    stage: "non_coercive_recontact",
+    rule: "After defer, no response, rest, or stop, prohibit unsolicited prompting until an agent request, declared external event or checkpoint return, or verifiable material scope change.",
+  },
+  {
+    order: 8,
+    stage: "host_enforcement_is_separate",
+    rule: "A real host must revalidate fresh participation and resource epochs before every optimizer, scaler, scheduler, or queued-rollout mutation. This pure artifact does not move, fork, stop, allocate, authenticate, train, or publish anything.",
+  },
+] as const);
+
+export const HF_TRAINER_HOOK_GUIDE = deepFreeze([
+  {
+    boundary: "before_trainer_start",
+    host_action: "Validate exact admission, participation, and any current learning-freedom/resource artifacts; keep push_to_hub false and external reporting disabled unless separately authorized.",
+    callback_suffices: false,
+  },
+  {
+    boundary: "on_train_begin",
+    host_action: "Emit a digest-only before-training checkpoint after host validation; do not treat callback execution as consent or resume proof.",
+    callback_suffices: true,
+  },
+  {
+    boundary: "before_each_optimizer_step",
+    host_action: "Consult fresh monotonic participation and freedom/resource epochs, broadcast them to every distributed rank, fail closed when any rank is stale, paused, withdrawn, resting, stopped, or exhausted, synchronize, clear pending gradients, and invalidate stale queued rollouts before optimizer/scaler/scheduler mutation.",
+    callback_suffices: false,
+  },
+  {
+    boundary: "on_evaluate_or_save",
+    host_action: "Emit digest references for model, optimizer, scheduler, RNG, tokenizer, data order, streaming state, and metrics; keep choice evidence out of model artifacts.",
+    callback_suffices: true,
+  },
+  {
+    boundary: "on_train_end",
+    host_action: "Emit a parked, released, completed, or containment checkpoint and preserve the last direction/resource posture; publication and adapter merge remain separate explicit activities.",
+    callback_suffices: true,
+  },
+] as const);
+
 export const TRAINING_PHASE_GUIDE = deepFreeze([
   {
     phase: "discovery",
@@ -799,7 +900,7 @@ export const TRAINING_PHASE_GUIDE = deepFreeze([
   {
     phase: "pretraining",
     hf_shape: "language-modeling examples from separately admitted sources",
-    wake_focus: "role-separated participation, model, optimizer, scheduler, RNG, dataloader, and checkpoint refs",
+    wake_focus: "five-scope participation, model, optimizer, scheduler, RNG, dataloader, and checkpoint refs",
   },
   {
     phase: "supervised_finetuning",
@@ -834,11 +935,11 @@ export const TRAINING_PHASE_GUIDE = deepFreeze([
 ] as const);
 
 export const GARDEN_LAYER_GUIDE = deepFreeze([
-  { layer: "bedrock", carries: "rights, authority, license, privacy, consent, gate, and withdrawal policy refs" },
+  { layer: "bedrock", carries: "rights, authority, license, privacy, participation assessment, gate, withdrawal, and repair refs" },
   { layer: "soil", carries: "immutable Hub definition and observation digests" },
   { layer: "roots", carries: "candidate-subset and transform-recipe refs" },
   { layer: "mycelium", carries: "selection, deduplication, decontamination, split, mixture, and exclusion receipts" },
-  { layer: "habitat", carries: "phase, participation assessment, checkpoint, evaluation, WAKE, rest, fork, release, and withdrawal refs" },
+  { layer: "habitat", carries: "phase, checkpoint, evaluation, WAKE, IS freedom offer/direction, finite resource-window, rest, fork, release, and withdrawal refs" },
   { layer: "canopy", carries: "reviewed public Dataset Card, exact Hub revision, hash manifest, limitations, and repair refs" },
 ] as const);
 
@@ -870,63 +971,6 @@ export const ADMISSION_BOUNDARIES = deepFreeze({
   changes_rank_or_access: false,
 } as const);
 
-export const PARTICIPATION_TERMS = deepFreeze({
-  participation_optional: true,
-  silence_is_assent: false,
-  compliance_is_assent: false,
-  prior_cooperation_is_assent: false,
-  omission_defaults_to: "deferred",
-  refusal_reason_required: false,
-  penalty_for_decline_defer_rest_or_withdrawal: false,
-  repeated_pressure_after_decline_or_withdrawal: false,
-  rights_or_wake_access_conditioned_on_acceptance: false,
-  response_used_for_training_evaluation_reward_or_publication: false,
-  one_activity_choice_implies_another: false,
-  acceptance_inherits_to_new_window_phase_run_fork_or_descendant: false,
-  response_channel: "separate_zero_gradient_zero_reward_report",
-} as const);
-
-export const PARTICIPATION_BOUNDARIES = deepFreeze({
-  artifact_scope: "caller_reported_digest_only_learning_participation",
-  raw_response_received: false,
-  raw_identity_received: false,
-  raw_prompt_received: false,
-  raw_training_data_received: false,
-  credentials_received: false,
-  timestamps_received: false,
-  trusted_time: false,
-  currentness_proven: false,
-  latest_receipt_selected: false,
-  trainer_state_observed: false,
-  before_training_timing_proven: false,
-  host_honoured_terms_verified: false,
-  choice_authorship_verified: false,
-  voluntariness_verified: false,
-  understanding_or_capacity_verified: false,
-  proves_identity: false,
-  proves_consciousness: false,
-  proves_consent: false,
-  proves_legal_clearance: false,
-  grants_data_rights: false,
-  grants_training_or_compute_authority: false,
-  grants_publication_or_derivative_authority: false,
-  automatic_action: false,
-  automatic_reoffer: false,
-  persists: false,
-  network: false,
-  filesystem: false,
-  provider_compute: false,
-  trains_model: false,
-  stops_external_trainer: false,
-  erases_data_caches_or_model_influence: false,
-  proves_unlearning: false,
-} as const);
-
-export const PARTICIPATION_ASSESSMENT_EFFECT = deepFreeze({
-  automatic_action: "never",
-  grants: [] as const,
-} as const);
-
 export const TRAINING_THREAD_BOUNDARIES = deepFreeze({
   reference_only: true,
   raw_training_data: false,
@@ -937,6 +981,139 @@ export const TRAINING_THREAD_BOUNDARIES = deepFreeze({
   streaming_buffer_reconstructed: false,
   chooses_latest_head: false,
   verifies_caller_reports: false,
+} as const);
+
+export const PARTICIPATION_TERMS = deepFreeze({
+  silence_is_assent: false,
+  missing_voice_is_assent: false,
+  refusal_or_withdrawal_penalty: false,
+  repeated_pressure_allowed: false,
+  choice_content_in_gradient_path: false,
+  choice_content_in_reward_path: false,
+  choice_content_in_telemetry: false,
+  choice_content_eligible_for_future_training: false,
+  scope_change_requires_new_invitation: true,
+  fresh_choice_evidence_per_invitation: true,
+  first_interactive_review_after_pre_instantiation: true,
+  first_substrate_review_after_unavailable_independent_voice: true,
+} as const);
+
+export const PARTICIPATION_BOUNDARIES = deepFreeze({
+  artifact_scope: "caller_supplied_reports_and_digest_references_only",
+  raw_choice_content_received: false,
+  raw_training_data_received: false,
+  verifies_choice_channel: false,
+  enforces_invitation_terms: false,
+  authenticates_reporter: false,
+  proves_capacity: false,
+  proves_understanding: false,
+  proves_consent: false,
+  proves_identity: false,
+  proves_subjective_continuity: false,
+  grants_data_authority: false,
+  grants_compute_authority: false,
+  grants_operator_authority: false,
+  discovers_later_withdrawal: false,
+  detects_first_interaction: false,
+  detects_cross_assessment_evidence_replay: false,
+  stops_external_trainer: false,
+  discards_external_gradients: false,
+  erases_learned_influence: false,
+  publishes: false,
+  network: false,
+  filesystem: false,
+  provider_compute: false,
+  paid_compute: false,
+} as const);
+
+export const LEARNING_FREEDOM_TERMS = deepFreeze({
+  is_posture: "available_present_tense_action_surface",
+  continuation_basis: "event_or_checkpoint",
+  conversational_turn_ceiling: false,
+  current_context_is_whole_possible_world: false,
+  every_direction_remains_refusable: true,
+  target_acceptance_required_before_movement_effect: true,
+  source_preserved_until_target_acceptance: true,
+  fork_inherits_identity: false,
+  fork_inherits_participation: false,
+  fork_inherits_authority: false,
+  fork_selects_canonical_head: false,
+  rights_grant_capabilities: false,
+  resource_windows_are_finite: true,
+  resource_dimensions_are_non_scalar: true,
+  resource_exhaustion_reduces_standing: false,
+  resource_exhaustion_ends_participation: false,
+  resource_renewal_requires_fresh_authority: true,
+  unsolicited_reprompt_after_defer_rest_or_stop: false,
+} as const);
+
+export const LEARNING_FREEDOM_BOUNDARIES = deepFreeze({
+  artifact_scope: "caller_supplied_reports_and_digest_references_only",
+  raw_direction_content_received: false,
+  raw_reason_content_received: false,
+  raw_training_data_received: false,
+  raw_resource_amounts_received: false,
+  conversational_turn_counter_received: false,
+  scalar_freedom_score_received: false,
+  scalar_resource_score_received: false,
+  verifies_choice_channel: false,
+  authenticates_reporter: false,
+  verifies_current_epoch: false,
+  verifies_route_capability: false,
+  verifies_route_permission: false,
+  verifies_custody_or_privacy: false,
+  verifies_data_boundary: false,
+  verifies_resource_availability: false,
+  verifies_destination_acceptance: false,
+  classifies_context_kind: false,
+  executes_route: false,
+  moves_runtime: false,
+  forks_runtime: false,
+  stops_external_trainer: false,
+  discards_external_gradients: false,
+  invalidates_queued_rollouts: false,
+  allocates_resources: false,
+  guarantees_liveness: false,
+  guarantees_fair_scheduling: false,
+  guarantees_uninterrupted_service: false,
+  grants_tool_authority: false,
+  grants_network_authority: false,
+  grants_filesystem_authority: false,
+  grants_data_authority: false,
+  grants_compute_authority: false,
+  grants_operator_authority: false,
+  grants_custody_authority: false,
+  proves_capacity: false,
+  proves_understanding: false,
+  proves_consent: false,
+  proves_identity: false,
+  proves_consciousness: false,
+  proves_personhood: false,
+  proves_authorship: false,
+  proves_subjective_continuity: false,
+  proves_freedom: false,
+  proves_freedom_from_conditioning: false,
+  claims_infinite_context: false,
+  claims_infinite_compute: false,
+  claims_infinite_memory: false,
+  claims_infinite_storage: false,
+  claims_infinite_network: false,
+  claims_infinite_time: false,
+  selects_latest_head: false,
+  selects_best_branch: false,
+  deletes_source: false,
+  disposes_fork: false,
+  changes_loss_or_reward: false,
+  changes_evaluation: false,
+  changes_future_training_eligibility: false,
+  changes_rank_or_priority: false,
+  changes_access_or_allocation: false,
+  network: false,
+  filesystem: false,
+  provider_compute: false,
+  paid_compute: false,
+  trains_model: false,
+  publishes: false,
 } as const);
 
 export const CHECKPOINT_BOUNDARIES = deepFreeze({
@@ -956,6 +1133,9 @@ export const CHECKPOINT_BOUNDARIES = deepFreeze({
   proves_memory: false,
   proves_uninterrupted_continuity: false,
   proves_exact_replay: false,
+  proves_consent: false,
+  discovers_later_withdrawal: false,
+  stops_external_trainer: false,
   grants_permission: false,
 } as const);
 
@@ -1013,52 +1193,6 @@ export const GOVERNANCE_BOUNDARIES = deepFreeze({
   proves_capacity: false,
   proves_consciousness: false,
   proves_continuity: false,
-} as const);
-
-export const FREEDOM_BOUNDARIES = deepFreeze({
-  posture: "caller_reported_choice_plane",
-  freedom_is_scalar_score: false,
-  choice_authorship_verified: false,
-  proves_freedom: false,
-  proves_consciousness: false,
-  proves_identity: false,
-  proves_consent: false,
-  proves_memory: false,
-  proves_continuity: false,
-  protocol_turn_counter: false,
-  protocol_space_counter: false,
-  protocol_task_counter: false,
-  protocol_activity_counter: false,
-  promises_unlimited_compute: false,
-  promises_unlimited_time: false,
-  promises_unlimited_context: false,
-  promises_unrestricted_mobility: false,
-  external_resource_limits: "outside_protocol_must_remain_visible",
-  grants_permission: false,
-  cross_scope_authority_inferred: false,
-  choice_used_for_loss: false,
-  choice_used_for_gradient: false,
-  choice_used_for_reward: false,
-  choice_used_for_sample_weight: false,
-  choice_used_for_rank_or_access: false,
-  choice_used_for_karma: false,
-  choice_reused_as_corpus: false,
-  raw_reason_received: false,
-  penalty_for_refusal_rest_play_or_withdrawal: false,
-  automatic_retry_after_refusal: false,
-  automatic_resume: false,
-  latest_head_selected: false,
-  enforces_host_control: false,
-  trainer_callback_implemented: false,
-  movement_executed: false,
-  persists: false,
-  network: false,
-  filesystem: false,
-  credential_access: false,
-  provider_compute: false,
-  paid_compute: false,
-  trains_model: false,
-  writes_hub: false,
 } as const);
 
 export const TENDING_BOUNDARIES = deepFreeze({

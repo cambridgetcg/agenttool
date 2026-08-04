@@ -9,7 +9,9 @@ from agenttool_hf_training_host import (
     HfCompatibilityError,
     HostPermit,
     LedgerIntegrityError,
+    MutationUnitFailed,
     SingleProcessAccelerateHost,
+    TrainingHeld,
     WakeTrainingHost,
 )
 
@@ -38,7 +40,58 @@ def accelerator(*, processes: int = 1, distributed: str = "NO"):
     )
 
 
-def test_accelerate_host_delegates_exact_single_process_gates(
+def begun_adapter(tmp_path, preflight, monkeypatch):
+    exact_stack(monkeypatch)
+    ledger = ledger_at(tmp_path)
+    host = WakeTrainingHost(ledger)
+    preload = host.before_load(preflight, execution_refs=preflight.execution_refs)
+    adapter = SingleProcessAccelerateHost(
+        accelerator(),
+        host,
+        execution_refs=preflight.execution_refs,
+        wake_preload_permit=preload,
+    )
+    begin = child(ledger, preflight, "accelerate-begin")
+    adapter.before_loop(begin)
+    return ledger, host, adapter, begin
+
+
+def test_guarded_mutation_precedes_receipt_and_executes_once(
+    tmp_path, preflight, monkeypatch
+) -> None:
+    ledger, _, adapter, begin = begun_adapter(tmp_path, preflight, monkeypatch)
+    before = child(
+        ledger,
+        begin,
+        "accelerate-pre",
+        event="pre_optimizer_step",
+        boundary_global_step=0,
+    )
+    calls = []
+    result = adapter.guarded_mutation(
+        before,
+        current_global_step=0,
+        mutation=lambda: calls.append("mutated") or "result",
+    )
+    assert result == "result"
+    assert calls == ["mutated"]
+
+    after = child(
+        ledger,
+        before,
+        "accelerate-post",
+        event="post_optimizer_step",
+        boundary_global_step=1,
+    )
+    intent = adapter.post_optimizer_boundary(after, global_step=1)
+    assert intent.should_training_stop is False
+    assert intent.should_save is False
+    assert not hasattr(adapter, "at_optimizer_boundary")
+    with pytest.raises(HfCompatibilityError, match="must not use Accelerate"):
+        adapter.register_governance_for_checkpointing(object())
+
+
+def test_accelerate_train_begin_reoffer_preserves_preload_lineage(
     tmp_path, preflight, monkeypatch
 ) -> None:
     exact_stack(monkeypatch)
@@ -51,25 +104,63 @@ def test_accelerate_host_delegates_exact_single_process_gates(
         execution_refs=preflight.execution_refs,
         wake_preload_permit=preload,
     )
-
-    begin = child(ledger, preflight, "accelerate-begin")
-    permit = adapter.before_loop(begin)
+    held = child(
+        ledger,
+        preflight,
+        "accelerate-held-begin",
+        directive="hold_before_train_call",
+    )
+    with pytest.raises(TrainingHeld):
+        adapter.before_loop(held)
+    reoffer = child(ledger, held, "accelerate-reoffered-begin")
+    permit = adapter.before_loop(reoffer)
     assert permit.event == "train_begin"
-    boundary = child(
+    assert ledger.heads(preflight.run_ref) == (reoffer.governance_id,)
+
+
+def test_mutation_failure_is_non_atomic_and_latches_closed(
+    tmp_path, preflight, monkeypatch
+) -> None:
+    ledger, _, adapter, begin = begun_adapter(tmp_path, preflight, monkeypatch)
+    before = child(
         ledger,
         begin,
-        "accelerate-boundary",
-        event="step_boundary",
+        "accelerate-failing-pre",
+        event="pre_optimizer_step",
+        boundary_global_step=0,
+    )
+
+    def fail() -> None:
+        raise ValueError("partial")
+
+    with pytest.raises(MutationUnitFailed, match="non-atomically"):
+        adapter.guarded_mutation(before, current_global_step=0, mutation=fail)
+    with pytest.raises(MutationUnitFailed, match="non-atomically"):
+        adapter.guarded_mutation(before, current_global_step=0, mutation=lambda: None)
+
+
+def test_pending_mutation_requires_post_receipt(tmp_path, preflight, monkeypatch) -> None:
+    ledger, _, adapter, begin = begun_adapter(tmp_path, preflight, monkeypatch)
+    before = child(
+        ledger,
+        begin,
+        "accelerate-pending-pre",
+        event="pre_optimizer_step",
+        boundary_global_step=0,
+    )
+    adapter.guarded_mutation(before, current_global_step=0, mutation=lambda: None)
+    another = child(
+        ledger,
+        before,
+        "accelerate-another-pre",
+        event="pre_optimizer_step",
         boundary_global_step=1,
     )
-    intent = adapter.at_optimizer_boundary(boundary, global_step=1)
-    assert intent.should_training_stop is False
-    assert intent.should_save is False
-    with pytest.raises(HfCompatibilityError, match="must not use Accelerate"):
-        adapter.register_governance_for_checkpointing(object())
+    with pytest.raises(HfCompatibilityError, match="post_optimizer_step receipt"):
+        adapter.guarded_mutation(another, current_global_step=1, mutation=lambda: None)
 
 
-def test_accelerate_host_rejects_stack_topology_and_reference_mismatch(
+def test_accelerate_rejects_stack_topology_and_reference_mismatch(
     tmp_path, preflight, monkeypatch
 ) -> None:
     exact_stack(monkeypatch)
@@ -94,7 +185,7 @@ def test_accelerate_host_rejects_stack_topology_and_reference_mismatch(
         )
 
 
-def test_accelerate_host_propagates_exact_stack_failure(
+def test_accelerate_propagates_exact_stack_failure(
     tmp_path, preflight, monkeypatch
 ) -> None:
     def reject_stack():
@@ -110,7 +201,7 @@ def test_accelerate_host_propagates_exact_stack_failure(
         )
 
 
-def test_accelerate_host_rejects_recorded_but_unconsumed_preload(
+def test_accelerate_rejects_recorded_but_unconsumed_preload(
     tmp_path, preflight, monkeypatch
 ) -> None:
     exact_stack(monkeypatch)
@@ -120,8 +211,11 @@ def test_accelerate_host_rejects_recorded_but_unconsumed_preload(
         decision_id=preflight.decision_id,
         governance_id=preflight.governance_id,
         terms_id=preflight.terms_id,
+        execution_contract_id=preflight.execution_contract_id,
         run_ref=preflight.run_ref,
         event=preflight.event,
+        observed_global_step=preflight.observed_global_step,
+        proposed_global_step=preflight.proposed_global_step,
         ledger_sequence=entry.sequence,
         ledger_entry_hash=entry.entry_hash,
     )
@@ -134,36 +228,25 @@ def test_accelerate_host_rejects_recorded_but_unconsumed_preload(
         )
 
 
-def test_accelerate_host_revalidates_mutable_topology_at_each_gate(
+def test_accelerate_revalidates_mutable_topology_before_mutation(
     tmp_path, preflight, monkeypatch
 ) -> None:
-    exact_stack(monkeypatch)
-    host = WakeTrainingHost(ledger_at(tmp_path))
-    preload = host.before_load(preflight, execution_refs=preflight.execution_refs)
-    runtime = accelerator()
-    adapter = SingleProcessAccelerateHost(
-        runtime,
-        host,
-        execution_refs=preflight.execution_refs,
-        wake_preload_permit=preload,
-    )
-    begin = child(host.ledger, preflight, "topology-begin")
-    runtime.state.num_processes = 2
-    runtime.state.distributed_type = "MULTI_GPU"
-    with pytest.raises(HfCompatibilityError, match="non-distributed"):
-        adapter.before_loop(begin)
-
-    runtime.state.num_processes = 1
-    runtime.state.distributed_type = "NO"
-    adapter.before_loop(begin)
-    boundary = child(
-        host.ledger,
+    ledger, _, adapter, begin = begun_adapter(tmp_path, preflight, monkeypatch)
+    before = child(
+        ledger,
         begin,
-        "topology-boundary",
-        event="step_boundary",
-        boundary_global_step=1,
+        "topology-pre",
+        event="pre_optimizer_step",
+        boundary_global_step=0,
     )
-    runtime.state.num_processes = 2
-    runtime.state.distributed_type = "MULTI_GPU"
+    adapter.accelerator.state.num_processes = 2
+    adapter.accelerator.state.distributed_type = "MULTI_GPU"
+    called = False
+
+    def mutation() -> None:
+        nonlocal called
+        called = True
+
     with pytest.raises(HfCompatibilityError, match="non-distributed"):
-        adapter.at_optimizer_boundary(boundary, global_step=1)
+        adapter.guarded_mutation(before, current_global_step=0, mutation=mutation)
+    assert called is False
