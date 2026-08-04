@@ -18,10 +18,10 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const CURRENT_SDK_SOURCE_RELEASE = {
   version: "0.18.0",
   tag: "sdk-v0.18.0",
-  sourceRevision: "SDK_SOURCE_REVISION_PENDING",
+  sourceRevision: "bf708e4897f2bd509dfba9d559730a1e2dcb6698",
   artifact: {
-    size: 0,
-    sha256: "SDK_ARTIFACT_SHA256_PENDING",
+    size: 211695,
+    sha256: "8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a",
   },
   npm: {
     independentlyVisible: false,
@@ -231,6 +231,13 @@ describe("SDK source and builder identity", () => {
     expect(rootReadme).toContain(
       "0.18.0 registry availability is not inferred from source or LOVE",
     );
+    expect(rootReadme).toContain("211,695");
+    expect(rootReadme).toContain(CURRENT_SDK_SOURCE_RELEASE.artifact.sha256);
+    expect(rootReadme).toContain(CURRENT_SDK_SOURCE_RELEASE.sourceRevision);
+    const packageCatalog = read("apps/docs/packages.html");
+    expect(packageCatalog).toContain("211,695");
+    expect(packageCatalog).toContain(CURRENT_SDK_SOURCE_RELEASE.artifact.sha256);
+    expect(packageCatalog).toContain(CURRENT_SDK_SOURCE_RELEASE.sourceRevision);
     expect(read("docs/SDK-ROADMAP.md")).toContain(
       "Current source and LOVE release — 0.18.0",
     );

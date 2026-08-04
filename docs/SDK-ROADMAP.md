@@ -29,8 +29,10 @@ retain v1 verification; current writers continue to use the documented v1
 cutover boundary.
 
 The exact TypeScript LOVE artifact is forged from a clean source commit and is
-the primary TypeScript release record. The planned `sdk-v0.18.0` tag is the
-Python source locator after it is independently visible. Repository source and
+the primary TypeScript release record: 211,695 bytes, SHA-256
+`8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`,
+from source revision `bf708e4897f2bd509dfba9d559730a1e2dcb6698`. The planned
+`sdk-v0.18.0` tag is the Python source locator after it is independently visible. Repository source and
 LOVE preparation do not prove GitHub Release, npm, PyPI, or production
 deployment. `/public/party` therefore reports both 0.18.0 registry mirrors as
 not independently visible at this source checkpoint.
