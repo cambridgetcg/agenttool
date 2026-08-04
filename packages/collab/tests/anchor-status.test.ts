@@ -66,6 +66,7 @@ describe("collab_anchor_status backing logic", () => {
     expect(status.status).toBe("unanchored");
     expect(status.ledger_readable).toBe(false);
     expect(status.head_sequence).toBe(workspace.event_head_sequence);
+    expect("ledger_path" in status).toBe(false);
   });
 
   test("corrupt ledger → unanchored, fail-open, never throws", () => {

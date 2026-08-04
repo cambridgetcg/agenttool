@@ -102,6 +102,26 @@ and has byte-identical 26,474-byte GitHub/npm tarballs with SHA-256
 `67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`.
 Both npm `latest` tags resolved to those exact versions at readback.
 
+## Collab 0.4.0 source candidate — publication pending
+
+The Collab source package and its Codex/Claude/Hermes plugin surfaces now
+identify `@agenttool/collab@0.4.0`. It adds one exported read-only
+anchor-status API and a 32nd local MCP tool, `collab_anchor_status`, over the
+optional sidecar maintained by the separate `@agenttool/collab-zerone` bridge.
+It does not contact a chain, broadcast, spend a fee, carry a key or RPC, or add
+a hosted surface. The database schema and coordination protocols are
+unchanged, so the package artifact itself requires no migration, LOVE artifact,
+or Fly deploy. After exact public readback, a separate receipt follow-up must
+update the existing static package-discovery page and deploy Pages; until then,
+that page must continue to advertise the verified 0.3.1 release.
+
+At source preparation on 2026-08-04, public npm `latest` remained the exact
+0.3.1 release recorded above. This source commit does not claim that a
+`collab-v0.4.0` tag, GitHub Release, npm version, provenance record, or public
+readback exists. Complete the protected trusted workflow below from an
+annotated tag on GitHub `main`, then append the observed run, byte hashes,
+dist-tag, and provenance instead of filling them speculatively.
+
 ## Verified Agent Browser 0.6.0 publication and deployment — 2026-07-30
 
 The authorized Browser release completed through protected
@@ -245,13 +265,13 @@ bun bin/npm-release.ts resolve --package collab
 
 # Create and push the annotated tag deliberately. Keep every value aligned
 # with the resolver output; these example values are for the current release.
-git tag -a collab-v0.3.1 <github-main-commit> -m '@agenttool/collab@0.3.1'
-git push github refs/tags/collab-v0.3.1
+git tag -a collab-v0.4.0 <github-main-commit> -m '@agenttool/collab@0.4.0'
+git push github refs/tags/collab-v0.4.0
 
 # The initial 0.1.0 bootstrap is already complete; later versions use trusted publishing.
-gh workflow run publish-npm.yml --ref collab-v0.3.1 \
+gh workflow run publish-npm.yml --ref collab-v0.4.0 \
   -f package=collab \
-  -f tag=collab-v0.3.1 \
+  -f tag=collab-v0.4.0 \
   -f authentication=trusted \
   -f npm_tag=latest
 ```

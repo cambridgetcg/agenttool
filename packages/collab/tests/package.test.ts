@@ -14,7 +14,7 @@ describe("cross-host package", () => {
     const codex = await json(".codex-plugin/plugin.json");
     const claude = await json(".claude-plugin/plugin.json");
 
-    expect(packageManifest.version).toBe("0.3.1");
+    expect(packageManifest.version).toBe("0.4.0");
     expect(codex.version).toBe(packageManifest.version);
     expect(claude.version).toBe(packageManifest.version);
     expect(codex.skills).toBe("./skills/");
@@ -28,6 +28,9 @@ describe("cross-host package", () => {
       command: "bun",
       args: ["${CLAUDE_PLUGIN_ROOT}/dist/agenttool-collab-mcp.js"],
     });
+    expect(codex.interface.capabilities).toContain("Read-only Zerone witness status");
+    expect(codex.interface.longDescription).toContain("never contacts a chain");
+    expect(claude.description).toContain("read-only Zerone witness status");
   });
 
   test("ships the plugins, skills, executable bundle, and notices", async () => {
@@ -42,6 +45,7 @@ describe("cross-host package", () => {
     expect(files).toContain("THIRD_PARTY_LICENSES");
     expect(packageManifest.bin["agenttool-collab-mcp"]).toBe("./dist/agenttool-collab-mcp.js");
     expect(packageManifest.keywords).toContain("hermes-agent");
+    expect(packageManifest.keywords).toContain("zerone");
     expect(statSync(join(packageRoot, "dist", "agenttool-collab-mcp.js")).mode & 0o111).not.toBe(0);
   });
 
@@ -89,6 +93,8 @@ describe("cross-host package", () => {
     expect(skill).toContain("mcp_agenttool_collab_task_review");
     expect(skill).toContain("mcp_agenttool_collab_task_claim");
     expect(skill).toContain("mcp_agenttool_collab_handoff_offer");
+    expect(skill).toContain("mcp_agenttool_collab_anchor_status");
+    expect(skill).toContain("never contacts a chain");
     expect(skill).toContain("heartbeat never renews a task");
     expect(skill).toContain("self-declared");
     expect(skill).toContain("credential-bound");

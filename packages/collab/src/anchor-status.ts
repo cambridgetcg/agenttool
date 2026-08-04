@@ -36,7 +36,6 @@ export interface CollabAnchorStatus {
   status: CollabAnchorState;
   head_sequence: number;
   head_hash: string;
-  ledger_path: string;
   ledger_readable: boolean;
   anchor: CollabAnchorRef | null;
   lag_events: number | null;
@@ -46,11 +45,11 @@ export interface CollabAnchorStatus {
 
 const SCOPE_NOTE =
   "Anchor status reflects the local sidecar ledger only; it never proves remote chain state."
-  + " Use @agenttool/collab-zerone `verify --check-chain` for on-chain confirmation.";
+  + " Use @agenttool/collab-zerone `verify --workspace <id> --check-chain` for on-chain confirmation.";
 
 // Real ledgers are a few KiB; anything larger is not a ledger. The cap plus
-// the O_NONBLOCK regular-file-only read below keep a hostile ledger_path from
-// wedging the single-threaded MCP server (FIFOs and device files block
+// the O_NONBLOCK regular-file-only read below keep a hostile selected path from
+// wedging a single-threaded host (FIFOs and device files block
 // readFileSync forever, which try/catch cannot save).
 const MAX_LEDGER_BYTES = 4 * 1024 * 1024;
 
@@ -152,7 +151,6 @@ export function anchorStatusForWorkspace(
     workspace_id: workspaceId,
     head_sequence: workspace.event_head_sequence,
     head_hash: workspace.event_head_hash,
-    ledger_path: path,
     scope_note: SCOPE_NOTE,
   };
   const raw = readLedgerFile(path);

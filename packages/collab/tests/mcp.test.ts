@@ -174,6 +174,14 @@ describe("MCP surface", () => {
     ]);
   });
 
+  test("keeps anchor ledger path selection host-only", () => {
+    const { server } = node();
+    const tool = (server as any)._registeredTools.collab_anchor_status;
+    expect(Object.keys(tool.inputSchema.shape)).toEqual(["workspace_id"]);
+    expect(tool.description).toContain("Local file read only");
+    expect(tool.description).toContain("cannot choose or discover it");
+  });
+
   test("declares annotations for every local read and mutation accurately", () => {
     const { server } = node();
     const tools = (server as any)._registeredTools;
@@ -806,8 +814,8 @@ describe("MCP surface", () => {
     const reviewer = new StdioMcpHarness(bundlePath, databasePath);
     cleanup.push(() => reviewer.close());
     const reviewerInit = await reviewer.initialize();
-    expect(implementerInit.serverInfo.version).toBe("0.3.1");
-    expect(reviewerInit.serverInfo.version).toBe("0.3.1");
+    expect(implementerInit.serverInfo.version).toBe("0.4.0");
+    expect(reviewerInit.serverInfo.version).toBe("0.4.0");
 
     const implementerJoin = await implementer.callTool("collab_session_start", {
       root_path: root,

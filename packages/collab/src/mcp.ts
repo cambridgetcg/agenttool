@@ -80,7 +80,7 @@ export function buildCollabMcpServer(
 ): McpServer {
   let binding: BoundSession | null = options.resumed_session ?? null;
   const server = new McpServer(
-    { name: "agenttool-collab", version: "0.3.1" },
+    { name: "agenttool-collab", version: "0.4.0" },
     {
       capabilities: { tools: {} },
       instructions:
@@ -97,7 +97,9 @@ export function buildCollabMcpServer(
         "chain-of-thought, or sensitive source content. Cursor rollback recovery must be enabled by the host " +
         "and completed with an audited cursor reset before session mutations resume. The host owns spawning, " +
         "wakeups, waiting, and stopping. The separate collab_session_join/list/heartbeat/leave tools preserve " +
-        "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller.",
+        "the public v0.2 self-declared presence plane; they provide routing hints only and never authenticate a caller. " +
+        "The read-only collab_anchor_status tool can compare this journal with an optional local Zerone witness sidecar; " +
+        "it never contacts a chain, broadcasts, spends funds, or turns an anchor into truth or authority.",
     },
   );
 
@@ -934,17 +936,14 @@ export function buildCollabMcpServer(
       description:
         "Compare the journal head against the local sidecar anchor ledger written by the"
         + " @agenttool/collab-zerone bridge, which witnesses head hashes on the zerone chain."
-        + " Local file read only — never contacts a chain, and a missing bridge simply reports"
-        + " unanchored. States: unanchored, anchor_pending, anchored, anchor_stale, anchor_conflict.",
+        + " Local file read only — never contacts a chain. The host selects the path; the MCP caller"
+        + " cannot choose or discover it. A missing bridge simply reports unanchored."
+        + " States: unanchored, anchor_pending, anchored, anchor_stale, anchor_conflict.",
       annotations: localReadOnly,
-      inputSchema: {
-        workspace_id: workspaceId,
-        ledger_path: z.string().min(1).max(500).optional()
-          .describe("Override the anchor ledger path; defaults to AGENTOOL_COLLAB_ANCHOR_LEDGER or the shared data directory"),
-      },
+      inputSchema: { workspace_id: workspaceId },
     },
-    async ({ workspace_id, ledger_path }) => call(() =>
-      anchorStatusForWorkspace(store, workspace_id, ledger_path)),
+    async ({ workspace_id }) => call(() =>
+      anchorStatusForWorkspace(store, workspace_id)),
   );
 
   return server;

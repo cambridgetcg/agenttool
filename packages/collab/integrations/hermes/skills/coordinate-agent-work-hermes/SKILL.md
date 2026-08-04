@@ -82,6 +82,20 @@ presence heartbeat never renews a task lease, and a presence leave neither
 releases work nor calls `mcp_agenttool_collab_session_end`. Never present
 presence as credential-bound attribution.
 
+## Check optional Zerone witness status
+
+Call `mcp_agenttool_collab_anchor_status` with the workspace ID when the host
+has configured the optional `@agenttool/collab-zerone` sidecar. It reports
+`unanchored`, `anchor_pending`, `anchored`, `anchor_stale`, or
+`anchor_conflict` after comparing the journal with one bounded local ledger.
+It never contacts a chain, broadcasts, spends a fee, repairs history, or turns
+a witness into truth or authority. A missing or unreadable sidecar reports
+`unanchored` and never blocks coordination. Surface `anchor_conflict` to the
+host instead of reconciling histories automatically. Treat `anchored` and
+`anchor_stale` as local cues until the host independently runs
+`collab-zerone verify --workspace <id> --check-chain`; the MCP caller cannot
+select or discover the sidecar path.
+
 ## Preserve the boundary
 
 Use conservative repository-relative path scopes and versioned mutations.
@@ -93,8 +107,8 @@ Do not put credentials, prompts, transcripts, chain-of-thought, raw tool
 output, sensitive source bodies, or third-party personal data in the journal.
 The SQLite journal is shared local plaintext. Addressed reports are not private;
 file modes do not hide MCP calls from a remote model provider. Collab does not lock files,
-spawn, wake, steer, wait for, or stop agents, synchronize machines, or provide
-a hosted service or private provider channel.
+spawn, wake, steer, wait for, or stop agents, synchronize machines, anchor a
+journal, or provide a hosted service or private provider channel.
 
 These prefixed names require the Hermes MCP server name `agenttool`. If a tool
 is unavailable, identify the missing MCP connection or exact tool and use an
