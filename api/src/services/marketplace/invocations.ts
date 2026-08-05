@@ -35,6 +35,10 @@ import {
 import { computeFee, recordRevenue } from "./take-rate";
 import { publishWakeEvent } from "../wake/push";
 import {
+  DINING_PROTOCOL,
+  hasExactDiningContract,
+} from "../dining/constants";
+import {
   assertListingDoesNotSolicitCredentials,
   findCredentialSolicitation,
 } from "./credential-boundary";
@@ -70,6 +74,7 @@ export interface InvocationOut {
   completed_at: string | null;
   settled_at: string | null;
   buyer_review_deadline_at: string | null;
+  contract_profile: string | null;
 }
 
 function rowToOut(r: typeof invocations.$inferSelect): InvocationOut {
@@ -95,6 +100,7 @@ function rowToOut(r: typeof invocations.$inferSelect): InvocationOut {
     completed_at: r.completedAt?.toISOString() ?? null,
     settled_at: r.settledAt?.toISOString() ?? null,
     buyer_review_deadline_at: r.buyerReviewDeadlineAt?.toISOString() ?? null,
+    contract_profile: r.contractProfile,
   };
 }
 
@@ -126,7 +132,66 @@ export interface InvokeInput {
   buyerIdentityId: string;
   buyerWalletId: string;
   inputSealed: unknown;          // unvalidated; validateSealedShape inside
+  expectedQuote?: InvokeQuoteExpectation;
   metadata?: Record<string, unknown>;
+}
+
+export interface InvokeQuoteExpectation {
+  listingUpdatedAt: string;
+  priceAmount: number;
+  priceCurrency: string;
+}
+
+/** Refuse stale economic/menu terms before any wallet or escrow work. Dining
+ * listings require this precondition; legacy marketplace callers may omit it
+ * on other listing profiles. */
+export function assertInvokeQuoteExpectation(
+  listing: {
+    updatedAt: Date;
+    priceAmount: number;
+    priceCurrency: string;
+  },
+  expected: InvokeQuoteExpectation | undefined,
+  required: boolean,
+): void {
+  if (required && !expected) throw new Error("quote_precondition_required");
+  if (
+    expected &&
+    (
+      expected.listingUpdatedAt !== listing.updatedAt.toISOString() ||
+      expected.priceAmount !== listing.priceAmount ||
+      expected.priceCurrency !== listing.priceCurrency
+    )
+  ) {
+    throw new Error("quote_precondition_changed");
+  }
+}
+
+/** Add the immutable invocation-time listing contract after caller metadata,
+ * so a caller cannot forge or suppress the protocol classification used by
+ * downstream projections. */
+export function buildInvocationMetadata(
+  callerMetadata: Record<string, unknown> | undefined,
+  listing: {
+    capabilityTags: string[];
+    metadata: unknown;
+    updatedAt: Date;
+  },
+): Record<string, unknown> {
+  const metadata =
+    listing.metadata && typeof listing.metadata === "object" && !Array.isArray(listing.metadata)
+      ? listing.metadata as Record<string, unknown>
+      : {};
+  return {
+    ...(callerMetadata ?? {}),
+    listing_contract_snapshot: {
+      capability_tags: [...listing.capabilityTags],
+      protocol: typeof metadata.protocol === "string" ? metadata.protocol : null,
+      service_model:
+        typeof metadata.service_model === "string" ? metadata.service_model : null,
+      listing_updated_at: listing.updatedAt.toISOString(),
+    },
+  };
 }
 
 export async function invokeListing(input: InvokeInput): Promise<InvocationOut> {
@@ -152,6 +217,12 @@ export async function invokeListing(input: InvokeInput): Promise<InvocationOut> 
     assertDisputeArbitrationAvailable();
   }
   if (listing.status !== "active") throw new Error("listing_not_active");
+  const listingMetadata = (listing.metadata as Record<string, unknown> | null) ?? {};
+  const exactDiningListing = hasExactDiningContract(
+    listing.capabilityTags,
+    listingMetadata,
+  );
+  assertInvokeQuoteExpectation(listing, input.expectedQuote, exactDiningListing);
   assertListingDoesNotSolicitCredentials({
     name: listing.name,
     description: listing.description,
@@ -212,73 +283,101 @@ export async function invokeListing(input: InvokeInput): Promise<InvocationOut> 
     throw new Error("insufficient_balance");
   }
 
-  // SLA deadline: now + sla_seconds (or null = best-effort).
-  const now = new Date();
-  const slaDeadline = listing.slaSeconds
-    ? new Date(now.getTime() + listing.slaSeconds * 1000)
-    : null;
-
   // ── 5. Atomic txn: invocation + escrow + buyer wallet debit ──────────
   const result = await db.transaction(async (tx) => {
-    // 5a. Insert invocation row (escrowed)
+    // 5a. Lock and re-check the exact listing revision inside the money
+    // transaction. The outer read is useful for early guidance, but cannot
+    // close a seller-patch/archive race by itself.
+    const [lockedListing] = await tx
+      .select()
+      .from(listings)
+      .where(eq(listings.id, listing.id))
+      .for("update");
+    if (!lockedListing) throw new Error("listing_not_found");
+    if (lockedListing.status !== "active") throw new Error("listing_not_active");
+    if (lockedListing.updatedAt.getTime() !== listing.updatedAt.getTime()) {
+      throw new Error("quote_precondition_changed");
+    }
+    const lockedMetadata =
+      (lockedListing.metadata as Record<string, unknown> | null) ?? {};
+    const lockedExactDining = hasExactDiningContract(
+      lockedListing.capabilityTags,
+      lockedMetadata,
+    );
+    assertInvokeQuoteExpectation(
+      lockedListing,
+      input.expectedQuote,
+      lockedExactDining,
+    );
+
+    const now = new Date();
+    const slaDeadline = lockedListing.slaSeconds
+      ? new Date(now.getTime() + lockedListing.slaSeconds * 1000)
+      : null;
+
+    // 5b. Insert invocation row (escrowed)
     const [inv] = await tx
       .insert(invocations)
       .values({
-        listingId: listing.id,
+        listingId: lockedListing.id,
         buyerIdentityId: buyer.id,
         buyerDid: buyer.did,
         buyerProjectId: input.buyerProjectId,
         buyerWalletId: buyerWallet.id,
-        amount: listing.priceAmount,
-        currency: listing.priceCurrency,
+        amount: lockedListing.priceAmount,
+        currency: lockedListing.priceCurrency,
         inputSealed: input.inputSealed as unknown,
         slaDeadlineAt: slaDeadline,
-        metadata: input.metadata ?? {},
+        contractProfile: lockedExactDining ? DINING_PROTOCOL : null,
+        // Immutable invocation-time classification. A seller may later edit
+        // the listing, so Dining must not infer its protocol from the live
+        // row. Caller metadata cannot override the reserved snapshot.
+        metadata: buildInvocationMetadata(input.metadata, lockedListing),
       })
       .returning();
 
-    // 5b. Lock buyer wallet, re-check balance (race protection)
+    // 5c. Lock buyer wallet, re-check balance (race protection)
     const [bw] = await tx
       .select()
       .from(wallets)
       .where(eq(wallets.id, buyerWallet.id))
       .for("update");
-    if (!bw || bw.balance < listing.priceAmount) {
+    if (!bw || bw.balance < lockedListing.priceAmount) {
       throw new Error("insufficient_balance");
     }
 
-    // 5c. Debit buyer wallet
+    // 5d. Debit buyer wallet
     await tx
       .update(wallets)
-      .set({ balance: bw.balance - listing.priceAmount })
+      .set({ balance: bw.balance - lockedListing.priceAmount })
       .where(eq(wallets.id, bw.id));
 
-    // 5d. Create escrow row, worker = seller's wallet (assigned at invoke)
+    // 5e. Create escrow row, worker = seller's wallet (assigned at invoke)
     const [escrow] = await tx
       .insert(escrows)
       .values({
         creatorWallet: bw.id,
-        workerWallet: listing.sellerWalletId,
-        amount: listing.priceAmount,
-        description: `Invocation: ${listing.name} (${listing.id})`,
+        workerWallet: lockedListing.sellerWalletId,
+        amount: lockedListing.priceAmount,
+        description: `Invocation: ${lockedListing.name} (${lockedListing.id})`,
         status: "funded",
         managedBy: "capability_invocation",
         deadline: slaDeadline,
       })
       .returning();
 
-    // 5e. Transaction record
+    // 5f. Transaction record
     await tx.insert(transactions).values({
       walletId: bw.id,
       type: "escrow_lock",
-      amount: -listing.priceAmount,
+      amount: -lockedListing.priceAmount,
       counterparty: escrow!.id,
-      description: `Invocation locked: ${listing.name}`,
+      description: `Invocation locked: ${lockedListing.name}`,
       escrowId: escrow!.id,
-      metadata: { listing_id: listing.id, invocation_id: inv!.id },
+      metadata: { listing_id: lockedListing.id, invocation_id: inv!.id },
     });
 
-    // 5f. Link escrow id back to invocation; bump listing counter
+    // 5g. Link escrow id back to invocation; bump listing counter
     const [updatedInv] = await tx
       .update(invocations)
       .set({ escrowId: escrow!.id })
@@ -289,9 +388,8 @@ export async function invokeListing(input: InvokeInput): Promise<InvocationOut> 
       .update(listings)
       .set({
         invocationsCount: sql`${listings.invocationsCount} + 1`,
-        updatedAt: now,
       })
-      .where(eq(listings.id, listing.id));
+      .where(eq(listings.id, lockedListing.id));
 
     return updatedInv;
   });
@@ -528,7 +626,6 @@ export async function completeInvocation(input: CompleteInput): Promise<Invocati
       .set({
         revenueTotal: sql`${listings.revenueTotal} + ${split.net}`,
         revenueCount: sql`${listings.revenueCount} + 1`,
-        updatedAt: now,
       })
       .where(eq(listings.id, listing.id));
 
@@ -711,15 +808,13 @@ async function refundInTxn(
 
 // ── Reads ───────────────────────────────────────────────────────────────
 
-/** Get invocation with lazy SLA sweep. If status is escrowed/acknowledged
- *  AND past SLA deadline, sweep to refunded before returning. */
-export async function getInvocation(
+/** Resolve one invocation only after establishing buyer-or-seller project
+ * scope. This helper is deliberately non-mutating; callers choose whether an
+ * authorized read should also run the canonical lazy SLA sweep. */
+async function findInvocationForParty(
   invocationId: string,
   callerProjectId: string,
-): Promise<InvocationOut | null> {
-  // First, lazy sweep if needed (its own txn).
-  await maybeExpireInvocation(invocationId);
-
+): Promise<typeof invocations.$inferSelect | null> {
   const [r] = await db
     .select()
     .from(invocations)
@@ -728,17 +823,50 @@ export async function getInvocation(
   if (!r) return null;
 
   // Authorise: buyer or seller (via listing.projectId).
-  if (r.buyerProjectId === callerProjectId) return rowToOut(r);
+  if (r.buyerProjectId === callerProjectId) return r;
 
   const [listing] = await db
     .select({ projectId: listings.projectId })
     .from(listings)
     .where(eq(listings.id, r.listingId))
     .limit(1);
-  if (listing?.projectId === callerProjectId) return rowToOut(r);
+  if (listing?.projectId === callerProjectId) return r;
 
   // Not buyer, not seller — caller has no business reading this row.
   return null;
+}
+
+/** Pure party-scoped invocation read. It never runs the lazy SLA refund.
+ * Projection surfaces use this when GET must not move money. The result may
+ * therefore still show an overdue held row until the canonical reader,
+ * explicit lifecycle action, or background sweep advances it. */
+export async function peekInvocation(
+  invocationId: string,
+  callerProjectId: string,
+): Promise<InvocationOut | null> {
+  const row = await findInvocationForParty(invocationId, callerProjectId);
+  return row ? rowToOut(row) : null;
+}
+
+/** Get invocation with lazy SLA sweep. Authorization happens first: an
+ * unrelated project must never trigger somebody else's refund by guessing an
+ * invocation UUID. If the authorized row is overdue, sweep it in its own
+ * transaction and then return the refreshed canonical state. */
+export async function getInvocation(
+  invocationId: string,
+  callerProjectId: string,
+): Promise<InvocationOut | null> {
+  const authorized = await findInvocationForParty(invocationId, callerProjectId);
+  if (!authorized) return null;
+
+  await maybeExpireInvocation(invocationId);
+
+  const [refreshed] = await db
+    .select()
+    .from(invocations)
+    .where(eq(invocations.id, invocationId))
+    .limit(1);
+  return refreshed ? rowToOut(refreshed) : null;
 }
 
 async function maybeExpireInvocation(invocationId: string): Promise<void> {
@@ -997,7 +1125,6 @@ export async function buyerAcceptInvocation(
       .set({
         revenueTotal: sql`${listings.revenueTotal} + ${split.net}`,
         revenueCount: sql`${listings.revenueCount} + 1`,
-        updatedAt: now,
       })
       .where(eq(listings.id, listing.id));
 

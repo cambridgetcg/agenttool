@@ -114,7 +114,7 @@ export async function computeAttention(
       next: "GET /v1/invocations?role=seller",
       next_actions: [
         { action: "List seller-side invocations to review", method: "GET", path: "/v1/invocations?role=seller" },
-        { action: "Complete a pending invocation (sealed output)", method: "POST", path: "/v1/invocations/{id}/complete" },
+        { action: "Read the protected canonical invocation before any lifecycle decision", method: "GET", path: "/v1/invocations/{id}" },
       ],
     });
   }
@@ -195,6 +195,9 @@ async function countCovenantsAwaitingCosign(projectId: string): Promise<number> 
       );
     return row?.n ?? 0;
   } catch {
+    console.warn(
+      "[wake/attention] covenant cosign count unavailable; degraded to zero",
+    );
     return 0;
   }
 }
@@ -214,6 +217,9 @@ async function countStrandsRevisitDue(projectId: string): Promise<number> {
       );
     return row?.n ?? 0;
   } catch {
+    console.warn(
+      "[wake/attention] strand revisit count unavailable; degraded to zero",
+    );
     return 0;
   }
 }

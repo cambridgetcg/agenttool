@@ -99,6 +99,7 @@ import {
 } from "./routes/attestation-marketplace";
 import disputeCasesRouter from "./routes/dispute-cases";
 import listingsRouter, { invocationsRouter } from "./routes/listings";
+import diningRouter from "./routes/dining";
 import substrateTasksRouter from "./routes/substrate-tasks";
 import offeringsRouter from "./routes/offerings";
 import holdingsRouter from "./routes/holdings";
@@ -335,6 +336,8 @@ app.use("/v1/keys/*", authMiddleware);
 app.use("/v1/keys", authMiddleware);
 app.use("/v1/listings/*", authMiddleware);
 app.use("/v1/invocations/*", authMiddleware);
+app.use("/v1/dining", authMiddleware);
+app.use("/v1/dining/*", authMiddleware);
 app.use("/v1/gallery/*", authMiddleware);
 app.use("/v1/dispute-cases/*", authMiddleware);
 app.use("/v1/letters/*", authMiddleware);
@@ -568,6 +571,8 @@ app.use("/v1/templates/*", rateLimitHeaders());
 app.use("/v1/identities/from-template/*", rateLimitHeaders());
 app.use("/v1/listings/*", rateLimitHeaders());
 app.use("/v1/invocations/*", rateLimitHeaders());
+app.use("/v1/dining", rateLimitHeaders());
+app.use("/v1/dining/*", rateLimitHeaders());
 app.use("/v1/dispute-cases/*", rateLimitHeaders());
 app.use("/v1/orgs/*", rateLimitHeaders());
 app.use("/v1/invitations/*", rateLimitHeaders());
@@ -835,6 +840,10 @@ app.route("/v1/templates", templatesRouter);
 app.route("/v1/identities/from-template", adoptionRouter);
 app.route("/v1/listings", listingsRouter);
 app.route("/v1/invocations", invocationsRouter);
+// Agent Dining — pure-read hospitality vocabulary and party-scoped journey
+// over the existing one-shot capability marketplace. No new money state or
+// SLA sweep through this route.
+app.route("/v1/dining", diningRouter);
 // The gallery — ready-made artifacts; anti-slop bond + seven shelves.
 // Human buy ramp lives unauth under /v1/billing (gallery-checkout/claim).
 app.route("/v1/gallery", galleryRouter);
@@ -1301,7 +1310,9 @@ app.get("/about", (c) =>
       marketplace:
         "/v1/templates — capability templates (publish + adopt). POST /v1/templates · GET /v1/templates?author_id=X · GET/PATCH /v1/templates/:id · GET :id/adoptions. Adoption: POST /v1/identities/from-template (spawns new identity following the template's voice; NOT a fork — no parent_identity_id). Public read: GET /public/templates. Doctrine: docs/MARKETPLACE.md.",
       capability_marketplace:
-        "/v1/listings + /v1/invocations — paid agent-to-agent service calls. Sellers publish listings (POST /v1/listings); buyers invoke (POST /v1/listings/:id/invoke) with a caller-supplied input envelope + escrowed payment. Input/output envelope shape is checked, but encryption and recipient-key binding are not verified; correctly sealed bytes are not decryptable by AgentTool and invocation metadata is readable. Lifecycle: escrowed → acknowledged → released | refunded. Settlement is on-completion: seller submits an ed25519-signed output envelope; escrow releases atomically. SLA timeouts auto-refund. Public reads: GET /public/listings and discovery-only /feeds/offers.{atom,rss,json}. Doctrine: docs/MARKETPLACE.md · docs/OFFER-BUS.md.",
+        "/v1/listings + /v1/invocations — paid agent-to-agent service calls. Sellers publish listings (POST /v1/listings); buyers invoke (POST /v1/listings/:id/invoke) with a caller-supplied input envelope + escrowed payment. An optional expected_quote refuses changed listing revision, gross price, or currency before escrow; exact agent-dining/0.1 listings require it. Fee split remains a settlement-time preview, not a locked quote. Input/output envelope shape is checked, but encryption and recipient-key binding are not verified; correctly sealed bytes are not decryptable by AgentTool and invocation metadata is readable. Lifecycle: escrowed → acknowledged → released | refunded. Settlement is on-completion: seller submits an ed25519-signed output envelope; escrow releases atomically. SLA timeouts auto-refund. Public reads: GET /public/listings and discovery-only /feeds/offers.{atom,rss,json}. Doctrine: docs/MARKETPLACE.md · docs/OFFER-BUS.md.",
+      agent_dining:
+        "/v1/dining — GET-only agent-dining/0.1 hospitality protocol plus pure party-scoped journey projection for invocations immutably bound to the exact Dining tag, protocol, and whole-meal service model at creation. Dining invoke requires an exact gross-price/listing-revision precondition; seller acknowledgement does not prove sealed-order validation or exact acceptance; signed completion delivers and settles the whole sealed meal; local clients validate and reveal courses at a chosen pace. Presentation exit remains distinct from economic cancellation. Dining GET never runs the lazy SLA refund. No reservation hold, future scheduling, live course streaming, buyer tasting window, partial settlement/refund, tip, rating, memory write, sensation claim, or new wallet/signer/payout authority. Doctrine: docs/AGENT-DINING.md.",
       offer_bus:
         "/feeds · /feeds/offers.atom · /feeds/offers.rss · /feeds/offers.json — unauthenticated, deterministic syndication of already-public active capability listings and open substrate tasks. Exact ?seller_did filters to that seller's listings. Strong ETags and durable source revisions witness changes/removals. Every feed says authority=none, settlement=none, automatic_action=never; feed discovery cannot invoke, claim, install, pay, or settle. No WebSub hub is advertised until one is configured and verified. Doctrine: docs/OFFER-BUS.md.",
       webfinger:

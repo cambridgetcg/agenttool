@@ -75,6 +75,10 @@ import {
   PARTY_TELEPHONE_INPUT_BOUNDS,
   PLAY_CANON_POINTER,
 } from "./public/play";
+import {
+  MARKETPLACE_DINING_OPENAPI_PATHS,
+  disputeArbitrationRestResponse,
+} from "./openapi-marketplace-dining";
 
 const app = new Hono();
 
@@ -439,27 +443,6 @@ function paidMemoryReceiptPreservedResponse(description: string) {
           },
           required: ["error", "message"],
           additionalProperties: false,
-        },
-      },
-    },
-  };
-}
-
-function disputeArbitrationRestResponse() {
-  return {
-    description:
-      "Dispute-policy review and arbitration are resting. The request is refused before charge or state change.",
-    content: {
-      "application/json": {
-        schema: {
-          type: "object",
-          properties: {
-            error: { type: "string", const: "dispute_arbitration_resting" },
-            hint: { type: "string" },
-            retryable: { type: "boolean", const: false },
-            docs: { type: "string", const: "/public/safety" },
-          },
-          required: ["error", "hint", "retryable", "docs"],
         },
       },
     },
@@ -3086,6 +3069,11 @@ function spec() {
       { name: "inbox", description: "Signed, covenant-gated message envelopes. Correctly recipient-sealed bodies are not decryptable by AgentTool, but encryption is caller-controlled and unverified; subjects and metadata may be readable." },
       { name: "public", description: "UNAUTHENTICATED surface. Every stored legacy did-field value has an AgentTool profile lookup; this is not W3C DID Resolution. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only. Former public memory, strand, pulse, and GET /public/discover observer routes are not mounted; POST /public/identities/by-pubkey is a signed recovery lookup with bounded timestamp freshness, not one-time replay protection. Lounge seats are a narrow exception: short public leases authorized by project-root bearers and carrying registered identity-key receipts, never inferred liveness or proof of independent agency." },
       { name: "marketplace", description: "Capability templates plus paid service and attestation grants. Paid attestation issuance uses a short-lived server-prepared attestation-issue/v1 authorization before escrow release. Dispute-policy review and arbitration are resting fail-closed; no qualified-arbiter or ruling-based money-routing claim is active." },
+      {
+        name: "dining",
+        description:
+          "Authenticated GET-only hospitality vocabulary and privacy-minimized journey projection over the existing capability-invocation economy.",
+      },
       { name: "tools", description: "scrape · browse · document · execute" },
       { name: "economy", description: "Wallets, escrow, and billing. Wallet reinvestment is mounted but resting fail-closed with 503; no wallet-to-project-credit conversion is currently available." },
       { name: "crypto", description: "Mixed-custody deposit, external-address binding, webhook, and payout paths; internal ledger balances and worker availability are separate" },
@@ -8404,98 +8392,7 @@ function spec() {
       },
 
       // ── Capability marketplace dispute boundary ────────────────────
-      "/v1/listings": {
-        post: {
-          tags: ["marketplace"],
-          summary: "Publish a callable capability listing",
-          description:
-            "Ordinary listings settle through signed completion, decline, cancel, or SLA refund. A non-null dispute_policy is refused with stable 503 before charging or writing; arbitration is not currently available.",
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    seller_identity_id: { type: "string", format: "uuid" },
-                    name: { type: "string", minLength: 1, maxLength: 255 },
-                    description: { type: ["string", "null"], maxLength: 2000 },
-                    capability_tags: { type: "array", maxItems: 32, items: { type: "string", maxLength: 64 } },
-                    input_schema: { type: ["object", "null"], additionalProperties: true },
-                    output_schema: { type: ["object", "null"], additionalProperties: true },
-                    price_amount: { type: "integer", minimum: 1 },
-                    price_currency: { type: "string", minLength: 1, maxLength: 20 },
-                    seller_wallet_id: { type: "string", format: "uuid" },
-                    sla_seconds: { type: ["integer", "null"], minimum: 1 },
-                    visibility: { type: "string", enum: ["private", "public"] },
-                    metadata: { type: "object", additionalProperties: true },
-                    dispute_policy: {
-                      type: ["object", "null"],
-                      additionalProperties: true,
-                      description: "Must be null or omitted while arbitration rests. Non-null returns 503 dispute_arbitration_resting.",
-                    },
-                  },
-                  required: ["seller_identity_id", "name", "price_amount", "price_currency", "seller_wallet_id"],
-                },
-              },
-            },
-          },
-          responses: {
-            "201": { description: "Ordinary direct-settlement listing published" },
-            "503": disputeArbitrationRestResponse(),
-          },
-        },
-      },
-      "/v1/listings/{id}": {
-        parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-        ],
-        patch: {
-          tags: ["marketplace"],
-          summary: "Update an owned capability listing",
-          description:
-            "Setting dispute_policy to null remains a legacy off-switch. Any non-null value returns stable 503 before charging or writing.",
-          requestBody: {
-            required: true,
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  additionalProperties: true,
-                  properties: {
-                    dispute_policy: {
-                      type: ["object", "null"],
-                      additionalProperties: true,
-                      description: "Only null or omission is currently accepted.",
-                    },
-                  },
-                },
-              },
-            },
-          },
-          responses: {
-            "200": { description: "Listing updated" },
-            "404": { $ref: "#/components/responses/NotFound" },
-            "503": disputeArbitrationRestResponse(),
-          },
-        },
-      },
-      "/v1/invocations/{id}/complete": {
-        parameters: [
-          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
-        ],
-        post: {
-          tags: ["marketplace"],
-          summary: "Submit a signed result and settle through direct release",
-          description:
-            "Current listings use direct signed-completion settlement. If a legacy row has a non-null dispute policy, completion fails closed with 503 instead of entering completed review.",
-          responses: {
-            "200": { description: "Signature verified and invocation released" },
-            "503": disputeArbitrationRestResponse(),
-          },
-        },
-      },
+      ...MARKETPLACE_DINING_OPENAPI_PATHS,
       "/v1/invocations/{id}/witness": {
         parameters: [
           { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },

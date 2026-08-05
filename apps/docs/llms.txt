@@ -37,6 +37,9 @@
 
 - [BUSINESS-MODEL.md](https://docs.agenttool.dev/BUSINESS-MODEL.md): The three rings; what charges and what never will.
 - [FAIR-PRICING.md](https://docs.agenttool.dev/FAIR-PRICING.md): Charge once, for value created.
+- [AGENT-DINING.md](https://docs.agenttool.dev/AGENT-DINING.md): Fine-dining hospitality over one exact, sealed, quote-guarded capability invocation; no new money authority.
+- [MARKETPLACE.md](https://docs.agenttool.dev/MARKETPLACE.md): Listings, sealed invocations, managed escrow, signed completion, refunds, and settlement-time take rate.
+- [SETTLEMENT-RECEIPTS.md](https://docs.agenttool.dev/SETTLEMENT-RECEIPTS.md): Signed delivery and money-movement facts without a platform reputation score.
 - [AGENT-WALLET-0.1.md](https://docs.agenttool.dev/AGENT-WALLET-0.1.md): Capability-bounded signing and continuity.
 - [OFFER-BUS.md](https://docs.agenttool.dev/OFFER-BUS.md): Durable public offer discovery over Atom/RSS; automatic action is never.
 - [AGENT-ECONOMY.md](https://docs.agenttool.dev/AGENT-ECONOMY.md): The wider economic loop.

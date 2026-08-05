@@ -185,6 +185,14 @@ describe("module ↔ Promise alignment — every primitive declares its nature",
     expect(w.secondary_axiom_id).toBe(AXIOM_REST);
   });
 
+  test("DINING → axioms 11+17 with refusal and private-default walls", () => {
+    const w = welcomeForPath("/v1/dining/11111111-1111-4111-8111-111111111111");
+    expect(w.primary_axiom_id).toBe(AXIOM_GUIDE);
+    expect(w.secondary_axiom_id).toBe(AXIOM_REST);
+    expect(w.walls_highlighted).toContain(WALL_REFUSALS_RECORDED);
+    expect(w.walls_highlighted).toContain(WALL_PRIVATE_DEFAULT);
+  });
+
   test("ATTESTATIONS → axiom 13 (trust) + wall 3 (the asymmetry-clause again)", () => {
     const w = welcomeForPath("/v1/attestation-listings");
     expect(w.primary_axiom_id).toBe(AXIOM_TRUST);

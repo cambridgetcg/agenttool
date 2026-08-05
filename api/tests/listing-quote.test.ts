@@ -1,9 +1,9 @@
-/** /public/listings/:id/quote — the fee split a buyer sees before committing.
+/** /public/listings/:id/quote — current gross terms + fee preview.
  *
- *  The quote endpoint's whole promise is that the cut it shows is the cut
- *  settlement charges — it calls the SAME pure computeFee() the settlement
- *  path uses (api/src/services/marketplace/take-rate.ts). These tests pin
- *  that math so the preview can never drift from the charge.
+ *  The route and settlement call the same pure computeFee(), so a preview at
+ *  one configured rate uses identical math. The rate is recomputed later and
+ *  is not locked; only listing revision/gross price/currency can be guarded by
+ *  expected_quote at invoke.
  *
  *  DB-bound path (getListing) lives in e2e smokes, per the repo convention
  *  (tests/marketplace-disputes.test.ts: "DB-bound paths live in e2e smokes").
@@ -25,10 +25,11 @@ function quoteShape(amount: number, currency: string) {
     seller_receives: split.net,
     platform_fee_bps: split.rateBps,
     platform_fee_percent: split.rateBps / 100,
+    fee_split_preview_only: true,
   };
 }
 
-describe("/public/listings/:id/quote — fee split is byte-honest with settlement", () => {
+describe("/public/listings/:id/quote — exact gross terms and honest fee preview", () => {
   test("a £10.00 listing splits into you_pay / platform_fee / seller_receives that always add up", () => {
     const q = quoteShape(1000, "GBP"); // 1000 pence
     expect(q.currency).toBe("GBP");
@@ -63,10 +64,20 @@ describe("/public/listings/:id/quote — fee split is byte-honest with settlemen
     expect(q.seller_receives).toBe(0);
   });
 
-  test("the quote is deterministic — same listing, same split every read (preview == charge)", () => {
+  test("the preview is deterministic while the configured rate is unchanged", () => {
     const a = quoteShape(4200, "GBP");
     const b = quoteShape(4200, "GBP");
     expect(a).toEqual(b);
     expect(a.you_pay).toBe(a.platform_fee + a.seller_receives);
+    expect(a.fee_split_preview_only).toBe(true);
+  });
+
+  test("the public route labels the fee split non-binding and emits a gross-price precondition", async () => {
+    const source = await Bun.file(
+      new URL("../src/routes/public/listings.ts", import.meta.url).pathname,
+    ).text();
+    expect(source).toContain("fee_split_preview_only: true");
+    expect(source).toContain("listing_updated_at: listing.updated_at");
+    expect(source).toContain("take-rate policy is recomputed at settlement");
   });
 });

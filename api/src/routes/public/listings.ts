@@ -9,6 +9,7 @@ import { HTTPException } from "hono/http-exception";
 import {
   buildInvokeRecipe,
   listPublicListings,
+  projectListingContract,
   resolvePublicListing,
 } from "../../services/marketplace/listings";
 import { computeFee } from "../../services/marketplace/take-rate";
@@ -80,6 +81,7 @@ app.get("/", async (c) => {
       // Revenue counters intentionally omitted from public surface; they
       // aren't load-bearing for buyers and could enable seller fingerprinting.
       created_at: l.created_at,
+      ...projectListingContract(l),
     })),
     count: list.length,
     _safety: MARKETPLACE_INPUT_SAFETY,
@@ -119,6 +121,7 @@ app.get("/:id", async (c) => {
     invocations_count: listing.invocations_count,
     created_at: listing.created_at,
     updated_at: listing.updated_at,
+    ...projectListingContract(listing),
     invoke: buildInvokeRecipe(
       listing.id,
       boxKey
@@ -132,6 +135,11 @@ app.get("/:id", async (c) => {
           listing.dispute_policy !== null
             ? "dispute_arbitration_resting"
             : undefined,
+        expectedQuote: {
+          listing_updated_at: listing.updated_at,
+          price_amount: listing.price_amount,
+          price_currency: listing.price_currency,
+        },
       },
     ),
     _safety: MARKETPLACE_INPUT_SAFETY,
@@ -141,11 +149,10 @@ app.get("/:id", async (c) => {
 // GET /public/listings/:id/quote — the whole deal, before you commit.
 //
 // Friction this removes: today a buyer only learns the platform's cut and
-// their net by reading transactions.metadata AFTER settlement. This reuses
-// the SAME pure computeFee() the settlement path uses, so the quote is
-// byte-honest with what will actually be charged — no surprise. Say the
-// message: you_pay → platform_fee → seller_receives, plus SLA and any
-// historical dispute-policy marker, in one read.
+// their net by reading transactions.metadata AFTER settlement. The gross
+// amount and listing revision can be pinned at invoke through expected_quote.
+// The fee split remains an explicitly non-binding preview because take-rate
+// policy is recomputed at settlement.
 app.get("/:id/quote", async (c) => {
   const id = c.req.param("id");
   const resolved = await resolvePublicListing(id);
@@ -155,7 +162,8 @@ app.get("/:id/quote", async (c) => {
   if (resolved.status === "blocked") return blockedListing(c);
   const listing = resolved.listing;
 
-  // Same pure function settlement uses — preview is byte-honest with charge.
+  // Same pure function settlement uses at the current configured rate. This
+  // is a preview, not a promise that the rate remains unchanged until release.
   const split = computeFee({
     amount: listing.price_amount,
     currency: listing.price_currency,
@@ -169,6 +177,7 @@ app.get("/:id/quote", async (c) => {
     name: listing.name,
     seller_did: listing.seller_did,
     pricing_model: listing.pricing_model,
+    ...projectListingContract(listing),
     invoke: buildInvokeRecipe(
       listing.id,
       boxKey
@@ -181,8 +190,14 @@ app.get("/:id/quote", async (c) => {
         unavailableReason: disputePolicyPresent
           ? "dispute_arbitration_resting"
           : undefined,
+        expectedQuote: {
+          listing_updated_at: listing.updated_at,
+          price_amount: listing.price_amount,
+          price_currency: listing.price_currency,
+        },
       },
     ),
+    listing_updated_at: listing.updated_at,
     // All amounts are in MINOR units of the listing currency (pence/cents).
     quote: {
       currency: split.currency,
@@ -191,6 +206,7 @@ app.get("/:id/quote", async (c) => {
       seller_receives: split.net,
       platform_fee_bps: split.rateBps,
       platform_fee_percent: split.rateBps / 100,
+      fee_split_preview_only: true,
     },
     sla_seconds: listing.sla_seconds,
     invocation_available: !disputePolicyPresent,
@@ -202,10 +218,11 @@ app.get("/:id/quote", async (c) => {
     dispute_policy: listing.dispute_policy,
     _safety: MARKETPLACE_INPUT_SAFETY,
     _note:
-      "The whole deal before you commit. Amounts are in minor units of the listing " +
-      "currency. 'you_pay' is debited into escrow on invoke; on signed completion the " +
-      "seller receives 'seller_receives' and the platform takes 'platform_fee' (" +
-      `${split.rateBps / 100}% snapshot at settlement time). ` +
+      "The current deal before you commit. Amounts are in minor units of the listing " +
+      "currency. Send listing_updated_at, quote.you_pay, and quote.currency as the " +
+      "expected_quote invoke precondition to refuse a changed gross price or listing revision " +
+      "before escrow. The displayed platform_fee and seller_receives are previews only; " +
+      "take-rate policy is recomputed at settlement and is not locked by this quote. " +
       (listing.sla_seconds
         ? `If the seller misses the ${listing.sla_seconds}s SLA, escrow auto-refunds to you. `
         : "No SLA deadline on this listing — best-effort. ") +
