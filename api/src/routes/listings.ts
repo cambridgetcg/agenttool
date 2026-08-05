@@ -45,6 +45,7 @@ import {
   patchListing,
   projectPublicListing,
   resolvePublicListing,
+  type ListingOut,
 } from "../services/marketplace/listings";
 import { lookupActiveBoxKey } from "../services/inbox/store";
 import {
@@ -106,6 +107,11 @@ const sealedSchema = z.object({
 const invokeSchema = z.object({
   buyer_identity_id: z.string().uuid(),
   buyer_wallet_id: z.string().uuid(),
+  expected_quote: z.object({
+    listing_updated_at: z.string().datetime(),
+    price_amount: z.number().int().positive(),
+    price_currency: z.string().min(1).max(20),
+  }).strict().optional(),
   input_sealed: sealedSchema,
   metadata: z.record(z.unknown()).optional(),
 }).strict();
@@ -177,6 +183,38 @@ function mapServiceError(msg: string): {
   if (msg === "seller_wallet_not_active") return { status: 409, code: msg };
   if (msg === "seller_wallet_currency_mismatch") return { status: 409, code: msg };
   if (msg === "listing_not_active") return { status: 409, code: msg };
+  if (msg === "quote_precondition_required") {
+    return {
+      status: 409,
+      code: msg,
+      hint:
+        "This listing requires an exact quote precondition. Re-read GET /public/listings/{id}/quote, then send its listing_updated_at, quote.you_pay, and quote.currency as expected_quote before any escrow is created.",
+      next_actions: [
+        {
+          action: "Read the latest listing quote and invoke recipe",
+          method: "GET",
+          path: "/public/listings/{id}/quote",
+        },
+      ],
+      docs: "/v1/canon/urn:agenttool:doc/AGENT-DINING",
+    };
+  }
+  if (msg === "quote_precondition_changed") {
+    return {
+      status: 409,
+      code: msg,
+      hint:
+        "The listing changed after the quote you inspected. No escrow was created. Re-read the menu and quote, re-check the sealed order, and invoke only if the new terms are acceptable.",
+      next_actions: [
+        {
+          action: "Read the changed listing and quote before deciding again",
+          method: "GET",
+          path: "/public/listings/{id}/quote",
+        },
+      ],
+      docs: "/v1/canon/urn:agenttool:doc/MARKETPLACE",
+    };
+  }
   if (msg === "sla_expired") return { status: 409, code: msg };
   if (msg === "completion_signature_invalid") return { status: 409, code: msg };
   if (msg === "seller_signing_key_missing") return { status: 409, code: msg };
@@ -355,8 +393,10 @@ app.get("/", async (c) => {
  *
  *  Same helper as the public surface, so the two cannot drift apart again. */
 async function invokeRecipeFor(
-  listingId: string,
-  sellerDid: string,
+  listing: Pick<
+    ListingOut,
+    "id" | "seller_did" | "updated_at" | "price_amount" | "price_currency"
+  >,
   disputePolicy: unknown,
   quarantined = false,
 ) {
@@ -365,11 +405,18 @@ async function invokeRecipeFor(
     : disputePolicy !== null && disputePolicy !== undefined
       ? ("dispute_arbitration_resting" as const)
       : undefined;
-  const boxKey = await lookupActiveBoxKey(sellerDid);
+  const boxKey = await lookupActiveBoxKey(listing.seller_did);
   return buildInvokeRecipe(
-    listingId,
+    listing.id,
     boxKey ? { box_key_id: boxKey.box_key_id, public_key: boxKey.public_key } : null,
-    { unavailableReason },
+    {
+      unavailableReason,
+      expectedQuote: {
+        listing_updated_at: listing.updated_at,
+        price_amount: listing.price_amount,
+        price_currency: listing.price_currency,
+      },
+    },
   );
 }
 
@@ -387,8 +434,7 @@ app.get("/:id", async (c) => {
     return c.json({
       ...projectPublicListing(resolved.listing),
       invoke: await invokeRecipeFor(
-        resolved.listing.id,
-        resolved.listing.seller_did,
+        resolved.listing,
         resolved.listing.dispute_policy,
       ),
       _safety: MARKETPLACE_INPUT_SAFETY,
@@ -402,8 +448,7 @@ app.get("/:id", async (c) => {
   return c.json({
     ...listing,
     invoke: await invokeRecipeFor(
-      listing.id,
-      listing.seller_did,
+      listing,
       listing.dispute_policy,
       quarantined,
     ),
@@ -491,6 +536,13 @@ app.post("/:id/invoke", async (c) => {
       buyerProjectId: c.var.project.id,
       buyerIdentityId: parsed.data.buyer_identity_id,
       buyerWalletId: parsed.data.buyer_wallet_id,
+      expectedQuote: parsed.data.expected_quote
+        ? {
+            listingUpdatedAt: parsed.data.expected_quote.listing_updated_at,
+            priceAmount: parsed.data.expected_quote.price_amount,
+            priceCurrency: parsed.data.expected_quote.price_currency,
+          }
+        : undefined,
       inputSealed: parsed.data.input_sealed,
       metadata: parsed.data.metadata,
     });

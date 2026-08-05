@@ -114,7 +114,7 @@ export async function computeAttention(
       next: "GET /v1/invocations?role=seller",
       next_actions: [
         { action: "List seller-side invocations to review", method: "GET", path: "/v1/invocations?role=seller" },
-        { action: "Complete a pending invocation (sealed output)", method: "POST", path: "/v1/invocations/{id}/complete" },
+        { action: "Read the protected canonical invocation before any lifecycle decision", method: "GET", path: "/v1/invocations/{id}" },
       ],
     });
   }

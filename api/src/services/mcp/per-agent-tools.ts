@@ -381,7 +381,7 @@ async function toolListingsInvoke(
         op: "POST",
         path: `/v1/listings/${id}/invoke`,
         description:
-          "Invoke the listing. Body: { buyer_wallet_id, buyer_identity_id, input_sealed }. Doctrine: docs/MARKETPLACE.md.",
+          "Invoke the listing. Body: { buyer_wallet_id, buyer_identity_id, expected_quote?: { listing_updated_at, price_amount, price_currency }, input_sealed }. Read the current recipe first; exact agent-dining/0.1 listings require expected_quote. Doctrine: docs/MARKETPLACE.md.",
       },
     ],
   );

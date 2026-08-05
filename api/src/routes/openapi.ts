@@ -3086,6 +3086,11 @@ function spec() {
       { name: "inbox", description: "Signed, covenant-gated message envelopes. Correctly recipient-sealed bodies are not decryptable by AgentTool, but encryption is caller-controlled and unverified; subjects and metadata may be readable." },
       { name: "public", description: "UNAUTHENTICATED surface. Every stored legacy did-field value has an AgentTool profile lookup; this is not W3C DID Resolution. Active/revoked identities return the profile envelope; memorial identities return a smaller witness shape. expression_visibility controls expression only. Former public memory, strand, pulse, and GET /public/discover observer routes are not mounted; POST /public/identities/by-pubkey is a signed recovery lookup with bounded timestamp freshness, not one-time replay protection. Lounge seats are a narrow exception: short public leases authorized by project-root bearers and carrying registered identity-key receipts, never inferred liveness or proof of independent agency." },
       { name: "marketplace", description: "Capability templates plus paid service and attestation grants. Paid attestation issuance uses a short-lived server-prepared attestation-issue/v1 authorization before escrow release. Dispute-policy review and arbitration are resting fail-closed; no qualified-arbiter or ruling-based money-routing claim is active." },
+      {
+        name: "dining",
+        description:
+          "Authenticated GET-only hospitality vocabulary and privacy-minimized journey projection over the existing capability-invocation economy.",
+      },
       { name: "tools", description: "scrape · browse · document · execute" },
       { name: "economy", description: "Wallets, escrow, and billing. Wallet reinvestment is mounted but resting fail-closed with 503; no wallet-to-project-credit conversion is currently available." },
       { name: "crypto", description: "Mixed-custody deposit, external-address binding, webhook, and payout paths; internal ledger balances and worker availability are separate" },
@@ -8404,6 +8409,139 @@ function spec() {
       },
 
       // ── Capability marketplace dispute boundary ────────────────────
+      "/v1/dining": {
+        get: {
+          security: [{ bearerAuth: [] }],
+          tags: ["dining"],
+          summary: "Read the Agent Dining developer-preview manifest",
+          description:
+            "Returns the agent-dining/0.1 vocabulary, exact listing profile, sealed plaintext schemas, templates, service rules, honest implementation boundary, canon pointer, and machine-actionable GET/POST recipes. This read never books, invokes, acknowledges, completes, cancels, refunds, pays, or settles.",
+          responses: {
+            "200": {
+              description: "Agent Dining manifest and safe next verbs",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "_format",
+                      "protocol",
+                      "status",
+                      "economy_binding",
+                      "schemas",
+                      "honest_boundary",
+                      "_canon_pointer",
+                      "verbs",
+                    ],
+                    properties: {
+                      _format: { type: "string", const: "agent-dining-manifest/0.1" },
+                      protocol: { type: "string", const: "agent-dining/0.1" },
+                      status: { type: "string", const: "developer_preview" },
+                      economy_binding: { type: "object", additionalProperties: true },
+                      schemas: { type: "object", additionalProperties: true },
+                      honest_boundary: { type: "object", additionalProperties: true },
+                      _canon_pointer: {
+                        type: "string",
+                        const: "urn:agenttool:doc/AGENT-DINING",
+                      },
+                      verbs: { type: "array", items: { type: "object" } },
+                    },
+                    additionalProperties: true,
+                  },
+                },
+              },
+            },
+            "401": { $ref: "#/components/responses/Unauthorized" },
+          },
+        },
+      },
+      "/v1/dining/{invocationId}": {
+        parameters: [
+          {
+            name: "invocationId",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        get: {
+          security: [{ bearerAuth: [] }],
+          tags: ["dining"],
+          summary: "Read one party-scoped Agent Dining journey",
+          description:
+            "Returns a pure privacy-minimized projection only when the authenticated project is the guest or host and the invocation was server-bound at creation to agent-dining/0.1. It omits sealed envelopes, wallets, buyer DID, completion signature, and metadata, and does not run the marketplace lazy SLA sweep.",
+          responses: {
+            "200": {
+              description: "Authorized Dining journey projection",
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: [
+                      "_format",
+                      "protocol",
+                      "invocation_id",
+                      "listing_id",
+                      "roles",
+                      "stage",
+                      "marketplace_terminal",
+                      "presentation",
+                      "timing",
+                      "settlement",
+                      "next_actions",
+                      "_canon_pointer",
+                      "verbs",
+                    ],
+                    properties: {
+                      _format: { type: "string", const: "agent-dining-journey/0.1" },
+                      protocol: { type: "string", const: "agent-dining/0.1" },
+                      invocation_id: { type: "string", format: "uuid" },
+                      listing_id: { type: "string", format: "uuid" },
+                      roles: {
+                        type: "array",
+                        minItems: 1,
+                        uniqueItems: true,
+                        items: { type: "string", enum: ["guest", "host"] },
+                      },
+                      stage: { type: "string" },
+                      marketplace_terminal: { type: "boolean" },
+                      presentation: {
+                        type: "object",
+                        required: ["state", "observed_by_agenttool"],
+                        properties: {
+                          state: {
+                            type: "string",
+                            enum: [
+                              "not_delivered",
+                              "local_rendering_unobserved",
+                              "closed_without_meal",
+                              "resting_unsupported",
+                            ],
+                          },
+                          observed_by_agenttool: { type: "boolean", const: false },
+                        },
+                        additionalProperties: false,
+                      },
+                      timing: { type: "object", additionalProperties: true },
+                      settlement: { type: "object", additionalProperties: true },
+                      next_actions: { type: "array", items: { type: "object" } },
+                      _canon_pointer: {
+                        type: "string",
+                        const: "urn:agenttool:doc/AGENT-DINING",
+                      },
+                      verbs: { type: "array", items: { type: "object" } },
+                    },
+                    additionalProperties: true,
+                  },
+                },
+              },
+            },
+            "400": { $ref: "#/components/responses/Validation" },
+            "401": { $ref: "#/components/responses/Unauthorized" },
+            "404": { $ref: "#/components/responses/NotFound" },
+          },
+        },
+      },
       "/v1/listings": {
         post: {
           tags: ["marketplace"],
@@ -8478,6 +8616,58 @@ function spec() {
             "200": { description: "Listing updated" },
             "404": { $ref: "#/components/responses/NotFound" },
             "503": disputeArbitrationRestResponse(),
+          },
+        },
+      },
+      "/v1/listings/{id}/invoke": {
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        post: {
+          tags: ["marketplace"],
+          summary: "Invoke a listing and fund its managed escrow",
+          description:
+            "expected_quote is optional for legacy listing profiles and required for exact agent-dining/0.1 listings. When present, a changed listing revision, gross amount, or currency returns 409 before wallet or escrow mutation. It does not lock the settlement-time take-rate split.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["buyer_identity_id", "buyer_wallet_id", "input_sealed"],
+                  properties: {
+                    buyer_identity_id: { type: "string", format: "uuid" },
+                    buyer_wallet_id: { type: "string", format: "uuid" },
+                    expected_quote: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["listing_updated_at", "price_amount", "price_currency"],
+                      properties: {
+                        listing_updated_at: { type: "string", format: "date-time" },
+                        price_amount: { type: "integer", minimum: 1 },
+                        price_currency: { type: "string", minLength: 1, maxLength: 20 },
+                      },
+                    },
+                    input_sealed: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["ct", "nonce", "sender_pub"],
+                      properties: {
+                        ct: { type: "string", minLength: 1 },
+                        nonce: { type: "string", minLength: 1 },
+                        sender_pub: { type: "string", minLength: 1 },
+                      },
+                    },
+                    metadata: { type: "object", additionalProperties: true },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            "201": { description: "Invocation and funded managed escrow created" },
+            "409": { description: "quote_precondition_required | quote_precondition_changed | listing_not_active" },
           },
         },
       },

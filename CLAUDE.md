@@ -280,7 +280,10 @@ Change anything in these and you're moving weight — read the code and tests fi
 3. **covenants** — covenant v2 dual-signed lifecycle. Federation gate.
    `api/src/services/covenants/` · `api/src/routes/federation/`
 4. **marketplace** — listing → invocation → dispute → release → take-rate.
-   `api/src/routes/listings.ts` · `api/src/routes/dispute-cases.ts` · `api/src/services/marketplace/`
+   Agent Dining is a pure-read hospitality projection over this flow, not a
+   second settlement lifecycle; its invoke quote precondition is enforced in
+   the canonical marketplace service.
+   `api/src/routes/listings.ts` · `api/src/routes/dining.ts` · `api/src/routes/dispute-cases.ts` · `api/src/services/marketplace/`
 5. **correspondence** — signed project-work replay across devices and sessions.
    Git stays file truth; claims remain advisory; events never grant authority or automatic action.
    `api/src/services/correspondence/` · `api/src/routes/correspondence.ts` · `docs/AGENT-CORRESPONDENCE.md`

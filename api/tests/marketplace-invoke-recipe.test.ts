@@ -22,7 +22,13 @@ describe("buildInvokeRecipe", () => {
   };
 
   test("with a seller box key: carries the exact interoperable recipe", () => {
-    const r = buildInvokeRecipe(id, boxKey) as Extract<
+    const r = buildInvokeRecipe(id, boxKey, {
+      expectedQuote: {
+        listing_updated_at: "2026-08-05T12:00:00.000Z",
+        price_amount: 1200,
+        price_currency: "GBP",
+      },
+    }) as Extract<
       ReturnType<typeof buildInvokeRecipe>,
       { invokable: true }
     >;
@@ -36,6 +42,11 @@ describe("buildInvokeRecipe", () => {
     expect(r.body.input_sealed).toHaveProperty("sender_pub");
     expect(r.body).toHaveProperty("buyer_identity_id");
     expect(r.body).toHaveProperty("buyer_wallet_id");
+    expect(r.body.expected_quote).toEqual({
+      listing_updated_at: "2026-08-05T12:00:00.000Z",
+      price_amount: 1200,
+      price_currency: "GBP",
+    });
     expect(r.body.metadata).toEqual({
       recipient_box_key_id: boxKey.box_key_id,
       envelope_profile: "agenttool-inbox-v1",

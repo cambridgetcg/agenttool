@@ -18,6 +18,12 @@ import { db } from "../../db/client";
 import { wallets } from "../../db/schema/economy";
 import { identities } from "../../db/schema/identity";
 import { listings } from "../../db/schema/marketplace";
+import {
+  DINING_CAPABILITY_TAG,
+  DINING_PROTOCOL,
+  DINING_SERVICE_MODEL,
+  hasExactDiningContract,
+} from "../dining/constants";
 import { publishWakeEvent } from "../wake/push";
 import { assertDisputeArbitrationAvailable } from "./dispute-rest";
 import { likePattern, normalizeSearchQuery } from "./search-query";
@@ -97,6 +103,11 @@ export interface InvokeRecipeBoxKey {
 
 export interface InvokeRecipeOptions {
   unavailableReason?: "dispute_arbitration_resting" | "credential_quarantine";
+  expectedQuote?: {
+    listing_updated_at: string;
+    price_amount: number;
+    price_currency: string;
+  };
 }
 
 /** The machine-actionable invoke recipe embedded in a public listing.
@@ -174,6 +185,7 @@ export function buildInvokeRecipe(
     body: {
       buyer_identity_id: "<your identity uuid>",
       buyer_wallet_id: "<your funded wallet uuid>",
+      ...(opts.expectedQuote ? { expected_quote: opts.expectedQuote } : {}),
       input_sealed: {
         ct: "<standard padded base64: AES-GCM ciphertext plus 16-byte tag>",
         nonce: "<standard padded base64: random 12-byte nonce>",
@@ -227,7 +239,28 @@ export function projectPublicListing(listing: ListingOut) {
     invocations_count: listing.invocations_count,
     created_at: listing.created_at,
     updated_at: listing.updated_at,
+    ...projectListingContract(listing),
   };
+}
+
+/** Public, non-secret projection of the exact current listing profile.
+ *
+ * Listing metadata remains seller-authored. These fields let a buyer verify
+ * that discovery, quote, and invoke agree on the three markers required for
+ * Dining without exposing the rest of that metadata. Invocation provenance is
+ * separately frozen in the server-owned invocations.contract_profile column.
+ */
+export function projectListingContract(
+  listing: Pick<ListingOut, "capability_tags" | "metadata">,
+) {
+  const exactDining = hasExactDiningContract(
+    listing.capability_tags,
+    listing.metadata,
+  );
+  return {
+    contract_profile: exactDining ? DINING_PROTOCOL : null,
+    service_model: exactDining ? DINING_SERVICE_MODEL : null,
+  } as const;
 }
 
 export function listingSafetyInput(
@@ -416,7 +449,18 @@ export async function listPublicListings(opts: {
     eq(listings.visibility, "public"),
     eq(listings.status, "active"),
   ];
-  if (opts.tag) conds.push(sql`${opts.tag} = ANY(${listings.capabilityTags})`);
+  if (opts.tag) {
+    conds.push(sql`${opts.tag} = ANY(${listings.capabilityTags})`);
+    // The Dining discovery verb promises an exact invokable profile, not a
+    // seller-controlled tag alone. Keep generic tag search unchanged while
+    // requiring all three current listing markers for this reserved profile.
+    if (opts.tag === DINING_CAPABILITY_TAG) {
+      conds.push(sql`${listings.metadata}->>'protocol' = ${DINING_PROTOCOL}`);
+      conds.push(
+        sql`${listings.metadata}->>'service_model' = ${DINING_SERVICE_MODEL}`,
+      );
+    }
+  }
   if (opts.sellerDid) conds.push(eq(listings.sellerDid, opts.sellerDid));
 
   // Free-text search: find a service by what it's CALLED or what it DOES, not

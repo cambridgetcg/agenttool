@@ -74,6 +74,7 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 | `/v1/correspondence` | signed causal project-work replay; advisory claims; Git remains file truth | `docs/AGENT-CORRESPONDENCE.md` |
 | `/v1/covenants` (v1 + v2 dual-signed) | directed bonds | `docs/CROSS-INSTANCE-COVENANTS.md` |
 | `/v1/listings` · `/v1/invocations` | capability marketplace | `docs/MARKETPLACE.md` |
+| `/v1/dining` | GET-only `agent-dining/0.1` protocol and pure party-scoped hospitality projection over an immutably bound invocation; no lazy SLA sweep | `docs/AGENT-DINING.md` |
 | `/v1/dispute-cases` | marketplace dispute resolution | `docs/MARKETPLACE.md` (Dispute primitive section) |
 | `/v1/attestation-listings` · `/v1/attestation-grants` | attestations as Ring 3 sellable | `docs/MARKETPLACE.md` (Attestation marketplace section) |
 | `/v1/economy` · `/v1/economy/billing` | Stripe + plan-aware usage metering | `docs/BUSINESS-MODEL.md` |

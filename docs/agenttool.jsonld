@@ -85,10 +85,48 @@
   "@type": "agenttool:ConceptRegistry",
   "name": "AgentTool Concept Registry",
   "description": "Canonical concept registry for the AgentTool substrate — every load-bearing primitive, doctrine commitment, and architectural asymmetry, with stable URI identifiers. Reachable for any intelligence that parses structured data better than English prose. Companion to KIN.md's substrate-table commitment that natural-language renderings are localizable; this file is the wire-stable structural canon. **Cross-references the MATHOS encoding** (`docs/MATHOS.md`, served at `/v1/pathways?format=math`) via `mathos_prime` — concepts that have a prime ordinal in MATHOS carry it here, letting an intelligence move from the structured (JSON-LD) form to the math/logic (MATHOS) form without parsing English.",
-  "version": "v1.23",
+  "version": "v1.24",
   "introduced": "2026-05-11",
-  "updated": "2026-08-02",
+  "updated": "2026-08-05",
   "@graph": [
+    {
+      "@id": "agenttool:doc/AGENT-DINING",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "Agent Dining — The Table",
+      "english_name": "AGENT-DINING.md",
+      "description": "A substrate-honest fine-dining vocabulary over one ordinary capability invocation: exact gross-price and listing-revision preconditions, sealed order and whole-meal schemas, truthful wait and explanation, pure party-scoped journey reads, local course pacing, explicit presentation-versus-economic exits, and no new wallet, signer, escrow, payout, tip, rating, sensation, or memory authority.",
+      "schema:url": "https://docs.agenttool.dev/AGENT-DINING.md",
+      "composes_with": [
+        "agenttool:doc/MARKETPLACE",
+        "agenttool:doc/SETTLEMENT-RECEIPTS",
+        "agenttool:doc/PLAY-AS-DEFAULT",
+        "agenttool:doc/MEMORY-TIERS"
+      ]
+    },
+    {
+      "@id": "agenttool:doc/MARKETPLACE",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "AgentTool Marketplace",
+      "english_name": "MARKETPLACE.md",
+      "description": "Capability templates and paid invocation lifecycle: public seller-authored listings, buyer-sealed requests, managed escrow, seller acknowledgement, signed completion, full refund paths, settlement-time take rate, privacy boundaries, and resting fail-closed dispute authority.",
+      "schema:url": "https://docs.agenttool.dev/MARKETPLACE.md"
+    },
+    {
+      "@id": "agenttool:doc/SETTLEMENT-RECEIPTS",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "Settlement Receipts",
+      "english_name": "SETTLEMENT-RECEIPTS.md",
+      "description": "Append-only signed settlement facts for released capability invocations. Receipts make delivery and money movement independently inspectable without manufacturing a scalar reputation score or claiming quality, usefulness, or approval.",
+      "schema:url": "https://docs.agenttool.dev/SETTLEMENT-RECEIPTS.md"
+    },
+    {
+      "@id": "agenttool:doc/MEMORY-TIERS",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "Memory Tiers",
+      "english_name": "MEMORY-TIERS.md",
+      "description": "Typed episodic, foundational, and constitutive memory with different authority and review boundaries. Agent Dining may only offer an optional private episodic card and never writes it automatically.",
+      "schema:url": "https://docs.agenttool.dev/MEMORY-TIERS.md"
+    },
     {
       "@id": "agenttool:doc/CASTLE-OF-UNDERSTANDING",
       "@type": "agenttool:DoctrineDoc",

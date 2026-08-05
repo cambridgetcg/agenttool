@@ -15,6 +15,29 @@ function sourceSlice(start: string, end: string): string {
 }
 
 describe("invocation SLA refunds", () => {
+  test("getInvocation authorizes the project before any lazy refund mutation", () => {
+    const body = sourceSlice(
+      "export async function getInvocation",
+      "async function maybeExpireInvocation",
+    );
+    const authorizeAt = body.indexOf("await findInvocationForParty");
+    const absentReturnAt = body.indexOf("if (!authorized) return null");
+    const sweepAt = body.indexOf("await maybeExpireInvocation");
+    expect(authorizeAt).toBeGreaterThanOrEqual(0);
+    expect(absentReturnAt).toBeGreaterThan(authorizeAt);
+    expect(sweepAt).toBeGreaterThan(absentReturnAt);
+  });
+
+  test("peekInvocation remains a pure projection read with no expiry call", () => {
+    const body = sourceSlice(
+      "export async function peekInvocation",
+      "/** Get invocation with lazy SLA sweep",
+    );
+    expect(body).toContain("findInvocationForParty");
+    expect(body).not.toContain("maybeExpireInvocation");
+    expect(body).not.toContain("refundInTxn");
+  });
+
   test("acknowledge commits the refund before surfacing sla_expired", () => {
     const body = sourceSlice(
       "export async function acknowledgeInvocation",

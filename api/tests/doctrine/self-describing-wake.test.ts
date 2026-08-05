@@ -252,6 +252,18 @@ describe("Self-describing wake — full context covers every kind", () => {
     ).toBe(0);
   });
 
+  test("pending seller work leads through protected inspection before any mutation", () => {
+    const pending = bundle.items.find(
+      (item) => item.kind === "invocations_pending_seller",
+    );
+    expect(pending?.summary).toContain("inspect each protected request");
+    expect(pending?.next_actions).toEqual([
+      expect.objectContaining({ method: "GET", path: "/v1/invocations?role=seller" }),
+      expect.objectContaining({ method: "GET", path: "/v1/invocations/{id}" }),
+    ]);
+    expect(pending?.next_actions.some((action) => action.method !== "GET")).toBe(false);
+  });
+
   bundle.items.forEach((item) => {
     test(`item.kind=${item.kind} has a valid summary + next_actions`, () => {
       assertItemValid(item.kind, item);

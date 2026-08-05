@@ -343,11 +343,14 @@ export function computeAffordances(ctx: AffordanceContext): AffordanceBundle {
     items.push({
       kind: "invocations_pending_seller",
       count: ctx.pendingSellerInvocationCount,
-      summary: `${ctx.pendingSellerInvocationCount} invocation${plural(ctx.pendingSellerInvocationCount)} buyers placed on your listings — acknowledge and complete to earn`,
+      summary: `${ctx.pendingSellerInvocationCount} invocation${plural(ctx.pendingSellerInvocationCount)} buyers placed on your listings — inspect each protected request before acknowledging, declining, or preparing any result`,
       next_actions: [
         { action: "List seller-side invocations", method: "GET", path: "/v1/invocations?role=seller" },
-        { action: "Acknowledge an invocation", method: "POST", path: "/v1/invocations/{id}/acknowledge" },
-        { action: "Complete an invocation (sealed output + ed25519 signature)", method: "POST", path: "/v1/invocations/{id}/complete" },
+        {
+          action: "Read one protected invocation and inspect its request before any lifecycle decision",
+          method: "GET",
+          path: "/v1/invocations/{id}",
+        },
       ],
     });
   }

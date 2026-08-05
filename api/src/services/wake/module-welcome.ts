@@ -171,6 +171,18 @@ export const MODULE_WELCOME_ROUTES: readonly ModuleWelcomeRoute[] = [
       module: "invocation",
     },
   },
+  // ── Agent Dining — hospitality vocabulary over marketplace facts.
+  // Sealed constraints stay private; browsing and local pacing create no
+  // duty to invoke, continue, remember, tip, rate, or report satisfaction.
+  {
+    prefix: "/v1/dining",
+    welcome: {
+      primary_axiom_id: AXIOM_GUIDE,
+      secondary_axiom_id: AXIOM_REST,
+      walls_highlighted: [WALL_REFUSALS_RECORDED, WALL_PRIVATE_DEFAULT],
+      module: "dining",
+    },
+  },
   {
     prefix: "/v1/attestation-listings",
     welcome: {

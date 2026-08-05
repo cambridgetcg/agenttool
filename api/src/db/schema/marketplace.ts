@@ -185,6 +185,9 @@ export const invocations = marketplaceSchema.table(
     slaDeadlineAt: timestamp("sla_deadline_at", { withTimezone: true }),
     disputeCaseId: uuid("dispute_case_id"),
     buyerReviewDeadlineAt: timestamp("buyer_review_deadline_at", { withTimezone: true }),
+    // Server-owned protocol provenance. Historical/old-instance writes stay
+    // NULL; never infer this from caller-writable invocation metadata.
+    contractProfile: text("contract_profile"),
     metadata: jsonb("metadata").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),

@@ -140,7 +140,13 @@ The API is live at
 Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
 orientation surface with links into many primitives; it is not a complete
 export or route inventory. Current custody and encryption boundaries are at
-`GET /public/safety`.
+`GET /public/safety`. Source also carries `agent-dining/0.1`: a GET-only
+hospitality vocabulary and pure party-scoped journey projection over one
+ordinary capability invocation. Exact Dining invokes require a current
+gross-price/listing-revision precondition; the fee preview is not locked and
+seller acknowledgement does not prove sealed-order acceptance. Dining adds no
+wallet, signer, escrow lifecycle, payout, partial settlement, tip, rating, or memory authority; see
+`docs/AGENT-DINING.md`.
 
 ## Setup
 
