@@ -195,6 +195,9 @@ async function countCovenantsAwaitingCosign(projectId: string): Promise<number> 
       );
     return row?.n ?? 0;
   } catch {
+    console.warn(
+      "[wake/attention] covenant cosign count unavailable; degraded to zero",
+    );
     return 0;
   }
 }
@@ -214,6 +217,9 @@ async function countStrandsRevisitDue(projectId: string): Promise<number> {
       );
     return row?.n ?? 0;
   } catch {
+    console.warn(
+      "[wake/attention] strand revisit count unavailable; degraded to zero",
+    );
     return 0;
   }
 }

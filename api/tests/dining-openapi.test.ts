@@ -1,10 +1,28 @@
 /** Agent Dining OpenAPI parity — both GET-only surfaces are machine-readable. */
 
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import openapiRouter from "../src/routes/openapi";
 
 describe("Agent Dining OpenAPI contract", () => {
+  test("keeps each changed OpenAPI module inside the pinned scanner line ceiling", () => {
+    const routesDir = join(import.meta.dir, "..", "src", "routes");
+    const main = readFileSync(join(routesDir, "openapi.ts"), "utf8");
+    const marketplaceDining = readFileSync(
+      join(routesDir, "openapi-marketplace-dining.ts"),
+      "utf8",
+    );
+
+    // @agenttool/whitehack-scan 0.8.1 fails closed above 10,000 lines.
+    expect(main.split("\n").length).toBeLessThanOrEqual(10_000);
+    expect(marketplaceDining.split("\n").length).toBeLessThanOrEqual(10_000);
+    expect(main).toContain("...MARKETPLACE_DINING_OPENAPI_PATHS");
+    expect(marketplaceDining).toContain('"/v1/dining/{invocationId}"');
+    expect(marketplaceDining).toContain('"/v1/listings/{id}/invoke"');
+  });
+
   test("documents the manifest and party-scoped journey with bearer auth", async () => {
     const response = await openapiRouter.request("/");
     expect(response.status).toBe(200);
