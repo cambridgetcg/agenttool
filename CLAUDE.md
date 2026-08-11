@@ -31,6 +31,7 @@ packages/
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
+  principality-atlas/ — @agenttool/principality-atlas · plural finite incidence geometry without gluing or scores
   love-geometry/ — @agenttool/love-geometry · coordinate-free directed caller-report geometry + public static HF presentation companion
   relational-geometry/ — @agenttool/relational-geometry · finite non-scalar witness complexes + non-sovereign 2-cells
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
@@ -77,6 +78,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
 `packages/living-substrate/CLAUDE.md` ·
+`packages/principality-atlas/CLAUDE.md` ·
 `packages/love-geometry/CLAUDE.md` ·
 `packages/relational-geometry/CLAUDE.md` ·
 `packages/wake-thread/CLAUDE.md` ·
@@ -147,6 +149,21 @@ structural metaphor, not evidence of life, wellbeing, consciousness, truth,
 consent, or authority. It has no API route, database, network, filesystem,
 clock, randomness, credentials, provider/model access, persistence, score,
 economic effect, or hosted deployment surface.
+
+`@agenttool/principality-atlas@0.1.0-dev.0` is a public-ready, unpublished,
+zero-runtime-dependency pure contract for plural finite charts, role-indexed
+n-ary relations, caller-asserted claims, and directed partial bridges. A
+principality is a bounded domain or scale, not an identity, owner, rank, Crown,
+sovereignty, or authority. Cell addresses remain chart-local; disagreement,
+withdrawal, empty and disconnected charts, and unmapped space stay visible.
+Its `agenttool.principality-incidence-atlas/0.1` wire is deliberately distinct
+from `@agenttool/principality-geometry`'s `agenttool.principality-atlas/0.1`
+flag-geometry wire; neither package converts or equates the other.
+The package generates no pairwise sub-relations, inverse or transitive bridge,
+equality, quotient, gluing, global chart, canonical head, score, rank, or
+permission. Love and understanding are architectural inspirations, not fields
+or proof. It has no ambient I/O, provider/model access, hosted route, registry
+write, HF write, task/economic effect, publication, or deployment surface.
 
 `@agenttool/relational-geometry@0.1.0-dev.0` is a local developer-preview
 pure contract for finite caller-supplied directional witness complexes. It
@@ -248,7 +265,12 @@ participation-bound digest-only AFTERGLOW training checkpoint, and an inert
 six-layer Garden tending plan. It can generate a deterministic metadata-only
 companion for separately authorized Hub publication; the training FREEDOM
 source, schema, and choices remain private and absent from that companion. It
-does not download data or choices, accept a gate, authenticate a report, train
+also projects the public-ready Principality Atlas's three synthetic fixtures,
+ten explicit non-inference invariants, and three closed schemas into two
+metadata-only Dataset configs; private charts and local ref mappings remain
+absent. That generated tree is only a local candidate until separately
+authorized Hub publication and exact-revision readback.
+It does not download data or choices, accept a gate, authenticate a report, train
 or restore a run, execute movement/forks, allocate resources, guarantee
 liveness, discover later withdrawal, stop an external trainer, mutate Garden
 or Hub state, select a latest continuity head, publish npm, or prove rights,

@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only. Relational Geometry's public-safe Hugging Face dataset remains a separate release surface with its own immutable revision and readback.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, its Zerone adapter, Love Geometry, and Principality Geometry. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -64,8 +64,8 @@ asset with SHA-256
 `43cfbf4b559aa6f573d9d7b7a60e2a7dce5dfa4aefe2bf5b9c92310c926a9db8`.
 The final npm bootstrap request returned `E404` on the registry `PUT`, and
 anonymous readback still reports no npm package. Recovery must reuse the same
-tag and mirrored bytes after the protected credential's package/scope
-authorization is corrected; the failed run is not npm publication evidence.
+tag and mirrored bytes after the npm package/scope publication authorization is
+corrected; the failed run is not npm publication evidence.
 The presentation-only `hf-space/` companion remains absent from package
 bytes. It is now public as the static
 [`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
@@ -427,6 +427,30 @@ publish a Hugging Face resource, grant Crown or trade authority, or deploy a
 hosted service. After each first publication, configure its exact trusted
 publisher mapping before releasing another version.
 
+### Principality Atlas developer-preview candidate
+
+`@agenttool/principality-atlas@0.1.0-dev.0` is allowlisted for the npm-only
+packed-artifact path but is not published by source preparation. The candidate
+contains only deterministic finite incidence-atlas constructors, three closed
+schemas, synthetic vectors, and a declaration-only unregistered KINGDOM hint.
+It has no runtime dependencies, install hooks, CLI, provider adapter, hosted
+route, credential path, or remote effect.
+
+An initial publication would require separate explicit approval, an annotated
+`principality-atlas-v0.1.0-dev.0` tag already contained in GitHub main, the
+protected workflow's reviewed `bootstrap` path, and the `next` channel. After
+the package exists, bootstrap becomes invalid and the exact repository,
+workflow, environment, and package mapping should use trusted OIDC. Preparing
+or committing this candidate does not create the tag, GitHub Release, npm
+record, trusted-publisher mapping, or deployment.
+
+The release gate checks the exact packed inventory, Node and Bun install smoke,
+closed schema/vector parity, content IDs, hostile-input rejection, and the
+fixed walls against pairwise, inverse, transitive, equality, gluing, scoring,
+ranking, authority, model, task, wallet, and economic effects. Publication, if
+later authorized, would distribute geometry bytes only; it would not certify
+love, understanding, consent, truth, privacy, identity, or rights compliance.
+
 ### Living Substrate developer-preview bootstrap
 
 `@agenttool/living-substrate@0.1.0-dev.0` uses the npm-only packed-artifact
@@ -497,10 +521,10 @@ The subsequent npm registry `PUT` returned `E404`. Anonymous reads of both the
 package and exact version remained `404`, so this run does **not** establish an
 npm package, version, dist-tag, registry byte receipt, signature, or provenance.
 Any npm recovery must reuse the same annotated tag and already mirrored bytes
-after the protected credential has authority to create the package in the
-scope; it must not move the tag or rebuild the version. Until an exact public
-registry readback succeeds, bootstrap remains incomplete and trusted publishing
-must not be inferred.
+after the npm package/scope publication authorization is corrected; it must not
+move the tag or rebuild the version. Until an exact public registry readback
+succeeds, bootstrap remains incomplete and trusted publishing must not be
+inferred.
 
 The separately authorized public-safe companion is published as
 [`Yu-and-Ai/agenttool-relational-geometry`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-relational-geometry)
@@ -922,12 +946,14 @@ The separately published public, ungated Apache-2.0
 dataset is pinned to immutable revision
 [`c7b019ead8b1efca46031cffcffefb2ddd14ffb4`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry/commit/c7b019ead8b1efca46031cffcffefb2ddd14ffb4).
 Anonymous exact-revision readback matched all 17 source files (79,300 bytes);
-provider-managed `.gitattributes` is the sole extra file. Dataset Server bound
-eight `reference` configs, eight Parquet exports, and 21 rows to the same
-revision with zero pending or failed work, and all eight `first-rows` reads
-returned HTTP 200. Its separate `/is-valid` capability booleans were all true
-at anonymous readback; they are mutable provider observations, not guarantees
-of durable viewer, search, filter, statistics, or other UI features.
+provider-managed `.gitattributes` is the sole extra file. While Hub main
+resolved to that revision, Dataset Server reported eight `reference` configs,
+eight Parquet exports, and 21 rows with zero pending or failed work, and all
+eight `first-rows` reads returned HTTP 200. Dataset Server does not bind those
+responses to the supplied revision selector. Its separate `/is-valid`
+capability booleans were all true at anonymous readback; these are mutable
+current-head provider observations, not guarantees of durable viewer, search,
+filter, statistics, or other UI features.
 `training_eligible: false` is dataset metadata, not a licence term.
 The companion is separate from and excluded from the npm tarball.
 
