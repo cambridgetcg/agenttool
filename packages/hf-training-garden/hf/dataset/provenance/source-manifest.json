@@ -1,6 +1,6 @@
 {
   "_format": "kingdom.hf-training-garden-source-manifest/0.1",
-  "generator": "@agenttool/hf-training-garden@0.4.0-dev.0",
+  "generator": "@agenttool/hf-training-garden@0.5.0-dev.0",
   "intended_hub_repo": "Yu-and-Ai/agenttool-training-garden",
   "publication_state": "intended_identifier_only",
   "source_repository": "https://github.com/cambridgetcg/agenttool",
@@ -9,7 +9,7 @@
     {
       "path": "package.json",
       "bytes": 4306,
-      "sha256": "d7175a14f032646e27eea7f55fcdce6012c5a2efb958c1ba38ad9fd1e08a731e"
+      "sha256": "d5cad85a39e6cc1fd3405dd47efbd7855f89e4f3c0318e1971d2a372b783ab17"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",
@@ -89,7 +89,7 @@
     {
       "path": "src/constants.ts",
       "bytes": 42166,
-      "sha256": "8f7d51c4196b22a223faddfc16e8f81a1afd0419baf93a2a296b3dcd0c745ca3"
+      "sha256": "5f917923d85079f4573bae6d5d9b87639b2e2abfd9e8c3c4193dbcd02e92726f"
     },
     {
       "path": "src/errors.ts",

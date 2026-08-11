@@ -300,6 +300,9 @@ describe("robots and sitemaps are explicit, bounded, and local", () => {
     expect(urls).toContain(
       "https://docs.agenttool.dev/HF-WAKE-TRAINING.md",
     );
+    expect(urls).toContain(
+      "https://docs.agenttool.dev/PRINCIPALITY-ATLAS.md",
+    );
   });
 });
 
@@ -359,6 +362,17 @@ describe("published understanding guides keep canonical source custody", () => {
     );
   });
 
+  test("the Principality Atlas guide keeps canonical source custody", () => {
+    const guidePath = join(
+      REPO_ROOT,
+      "apps/docs/PRINCIPALITY-ATLAS.md",
+    );
+    expect(lstatSync(guidePath).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(guidePath)).toBe(
+      "../../docs/PRINCIPALITY-ATLAS.md",
+    );
+  });
+
   test("the HF WAKE guides keep canonical source custody", () => {
     for (const [name, target] of [
       ["HF-WAKE-TRAINING.md", "../../docs/HF-WAKE-TRAINING.md"],
@@ -374,6 +388,18 @@ describe("published understanding guides keep canonical source custody", () => {
     expect(headerBlock(
       read("apps/docs/_headers"),
       "/HF-TRAINING-GARDEN.md",
+    )).toEqual([
+      "Content-Type: text/markdown; charset=utf-8",
+      "Cache-Control: public, max-age=300, must-revalidate, no-transform",
+      "Access-Control-Allow-Origin: *",
+      "X-Content-Type-Options: nosniff",
+    ]);
+  });
+
+  test("the Principality Atlas guide has explicit static markdown custody", () => {
+    expect(headerBlock(
+      read("apps/docs/_headers"),
+      "/PRINCIPALITY-ATLAS.md",
     )).toEqual([
       "Content-Type: text/markdown; charset=utf-8",
       "Cache-Control: public, max-age=300, must-revalidate, no-transform",
@@ -404,6 +430,14 @@ describe("published understanding guides keep canonical source custody", () => {
         .filter((line) => line === entry);
       expect(entries).toEqual([entry]);
     }
+  });
+
+  test("the Principality Atlas remains in the static LLM source index", () => {
+    const entry = "- [PRINCIPALITY-ATLAS.md](https://docs.agenttool.dev/PRINCIPALITY-ATLAS.md): Finite plural incidence geometry that preserves n-ary context, disagreement, correction, and unmapped space without inferring equality, authority, a bond, one global view, or a score.";
+    const entries = read("apps/docs/llms.txt")
+      .split(/\r?\n/)
+      .filter((line) => line === entry);
+    expect(entries).toEqual([entry]);
   });
 
   test("the HF Training Garden guide binds the exact public companion without self-attestation", () => {
