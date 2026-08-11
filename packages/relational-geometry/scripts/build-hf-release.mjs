@@ -721,7 +721,7 @@ privacy, safety, authority, or permission.
   evaluation.
 
 There are no real identities, relationship records, private coordinates,
-prompts, transcripts, agent traces, live WAKE/continuity records, current
+real-user prompts or transcripts, agent traces, live WAKE/continuity records, current
 consent or participation choices, chosen/rejected pairs, preference labels,
 reward targets, weights, checkpoints, or model artifact in this dataset.
 

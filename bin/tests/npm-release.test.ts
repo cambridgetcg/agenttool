@@ -87,7 +87,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twenty-four reviewed release identities", () => {
+  test("allowlists twenty-five reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -105,6 +105,7 @@ describe("standard npm release policy", () => {
       "kingdom",
       "kingdom-witness-lab",
       "living-substrate",
+      "relational-geometry",
       "repo-archive",
       "sdk",
       "skills",
@@ -203,6 +204,12 @@ describe("standard npm release policy", () => {
       tagPrefix: "living-substrate",
       artifactKind: "pack",
     });
+    expect(releaseSpec("relational-geometry")).toMatchObject({
+      name: "@agenttool/relational-geometry",
+      packagePath: "packages/relational-geometry",
+      tagPrefix: "relational-geometry",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("repo-archive")).toMatchObject({
       name: "@agenttool/repo-archive",
       packagePath: "packages/repo-archive",
@@ -294,6 +301,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/living-substrate", "0.1.0-dev.0")).toBe(
       "agenttool-living-substrate-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("relational-geometry"), "0.1.0-dev.0")).toBe(
+      "relational-geometry-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/relational-geometry", "0.1.0-dev.0")).toBe(
+      "agenttool-relational-geometry-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("alchemy"), "0.1.0-dev.0")).toBe(
       "alchemy-v0.1.0-dev.0",
@@ -484,6 +497,32 @@ describe("standard npm release policy", () => {
         "package/schema/agenttool-living-substrate-map-v0.1.schema.json",
         "package/schema/agenttool-regeneration-proposal-v0.1.schema.json",
         "package/vectors/agenttool-living-substrate-v0.1.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("relational-geometry"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/schema/agenttool-relational-complex-v0.1.schema.json",
+        "package/schema/agenttool-relational-lens-v0.1.schema.json",
+        "package/vectors/agenttool-relational-geometry-v0.1.json",
+        "package/hf/dataset/LICENSE",
+        "package/hf/dataset/NOTICE",
+        "package/hf/dataset/README.md",
+        "package/hf/dataset/data/structural-examples.jsonl",
+        "package/hf/dataset/data/sft-train.jsonl",
+        "package/hf/dataset/data/public-regression.jsonl",
+        "package/hf/dataset/schema/relational-geometry-structural-v0.1.schema.json",
+        "package/hf/dataset/schema/relational-geometry-sft-v0.1.schema.json",
+        "package/hf/dataset/schema/relational-geometry-public-regression-v0.1.schema.json",
+        "package/hf/dataset/provenance/source-manifest.json",
+        "package/hf/dataset/provenance/example-manifest.json",
+        "package/hf/dataset/hash-manifest.json",
       ]),
     );
     expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([

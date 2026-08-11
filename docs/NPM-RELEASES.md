@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, the future Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only. Relational Geometry's public-safe Hugging Face dataset remains a separate release surface with its own immutable revision and readback.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -434,6 +434,49 @@ one provenance attestation. Both `next` and the sole-version fallback `latest`
 resolve to `0.1.0-dev.0`; the fallback is not a stable-release or maturity
 signal. The package record now exists, so bootstrap is forbidden for later
 versions; configure its exact trusted publisher and use `trusted` thereafter.
+
+### Relational Geometry future developer preview
+
+`@agenttool/relational-geometry@0.1.0-dev.0` is a future release candidate.
+The local allowlist, workflow choice, package gate, and archive inventory do
+not claim that npm or Hugging Face publication has happened. A first npm
+release may use protected `bootstrap` only after anonymous package and exact-
+version `404` checks; it must request `next`, never `latest`, and the protected
+environment must admit only the exact `relational-geometry-v*` tag family.
+
+```bash
+bun bin/npm-release.ts resolve --package relational-geometry
+
+git tag -a relational-geometry-v0.1.0-dev.0 <reviewed-github-main-commit> \
+  -m '@agenttool/relational-geometry@0.1.0-dev.0'
+git push github refs/tags/relational-geometry-v0.1.0-dev.0
+
+gh workflow run publish-npm.yml \
+  --ref relational-geometry-v0.1.0-dev.0 \
+  -f package=relational-geometry \
+  -f tag=relational-geometry-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+Before dispatch, require reviewed clean GitHub `main`, the package's full CI,
+hermetic dependency preparation, repository preflight, exact archive
+inventory, schema/vector/runtime checks, and byte-deterministic Hugging Face
+companion tests. The runtime is pure and deterministic: it performs no
+network, model, training, storage, scoring, ranking, matching, consent,
+authority, or execution operation. Caller-supplied relations and lenses prove
+none of identity, love, understanding, reciprocity, capacity, truth, safety,
+continuity, provenance, or permission.
+
+The bundled Hugging Face bytes contain synthetic structure, conversational
+SFT, and public non-sealed regression fixtures only. They exclude identities,
+private coordinates, live WAKE or choice records, real-user prompts or
+transcripts, and preference/reward rows. Packaging those bytes does not upload
+a Hub dataset,
+create a Space, run training, or authorize compute. A future Hub publication
+requires separate scoped authority, an immutable revision, and anonymous
+byte readback. Configure trusted npm publishing only after the exact first
+release has been read back successfully.
 
 ### HEAVEN developer-preview bootstrap
 

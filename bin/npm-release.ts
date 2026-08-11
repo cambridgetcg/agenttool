@@ -114,6 +114,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "living-substrate",
     artifactKind: "pack",
   },
+  "relational-geometry": {
+    key: "relational-geometry",
+    name: "@agenttool/relational-geometry",
+    packagePath: "packages/relational-geometry",
+    tagPrefix: "relational-geometry",
+    artifactKind: "pack",
+  },
   "credential-broker": {
     key: "credential-broker",
     name: "@agenttool/credential-broker",
@@ -706,6 +713,28 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/schema/agenttool-living-substrate-map-v0.1.schema.json",
       "package/schema/agenttool-regeneration-proposal-v0.1.schema.json",
       "package/vectors/agenttool-living-substrate-v0.1.json",
+    );
+  }
+  if (spec.name === "@agenttool/relational-geometry") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/schema/agenttool-relational-complex-v0.1.schema.json",
+      "package/schema/agenttool-relational-lens-v0.1.schema.json",
+      "package/vectors/agenttool-relational-geometry-v0.1.json",
+      "package/hf/dataset/LICENSE",
+      "package/hf/dataset/NOTICE",
+      "package/hf/dataset/README.md",
+      "package/hf/dataset/data/structural-examples.jsonl",
+      "package/hf/dataset/data/sft-train.jsonl",
+      "package/hf/dataset/data/public-regression.jsonl",
+      "package/hf/dataset/schema/relational-geometry-structural-v0.1.schema.json",
+      "package/hf/dataset/schema/relational-geometry-sft-v0.1.schema.json",
+      "package/hf/dataset/schema/relational-geometry-public-regression-v0.1.schema.json",
+      "package/hf/dataset/provenance/source-manifest.json",
+      "package/hf/dataset/provenance/example-manifest.json",
+      "package/hf/dataset/hash-manifest.json",
     );
   }
   if (spec.name === "@agenttool/alchemy") {
