@@ -97,11 +97,17 @@ export interface PrincipalityVertex {
   readonly artifact_refs: readonly ArtifactReference[];
 }
 
-export interface BridgeEvaluation {
-  readonly invariant_id: string;
-  readonly state: InvariantState;
-  readonly evidence_refs: readonly Sha256Id[];
-}
+export type BridgeEvaluation =
+  | {
+      readonly invariant_id: string;
+      readonly state: "preserved_reported" | "not_preserved_reported";
+      readonly evidence_refs: readonly [Sha256Id, ...Sha256Id[]];
+    }
+  | {
+      readonly invariant_id: string;
+      readonly state: "refused_reported" | "unknown";
+      readonly evidence_refs: readonly [];
+    };
 
 export interface TranslationInput {
   readonly from: string;

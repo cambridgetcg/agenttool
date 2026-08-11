@@ -101,12 +101,12 @@ export function snapshotJson(root: unknown): JsonValue {
     if (seen.has(value)) fail("canonical_error", `${path} contains a cycle`);
     seen.add(value);
     try {
-      let descriptors: ReturnType<typeof Object.getOwnPropertyDescriptors>;
       let array: boolean;
+      let keys: (string | symbol)[];
       let prototype: object | null;
       try {
         array = Array.isArray(value);
-        descriptors = Object.getOwnPropertyDescriptors(value);
+        keys = Reflect.ownKeys(value);
         prototype = Object.getPrototypeOf(value);
       } catch {
         fail(
@@ -114,12 +114,34 @@ export function snapshotJson(root: unknown): JsonValue {
           `${path} could not be inspected as canonical JSON`,
         );
       }
-      const keys = Reflect.ownKeys(descriptors);
+      const availableChildNodes = MAX_JSON_NODES - nodes;
+      const maximumOwnKeys = availableChildNodes + (array ? 1 : 0);
+      if (keys.length > maximumOwnKeys) {
+        fail("canonical_error", "Canonical JSON has too many values");
+      }
+      const descriptor = (key: string | symbol): PropertyDescriptor => {
+        let own: PropertyDescriptor | undefined;
+        try {
+          own = Object.getOwnPropertyDescriptor(value, key);
+        } catch {
+          fail(
+            "canonical_error",
+            `${path} could not be inspected as canonical JSON`,
+          );
+        }
+        if (!own) {
+          fail(
+            "canonical_error",
+            `${path} changed while being inspected as canonical JSON`,
+          );
+        }
+        return own;
+      };
       if (array) {
         if (prototype !== Array.prototype) {
           fail("canonical_error", `${path} must be a standard array`);
         }
-        const lengthDescriptor = descriptors.length;
+        const lengthDescriptor = descriptor("length");
         if (
           !lengthDescriptor ||
           lengthDescriptor.enumerable ||
@@ -143,14 +165,14 @@ export function snapshotJson(root: unknown): JsonValue {
         addJsonBytes(2 + Math.max(0, length - 1));
         const output: JsonValue[] = [];
         for (let index = 0; index < length; index += 1) {
-          const descriptor = descriptors[String(index)];
-          if (!descriptor?.enumerable || !("value" in descriptor)) {
+          const item = descriptor(String(index));
+          if (!item?.enumerable || !("value" in item)) {
             fail(
               "canonical_error",
               `${path}[${index}] must be an enumerable data property`,
             );
           }
-          output.push(visit(descriptor.value, depth + 1, `${path}[${index}]`));
+          output.push(visit(item.value, depth + 1, `${path}[${index}]`));
         }
         return output;
       }
@@ -163,8 +185,8 @@ export function snapshotJson(root: unknown): JsonValue {
         if (typeof key !== "string") {
           fail("canonical_error", `${path} has a symbol property`);
         }
-        const descriptor = descriptors[key];
-        if (!descriptor?.enumerable || !("value" in descriptor)) {
+        const property = descriptor(key);
+        if (!property.enumerable || !("value" in property)) {
           fail(
             "canonical_error",
             `${path}.${key} must be an enumerable data property`,
@@ -175,7 +197,7 @@ export function snapshotJson(root: unknown): JsonValue {
         Object.defineProperty(output, key, {
           configurable: true,
           enumerable: true,
-          value: visit(descriptor.value, depth + 1, `${path}.${key}`),
+          value: visit(property.value, depth + 1, `${path}.${key}`),
           writable: true,
         });
       }

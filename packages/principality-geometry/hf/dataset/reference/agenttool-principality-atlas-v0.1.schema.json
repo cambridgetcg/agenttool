@@ -21,7 +21,7 @@
   "$defs": {
     "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
     "token": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$" },
-    "protocol": { "type": "string", "pattern": "^(?=.{1,128}$)[a-z][a-z0-9._:/-]*$" },
+    "protocol": { "type": "string", "pattern": "^(?=.{1,128}$)[a-z][a-z0-9._:-]*(?:/[a-z0-9][a-z0-9._-]*)*$" },
     "disposition": { "enum": ["available_reported", "resting_reported", "refused_reported", "withdrawn_reported", "unknown"] },
     "state": { "enum": ["preserved_reported", "not_preserved_reported", "refused_reported", "unknown"] },
     "observation": { "enum": ["provider_observation_reported", "caller_asserted"] },

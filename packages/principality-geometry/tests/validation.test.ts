@@ -161,10 +161,17 @@ describe("validation and canonical boundaries", () => {
     versioned.principalities[0].artifact_refs[0].snapshot_manifest_protocol =
       "agent-browser-understanding/0.1";
     versioned.principalities[0].artifact_refs[1].version_metadata_protocol =
-      "npm/version-metadata/v1";
+      "agenttool/knock-knock/index/v1";
     expect(() => createPrincipalityAtlas(versioned)).not.toThrow();
 
-    for (const protocol of ["AgentTool/0.1", "agent tool/0.1", "a".repeat(129)]) {
+    for (const protocol of [
+      "AgentTool/0.1",
+      "agent tool/0.1",
+      "xenia.rights/../../escape",
+      "agenttool//v1",
+      "agenttool/v1/",
+      "a".repeat(129),
+    ]) {
       const invalid = rosetteInput();
       invalid.principalities[0].manifestations[0].protocol = protocol;
       expect(() => createPrincipalityAtlas(invalid)).toThrow(/protocol identifier/u);
@@ -304,6 +311,11 @@ describe("validation and canonical boundaries", () => {
   test("rejects oversized canonical JSON before serialization can grow unbounded", () => {
     const boundedStrings = Array.from({ length: 2_100 }, () => "x".repeat(4_096));
     expect(() => snapshotJson(boundedStrings)).toThrow(/exceeds 8388608 bytes/u);
+  });
+
+  test("rejects an over-budget own-key set before reading its descriptors", () => {
+    const tooManyValues = Array.from({ length: 262_144 }, () => null);
+    expect(() => snapshotJson(tooManyValues)).toThrow(/too many values/u);
   });
 
   test("keeps the documented maximum shape constructible", () => {

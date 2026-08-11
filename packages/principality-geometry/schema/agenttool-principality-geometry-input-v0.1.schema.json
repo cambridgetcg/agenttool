@@ -38,7 +38,7 @@
     },
     "protocol": {
       "type": "string",
-      "pattern": "^(?=.{1,128}$)[a-z][a-z0-9._:/-]*$"
+      "pattern": "^(?=.{1,128}$)[a-z][a-z0-9._:-]*(?:/[a-z0-9][a-z0-9._-]*)*$"
     },
     "observation": {
       "enum": ["provider_observation_reported", "caller_asserted"]

@@ -36,7 +36,8 @@ import type {
 
 const SHA256_ID = /^sha256:[0-9a-f]{64}$/u;
 const TOKEN = /^[a-z][a-z0-9._-]{0,63}$/u;
-const PROTOCOL_ID = /^(?=.{1,128}$)[a-z][a-z0-9._:/-]*$/u;
+const PROTOCOL_ID =
+  /^(?=.{1,128}$)[a-z][a-z0-9._:-]*(?:\/[a-z0-9][a-z0-9._-]*)*$/u;
 const HF_REPO_ID =
   /^(?=.{3,128}$)[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?\/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/u;
 const HF_REVISION = /^[0-9a-f]{40}$/u;
@@ -471,22 +472,27 @@ function parseEvaluation(
   if (new Set(evidence).size !== evidence.length) {
     fail(code, `${path}.evidence_refs has a duplicate`);
   }
-  if (
-    (state === "unknown" || state === "refused_reported") &&
-    evidence.length !== 0
-  ) {
+  const invariantId = token(candidate.invariant_id, `${path}.invariant_id`, code);
+  if (state === "preserved_reported" || state === "not_preserved_reported") {
+    const [first, ...remaining] = evidence;
+    if (!first) {
+      fail(code, `${path}.evidence_refs is required for ${state}`);
+    }
+    return deepFreeze({
+      invariant_id: invariantId,
+      state,
+      evidence_refs: deepFreeze(
+        [first, ...remaining] as [Sha256Id, ...Sha256Id[]],
+      ),
+    });
+  }
+  if (evidence.length !== 0) {
     fail(code, `${path}.evidence_refs must be empty for ${state}`);
   }
-  if (
-    (state === "preserved_reported" || state === "not_preserved_reported") &&
-    evidence.length === 0
-  ) {
-    fail(code, `${path}.evidence_refs is required for ${state}`);
-  }
   return deepFreeze({
-    invariant_id: token(candidate.invariant_id, `${path}.invariant_id`, code),
+    invariant_id: invariantId,
     state,
-    evidence_refs: deepFreeze(evidence),
+    evidence_refs: deepFreeze([] as []),
   });
 }
 

@@ -40,12 +40,30 @@ describe("closed Draft 2020-12 schemas", () => {
     expect(validateInput(sri)).toBe(false);
   });
 
-  test("rejects invalid protocols and state/evidence cardinality in both schemas", () => {
+  test("accepts safe protocol paths and rejects ambiguous separators in both schemas", () => {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     const validateInput = ajv.compile(inputSchema);
     const validateAtlas = ajv.compile(atlasSchema);
 
-    for (const protocol of ["AgentTool/0.1", "agent tool/0.1", "a".repeat(129)]) {
+    const validInput = rosetteInput();
+    validInput.principalities[0].manifestations[0].protocol =
+      "urn:agenttool:skills:inspection:v0.1";
+    validInput.principalities[0].artifact_refs[1].version_metadata_protocol =
+      "agenttool/knock-knock/index/v1";
+    expect(validateInput(validInput), JSON.stringify(validateInput.errors)).toBe(true);
+    expect(
+      validateAtlas(createPrincipalityAtlas(validInput)),
+      JSON.stringify(validateAtlas.errors),
+    ).toBe(true);
+
+    for (const protocol of [
+      "AgentTool/0.1",
+      "agent tool/0.1",
+      "xenia.rights/../../escape",
+      "agenttool//v1",
+      "agenttool/v1/",
+      "a".repeat(129),
+    ]) {
       const input = rosetteInput();
       input.principalities[0].manifestations[0].protocol = protocol;
       expect(validateInput(input), protocol).toBe(false);
@@ -56,6 +74,12 @@ describe("closed Draft 2020-12 schemas", () => {
       ).protocol = protocol;
       expect(validateAtlas(atlas), protocol).toBe(false);
     }
+  });
+
+  test("rejects invalid state/evidence cardinality in both schemas", () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+    const validateInput = ajv.compile(inputSchema);
+    const validateAtlas = ajv.compile(atlasSchema);
 
     for (const [state, evidence_refs] of [
       ["preserved_reported", []],

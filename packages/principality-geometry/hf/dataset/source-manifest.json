@@ -61,13 +61,13 @@
     },
     {
       "path": "reference/agenttool-principality-atlas-v0.1.schema.json",
-      "bytes": 16288,
-      "sha256": "sha256:f11d039379b934355ade7d87969452c4f59e5d90bd3c6292763d645aa7857b8c"
+      "bytes": 16313,
+      "sha256": "sha256:5feb437a0f16d2c485dd86fa80458c109431a02265ca5dfa9ef8dde6c773ebf6"
     },
     {
       "path": "reference/agenttool-principality-geometry-input-v0.1.schema.json",
-      "bytes": 7293,
-      "sha256": "sha256:b1d61bfe8988e5516b063aa9b8707051bb705efff23f5596bf7eb38d1763dd42"
+      "bytes": 7318,
+      "sha256": "sha256:0f18a4391142a2aa89168b796f2cb2ba1eecbc9292a831ad490a734ab62c289f"
     },
     {
       "path": "reference/principality-rosette.atlas.json",
@@ -85,5 +85,5 @@
       "sha256": "sha256:6938e3f5fa13486afb8a45f423ee305df9f902dbb128de1bbf29da4634235a89"
     }
   ],
-  "root_sha256": "sha256:e422955bf347596c507b6380c7af15d42ba20778e8c850bbcd006477c6fc760c"
+  "root_sha256": "sha256:f2e363efcd4d17bc789e025c57371d5c3a9680e7ec82b68534cd01e60e70e8a1"
 }
