@@ -130,6 +130,7 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/browser", version: "0.5.0", releaseTag: "browser-v0.5.0" },
       { name: "@agenttool/browser", version: "0.5.1", releaseTag: "browser-v0.5.1" },
       { name: "@agenttool/browser", version: "0.6.0", releaseTag: "browser-v0.6.0" },
+      { name: "@agenttool/principality-geometry", version: "0.1.0-dev.0", releaseTag: "principality-geometry-v0.1.0-dev.0" },
     ]);
   });
 

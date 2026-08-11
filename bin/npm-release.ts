@@ -114,6 +114,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "living-substrate",
     artifactKind: "pack",
   },
+  "principality-geometry": {
+    key: "principality-geometry",
+    name: "@agenttool/principality-geometry",
+    packagePath: "packages/principality-geometry",
+    tagPrefix: "principality-geometry",
+    artifactKind: "love",
+  },
   "love-geometry": {
     key: "love-geometry",
     name: "@agenttool/love-geometry",
@@ -724,6 +731,19 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/schema/agenttool-living-substrate-map-v0.1.schema.json",
       "package/schema/agenttool-regeneration-proposal-v0.1.schema.json",
       "package/vectors/agenttool-living-substrate-v0.1.json",
+    );
+  }
+  if (spec.name === "@agenttool/principality-geometry") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/examples/principality-rosette.atlas.json",
+      "package/examples/principality-rosette.input.json",
+      "package/examples/principality-rosette.svg",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-principality-atlas-v0.1.schema.json",
+      "package/schema/agenttool-principality-geometry-input-v0.1.schema.json",
     );
   }
   if (spec.name === "@agenttool/love-geometry") {

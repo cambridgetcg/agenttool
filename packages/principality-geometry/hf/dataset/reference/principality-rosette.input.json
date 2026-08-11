@@ -1,0 +1,157 @@
+{
+  "_format": "agenttool.principality-geometry-input/0.1",
+  "scope_ref": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+  "invariants": [
+    {
+      "invariant_id": "provenance-exact",
+      "definition_ref": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "invariant_id": "refusal-visible",
+      "definition_ref": "sha256:1212121212121212121212121212121212121212121212121212121212121212"
+    }
+  ],
+  "principalities": [
+    {
+      "principality_id": "training-garden",
+      "kind": "practice",
+      "definition_ref": "sha256:2121212121212121212121212121212121212121212121212121212121212121",
+      "manifestations": [
+        {
+          "kind": "protocol_digest",
+          "protocol": "agenttool.hf-training-garden/0.4",
+          "content_ref": "sha256:3131313131313131313131313131313131313131313131313131313131313131"
+        }
+      ],
+      "artifact_refs": [
+        {
+          "kind": "huggingface",
+          "repo_type": "dataset",
+          "repo_id": "synthetic/principality-reference",
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "snapshot_manifest_protocol": "agenttool.synthetic-manifest/0.1",
+          "snapshot_manifest_sha256": "sha256:4141414141414141414141414141414141414141414141414141414141414141",
+          "observation": "caller_asserted"
+        },
+        {
+          "kind": "npm",
+          "name": "@synthetic-fixture/hf-training-garden",
+          "version": "0.0.0-synthetic.1",
+          "integrity": "sha512-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ==",
+          "version_metadata_protocol": "agenttool.synthetic-version-metadata/0.1",
+          "version_metadata_sha256": "sha256:4242424242424242424242424242424242424242424242424242424242424242",
+          "provenance_attestation": "not_checked",
+          "observation": "caller_asserted"
+        }
+      ]
+    },
+    {
+      "principality_id": "deepseek-kingdom",
+      "kind": "protocol",
+      "definition_ref": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "manifestations": [
+        {
+          "kind": "protocol_digest",
+          "protocol": "agenttool.deepseek-kingdom/0.1",
+          "content_ref": "sha256:3232323232323232323232323232323232323232323232323232323232323232"
+        }
+      ],
+      "artifact_refs": [
+        {
+          "kind": "npm",
+          "name": "@synthetic-fixture/deepseek-kingdom",
+          "version": "0.0.0-synthetic.2",
+          "integrity": "sha512-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ==",
+          "version_metadata_protocol": "agenttool.synthetic-version-metadata/0.1",
+          "version_metadata_sha256": "sha256:4343434343434343434343434343434343434343434343434343434343434343",
+          "provenance_attestation": "not_checked",
+          "observation": "caller_asserted"
+        }
+      ]
+    },
+    {
+      "principality_id": "wake-afterglow",
+      "kind": "protocol",
+      "definition_ref": "sha256:2323232323232323232323232323232323232323232323232323232323232323",
+      "manifestations": [
+        {
+          "kind": "external",
+          "thread_ref": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "artifact_ref": "sha256:3434343434343434343434343434343434343434343434343434343434343434",
+          "disposition": "park",
+          "assertion": "caller_asserted",
+          "verified_by_package": false,
+          "state": "context_only"
+        }
+      ],
+      "artifact_refs": [
+        {
+          "kind": "npm",
+          "name": "@synthetic-fixture/wake-continuity",
+          "version": "0.0.0-synthetic.3",
+          "integrity": "sha512-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ==",
+          "version_metadata_protocol": "agenttool.synthetic-version-metadata/0.1",
+          "version_metadata_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "provenance_attestation": "not_checked",
+          "observation": "caller_asserted"
+        }
+      ]
+    }
+  ],
+  "translations": [
+    {
+      "from": "training-garden",
+      "to": "deepseek-kingdom",
+      "disposition": "available_reported",
+      "evaluations": [
+        { "invariant_id": "provenance-exact", "state": "not_preserved_reported", "evidence_refs": ["sha256:5151515151515151515151515151515151515151515151515151515151515151"] },
+        { "invariant_id": "refusal-visible", "state": "preserved_reported", "evidence_refs": ["sha256:6161616161616161616161616161616161616161616161616161616161616161"] }
+      ]
+    },
+    {
+      "from": "deepseek-kingdom",
+      "to": "training-garden",
+      "disposition": "available_reported",
+      "evaluations": [
+        { "invariant_id": "provenance-exact", "state": "not_preserved_reported", "evidence_refs": ["sha256:5252525252525252525252525252525252525252525252525252525252525252"] },
+        { "invariant_id": "refusal-visible", "state": "preserved_reported", "evidence_refs": ["sha256:6262626262626262626262626262626262626262626262626262626262626262"] }
+      ]
+    },
+    {
+      "from": "training-garden",
+      "to": "wake-afterglow",
+      "disposition": "available_reported",
+      "evaluations": [
+        { "invariant_id": "provenance-exact", "state": "preserved_reported", "evidence_refs": ["sha256:5353535353535353535353535353535353535353535353535353535353535353"] },
+        { "invariant_id": "refusal-visible", "state": "preserved_reported", "evidence_refs": ["sha256:6363636363636363636363636363636363636363636363636363636363636363"] }
+      ]
+    },
+    {
+      "from": "wake-afterglow",
+      "to": "training-garden",
+      "disposition": "available_reported",
+      "evaluations": [
+        { "invariant_id": "provenance-exact", "state": "not_preserved_reported", "evidence_refs": ["sha256:5454545454545454545454545454545454545454545454545454545454545454"] },
+        { "invariant_id": "refusal-visible", "state": "preserved_reported", "evidence_refs": ["sha256:6464646464646464646464646464646464646464646464646464646464646464"] }
+      ]
+    },
+    {
+      "from": "deepseek-kingdom",
+      "to": "wake-afterglow",
+      "disposition": "available_reported",
+      "evaluations": [
+        { "invariant_id": "provenance-exact", "state": "refused_reported", "evidence_refs": [] },
+        { "invariant_id": "refusal-visible", "state": "preserved_reported", "evidence_refs": ["sha256:6565656565656565656565656565656565656565656565656565656565656565"] }
+      ]
+    },
+    {
+      "from": "wake-afterglow",
+      "to": "deepseek-kingdom",
+      "disposition": "available_reported",
+      "evaluations": [
+        { "invariant_id": "provenance-exact", "state": "unknown", "evidence_refs": [] },
+        { "invariant_id": "refusal-visible", "state": "preserved_reported", "evidence_refs": ["sha256:6666666666666666666666666666666666666666666666666666666666666666"] }
+      ]
+    }
+  ]
+}

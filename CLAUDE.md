@@ -26,6 +26,7 @@ packages/
   dark-continent-karma/ — @agenttool/dark-continent-karma · proposal-only KG enrichment adapter
   deepseek-kingdom/ — @agenttool/deepseek-kingdom · pinned primary-source proposal adapter
   wake-continuity/ — @agenttool/wake-continuity · digest-only AFTERGLOW capsules and next-wake lenses
+  principality-geometry/ — @agenttool/principality-geometry · public invariant-preservation flag geometry over caller reports
   kingdom-witness-lab/ — @agenttool/kingdom-witness-lab · local research admission records
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
@@ -71,6 +72,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/dark-continent-karma/CLAUDE.md` ·
 `packages/deepseek-kingdom/CLAUDE.md` ·
 `packages/wake-continuity/CLAUDE.md` ·
+`packages/principality-geometry/CLAUDE.md` ·
 `packages/kingdom-witness-lab/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
@@ -192,6 +194,17 @@ lenses. It can project exact Handoff fact and Correspondence content-digest
 references, but it does not read or persist WAKE, choose a canonical head,
 verify referents, or prove identity, memory, consent, permission, replay, or
 uninterrupted continuity.
+
+`@agenttool/principality-geometry` is a public developer-preview pure composition plane for
+caller-declared, digest-bound translations among distinct principalities. It
+retains directed reports, reciprocal lenses, per-invariant components,
+six-direction flag surfaces, and every open/refused/unknown condition while
+accepting immutable HF/npm references and an exact external AFTERGLOW thread
+shape. The distribution boundary is an exact LOVE/npm `next` release and a
+separately scoped static, non-training Hugging Face reference companion. The
+runtime still does not score beings, infer love, understanding, truth,
+consent, identity, safety, or authority, fetch providers, continue a thread,
+upload, persist, or expose a hosted surface.
 
 `@agenttool/kingdom-witness-lab` supplies deterministic local passports,
 mutable provider-route disclosures, digest-only multi-witness dossiers, inert

@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="960" viewBox="0 0 960 960" role="img" aria-labelledby="title description" data-layout="display-only-integer-ring">
+  <title id="title">Principality invariant geometry</title>
+  <desc id="description">A deterministic display-only integer layout. P labels follow unsigned UTF-16 protocol order. Filled surfaces show only caller-reported mutual preservation across all six directions of a triangle. Distance, position and area are not similarity, value, rank, love or understanding.</desc>
+  <metadata>agenttool.principality-geometry/display-only</metadata>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,4 L0,8 Z" fill="#d4a72c" /></marker>
+    <style>
+      .surface{fill:#f6c177;fill-opacity:.14;stroke:#f6c177;stroke-opacity:.45;stroke-width:2}
+      .reciprocal{stroke:#63d2b4;stroke-width:3;fill:none}
+      .inactive{stroke:#8b93a7;stroke-width:2;stroke-dasharray:8 7;fill:none}
+      .one-way{stroke-width:2;fill:none;marker-end:url(#arrow)}
+      .one-way.available{stroke:#d4a72c;stroke-dasharray:5 7}
+      .one-way.resting{stroke:#78a9ff;stroke-dasharray:2 8}
+      .one-way.refused{stroke:#ff7eb6;stroke-dasharray:10 6}
+      .one-way.withdrawn{stroke:#8b93a7;stroke-dasharray:1 9}
+      .one-way.unknown{stroke:#be95ff;stroke-dasharray:4 10}
+      .vertex{fill:#11182a;stroke:#f2f4f8;stroke-width:3}
+      .label{fill:#f2f4f8;font:600 15px ui-monospace,SFMono-Regular,Menlo,monospace;text-anchor:middle;dominant-baseline:middle}
+      .artifact.hf{fill:#ffd21e;stroke:#11182a;stroke-width:1}
+      .artifact.npm{fill:#cb3837;stroke:#11182a;stroke-width:1}
+    </style>
+  </defs>
+  <rect width="960" height="960" rx="48" fill="#0b1020" />
+  <polygon class="surface" points="810,480 785,606 713,713" data-invariant-count="1" />
+  <line class="reciprocal" data-forward-disposition="available_reported" data-reverse-disposition="available_reported" x1="810" y1="480" x2="785" y2="606" />
+  <line class="reciprocal" data-forward-disposition="available_reported" data-reverse-disposition="available_reported" x1="810" y1="480" x2="713" y2="713" />
+  <line class="reciprocal" data-forward-disposition="available_reported" data-reverse-disposition="available_reported" x1="785" y1="606" x2="713" y2="713" />
+  <g class="principality">
+    <circle class="vertex" cx="810" cy="480" r="38" />
+    <text class="label" x="810" y="480">P01</text>
+    <rect class="artifact npm" x="806" y="534" width="8" height="8" rx="1" />
+  </g>
+  <g class="principality">
+    <circle class="vertex" cx="785" cy="606" r="38" />
+    <text class="label" x="785" y="606">P02</text>
+    <rect class="artifact npm" x="775" y="660" width="8" height="8" rx="1" />
+    <circle class="artifact hf" cx="792" cy="664" r="4" />
+  </g>
+  <g class="principality">
+    <circle class="vertex" cx="713" cy="713" r="38" />
+    <text class="label" x="713" y="713">P03</text>
+    <rect class="artifact npm" x="709" y="767" width="8" height="8" rx="1" />
+  </g>
+</svg>
