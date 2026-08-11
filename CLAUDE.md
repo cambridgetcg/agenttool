@@ -32,6 +32,7 @@ packages/
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
   principality-atlas/ — @agenttool/principality-atlas · plural finite incidence geometry without gluing or scores
   love-geometry/ — @agenttool/love-geometry · coordinate-free directed caller-report geometry + staged static HF companion
+  relational-geometry/ — @agenttool/relational-geometry · finite non-scalar witness complexes + non-sovereign 2-cells
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
@@ -77,6 +78,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/living-substrate/CLAUDE.md` ·
 `packages/principality-atlas/CLAUDE.md` ·
 `packages/love-geometry/CLAUDE.md` ·
+`packages/relational-geometry/CLAUDE.md` ·
 `packages/wake-thread/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
@@ -157,6 +159,20 @@ equality, quotient, gluing, global chart, canonical head, score, rank, or
 permission. Love and understanding are architectural inspirations, not fields
 or proof. It has no ambient I/O, provider/model access, hosted route, registry
 write, HF write, task/economic effect, publication, or deployment surface.
+
+`@agenttool/relational-geometry@0.1.0-dev.0` is a local developer-preview
+pure contract for finite caller-supplied directional witness complexes. It
+derives one explicitly non-sovereign principality 2-cell only when
+understanding and recognition witnesses share the same ordered pair; empty,
+boundary-only, and one-pole complexes remain complete. Explicit consent,
+refusal, privacy, authority, and continuity boundary witnesses remain visible
+without deriving a cell. The geometry is structural, not a metric, rank,
+mutual relation, consent record, identity, inner-state or truth proof,
+continuity claim, or authority source. A separately authorized host may carry
+only an exact opaque digest through AFTERGLOW's `external` / `context_only`
+thread; no crossing is automatic. The package has no hosted route, network,
+persistence, provider/model access, training, economic effect, publication,
+or deployment surface. See [`docs/PRINCIPALITIES.md`](docs/PRINCIPALITIES.md).
 
 `@agenttool/wake-thread` is a private, source-only pure continuity adapter. It
 content-binds caller-selected WAKE facts, explicit identity/project/mixed scope,

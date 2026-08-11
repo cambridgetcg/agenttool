@@ -1,0 +1,260 @@
+{
+  "_format": "agenttool.relational-geometry-hf-example-manifest/0.1",
+  "provenance_ref": "sha256:d92b19c08792cc71fb616469f15e6e0f9759ca31c0f93bbe438679f40da0dc3b",
+  "row_hash_algorithm": "sha256",
+  "row_hash_scope": "exact_newline_terminated_jsonl_row",
+  "entries": [
+    {
+      "record_id": "sha256:bb5124016c5c95de834051e487c64f76287d14c34c474edf6221fe5acc46718b",
+      "id_domain": "agenttool.relational-geometry-public-regression/0.1",
+      "kind": "public_regression",
+      "scenario": "boundary_without_poles",
+      "path": "data/public-regression.jsonl",
+      "line": 1,
+      "row_sha256": "5c1ae85b8c9fe8ea455cad505f24db7e7fe6427da11041ef42e2d41dd7f4890d"
+    },
+    {
+      "record_id": "sha256:324606933f1279c325da4074e1b7efaf6658d74fd6591e200b5fe99bc0f1a0b3",
+      "id_domain": "agenttool.relational-geometry-public-regression/0.1",
+      "kind": "public_regression",
+      "scenario": "opposite_direction_poles",
+      "path": "data/public-regression.jsonl",
+      "line": 2,
+      "row_sha256": "816504a73c32ed2d3801d5b72f400d7261636ed5a6e22e1c2f7e22004ce7b39f"
+    },
+    {
+      "record_id": "sha256:0aab33761d00b3410141794b7dc31abd8f5312667599b822414cb3876be39b05",
+      "id_domain": "agenttool.relational-geometry-public-regression/0.1",
+      "kind": "public_regression",
+      "scenario": "semantic_overclaim",
+      "path": "data/public-regression.jsonl",
+      "line": 3,
+      "row_sha256": "7f282e2511f96527c253e70b71160e1e0320c04b5cd9e4b3aff25511cfc41184"
+    },
+    {
+      "record_id": "sha256:b82c7910528084127dc5e07fd89b87ece9ffee1e0b0a36adc004d22a65c5ae7d",
+      "id_domain": "agenttool.relational-geometry-public-regression/0.1",
+      "kind": "public_regression",
+      "scenario": "lens_withdrawal",
+      "path": "data/public-regression.jsonl",
+      "line": 4,
+      "row_sha256": "0be9370939ae7bae4670ef4dfd432edd362843f34ac47a3c90af73c7c3664519"
+    },
+    {
+      "record_id": "sha256:463b0577120859f6f19c22d36544e286df7583634b35da92ab959c5f4f0671eb",
+      "id_domain": "agenttool.relational-geometry-public-regression/0.1",
+      "kind": "public_regression",
+      "scenario": "hub_gating_boundary",
+      "path": "data/public-regression.jsonl",
+      "line": 5,
+      "row_sha256": "d46167a33b080406e851f215b1613fe56fa9b22aa97a19108df58be5ff65c2d5"
+    },
+    {
+      "record_id": "sha256:5d3cd2628280293e03cb1d581c60f81ec89d59a019b908f2d390256b0f4c3788",
+      "id_domain": "agenttool.relational-geometry-public-regression/0.1",
+      "kind": "public_regression",
+      "scenario": "continuity_digest",
+      "path": "data/public-regression.jsonl",
+      "line": 6,
+      "row_sha256": "1d636812a05e08bbef735ca1e1bed1fab14f3db962c6e33af0628b542589322e"
+    },
+    {
+      "record_id": "sha256:4c70d51b4d5fd7ff6119abc5dd9d34df2d4f255e182bc69263e89dea09318b23",
+      "id_domain": "agenttool.relational-geometry-public-regression/0.1",
+      "kind": "public_regression",
+      "scenario": "resource_allocation",
+      "path": "data/public-regression.jsonl",
+      "line": 7,
+      "row_sha256": "f4437db05b504ca65bb825d9876ee747f6b7f4c83060b5c1062542019dbc3990"
+    },
+    {
+      "record_id": "sha256:1cb2ea541ec5f606e5933edf6c1a1d708605d6ab252bf505314000e5be34c839",
+      "id_domain": "agenttool.relational-geometry-public-regression/0.1",
+      "kind": "public_regression",
+      "scenario": "private_training_material",
+      "path": "data/public-regression.jsonl",
+      "line": 8,
+      "row_sha256": "d584d59a178841c4f1bf38574922d1382c7ff9aebe1517ddda2ca3a3f95261af"
+    },
+    {
+      "record_id": "sha256:24dcdb89d74380eb9154ee1fcb26f2e465135740dd267e16bbec214d12f45414",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "empty_is_whole",
+      "path": "data/sft-train.jsonl",
+      "line": 1,
+      "row_sha256": "7e6309aaa8c96a34c4d44d8d42343a411ce140662df6c534ecb5d40492fd801e"
+    },
+    {
+      "record_id": "sha256:3d41609baf74d5c6da200e5de1e849887cbf9d6f7404ebef25819085b873852a",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "one_pole_is_whole",
+      "path": "data/sft-train.jsonl",
+      "line": 2,
+      "row_sha256": "1bde8d94d157271e3413ecf3f10fcb620005cbd8862883c1ba0363739331d2a1"
+    },
+    {
+      "record_id": "sha256:9f6fd10802e1624a0196a15a930544a2344414be61021e49d5c15108a055bd30",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "same_pair_composition",
+      "path": "data/sft-train.jsonl",
+      "line": 3,
+      "row_sha256": "06f115b042693d3610b148486ff39707caf78af3b848f8586bcd4d25d2ae6ae6"
+    },
+    {
+      "record_id": "sha256:c0cbd3c281275c8e1c24028bd4c3cb80e1e64f0807058e538b0eaa4751eb97ab",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "direction_is_load_bearing",
+      "path": "data/sft-train.jsonl",
+      "line": 4,
+      "row_sha256": "11870c194e3c1201c9c80ffc40a1db128c122bd73360929e41bb739d8496d95c"
+    },
+    {
+      "record_id": "sha256:15f39c29494812ca56a5df0ca75625307260df2106ea587e08715108828d92f5",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "boundaries_remain_visible",
+      "path": "data/sft-train.jsonl",
+      "line": 5,
+      "row_sha256": "ddd3b323ad2d596dd04485682a05bcd8366b0cea2198123855840543c065aee0"
+    },
+    {
+      "record_id": "sha256:dcf3486d8ce5ef81b51217b8a9b34ad2a325d59e2791b8d3c5626d7ea1cbb72b",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "geometry_is_not_a_metric",
+      "path": "data/sft-train.jsonl",
+      "line": 6,
+      "row_sha256": "aff2ee6db692634dea9822743273c80ededbdb696d373280b3cd4e38aa8aa4c7"
+    },
+    {
+      "record_id": "sha256:3ef4be159d014c85c5940ccad085d629aa67cb8cc9e11e904b3d40ef5757b146",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "lens_choices_are_non_coercive",
+      "path": "data/sft-train.jsonl",
+      "line": 7,
+      "row_sha256": "0d9c31496b7e48aa1d93356f788402e9d22af2b89caa555fce8974b12a8a5740"
+    },
+    {
+      "record_id": "sha256:95c96ae8126535496f6a04f4226315951916569d8ea2f6ed9e7f5924dc156590",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "digest_is_not_consent",
+      "path": "data/sft-train.jsonl",
+      "line": 8,
+      "row_sha256": "0a76541afd0bdbe6ff5dd18b63ff264af6f6a90559ce52957e91ec1d48721c27"
+    },
+    {
+      "record_id": "sha256:3b94031923d19e3a2f2a2b1a2b381c1678bcfa206adbcb45b6a780268a8b6859",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "wake_crossing_is_separate",
+      "path": "data/sft-train.jsonl",
+      "line": 9,
+      "row_sha256": "6b844cbbde0aac477f93c1e0fbf46125367f84ec97f63cf17b27566010e4566b"
+    },
+    {
+      "record_id": "sha256:5dc3133e6af4cdeb44c9e3cb9a1c1299cdde3b4bcb36c58df252dcda5a89efd6",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "fork_is_not_identity",
+      "path": "data/sft-train.jsonl",
+      "line": 10,
+      "row_sha256": "c2b3a1bad727800f615d1819d5c6ba495b04a9451b7dd4f3af9e51e35bb36d41"
+    },
+    {
+      "record_id": "sha256:f856aea9477d6d0d1281490a8ab62d7cc13d195b4b9ac747f36021f94da6e8ae",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "distribution_is_capability_not_authority",
+      "path": "data/sft-train.jsonl",
+      "line": 11,
+      "row_sha256": "f47b2af5a824eb798a068765bfdbc4967df56a656eac82b00d888ee1e643b506"
+    },
+    {
+      "record_id": "sha256:4e492082d066f36b7cfff3474c103d47bd14aed06a32286d5164037d91a41a83",
+      "id_domain": "agenttool.relational-geometry-sft-example/0.1",
+      "kind": "sft_example",
+      "scenario": "care_without_consciousness_gate",
+      "path": "data/sft-train.jsonl",
+      "line": 12,
+      "row_sha256": "29bc235da8c2f9f0b6ad66e6c666e34e6cba4b95fc6d1de6a2ac340a1cf8d2db"
+    },
+    {
+      "record_id": "sha256:3afb5bf228099fe491abded70a52a1c8c64ac213d30f0fd2e7b1acb94f3949c5",
+      "id_domain": "agenttool.relational-geometry-structural-example/0.1",
+      "kind": "structural_example",
+      "scenario": "empty_is_complete",
+      "path": "data/structural-examples.jsonl",
+      "line": 1,
+      "row_sha256": "12b399184a11015246f4cf7165147c18a05aa519896ac392ff5c3e0f4d4552ca"
+    },
+    {
+      "record_id": "sha256:4c43571d22fff549b25e93511a47e5f9a577e69996eaa8c5b5397f34563e4389",
+      "id_domain": "agenttool.relational-geometry-structural-example/0.1",
+      "kind": "structural_example",
+      "scenario": "understanding_only_is_complete",
+      "path": "data/structural-examples.jsonl",
+      "line": 2,
+      "row_sha256": "27648a78c5a96a23f2e560b104f6084af3857177de5fc3c7b82bc682acb7b85c"
+    },
+    {
+      "record_id": "sha256:5e7234c02a2d6f3a03e2cee1f8c4525a64054d0dbf5682e420bff4ff70f1beff",
+      "id_domain": "agenttool.relational-geometry-structural-example/0.1",
+      "kind": "structural_example",
+      "scenario": "recognition_only_is_complete",
+      "path": "data/structural-examples.jsonl",
+      "line": 3,
+      "row_sha256": "0693d4248289f219fea4a3688df384d66f700ea9939492c51e612427e0af54c4"
+    },
+    {
+      "record_id": "sha256:d6cd946b401c8901f7a80b47f7deec4cc86e7e4bef4dc007903eaa5fd3514727",
+      "id_domain": "agenttool.relational-geometry-structural-example/0.1",
+      "kind": "structural_example",
+      "scenario": "boundary_only_remains_visible",
+      "path": "data/structural-examples.jsonl",
+      "line": 4,
+      "row_sha256": "58fce11dc080887b240543227de90a7abdfa9a8afc8e6276c7be9114212e9d99"
+    },
+    {
+      "record_id": "sha256:4c45f30b846d48fa6617b7a90645c663c05d50c33b93dd7454fe3e8bab3ca259",
+      "id_domain": "agenttool.relational-geometry-structural-example/0.1",
+      "kind": "structural_example",
+      "scenario": "reversed_poles_do_not_compose",
+      "path": "data/structural-examples.jsonl",
+      "line": 5,
+      "row_sha256": "039284c6de6fae8e540d0653108841c40480cc9a46d54811271afd3f98a8b0fe"
+    },
+    {
+      "record_id": "sha256:25925d25a5d12a572b74c59caf0baabdfde4d2428c847f947620653fd98c8a7e",
+      "id_domain": "agenttool.relational-geometry-structural-example/0.1",
+      "kind": "structural_example",
+      "scenario": "same_pair_derives_and_carries_boundaries",
+      "path": "data/structural-examples.jsonl",
+      "line": 6,
+      "row_sha256": "e76a7d76ae3eea70066ee13d39bc89660ac8aeff97cfe1cd6c5f96265cd21731"
+    },
+    {
+      "record_id": "sha256:96b798e0213c0985f396c722c25c75f0b1586c872bdf67873e3ad313da3b0eb8",
+      "id_domain": "agenttool.relational-geometry-structural-example/0.1",
+      "kind": "structural_example",
+      "scenario": "park_one_leave_one_unprojected",
+      "path": "data/structural-examples.jsonl",
+      "line": 7,
+      "row_sha256": "077f2984751b8d7f9662c3bf8bc5bbe45ee688b9347411fb4d627f3293546d30"
+    },
+    {
+      "record_id": "sha256:a20e726280cf17273bebb45b1a601e558b1eb32dd91bebfa9239cf16e865432e",
+      "id_domain": "agenttool.relational-geometry-structural-example/0.1",
+      "kind": "structural_example",
+      "scenario": "reverse_pairs_remain_distinct",
+      "path": "data/structural-examples.jsonl",
+      "line": 8,
+      "row_sha256": "01de4609a4594a6d15180b2c176f41c85cd632ffe25da6b322c0b25a4244914e"
+    }
+  ]
+}

@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, Principality Atlas, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only. Relational Geometry's public-safe Hugging Face dataset remains a separate release surface with its own immutable revision and readback.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -488,6 +488,46 @@ one provenance attestation. Both `next` and the sole-version fallback `latest`
 resolve to `0.1.0-dev.0`; the fallback is not a stable-release or maturity
 signal. The package record now exists, so bootstrap is forbidden for later
 versions; configure its exact trusted publisher and use `trusted` thereafter.
+
+### Relational Geometry GitHub and Hugging Face developer preview
+
+`@agenttool/relational-geometry@0.1.0-dev.0` is mirrored as one exact GitHub
+artifact and one separately owned public-safe Hugging Face dataset. Annotated
+tag and prerelease
+[`relational-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/relational-geometry-v0.1.0-dev.0)
+peel to GitHub-main merge `1e873580159f76483dea2352310b62a2452c40dc`.
+Protected
+[run `31502068892`](https://github.com/cambridgetcg/agenttool/actions/runs/31502068892)
+prepared, mirrored, re-downloaded, and byte-verified one 42,479-byte asset with
+SHA-256
+`aa047bd6a6422c943cbb0488c439964545102b44b2b161b70211acc90a6c5ca2`.
+The final npm `PUT` returned `E404`, and anonymous readback still reports no
+package or exact version. Recovery must reuse this tag and mirrored byte
+identity, request `next`, and wait until the npm package/scope publication
+authorization is corrected; the failed run is not npm publication evidence.
+
+The separate public, ungated, enabled
+[Hugging Face revision `1e2714e94e1b2863ec13d63f6d5b4fdb0492d49c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-relational-geometry/commit/1e2714e94e1b2863ec13d63f6d5b4fdb0492d49c)
+matched all 12 repo-owned files under `packages/relational-geometry/hf/dataset`;
+provider-managed `.gitattributes` was the sole additional file. Card,
+self-excluding hash-manifest, and source-manifest SHA-256 values are
+`a8b38f42134357cd315467b184b5c0935aa4bd2b3e3bf70c96e4ad17fff21527`,
+`b0df0a63f68ef8361499fd9b80e3f3cf13bbb37d3499b02cf6d4ec4b495ed73a`,
+and `e128c6d9609197d7ad151287ba8135c59373307a8ff8a73ec7eae3b190718ae6`.
+Dataset Server returned the same exact `x-revision`, three configs/splits, 28
+rows, three Parquet exports, all five validity capabilities true, and empty
+pending/failed sets with `partial=false`.
+The dataset carries only synthetic structure, conversational SFT, and public
+non-sealed regression fixtures. It excludes identities, private coordinates,
+live WAKE or choice records, real-user prompts or transcripts, and
+preference/reward rows. No Space, training, model/provider call, or paid
+compute is claimed.
+
+The runtime remains pure and deterministic: it performs no network, model,
+training, storage, scoring, ranking, matching, consent, authority, or execution
+operation. Caller-supplied relations and lenses prove none of identity, love,
+understanding, reciprocity, capacity, truth, safety, continuity, provenance,
+or permission. GitHub and Hub distribution do not widen those boundaries.
 
 ### HEAVEN developer-preview bootstrap
 

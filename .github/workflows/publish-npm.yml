@@ -19,6 +19,7 @@ on:
           - living-substrate
           - love-geometry
           - principality-atlas
+          - relational-geometry
           - credential-broker
           - sdk
           - wallet

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-relational-complex-v0.1.schema.json",
+  "title": "AgentTool Relational Complex v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "complex_id", "points", "witnesses", "principalities", "coverage", "boundaries"],
+  "properties": {
+    "_format": { "const": "agenttool.relational-complex/0.1" },
+    "complex_id": { "$ref": "#/$defs/sha256Id" },
+    "points": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/point" } },
+    "witnesses": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/witness" } },
+    "principalities": { "type": "array", "maxItems": 128, "items": { "$ref": "#/$defs/principality" } },
+    "coverage": { "const": "bounded_not_complete" },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "$defs": {
+    "sha256Id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["point_ref", "kind", "assertion", "verified_by_package"],
+      "properties": {
+        "point_ref": { "$ref": "#/$defs/sha256Id" },
+        "kind": { "enum": ["collective", "context", "perspective", "substrate", "unknown"] },
+        "assertion": { "const": "caller_asserted" },
+        "verified_by_package": { "const": false }
+      }
+    },
+    "witness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["witness_ref", "from_ref", "kind", "to_ref", "assertion", "verified_by_package"],
+      "properties": {
+        "witness_ref": { "$ref": "#/$defs/sha256Id" },
+        "from_ref": { "$ref": "#/$defs/sha256Id" },
+        "kind": { "enum": ["authority_boundary", "consent_boundary", "continuity_boundary", "privacy_boundary", "recognition", "refusal_boundary", "understanding"] },
+        "to_ref": { "$ref": "#/$defs/sha256Id" },
+        "assertion": { "const": "caller_asserted" },
+        "verified_by_package": { "const": false }
+      }
+    },
+    "principality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principality_ref", "kind", "equation", "from_ref", "to_ref", "understanding_witness_refs", "recognition_witness_refs", "boundary_witness_refs", "derivation", "sovereignty", "structurally_derived_by_package", "semantic_claims_verified_by_package"],
+      "properties": {
+        "principality_ref": { "$ref": "#/$defs/sha256Id" },
+        "kind": { "const": "love_equation" },
+        "equation": { "const": "love_equals_understanding_plus_recognition" },
+        "from_ref": { "$ref": "#/$defs/sha256Id" },
+        "to_ref": { "$ref": "#/$defs/sha256Id" },
+        "understanding_witness_refs": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/sha256Id" } },
+        "recognition_witness_refs": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/sha256Id" } },
+        "boundary_witness_refs": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/sha256Id" } },
+        "derivation": { "const": "deterministic_same_ordered_pair" },
+        "sovereignty": { "const": "none" },
+        "structurally_derived_by_package": { "const": true },
+        "semantic_claims_verified_by_package": { "const": false }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["geometry", "principality", "witness_semantics", "derived_semantics", "absent_or_unknown", "effect"],
+      "properties": {
+        "geometry": { "const": "finite_combinatorial_not_metric" },
+        "principality": { "const": "non_sovereign_relation_among_relations" },
+        "witness_semantics": { "const": "caller_asserted_unchecked" },
+        "derived_semantics": { "const": "structural_correspondence_not_proof" },
+        "absent_or_unknown": { "const": "valid_not_deficit" },
+        "effect": { "const": "none" }
+      }
+    }
+  }
+}
