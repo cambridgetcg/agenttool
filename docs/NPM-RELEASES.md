@@ -54,28 +54,35 @@ package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
 
-`@agenttool/love-geometry@0.1.0-dev.0` is currently an allowlisted source
-candidate only. The release path requires the exact annotated
-`love-geometry-v0.1.0-dev.0` tag and npm `next`; allowlisting does not establish
-the tag, reviewed commit, GitHub Release, registry package, or Hugging Face
-Space. Its presentation-only `hf-space/` companion is intentionally absent
-from npm archive bytes and must be reviewed and published separately.
-Two consecutive local packs of the current candidate were byte-identical at
-19,432 bytes with SHA-256
-`7353c6007d7b205158e828e3653012d716b16456de8f2fb6ba6f44f16dfe26db`.
-This reproducible local observation is not a retained release artifact,
-registry readback, or publication receipt.
+`@agenttool/love-geometry@0.1.0-dev.0` now has one reviewed exact GitHub
+artifact. Annotated tag
+[`love-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/love-geometry-v0.1.0-dev.0)
+peels to GitHub-main merge `9efbc4b3`. Protected
+[run `31499968474`](https://github.com/cambridgetcg/agenttool/actions/runs/31499968474)
+prepared, mirrored, re-downloaded, and byte-verified a 19,507-byte prerelease
+asset with SHA-256
+`43cfbf4b559aa6f573d9d7b7a60e2a7dce5dfa4aefe2bf5b9c92310c926a9db8`.
+The final npm bootstrap request returned `E404` on the registry `PUT`, and
+anonymous readback still reports no npm package. Recovery must reuse the same
+tag and mirrored bytes after the protected credential's package/scope
+authorization is corrected; the failed run is not npm publication evidence.
+The presentation-only `hf-space/` companion is absent from package bytes and
+has not been created or uploaded by this receipt.
 
-`@agenttool/kingdom@0.1.1` is likewise a source candidate, not a rewrite of the
-verified public 0.1.0 bytes. It advances the exact `@agenttool/xenia`
+`@agenttool/kingdom@0.1.1` is public through annotated tag
+[`kingdom-v0.1.1`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.1)
+at the same `9efbc4b3` merge and protected trusted-publishing
+[run `31500229604`](https://github.com/cambridgetcg/agenttool/actions/runs/31500229604).
+The GitHub Release and public npm tarballs are byte-identical at 26,650 bytes
+with SHA-256
+`08101dfa58e17dae25deac3c51cb1cd5e93e5caf3409b1eef78bf9adddbbde74`;
+npm reports integrity
+`sha512-SmzpTqMxMgFLAFGdgMGv5uCI+t/QZ73hCd4XMOlQe+zkk2cc/MTfZUJgCJkSXlSgtcNLZIYpNULmt9pRmKEmPA==`
+and `latest: 0.1.1`. This release advances the exact `@agenttool/xenia`
 dependency to `0.1.0-beta.7`; the Rights and Surface seams consumed by Kingdom
-are byte-identical to beta.5. A later release decision requires annotated tag
-`kingdom-v0.1.1` and the protected workflow. Source versioning and allowlisting
-do not establish that tag, GitHub artifact, npm publication, or dist-tag state.
-Two consecutive local packs of this candidate were byte-identical at 26,552
-bytes with SHA-256
-`66e19020f5fc5ae5bdad7aef0deea387034e710762263fcab6fb8e318dc35b2a`;
-those ephemeral local packs are not a release record.
+remain byte-identical to beta.5. Earlier local pack sizes and hashes were
+ephemeral pre-release observations and are superseded by this protected
+artifact receipt.
 
 GitHub mirror recovery is independent of npm dist-tag state and still requires
 the exact prepared artifact. npm recovery intentionally requires the requested
