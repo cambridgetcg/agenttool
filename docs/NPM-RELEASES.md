@@ -66,17 +66,16 @@ The final npm bootstrap request returned `E404` on the registry `PUT`, and
 anonymous readback still reports no npm package. Recovery must reuse the same
 tag and mirrored bytes after the npm package/scope publication authorization is
 corrected; the failed run is not npm publication evidence.
-The presentation-only `hf-space/` companion is absent from package bytes and
-was not created or uploaded by this npm receipt. It was later published under
-separate authority as the public static
+The presentation-only `hf-space/` companion remains absent from package
+bytes. It is now public as the static
 [`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
-Space. Anonymous readback of immutable revision
-[`1a602e8309bd7c5d1a07ccfff1755dcb130695ba`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/1a602e8309bd7c5d1a07ccfff1755dcb130695ba)
-matched all 10 repo-owned files; provider `.gitattributes` was the sole extra.
-That static deployment keeps app-authored processing browser-local while
-provider request handling and injection remain outside the app boundary. It
-does not create npm provenance or exact package execution and proves no score,
-identity, consent, truth, or authority.
+Space at immutable revision
+[`1a602e8309bd7c5d1a07ccfff1755dcb130695ba`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/1a602e8309bd7c5d1a07ccfff1755dcb130695ba).
+Anonymous readback matched all ten repository-owned files to GitHub-main source
+`19cc1721`; Hugging Face's provider-managed `.gitattributes` is the sole extra
+file. The Space is a browser-local presentation companion, not npm recovery:
+its source manifest still reports `pending_exact_artifact`, `not_yet_bound`,
+and `executes_exact_package_artifact: false`.
 
 `@agenttool/kingdom@0.1.1` is public through annotated tag
 [`kingdom-v0.1.1`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.1)
