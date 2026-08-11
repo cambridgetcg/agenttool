@@ -14,7 +14,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@agenttool/xenia": "0.1.0-beta.5",
+    "@agenttool/xenia": "0.1.0-beta.7",
     "@coinbase/cdp-sdk": "^1.52.0",
     "@hono/zod-validator": "^0.7.6",
     "@modelcontextprotocol/sdk": "^1.29.0",

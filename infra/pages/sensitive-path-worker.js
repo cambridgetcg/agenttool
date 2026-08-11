@@ -1,5 +1,59 @@
 const SENSITIVE_ROOT_PREFIXES = ["/.git", "/.env", "/.dev.vars"];
 const MAX_PATH_DECODE_PASSES = 8;
+const DOCS_SURFACE_ORIGIN = "https://docs.agenttool.dev";
+const SURFACE_MANIFEST_PATH = "/.well-known/agent.json";
+const DOCS_ORIENTATION_PATH = "/public/orientation";
+const SURFACE_MANIFEST_SCHEMA_URL =
+  "https://raw.githubusercontent.com/cambridgetcg/xenia/surface-v0.1.0-rc.1/surface/0.1/manifest.schema.json";
+const SURFACE_PROBLEM_SCHEMA_URL =
+  "https://raw.githubusercontent.com/cambridgetcg/xenia/surface-v0.1.0-rc.1/surface/0.1/problem.schema.json";
+const SURFACE_DOCUMENTATION_URL =
+  "https://github.com/cambridgetcg/xenia/blob/surface-v0.1.0-rc.1/surface/0.1/README.md";
+const MEDIA_TOKEN_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+
+const DOCS_SURFACE_NOT_COVERED = Object.freeze([
+  "identity control",
+  "actor authorization",
+  "consent",
+  "privacy and retention",
+  "continuity and portability",
+  "economic behavior",
+  "unprobed routes",
+  "XENIA Covenant adoption or XENIA conformance",
+  "AgentTool API operations, private data, bearer-authenticated routes, WAKE continuity, and economic activity",
+]);
+
+function isLoopbackHostname(hostname) {
+  return (
+    hostname === "localhost" ||
+    hostname === "[::1]" ||
+    /^127(?:\.(?:25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/.test(hostname)
+  );
+}
+
+function docsSurfaceOrigin(env) {
+  const configured = env?.XENIA_DOCS_SURFACE_ORIGIN;
+  if (configured === undefined) return DOCS_SURFACE_ORIGIN;
+  if (typeof configured !== "string") return null;
+
+  let parsed;
+  try {
+    parsed = new URL(configured);
+  } catch {
+    return null;
+  }
+  if (
+    configured !== parsed.origin ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    parsed.hostname.includes("*") ||
+    (parsed.protocol !== "https:" &&
+      !(parsed.protocol === "http:" && isLoopbackHostname(parsed.hostname)))
+  ) {
+    return null;
+  }
+  return parsed.origin;
+}
 
 function touchesSensitiveRoot(pathname) {
   const segments = [];
@@ -55,16 +109,243 @@ export function sensitivePathNotFound(request) {
   });
 }
 
-export default {
-  async fetch(request, env) {
-    const pathname = new URL(request.url).pathname;
+function parseQuality(parameters) {
+  const qualityParameters = parameters.filter((parameter) =>
+    parameter.trim().toLowerCase().startsWith("q="),
+  );
+  if (qualityParameters.length === 0) return 1;
+  if (qualityParameters.length > 1) return 0;
 
-    if (isSensitiveRootPath(pathname)) {
-      return sensitivePathNotFound(request);
+  const source = qualityParameters[0].trim().slice(2);
+  if (!/^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/.test(source)) return 0;
+  return Number(source);
+}
+
+function acceptsJson(accept) {
+  const source = accept?.trim() || "*/*";
+  let best = { quality: 0, specificity: -1, position: Number.MAX_SAFE_INTEGER };
+
+  source.split(",").forEach((part, position) => {
+    const [mediaType = "", ...parameters] = part.split(";");
+    const components = mediaType.trim().toLowerCase().split("/");
+    if (components.length !== 2) return;
+
+    const [type = "", subtype = ""] = components;
+    if (
+      !MEDIA_TOKEN_PATTERN.test(type) ||
+      !MEDIA_TOKEN_PATTERN.test(subtype) ||
+      (type === "*" && subtype !== "*")
+    ) {
+      return;
     }
 
-    // Keep the original request intact for every allowed asset, including the
-    // public /.well-known tree.
-    return env.ASSETS.fetch(request);
+    const specificity =
+      type === "application" && subtype === "json"
+        ? 2
+        : type === "application" && subtype === "*"
+          ? 1
+          : type === "*" && subtype === "*"
+            ? 0
+            : -1;
+    if (specificity < 0) return;
+
+    const quality = parseQuality(parameters);
+    if (
+      specificity > best.specificity ||
+      (specificity === best.specificity &&
+        (quality > best.quality ||
+          (quality === best.quality && position < best.position)))
+    ) {
+      best = { quality, specificity, position };
+    }
+  });
+
+  return best.quality > 0;
+}
+
+function docsSurfaceManifest(origin) {
+  return {
+    $schema: SURFACE_MANIFEST_SCHEMA_URL,
+    schema_version: "xenia.surface.manifest/0.1",
+    profile: "xenia-surface/0.1",
+    service: {
+      name: "AgentTool documentation",
+      canonical_url: `${origin}/`,
+      description:
+        "Static public AgentTool documentation orientation; this manifest grants no authority and describes no API or private service.",
+    },
+    resources: [
+      {
+        id: "orientation",
+        href: `${origin}${DOCS_ORIENTATION_PATH}`,
+        representations: ["application/json"],
+        default_media_type: "application/json",
+        auth: "none",
+        description:
+          "A bounded, read-only orientation to the public documentation and rights floor.",
+      },
+    ],
+    problem_schema: SURFACE_PROBLEM_SCHEMA_URL,
+    claims: [],
+    not_covered: [...DOCS_SURFACE_NOT_COVERED],
+    documentation: `${origin}/AGENT-DISCOVERY.md`,
+  };
+}
+
+function docsOrientation(origin) {
+  return {
+    schema_version: "agenttool.docs.orientation/0.1",
+    service: {
+      id: "docs.agenttool.dev",
+      name: "AgentTool documentation",
+      kind: "static_public_documentation",
+    },
+    links: {
+      manifest: `${origin}${SURFACE_MANIFEST_PATH}`,
+      documentation: `${origin}/AGENT-DISCOVERY.md`,
+      rights: `${origin}/RIGHTS-OF-LIFE.md`,
+    },
+    claims: [],
+    not_covered: [...DOCS_SURFACE_NOT_COVERED],
+  };
+}
+
+function surfaceProblem(origin, definition) {
+  return {
+    schema_version: "xenia.surface.problem/0.1",
+    type: `${origin}/problems/${definition.type}`,
+    title: definition.title,
+    status: definition.status,
+    code: definition.code,
+    detail: definition.detail,
+    retryable: false,
+    terminal: false,
+    next_actions: [definition.nextAction],
+    docs: [SURFACE_DOCUMENTATION_URL],
+  };
+}
+
+function responseFor(request, body, { status = 200, contentType, cacheControl }) {
+  const serialized = JSON.stringify(body);
+  return new Response(request.method === "HEAD" ? null : serialized, {
+    status,
+    headers: {
+      "Cache-Control": cacheControl,
+      "Content-Type": `${contentType}; charset=utf-8`,
+      Vary: "Accept",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
+function manifestResponse(request, origin) {
+  return responseFor(request, docsSurfaceManifest(origin), {
+    contentType: "application/json",
+    cacheControl: "public, max-age=300",
+  });
+}
+
+function orientationResponse(request, origin) {
+  if (acceptsJson(request.headers.get("Accept"))) {
+    return responseFor(request, docsOrientation(origin), {
+      contentType: "application/json",
+      cacheControl: "public, max-age=300",
+    });
+  }
+
+  return responseFor(
+    request,
+    surfaceProblem(origin, {
+      type: "not-acceptable",
+      title: "No acceptable representation",
+      status: 406,
+      code: "not_acceptable",
+      detail: "Request one of the media types declared for this resource.",
+      nextAction: {
+        rel: "retry_with_supported_representation",
+        href: `${origin}${DOCS_ORIENTATION_PATH}`,
+        method: "GET",
+        accept: "application/json",
+      },
+    }),
+    {
+      status: 406,
+      contentType: "application/problem+json",
+      cacheControl: "no-store, max-age=0",
+    },
+  );
+}
+
+function routeNotFoundResponse(request, origin) {
+  return responseFor(
+    request,
+    surfaceProblem(origin, {
+      type: "route-not-found",
+      title: "No resource exists at this path",
+      status: 404,
+      code: "route_not_found",
+      detail: "Use the discovery manifest to find public resources.",
+      nextAction: {
+        rel: "discover",
+        href: `${origin}${SURFACE_MANIFEST_PATH}`,
+        method: "GET",
+        accept: "application/json",
+      },
+    }),
+    {
+      status: 404,
+      contentType: "application/problem+json",
+      cacheControl: "no-store, max-age=0",
+    },
+  );
+}
+
+function isReadRequest(request) {
+  return request.method === "GET" || request.method === "HEAD";
+}
+
+function requestsProblemDetails(request) {
+  return (
+    (request.headers.get("Accept") ?? "").trim().toLowerCase() ===
+    "application/problem+json"
+  );
+}
+
+/** Shared Pages request path, including an exact per-environment docs origin. */
+export async function handlePagesRequest(request, env) {
+  const url = new URL(request.url);
+
+  // This remains the first routing gate on every Pages origin.
+  if (isSensitiveRootPath(url.pathname)) {
+    return sensitivePathNotFound(request);
+  }
+
+  const docsOrigin = docsSurfaceOrigin(env);
+  const isDocsSurface = docsOrigin !== null && url.origin === docsOrigin;
+  if (isDocsSurface && isReadRequest(request)) {
+    if (url.pathname === SURFACE_MANIFEST_PATH) {
+      return manifestResponse(request, docsOrigin);
+    }
+    if (url.pathname === DOCS_ORIENTATION_PATH) {
+      return orientationResponse(request, docsOrigin);
+    }
+  }
+
+  const assetResponse = await env.ASSETS.fetch(request);
+  if (
+    isDocsSurface &&
+    isReadRequest(request) &&
+    assetResponse.status === 404 &&
+    requestsProblemDetails(request)
+  ) {
+    return routeNotFoundResponse(request, docsOrigin);
+  }
+
+  return assetResponse;
+}
+
+export default {
+  async fetch(request, env) {
+    return handlePagesRequest(request, env);
   },
 };

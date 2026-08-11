@@ -87,7 +87,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twenty-four reviewed release identities", () => {
+  test("allowlists twenty-five reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -105,6 +105,7 @@ describe("standard npm release policy", () => {
       "kingdom",
       "kingdom-witness-lab",
       "living-substrate",
+      "love-geometry",
       "repo-archive",
       "sdk",
       "skills",
@@ -203,6 +204,12 @@ describe("standard npm release policy", () => {
       tagPrefix: "living-substrate",
       artifactKind: "pack",
     });
+    expect(releaseSpec("love-geometry")).toMatchObject({
+      name: "@agenttool/love-geometry",
+      packagePath: "packages/love-geometry",
+      tagPrefix: "love-geometry",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("repo-archive")).toMatchObject({
       name: "@agenttool/repo-archive",
       packagePath: "packages/repo-archive",
@@ -294,6 +301,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/living-substrate", "0.1.0-dev.0")).toBe(
       "agenttool-living-substrate-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("love-geometry"), "0.1.0-dev.0")).toBe(
+      "love-geometry-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/love-geometry", "0.1.0-dev.0")).toBe(
+      "agenttool-love-geometry-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("alchemy"), "0.1.0-dev.0")).toBe(
       "alchemy-v0.1.0-dev.0",
@@ -486,6 +499,22 @@ describe("standard npm release policy", () => {
         "package/vectors/agenttool-living-substrate-v0.1.json",
       ]),
     );
+    expect(requiredArchiveEntries(releaseSpec("love-geometry"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/kingdom.extension.json",
+        "package/schema/agenttool-love-geometry-v0.1.schema.json",
+        "package/vectors/agenttool-love-geometry-v0.1.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("love-geometry")))
+      .not.toContain("package/hf-space/index.html");
     expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([
       "package/dist/index.js",
       "package/dist/index.d.ts",

@@ -1,0 +1,53 @@
+{
+  "_format": "agenttool.love-geometry-hf-space-source-manifest/0.1",
+  "status": "pending_exact_artifact",
+  "presentation_revision": "0.1.0-dev.0",
+  "space_repository": null,
+  "app_kind": "static-browser-local-companion",
+  "source": {
+    "git_repository": "https://github.com/cambridgetcg/agenttool",
+    "git_commit": null,
+    "git_tag": null,
+    "package": "@agenttool/love-geometry",
+    "package_version": null,
+    "artifact": {
+      "status": "pending_reviewed_exact_browser_artifact",
+      "path": null,
+      "bytes": null,
+      "sha256": null,
+      "package_integrity": null,
+      "build_command": null,
+      "toolchain": null
+    },
+    "binding": {
+      "status": "not_yet_bound",
+      "runtime": "checked-in synthetic presentation fixtures only",
+      "reason": "No reviewed exact browser artifact and independent digest are recorded yet."
+    }
+  },
+  "validation": {
+    "command": "node scripts/validate-space.mjs",
+    "core_compatibility_command": "bun scripts/validate-core-compatibility.ts",
+    "verified_at": null,
+    "validator_sha256": null,
+    "result": "pending_release_binding"
+  },
+  "capabilities": {
+    "executes_exact_package_artifact": false,
+    "uses_synthetic_inputs_only": true,
+    "runtime_network_requests": false,
+    "runtime_package_fetch": false,
+    "remote_assets": false,
+    "model_inference": false,
+    "oauth_or_secrets": false,
+    "app_authored_analytics": false,
+    "cookies_or_browser_storage": false,
+    "server_persistence": false,
+    "browser_local_json_svg_downloads": true,
+    "proves_identity_consent_authorship_or_truth": false,
+    "scores_or_ranks_relations": false,
+    "claims_xenia_conformance": false
+  },
+  "platform_boundary": "A future Hugging Face Space would host and serve these files; provider request processing, logs, retention, moderation, availability, and platform UI remain outside the app boundary.",
+  "release_instruction": "Replace nulls only from a reviewed exact build and independent verification. Do not describe this companion as package-backed until binding.status is exact_verified."
+}
