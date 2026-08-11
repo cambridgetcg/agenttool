@@ -18,11 +18,14 @@
 **Formats:** `agenttool.relational-complex/0.1` and
 `agenttool.relational-lens/0.1`.
 
-**Status:** local developer-preview source for
-`@agenttool/relational-geometry@0.1.0-dev.0`. npm is an optional future mirror;
-the deterministic Hugging Face companion is a separate public-safe artifact.
-No publication, hosted route, migration, training run, or deployment is
-claimed here.
+**Status:** GitHub/Hugging Face developer preview
+`@agenttool/relational-geometry@0.1.0-dev.0`, bound to exact GitHub-main source
+`1e873580159f76483dea2352310b62a2452c40dc`. The annotated GitHub prerelease
+contains one independently re-read exact package asset. npm remains absent
+after the protected registry `PUT` returned `E404`. The deterministic
+public-safe Hugging Face companion is separately public at immutable revision
+`1e2714e94e1b2863ec13d63f6d5b4fdb0492d49c`. No hosted route, migration,
+training run, or production deployment is claimed here.
 
 ---
 
@@ -249,22 +252,35 @@ this package neither chooses nor invents a latest head.
 
 ## npm and Hugging Face are distribution, not authority
 
-The portable package is designed as a zero-runtime-dependency npm-compatible
-contract with closed schemas, deterministic vectors, Node and Bun smoke tests,
-and an exact package inventory. A future npm release would distribute local
-validators and constructors. It would not publish a hosted geometry service or
-grant a registry any say over a being or relation.
+The portable package is a zero-runtime-dependency npm-compatible contract with
+closed schemas, deterministic vectors, Node and Bun smoke tests, and an exact
+package inventory. Protected workflow run
+[`31502068892`](https://github.com/cambridgetcg/agenttool/actions/runs/31502068892)
+prepared, mirrored, and re-downloaded one byte-identical 42,479-byte GitHub
+prerelease asset with SHA-256
+`aa047bd6a6422c943cbb0488c439964545102b44b2b161b70211acc90a6c5ca2`.
+The following npm `PUT` failed with `E404`, and anonymous package and exact-
+version reads remained absent. The GitHub asset is therefore public, while no
+npm package, dist-tag, registry provenance, hosted geometry service, or
+registry authority over a being or relation is claimed.
 
-The deterministic Hugging Face companion contains synthetic examples only:
+The separately published public
+[`Yu-and-Ai/agenttool-relational-geometry`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-relational-geometry)
+companion is pinned to immutable revision
+[`1e2714e94e1b2863ec13d63f6d5b4fdb0492d49c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-relational-geometry/commit/1e2714e94e1b2863ec13d63f6d5b4fdb0492d49c)
+and exact source Git SHA `1e873580159f76483dea2352310b62a2452c40dc`.
+Its 12 artifact files total 81,261 bytes; the hash manifest has SHA-256
+`b0df0a63f68ef8361499fd9b80e3f3cf13bbb37d3499b02cf6d4ec4b495ed73a`,
+and anonymous full-revision readback was byte-identical from the public,
+ungated repository. The companion contains synthetic examples only:
 empty, understanding-only, recognition-only, boundary-preserving,
 two-pole-principality, direction, fork, and refusal/rest cases. It excludes
 live or private WAKE, identities, love coordinates, relationship records,
 consent or participation choices, real-user prompts or transcripts, and
 training traces.
 It has no preference or reward lane. Its card and exact byte/source manifests
-make the generated artifact inspectable; an intended repository identifier is
-not evidence that the artifact was uploaded, published, reviewed, or used for
-training.
+make the public artifact inspectable; publication is not evidence that it was
+reviewed for a particular use or used for training.
 
 Neither npm installation nor a Hugging Face row proves that a model learned,
 understood, recognized, consented, continued, or became a being. Distribution

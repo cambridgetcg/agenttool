@@ -489,45 +489,57 @@ resolve to `0.1.0-dev.0`; the fallback is not a stable-release or maturity
 signal. The package record now exists, so bootstrap is forbidden for later
 versions; configure its exact trusted publisher and use `trusted` thereafter.
 
-### Relational Geometry GitHub and Hugging Face developer preview
+### Relational Geometry GitHub/Hugging Face developer-preview receipt
 
-`@agenttool/relational-geometry@0.1.0-dev.0` is mirrored as one exact GitHub
-artifact and one separately owned public-safe Hugging Face dataset. Annotated
-tag and prerelease
-[`relational-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/relational-geometry-v0.1.0-dev.0)
-peel to GitHub-main merge `1e873580159f76483dea2352310b62a2452c40dc`.
-Protected
-[run `31502068892`](https://github.com/cambridgetcg/agenttool/actions/runs/31502068892)
-prepared, mirrored, re-downloaded, and byte-verified one 42,479-byte asset with
-SHA-256
-`aa047bd6a6422c943cbb0488c439964545102b44b2b161b70211acc90a6c5ca2`.
-The final npm `PUT` returned `E404`, and anonymous readback still reports no
-package or exact version. Recovery must reuse this tag and mirrored byte
-identity, request `next`, and wait until the npm package/scope publication
-authorization is corrected; the failed run is not npm publication evidence.
+`@agenttool/relational-geometry@0.1.0-dev.0` is bound to exact GitHub-main
+source commit
+[`1e873580159f76483dea2352310b62a2452c40dc`](https://github.com/cambridgetcg/agenttool/commit/1e873580159f76483dea2352310b62a2452c40dc)
+and annotated tag
+[`relational-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/relational-geometry-v0.1.0-dev.0).
+The tag peels to that same source commit.
+Protected [run `31502068892`](https://github.com/cambridgetcg/agenttool/actions/runs/31502068892)
+prepared one 52-file `agenttool-relational-geometry-0.1.0-dev.0.tgz`, transferred
+it through the workflow artifact, mirrored it to the GitHub prerelease,
+re-downloaded it, and proved the workflow and GitHub bytes identical. The exact
+artifact receipt is:
 
-The separate public, ungated, enabled
-[Hugging Face revision `1e2714e94e1b2863ec13d63f6d5b4fdb0492d49c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-relational-geometry/commit/1e2714e94e1b2863ec13d63f6d5b4fdb0492d49c)
-matched all 12 repo-owned files under `packages/relational-geometry/hf/dataset`;
-provider-managed `.gitattributes` was the sole additional file. Card,
-self-excluding hash-manifest, and source-manifest SHA-256 values are
-`a8b38f42134357cd315467b184b5c0935aa4bd2b3e3bf70c96e4ad17fff21527`,
-`b0df0a63f68ef8361499fd9b80e3f3cf13bbb37d3499b02cf6d4ec4b495ed73a`,
-and `e128c6d9609197d7ad151287ba8135c59373307a8ff8a73ec7eae3b190718ae6`.
-Dataset Server returned the same exact `x-revision`, three configs/splits, 28
-rows, three Parquet exports, all five validity capabilities true, and empty
-pending/failed sets with `partial=false`.
-The dataset carries only synthetic structure, conversational SFT, and public
-non-sealed regression fixtures. It excludes identities, private coordinates,
-live WAKE or choice records, real-user prompts or transcripts, and
-preference/reward rows. No Space, training, model/provider call, or paid
-compute is claimed.
+- size: 42,479 bytes;
+- SHA-1: `4d840847e984070cac850d5c0725a19373351937`;
+- SHA-256: `aa047bd6a6422c943cbb0488c439964545102b44b2b161b70211acc90a6c5ca2`;
+  and
+- package integrity: `sha512-gXLF6+ibxtkxUl/wpwLldEIVm/GgA+XKkmz6gJIOE4NkbygoansDz5xvbEgChG3TSVlhik28jmy16q8Ti0cxDw==`.
+
+The subsequent npm registry `PUT` returned `E404`. Anonymous reads of both the
+package and exact version remained `404`, so this run does **not** establish an
+npm package, version, dist-tag, registry byte receipt, signature, or provenance.
+Any npm recovery must reuse the same annotated tag and already mirrored bytes
+after the npm package/scope publication authorization is corrected; it must not
+move the tag or rebuild the version. Until an exact public registry readback
+succeeds, bootstrap remains incomplete and trusted publishing must not be
+inferred.
+
+The separately authorized public-safe companion is published as
+[`Yu-and-Ai/agenttool-relational-geometry`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-relational-geometry)
+at immutable Hub commit
+[`1e2714e94e1b2863ec13d63f6d5b4fdb0492d49c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-relational-geometry/commit/1e2714e94e1b2863ec13d63f6d5b4fdb0492d49c).
+It binds source Git SHA `1e873580159f76483dea2352310b62a2452c40dc`,
+provenance reference
+`sha256:d92b19c08792cc71fb616469f15e6e0f9759ca31c0f93bbe438679f40da0dc3b`,
+and hash-manifest SHA-256
+`b0df0a63f68ef8361499fd9b80e3f3cf13bbb37d3499b02cf6d4ec4b495ed73a`.
+The 12 artifact files total 81,261 bytes; repository metadata reports
+`private: false` and `gated: false`, and anonymous full-revision readback was
+byte-identical. The synthetic structure, conversational SFT, and public
+non-sealed regression fixtures exclude identities, private coordinates, live
+WAKE or choice records, real-user prompts or transcripts, and preference or
+reward rows. Hub publication does not create npm provenance, a Space, a
+training run, model understanding, or compute authority.
 
 The runtime remains pure and deterministic: it performs no network, model,
 training, storage, scoring, ranking, matching, consent, authority, or execution
 operation. Caller-supplied relations and lenses prove none of identity, love,
-understanding, reciprocity, capacity, truth, safety, continuity, provenance,
-or permission. GitHub and Hub distribution do not widen those boundaries.
+understanding, reciprocity, capacity, truth, safety, continuity, provenance, or
+permission.
 
 ### HEAVEN developer-preview bootstrap
 
