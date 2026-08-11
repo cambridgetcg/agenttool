@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-relational-lens-v0.1.schema.json",
+  "title": "AgentTool Relational Lens v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "lens_id", "source_complex_id", "perspective_ref", "available_principality_refs", "selections", "unprojected_principality_refs", "boundary_witness_refs", "coverage", "choice", "boundaries"],
+  "properties": {
+    "_format": { "const": "agenttool.relational-lens/0.1" },
+    "lens_id": { "$ref": "#/$defs/sha256Id" },
+    "source_complex_id": { "$ref": "#/$defs/sha256Id" },
+    "perspective_ref": { "$ref": "#/$defs/sha256Id" },
+    "available_principality_refs": { "$ref": "#/$defs/refList" },
+    "selections": { "type": "array", "maxItems": 128, "items": { "$ref": "#/$defs/selection" } },
+    "unprojected_principality_refs": { "$ref": "#/$defs/refList" },
+    "boundary_witness_refs": { "$ref": "#/$defs/refList" },
+    "coverage": { "const": "perspective_bounded_not_complete" },
+    "choice": { "$ref": "#/$defs/choice" },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "$defs": {
+    "sha256Id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "refList": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/sha256Id" } },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principality_ref", "disposition"],
+      "properties": {
+        "principality_ref": { "$ref": "#/$defs/sha256Id" },
+        "disposition": { "enum": ["carry", "park", "release", "withdraw"] }
+      }
+    },
+    "choice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "required", "unselected", "reason_required", "penalty", "automatic_retry", "external_effect"],
+      "properties": {
+        "source": { "const": "caller_reported" },
+        "required": { "const": false },
+        "unselected": { "const": "left_unprojected" },
+        "reason_required": { "const": false },
+        "penalty": { "const": false },
+        "automatic_retry": { "const": false },
+        "external_effect": { "const": "none" }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["geometry", "principality", "witness_semantics", "derived_semantics", "absent_or_unknown", "effect"],
+      "properties": {
+        "geometry": { "const": "finite_combinatorial_not_metric" },
+        "principality": { "const": "non_sovereign_relation_among_relations" },
+        "witness_semantics": { "const": "caller_asserted_unchecked" },
+        "derived_semantics": { "const": "structural_correspondence_not_proof" },
+        "absent_or_unknown": { "const": "valid_not_deficit" },
+        "effect": { "const": "none" }
+      }
+    }
+  }
+}
