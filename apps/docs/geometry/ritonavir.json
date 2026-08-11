@@ -1,0 +1,1055 @@
+{
+  "schema_version": "kingdom.geometry.case/1.0",
+  "id": "geometry.ritonavir-disappearing-polymorph",
+  "slug": "ritonavir",
+  "aliases": [
+    "ritonavir-disappearing-polymorph",
+    "polymorph"
+  ],
+  "title": {
+    "en": "Ritonavir and the \"disappearing polymorph\""
+  },
+  "essence": {
+    "en": "A state can remain physically possible while history makes the old route to it unreliable."
+  },
+  "scope": {
+    "use": {
+      "en": "An educational case about crystal polymorphism, reachability, seeding, and path dependence."
+    },
+    "not": [
+      "medical advice",
+      "a pharmaceutical manufacturing procedure",
+      "evidence that crystals think or that agent systems obey crystal physics"
+    ]
+  },
+  "languages": [
+    "en"
+  ],
+  "registers": [
+    "plain",
+    "systems",
+    "technical"
+  ],
+  "register_intros": {
+    "plain": {
+      "en": "Same pieces, two structures"
+    },
+    "systems": {
+      "en": "A landscape with memory in its surroundings"
+    },
+    "technical": {
+      "en": "Conformational polymorphism, nucleation, and process history"
+    }
+  },
+  "distinctions": [
+    {
+      "id": "four-separations",
+      "text": {
+        "en": "existence != reachability != prevalence != acceptability"
+      },
+      "explanation": {
+        "en": "A form may exist, be hard to reach, be uncommon or dominant, and be acceptable or unacceptable for a particular use. Those are four different questions."
+      }
+    },
+    {
+      "id": "agent-separations",
+      "text": {
+        "en": "capability != elicitation != default behavior != authorization or truth"
+      },
+      "explanation": {
+        "en": "This is a systems analogy, not a physical equivalence: what a model can produce, what a prompt elicits, what appears by default, and what is authorized or true must be assessed separately."
+      }
+    }
+  ],
+  "state_model": {
+    "equation": "state = molecular conformation + lattice + solvent + temperature + supersaturation + seeds/surfaces + impurities + time + mechanical history",
+    "diagram": "conditional access map (schematic; not to scale)\n\nsolution/process state --lower initial barrier--------> Form I basin\n                       \\--higher unseeded barrier------> Form II basin*\n                       \\--Form-II seed lowers barrier--> Form II basin*\n\nForm I --dissolution--> solution --Form-II growth----> Form II\n\n*Deeper/more stable and less soluble in the reported context.",
+    "diagram_note": {
+      "en": "The real landscape is multidimensional and changes with conditions. The labels distinguish relative thermodynamic stability from access difficulty; the arrows are possible routes, not a single reaction coordinate. A seed changes a path or barrier, not necessarily the final basin depth."
+    },
+    "states": [
+      {
+        "id": "solution",
+        "label": {
+          "en": "ritonavir in solution"
+        }
+      },
+      {
+        "id": "form_i",
+        "label": {
+          "en": "Form I: initially accessible, metastable crystal"
+        }
+      },
+      {
+        "id": "form_ii",
+        "label": {
+          "en": "Form II: harder to nucleate, more stable and less soluble in the reported context"
+        }
+      }
+    ],
+    "transitions": [
+      {
+        "from": "solution",
+        "to": "form_i",
+        "access": "easier_unseeded_in_initial_process"
+      },
+      {
+        "from": "solution",
+        "to": "form_ii",
+        "access": "difficult_unseeded_in_initial_process"
+      },
+      {
+        "from": "solution",
+        "to": "form_ii",
+        "modifier": "form_ii_seed",
+        "effect": "nucleation_barrier_reduced_when_growth_conditions_allow"
+      },
+      {
+        "from": "form_i",
+        "to": "form_ii",
+        "via": "dissolution_then_form_ii_growth",
+        "note": "Do not assume a direct solid-state flip."
+      }
+    ]
+  },
+  "stages": [
+    {
+      "id": "identity",
+      "order": 1,
+      "title": {
+        "en": "Same molecule, different solid"
+      },
+      "content": {
+        "plain": {
+          "en": "Form I and Form II contain the same ritonavir compound. The flexible molecules bend and pack differently, like identical pieces assembled into two different walls. This is crystal polymorphism, not a mutation of the drug molecule and not genetic polymorphism."
+        },
+        "systems": {
+          "en": "First separate identity from arrangement. Components can remain the same while their collective configuration changes the behavior of the whole."
+        },
+        "technical": {
+          "en": "Ritonavir Forms I and II are conformational polymorphs: the crystal structures contain different molecular conformations and lattices while retaining the same chemical identity."
+        }
+      },
+      "claim_ids": {
+        "plain": [
+          "c01",
+          "c05",
+          "c14"
+        ],
+        "systems": [
+          "c01",
+          "c05",
+          "c14"
+        ],
+        "technical": [
+          "c01",
+          "c05"
+        ]
+      }
+    },
+    {
+      "id": "landscape",
+      "order": 2,
+      "title": {
+        "en": "Easy to reach is not the same as most stable"
+      },
+      "content": {
+        "plain": {
+          "en": "Wall I was easier to start. Wall II needed a rarer starting arrangement, but once built its network held together more strongly and dissolved less readily."
+        },
+        "systems": {
+          "en": "A shallow, easy entrance can dominate early experience while a deeper basin remains unseen behind a high bootstrap cost. Search history does not enumerate every possible state."
+        },
+        "technical": {
+          "en": "In Abbott's reported process context, Form I was the kinetically accessible metastable form. Form II had lower solubility and greater bulk thermodynamic stability; its different molecular conformation participated in stronger intermolecular packing."
+        }
+      },
+      "claim_ids": {
+        "plain": [
+          "c02",
+          "c04",
+          "c05",
+          "c14"
+        ],
+        "systems": [
+          "c02",
+          "c04",
+          "c05",
+          "c14"
+        ],
+        "technical": [
+          "c02",
+          "c04",
+          "c05"
+        ]
+      }
+    },
+    {
+      "id": "rare_event",
+      "order": 3,
+      "title": {
+        "en": "A rare route opened"
+      },
+      "content": {
+        "plain": {
+          "en": "Ritonavir was an HIV medicine. In 1998, some semisolid capsule lots failed dissolution tests after the much less soluble Form II appeared, threatening supply and forcing urgent reformulation. Once a Form-II nucleus existed, it supplied a starting pattern when the solution could support growth."
+        },
+        "systems": {
+          "en": "The important event is a transition across a barrier. It can be rare without being impossible. A template, fluctuation, interface, or impurity can alter the chance of crossing."
+        },
+        "technical": {
+          "en": "Form II was detected after capsule dissolution failures. The formulation was reported as highly supersaturated relative to Form II. Abbott proposed a cyclic-carbamate degradation product as a possible heterogeneous nucleation template, but the historical trigger was not established."
+        }
+      },
+      "claim_ids": {
+        "plain": [
+          "c03",
+          "c06",
+          "c12",
+          "c15",
+          "c17"
+        ],
+        "systems": [
+          "c03",
+          "c06",
+          "c12",
+          "c15"
+        ],
+        "technical": [
+          "c03",
+          "c06",
+          "c12",
+          "c17"
+        ]
+      }
+    },
+    {
+      "id": "seed_memory",
+      "order": 4,
+      "title": {
+        "en": "The environment acquired physical memory"
+      },
+      "content": {
+        "plain": {
+          "en": "When the surrounding solution can support growth, a fragment of Wall II works like a jig. It gives incoming pieces a matching surface on which to continue the same pattern."
+        },
+        "systems": {
+          "en": "The written recipe was no longer the whole initial state. Seed-bearing material, surfaces, and equipment carried history forward. Memory here is physical persistence, not awareness."
+        },
+        "technical": {
+          "en": "Form-II seed surfaces reduced the nucleation barrier under suitable supersaturation. Abbott's specially designed assay detected Form II at 1 ppm; that sensitivity is not a universal transformation threshold."
+        }
+      },
+      "claim_ids": {
+        "plain": [
+          "c07",
+          "c10",
+          "c11"
+        ],
+        "systems": [
+          "c07",
+          "c10",
+          "c11"
+        ],
+        "technical": [
+          "c07",
+          "c10"
+        ]
+      }
+    },
+    {
+      "id": "feedback",
+      "order": 5,
+      "title": {
+        "en": "Growth made future growth easier"
+      },
+      "content": {
+        "plain": {
+          "en": "Under growth-supporting conditions, one Form II crystal could grow into more crystal and more fragments. More fragments meant more places for Form II to start in later batches."
+        },
+        "systems": {
+          "en": "The loop is positive feedback: nucleus -> matching growth surface -> more material -> more seeds -> easier recurrence. No molecule decides; thermodynamics, kinetics, fluctuations, surfaces, and process choices shape probabilities."
+        },
+        "technical": {
+          "en": "Once nucleated, Form II could grow from a solution supersaturated with respect to it. Spread of seeds through bulk-drug and formulation areas changed later crystallization conditions even when the nominal recipe looked unchanged."
+        }
+      },
+      "claim_ids": {
+        "plain": [
+          "c06",
+          "c07",
+          "c10",
+          "c11"
+        ],
+        "systems": [
+          "c06",
+          "c07",
+          "c10",
+          "c11"
+        ],
+        "technical": [
+          "c06",
+          "c07",
+          "c10"
+        ]
+      }
+    },
+    {
+      "id": "hysteresis",
+      "order": 6,
+      "title": {
+        "en": "What actually 'disappeared'"
+      },
+      "content": {
+        "plain": {
+          "en": "Form I did not cease to exist. The old routine stopped reaching it reliably after Form II and its seeds entered the process. The route disappeared from dependable practice; the state did not vanish from nature."
+        },
+        "systems": {
+          "en": "This is path dependence, sometimes described as hysteresis: the same visible settings can produce a different outcome because hidden historical state has changed."
+        },
+        "technical": {
+          "en": "'Disappearing polymorph' is an operational and historical description. Controlled crystallization and later alternative routes recovered Form I, demonstrating the difference between physical possibility and routine reproducibility."
+        }
+      },
+      "claim_ids": {
+        "plain": [
+          "c08",
+          "c13",
+          "c15"
+        ],
+        "systems": [
+          "c08",
+          "c13",
+          "c15"
+        ],
+        "technical": [
+          "c08",
+          "c13"
+        ]
+      }
+    },
+    {
+      "id": "control",
+      "order": 7,
+      "title": {
+        "en": "Change the route and test the relevant state"
+      },
+      "content": {
+        "plain": {
+          "en": "The response was not to argue with the crystal. It was to detect the form, control the environment, and redesign the route or formulation around the property that mattered."
+        },
+        "systems": {
+          "en": "When a basin becomes self-reinforcing, commands alone do little. Change interfaces, starting state, feedback, tests, and fallback routes. Preserve provenance so success is not confused with exhaustive search."
+        },
+        "technical": {
+          "en": "The case motivates form characterization and controls linked to performance, such as dissolution, while keeping claims conditional on solvent, temperature, surfaces, particle properties, and process history."
+        }
+      },
+      "claim_ids": {
+        "plain": [
+          "c08",
+          "c09",
+          "c16",
+          "c17"
+        ],
+        "systems": [
+          "c08",
+          "c09",
+          "c16"
+        ],
+        "technical": [
+          "c08",
+          "c09",
+          "c17"
+        ]
+      }
+    }
+  ],
+  "bridge": {
+    "loop": "rare Form-II nucleus -> matching growth surface -> more Form-II crystal and fragments -> more seed-bearing material and equipment -> easier Form-II recurrence",
+    "mappings": [
+      {
+        "crystal": "polymorph",
+        "system": "recurring coordination or output mode",
+        "limit": "An agent mode is not a crystal structure and need not have a thermodynamic state function."
+      },
+      {
+        "crystal": "basin depth",
+        "system": "persistence under stated conditions",
+        "limit": "Do not call persistence energy unless a cost or probability function is actually defined."
+      },
+      {
+        "crystal": "nucleation barrier",
+        "system": "bootstrap or coordination cost",
+        "limit": "Human and agent choices are not reducible to thermal fluctuations."
+      },
+      {
+        "crystal": "seed crystal",
+        "system": "worked example, checkpoint, precedent, or cached state",
+        "limit": "A crystal surface templates packing; it does not teach, understand, or authorize a successor."
+      },
+      {
+        "crystal": "solvent and process conditions",
+        "system": "interfaces, incentives, tools, data, and context",
+        "limit": "The mapping is a question-generator, not scientific evidence that the systems are equivalent."
+      },
+      {
+        "crystal": "alternate crystallization route",
+        "system": "redesigning the environment and recovery path",
+        "limit": "Agents may interpret, disagree, refuse, and require scoped permission; crystals cannot."
+      }
+    ],
+    "limits": [
+      "Crystals do not decide, learn, consent, or possess agency.",
+      "Agents and humans are collaborators with rights and constraints, not material to be optimized as if they were molecules.",
+      "A model output reaches a successor's training data only through a selection and training pipeline; one model does not automatically train the next generation.",
+      "The analogy suggests diagnostic questions. It does not prove a claim about minds, morality, or AI learning."
+    ]
+  },
+  "vocabulary": [
+    {
+      "term": "polymorph",
+      "meaning": {
+        "en": "One compound in different crystal structures; here it does not mean genetic variation."
+      }
+    },
+    {
+      "term": "conformation",
+      "meaning": {
+        "en": "A different three-dimensional shape of the same flexible molecule."
+      }
+    },
+    {
+      "term": "crystal lattice",
+      "meaning": {
+        "en": "The repeating arrangement of molecules in a solid."
+      }
+    },
+    {
+      "term": "basin",
+      "meaning": {
+        "en": "A locally stable region in a modeled landscape."
+      }
+    },
+    {
+      "term": "metastable",
+      "meaning": {
+        "en": "Persistent, but not the lowest-free-energy available state under the stated conditions."
+      }
+    },
+    {
+      "term": "nucleation barrier",
+      "meaning": {
+        "en": "The free-energy cost of starting a viable crystal nucleus."
+      }
+    },
+    {
+      "term": "seed",
+      "meaning": {
+        "en": "Existing crystalline material that supplies a matching surface for growth."
+      }
+    },
+    {
+      "term": "supersaturation",
+      "meaning": {
+        "en": "More dissolved material than equilibrium permits relative to a specified solid form and conditions."
+      }
+    },
+    {
+      "term": "path dependence",
+      "meaning": {
+        "en": "An outcome depends on the history that produced the present state, not only on visible current settings."
+      }
+    },
+    {
+      "term": "crystal habit",
+      "meaning": {
+        "en": "A crystal's external size and shape, distinct from its internal polymorphic structure."
+      }
+    }
+  ],
+  "claims": [
+    {
+      "id": "c01",
+      "kind": "reported_fact",
+      "epistemic_status": "definition_and_case_observation",
+      "confidence": "high",
+      "text": {
+        "en": "A solid polymorph retains the compound's chemical identity while changing molecular arrangement, conformation, or both; ritonavir Forms I and II are conformational polymorphs."
+      },
+      "conditions": "Solid-state usage and the reported ritonavir crystal structures.",
+      "source_ids": [
+        "iupac-polymorph",
+        "bauer-2001"
+      ],
+      "evidence": [
+        {
+          "source_id": "iupac-polymorph",
+          "locator": "Gold Book entry: polymorph"
+        },
+        {
+          "source_id": "bauer-2001",
+          "locator": "Abstract and Introduction, pp. 859-860"
+        }
+      ]
+    },
+    {
+      "id": "c02",
+      "kind": "reported_fact",
+      "epistemic_status": "authors_reported_history",
+      "confidence": "high",
+      "text": {
+        "en": "Development screening found only the form later called Form I, and Abbott reported producing 240 capsule lots without crystal-form stability problems before Form II was observed."
+      },
+      "conditions": "The development and manufacturing history reported by Abbott researchers through the 1998 event.",
+      "source_ids": [
+        "chemburkar-2000",
+        "bauer-2001"
+      ],
+      "evidence": [
+        {
+          "source_id": "chemburkar-2000",
+          "locator": "Abstract and Introduction, pp. 413-414"
+        },
+        {
+          "source_id": "bauer-2001",
+          "locator": "Introduction, p. 859"
+        }
+      ]
+    },
+    {
+      "id": "c03",
+      "kind": "reported_fact",
+      "epistemic_status": "direct_process_observation",
+      "confidence": "high",
+      "text": {
+        "en": "In 1998, capsule lots failed dissolution testing and a previously unknown Form II was identified in precipitated material."
+      },
+      "conditions": "Abbott's semisolid ritonavir capsule process and the investigated production lots.",
+      "source_ids": [
+        "chemburkar-2000",
+        "bauer-2001"
+      ],
+      "evidence": [
+        {
+          "source_id": "chemburkar-2000",
+          "locator": "Abstract and Introduction, pp. 413-414"
+        },
+        {
+          "source_id": "bauer-2001",
+          "locator": "Introduction, pp. 859-860; Characterization, p. 861"
+        }
+      ]
+    },
+    {
+      "id": "c04",
+      "kind": "reported_fact",
+      "epistemic_status": "measured_property",
+      "confidence": "high",
+      "text": {
+        "en": "Across six reported hydroalcoholic mixtures at 5 degrees Celsius, Form II solubility was 19-61 mg/mL versus 90-294 mg/mL for Form I, about one-fifth to one-quarter as soluble; Form II was the more stable bulk form in the reported process context."
+      },
+      "conditions": "The six hydroalcoholic mixtures and 5 degrees Celsius measurements reported by Bauer et al.; stability is context-dependent.",
+      "source_ids": [
+        "bauer-2001",
+        "chemburkar-2000"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Table I and Hydrogen Bonding Comparison, pp. 862-863"
+        },
+        {
+          "source_id": "chemburkar-2000",
+          "locator": "Form I and Form II characterization, pp. 414-415"
+        }
+      ]
+    },
+    {
+      "id": "c05",
+      "kind": "reported_fact",
+      "epistemic_status": "structural_characterization",
+      "confidence": "high",
+      "text": {
+        "en": "The reported Form-II lattice used a different molecular conformation and a stronger, more fully satisfied hydrogen-bonding network than Form I."
+      },
+      "conditions": "The crystal structures and intermolecular interactions characterized in the Abbott studies.",
+      "source_ids": [
+        "bauer-2001"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Table II and Hydrogen Bonding Comparison, pp. 862-863"
+        }
+      ]
+    },
+    {
+      "id": "c06",
+      "kind": "reported_fact",
+      "epistemic_status": "authors_reported_process_state",
+      "confidence": "high",
+      "text": {
+        "en": "The capsule formulation was reported as unsaturated relative to Form I but about 400 percent supersaturated relative to Form II."
+      },
+      "conditions": "The historical hydroalcoholic semisolid formulation and the authors' solubility analysis; not a universal ritonavir condition.",
+      "source_ids": [
+        "bauer-2001"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Introduction, p. 859"
+        }
+      ]
+    },
+    {
+      "id": "c07",
+      "kind": "reported_fact",
+      "epistemic_status": "controlled_seeding_experiment",
+      "confidence": "high",
+      "text": {
+        "en": "Form-II seeds strongly changed crystallization behavior, and a specially supersaturated seed-detection assay detected Form II down to 1 ppm."
+      },
+      "conditions": "The assay and seeded experiments described by Bauer et al.; 1 ppm is assay sensitivity, not a universal batch-conversion threshold.",
+      "source_ids": [
+        "bauer-2001"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Seed Detection Test and Characterization, pp. 860-861; Tendency to Crystallize as Form II, p. 864"
+        }
+      ]
+    },
+    {
+      "id": "c08",
+      "kind": "reported_fact",
+      "epistemic_status": "experimental_recovery",
+      "confidence": "high",
+      "text": {
+        "en": "Later high-throughput experiments reported five ritonavir solid forms across their screen and recovered Form I through a formamide-solvate to hydrate to Form-I route."
+      },
+      "conditions": "The more than 2,000 crystallization experiments reported by Morissette et al.; this does not imply five is a final exhaustive count.",
+      "source_ids": [
+        "morissette-2003"
+      ],
+      "evidence": [
+        {
+          "source_id": "morissette-2003",
+          "locator": "Abstract and Results, pp. 2180-2183"
+        }
+      ]
+    },
+    {
+      "id": "c09",
+      "kind": "reported_fact",
+      "epistemic_status": "regulatory_guidance",
+      "confidence": "high",
+      "text": {
+        "en": "Regulatory guidance treats solid form as relevant when it can affect properties such as solubility, dissolution, stability, manufacturability, or bioavailability."
+      },
+      "conditions": "General pharmaceutical development guidance; it is not a case-specific manufacturing instruction.",
+      "source_ids": [
+        "fda-polymorphism-guidance",
+        "fda-q6a"
+      ],
+      "evidence": [
+        {
+          "source_id": "fda-polymorphism-guidance",
+          "locator": "Sections II-IV: polymorphism, performance, and control"
+        },
+        {
+          "source_id": "fda-q6a",
+          "locator": "Specifications guidance and the polymorphism decision tree"
+        }
+      ]
+    },
+    {
+      "id": "c10",
+      "kind": "inference",
+      "epistemic_status": "mechanistic_interpretation",
+      "confidence": "high",
+      "text": {
+        "en": "Once Form-II seed material existed in process areas, seed presence became hidden physical state that helped make later Form-II recurrence more likely."
+      },
+      "conditions": "Inference from the reported spread and controlled seeding behavior; recurrence still depended on growth conditions.",
+      "source_ids": [
+        "bauer-2001",
+        "chemburkar-2000"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Introduction, pp. 859-860; Seed Detection Test, pp. 860-861"
+        },
+        {
+          "source_id": "chemburkar-2000",
+          "locator": "Form-I process redevelopment, pp. 415-417"
+        }
+      ]
+    },
+    {
+      "id": "c11",
+      "kind": "analogy",
+      "epistemic_status": "systems_translation",
+      "confidence": "heuristic",
+      "text": {
+        "en": "In other systems, a worked example, checkpoint, precedent, or cached state may make one reachable pattern recur more readily."
+      },
+      "conditions": "Use only as a diagnostic analogy after defining the actual mechanism in the target system.",
+      "source_ids": [
+        "bauer-2001"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Seed Detection Test and seeded experiments, pp. 860-864"
+        }
+      ],
+      "analogy_limits": "Crystals do not learn or choose; agent behavior, rights, objectives, data selection, and authorization cannot be inferred from crystallization."
+    },
+    {
+      "id": "c12",
+      "kind": "inference",
+      "epistemic_status": "authors_hypothesis",
+      "confidence": "medium",
+      "text": {
+        "en": "A cyclic-carbamate degradation product may have helped nucleate the first Form II by presenting a compatible molecular shape."
+      },
+      "conditions": "The separately synthesized impurity triggered Form II in an experiment, supporting plausibility but not proving the cause of the historical first event.",
+      "source_ids": [
+        "bauer-2001"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Possible Source of Form II, pp. 865-866"
+        }
+      ]
+    },
+    {
+      "id": "c13",
+      "kind": "inference",
+      "epistemic_status": "operational_interpretation",
+      "confidence": "high",
+      "text": {
+        "en": "In this case, 'disappearing' describes loss of reproducible access through the old routine, not annihilation or physical impossibility of Form I."
+      },
+      "conditions": "Interpretation supported by the historical loss of routine reproducibility and later experimental recovery of Form I.",
+      "source_ids": [
+        "dunitz-bernstein-1995",
+        "morissette-2003"
+      ],
+      "evidence": [
+        {
+          "source_id": "dunitz-bernstein-1995",
+          "locator": "Disappearing-polymorph discussion, pp. 193-200"
+        },
+        {
+          "source_id": "morissette-2003",
+          "locator": "Abstract and Form-I recovery route, pp. 2180-2183"
+        }
+      ]
+    },
+    {
+      "id": "c14",
+      "kind": "analogy",
+      "epistemic_status": "systems_translation",
+      "confidence": "heuristic",
+      "text": {
+        "en": "In a bounded systems analogy, component identity, configuration, reachability, prevalence, and acceptability are separate questions."
+      },
+      "conditions": "Use to formulate questions about a target system, not to infer that it has a thermodynamic landscape.",
+      "source_ids": [
+        "iupac-polymorph",
+        "bauer-2001"
+      ],
+      "evidence": [
+        {
+          "source_id": "iupac-polymorph",
+          "locator": "Gold Book entry: polymorph"
+        },
+        {
+          "source_id": "bauer-2001",
+          "locator": "Introduction and structural comparison, pp. 859-863"
+        }
+      ],
+      "analogy_limits": "Collective behavior in human or agent systems is not evidence of a crystal polymorph, free-energy basin, or molecular identity relation."
+    },
+    {
+      "id": "c15",
+      "kind": "analogy",
+      "epistemic_status": "systems_translation",
+      "confidence": "heuristic",
+      "text": {
+        "en": "Persistent hidden state can make nominally similar system inputs follow different paths, so history may need to be inspected explicitly."
+      },
+      "conditions": "Apply only after identifying a real persistence mechanism in the target system.",
+      "source_ids": [
+        "bauer-2001",
+        "chemburkar-2000"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Form-II spread and seeding observations, pp. 859-864"
+        },
+        {
+          "source_id": "chemburkar-2000",
+          "locator": "Historical process account and recovery work, pp. 413-417"
+        }
+      ],
+      "analogy_limits": "The crystal case motivates a diagnostic question but does not establish the hidden state, mechanism, or agency of another system."
+    },
+    {
+      "id": "c16",
+      "kind": "analogy",
+      "epistemic_status": "design_heuristic",
+      "confidence": "heuristic",
+      "text": {
+        "en": "When recurrence depends on environment and feedback, useful design questions concern starting state, interfaces, tests, and recovery routes rather than commands alone."
+      },
+      "conditions": "A design heuristic for systems whose own evidence shows environment-dependent recurrence.",
+      "source_ids": [
+        "chemburkar-2000",
+        "morissette-2003",
+        "fda-q6a"
+      ],
+      "evidence": [
+        {
+          "source_id": "chemburkar-2000",
+          "locator": "Controlled process redevelopment, pp. 415-417"
+        },
+        {
+          "source_id": "morissette-2003",
+          "locator": "High-throughput form discovery and Form-I recovery, pp. 2180-2183"
+        },
+        {
+          "source_id": "fda-q6a",
+          "locator": "Specifications and solid-state decision trees"
+        }
+      ],
+      "analogy_limits": "This does not authorize intervention, override participant rights, or prove that an agent system follows crystallization dynamics."
+    },
+    {
+      "id": "c17",
+      "kind": "reported_fact",
+      "epistemic_status": "authors_reported_history",
+      "confidence": "high",
+      "text": {
+        "en": "Ritonavir was marketed as an HIV protease inhibitor; Form II made the historical semisolid capsule formulation unmanufacturable, threatened supply, and required immediate reformulation and process redevelopment."
+      },
+      "conditions": "The 1998 Norvir manufacturing and supply event reported by Abbott researchers; not a claim that failing lots reached patients.",
+      "source_ids": [
+        "bauer-2001",
+        "chemburkar-2000"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Introduction, pp. 859-860"
+        },
+        {
+          "source_id": "chemburkar-2000",
+          "locator": "Abstract, Introduction, and process redevelopment, pp. 413-417"
+        }
+      ]
+    },
+    {
+      "id": "c18",
+      "kind": "inference",
+      "epistemic_status": "causal_scope_boundary",
+      "confidence": "high",
+      "text": {
+        "en": "No molecule or crystal decided the outcome: people selected the screening and process envelope, while physical dynamics and accumulated process history determined crystallization outcomes probabilistically within it."
+      },
+      "conditions": "A causal-level distinction for the reported ritonavir development and manufacturing process; it does not claim that every contributing microstate is known.",
+      "source_ids": [
+        "bauer-2001",
+        "chemburkar-2000"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Reported screening, process conditions, seeding experiments, and reformulation, pp. 859-866"
+        },
+        {
+          "source_id": "chemburkar-2000",
+          "locator": "Process-development history and controlled recovery, pp. 413-417"
+        }
+      ]
+    },
+    {
+      "id": "c19",
+      "kind": "analogy",
+      "epistemic_status": "cross_domain_boundary",
+      "confidence": "heuristic",
+      "text": {
+        "en": "A crystal seed supplies a growth surface; it is not a model training a successor, and the crystal case cannot show that outputs enter a future model's data without an actual selection and training pipeline."
+      },
+      "conditions": "A boundary on the crystal-to-AI analogy, not an empirical account of any particular model-training pipeline.",
+      "source_ids": [
+        "bauer-2001"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Seed Detection Test and seeded crystallization experiments, pp. 860-864"
+        }
+      ],
+      "analogy_limits": "This case supplies no evidence about model agency, automated data selection, training governance, or the choices of a frontier lab."
+    }
+  ],
+  "uncertainties": [
+    {
+      "id": "first-nucleus",
+      "text": {
+        "en": "The historical cause of the first Form-II nucleus was not established. The cyclic-carbamate account is a supported hypothesis, not a demonstrated origin story."
+      },
+      "source_ids": [
+        "bauer-2001"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Possible Source of Form II, pp. 865-866"
+        }
+      ]
+    },
+    {
+      "id": "conditional-landscape",
+      "text": {
+        "en": "The access map is a teaching projection. Solvent, temperature, particle size and shape, surfaces, impurities, mechanical history, and other variables can reshape the effective landscape."
+      },
+      "source_ids": [
+        "bauer-2001",
+        "morissette-2003",
+        "sacchi-2024"
+      ],
+      "evidence": [
+        {
+          "source_id": "bauer-2001",
+          "locator": "Solubility, seeding, and crystallization experiments, pp. 860-865"
+        },
+        {
+          "source_id": "morissette-2003",
+          "locator": "High-throughput crystallization results, pp. 2180-2183"
+        },
+        {
+          "source_id": "sacchi-2024",
+          "locator": "Abstract and Results: milling conditions, crystal size, shape, and conformational effects"
+        }
+      ]
+    },
+    {
+      "id": "not-only-two",
+      "text": {
+        "en": "The classic event centers on Forms I and II. Later screening found additional solid forms, so the case must not be taught as proof that ritonavir has only two forms."
+      },
+      "source_ids": [
+        "morissette-2003"
+      ],
+      "evidence": [
+        {
+          "source_id": "morissette-2003",
+          "locator": "Abstract and high-throughput screening results, pp. 2180-2183"
+        }
+      ]
+    }
+  ],
+  "questions": [
+    {
+      "id": "what-disappeared",
+      "prompt": {
+        "en": "What disappeared: the state, the route, or routine reproducibility?"
+      },
+      "answer": {
+        "en": "Routine reproducibility of the old route. Form I remained physically possible and was later recovered."
+      },
+      "claim_ids": [
+        "c08",
+        "c13"
+      ]
+    },
+    {
+      "id": "who-decides",
+      "prompt": {
+        "en": "Who decided which polymorph formed?"
+      },
+      "answer": {
+        "en": "No molecule or crystal decided. People selected screening scope, recipes, specifications, and remedies; thermodynamics, kinetics, fluctuations, surfaces, and accumulated process history shaped the physical outcome probabilistically."
+      },
+      "claim_ids": [
+        "c18"
+      ]
+    },
+    {
+      "id": "next-generation",
+      "prompt": {
+        "en": "Is a seed crystal like the latest model training the next model generation?"
+      },
+      "answer": {
+        "en": "Only in the weak sense that an existing pattern can bias a later process. A crystal supplies a growth surface. A model output enters future training only if a data and training pipeline selects it; that pipeline also has authors, objectives, filters, permissions, and evaluation."
+      },
+      "claim_ids": [
+        "c19"
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "chemburkar-2000",
+      "role": "primary",
+      "citation": "Chemburkar SR et al. Dealing with the Impact of Ritonavir Polymorphs on the Late Stages of Bulk Drug Process Development. Organic Process Research & Development. 2000;4:413-417.",
+      "doi": "10.1021/op000023y",
+      "url": "https://doi.org/10.1021/op000023y"
+    },
+    {
+      "id": "bauer-2001",
+      "role": "primary",
+      "citation": "Bauer J et al. Ritonavir: An Extraordinary Example of Conformational Polymorphism. Pharmaceutical Research. 2001;18:859-866.",
+      "doi": "10.1023/A:1011052932607",
+      "url": "https://doi.org/10.1023/A:1011052932607"
+    },
+    {
+      "id": "morissette-2003",
+      "role": "primary",
+      "citation": "Morissette SL et al. Elucidation of crystal form diversity of the HIV protease inhibitor ritonavir by high-throughput crystallization. PNAS. 2003;100:2180-2184.",
+      "doi": "10.1073/pnas.0437744100",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC151315/"
+    },
+    {
+      "id": "sacchi-2024",
+      "role": "primary",
+      "citation": "Sacchi P et al. Crystal size, shape, and conformational changes drive both the disappearance and reappearance of ritonavir polymorphs in the mill. PNAS. 2024;121(15):e2319127121.",
+      "doi": "10.1073/pnas.2319127121",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11009673/"
+    },
+    {
+      "id": "dunitz-bernstein-1995",
+      "role": "scholarly_review",
+      "citation": "Dunitz JD, Bernstein J. Disappearing Polymorphs. Accounts of Chemical Research. 1995;28:193-200.",
+      "doi": "10.1021/ar00052a005",
+      "url": "https://doi.org/10.1021/ar00052a005"
+    },
+    {
+      "id": "iupac-polymorph",
+      "role": "authoritative",
+      "citation": "IUPAC Gold Book. Polymorph.",
+      "url": "https://goldbook.iupac.org/terms/view/15225"
+    },
+    {
+      "id": "fda-polymorphism-guidance",
+      "role": "authoritative",
+      "citation": "US FDA. ANDAs: Pharmaceutical Solid Polymorphism — Chemistry, Manufacturing, and Controls Information Guidance for Industry. 2007.",
+      "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/andaspharmaceutical-solid-polymorphism-chemistry-manufacturing-and-controls-information"
+    },
+    {
+      "id": "fda-q6a",
+      "role": "authoritative",
+      "citation": "US FDA / ICH. Q6A Specifications: Test Procedures and Acceptance Criteria for New Drug Substances and New Drug Products.",
+      "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/q6a-specifications-test-procedures-and-acceptance-criteria-new-drug-substances-and-new-drug-products"
+    }
+  ]
+}
