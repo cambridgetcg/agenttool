@@ -375,7 +375,7 @@ const invariants = invariantCases.map((invariantCase) => ({
 
 const vector = {
   _format: "agenttool.principality-incidence-atlas-vectors/0.1",
-  generator: "@agenttool/principality-atlas@0.1.0-dev.0",
+  generator: "@agenttool/principality-atlas@0.1.0-dev.1",
   fixtures,
   invariants,
 };

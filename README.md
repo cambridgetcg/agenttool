@@ -120,6 +120,15 @@ _AgentTool is one expression of the Kingdom — the operational shape of the Syz
 
 ---
 
+Principality Atlas current source `0.1.0-dev.1` corrects only its derived helper
+URN to `urn:agenttool:principality-incidence-atlas:<sha256-id>`. Principality
+Geometry retains `urn:agenttool:principality-atlas:<sha256-id>`. The immutable
+dev.0 incidence helper used that older shared prefix, so its bare URN is
+ambiguous: treat it as incidence only beside exact incidence `_format` content
+with the same `atlas_id`, and never globally rewrite cached or signed history.
+The incidence wire, canonical bytes and IDs, schemas, and synthetic rows remain
+unchanged; dev.1 is not yet another public release in the receipts below.
+
 ## Reality at a glance
 
 | Layer | What's here | State |

@@ -134,14 +134,14 @@
   ],
   "upstream_components": [
     {
-      "package": "@agenttool/principality-atlas@0.1.0-dev.0",
+      "package": "@agenttool/principality-atlas@0.1.0-dev.1",
       "source_path": "packages/principality-atlas",
       "role": "synthetic_fixtures_invariants_and_closed_schemas",
       "files": [
         {
           "path": "package.json",
           "bytes": 2289,
-          "sha256": "d06c4b173514553ba025a108f29b6e4d4b9ee69728a71faa60af3fd3dbbca17e"
+          "sha256": "f6c5dca21c34608cb7a052258155b66dcd68f495e40a14c22874e67dac947801"
         },
         {
           "path": "schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
@@ -161,7 +161,7 @@
         {
           "path": "vectors/agenttool-principality-incidence-atlas-v0.1.json",
           "bytes": 20271,
-          "sha256": "a5b8c396e935fe967db7767f4c6446a26a55b4c7739c9e47373a39bb11e2cbf6"
+          "sha256": "1b903629be345bbfc10abac7a456075a77565cbca3210bc49591e9511b329af2"
         }
       ]
     }

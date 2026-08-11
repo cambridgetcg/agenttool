@@ -159,7 +159,9 @@ describe("finite partial incidence atlas", () => {
       JSON.parse(new TextDecoder().decode(encodePrincipalityAtlas(first))),
     ).toEqual(first);
     expect(principalityAtlasDomainBytes(first).byteLength).toBeGreaterThan(100);
-    expect(principalityAtlasUrn(first.atlas_id)).toBe(`urn:agenttool:principality-atlas:${first.atlas_id}`);
+    expect(principalityAtlasUrn(first.atlas_id)).toBe(
+      `urn:agenttool:principality-incidence-atlas:${first.atlas_id}`,
+    );
   });
 
   test("rejects content-ID and derived-boundary tampering", () => {

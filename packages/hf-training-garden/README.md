@@ -437,6 +437,14 @@ read-back are the durable evidence. The addition contains only three synthetic
 Principality Atlas fixtures, ten non-inference invariants, and their copied
 closed schemas. No gate or paid compute was used.
 
+Current repository generation binds the later
+`@agenttool/principality-atlas@0.1.0-dev.1` source candidate. Its corrected
+incidence helper URN changes package/vector provenance only: the three copied
+Atlas schemas and both Atlas JSONL data files stay byte-identical. Accordingly,
+only the source and self-excluding hash manifests change in the generated
+companion. Those local bytes are not a claim that a post-v0.5 Hub revision has
+been uploaded.
+
 Intermediate revision
 [`21e8d4d27d47604375a122e66e7ed5fe8b9fdf08`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/21e8d4d27d47604375a122e66e7ed5fe8b9fdf08)
 remains immutable evidence for the pre-FREEDOM GitHub-main merge `74aeaa13`.

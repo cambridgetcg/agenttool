@@ -76,7 +76,7 @@
     {
       "path": "provenance/source-manifest.json",
       "bytes": 9520,
-      "sha256": "960122ff4f8de067becec81f95fc0a404f3ad3a8b505dc887252566f2a832e57"
+      "sha256": "434747b1f35ca65a716558dae9183ac49e844133202f6d5dc4896c2e799fc2da"
     },
     {
       "path": "schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",

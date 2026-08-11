@@ -19,6 +19,11 @@ const invariantSchema = readJson("schema/agenttool-principality-incidence-atlas-
 const vectors = readJson("vectors/agenttool-principality-incidence-atlas-v0.1.json");
 
 describe("closed portable schemas and vectors", () => {
+  test("binds the dev.1 generator without changing the v0.1 wire", () => {
+    expect(vectors._format).toBe("agenttool.principality-incidence-atlas-vectors/0.1");
+    expect(vectors.generator).toBe("@agenttool/principality-atlas@0.1.0-dev.1");
+  });
+
   test("strictly validates every generated fixture and invariant", () => {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     addFormats(ajv);

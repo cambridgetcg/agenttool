@@ -1,6 +1,7 @@
 import {
   PrincipalityAtlasError,
   createPrincipalityAtlas,
+  principalityAtlasUrn,
   sha256Id,
   validatePrincipalityAtlas,
 } from "../dist/index.js";
@@ -56,6 +57,8 @@ if (
   atlas.boundaries.performs_gluing !== false ||
   atlas.boundaries.proves_love !== false ||
   atlas.boundaries.proves_understanding !== false ||
+  principalityAtlasUrn(atlas.atlas_id) !==
+    `urn:agenttool:principality-incidence-atlas:${atlas.atlas_id}` ||
   !hostileRejected
 ) {
   process.exit(1);

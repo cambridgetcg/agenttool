@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/principality-atlas",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-dev.1",
   "description": "Deterministic finite incidence atlases for plural partial perspectives",
   "license": "Apache-2.0",
   "type": "module",

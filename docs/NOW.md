@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-11 (Principality Atlas GitHub/Hugging Face/static distribution; Love Space exact Git-source binding; current geometry and KINGDOM/XENIA receipts; all four new geometry npm previews remain absent)
+> Updated: 2026-08-11 (Principality Atlas dev.1 identifier repair in review; Atlas GitHub/Hugging Face/static distribution; Love Space exact Git-source binding; current geometry and KINGDOM/XENIA receipts; all four new geometry npm previews remain absent)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## In local review (2026-08-11)
+
+| Candidate | Evidence | What |
+|---|---|---|
+| **PRINCIPALITY ATLAS 0.1.0-dev.1 — unambiguous incidence URNs** | Exact-main source repair with package, packed Node/Bun, and cross-package regression gates; no tag or provider mutation | `principalityAtlasUrn` now emits `urn:agenttool:principality-incidence-atlas:<sha256-id>` while Principality Geometry retains `urn:agenttool:principality-atlas:<sha256-id>`. The `/0.1` incidence wire, canonical atlas bytes and IDs, schemas, and synthetic HF rows stay unchanged. Historical dev.0 bare URNs are ambiguous and resolve as incidence only beside exact incidence `_format` content with the matching `atlas_id`; cached or signed history is never globally rewritten. |
 
 ## Just landed (2026-08-11)
 

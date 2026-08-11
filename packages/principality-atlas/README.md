@@ -18,6 +18,25 @@ package converts, glues, or treats an artifact from the other as semantically
 equivalent. A host may compose exact digests only through a separately reviewed
 and authorized adapter.
 
+## Identifier namespace and dev.0 history
+
+Version `0.1.0-dev.1` makes the exported helper namespace match that distinct
+wire. `principalityAtlasUrn(atlas.atlas_id)` now returns
+`urn:agenttool:principality-incidence-atlas:<sha256-id>`. This changes only the
+derived URN string. It does not change `atlas_id`, canonical atlas bytes, the
+`agenttool.principality-incidence-atlas/0.1` wire, or any schema.
+
+The immutable dev.0 helper emitted
+`urn:agenttool:principality-atlas:<sha256-id>`, the namespace still owned by
+the separate invariant-geometry package. A historical bare dev.0 URN is
+therefore ambiguous by itself. It may be resolved as an incidence-atlas
+reference only when accompanying content declares exact
+`_format: "agenttool.principality-incidence-atlas/0.1"` and the URN suffix
+equals that content's `atlas_id`. Preserve historical bytes: do not globally
+rewrite cached URNs or signed messages. A cache key or signature that includes
+the derived URN string changes in dev.1; a signature over unchanged canonical
+atlas bytes does not.
+
 “Principality” means only a caller-designated bounded domain or scale. It does
 not mean a security principal, identity, owner, territory, rank, Crown status,
 sovereignty, or authority.
