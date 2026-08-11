@@ -50,6 +50,8 @@ export const POLYMORPH_TEXT_LIMITS = Object.freeze({
   source_url: 2048,
 } as const);
 
+export const POLYMORPH_SOURCE_URL_PATTERN = "^https://(?![^/?#]*@)(?:(?:[A-Za-z0-9._~!$&'()*+,;=:@/?#\\[\\]-])|(?:%[0-9A-Fa-f]{2}))+$";
+
 export const WITNESS_KINDS = Object.freeze([
   "mechanism_hypothesis",
   "measurement",

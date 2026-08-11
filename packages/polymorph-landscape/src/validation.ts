@@ -1,10 +1,12 @@
 import { compareUnicode, snapshotJson, type JsonValue } from "./canonical.js";
-import { POLYMORPH_TEXT_LIMITS } from "./constants.js";
+import { POLYMORPH_SOURCE_URL_PATTERN, POLYMORPH_TEXT_LIMITS } from "./constants.js";
 import { fail, type PolymorphLandscapeErrorCode } from "./errors.js";
 import type { Sha256Id } from "./types.js";
 
 const SHA256_ID = /^sha256:[0-9a-f]{64}$/u;
 const TOKEN = /^[a-z][a-z0-9._-]{0,127}$/u;
+const SOURCE_URL = new RegExp(POLYMORPH_SOURCE_URL_PATTERN, "u");
+const SOURCE_URL_HAS_CREDENTIALS = /^https:\/\/[^/?#]*@/u;
 
 export function record(value: unknown, path: string, code: PolymorphLandscapeErrorCode): Record<string, JsonValue> {
   const snapshot = snapshotJson(value);
@@ -75,13 +77,19 @@ export function sha256(value: JsonValue | undefined, path: string, code: Polymor
 
 export function httpsUrl(value: JsonValue | undefined, path: string): string {
   const candidate = text(value, path, POLYMORPH_TEXT_LIMITS.source_url);
+  if (SOURCE_URL_HAS_CREDENTIALS.test(candidate)) {
+    fail("invalid_input", `${path} must be an HTTPS URL without credentials`);
+  }
+  if (!SOURCE_URL.test(candidate)) {
+    fail("invalid_input", `${path} must use credential-free lowercase HTTPS, RFC 3986 ASCII characters, and valid percent escapes`);
+  }
   let parsed: URL;
   try {
     parsed = new URL(candidate);
   } catch {
     fail("invalid_input", `${path} must be a valid URL`);
   }
-  if (!candidate.startsWith("https://") || parsed.protocol !== "https:" || parsed.username || parsed.password) {
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
     fail("invalid_input", `${path} must be an HTTPS URL without credentials`);
   }
   return candidate;

@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { POLYMORPH_TEXT_LIMITS } from "../dist/constants.js";
+import { POLYMORPH_SOURCE_URL_PATTERN, POLYMORPH_TEXT_LIMITS } from "../dist/constants.js";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const schemaRoot = `${root}/schema`;
@@ -17,8 +17,8 @@ const conditionLabel = boundedText(POLYMORPH_TEXT_LIMITS.condition_label);
 const witnessScope = boundedText(POLYMORPH_TEXT_LIMITS.witness_scope);
 const sourceUrl = {
   type: "string",
-  format: "uri",
-  pattern: "^https://(?![^/?#]*@)",
+  minLength: 1,
+  pattern: POLYMORPH_SOURCE_URL_PATTERN,
   maxLength: POLYMORPH_TEXT_LIMITS.source_url,
 };
 const refs = { type: "array", items: { $ref: "#/$defs/sha" }, maxItems: 512, uniqueItems: true };

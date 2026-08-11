@@ -96,8 +96,14 @@ Text field limits count Unicode code points, matching JSON Schema
 `maxLength`: material, form, and condition labels allow 512; source labels and
 witness scopes allow 1,024; source URLs allow 2,048; and other text allows
 4,096. Source URLs must begin with lowercase `https://` and contain no URL
-credentials. The canonical layer separately rejects malformed Unicode and
-caps each string at 16 KiB of UTF-8 plus each complete artifact at 2 MiB.
+credentials. They use an ASCII RFC 3986 character subset, and every `%` must
+begin a two-hex-digit percent escape; raw spaces, control characters, Unicode
+URL text, and malformed escapes are rejected rather than silently normalized.
+The runtime also parses the candidate as a URL. The schema deliberately shares
+the lexical subset as a structural superset; it does not claim to reproduce all
+WHATWG URL semantics or every runtime integrity check. The canonical layer
+separately rejects malformed Unicode and caps each string at 16 KiB of UTF-8
+plus each complete artifact at 2 MiB.
 
 ## Verify
 

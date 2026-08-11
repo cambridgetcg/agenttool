@@ -33,23 +33,23 @@
     },
     {
       "path": "reference/agenttool-polymorph-landscape-v0.1.schema.json",
-      "bytes": 12640,
-      "sha256": "9f03ba0694de29c6629bfb471b61f632b90551e40ff7e28ae00cfcf40b3cd051"
+      "bytes": 12706,
+      "sha256": "aa8a434a01af5df1e5267bc7d3be52e9af86ef80ba3cba4819b454db0afd843c"
     },
     {
       "path": "reference/agenttool-polymorph-lesson-v0.1.schema.json",
-      "bytes": 14300,
-      "sha256": "ff65af578435af6b05de60d2593708f739226e160dcf7bf0ad9e64b3b6871725"
+      "bytes": 14366,
+      "sha256": "2994bc177fc33056e1cb6b716fdfca2293abb40860e31bbd1246885a067c89bb"
     },
     {
       "path": "reference/agenttool-polymorph-reachability-shift-v0.1.schema.json",
-      "bytes": 4708,
-      "sha256": "29f360e4d729a190eac2bad23d5452cf5876ad56465a98ff940b0109096c33dd"
+      "bytes": 4774,
+      "sha256": "4c48ddda34c860f95279421c00affd858af6aa5c4cab647a17d0c40857e45ea8"
     },
     {
       "path": "source-manifest.json",
       "bytes": 5744,
-      "sha256": "d58406deba36720b6f2385b405626e67512185f1a868e4634b412a4fca3fef1d"
+      "sha256": "f9442f14c6715d0b8ebe74e48cea89c76da6470054ba45a1d7bac789f7823a65"
     }
   ]
 }

@@ -531,8 +531,8 @@
     },
     "sourceUrl": {
       "type": "string",
-      "format": "uri",
-      "pattern": "^https://(?![^/?#]*@)",
+      "minLength": 1,
+      "pattern": "^https://(?![^/?#]*@)(?:(?:[A-Za-z0-9._~!$&'()*+,;=:@/?#\\[\\]-])|(?:%[0-9A-Fa-f]{2}))+$",
       "maxLength": 2048
     },
     "refs": {

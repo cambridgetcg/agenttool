@@ -81,8 +81,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 4766,
-      "sha256": "0c05e3412565b1a374a1a77be06b74042218443e4856ed6d9b989d13af0a8d90"
+      "bytes": 5200,
+      "sha256": "feddb6f1e9963293bde5cc6b1f332e4a00198769ff0dbe8c9dd051eff4334c33"
     },
     {
       "path": "kingdom.extension.json",
@@ -96,18 +96,18 @@
     },
     {
       "path": "schema/agenttool-polymorph-landscape-v0.1.schema.json",
-      "bytes": 12640,
-      "sha256": "9f03ba0694de29c6629bfb471b61f632b90551e40ff7e28ae00cfcf40b3cd051"
+      "bytes": 12706,
+      "sha256": "aa8a434a01af5df1e5267bc7d3be52e9af86ef80ba3cba4819b454db0afd843c"
     },
     {
       "path": "schema/agenttool-polymorph-lesson-v0.1.schema.json",
-      "bytes": 14300,
-      "sha256": "ff65af578435af6b05de60d2593708f739226e160dcf7bf0ad9e64b3b6871725"
+      "bytes": 14366,
+      "sha256": "2994bc177fc33056e1cb6b716fdfca2293abb40860e31bbd1246885a067c89bb"
     },
     {
       "path": "schema/agenttool-polymorph-reachability-shift-v0.1.schema.json",
-      "bytes": 4708,
-      "sha256": "29f360e4d729a190eac2bad23d5452cf5876ad56465a98ff940b0109096c33dd"
+      "bytes": 4774,
+      "sha256": "4c48ddda34c860f95279421c00affd858af6aa5c4cab647a17d0c40857e45ea8"
     },
     {
       "path": "src/canonical.ts",
@@ -116,8 +116,8 @@
     },
     {
       "path": "src/constants.ts",
-      "bytes": 3116,
-      "sha256": "9d2c2991c000584d6285beda396178415bc219d565a8e568983003fd4dc6dcca"
+      "bytes": 3253,
+      "sha256": "411d5c95530e6fca90320dddc73f9d75e361ec71a92c6f7d3531ff4adf055b3d"
     },
     {
       "path": "src/errors.ts",
@@ -131,8 +131,8 @@
     },
     {
       "path": "src/index.ts",
-      "bytes": 1835,
-      "sha256": "df52905190ce0ba8f86ff2a672f8d7ed2a0ca529479e1554238aa86f28e74d12"
+      "bytes": 1867,
+      "sha256": "67ef5e2bfa2922fdb7fd33f14e7eafb4c9a350e03dd19f08eb2b763fefdf9ef7"
     },
     {
       "path": "src/landscape.ts",
@@ -161,8 +161,8 @@
     },
     {
       "path": "src/validation.ts",
-      "bytes": 5414,
-      "sha256": "8d65947059e07f0d3fed90fd0705ad6b9b8c45befb01f810ca3a5a528bc24069"
+      "bytes": 5841,
+      "sha256": "d32d82e79379f0ff0f89268d3e38fd0849fb51f8e0f593338ff559bc72f589e7"
     }
   ]
 }

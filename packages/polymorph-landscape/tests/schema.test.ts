@@ -7,6 +7,7 @@ import addFormats from "ajv-formats";
 import {
   createPolymorphLandscape,
   createRitonavirCase,
+  POLYMORPH_SOURCE_URL_PATTERN,
   validatePolymorphLandscape,
 } from "../src/index.js";
 import { minimalInput } from "./fixtures.js";
@@ -96,6 +97,52 @@ describe("closed schema parity", () => {
     const credentialInput: any = structuredClone(minimalInput());
     credentialInput.sources[0].url = "https://user:pass@example.com/source";
     expect(() => createPolymorphLandscape(credentialInput)).toThrow(/without credentials/);
+  });
+
+  test("keeps runtime-emitted source URLs inside the exact shipped schema boundary", () => {
+    expect(schemas.landscape.$defs.sourceUrl.pattern).toBe(POLYMORPH_SOURCE_URL_PATTERN);
+    expect(schemas.landscape.$defs.sourceUrl.format).toBeUndefined();
+
+    for (const url of [
+      "https://example.test/a",
+      "https://example.test/a%20b",
+      "https://example.test/path/user@example",
+      "https://[2001:db8::1]/a?b=c#d",
+      "https://doi.org/10.1023/A:1011052932607",
+    ]) {
+      const input: any = structuredClone(minimalInput());
+      input.sources[0].url = url;
+      const produced = createPolymorphLandscape(input);
+      expect(produced.sources.find((source) => source.key === "source_a")!.url).toBe(url);
+      expect(validators.landscape(produced), JSON.stringify(validators.landscape.errors)).toBe(true);
+      expect(validatePolymorphLandscape(produced)).toEqual(produced);
+    }
+
+    const baseline = createPolymorphLandscape(minimalInput());
+    for (const url of [
+      "https://example.test/a b",
+      "https://éxample.test/ü",
+      "https://example.test/a\n",
+      "https://example.test/a\u0000",
+      "https://example.test/%ZZ",
+      "https://example.test/%2",
+      "https://user:pass@example.com/source",
+    ]) {
+      const input: any = structuredClone(minimalInput());
+      input.sources[0].url = url;
+      expect(() => createPolymorphLandscape(input)).toThrow();
+
+      const structural = {
+        ...baseline,
+        sources: baseline.sources.map((source) => source.key === "source_a"
+          ? { ...source, url }
+          : source),
+      };
+      expect(validators.landscape(structural)).toBe(false);
+      expect(validators.landscape.errors?.some((error) => (
+        error.instancePath.endsWith("/url") && error.keyword === "pattern"
+      ))).toBe(true);
+    }
   });
 
   test("closes every object schema", () => {
