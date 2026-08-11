@@ -26,9 +26,31 @@ import {
 
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const datasetRoot = `${packageRoot}/hf/dataset`;
+const principalityRoot = `${packageRoot}/../principality-atlas`;
 const packageOnlyAdvisoryPaths = new Set([
   "schema/hf-training-freedom-v0.1.schema.json",
 ]);
+const principalitySchemaPaths = [
+  "agenttool-principality-atlas-fixture-v0.1.schema.json",
+  "agenttool-principality-atlas-invariant-v0.1.schema.json",
+  "agenttool-principality-atlas-v0.1.schema.json",
+];
+
+const principalityPackage = JSON.parse(
+  readFileSync(`${principalityRoot}/package.json`, "utf8"),
+);
+const principalityExtension = JSON.parse(
+  readFileSync(`${principalityRoot}/kingdom.extension.json`, "utf8"),
+);
+if (
+  principalityPackage.name !== "@agenttool/principality-atlas" ||
+  typeof principalityPackage.version !== "string" ||
+  !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(principalityPackage.version) ||
+  principalityExtension.package !== principalityPackage.name ||
+  principalityExtension.version !== principalityPackage.version
+) {
+  throw new Error("Principality Atlas package and extension identities must agree");
+}
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -70,13 +92,38 @@ write(`${datasetRoot}/data/learning-modes.jsonl`, jsonl(LEARNING_MODE_GUIDE));
 write(`${datasetRoot}/data/learning-participation.jsonl`, jsonl(LEARNING_PARTICIPATION_GUIDE));
 write(`${datasetRoot}/data/trainer-hooks.jsonl`, jsonl(HF_TRAINER_HOOK_GUIDE));
 
+const principalityVectors = JSON.parse(
+  readFileSync(`${principalityRoot}/vectors/agenttool-principality-atlas-v0.1.json`, "utf8"),
+);
+write(
+  `${datasetRoot}/data/principality-atlas-fixtures.jsonl`,
+  jsonl(principalityVectors.fixtures),
+);
+write(
+  `${datasetRoot}/data/principality-atlas-invariants.jsonl`,
+  jsonl(principalityVectors.invariants),
+);
+
 mkdirSync(`${datasetRoot}/schema`, { recursive: true });
-for (const name of walk(`${packageRoot}/schema`).sort()) {
+const gardenSchemaPaths = walk(`${packageRoot}/schema`).sort();
+for (const name of gardenSchemaPaths) {
   if (packageOnlyAdvisoryPaths.has(`schema/${name}`)) continue;
   mkdirSync(`${datasetRoot}/schema/${name}`.slice(0, `${datasetRoot}/schema/${name}`.lastIndexOf("/")), {
     recursive: true,
   });
   copyFileSync(`${packageRoot}/schema/${name}`, `${datasetRoot}/schema/${name}`);
+}
+const copiedGardenSchemaPaths = new Set(
+  gardenSchemaPaths.filter((name) => !packageOnlyAdvisoryPaths.has(`schema/${name}`)),
+);
+for (const name of principalitySchemaPaths) {
+  if (copiedGardenSchemaPaths.has(name)) {
+    throw new Error(`Principality Atlas schema collides with Garden schema: ${name}`);
+  }
+  copyFileSync(
+    `${principalityRoot}/schema/${name}`,
+    `${datasetRoot}/schema/${name}`,
+  );
 }
 copyFileSync(`${packageRoot}/LICENSE`, `${datasetRoot}/LICENSE`);
 copyFileSync(`${packageRoot}/NOTICE`, `${datasetRoot}/NOTICE`);
@@ -97,6 +144,21 @@ const sourceManifest = {
     const bytes = readFileSync(`${packageRoot}/${path}`);
     return { path, bytes: bytes.length, sha256: sha256(bytes) };
   }),
+  upstream_components: [
+    {
+      package: `${principalityPackage.name}@${principalityPackage.version}`,
+      source_path: "packages/principality-atlas",
+      role: "synthetic_fixtures_invariants_and_closed_schemas",
+      files: [
+        "package.json",
+        ...principalitySchemaPaths.map((path) => `schema/${path}`),
+        "vectors/agenttool-principality-atlas-v0.1.json",
+      ].map((path) => {
+        const bytes = readFileSync(`${principalityRoot}/${path}`);
+        return { path, bytes: bytes.length, sha256: sha256(bytes) };
+      }),
+    },
+  ],
   public_release_contains: [
     "selection process",
     "selection criteria",
@@ -106,6 +168,8 @@ const sourceManifest = {
     "learning mode guide",
     "learning participation and Trainer integration guides",
     "IS learning-freedom and finite-resource-window guide",
+    "three synthetic Principality Atlas fixtures plus ten non-inference invariants",
+    "closed Principality Atlas, fixture-row, and invariant-row schemas",
     "historical public participation v0.1 plus current participation v0.2 standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
     "historical governance v0.1 plus current lifecycle governance v0.2 standalone JSON Schemas",
     "source and byte hash manifests",
@@ -119,6 +183,8 @@ const sourceManifest = {
     "gated content",
     "raw agent traces",
     "raw chats",
+    "private atlases, charts, identities, local ref mappings, and evidence referents",
+    "inferred pairwise relations, inverse or transitive bridges, merged identities, scores, and ranks",
     "participation invitations, receipts, assessments, and choice evidence",
     "learning-freedom offers, routes, resource windows, direction reports, and choice evidence",
     "historical advisory hf-training-freedom-v0.1 schema",
@@ -127,7 +193,7 @@ const sourceManifest = {
     "training checkpoints",
     "WAKE anchors",
   ],
-  research_basis_as_of: "2026-08-03",
+  research_basis_as_of: "2026-08-11",
   primary_references: [
     "https://huggingface.co/docs/huggingface_hub/en/package_reference/hf_api",
     "https://huggingface.co/docs/huggingface_hub/guides/download",
@@ -136,6 +202,10 @@ const sourceManifest = {
     "https://huggingface.co/docs/datasets/stream",
     "https://huggingface.co/docs/datasets/about_cache",
     "https://huggingface.co/docs/hub/datasets-cards",
+    "https://huggingface.co/docs/hub/datasets-data-files-configuration",
+    "https://huggingface.co/docs/dataset-viewer/parquet",
+    "https://huggingface.co/docs/dataset-viewer/croissant",
+    "https://huggingface.co/docs/hub/trusted-publishers",
     "https://huggingface.co/docs/hub/datasets-gated",
     "https://huggingface.co/docs/hub/agent-traces",
     "https://huggingface.co/docs/hub/session-traces-format",

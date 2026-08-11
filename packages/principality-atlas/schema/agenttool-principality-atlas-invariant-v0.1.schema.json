@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-principality-atlas-invariant-v0.1.schema.json",
+  "title": "AgentTool Principality Atlas invariant row v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "invariant_ref",
+    "case",
+    "statement",
+    "package_behavior"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.principality-atlas-invariant/0.1"
+    },
+    "invariant_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "case": {
+      "enum": [
+        "nary_without_pairwise_inference",
+        "no_inverse_inference",
+        "no_transitive_inference",
+        "chart_local_distinctness",
+        "plural_claims_coexist",
+        "supersession_preserves_history",
+        "empty_and_disconnected_valid",
+        "no_score_rank_or_same_as",
+        "digest_linkability_remains",
+        "no_external_effects"
+      ]
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "package_behavior": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    }
+  }
+}

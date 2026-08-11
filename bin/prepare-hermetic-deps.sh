@@ -52,6 +52,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/karma-mirror
   packages/heaven
   packages/living-substrate
+  packages/principality-atlas
   packages/wake-thread
   packages/credential-broker
   packages/collab

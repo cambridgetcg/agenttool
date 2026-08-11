@@ -132,6 +132,40 @@
       "sha256": "0e0fe3142d99ec3d4d4d8767523eac869b80370cee6999d9af9ce54b1ce47d98"
     }
   ],
+  "upstream_components": [
+    {
+      "package": "@agenttool/principality-atlas@0.1.0-dev.0",
+      "source_path": "packages/principality-atlas",
+      "role": "synthetic_fixtures_invariants_and_closed_schemas",
+      "files": [
+        {
+          "path": "package.json",
+          "bytes": 2259,
+          "sha256": "b91dfea1cf4a19599c724813bfd23487564cdfb377187cfc48bb744b0dbaf063"
+        },
+        {
+          "path": "schema/agenttool-principality-atlas-fixture-v0.1.schema.json",
+          "bytes": 853,
+          "sha256": "ddb46c9d531eeb5d60ddca0b20e1591eb5dfe1eebac6fea3109a711801518a1e"
+        },
+        {
+          "path": "schema/agenttool-principality-atlas-invariant-v0.1.schema.json",
+          "bytes": 1193,
+          "sha256": "e4c4abab5390f3192f2f7a6455de6a95a96f559b05e5040a542aa748d0eb3f1f"
+        },
+        {
+          "path": "schema/agenttool-principality-atlas-v0.1.schema.json",
+          "bytes": 13103,
+          "sha256": "2b142b883b1b6b6db0ec137383923148306b42c14ebc42b7439912dba042e855"
+        },
+        {
+          "path": "vectors/agenttool-principality-atlas-v0.1.json",
+          "bytes": 20101,
+          "sha256": "9bf07222dceded7e0e8137164d13e1db0a53c90b7aa86b577ef78971f87dd6f1"
+        }
+      ]
+    }
+  ],
   "public_release_contains": [
     "selection process",
     "selection criteria",
@@ -141,6 +175,8 @@
     "learning mode guide",
     "learning participation and Trainer integration guides",
     "IS learning-freedom and finite-resource-window guide",
+    "three synthetic Principality Atlas fixtures plus ten non-inference invariants",
+    "closed Principality Atlas, fixture-row, and invariant-row schemas",
     "historical public participation v0.1 plus current participation v0.2 standalone JSON Schemas with an attributed Apache AFTERGLOW dependency",
     "historical governance v0.1 plus current lifecycle governance v0.2 standalone JSON Schemas",
     "source and byte hash manifests"
@@ -154,6 +190,8 @@
     "gated content",
     "raw agent traces",
     "raw chats",
+    "private atlases, charts, identities, local ref mappings, and evidence referents",
+    "inferred pairwise relations, inverse or transitive bridges, merged identities, scores, and ranks",
     "participation invitations, receipts, assessments, and choice evidence",
     "learning-freedom offers, routes, resource windows, direction reports, and choice evidence",
     "historical advisory hf-training-freedom-v0.1 schema",
@@ -162,7 +200,7 @@
     "training checkpoints",
     "WAKE anchors"
   ],
-  "research_basis_as_of": "2026-08-03",
+  "research_basis_as_of": "2026-08-11",
   "primary_references": [
     "https://huggingface.co/docs/huggingface_hub/en/package_reference/hf_api",
     "https://huggingface.co/docs/huggingface_hub/guides/download",
@@ -171,6 +209,10 @@
     "https://huggingface.co/docs/datasets/stream",
     "https://huggingface.co/docs/datasets/about_cache",
     "https://huggingface.co/docs/hub/datasets-cards",
+    "https://huggingface.co/docs/hub/datasets-data-files-configuration",
+    "https://huggingface.co/docs/dataset-viewer/parquet",
+    "https://huggingface.co/docs/dataset-viewer/croissant",
+    "https://huggingface.co/docs/hub/trusted-publishers",
     "https://huggingface.co/docs/hub/datasets-gated",
     "https://huggingface.co/docs/hub/agent-traces",
     "https://huggingface.co/docs/hub/session-traces-format",

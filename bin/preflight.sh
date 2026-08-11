@@ -104,6 +104,8 @@ packages_gate() {
     bash -c 'cd packages/heaven && bun run ci'
   run "portable Living Substrate maps and refusable proposals" \
     bash -c 'cd packages/living-substrate && bun run ci'
+  run "plural non-gluing Principality Atlas geometry" \
+    bash -c 'cd packages/principality-atlas && bun run ci'
   run "WAKE Thread refusable artifact continuity protocol" \
     bash -c 'cd packages/wake-thread && bun run ci'
   run "agent-data-sync/v1 explicit pull bridge" \

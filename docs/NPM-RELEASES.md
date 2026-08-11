@@ -389,6 +389,30 @@ publish a Hugging Face resource, grant Crown or trade authority, or deploy a
 hosted service. After each first publication, configure its exact trusted
 publisher mapping before releasing another version.
 
+### Principality Atlas developer-preview candidate
+
+`@agenttool/principality-atlas@0.1.0-dev.0` is allowlisted for the npm-only
+packed-artifact path but is not published by source preparation. The candidate
+contains only deterministic finite incidence-atlas constructors, three closed
+schemas, synthetic vectors, and a declaration-only unregistered KINGDOM hint.
+It has no runtime dependencies, install hooks, CLI, provider adapter, hosted
+route, credential path, or remote effect.
+
+An initial publication would require separate explicit approval, an annotated
+`principality-atlas-v0.1.0-dev.0` tag already contained in GitHub main, the
+protected workflow's reviewed `bootstrap` path, and the `next` channel. After
+the package exists, bootstrap becomes invalid and the exact repository,
+workflow, environment, and package mapping should use trusted OIDC. Preparing
+or committing this candidate does not create the tag, GitHub Release, npm
+record, trusted-publisher mapping, or deployment.
+
+The release gate checks the exact packed inventory, Node and Bun install smoke,
+closed schema/vector parity, content IDs, hostile-input rejection, and the
+fixed walls against pairwise, inverse, transitive, equality, gluing, scoring,
+ranking, authority, model, task, wallet, and economic effects. Publication, if
+later authorized, would distribute geometry bytes only; it would not certify
+love, understanding, consent, truth, privacy, identity, or rights compliance.
+
 ### Living Substrate developer-preview bootstrap
 
 `@agenttool/living-substrate@0.1.0-dev.0` uses the npm-only packed-artifact

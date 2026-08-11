@@ -87,7 +87,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twenty-four reviewed release identities", () => {
+  test("allowlists twenty-five reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -105,6 +105,7 @@ describe("standard npm release policy", () => {
       "kingdom",
       "kingdom-witness-lab",
       "living-substrate",
+      "principality-atlas",
       "repo-archive",
       "sdk",
       "skills",
@@ -203,6 +204,12 @@ describe("standard npm release policy", () => {
       tagPrefix: "living-substrate",
       artifactKind: "pack",
     });
+    expect(releaseSpec("principality-atlas")).toMatchObject({
+      name: "@agenttool/principality-atlas",
+      packagePath: "packages/principality-atlas",
+      tagPrefix: "principality-atlas",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("repo-archive")).toMatchObject({
       name: "@agenttool/repo-archive",
       packagePath: "packages/repo-archive",
@@ -294,6 +301,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/living-substrate", "0.1.0-dev.0")).toBe(
       "agenttool-living-substrate-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("principality-atlas"), "0.1.0-dev.0")).toBe(
+      "principality-atlas-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/principality-atlas", "0.1.0-dev.0")).toBe(
+      "agenttool-principality-atlas-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("alchemy"), "0.1.0-dev.0")).toBe(
       "alchemy-v0.1.0-dev.0",
@@ -484,6 +497,22 @@ describe("standard npm release policy", () => {
         "package/schema/agenttool-living-substrate-map-v0.1.schema.json",
         "package/schema/agenttool-regeneration-proposal-v0.1.schema.json",
         "package/vectors/agenttool-living-substrate-v0.1.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("principality-atlas"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/kingdom.extension.json",
+        "package/schema/agenttool-principality-atlas-v0.1.schema.json",
+        "package/schema/agenttool-principality-atlas-fixture-v0.1.schema.json",
+        "package/schema/agenttool-principality-atlas-invariant-v0.1.schema.json",
+        "package/vectors/agenttool-principality-atlas-v0.1.json",
       ]),
     );
     expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([

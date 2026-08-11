@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-04 (SDK 0.18.0, Collab 0.4.0, and HF Training Garden v0.4 public receipts)
+> Updated: 2026-08-11 (Principality Atlas local release candidate; prior public receipts unchanged)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## In local review (2026-08-11)
+
+| Candidate | Evidence | What |
+|---|---|---|
+| **PRINCIPALITY ATLAS — relation without collapse** | Working-tree source in `packages/principality-atlas/` plus generated `packages/hf-training-garden/hf/dataset/`; no external artifact yet | Public-ready `@agenttool/principality-atlas@0.1.0-dev.0` implements finite chart-local cells, true n-ary typed incidence, plural caller-asserted claims with append-only supersession, and directed partial non-gluing bridges. It makes no pairwise, inverse, transitive, equality, global-chart, canonical-head, score, rank, consent, authority, love, or understanding inference. Three synthetic fixtures, ten non-inference rows, and three closed schemas extend the local HF Training Garden candidate with upstream byte hashes and a self-excluding release manifest. The protected npm policy knows the exact package inventory, but no tag, GitHub Release, npm record, Hub commit, API/Fly change, paid compute, or credential use has occurred. |
 
 ## Just landed (2026-08-04)
 

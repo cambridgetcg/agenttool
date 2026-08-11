@@ -1,0 +1,78 @@
+{
+  "name": "@agenttool/principality-atlas",
+  "version": "0.1.0-dev.0",
+  "description": "Deterministic finite incidence atlases for plural partial perspectives",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./atlas.schema.json": {
+      "default": "./schema/agenttool-principality-atlas-v0.1.schema.json"
+    },
+    "./fixture.schema.json": {
+      "default": "./schema/agenttool-principality-atlas-fixture-v0.1.schema.json"
+    },
+    "./invariant.schema.json": {
+      "default": "./schema/agenttool-principality-atlas-invariant-v0.1.schema.json"
+    },
+    "./kingdom.extension.json": {
+      "default": "./kingdom.extension.json"
+    }
+  },
+  "files": [
+    "dist",
+    "schema",
+    "vectors",
+    "kingdom.extension.json",
+    "README.md",
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "engines": {
+    "node": ">=20.19.0",
+    "bun": ">=1.3.5"
+  },
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests",
+    "check:assets": "node scripts/build-assets.mjs --check",
+    "smoke:runtimes": "node scripts/smoke-node.mjs && bun scripts/smoke-node.mjs",
+    "smoke:pack": "node scripts/smoke-packed.mjs",
+    "check:package": "node scripts/check-package-inventory.mjs",
+    "ci": "bun run typecheck && bun run test && bun run build && bun run check:assets && bun run smoke:runtimes && bun run check:package && bun run smoke:pack",
+    "prepack": "bun run ci"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/node": "20.19.43",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "typescript": "5.9.3"
+  },
+  "keywords": [
+    "agents",
+    "atlas",
+    "hypergraph",
+    "kingdom",
+    "provenance"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/principality-atlas"
+  },
+  "homepage": "https://docs.agenttool.dev/packages"
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-principality-atlas-fixture-v0.1.schema.json",
+  "title": "AgentTool Principality Atlas fixture v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "fixture_ref",
+    "case",
+    "expected",
+    "atlas"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.principality-atlas-fixture/0.1"
+    },
+    "fixture_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "case": {
+      "enum": [
+        "empty_atlas",
+        "nary_plural_claims",
+        "directed_partial_bridge"
+      ]
+    },
+    "expected": {
+      "const": "valid"
+    },
+    "atlas": {
+      "$ref": "https://agenttool.dev/schema/agenttool-principality-atlas-v0.1.schema.json"
+    }
+  }
+}

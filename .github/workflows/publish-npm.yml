@@ -17,6 +17,7 @@ on:
           - deepseek-kingdom
           - heaven
           - living-substrate
+          - principality-atlas
           - credential-broker
           - sdk
           - wallet
