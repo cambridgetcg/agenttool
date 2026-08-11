@@ -301,7 +301,9 @@ describe("deterministic public-safe Hugging Face relational geometry companion",
     expect(card).toContain("generation-time provenance");
     expect(card).toContain("not a statement about its current distribution");
     expect(card).toContain("intended identifier at generation, not evidence of publication");
-    expect(card).toContain("full Hub commit SHA");
+    expect(card).toMatch(/returned full Hub\s+commit SHA/u);
+    expect(card).toContain("At generation time this source artifact had no Hub revision to pin");
+    expect(card).toContain("makes no claim about its current hosting state");
     expect(card).toContain("token=False");
   });
 

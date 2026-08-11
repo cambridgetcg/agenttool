@@ -72,8 +72,8 @@
     },
     {
       "path": "scripts/build-hf-release.mjs",
-      "bytes": 35327,
-      "sha256": "675601271ccf00d33a397926a2b7322bfee71b961f3cc0dda755d2cd903e8b89"
+      "bytes": 35416,
+      "sha256": "51d55ca3aeb7589b1bd08bca314651bcf51756ade826e81c0f66a3c007a8306b"
     },
     {
       "path": "src/canonical.ts",
@@ -121,5 +121,5 @@
       "sha256": "5fc78503d74197958d568bb4d9eea0996608de9d887e1674ab23a3f12ba8dc38"
     }
   ],
-  "provenance_ref": "sha256:691ea8cf61e1243f340b8dc6037f0c3ae794263a8fa3a7bb4f751934ae6a4393"
+  "provenance_ref": "sha256:d92b19c08792cc71fb616469f15e6e0f9759ca31c0f93bbe438679f40da0dc3b"
 }

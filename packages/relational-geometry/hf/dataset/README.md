@@ -80,10 +80,11 @@ the generator. `provenance/example-manifest.json` binds every JSONL line.
 node scripts/build-hf-release.mjs
 ```
 
-If a future upload is separately authorized and read back, pin the returned
-full Hub commit SHA and disable token lookup for a public artifact, for example
+For any separately authorized upload and readback, pin the returned full Hub
+commit SHA and disable token lookup for a public artifact, for example
 `hf_hub_download(..., repo_type="dataset", revision="<full-commit-sha>", token=False)`.
-The current tree has no Hub revision to pin.
+At generation time this source artifact had no Hub revision to pin; that
+historical statement makes no claim about its current hosting state.
 
 Primary Hugging Face references: [dataset cards](https://huggingface.co/docs/hub/datasets-cards),
 [gated datasets](https://huggingface.co/docs/hub/datasets-gated),
