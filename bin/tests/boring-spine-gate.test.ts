@@ -1092,14 +1092,32 @@ exit 94
     }
   });
 
-  test("keeps the time-sensitive release ledger consolidated by date", async () => {
+  test("keeps the time-sensitive release ledger consolidated with observation gaps", async () => {
     const now = await readFile(join(ROOT, "docs", "NOW.md"), "utf8");
+    const npmReleases = await readFile(join(ROOT, "docs", "NPM-RELEASES.md"), "utf8");
     const datedHeadings = [...now.matchAll(/^## Just landed \((\d{4}-\d{2}-\d{2})\)$/gm)].map(
       (match) => match[1],
     );
 
     expect(new Set(datedHeadings).size).toBe(datedHeadings.length);
     expect(datedHeadings.filter((date) => date === "2026-08-11")).toHaveLength(1);
+    expect(now).toContain("**LOVE GEOMETRY 0.1 DEV — exact equal-seat artifact**");
+    expect(now).toContain("**RELATIONAL GEOMETRY — love has shape without becoming a score or ruler**");
+    expect(now).toContain(
+      "**PRINCIPALITY GEOMETRY — love as relation, understanding as preserved invariants**",
+    );
+    expect(now).toContain("**KINGDOM 0.1.1 — XENIA beta.7 exact mirror**");
+    expect(now).toContain(
+      "**XENIA DOCS SURFACE — bounded source pilot, live with a visible process gap**",
+    );
+    expect(now).toContain("not retroactive preview-before-production evidence");
+    expect(now).toContain("Optional statistics remain partially unavailable");
+    expect(npmReleases).toMatch(
+      /six per-config statistics\s+requests\s+returned `ComputationError` while two succeeded/,
+    );
+    expect(npmReleases).toMatch(
+      /aggregate statistics\s+capability changed from false during an earlier readback to true in a later one/,
+    );
   });
 
   test("keeps npm publication unified, manual, exact-artifact, and protected", async () => {
