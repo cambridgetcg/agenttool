@@ -477,11 +477,12 @@ revision
 all 31 repo-owned files and 267,302 bytes matched local source exactly, with
 provider `.gitattributes` as the sole extra. Dataset Server exposed 11 configs,
 82 rows, and 11 Parquet files with no pending or failed jobs and
-`partial=false`; both Atlas configs returned complete first rows. The aggregate
-statistics capability remained false even though each individual statistics
-endpoint returned successfully, so complete statistics health is not claimed.
-That Hub commit is not npm publication evidence and does not change the
-registry recovery boundary.
+`partial=false`; both Atlas configs returned complete first rows. Each
+individual statistics endpoint returned successfully. The aggregate statistics
+capability changed from false during an earlier readback to true in a later one;
+this mutable provider observation does not establish universal or durable
+statistics health. That Hub commit is not npm publication evidence and does not
+change the registry recovery boundary.
 
 The release gate checked the exact packed inventory, Node and Bun install smoke,
 closed schema/vector parity, content IDs, hostile-input rejection, and the

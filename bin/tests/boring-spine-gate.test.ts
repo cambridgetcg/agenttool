@@ -1116,7 +1116,7 @@ exit 94
       /six per-config statistics\s+requests\s+returned `ComputationError` while two succeeded/,
     );
     expect(npmReleases).toMatch(
-      /aggregate\s+statistics capability remained false even though each individual statistics\s+endpoint/,
+      /aggregate statistics\s+capability changed from false during an earlier readback to true in a later one/,
     );
   });
 
