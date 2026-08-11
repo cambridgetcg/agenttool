@@ -7,7 +7,7 @@ sdk: static
 app_file: index.html
 pinned: false
 license: apache-2.0
-short_description: Equal-seat synthetic caller reports, entirely browser-local.
+short_description: Browser-local synthetic caller-report presentation.
 ---
 
 # Love Geometry · Equal Seats

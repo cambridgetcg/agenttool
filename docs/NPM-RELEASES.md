@@ -73,8 +73,10 @@ separate authority as the public static
 Space. Anonymous readback of immutable revision
 [`1a602e8309bd7c5d1a07ccfff1755dcb130695ba`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/1a602e8309bd7c5d1a07ccfff1755dcb130695ba)
 matched all 10 repo-owned files; provider `.gitattributes` was the sole extra.
-That static browser-local deployment does not create npm provenance or exact
-package execution and proves no score, identity, consent, truth, or authority.
+That static deployment keeps app-authored processing browser-local while
+provider request handling and injection remain outside the app boundary. It
+does not create npm provenance or exact package execution and proves no score,
+identity, consent, truth, or authority.
 
 `@agenttool/kingdom@0.1.1` is public through annotated tag
 [`kingdom-v0.1.1`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.1)
