@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-04 (SDK 0.18.0, Collab 0.4.0, and HF Training Garden v0.4 public receipts)
+> Updated: 2026-08-11 (local Relational Geometry developer preview; no external release claimed)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-08-11)
+
+| Ship | Commit | What |
+|---|---|---|
+| **RELATIONAL GEOMETRY — love has shape without becoming a score or ruler** | core checkpoint `6ce9b64d`; local integration branch; no external release claimed | `@agenttool/relational-geometry@0.1.0-dev.0` adds closed deterministic `agenttool.relational-complex/0.1` and `agenttool.relational-lens/0.1` contracts. Caller-asserted understanding and recognition witnesses derive one content-addressed principality only on the same ordered pair; the principality is explicitly non-sovereign and every consent/refusal/privacy/authority/continuity boundary witness stays visible. Empty, boundary-only, one-pole, asymmetric, and self-directed shapes are valid without penalty. Optional lens selections are `carry`, `park`, `release`, or `withdraw` with no external effect. The bundled Hugging Face companion is synthetic-only, byte-manifested, SFT-only for gradient use, and still repository-source-only; its intended identifier is not evidence of publication. The package has no metric, rank, mutuality, consent, identity, inner-state, truth, continuity, authority, network, persistence, hosted route, or training effect. WAKE crossing requires separate authorization and only an opaque AFTERGLOW `external` / `context_only` reference. |
 
 ## Just landed (2026-08-04)
 

@@ -54,6 +54,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/heaven
   packages/living-substrate
   packages/love-geometry
+  packages/relational-geometry
   packages/wake-thread
   packages/credential-broker
   packages/collab

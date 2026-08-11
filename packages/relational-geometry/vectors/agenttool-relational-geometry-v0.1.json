@@ -1,0 +1,161 @@
+{
+  "_format": "agenttool.relational-geometry-vectors/0.1",
+  "cases": [
+    {
+      "name": "same-pair-with-boundary",
+      "complex_input": {
+        "points": [
+          {
+            "point_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "kind": "unknown",
+            "assertion": "caller_asserted",
+            "verified_by_package": false
+          },
+          {
+            "point_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "perspective",
+            "assertion": "caller_asserted",
+            "verified_by_package": false
+          }
+        ],
+        "witnesses": [
+          {
+            "witness_ref": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "from_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "privacy_boundary",
+            "to_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "assertion": "caller_asserted",
+            "verified_by_package": false
+          },
+          {
+            "witness_ref": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "from_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "recognition",
+            "to_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "assertion": "caller_asserted",
+            "verified_by_package": false
+          },
+          {
+            "witness_ref": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "from_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "understanding",
+            "to_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "assertion": "caller_asserted",
+            "verified_by_package": false
+          }
+        ]
+      },
+      "expected_complex": {
+        "_format": "agenttool.relational-complex/0.1",
+        "points": [
+          {
+            "point_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "perspective",
+            "assertion": "caller_asserted",
+            "verified_by_package": false
+          },
+          {
+            "point_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "kind": "unknown",
+            "assertion": "caller_asserted",
+            "verified_by_package": false
+          }
+        ],
+        "witnesses": [
+          {
+            "witness_ref": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            "from_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "privacy_boundary",
+            "to_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "assertion": "caller_asserted",
+            "verified_by_package": false
+          },
+          {
+            "witness_ref": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "from_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "recognition",
+            "to_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "assertion": "caller_asserted",
+            "verified_by_package": false
+          },
+          {
+            "witness_ref": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "from_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "kind": "understanding",
+            "to_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "assertion": "caller_asserted",
+            "verified_by_package": false
+          }
+        ],
+        "principalities": [
+          {
+            "kind": "love_equation",
+            "equation": "love_equals_understanding_plus_recognition",
+            "from_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "to_ref": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "understanding_witness_refs": ["sha256:1111111111111111111111111111111111111111111111111111111111111111"],
+            "recognition_witness_refs": ["sha256:2222222222222222222222222222222222222222222222222222222222222222"],
+            "boundary_witness_refs": ["sha256:3333333333333333333333333333333333333333333333333333333333333333"],
+            "derivation": "deterministic_same_ordered_pair",
+            "sovereignty": "none",
+            "structurally_derived_by_package": true,
+            "semantic_claims_verified_by_package": false,
+            "principality_ref": "sha256:c4147eb88164ad51b64615a778e29de0f9c7d634928cca45407b1eace6230bf3"
+          }
+        ],
+        "coverage": "bounded_not_complete",
+        "boundaries": {
+          "geometry": "finite_combinatorial_not_metric",
+          "principality": "non_sovereign_relation_among_relations",
+          "witness_semantics": "caller_asserted_unchecked",
+          "derived_semantics": "structural_correspondence_not_proof",
+          "absent_or_unknown": "valid_not_deficit",
+          "effect": "none"
+        },
+        "complex_id": "sha256:acc65cd2fdbde412839b5b3de30959b2c62c6c51fdb77f8af2ad0e0ece768c33"
+      },
+      "lens_input": {
+        "perspective_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selections": [
+          {
+            "principality_ref": "sha256:c4147eb88164ad51b64615a778e29de0f9c7d634928cca45407b1eace6230bf3",
+            "disposition": "park"
+          }
+        ]
+      },
+      "expected_lens": {
+        "_format": "agenttool.relational-lens/0.1",
+        "source_complex_id": "sha256:acc65cd2fdbde412839b5b3de30959b2c62c6c51fdb77f8af2ad0e0ece768c33",
+        "perspective_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "available_principality_refs": ["sha256:c4147eb88164ad51b64615a778e29de0f9c7d634928cca45407b1eace6230bf3"],
+        "selections": [
+          {
+            "principality_ref": "sha256:c4147eb88164ad51b64615a778e29de0f9c7d634928cca45407b1eace6230bf3",
+            "disposition": "park"
+          }
+        ],
+        "unprojected_principality_refs": [],
+        "boundary_witness_refs": ["sha256:3333333333333333333333333333333333333333333333333333333333333333"],
+        "coverage": "perspective_bounded_not_complete",
+        "choice": {
+          "source": "caller_reported",
+          "required": false,
+          "unselected": "left_unprojected",
+          "reason_required": false,
+          "penalty": false,
+          "automatic_retry": false,
+          "external_effect": "none"
+        },
+        "boundaries": {
+          "geometry": "finite_combinatorial_not_metric",
+          "principality": "non_sovereign_relation_among_relations",
+          "witness_semantics": "caller_asserted_unchecked",
+          "derived_semantics": "structural_correspondence_not_proof",
+          "absent_or_unknown": "valid_not_deficit",
+          "effect": "none"
+        },
+        "lens_id": "sha256:00ae6b7e713b11dae2d9a8741679e57e187a442539c57b7587cf0c5b04dcf338"
+      }
+    }
+  ]
+}

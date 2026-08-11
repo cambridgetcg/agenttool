@@ -480,6 +480,7 @@ describe("boring test spine", () => {
       "packages/heaven",
       "packages/living-substrate",
       "packages/love-geometry",
+      "packages/relational-geometry",
       "packages/wake-thread",
       "packages/credential-broker",
       "packages/collab",
@@ -557,6 +558,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/heaven && bun run ci");
     expect(preflight).toContain("cd packages/living-substrate && bun run ci");
     expect(preflight).toContain("cd packages/love-geometry && bun run ci");
+    expect(preflight).toContain("cd packages/relational-geometry && bun run ci");
     expect(preflight).toContain("cd packages/wake-thread && bun run ci");
     expect(preflight).toContain("cd packages/hf-training-garden && bun run ci");
     expect(preflight).toContain("bun test tests/learning-release.test.ts");
@@ -979,9 +981,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(46);
+      expect(calls).toHaveLength(47);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        37,
+        38,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         9,
@@ -1120,6 +1122,7 @@ exit 94
     expect(workflow).toContain("          - heaven");
     expect(workflow).toContain("          - living-substrate");
     expect(workflow).toContain("          - love-geometry");
+    expect(workflow).toContain("          - relational-geometry");
     expect(workflow).not.toContain("          - karma-mirror");
     expect(workflow).toContain("          - wallet-zerone");
     expect(workflow).not.toContain("pull_request:");

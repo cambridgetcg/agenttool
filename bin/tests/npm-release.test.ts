@@ -16,6 +16,7 @@ import {
   registryPackagePath,
   releaseSpec,
   requiredArchiveEntries,
+  shouldScanArchiveEntryForSecrets,
   prepareReleaseWorkspaces,
   validateNpmTagForVersion,
   workspaceInstallArguments,
@@ -77,6 +78,16 @@ function registryFixture(): {
 }
 
 describe("standard npm release policy", () => {
+  test("scans bundled JSONL dataset rows for secret signatures", () => {
+    expect(shouldScanArchiveEntryForSecrets(
+      "package/hf/dataset/data/structural-examples.jsonl",
+      128,
+    )).toBe(true);
+    expect(shouldScanArchiveEntryForSecrets("package/data/ROWS.JSONL", 2_000_000)).toBe(true);
+    expect(shouldScanArchiveEntryForSecrets("package/data/rows.jsonl", 2_000_001)).toBe(false);
+    expect(shouldScanArchiveEntryForSecrets("package/model/checkpoint.bin", 128)).toBe(false);
+  });
+
   test("mirrors reviewed bytes without depending on optional npm state", async () => {
     const script = await readFile(join(import.meta.dir, "..", "npm-release.ts"), "utf8");
     const mirrorBody =
@@ -107,6 +118,7 @@ describe("standard npm release policy", () => {
       "living-substrate",
       "love-geometry",
       "principality-geometry",
+      "relational-geometry",
       "repo-archive",
       "sdk",
       "skills",
@@ -217,6 +229,12 @@ describe("standard npm release policy", () => {
       tagPrefix: "love-geometry",
       artifactKind: "pack",
     });
+    expect(releaseSpec("relational-geometry")).toMatchObject({
+      name: "@agenttool/relational-geometry",
+      packagePath: "packages/relational-geometry",
+      tagPrefix: "relational-geometry",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("repo-archive")).toMatchObject({
       name: "@agenttool/repo-archive",
       packagePath: "packages/repo-archive",
@@ -320,6 +338,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/love-geometry", "0.1.0-dev.0")).toBe(
       "agenttool-love-geometry-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("relational-geometry"), "0.1.0-dev.0")).toBe(
+      "relational-geometry-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/relational-geometry", "0.1.0-dev.0")).toBe(
+      "agenttool-relational-geometry-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("alchemy"), "0.1.0-dev.0")).toBe(
       "alchemy-v0.1.0-dev.0",
@@ -545,6 +569,32 @@ describe("standard npm release policy", () => {
     );
     expect(requiredArchiveEntries(releaseSpec("love-geometry")))
       .not.toContain("package/hf-space/index.html");
+    expect(requiredArchiveEntries(releaseSpec("relational-geometry"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/schema/agenttool-relational-complex-v0.1.schema.json",
+        "package/schema/agenttool-relational-lens-v0.1.schema.json",
+        "package/vectors/agenttool-relational-geometry-v0.1.json",
+        "package/hf/dataset/LICENSE",
+        "package/hf/dataset/NOTICE",
+        "package/hf/dataset/README.md",
+        "package/hf/dataset/data/structural-examples.jsonl",
+        "package/hf/dataset/data/sft-train.jsonl",
+        "package/hf/dataset/data/public-regression.jsonl",
+        "package/hf/dataset/schema/relational-geometry-structural-v0.1.schema.json",
+        "package/hf/dataset/schema/relational-geometry-sft-v0.1.schema.json",
+        "package/hf/dataset/schema/relational-geometry-public-regression-v0.1.schema.json",
+        "package/hf/dataset/provenance/source-manifest.json",
+        "package/hf/dataset/provenance/example-manifest.json",
+        "package/hf/dataset/hash-manifest.json",
+      ]),
+    );
     expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([
       "package/dist/index.js",
       "package/dist/index.d.ts",
