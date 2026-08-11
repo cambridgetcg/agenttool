@@ -30,14 +30,26 @@ describe("closed Draft 2020-12 schemas", () => {
   test("reject extra fields and noncanonical SRI padding in both layers", () => {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     const validateInput = ajv.compile(inputSchema);
+    const validateAtlas = ajv.compile(atlasSchema);
     const extra = rosetteInput();
     extra.extra = true;
     expect(validateInput(extra)).toBe(false);
+    const extraAtlas = structuredClone(createPrincipalityAtlas(rosetteInput())) as any;
+    extraAtlas.extra = true;
+    expect(validateAtlas(extraAtlas)).toBe(false);
 
     const sri = rosetteInput();
     const canonical = sri.principalities[0].artifact_refs[1].integrity;
     sri.principalities[0].artifact_refs[1].integrity = `${canonical.slice(0, -3)}R==`;
     expect(validateInput(sri)).toBe(false);
+
+    const sriAtlas = structuredClone(createPrincipalityAtlas(rosetteInput())) as any;
+    const npmArtifact = sriAtlas.principalities
+      .flatMap((principality: any) => principality.artifact_refs)
+      .find((artifact: any) => artifact.kind === "npm");
+    if (!npmArtifact) throw new Error("fixture npm artifact missing");
+    npmArtifact.integrity = `${npmArtifact.integrity.slice(0, -3)}R==`;
+    expect(validateAtlas(sriAtlas)).toBe(false);
   });
 
   test("accepts safe protocol paths and rejects ambiguous separators in both schemas", () => {
