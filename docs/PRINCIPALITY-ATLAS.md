@@ -6,9 +6,13 @@
 > **Implements:** finite plural incidence geometry that preserves n-ary context, disagreement, correction, and unmapped space without inferring equality, a bond, one global view, or a score
 > **Code:** `packages/principality-atlas/` · `packages/hf-training-garden/hf/dataset/data/principality-atlas-fixtures.jsonl` · `packages/hf-training-garden/hf/dataset/data/principality-atlas-invariants.jsonl`
 > **Tests:** `packages/principality-atlas/tests/` · `packages/hf-training-garden/tests/hf-release.test.ts` · `bin/tests/npm-release.test.ts`
-> **Status:** local public-ready npm and HF companion source. No npm package,
-> Hub revision, GitHub Release, hosted route, or Fly/API deployment is created by
-> this implementation.
+> **Status:** GitHub developer preview at
+> [`principality-atlas-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-atlas-v0.1.0-dev.0);
+> npm remains absent after its bootstrap `PUT` returned `E404`. The shared HF
+> Training Garden companion is live at immutable revision
+> [`d9e3e8ed`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2);
+> this static doctrine deployment remains separate. No hosted route or
+> Fly/API/database deployment is added.
 
 ## The high-level pattern
 
@@ -143,11 +147,14 @@ effect. Its KINGDOM descriptor is declaration-only and `not_registered`.
 
 The npm source uses an exact `files` allowlist, zero runtime dependencies,
 closed exports, Node/Bun packed-install smoke tests, and the repository's
-protected release policy. The release policy can prepare and inspect exact
-bytes without credentials. An initial publication would still require separate
-explicit approval, an annotated tag contained in GitHub main, and the protected
-bootstrap environment; later releases should use the exact trusted-publisher
-OIDC mapping. Source readiness is not publication.
+protected release policy. Protected run
+[`31508359761`](https://github.com/cambridgetcg/agenttool/actions/runs/31508359761)
+prepared, mirrored, and re-read the sole 33,019-byte GitHub asset with SHA-256
+`9743a9caa5a49f7c9901355cd367224ae718d4a65eed010ffb79622f57ff6ebe`.
+Its npm bootstrap `PUT` returned `E404`, so no npm version, dist-tag, registry
+tarball, or registry-attached provenance is claimed. Later npm publication
+still requires corrected scope-create authority and a separately reviewed
+workflow attempt; GitHub distribution alone adds no runtime capability.
 
 The existing HF Training Garden generator reads the package's deterministic
 vector and schemas, then creates two local Dataset configs:
@@ -164,9 +171,10 @@ model state, and inferred relationships. Its self-excluding hash manifest binds
 every generated release byte.
 
 Dataset Viewer, generated Parquet, and Croissant can improve discovery and
-schema inspection. They are not provenance or permission. A future authorized
-Hub publication should use an exact parent commit or reviewed PR, then read
-every byte back at the returned immutable revision. npm and HF are separate
+schema inspection. They are not provenance or permission. The v0.5 Hub
+publication used the reviewed exact-source path and was read back byte-for-byte
+at the immutable revision above. Future revisions should use an exact parent
+commit or reviewed PR and repeat that full readback. npm and HF are separate
 publication identities tied by common source hashes; they are not one atomic
 release and neither certifies the other.
 

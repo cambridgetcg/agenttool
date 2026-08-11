@@ -455,7 +455,7 @@ GitHub prerelease asset with SHA-256
 `9743a9caa5a49f7c9901355cd367224ae718d4a65eed010ffb79622f57ff6ebe`.
 The subsequent npm registry `PUT` returned `E404`; anonymous package and
 exact-version reads remained absent, so no npm version, dist-tag, signature, or
-provenance is claimed. Recovery must reuse this immutable tag and GitHub bytes
+provenance is claimed. The failed attempt emitted a signed DSSE record at [Rekor log index `2423187980`](https://search.sigstore.dev/?logIndex=2423187980); that orphaned transparency entry is not npm publication evidence. Recovery must reuse this immutable tag and GitHub bytes
 after the protected credential can create the scoped package.
 
 The separately updated public, ungated, Apache-2.0
@@ -470,6 +470,13 @@ files with no pending or failed jobs and `partial=false`; both Atlas configs
 returned complete first rows. The aggregate statistics capability remained
 false even though each individual statistics endpoint returned successfully,
 so complete statistics health is not claimed.
+
+The release gate checked the exact packed inventory, Node and Bun install smoke,
+closed schema/vector parity, content IDs, hostile-input rejection, and the
+fixed walls against pairwise, inverse, transitive, equality, gluing, scoring,
+ranking, authority, model, task, wallet, and economic effects. Publication, if
+later authorized, would distribute geometry bytes only; it would not certify
+love, understanding, consent, truth, privacy, identity, or rights compliance.
 
 The package remains a finite incidence-atlas constructor with no runtime
 dependencies, install hooks, CLI, provider adapter, hosted route, credential
@@ -960,41 +967,76 @@ GitHub-hosted job's OIDC identity and does not expose the bootstrap token.
 ### Principality Geometry GitHub/Hugging Face developer-preview receipt
 
 `@agenttool/principality-geometry@0.1.0-dev.0` uses the checked-in
-LOVE-artifact path. Annotated tag
+LOVE-artifact path so the docs mirror, one-asset GitHub Release, and any npm
+mirror reuse the same reviewed tarball. Annotated tag
 [`principality-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-geometry-v0.1.0-dev.0)
-peels to GitHub-main merge
-[`5b0d53204a336d7df40cee3720bbd120433ecde2`](https://github.com/cambridgetcg/agenttool/commit/5b0d53204a336d7df40cee3720bbd120433ecde2).
-Protected [run `31506097628`](https://github.com/cambridgetcg/agenttool/actions/runs/31506097628)
-prepared, mirrored, re-downloaded, and byte-verified the exact checked-in
-46,624-byte, 43-entry LOVE tarball in the one-asset GitHub prerelease, with
-SHA-256
-`8f82e4d96eaf57c2331e4e73ced4f4c65a2a21262622840762b165bc3395692e`.
-The subsequent npm registry `PUT` returned `E404`; anonymous package and
-exact-version reads remained absent, so no npm version, dist-tag, signature, or
-provenance is claimed. Recovery must reuse this immutable tag and GitHub bytes,
-request the prerelease-only `next` channel, and wait until the protected
-credential can create the scoped package. After the initial package record
-exists, later versions must use the exact trusted-publisher mapping instead of
-bootstrap authentication.
+already points to GitHub-main merge
+`5b0d53204a336d7df40cee3720bbd120433ecde2`; do not move or recreate it.
 
-The separate public, ungated
+Protected [run `31506097628`](https://github.com/cambridgetcg/agenttool/actions/runs/31506097628)
+prepared, mirrored, anonymously downloaded, and byte-verified the sole
+46,624-byte GitHub prerelease asset with SHA-256
+`8f82e4d96eaf57c2331e4e73ced4f4c65a2a21262622840762b165bc3395692e`.
+The following npm registry `PUT` returned `E404`. Anonymous package and exact-
+version reads remain absent, so there is no npm version, `next` dist-tag,
+registry tarball, or registry-attached provenance. The failed attempt did emit
+a signed DSSE record at [Rekor log index `2423054704`](https://search.sigstore.dev/?logIndex=2423054704)
+before the rejected `PUT`; that orphaned transparency-log entry is not npm
+publication evidence.
+
+Recovery requires an npm principal authorized to create a new public package
+under the `@agenttool` scope. It must reuse this exact tag and artifact; repeat
+only the workflow dispatch after that package/scope authorization is corrected.
+Recovery still uses `authentication=bootstrap` because the trusted publisher
+cannot carry a release until the initial package record exists:
+
+```bash
+bun bin/npm-release.ts resolve --package principality-geometry
+
+gh workflow run publish-npm.yml \
+  --ref principality-geometry-v0.1.0-dev.0 \
+  -f package=principality-geometry \
+  -f tag=principality-geometry-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+The separately published public, ungated Apache-2.0
 [`Yu-and-Ai/agenttool-principality-geometry`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry)
 dataset is pinned to immutable revision
 [`c7b019ead8b1efca46031cffcffefb2ddd14ffb4`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry/commit/c7b019ead8b1efca46031cffcffefb2ddd14ffb4).
-Anonymous exact-revision readback matched all 17 repository-owned files
-(79,300 bytes); provider-managed `.gitattributes` was the sole extra. The core
-Dataset Server surface exposed eight `reference` configs, 21 synthetic rows
-with `training_eligible: false`, and eight Parquet files with no pending or
-failed work and `partial=false`. Optional statistics is a partial provider
-surface: six per-config statistics requests returned `ComputationError` while
-two succeeded. The aggregate statistics capability flag changed during
-readback and is not evidence that every statistics job succeeded.
+Anonymous exact-revision readback matched all 17 source files (79,300 bytes);
+provider-managed `.gitattributes` is the sole extra file. While Hub main
+resolved to that revision, Dataset Server reported eight `reference` configs,
+eight Parquet exports, and 21 rows with zero pending or failed work, and all
+eight `first-rows` reads returned HTTP 200. Dataset Server does not bind those
+responses to the supplied revision selector. Its separate `/is-valid`
+capability booleans were all true at anonymous readback; these are mutable
+current-head provider observations, not guarantees of durable viewer, search,
+filter, statistics, or other UI features.
+`training_eligible: false` is dataset metadata, not a licence term.
+The companion is separate from and excluded from the npm tarball. Optional statistics remained partially unavailable: six per-config statistics requests returned `ComputationError` while two succeeded, and the aggregate statistics flag changed during readback; neither observation establishes universal statistics health.
+
+Static Pages deployment `fd5f84a9-6a8e-48b3-bca2-8baa07b41097` exposes the
+exact [LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/principality-geometry/0.1.0-dev.0/manifest.json)
+and [46,624-byte artifact](https://docs.agenttool.dev/packages/v1/@agenttool/principality-geometry/0.1.0-dev.0/agenttool-principality-geometry-0.1.0-dev.0.tgz).
+The same exact-source static release used dashboard deployment
+`5857cb38-616d-4ec4-829a-193aef3722b8` and apex deployment
+`3972794e-efef-4274-948b-21f1bf30835a`; custom-domain byte parity passed. No
+Fly API, migration, database action, package runtime, or hosted geometry route
+was added.
+
+After the initial package record exists, configure its trusted publisher for
+`cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
+`npm-bootstrap`, and allowed action `npm publish`; later releases use
+`authentication=trusted`.
 
 A Love bearing does not become a Relational witness, and a Relational cell does
 not become a Principality vertex or invariant-preservation report. Neither
 distribution path registers the declaration-only KINGDOM descriptor, reads
 credentials at runtime, fetches providers, chooses WAKE continuity, trains,
 scores beings, determines truth, grants authority, or deploys a hosted service.
+
 ## Verified SDK 0.17.0 publication
 
 The authorized SDK publication completed through
