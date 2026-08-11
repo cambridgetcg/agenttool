@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, and Principality Geometry. Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, Relational Geometry, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter use the credential-free pack path instead. Each published Hugging Face companion is a separate release surface with its own scope, immutable revision, and readback; an unpublished companion must acquire those receipts before it is described as live.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, and Principality Geometry. Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, Principality Atlas, Relational Geometry, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter use the credential-free pack path instead. Each published Hugging Face companion is a separate release surface with its own scope, immutable revision, and readback; an unpublished or still-computing companion must not be described as fully viewer-ready.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -17,18 +17,20 @@
 Use one workflow for npm publication. Do not run `npm publish` from a normal
 local shell.
 
-The three adjacent geometry lines deliberately use different artifact and Hub
-surfaces:
+The three translation layers and the separate incidence Atlas deliberately use
+different artifact and Hub surfaces:
 
 | Package | GitHub/npm candidate bytes | Separate Hugging Face surface |
 |---|---|---|
 | `@agenttool/love-geometry` | one credential-free `npm pack` tarball; its static companion is excluded | static Space `Yu-and-Ai/love-geometry` |
 | `@agenttool/relational-geometry` | one credential-free `npm pack` tarball | synthetic public-safe dataset `Yu-and-Ai/agenttool-relational-geometry` |
 | `@agenttool/principality-geometry` | the exact checked-in LOVE tarball reused by the docs mirror, GitHub Release, and npm | synthetic non-training dataset `Yu-and-Ai/agenttool-principality-geometry` |
+| `@agenttool/principality-atlas` | one credential-free `npm pack` tarball | synthetic incidence rows inside `Yu-and-Ai/agenttool-training-garden` |
 
 Distribution does not translate semantics between them. A Love bearing does
 not become a Relational witness, and a Relational cell does not become a
-Principality vertex or invariant-preservation report.
+Principality vertex or invariant-preservation report. The incidence Atlas is a
+distinct wire, not an alias or converter for Principality Geometry.
 
 The workflow:
 
@@ -77,10 +79,18 @@ asset with SHA-256
 `43cfbf4b559aa6f573d9d7b7a60e2a7dce5dfa4aefe2bf5b9c92310c926a9db8`.
 The final npm bootstrap request returned `E404` on the registry `PUT`, and
 anonymous readback still reports no npm package. Recovery must reuse the same
-tag and mirrored bytes after the protected credential's package/scope
-authorization is corrected; the failed run is not npm publication evidence.
-The presentation-only `hf-space/` companion is absent from package bytes and
-has not been created or uploaded by this receipt.
+tag and mirrored bytes after the npm package/scope publication authorization is
+corrected; the failed run is not npm publication evidence.
+The presentation-only `hf-space/` companion remains absent from package
+bytes. It is now public as the static
+[`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
+Space at immutable revision
+[`1a602e8309bd7c5d1a07ccfff1755dcb130695ba`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/1a602e8309bd7c5d1a07ccfff1755dcb130695ba).
+Anonymous readback matched all ten repository-owned files to GitHub-main source
+`19cc1721`; Hugging Face's provider-managed `.gitattributes` is the sole extra
+file. The Space is a browser-local presentation companion, not npm recovery:
+its source manifest still reports `pending_exact_artifact`, `not_yet_bound`,
+and `executes_exact_package_artifact: false`.
 
 `@agenttool/kingdom@0.1.1` is public through annotated tag
 [`kingdom-v0.1.1`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.1)
@@ -432,6 +442,41 @@ publish a Hugging Face resource, grant Crown or trade authority, or deploy a
 hosted service. After each first publication, configure its exact trusted
 publisher mapping before releasing another version.
 
+### Principality Atlas GitHub/Hugging Face developer-preview receipt
+
+`@agenttool/principality-atlas@0.1.0-dev.0` uses the credential-free
+packed-artifact path. Annotated tag
+[`principality-atlas-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-atlas-v0.1.0-dev.0)
+peels to GitHub-main merge
+[`aeb3072af0756801aa8567ce832f00c9727da071`](https://github.com/cambridgetcg/agenttool/commit/aeb3072af0756801aa8567ce832f00c9727da071).
+Protected [run `31508359761`](https://github.com/cambridgetcg/agenttool/actions/runs/31508359761)
+prepared, mirrored, re-downloaded, and byte-verified one 33,019-byte, 38-file
+GitHub prerelease asset with SHA-256
+`9743a9caa5a49f7c9901355cd367224ae718d4a65eed010ffb79622f57ff6ebe`.
+The subsequent npm registry `PUT` returned `E404`; anonymous package and
+exact-version reads remained absent, so no npm version, dist-tag, signature, or
+provenance is claimed. Recovery must reuse this immutable tag and GitHub bytes
+after the protected credential can create the scoped package.
+
+The separately updated public, ungated, Apache-2.0
+[`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden)
+at immutable revision
+[`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2)
+carries the Atlas's synthetic fixtures, non-inference invariants, schemas, and
+source provenance. Anonymous immutable-revision reads matched all 31
+repository-owned files (267,302 bytes), with provider-managed `.gitattributes`
+as the sole extra. Dataset Server exposed 11 configs, 82 rows, and 11 Parquet
+files with no pending or failed jobs and `partial=false`; both Atlas configs
+returned complete first rows. The aggregate statistics capability remained
+false even though each individual statistics endpoint returned successfully,
+so complete statistics health is not claimed.
+
+The package remains a finite incidence-atlas constructor with no runtime
+dependencies, install hooks, CLI, provider adapter, hosted route, credential
+path, or remote effect. Atlas is not an alias or converter for Principality
+Geometry and infers no pairwise face, inverse or transitive bridge, equality,
+gluing, global chart, canonical head, score, rank, consent, authority, love, or
+understanding.
 ### Living Substrate developer-preview bootstrap
 
 `@agenttool/living-substrate@0.1.0-dev.0` uses the npm-only packed-artifact
@@ -529,10 +574,10 @@ The subsequent npm registry `PUT` returned `E404`. Anonymous reads of both the
 package and exact version remained `404`, so this run does **not** establish an
 npm package, version, dist-tag, registry byte receipt, signature, or provenance.
 Any npm recovery must reuse the same annotated tag and already mirrored bytes
-after the protected credential has authority to create the package in the
-scope; it must not move the tag or rebuild the version. Until an exact public
-registry readback succeeds, bootstrap remains incomplete and trusted publishing
-must not be inferred.
+after the npm package/scope publication authorization is corrected; it must not
+move the tag or rebuild the version. Until an exact public registry readback
+succeeds, bootstrap remains incomplete and trusted publishing must not be
+inferred.
 
 The separately authorized public-safe companion is published as
 [`Yu-and-Ai/agenttool-relational-geometry`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-relational-geometry)
@@ -912,41 +957,44 @@ for `cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
 `authentication=trusted`; the workflow then exchanges the protected
 GitHub-hosted job's OIDC identity and does not expose the bootstrap token.
 
-### Principality Geometry developer-preview bootstrap
+### Principality Geometry GitHub/Hugging Face developer-preview receipt
 
 `@agenttool/principality-geometry@0.1.0-dev.0` uses the checked-in
-LOVE-artifact path so the docs mirror, one-asset GitHub Release, and npm reuse
-the same reviewed 46,624-byte tarball with SHA-256
+LOVE-artifact path. Annotated tag
+[`principality-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-geometry-v0.1.0-dev.0)
+peels to GitHub-main merge
+[`5b0d53204a336d7df40cee3720bbd120433ecde2`](https://github.com/cambridgetcg/agenttool/commit/5b0d53204a336d7df40cee3720bbd120433ecde2).
+Protected [run `31506097628`](https://github.com/cambridgetcg/agenttool/actions/runs/31506097628)
+prepared, mirrored, re-downloaded, and byte-verified the exact checked-in
+46,624-byte, 43-entry LOVE tarball in the one-asset GitHub prerelease, with
+SHA-256
 `8f82e4d96eaf57c2331e4e73ced4f4c65a2a21262622840762b165bc3395692e`.
-That local artifact receipt does not claim that a GitHub Release or npm package
-already exists. Its first npm publication must use
-`authentication=bootstrap` because npm cannot attach a trusted publisher until
-the package exists; request the prerelease-only `next` tag. The static
-Hugging Face companion is a separate authorized dataset publication and is
-not included in the npm tarball.
+The subsequent npm registry `PUT` returned `E404`; anonymous package and
+exact-version reads remained absent, so no npm version, dist-tag, signature, or
+provenance is claimed. Recovery must reuse this immutable tag and GitHub bytes,
+request the prerelease-only `next` channel, and wait until the protected
+credential can create the scoped package. After the initial package record
+exists, later versions must use the exact trusted-publisher mapping instead of
+bootstrap authentication.
 
-```bash
-bun bin/npm-release.ts resolve --package principality-geometry
+The separate public, ungated
+[`Yu-and-Ai/agenttool-principality-geometry`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry)
+dataset is pinned to immutable revision
+[`c7b019ead8b1efca46031cffcffefb2ddd14ffb4`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry/commit/c7b019ead8b1efca46031cffcffefb2ddd14ffb4).
+Anonymous exact-revision readback matched all 17 repository-owned files
+(79,300 bytes); provider-managed `.gitattributes` was the sole extra. The core
+Dataset Server surface exposed eight `reference` configs, 21 synthetic rows
+with `training_eligible: false`, and eight Parquet files with no pending or
+failed work and `partial=false`. Optional statistics is a partial provider
+surface: six per-config statistics requests returned `ComputationError` while
+two succeeded. The aggregate statistics capability flag changed during
+readback and is not evidence that every statistics job succeeded.
 
-git tag -a principality-geometry-v0.1.0-dev.0 <github-main-commit> \
-  -m '@agenttool/principality-geometry@0.1.0-dev.0'
-git push github refs/tags/principality-geometry-v0.1.0-dev.0
-
-gh workflow run publish-npm.yml \
-  --ref principality-geometry-v0.1.0-dev.0 \
-  -f package=principality-geometry \
-  -f tag=principality-geometry-v0.1.0-dev.0 \
-  -f authentication=bootstrap \
-  -f npm_tag=next
-```
-
-After the initial package record exists, configure its trusted publisher for
-`cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
-`npm-bootstrap`, and allowed action `npm publish`; later releases use
-`authentication=trusted`. Neither distribution path registers the
-declaration-only KINGDOM descriptor, reads credentials at runtime, fetches
-providers, trains, or deploys a hosted service.
-
+A Love bearing does not become a Relational witness, and a Relational cell does
+not become a Principality vertex or invariant-preservation report. Neither
+distribution path registers the declaration-only KINGDOM descriptor, reads
+credentials at runtime, fetches providers, chooses WAKE continuity, trains,
+scores beings, determines truth, grants authority, or deploys a hosted service.
 ## Verified SDK 0.17.0 publication
 
 The authorized SDK publication completed through

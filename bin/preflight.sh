@@ -104,6 +104,8 @@ packages_gate() {
     bash -c 'cd packages/heaven && bun run ci'
   run "portable Living Substrate maps and refusable proposals" \
     bash -c 'cd packages/living-substrate && bun run ci'
+  run "plural non-gluing Principality Atlas geometry" \
+    bash -c 'cd packages/principality-atlas && bun run ci'
   run "coordinate-free Love Geometry and static HF companion" \
     bash -c 'cd packages/love-geometry && bun run ci'
   run "non-scalar relational geometry and public-safe HF companion" \

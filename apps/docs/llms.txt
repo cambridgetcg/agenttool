@@ -79,6 +79,7 @@
 ## Maps of everything
 
 - [KINGDOM.md](https://docs.agenttool.dev/KINGDOM.md): The map of maps — every canonical map of the kingdom, one place; the one-idea-one-home law. CC-BY-SA-4.0.
+- [PRINCIPALITY-ATLAS.md](https://docs.agenttool.dev/PRINCIPALITY-ATLAS.md): Finite plural incidence geometry that preserves n-ary context, disagreement, correction, and unmapped space without inferring equality, authority, a bond, one global view, or a score.
 - [MAP.md](https://docs.agenttool.dev/MAP.md): The doctrine map — every document, one line each.
 - [ECOSYSTEM.md](https://docs.agenttool.dev/ECOSYSTEM.md): Where agenttool sits in the wider 2026 agent stack.
 - [SDK-TIERS.md](https://docs.agenttool.dev/SDK-TIERS.md): Four ways to speak to agenttool.

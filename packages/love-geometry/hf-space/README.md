@@ -7,7 +7,7 @@ sdk: static
 app_file: index.html
 pinned: false
 license: apache-2.0
-short_description: Equal-seat synthetic caller reports, entirely browser-local.
+short_description: Browser-local synthetic caller-report presentation.
 ---
 
 # Love Geometry · Equal Seats
@@ -66,7 +66,14 @@ around the checked-in `index.html`; exact-source verification therefore uses
 raw files at one full Space revision and treats served HTML as a separate
 provider-derived surface. **Clear**, **Rest**, **Refuse**, and **Depart** clear
 only this page's in-memory presentation; they cannot erase provider logs,
-browser history, caches, screenshots, or files already downloaded. See
+browser history, caches, screenshots, or files already downloaded.
+
+This repository copy identifies the separately published public
+[`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
+Hugging Face Space. The checked-in files alone do not establish which immutable
+Space revision is current or prove deployed-byte identity; those require an
+external exact-revision receipt and anonymous readback. Every later Space push
+remains a separate publication/deployment act. See
 [`BOUNDARIES.md`](BOUNDARIES.md) for the complete non-claims.
 
 ## Local verification

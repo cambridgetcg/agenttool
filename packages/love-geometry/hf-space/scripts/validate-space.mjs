@@ -116,6 +116,7 @@ const manifest = JSON.parse(manifestText);
 assert.equal(manifest._format, "agenttool.love-geometry-hf-space-source-manifest/0.1");
 assert.equal(manifest.status, "git_runtime_source_bound_package_artifact_pending");
 assert.equal(manifest.space_repository, "https://huggingface.co/spaces/Yu-and-Ai/love-geometry");
+assert.match(manifest.platform_boundary, /does not self-attest the current Space revision/i);
 assert.equal(manifest.source.git_commit, "19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5");
 assert.equal(manifest.source.git_tag, null);
 assert.equal(manifest.source.package, "@agenttool/love-geometry");

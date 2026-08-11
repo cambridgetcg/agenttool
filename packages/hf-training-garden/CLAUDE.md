@@ -62,6 +62,11 @@ Keep the six surfaces separate:
   freedom offers/directions, checkpoints, WAKE, identities, or bearer material.
   Keep the historical advisory training-FREEDOM schema package-only so the
   public candidate exposes only the current IS learning-freedom wire.
+- The public companion may copy only the deterministic synthetic fixtures,
+  non-inference invariants, and closed schemas from
+  `packages/principality-atlas/`. Bind those upstream bytes in the source
+  manifest. Never export a private/live atlas, identity, local ref mapping,
+  evidence referent, inferred relation, score, or authority field.
 
 All IDs are domain-separated SHA-256 over bounded canonical data. Validators
 must reject extra fields, rewritten Scout definitions, mutable revisions,

@@ -74,7 +74,10 @@ served bytes are verified as a separate surface and are not claimed to match
 the checked-in `index.html`. Provider request handling, logs, retention,
 moderation, availability, iframe behavior, injected platform UI, and future
 platform changes sit outside this app's guarantees. Deployment does not grant
-account authorization or bind a package artifact.
+account authorization or bind a package artifact. The checked-in files alone
+do not establish the current immutable Space revision or deployed-byte
+identity; those require separate provider observation and exact anonymous
+readback.
 
 This static companion is not an MCP server, WAKE continuity store, hosted
 AgentTool route, XENIA Surface, XENIA Covenant adoption, conformance result,

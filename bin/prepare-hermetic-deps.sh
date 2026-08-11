@@ -53,6 +53,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/karma-mirror
   packages/heaven
   packages/living-substrate
+  packages/principality-atlas
   packages/love-geometry
   packages/relational-geometry
   packages/wake-thread

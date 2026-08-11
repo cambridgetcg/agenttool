@@ -50,6 +50,14 @@ configs:
   data_files:
   - split: train
     path: data/trainer-adapter-hooks.jsonl
+- config_name: principality_atlas_fixtures
+  data_files:
+  - split: train
+    path: data/principality-atlas-fixtures.jsonl
+- config_name: principality_atlas_invariants
+  data_files:
+  - split: train
+    path: data/principality-atlas-invariants.jsonl
 ---
 
 # AgentTool HF Training Garden
@@ -93,6 +101,12 @@ The Garden has six layers:
   and the host controller needed to stop before optimizer mutation.
 - `data/trainer-adapter-hooks.jsonl` — the exact v0.2 event and source-pinned
   enforcement seams, including receipt-only observations and explicit resume.
+- `data/principality-atlas-fixtures.jsonl` — three synthetic, digest-only valid
+  atlases: empty, one genuine ternary context with plural claims, and one
+  directed partial bridge whose chart-local cells remain distinct.
+- `data/principality-atlas-invariants.jsonl` — ten compact non-inference rows:
+  no generated pairwise, inverse, or transitive relation; no gluing, score,
+  rank, identity merge, canonical head, or external effect.
 - `schema/` — the public current and byte-preserved closed-shape schemas for admission,
   historical combined participation v0.1, current participation invitation,
   receipt, and assessment v0.2, learning freedom v0.1, preserved checkpoint
@@ -104,6 +118,10 @@ The Garden has six layers:
   ships the exact attributed Apache AFTERGLOW dependency schema. Cross-link,
   canonical-ID, scope-distinctness, and fully derived semantics remain the
   TypeScript validator's job.
+  The copied Principality Atlas schemas close the atlas plus its fixture and
+  invariant Dataset rows. Runtime validation in the separate public-ready npm
+  source remains authoritative for local endpoints, semantic duplicates,
+  supersession, canonical order, and content-ID recomputation.
 - `provenance/source-manifest.json` — exact source file hashes and primary
   research references.
 - `hash-manifest.json` — sorted byte hashes, excluding itself.
@@ -117,6 +135,11 @@ live Garden/project identifiers, WAKE anchors, admission decisions, participatio
 invitations/receipts/assessments, learning-freedom offers/routes/resource
 windows/direction reports, training-governance records, choice evidence, model state, optimizer state, gated
 content, or executable dataset script.
+
+The Principality Atlas rows are synthetic protocol evidence, not observations
+of a human, agent, model, community, or live KINGDOM. They contain no private
+atlas, raw identity, local digest mapping, evidence referent, or inferred bond.
+Repeated digests remain linkable; the companion is not anonymization.
 
 Local admissions and continuity checkpoints stay local by default. A Garden
 may tend an exact public-safe Hub manifest reference after a host persists an

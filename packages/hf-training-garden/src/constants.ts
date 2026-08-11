@@ -1,7 +1,7 @@
 import { deepFreeze } from "./canonical.js";
 
 export const PACKAGE_NAME = "@agenttool/hf-training-garden" as const;
-export const PACKAGE_VERSION = "0.4.0-dev.0" as const;
+export const PACKAGE_VERSION = "0.5.0-dev.0" as const;
 
 export const ADMISSION_FORMAT = "kingdom.hf-dataset-admission/0.1" as const;
 export const ADMISSION_ENTRY_PROFILE =

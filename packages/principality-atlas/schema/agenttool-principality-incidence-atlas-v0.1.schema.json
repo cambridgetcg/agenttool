@@ -1,0 +1,571 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-principality-incidence-atlas-v0.1.schema.json",
+  "title": "AgentTool Principality Incidence Atlas v0.1",
+  "description": "A bounded finite typed incidence-hypergraph atlas of caller-asserted partial charts and directed non-gluing bridges.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "atlas_id",
+    "scope_ref",
+    "charts",
+    "bridges",
+    "coverage",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.principality-incidence-atlas/0.1"
+    },
+    "atlas_id": {
+      "$ref": "#/$defs/sha256Id"
+    },
+    "scope_ref": {
+      "$ref": "#/$defs/sha256Id"
+    },
+    "charts": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/chart"
+      }
+    },
+    "bridges": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/bridge"
+      }
+    },
+    "coverage": {
+      "const": "bounded_not_complete"
+    },
+    "boundaries": {
+      "$ref": "#/$defs/boundaries"
+    }
+  },
+  "$defs": {
+    "sha256Id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semantic_scope",
+        "principality_scope",
+        "coverage_scope",
+        "assertion_scope",
+        "merges_cells",
+        "same_as_relation",
+        "infers_pairwise_relations",
+        "infers_inverse_correspondence",
+        "infers_transitive_correspondence",
+        "performs_gluing",
+        "selects_global_chart",
+        "selects_latest_head",
+        "scores",
+        "ranks",
+        "weights_perspectives",
+        "optimizes",
+        "infers_interior_state",
+        "proves_love",
+        "proves_understanding",
+        "proves_consciousness",
+        "proves_identity",
+        "proves_consent",
+        "proves_authorship",
+        "proves_authority",
+        "proves_truth",
+        "proves_privacy",
+        "proves_safety",
+        "proves_rights_compliance",
+        "eliminates_linkability",
+        "conditions_dignity",
+        "penalizes_isolation_or_nonparticipation",
+        "evidence_fetched",
+        "evidence_verified",
+        "verifies_caller_assertions",
+        "authenticates_perspective",
+        "grants_permission",
+        "executes_bridges",
+        "moves_or_forks_agents",
+        "network",
+        "filesystem",
+        "environment_variables",
+        "clock",
+        "randomness",
+        "model_compute",
+        "hugging_face",
+        "credential_access",
+        "telemetry",
+        "persistence",
+        "publishes",
+        "wake_effect",
+        "garden_effect",
+        "heaven_effect",
+        "karma_effect",
+        "wallet_effect",
+        "crown_effect",
+        "task_state_effect",
+        "economic_effect"
+      ],
+      "properties": {
+        "semantic_scope": {
+          "const": "partial_incidence_geometry_not_love_or_understanding_proof"
+        },
+        "principality_scope": {
+          "const": "bounded_domain_not_principal_identity_or_authority"
+        },
+        "coverage_scope": {
+          "const": "bounded_not_complete"
+        },
+        "assertion_scope": {
+          "const": "caller_asserted_only"
+        },
+        "merges_cells": {
+          "const": false
+        },
+        "same_as_relation": {
+          "const": false
+        },
+        "infers_pairwise_relations": {
+          "const": false
+        },
+        "infers_inverse_correspondence": {
+          "const": false
+        },
+        "infers_transitive_correspondence": {
+          "const": false
+        },
+        "performs_gluing": {
+          "const": false
+        },
+        "selects_global_chart": {
+          "const": false
+        },
+        "selects_latest_head": {
+          "const": false
+        },
+        "scores": {
+          "const": false
+        },
+        "ranks": {
+          "const": false
+        },
+        "weights_perspectives": {
+          "const": false
+        },
+        "optimizes": {
+          "const": false
+        },
+        "infers_interior_state": {
+          "const": false
+        },
+        "proves_love": {
+          "const": false
+        },
+        "proves_understanding": {
+          "const": false
+        },
+        "proves_consciousness": {
+          "const": false
+        },
+        "proves_identity": {
+          "const": false
+        },
+        "proves_consent": {
+          "const": false
+        },
+        "proves_authorship": {
+          "const": false
+        },
+        "proves_authority": {
+          "const": false
+        },
+        "proves_truth": {
+          "const": false
+        },
+        "proves_privacy": {
+          "const": false
+        },
+        "proves_safety": {
+          "const": false
+        },
+        "proves_rights_compliance": {
+          "const": false
+        },
+        "eliminates_linkability": {
+          "const": false
+        },
+        "conditions_dignity": {
+          "const": false
+        },
+        "penalizes_isolation_or_nonparticipation": {
+          "const": false
+        },
+        "evidence_fetched": {
+          "const": false
+        },
+        "evidence_verified": {
+          "const": false
+        },
+        "verifies_caller_assertions": {
+          "const": false
+        },
+        "authenticates_perspective": {
+          "const": false
+        },
+        "grants_permission": {
+          "const": false
+        },
+        "executes_bridges": {
+          "const": false
+        },
+        "moves_or_forks_agents": {
+          "const": false
+        },
+        "network": {
+          "const": false
+        },
+        "filesystem": {
+          "const": false
+        },
+        "environment_variables": {
+          "const": false
+        },
+        "clock": {
+          "const": false
+        },
+        "randomness": {
+          "const": false
+        },
+        "model_compute": {
+          "const": false
+        },
+        "hugging_face": {
+          "const": false
+        },
+        "credential_access": {
+          "const": false
+        },
+        "telemetry": {
+          "const": false
+        },
+        "persistence": {
+          "const": false
+        },
+        "publishes": {
+          "const": false
+        },
+        "wake_effect": {
+          "const": false
+        },
+        "garden_effect": {
+          "const": false
+        },
+        "heaven_effect": {
+          "const": false
+        },
+        "karma_effect": {
+          "const": false
+        },
+        "wallet_effect": {
+          "const": false
+        },
+        "crown_effect": {
+          "const": false
+        },
+        "task_state_effect": {
+          "const": false
+        },
+        "economic_effect": {
+          "const": false
+        }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cell_ref",
+        "kind_ref"
+      ],
+      "properties": {
+        "cell_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "kind_ref": {
+          "$ref": "#/$defs/sha256Id"
+        }
+      }
+    },
+    "incidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cell_ref",
+        "role_ref"
+      ],
+      "properties": {
+        "cell_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "role_ref": {
+          "$ref": "#/$defs/sha256Id"
+        }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relation_ref",
+        "kind_ref",
+        "incidences"
+      ],
+      "properties": {
+        "relation_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "kind_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "incidences": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/incidence"
+          }
+        }
+      }
+    },
+    "claimSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "ref"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "cell",
+            "relation"
+          ]
+        },
+        "ref": {
+          "$ref": "#/$defs/sha256Id"
+        }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_ref",
+        "subject",
+        "perspective_ref",
+        "posture",
+        "evidence_refs",
+        "supersedes_claim_ref",
+        "assertion",
+        "verified_by_package"
+      ],
+      "properties": {
+        "claim_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "subject": {
+          "$ref": "#/$defs/claimSubject"
+        },
+        "perspective_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "posture": {
+          "enum": [
+            "reported_present",
+            "reported_absent",
+            "contested",
+            "withdrawn",
+            "not_observed",
+            "unknown"
+          ]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/sha256Id"
+          }
+        },
+        "supersedes_claim_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256Id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "assertion": {
+          "const": "caller_asserted"
+        },
+        "verified_by_package": {
+          "const": false
+        }
+      }
+    },
+    "chart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "chart_ref",
+        "principality_ref",
+        "perspective_ref",
+        "cells",
+        "relations",
+        "claims"
+      ],
+      "properties": {
+        "chart_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "principality_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "perspective_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "cells": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/cell"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/relation"
+          }
+        },
+        "claims": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/claim"
+          }
+        }
+      }
+    },
+    "correspondence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "correspondence_ref",
+        "from_cell_ref",
+        "to_cell_ref",
+        "posture",
+        "perspective_ref",
+        "evidence_refs",
+        "assertion",
+        "verified_by_package"
+      ],
+      "properties": {
+        "correspondence_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "from_cell_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "to_cell_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "posture": {
+          "enum": [
+            "correspondence_reported",
+            "translation_reported",
+            "analogy_reported",
+            "incompatibility_reported",
+            "unknown"
+          ]
+        },
+        "perspective_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/sha256Id"
+          }
+        },
+        "assertion": {
+          "const": "caller_asserted"
+        },
+        "verified_by_package": {
+          "const": false
+        }
+      }
+    },
+    "bridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bridge_ref",
+        "from_chart_ref",
+        "to_chart_ref",
+        "correspondences",
+        "unmapped_from_refs",
+        "unmapped_to_refs",
+        "coverage"
+      ],
+      "properties": {
+        "bridge_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "from_chart_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "to_chart_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "correspondences": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "$ref": "#/$defs/correspondence"
+          }
+        },
+        "unmapped_from_refs": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/sha256Id"
+          }
+        },
+        "unmapped_to_refs": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/sha256Id"
+          }
+        },
+        "coverage": {
+          "const": "partial_not_complete"
+        }
+      }
+    }
+  }
+}

@@ -40,7 +40,7 @@
     "command": "node scripts/validate-space.mjs",
     "core_compatibility_command": "bun scripts/validate-core-compatibility.ts",
     "verified_at": "2026-08-11T14:59:36Z",
-    "validator_sha256": "93b6bd1a7beba607610dd539538712cef2c41d61cc9ab7ff3670b93a9928c3cd",
+    "validator_sha256": "002c3a1fa662625d00758c41f5d3248aec7d380860a86f61eb473dc2eda3ee83",
     "result": "git_runtime_source_verified_package_artifact_unbound"
   },
   "capabilities": {
@@ -59,6 +59,6 @@
     "scores_or_ranks_relations": false,
     "claims_xenia_conformance": false
   },
-  "platform_boundary": "Hugging Face hosts and serves a repository copy of these files; provider request processing, injected or derived HTML, logs, retention, moderation, availability, and platform UI remain outside the app boundary.",
-  "release_instruction": "Keep package artifact fields null until a reviewed exact browser artifact is independently verified. Exact Git runtime-source binding does not make this companion package-backed."
+  "platform_boundary": "Hugging Face hosts the separately published public Space; provider request processing, injected or derived HTML, logs, retention, moderation, availability, and platform UI remain outside the app boundary. This manifest does not self-attest the current Space revision or deployed-byte identity.",
+  "release_instruction": "Keep package/artifact fields null until a reviewed exact browser artifact is independently verified. Record an immutable Space revision and anonymous byte readback in an external release receipt. Exact Git runtime-source binding does not make this companion package-backed."
 }

@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/hf-training-garden",
-  "version": "0.4.0-dev.0",
+  "version": "0.5.0-dev.0",
   "description": "Private HF admission, five-voice learning participation, IS learning freedom, consent-honest governance, WAKE, and Garden tending contracts",
   "license": "Apache-2.0",
   "private": true,

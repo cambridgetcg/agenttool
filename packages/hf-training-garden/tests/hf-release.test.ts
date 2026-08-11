@@ -47,6 +47,14 @@ describe("deterministic public-safe HF companion", () => {
     expect(readJsonl("data/learning-modes.jsonl")).toEqual(LEARNING_MODE_GUIDE);
     expect(readJsonl("data/learning-participation.jsonl")).toEqual(LEARNING_PARTICIPATION_GUIDE);
     expect(readJsonl("data/trainer-hooks.jsonl")).toEqual(HF_TRAINER_HOOK_GUIDE);
+    const principalityVectors = JSON.parse(readFileSync(new URL(
+      "../../principality-atlas/vectors/agenttool-principality-incidence-atlas-v0.1.json",
+      import.meta.url,
+    ), "utf8"));
+    expect(readJsonl("data/principality-atlas-fixtures.jsonl"))
+      .toEqual(principalityVectors.fixtures);
+    expect(readJsonl("data/principality-atlas-invariants.jsonl"))
+      .toEqual(principalityVectors.invariants);
 
     const card = read("README.md").toString("utf8");
     expect(card).not.toContain("config_name: admissions");
@@ -55,6 +63,12 @@ describe("deterministic public-safe HF companion", () => {
     const source = readJson("provenance/source-manifest.json");
     expect(source.publication_state).toBe("intended_identifier_only");
     expect(source.public_release_excludes).toContain("raw agent traces");
+    expect(source.public_release_excludes).toContain(
+      "private atlases, charts, identities, local ref mappings, and evidence referents",
+    );
+    expect(source.public_release_excludes).toContain(
+      "inferred pairwise relations, inverse or transitive bridges, merged identities, scores, and ranks",
+    );
     expect(source.public_release_excludes).toContain(
       "private/local Garden scope and project-instance identifiers",
     );
@@ -75,6 +89,43 @@ describe("deterministic public-safe HF companion", () => {
     expect(source.public_release_contains).toContain(
       "historical governance v0.1 plus current lifecycle governance v0.2 standalone JSON Schemas",
     );
+    expect(source.public_release_contains).toContain(
+      "three synthetic Principality Atlas fixtures plus ten non-inference invariants",
+    );
+    const principalityPackage = JSON.parse(readFileSync(new URL(
+      "../../principality-atlas/package.json",
+      import.meta.url,
+    ), "utf8"));
+    const principalityExtension = JSON.parse(readFileSync(new URL(
+      "../../principality-atlas/kingdom.extension.json",
+      import.meta.url,
+    ), "utf8"));
+    expect(principalityExtension.package).toBe(principalityPackage.name);
+    expect(principalityExtension.version).toBe(principalityPackage.version);
+    expect(source.upstream_components).toHaveLength(1);
+    expect(source.upstream_components[0]).toMatchObject({
+      package: `${principalityPackage.name}@${principalityPackage.version}`,
+      source_path: "packages/principality-atlas",
+      role: "synthetic_fixtures_invariants_and_closed_schemas",
+    });
+    expect(source.upstream_components[0].files.map((entry: { path: string }) => entry.path))
+      .toEqual([
+        "package.json",
+        "schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+        "schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
+        "schema/agenttool-principality-incidence-atlas-v0.1.schema.json",
+        "vectors/agenttool-principality-incidence-atlas-v0.1.json",
+      ]);
+    for (const name of [
+      "agenttool-principality-incidence-atlas-v0.1.schema.json",
+      "agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+      "agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
+    ]) {
+      expect(read(`schema/${name}`)).toEqual(readFileSync(new URL(
+        `../../principality-atlas/schema/${name}`,
+        import.meta.url,
+      )));
+    }
     expect(read("schema/hf-training-governance-v0.2.schema.json"))
       .toEqual(readFileSync(new URL(
         "../../schema/hf-training-governance-v0.2.schema.json",
