@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, Principality Atlas, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -64,8 +64,8 @@ asset with SHA-256
 `43cfbf4b559aa6f573d9d7b7a60e2a7dce5dfa4aefe2bf5b9c92310c926a9db8`.
 The final npm bootstrap request returned `E404` on the registry `PUT`, and
 anonymous readback still reports no npm package. Recovery must reuse the same
-tag and mirrored bytes after the protected credential's package/scope
-authorization is corrected; the failed run is not npm publication evidence.
+tag and mirrored bytes after the npm package/scope publication authorization is
+corrected; the failed run is not npm publication evidence.
 The presentation-only `hf-space/` companion is absent from package bytes and
 has not been created or uploaded by this receipt.
 
