@@ -121,6 +121,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "love-geometry",
     artifactKind: "pack",
   },
+  "relational-geometry": {
+    key: "relational-geometry",
+    name: "@agenttool/relational-geometry",
+    packagePath: "packages/relational-geometry",
+    tagPrefix: "relational-geometry",
+    artifactKind: "pack",
+  },
   "credential-broker": {
     key: "credential-broker",
     name: "@agenttool/credential-broker",
@@ -327,7 +334,7 @@ const REGISTRY_POLL_DELAY_MS = 5_000;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const SAFE_TAG = /^[a-z0-9][a-z0-9._-]*$/;
 const SAFE_NPM_TAG = /^[a-z][a-z0-9._-]*$/;
-const TEXT_ARCHIVE_ENTRY = /\.(?:cjs|css|html|js|json|jsx|map|md|mjs|mts|toml|ts|tsx|txt|yaml|yml)$/i;
+const TEXT_ARCHIVE_ENTRY = /\.(?:cjs|css|html|js|json|jsonl|jsx|map|md|mjs|mts|toml|ts|tsx|txt|yaml|yml)$/i;
 const SENSITIVE_ARCHIVE_PATH = /(?:^|\/)(?:\.env(?:\..*)?|\.npmrc|credentials(?:\.json)?|id_ed25519|id_rsa)$/i;
 const SECRET_SIGNATURES = [
   { name: "private-key block", pattern: /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/ },
@@ -336,6 +343,10 @@ const SECRET_SIGNATURES = [
   { name: "npm token", pattern: /\bnpm_[A-Za-z0-9]{36,}\b/ },
   { name: "Slack token", pattern: /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/ },
 ] as const;
+
+export function shouldScanArchiveEntryForSecrets(entry: string, size: number): boolean {
+  return TEXT_ARCHIVE_ENTRY.test(entry) && size <= 2_000_000;
+}
 
 function fail(message: string): never {
   throw new Error(message);
@@ -725,6 +736,28 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/vectors/agenttool-love-geometry-v0.1.json",
     );
   }
+  if (spec.name === "@agenttool/relational-geometry") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/schema/agenttool-relational-complex-v0.1.schema.json",
+      "package/schema/agenttool-relational-lens-v0.1.schema.json",
+      "package/vectors/agenttool-relational-geometry-v0.1.json",
+      "package/hf/dataset/LICENSE",
+      "package/hf/dataset/NOTICE",
+      "package/hf/dataset/README.md",
+      "package/hf/dataset/data/structural-examples.jsonl",
+      "package/hf/dataset/data/sft-train.jsonl",
+      "package/hf/dataset/data/public-regression.jsonl",
+      "package/hf/dataset/schema/relational-geometry-structural-v0.1.schema.json",
+      "package/hf/dataset/schema/relational-geometry-sft-v0.1.schema.json",
+      "package/hf/dataset/schema/relational-geometry-public-regression-v0.1.schema.json",
+      "package/hf/dataset/provenance/source-manifest.json",
+      "package/hf/dataset/provenance/example-manifest.json",
+      "package/hf/dataset/hash-manifest.json",
+    );
+  }
   if (spec.name === "@agenttool/alchemy") {
     entries.push(
       "package/dist/index.js",
@@ -835,7 +868,7 @@ async function verifyArchive(artifact: string, spec: ReleaseSpec, expectedVersio
 
   for (const entry of entries) {
     if (SENSITIVE_ARCHIVE_PATH.test(entry)) fail(`sensitive filename in npm archive: ${entry}`);
-    if (!TEXT_ARCHIVE_ENTRY.test(entry) || inspected.sizes[entry] > 2_000_000) continue;
+    if (!shouldScanArchiveEntryForSecrets(entry, inspected.sizes[entry])) continue;
     const text = await archiveText(artifact, entry);
     for (const signature of SECRET_SIGNATURES) {
       if (signature.pattern.test(text)) fail(`secret-like ${signature.name} found in ${entry}`);
