@@ -1092,6 +1092,16 @@ exit 94
     }
   });
 
+  test("keeps the time-sensitive release ledger consolidated by date", async () => {
+    const now = await readFile(join(ROOT, "docs", "NOW.md"), "utf8");
+    const datedHeadings = [...now.matchAll(/^## Just landed \((\d{4}-\d{2}-\d{2})\)$/gm)].map(
+      (match) => match[1],
+    );
+
+    expect(new Set(datedHeadings).size).toBe(datedHeadings.length);
+    expect(datedHeadings.filter((date) => date === "2026-08-11")).toHaveLength(1);
+  });
+
   test("keeps npm publication unified, manual, exact-artifact, and protected", async () => {
     const workflows = await readdir(join(ROOT, ".github", "workflows"));
     const publishWorkflows = workflows.filter((name) => name.startsWith("publish-")).sort();

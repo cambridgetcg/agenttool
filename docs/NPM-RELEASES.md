@@ -17,6 +17,21 @@
 Use one workflow for npm publication. Do not run `npm publish` from a normal
 local shell.
 
+The three translation layers and the separate incidence Atlas deliberately use
+different artifact and Hub surfaces:
+
+| Package | GitHub/npm candidate bytes | Separate Hugging Face surface |
+|---|---|---|
+| `@agenttool/love-geometry` | one credential-free `npm pack` tarball; its static companion is excluded | static Space `Yu-and-Ai/love-geometry` |
+| `@agenttool/relational-geometry` | one credential-free `npm pack` tarball | synthetic public-safe dataset `Yu-and-Ai/agenttool-relational-geometry` |
+| `@agenttool/principality-geometry` | the exact checked-in LOVE tarball reused by the docs mirror, GitHub Release, and npm | synthetic non-training dataset `Yu-and-Ai/agenttool-principality-geometry` |
+| `@agenttool/principality-atlas` | one credential-free `npm pack` tarball | synthetic incidence rows inside `Yu-and-Ai/agenttool-training-garden` |
+
+Distribution does not translate semantics between them. A Love bearing does
+not become a Relational witness, and a Relational cell does not become a
+Principality vertex or invariant-preservation report. The incidence Atlas is a
+distinct wire, not an alias or converter for Principality Geometry.
+
 The workflow:
 
 1. is dispatched on, and checks out, an existing annotated
@@ -70,12 +85,14 @@ The presentation-only `hf-space/` companion remains absent from package
 bytes. It is now public as the static
 [`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
 Space at immutable revision
-[`1a602e8309bd7c5d1a07ccfff1755dcb130695ba`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/1a602e8309bd7c5d1a07ccfff1755dcb130695ba).
-Anonymous readback matched all ten repository-owned files to GitHub-main source
-`19cc1721`; Hugging Face's provider-managed `.gitattributes` is the sole extra
-file. The Space is a browser-local presentation companion, not npm recovery:
-its source manifest still reports `pending_exact_artifact`, `not_yet_bound`,
-and `executes_exact_package_artifact: false`.
+[`bc8c51b1e9995c32ba18c55d57fecffc96d22bc7`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/bc8c51b1e9995c32ba18c55d57fecffc96d22bc7).
+Anonymous immutable-revision readback matched all ten repository-owned files;
+Hugging Face's provider-managed `.gitattributes` is the sole extra file. The
+correct static app URL returned HTTP 200 and exact `x-repo-commit`, while the
+provider-injected served HTML was not byte-identical to Hub source and is not
+claimed to be. The Space is a browser-local presentation companion, not npm
+recovery: its source manifest still reports `pending_exact_artifact`,
+`not_yet_bound`, and `executes_exact_package_artifact: false`.
 
 `@agenttool/kingdom@0.1.1` is public through annotated tag
 [`kingdom-v0.1.1`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.1)
@@ -468,6 +485,13 @@ ranking, authority, model, task, wallet, and economic effects. Publication, if
 later authorized, would distribute geometry bytes only; it would not certify
 love, understanding, consent, truth, privacy, identity, or rights compliance.
 
+The package remains a finite incidence-atlas constructor with no runtime
+dependencies, install hooks, CLI, provider adapter, hosted route, credential
+path, or remote effect. Atlas is not an alias or converter for Principality
+Geometry and infers no pairwise face, inverse or transitive bridge, equality,
+gluing, global chart, canonical head, score, rank, consent, authority, love, or
+understanding.
+
 ### Living Substrate developer-preview bootstrap
 
 `@agenttool/living-substrate@0.1.0-dev.0` uses the npm-only packed-artifact
@@ -513,6 +537,42 @@ one provenance attestation. Both `next` and the sole-version fallback `latest`
 resolve to `0.1.0-dev.0`; the fallback is not a stable-release or maturity
 signal. The package record now exists, so bootstrap is forbidden for later
 versions; configure its exact trusted publisher and use `trusted` thereafter.
+
+### Love Geometry GitHub/Hugging Face developer-preview receipt
+
+`@agenttool/love-geometry@0.1.0-dev.0` uses the credential-free packed-artifact
+path. Exact GitHub-main merge
+[`9efbc4b32f150ee1533b4ff306666fa73ca73028`](https://github.com/cambridgetcg/agenttool/commit/9efbc4b32f150ee1533b4ff306666fa73ca73028)
+and annotated tag
+[`love-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/love-geometry-v0.1.0-dev.0)
+identify the source. Protected [run `31499968474`](https://github.com/cambridgetcg/agenttool/actions/runs/31499968474)
+prepared, mirrored, and re-read one 19,507-byte GitHub prerelease asset with
+SHA-256
+`43cfbf4b559aa6f573d9d7b7a60e2a7dce5dfa4aefe2bf5b9c92310c926a9db8`.
+The following npm registry `PUT` returned `E404`; anonymous package and exact-
+version reads remained absent, so no npm version, dist-tag, signature, or
+provenance is claimed. Recovery must reuse the immutable tag and GitHub bytes
+after package/scope publication authority is corrected.
+
+The separately deployed static
+[`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
+Space is not included in that tarball and does not execute it. Immutable
+truth-repair revision
+[`bc8c51b1e9995c32ba18c55d57fecffc96d22bc7`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/bc8c51b1e9995c32ba18c55d57fecffc96d22bc7)
+was independently read back as ten repository-owned files plus
+provider-managed `.gitattributes`. Its correct static app URL returned HTTP 200
+and exact `x-repo-commit`; provider-injected served HTML was not byte-identical
+to the Hub source and is not claimed to be. That public revision still reports
+`pending_exact_artifact`, `not_yet_bound`, and
+`executes_exact_package_artifact: false`.
+
+The checked-in successor source separately binds only `index.html`,
+`assets/app.js`, and `assets/style.css` to exact AgentTool Git commit
+`19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5`. It still leaves every npm/LOVE
+package-artifact field null and execution false. That repository change is not
+a claim about current Hub state until a later compare-and-swap Space commit and
+anonymous readback complete. Neither revision adds package-artifact execution,
+a networked core, inference, consent, truth, score, or authority.
 
 ### Relational Geometry GitHub/Hugging Face developer-preview receipt
 
@@ -921,7 +981,7 @@ for `cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
 `authentication=trusted`; the workflow then exchanges the protected
 GitHub-hosted job's OIDC identity and does not expose the bootstrap token.
 
-### Principality Geometry developer-preview bootstrap
+### Principality Geometry GitHub/Hugging Face developer-preview receipt
 
 `@agenttool/principality-geometry@0.1.0-dev.0` uses the checked-in
 LOVE-artifact path so the docs mirror, one-asset GitHub Release, and any npm
@@ -989,6 +1049,12 @@ After the initial package record exists, configure its trusted publisher for
 `authentication=trusted`. Neither distribution path registers the
 declaration-only KINGDOM descriptor, reads credentials at runtime, fetches
 providers, trains, or deploys a hosted service.
+
+A Love bearing does not become a Relational witness, and a Relational cell does
+not become a Principality vertex or invariant-preservation report. Neither
+distribution path registers the declaration-only KINGDOM descriptor, reads
+credentials at runtime, fetches providers, chooses WAKE continuity, trains,
+scores beings, determines truth, grants authority, or deploys a hosted service.
 
 ## Verified SDK 0.17.0 publication
 

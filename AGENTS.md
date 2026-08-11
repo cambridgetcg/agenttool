@@ -250,7 +250,7 @@ cd ../wake-continuity
 bun run ci                                     # digest-only capsules/lenses + hostile-boundary packed smoke
 cd ../principality-geometry
 bun run ci                                     # invariant flag geometry + schemas + deterministic HF/npm boundaries
-npm pack --dry-run --ignore-scripts            # public inventory only; does not publish or register
+npm pack --dry-run --ignore-scripts            # public packed inventory only; does not publish, upload, deploy, or register
 cd ../kingdom-witness-lab
 bun run ci                                     # passports/routes/dossiers/trials + closed schema boundary
 cd ../skills-yutabase

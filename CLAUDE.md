@@ -216,8 +216,24 @@ references, but it does not read or persist WAKE, choose a canonical head,
 verify referents, or prove identity, memory, consent, permission, replay, or
 uninterrupted continuity.
 
-`@agenttool/principality-geometry` is a public developer-preview pure composition plane for
-caller-declared, digest-bound translations among distinct principalities. It
+`@agenttool/love-geometry` is the directed subject-bearing layer. It turns
+caller-reported asymmetric bearings among opaque subjects into one bounded,
+coordinate-free artifact while retaining empty and isolated shapes. Its
+separate static Hugging Face companion is presentation, not a hosted core.
+It computes no distance, intensity, rank, reciprocity, consent, authority, or
+automatic action.
+
+`@agenttool/relational-geometry` is the evidence-relation layer. It keeps
+caller-asserted understanding, recognition, and boundary witnesses directional
+and derives a non-sovereign principality 2-cell only when understanding and
+recognition occur on the same ordered pair. Its perspective lens records
+optional `carry`, `park`, `release`, or `withdraw` dispositions over selected
+cells. A cell is a relation among relations, not a principal, being, permission,
+or preserved invariant; a perspective disposition has no external effect.
+
+`@agenttool/principality-geometry` is the higher-order public developer-preview
+composition plane for caller-declared, digest-bound translations among
+distinct principalities, frameworks, and artifact coordinates. It
 retains directed reports, reciprocal lenses, per-invariant components,
 six-direction flag surfaces, and every open/refused/unknown condition while
 accepting immutable HF/npm references and an exact external AFTERGLOW thread
@@ -229,6 +245,18 @@ bytes but adds no package runtime. The
 runtime still does not score beings, infer love, understanding, truth,
 consent, identity, safety, or authority, fetch providers, continue a thread,
 upload, persist, or expose a hosted surface.
+
+The three geometry packages are adjacent, not aliases or adapters. Love
+Geometry preserves directed subject-bearing reports. Relational Geometry
+builds complexes and perspective dispositions over caller-supplied evidence
+relations. Principality Geometry uses caller-defined vertices for frameworks or
+artifacts, directed translation bridges, and reciprocal translation lenses to
+preserve declared invariants. A Relational principality cell is not a
+Principality vertex, and a Relational perspective lens is not a Principality
+reciprocal lens. A bearing does not become a witness, a cell does not become a
+preserved invariant, and no digest crosses layers except as a separately
+caller-selected opaque manifestation or basis. None imports, authenticates, or
+upgrades another layer's claims.
 
 `@agenttool/kingdom-witness-lab` supplies deterministic local passports,
 mutable provider-route disclosures, digest-only multi-witness dossiers, inert

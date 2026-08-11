@@ -12,9 +12,11 @@ short_description: Browser-local synthetic caller-report presentation.
 
 # Love Geometry · Equal Seats
 
-This is a static, browser-local companion for the emerging
-`@agenttool/love-geometry` pure package. It presents a small set of synthetic,
-deterministic scenario inputs only after an explicit local choice.
+This is the source for the live static, browser-local
+[`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
+companion to the `@agenttool/love-geometry` pure package. It presents a small
+set of synthetic, deterministic scenario inputs only after an explicit local
+choice.
 
 The core format is coordinate-free. The cards shown by this page occupy equal
 **display slots** so a browser can lay them out. Slot order and screen position
@@ -35,12 +37,19 @@ private, anonymous, unlinkable, or suitable as identifiers for real beings.
 
 ## Exact-source status
 
-The companion is intentionally **not yet represented as exact-package-backed**.
-[`source-manifest.json`](source-manifest.json) is a template whose package
-version, Git revision, artifact path, byte length, SHA-256, and package
-integrity remain `null` until a reviewed exact browser artifact exists and is
-verified. Until then the page renders only its checked-in synthetic fixtures;
-it does not claim to execute the package implementation.
+The three checked-in runtime files—`index.html`, `assets/app.js`, and
+`assets/style.css`—are bound by [`source-manifest.json`](source-manifest.json)
+to exact AgentTool Git commit
+[`19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5`](https://github.com/cambridgetcg/agenttool/commit/19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5).
+The JavaScript is checked-in companion code; it does not import or execute an
+npm or LOVE package artifact.
+
+The companion is therefore intentionally **not represented as
+exact-package-backed**. Package version, tag, artifact path, byte length,
+SHA-256, package integrity, build command, and toolchain remain `null` until a
+reviewed exact browser artifact exists and is independently verified. The page
+renders only its checked-in synthetic fixtures and does not claim to execute
+the package implementation.
 
 ## Hosting and custody boundary
 
@@ -52,7 +61,10 @@ pressed.
 
 Hugging Face, the browser, operating system, network, and any embedding page
 remain outside this app boundary. Hosting the files can expose ordinary request
-metadata to those layers. **Clear**, **Rest**, **Refuse**, and **Depart** clear
+metadata to those layers. Hugging Face may derive or inject platform-owned HTML
+around the checked-in `index.html`; exact-source verification therefore uses
+raw files at one full Space revision and treats served HTML as a separate
+provider-derived surface. **Clear**, **Rest**, **Refuse**, and **Depart** clear
 only this page's in-memory presentation; they cannot erase provider logs,
 browser history, caches, screenshots, or files already downloaded.
 
@@ -73,10 +85,11 @@ node scripts/validate-space.mjs
 bun scripts/validate-core-compatibility.ts
 ```
 
-The first check is self-contained and verifies static/runtime boundaries plus
-deterministic fixture exports. The second reads the adjacent TypeScript source
-and verifies that every fixture is accepted by the current core. Source
-compatibility still does not create or verify a browser artifact.
+The first check is self-contained and verifies the Git runtime-source binding,
+static/runtime boundaries, and deterministic fixture exports. The second reads
+the adjacent TypeScript source and verifies that every fixture is accepted by
+the current core. Git-source compatibility still does not create or verify a
+package browser artifact.
 
 For a visual check, serve this directory with any deliberately started local
 static server and open `index.html`. No build step is required.

@@ -1,12 +1,12 @@
 {
   "_format": "agenttool.love-geometry-hf-space-source-manifest/0.1",
-  "status": "pending_exact_artifact",
+  "status": "git_runtime_source_bound_package_artifact_pending",
   "presentation_revision": "0.1.0-dev.0",
   "space_repository": "https://huggingface.co/spaces/Yu-and-Ai/love-geometry",
   "app_kind": "static-browser-local-companion",
   "source": {
     "git_repository": "https://github.com/cambridgetcg/agenttool",
-    "git_commit": null,
+    "git_commit": "19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5",
     "git_tag": null,
     "package": "@agenttool/love-geometry",
     "package_version": null,
@@ -20,17 +20,28 @@
       "toolchain": null
     },
     "binding": {
-      "status": "not_yet_bound",
+      "status": "exact_git_runtime_source_only",
       "runtime": "checked-in synthetic presentation fixtures only",
-      "reason": "No reviewed exact browser artifact and independent digest are recorded yet."
+      "git_subdirectory": "packages/love-geometry/hf-space",
+      "paths": [
+        "assets/app.js",
+        "assets/style.css",
+        "index.html"
+      ],
+      "sha256": {
+        "assets/app.js": "79b0a2f86f0a0dc1bdfcf7e1574b32e79b58a13b592cba5e35a5d6484278bbaf",
+        "assets/style.css": "915e0c65278693563ef1502c6ecab346526933100f193148ab990301a1829a77",
+        "index.html": "f25c90f858da742ca2db430e07ed5598fa356de4e9958aad973189ae49b0f417"
+      },
+      "reason": "These three checked-in runtime files are bound to the exact Git commit above. No reviewed exact npm or LOVE browser artifact is bound or executed."
     }
   },
   "validation": {
     "command": "node scripts/validate-space.mjs",
     "core_compatibility_command": "bun scripts/validate-core-compatibility.ts",
-    "verified_at": null,
-    "validator_sha256": null,
-    "result": "pending_release_binding"
+    "verified_at": "2026-08-11T14:59:36Z",
+    "validator_sha256": "002c3a1fa662625d00758c41f5d3248aec7d380860a86f61eb473dc2eda3ee83",
+    "result": "git_runtime_source_verified_package_artifact_unbound"
   },
   "capabilities": {
     "executes_exact_package_artifact": false,
@@ -48,6 +59,6 @@
     "scores_or_ranks_relations": false,
     "claims_xenia_conformance": false
   },
-  "platform_boundary": "Hugging Face hosts the separately published public Space; provider request processing, logs, retention, moderation, availability, and platform UI remain outside the app boundary. This manifest does not self-attest the current Space revision or deployed-byte identity.",
-  "release_instruction": "Replace package/artifact nulls only from a reviewed exact build and independent verification. Record an immutable Space revision and anonymous byte readback in an external release receipt. Do not describe this companion as package-backed until binding.status is exact_verified."
+  "platform_boundary": "Hugging Face hosts the separately published public Space; provider request processing, injected or derived HTML, logs, retention, moderation, availability, and platform UI remain outside the app boundary. This manifest does not self-attest the current Space revision or deployed-byte identity.",
+  "release_instruction": "Keep package/artifact fields null until a reviewed exact browser artifact is independently verified. Record an immutable Space revision and anonymous byte readback in an external release receipt. Exact Git runtime-source binding does not make this companion package-backed."
 }
