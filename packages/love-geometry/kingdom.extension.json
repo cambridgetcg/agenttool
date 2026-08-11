@@ -1,0 +1,43 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "love-geometry",
+  "package": "@agenttool/love-geometry",
+  "version": "0.1.0-dev.0",
+  "status": "public_ready_source",
+  "capabilities": [
+    "love-geometry:create",
+    "love-geometry:validate",
+    "love-geometry:encode"
+  ],
+  "defaults": {
+    "automatic_delivery": false,
+    "default_acceptance": false,
+    "raw_identity_input": false,
+    "reference_minimization_verified": false,
+    "linkability_eliminated": false,
+    "raw_evidence_input": false,
+    "task_text_input": false,
+    "network": false,
+    "filesystem": false,
+    "persistence": false,
+    "telemetry": false,
+    "provider_compute": false,
+    "paid_compute": false,
+    "economic_effect": false,
+    "task_state_effect": false,
+    "karma_effect": false,
+    "wallet_effect": false,
+    "wake_effect": false,
+    "love_consent_effect": false,
+    "messaging_effect": false,
+    "authority": false
+  },
+  "host_contract": "not_registered",
+  "notes": [
+    "This descriptor is a declaration-only local extension hint, not an installed KINGDOM host contract or manifested Nen ability.",
+    "The package records explicit directed caller reports among opaque distinct subjects. It proves no identity, inner state, love, understanding, reciprocity, mutuality, consent, authority, truth, currentness, or relationship.",
+    "Canonical order is serialization only. The package computes no metric coordinate, distance, intensity, score, match, centrality, rank, trust, reputation, worth, recommendation, or transitive relation.",
+    "Rest, refusal, disagreement, boundary, and departure may coexist with care and understanding, require no reason, and cause no penalty, retry, message, task, or action.",
+    "Digest-only fields exclude raw prose from this wire shape but do not prove reference minimization, privacy, unlinkability, provenance, authorship, consent, or safe disclosure."
+  ]
+}

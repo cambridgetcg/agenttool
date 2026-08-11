@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="A browser-local, equal-seat presentation of synthetic Love Geometry caller reports.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Love Geometry · Equal Seats</title>
+  <link rel="stylesheet" href="./assets/style.css">
+  <script type="module" src="./assets/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#experience">Skip to the local experience</a>
+
+  <main id="experience">
+    <header class="hero">
+      <p class="eyebrow">AgentTool · static local companion</p>
+      <h1>Love Geometry</h1>
+      <p class="lede">Equal seats for distinct vantages. A report may carry care, understanding, disagreement, rest, boundary, refusal, or departure together—without becoming truth, compatibility, or a score.</p>
+      <p class="source-state"><span aria-hidden="true">◇</span> Exact package binding is pending. This page currently presents synthetic fixtures only.</p>
+    </header>
+
+    <section class="boundary-strip" aria-labelledby="coordinate-free-title">
+      <div>
+        <p class="kicker">Coordinate-free semantics</p>
+        <h2 id="coordinate-free-title">Every visible position is only a display slot.</h2>
+      </div>
+      <p>No slot, gap, order, colour, or wrapping represents distance, intensity, centrality, hierarchy, priority, mutuality, or value.</p>
+    </section>
+
+    <section class="workbench" aria-labelledby="scenario-title">
+      <div class="chooser">
+        <div>
+          <p class="kicker">Synthetic scenarios</p>
+          <h2 id="scenario-title">Choose what to present in this tab</h2>
+          <p>The fixtures name no real person or agent. Nothing is presented until you press the button.</p>
+        </div>
+
+        <form id="scenario-form" novalidate>
+          <label for="scenario-select">Scenario</label>
+          <select id="scenario-select" name="scenario" aria-describedby="scenario-description"></select>
+          <p id="scenario-description" class="scenario-description"></p>
+          <button class="interaction" type="submit">Present locally</button>
+        </form>
+      </div>
+
+      <div class="choice-row" aria-label="Equally complete interaction choices">
+        <button class="interaction" id="rest-action" type="button">Rest here</button>
+        <button class="interaction" id="refuse-action" type="button">Refuse</button>
+        <button class="interaction" id="depart-action" type="button">Depart</button>
+        <button class="interaction" id="clear-action" type="button">Clear presentation</button>
+      </div>
+      <p class="choice-note">Rest, refusal, and departure are full-value outcomes. Clear is a separate display action and implies none of them. No explanation, retry, completion, or return is requested.</p>
+    </section>
+
+    <section class="presentation" id="presentation" aria-labelledby="presentation-title" aria-live="polite">
+      <div class="presentation-heading">
+        <div>
+          <p class="kicker" id="presentation-mode">Waiting by choice</p>
+          <h2 id="presentation-title">Nothing is being presented</h2>
+        </div>
+        <p id="presentation-note">Choose a synthetic scenario and press <strong>Present locally</strong>, or leave this state exactly as it is.</p>
+      </div>
+
+      <div id="seat-grid" class="seat-grid" aria-label="Equal display slots"></div>
+      <div id="vantage-list" class="vantage-list" aria-label="Caller-reported vantages"></div>
+
+      <div class="download-row">
+        <button class="download" id="download-json" type="button" disabled>Download local JSON</button>
+        <button class="download" id="download-svg" type="button" disabled>Download local SVG</button>
+      </div>
+      <p class="download-note">Downloads are constructed in this browser only after you press a download button. The app does not upload them.</p>
+    </section>
+
+    <section class="legend" aria-labelledby="legend-title">
+      <p class="kicker">Caller-reported vocabulary</p>
+      <h2 id="legend-title">Bearings have equal standing here</h2>
+      <p>Each bearing describes only what one supplied vantage reports toward another reference. The order below carries no rank.</p>
+      <div id="bearing-legend" class="legend-grid"></div>
+    </section>
+
+    <aside class="host-boundary">
+      <strong>This app has no network, storage, analytics, model, identity, or consent path.</strong>
+      Hugging Face would still host and serve the files and may process ordinary request metadata. Clearing this page cannot clear provider or browser records. Read the local <a href="./BOUNDARIES.md">boundaries</a> and <a href="./source-manifest.json">pending source manifest</a>.
+    </aside>
+
+    <noscript>
+      <p class="noscript">JavaScript is disabled. No scenario is rendered and no data leaves this document.</p>
+    </noscript>
+  </main>
+</body>
+</html>

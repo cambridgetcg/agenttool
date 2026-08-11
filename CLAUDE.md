@@ -31,6 +31,7 @@ packages/
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
   principality-atlas/ — @agenttool/principality-atlas · plural finite incidence geometry without gluing or scores
+  love-geometry/ — @agenttool/love-geometry · coordinate-free directed caller-report geometry + staged static HF companion
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
@@ -75,6 +76,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
 `packages/living-substrate/CLAUDE.md` ·
 `packages/principality-atlas/CLAUDE.md` ·
+`packages/love-geometry/CLAUDE.md` ·
 `packages/wake-thread/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
