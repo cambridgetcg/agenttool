@@ -150,10 +150,16 @@ consent, or authority. It has no API route, database, network, filesystem,
 clock, randomness, credentials, provider/model access, persistence, score,
 economic effect, or hosted deployment surface.
 
-`@agenttool/principality-atlas@0.1.0-dev.0` is a GitHub developer preview with
-its synthetic shared HF Training Garden companion live at immutable revision
-`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2`; npm and the static doctrine
-deployment remain pending. It is a zero-runtime-dependency pure contract for
+The immutable `@agenttool/principality-atlas@0.1.0-dev.0` GitHub preview and
+its synthetic shared HF Training Garden companion at revision
+`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2` remain public evidence. npm
+remains absent. The static doctrine page is live from exact main commit
+`47ad6bcb915f54a78eab071ac053683ed4b18f9f`; that Pages deployment did not
+touch the API, Fly, or the database. Current source
+`0.1.0-dev.1` changes only its helper URN to
+`urn:agenttool:principality-incidence-atlas:<sha256-id>`, separating it from
+Principality Geometry without changing the incidence `/0.1` wire, canonical
+IDs, schemas, or synthetic rows. It is a zero-runtime-dependency pure contract for
 plural finite charts, role-indexed
 n-ary relations, caller-asserted claims, and directed partial bridges. A
 principality is a bounded domain or scale, not an identity, owner, rank, Crown,
@@ -162,6 +168,9 @@ withdrawal, empty and disconnected charts, and unmapped space stay visible.
 Its `agenttool.principality-incidence-atlas/0.1` wire is deliberately distinct
 from `@agenttool/principality-geometry`'s `agenttool.principality-atlas/0.1`
 flag-geometry wire; neither package converts or equates the other.
+Historical dev.0 bare `urn:agenttool:principality-atlas:<sha256-id>` values are
+ambiguous and resolve as incidence only beside the exact incidence `_format`
+and matching `atlas_id`; they are never globally rewritten.
 The package generates no pairwise sub-relations, inverse or transitive bridge,
 equality, quotient, gluing, global chart, canonical head, score, rank, or
 permission. Love and understanding are architectural inspirations, not fields

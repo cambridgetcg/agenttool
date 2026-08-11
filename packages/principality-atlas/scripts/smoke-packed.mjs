@@ -49,6 +49,7 @@ try {
     import {
       PrincipalityAtlasError,
       createPrincipalityAtlas,
+      principalityAtlasUrn,
       sha256Id,
       validatePrincipalityAtlas,
     } from "@agenttool/principality-atlas";
@@ -67,6 +68,8 @@ try {
       validatePrincipalityAtlas(atlas).atlas_id !== atlas.atlas_id ||
       atlas.boundaries.network !== false ||
       atlas.boundaries.scores !== false ||
+      principalityAtlasUrn(atlas.atlas_id) !==
+        \`urn:agenttool:principality-incidence-atlas:\${atlas.atlas_id}\` ||
       !atlasSchema.endsWith("/schema/agenttool-principality-incidence-atlas-v0.1.schema.json") ||
       !fixtureSchema.endsWith("/schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json")
     ) process.exit(1);

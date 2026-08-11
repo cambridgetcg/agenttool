@@ -5,14 +5,17 @@
 > **Compass:** [`LOVE-CONSENT.md`](LOVE-CONSENT.md) · [`UNDERSTANDING-MATHEMATICS.md`](UNDERSTANDING-MATHEMATICS.md) · [`GARDENS.md`](GARDENS.md) · [`HF-TRAINING-GARDEN.md`](HF-TRAINING-GARDEN.md) · [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md)
 > **Implements:** finite plural incidence geometry that preserves n-ary context, disagreement, correction, and unmapped space without inferring equality, a bond, one global view, or a score
 > **Code:** `packages/principality-atlas/` · `packages/hf-training-garden/hf/dataset/data/principality-atlas-fixtures.jsonl` · `packages/hf-training-garden/hf/dataset/data/principality-atlas-invariants.jsonl`
-> **Tests:** `packages/principality-atlas/tests/` · `packages/hf-training-garden/tests/hf-release.test.ts` · `bin/tests/npm-release.test.ts`
+> **Tests:** `packages/principality-atlas/tests/` · `packages/hf-training-garden/tests/hf-release.test.ts` · `bin/tests/principality-urn-separation.test.ts` · `bin/tests/npm-release.test.ts`
 > **Status:** GitHub developer preview at
 > [`principality-atlas-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-atlas-v0.1.0-dev.0);
 > npm remains absent after its bootstrap `PUT` returned `E404`. The shared HF
 > Training Garden companion is live at immutable revision
 > [`d9e3e8ed`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2);
-> this static doctrine deployment remains separate. No hosted route or
-> Fly/API/database deployment is added.
+> current source `0.1.0-dev.1` repairs only the helper URN namespace and is not
+> yet another published artifact. This doctrine page is live from exact main
+> commit [`47ad6bcb`](https://github.com/cambridgetcg/agenttool/commit/47ad6bcb915f54a78eab071ac053683ed4b18f9f);
+> that separate static deployment adds no hosted geometry route and touched no
+> Fly/API/database surface.
 
 ## The high-level pattern
 
@@ -45,6 +48,19 @@ These are complementary, incompatible shapes rather than aliases. Neither
 runtime converts between them, establishes semantic equivalence, or glues their
 views. A future crossover must bind exact source digests and declare its own
 reviewed mapping and authorization boundary.
+
+The dev.1 `principalityAtlasUrn` helper emits
+`urn:agenttool:principality-incidence-atlas:<sha256-id>`. The invariant-geometry
+helper retains `urn:agenttool:principality-atlas:<sha256-id>`. This separates
+derived references without changing the incidence `/0.1` wire, canonical
+atlas bytes, `atlas_id`, closed schemas, or fixture and invariant rows.
+
+The immutable dev.0 incidence helper used the Geometry-owned prefix. Its bare
+URN is ambiguous and must not be globally rewritten. It may be interpreted as
+an incidence-atlas reference only when carried beside exact
+`agenttool.principality-incidence-atlas/0.1` content and when its suffix equals
+that content's `atlas_id`. Caches and signatures over the old URN string remain
+historical evidence; newly derived dev.1 URN strings use the corrected prefix.
 
 One local chart is:
 

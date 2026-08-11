@@ -765,6 +765,15 @@ returned HTTP 200 at the same revision. These processing endpoints follow the
 current head and are mutable observations, while the Hub commit and byte
 read-back remain the durable evidence. No gate or paid compute was used.
 
+Current repository source prepares a later companion candidate against
+`@agenttool/principality-atlas@0.1.0-dev.1`. That package revision corrects only
+the derived incidence helper URN; it does not change the Atlas `/0.1` wire,
+canonical IDs, three copied schemas, three fixture rows, or ten invariant rows.
+Regeneration therefore changes only `provenance/source-manifest.json`, which
+binds the new package/vector metadata, and the self-excluding
+`hash-manifest.json`. This candidate is not the immutable v0.5 Hub revision
+above and does not claim a later upload.
+
 The immutable v0.2 and verified v0.3 revisions both preserve a release error:
 they expanded the already public checkpoint `/0.1` schema in place. Their
 checkpoint-v0.1 SHA-256 is

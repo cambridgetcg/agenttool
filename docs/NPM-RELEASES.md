@@ -470,6 +470,15 @@ under the `@agenttool` scope and must use a new reviewed version if package
 bytes change. Do not retry this exact version until that scope-create boundary
 is corrected.
 
+Current source `0.1.0-dev.1` is that new reviewed version candidate. It changes
+only `principalityAtlasUrn` to emit
+`urn:agenttool:principality-incidence-atlas:<sha256-id>`, leaving the incidence
+`/0.1` wire, canonical bytes and IDs, schemas, and synthetic rows unchanged.
+It has not been tagged, mirrored, or published by this receipt. The immutable
+dev.0 helper's bare `urn:agenttool:principality-atlas:<sha256-id>` is ambiguous:
+resolve it as incidence only beside exact incidence `_format` content with a
+matching `atlas_id`, and never globally rewrite caches or signed messages.
+
 The artifact contains only deterministic finite incidence-atlas constructors,
 three closed schemas, synthetic vectors, and a declaration-only unregistered
 KINGDOM hint. It has no runtime dependencies, install hooks, CLI, provider

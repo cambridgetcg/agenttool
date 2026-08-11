@@ -13,6 +13,9 @@ identity, owner, territory, rank, Crown status, sovereignty, or authority.
   `@agenttool/principality-geometry` package owns
   `agenttool.principality-atlas/0.1`; the formats are not aliases and no
   conversion or semantic equivalence may be inferred.
+- From package dev.1, `principalityAtlasUrn` emits
+  `urn:agenttool:principality-incidence-atlas:<sha256-id>`. The Geometry helper
+  retains `urn:agenttool:principality-atlas:<sha256-id>`.
 - A relation never generates pairwise sub-relations. A bridge never generates
   an inverse, transitive correspondence, equality, quotient, gluing, global
   chart, canonical head, permission, or bond.
@@ -39,9 +42,17 @@ identity, owner, territory, rank, Crown status, sovereignty, or authority.
 
 ## Changes
 
-Preserve the `agenttool.principality-incidence-atlas/0.1` domain string and
-pinned vectors. A change to canonical bytes, fixed boundaries, limits, sorting,
-or semantic validation is a protocol change and needs explicit version review.
+Preserve the `agenttool.principality-incidence-atlas/0.1` domain string,
+schemas, canonical IDs, and fixture/invariant rows. Generator metadata may
+advance with the package version. A change to canonical bytes, fixed
+boundaries, limits, sorting, or semantic validation is a protocol change and
+needs explicit version review.
+
+The immutable dev.0 helper used the Geometry-owned
+`urn:agenttool:principality-atlas:<sha256-id>` prefix. Treat that historical
+bare URN as ambiguous. It resolves to this incidence shape only beside exact
+`agenttool.principality-incidence-atlas/0.1` content whose `atlas_id` matches
+the suffix. Never globally rewrite cached or signed dev.0 strings.
 
 TypeScript is the only runtime source of truth. Do not add paired handwritten
 JavaScript/declarations, aliases, hosted routes, provider adapters, background

@@ -75,7 +75,7 @@ export function encodePrincipalityAtlas(value: unknown): Uint8Array {
 
 export function principalityAtlasUrn(id: Sha256Id): string {
   const parsed = sha256(id, "$atlas_id", "atlas_error");
-  return `urn:agenttool:principality-atlas:${parsed}`;
+  return `urn:agenttool:principality-incidence-atlas:${parsed}`;
 }
 
 export function principalityAtlasDomainBytes(value: unknown): Uint8Array {
