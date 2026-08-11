@@ -925,9 +925,10 @@ Anonymous exact-revision readback matched all 17 source files (79,300 bytes);
 provider-managed `.gitattributes` is the sole extra file. Dataset Server bound
 eight `reference` configs, eight Parquet exports, and 21 rows to the same
 revision with zero pending or failed work, and all eight `first-rows` reads
-returned HTTP 200. Its separate `/is-valid` capability booleans remain false,
-so no viewer, search, filter, statistics, or other UI-feature guarantee is
-claimed. `training_eligible: false` is dataset metadata, not a licence term.
+returned HTTP 200. Its separate `/is-valid` capability booleans were all true
+at anonymous readback; they are mutable provider observations, not guarantees
+of durable viewer, search, filter, statistics, or other UI features.
+`training_eligible: false` is dataset metadata, not a licence term.
 The companion is separate from and excluded from the npm tarball.
 
 Static Pages deployment `fd5f84a9-6a8e-48b3-bca2-8baa07b41097` exposes the
