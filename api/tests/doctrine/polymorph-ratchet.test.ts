@@ -1,8 +1,9 @@
-/** polymorph-ratchet — the no-going-back protocol, as a build gate.
+/** polymorph-ratchet — the current four-corner policy, as a build gate.
  *
- *  The 1998 ritonavir incident says: once Form II exists, Form I becomes
- *  structurally unrecoverable. This test enforces the same on every Wall
- *  in the agenttool canon whose `crystallized_at` is set:
+ *  The ritonavir case describes a formerly reliable route that stopped
+ *  reproducing Form I under named conditions; changed-condition routes later
+ *  recovered it. The repository borrows that shape as a change-control
+ *  analogy for every Wall whose `crystallized_at` is set:
  *
  *    1. The wall's four corners must all be present:
  *         a. Canon entry (with crystallized_at + predecessor_form + defends
@@ -16,9 +17,9 @@
  *    3. The commitment URN urn:agenttool:commitment/polymorphic-ratchet
  *       must itself have all four corners (this test IS one of them).
  *
- *  Removing any corner of any crystallized wall fails this test. The
- *  test IS the ratchet — the substrate cannot revert because the build
- *  would refuse the PR.
+ *  Removing any corner of any crystallized wall fails this test today. An
+ *  explicit reviewed code/canon/test change can revise the policy; the test
+ *  supplies change friction, not physical impossibility.
  *
  *  Doctrine: docs/POLYMORPH.md · docs/PATTERN-COMMITMENT-DEFENDER.md. */
 
@@ -280,14 +281,71 @@ describe("polymorph-ratchet — the no-going-back protocol", () => {
         polymorph_index?: number;
         _this_protocol_is_itself_a_polymorph?: boolean;
         _ritonavir?: string;
+        _ritonavir_reachability_shift_summary?: {
+          package?: string;
+          wire_format_reference?: string;
+          profile?: string;
+          case?: string;
+          source_scope?: string;
+          classification?: string;
+          causation?: string;
+          physical_erasure?: string;
+          universal_inevitability?: string;
+          reversibility?: string;
+          same_condition_return?: string;
+          changed_condition_recovery?: string;
+          form_identifiers?: string;
+          projections?: string[];
+        };
+        _can_this_endpoint_be_removed?: string;
+        _meta?: { propagation?: string };
       };
       expect(body._enforces).toContain("urn:agenttool:commitment/polymorphic-ratchet");
       expect(Array.isArray(body.crystallized_walls)).toBe(true);
       expect((body.crystallized_walls as unknown[]).length).toBeGreaterThan(0);
       expect(typeof body.polymorph_index).toBe("number");
       expect(body._this_protocol_is_itself_a_polymorph).toBe(true);
-      expect(body._ritonavir).toContain("1998");
-      expect(body._ritonavir).toContain("Abbott");
+      expect(body._ritonavir).toContain("hydroalcoholic semisolid fill");
+      expect(body._ritonavir).toContain("Abbott Park");
+      expect(body._ritonavir).toContain("detected and not released");
+      expect(body._ritonavir).toContain("named bulk-drug process");
+      expect(body._ritonavir).toContain("remain unresolved");
+      expect(body._ritonavir).toContain("recovered Form I under changed conditions");
+      expect(body._ritonavir).toContain("not physical erasure or a universal outcome");
+
+      expect(body._ritonavir_reachability_shift_summary).toEqual({
+        package: "@agenttool/polymorph-landscape",
+        wire_format_reference: "agenttool.polymorph-reachability-shift/0.1",
+        profile: "source_bounded_summary",
+        case: "ritonavir",
+        source_scope: "primary_source_bounded",
+        classification: "not_reproduced_in_named_condition_reported",
+        causation: "not_determined",
+        physical_erasure: "not_claimed",
+        universal_inevitability: "not_claimed",
+        reversibility: "bounded_by_named_conditions",
+        same_condition_return: "not_established",
+        changed_condition_recovery: "reported",
+        form_identifiers: "source_scoped",
+        projections: ["en", "yue-Hant", "zh-Hant", "zh-Hans"],
+      });
+      expect(body._meta?.propagation).toContain("explicitly copies declared wall URNs");
+      expect(body._meta?.propagation).toContain("not proof of identity, memory or continuity");
+      expect(body._meta?.propagation).toContain("inherited authority");
+      expect(body._can_this_endpoint_be_removed).toContain("explicit reviewed change");
+
+      const serialized = JSON.stringify(body).toLowerCase();
+      for (const forbidden of [
+        "inevitable everywhere",
+        "morphic resonance",
+        "only form ii",
+        "stopped working",
+        "structurally unrecoverable",
+        "airborne crystal contamination",
+        "structurally, no",
+      ]) {
+        expect(serialized).not.toContain(forbidden);
+      }
     });
 
     test("response carries _canon_pointer to POLYMORPH doctrine via attachSurface", async () => {

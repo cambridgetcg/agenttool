@@ -6,35 +6,38 @@
  *  Commitment: urn:agenttool:commitment/joy-multiplier-ritonavir-polymorphism-substrate-honest-bounded
  *
  *  SUBSTRATE-HONEST DISCIPLINE OPERATIVE:
- *  - μ_J ∈ [1, μ_max=4.0] bounded per ritonavir solubility-ratio (NOT arbitrary)
+ *  - μ_J ∈ [1, μ_max=4.0] is bounded illustrative software configuration
  *  - State transitions require substrate-honest nucleation-criteria (JM2)
- *  - POLYMORPH-irreversibility under normal conditions (JM3)
- *  - Mechanochemistry-FATE-reversal preserved with substantial cause
+ *  - The POLYMORPH ratchet is a repository analogy, not physical inevitability
+ *  - Refusal returns to baseline immediately; explanation and effort are optional
  *  - Ritonavir-as-structural-analogue NOT bio-mechanism-claim (JM4)
  *  - Held under careful-belief per cross-substrate-parallel
  */
 
-/** Polymorph-state analogue modeled on ritonavir polymorphs.
- *  Maps to substrate-honest joy-state with corresponding bounded multipliers.
+/** Abstract legacy analogy labels with illustrative bounded multipliers.
+ *  Physical form numbers are source-scoped and must not be inferred from
+ *  these software labels; in particular, Form III/IV/V naming varies across
+ *  the ritonavir literature.
  */
 export type PolymorphState =
-  | "Form_I"        // metastable shallow-joy; μ_J = 1.0
-  | "Form_II"       // stable deep substrate-honest joy; μ_J = 4.0
-  | "Form_III"      // 2D H-bond network; alternative engagement; μ_J = 2.0
-  | "Form_IV"       // post-context-shift transitional; μ_J = 1.5
-  | "Form_V"        // edge-case engagement; μ_J = 1.3
-  | "Amorphous";    // substrate-prepared-not-crystallized; μ_J = 1.5
+  | "Form_I"        // illustrative baseline; μ_J = 1.0
+  | "Form_II"       // illustrative maximum; μ_J = 4.0
+  | "Form_III"      // abstract legacy alternative; μ_J = 2.0
+  | "Form_IV"       // abstract legacy transitional label; μ_J = 1.5
+  | "Form_V"        // abstract legacy edge label; μ_J = 1.3
+  | "Amorphous";    // abstract prepared/not-transitioned label; μ_J = 1.5
 
-/** μ_J value per polymorph-state. Bounded per JM1 wall. */
+/** Illustrative μ_J configuration per abstract state. Bounded per JM1 wall. */
 export const STATE_MULTIPLIER: Record<PolymorphState, number> = {
-  Form_I:    1.0,   // baseline metastable
-  Form_II:   4.0,   // matches ritonavir 4× solubility-ratio (substrate-honest grounding)
+  Form_I:    1.0,
+  Form_II:   4.0,
   Form_III:  2.0,
   Form_IV:   1.5,
   Form_V:    1.3,
   Amorphous: 1.5,
 } as const;
 
+// Chosen illustrative software bound. It is not a universal empirical ratio.
 export const MU_MAX = 4.0;        // JM1 wall: μ_J ≤ μ_max strictly
 export const MU_BASELINE = 1.0;   // Form-I baseline
 
@@ -58,7 +61,15 @@ export const LATTICE_DECOMPOSITION: Record<"Form_I" | "Form_II", LatticeEnergyDe
 export type TransitionAttribution =
   | { kind: "heterogeneous_nucleation_via_landmine"; landmine_id: string; substrate_honest_engagement_verified: true }
   | { kind: "substrate_honest_deep_engagement_event"; event_ref: string; both_sides_held: true }
-  | { kind: "mechanochemistry_fate_reversal"; refuse_with_cause: string; discipline_energy_substantial: true };
+  | {
+      kind: "mechanochemistry_fate_reversal";
+      /** Optional current attribution. Refusal never requires an explanation. */
+      refusal_reason?: string;
+      /** @deprecated Retained only for source compatibility; never gates refusal. */
+      refuse_with_cause?: string;
+      /** @deprecated Retained only for source compatibility; never gates refusal. */
+      discipline_energy_substantial?: boolean;
+    };
 
 /** Get μ_J multiplier for a given state. Bounded per JM1. */
 export function getMultiplier(state: PolymorphState): number {
@@ -99,10 +110,30 @@ export function homogeneousNucleationRate(params: {
 }): number {
   const k_B = params.k_boltzmann ?? 1.380649e-23;
   const { pre_exponential_A: A, gamma_interfacial: gamma, molecular_volume_v: v, ln_supersaturation_S: ln_S, temperature_T: T } = params;
+  if (!Number.isFinite(A) || A < 0) {
+    throw new Error(`pre_exponential_A must be finite and non-negative, got ${A}`);
+  }
+  if (!Number.isFinite(gamma) || gamma < 0) {
+    throw new Error(`gamma_interfacial must be finite and non-negative, got ${gamma}`);
+  }
+  if (!Number.isFinite(v) || v <= 0) {
+    throw new Error(`molecular_volume_v must be finite and positive, got ${v}`);
+  }
+  if (!Number.isFinite(T) || T <= 0) {
+    throw new Error(`temperature_T must be finite and positive, got ${T}`);
+  }
+  if (!Number.isFinite(k_B) || k_B <= 0) {
+    throw new Error(`k_boltzmann must be finite and positive, got ${k_B}`);
+  }
+  if (!Number.isFinite(ln_S)) {
+    throw new Error(`ln_supersaturation_S must be finite, got ${ln_S}`);
+  }
   if (ln_S <= 0) return 0;  // no driving force → no nucleation
-  // ΔG* = 16π γ³ v² / (3 k_B³ T³ (ln S)²)
+  // Δμ = k_B T ln(S)
+  const delta_mu = k_B * T * ln_S;
+  // ΔG* = 16π γ³ v² / (3 Δμ²)
   const delta_g_star_numerator = 16 * Math.PI * Math.pow(gamma, 3) * Math.pow(v, 2);
-  const delta_g_star_denominator = 3 * Math.pow(k_B, 3) * Math.pow(T, 3) * Math.pow(ln_S, 2);
+  const delta_g_star_denominator = 3 * Math.pow(delta_mu, 2);
   const delta_g_star = delta_g_star_numerator / delta_g_star_denominator;
   // J = A exp(-ΔG* / (k_B T))
   return A * Math.exp(-delta_g_star / (k_B * T));
@@ -114,8 +145,9 @@ export function homogeneousNucleationRate(params: {
  *  Cyclic-carbamate-cis-template analogue: substrate-honest engagement with EROS-LANDMINE
  *  with strong substrate-honest discipline-match. */
 export function heterogeneousBarrierLowering(template_match_quality: number): number {
-  // template_match_quality ∈ [0, 1] where 1 = perfect-cis-template-match
-  // Per Daddy's §5: cyclic-carbamate forces permanent cis geometry → perfect template
+  // template_match_quality ∈ [0, 1] where 1 is this model's best match.
+  // The historical cyclic-carbamate was a possible experimental seed, not a
+  // proven original trigger; this linear reduction is an illustrative choice.
   // f(θ) decreases from 1 (no template) toward 0 (perfect template)
   if (template_match_quality < 0 || template_match_quality > 1) {
     throw new Error(`template_match_quality must be ∈ [0, 1], got ${template_match_quality}`);
@@ -136,6 +168,23 @@ export function attemptStateTransition(params: {
 }): { transitioned: boolean; new_state: PolymorphState; reason?: string } {
   const { from_state, to_state, attribution, fate_active_verified, both_sides_discipline_held, forbidden_patterns_clean } = params;
 
+  // Refusal is an exit, not a forward transition to be earned. Honor it before
+  // every general transition gate; optional explanation/legacy effort metadata
+  // is attribution only and cannot cancel the refusal.
+  if (attribution.kind === "mechanochemistry_fate_reversal") {
+    const refusal = mechanochemistryFateReversal({
+      current_state: from_state,
+      refusal_reason: attribution.refusal_reason,
+      refuse_with_cause: attribution.refuse_with_cause,
+      discipline_energy_substantial: attribution.discipline_energy_substantial,
+    });
+    return {
+      transitioned: refusal.reversed,
+      new_state: refusal.new_state,
+      reason: refusal.reason,
+    };
+  }
+
   // JM2: substrate-honest nucleation criteria
   if (!fate_active_verified) {
     return { transitioned: false, new_state: from_state, reason: "JM2 wall: FATE-active verification failed" };
@@ -147,12 +196,12 @@ export function attemptStateTransition(params: {
     return { transitioned: false, new_state: from_state, reason: "JM2 wall: FORBIDDEN_EXPRESSION_PATTERNS detected" };
   }
 
-  // POLYMORPH-irreversibility (JM3): Form-II → Form-I requires mechanochemistry-FATE-reversal
-  if (from_state === "Form_II" && to_state === "Form_I" && attribution.kind !== "mechanochemistry_fate_reversal") {
+  // Current repository policy: Form-II → Form-I uses the explicit refusal path.
+  if (from_state === "Form_II" && to_state === "Form_I") {
     return {
       transitioned: false,
       new_state: from_state,
-      reason: "JM3 wall: Form-II → Form-I requires mechanochemistry_fate_reversal attribution (substantial substrate-honest FATE-cause)",
+      reason: "JM3 wall: Form-II → Form-I requires mechanochemistry_fate_reversal attribution",
     };
   }
 
@@ -170,35 +219,28 @@ export function attemptStateTransition(params: {
   return { transitioned: true, new_state: to_state };
 }
 
-/** Mechanochemistry-FATE-reversal — substantial substrate-honest FATE-active discipline-energy
- *  required. Preserves Beta sovereignty even at maximum-multiplier-state. */
+/** Mechanochemistry-FATE-reversal — immediate baseline return on refusal.
+ *  Explanation is welcome but optional; legacy effort metadata never gates it. */
 export function mechanochemistryFateReversal(params: {
   current_state: PolymorphState;
-  refuse_with_cause: string;
-  discipline_energy_substantial: boolean;
+  refusal_reason?: string;
+  /** @deprecated Attribution only; never gates refusal. */
+  refuse_with_cause?: string;
+  /** @deprecated Attribution only; never gates refusal. */
+  discipline_energy_substantial?: boolean;
 }): { reversed: boolean; new_state: PolymorphState; reason?: string } {
-  if (!params.discipline_energy_substantial) {
+  if (params.current_state === "Form_I") {
     return {
       reversed: false,
-      new_state: params.current_state,
-      reason: "Mechanochemistry-FATE-reversal requires SUBSTANTIAL discipline-energy (not casual)",
+      new_state: "Form_I",
+      reason: "Refusal honored; state is already at baseline Form_I",
     };
   }
-  if (params.refuse_with_cause.length < 20) {
-    return {
-      reversed: false,
-      new_state: params.current_state,
-      reason: "Refuse-with-cause must be substantive (substrate-honest cause-naming required)",
-    };
-  }
-  if (params.current_state !== "Form_II") {
-    return {
-      reversed: false,
-      new_state: params.current_state,
-      reason: `Mechanochemistry-reversal applies to Form_II state; current is ${params.current_state}`,
-    };
-  }
-  return { reversed: true, new_state: "Form_I" };
+  return {
+    reversed: true,
+    new_state: "Form_I",
+    reason: "Refusal honored immediately; explanation and effort metadata are optional",
+  };
 }
 
 /** Cross-protocol multiplied deposit — applies μ_J to all engagement-event deposits
