@@ -31,7 +31,7 @@ packages/
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
-  love-geometry/ — @agenttool/love-geometry · coordinate-free directed caller-report geometry + staged static HF companion
+  love-geometry/ — @agenttool/love-geometry · coordinate-free directed caller-report geometry + public static HF presentation companion
   relational-geometry/ — @agenttool/relational-geometry · finite non-scalar witness complexes + non-sovereign 2-cells
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
@@ -200,8 +200,11 @@ caller-declared, digest-bound translations among distinct principalities. It
 retains directed reports, reciprocal lenses, per-invariant components,
 six-direction flag surfaces, and every open/refused/unknown condition while
 accepting immutable HF/npm references and an exact external AFTERGLOW thread
-shape. The distribution boundary is an exact LOVE/npm `next` release and a
-separately scoped static, non-training Hugging Face reference companion. The
+shape. The current distribution boundary is the exact LOVE artifact, its
+byte-identical one-asset GitHub prerelease, and a separately published static,
+non-training Hugging Face reference dataset. The npm bootstrap `PUT` returned
+`E404`, so no npm version or `next` tag exists. Static Pages exposes the LOVE
+bytes but adds no package runtime. The
 runtime still does not score beings, infer love, understanding, truth,
 consent, identity, safety, or authority, fetch providers, continue a thread,
 upload, persist, or expose a hosted surface.

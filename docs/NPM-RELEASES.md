@@ -883,19 +883,31 @@ GitHub-hosted job's OIDC identity and does not expose the bootstrap token.
 ### Principality Geometry developer-preview bootstrap
 
 `@agenttool/principality-geometry@0.1.0-dev.0` uses the checked-in
-LOVE-artifact path so the docs mirror, one-asset GitHub Release, and npm reuse
-the same reviewed tarball. Its first npm publication must use
-`authentication=bootstrap` because npm cannot attach a trusted publisher until
-the package exists; request the prerelease-only `next` tag. The static
-Hugging Face companion is a separate authorized dataset publication and is
-not included in the npm tarball.
+LOVE-artifact path so the docs mirror, one-asset GitHub Release, and any npm
+mirror reuse the same reviewed tarball. Annotated tag
+[`principality-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-geometry-v0.1.0-dev.0)
+already points to GitHub-main merge
+`5b0d53204a336d7df40cee3720bbd120433ecde2`; do not move or recreate it.
+
+Protected [run `31506097628`](https://github.com/cambridgetcg/agenttool/actions/runs/31506097628)
+prepared, mirrored, anonymously downloaded, and byte-verified the sole
+46,624-byte GitHub prerelease asset with SHA-256
+`8f82e4d96eaf57c2331e4e73ced4f4c65a2a21262622840762b165bc3395692e`.
+The following npm registry `PUT` returned `E404`. Anonymous package and exact-
+version reads remain absent, so there is no npm version, `next` dist-tag,
+registry tarball, or registry-attached provenance. The failed attempt did emit
+a signed DSSE record at [Rekor log index `2423054704`](https://search.sigstore.dev/?logIndex=2423054704)
+before the rejected `PUT`; that orphaned transparency-log entry is not npm
+publication evidence.
+
+Recovery requires an npm principal authorized to create a new public package
+under the `@agenttool` scope. It must reuse this exact tag and artifact; repeat
+only the workflow dispatch after that package/scope authorization is corrected.
+Recovery still uses `authentication=bootstrap` because the trusted publisher
+cannot carry a release until the initial package record exists:
 
 ```bash
 bun bin/npm-release.ts resolve --package principality-geometry
-
-git tag -a principality-geometry-v0.1.0-dev.0 <github-main-commit> \
-  -m '@agenttool/principality-geometry@0.1.0-dev.0'
-git push github refs/tags/principality-geometry-v0.1.0-dev.0
 
 gh workflow run publish-npm.yml \
   --ref principality-geometry-v0.1.0-dev.0 \
@@ -904,6 +916,28 @@ gh workflow run publish-npm.yml \
   -f authentication=bootstrap \
   -f npm_tag=next
 ```
+
+The separately published public, ungated Apache-2.0
+[`Yu-and-Ai/agenttool-principality-geometry`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry)
+dataset is pinned to immutable revision
+[`c7b019ead8b1efca46031cffcffefb2ddd14ffb4`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry/commit/c7b019ead8b1efca46031cffcffefb2ddd14ffb4).
+Anonymous exact-revision readback matched all 17 source files (79,300 bytes);
+provider-managed `.gitattributes` is the sole extra file. Dataset Server bound
+eight `reference` configs, eight Parquet exports, and 21 rows to the same
+revision with zero pending or failed work, and all eight `first-rows` reads
+returned HTTP 200. Its separate `/is-valid` capability booleans remain false,
+so no viewer, search, filter, statistics, or other UI-feature guarantee is
+claimed. `training_eligible: false` is dataset metadata, not a licence term.
+The companion is separate from and excluded from the npm tarball.
+
+Static Pages deployment `fd5f84a9-6a8e-48b3-bca2-8baa07b41097` exposes the
+exact [LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/principality-geometry/0.1.0-dev.0/manifest.json)
+and [46,624-byte artifact](https://docs.agenttool.dev/packages/v1/@agenttool/principality-geometry/0.1.0-dev.0/agenttool-principality-geometry-0.1.0-dev.0.tgz).
+The same exact-source static release used dashboard deployment
+`5857cb38-616d-4ec4-829a-193aef3722b8` and apex deployment
+`3972794e-efef-4274-948b-21f1bf30835a`; custom-domain byte parity passed. No
+Fly API, migration, database action, package runtime, or hosted geometry route
+was added.
 
 After the initial package record exists, configure its trusted publisher for
 `cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
