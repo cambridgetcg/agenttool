@@ -85,14 +85,18 @@ The presentation-only `hf-space/` companion remains absent from package
 bytes. It is now public as the static
 [`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
 Space at immutable revision
-[`bc8c51b1e9995c32ba18c55d57fecffc96d22bc7`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/bc8c51b1e9995c32ba18c55d57fecffc96d22bc7).
+[`f8d4c299d8d17d116ced27736204e541f9206865`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/f8d4c299d8d17d116ced27736204e541f9206865).
 Anonymous immutable-revision readback matched all ten repository-owned files;
 Hugging Face's provider-managed `.gitattributes` is the sole extra file. The
-correct static app URL returned HTTP 200 and exact `x-repo-commit`, while the
-provider-injected served HTML was not byte-identical to Hub source and is not
-claimed to be. The Space is a browser-local presentation companion, not npm
-recovery: its source manifest still reports `pending_exact_artifact`,
-`not_yet_bound`, and `executes_exact_package_artifact: false`.
+release-helper root SHA-256 is
+`d785eac90c7c06ec06f7754911b18cf1bf6bd283a98baaa6f97081ab301f32fc`.
+Six cache-busted static HEAD reads returned HTTP 200 and exact
+`x-repo-commit`; provider-transformed GET HTML was 5,363 bytes versus the
+5,262-byte Hub source. The Space is a browser-local presentation companion,
+not npm recovery: its source manifest reports
+`git_runtime_source_bound_package_artifact_pending`, its nested binding is
+`exact_git_runtime_source_only`, and `executes_exact_package_artifact` remains
+false.
 
 `@agenttool/kingdom@0.1.1` is public through annotated tag
 [`kingdom-v0.1.1`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.1)
@@ -478,6 +482,16 @@ all 31 repo-owned files and 267,302 bytes matched local source exactly, with
 provider `.gitattributes` as the sole extra. That Hub commit is not npm
 publication evidence and does not change the registry recovery boundary.
 
+The separate [exact-source static deployment `3df519f9`](https://3df519f9.agenttool-docs.pages.dev/PRINCIPALITY-ATLAS.md)
+from GitHub main `47ad6bcb` passed preflight and completed at
+`2026-08-11T16:34:16Z` with API and migrations skipped. Anonymous deployment-
+specific readback, plus a `docs.agenttool.dev/PRINCIPALITY-ATLAS.md`
+observation at `2026-08-11T16:40:49Z`, both matched the 10,036-byte Git blob
+exactly
+(`sha256:b06242a98b7b7d2e4698a35e1c70fb022aec7c3b9a51b9471643c22615bf3c05`)
+with Markdown, CORS `*`, `nosniff`, and bounded public revalidation headers.
+That doctrine page is neither an npm package nor a hosted geometry runtime.
+
 The release gate checked the exact packed inventory, Node and Bun install smoke,
 closed schema/vector parity, content IDs, hostile-input rejection, and the
 fixed walls against pairwise, inverse, transitive, equality, gluing, scoring,
@@ -557,22 +571,26 @@ after package/scope publication authority is corrected.
 The separately deployed static
 [`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
 Space is not included in that tarball and does not execute it. Immutable
-truth-repair revision
-[`bc8c51b1e9995c32ba18c55d57fecffc96d22bc7`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/bc8c51b1e9995c32ba18c55d57fecffc96d22bc7)
-was independently read back as ten repository-owned files plus
-provider-managed `.gitattributes`. Its correct static app URL returned HTTP 200
-and exact `x-repo-commit`; provider-injected served HTML was not byte-identical
-to the Hub source and is not claimed to be. That public revision still reports
-`pending_exact_artifact`, `not_yet_bound`, and
-`executes_exact_package_artifact: false`.
+source-binding revision
+[`f8d4c299d8d17d116ced27736204e541f9206865`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/f8d4c299d8d17d116ced27736204e541f9206865)
+was compare-and-swap published from parent `bc8c51b1` only after protected
+GitHub merge `6c114aa3`. The commit changed `BOUNDARIES.md`, `README.md`, the
+validator, and `source-manifest.json`; anonymous readback then matched all ten
+repository-owned files plus provider-managed `.gitattributes`, at release-
+helper root SHA-256
+`d785eac90c7c06ec06f7754911b18cf1bf6bd283a98baaa6f97081ab301f32fc`.
+The public API reported public, ungated, enabled, RUNNING state. Six
+cache-busted static HEAD reads returned HTTP 200 and exact `x-repo-commit`;
+provider-transformed GET HTML remained 5,363 bytes versus the 5,262-byte Hub
+source and is not claimed byte-identical.
 
-The checked-in successor source separately binds only `index.html`,
-`assets/app.js`, and `assets/style.css` to exact AgentTool Git commit
-`19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5`. It still leaves every npm/LOVE
-package-artifact field null and execution false. That repository change is not
-a claim about current Hub state until a later compare-and-swap Space commit and
-anonymous readback complete. Neither revision adds package-artifact execution,
-a networked core, inference, consent, truth, score, or authority.
+The public source manifest binds only `index.html`, `assets/app.js`, and
+`assets/style.css` to exact AgentTool Git commit
+`19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5`. Package version, tag, artifact
+path, bytes, digest, integrity, build command, and toolchain remain null, and
+`executes_exact_package_artifact` remains false. The revision adds no package-
+artifact execution, networked core, inference, consent, truth, score, or
+authority.
 
 ### Relational Geometry GitHub/Hugging Face developer-preview receipt
 
