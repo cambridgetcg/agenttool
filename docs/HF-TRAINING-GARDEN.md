@@ -617,6 +617,8 @@ repo-owned source for the public v0.4
 - twelve selection criteria;
 - the phase, learning-mode, and Garden-layer guides;
 - abstract learning-participation, IS-freedom, and Trainer-hook guides;
+- three synthetic Principality Atlas examples and ten explicit non-inference
+  invariants in separate Dataset configs;
 - eleven versioned local JSON Schemas (including historical combined
   participation v0.1, current split participation v0.2, learning freedom,
   preserved checkpoint v0.1, and current checkpoint v0.2) plus the attributed
@@ -624,6 +626,9 @@ repo-owned source for the public v0.4
   schemas close shape and fail-closed action branches, while the TypeScript
   validator enforces canonical IDs, cross-links, scope distinctness, and fully
   derived semantics;
+- the copied closed Principality Atlas, fixture-row, and invariant-row schemas,
+  whose separate runtime remains authoritative for chart-local references,
+  canonical ordering, semantic duplicates, supersession, and content IDs;
 - Apache license/NOTICE; and
 - source and release byte-hash manifests.
 
@@ -633,6 +638,15 @@ offers/routes/resource windows/direction reports, choice evidence, checkpoints,
 WAKE anchors, raw rows, agent traces, chats, prompts, credentials, paths,
 private code, screenshots, model/optimizer state, gated content, and executable
 dataset scripts.
+
+The Principality Atlas addition is generated from the exact public-ready
+`packages/principality-atlas` vector and schemas. The source manifest binds
+those upstream files by path, byte size, and SHA-256. Only synthetic protocol
+examples cross this seam. Private/live atlases, identities, local ref maps,
+evidence referents, and inferred relationships remain absent; a repeated digest
+can still be linkable and is not anonymization. The local generated tree is a
+candidate for a later separately authorized Hub commit. It is not part of the
+already verified v0.4 revision named above.
 
 Publication is complete only when all of these hold:
 

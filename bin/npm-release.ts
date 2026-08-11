@@ -114,6 +114,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "living-substrate",
     artifactKind: "pack",
   },
+  "principality-atlas": {
+    key: "principality-atlas",
+    name: "@agenttool/principality-atlas",
+    packagePath: "packages/principality-atlas",
+    tagPrefix: "principality-atlas",
+    artifactKind: "pack",
+  },
   "principality-geometry": {
     key: "principality-geometry",
     name: "@agenttool/principality-geometry",
@@ -731,6 +738,18 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/schema/agenttool-living-substrate-map-v0.1.schema.json",
       "package/schema/agenttool-regeneration-proposal-v0.1.schema.json",
       "package/vectors/agenttool-living-substrate-v0.1.json",
+    );
+  }
+  if (spec.name === "@agenttool/principality-atlas") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-principality-incidence-atlas-v0.1.schema.json",
+      "package/schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+      "package/schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
+      "package/vectors/agenttool-principality-incidence-atlas-v0.1.json",
     );
   }
   if (spec.name === "@agenttool/principality-geometry") {

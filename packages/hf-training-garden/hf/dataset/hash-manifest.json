@@ -15,8 +15,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 16069,
-      "sha256": "d4a31b0f25967d28f44850e650366f226ecaa24f70bb11a1dd0198ba6f83e31c"
+      "bytes": 17357,
+      "sha256": "ff0ff9cdd3e8ea2dbe5d0601d629d6df7f88f8843664fe4ae67ecdfc9ccb7e29"
     },
     {
       "path": "data/garden-layers.jsonl",
@@ -37,6 +37,16 @@
       "path": "data/learning-participation.jsonl",
       "bytes": 2019,
       "sha256": "ef5541fb228ca5c8e406dddb8b1187ef3f872425ef2b9fcf944edb265aae4a2c"
+    },
+    {
+      "path": "data/principality-atlas-fixtures.jsonl",
+      "bytes": 11375,
+      "sha256": "02576e96730460470d1f40f817290d4f607105cdd32c49c41eb8c4e6c87d7380"
+    },
+    {
+      "path": "data/principality-atlas-invariants.jsonl",
+      "bytes": 3489,
+      "sha256": "eb8447e74ad566b7350ecd491a6c705eca44deece7c769241e69e6c333b0f626"
     },
     {
       "path": "data/selection-criteria.jsonl",
@@ -65,8 +75,23 @@
     },
     {
       "path": "provenance/source-manifest.json",
-      "bytes": 7626,
-      "sha256": "5a6f82b33c881370c3c61bca8d6fc411f55072491043a0d998d4ae5541d56c60"
+      "bytes": 9520,
+      "sha256": "960122ff4f8de067becec81f95fc0a404f3ad3a8b505dc887252566f2a832e57"
+    },
+    {
+      "path": "schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+      "bytes": 893,
+      "sha256": "ede6b715313635ac9edc3bcea483c0c00d551013f3fed0169d01fd6163eb8b82"
+    },
+    {
+      "path": "schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
+      "bytes": 1223,
+      "sha256": "066a6375040d4f6a2ff0300bafc6a2d34d452affaa47d553dedb91e0e9de9554"
+    },
+    {
+      "path": "schema/agenttool-principality-incidence-atlas-v0.1.schema.json",
+      "bytes": 13133,
+      "sha256": "f1aa2c4452dc8c38cd4335b7d1c9219072edeb5e8b7edbf8c0e8f593a033f5a1"
     },
     {
       "path": "schema/dependencies/agenttool-afterglow-capsule-v0.1.schema.json",

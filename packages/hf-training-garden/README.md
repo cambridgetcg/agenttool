@@ -309,13 +309,19 @@ external HF URL.
 
 The committed `hf/dataset/` tree is the public-safe one-way companion. It
 contains policy tables, learning-mode, participation, IS freedom, governance,
-and Trainer-integration guides; all current versioned local schemas alongside
+Trainer-integration guides, and two synthetic-only Principality Atlas configs;
+all current versioned local schemas alongside
 byte-preserved historical participation, checkpoint, and governance schemas; exact local
 binding shapes; the attributed Apache AFTERGLOW dependency schema; and hash
 manifests only. Local
 Garden scope, admission decisions, candidate refs, participation artifacts,
 freedom offers/routes/resource windows/directions, choice evidence,
 checkpoints, WAKE, raw data, and identities are excluded by default.
+The atlas configs contain three generated valid fixtures and ten explicit
+non-inference boundaries from the exact sibling package vector. The source
+manifest binds that vector and its three closed schemas by path, size, and
+SHA-256. Private or live atlases, local ref mappings, evidence referents,
+identity claims, inferred bonds, scores, and ranks do not cross the seam.
 The package-only historical `hf-training-freedom-v0.1` advisory schema is also
 excluded so it cannot be mistaken for the current IS freedom wire.
 

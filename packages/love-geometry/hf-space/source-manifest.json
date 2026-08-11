@@ -2,7 +2,7 @@
   "_format": "agenttool.love-geometry-hf-space-source-manifest/0.1",
   "status": "pending_exact_artifact",
   "presentation_revision": "0.1.0-dev.0",
-  "space_repository": null,
+  "space_repository": "https://huggingface.co/spaces/Yu-and-Ai/love-geometry",
   "app_kind": "static-browser-local-companion",
   "source": {
     "git_repository": "https://github.com/cambridgetcg/agenttool",
@@ -48,6 +48,6 @@
     "scores_or_ranks_relations": false,
     "claims_xenia_conformance": false
   },
-  "platform_boundary": "A future Hugging Face Space would host and serve these files; provider request processing, logs, retention, moderation, availability, and platform UI remain outside the app boundary.",
-  "release_instruction": "Replace nulls only from a reviewed exact build and independent verification. Do not describe this companion as package-backed until binding.status is exact_verified."
+  "platform_boundary": "Hugging Face hosts the separately published public Space; provider request processing, logs, retention, moderation, availability, and platform UI remain outside the app boundary. This manifest does not self-attest the current Space revision or deployed-byte identity.",
+  "release_instruction": "Replace package/artifact nulls only from a reviewed exact build and independent verification. Record an immutable Space revision and anonymous byte readback in an external release receipt. Do not describe this companion as package-backed until binding.status is exact_verified."
 }

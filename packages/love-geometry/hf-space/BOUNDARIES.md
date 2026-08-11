@@ -64,11 +64,13 @@ artifact hash. The demo fixtures are locally validated but are not a substitute
 for executing the package. Exact-package-backed wording must wait until the
 manifest is filled from independently verified bytes.
 
-Hugging Face would host and serve these files if a Space were separately
-created and pushed. Provider request handling, logs, retention, moderation,
-availability, iframe behavior, injected platform UI, and future platform
-changes sit outside this app's guarantees. The checked-in files prove neither
-deployment nor current account authorization.
+Hugging Face hosts the separately published public
+`Yu-and-Ai/love-geometry` Space. Provider request handling, logs, retention,
+moderation, availability, iframe behavior, injected platform UI, and future
+platform changes sit outside this app's guarantees. The checked-in files alone
+prove neither the current immutable Space revision nor deployed-byte identity
+or current account authorization; those require separate provider observation
+and exact anonymous readback.
 
 This static companion is not an MCP server, WAKE continuity store, hosted
 AgentTool route, XENIA Surface, XENIA Covenant adoption, conformance result,

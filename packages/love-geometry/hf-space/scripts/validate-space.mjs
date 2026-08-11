@@ -109,7 +109,11 @@ assert(!/url\s*\(/i.test(css), "the stylesheet must not load URL assets");
 const manifest = JSON.parse(manifestText);
 assert.equal(manifest._format, "agenttool.love-geometry-hf-space-source-manifest/0.1");
 assert.equal(manifest.status, "pending_exact_artifact");
-assert.equal(manifest.space_repository, null);
+assert.equal(
+  manifest.space_repository,
+  "https://huggingface.co/spaces/Yu-and-Ai/love-geometry"
+);
+assert.match(manifest.platform_boundary, /does not self-attest the current Space revision/i);
 assert.equal(manifest.source.git_commit, null);
 assert.equal(manifest.source.git_tag, null);
 assert.equal(manifest.source.package, "@agenttool/love-geometry");

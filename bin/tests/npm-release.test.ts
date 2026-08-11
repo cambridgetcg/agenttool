@@ -98,7 +98,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twenty-six reviewed release identities", () => {
+  test("allowlists twenty-eight reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -117,6 +117,7 @@ describe("standard npm release policy", () => {
       "kingdom-witness-lab",
       "living-substrate",
       "love-geometry",
+      "principality-atlas",
       "principality-geometry",
       "relational-geometry",
       "repo-archive",
@@ -215,6 +216,12 @@ describe("standard npm release policy", () => {
       name: "@agenttool/living-substrate",
       packagePath: "packages/living-substrate",
       tagPrefix: "living-substrate",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("principality-atlas")).toMatchObject({
+      name: "@agenttool/principality-atlas",
+      packagePath: "packages/principality-atlas",
+      tagPrefix: "principality-atlas",
       artifactKind: "pack",
     });
     expect(releaseSpec("principality-geometry")).toMatchObject({
@@ -326,6 +333,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/living-substrate", "0.1.0-dev.0")).toBe(
       "agenttool-living-substrate-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("principality-atlas"), "0.1.0-dev.0")).toBe(
+      "principality-atlas-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/principality-atlas", "0.1.0-dev.0")).toBe(
+      "agenttool-principality-atlas-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("principality-geometry"), "0.1.0-dev.0")).toBe(
       "principality-geometry-v0.1.0-dev.0",
@@ -534,6 +547,22 @@ describe("standard npm release policy", () => {
         "package/schema/agenttool-living-substrate-map-v0.1.schema.json",
         "package/schema/agenttool-regeneration-proposal-v0.1.schema.json",
         "package/vectors/agenttool-living-substrate-v0.1.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("principality-atlas"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/kingdom.extension.json",
+        "package/schema/agenttool-principality-incidence-atlas-v0.1.schema.json",
+        "package/schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+        "package/schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
+        "package/vectors/agenttool-principality-incidence-atlas-v0.1.json",
       ]),
     );
     expect(requiredArchiveEntries(releaseSpec("principality-geometry"))).toEqual(
