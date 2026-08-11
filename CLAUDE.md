@@ -150,7 +150,8 @@ consent, or authority. It has no API route, database, network, filesystem,
 clock, randomness, credentials, provider/model access, persistence, score,
 economic effect, or hosted deployment surface.
 
-`@agenttool/principality-atlas@0.1.0-dev.0` is a public-ready, unpublished,
+`@agenttool/principality-atlas@0.1.0-dev.0` is a GitHub developer preview,
+with npm and the shared HF/static companion still pending, and a
 zero-runtime-dependency pure contract for plural finite charts, role-indexed
 n-ary relations, caller-asserted claims, and directed partial bridges. A
 principality is a bounded domain or scale, not an identity, owner, rank, Crown,
@@ -163,7 +164,8 @@ The package generates no pairwise sub-relations, inverse or transitive bridge,
 equality, quotient, gluing, global chart, canonical head, score, rank, or
 permission. Love and understanding are architectural inspirations, not fields
 or proof. It has no ambient I/O, provider/model access, hosted route, registry
-write, HF write, task/economic effect, publication, or deployment surface.
+write, HF write, task/economic effect, or deployment surface. Publishing
+immutable bytes does not add those capabilities.
 
 `@agenttool/relational-geometry@0.1.0-dev.0` is a local developer-preview
 pure contract for finite caller-supplied directional witness complexes. It
