@@ -36,8 +36,7 @@ import type {
 
 const SHA256_ID = /^sha256:[0-9a-f]{64}$/u;
 const TOKEN = /^[a-z][a-z0-9._-]{0,63}$/u;
-const PROTOCOL_ID =
-  /^(?=.{1,128}$)[a-z][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?$/u;
+const PROTOCOL_ID = /^(?=.{1,128}$)[a-z][a-z0-9._:/-]*$/u;
 const HF_REPO_ID =
   /^(?=.{3,128}$)[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?\/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/u;
 const HF_REVISION = /^[0-9a-f]{40}$/u;

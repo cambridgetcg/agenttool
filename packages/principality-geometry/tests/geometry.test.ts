@@ -225,14 +225,12 @@ describe("principality flag geometry", () => {
   test("matches an independent multi-invariant triangle and component oracle", () => {
     const vertexIds = Array.from({ length: 5 }, (_, index) => `p${index}`);
     const invariantIds = ["q0", "q1", "q2"];
-    const routeAvailable = (from: number, to: number) => (from * 5 + to) % 7 !== 0;
-    const state = (from: number, to: number, invariant: number) =>
-      ([
-        "preserved_reported",
-        "not_preserved_reported",
-        "refused_reported",
-        "unknown",
-      ] as const)[(from * 11 + to * 7 + invariant * 3) % 4]!;
+    const preservationEdges = new Map<string, ReadonlySet<string>>([
+      ["q0", new Set(["p0|p1", "p0|p2", "p1|p2", "p2|p3"])],
+      ["q1", new Set(["p0|p3", "p3|p4"])],
+      ["q2", new Set(["p1|p4"])],
+    ]);
+    const pair = (a: string, b: string) => [a, b].sort().join("|");
     const input = {
       _format: "agenttool.principality-geometry-input/0.1",
       scope_ref: sha256Id("oracle scope"),
@@ -247,54 +245,38 @@ describe("principality flag geometry", () => {
         manifestations: [],
         artifact_refs: [],
       })),
-      translations: vertexIds.flatMap((fromId, from) =>
-        vertexIds.flatMap((toId, to) => {
-          if (from === to) return [];
+      translations: vertexIds.flatMap((fromId) =>
+        vertexIds.flatMap((toId) => {
+          if (fromId === toId) return [];
           return [{
             from: fromId,
             to: toId,
-            disposition: routeAvailable(from, to)
-              ? "available_reported"
-              : "resting_reported",
-            evaluations: invariantIds.map((invariantId, invariant) => {
-              const outcome = state(from, to, invariant);
+            disposition:
+              fromId === "p2" && toId === "p4"
+                ? "resting_reported"
+                : "available_reported",
+            evaluations: invariantIds.map((invariantId) => {
+              const outcome = preservationEdges.get(invariantId)?.has(
+                pair(fromId, toId),
+              )
+                ? "preserved_reported"
+                : "not_preserved_reported";
               return {
                 invariant_id: invariantId,
                 state: outcome,
-                evidence_refs:
-                  outcome === "preserved_reported" ||
-                  outcome === "not_preserved_reported"
-                    ? [sha256Id(`${from}-${to}-${invariant}`)]
-                    : [],
+                evidence_refs: [sha256Id(`${fromId}-${toId}-${invariantId}`)],
               };
             }),
           }];
         }),
       ),
     };
-    const mutual = (a: number, b: number, q: number) =>
-      routeAvailable(a, b) &&
-      routeAvailable(b, a) &&
-      state(a, b, q) === "preserved_reported" &&
-      state(b, a, q) === "preserved_reported";
-
-    const expectedSurfaces: Array<{ vertices: string[]; invariant_ids: string[] }> = [];
-    for (let a = 0; a < vertexIds.length; a += 1) {
-      for (let b = a + 1; b < vertexIds.length; b += 1) {
-        for (let c = b + 1; c < vertexIds.length; c += 1) {
-          const common = invariantIds.filter((_, q) =>
-            mutual(a, b, q) && mutual(a, c, q) && mutual(b, c, q),
-          );
-          if (common.length > 0) {
-            expectedSurfaces.push({
-              vertices: [vertexIds[a]!, vertexIds[b]!, vertexIds[c]!],
-              invariant_ids: common,
-            });
-          }
-        }
-      }
-    }
     const atlas = createPrincipalityAtlas(input as any);
+    const expectedSurfaces = [{
+      vertices: ["p0", "p1", "p2"],
+      invariant_ids: ["q0"],
+    }];
+    expect(expectedSurfaces.length).toBeGreaterThan(0);
     expect(
       atlas.geometry.invariant_surfaces.map(({ vertices, invariant_ids }) => ({
         vertices: [...vertices],
@@ -302,13 +284,42 @@ describe("principality flag geometry", () => {
       })),
     ).toEqual(expectedSurfaces);
 
-    for (const invariantId of invariantIds) {
-      const flattened = atlas.geometry.invariant_components
-        .filter((component) => component.invariant_id === invariantId)
-        .flatMap((component) => component.vertices)
-        .sort();
-      expect(flattened).toEqual(vertexIds);
-    }
+    const actualPreservationEdges = Object.fromEntries(
+      invariantIds.map((invariantId) => [
+        invariantId,
+        atlas.geometry.reciprocal_lenses
+          .filter(
+            (lens) =>
+              lens.route_state === "both_available_reported" &&
+              lens.mutually_preserved.includes(invariantId),
+          )
+          .map((lens) => pair(...lens.vertices))
+          .sort(),
+      ]),
+    );
+    expect(actualPreservationEdges).toEqual({
+      q0: ["p0|p1", "p0|p2", "p1|p2", "p2|p3"],
+      q1: ["p0|p3", "p3|p4"],
+      q2: ["p1|p4"],
+    });
+
+    const actualComponents = Object.fromEntries(
+      invariantIds.map((invariantId) => [
+        invariantId,
+        atlas.geometry.invariant_components
+          .filter((component) => component.invariant_id === invariantId)
+          .map((component) => [...component.vertices]),
+      ]),
+    );
+    expect(actualComponents).toEqual({
+      q0: [["p0", "p1", "p2", "p3"], ["p4"]],
+      q1: [["p0", "p3", "p4"], ["p1"], ["p2"]],
+      q2: [["p0"], ["p1", "p4"], ["p2"], ["p3"]],
+    });
+    expect(atlas.geometry.open_conditions.non_available_bridge_ids).toEqual([
+      atlas.bridges.find((bridge) => bridge.from === "p2" && bridge.to === "p4")
+        ?.bridge_id,
+    ]);
   });
 
   test("keeps SVG inert, source-name-free, and one-way arrows visible", () => {

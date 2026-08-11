@@ -40,6 +40,60 @@ describe("closed Draft 2020-12 schemas", () => {
     expect(validateInput(sri)).toBe(false);
   });
 
+  test("rejects invalid protocols and state/evidence cardinality in both schemas", () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+    const validateInput = ajv.compile(inputSchema);
+    const validateAtlas = ajv.compile(atlasSchema);
+
+    for (const protocol of ["AgentTool/0.1", "agent tool/0.1", "a".repeat(129)]) {
+      const input = rosetteInput();
+      input.principalities[0].manifestations[0].protocol = protocol;
+      expect(validateInput(input), protocol).toBe(false);
+
+      const atlas = structuredClone(createPrincipalityAtlas(rosetteInput())) as any;
+      atlas.principalities[0].manifestations.find(
+        (entry: any) => entry.kind === "protocol_digest",
+      ).protocol = protocol;
+      expect(validateAtlas(atlas), protocol).toBe(false);
+    }
+
+    for (const [state, evidence_refs] of [
+      ["preserved_reported", []],
+      ["refused_reported", [rosetteInput().scope_ref]],
+      ["unknown", [rosetteInput().scope_ref]],
+    ] as const) {
+      const input = rosetteInput();
+      input.translations[0].evaluations[0].state = state;
+      input.translations[0].evaluations[0].evidence_refs = [...evidence_refs];
+      expect(validateInput(input), state).toBe(false);
+
+      const atlas = structuredClone(createPrincipalityAtlas(rosetteInput())) as any;
+      atlas.bridges[0].evaluations[0].state = state;
+      atlas.bridges[0].evaluations[0].evidence_refs = [...evidence_refs];
+      expect(validateAtlas(atlas), state).toBe(false);
+    }
+  });
+
+  test("bounds syntactically valid npm SemVer equally at runtime and schema", () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+    const validateInput = ajv.compile(inputSchema);
+    const validateAtlas = ajv.compile(atlasSchema);
+    const tooLongVersion = `1.0.0+${"a".repeat(4091)}`;
+    expect(tooLongVersion).toHaveLength(4097);
+
+    const input = rosetteInput();
+    input.principalities[0].artifact_refs[1].version = tooLongVersion;
+    expect(validateInput(input)).toBe(false);
+    expect(() => createPrincipalityAtlas(input)).toThrow();
+
+    const atlas = structuredClone(createPrincipalityAtlas(rosetteInput())) as any;
+    atlas.principalities[0].artifact_refs.find(
+      (entry: any) => entry.kind === "npm",
+    ).version = tooLongVersion;
+    expect(validateAtlas(atlas)).toBe(false);
+    expect(() => validatePrincipalityAtlas(atlas)).toThrow();
+  });
+
   test("keeps runtime derivation authoritative beyond shape validation", () => {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     const validateAtlasShape = ajv.compile(atlasSchema);

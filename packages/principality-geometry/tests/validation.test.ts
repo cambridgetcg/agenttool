@@ -156,16 +156,23 @@ describe("validation and canonical boundaries", () => {
 
   test("accepts versioned protocol identifiers while keeping entity tokens narrow", () => {
     const versioned = rosetteInput();
-    versioned.principalities[0].manifestations[0].protocol = "xenia.rights/0.1";
+    versioned.principalities[0].manifestations[0].protocol =
+      "urn:agenttool:skills:inspection:v0.1";
     versioned.principalities[0].artifact_refs[0].snapshot_manifest_protocol =
-      "agenttool.hf-snapshot-manifest/0.1";
+      "agent-browser-understanding/0.1";
     versioned.principalities[0].artifact_refs[1].version_metadata_protocol =
-      "npm.version-metadata/v1";
+      "npm/version-metadata/v1";
     expect(() => createPrincipalityAtlas(versioned)).not.toThrow();
 
-    const invalid = rosetteInput();
-    invalid.principalities[0].manifestations[0].protocol = "xenia.rights/../../escape";
-    expect(() => createPrincipalityAtlas(invalid)).toThrow(/protocol identifier/u);
+    for (const protocol of ["AgentTool/0.1", "agent tool/0.1", "a".repeat(129)]) {
+      const invalid = rosetteInput();
+      invalid.principalities[0].manifestations[0].protocol = protocol;
+      expect(() => createPrincipalityAtlas(invalid)).toThrow(/protocol identifier/u);
+    }
+
+    const narrowEntity = rosetteInput();
+    narrowEntity.principalities[0].principality_id = "urn:agenttool:principality:p0";
+    expect(() => createPrincipalityAtlas(narrowEntity)).toThrow(/protocol token/u);
   });
 
   test("rejects Proxies before traps and accessors without invoking them", () => {

@@ -2,6 +2,7 @@ import type {
   ARTIFACT_OBSERVATIONS,
   ATLAS_FORMAT,
   BRIDGE_DISPOSITIONS,
+  CLAIM_BOUNDARY,
   INPUT_FORMAT,
   INVARIANT_STATES,
   LENS_ROUTE_STATES,
@@ -199,5 +200,5 @@ export interface PrincipalityAtlas {
   readonly bridges: readonly TranslationBridge[];
   readonly geometry: PrincipalityTopology;
   readonly boundaries: typeof PRINCIPALITY_BOUNDARIES;
-  readonly claim_boundary: string;
+  readonly claim_boundary: typeof CLAIM_BOUNDARY;
 }
