@@ -61,7 +61,10 @@ universal index and does not explain how a caller found the hostname.
 
 `GET https://api.agenttool.dev/.well-known/agent.json` is the stricter
 XENIA Surface 0.1 door. AgentTool builds it with the exact
-`@agenttool/xenia@0.1.0-beta.5` producer. It lists exactly two same-origin,
+`@agenttool/xenia@0.1.0-beta.7` producer. Its Surface and Rights seams are
+byte-identical to the earlier beta.5 dependency, so this package update does
+not rewrite AgentTool's separately pinned historical Rights attribution. The
+manifest lists exactly two same-origin,
 unauthenticated JSON GET resources:
 `/public/kingdom/framework` and `/public/xenia/rights`. The latter returns the
 exact installed informative `xenia.rights/0.1` index; `RIGHTS.md` remains the

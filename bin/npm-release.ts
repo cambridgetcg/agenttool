@@ -121,6 +121,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "principality-geometry",
     artifactKind: "love",
   },
+  "love-geometry": {
+    key: "love-geometry",
+    name: "@agenttool/love-geometry",
+    packagePath: "packages/love-geometry",
+    tagPrefix: "love-geometry",
+    artifactKind: "pack",
+  },
   "credential-broker": {
     key: "credential-broker",
     name: "@agenttool/credential-broker",
@@ -726,6 +733,16 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/kingdom.extension.json",
       "package/schema/agenttool-principality-atlas-v0.1.schema.json",
       "package/schema/agenttool-principality-geometry-input-v0.1.schema.json",
+    );
+  }
+  if (spec.name === "@agenttool/love-geometry") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-love-geometry-v0.1.schema.json",
+      "package/vectors/agenttool-love-geometry-v0.1.json",
     );
   }
   if (spec.name === "@agenttool/alchemy") {
