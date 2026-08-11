@@ -98,7 +98,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twenty-six reviewed release identities", () => {
+  test("allowlists twenty-seven reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",

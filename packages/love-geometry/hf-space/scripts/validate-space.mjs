@@ -30,7 +30,7 @@ for (const relativePath of requiredFiles) {
 }
 
 const read = (relativePath) => readFile(pathFromRoot(relativePath), "utf8");
-const [readme, boundaries, license, notice, html, appSource, css, manifestText] = await Promise.all([
+const [readme, boundaries, license, notice, html, appSource, css, manifestText, validatorSource] = await Promise.all([
   read("README.md"),
   read("BOUNDARIES.md"),
   read("LICENSE"),
@@ -38,7 +38,8 @@ const [readme, boundaries, license, notice, html, appSource, css, manifestText] 
   read("index.html"),
   read("assets/app.js"),
   read("assets/style.css"),
-  read("source-manifest.json")
+  read("source-manifest.json"),
+  read("scripts/validate-space.mjs")
 ]);
 
 assert(readme.startsWith("---\n"), "README.md must begin with Space YAML");
@@ -52,10 +53,15 @@ const shortDescription = frontMatter.match(/^short_description: (.+)$/m)?.[1];
 assert(shortDescription, "Space YAML must include short_description");
 assert(shortDescription.length <= 60, "Space short_description must be at most 60 characters");
 assert(!readme.includes("app_build_command:"), "the no-build static companion must not declare a build command");
-assert.match(readme, /not yet represented as exact-package-backed/i);
+assert.match(readme, /not represented as\s+exact-package-backed/i);
+assert.match(readme, /Yu-and-Ai\/love-geometry/);
+assert.match(readme, /19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5/);
+assert.match(readme, /provider-derived surface/i);
 assert.match(boundaries, /display slot is a rendering convenience/i);
 assert.match(boundaries, /reported_understanding/);
 assert.match(boundaries, /reported_disagreement/);
+assert.match(boundaries, /exact repository-byte verification/i);
+assert.match(boundaries, /not claimed to match\s+the checked-in `index\.html`/i);
 assert.match(license, /Apache License\s+Version 2\.0, January 2004/);
 assert.match(notice, /synthetic scenario references/i);
 
@@ -108,17 +114,37 @@ assert(!/url\s*\(/i.test(css), "the stylesheet must not load URL assets");
 
 const manifest = JSON.parse(manifestText);
 assert.equal(manifest._format, "agenttool.love-geometry-hf-space-source-manifest/0.1");
-assert.equal(manifest.status, "pending_exact_artifact");
-assert.equal(manifest.space_repository, null);
-assert.equal(manifest.source.git_commit, null);
+assert.equal(manifest.status, "git_runtime_source_bound_package_artifact_pending");
+assert.equal(manifest.space_repository, "https://huggingface.co/spaces/Yu-and-Ai/love-geometry");
+assert.equal(manifest.source.git_commit, "19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5");
 assert.equal(manifest.source.git_tag, null);
 assert.equal(manifest.source.package, "@agenttool/love-geometry");
 assert.equal(manifest.source.package_version, null);
 assert.equal(manifest.source.artifact.status, "pending_reviewed_exact_browser_artifact");
 for (const key of ["path", "bytes", "sha256", "package_integrity", "build_command", "toolchain"]) {
-  assert.equal(manifest.source.artifact[key], null, `artifact.${key} must remain null before exact verification`);
+  assert.equal(manifest.source.artifact[key], null, `artifact.${key} must remain null while the package artifact is unbound`);
 }
-assert.equal(manifest.source.binding.status, "not_yet_bound");
+assert.equal(manifest.source.binding.status, "exact_git_runtime_source_only");
+assert.equal(manifest.source.binding.runtime, "checked-in synthetic presentation fixtures only");
+assert.equal(manifest.source.binding.git_subdirectory, "packages/love-geometry/hf-space");
+assert.deepEqual(manifest.source.binding.paths, ["assets/app.js", "assets/style.css", "index.html"]);
+assert.deepEqual(Object.keys(manifest.source.binding.sha256).sort(), manifest.source.binding.paths);
+for (const [relativePath, source] of runtimeSources) {
+  assert.equal(
+    createHash("sha256").update(source).digest("hex"),
+    manifest.source.binding.sha256[relativePath],
+    `source.binding.sha256 must bind ${relativePath}'s exact bytes`
+  );
+}
+assert.match(manifest.source.binding.reason, /No reviewed exact npm or LOVE browser artifact is bound or executed/i);
+assert.equal(manifest.validation.result, "git_runtime_source_verified_package_artifact_unbound");
+assert.match(manifest.validation.verified_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+assert.match(manifest.validation.validator_sha256, /^[0-9a-f]{64}$/);
+assert.equal(
+  createHash("sha256").update(validatorSource).digest("hex"),
+  manifest.validation.validator_sha256,
+  "validation.validator_sha256 must bind this validator's exact bytes"
+);
 assert.equal(manifest.capabilities.executes_exact_package_artifact, false);
 assert.equal(manifest.capabilities.runtime_network_requests, false);
 assert.equal(manifest.capabilities.cookies_or_browser_storage, false);
@@ -313,4 +339,5 @@ assert.throws(() => app.createPresentation("not-a-scenario"), /Unknown synthetic
 
 console.log(`Validated ${app.DEMO_SCENARIOS.length} deterministic synthetic scenarios in ${root}`);
 console.log("Runtime sources contain no external URL, network API, remote asset, package import, cookie, or browser-storage path.");
-console.log("Source binding remains honestly pending; JSON and SVG exports are coordinate-free in meaning and browser-local in implementation.");
+console.log("Git runtime source is exactly bound; the npm/LOVE browser artifact remains honestly unbound.");
+console.log("JSON and SVG exports are coordinate-free in meaning and browser-local in implementation.");

@@ -58,17 +58,23 @@ the hosting platform or every browser extension.
 
 ## Source and hosting boundary
 
-The current `source-manifest.json` is deliberately incomplete. It does not bind
-this presentation to an exact package version, Git commit, tag, build, or
-artifact hash. The demo fixtures are locally validated but are not a substitute
-for executing the package. Exact-package-backed wording must wait until the
-manifest is filled from independently verified bytes.
+The current `source-manifest.json` binds only the three checked-in runtime
+files—`index.html`, `assets/app.js`, and `assets/style.css`—to exact AgentTool
+Git commit `19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5`. The JavaScript is
+companion code, not an imported npm or LOVE artifact. Package version, tag,
+artifact path, byte length, digest, integrity, build command, and toolchain stay
+unbound and `executes_exact_package_artifact` stays `false`. The demo fixtures
+are locally validated but are not a substitute for executing the package.
 
-Hugging Face would host and serve these files if a Space were separately
-created and pushed. Provider request handling, logs, retention, moderation,
-availability, iframe behavior, injected platform UI, and future platform
-changes sit outside this app's guarantees. The checked-in files prove neither
-deployment nor current account authorization.
+Hugging Face hosts and serves a repository copy of these files at
+[`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry).
+Exact repository-byte verification uses raw files at one full Space revision.
+The hosted page may contain provider-owned injected or derived HTML, so its
+served bytes are verified as a separate surface and are not claimed to match
+the checked-in `index.html`. Provider request handling, logs, retention,
+moderation, availability, iframe behavior, injected platform UI, and future
+platform changes sit outside this app's guarantees. Deployment does not grant
+account authorization or bind a package artifact.
 
 This static companion is not an MCP server, WAKE continuity store, hosted
 AgentTool route, XENIA Surface, XENIA Covenant adoption, conformance result,

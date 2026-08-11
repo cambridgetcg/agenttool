@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only. Relational Geometry's public-safe Hugging Face dataset remains a separate release surface with its own immutable revision and readback.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, and Principality Geometry. Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, Relational Geometry, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter use the credential-free pack path instead. Each published Hugging Face companion is a separate release surface with its own scope, immutable revision, and readback; an unpublished companion must acquire those receipts before it is described as live.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -16,6 +16,19 @@
 
 Use one workflow for npm publication. Do not run `npm publish` from a normal
 local shell.
+
+The three adjacent geometry lines deliberately use different artifact and Hub
+surfaces:
+
+| Package | GitHub/npm candidate bytes | Separate Hugging Face surface |
+|---|---|---|
+| `@agenttool/love-geometry` | one credential-free `npm pack` tarball; its static companion is excluded | static Space `Yu-and-Ai/love-geometry` |
+| `@agenttool/relational-geometry` | one credential-free `npm pack` tarball | synthetic public-safe dataset `Yu-and-Ai/agenttool-relational-geometry` |
+| `@agenttool/principality-geometry` | the exact checked-in LOVE tarball reused by the docs mirror, GitHub Release, and npm | synthetic non-training dataset `Yu-and-Ai/agenttool-principality-geometry` |
+
+Distribution does not translate semantics between them. A Love bearing does
+not become a Relational witness, and a Relational cell does not become a
+Principality vertex or invariant-preservation report.
 
 The workflow:
 
@@ -465,6 +478,33 @@ resolve to `0.1.0-dev.0`; the fallback is not a stable-release or maturity
 signal. The package record now exists, so bootstrap is forbidden for later
 versions; configure its exact trusted publisher and use `trusted` thereafter.
 
+### Love Geometry GitHub/Hugging Face developer-preview receipt
+
+`@agenttool/love-geometry@0.1.0-dev.0` uses the credential-free packed-artifact
+path. Exact GitHub-main merge
+[`9efbc4b32f150ee1533b4ff306666fa73ca73028`](https://github.com/cambridgetcg/agenttool/commit/9efbc4b32f150ee1533b4ff306666fa73ca73028)
+and annotated tag
+[`love-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/love-geometry-v0.1.0-dev.0)
+identify the source. Protected [run `31499968474`](https://github.com/cambridgetcg/agenttool/actions/runs/31499968474)
+prepared, mirrored, and re-read one 19,507-byte GitHub prerelease asset with
+SHA-256
+`43cfbf4b559aa6f573d9d7b7a60e2a7dce5dfa4aefe2bf5b9c92310c926a9db8`.
+The following npm registry `PUT` returned `E404`; anonymous package and exact-
+version reads remained absent, so no npm version, dist-tag, signature, or
+provenance is claimed. Recovery must reuse the immutable tag and GitHub bytes
+after the protected credential can create the scoped package.
+
+The separately deployed static
+[`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
+Space is not included in that tarball and does not execute it. Public revision
+`1a602e8309bd7c5d1a07ccfff1755dcb130695ba` preserved the earlier placeholder
+as an ancestor and was independently read back as ten repository-owned files
+matching AgentTool source `19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5`, plus provider-managed
+`.gitattributes`. Hugging Face may inject or derive hosted HTML, so raw
+full-revision files prove repository bytes while served HTML remains a separate
+provider surface. That publication adds no package-artifact execution,
+networked core, inference, consent, truth, score, or authority.
+
 ### Relational Geometry GitHub/Hugging Face developer-preview receipt
 
 `@agenttool/relational-geometry@0.1.0-dev.0` is bound to exact GitHub-main
@@ -876,7 +916,10 @@ GitHub-hosted job's OIDC identity and does not expose the bootstrap token.
 
 `@agenttool/principality-geometry@0.1.0-dev.0` uses the checked-in
 LOVE-artifact path so the docs mirror, one-asset GitHub Release, and npm reuse
-the same reviewed tarball. Its first npm publication must use
+the same reviewed 46,624-byte tarball with SHA-256
+`8f82e4d96eaf57c2331e4e73ced4f4c65a2a21262622840762b165bc3395692e`.
+That local artifact receipt does not claim that a GitHub Release or npm package
+already exists. Its first npm publication must use
 `authentication=bootstrap` because npm cannot attach a trusted publisher until
 the package exists; request the prerelease-only `next` tag. The static
 Hugging Face companion is a separate authorized dataset publication and is

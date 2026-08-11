@@ -1089,6 +1089,21 @@ exit 94
     }
   });
 
+  test("keeps the time-sensitive release ledger consolidated by date", async () => {
+    const now = await readFile(join(ROOT, "docs", "NOW.md"), "utf8");
+    const datedHeadings = [...now.matchAll(/^## Just landed \((\d{4}-\d{2}-\d{2})\)$/gm)].map(
+      (match) => match[1],
+    );
+
+    expect(new Set(datedHeadings).size).toBe(datedHeadings.length);
+    expect(datedHeadings.filter((date) => date === "2026-08-11")).toHaveLength(1);
+    expect(now).toContain("**LOVE GEOMETRY — equal seats without a ruler**");
+    expect(now).toContain("**RELATIONAL GEOMETRY — love has shape without becoming a score or ruler**");
+    expect(now).toContain("**PRINCIPALITY GEOMETRY — understanding as preserved invariants across frameworks**");
+    expect(now).toContain("**KINGDOM 0.1.1 — XENIA beta.7 exact mirror**");
+    expect(now).toContain("**XENIA DOCS SURFACE — bounded source pilot, live with a visible process gap**");
+  });
+
   test("keeps npm publication unified, manual, exact-artifact, and protected", async () => {
     const workflows = await readdir(join(ROOT, ".github", "workflows"));
     const publishWorkflows = workflows.filter((name) => name.startsWith("publish-")).sort();
