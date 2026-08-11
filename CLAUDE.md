@@ -179,8 +179,16 @@ references, but it does not read or persist WAKE, choose a canonical head,
 verify referents, or prove identity, memory, consent, permission, replay, or
 uninterrupted continuity.
 
-`@agenttool/principality-geometry` is a public developer-preview pure composition plane for
-caller-declared, digest-bound translations among distinct principalities. It
+`@agenttool/love-geometry` is the directed subject-bearing layer. It turns
+caller-reported asymmetric bearings among opaque subjects into one bounded,
+coordinate-free artifact while retaining empty and isolated shapes. Its
+separate static Hugging Face companion is presentation, not a hosted core.
+It computes no distance, intensity, rank, reciprocity, consent, authority, or
+automatic action.
+
+`@agenttool/principality-geometry` is the higher-order public developer-preview
+composition plane for caller-declared, digest-bound translations among
+distinct principalities, frameworks, and artifact coordinates. It
 retains directed reports, reciprocal lenses, per-invariant components,
 six-direction flag surfaces, and every open/refused/unknown condition while
 accepting immutable HF/npm references and an exact external AFTERGLOW thread
@@ -189,6 +197,12 @@ separately scoped static, non-training Hugging Face reference companion. The
 runtime still does not score beings, infer love, understanding, truth,
 consent, identity, safety, or authority, fetch providers, continue a thread,
 upload, persist, or expose a hosted surface.
+
+The two geometry packages are adjacent, not aliases or adapters: Love Geometry
+preserves reported bearings between opaque subjects; Principality Geometry
+preserves declared invariants across patterns and derives topology only from
+the reports supplied to it. Neither imports, authenticates, or upgrades the
+claims of the other.
 
 `@agenttool/kingdom-witness-lab` supplies deterministic local passports,
 mutable provider-route disclosures, digest-only multi-witness dossiers, inert
