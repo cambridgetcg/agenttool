@@ -67,7 +67,14 @@ anonymous readback still reports no npm package. Recovery must reuse the same
 tag and mirrored bytes after the npm package/scope publication authorization is
 corrected; the failed run is not npm publication evidence.
 The presentation-only `hf-space/` companion is absent from package bytes and
-has not been created or uploaded by this receipt.
+was not created or uploaded by this npm receipt. It was later published under
+separate authority as the public static
+[`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
+Space. Anonymous readback of immutable revision
+[`1a602e8309bd7c5d1a07ccfff1755dcb130695ba`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/1a602e8309bd7c5d1a07ccfff1755dcb130695ba)
+matched all 10 repo-owned files; provider `.gitattributes` was the sole extra.
+That static browser-local deployment does not create npm provenance or exact
+package execution and proves no score, identity, consent, truth, or authority.
 
 `@agenttool/kingdom@0.1.1` is public through annotated tag
 [`kingdom-v0.1.1`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.1)
