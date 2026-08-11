@@ -1,0 +1,533 @@
+{
+  "_format": "agenttool.polymorph-landscape/0.1",
+  "boundaries": {
+    "analogy": "structural_analogy_only_not_empirical_validation",
+    "beings": "no_identity_consciousness_consent_dignity_or_authority_claim",
+    "coverage": "bounded_not_complete",
+    "disappearance": "named_condition_nonreproduction_not_physical_erasure",
+    "effect": "none",
+    "evidence": "source_assertions_not_verified_by_package",
+    "inference": "no_inverse_transitive_or_universal_route_inference",
+    "medical": "educational_not_medical_or_manufacturing_advice",
+    "stability": "pairwise_condition_scoped_never_goodness"
+  },
+  "conditions": [
+    {
+      "condition_ref": "sha256:4e40b86496f6332bd22d5aaf2b82c7bd9d7e30036bcbb4f1c5316dcccfba79f2",
+      "description": "Liquid, time, particle-size, shape, and mechanical conditions reported to select Form I in the cited milling study.",
+      "key": "ball_milling_form_i_conditions_2024",
+      "kind": "mechanical_process",
+      "label": "2024 Form-I-selective milling conditions"
+    },
+    {
+      "condition_ref": "sha256:5b4a6f7d201944ccf01cc5382740e75ac3f3f5201db68f724ce4f3f5caa6f74c",
+      "description": "A different named milling regime reported to select Form II; not a universal direction of conversion.",
+      "key": "ball_milling_form_ii_conditions_2024",
+      "kind": "mechanical_process",
+      "label": "2024 Form-II-selective milling conditions"
+    },
+    {
+      "condition_ref": "sha256:91f62f84e7dc87311ef9372db31a1987fea7c0bf1c936082ef38808eaa19499b",
+      "description": "The source-specific solvent and washing conditions reported to recover Form I through intermediate solid forms.",
+      "key": "formamide_solvate_wash_2003",
+      "kind": "solvent_process",
+      "label": "2003 formamide-solvate, hydrate, and wash route"
+    },
+    {
+      "condition_ref": "sha256:90c53e2c71dedfa6a59fb032fac4baacd9cf296446120734451e61feac200374",
+      "description": "The then-current supersaturated formulation context in which Form-II crystallization caused dissolution failures.",
+      "key": "hydroalcoholic_fill_1998",
+      "kind": "formulation",
+      "label": "1998 hydroalcoholic semisolid capsule fill"
+    },
+    {
+      "condition_ref": "sha256:d569ac79024e49848048fd058be336ac08f3ab865285b1400fa884dc8f926b21",
+      "description": "The prior routine preparation environment after Form II had entered laboratory and production areas.",
+      "key": "old_form_i_bulk_route_after_form_ii",
+      "kind": "manufacturing_process",
+      "label": "Former Form-I bulk route after Form-II emergence"
+    },
+    {
+      "condition_ref": "sha256:afc6d2465f4444b1c5dfab2ce3bf4f048a7d07f8a2b9ab95dcb2d6af2e300e99",
+      "description": "A changed, controlled route reported to produce Form I from Form-II-containing material.",
+      "key": "reverse_addition_superseeding",
+      "kind": "solvent_process",
+      "label": "Controlled reverse addition and Form-I superseeding"
+    },
+    {
+      "condition_ref": "sha256:35ca031bf591f1bfa115dc9f5c0831d6aa643be14bc9816ab24b0c5f53ac13ec",
+      "description": "A specific measurement condition; its numerical ratio is not treated as a universal constant.",
+      "key": "solubility_85_15_ethanol_water_5c",
+      "kind": "measurement",
+      "label": "Solubility measurement in 85:15 ethanol/water at 5 °C"
+    }
+  ],
+  "coverage": "bounded_not_complete",
+  "forms": [
+    {
+      "description": "The originally developed crystalline form; the label is scoped to the Abbott process and structure papers.",
+      "form_ref": "sha256:1537462272f1265f7daef64560cec2a265db3ec5956c030a2b4446d15752d2ca",
+      "key": "form_i_abbott",
+      "kind_reported": "polymorph",
+      "label": "Form I (Abbott 2000/2001 naming)",
+      "source_refs": [
+        "sha256:052e253ac4ca05655f485897dac7d34fd74040cc37cffbb52cbde8ba0d378c5b",
+        "sha256:619891679328480497a678084d26bfbea88fecebaa75badeb4914a14cae05700"
+      ],
+      "source_scoped_identity": true,
+      "verified_by_package": false
+    },
+    {
+      "description": "The later-observed crystalline form reported as more stable and much less soluble under the tested formulation conditions.",
+      "form_ref": "sha256:907c5c0a72d7a75492d23b7efe33e8fd6f15e1aa0738fea8b8f6b0e20feb2eba",
+      "key": "form_ii_abbott",
+      "kind_reported": "polymorph",
+      "label": "Form II (Abbott 2000/2001 naming)",
+      "source_refs": [
+        "sha256:052e253ac4ca05655f485897dac7d34fd74040cc37cffbb52cbde8ba0d378c5b",
+        "sha256:619891679328480497a678084d26bfbea88fecebaa75badeb4914a14cae05700"
+      ],
+      "source_scoped_identity": true,
+      "verified_by_package": false
+    },
+    {
+      "description": "An anhydrous polymorph whose source-scoped label must not be merged with Morissette's 2003 Form III solvate.",
+      "form_ref": "sha256:3b3aac85a8347dfff7372731d8638d149548462785b8897db075ddef1c5d6e24",
+      "key": "form_iii_anhydrous_yao_2023",
+      "kind_reported": "polymorph",
+      "label": "Form III (Yao 2023 anhydrous-polymorph naming)",
+      "source_refs": [
+        "sha256:2df11686634a2cea35f82d5d907ced7c99060eeb13674508a37ead9f84918ca1"
+      ],
+      "source_scoped_identity": true,
+      "verified_by_package": false
+    },
+    {
+      "description": "A formamide solvate in the 2003 paper's naming; not the later anhydrous polymorph also called Form III.",
+      "form_ref": "sha256:1797a775dbaf6a45d949e23f3b0271ff93c329341004a7b96f50a386bc29121f",
+      "key": "form_iii_solvate_morissette_2003",
+      "kind_reported": "solvate",
+      "label": "Form III (Morissette 2003 formamide-solvate naming)",
+      "source_refs": [
+        "sha256:e7cf48345cf6d766945d81fc9ff9bf0ed9bd82bbbf14076b40cc4f8a380dfa9e"
+      ],
+      "source_scoped_identity": true,
+      "verified_by_package": false
+    },
+    {
+      "description": "A hydrate intermediate in the 2003 reported Form-I recovery route.",
+      "form_ref": "sha256:5bf1c4ab752318eb82f95cecd7558f46a45b7e0ee6e49975ce143058e3707bfb",
+      "key": "form_v_hydrate_morissette_2003",
+      "kind_reported": "hydrate",
+      "label": "Form V (Morissette 2003 hydrate naming)",
+      "source_refs": [
+        "sha256:e7cf48345cf6d766945d81fc9ff9bf0ed9bd82bbbf14076b40cc4f8a380dfa9e"
+      ],
+      "source_scoped_identity": true,
+      "verified_by_package": false
+    },
+    {
+      "description": "The dissolved-drug state used in the original hard-capsule fill; not a capsule of Form-I crystals.",
+      "form_ref": "sha256:0667b4dd07d75ab1df154cce26154bd60cbfe09c544d0c6af1d6162a51247a89",
+      "key": "hydroalcoholic_solution",
+      "kind_reported": "other",
+      "label": "Ritonavir hydroalcoholic semisolid solution",
+      "source_refs": [
+        "sha256:052e253ac4ca05655f485897dac7d34fd74040cc37cffbb52cbde8ba0d378c5b",
+        "sha256:619891679328480497a678084d26bfbea88fecebaa75badeb4914a14cae05700"
+      ],
+      "source_scoped_identity": true,
+      "verified_by_package": false
+    }
+  ],
+  "landscape_id": "sha256:a3096f5a78308ab126f3a2ee9a77851fe68ffef5f0c7cf06323d744e73fdf8a2",
+  "material": {
+    "assertion": "caller_reported",
+    "key": "ritonavir",
+    "label": "ritonavir",
+    "material_ref": "sha256:0b6c4bb4e622debd316ca3472173f990f6cd07e998ac35c9b5b8325fa19c421b",
+    "verified_by_package": false
+  },
+  "open_conditions": [
+    {
+      "key": "historical_origin_of_form_ii",
+      "open_condition_ref": "sha256:329892d81088a20f604baf6d32f9474ffe96b54ab6505a5d363522be04f89c64",
+      "question": "What first nucleated historical Form II in 1998? The package preserves this as unresolved.",
+      "status": "open_not_resolved_by_package",
+      "witness_refs": [
+        "sha256:1f034c52815185dce8ba4a25c9e7dc6bb1faeb78c54feb2b37fc111a5f79c045",
+        "sha256:ae0f800ae6500335421119b044b0a2a8ef037e10b4665f7d8e3cf27ef61994e4"
+      ]
+    },
+    {
+      "key": "source_scoped_form_numbering",
+      "open_condition_ref": "sha256:bd7c8328b248668c0602c75dede34e35a7e36c14b403108ed5d902f78c6226e7",
+      "question": "Which source and solid-state kind does a reused form number denote? Labels are never merged by number alone.",
+      "status": "open_not_resolved_by_package",
+      "witness_refs": [
+        "sha256:3cebad801d897888b0730c98dfb3f3792d4326909d76b5a356f400a228a212ff"
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "barrier_reported": "present_reported",
+      "causation_verified_by_package": false,
+      "condition_refs": [
+        "sha256:5b4a6f7d201944ccf01cc5382740e75ac3f3f5201db68f724ce4f3f5caa6f74c"
+      ],
+      "direction": "reported_only_no_inverse_or_transitive_inference",
+      "from_form_ref": "sha256:1537462272f1265f7daef64560cec2a265db3ec5956c030a2b4446d15752d2ca",
+      "key": "form_i_to_form_ii_by_milling_2024",
+      "route_ref": "sha256:9628efc75967db9c19e486d0ec6f70ea43ac9e8af4d7fbb95102ae47ee4a6de4",
+      "status": "converted_reported",
+      "template_reported": "not_reported",
+      "to_form_ref": "sha256:907c5c0a72d7a75492d23b7efe33e8fd6f15e1aa0738fea8b8f6b0e20feb2eba",
+      "witness_refs": [
+        "sha256:aafc2b46d00d9180f5f8b5b2126f4685ae045e14bd41a61d22b76074e5c9d32f"
+      ]
+    },
+    {
+      "barrier_reported": "present_reported",
+      "causation_verified_by_package": false,
+      "condition_refs": [
+        "sha256:4e40b86496f6332bd22d5aaf2b82c7bd9d7e30036bcbb4f1c5316dcccfba79f2"
+      ],
+      "direction": "reported_only_no_inverse_or_transitive_inference",
+      "from_form_ref": "sha256:907c5c0a72d7a75492d23b7efe33e8fd6f15e1aa0738fea8b8f6b0e20feb2eba",
+      "key": "form_ii_to_form_i_by_milling_2024",
+      "route_ref": "sha256:2488cb7d95605af5fcd3d30e57850da6a1ca94c3625a173775738f4b59141307",
+      "status": "converted_reported",
+      "template_reported": "not_reported",
+      "to_form_ref": "sha256:1537462272f1265f7daef64560cec2a265db3ec5956c030a2b4446d15752d2ca",
+      "witness_refs": [
+        "sha256:aafc2b46d00d9180f5f8b5b2126f4685ae045e14bd41a61d22b76074e5c9d32f"
+      ]
+    },
+    {
+      "barrier_reported": "present_reported",
+      "causation_verified_by_package": false,
+      "condition_refs": [
+        "sha256:afc6d2465f4444b1c5dfab2ce3bf4f048a7d07f8a2b9ab95dcb2d6af2e300e99"
+      ],
+      "direction": "reported_only_no_inverse_or_transitive_inference",
+      "from_form_ref": "sha256:907c5c0a72d7a75492d23b7efe33e8fd6f15e1aa0738fea8b8f6b0e20feb2eba",
+      "key": "form_ii_to_form_i_reverse_addition",
+      "route_ref": "sha256:3b0015b5678f9fdc187d0b94675925d50a31d9bf90ee485ba0cd72b1c21fe8a0",
+      "status": "converted_reported",
+      "template_reported": "present_reported",
+      "to_form_ref": "sha256:1537462272f1265f7daef64560cec2a265db3ec5956c030a2b4446d15752d2ca",
+      "witness_refs": [
+        "sha256:67b5bfa49be461ddb56aac92615e8bf195c1f0151d3ce954c1063bc1598a05cb"
+      ]
+    },
+    {
+      "barrier_reported": "not_reported",
+      "causation_verified_by_package": false,
+      "condition_refs": [
+        "sha256:91f62f84e7dc87311ef9372db31a1987fea7c0bf1c936082ef38808eaa19499b"
+      ],
+      "direction": "reported_only_no_inverse_or_transitive_inference",
+      "from_form_ref": "sha256:5bf1c4ab752318eb82f95cecd7558f46a45b7e0ee6e49975ce143058e3707bfb",
+      "key": "form_v_hydrate_to_form_i_2003",
+      "route_ref": "sha256:bc1acb811f29496f792afa1b770c18a2d85260320e18860a4de7076d67e7a7e8",
+      "status": "converted_reported",
+      "template_reported": "not_reported",
+      "to_form_ref": "sha256:1537462272f1265f7daef64560cec2a265db3ec5956c030a2b4446d15752d2ca",
+      "witness_refs": [
+        "sha256:435ff5ccd7183b4cceac0ddb89ad7b8186f8e886b59e8e3876b297b53dae34f5"
+      ]
+    },
+    {
+      "barrier_reported": "unknown",
+      "causation_verified_by_package": false,
+      "condition_refs": [
+        "sha256:d569ac79024e49848048fd058be336ac08f3ab865285b1400fa884dc8f926b21"
+      ],
+      "direction": "reported_only_no_inverse_or_transitive_inference",
+      "from_form_ref": "sha256:0667b4dd07d75ab1df154cce26154bd60cbfe09c544d0c6af1d6162a51247a89",
+      "key": "old_route_to_form_i_after_form_ii",
+      "route_ref": "sha256:528070fdc8f61fd98072a044af61843881c32b6719cea59f83b82f8797cc3f8d",
+      "status": "not_reproduced_reported",
+      "template_reported": "not_established",
+      "to_form_ref": "sha256:1537462272f1265f7daef64560cec2a265db3ec5956c030a2b4446d15752d2ca",
+      "witness_refs": [
+        "sha256:8c8684cdd83420646567f36efab4bcd0b4f4f216a179e4dfa042517604484182"
+      ]
+    },
+    {
+      "barrier_reported": "unknown",
+      "causation_verified_by_package": false,
+      "condition_refs": [
+        "sha256:90c53e2c71dedfa6a59fb032fac4baacd9cf296446120734451e61feac200374"
+      ],
+      "direction": "reported_only_no_inverse_or_transitive_inference",
+      "from_form_ref": "sha256:0667b4dd07d75ab1df154cce26154bd60cbfe09c544d0c6af1d6162a51247a89",
+      "key": "semisolid_solution_to_form_ii_1998",
+      "route_ref": "sha256:cb7f05939e602e10dad725d4f7ad736572d1faca26b72be195f721c8579d07d0",
+      "status": "produced_reported",
+      "template_reported": "not_established",
+      "to_form_ref": "sha256:907c5c0a72d7a75492d23b7efe33e8fd6f15e1aa0738fea8b8f6b0e20feb2eba",
+      "witness_refs": [
+        "sha256:a6b48947491a3914b729e5069d6cf9b991f316a7b97b2585063e11f0677ee846"
+      ]
+    },
+    {
+      "barrier_reported": "not_reported",
+      "causation_verified_by_package": false,
+      "condition_refs": [
+        "sha256:91f62f84e7dc87311ef9372db31a1987fea7c0bf1c936082ef38808eaa19499b"
+      ],
+      "direction": "reported_only_no_inverse_or_transitive_inference",
+      "from_form_ref": "sha256:1797a775dbaf6a45d949e23f3b0271ff93c329341004a7b96f50a386bc29121f",
+      "key": "solvate_to_hydrate_2003",
+      "route_ref": "sha256:c9c0995100ea0008dfb714718fb883d36df9cbce1d6eaddccbf5a775184e4dba",
+      "status": "converted_reported",
+      "template_reported": "not_reported",
+      "to_form_ref": "sha256:5bf1c4ab752318eb82f95cecd7558f46a45b7e0ee6e49975ce143058e3707bfb",
+      "witness_refs": [
+        "sha256:435ff5ccd7183b4cceac0ddb89ad7b8186f8e886b59e8e3876b297b53dae34f5"
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "content_verified_by_package": false,
+      "key": "bauer_2001",
+      "kind": "peer_reviewed_primary",
+      "label": "Bauer et al. 2001, Ritonavir: An Extraordinary Example of Conformational Polymorphism",
+      "published_year": 2001,
+      "source_ref": "sha256:619891679328480497a678084d26bfbea88fecebaa75badeb4914a14cae05700",
+      "url": "https://doi.org/10.1023/A:1011052932607"
+    },
+    {
+      "content_verified_by_package": false,
+      "key": "chemburkar_2000",
+      "kind": "peer_reviewed_primary",
+      "label": "Chemburkar et al. 2000, Dealing with the Impact of Ritonavir Polymorphs",
+      "published_year": 2000,
+      "source_ref": "sha256:052e253ac4ca05655f485897dac7d34fd74040cc37cffbb52cbde8ba0d378c5b",
+      "url": "https://doi.org/10.1021/op000023y"
+    },
+    {
+      "content_verified_by_package": false,
+      "key": "ema_1998",
+      "kind": "official_regulatory",
+      "label": "European Medicines Agency 1998 public statement on Norvir hard-capsule supply",
+      "published_year": 1998,
+      "source_ref": "sha256:a27826babd6e0563ccca1876db08fffd00aebd7ad86ff044f8f1e4cd65329105",
+      "url": "https://www.ema.europa.eu/en/news/public-statement-supply-norvir-hard-capsules"
+    },
+    {
+      "content_verified_by_package": false,
+      "key": "fda_1999",
+      "kind": "official_regulatory",
+      "label": "US FDA 1999 Norvir administrative review",
+      "published_year": 1999,
+      "source_ref": "sha256:177d9c83ba6f7491e1376e3820ec443c8cb5614a924848cd19eb95bb6482ae72",
+      "url": "https://www.accessdata.fda.gov/drugsatfda_docs/nda/99/20-945.pdf_Ritonovir_Admindocs.pdf"
+    },
+    {
+      "content_verified_by_package": false,
+      "key": "morissette_2003",
+      "kind": "peer_reviewed_primary",
+      "label": "Morissette et al. 2003, Elucidation of crystal form diversity of ritonavir",
+      "published_year": 2003,
+      "source_ref": "sha256:e7cf48345cf6d766945d81fc9ff9bf0ed9bd82bbbf14076b40cc4f8a380dfa9e",
+      "url": "https://doi.org/10.1073/pnas.0437744100"
+    },
+    {
+      "content_verified_by_package": false,
+      "key": "sacchi_2024",
+      "kind": "peer_reviewed_primary",
+      "label": "Sacchi et al. 2024, Disappearance and reappearance of ritonavir polymorphs in the mill",
+      "published_year": 2024,
+      "source_ref": "sha256:dee7555bd0d85065ced762af6ccf0de79ea6c4247ee83f693ec8098112251c7f",
+      "url": "https://doi.org/10.1073/pnas.2319127121"
+    },
+    {
+      "content_verified_by_package": false,
+      "key": "wang_2024",
+      "kind": "peer_reviewed_primary",
+      "label": "Wang et al. 2024, Solvent selection and ritonavir polymorphic selectivity",
+      "published_year": 2024,
+      "source_ref": "sha256:06849edb748723598e6b51d19a779d70694c2c7da8e0447db8cb2ffa52eca654",
+      "url": "https://doi.org/10.1021/acs.molpharmaceut.4c00234"
+    },
+    {
+      "content_verified_by_package": false,
+      "key": "yao_2023",
+      "kind": "peer_reviewed_primary",
+      "label": "Yao et al. 2023, anhydrous ritonavir Form III report",
+      "published_year": 2023,
+      "source_ref": "sha256:2df11686634a2cea35f82d5d907ced7c99060eeb13674508a37ead9f84918ca1",
+      "url": "https://doi.org/10.1016/j.xphs.2022.09.026"
+    }
+  ],
+  "stability_reports": [
+    {
+      "compared_form_ref": "sha256:1537462272f1265f7daef64560cec2a265db3ec5956c030a2b4446d15752d2ca",
+      "condition_refs": [
+        "sha256:35ca031bf591f1bfa115dc9f5c0831d6aa643be14bc9816ab24b0c5f53ac13ec",
+        "sha256:90c53e2c71dedfa6a59fb032fac4baacd9cf296446120734451e61feac200374"
+      ],
+      "key": "form_ii_over_form_i_tested_conditions",
+      "preferred_form_ref": "sha256:907c5c0a72d7a75492d23b7efe33e8fd6f15e1aa0738fea8b8f6b0e20feb2eba",
+      "scope": "pairwise_condition_scoped",
+      "stability_ref": "sha256:a0304d66edff930dd3a6816e07cd35037d7f2022796fd24f37ec447e9cd224f4",
+      "value_or_goodness": "not_implied",
+      "verified_by_package": false,
+      "witness_refs": [
+        "sha256:b47bc3e60dbb0b363cfa977deeec9b9cdbbea8df8a4338bbd21e773ef56ed15e"
+      ]
+    }
+  ],
+  "witnesses": [
+    {
+      "key": "commercial_form_i_before_1998",
+      "kind": "reported_history",
+      "scope": "Abbott process history before Form-II identification",
+      "source_refs": [
+        "sha256:052e253ac4ca05655f485897dac7d34fd74040cc37cffbb52cbde8ba0d378c5b"
+      ],
+      "statement": "Abbott reported routine Form-I bulk production before the 1998 Form-II event.",
+      "status": "reported_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:64df4e05b73bb83fb23916996d2b0a2fb8669f05f2895d47a4882d8964e00867"
+    },
+    {
+      "key": "cyclic_carbamate_possible_seed",
+      "kind": "mechanism_hypothesis",
+      "scope": "experimental seed test and bounded causal hypothesis",
+      "source_refs": [
+        "sha256:619891679328480497a678084d26bfbea88fecebaa75badeb4914a14cae05700"
+      ],
+      "statement": "A cyclic-carbamate degradant could seed Form II in a sensitive test and was proposed as a possible source, not established as the historical trigger.",
+      "status": "hypothesized_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:ae0f800ae6500335421119b044b0a2a8ef037e10b4665f7d8e3cf27ef61994e4"
+    },
+    {
+      "key": "fda_reformulation_accepts_either_form",
+      "kind": "regulatory_record",
+      "scope": "1999 US regulatory review of the reformulated capsule",
+      "source_refs": [
+        "sha256:177d9c83ba6f7491e1376e3820ec443c8cb5614a924848cd19eb95bb6482ae72"
+      ],
+      "statement": "The FDA administrative record describes a reformulated soft elastic capsule designed to accommodate either Form I or Form II.",
+      "status": "reported_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:ab56a6787cb89fbe8c8c3bd3c80ce2e31f9d6dcbc9567c8a59aad8429dee82c9"
+    },
+    {
+      "key": "form_i_not_reproduced_by_old_route",
+      "kind": "process_observation",
+      "scope": "reported Abbott laboratory and bulk-drug process experience",
+      "source_refs": [
+        "sha256:052e253ac4ca05655f485897dac7d34fd74040cc37cffbb52cbde8ba0d378c5b"
+      ],
+      "statement": "After Form II entered the process environment, the former routine route no longer reliably reproduced Form I until a controlled changed process was developed.",
+      "status": "reported_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:8c8684cdd83420646567f36efab4bcd0b4f4f216a179e4dfa042517604484182"
+    },
+    {
+      "key": "form_i_recovered_by_milling",
+      "kind": "recovery_observation",
+      "scope": "2024 laboratory mechanochemistry conditions",
+      "source_refs": [
+        "sha256:dee7555bd0d85065ced762af6ccf0de79ea6c4247ee83f693ec8098112251c7f"
+      ],
+      "statement": "Controlled milling experiments reproducibly selected Form I or Form II in different regimes, with size, shape, liquid, time, and conformation affecting direction.",
+      "status": "measured_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:aafc2b46d00d9180f5f8b5b2126f4685ae045e14bd41a61d22b76074e5c9d32f"
+    },
+    {
+      "key": "form_i_recovered_by_reverse_addition",
+      "kind": "recovery_observation",
+      "scope": "Abbott controlled bulk process reported in 2000",
+      "source_refs": [
+        "sha256:052e253ac4ca05655f485897dac7d34fd74040cc37cffbb52cbde8ba0d378c5b"
+      ],
+      "statement": "Complete dissolution, controlled handling, reverse addition, and Form-I superseeding produced Form I from Form-II-containing material.",
+      "status": "reported_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:67b5bfa49be461ddb56aac92615e8bf195c1f0151d3ce954c1063bc1598a05cb"
+    },
+    {
+      "key": "form_i_recovered_through_solvate_hydrate",
+      "kind": "recovery_observation",
+      "scope": "source-specific 2003 solvent and washing conditions",
+      "source_refs": [
+        "sha256:e7cf48345cf6d766945d81fc9ff9bf0ed9bd82bbbf14076b40cc4f8a380dfa9e"
+      ],
+      "statement": "A formamide solvate and hydrate sequence followed by washing yielded Form I in the 2003 high-throughput study.",
+      "status": "measured_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:435ff5ccd7183b4cceac0ddb89ad7b8186f8e886b59e8e3876b297b53dae34f5"
+    },
+    {
+      "key": "form_ii_appearance_and_dissolution_failures",
+      "kind": "reported_history",
+      "scope": "Abbott process account and contemporaneous European regulatory statement",
+      "source_refs": [
+        "sha256:052e253ac4ca05655f485897dac7d34fd74040cc37cffbb52cbde8ba0d378c5b",
+        "sha256:a27826babd6e0563ccca1876db08fffd00aebd7ad86ff044f8f1e4cd65329105"
+      ],
+      "statement": "In mid-1998, Form II crystallization was identified after some semisolid capsule lots failed dissolution; affected lots were detected before release.",
+      "status": "reported_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:a6b48947491a3914b729e5069d6cf9b991f316a7b97b2585063e11f0677ee846"
+    },
+    {
+      "key": "form_ii_solubility_and_stability",
+      "kind": "measurement",
+      "scope": "condition-specific Abbott measurements, not a universal ratio",
+      "source_refs": [
+        "sha256:619891679328480497a678084d26bfbea88fecebaa75badeb4914a14cae05700"
+      ],
+      "statement": "Under the reported formulation and measurement conditions, Form II was more stable and substantially less soluble than Form I; at 5 °C in 85:15 ethanol/water the reported solubilities were 61 and 294 mg/mL respectively.",
+      "status": "measured_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:b47bc3e60dbb0b363cfa977deeec9b9cdbbea8df8a4338bbd21e773ef56ed15e"
+    },
+    {
+      "key": "later_anhydrous_form_iii",
+      "kind": "measurement",
+      "scope": "source-scoped nomenclature comparison",
+      "source_refs": [
+        "sha256:2df11686634a2cea35f82d5d907ced7c99060eeb13674508a37ead9f84918ca1",
+        "sha256:e7cf48345cf6d766945d81fc9ff9bf0ed9bd82bbbf14076b40cc4f8a380dfa9e"
+      ],
+      "statement": "Later work used Form III for an anhydrous polymorph, distinct from the 2003 paper's Form III formamide solvate.",
+      "status": "measured_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:3cebad801d897888b0730c98dfb3f3792d4326909d76b5a356f400a228a212ff"
+    },
+    {
+      "key": "origin_and_personnel_transfer_unresolved",
+      "kind": "reported_history",
+      "scope": "historical causation remains unresolved",
+      "source_refs": [
+        "sha256:052e253ac4ca05655f485897dac7d34fd74040cc37cffbb52cbde8ba0d378c5b"
+      ],
+      "statement": "The timing of Form II at the Italy site after a personnel visit and the original nucleation source were reported as debatable or unknown, not proven global airborne transmission.",
+      "status": "reported_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:1f034c52815185dce8ba4a25c9e7dc6bb1faeb78c54feb2b37fc111a5f79c045"
+    },
+    {
+      "key": "solvent_changes_selectivity",
+      "kind": "measurement",
+      "scope": "2024 laboratory solvent-screening conditions",
+      "source_refs": [
+        "sha256:06849edb748723598e6b51d19a779d70694c2c7da8e0447db8cb2ffa52eca654"
+      ],
+      "statement": "Later experiments reported that solvent selection and supersaturation influence ritonavir crystallizability and polymorphic selectivity.",
+      "status": "measured_primary",
+      "verified_by_package": false,
+      "witness_ref": "sha256:e22cdc8ca1c0d0654a55e831a1ae9b9b87e233ec30589dc35f3668bc356546bd"
+    }
+  ]
+}

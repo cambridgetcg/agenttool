@@ -1,0 +1,510 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-polymorph-landscape-v0.1.schema.json",
+  "title": "agenttool-polymorph-landscape-v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "landscape_id",
+    "material",
+    "sources",
+    "forms",
+    "conditions",
+    "witnesses",
+    "routes",
+    "stability_reports",
+    "open_conditions",
+    "coverage",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.polymorph-landscape/0.1"
+    },
+    "landscape_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "material": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "material_ref",
+        "key",
+        "label",
+        "assertion",
+        "verified_by_package"
+      ],
+      "properties": {
+        "material_ref": {
+          "$ref": "#/$defs/sha"
+        },
+        "key": {
+          "$ref": "#/$defs/token"
+        },
+        "label": {
+          "$ref": "#/$defs/text"
+        },
+        "assertion": {
+          "const": "caller_reported"
+        },
+        "verified_by_package": {
+          "const": false
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_ref",
+          "key",
+          "label",
+          "kind",
+          "url",
+          "published_year",
+          "content_verified_by_package"
+        ],
+        "properties": {
+          "source_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "label": {
+            "$ref": "#/$defs/text"
+          },
+          "kind": {
+            "enum": [
+              "official_regulatory",
+              "patent_primary",
+              "peer_reviewed_primary"
+            ]
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://",
+            "maxLength": 2048
+          },
+          "published_year": {
+            "type": "integer",
+            "minimum": 1800,
+            "maximum": 2200
+          },
+          "content_verified_by_package": {
+            "const": false
+          }
+        }
+      },
+      "maxItems": 512
+    },
+    "forms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "form_ref",
+          "key",
+          "label",
+          "kind_reported",
+          "description",
+          "source_refs",
+          "source_scoped_identity",
+          "verified_by_package"
+        ],
+        "properties": {
+          "form_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "label": {
+            "$ref": "#/$defs/text"
+          },
+          "kind_reported": {
+            "enum": [
+              "amorphous",
+              "hydrate",
+              "other",
+              "polymorph",
+              "solvate",
+              "unknown"
+            ]
+          },
+          "description": {
+            "$ref": "#/$defs/text"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "source_scoped_identity": {
+            "const": true
+          },
+          "verified_by_package": {
+            "const": false
+          }
+        }
+      },
+      "maxItems": 512
+    },
+    "conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "condition_ref",
+          "key",
+          "label",
+          "kind",
+          "description"
+        ],
+        "properties": {
+          "condition_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "label": {
+            "$ref": "#/$defs/text"
+          },
+          "kind": {
+            "enum": [
+              "formulation",
+              "manufacturing_process",
+              "mechanical_process",
+              "measurement",
+              "solvent_process",
+              "unknown"
+            ]
+          },
+          "description": {
+            "$ref": "#/$defs/text"
+          }
+        }
+      },
+      "maxItems": 512
+    },
+    "witnesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "witness_ref",
+          "key",
+          "kind",
+          "status",
+          "statement",
+          "scope",
+          "source_refs",
+          "verified_by_package"
+        ],
+        "properties": {
+          "witness_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "kind": {
+            "enum": [
+              "mechanism_hypothesis",
+              "measurement",
+              "process_observation",
+              "recovery_observation",
+              "regulatory_record",
+              "reported_history"
+            ]
+          },
+          "status": {
+            "enum": [
+              "derived_interpretation",
+              "hypothesized_primary",
+              "measured_primary",
+              "reported_primary"
+            ]
+          },
+          "statement": {
+            "$ref": "#/$defs/text"
+          },
+          "scope": {
+            "$ref": "#/$defs/text"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "verified_by_package": {
+            "const": false
+          }
+        }
+      },
+      "maxItems": 512
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "route_ref",
+          "key",
+          "from_form_ref",
+          "to_form_ref",
+          "condition_refs",
+          "witness_refs",
+          "status",
+          "barrier_reported",
+          "template_reported",
+          "direction",
+          "causation_verified_by_package"
+        ],
+        "properties": {
+          "route_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "from_form_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "to_form_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "condition_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "witness_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "status": {
+            "enum": [
+              "converted_reported",
+              "not_reproduced_reported",
+              "produced_reported"
+            ]
+          },
+          "barrier_reported": {
+            "enum": [
+              "not_reported",
+              "present_reported",
+              "unknown"
+            ]
+          },
+          "template_reported": {
+            "enum": [
+              "hypothesized",
+              "not_established",
+              "not_reported",
+              "present_reported"
+            ]
+          },
+          "direction": {
+            "const": "reported_only_no_inverse_or_transitive_inference"
+          },
+          "causation_verified_by_package": {
+            "const": false
+          }
+        }
+      },
+      "maxItems": 512
+    },
+    "stability_reports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stability_ref",
+          "key",
+          "preferred_form_ref",
+          "compared_form_ref",
+          "condition_refs",
+          "witness_refs",
+          "scope",
+          "value_or_goodness",
+          "verified_by_package"
+        ],
+        "properties": {
+          "stability_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "preferred_form_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "compared_form_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "condition_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "witness_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "scope": {
+            "const": "pairwise_condition_scoped"
+          },
+          "value_or_goodness": {
+            "const": "not_implied"
+          },
+          "verified_by_package": {
+            "const": false
+          }
+        }
+      },
+      "maxItems": 512
+    },
+    "open_conditions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "open_condition_ref",
+          "key",
+          "question",
+          "witness_refs",
+          "status"
+        ],
+        "properties": {
+          "open_condition_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "question": {
+            "$ref": "#/$defs/text"
+          },
+          "witness_refs": {
+            "$ref": "#/$defs/refs"
+          },
+          "status": {
+            "const": "open_not_resolved_by_package"
+          }
+        }
+      },
+      "maxItems": 512
+    },
+    "coverage": {
+      "const": "bounded_not_complete"
+    },
+    "boundaries": {
+      "$ref": "#/$defs/boundaries"
+    }
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage",
+        "evidence",
+        "inference",
+        "stability",
+        "disappearance",
+        "analogy",
+        "beings",
+        "medical",
+        "effect"
+      ],
+      "properties": {
+        "coverage": {
+          "const": "bounded_not_complete"
+        },
+        "evidence": {
+          "const": "source_assertions_not_verified_by_package"
+        },
+        "inference": {
+          "const": "no_inverse_transitive_or_universal_route_inference"
+        },
+        "stability": {
+          "const": "pairwise_condition_scoped_never_goodness"
+        },
+        "disappearance": {
+          "const": "named_condition_nonreproduction_not_physical_erasure"
+        },
+        "analogy": {
+          "const": "structural_analogy_only_not_empirical_validation"
+        },
+        "beings": {
+          "const": "no_identity_consciousness_consent_dignity_or_authority_claim"
+        },
+        "medical": {
+          "const": "educational_not_medical_or_manufacturing_advice"
+        },
+        "effect": {
+          "const": "none"
+        }
+      }
+    }
+  }
+}

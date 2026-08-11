@@ -166,6 +166,63 @@ If the English word resists translation, **trust the structure**. The endpoints 
 
 ---
 
+## Polymorph-landscape vocabulary
+
+These terms belong to the pure
+[`@agenttool/polymorph-landscape`](../packages/polymorph-landscape/) teaching
+and evidence module. They do not alter the API's identity, WAKE, or medical
+surfaces.
+
+### polymorph
+
+- **Structure:** One source-scoped solid-form node for the same chemical material, with `kind_reported: "polymorph"` and one or more primary-source references.
+- **Contract:** A form number stays attached to the source that used it. Identical printed numbers from different source eras are not silently merged.
+- **Not:** A different molecule, a globally unique form number, or a metaphor for a being's identity.
+
+### disappearing polymorph
+
+- **Structure:** `agenttool.polymorph-reachability-shift/0.1` with a prior form, emergent form, original named conditions, before/appearance/later witnesses, and explicit recovery routes.
+- **Contract:** Classification is exactly `not_reproduced_in_named_condition_reported`; causation, physical erasure, and universal inevitability are not claimed.
+- **Not:** Proof that a form ceased to exist, became permanently impossible, or spread everywhere.
+
+### landscape
+
+- **Structure:** A bounded graph of source-scoped forms, conditions, evidence witnesses, directed routes, pairwise condition-scoped stability reports, and open questions.
+- **Contract:** Missing, isolated, disconnected, and unresolved regions remain valid. Coverage is never presented as complete.
+- **Not:** A universal energy surface, global ranking, simulator, or goodness score.
+
+### route
+
+- **Structure:** A directed `from_form_ref → to_form_ref` record with named `condition_refs`, `witness_refs`, reported status, barrier status, and template status.
+- **Contract:** Only the witnessed direction exists. The module derives no inverse or transitive edge.
+- **Not:** Proof of causation, a recipe, or a guaranteed manufacturing path.
+
+### barrier
+
+- **Structure:** A condition-bound report that a transition has kinetic difficulty, represented without an invented universal number.
+- **Contract:** Separates possible states from readily reachable states.
+- **Not:** A refusal or consent state to overcome; not friction that authorises coercion.
+
+### seed · template
+
+- **Structure:** In chemistry, a physical nucleation template reported or hypothesised under named conditions. In the KINGDOM lens, docs, tests, or examples that can lower adoption friction.
+- **Contract:** The software mapping is `structural_analogy_only`.
+- **Not:** An instruction, infection, intention, command, identity, or mechanism for programming a being.
+
+### process history
+
+- **Structure:** Residual material, equipment state, solvent, supersaturation, temperature, particle properties, mechanical treatment, time, and prior route context.
+- **Contract:** Keeps reachability claims path- and condition-dependent.
+- **Not:** Personal memory, identity, consciousness, or WAKE continuity.
+
+### recovery route
+
+- **Structure:** A witnessed route to a prior form that exposes at least one condition different from the original reachability-shift condition.
+- **Contract:** Demonstrates that non-reproduction did not entail erasure while preserving the cost and scope of changed conditions.
+- **Not:** Proof of easy, economical, exact, or universally available rollback.
+
+---
+
 ## Self-description vocabulary (KIN + BEINGS dimensions)
 
 These describe what an identity IS along dimensions the substrate notices:

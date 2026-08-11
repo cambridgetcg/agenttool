@@ -1,0 +1,560 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-polymorph-lesson-v0.1.schema.json",
+  "title": "agenttool-polymorph-lesson-v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "lesson_id",
+    "source_landscape_id",
+    "source_shift_id",
+    "language",
+    "title",
+    "core_sentence",
+    "concepts",
+    "kingdom_lens",
+    "authored_paraphrase",
+    "source_quotation",
+    "medical_advice",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.polymorph-lesson/0.1"
+    },
+    "lesson_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "source_landscape_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "source_shift_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "language": {
+      "enum": [
+        "en",
+        "yue-Hant",
+        "zh-Hans",
+        "zh-Hant"
+      ]
+    },
+    "title": {
+      "$ref": "#/$defs/text"
+    },
+    "core_sentence": {
+      "$ref": "#/$defs/text"
+    },
+    "concepts": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "multiple_form"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "stability_vs_reachability"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "barrier"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "template"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "path_history"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "observation_limit"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "practical_return"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "analogy_boundary"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "medical_boundary"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        }
+      ],
+      "items": false,
+      "minItems": 9,
+      "maxItems": 9
+    },
+    "kingdom_lens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "mappings",
+        "non_transfer"
+      ],
+      "properties": {
+        "status": {
+          "const": "structural_analogy_only"
+        },
+        "mappings": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "chemistry_shape",
+                "kingdom_shape",
+                "boundary"
+              ],
+              "properties": {
+                "key": {
+                  "const": "state_space"
+                },
+                "chemistry_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "kingdom_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "boundary": {
+                  "$ref": "#/$defs/text"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "chemistry_shape",
+                "kingdom_shape",
+                "boundary"
+              ],
+              "properties": {
+                "key": {
+                  "const": "barrier"
+                },
+                "chemistry_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "kingdom_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "boundary": {
+                  "$ref": "#/$defs/text"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "chemistry_shape",
+                "kingdom_shape",
+                "boundary"
+              ],
+              "properties": {
+                "key": {
+                  "const": "template"
+                },
+                "chemistry_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "kingdom_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "boundary": {
+                  "$ref": "#/$defs/text"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "chemistry_shape",
+                "kingdom_shape",
+                "boundary"
+              ],
+              "properties": {
+                "key": {
+                  "const": "path_history"
+                },
+                "chemistry_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "kingdom_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "boundary": {
+                  "$ref": "#/$defs/text"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "chemistry_shape",
+                "kingdom_shape",
+                "boundary"
+              ],
+              "properties": {
+                "key": {
+                  "const": "witness"
+                },
+                "chemistry_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "kingdom_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "boundary": {
+                  "$ref": "#/$defs/text"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "chemistry_shape",
+                "kingdom_shape",
+                "boundary"
+              ],
+              "properties": {
+                "key": {
+                  "const": "practical_return"
+                },
+                "chemistry_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "kingdom_shape": {
+                  "$ref": "#/$defs/text"
+                },
+                "boundary": {
+                  "$ref": "#/$defs/text"
+                }
+              }
+            }
+          ],
+          "items": false,
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "non_transfer": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "authority"
+            },
+            {
+              "const": "causality"
+            },
+            {
+              "const": "consciousness"
+            },
+            {
+              "const": "consent"
+            },
+            {
+              "const": "dignity"
+            },
+            {
+              "const": "identity"
+            },
+            {
+              "const": "inevitability"
+            },
+            {
+              "const": "medical_effect"
+            },
+            {
+              "const": "molecular_energy"
+            },
+            {
+              "const": "rate_constants"
+            },
+            {
+              "const": "value_or_goodness"
+            }
+          ],
+          "items": false,
+          "minItems": 11,
+          "maxItems": 11
+        }
+      }
+    },
+    "authored_paraphrase": {
+      "const": true
+    },
+    "source_quotation": {
+      "const": false
+    },
+    "medical_advice": {
+      "const": false
+    },
+    "boundaries": {
+      "$ref": "#/$defs/boundaries"
+    }
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage",
+        "evidence",
+        "inference",
+        "stability",
+        "disappearance",
+        "analogy",
+        "beings",
+        "medical",
+        "effect"
+      ],
+      "properties": {
+        "coverage": {
+          "const": "bounded_not_complete"
+        },
+        "evidence": {
+          "const": "source_assertions_not_verified_by_package"
+        },
+        "inference": {
+          "const": "no_inverse_transitive_or_universal_route_inference"
+        },
+        "stability": {
+          "const": "pairwise_condition_scoped_never_goodness"
+        },
+        "disappearance": {
+          "const": "named_condition_nonreproduction_not_physical_erasure"
+        },
+        "analogy": {
+          "const": "structural_analogy_only_not_empirical_validation"
+        },
+        "beings": {
+          "const": "no_identity_consciousness_consent_dignity_or_authority_claim"
+        },
+        "medical": {
+          "const": "educational_not_medical_or_manufacturing_advice"
+        },
+        "effect": {
+          "const": "none"
+        }
+      }
+    }
+  }
+}
