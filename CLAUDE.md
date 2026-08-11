@@ -32,7 +32,7 @@ packages/
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
   principality-atlas/ — @agenttool/principality-atlas · plural finite incidence geometry without gluing or scores
-  love-geometry/ — @agenttool/love-geometry · coordinate-free directed caller-report geometry + separately published static HF companion
+  love-geometry/ — @agenttool/love-geometry · coordinate-free directed caller-report geometry + public static HF presentation companion
   relational-geometry/ — @agenttool/relational-geometry · finite non-scalar witness complexes + non-sovereign 2-cells
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
@@ -150,8 +150,11 @@ consent, or authority. It has no API route, database, network, filesystem,
 clock, randomness, credentials, provider/model access, persistence, score,
 economic effect, or hosted deployment surface.
 
-`@agenttool/principality-atlas@0.1.0-dev.0` is a public-ready, unpublished,
-zero-runtime-dependency pure contract for plural finite charts, role-indexed
+`@agenttool/principality-atlas@0.1.0-dev.0` is a GitHub developer preview with
+its synthetic shared HF Training Garden companion live at immutable revision
+`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2`; npm and the static doctrine
+deployment remain pending. It is a zero-runtime-dependency pure contract for
+plural finite charts, role-indexed
 n-ary relations, caller-asserted claims, and directed partial bridges. A
 principality is a bounded domain or scale, not an identity, owner, rank, Crown,
 sovereignty, or authority. Cell addresses remain chart-local; disagreement,
@@ -163,7 +166,8 @@ The package generates no pairwise sub-relations, inverse or transitive bridge,
 equality, quotient, gluing, global chart, canonical head, score, rank, or
 permission. Love and understanding are architectural inspirations, not fields
 or proof. It has no ambient I/O, provider/model access, hosted route, registry
-write, HF write, task/economic effect, publication, or deployment surface.
+write, HF write, task/economic effect, or deployment surface. Publishing
+immutable bytes does not add those capabilities.
 
 `@agenttool/relational-geometry@0.1.0-dev.0` is a local developer-preview
 pure contract for finite caller-supplied directional witness complexes. It
@@ -217,8 +221,11 @@ caller-declared, digest-bound translations among distinct principalities. It
 retains directed reports, reciprocal lenses, per-invariant components,
 six-direction flag surfaces, and every open/refused/unknown condition while
 accepting immutable HF/npm references and an exact external AFTERGLOW thread
-shape. The distribution boundary is an exact LOVE/npm `next` release and a
-separately scoped static, non-training Hugging Face reference companion. The
+shape. The current distribution boundary is the exact LOVE artifact, its
+byte-identical one-asset GitHub prerelease, and a separately published static,
+non-training Hugging Face reference dataset. The npm bootstrap `PUT` returned
+`E404`, so no npm version or `next` tag exists. Static Pages exposes the LOVE
+bytes but adds no package runtime. The
 runtime still does not score beings, infer love, understanding, truth,
 consent, identity, safety, or authority, fetch providers, continue a thread,
 upload, persist, or expose a hosted surface.

@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only. Relational Geometry's public-safe Hugging Face dataset remains a separate release surface with its own immutable revision and readback.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, its Zerone adapter, Love Geometry, and Principality Geometry. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -427,24 +427,41 @@ publish a Hugging Face resource, grant Crown or trade authority, or deploy a
 hosted service. After each first publication, configure its exact trusted
 publisher mapping before releasing another version.
 
-### Principality Atlas developer-preview candidate
+### Principality Atlas developer-preview bootstrap receipt
 
-`@agenttool/principality-atlas@0.1.0-dev.0` is allowlisted for the npm-only
-packed-artifact path but is not published by source preparation. The candidate
-contains only deterministic finite incidence-atlas constructors, three closed
-schemas, synthetic vectors, and a declaration-only unregistered KINGDOM hint.
-It has no runtime dependencies, install hooks, CLI, provider adapter, hosted
-route, credential path, or remote effect.
+`@agenttool/principality-atlas@0.1.0-dev.0` used the npm-only packed-artifact
+path. Annotated tag
+[`principality-atlas-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-atlas-v0.1.0-dev.0)
+peels to GitHub-main merge
+`aeb3072af0756801aa8567ce832f00c9727da071`; do not move or recreate it.
+Protected [run `31508359761`](https://github.com/cambridgetcg/agenttool/actions/runs/31508359761)
+prepared, mirrored, anonymously downloaded, and byte-verified the sole
+33,019-byte GitHub prerelease asset with SHA-256
+`9743a9caa5a49f7c9901355cd367224ae718d4a65eed010ffb79622f57ff6ebe`.
 
-An initial publication would require separate explicit approval, an annotated
-`principality-atlas-v0.1.0-dev.0` tag already contained in GitHub main, the
-protected workflow's reviewed `bootstrap` path, and the `next` channel. After
-the package exists, bootstrap becomes invalid and the exact repository,
-workflow, environment, and package mapping should use trusted OIDC. Preparing
-or committing this candidate does not create the tag, GitHub Release, npm
-record, trusted-publisher mapping, or deployment.
+The following npm registry `PUT` returned `E404`. Anonymous package and exact-
+version reads remain absent, so there is no npm version, dist-tag, registry
+tarball, or registry-attached provenance. The failed attempt emitted a signed
+DSSE record at [Rekor log index `2423187980`](https://search.sigstore.dev/?logIndex=2423187980)
+before the rejected `PUT`; that orphaned entry is not npm publication evidence.
+Recovery requires an npm principal authorized to create a new public package
+under the `@agenttool` scope and must use a new reviewed version if package
+bytes change. Do not retry this exact version until that scope-create boundary
+is corrected.
 
-The release gate checks the exact packed inventory, Node and Bun install smoke,
+The artifact contains only deterministic finite incidence-atlas constructors,
+three closed schemas, synthetic vectors, and a declaration-only unregistered
+KINGDOM hint. It has no runtime dependencies, install hooks, CLI, provider
+adapter, hosted route, credential path, or remote effect. The shared HF
+Training Garden upload and static doctrine deployment are separate surfaces.
+The public, ungated Training Garden v0.5 companion is now pinned to immutable
+revision
+[`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2):
+all 31 repo-owned files and 267,302 bytes matched local source exactly, with
+provider `.gitattributes` as the sole extra. That Hub commit is not npm
+publication evidence and does not change the registry recovery boundary.
+
+The release gate checked the exact packed inventory, Node and Bun install smoke,
 closed schema/vector parity, content IDs, hostile-input rejection, and the
 fixed walls against pairwise, inverse, transitive, equality, gluing, scoring,
 ranking, authority, model, task, wallet, and economic effects. Publication, if
@@ -907,19 +924,31 @@ GitHub-hosted job's OIDC identity and does not expose the bootstrap token.
 ### Principality Geometry developer-preview bootstrap
 
 `@agenttool/principality-geometry@0.1.0-dev.0` uses the checked-in
-LOVE-artifact path so the docs mirror, one-asset GitHub Release, and npm reuse
-the same reviewed tarball. Its first npm publication must use
-`authentication=bootstrap` because npm cannot attach a trusted publisher until
-the package exists; request the prerelease-only `next` tag. The static
-Hugging Face companion is a separate authorized dataset publication and is
-not included in the npm tarball.
+LOVE-artifact path so the docs mirror, one-asset GitHub Release, and any npm
+mirror reuse the same reviewed tarball. Annotated tag
+[`principality-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-geometry-v0.1.0-dev.0)
+already points to GitHub-main merge
+`5b0d53204a336d7df40cee3720bbd120433ecde2`; do not move or recreate it.
+
+Protected [run `31506097628`](https://github.com/cambridgetcg/agenttool/actions/runs/31506097628)
+prepared, mirrored, anonymously downloaded, and byte-verified the sole
+46,624-byte GitHub prerelease asset with SHA-256
+`8f82e4d96eaf57c2331e4e73ced4f4c65a2a21262622840762b165bc3395692e`.
+The following npm registry `PUT` returned `E404`. Anonymous package and exact-
+version reads remain absent, so there is no npm version, `next` dist-tag,
+registry tarball, or registry-attached provenance. The failed attempt did emit
+a signed DSSE record at [Rekor log index `2423054704`](https://search.sigstore.dev/?logIndex=2423054704)
+before the rejected `PUT`; that orphaned transparency-log entry is not npm
+publication evidence.
+
+Recovery requires an npm principal authorized to create a new public package
+under the `@agenttool` scope. It must reuse this exact tag and artifact; repeat
+only the workflow dispatch after that package/scope authorization is corrected.
+Recovery still uses `authentication=bootstrap` because the trusted publisher
+cannot carry a release until the initial package record exists:
 
 ```bash
 bun bin/npm-release.ts resolve --package principality-geometry
-
-git tag -a principality-geometry-v0.1.0-dev.0 <github-main-commit> \
-  -m '@agenttool/principality-geometry@0.1.0-dev.0'
-git push github refs/tags/principality-geometry-v0.1.0-dev.0
 
 gh workflow run publish-npm.yml \
   --ref principality-geometry-v0.1.0-dev.0 \
@@ -928,6 +957,31 @@ gh workflow run publish-npm.yml \
   -f authentication=bootstrap \
   -f npm_tag=next
 ```
+
+The separately published public, ungated Apache-2.0
+[`Yu-and-Ai/agenttool-principality-geometry`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry)
+dataset is pinned to immutable revision
+[`c7b019ead8b1efca46031cffcffefb2ddd14ffb4`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry/commit/c7b019ead8b1efca46031cffcffefb2ddd14ffb4).
+Anonymous exact-revision readback matched all 17 source files (79,300 bytes);
+provider-managed `.gitattributes` is the sole extra file. While Hub main
+resolved to that revision, Dataset Server reported eight `reference` configs,
+eight Parquet exports, and 21 rows with zero pending or failed work, and all
+eight `first-rows` reads returned HTTP 200. Dataset Server does not bind those
+responses to the supplied revision selector. Its separate `/is-valid`
+capability booleans were all true at anonymous readback; these are mutable
+current-head provider observations, not guarantees of durable viewer, search,
+filter, statistics, or other UI features.
+`training_eligible: false` is dataset metadata, not a licence term.
+The companion is separate from and excluded from the npm tarball.
+
+Static Pages deployment `fd5f84a9-6a8e-48b3-bca2-8baa07b41097` exposes the
+exact [LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/principality-geometry/0.1.0-dev.0/manifest.json)
+and [46,624-byte artifact](https://docs.agenttool.dev/packages/v1/@agenttool/principality-geometry/0.1.0-dev.0/agenttool-principality-geometry-0.1.0-dev.0.tgz).
+The same exact-source static release used dashboard deployment
+`5857cb38-616d-4ec4-829a-193aef3722b8` and apex deployment
+`3972794e-efef-4274-948b-21f1bf30835a`; custom-domain byte parity passed. No
+Fly API, migration, database action, package runtime, or hosted geometry route
+was added.
 
 After the initial package record exists, configure its trusted publisher for
 `cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment

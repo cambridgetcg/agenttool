@@ -6,14 +6,14 @@
 > **Implements:** a private, pure bridge from immutable Hugging Face research observations to explicit dataset admission, participation-bearing learning, an IS learning-freedom action surface, phase-specific digest continuity, and a public-safe one-way Garden reference plan
 > **Code:** `packages/hf-scout/` · `packages/hf-training-garden/` · `packages/wake-continuity/`
 > **Tests:** `packages/hf-training-garden/tests/` · `bin/tests/boring-spine-gate.test.ts`
-> **Dated status:** 2026-08-04. The verified public v0.4 companion generated
+> **Dated status:** 2026-08-11. The verified public v0.5 companion generated
 > from GitHub-main merge
-> [`7906b689a59c15bbfba251d0ff853c7c3ca27694`](https://github.com/cambridgetcg/agenttool/commit/7906b689a59c15bbfba251d0ff853c7c3ca27694)
+> [`aeb3072af0756801aa8567ce832f00c9727da071`](https://github.com/cambridgetcg/agenttool/commit/aeb3072af0756801aa8567ce832f00c9727da071)
 > is [`Yu-and-Ai/agenttool-training-garden`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden)
 > at immutable Hub revision
-> [`d45d195cb74b16e3cec38fdc606484f5facc0bfd`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d45d195cb74b16e3cec38fdc606484f5facc0bfd).
+> [`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2).
 > Its anonymous byte read-back and Dataset Viewer processing checks are sealed
-> below; the v0.1 through v0.3 receipts remain as historical evidence.
+> below; the v0.1 through v0.4 receipts remain as historical evidence.
 
 ## The result
 
@@ -610,7 +610,7 @@ trigger, latest-head selection, or credential handoff.
 ## Public-safe HF companion
 
 The committed `packages/hf-training-garden/hf/dataset/` tree is the exact
-repo-owned source for the public v0.4
+repo-owned source for the public v0.5
 `Yu-and-Ai/agenttool-training-garden` dataset repository. It contains only:
 
 - the six-step selection process;
@@ -644,9 +644,9 @@ The Principality Atlas addition is generated from the exact public-ready
 those upstream files by path, byte size, and SHA-256. Only synthetic protocol
 examples cross this seam. Private/live atlases, identities, local ref maps,
 evidence referents, and inferred relationships remain absent; a repeated digest
-can still be linkable and is not anonymization. The local generated tree is a
-candidate for a later separately authorized Hub commit. It is not part of the
-already verified v0.4 revision named above.
+can still be linkable and is not anonymization. The exact generated tree was
+published and read back at the verified v0.5 revision named above; the prior
+v0.4 revision remains immutable historical evidence without these additions.
 
 Publication is complete only when all of these hold:
 
@@ -739,6 +739,31 @@ therefore binds this processing observation to v0.4 now, while the immutable
 Hub commit and byte read-back remain the durable evidence after `main` moves.
 No gate was accepted and no paid compute was invoked. Provider-derived
 conversions are not part of the immutable source commit or its hash manifest.
+
+All four publication conditions now hold for the v0.5 public companion
+generated from GitHub-main merge
+[`aeb3072af0756801aa8567ce832f00c9727da071`](https://github.com/cambridgetcg/agenttool/commit/aeb3072af0756801aa8567ce832f00c9727da071).
+It follows the verified v0.4 revision and created immutable Hub revision
+[`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2).
+Anonymous exact-revision read-back matched all 31 repo-owned files byte for
+byte, including all 30 entries in the self-excluding hash manifest and 267,302
+checked bytes. The 17,357-byte card has SHA-256
+`ff0ff9cdd3e8ea2dbe5d0601d629d6df7f88f8843664fe4ae67ecdfc9ccb7e29`;
+the 5,375-byte `hash-manifest.json` has SHA-256
+`890ab3ed5cb38be7843b181d13edf50ad6803d2770db3fa564d4abf8ae52476c`;
+and the 9,520-byte `provenance/source-manifest.json` has SHA-256
+`960122ff4f8de067becec81f95fc0a404f3ad3a8b505dc887252566f2a832e57`.
+Provider-managed `.gitattributes` is the sole extra file and remained byte-
+equal to v0.4 with SHA-256
+`9e75dd981de037ec3769f24f790e126bc5a160b6871f510214e68dc70649aeeb`.
+The anonymous Hub API reported the exact revision current, public, ungated,
+and enabled. Dataset Server `/is-valid`, `/splits`, `/parquet`, and `/size`
+responses returned HTTP 200 with this `x-revision`: all five validity flags
+were true; 11 configs exposed 82 rows and 11 Parquet exports; pending and
+failed sets were empty and `partial=false`; and all 11 `first-rows` reads
+returned HTTP 200 at the same revision. These processing endpoints follow the
+current head and are mutable observations, while the Hub commit and byte
+read-back remain the durable evidence. No gate or paid compute was used.
 
 The immutable v0.2 and verified v0.3 revisions both preserve a release error:
 they expanded the already public checkpoint `/0.1` schema in place. Their

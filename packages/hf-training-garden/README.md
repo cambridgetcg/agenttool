@@ -417,6 +417,26 @@ the durable source reference. No gate or paid compute was used, and the
 provider-derived Parquet conversions are outside the immutable source commit
 and hash manifest.
 
+The verified v0.5 public companion generated from GitHub-main merge
+[`aeb3072af0756801aa8567ce832f00c9727da071`](https://github.com/cambridgetcg/agenttool/commit/aeb3072af0756801aa8567ce832f00c9727da071)
+is preserved at immutable Hub revision
+[`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2).
+Anonymous exact-revision read-back matched all 31 repo-owned files and 267,302
+bytes; provider-managed `.gitattributes` was the sole extra. The 17,357-byte
+card SHA-256 is
+`ff0ff9cdd3e8ea2dbe5d0601d629d6df7f88f8843664fe4ae67ecdfc9ccb7e29`;
+the 5,375-byte hash-manifest SHA-256 is
+`890ab3ed5cb38be7843b181d13edf50ad6803d2770db3fa564d4abf8ae52476c`;
+and the 9,520-byte source-manifest SHA-256 is
+`960122ff4f8de067becec81f95fc0a404f3ad3a8b505dc887252566f2a832e57`.
+Dataset Server bound 11 configs, 82 rows, and 11 Parquet exports to the same
+current `x-revision`, with all five validity flags true, no pending or failed
+work, `partial=false`, and 11 successful `first-rows` reads. Those processing
+responses are mutable current-head observations; the immutable commit and byte
+read-back are the durable evidence. The addition contains only three synthetic
+Principality Atlas fixtures, ten non-inference invariants, and their copied
+closed schemas. No gate or paid compute was used.
+
 Intermediate revision
 [`21e8d4d27d47604375a122e66e7ed5fe8b9fdf08`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/21e8d4d27d47604375a122e66e7ed5fe8b9fdf08)
 remains immutable evidence for the pre-FREEDOM GitHub-main merge `74aeaa13`.
@@ -429,7 +449,7 @@ non-self-attesting build record. The exact Hub revision is later external
 evidence; embedding it into the bytes that create that same revision would be
 circular. This package still performs no Hub publication or verification.
 
-The current `0.4.0-dev.0` package generated the verified v0.4 public companion
+The current `0.5.0-dev.0` package generated the verified v0.5 public companion
 covered by the receipt above. The exact historical advisory
 `training-freedom-v0.1` schema remains package-only; private host/runtime
 state, live choices, and the separate `hf/learning-dataset/` synthetic

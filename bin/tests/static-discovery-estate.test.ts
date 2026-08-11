@@ -275,7 +275,7 @@ describe("robots and sitemaps are explicit, bounded, and local", () => {
     test(`${site.name} sitemap names unique files on its own origin`, () => {
       const urls = sitemapUrls(read(`${site.dir}/sitemap.xml`));
       expect(urls.length).toBeGreaterThan(0);
-      expect(urls.length).toBeLessThanOrEqual(64);
+      expect(urls.length).toBeLessThanOrEqual(96);
       expect(new Set(urls).size).toBe(urls.length);
       if ("sitemap" in site) expect(urls).toEqual([...site.sitemap]);
 
@@ -303,6 +303,7 @@ describe("robots and sitemaps are explicit, bounded, and local", () => {
     expect(urls).toContain(
       "https://docs.agenttool.dev/PRINCIPALITY-ATLAS.md",
     );
+    expect(urls).toContain("https://docs.agenttool.dev/gold-love");
   });
 });
 
