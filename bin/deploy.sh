@@ -257,6 +257,7 @@ readonly -a FRONTEND_PARITY_PUBLICATIONS=(
   "apps/docs/GARDENS.md|https://docs.agenttool.dev/GARDENS.md"
   "apps/docs/HF-TRAINING-GARDEN.md|https://docs.agenttool.dev/HF-TRAINING-GARDEN.md"
   "apps/docs/PRINCIPALITY-ATLAS.md|https://docs.agenttool.dev/PRINCIPALITY-ATLAS.md"
+  "apps/docs/POLYMORPH-LANDSCAPE.md|https://docs.agenttool.dev/POLYMORPH-LANDSCAPE.md"
   "apps/docs/HF-WAKE-TRAINING.md|https://docs.agenttool.dev/HF-WAKE-TRAINING.md"
   "apps/docs/HF-WAKE-HOST.md|https://docs.agenttool.dev/HF-WAKE-HOST.md"
   "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"

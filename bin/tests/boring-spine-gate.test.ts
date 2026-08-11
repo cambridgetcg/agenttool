@@ -4,10 +4,12 @@ import { describe, expect, test } from "bun:test";
 import {
   chmod,
   copyFile,
+  lstat,
   mkdir,
   mkdtemp,
   readdir,
   readFile,
+  readlink,
   rm,
   symlink,
   writeFile,
@@ -450,6 +452,19 @@ describe("boring test spine", () => {
     expect(deploy).toContain(
       "bin/bash-without-env-hooks.sh bin/preflight.sh",
     );
+    expect(deploy).toContain(
+      '"apps/docs/POLYMORPH-LANDSCAPE.md|https://docs.agenttool.dev/POLYMORPH-LANDSCAPE.md"',
+    );
+    const polymorphGuide = join(
+      ROOT,
+      "apps",
+      "docs",
+      "POLYMORPH-LANDSCAPE.md",
+    );
+    expect((await lstat(polymorphGuide)).isSymbolicLink()).toBe(true);
+    expect(await readlink(polymorphGuide)).toBe(
+      "../../docs/POLYMORPH-LANDSCAPE.md",
+    );
 
     const readBashArray = (name: string): string[] => {
       const match = preparer.match(
@@ -480,6 +495,7 @@ describe("boring test spine", () => {
       "packages/heaven",
       "packages/living-substrate",
       "packages/principality-atlas",
+      "packages/polymorph-landscape",
       "packages/love-geometry",
       "packages/relational-geometry",
       "packages/wake-thread",
@@ -559,7 +575,10 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/heaven && bun run ci");
     expect(preflight).toContain("cd packages/living-substrate && bun run ci");
     expect(preflight).toContain("cd packages/principality-atlas && bun run ci");
-    expect(workflow).toContain("Principality Geometry and Atlas");
+    expect(preflight).toContain("cd packages/polymorph-landscape && bun run ci");
+    expect(workflow).toContain(
+      "Principality Geometry and Atlas, Polymorph Landscape",
+    );
     expect(preflight).toContain("cd packages/love-geometry && bun run ci");
     expect(preflight).toContain("cd packages/relational-geometry && bun run ci");
     expect(preflight).toContain("cd packages/wake-thread && bun run ci");
@@ -984,9 +1003,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(48);
+      expect(calls).toHaveLength(49);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        39,
+        40,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         9,
@@ -1153,6 +1172,7 @@ exit 94
     expect(workflow).toContain("          - heaven");
     expect(workflow).toContain("          - living-substrate");
     expect(workflow).toContain("          - principality-atlas");
+    expect(workflow).toContain("          - polymorph-landscape");
     expect(workflow).toContain("          - love-geometry");
     expect(workflow).toContain("          - relational-geometry");
     expect(workflow).not.toContain("          - karma-mirror");

@@ -98,7 +98,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twenty-eight reviewed release identities", () => {
+  test("allowlists twenty-nine reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -117,6 +117,7 @@ describe("standard npm release policy", () => {
       "kingdom-witness-lab",
       "living-substrate",
       "love-geometry",
+      "polymorph-landscape",
       "principality-atlas",
       "principality-geometry",
       "relational-geometry",
@@ -222,6 +223,12 @@ describe("standard npm release policy", () => {
       name: "@agenttool/principality-atlas",
       packagePath: "packages/principality-atlas",
       tagPrefix: "principality-atlas",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("polymorph-landscape")).toMatchObject({
+      name: "@agenttool/polymorph-landscape",
+      packagePath: "packages/polymorph-landscape",
+      tagPrefix: "polymorph-landscape",
       artifactKind: "pack",
     });
     expect(releaseSpec("principality-geometry")).toMatchObject({
@@ -339,6 +346,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/principality-atlas", "0.1.0-dev.0")).toBe(
       "agenttool-principality-atlas-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("polymorph-landscape"), "0.1.0-dev.0")).toBe(
+      "polymorph-landscape-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/polymorph-landscape", "0.1.0-dev.0")).toBe(
+      "agenttool-polymorph-landscape-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("principality-geometry"), "0.1.0-dev.0")).toBe(
       "principality-geometry-v0.1.0-dev.0",
@@ -565,6 +578,24 @@ describe("standard npm release policy", () => {
         "package/vectors/agenttool-principality-incidence-atlas-v0.1.json",
       ]),
     );
+    expect(requiredArchiveEntries(releaseSpec("polymorph-landscape"))).toEqual([
+      "package/package.json",
+      "package/LICENSE",
+      "package/NOTICE",
+      "package/README.md",
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-polymorph-landscape-v0.1.schema.json",
+      "package/schema/agenttool-polymorph-lesson-v0.1.schema.json",
+      "package/schema/agenttool-polymorph-reachability-shift-v0.1.schema.json",
+      "package/examples/ritonavir.landscape.json",
+      "package/examples/ritonavir.reachability-shift.json",
+      "package/hf/dataset/source-manifest.json",
+      "package/hf/dataset/hash-manifest.json",
+      "package/hf/dataset/data/lessons.jsonl",
+    ]);
     expect(requiredArchiveEntries(releaseSpec("principality-geometry"))).toEqual(
       expect.arrayContaining([
         "package/package.json",

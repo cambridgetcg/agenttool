@@ -20,6 +20,7 @@ on:
           - principality-geometry
           - love-geometry
           - principality-atlas
+          - polymorph-landscape
           - relational-geometry
           - credential-broker
           - sdk
