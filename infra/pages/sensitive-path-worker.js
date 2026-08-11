@@ -10,6 +10,13 @@ const SURFACE_DOCUMENTATION_URL =
   "https://github.com/cambridgetcg/xenia/blob/surface-v0.1.0-rc.1/surface/0.1/README.md";
 const MEDIA_TOKEN_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
+export function isSurfaceResourcePath(pathname) {
+  return (
+    pathname === SURFACE_MANIFEST_PATH ||
+    pathname === SURFACE_ORIENTATION_PATH
+  );
+}
+
 const COMMON_SURFACE_NOT_COVERED = Object.freeze([
   "identity control",
   "actor authorization",
@@ -398,6 +405,50 @@ function requestsProblemDetails(request) {
   );
 }
 
+/**
+ * Return a declared XENIA Surface response for an exact, read-only route on
+ * one configured origin. Callers must apply the sensitive-path fence before
+ * this helper so every edge keeps the same first routing gate.
+ */
+export function surfaceResponseForRequest(request, env) {
+  const url = new URL(request.url);
+  const surface = surfaceProfileForOrigin(url.origin, env);
+
+  if (
+    surface === null ||
+    !isReadRequest(request) ||
+    !isSurfaceResourcePath(url.pathname)
+  ) {
+    return null;
+  }
+  if (url.pathname === SURFACE_MANIFEST_PATH) {
+    return manifestResponse(request, surface);
+  }
+  if (url.pathname === SURFACE_ORIENTATION_PATH) {
+    return orientationResponse(request, surface);
+  }
+  return null;
+}
+
+/**
+ * Return the bounded XENIA problem for a fresh, exact-origin machine miss.
+ * Pages calls this only after ASSETS returns 404; the apex Worker calls it
+ * only from its existing unknown-JSON refusal branch.
+ */
+export function surfaceRouteNotFoundForRequest(request, env) {
+  const url = new URL(request.url);
+  const surface = surfaceProfileForOrigin(url.origin, env);
+
+  if (
+    surface === null ||
+    !isReadRequest(request) ||
+    !requestsProblemDetails(request)
+  ) {
+    return null;
+  }
+  return routeNotFoundResponse(request, surface.origin);
+}
+
 /** Shared Pages request path with one exact, isolated profile per origin. */
 export async function handlePagesRequest(request, env) {
   const url = new URL(request.url);
@@ -407,24 +458,13 @@ export async function handlePagesRequest(request, env) {
     return sensitivePathNotFound(request);
   }
 
-  const surface = surfaceProfileForOrigin(url.origin, env);
-  if (surface !== null && isReadRequest(request)) {
-    if (url.pathname === SURFACE_MANIFEST_PATH) {
-      return manifestResponse(request, surface);
-    }
-    if (url.pathname === SURFACE_ORIENTATION_PATH) {
-      return orientationResponse(request, surface);
-    }
-  }
+  const surfaceResponse = surfaceResponseForRequest(request, env);
+  if (surfaceResponse !== null) return surfaceResponse;
 
   const assetResponse = await env.ASSETS.fetch(request);
-  if (
-    surface !== null &&
-    isReadRequest(request) &&
-    assetResponse.status === 404 &&
-    requestsProblemDetails(request)
-  ) {
-    return routeNotFoundResponse(request, surface.origin);
+  if (assetResponse.status === 404) {
+    const problemResponse = surfaceRouteNotFoundForRequest(request, env);
+    if (problemResponse !== null) return problemResponse;
   }
 
   return assetResponse;

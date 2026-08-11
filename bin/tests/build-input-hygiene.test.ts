@@ -90,7 +90,7 @@ describe("frontend deploy input discipline", () => {
     expect(script).toContain('npx --yes "wrangler@${WRANGLER_VERSION}" "$@"');
     expect(script).not.toContain("wrangler@latest");
     expect(script).toContain('command curl -q "$@"');
-    expect(script.match(/frontend_curl -fsS/g)).toHaveLength(2);
+    expect(script.match(/frontend_curl -fsS/g)).toHaveLength(4);
     expect(
       script
         .split("\n")
@@ -148,6 +148,7 @@ describe("frontend deploy input discipline", () => {
       "apps/dashboard",
       "apps/web",
       "docs",
+      "infra/apex-door",
       "infra/pages",
       "packages/data/schema",
       "packages/repo-archive/schema",
@@ -167,8 +168,19 @@ describe("frontend deploy input discipline", () => {
     expect(stageScript).toContain("escapes, is broken, or is cyclic");
     expect(script).toContain('source_dir="$STAGE_ROOT/$dir"');
     expect(script).toContain('verify_pages_project_policy "$proj" || exit 1');
+    expect(script).toContain("verify_apex_worker_topology || exit 1");
     expect(script).toContain("python3 bin/verify-pages-project-policy.py");
     expect(script).toContain('wrangler pages deploy "$source_dir"');
+    expect(script).toContain("wrangler deploy \\\n        --config=wrangler.toml");
+    expect(script).toContain("--dry-run");
+    expect(script).toContain('--outdir="$outdir"');
+    expect(script).toContain(
+      '--message="agenttool frontend release $COMMIT_HASH"',
+    );
+    expect(script).toContain("--strict");
+    expect(script).toContain(
+      'exactly agenttool.dev/* and www.agenttool.dev/* owned by that script',
+    );
     expect(script).toContain('--commit-hash="$COMMIT_HASH"');
     expect(script).toContain('--commit-dirty="$COMMIT_DIRTY"');
     expect(script).not.toContain("--commit-dirty=true");
@@ -224,12 +236,18 @@ describe("frontend deploy input discipline", () => {
     ]);
 
     const partyPath = join(fixtureRepo, "apps/web/party.html");
+    const apexFixturePath = join(
+      fixtureRepo,
+      "infra/apex-door/revision-fixture.txt",
+    );
     await writeFile(partyPath, "pinned frontend fixture A\n");
+    await writeFile(apexFixturePath, "pinned apex fixture A\n");
     result = await run(
       [
         "git",
         "add",
         "apps/web/party.html",
+        "infra/apex-door/revision-fixture.txt",
         "bin/frontend-deploy.sh",
         "bin/stage-frontend-release.sh",
         "bin/frontend-release-paths.txt",
@@ -244,6 +262,7 @@ describe("frontend deploy input discipline", () => {
     const pinnedRevision = result.stdout.trim();
 
     await writeFile(partyPath, "ambient frontend fixture B\n");
+    await writeFile(apexFixturePath, "ambient apex fixture B\n");
     const manifestPath = join(fixtureRepo, "bin/frontend-release-paths.txt");
     const ambientManifest = (await readFile(manifestPath, "utf8"))
       .split("\n")
@@ -251,7 +270,13 @@ describe("frontend deploy input discipline", () => {
       .join("\n");
     await writeFile(manifestPath, ambientManifest);
     result = await run(
-      ["git", "add", "apps/web/party.html", "bin/frontend-release-paths.txt"],
+      [
+        "git",
+        "add",
+        "apps/web/party.html",
+        "infra/apex-door/revision-fixture.txt",
+        "bin/frontend-release-paths.txt",
+      ],
       fixtureRepo,
     );
     expect(result.code, result.stderr).toBe(0);
@@ -264,10 +289,27 @@ describe("frontend deploy input discipline", () => {
       join(fakeBin, "curl"),
       `#!/usr/bin/env bash
 set -eu
-case "$*" in
-  *user/tokens/verify*) printf '{"success":true}\\n' ;;
+output=""
+previous=""
+url=""
+for arg in "$@"; do
+  if [ "$previous" = "-o" ]; then output="$arg"; fi
+  previous="$arg"
+  case "$arg" in https://*) url="$arg" ;; esac
+done
+emit() {
+  if [ -n "$output" ]; then printf '%s\\n' "$1" > "$output"; else printf '%s\\n' "$1"; fi
+}
+case "$url" in
+  *user/tokens/verify*) emit '{"success":true}' ;;
   *pages/projects/*)
-    printf '{"success":true,"result":{"production_branch":"main","deployment_configs":{"production":{"fail_open":false},"preview":{"fail_open":false}}}}\\n'
+    emit '{"success":true,"result":{"production_branch":"main","deployment_configs":{"production":{"fail_open":false},"preview":{"fail_open":false}}}}'
+    ;;
+  *'/zones?'*)
+    emit '{"success":true,"result":[{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"agenttool.dev","status":"active","account":{"id":"fixture-account"}}]}'
+    ;;
+  */zones/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/workers/routes)
+    emit '{"success":true,"result":[{"pattern":"agenttool.dev/*","script":"agenttool-proxy"},{"pattern":"www.agenttool.dev/*","script":"agenttool-proxy"},{"pattern":"unrelated.example/*","script":"other-worker"}]}'
     ;;
   *) exit 2 ;;
 esac
@@ -277,13 +319,30 @@ esac
       join(fakeBin, "npx"),
       `#!/usr/bin/env bash
 set -eu
-printf '%s\\n' "$*" > "$DEPLOY_TEST_WRANGLER_LOG"
-source_dir=""
-for arg in "$@"; do
-  case "$arg" in */apps/web) source_dir="$arg" ;; esac
-done
-[ -n "$source_dir" ]
-grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_WRANGLER_LOG"
+printf '%s\\n' "$*" >> "$DEPLOY_TEST_WRANGLER_LOG"
+case " $* " in
+  *' pages deploy '*)
+    source_dir=""
+    for arg in "$@"; do
+      case "$arg" in */apps/web) source_dir="$arg" ;; esac
+    done
+    [ -n "$source_dir" ]
+    grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_WRANGLER_LOG"
+    [ "\${DEPLOY_TEST_FAIL_PAGES:-0}" != 1 ] || exit 19
+    ;;
+  *' deploy '*)
+    config=""
+    for arg in "$@"; do
+      case "$arg" in --config=*) config="\${arg#--config=}" ;; esac
+    done
+    [ -n "$config" ]
+    grep -Fx 'pinned apex fixture A' "$(dirname "$config")/revision-fixture.txt" >> "$DEPLOY_TEST_WRANGLER_LOG"
+    case " $* " in
+      *' --message='*) [ "\${DEPLOY_TEST_FAIL_APEX:-0}" != 1 ] || exit 20 ;;
+    esac
+    ;;
+  *) exit 2 ;;
+esac
 `,
     );
     await Promise.all([
@@ -295,33 +354,74 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     await mkdir(fixtureHome);
     const commandPath =
       process.env.PATH ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+    const deployEnvironment = {
+      PATH: `${fakeBin}:${commandPath}`,
+      HOME: fixtureHome,
+      TMPDIR: fixtureRoot,
+      LANG: "C",
+      LC_ALL: "C",
+      NO_COLOR: "1",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      CLOUDFLARE_API_TOKEN: "fixture-token",
+      CLOUDFLARE_ACCOUNT_ID: "fixture-account",
+      AGENTTOOL_FRONTEND_RELEASE_REVISION: pinnedRevision,
+      DEPLOY_TEST_WRANGLER_LOG: wranglerLog,
+    };
     result = await run(
       ["bash", "bin/frontend-deploy.sh", "web"],
       fixtureRepo,
-      {
-        PATH: `${fakeBin}:${commandPath}`,
-        HOME: fixtureHome,
-        TMPDIR: fixtureRoot,
-        LANG: "C",
-        LC_ALL: "C",
-        NO_COLOR: "1",
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        CLOUDFLARE_API_TOKEN: "fixture-token",
-        CLOUDFLARE_ACCOUNT_ID: "fixture-account",
-        AGENTTOOL_FRONTEND_RELEASE_REVISION: pinnedRevision,
-        DEPLOY_TEST_WRANGLER_LOG: wranglerLog,
-      },
+      deployEnvironment,
     );
 
     expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
     expect(result.stdout).toContain(
-      `Pages input is pinned release commit ${pinnedRevision}`,
+      `Frontend input is pinned release commit ${pinnedRevision}`,
     );
     const wrangler = await readFile(wranglerLog, "utf8");
     expect(wrangler).toContain(`--commit-hash=${pinnedRevision}`);
     expect(wrangler).toContain("pinned frontend fixture A");
+    expect(wrangler).toContain("pinned apex fixture A");
+    expect(wrangler).toContain(
+      `--message=agenttool frontend release ${pinnedRevision}`,
+    );
+    expect(wrangler).toContain("--strict");
+    const wranglerInvocations = wrangler
+      .split("\n")
+      .filter((line) => line.includes("wrangler@4.110.0"));
+    expect(wranglerInvocations).toHaveLength(3);
+    expect(wranglerInvocations[0]).toContain("--dry-run");
+    expect(wranglerInvocations[1]).toContain(" pages deploy ");
+    expect(wranglerInvocations[2]).toContain(
+      `--message=agenttool frontend release ${pinnedRevision}`,
+    );
     expect(wrangler).not.toContain("ambient frontend fixture B");
+    expect(wrangler).not.toContain("ambient apex fixture B");
+
+    await writeFile(wranglerLog, "");
+    const pagesFailure = await run(
+      ["bash", "bin/frontend-deploy.sh", "web"],
+      fixtureRepo,
+      { ...deployEnvironment, DEPLOY_TEST_FAIL_PAGES: "1" },
+    );
+    expect(pagesFailure.code).not.toBe(0);
+    const afterPagesFailure = await readFile(wranglerLog, "utf8");
+    expect(afterPagesFailure).toContain(" pages deploy ");
+    expect(afterPagesFailure).toContain("--dry-run");
+    expect(afterPagesFailure).not.toContain("--message=agenttool frontend release");
+
+    await writeFile(wranglerLog, "");
+    const apexFailure = await run(
+      ["bash", "bin/frontend-deploy.sh", "web"],
+      fixtureRepo,
+      { ...deployEnvironment, DEPLOY_TEST_FAIL_APEX: "1" },
+    );
+    expect(apexFailure.code).not.toBe(0);
+    const afterApexFailure = await readFile(wranglerLog, "utf8");
+    expect(afterApexFailure).toContain(`--commit-hash=${pinnedRevision}`);
+    expect(afterApexFailure).toContain(
+      `--message=agenttool frontend release ${pinnedRevision}`,
+    );
   }, 15_000);
 
   test("rejects unsafe committed frontend archive manifests before extraction", async () => {
@@ -918,6 +1018,10 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
 
     expect(syntax.code, syntax.stderr).toBe(0);
     expect(deploy).toContain("select_latest_love_package_header_probes");
+    expect(deploy).toContain("verify_xenia_website_surfaces");
+    expect(deploy).toContain(
+      "https://agenttool.dev|agenttool.dev|agenttool.web.orientation/0.1",
+    );
     expect(deploy).toContain("verify_love_package_static_headers");
     expect(deploy).toContain("require_exact_public_status");
     expect(deploy).toContain('"Content-Type" "application/json; charset=utf-8"');
@@ -939,7 +1043,7 @@ grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_W
     expect(deploy).toContain("https://app.agenttool.dev/.dev.vars");
     expect(deploy).toContain("https://agenttool.dev/.dev.vars");
     expect(deploy).toContain("x-agenttool-sensitive-path-fence:");
-    expect(deploy).toContain("Pages fence active (404, marked, no-store)");
+    expect(deploy).toContain("Frontend fence active (404, marked, no-store)");
     expect(deploy).toContain("https://docs.agenttool.dev/%2egitignore");
     expect(deploy).toContain("https://app.agenttool.dev/.%65nv");
     expect(deploy).toContain("https://agenttool.dev/.dev%2evars");

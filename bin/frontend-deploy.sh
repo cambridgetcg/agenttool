@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Direct-upload deploy for the Cloudflare Pages projects:
+# Exact-source deploy for the Cloudflare frontend projects:
 #
 #   apps/docs/       → agenttool-docs       (docs.agenttool.dev)
 #   apps/dashboard/  → agenttool-dashboard  (app.agenttool.dev)
-#   apps/web/        → agenttool-web        (agenttool.dev)
+#   apps/web/        → agenttool-web        (apex Pages backing)
+#   infra/apex-door/ → agenttool-proxy      (agenttool.dev + www front door)
 #
 # Each Pages project is configured as Direct Upload (NOT git-connected),
 # so a `git push` does not trigger a deploy. This is the low-level uploader;
@@ -47,6 +48,8 @@ set -- "${_args[@]+"${_args[@]}"}"
 # runs. Review and update this value deliberately when upgrading Wrangler.
 readonly WRANGLER_VERSION="4.110.0"
 readonly KEYCHAIN_ACCOUNT="macair"
+readonly APEX_ZONE_NAME="agenttool.dev"
+readonly APEX_WORKER_NAME="agenttool-proxy"
 wrangler() {
   npx --yes "wrangler@${WRANGLER_VERSION}" "$@"
 }
@@ -141,9 +144,9 @@ if ! WORKTREE_STATUS="$(git status --porcelain=v1 --untracked-files=all)"; then
   exit 1
 fi
 if [[ -n "$WORKTREE_STATUS" ]]; then
-  echo "→ Working-tree changes are excluded; Pages input is $RELEASE_INPUT_LABEL $COMMIT_HASH."
+  echo "→ Working-tree changes are excluded; frontend input is $RELEASE_INPUT_LABEL $COMMIT_HASH."
 else
-  echo "→ Pages input is $RELEASE_INPUT_LABEL $COMMIT_HASH."
+  echo "→ Frontend input is $RELEASE_INPUT_LABEL $COMMIT_HASH."
 fi
 COMMIT_DIRTY=false
 
@@ -224,6 +227,51 @@ for app in docs dashboard web; do
   cp "$PAGES_FENCE_DIR/sensitive-path-routes.json" "$STAGE_ROOT/apps/$app/_routes.json"
 done
 
+# agenttool.dev is actually owned by this apex Worker. Its committed module
+# imports the same Surface/sensitive-path implementation staged above; deploy
+# it from this immutable tree rather than from the ambient worktree.
+APEX_WORKER_DIR="$STAGE_ROOT/infra/apex-door"
+APEX_WORKER_CONFIG="$APEX_WORKER_DIR/wrangler.toml"
+for apex_file in worker.js wrangler.toml; do
+  if [[ ! -f "$APEX_WORKER_DIR/$apex_file" || -L "$APEX_WORKER_DIR/$apex_file" ]]; then
+    echo "✗ Missing or unsafe apex Worker input: infra/apex-door/$apex_file"
+    exit 1
+  fi
+done
+if find "$APEX_WORKER_DIR" \( -type f -o -type l \) \
+  \( -name '.env' -o -name '.env.*' -o -name '.dev.vars' -o -name '.dev.vars.*' \) \
+  -print -quit | grep -q .; then
+  echo "✗ A tracked apex Worker environment file reached the staging tree; refusing deployment."
+  exit 1
+fi
+if ! python3 - "$APEX_WORKER_CONFIG" "$APEX_WORKER_NAME" <<'PY'
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    config = source.read()
+expected_routes = {
+    ("agenttool.dev/*", "agenttool.dev"),
+    ("www.agenttool.dev/*", "agenttool.dev"),
+}
+names = re.findall(r'^name\s*=\s*"([^"]+)"\s*$', config, re.MULTILINE)
+mains = re.findall(r'^main\s*=\s*"([^"]+)"\s*$', config, re.MULTILINE)
+route_blocks = re.findall(r'^routes\s*=\s*\[(.*?)\]\s*$', config, re.MULTILINE | re.DOTALL)
+if len(names) != 1 or names[0] != sys.argv[2] or mains != ["worker.js"] or len(route_blocks) != 1:
+    raise SystemExit(1)
+route_pattern = re.compile(
+    r'\{\s*pattern\s*=\s*"([^"]+)"\s*,\s*zone_name\s*=\s*"([^"]+)"\s*\}'
+)
+route_rows = route_pattern.findall(route_blocks[0])
+unparsed = route_pattern.sub("", route_blocks[0]).replace(",", "").strip()
+if len(route_rows) != 2 or set(route_rows) != expected_routes or unparsed:
+    raise SystemExit(1)
+PY
+then
+  echo "✗ Staged infra/apex-door/wrangler.toml does not name the exact Worker, entry point, and apex/www routes."
+  exit 1
+fi
+
 # ── Targets (key|dir|project-name; bash 3 compatible) ──────────────
 ALL_TARGETS=(
   "docs|apps/docs|agenttool-docs"
@@ -274,6 +322,110 @@ verify_pages_project_policy() {
   fi
 
   echo "  ✓ $project policy: main is production; production + preview fail closed"
+}
+
+verify_apex_worker_topology() {
+  local zone_response routes_response zone_id
+  zone_response="$STAGE_ROOT/.cloudflare-apex-zone.json"
+  routes_response="$STAGE_ROOT/.cloudflare-apex-routes.json"
+
+  if [[ "$CF_AUTH_MODE" = "oauth" ]]; then
+    if ! wrangler deployments list --config="$APEX_WORKER_CONFIG" --json >/dev/null 2>&1; then
+      echo "✗ Apex Worker $APEX_WORKER_NAME is not visible to the OAuth session."
+      return 1
+    fi
+    echo "  ⚠ $APEX_WORKER_NAME: exists (oauth). Route ownership check SKIPPED — apex/www topology NOT verified this run."
+    return 0
+  fi
+
+  if ! frontend_curl -fsS --max-time 30 \
+    -H "Authorization: Bearer $CF_API_TOKEN" \
+    -o "$zone_response" \
+    "https://api.cloudflare.com/client/v4/zones?name=$APEX_ZONE_NAME&account.id=$CF_ACCOUNT_ID&status=active"; then
+    echo "✗ Could not resolve the active Cloudflare zone for $APEX_ZONE_NAME."
+    echo "  Required boundary: the active Cloudflare credential needs Zone Read."
+    return 1
+  fi
+  if ! zone_id="$(python3 - "$zone_response" "$APEX_ZONE_NAME" "$CF_ACCOUNT_ID" <<'PY'
+import json
+import re
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    payload = json.load(source)
+matches = [
+    zone
+    for zone in payload.get("result", [])
+    if zone.get("name") == sys.argv[2]
+    and zone.get("status") == "active"
+    and zone.get("account", {}).get("id") == sys.argv[3]
+]
+if payload.get("success") is not True or len(matches) != 1:
+    raise SystemExit(1)
+zone_id = matches[0].get("id")
+if not isinstance(zone_id, str) or re.fullmatch(r"[0-9a-f]{32}", zone_id) is None:
+    raise SystemExit(1)
+print(zone_id)
+PY
+  )"; then
+    echo "✗ Cloudflare did not return one exact active $APEX_ZONE_NAME zone for this account."
+    return 1
+  fi
+
+  if ! frontend_curl -fsS --max-time 30 \
+    -H "Authorization: Bearer $CF_API_TOKEN" \
+    -o "$routes_response" \
+    "https://api.cloudflare.com/client/v4/zones/$zone_id/workers/routes"; then
+    echo "✗ Could not read Worker routes for $APEX_ZONE_NAME."
+    echo "  Required boundary: the active Cloudflare credential needs Workers Routes Read."
+    return 1
+  fi
+  if ! python3 - "$routes_response" "$APEX_WORKER_NAME" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as source:
+    payload = json.load(source)
+expected = {
+    ("agenttool.dev/*", sys.argv[2]),
+    ("www.agenttool.dev/*", sys.argv[2]),
+}
+relevant = [
+    (route.get("pattern"), route.get("script"))
+    for route in payload.get("result", [])
+    if route.get("script") == sys.argv[2]
+    or route.get("pattern") in {"agenttool.dev/*", "www.agenttool.dev/*"}
+]
+if (
+    payload.get("success") is not True
+    or len(relevant) != len(expected)
+    or set(relevant) != expected
+):
+    print("unexpected apex Worker route ownership", file=sys.stderr)
+    raise SystemExit(1)
+PY
+  then
+    echo "✗ Unsafe apex Worker topology for $APEX_WORKER_NAME."
+    echo "  Required: exactly agenttool.dev/* and www.agenttool.dev/* owned by that script."
+    return 1
+  fi
+
+  echo "  ✓ $APEX_WORKER_NAME topology: exact apex + www routes"
+}
+
+compile_staged_apex_worker() {
+  local outdir="$STAGE_ROOT/.apex-worker-dry-run"
+  if ! (
+    cd "$APEX_WORKER_DIR" || exit 1
+    wrangler deploy \
+      --config=wrangler.toml \
+      --dry-run \
+      --outdir="$outdir"
+  ); then
+    echo "✗ The exact staged apex Worker did not bundle cleanly; no frontend upload occurred."
+    return 1
+  fi
+  echo "  ✓ $APEX_WORKER_NAME bundles from exact source $COMMIT_HASH"
 }
 
 # ── Pre-flight: verify symlinks resolve ────────────────────────────
@@ -327,12 +479,27 @@ deploy_one() {
 
   # Wrangler follows symlinks during direct upload, so apps/<x>/shared
   # → apps/_shared resolves to real files in the deployment.
-  wrangler pages deploy "$source_dir" \
+  if ! wrangler pages deploy "$source_dir" \
     --project-name="$proj" \
     --branch=main \
     --commit-hash="$COMMIT_HASH" \
     --commit-dirty="$COMMIT_DIRTY" \
-    --commit-message="$(git log -1 --pretty=format:%s "$COMMIT_HASH" 2>/dev/null || echo 'manual deploy')"
+    --commit-message="$(git log -1 --pretty=format:%s "$COMMIT_HASH" 2>/dev/null || echo 'manual deploy')"; then
+    return 1
+  fi
+
+  if [[ "$key" = "web" ]]; then
+    echo ""
+    echo "  $APEX_WORKER_NAME"
+    echo "  source : infra/apex-door + infra/pages @ $COMMIT_HASH"
+    (
+      cd "$APEX_WORKER_DIR" || exit 1
+      wrangler deploy \
+        --config=wrangler.toml \
+        --message="agenttool frontend release $COMMIT_HASH" \
+        --strict
+    )
+  fi
 }
 
 if [[ $# -eq 0 ]]; then
@@ -341,6 +508,7 @@ fi
 
 # Validate every requested target and its external production policy before
 # the first upload. A known-bad later target must not create a partial release.
+WEB_TARGET_REQUESTED=0
 for arg in "$@"; do
   entry="$(target_for "$arg" || true)"
   if [[ -z "$entry" ]]; then
@@ -349,7 +517,12 @@ for arg in "$@"; do
   fi
   proj="$(echo "$entry" | cut -d'|' -f3)"
   verify_pages_project_policy "$proj" || exit 1
+  [[ "$arg" = "web" ]] && WEB_TARGET_REQUESTED=1
 done
+if [[ "$WEB_TARGET_REQUESTED" = 1 ]]; then
+  verify_apex_worker_topology || exit 1
+  compile_staged_apex_worker || exit 1
+fi
 
 failed=()
 for arg in "$@"; do
@@ -369,4 +542,4 @@ echo "✓ Deploy complete."
 echo "  Live URLs:"
 echo "    https://docs.agenttool.dev/"
 echo "    https://app.agenttool.dev/"
-echo "    https://agenttool.dev/"
+echo "    https://agenttool.dev/ (agenttool-proxy → Pages/API by route)"

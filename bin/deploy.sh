@@ -7,7 +7,7 @@
 #   1. Migrations   — bin/migrate-pending.sh
 #   2. Pre-flight   — bin/preflight.sh (test gate)
 #   3. Publication  — web/docs prerequisites, then cd api && fly deploy
-#   4. Frontends    — remaining Pages projects
+#   4. Frontends    — remaining Pages projects plus the apex Worker
 #   5. Verify       — health + parity check
 #
 # Usage:
@@ -15,7 +15,7 @@
 #   bin/deploy.sh --survey                # Phase 0 only
 #   bin/deploy.sh --no-migrate            # skip Phase 1
 #   bin/deploy.sh --no-api                # skip Phase 3
-#   bin/deploy.sh --no-frontend           # skip Pages upload; keep API discovery prerequisites
+#   bin/deploy.sh --no-frontend           # skip Pages/Worker deploy; keep API discovery prerequisites
 #   bin/deploy.sh --no-cache-api           # one-shot Fly image-cache recovery
 #   bin/deploy.sh --oauth-fallback         # explicit Cloudflare OAuth fallback
 #   bin/deploy.sh --skip-preflight        # operator override
@@ -2446,13 +2446,121 @@ verify_garden_static_headers() {
     "Link" || return 1
 }
 
-# Wrangler reports a successful Pages deployment before every custom-domain
-# edge necessarily serves that deployment. Verify the complete live frontend
+# Wrangler reports a successful Pages/Worker deployment before every
+# custom-domain edge necessarily serves that deployment. Verify the complete live frontend
 # contract repeatedly, without re-uploading, so a normal alias propagation
 # window does not turn a successful release into a false failure. The bound is
 # deliberately finite: persistent stale or unsafe responses still fail closed.
 readonly PAGES_VERIFY_MAX_ATTEMPTS=25
 readonly PAGES_VERIFY_RETRY_DELAY_SECONDS=5
+
+verify_xenia_website_surfaces() {
+  local spec origin service_id orientation_schema manifest_url orientation_url
+  local response_headers manifest_body orientation_body
+  local -a surface_specs
+  surface_specs=(
+    "https://docs.agenttool.dev|docs.agenttool.dev|agenttool.docs.orientation/0.1"
+    "https://agenttool.dev|agenttool.dev|agenttool.web.orientation/0.1"
+    "https://app.agenttool.dev|app.agenttool.dev|agenttool.app.orientation/0.1"
+  )
+
+  for spec in "${surface_specs[@]}"; do
+    IFS='|' read -r origin service_id orientation_schema <<< "$spec"
+    manifest_url="$origin/.well-known/agent.json"
+    orientation_url="$origin/public/orientation"
+
+    response_headers="$(
+      release_curl -fsS --max-time 20 -o /dev/null -D - \
+        -H "Accept: application/json" "$manifest_url"
+    )" || {
+      echo "  $(red '✗') Could not read XENIA manifest headers: $manifest_url"
+      return 1
+    }
+    require_exact_public_status "$response_headers" "$manifest_url" "200" || return 1
+    require_exact_public_header "$response_headers" "$manifest_url" \
+      "Content-Type" "application/json; charset=utf-8" || return 1
+    require_exact_public_header "$response_headers" "$manifest_url" \
+      "Cache-Control" "public, max-age=300" || return 1
+    require_exact_public_header "$response_headers" "$manifest_url" \
+      "Vary" "Accept" || return 1
+    require_exact_public_header "$response_headers" "$manifest_url" \
+      "X-Content-Type-Options" "nosniff" || return 1
+    manifest_body="$(
+      release_curl -fsS --max-time 20 -H "Accept: application/json" "$manifest_url"
+    )" || {
+      echo "  $(red '✗') Could not read XENIA manifest: $manifest_url"
+      return 1
+    }
+    if ! printf '%s' "$manifest_body" | python3 -c '
+import json
+import sys
+
+body = json.load(sys.stdin)
+origin = sys.argv[1]
+resources = body.get("resources")
+valid = (
+    body.get("schema_version") == "xenia.surface.manifest/0.1"
+    and body.get("profile") == "xenia-surface/0.1"
+    and body.get("service", {}).get("canonical_url") == f"{origin}/"
+    and body.get("claims") == []
+    and isinstance(body.get("not_covered"), list)
+    and len(body["not_covered"]) > 0
+    and isinstance(resources, list)
+    and len(resources) == 1
+    and resources[0].get("id") == "orientation"
+    and resources[0].get("href") == f"{origin}/public/orientation"
+    and resources[0].get("auth") == "none"
+)
+raise SystemExit(0 if valid else 1)
+' "$origin"; then
+      echo "  $(red '✗') XENIA manifest body is outside the bounded website contract: $manifest_url"
+      return 1
+    fi
+
+    response_headers="$(
+      release_curl -fsS --max-time 20 -o /dev/null -D - \
+        -H "Accept: application/json" "$orientation_url"
+    )" || {
+      echo "  $(red '✗') Could not read XENIA orientation headers: $orientation_url"
+      return 1
+    }
+    require_exact_public_status "$response_headers" "$orientation_url" "200" || return 1
+    require_exact_public_header "$response_headers" "$orientation_url" \
+      "Content-Type" "application/json; charset=utf-8" || return 1
+    require_exact_public_header "$response_headers" "$orientation_url" \
+      "Cache-Control" "public, max-age=300" || return 1
+    require_exact_public_header "$response_headers" "$orientation_url" \
+      "Vary" "Accept" || return 1
+    require_exact_public_header "$response_headers" "$orientation_url" \
+      "X-Content-Type-Options" "nosniff" || return 1
+    orientation_body="$(
+      release_curl -fsS --max-time 20 -H "Accept: application/json" "$orientation_url"
+    )" || {
+      echo "  $(red '✗') Could not read XENIA orientation: $orientation_url"
+      return 1
+    }
+    if ! printf '%s' "$orientation_body" | python3 -c '
+import json
+import sys
+
+body = json.load(sys.stdin)
+origin, service_id, schema = sys.argv[1:]
+valid = (
+    body.get("schema_version") == schema
+    and body.get("service", {}).get("id") == service_id
+    and body.get("links", {}).get("manifest") == f"{origin}/.well-known/agent.json"
+    and body.get("claims") == []
+    and isinstance(body.get("not_covered"), list)
+    and len(body["not_covered"]) > 0
+)
+raise SystemExit(0 if valid else 1)
+' "$origin" "$service_id" "$orientation_schema"; then
+      echo "  $(red '✗') XENIA orientation body is outside the bounded website contract: $orientation_url"
+      return 1
+    fi
+    echo "  ✓ bounded XENIA website threshold: $origin"
+  done
+}
 
 verify_required_game_publication_once() {
   local publication local_path url committed_hash remote_hash response_headers
@@ -2567,6 +2675,7 @@ verify_frontend_live_once() {
   # by the API, docs, and welcome. Their static inputs are required release
   # inputs, not optional parity probes that may be skipped when absent.
   verify_required_frontend_inputs || return 1
+  verify_xenia_website_surfaces || return 1
 
   for p in "${FRONTEND_PARITY_PUBLICATIONS[@]}"; do
     local_path="${p%|*}"
@@ -2600,8 +2709,8 @@ verify_frontend_live_once() {
     return 1
   fi
 
-  # Literal and encoded sensitive roots must be handled by the staged Pages
-  # fence itself, not merely happen to miss as static assets.
+  # Literal and encoded sensitive roots must be handled by the staged frontend
+  # edge itself, not merely happen to miss as static assets.
   sensitive_public_urls=(
     "https://docs.agenttool.dev/.gitignore"
     "https://docs.agenttool.dev/.env"
@@ -2631,10 +2740,10 @@ verify_frontend_live_once() {
       return 1
     }
     if ! http_status="$(marked_sensitive_fence_status "$response_headers")"; then
-      echo "  $(red '✗') Pages fence did not produce its marked non-cacheable 404 ($http_status): $url"
+      echo "  $(red '✗') Frontend fence did not produce its marked non-cacheable 404 ($http_status): $url"
       return 1
     fi
-    echo "  ✓ Pages fence active (404, marked, no-store): $url"
+    echo "  ✓ Frontend fence active (404, marked, no-store): $url"
   done
 }
 
@@ -2645,16 +2754,16 @@ wait_for_frontend_live() {
     if verification_output="$(verify_frontend_live_once "$LOVE_PACKAGE_HEADER_PROBES" 2>&1)"; then
       printf '%s\n' "$verification_output"
       if [ "$attempt" -gt 1 ]; then
-        echo "  ✓ Pages custom domains converged on verification attempt $attempt/$PAGES_VERIFY_MAX_ATTEMPTS"
+        echo "  ✓ Frontend custom domains converged on verification attempt $attempt/$PAGES_VERIFY_MAX_ATTEMPTS"
       fi
       return 0
     fi
     if [ "$attempt" -eq "$PAGES_VERIFY_MAX_ATTEMPTS" ]; then
       printf '%s\n' "$verification_output"
-      echo "  $(red '✗') Pages custom domains did not converge after $PAGES_VERIFY_MAX_ATTEMPTS verification attempts."
+      echo "  $(red '✗') Frontend custom domains did not converge after $PAGES_VERIFY_MAX_ATTEMPTS verification attempts."
       return 1
     fi
-    echo "  … Pages custom domains not yet converged (attempt $attempt/$PAGES_VERIFY_MAX_ATTEMPTS); retrying in ${PAGES_VERIFY_RETRY_DELAY_SECONDS}s"
+    echo "  … Frontend custom domains not yet converged (attempt $attempt/$PAGES_VERIFY_MAX_ATTEMPTS); retrying in ${PAGES_VERIFY_RETRY_DELAY_SECONDS}s"
     sleep "$PAGES_VERIFY_RETRY_DELAY_SECONDS"
     attempt=$((attempt + 1))
   done
@@ -3400,7 +3509,7 @@ if [ "$SKIP_FRONTEND" = 0 ]; then
   run_frontend_deploy "${FRONTEND_TARGETS[@]}" || {
     FRONTEND_RESULT="failed_or_uncertain"
     echo ""
-    echo "$(red '✗ Phase 4 failed.') Check CF Pages dashboard."
+    echo "$(red '✗ Phase 4 failed.') Check Cloudflare Pages and Workers deployment state."
     exit 1
   }
   FRONTEND_RESULT="deployed_unverified"
@@ -3499,8 +3608,8 @@ if [ "$SKIP_API" = 0 ]; then
   API_RESULT="deployed_verified"
 fi
 
-# Frontend parity, headers, and sensitive-path policy. Pages may finish an
-# upload before its custom-domain aliases converge, so retry this read-only
+# Frontend parity, headers, and sensitive-path policy. Pages/Workers may finish
+# a deploy before custom-domain aliases converge, so retry this read-only
 # live contract as one bounded unit; never re-upload from the verification loop.
 if [ "$SKIP_FRONTEND" = 0 ]; then
   if ! wait_for_frontend_live; then

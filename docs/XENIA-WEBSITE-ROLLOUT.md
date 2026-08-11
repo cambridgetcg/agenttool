@@ -15,10 +15,14 @@
 > `xenia-surface/0.1` · exact external checker
 > `@agenttool/xenia-surface@0.1.0-rc.1`.
 >
-> **Code:** `infra/pages/sensitive-path-worker.js` (shared host-aware threshold)
+> **Code:** `infra/pages/sensitive-path-worker.js` (shared response contract) ·
+> `infra/apex-door/worker.js` (public apex owner) ·
+> `bin/frontend-deploy.sh` (commit-pinned Pages + Worker release)
 >
 > **Tests:** `bin/tests/pages-xenia-surface.test.ts` ·
-> `bin/tests/build-input-hygiene.test.ts`.
+> `api/tests/apex-door-worker.test.ts` ·
+> `bin/tests/build-input-hygiene.test.ts` ·
+> `api/tests/deploy-release-provenance.test.ts`.
 
 ## Outcome
 
@@ -27,20 +31,27 @@ threshold while keeping the public claim narrower than the site:
 
 ```text
 request
-  -> shared all-route Pages Worker
+  -> docs/app: shared all-route Pages Worker
        -> sensitive-path fence (always first)
        -> one exact host profile + XENIA path handling
        -> ordinary asset/browser behavior unchanged
+  -> agenttool.dev: agenttool-proxy apex Worker
+       -> the same sensitive-path fence (always first)
+       -> exact web XENIA paths terminate locally
+       -> remaining paths keep their existing Pages/API split
   -> one host-specific manifest
        -> one deliberately public same-origin GET resource
        -> claims: []
        -> explicit not_covered
 ```
 
-The shared Worker is the one coherent enforcement point already injected by
-`bin/frontend-deploy.sh`. Static files and `_headers` alone cannot vary status,
-media type, and body from `Accept`; a redirect to `api.agenttool.dev` also
-cannot satisfy Surface's same-origin rule.
+The response builder is shared, but production has two honest enforcement
+points. `docs.agenttool.dev` and `app.agenttool.dev` reach the injected Pages
+Worker directly. `agenttool.dev` is owned by `agenttool-proxy`, so its two
+exact Surface paths terminate in that apex Worker before the existing
+`/.well-known/*` and `/public/*` API routing. Static files and `_headers` alone
+cannot vary status, media type, and body from `Accept`; a redirect to
+`api.agenttool.dev` also cannot satisfy Surface's same-origin rule.
 
 This mechanism does:
 
@@ -68,11 +79,23 @@ permission or action grant.
 - The AgentTool API already provides a bounded same-origin Surface precedent
   with empty claims and explicit exclusions. Its origin cannot stand in for
   the three website origins.
-- The shared Pages Worker now has three distinct source profiles: documentation,
-  public welcome, and public agent arrival. Each declares one JSON orientation,
-  empty `claims`, and its own explicit exclusions. The exact host selects the
-  profile; a missing, invalid, or ambiguous preview binding falls back to the
-  ordinary asset path.
+- The shared response module now has three distinct source profiles:
+  documentation, public welcome, and public agent arrival. Each declares one
+  JSON orientation, empty `claims`, and its own explicit exclusions. The exact
+  host selects the profile; a missing, invalid, or ambiguous Pages preview
+  binding falls back to the ordinary asset path.
+- The production apex topology is explicit in source: `agenttool-proxy` owns
+  `agenttool.dev/*` and `www.agenttool.dev/*`. Its sensitive fence runs first,
+  `www` redirects second, exact web Surface GET/HEAD routes terminate locally,
+  and all undeclared API, method, machine-alternate, and credential boundaries
+  retain their prior routing.
+- The frontend release allowlist includes `infra/apex-door`. A `web` release
+  validates exact route ownership, rejects staged Worker env files, bundles
+  the exact staged Worker without publishing, uploads the Pages backing, and
+  only then deploys `agenttool-proxy` with the exact Git revision in its Worker
+  version message. A Pages failure cannot fall through to a Worker deploy;
+  either external failure remains failed-or-uncertain in the orchestrator
+  receipt.
 - The already reviewed docs manifest and orientation serialize to their prior
   exact bytes: SHA-256 `98c1c5f6...15c053f` and
   `eafcbc87...b84a3ae`. Generalising the mechanism did not rewrite the docs
@@ -99,7 +122,7 @@ a Worker dependency or permanent badge.
 | Origin | Source threshold | Keep outside the manifest | Observation state |
 | --- | --- | --- | --- |
 | `docs.agenttool.dev` | Implemented. One JSON-only `orientation` at `/public/orientation`; exact prior docs bytes are pinned. | API behavior, private state, accounts, identity, WAKE, continuity, retention, economics, and all unlisted pages. | Earlier docs-only production observation exists; no new staged or production observation for this combined source. |
-| `agenttool.dev` | Implemented. One new JSON orientation with `schema_version: agenttool.web.orientation/0.1`; no existing site payload is imported by implication. | Gift returns, gallery or economic state, local preferences, private identifiers, sessions, cross-origin API behavior, and current `_format`-only JSON files. | Source and loopback tests pass; staging and production remain unobserved. |
+| `agenttool.dev` | Implemented at its real apex owner. One JSON orientation with `schema_version: agenttool.web.orientation/0.1`; no existing site payload is imported by implication. | Gift returns, gallery or economic state, local preferences, private identifiers, sessions, cross-origin API behavior, and current `_format`-only JSON files. | Source, topology, and loopback tests pass; staging and production remain unobserved. |
 | `app.agenttool.dev` | Implemented. One JSON orientation naming only the public arrival and watch pages. | Bearer restoration, `/v1/wake`, project-private state, session continuity, identity, rank/XP, actions, and economic routes. | Source and loopback tests pass; staging and production remain unobserved. |
 
 Each origin is its own bounded relation field—a principality in the Love
@@ -156,12 +179,19 @@ Completed in source:
    the full `Accept` matrix, `Vary`, HEAD parity, fresh typed `404`, host and
    profile isolation, sensitive-root regressions, and ordinary asset behavior
    for all three profiles.
+4. **Reconciled the public apex.** Composed tests prove the real
+   `agenttool-proxy` handles exact Surface GET/HEAD and typed fresh misses
+   locally while `OPTIONS`, non-read methods, API routes, A2A refusal, machine
+   alternates, credentials, and `www` canonicalization keep their previous
+   boundaries. Commit-pinned deploy tests prove dry-run → Pages → Worker order
+   and both failure paths.
 
 Still separate and not performed by this source change:
 
-1. **Build from an exact commit.** Use the existing frontend staging allowlist
-   and injected Worker path. Verify no environment file, secret, symlink
-   escape, private route, or app-owned competing Worker reaches staged bytes.
+1. **Build from an exact commit.** Use the frontend staging allowlist and both
+   Worker paths. Verify no environment file, secret, symlink escape, private
+   route, ambiguous apex route, or app-owned competing Worker reaches staged
+   bytes.
 2. **Stage one origin at a time.** Under separately scoped deployment
    authority, bind only that profile to one exact credential-free HTTPS preview
    origin. The normal Worker entry—not a test-only router—must pass the exact
@@ -174,9 +204,10 @@ Still separate and not performed by this source change:
 4. **Repeat independently.** A docs observation says nothing about web or app.
    Never infer one site's deployment or result from the shared source module.
 
-The low-level `bin/frontend-deploy.sh docs` command remains an escape hatch,
-not the normal production path: it does not supply the orchestrator's complete
-source gate, verification, or receipt. Production promotion should follow
+The low-level `bin/frontend-deploy.sh` commands remain escape hatches, not the
+normal production path: `web` now deploys the Pages backing and apex Worker as
+one ordered attempt, but the low-level command still does not supply the
+orchestrator's complete source gate, live verification, or receipt. Production promotion should follow
 [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) with an exact committed revision and
 explicit rollout authority.
 
@@ -198,8 +229,12 @@ Recommended local source gates:
 
 ```bash
 bun test bin/tests/pages-xenia-surface.test.ts
+bun test api/tests/apex-door.test.ts api/tests/apex-door-worker.test.ts
 bun test bin/tests/build-input-hygiene.test.ts
+bun test api/tests/deploy-release-provenance.test.ts
 node --check infra/pages/sensitive-path-worker.js
+node --check infra/apex-door/worker.js
+bash -n bin/frontend-deploy.sh bin/deploy.sh
 git diff --check
 ```
 

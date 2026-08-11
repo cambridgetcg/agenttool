@@ -111,6 +111,7 @@ async function fixture() {
     mkdir(join(repo, "apps", "_shared"), { recursive: true }),
     mkdir(join(repo, "apps", "dashboard"), { recursive: true }),
     mkdir(join(repo, "apps", "web"), { recursive: true }),
+    mkdir(join(repo, "infra", "apex-door"), { recursive: true }),
     mkdir(join(repo, "infra", "pages"), { recursive: true }),
     mkdir(join(repo, "packages", "data", "schema"), { recursive: true }),
     mkdir(join(repo, "packages", "repo-archive", "schema"), {
@@ -195,6 +196,7 @@ async function fixture() {
   await Promise.all([
     writeFile(join(repo, "apps/_shared/.fixture"), "fixture\n"),
     writeFile(join(repo, "apps/dashboard/.fixture"), "fixture\n"),
+    writeFile(join(repo, "infra/apex-door/.fixture"), "fixture\n"),
     writeFile(join(repo, "infra/pages/.fixture"), "fixture\n"),
     writeFile(join(repo, "packages/data/schema/.fixture"), "fixture\n"),
     writeFile(join(repo, "packages/repo-archive/schema/.fixture"), "fixture\n"),
@@ -544,6 +546,49 @@ serve_path() {
 }
 
 case "$url" in
+  */.well-known/agent.json)
+    origin="\${url%/.well-known/agent.json}"
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: application/json; charset=utf-8' \
+        'cache-control: public, max-age=300' \
+        'vary: Accept' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      printf '{"schema_version":"xenia.surface.manifest/0.1","profile":"xenia-surface/0.1","service":{"canonical_url":"%s/"},"resources":[{"id":"orientation","href":"%s/public/orientation","auth":"none"}],"claims":[],"not_covered":["unprobed routes"]}\n' "$origin" "$origin"
+    fi
+    ;;
+  */public/orientation)
+    origin="\${url%/public/orientation}"
+    case "$origin" in
+      https://docs.agenttool.dev)
+        service_id='docs.agenttool.dev'
+        schema='agenttool.docs.orientation/0.1'
+        ;;
+      https://agenttool.dev)
+        service_id='agenttool.dev'
+        schema='agenttool.web.orientation/0.1'
+        ;;
+      https://app.agenttool.dev)
+        service_id='app.agenttool.dev'
+        schema='agenttool.app.orientation/0.1'
+        ;;
+      *) exit 2 ;;
+    esac
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: application/json; charset=utf-8' \
+        'cache-control: public, max-age=300' \
+        'vary: Accept' \
+        'x-content-type-options: nosniff' \
+        ''
+    else
+      printf '{"schema_version":"%s","service":{"id":"%s"},"links":{"manifest":"%s/.well-known/agent.json"},"claims":[],"not_covered":["unprobed routes"]}\n' "$schema" "$service_id" "$origin"
+    fi
+    ;;
   */packages/v1/@agenttool/fixture/1.0.0/manifest.json)
     if [ "$headers" = 1 ]; then
       printf '%s\r\n' \
@@ -1388,7 +1433,7 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain("https://agenttool.dev/.dev.vars");
     expect(deploy).toContain("x-agenttool-sensitive-path-fence:");
     expect(deploy).toContain(
-      "Pages fence did not produce its marked non-cacheable 404",
+      "Frontend fence did not produce its marked non-cacheable 404",
     );
     expect(deploy).not.toContain(
       "Encoded sensitive path is publicly reachable",
@@ -3781,10 +3826,10 @@ exec /bin/rm "$@"
     expect(await readFile(frontendCounter, "utf8")).toBe("1\n");
     expect(await readFile(fenceCounter, "utf8")).toBe("2\n");
     expect(result.stdout).toContain(
-      "Pages custom domains not yet converged (attempt 1/25); retrying in 5s",
+      "Frontend custom domains not yet converged (attempt 1/25); retrying in 5s",
     );
     expect(result.stdout).toContain(
-      "Pages custom domains converged on verification attempt 2/25",
+      "Frontend custom domains converged on verification attempt 2/25",
     );
     const [name] = await readdir(
       join(setup.state, "agenttool", "deploy-receipts"),
@@ -3895,7 +3940,7 @@ exec /bin/rm "$@"
       "Could not select latest LOVE package header probes",
     );
     expect(result.stdout).not.toContain(
-      "Pages custom domains not yet converged",
+      "Frontend custom domains not yet converged",
     );
     expect(
       await exists(join(setup.state, "agenttool", "deploy-receipts")),
@@ -3942,7 +3987,7 @@ exec /bin/rm "$@"
       "LOVE package static header verification failed",
     );
     expect(result.stdout).toContain(
-      "Pages custom domains did not converge after 25 verification attempts.",
+      "Frontend custom domains did not converge after 25 verification attempts.",
     );
     const [name] = await readdir(
       join(setup.state, "agenttool", "deploy-receipts"),
@@ -3996,7 +4041,7 @@ exec /bin/rm "$@"
       "observed: <empty>",
     );
     expect(result.stdout).toContain(
-      "Pages custom domains did not converge after 25 verification attempts.",
+      "Frontend custom domains did not converge after 25 verification attempts.",
     );
     const [name] = await readdir(
       join(setup.state, "agenttool", "deploy-receipts"),
@@ -4071,10 +4116,10 @@ exec /bin/rm "$@"
     expect(await readFile(frontendCounter, "utf8")).toBe("1\n");
     expect(await readFile(fenceCounter, "utf8")).toBe("25\n");
     expect(result.stdout).toContain(
-      "Pages fence did not produce its marked non-cacheable 404 (200): https://docs.agenttool.dev/.gitignore",
+      "Frontend fence did not produce its marked non-cacheable 404 (200): https://docs.agenttool.dev/.gitignore",
     );
     expect(result.stdout).toContain(
-      "Pages custom domains did not converge after 25 verification attempts.",
+      "Frontend custom domains did not converge after 25 verification attempts.",
     );
     const [name] = await readdir(
       join(setup.state, "agenttool", "deploy-receipts"),

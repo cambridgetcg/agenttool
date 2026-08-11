@@ -213,10 +213,13 @@ describe("three AgentTool website XENIA Surface 0.1 thresholds", () => {
       -1,
     );
     expect(handler.indexOf("isSensitiveRootPath(url.pathname)")).toBeLessThan(
-      handler.indexOf("surfaceProfileForOrigin(url.origin, env)"),
+      handler.indexOf("surfaceResponseForRequest(request, env)"),
     );
-    expect(handler.indexOf("surfaceProfileForOrigin(url.origin, env)")).toBeLessThan(
+    expect(handler.indexOf("surfaceResponseForRequest(request, env)")).toBeLessThan(
       handler.indexOf("env.ASSETS.fetch(request)"),
+    );
+    expect(handler.indexOf("env.ASSETS.fetch(request)")).toBeLessThan(
+      handler.indexOf("surfaceRouteNotFoundForRequest(request, env)"),
     );
   });
 
