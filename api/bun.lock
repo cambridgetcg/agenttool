@@ -5,7 +5,7 @@
     "": {
       "name": "agenttool",
       "dependencies": {
-        "@agenttool/xenia": "0.1.0-beta.5",
+        "@agenttool/xenia": "0.1.0-beta.7",
         "@coinbase/cdp-sdk": "^1.52.0",
         "@hono/zod-validator": "^0.7.6",
         "@modelcontextprotocol/sdk": "^1.29.0",
@@ -47,7 +47,7 @@
   "packages": {
     "@adraffy/ens-normalize": ["@adraffy/ens-normalize@1.11.1", "", {}, "sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ=="],
 
-    "@agenttool/xenia": ["@agenttool/xenia@0.1.0-beta.5", "", {}, "sha512-9Lf+k46r51zeRCOwPcZxYTpJN0oFArRbz34hoqexzwZho/JEScaNRRrVnFA12NVzX4VPvK9jidk6+ZrWAhMLdw=="],
+    "@agenttool/xenia": ["@agenttool/xenia@0.1.0-beta.7", "", {}, "sha512-VTKEe2u6AQ+oIc1Xj7fXQAaB8M95bQCxUWzgYy7gab/BKk7IT0Tog1yT7ti6oI4hqPJCTTswVhq46D8HGenRTg=="],
 
     "@babel/runtime": ["@babel/runtime@7.29.2", "", {}, "sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g=="],
 

@@ -1,0 +1,73 @@
+{
+  "_format": "agenttool.love-geometry-vector/0.1",
+  "description": "Asymmetric caller reports with one isolated subject; sorting is serialization, never rank.",
+  "input": {
+    "scope_ref": "sha256:06d4f015b533efd8bcf6f90100cd4f8173e803489919dceefd07c075de6e719d",
+    "subject_refs": [
+      "sha256:a08b27e3f4685dc1954da3dbde086f0659a8a5ea430ed75b5e1b09c720caf851",
+      "sha256:2fb286bff99cdb6a46d7091aaba2842c7a319722abae9714952fe631aad2678c",
+      "sha256:29abe2d727204473ac819b7fa82717a1e0cef5ec0db50a7f2b3767417e090409"
+    ],
+    "vantages": [
+      {
+        "subject_ref": "sha256:2fb286bff99cdb6a46d7091aaba2842c7a319722abae9714952fe631aad2678c",
+        "toward_ref": "sha256:29abe2d727204473ac819b7fa82717a1e0cef5ec0db50a7f2b3767417e090409",
+        "bearings": [
+          "reported_boundary"
+        ],
+        "basis_refs": [],
+        "assertion": "caller_reported",
+        "verified_by_package": false
+      },
+      {
+        "subject_ref": "sha256:29abe2d727204473ac819b7fa82717a1e0cef5ec0db50a7f2b3767417e090409",
+        "toward_ref": "sha256:2fb286bff99cdb6a46d7091aaba2842c7a319722abae9714952fe631aad2678c",
+        "bearings": [
+          "reported_disagreement",
+          "reported_care"
+        ],
+        "basis_refs": [
+          "sha256:97fd8cf0051e0355c1ad1b274d8230db9914d828f1b6e43f27308598d799f142"
+        ],
+        "assertion": "caller_reported",
+        "verified_by_package": false
+      }
+    ]
+  },
+  "expected": {
+    "geometry_id": "sha256:76db5a4de56a1e60fe97bcd1a96854f97f821479de3d5de10d323fe04babb8b3",
+    "canonical_json_sha256": "sha256:30130226a4a53bbcb3d3043ec58d7b234bd23b69e22bcdf81dcaa098f82845b4",
+    "domain_byte_length": 2350,
+    "subject_refs": [
+      "sha256:29abe2d727204473ac819b7fa82717a1e0cef5ec0db50a7f2b3767417e090409",
+      "sha256:2fb286bff99cdb6a46d7091aaba2842c7a319722abae9714952fe631aad2678c",
+      "sha256:a08b27e3f4685dc1954da3dbde086f0659a8a5ea430ed75b5e1b09c720caf851"
+    ],
+    "vantages": [
+      {
+        "subject_ref": "sha256:29abe2d727204473ac819b7fa82717a1e0cef5ec0db50a7f2b3767417e090409",
+        "toward_ref": "sha256:2fb286bff99cdb6a46d7091aaba2842c7a319722abae9714952fe631aad2678c",
+        "bearings": [
+          "reported_care",
+          "reported_disagreement"
+        ],
+        "basis_refs": [
+          "sha256:97fd8cf0051e0355c1ad1b274d8230db9914d828f1b6e43f27308598d799f142"
+        ],
+        "assertion": "caller_reported",
+        "verified_by_package": false
+      },
+      {
+        "subject_ref": "sha256:2fb286bff99cdb6a46d7091aaba2842c7a319722abae9714952fe631aad2678c",
+        "toward_ref": "sha256:29abe2d727204473ac819b7fa82717a1e0cef5ec0db50a7f2b3767417e090409",
+        "bearings": [
+          "reported_boundary"
+        ],
+        "basis_refs": [],
+        "assertion": "caller_reported",
+        "verified_by_package": false
+      }
+    ],
+    "urn": "urn:agenttool:love-geometry:76db5a4de56a1e60fe97bcd1a96854f97f821479de3d5de10d323fe04babb8b3"
+  }
+}

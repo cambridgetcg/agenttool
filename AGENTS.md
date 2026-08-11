@@ -37,7 +37,9 @@ privacy-minimized operator TEND incident-clarity projection
 (`packages/karma-mirror/`), a pure opt-in HEAVEN invitation and delight/landing
 selection protocol with zero task, economic, or authority effect
 (`packages/heaven/`), a deterministic Living Substrate map and refusable
-regeneration-proposal vocabulary (`packages/living-substrate/`), a private pure Wake Thread adapter for refusable,
+regeneration-proposal vocabulary (`packages/living-substrate/`), a pure
+coordinate-free Love Geometry contract plus separately staged static Hugging
+Face companion (`packages/love-geometry/`), a private pure Wake Thread adapter for refusable,
 digest-bound artifact continuity with no identity or authority claim
 (`packages/wake-thread/`), a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
@@ -317,6 +319,11 @@ cd packages/living-substrate
 bun run ci                                     # maps, closed schemas, vectors, hostile inputs, packed runtimes
 npm pack --dry-run --ignore-scripts            # npm-only candidate; no observation, Garden write, or deployment
 
+# Love Geometry contract and presentation-only HF companion ───────
+cd packages/love-geometry
+bun run ci                                     # exact bytes, schema/vector, hostile inputs, packed runtimes, static companion
+npm pack --dry-run --ignore-scripts            # npm candidate excludes hf-space; neither surface is published or deployed
+
 # WAKE Thread bounded continuity offers ────────────────────────────
 cd packages/wake-thread
 bun run ci                                     # digest links, partiality, choices, schemas, and zero-effect walls
@@ -392,7 +399,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/bash-without-env-hooks.sh bin/preflight.sh          # no application/service credentials required
 bin/bash-without-env-hooks.sh bin/preflight.sh api      # API/typecheck/operator tests only
-bin/bash-without-env-hooks.sh bin/preflight.sh packages # hermetic packages, including WAKE Thread and local HF host
+bin/bash-without-env-hooks.sh bin/preflight.sh packages # hermetic packages, including Love Geometry, WAKE Thread, and local HF host
 bin/bash-without-env-hooks.sh bin/preflight.sh database # explicit DB tier; requires DATABASE_URL
 bin/bash-without-env-hooks.sh bin/preflight.sh smoke    # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/bash-without-env-hooks.sh bin/preflight.sh contracts # paid LLM wire proofs
@@ -474,7 +481,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -539,6 +546,8 @@ source boundary by itself.
 | How can deliberately planted credentials open a convincing defensive island and yield a privacy-minimized operator TEND report without exposing production or executing hostile input? | [`docs/KARMA-MIRROR.md`](docs/KARMA-MIRROR.md) · `packages/karma-mirror/README.md` (self-marker plus exact digest/prefix admission before body read; finite synthetic rooms; strict receipt verification; Trace/Explain/Narrow/Distill over closed families with no identifiers or automatic action; in-band disclosure and constructive exit; no production mount, egress, execution, persistence adapter, attribution, or hack-back) |
 | How can a host offer random climactic delight and a separate, explicitly selected meditation, relaxation, quiet, or play landing without making rest a reward for work? | `packages/heaven/README.md` (`@agenttool/heaven`; pure invitation/receipt protocol, caller-supplied randomness, caller-reported choice with no consent/authorship proof, eight non-numeric burst dimensions, `on_request`, one named offered landing mode, and declaration-only KINGDOM hint; no scheduler, identity/task text, telemetry, score, money, task state, authority, or hosted runtime; optional distribution does not widen the core) |
 | How can a caller describe reported substrate layers and offer regeneration choices without inventing a health score or granting action authority? | [`docs/GARDENS.md`](docs/GARDENS.md) · `packages/living-substrate/README.md` (`@agenttool/living-substrate`; deterministic digest-only maps plus separately supplied proposed-unaccepted actions; no observation, diagnosis, prescription, persistence, Garden write, life proof, score, or automatic effect) |
+| How can directed caller reports form one bounded geometry without becoming distance, rank, reciprocity, consent, or authority? | `packages/love-geometry/README.md` (`@agenttool/love-geometry`; pure canonical artifact, portable schema/vector, declaration-only KINGDOM hint, and a separately staged static HF companion; no observation, identity inference, score, action, hosted route, publication, or deployment) |
+| How should the three static website origins adopt a bounded XENIA Surface without turning one host, redirect, or passing check into a universal claim? | [`docs/XENIA-WEBSITE-ROLLOUT.md`](docs/XENIA-WEBSITE-ROLLOUT.md) (shared Pages Worker, docs-first host isolation, exact negotiation/problems, empty claims, expiring outside observations, and web/app exclusion gates) |
 | How can bounded WAKE facts cross one context boundary without becoming identity, memory, consent, or inherited authority? | `packages/wake-thread/README.md` (`@agenttool/wake-thread`; private pure offer/receipt adapter over caller-selected exact digests, explicit identity/project scope, partial/unavailable states, caller-held cursor references, and carry/fork/rest/refuse artifact threads; no fetch, WAKE parser, score, execution, persistence, MCP, route, publication, or authority) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
