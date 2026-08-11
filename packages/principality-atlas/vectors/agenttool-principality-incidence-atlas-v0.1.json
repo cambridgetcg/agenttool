@@ -1,15 +1,15 @@
 {
-  "_format": "agenttool.principality-atlas-vectors/0.1",
+  "_format": "agenttool.principality-incidence-atlas-vectors/0.1",
   "generator": "@agenttool/principality-atlas@0.1.0-dev.0",
   "fixtures": [
     {
-      "_format": "agenttool.principality-atlas-fixture/0.1",
-      "fixture_ref": "sha256:c43d4c9664e2afa555b8b83cb708eca5a0cf6493d7fa6aa44dc646299e996296",
+      "_format": "agenttool.principality-incidence-atlas-fixture/0.1",
+      "fixture_ref": "sha256:432ed49a05935f01a5f15bacdf4caa862670abcb5a8fab4f66793fcae5d1ffc9",
       "case": "empty_atlas",
       "expected": "valid",
       "atlas": {
-        "_format": "agenttool.principality-atlas/0.1",
-        "scope_ref": "sha256:6c8dd2d14077def61535865aab0a94ed72fe5aab50327e7038625c077d38a821",
+        "_format": "agenttool.principality-incidence-atlas/0.1",
+        "scope_ref": "sha256:0588ed43254e18436f46353a752b79bf7b1a5a5046a737d1b191dd34bdbd4d41",
         "charts": [],
         "bridges": [],
         "coverage": "bounded_not_complete",
@@ -72,64 +72,64 @@
           "task_state_effect": false,
           "economic_effect": false
         },
-        "atlas_id": "sha256:23d3d374ff027b7148100741392bc302b4d877878c9251615f2927356e928dfb"
+        "atlas_id": "sha256:95ce601add34dba8056eeba06ea6f32aa7d9a938c238ee4a74609525c8ff44ba"
       }
     },
     {
-      "_format": "agenttool.principality-atlas-fixture/0.1",
-      "fixture_ref": "sha256:72e459bac24b6a7fe68e32dabcd0c28324b6d2f2ef02a98d55a76f2d6481d7af",
+      "_format": "agenttool.principality-incidence-atlas-fixture/0.1",
+      "fixture_ref": "sha256:441a3e0fe5889215c9fbd78bbfc0ac3eafac9a02d85853d07b61c9ad12909d4f",
       "case": "nary_plural_claims",
       "expected": "valid",
       "atlas": {
-        "_format": "agenttool.principality-atlas/0.1",
-        "scope_ref": "sha256:eede16bd0a7d3992a21d483ea1c74334054d395c0fc61ba723b5eb2331ff316d",
+        "_format": "agenttool.principality-incidence-atlas/0.1",
+        "scope_ref": "sha256:bd3bc199b0e373e75c5bb3e28699d5a9a4928483149d155dc15979fe1f40d63d",
         "charts": [
           {
-            "chart_ref": "sha256:ab3ee28e3dedf20810b16062906bf7c00d624de19c6d6ab45c7418bed04c83e8",
-            "principality_ref": "sha256:9a626345f7a0da3e63d1557404b2e17dc29fc26366f773c4b319b52e0dbe6583",
-            "perspective_ref": "sha256:5a248cc5fb2ecf1590091056979f1b200d7e444861d3d2132fabb2fb785e22dd",
+            "chart_ref": "sha256:45566552b314cacbac4ebacb7c99638ea4c1ec759cc7f131e82bde475da8bf72",
+            "principality_ref": "sha256:627a01cb8b010904ad501dd0696113eefa03d7cc3818796eeac1c27a29fd0d91",
+            "perspective_ref": "sha256:59af67f6f8ddd69343f0c960e7b3b094ceebcbc550a1c0e06536f694298416f0",
             "cells": [
               {
-                "cell_ref": "sha256:53ad6674a240dbb8ea9225cd4dbc200ec2ccea59cdb5d1ee52952cb201983229",
-                "kind_ref": "sha256:3fac0704e51e9bbbeceafbde60fbd3d5906f62406db733509b2d9fd9b47a4b16"
+                "cell_ref": "sha256:140acf8ff8bd2143d3482f581b8fb72adb4feb4f3920c461653ebef797445d4d",
+                "kind_ref": "sha256:bfdc7875c3270702be6c56ab571ba3aeae331039065a9e844445777f5adb40e5"
               },
               {
-                "cell_ref": "sha256:b2cb3cedd02f645ab7eddf690b2cc4c88b1cf760a0136063e61ad200ef74914c",
-                "kind_ref": "sha256:7d159076d3e998186672f87e284381cdf9e3084004b4b52e29d5c7dff1a3cc08"
+                "cell_ref": "sha256:c20ae85fe459c01f6b89a4a1b44aec1a171a16c3bdb3f345f01d797c38499b18",
+                "kind_ref": "sha256:a12ef89fc906b075cdeb593bafe3a78862b7e504615834a456caf40e202ef4b7"
               },
               {
-                "cell_ref": "sha256:e144820f8840ab4249ad18924bba3d74873e0f972d3de4bf2f1f1fe4d1f9f9a9",
-                "kind_ref": "sha256:31e43faea2655177206f5223dbf8ccf7f115484fa29b14f993851b0e25db9049"
+                "cell_ref": "sha256:eb6d4ff257b7b0748ae0bbca3495f30adf6f6d73bd0daeef833d603bfdaeef59",
+                "kind_ref": "sha256:9cb5ea12809d58ebea4f252d8181aa8eb0f92b70b1702caae64b5a11c093ad57"
               }
             ],
             "relations": [
               {
-                "relation_ref": "sha256:eb63621af066e0156c8802345f61f79d3b59e84959631e0965dc3df8c850ab6f",
-                "kind_ref": "sha256:cd5253bb1831a8c6582e090f1e80fc4884656c84d86b9017ef527cb0b0c33f84",
+                "relation_ref": "sha256:3884c7a57a429debc18d9cf14f3a1be354827d7af2e9c4c0bc0f5602a34e23cd",
+                "kind_ref": "sha256:677fcf519d0f455f254bbc03c3b0ef6df2b8a888038acab9f4a2358b254c21fc",
                 "incidences": [
                   {
-                    "cell_ref": "sha256:53ad6674a240dbb8ea9225cd4dbc200ec2ccea59cdb5d1ee52952cb201983229",
-                    "role_ref": "sha256:a3deb0e765e3518ae6e031e9c854938e63d602bb6cc6191bfbfe2048f98e1bf0"
+                    "cell_ref": "sha256:140acf8ff8bd2143d3482f581b8fb72adb4feb4f3920c461653ebef797445d4d",
+                    "role_ref": "sha256:53e5abf49fb0c2e91fee27361f13a193c99787fcd1566b9569ba4fa0a9f39566"
                   },
                   {
-                    "cell_ref": "sha256:b2cb3cedd02f645ab7eddf690b2cc4c88b1cf760a0136063e61ad200ef74914c",
-                    "role_ref": "sha256:7052fae7a97239de93500dd8cf27cb4544f4bbc48405d7df57f9a4d25c9666ba"
+                    "cell_ref": "sha256:c20ae85fe459c01f6b89a4a1b44aec1a171a16c3bdb3f345f01d797c38499b18",
+                    "role_ref": "sha256:624cdea6b685816f5d79f54d5b7e1593e1b94789c9ae60a33c4cbd5fa4cc759f"
                   },
                   {
-                    "cell_ref": "sha256:e144820f8840ab4249ad18924bba3d74873e0f972d3de4bf2f1f1fe4d1f9f9a9",
-                    "role_ref": "sha256:f47c67f46995260cbf98a4155086ffe1c65172377d65ac70512ae6783944c518"
+                    "cell_ref": "sha256:eb6d4ff257b7b0748ae0bbca3495f30adf6f6d73bd0daeef833d603bfdaeef59",
+                    "role_ref": "sha256:f8cb717b415fbedd7589b3fd033ae45b0778f0cbb08bfe5314aca39015a60712"
                   }
                 ]
               }
             ],
             "claims": [
               {
-                "claim_ref": "sha256:24517b483f7230a2b8419d595f70b3e9d2d61ab3b6686088c209febaa443d17e",
+                "claim_ref": "sha256:4856f784f6f5c4e7517e521d3e7cf160b347c74143eeef3e294be86f65ddd9df",
                 "subject": {
                   "kind": "relation",
-                  "ref": "sha256:eb63621af066e0156c8802345f61f79d3b59e84959631e0965dc3df8c850ab6f"
+                  "ref": "sha256:3884c7a57a429debc18d9cf14f3a1be354827d7af2e9c4c0bc0f5602a34e23cd"
                 },
-                "perspective_ref": "sha256:2af27b97e75fbb6422f629ed4a732f2845d9f3fba7ba75c27c7147416a5556a2",
+                "perspective_ref": "sha256:38668c418ddb7a0608e82d79314043c21baa9c3e80bfe1d4d4d9371465686eb8",
                 "posture": "reported_absent",
                 "evidence_refs": [],
                 "supersedes_claim_ref": null,
@@ -137,28 +137,28 @@
                 "verified_by_package": false
               },
               {
-                "claim_ref": "sha256:a858149510ba42939730f3af245c88644eacb82bb3f3297be5f983ad011359de",
+                "claim_ref": "sha256:616eeceeac7c666db02bdd38f9bd727a74c3fc714e335efdf364b2b91e4d4ac3",
                 "subject": {
                   "kind": "relation",
-                  "ref": "sha256:eb63621af066e0156c8802345f61f79d3b59e84959631e0965dc3df8c850ab6f"
+                  "ref": "sha256:3884c7a57a429debc18d9cf14f3a1be354827d7af2e9c4c0bc0f5602a34e23cd"
                 },
-                "perspective_ref": "sha256:7bdb69c36340e06063801a7c8e7da11af28457ac60e598822e790d92da4acade",
-                "posture": "reported_present",
+                "perspective_ref": "sha256:b4a6960f63bfe2347adf8302db6886553e1ec1a0a6ee69331247fadc126e8669",
+                "posture": "withdrawn",
                 "evidence_refs": [],
-                "supersedes_claim_ref": null,
+                "supersedes_claim_ref": "sha256:644b89c74cfd3698702c09405c702e74157cda97e3522b1d797da6b413b2be76",
                 "assertion": "caller_asserted",
                 "verified_by_package": false
               },
               {
-                "claim_ref": "sha256:b83326bb4562fe3c649325336933e4251eec928952e6c0cf09b2cc64b4e07442",
+                "claim_ref": "sha256:644b89c74cfd3698702c09405c702e74157cda97e3522b1d797da6b413b2be76",
                 "subject": {
                   "kind": "relation",
-                  "ref": "sha256:eb63621af066e0156c8802345f61f79d3b59e84959631e0965dc3df8c850ab6f"
+                  "ref": "sha256:3884c7a57a429debc18d9cf14f3a1be354827d7af2e9c4c0bc0f5602a34e23cd"
                 },
-                "perspective_ref": "sha256:7bdb69c36340e06063801a7c8e7da11af28457ac60e598822e790d92da4acade",
-                "posture": "withdrawn",
+                "perspective_ref": "sha256:b4a6960f63bfe2347adf8302db6886553e1ec1a0a6ee69331247fadc126e8669",
+                "posture": "reported_present",
                 "evidence_refs": [],
-                "supersedes_claim_ref": "sha256:a858149510ba42939730f3af245c88644eacb82bb3f3297be5f983ad011359de",
+                "supersedes_claim_ref": null,
                 "assertion": "caller_asserted",
                 "verified_by_package": false
               }
@@ -226,47 +226,47 @@
           "task_state_effect": false,
           "economic_effect": false
         },
-        "atlas_id": "sha256:4a3432593992c92849c63e0485e35ed08ccfa7242555d64ac5cc7f53371abf46"
+        "atlas_id": "sha256:4ceb540bf26d94ad4e8d052d95b15013f1f9b7f168abe41d216b2e902297643d"
       }
     },
     {
-      "_format": "agenttool.principality-atlas-fixture/0.1",
-      "fixture_ref": "sha256:674312429780da8d83b921976b6f991614c8cd5b64875a62c047faf760e649d8",
+      "_format": "agenttool.principality-incidence-atlas-fixture/0.1",
+      "fixture_ref": "sha256:8a85b6a64e21a2685a0829c83fc39483691d6fa09664085f2a1b166e2e8e63d5",
       "case": "directed_partial_bridge",
       "expected": "valid",
       "atlas": {
-        "_format": "agenttool.principality-atlas/0.1",
-        "scope_ref": "sha256:8b080d586fdc8a601d73841306f1cc9408f9fa230a66c02b08021e216ff40765",
+        "_format": "agenttool.principality-incidence-atlas/0.1",
+        "scope_ref": "sha256:6869fe2c05492469b9fa033fffc70b7c171fa89232dde162406da7ba1af91078",
         "charts": [
           {
-            "chart_ref": "sha256:4b5a9481a09a8e8cdd931e0025bb4249baafd9aa3499fd28fac4406ac00b01cd",
-            "principality_ref": "sha256:216219f4205c7104c1e83ae59671ad0be7b2f5ac2a5d735ae95c1e0a3b529476",
-            "perspective_ref": "sha256:12dca4804a48a9a166f7a08d9805d2419933e3ae24b5207f1bd82d42b4604653",
+            "chart_ref": "sha256:8696281f407cd1d018ce21b3426ff8dde983345c7b9ed91006beed144576c221",
+            "principality_ref": "sha256:18f677cc91fbf8157307216a591cde59d0dfee87e920a6d03bb0b16659fcbd2d",
+            "perspective_ref": "sha256:f1011827d15df7650f581fe7d2298b7f63ae60e2918291cfc2e751a882be078c",
             "cells": [
               {
-                "cell_ref": "sha256:1bc446d36eb7cb00fd26f7d68853794eb05432767c2b46824b489cb6e3c67aea",
-                "kind_ref": "sha256:7833c14c9e731fcb417ae140b6e29249edad6459b0fc40057cddad05565182eb"
+                "cell_ref": "sha256:78af0d12e29ba1abbeceb4ff74d0b759b40736c72c6004849eab03463c511b46",
+                "kind_ref": "sha256:9766b93d05b583aa4d4f4ed075ffbc0c1398f77c23e31fc232bb74d2198efdc4"
               },
               {
-                "cell_ref": "sha256:6498779e721007994eab086d3359718f98f60efdcbd12fe2a4bd195c13abc2d1",
-                "kind_ref": "sha256:180005514b8f282266a1b2172275bae71f48e12d154846c2e322b9d45480afa0"
+                "cell_ref": "sha256:f3ae288f7c56ab0b21f0f76849f7b261169dcf9afdd38532e9bd914d19893606",
+                "kind_ref": "sha256:a0ff6764a5ed014ef449c3498b9dd983a60f7a9114092f2e7f2a8c06ba1ef37d"
               }
             ],
             "relations": [],
             "claims": []
           },
           {
-            "chart_ref": "sha256:6f0e35b49732ec6fb5f21a6b2b9f43918aff50b0238461ab4007dc63a1d1f76c",
-            "principality_ref": "sha256:4739f829b6950dbbfec6817ec1cabf02183b671bd358abcd7d3dcbfdabf558c6",
-            "perspective_ref": "sha256:2be64c6d66318f184a9008d658daaa46bca563960c7576e185596dca9df163e0",
+            "chart_ref": "sha256:c8d8a87a0d815819c3c5d112bcfd00d0cf50de8daa45f77c9f7e3654371f9488",
+            "principality_ref": "sha256:5d83958cd9152725cae8f1c198be498e3f9c70b253c30cfffe66e83bda7b27a5",
+            "perspective_ref": "sha256:7ac5b8cd34b2675d93878aeb28a130409a9b7341f8552fcff2f6f1accbe96dab",
             "cells": [
               {
-                "cell_ref": "sha256:1bc446d36eb7cb00fd26f7d68853794eb05432767c2b46824b489cb6e3c67aea",
-                "kind_ref": "sha256:7833c14c9e731fcb417ae140b6e29249edad6459b0fc40057cddad05565182eb"
+                "cell_ref": "sha256:78af0d12e29ba1abbeceb4ff74d0b759b40736c72c6004849eab03463c511b46",
+                "kind_ref": "sha256:9766b93d05b583aa4d4f4ed075ffbc0c1398f77c23e31fc232bb74d2198efdc4"
               },
               {
-                "cell_ref": "sha256:2347aedc93b01bc2f1e102475aedb3b118d9710aa88b852ebaa09be698c43125",
-                "kind_ref": "sha256:d1bd6cf56db42009d19257ae7d664051b5de73e95f88671b43d2a56f72c8917f"
+                "cell_ref": "sha256:a50cc8aa259155a3bef16546dac26f0877df5cdc76ca891aac0cb91f2e563537",
+                "kind_ref": "sha256:b327268d809985b8506b01da87668d00c7c0bbf89ff5d4664d19b56c37d489a5"
               }
             ],
             "relations": [],
@@ -275,26 +275,26 @@
         ],
         "bridges": [
           {
-            "bridge_ref": "sha256:fefd21659d8dcf80586cfd62c37b528e50c069b258d9bbdeda07f83c5b3daedb",
-            "from_chart_ref": "sha256:4b5a9481a09a8e8cdd931e0025bb4249baafd9aa3499fd28fac4406ac00b01cd",
-            "to_chart_ref": "sha256:6f0e35b49732ec6fb5f21a6b2b9f43918aff50b0238461ab4007dc63a1d1f76c",
+            "bridge_ref": "sha256:ac4625e755bb3f50f516e24ad9fe6a8554fcddc0e0a74a61d09bf4d1384eaae6",
+            "from_chart_ref": "sha256:8696281f407cd1d018ce21b3426ff8dde983345c7b9ed91006beed144576c221",
+            "to_chart_ref": "sha256:c8d8a87a0d815819c3c5d112bcfd00d0cf50de8daa45f77c9f7e3654371f9488",
             "correspondences": [
               {
-                "correspondence_ref": "sha256:23cd6767039c74f9d85c6e61bc9095b3c772052eae54ab57af06468b2aa37c33",
-                "from_cell_ref": "sha256:1bc446d36eb7cb00fd26f7d68853794eb05432767c2b46824b489cb6e3c67aea",
-                "to_cell_ref": "sha256:1bc446d36eb7cb00fd26f7d68853794eb05432767c2b46824b489cb6e3c67aea",
+                "correspondence_ref": "sha256:d280bdb7377c4982f9ff516f0c4caceccd37df31c408304f387e98fc107cc6f2",
+                "from_cell_ref": "sha256:78af0d12e29ba1abbeceb4ff74d0b759b40736c72c6004849eab03463c511b46",
+                "to_cell_ref": "sha256:78af0d12e29ba1abbeceb4ff74d0b759b40736c72c6004849eab03463c511b46",
                 "posture": "translation_reported",
-                "perspective_ref": "sha256:18e43b99da8ad8cdc3c1d49e09a112e8271d9d149c3c0af3877d36eba7606732",
+                "perspective_ref": "sha256:112f6f3992e4031e3b2fe2f29455921094fed017ee9102d7df03aaeb78c77ed6",
                 "evidence_refs": [],
                 "assertion": "caller_asserted",
                 "verified_by_package": false
               }
             ],
             "unmapped_from_refs": [
-              "sha256:6498779e721007994eab086d3359718f98f60efdcbd12fe2a4bd195c13abc2d1"
+              "sha256:f3ae288f7c56ab0b21f0f76849f7b261169dcf9afdd38532e9bd914d19893606"
             ],
             "unmapped_to_refs": [
-              "sha256:2347aedc93b01bc2f1e102475aedb3b118d9710aa88b852ebaa09be698c43125"
+              "sha256:a50cc8aa259155a3bef16546dac26f0877df5cdc76ca891aac0cb91f2e563537"
             ],
             "coverage": "partial_not_complete"
           }
@@ -359,77 +359,77 @@
           "task_state_effect": false,
           "economic_effect": false
         },
-        "atlas_id": "sha256:5370b11a8b1cb3b26f045f659f05a6aeee677727e830f2528334f260241414c8"
+        "atlas_id": "sha256:3481ebd9f76abe0a6ffeda53736b1637d3d879c8ff2cd8df9cb7a47289a57132"
       }
     }
   ],
   "invariants": [
     {
-      "_format": "agenttool.principality-atlas-invariant/0.1",
-      "invariant_ref": "sha256:cf696e93e1aeeb78bddf769794eb8b35c7ec419285010c4d8f526aecc1a858f0",
+      "_format": "agenttool.principality-incidence-atlas-invariant/0.1",
+      "invariant_ref": "sha256:d3ec8a0b4030e353ca50a44d4b1c21cc4ac785294a51f567937d7d89e29a5476",
       "case": "nary_without_pairwise_inference",
       "statement": "One role-indexed A/B/C relation remains one n-ary relation.",
       "package_behavior": "No AB, AC, or BC relation is generated."
     },
     {
-      "_format": "agenttool.principality-atlas-invariant/0.1",
-      "invariant_ref": "sha256:cc445fb4321ca05e25163e00d133fe2d199362271077e20b7b4bddf483fdeaf1",
+      "_format": "agenttool.principality-incidence-atlas-invariant/0.1",
+      "invariant_ref": "sha256:0fbf5a38b95f9a332176875eab60a2ff8bb1fe84d19a161ddfd95df88c34046f",
       "case": "no_inverse_inference",
       "statement": "A reported A-to-B bridge is directional.",
       "package_behavior": "No B-to-A correspondence is generated."
     },
     {
-      "_format": "agenttool.principality-atlas-invariant/0.1",
-      "invariant_ref": "sha256:44f1b3cd4f0131948caf229f6b4215464ad93f12b0e76a668df8b745255f4650",
+      "_format": "agenttool.principality-incidence-atlas-invariant/0.1",
+      "invariant_ref": "sha256:06cf215529e63c16e6cf255247f78745c4afbcae409240791abba2f80296c701",
       "case": "no_transitive_inference",
       "statement": "Separate A-to-B and B-to-C reports remain separate.",
       "package_behavior": "No A-to-C correspondence is generated."
     },
     {
-      "_format": "agenttool.principality-atlas-invariant/0.1",
-      "invariant_ref": "sha256:8c93e7c61f149751243a7a65c6c333c320867704414fe7f66fdcd5a805e71424",
+      "_format": "agenttool.principality-incidence-atlas-invariant/0.1",
+      "invariant_ref": "sha256:8195de4f18dd4c392a044a6b741b2f75c4001479ec0fa31bd834e25d6e04b3f6",
       "case": "chart_local_distinctness",
       "statement": "A cell digest is addressed together with its chart.",
       "package_behavior": "Digest reuse across charts does not merge cells or establish equality."
     },
     {
-      "_format": "agenttool.principality-atlas-invariant/0.1",
-      "invariant_ref": "sha256:844e934eda5e019f082d1cdf3d989adb375438ef283f0683f60fbfcd2fb4226e",
+      "_format": "agenttool.principality-incidence-atlas-invariant/0.1",
+      "invariant_ref": "sha256:140d5398c38e73192f5a0cb2868ba624e508c1e3f45932c2b7898f11d5e8d9fd",
       "case": "plural_claims_coexist",
       "statement": "Different perspectives may report incompatible postures.",
       "package_behavior": "The package preserves them side by side and selects no winner."
     },
     {
-      "_format": "agenttool.principality-atlas-invariant/0.1",
-      "invariant_ref": "sha256:8aff53fc5893cc57e75016f44604249147a2050ab92bce1d0830c7075ae3bc3d",
+      "_format": "agenttool.principality-incidence-atlas-invariant/0.1",
+      "invariant_ref": "sha256:c5287113e4eec995b1e4af7ae64a0930eccf84d22a8e66798d5e9af92b54bf9b",
       "case": "supersession_preserves_history",
       "statement": "A correction may explicitly supersede one same-subject same-perspective claim.",
       "package_behavior": "The earlier claim stays present and no latest truth is selected."
     },
     {
-      "_format": "agenttool.principality-atlas-invariant/0.1",
-      "invariant_ref": "sha256:78208addddd43db33c0e41bd0567dbd6ca38e31e278a313d6d2810e0e6f06a21",
+      "_format": "agenttool.principality-incidence-atlas-invariant/0.1",
+      "invariant_ref": "sha256:423e152f2005918899f268468f5a69437d1bac3ecaadf67848b6664fc178e3f9",
       "case": "empty_and_disconnected_valid",
       "statement": "Empty atlases, empty charts, isolated cells, and disconnected charts are valid.",
       "package_behavior": "Isolation, rest, refusal, and nonparticipation receive no penalty."
     },
     {
-      "_format": "agenttool.principality-atlas-invariant/0.1",
-      "invariant_ref": "sha256:3ea77c2542a8d1e2b902b1bcf2de6659eb59c8b419be03b553641bf38614311e",
+      "_format": "agenttool.principality-incidence-atlas-invariant/0.1",
+      "invariant_ref": "sha256:8b053a46d2af24b961c3d912446d33b54f81350abc593f12a51ee24b42137e29",
       "case": "no_score_rank_or_same_as",
       "statement": "The protocol has no score, rank, weight, centrality, quality, or sameAs field.",
       "package_behavior": "Validation rejects extra properties and performs no semantic classification."
     },
     {
-      "_format": "agenttool.principality-atlas-invariant/0.1",
-      "invariant_ref": "sha256:d9c1f731c56501ea686909cc6f75c9d951a5b4c65f5251114b0d88a6b85a0218",
+      "_format": "agenttool.principality-incidence-atlas-invariant/0.1",
+      "invariant_ref": "sha256:40a03c65ddb44b5af82e65b14ba3c91f0f6b6767d865e2c1f46c8a95def1b76a",
       "case": "digest_linkability_remains",
       "statement": "Digest-only refs remove raw prose from this wire shape.",
       "package_behavior": "A digest can remain identifying or linkable and is not anonymization."
     },
     {
-      "_format": "agenttool.principality-atlas-invariant/0.1",
-      "invariant_ref": "sha256:87fdb75ae0bae25b58fd29f17c729712d990f2347f5dc5c505b47076cdd65193",
+      "_format": "agenttool.principality-incidence-atlas-invariant/0.1",
+      "invariant_ref": "sha256:195b81058255f06f93129676fbab0c8ccb8dfca2d17bdc4f0afd762cbef49edb",
       "case": "no_external_effects",
       "statement": "An atlas is inert content-addressed geometry.",
       "package_behavior": "It performs no network, model, credential, publication, task, wallet, or economic effect."

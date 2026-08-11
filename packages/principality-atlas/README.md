@@ -10,6 +10,14 @@ It builds a typed incidence-hypergraph atlas from caller-supplied digest refs:
 - separate caller-asserted claims, including disagreement and withdrawal;
 - explicit directed, partial bridges between charts.
 
+Its wire identity is `agenttool.principality-incidence-atlas/0.1`. The separate
+`@agenttool/principality-geometry` package owns
+`agenttool.principality-atlas/0.1` for reciprocal invariant flag geometry over
+translation reports. The two formats are intentionally not aliases: neither
+package converts, glues, or treats an artifact from the other as semantically
+equivalent. A host may compose exact digests only through a separately reviewed
+and authorized adapter.
+
 “Principality” means only a caller-designated bounded domain or scale. It does
 not mean a security principal, identity, owner, territory, rank, Crown status,
 sovereignty, or authority.
@@ -126,8 +134,8 @@ The package ships:
 - `atlas.schema.json` — the closed Draft 2020-12 atlas wire;
 - `fixture.schema.json` and `invariant.schema.json` — closed synthetic evidence
   rows;
-- `vectors/agenttool-principality-atlas-v0.1.json` — three valid synthetic
-  examples and ten explicit non-inference boundaries;
+- `vectors/agenttool-principality-incidence-atlas-v0.1.json` — three valid
+  synthetic examples and ten explicit non-inference boundaries;
 - `kingdom.extension.json` — a declaration-only, unregistered extension hint.
 
 The synthetic rows can be projected into the existing HF Training Garden for

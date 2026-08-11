@@ -47,8 +47,8 @@ const boundaries = closed(
 
 const atlasSchema = {
   $schema: draft,
-  $id: "https://agenttool.dev/schema/agenttool-principality-atlas-v0.1.schema.json",
-  title: "AgentTool Principality Atlas v0.1",
+  $id: "https://agenttool.dev/schema/agenttool-principality-incidence-atlas-v0.1.schema.json",
+  title: "AgentTool Principality Incidence Atlas v0.1",
   description:
     "A bounded finite typed incidence-hypergraph atlas of caller-asserted partial charts and directed non-gluing bridges.",
   ...closed({
@@ -180,25 +180,25 @@ const invariantCases = [
 
 const fixtureSchema = {
   $schema: draft,
-  $id: "https://agenttool.dev/schema/agenttool-principality-atlas-fixture-v0.1.schema.json",
-  title: "AgentTool Principality Atlas fixture v0.1",
+  $id: "https://agenttool.dev/schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+  title: "AgentTool Principality Incidence Atlas fixture v0.1",
   ...closed({
-    _format: { const: "agenttool.principality-atlas-fixture/0.1" },
+    _format: { const: "agenttool.principality-incidence-atlas-fixture/0.1" },
     fixture_ref: sha256IdSchema,
     case: { enum: fixtureCases },
     expected: { const: "valid" },
     atlas: {
-      $ref: "https://agenttool.dev/schema/agenttool-principality-atlas-v0.1.schema.json",
+      $ref: "https://agenttool.dev/schema/agenttool-principality-incidence-atlas-v0.1.schema.json",
     },
   }),
 };
 
 const invariantSchema = {
   $schema: draft,
-  $id: "https://agenttool.dev/schema/agenttool-principality-atlas-invariant-v0.1.schema.json",
-  title: "AgentTool Principality Atlas invariant row v0.1",
+  $id: "https://agenttool.dev/schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
+  title: "AgentTool Principality Incidence Atlas invariant row v0.1",
   ...closed({
-    _format: { const: "agenttool.principality-atlas-invariant/0.1" },
+    _format: { const: "agenttool.principality-incidence-atlas-invariant/0.1" },
     invariant_ref: sha256IdSchema,
     case: { enum: invariantCases },
     statement: { type: "string", minLength: 1, maxLength: 512 },
@@ -206,7 +206,7 @@ const invariantSchema = {
   }),
 };
 
-const id = (name) => sha256Id(`agenttool-principality-atlas-v0.1:${name}`);
+const id = (name) => sha256Id(`agenttool-principality-incidence-atlas-v0.1:${name}`);
 const claim = ({ name, subject, perspective, posture, supersedes = null }) => ({
   claim_ref: id(`claim:${name}`),
   subject,
@@ -316,7 +316,7 @@ const fixtures = [
   ["nary_plural_claims", naryAtlas],
   ["directed_partial_bridge", bridgeAtlas],
 ].map(([fixtureCase, atlas]) => ({
-  _format: "agenttool.principality-atlas-fixture/0.1",
+  _format: "agenttool.principality-incidence-atlas-fixture/0.1",
   fixture_ref: id(`fixture:${fixtureCase}`),
   case: fixtureCase,
   expected: "valid",
@@ -366,7 +366,7 @@ const invariantText = {
   ],
 };
 const invariants = invariantCases.map((invariantCase) => ({
-  _format: "agenttool.principality-atlas-invariant/0.1",
+  _format: "agenttool.principality-incidence-atlas-invariant/0.1",
   invariant_ref: id(`invariant:${invariantCase}`),
   case: invariantCase,
   statement: invariantText[invariantCase][0],
@@ -374,17 +374,17 @@ const invariants = invariantCases.map((invariantCase) => ({
 }));
 
 const vector = {
-  _format: "agenttool.principality-atlas-vectors/0.1",
+  _format: "agenttool.principality-incidence-atlas-vectors/0.1",
   generator: "@agenttool/principality-atlas@0.1.0-dev.0",
   fixtures,
   invariants,
 };
 
 const outputs = new Map([
-  ["schema/agenttool-principality-atlas-v0.1.schema.json", atlasSchema],
-  ["schema/agenttool-principality-atlas-fixture-v0.1.schema.json", fixtureSchema],
-  ["schema/agenttool-principality-atlas-invariant-v0.1.schema.json", invariantSchema],
-  ["vectors/agenttool-principality-atlas-v0.1.json", vector],
+  ["schema/agenttool-principality-incidence-atlas-v0.1.schema.json", atlasSchema],
+  ["schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json", fixtureSchema],
+  ["schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json", invariantSchema],
+  ["vectors/agenttool-principality-incidence-atlas-v0.1.json", vector],
 ]);
 
 for (const [relative, value] of outputs) {

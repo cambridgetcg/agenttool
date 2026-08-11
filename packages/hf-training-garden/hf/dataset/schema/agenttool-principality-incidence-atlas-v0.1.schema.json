@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agenttool.dev/schema/agenttool-principality-atlas-v0.1.schema.json",
-  "title": "AgentTool Principality Atlas v0.1",
+  "$id": "https://agenttool.dev/schema/agenttool-principality-incidence-atlas-v0.1.schema.json",
+  "title": "AgentTool Principality Incidence Atlas v0.1",
   "description": "A bounded finite typed incidence-hypergraph atlas of caller-asserted partial charts and directed non-gluing bridges.",
   "type": "object",
   "additionalProperties": false,
@@ -16,7 +16,7 @@
   ],
   "properties": {
     "_format": {
-      "const": "agenttool.principality-atlas/0.1"
+      "const": "agenttool.principality-incidence-atlas/0.1"
     },
     "atlas_id": {
       "$ref": "#/$defs/sha256Id"

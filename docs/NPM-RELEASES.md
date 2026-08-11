@@ -905,6 +905,38 @@ for `cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
 `authentication=trusted`; the workflow then exchanges the protected
 GitHub-hosted job's OIDC identity and does not expose the bootstrap token.
 
+### Principality Geometry developer-preview bootstrap
+
+`@agenttool/principality-geometry@0.1.0-dev.0` uses the checked-in
+LOVE-artifact path so the docs mirror, one-asset GitHub Release, and npm reuse
+the same reviewed tarball. Its first npm publication must use
+`authentication=bootstrap` because npm cannot attach a trusted publisher until
+the package exists; request the prerelease-only `next` tag. The static
+Hugging Face companion is a separate authorized dataset publication and is
+not included in the npm tarball.
+
+```bash
+bun bin/npm-release.ts resolve --package principality-geometry
+
+git tag -a principality-geometry-v0.1.0-dev.0 <github-main-commit> \
+  -m '@agenttool/principality-geometry@0.1.0-dev.0'
+git push github refs/tags/principality-geometry-v0.1.0-dev.0
+
+gh workflow run publish-npm.yml \
+  --ref principality-geometry-v0.1.0-dev.0 \
+  -f package=principality-geometry \
+  -f tag=principality-geometry-v0.1.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+After the initial package record exists, configure its trusted publisher for
+`cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
+`npm-bootstrap`, and allowed action `npm publish`; later releases use
+`authentication=trusted`. Neither distribution path registers the
+declaration-only KINGDOM descriptor, reads credentials at runtime, fetches
+providers, trains, or deploys a hosted service.
+
 ## Verified SDK 0.17.0 publication
 
 The authorized SDK publication completed through

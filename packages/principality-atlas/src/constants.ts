@@ -1,7 +1,7 @@
 import { deepFreeze } from "./canonical.js";
 
 export const PRINCIPALITY_ATLAS_FORMAT =
-  "agenttool.principality-atlas/0.1" as const;
+  "agenttool.principality-incidence-atlas/0.1" as const;
 
 export const PRINCIPALITY_ATLAS_CLAIM_POSTURES = deepFreeze([
   "reported_present",

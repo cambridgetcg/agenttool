@@ -33,6 +33,15 @@ authority.
 
 ## The mathematical object
 
+The npm package keeps its descriptive name, while its distinct wire identity
+is `agenttool.principality-incidence-atlas/0.1`. The separately released
+`@agenttool/principality-geometry` package owns the older
+`agenttool.principality-atlas/0.1` wire for reciprocal invariant flag geometry.
+These are complementary, incompatible shapes rather than aliases. Neither
+runtime converts between them, establishes semantic equivalence, or glues their
+views. A future crossover must bind exact source digests and declare its own
+reviewed mapping and authorization boundary.
+
 One local chart is:
 
 \[

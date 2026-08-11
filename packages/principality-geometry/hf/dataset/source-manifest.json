@@ -1,0 +1,90 @@
+{
+  "_format": "agenttool.principality-geometry-hf-source-manifest/0.1",
+  "intended_repo_id": "Yu-and-Ai/agenttool-principality-geometry",
+  "publication_authorized": true,
+  "license_id": "apache-2.0",
+  "training_eligible": false,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11358,
+      "sha256": "sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 401,
+      "sha256": "sha256:ef8adcb03c6c7b48c015dc68f14da23b075a53594aed2aeca76087d0311cbb03"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2242,
+      "sha256": "sha256:c3ae513372ef28d485bbad90ae61d5e499066d5ccfe67b346d1ca97e18b551d3"
+    },
+    {
+      "path": "data/atlases.jsonl",
+      "bytes": 595,
+      "sha256": "sha256:56f44d8aa4a884a39ebcf3586a31dafb4047cb30a331866e6785e27d8c9b8091"
+    },
+    {
+      "path": "data/bridges.jsonl",
+      "bytes": 2334,
+      "sha256": "sha256:390d6532024270e2a1abfeebb806f5f0e32956c001c73657077f86365c8c5896"
+    },
+    {
+      "path": "data/components.jsonl",
+      "bytes": 1231,
+      "sha256": "sha256:50ec1c69720164c48bc705fe1d2eddca6d5f5272871b3c7c550998db1128395f"
+    },
+    {
+      "path": "data/invariants.jsonl",
+      "bytes": 497,
+      "sha256": "sha256:274202d389be9addbfe8a1bf45915948206d94a3a92757e5c85ce1f2c41b5045"
+    },
+    {
+      "path": "data/lenses.jsonl",
+      "bytes": 1512,
+      "sha256": "sha256:22ea531ca140a28ddf9fc659321fe5f744c2845dc374d87451c6db415c99cdfb"
+    },
+    {
+      "path": "data/open_conditions.jsonl",
+      "bytes": 330,
+      "sha256": "sha256:134d114101bd7033908de1515ff4eaabe76bdee2e6445fa55d7ebd86eacfad4e"
+    },
+    {
+      "path": "data/surfaces.jsonl",
+      "bytes": 303,
+      "sha256": "sha256:5561a024d383df66a542cc566bf76d643811ee35884dc0e146ca80f832eb0659"
+    },
+    {
+      "path": "data/vertices.jsonl",
+      "bytes": 894,
+      "sha256": "sha256:960a8ceac3239919ddd9e75ac134008901216d519ce899c35da3d70cfb7a3923"
+    },
+    {
+      "path": "reference/agenttool-principality-atlas-v0.1.schema.json",
+      "bytes": 16313,
+      "sha256": "sha256:5feb437a0f16d2c485dd86fa80458c109431a02265ca5dfa9ef8dde6c773ebf6"
+    },
+    {
+      "path": "reference/agenttool-principality-geometry-input-v0.1.schema.json",
+      "bytes": 7318,
+      "sha256": "sha256:0f18a4391142a2aa89168b796f2cb2ba1eecbc9292a831ad490a734ab62c289f"
+    },
+    {
+      "path": "reference/principality-rosette.atlas.json",
+      "bytes": 20824,
+      "sha256": "sha256:650c9f9743599fb08bb0665333e24508aacc29a1e4e2d3eac5e91dce1a3b7447"
+    },
+    {
+      "path": "reference/principality-rosette.input.json",
+      "bytes": 7035,
+      "sha256": "sha256:ea754e7db620a352ead2b0d6203cca286acc3d81a4f6bcfa9f18a8d6517c9052"
+    },
+    {
+      "path": "reference/principality-rosette.svg",
+      "bytes": 3084,
+      "sha256": "sha256:6938e3f5fa13486afb8a45f423ee305df9f902dbb128de1bbf29da4634235a89"
+    }
+  ],
+  "root_sha256": "sha256:7ca4f46037949ca4e140792242ee1fb616eccf9ca068dab6ec55eb5d64f69113"
+}

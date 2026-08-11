@@ -86,9 +86,9 @@ describe("package boundary", () => {
 
   test("ships three parseable closed Draft 2020-12 schemas", () => {
     for (const file of [
-      "agenttool-principality-atlas-v0.1.schema.json",
-      "agenttool-principality-atlas-fixture-v0.1.schema.json",
-      "agenttool-principality-atlas-invariant-v0.1.schema.json",
+      "agenttool-principality-incidence-atlas-v0.1.schema.json",
+      "agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+      "agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
     ]) {
       const schema = JSON.parse(readFileSync(join(packageRoot, "schema", file), "utf8"));
       expect(schema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");

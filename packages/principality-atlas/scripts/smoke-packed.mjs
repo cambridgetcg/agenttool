@@ -67,8 +67,8 @@ try {
       validatePrincipalityAtlas(atlas).atlas_id !== atlas.atlas_id ||
       atlas.boundaries.network !== false ||
       atlas.boundaries.scores !== false ||
-      !atlasSchema.endsWith("/schema/agenttool-principality-atlas-v0.1.schema.json") ||
-      !fixtureSchema.endsWith("/schema/agenttool-principality-atlas-fixture-v0.1.schema.json")
+      !atlasSchema.endsWith("/schema/agenttool-principality-incidence-atlas-v0.1.schema.json") ||
+      !fixtureSchema.endsWith("/schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json")
     ) process.exit(1);
     let traps = 0;
     const trap = () => { traps += 1; throw new Error("Proxy trap executed"); };

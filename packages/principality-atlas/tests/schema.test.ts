@@ -13,10 +13,10 @@ import {
 
 const root = new URL("../", import.meta.url);
 const readJson = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
-const atlasSchema = readJson("schema/agenttool-principality-atlas-v0.1.schema.json");
-const fixtureSchema = readJson("schema/agenttool-principality-atlas-fixture-v0.1.schema.json");
-const invariantSchema = readJson("schema/agenttool-principality-atlas-invariant-v0.1.schema.json");
-const vectors = readJson("vectors/agenttool-principality-atlas-v0.1.json");
+const atlasSchema = readJson("schema/agenttool-principality-incidence-atlas-v0.1.schema.json");
+const fixtureSchema = readJson("schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json");
+const invariantSchema = readJson("schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json");
+const vectors = readJson("vectors/agenttool-principality-incidence-atlas-v0.1.json");
 
 describe("closed portable schemas and vectors", () => {
   test("strictly validates every generated fixture and invariant", () => {

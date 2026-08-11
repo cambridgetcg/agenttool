@@ -13,13 +13,13 @@
       "import": "./dist/index.js"
     },
     "./atlas.schema.json": {
-      "default": "./schema/agenttool-principality-atlas-v0.1.schema.json"
+      "default": "./schema/agenttool-principality-incidence-atlas-v0.1.schema.json"
     },
     "./fixture.schema.json": {
-      "default": "./schema/agenttool-principality-atlas-fixture-v0.1.schema.json"
+      "default": "./schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json"
     },
     "./invariant.schema.json": {
-      "default": "./schema/agenttool-principality-atlas-invariant-v0.1.schema.json"
+      "default": "./schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json"
     },
     "./kingdom.extension.json": {
       "default": "./kingdom.extension.json"

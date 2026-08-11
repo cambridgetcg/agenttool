@@ -199,6 +199,13 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
       "zod": "4.4.3",
     },
   },
+  {
+    name: "@agenttool/principality-geometry",
+    version: "0.1.0-dev.0",
+    packagePath: "packages/principality-geometry",
+    releaseTag: "principality-geometry-v0.1.0-dev.0",
+    buildCommands: [["bun", "run", "ci"]],
+  },
 ] as const;
 
 export interface PackageJson {

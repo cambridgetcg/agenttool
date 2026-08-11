@@ -62,7 +62,7 @@ jobs:
           cache-dependency-path: packages/hf-training-host/pyproject.toml
       - name: Prepare package-gate dependencies
         run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh packages
-      - name: Run hermetic data, ADDS, sync, archive, Dark Continent, WAKE continuity, KINGDOM research, KARMA Mirror, HEAVEN, Living Substrate, WAKE Thread, broker, collab, collab-zerone, Browser, HF Scout, HF Training Garden/host, local learning fixtures, projection, constructive-intelligence, Trials, Skills, SDK, Wallet, Zerone adapter, Telescope, Alchemy, and KINGDOM gate
+      - name: Run hermetic data, ADDS, sync, archive, Dark Continent, WAKE continuity, Principality Geometry and Atlas, KINGDOM research, KARMA Mirror, HEAVEN, Living Substrate, WAKE Thread, broker, collab, collab-zerone, Browser, HF Scout, HF Training Garden/host, local learning fixtures, projection, constructive-intelligence, Trials, Skills, SDK, Wallet, Zerone adapter, Telescope, Alchemy, and KINGDOM gate
         run: bin/bash-without-env-hooks.sh bin/preflight.sh packages
       - name: Smoke packed Alchemy read package under Node and Bun
         working-directory: packages/alchemy

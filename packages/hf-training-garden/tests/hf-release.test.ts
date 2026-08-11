@@ -48,7 +48,7 @@ describe("deterministic public-safe HF companion", () => {
     expect(readJsonl("data/learning-participation.jsonl")).toEqual(LEARNING_PARTICIPATION_GUIDE);
     expect(readJsonl("data/trainer-hooks.jsonl")).toEqual(HF_TRAINER_HOOK_GUIDE);
     const principalityVectors = JSON.parse(readFileSync(new URL(
-      "../../principality-atlas/vectors/agenttool-principality-atlas-v0.1.json",
+      "../../principality-atlas/vectors/agenttool-principality-incidence-atlas-v0.1.json",
       import.meta.url,
     ), "utf8"));
     expect(readJsonl("data/principality-atlas-fixtures.jsonl"))
@@ -111,15 +111,15 @@ describe("deterministic public-safe HF companion", () => {
     expect(source.upstream_components[0].files.map((entry: { path: string }) => entry.path))
       .toEqual([
         "package.json",
-        "schema/agenttool-principality-atlas-fixture-v0.1.schema.json",
-        "schema/agenttool-principality-atlas-invariant-v0.1.schema.json",
-        "schema/agenttool-principality-atlas-v0.1.schema.json",
-        "vectors/agenttool-principality-atlas-v0.1.json",
+        "schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+        "schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
+        "schema/agenttool-principality-incidence-atlas-v0.1.schema.json",
+        "vectors/agenttool-principality-incidence-atlas-v0.1.json",
       ]);
     for (const name of [
-      "agenttool-principality-atlas-v0.1.schema.json",
-      "agenttool-principality-atlas-fixture-v0.1.schema.json",
-      "agenttool-principality-atlas-invariant-v0.1.schema.json",
+      "agenttool-principality-incidence-atlas-v0.1.schema.json",
+      "agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+      "agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
     ]) {
       expect(read(`schema/${name}`)).toEqual(readFileSync(new URL(
         `../../principality-atlas/schema/${name}`,

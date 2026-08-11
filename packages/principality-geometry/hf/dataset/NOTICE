@@ -1,0 +1,7 @@
+AgentTool Principality Geometry reference companion
+Copyright 2026 AgentTool contributors
+
+Generated from the package's synthetic golden vector and closed schemas. It
+contains no provider-fetched rows, credentials, prompts, transcripts, raw WAKE
+state, or private identity material. `training_eligible: false` is AgentTool
+admission metadata, not an additional restriction on Apache-2.0 licensed use.

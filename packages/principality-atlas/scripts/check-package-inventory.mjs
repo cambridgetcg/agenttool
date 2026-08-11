@@ -31,10 +31,10 @@ const expected = [
   ...dist,
   "kingdom.extension.json",
   "package.json",
-  "schema/agenttool-principality-atlas-fixture-v0.1.schema.json",
-  "schema/agenttool-principality-atlas-invariant-v0.1.schema.json",
-  "schema/agenttool-principality-atlas-v0.1.schema.json",
-  "vectors/agenttool-principality-atlas-v0.1.json",
+  "schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+  "schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
+  "schema/agenttool-principality-incidence-atlas-v0.1.schema.json",
+  "vectors/agenttool-principality-incidence-atlas-v0.1.json",
 ].sort();
 
 if (JSON.stringify(files) !== JSON.stringify(expected)) {

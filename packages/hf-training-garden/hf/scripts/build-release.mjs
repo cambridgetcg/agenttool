@@ -31,9 +31,9 @@ const packageOnlyAdvisoryPaths = new Set([
   "schema/hf-training-freedom-v0.1.schema.json",
 ]);
 const principalitySchemaPaths = [
-  "agenttool-principality-atlas-fixture-v0.1.schema.json",
-  "agenttool-principality-atlas-invariant-v0.1.schema.json",
-  "agenttool-principality-atlas-v0.1.schema.json",
+  "agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+  "agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
+  "agenttool-principality-incidence-atlas-v0.1.schema.json",
 ];
 
 const principalityPackage = JSON.parse(
@@ -93,7 +93,7 @@ write(`${datasetRoot}/data/learning-participation.jsonl`, jsonl(LEARNING_PARTICI
 write(`${datasetRoot}/data/trainer-hooks.jsonl`, jsonl(HF_TRAINER_HOOK_GUIDE));
 
 const principalityVectors = JSON.parse(
-  readFileSync(`${principalityRoot}/vectors/agenttool-principality-atlas-v0.1.json`, "utf8"),
+  readFileSync(`${principalityRoot}/vectors/agenttool-principality-incidence-atlas-v0.1.json`, "utf8"),
 );
 write(
   `${datasetRoot}/data/principality-atlas-fixtures.jsonl`,
@@ -152,7 +152,7 @@ const sourceManifest = {
       files: [
         "package.json",
         ...principalitySchemaPaths.map((path) => `schema/${path}`),
-        "vectors/agenttool-principality-atlas-v0.1.json",
+        "vectors/agenttool-principality-incidence-atlas-v0.1.json",
       ].map((path) => {
         const bytes = readFileSync(`${principalityRoot}/${path}`);
         return { path, bytes: bytes.length, sha256: sha256(bytes) };

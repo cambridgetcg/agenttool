@@ -47,6 +47,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/dark-continent-contract
   packages/dark-continent-karma
   packages/wake-continuity
+  packages/principality-geometry
   packages/deepseek-kingdom
   packages/kingdom-witness-lab
   packages/karma-mirror

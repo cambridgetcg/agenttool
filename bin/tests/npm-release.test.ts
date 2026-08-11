@@ -98,7 +98,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists twenty-seven reviewed release identities", () => {
+  test("allowlists twenty-eight reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -118,6 +118,7 @@ describe("standard npm release policy", () => {
       "living-substrate",
       "love-geometry",
       "principality-atlas",
+      "principality-geometry",
       "relational-geometry",
       "repo-archive",
       "sdk",
@@ -222,6 +223,12 @@ describe("standard npm release policy", () => {
       packagePath: "packages/principality-atlas",
       tagPrefix: "principality-atlas",
       artifactKind: "pack",
+    });
+    expect(releaseSpec("principality-geometry")).toMatchObject({
+      name: "@agenttool/principality-geometry",
+      packagePath: "packages/principality-geometry",
+      tagPrefix: "principality-geometry",
+      artifactKind: "love",
     });
     expect(releaseSpec("love-geometry")).toMatchObject({
       name: "@agenttool/love-geometry",
@@ -332,6 +339,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/principality-atlas", "0.1.0-dev.0")).toBe(
       "agenttool-principality-atlas-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("principality-geometry"), "0.1.0-dev.0")).toBe(
+      "principality-geometry-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/principality-geometry", "0.1.0-dev.0")).toBe(
+      "agenttool-principality-geometry-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("love-geometry"), "0.1.0-dev.0")).toBe(
       "love-geometry-v0.1.0-dev.0",
@@ -546,10 +559,27 @@ describe("standard npm release policy", () => {
         "package/dist/index.js",
         "package/dist/index.d.ts",
         "package/kingdom.extension.json",
+        "package/schema/agenttool-principality-incidence-atlas-v0.1.schema.json",
+        "package/schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
+        "package/schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
+        "package/vectors/agenttool-principality-incidence-atlas-v0.1.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("principality-geometry"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/examples/principality-rosette.atlas.json",
+        "package/examples/principality-rosette.input.json",
+        "package/examples/principality-rosette.svg",
+        "package/kingdom.extension.json",
         "package/schema/agenttool-principality-atlas-v0.1.schema.json",
-        "package/schema/agenttool-principality-atlas-fixture-v0.1.schema.json",
-        "package/schema/agenttool-principality-atlas-invariant-v0.1.schema.json",
-        "package/vectors/agenttool-principality-atlas-v0.1.json",
+        "package/schema/agenttool-principality-geometry-input-v0.1.schema.json",
       ]),
     );
     expect(requiredArchiveEntries(releaseSpec("love-geometry"))).toEqual(

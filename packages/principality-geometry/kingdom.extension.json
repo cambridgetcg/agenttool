@@ -1,0 +1,42 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "principality-geometry",
+  "package": "@agenttool/principality-geometry",
+  "version": "0.1.0-dev.0",
+  "host_contract": "not_registered",
+  "capabilities": [
+    "principality:compile-invariant-topology",
+    "principality:render-inert-svg",
+    "principality:bind-afterglow-external-manifestation"
+  ],
+  "defaults": {
+    "network": false,
+    "credentials": false,
+    "filesystem": false,
+    "provider_compute": false,
+    "artifact_download": false,
+    "artifact_execution": false,
+    "persistence": false,
+    "publication": false,
+    "deployment": false,
+    "authority": false,
+    "economic_effect": false,
+    "task_state_effect": false,
+    "automatic_retry": false,
+    "automatic_carry": false,
+    "penalty_for_refusal_or_rest": false,
+    "reads_hosted_love_coordinates": false,
+    "selects_continuity_head": false,
+    "scores_beings": false,
+    "proves_love": false,
+    "proves_understanding": false,
+    "proves_consent": false
+  },
+  "notes": [
+    "This descriptor is a declaration-only source hint, not an installed KINGDOM host contract.",
+    "Principalities are caller-defined coordinate charts, never identities, owners, ranks, or authority domains.",
+    "A surface records only a shared caller-reported invariant intersection across six supplied directions; it does not prove composition, love, understanding, truth, consent, safety, or licence compatibility.",
+    "Hugging Face and npm references are inert immutable-reference shapes. This package contacts neither provider.",
+    "An AFTERGLOW external/context_only manifestation is copied as caller-asserted context only; this package never selects a continuity head, carries, resumes, accepts, or executes it."
+  ]
+}

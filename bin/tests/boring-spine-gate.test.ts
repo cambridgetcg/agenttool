@@ -473,6 +473,7 @@ describe("boring test spine", () => {
       "packages/dark-continent-contract",
       "packages/dark-continent-karma",
       "packages/wake-continuity",
+      "packages/principality-geometry",
       "packages/deepseek-kingdom",
       "packages/kingdom-witness-lab",
       "packages/karma-mirror",
@@ -552,11 +553,13 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/dark-continent-karma && bun run ci");
     expect(preflight).toContain("cd packages/deepseek-kingdom && bun run ci");
     expect(preflight).toContain("cd packages/wake-continuity && bun run ci");
+    expect(preflight).toContain("cd packages/principality-geometry && bun run ci");
     expect(preflight).toContain("cd packages/kingdom-witness-lab && bun run ci");
     expect(preflight).toContain("cd packages/karma-mirror && bun run ci");
     expect(preflight).toContain("cd packages/heaven && bun run ci");
     expect(preflight).toContain("cd packages/living-substrate && bun run ci");
     expect(preflight).toContain("cd packages/principality-atlas && bun run ci");
+    expect(workflow).toContain("Principality Geometry and Atlas");
     expect(preflight).toContain("cd packages/love-geometry && bun run ci");
     expect(preflight).toContain("cd packages/relational-geometry && bun run ci");
     expect(preflight).toContain("cd packages/wake-thread && bun run ci");
@@ -981,9 +984,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(47);
+      expect(calls).toHaveLength(48);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        38,
+        39,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         9,
@@ -1116,6 +1119,7 @@ exit 94
     expect(workflow).toContain("          - deepseek-kingdom");
     expect(workflow).toContain("          - wake-continuity");
     expect(workflow).toContain("          - kingdom-witness-lab");
+    expect(workflow).toContain("          - principality-geometry");
     expect(workflow).toContain("          - skills-yutabase");
     expect(workflow).not.toContain("          - skills-wake-continuity");
     expect(workflow).toContain("          - heaven");

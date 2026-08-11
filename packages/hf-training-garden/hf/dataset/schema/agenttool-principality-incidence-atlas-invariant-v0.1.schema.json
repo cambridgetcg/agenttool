@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agenttool.dev/schema/agenttool-principality-atlas-invariant-v0.1.schema.json",
-  "title": "AgentTool Principality Atlas invariant row v0.1",
+  "$id": "https://agenttool.dev/schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
+  "title": "AgentTool Principality Incidence Atlas invariant row v0.1",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -13,7 +13,7 @@
   ],
   "properties": {
     "_format": {
-      "const": "agenttool.principality-atlas-invariant/0.1"
+      "const": "agenttool.principality-incidence-atlas-invariant/0.1"
     },
     "invariant_ref": {
       "type": "string",
