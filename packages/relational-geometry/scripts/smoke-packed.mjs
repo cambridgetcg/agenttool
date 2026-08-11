@@ -52,4 +52,3 @@ try {
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }
-

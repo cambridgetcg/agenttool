@@ -47,4 +47,3 @@ function exportTargets(value) {
 for (const target of exportTargets(packageJson.exports)) {
   if (!files.includes(target)) throw new Error("a public Relational Geometry export is absent from the packed inventory");
 }
-

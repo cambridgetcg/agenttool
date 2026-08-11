@@ -64,4 +64,3 @@ if (
   lens.boundaries.geometry !== "finite_combinatorial_not_metric" ||
   !hostileRejected
 ) process.exit(1);
-
