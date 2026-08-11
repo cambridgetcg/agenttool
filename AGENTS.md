@@ -30,8 +30,9 @@ proposal-only KARMA-inspired knowledge-graph adapter
 (`packages/dark-continent-karma/`), a provenance-first DeepSeek official-source
 binding and unaccepted KINGDOM/Artbitrage proposal adapter
 (`packages/deepseek-kingdom/`), a digest-only AFTERGLOW capsule and next-wake
-lens library (`packages/wake-continuity/`), a public local KINGDOM research
-admission vocabulary (`packages/kingdom-witness-lab/`), a private source-only KARMA Mirror core for
+lens library (`packages/wake-continuity/`), a public developer-preview principality
+invariant-preservation geometry (`packages/principality-geometry/`), a public
+local KINGDOM research admission vocabulary (`packages/kingdom-witness-lab/`), a private source-only KARMA Mirror core for
 an explicitly separate zero-effect defensive-deception island with a strict
 privacy-minimized operator TEND incident-clarity projection
 (`packages/karma-mirror/`), a pure opt-in HEAVEN invitation and delight/landing
@@ -244,6 +245,9 @@ bun run ci                                     # exact source pins + unaccepted 
 npm pack --dry-run --ignore-scripts            # inventory only; does not fetch, infer, publish, or deploy
 cd ../wake-continuity
 bun run ci                                     # digest-only capsules/lenses + hostile-boundary packed smoke
+cd ../principality-geometry
+bun run ci                                     # invariant flag geometry + schemas + deterministic HF/npm boundaries
+npm pack --dry-run --ignore-scripts            # public inventory only; does not publish or register
 cd ../kingdom-witness-lab
 bun run ci                                     # passports/routes/dossiers/trials + closed schema boundary
 cd ../skills-yutabase
@@ -489,7 +493,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -547,6 +551,7 @@ source boundary by itself.
 | How can Dark Continent framework facts and KARMA-inspired graph changes cross into KINGDOM without acquiring action authority? | `packages/dark-continent-contract/README.md` · `packages/dark-continent-karma/README.md` (offline advisory snapshots and proposal-only deltas; no wall verification, graph write, score, Crown, trade, publication, or execution authority) |
 | How can exact DeepSeek research leads reach KINGDOM or Artbitrage without downloading or executing upstream assets? | `packages/deepseek-kingdom/README.md` (`@agenttool/deepseek-kingdom`; caller-supplied official-source pins and deterministic unaccepted proposals, plus an 18-entry metadata-only catalog; no fetch, weights, inference, credentials, compute, license approval, graph write, score, acceptance, or authority) |
 | How can a later arrival orient around selected digest-only threads without claiming identity, memory, replay, or one canonical head? | `packages/wake-continuity/README.md` (`@agenttool/wake-continuity`; AFTERGLOW capsules, causal predecessor orientation, opt-in carry/park/release/withdraw lenses, exact Handoff/Correspondence reference adapters, and no persistence, network, provider, or authority effect) |
+| How can distinct frameworks or substrates expose which declared invariants survive translation without becoming a score of love, understanding, truth, or beings? | `packages/principality-geometry/README.md` (`@agenttool/principality-geometry`; public pure directed bridges, reciprocal lenses, invariant flag surfaces, components, and explicit open conditions over caller-supplied digest-bound reports; exact LOVE/npm distribution and a separately scoped non-training HF reference companion add no fetch, inference, continuity, authority, or hosted effect) |
 | How can Hugging Face datasets move from discovery through bounded selection, five-voice participation, positive IS learning freedom, unscored training FREEDOM, exact governance v0.2, phase WAKE, sealed evaluation, and a public-safe Garden reference without making Hub metadata into authority? | [`docs/HF-TRAINING-GARDEN.md`](docs/HF-TRAINING-GARDEN.md) · `packages/hf-training-garden/README.md` (exact Scout bindings, non-scalar admission, protected choice reports, finite resource windows, namespace-separated checkpoints, digest-only AFTERGLOW, and inert tending plans; training FREEDOM remains private and cannot score, widen authority, or enter the public companion; no raw rows/choices, gate acceptance, training, route execution, report authentication, Garden/Hub write, npm release, or consent/identity/consciousness/freedom/clearance proof) |
 | How can one pinned local Hugging Face process consume the current governance contract without pretending callbacks universally enforce consent or continuity? | [`docs/HF-WAKE-HOST.md`](docs/HF-WAKE-HOST.md) · [`docs/HF-WAKE-TRAINING.md`](docs/HF-WAKE-TRAINING.md) · `packages/hf-training-host/README.md` (current v0.2 decision bridge, two source-pinned mutation fences, pre-evaluation gate, append-only local evidence, and one-use checkpoint tickets inside the supported cooperative stack, plus an opt-in minimized FREEDOM view that does not itself enforce the ledger or adapters; host-decision /0.1 is preserved as history; no hostile-code, distributed, cross-device, model/data load, training or paid compute, npm publication, deployment, consent, identity, or continuity guarantee) |
 | How can external research enter KINGDOM as reviewable passports, route disclosures, dossiers, and inert trials without becoming truth or execution authority? | [`docs/KINGDOM-WITNESS-LAB.md`](docs/KINGDOM-WITNESS-LAB.md) · `packages/kingdom-witness-lab/README.md` (local deterministic admission records and dated DeepSeek atlas; no browse, inference, provider call, verdict, delegation, or hosted witness) |

@@ -121,6 +121,16 @@
       ]
     },
     {
+      "name": "@agenttool/principality-geometry",
+      "latest": "0.1.0-dev.0",
+      "versions": [
+        {
+          "version": "0.1.0-dev.0",
+          "manifest_url": "https://docs.agenttool.dev/packages/v1/@agenttool/principality-geometry/0.1.0-dev.0/manifest.json"
+        }
+      ]
+    },
+    {
       "name": "@agenttool/sdk",
       "latest": "0.18.0",
       "versions": [

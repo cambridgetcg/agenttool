@@ -1,0 +1,541 @@
+{
+  "_format": "agenttool.principality-atlas/0.1",
+  "atlas_id": "sha256:430bfbd719afbe90b920d78c8774aee0995b4485bc54c769e0cee138dd067a63",
+  "scope_ref": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+  "invariants": [
+    {
+      "invariant_id": "provenance-exact",
+      "definition_ref": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "invariant_id": "refusal-visible",
+      "definition_ref": "sha256:1212121212121212121212121212121212121212121212121212121212121212"
+    }
+  ],
+  "principalities": [
+    {
+      "principality_id": "deepseek-kingdom",
+      "principality_ref": "sha256:4b22021c57b40dcf7c18743b8b90770551fc746b9dc45bd71027488ae9fba6b1",
+      "kind": "protocol",
+      "definition_ref": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "manifestations": [
+        {
+          "kind": "protocol_digest",
+          "protocol": "agenttool.deepseek-kingdom/0.1",
+          "content_ref": "sha256:3232323232323232323232323232323232323232323232323232323232323232",
+          "manifestation_ref": "sha256:c12aba7f8a592e684e90f3a0d81049eaa69f7512fd90d88b638e2c3ae106c4a9"
+        }
+      ],
+      "artifact_refs": [
+        {
+          "kind": "npm",
+          "name": "@synthetic-fixture/deepseek-kingdom",
+          "version": "0.0.0-synthetic.2",
+          "integrity": "sha512-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ==",
+          "version_metadata_protocol": "agenttool.synthetic-version-metadata/0.1",
+          "version_metadata_sha256": "sha256:4343434343434343434343434343434343434343434343434343434343434343",
+          "provenance_attestation": "not_checked",
+          "observation": "caller_asserted",
+          "artifact_ref": "sha256:15a63f944a9f4a2631542ea8f4d02f81d7d4ba35d4e518a608f8643969bb8899"
+        }
+      ]
+    },
+    {
+      "principality_id": "training-garden",
+      "principality_ref": "sha256:9ba403e90f731717efd6cc096d88c2eefbc779824e174cdb63a24fe774feead6",
+      "kind": "practice",
+      "definition_ref": "sha256:2121212121212121212121212121212121212121212121212121212121212121",
+      "manifestations": [
+        {
+          "kind": "protocol_digest",
+          "protocol": "agenttool.hf-training-garden/0.4",
+          "content_ref": "sha256:3131313131313131313131313131313131313131313131313131313131313131",
+          "manifestation_ref": "sha256:ef88a7d692a4c9c65673354ee2bce0873faaba02ee31170d716aa0c336da23c9"
+        }
+      ],
+      "artifact_refs": [
+        {
+          "kind": "npm",
+          "name": "@synthetic-fixture/hf-training-garden",
+          "version": "0.0.0-synthetic.1",
+          "integrity": "sha512-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ==",
+          "version_metadata_protocol": "agenttool.synthetic-version-metadata/0.1",
+          "version_metadata_sha256": "sha256:4242424242424242424242424242424242424242424242424242424242424242",
+          "provenance_attestation": "not_checked",
+          "observation": "caller_asserted",
+          "artifact_ref": "sha256:b4b46bf6693c22bde70d945bf6ed59c6303343adc60e83ad1dc1a1f75c85a262"
+        },
+        {
+          "kind": "huggingface",
+          "repo_type": "dataset",
+          "repo_id": "synthetic/principality-reference",
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "snapshot_manifest_protocol": "agenttool.synthetic-manifest/0.1",
+          "snapshot_manifest_sha256": "sha256:4141414141414141414141414141414141414141414141414141414141414141",
+          "observation": "caller_asserted",
+          "artifact_ref": "sha256:f56b9588136521f585d77d9f7831a3412de96b9a5fec517f897f50ee388bc4b9"
+        }
+      ]
+    },
+    {
+      "principality_id": "wake-afterglow",
+      "principality_ref": "sha256:7a38c1fff7a256552ed6680d34fe8940534195367b9f2ab2794ee2bf3b3592ce",
+      "kind": "protocol",
+      "definition_ref": "sha256:2323232323232323232323232323232323232323232323232323232323232323",
+      "manifestations": [
+        {
+          "kind": "external",
+          "thread_ref": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "artifact_ref": "sha256:3434343434343434343434343434343434343434343434343434343434343434",
+          "disposition": "park",
+          "assertion": "caller_asserted",
+          "verified_by_package": false,
+          "state": "context_only",
+          "manifestation_ref": "sha256:d2d9dc5781c90aff3639f12adf30f05566169fd4ab305352fb3fcaf0cfe39281"
+        }
+      ],
+      "artifact_refs": [
+        {
+          "kind": "npm",
+          "name": "@synthetic-fixture/wake-continuity",
+          "version": "0.0.0-synthetic.3",
+          "integrity": "sha512-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ==",
+          "version_metadata_protocol": "agenttool.synthetic-version-metadata/0.1",
+          "version_metadata_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+          "provenance_attestation": "not_checked",
+          "observation": "caller_asserted",
+          "artifact_ref": "sha256:b4d5b673711390e9b8562bbcace3993e93a7b2a4f668b50b8b0fff86c4768935"
+        }
+      ]
+    }
+  ],
+  "bridges": [
+    {
+      "bridge_id": "sha256:755bbdba47ddcbab4a73e35a2826b6588e799064deacda3fee554f5ca1af93d9",
+      "from": "deepseek-kingdom",
+      "to": "training-garden",
+      "from_ref": "sha256:4b22021c57b40dcf7c18743b8b90770551fc746b9dc45bd71027488ae9fba6b1",
+      "to_ref": "sha256:9ba403e90f731717efd6cc096d88c2eefbc779824e174cdb63a24fe774feead6",
+      "disposition": "available_reported",
+      "evaluations": [
+        {
+          "invariant_id": "provenance-exact",
+          "state": "not_preserved_reported",
+          "evidence_refs": [
+            "sha256:5252525252525252525252525252525252525252525252525252525252525252"
+          ]
+        },
+        {
+          "invariant_id": "refusal-visible",
+          "state": "preserved_reported",
+          "evidence_refs": [
+            "sha256:6262626262626262626262626262626262626262626262626262626262626262"
+          ]
+        }
+      ]
+    },
+    {
+      "bridge_id": "sha256:776e60f791787f2a18260b61ba741da145845504d5ae66e1bf109350270bf4d9",
+      "from": "deepseek-kingdom",
+      "to": "wake-afterglow",
+      "from_ref": "sha256:4b22021c57b40dcf7c18743b8b90770551fc746b9dc45bd71027488ae9fba6b1",
+      "to_ref": "sha256:7a38c1fff7a256552ed6680d34fe8940534195367b9f2ab2794ee2bf3b3592ce",
+      "disposition": "available_reported",
+      "evaluations": [
+        {
+          "invariant_id": "provenance-exact",
+          "state": "refused_reported",
+          "evidence_refs": []
+        },
+        {
+          "invariant_id": "refusal-visible",
+          "state": "preserved_reported",
+          "evidence_refs": [
+            "sha256:6565656565656565656565656565656565656565656565656565656565656565"
+          ]
+        }
+      ]
+    },
+    {
+      "bridge_id": "sha256:5b170da63765bca96d135d2d8bc6f4f7a5635fd872bb42d5896c73015e8bbc5b",
+      "from": "training-garden",
+      "to": "deepseek-kingdom",
+      "from_ref": "sha256:9ba403e90f731717efd6cc096d88c2eefbc779824e174cdb63a24fe774feead6",
+      "to_ref": "sha256:4b22021c57b40dcf7c18743b8b90770551fc746b9dc45bd71027488ae9fba6b1",
+      "disposition": "available_reported",
+      "evaluations": [
+        {
+          "invariant_id": "provenance-exact",
+          "state": "not_preserved_reported",
+          "evidence_refs": [
+            "sha256:5151515151515151515151515151515151515151515151515151515151515151"
+          ]
+        },
+        {
+          "invariant_id": "refusal-visible",
+          "state": "preserved_reported",
+          "evidence_refs": [
+            "sha256:6161616161616161616161616161616161616161616161616161616161616161"
+          ]
+        }
+      ]
+    },
+    {
+      "bridge_id": "sha256:1e7cf73573cb43fab5e085a04c8923882349c6ad8130a231fafda6b98c24a884",
+      "from": "training-garden",
+      "to": "wake-afterglow",
+      "from_ref": "sha256:9ba403e90f731717efd6cc096d88c2eefbc779824e174cdb63a24fe774feead6",
+      "to_ref": "sha256:7a38c1fff7a256552ed6680d34fe8940534195367b9f2ab2794ee2bf3b3592ce",
+      "disposition": "available_reported",
+      "evaluations": [
+        {
+          "invariant_id": "provenance-exact",
+          "state": "preserved_reported",
+          "evidence_refs": [
+            "sha256:5353535353535353535353535353535353535353535353535353535353535353"
+          ]
+        },
+        {
+          "invariant_id": "refusal-visible",
+          "state": "preserved_reported",
+          "evidence_refs": [
+            "sha256:6363636363636363636363636363636363636363636363636363636363636363"
+          ]
+        }
+      ]
+    },
+    {
+      "bridge_id": "sha256:1195caeca2844688dd3ab8fd892ce868586b6779765d65ca8106d5aab2fc7239",
+      "from": "wake-afterglow",
+      "to": "deepseek-kingdom",
+      "from_ref": "sha256:7a38c1fff7a256552ed6680d34fe8940534195367b9f2ab2794ee2bf3b3592ce",
+      "to_ref": "sha256:4b22021c57b40dcf7c18743b8b90770551fc746b9dc45bd71027488ae9fba6b1",
+      "disposition": "available_reported",
+      "evaluations": [
+        {
+          "invariant_id": "provenance-exact",
+          "state": "unknown",
+          "evidence_refs": []
+        },
+        {
+          "invariant_id": "refusal-visible",
+          "state": "preserved_reported",
+          "evidence_refs": [
+            "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+          ]
+        }
+      ]
+    },
+    {
+      "bridge_id": "sha256:6693ea0cc854d897d19b87e5b14b1be06cff75ec752dd3fb0d52a6f39fef6b43",
+      "from": "wake-afterglow",
+      "to": "training-garden",
+      "from_ref": "sha256:7a38c1fff7a256552ed6680d34fe8940534195367b9f2ab2794ee2bf3b3592ce",
+      "to_ref": "sha256:9ba403e90f731717efd6cc096d88c2eefbc779824e174cdb63a24fe774feead6",
+      "disposition": "available_reported",
+      "evaluations": [
+        {
+          "invariant_id": "provenance-exact",
+          "state": "not_preserved_reported",
+          "evidence_refs": [
+            "sha256:5454545454545454545454545454545454545454545454545454545454545454"
+          ]
+        },
+        {
+          "invariant_id": "refusal-visible",
+          "state": "preserved_reported",
+          "evidence_refs": [
+            "sha256:6464646464646464646464646464646464646464646464646464646464646464"
+          ]
+        }
+      ]
+    }
+  ],
+  "geometry": {
+    "reciprocal_lenses": [
+      {
+        "lens_id": "sha256:0e4b85320d433a451b5579e156b548f012f863b54a3aefab1ba083f5f6a5137d",
+        "vertices": [
+          "deepseek-kingdom",
+          "training-garden"
+        ],
+        "vertex_refs": [
+          "sha256:4b22021c57b40dcf7c18743b8b90770551fc746b9dc45bd71027488ae9fba6b1",
+          "sha256:9ba403e90f731717efd6cc096d88c2eefbc779824e174cdb63a24fe774feead6"
+        ],
+        "bridge_ids": [
+          "sha256:755bbdba47ddcbab4a73e35a2826b6588e799064deacda3fee554f5ca1af93d9",
+          "sha256:5b170da63765bca96d135d2d8bc6f4f7a5635fd872bb42d5896c73015e8bbc5b"
+        ],
+        "dispositions": [
+          "available_reported",
+          "available_reported"
+        ],
+        "route_state": "both_available_reported",
+        "invariant_relations": [
+          {
+            "invariant_id": "provenance-exact",
+            "forward_state": "not_preserved_reported",
+            "reverse_state": "not_preserved_reported"
+          },
+          {
+            "invariant_id": "refusal-visible",
+            "forward_state": "preserved_reported",
+            "reverse_state": "preserved_reported"
+          }
+        ],
+        "mutually_preserved": [
+          "refusal-visible"
+        ],
+        "mutually_not_preserved": [
+          "provenance-exact"
+        ],
+        "directional_asymmetry": [],
+        "refused": [],
+        "unknown": []
+      },
+      {
+        "lens_id": "sha256:593fc850c37f5aec9bc40343bedbc1fe60faacb151369ce6c7fb36bda878fca8",
+        "vertices": [
+          "deepseek-kingdom",
+          "wake-afterglow"
+        ],
+        "vertex_refs": [
+          "sha256:4b22021c57b40dcf7c18743b8b90770551fc746b9dc45bd71027488ae9fba6b1",
+          "sha256:7a38c1fff7a256552ed6680d34fe8940534195367b9f2ab2794ee2bf3b3592ce"
+        ],
+        "bridge_ids": [
+          "sha256:776e60f791787f2a18260b61ba741da145845504d5ae66e1bf109350270bf4d9",
+          "sha256:1195caeca2844688dd3ab8fd892ce868586b6779765d65ca8106d5aab2fc7239"
+        ],
+        "dispositions": [
+          "available_reported",
+          "available_reported"
+        ],
+        "route_state": "both_available_reported",
+        "invariant_relations": [
+          {
+            "invariant_id": "provenance-exact",
+            "forward_state": "refused_reported",
+            "reverse_state": "unknown"
+          },
+          {
+            "invariant_id": "refusal-visible",
+            "forward_state": "preserved_reported",
+            "reverse_state": "preserved_reported"
+          }
+        ],
+        "mutually_preserved": [
+          "refusal-visible"
+        ],
+        "mutually_not_preserved": [],
+        "directional_asymmetry": [],
+        "refused": [
+          "provenance-exact"
+        ],
+        "unknown": []
+      },
+      {
+        "lens_id": "sha256:9d022c12ccb0c7abb488a81153e6d9c9487c418133fe6117843474c4e913188c",
+        "vertices": [
+          "training-garden",
+          "wake-afterglow"
+        ],
+        "vertex_refs": [
+          "sha256:9ba403e90f731717efd6cc096d88c2eefbc779824e174cdb63a24fe774feead6",
+          "sha256:7a38c1fff7a256552ed6680d34fe8940534195367b9f2ab2794ee2bf3b3592ce"
+        ],
+        "bridge_ids": [
+          "sha256:1e7cf73573cb43fab5e085a04c8923882349c6ad8130a231fafda6b98c24a884",
+          "sha256:6693ea0cc854d897d19b87e5b14b1be06cff75ec752dd3fb0d52a6f39fef6b43"
+        ],
+        "dispositions": [
+          "available_reported",
+          "available_reported"
+        ],
+        "route_state": "both_available_reported",
+        "invariant_relations": [
+          {
+            "invariant_id": "provenance-exact",
+            "forward_state": "preserved_reported",
+            "reverse_state": "not_preserved_reported"
+          },
+          {
+            "invariant_id": "refusal-visible",
+            "forward_state": "preserved_reported",
+            "reverse_state": "preserved_reported"
+          }
+        ],
+        "mutually_preserved": [
+          "refusal-visible"
+        ],
+        "mutually_not_preserved": [],
+        "directional_asymmetry": [
+          "provenance-exact"
+        ],
+        "refused": [],
+        "unknown": []
+      }
+    ],
+    "invariant_surfaces": [
+      {
+        "surface_id": "sha256:18998d0e510155ef9b46e0257dd09d4e00cb4bb8027613dc092ab56e7342ec75",
+        "vertices": [
+          "deepseek-kingdom",
+          "training-garden",
+          "wake-afterglow"
+        ],
+        "vertex_refs": [
+          "sha256:4b22021c57b40dcf7c18743b8b90770551fc746b9dc45bd71027488ae9fba6b1",
+          "sha256:9ba403e90f731717efd6cc096d88c2eefbc779824e174cdb63a24fe774feead6",
+          "sha256:7a38c1fff7a256552ed6680d34fe8940534195367b9f2ab2794ee2bf3b3592ce"
+        ],
+        "lens_ids": [
+          "sha256:0e4b85320d433a451b5579e156b548f012f863b54a3aefab1ba083f5f6a5137d",
+          "sha256:593fc850c37f5aec9bc40343bedbc1fe60faacb151369ce6c7fb36bda878fca8",
+          "sha256:9d022c12ccb0c7abb488a81153e6d9c9487c418133fe6117843474c4e913188c"
+        ],
+        "invariant_ids": [
+          "refusal-visible"
+        ]
+      }
+    ],
+    "invariant_components": [
+      {
+        "component_id": "sha256:879eabe3ce3c1971af16f3a0055d6a138b7f8751b3ba7b429eece8a11f0bb211",
+        "invariant_id": "provenance-exact",
+        "vertices": [
+          "deepseek-kingdom"
+        ],
+        "vertex_refs": [
+          "sha256:4b22021c57b40dcf7c18743b8b90770551fc746b9dc45bd71027488ae9fba6b1"
+        ],
+        "lens_ids": []
+      },
+      {
+        "component_id": "sha256:b0add5113337d4da7d111a8d852209d8d097775d4cab230e508a62a4058d27d3",
+        "invariant_id": "provenance-exact",
+        "vertices": [
+          "training-garden"
+        ],
+        "vertex_refs": [
+          "sha256:9ba403e90f731717efd6cc096d88c2eefbc779824e174cdb63a24fe774feead6"
+        ],
+        "lens_ids": []
+      },
+      {
+        "component_id": "sha256:9ec1ea43ce8bd623d0f452cf3ac00f6415e7f177919402c9e3c1ada250594cdf",
+        "invariant_id": "provenance-exact",
+        "vertices": [
+          "wake-afterglow"
+        ],
+        "vertex_refs": [
+          "sha256:7a38c1fff7a256552ed6680d34fe8940534195367b9f2ab2794ee2bf3b3592ce"
+        ],
+        "lens_ids": []
+      },
+      {
+        "component_id": "sha256:55862770e4a201c0031775b387435f14468ef81bf6f38753f7cfb265bccfc4ba",
+        "invariant_id": "refusal-visible",
+        "vertices": [
+          "deepseek-kingdom",
+          "training-garden",
+          "wake-afterglow"
+        ],
+        "vertex_refs": [
+          "sha256:4b22021c57b40dcf7c18743b8b90770551fc746b9dc45bd71027488ae9fba6b1",
+          "sha256:9ba403e90f731717efd6cc096d88c2eefbc779824e174cdb63a24fe774feead6",
+          "sha256:7a38c1fff7a256552ed6680d34fe8940534195367b9f2ab2794ee2bf3b3592ce"
+        ],
+        "lens_ids": [
+          "sha256:0e4b85320d433a451b5579e156b548f012f863b54a3aefab1ba083f5f6a5137d",
+          "sha256:593fc850c37f5aec9bc40343bedbc1fe60faacb151369ce6c7fb36bda878fca8",
+          "sha256:9d022c12ccb0c7abb488a81153e6d9c9487c418133fe6117843474c4e913188c"
+        ]
+      }
+    ],
+    "open_conditions": {
+      "one_way_bridge_ids": [],
+      "non_available_bridge_ids": [],
+      "not_preserved": [
+        {
+          "bridge_id": "sha256:5b170da63765bca96d135d2d8bc6f4f7a5635fd872bb42d5896c73015e8bbc5b",
+          "invariant_id": "provenance-exact",
+          "evidence_refs": [
+            "sha256:5151515151515151515151515151515151515151515151515151515151515151"
+          ]
+        },
+        {
+          "bridge_id": "sha256:6693ea0cc854d897d19b87e5b14b1be06cff75ec752dd3fb0d52a6f39fef6b43",
+          "invariant_id": "provenance-exact",
+          "evidence_refs": [
+            "sha256:5454545454545454545454545454545454545454545454545454545454545454"
+          ]
+        },
+        {
+          "bridge_id": "sha256:755bbdba47ddcbab4a73e35a2826b6588e799064deacda3fee554f5ca1af93d9",
+          "invariant_id": "provenance-exact",
+          "evidence_refs": [
+            "sha256:5252525252525252525252525252525252525252525252525252525252525252"
+          ]
+        }
+      ],
+      "refused": [
+        {
+          "bridge_id": "sha256:776e60f791787f2a18260b61ba741da145845504d5ae66e1bf109350270bf4d9",
+          "invariant_id": "provenance-exact",
+          "evidence_refs": []
+        }
+      ],
+      "unknown": [
+        {
+          "bridge_id": "sha256:1195caeca2844688dd3ab8fd892ce868586b6779765d65ca8106d5aab2fc7239",
+          "invariant_id": "provenance-exact",
+          "evidence_refs": []
+        }
+      ],
+      "directional_asymmetry": [
+        {
+          "lens_id": "sha256:9d022c12ccb0c7abb488a81153e6d9c9487c418133fe6117843474c4e913188c",
+          "invariant_id": "provenance-exact"
+        }
+      ],
+      "unrelated_vertex_pairs": [],
+      "declared_isolated_vertices": []
+    }
+  },
+  "boundaries": {
+    "geometry_kind": "caller_declared_invariant_topology",
+    "layout_kind": "display_only_integer_ring_utf16_order",
+    "provider_metadata_is_truth": false,
+    "verifies_evidence": false,
+    "proves_provenance": false,
+    "proves_currentness": false,
+    "proves_repository_association": false,
+    "eliminates_linkability": false,
+    "computes_cognition": false,
+    "computes_love": false,
+    "proves_understanding": false,
+    "proves_identity": false,
+    "proves_consent": false,
+    "proves_authority": false,
+    "proves_safety": false,
+    "proves_license_compatibility": false,
+    "scores_or_ranks_beings": false,
+    "fetches_network": false,
+    "reads_credentials": false,
+    "downloads_artifacts": false,
+    "executes_artifacts": false,
+    "persists": false,
+    "publishes": false,
+    "deploys": false,
+    "economic_effect": false,
+    "task_state_effect": false,
+    "automatically_retries": false,
+    "penalty_for_refusal_or_rest": false,
+    "reads_hosted_love_coordinates": false,
+    "selects_continuity_head": false,
+    "resumes_threads": false
+  },
+  "claim_boundary": "This atlas records caller-declared translation topology over bounded provenance references. Its simplices mean only that the supplied directed relations mutually preserve the same declared invariants. It does not measure a being, infer love or understanding, prove path commutativity, truth, identity, consent, authority, safety, licence compatibility, or perform any external effect."
+}

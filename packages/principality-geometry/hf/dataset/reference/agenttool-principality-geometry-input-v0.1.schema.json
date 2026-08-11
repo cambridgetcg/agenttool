@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-principality-geometry-input-v0.1.schema.json",
+  "title": "AgentTool Principality Geometry Input v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "scope_ref", "invariants", "principalities", "translations"],
+  "properties": {
+    "_format": { "const": "agenttool.principality-geometry-input/0.1" },
+    "scope_ref": { "$ref": "#/$defs/sha256" },
+    "invariants": {
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/invariant" }
+    },
+    "principalities": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/principality" }
+    },
+    "translations": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/translation" }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,63}$"
+    },
+    "protocol": {
+      "type": "string",
+      "pattern": "^(?=.{1,128}$)[a-z][a-z0-9._:-]*(?:/[a-z0-9][a-z0-9._-]*)*$"
+    },
+    "observation": {
+      "enum": ["provider_observation_reported", "caller_asserted"]
+    },
+    "hfArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "repo_type", "repo_id", "revision", "snapshot_manifest_protocol", "snapshot_manifest_sha256", "observation"],
+      "properties": {
+        "kind": { "const": "huggingface" },
+        "repo_type": { "enum": ["model", "dataset", "space"] },
+        "repo_id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+        },
+        "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "snapshot_manifest_protocol": { "$ref": "#/$defs/protocol" },
+        "snapshot_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "observation": { "$ref": "#/$defs/observation" }
+      }
+    },
+    "npmArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "version", "integrity", "version_metadata_protocol", "version_metadata_sha256", "provenance_attestation", "observation"],
+      "properties": {
+        "kind": { "const": "npm" },
+        "name": {
+          "type": "string",
+          "pattern": "^(?:@[a-z0-9][a-z0-9._-]{0,63}/[a-z0-9][a-z0-9._-]{0,127}|[a-z0-9][a-z0-9._-]{0,127})$"
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 4096,
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "integrity": {
+          "type": "string",
+          "pattern": "^sha512-[A-Za-z0-9+/]{85}[AQgw]==$"
+        },
+        "version_metadata_protocol": { "$ref": "#/$defs/protocol" },
+        "version_metadata_sha256": { "$ref": "#/$defs/sha256" },
+        "provenance_attestation": {
+          "enum": ["present_unverified", "absent_reported", "not_checked"]
+        },
+        "observation": { "$ref": "#/$defs/observation" }
+      }
+    },
+    "artifact": {
+      "oneOf": [
+        { "$ref": "#/$defs/hfArtifact" },
+        { "$ref": "#/$defs/npmArtifact" }
+      ]
+    },
+    "protocolManifestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "protocol", "content_ref"],
+      "properties": {
+        "kind": { "const": "protocol_digest" },
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "content_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "afterglowExternalManifestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "thread_ref", "artifact_ref", "disposition", "assertion", "verified_by_package", "state"],
+      "properties": {
+        "kind": { "const": "external" },
+        "thread_ref": { "$ref": "#/$defs/sha256" },
+        "artifact_ref": { "$ref": "#/$defs/sha256" },
+        "disposition": { "enum": ["carry", "park", "release", "withdraw"] },
+        "assertion": { "const": "caller_asserted" },
+        "verified_by_package": { "const": false },
+        "state": { "enum": ["context_only", "review_required", "hold"] }
+      }
+    },
+    "manifestation": {
+      "oneOf": [
+        { "$ref": "#/$defs/protocolManifestation" },
+        { "$ref": "#/$defs/afterglowExternalManifestation" }
+      ]
+    },
+    "invariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invariant_id", "definition_ref"],
+      "properties": {
+        "invariant_id": { "$ref": "#/$defs/token" },
+        "definition_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "principality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principality_id", "kind", "definition_ref", "manifestations", "artifact_refs"],
+      "properties": {
+        "principality_id": { "$ref": "#/$defs/token" },
+        "kind": {
+          "enum": ["practice", "protocol", "package", "model", "dataset", "space", "infrastructure", "archive", "other"]
+        },
+        "definition_ref": { "$ref": "#/$defs/sha256" },
+        "manifestations": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/manifestation" }
+        },
+        "artifact_refs": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/artifact" }
+        }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invariant_id", "state", "evidence_refs"],
+      "properties": {
+        "invariant_id": { "$ref": "#/$defs/token" },
+        "state": {
+          "enum": ["preserved_reported", "not_preserved_reported", "refused_reported", "unknown"]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "enum": ["preserved_reported", "not_preserved_reported"] } } },
+          "then": { "properties": { "evidence_refs": { "type": "array", "minItems": 1 } } },
+          "else": { "properties": { "evidence_refs": { "type": "array", "maxItems": 0 } } }
+        }
+      ]
+    },
+    "translation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "disposition", "evaluations"],
+      "properties": {
+        "from": { "$ref": "#/$defs/token" },
+        "to": { "$ref": "#/$defs/token" },
+        "disposition": {
+          "enum": ["available_reported", "resting_reported", "refused_reported", "withdrawn_reported", "unknown"]
+        },
+        "evaluations": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evaluation" }
+        }
+      }
+    }
+  }
+}

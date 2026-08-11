@@ -712,9 +712,9 @@ SHA-256 before archive inspection, binds embedded package identity, rejects
 unsafe archives, surfaces digest conflicts, and keeps discovery non-executing.
 
 The AgentTool catalog publishes `@agenttool/data`, `@agenttool/data-sync`,
-`@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, and
-`@agenttool/telescope`, `@agenttool/wallet`,
-`@agenttool/wallet-zerone`, and `@agenttool/browser` through this profile.
+`@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`,
+`@agenttool/telescope`, `@agenttool/wallet`, `@agenttool/wallet-zerone`,
+`@agenttool/browser`, and `@agenttool/principality-geometry` through this profile.
 Their presence demonstrates the read and verification path; it does not make
 AgentTool a required registry, add a publisher-signature claim, or prove that
 the Wallet Zerone adapter has custody, a hosted endpoint, a durable execution
@@ -724,14 +724,22 @@ reuse grant; the current `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.2`, `@agenttool/adds@0.2.3`,
 `@agenttool/credential-broker@0.3.1`, `@agenttool/sdk@0.18.0`, and
 `@agenttool/telescope@0.2.3`, `@agenttool/wallet@0.1.3`,
-`@agenttool/wallet-zerone@0.1.2`, and `@agenttool/browser@0.6.0` releases
-instead declare `Apache-2.0` without retroactively changing those immutable
-older releases. Historical Wallet `0.1.0`/`0.1.1`/`0.1.2` and Wallet Zerone
+`@agenttool/wallet-zerone@0.1.2`, `@agenttool/browser@0.6.0`, and
+`@agenttool/principality-geometry@0.1.0-dev.0` releases instead declare
+`Apache-2.0` without retroactively changing those immutable older releases.
+Historical Wallet `0.1.0`/`0.1.1`/`0.1.2` and Wallet Zerone
 `0.1.0`/`0.1.1` LOVE artifacts remain separately addressable and are not
 rewritten; public errata supersede stale release-state prose and record that
 the 0.1.1 Zerone npm attempt stopped before mirror mutation. GitHub Releases
 are optional mutable locators and do not inherit the LOVE exact-version
 preservation policy.
+
+Principality Geometry `0.1.0-dev.0` is a zero-runtime-dependency pure library
+whose checked-in LOVE tarball is also the intended GitHub/npm release artifact.
+LOVE makes those bytes retrievable and verifiable; it does not validate the
+caller's invariant reports, establish love or understanding, register the
+declaration-only KINGDOM descriptor, or create a hosted runtime. Its separately
+scoped Hugging Face reference dataset is not part of the LOVE artifact.
 
 Browser `0.6.0` adds a direct-only understanding subpath. It binds bounded
 observed text to Browser provenance, can mark visible rhetoric locally through
