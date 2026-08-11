@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   createPolymorphLandscape,
+  createPolymorphReachabilityShift,
   createRitonavirCase,
   LESSON_CONCEPT_KEYS,
   LESSON_LANGUAGES,
@@ -10,7 +11,7 @@ import {
   validatePolymorphLesson,
   validatePolymorphReachabilityShift,
 } from "../src/index.js";
-import { minimalInput, minimalLandscape, minimalShift } from "./fixtures.js";
+import { minimalInput, minimalLandscape, minimalShift, minimalShiftInput } from "./fixtures.js";
 
 describe("polymorph landscape", () => {
   test("is deterministic and input-order independent", () => {
@@ -64,6 +65,35 @@ describe("polymorph landscape", () => {
     expect(Object.isFrozen(landscape)).toBe(true);
     expect(Object.isFrozen(landscape.routes)).toBe(true);
   });
+
+  test("requires primary reported or measured evidence for reported routes and stability", () => {
+    for (const status of ["hypothesized_primary", "derived_interpretation"] as const) {
+      const openOnly: any = structuredClone(minimalInput());
+      openOnly.witnesses.find((witness: any) => witness.key === "hypothesis").status = status;
+      expect(createPolymorphLandscape(openOnly).open_conditions[0]!.witness_refs).toHaveLength(1);
+
+      const routeOnly: any = structuredClone(openOnly);
+      routeOnly.routes.find((route: any) => route.key === "a_to_b").witness_keys = ["hypothesis"];
+      expect(() => createPolymorphLandscape(routeOnly)).toThrow(/measured_primary or reported_primary/);
+
+      const stabilityOnly: any = structuredClone(openOnly);
+      stabilityOnly.stability_reports[0].witness_keys = ["hypothesis"];
+      expect(() => createPolymorphLandscape(stabilityOnly)).toThrow(/measured_primary or reported_primary/);
+    }
+  });
+
+  test("keeps the bulk Form-I route distinct from the hard-capsule fill", () => {
+    const landscape = createRitonavirCase().landscape;
+    const bulkInput = landscape.forms.find((form) => form.key === "bulk_form_i_process_input")!;
+    const semisolidFill = landscape.forms.find((form) => form.key === "hydroalcoholic_solution")!;
+    const oldBulkRoute = landscape.routes.find((route) => route.key === "old_route_to_form_i_after_form_ii")!;
+    const capsuleRoute = landscape.routes.find((route) => route.key === "semisolid_solution_to_form_ii_1998")!;
+
+    expect(oldBulkRoute.from_form_ref).toBe(bulkInput.form_ref);
+    expect(oldBulkRoute.from_form_ref).not.toBe(semisolidFill.form_ref);
+    expect(capsuleRoute.from_form_ref).toBe(semisolidFill.form_ref);
+    expect(bulkInput.description).toContain("separate from the hydroalcoholic semisolid hard-capsule fill");
+  });
 });
 
 describe("reachability shift", () => {
@@ -86,6 +116,40 @@ describe("reachability shift", () => {
       expect(route.status).not.toBe("not_reproduced_reported");
       expect(route.to_form_ref).toBe(shift.prior_form_ref);
     }
+  });
+
+  test("does not let hypothesis or interpretation alone establish a reported shift", () => {
+    for (const status of ["hypothesized_primary", "derived_interpretation"] as const) {
+      const input: any = structuredClone(minimalInput());
+      input.witnesses.find((witness: any) => witness.key === "hypothesis").status = status;
+      const landscape = createPolymorphLandscape(input);
+      const hypothesis = landscape.witnesses.find((witness) => witness.key === "hypothesis")!;
+      const base = minimalShiftInput(landscape);
+
+      expect(() => createPolymorphReachabilityShift(landscape, {
+        ...base,
+        before_witness_refs: [hypothesis.witness_ref],
+      })).toThrow(/before_witness_refs.*measured_primary or reported_primary/);
+      expect(() => createPolymorphReachabilityShift(landscape, {
+        ...base,
+        appearance_witness_refs: [hypothesis.witness_ref],
+      })).toThrow(/appearance_witness_refs.*measured_primary or reported_primary/);
+      expect(() => createPolymorphReachabilityShift(landscape, {
+        ...base,
+        later_witness_refs: [hypothesis.witness_ref],
+        same_condition_return: "reported",
+      })).toThrow(/later_witness_refs.*measured_primary or reported_primary/);
+    }
+  });
+
+  test("requires qualifying later evidence exactly when same-condition return is reported", () => {
+    const landscape = minimalLandscape();
+    const base = minimalShiftInput(landscape);
+    const reported = createPolymorphReachabilityShift(landscape, {
+      ...base,
+      same_condition_return: "reported",
+    });
+    expect(reported.same_condition_return).toBe("reported");
   });
 });
 

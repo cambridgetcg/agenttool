@@ -1,9 +1,11 @@
 import { POLYMORPH_BOUNDARIES, POLYMORPH_FORMATS } from "./constants.js";
 import { canonicalJson, deepFreeze, domainSeparatedId, type JsonValue } from "./canonical.js";
+import { hasReportedOrMeasuredPrimary } from "./evidence.js";
 import { fail } from "./errors.js";
-import { assertBoundaries } from "./landscape.js";
+import { assertBoundaries, validatePolymorphLandscape } from "./landscape.js";
 import type {
   CreateReachabilityShiftInput,
+  EvidenceWitness,
   PolymorphLandscape,
   PolymorphReachabilityShift,
   Sha256Id,
@@ -14,11 +16,11 @@ export function createPolymorphReachabilityShift(
   landscapeValue: PolymorphLandscape,
   inputValue: CreateReachabilityShiftInput,
 ): Readonly<PolymorphReachabilityShift> {
-  const landscape = landscapeValue;
+  const landscape = validatePolymorphLandscape(landscapeValue);
   const input = parseInput(inputValue);
   const formRefs = new Set(landscape.forms.map((form) => form.form_ref));
   const conditionRefs = new Set(landscape.conditions.map((condition) => condition.condition_ref));
-  const witnessRefs = new Set(landscape.witnesses.map((witness) => witness.witness_ref));
+  const witnessByRef = new Map(landscape.witnesses.map((witness) => [witness.witness_ref, witness] as const));
   const routeByRef = new Map(landscape.routes.map((route) => [route.route_ref, route] as const));
   const openRefs = new Set(landscape.open_conditions.map((condition) => condition.open_condition_ref));
 
@@ -28,10 +30,15 @@ export function createPolymorphReachabilityShift(
   input.condition_refs.forEach((ref) => ensureRef(conditionRefs, ref, "condition_refs"));
   if (input.condition_refs.length === 0) fail("invalid_reachability_shift", "a reachability shift requires at least one named condition");
   for (const refs of [input.before_witness_refs, input.appearance_witness_refs, input.later_witness_refs]) {
-    refs.forEach((ref) => ensureRef(witnessRefs, ref, "witness_refs"));
+    refs.forEach((ref) => ensureRef(witnessByRef, ref, "witness_refs"));
   }
   if (input.before_witness_refs.length === 0 || input.appearance_witness_refs.length === 0) {
     fail("invalid_reachability_shift", "before and appearance witnesses must not be empty");
+  }
+  requireReportedEvidence(input.before_witness_refs, witnessByRef, "before_witness_refs");
+  requireReportedEvidence(input.appearance_witness_refs, witnessByRef, "appearance_witness_refs");
+  if (input.same_condition_return === "reported") {
+    requireReportedEvidence(input.later_witness_refs, witnessByRef, "later_witness_refs for a reported same-condition return");
   }
   input.open_condition_refs.forEach((ref) => ensureRef(openRefs, ref, "open_condition_refs"));
   const originalConditions = new Set(input.condition_refs);
@@ -70,9 +77,10 @@ export function createPolymorphReachabilityShift(
 }
 
 export function validatePolymorphReachabilityShift(
-  landscape: PolymorphLandscape,
+  landscapeValue: PolymorphLandscape,
   value: unknown,
 ): Readonly<PolymorphReachabilityShift> {
+  const landscape = validatePolymorphLandscape(landscapeValue);
   const root = record(value, "$", "invalid_reachability_shift");
   exactKeys(root, [
     "_format", "shift_id", "landscape_id", "prior_form_ref", "emergent_form_ref", "condition_refs",
@@ -139,6 +147,17 @@ function parseInput(value: unknown): CreateReachabilityShiftInput {
   });
 }
 
-function ensureRef(values: ReadonlySet<Sha256Id>, value: Sha256Id, path: string): void {
+function ensureRef(values: ReadonlySet<Sha256Id> | ReadonlyMap<Sha256Id, unknown>, value: Sha256Id, path: string): void {
   if (!values.has(value)) fail("unknown_reference", `${path} refers outside the landscape`);
+}
+
+function requireReportedEvidence(
+  refs: readonly Sha256Id[],
+  witnesses: ReadonlyMap<Sha256Id, Readonly<EvidenceWitness>>,
+  path: string,
+): void {
+  const resolved = refs.map((ref) => witnesses.get(ref)!);
+  if (!hasReportedOrMeasuredPrimary(resolved)) {
+    fail("invalid_reachability_shift", `${path} must cite at least one measured_primary or reported_primary witness`);
+  }
 }

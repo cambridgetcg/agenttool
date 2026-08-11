@@ -9,7 +9,7 @@ const output = execFileSync("npm", ["pack", "--dry-run", "--ignore-scripts", "--
 const [report] = JSON.parse(output);
 const files = report.files.map(({ path }) => path).sort();
 const dist = [
-  "canonical", "constants", "errors", "index", "landscape", "projection",
+  "canonical", "constants", "errors", "evidence", "index", "landscape", "projection",
   "reachability-shift", "ritonavir", "types", "validation",
 ].flatMap((name) => [`dist/${name}.d.ts`, `dist/${name}.d.ts.map`, `dist/${name}.js`, `dist/${name}.js.map`]);
 const expected = [

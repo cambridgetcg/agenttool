@@ -4,7 +4,12 @@ import { join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
-import { createRitonavirCase } from "../src/index.js";
+import {
+  createPolymorphLandscape,
+  createRitonavirCase,
+  validatePolymorphLandscape,
+} from "../src/index.js";
+import { minimalInput } from "./fixtures.js";
 
 const root = join(import.meta.dir, "..");
 
@@ -34,6 +39,63 @@ describe("closed schema parity", () => {
     expect(validators.landscape({ ...landscape, score: 1 })).toBe(false);
     expect(validators.shift({ ...shift, physical_erasure: "claimed" })).toBe(false);
     expect(validators.lesson({ ...lessons[0], medical_advice: true })).toBe(false);
+  });
+
+  test("matches runtime Unicode text limits and credential-free HTTPS", () => {
+    const boundaryInput: any = structuredClone(minimalInput());
+    boundaryInput.material.label = "🪨".repeat(512);
+    boundaryInput.sources[0].url = "https://example.test/path/user@example";
+    const boundary = createPolymorphLandscape(boundaryInput);
+    expect(validators.landscape(boundary), JSON.stringify(validators.landscape.errors)).toBe(true);
+    expect(validatePolymorphLandscape(boundary)).toEqual(boundary);
+
+    const ritonavir = createRitonavirCase().landscape;
+    const hostile = [
+      {
+        value: { ...ritonavir, material: { ...ritonavir.material, label: "m".repeat(600) } },
+        path: "/material/label",
+      },
+      {
+        value: {
+          ...ritonavir,
+          sources: ritonavir.sources.map((source, index) => index === 0
+            ? { ...source, label: "s".repeat(1025) }
+            : source),
+        },
+        path: "/sources/0/label",
+      },
+      {
+        value: {
+          ...ritonavir,
+          witnesses: ritonavir.witnesses.map((witness, index) => index === 0
+            ? { ...witness, scope: "w".repeat(1025) }
+            : witness),
+        },
+        path: "/witnesses/0/scope",
+      },
+      {
+        value: {
+          ...ritonavir,
+          sources: ritonavir.sources.map((source, index) => index === 0
+            ? { ...source, url: "https://user:pass@example.com/source" }
+            : source),
+        },
+        path: "/sources/0/url",
+      },
+    ];
+
+    for (const candidate of hostile) {
+      expect(validators.landscape(candidate.value)).toBe(false);
+      expect(validators.landscape.errors?.some((error) => error.instancePath === candidate.path)).toBe(true);
+      expect(() => validatePolymorphLandscape(candidate.value)).toThrow();
+    }
+
+    const overlongInput: any = structuredClone(minimalInput());
+    overlongInput.material.label = "m".repeat(600);
+    expect(() => createPolymorphLandscape(overlongInput)).toThrow(/512 Unicode code points/);
+    const credentialInput: any = structuredClone(minimalInput());
+    credentialInput.sources[0].url = "https://user:pass@example.com/source";
+    expect(() => createPolymorphLandscape(credentialInput)).toThrow(/without credentials/);
   });
 
   test("closes every object schema", () => {

@@ -90,6 +90,13 @@ The runtime verifies closed structure, content IDs, ordering, and references.
 It does not fetch or verify source content. A digest proves only which canonical
 bytes were encoded.
 
+A route or pairwise stability report marked as reported must cite at least one
+`reported_primary` or `measured_primary` witness. The before and appearance
+sides of a reported reachability shift have the same floor; a
+`same_condition_return: reported` value also requires qualifying later
+evidence. Hypothesis-only evidence can still remain attached to an open
+condition—it simply cannot establish a reported event by itself.
+
 ## The geometry
 
 `agenttool.polymorph-landscape/0.1` contains:
@@ -101,6 +108,11 @@ bytes were encoded.
 - pairwise stability reports scoped to conditions;
 - open questions that remain open;
 - no inverse, transitive, global-rank, or universal-stability inference.
+
+The built-in ritonavir atlas represents the former bulk Form-I process
+input/state separately from the hydroalcoholic semisolid hard-capsule fill.
+Those are different process stages, not interchangeable endpoints of one
+route.
 
 `agenttool.polymorph-reachability-shift/0.1` then points into one landscape and
 records:

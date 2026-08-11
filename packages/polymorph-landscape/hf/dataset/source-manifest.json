@@ -81,8 +81,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 4143,
-      "sha256": "7fd6ca5254bbbda24957bb8977245207854c0d2bc559a083a9a0eb36ecb429dc"
+      "bytes": 4766,
+      "sha256": "0c05e3412565b1a374a1a77be06b74042218443e4856ed6d9b989d13af0a8d90"
     },
     {
       "path": "kingdom.extension.json",
@@ -96,18 +96,18 @@
     },
     {
       "path": "schema/agenttool-polymorph-landscape-v0.1.schema.json",
-      "bytes": 12056,
-      "sha256": "1ac35143919890d2970c8ad1cd56d7a1a2aa5621d7039bb4ff4522a11ba7dd72"
+      "bytes": 12640,
+      "sha256": "9f03ba0694de29c6629bfb471b61f632b90551e40ff7e28ae00cfcf40b3cd051"
     },
     {
       "path": "schema/agenttool-polymorph-lesson-v0.1.schema.json",
-      "bytes": 13670,
-      "sha256": "94004a86fef46f68a7f56781ee5a7544a73f2e40a6f9c0b5b57cb4d4f9cd1a06"
+      "bytes": 14300,
+      "sha256": "ff65af578435af6b05de60d2593708f739226e160dcf7bf0ad9e64b3b6871725"
     },
     {
       "path": "schema/agenttool-polymorph-reachability-shift-v0.1.schema.json",
-      "bytes": 4078,
-      "sha256": "b11ea05b196d11c72e3393ee80467b1e9609999f58a1f7a36ab0a0c6c07c72b4"
+      "bytes": 4708,
+      "sha256": "29f360e4d729a190eac2bad23d5452cf5876ad56465a98ff940b0109096c33dd"
     },
     {
       "path": "src/canonical.ts",
@@ -116,8 +116,8 @@
     },
     {
       "path": "src/constants.ts",
-      "bytes": 2779,
-      "sha256": "180509a11b33c974d3717cd0d45fd581d41a126cf28f2411ca1ec029495d95f4"
+      "bytes": 3116,
+      "sha256": "9d2c2991c000584d6285beda396178415bc219d565a8e568983003fd4dc6dcca"
     },
     {
       "path": "src/errors.ts",
@@ -125,14 +125,19 @@
       "sha256": "16631073af0cf6338d6f1b98da24370e4688ec59207c7588a0a561012022d645"
     },
     {
+      "path": "src/evidence.ts",
+      "bytes": 365,
+      "sha256": "8939f576c79828e7b6f9cc1204d4e0ac5bb129772e1bbcb430521ef1a7b20913"
+    },
+    {
       "path": "src/index.ts",
-      "bytes": 1774,
-      "sha256": "428cf51ed7b546fbb5993676739b9e8477d7af4aba4ac290cd139b96070e3a7c"
+      "bytes": 1835,
+      "sha256": "df52905190ce0ba8f86ff2a672f8d7ed2a0ca529479e1554238aa86f28e74d12"
     },
     {
       "path": "src/landscape.ts",
-      "bytes": 26055,
-      "sha256": "e49ab0aad692629b1bd25c418bea643fd7a48f4ca3226a1ed489cdc0af7c8cdd"
+      "bytes": 26769,
+      "sha256": "357cac5d7cbeef46b95bc2c643439b9d28deeef521c6541136d95fee7ff253ff"
     },
     {
       "path": "src/projection.ts",
@@ -141,13 +146,13 @@
     },
     {
       "path": "src/reachability-shift.ts",
-      "bytes": 9520,
-      "sha256": "8b8fb3771d616ff29f28471fdf00887963cd860b51af6f34743af9ce22f876ff"
+      "bytes": 10541,
+      "sha256": "48f2549e52eb953db1cc2eb85bea1976e48e225b25668f6e652ce228033e5220"
     },
     {
       "path": "src/ritonavir.ts",
-      "bytes": 17876,
-      "sha256": "83650aec290d589b1f536648f89d9037a5c821ccfbc059eda4c07396ef40d973"
+      "bytes": 18380,
+      "sha256": "eca979bb3d1e16c62138989b1c40a892d8fd855b379c6df00ae1ad7b0fff4750"
     },
     {
       "path": "src/types.ts",
@@ -156,8 +161,8 @@
     },
     {
       "path": "src/validation.ts",
-      "bytes": 5260,
-      "sha256": "169157806c6dd4e5825d147eb8b6100e06a8f846ca4aec0fba5340ee4ed8d5ef"
+      "bytes": 5414,
+      "sha256": "8d65947059e07f0d3fed90fd0705ad6b9b8c45befb01f810ca3a5a528bc24069"
     }
   ]
 }

@@ -5,12 +5,14 @@ import {
   FORM_KINDS,
   POLYMORPH_BOUNDARIES,
   POLYMORPH_FORMATS,
+  POLYMORPH_TEXT_LIMITS,
   ROUTE_STATUSES,
   SOURCE_KINDS,
   TEMPLATE_REPORTS,
   WITNESS_KINDS,
 } from "./constants.js";
 import { canonicalJson, compareUnicode, deepFreeze, domainSeparatedId, snapshotJson, type JsonValue } from "./canonical.js";
+import { hasReportedOrMeasuredPrimary } from "./evidence.js";
 import { fail } from "./errors.js";
 import type {
   ConditionInput,
@@ -140,12 +142,14 @@ export function createPolymorphLandscape(input: CreatePolymorphLandscapeInput): 
   const routes = sorted(parsed.routes).map((route) => {
     const from = required(formByKey, route.from_form_key, "form", route.key);
     const to = required(formByKey, route.to_form_key, "form", route.key);
+    const witnesses = resolveKeys(route.witness_keys, witnessByKey, "witness", route.key);
+    requireReportedEvidence(witnesses, `reported route ${route.key}`);
     const body = {
       key: route.key,
       from_form_ref: from.form_ref,
       to_form_ref: to.form_ref,
       condition_refs: sortedRefs(resolveKeys(route.condition_keys, conditionByKey, "condition", route.key).map((value) => value.condition_ref)),
-      witness_refs: sortedRefs(resolveKeys(route.witness_keys, witnessByKey, "witness", route.key).map((value) => value.witness_ref)),
+      witness_refs: sortedRefs(witnesses.map((value) => value.witness_ref)),
       status: route.status,
       barrier_reported: route.barrier_reported,
       template_reported: route.template_reported,
@@ -161,12 +165,14 @@ export function createPolymorphLandscape(input: CreatePolymorphLandscapeInput): 
     const preferred = required(formByKey, report.preferred_form_key, "form", report.key);
     const compared = required(formByKey, report.compared_form_key, "form", report.key);
     if (preferred.form_ref === compared.form_ref) fail("invalid_input", `stability report ${report.key} must compare distinct forms`);
+    const witnesses = resolveKeys(report.witness_keys, witnessByKey, "witness", report.key);
+    requireReportedEvidence(witnesses, `stability report ${report.key}`);
     const body = {
       key: report.key,
       preferred_form_ref: preferred.form_ref,
       compared_form_ref: compared.form_ref,
       condition_refs: sortedRefs(resolveKeys(report.condition_keys, conditionByKey, "condition", report.key).map((value) => value.condition_ref)),
-      witness_refs: sortedRefs(resolveKeys(report.witness_keys, witnessByKey, "witness", report.key).map((value) => value.witness_ref)),
+      witness_refs: sortedRefs(witnesses.map((value) => value.witness_ref)),
       scope: "pairwise_condition_scoped" as const,
       value_or_goodness: "not_implied" as const,
       verified_by_package: false as const,
@@ -236,14 +242,14 @@ function parseInput(value: unknown): CreatePolymorphLandscapeInput {
 function parseMaterialInput(value: JsonValue | undefined, path: string): MaterialInput {
   const item = record(value, path, "invalid_input");
   exactKeys(item, ["key", "label"], path, "invalid_input");
-  return { key: token(item.key, `${path}.key`), label: text(item.label, `${path}.label`, 512) };
+  return { key: token(item.key, `${path}.key`), label: text(item.label, `${path}.label`, POLYMORPH_TEXT_LIMITS.material_label) };
 }
 
 function parseSourceInput(value: JsonValue, path: string): SourceInput {
   const item = record(value, path, "invalid_input");
   exactKeys(item, ["key", "label", "kind", "url", "published_year"], path, "invalid_input");
   return {
-    key: token(item.key, `${path}.key`), label: text(item.label, `${path}.label`, 1024),
+    key: token(item.key, `${path}.key`), label: text(item.label, `${path}.label`, POLYMORPH_TEXT_LIMITS.source_label),
     kind: literal(item.kind, SOURCE_KINDS, `${path}.kind`), url: httpsUrl(item.url, `${path}.url`),
     published_year: integer(item.published_year, `${path}.published_year`, 1800, 2200),
   };
@@ -253,7 +259,7 @@ function parseFormInput(value: JsonValue, path: string): FormInput {
   const item = record(value, path, "invalid_input");
   exactKeys(item, ["key", "label", "kind_reported", "description", "source_keys"], path, "invalid_input");
   return {
-    key: token(item.key, `${path}.key`), label: text(item.label, `${path}.label`, 512),
+    key: token(item.key, `${path}.key`), label: text(item.label, `${path}.label`, POLYMORPH_TEXT_LIMITS.form_label),
     kind_reported: literal(item.kind_reported, FORM_KINDS, `${path}.kind_reported`),
     description: text(item.description, `${path}.description`), source_keys: uniqueTokens(item.source_keys, `${path}.source_keys`, false),
   };
@@ -263,7 +269,7 @@ function parseConditionInput(value: JsonValue, path: string): ConditionInput {
   const item = record(value, path, "invalid_input");
   exactKeys(item, ["key", "label", "kind", "description"], path, "invalid_input");
   return {
-    key: token(item.key, `${path}.key`), label: text(item.label, `${path}.label`, 512),
+    key: token(item.key, `${path}.key`), label: text(item.label, `${path}.label`, POLYMORPH_TEXT_LIMITS.condition_label),
     kind: literal(item.kind, CONDITION_KINDS, `${path}.kind`), description: text(item.description, `${path}.description`),
   };
 }
@@ -274,7 +280,7 @@ function parseWitnessInput(value: JsonValue, path: string): WitnessInput {
   return {
     key: token(item.key, `${path}.key`), kind: literal(item.kind, WITNESS_KINDS, `${path}.kind`),
     status: literal(item.status, EVIDENCE_STATUSES, `${path}.status`), statement: text(item.statement, `${path}.statement`),
-    scope: text(item.scope, `${path}.scope`, 1024), source_keys: uniqueTokens(item.source_keys, `${path}.source_keys`, false),
+    scope: text(item.scope, `${path}.scope`, POLYMORPH_TEXT_LIMITS.witness_scope), source_keys: uniqueTokens(item.source_keys, `${path}.source_keys`, false),
   };
 }
 
@@ -428,6 +434,12 @@ function required<T>(map: ReadonlyMap<string, T>, key: string, kind: string, own
 
 function resolveKeys<T>(keys: readonly string[], map: ReadonlyMap<string, T>, kind: string, owner: string): readonly T[] {
   return keys.map((key) => required(map, key, kind, owner));
+}
+
+function requireReportedEvidence(witnesses: readonly EvidenceWitness[], owner: string): void {
+  if (!hasReportedOrMeasuredPrimary(witnesses)) {
+    fail("invalid_input", `${owner} must cite at least one measured_primary or reported_primary witness`);
+  }
 }
 
 function refToKey(value: JsonValue | undefined, map: ReadonlyMap<Sha256Id, string>, path: string, kind: string): string {

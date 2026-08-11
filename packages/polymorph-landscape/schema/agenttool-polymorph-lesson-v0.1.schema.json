@@ -504,6 +504,37 @@
       "minLength": 1,
       "maxLength": 4096
     },
+    "materialLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "sourceLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "formLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "conditionLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "witnessScope": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "sourceUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://(?![^/?#]*@)",
+      "maxLength": 2048
+    },
     "refs": {
       "type": "array",
       "items": {

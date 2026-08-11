@@ -1,7 +1,7 @@
 import { LESSON_LANGUAGES } from "./constants.js";
 import { deepFreeze } from "./canonical.js";
 import { fail } from "./errors.js";
-import { createPolymorphLandscape } from "./landscape.js";
+import { createPolymorphLandscape, validatePolymorphLandscape } from "./landscape.js";
 import { projectPolymorphLesson } from "./projection.js";
 import { createPolymorphReachabilityShift } from "./reachability-shift.js";
 import type {
@@ -73,6 +73,13 @@ export function createRitonavirLandscape(): Readonly<PolymorphLandscape> {
       },
     ],
     forms: [
+      {
+        key: "bulk_form_i_process_input",
+        label: "Abbott bulk Form-I process input/state",
+        kind_reported: "other",
+        description: "A source-scoped input/state for the former routine bulk-drug Form-I route; separate from the hydroalcoholic semisolid hard-capsule fill and not an assertion of one crystalline starting form.",
+        source_keys: ["chemburkar_2000"],
+      },
       {
         key: "form_i_abbott",
         label: "Form I (Abbott 2000/2001 naming)",
@@ -301,7 +308,7 @@ export function createRitonavirLandscape(): Readonly<PolymorphLandscape> {
       },
       {
         key: "old_route_to_form_i_after_form_ii",
-        from_form_key: "hydroalcoholic_solution",
+        from_form_key: "bulk_form_i_process_input",
         to_form_key: "form_i_abbott",
         condition_keys: ["old_form_i_bulk_route_after_form_ii"],
         witness_keys: ["form_i_not_reproduced_by_old_route"],
@@ -355,8 +362,9 @@ export function createRitonavirLandscape(): Readonly<PolymorphLandscape> {
 }
 
 export function createRitonavirReachabilityShift(
-  landscape: PolymorphLandscape = createRitonavirLandscape(),
+  landscapeValue: PolymorphLandscape = createRitonavirLandscape(),
 ): Readonly<PolymorphReachabilityShift> {
+  const landscape = validatePolymorphLandscape(landscapeValue);
   const form = (key: string): Sha256Id => find(landscape.forms, key, "form").form_ref;
   const condition = (key: string): Sha256Id => find(landscape.conditions, key, "condition").condition_ref;
   const witness = (key: string): Sha256Id => find(landscape.witnesses, key, "witness").witness_ref;

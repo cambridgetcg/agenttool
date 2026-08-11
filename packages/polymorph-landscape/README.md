@@ -68,6 +68,9 @@ The checked-in atlas links primary process, structure, regulatory, solvent,
 and mechanochemistry sources. It distinguishes Morissette et al.'s 2003
 “Form III” formamide solvate from the later anhydrous polymorph also called
 Form III. A form number is never merged without its source and reported kind.
+It also keeps the former bulk Form-I process input/state separate from the
+hydroalcoholic semisolid hard-capsule fill, so one route never silently joins
+two manufacturing stages.
 
 The record deliberately excludes folklore about proven worldwide airborne
 spread, Italy-first certainty, morphic resonance, permanent impossibility, or
@@ -88,6 +91,13 @@ environment, clock, randomness, persistence, model, training, medical,
 manufacturing, publication, deployment, consent, identity, or authority
 action. It checks closed structure and reference integrity; it does not verify
 the contents of external sources.
+
+Text field limits count Unicode code points, matching JSON Schema
+`maxLength`: material, form, and condition labels allow 512; source labels and
+witness scopes allow 1,024; source URLs allow 2,048; and other text allows
+4,096. Source URLs must begin with lowercase `https://` and contain no URL
+credentials. The canonical layer separately rejects malformed Unicode and
+caps each string at 16 KiB of UTF-8 plus each complete artifact at 2 MiB.
 
 ## Verify
 

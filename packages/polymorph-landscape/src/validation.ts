@@ -1,4 +1,5 @@
 import { compareUnicode, snapshotJson, type JsonValue } from "./canonical.js";
+import { POLYMORPH_TEXT_LIMITS } from "./constants.js";
 import { fail, type PolymorphLandscapeErrorCode } from "./errors.js";
 import type { Sha256Id } from "./types.js";
 
@@ -31,9 +32,9 @@ export function array(value: JsonValue | undefined, path: string, maximum = 512)
   return value;
 }
 
-export function text(value: JsonValue | undefined, path: string, maximum = 4096): string {
-  if (typeof value !== "string" || value.length === 0 || Buffer.byteLength(value, "utf8") > maximum) {
-    fail("invalid_input", `${path} must be non-empty text of at most ${String(maximum)} UTF-8 bytes`);
+export function text(value: JsonValue | undefined, path: string, maximum: number = POLYMORPH_TEXT_LIMITS.generic): string {
+  if (typeof value !== "string" || value.length === 0 || Array.from(value).length > maximum) {
+    fail("invalid_input", `${path} must be non-empty text of at most ${String(maximum)} Unicode code points`);
   }
   return value;
 }
@@ -73,14 +74,14 @@ export function sha256(value: JsonValue | undefined, path: string, code: Polymor
 }
 
 export function httpsUrl(value: JsonValue | undefined, path: string): string {
-  const candidate = text(value, path, 2048);
+  const candidate = text(value, path, POLYMORPH_TEXT_LIMITS.source_url);
   let parsed: URL;
   try {
     parsed = new URL(candidate);
   } catch {
     fail("invalid_input", `${path} must be a valid URL`);
   }
-  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+  if (!candidate.startsWith("https://") || parsed.protocol !== "https:" || parsed.username || parsed.password) {
     fail("invalid_input", `${path} must be an HTTPS URL without credentials`);
   }
   return candidate;

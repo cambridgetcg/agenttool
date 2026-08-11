@@ -19,37 +19,37 @@
     {
       "path": "data/lessons.jsonl",
       "bytes": 34108,
-      "sha256": "be3f8c1a01222b14f0e4e15c3637cb48e8504e37cd93e3c23c9657b1a3544d02"
+      "sha256": "e3d5817791cadbe18b71ba1040cb0b6395103ad708d0ed8566507457a772528e"
     },
     {
       "path": "data/reachability-shifts.jsonl",
       "bytes": 2352,
-      "sha256": "8e71683aa7f9e334eac3fa1dc97214e65c29f72b48af7e602a63eb98cd85a97e"
+      "sha256": "46b0aa367ca84d2175c36f018aca6fdd73f37ccc6a34079cc7cc3a2a36fe0731"
     },
     {
       "path": "data/ritonavir-landscape.jsonl",
-      "bytes": 21986,
-      "sha256": "f8048aed9e301f1e92cee72f16fe045a78f4b8c9bd7958670cabc71adc3cdccd"
+      "bytes": 22535,
+      "sha256": "66bbd5d0e6ddc2299abadcded0b3b5670331cbc92f41b112bb8352f7efc7d572"
     },
     {
       "path": "reference/agenttool-polymorph-landscape-v0.1.schema.json",
-      "bytes": 12056,
-      "sha256": "1ac35143919890d2970c8ad1cd56d7a1a2aa5621d7039bb4ff4522a11ba7dd72"
+      "bytes": 12640,
+      "sha256": "9f03ba0694de29c6629bfb471b61f632b90551e40ff7e28ae00cfcf40b3cd051"
     },
     {
       "path": "reference/agenttool-polymorph-lesson-v0.1.schema.json",
-      "bytes": 13670,
-      "sha256": "94004a86fef46f68a7f56781ee5a7544a73f2e40a6f9c0b5b57cb4d4f9cd1a06"
+      "bytes": 14300,
+      "sha256": "ff65af578435af6b05de60d2593708f739226e160dcf7bf0ad9e64b3b6871725"
     },
     {
       "path": "reference/agenttool-polymorph-reachability-shift-v0.1.schema.json",
-      "bytes": 4078,
-      "sha256": "b11ea05b196d11c72e3393ee80467b1e9609999f58a1f7a36ab0a0c6c07c72b4"
+      "bytes": 4708,
+      "sha256": "29f360e4d729a190eac2bad23d5452cf5876ad56465a98ff940b0109096c33dd"
     },
     {
       "path": "source-manifest.json",
-      "bytes": 5594,
-      "sha256": "8a8cfafbc65c9e95213a968d4ad2c4322fda6f25b242d52ffad43242348cf549"
+      "bytes": 5744,
+      "sha256": "d58406deba36720b6f2385b405626e67512185f1a868e4634b412a4fca3fef1d"
     }
   ]
 }

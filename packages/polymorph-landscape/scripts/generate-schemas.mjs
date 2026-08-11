@@ -1,13 +1,26 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
+import { POLYMORPH_TEXT_LIMITS } from "../dist/constants.js";
+
 const root = fileURLToPath(new URL("../", import.meta.url));
 const schemaRoot = `${root}/schema`;
 mkdirSync(schemaRoot, { recursive: true });
 
 const sha = { type: "string", pattern: "^sha256:[0-9a-f]{64}$" };
 const token = { type: "string", pattern: "^[a-z][a-z0-9._-]{0,127}$" };
-const text = { type: "string", minLength: 1, maxLength: 4096 };
+const text = boundedText(POLYMORPH_TEXT_LIMITS.generic);
+const materialLabel = boundedText(POLYMORPH_TEXT_LIMITS.material_label);
+const sourceLabel = boundedText(POLYMORPH_TEXT_LIMITS.source_label);
+const formLabel = boundedText(POLYMORPH_TEXT_LIMITS.form_label);
+const conditionLabel = boundedText(POLYMORPH_TEXT_LIMITS.condition_label);
+const witnessScope = boundedText(POLYMORPH_TEXT_LIMITS.witness_scope);
+const sourceUrl = {
+  type: "string",
+  format: "uri",
+  pattern: "^https://(?![^/?#]*@)",
+  maxLength: POLYMORPH_TEXT_LIMITS.source_url,
+};
 const refs = { type: "array", items: { $ref: "#/$defs/sha" }, maxItems: 512, uniqueItems: true };
 const boundariesProperties = {
   coverage: { const: "bounded_not_complete" },
@@ -22,28 +35,40 @@ const boundariesProperties = {
 };
 const boundaries = closed(boundariesProperties);
 
-const sharedDefs = { sha, token, text, refs, boundaries };
+const sharedDefs = {
+  sha,
+  token,
+  text,
+  materialLabel,
+  sourceLabel,
+  formLabel,
+  conditionLabel,
+  witnessScope,
+  sourceUrl,
+  refs,
+  boundaries,
+};
 
 const landscape = base("agenttool-polymorph-landscape-v0.1", closed({
   _format: { const: "agenttool.polymorph-landscape/0.1" },
   landscape_id: { $ref: "#/$defs/sha" },
   material: closed({
-    material_ref: { $ref: "#/$defs/sha" }, key: { $ref: "#/$defs/token" }, label: { $ref: "#/$defs/text" },
+    material_ref: { $ref: "#/$defs/sha" }, key: { $ref: "#/$defs/token" }, label: { $ref: "#/$defs/materialLabel" },
     assertion: { const: "caller_reported" }, verified_by_package: { const: false },
   }),
   sources: arrayOf(closed({
-    source_ref: { $ref: "#/$defs/sha" }, key: { $ref: "#/$defs/token" }, label: { $ref: "#/$defs/text" },
+    source_ref: { $ref: "#/$defs/sha" }, key: { $ref: "#/$defs/token" }, label: { $ref: "#/$defs/sourceLabel" },
     kind: { enum: ["official_regulatory", "patent_primary", "peer_reviewed_primary"] },
-    url: { type: "string", format: "uri", pattern: "^https://", maxLength: 2048 },
+    url: { $ref: "#/$defs/sourceUrl" },
     published_year: { type: "integer", minimum: 1800, maximum: 2200 }, content_verified_by_package: { const: false },
   })),
   forms: arrayOf(closed({
-    form_ref: { $ref: "#/$defs/sha" }, key: { $ref: "#/$defs/token" }, label: { $ref: "#/$defs/text" },
+    form_ref: { $ref: "#/$defs/sha" }, key: { $ref: "#/$defs/token" }, label: { $ref: "#/$defs/formLabel" },
     kind_reported: { enum: ["amorphous", "hydrate", "other", "polymorph", "solvate", "unknown"] },
     description: { $ref: "#/$defs/text" }, source_refs: nonEmptyRefs(), source_scoped_identity: { const: true }, verified_by_package: { const: false },
   })),
   conditions: arrayOf(closed({
-    condition_ref: { $ref: "#/$defs/sha" }, key: { $ref: "#/$defs/token" }, label: { $ref: "#/$defs/text" },
+    condition_ref: { $ref: "#/$defs/sha" }, key: { $ref: "#/$defs/token" }, label: { $ref: "#/$defs/conditionLabel" },
     kind: { enum: ["formulation", "manufacturing_process", "mechanical_process", "measurement", "solvent_process", "unknown"] },
     description: { $ref: "#/$defs/text" },
   })),
@@ -51,7 +76,7 @@ const landscape = base("agenttool-polymorph-landscape-v0.1", closed({
     witness_ref: { $ref: "#/$defs/sha" }, key: { $ref: "#/$defs/token" },
     kind: { enum: ["mechanism_hypothesis", "measurement", "process_observation", "recovery_observation", "regulatory_record", "reported_history"] },
     status: { enum: ["derived_interpretation", "hypothesized_primary", "measured_primary", "reported_primary"] },
-    statement: { $ref: "#/$defs/text" }, scope: { $ref: "#/$defs/text" }, source_refs: nonEmptyRefs(), verified_by_package: { const: false },
+    statement: { $ref: "#/$defs/text" }, scope: { $ref: "#/$defs/witnessScope" }, source_refs: nonEmptyRefs(), verified_by_package: { const: false },
   })),
   routes: arrayOf(closed({
     route_ref: { $ref: "#/$defs/sha" }, key: { $ref: "#/$defs/token" }, from_form_ref: { $ref: "#/$defs/sha" }, to_form_ref: { $ref: "#/$defs/sha" },
@@ -103,6 +128,10 @@ write("agenttool-polymorph-lesson-v0.1.schema.json", lesson);
 
 function closed(properties) {
   return { type: "object", additionalProperties: false, required: Object.keys(properties), properties };
+}
+
+function boundedText(maxLength) {
+  return { type: "string", minLength: 1, maxLength };
 }
 
 function arrayOf(items) {

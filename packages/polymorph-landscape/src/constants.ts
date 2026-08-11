@@ -35,6 +35,21 @@ export const EVIDENCE_STATUSES = Object.freeze([
   "reported_primary",
 ] as const);
 
+export const REPORTED_CLAIM_EVIDENCE_STATUSES = Object.freeze([
+  "measured_primary",
+  "reported_primary",
+] as const);
+
+export const POLYMORPH_TEXT_LIMITS = Object.freeze({
+  generic: 4096,
+  material_label: 512,
+  source_label: 1024,
+  form_label: 512,
+  condition_label: 512,
+  witness_scope: 1024,
+  source_url: 2048,
+} as const);
+
 export const WITNESS_KINDS = Object.freeze([
   "mechanism_hypothesis",
   "measurement",

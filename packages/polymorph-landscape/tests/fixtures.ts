@@ -2,6 +2,7 @@ import {
   createPolymorphLandscape,
   createPolymorphReachabilityShift,
   type CreatePolymorphLandscapeInput,
+  type CreateReachabilityShiftInput,
   type PolymorphLandscape,
 } from "../src/index.js";
 
@@ -48,8 +49,12 @@ export function minimalLandscape(): PolymorphLandscape {
 }
 
 export function minimalShift(landscape = minimalLandscape()) {
+  return createPolymorphReachabilityShift(landscape, minimalShiftInput(landscape));
+}
+
+export function minimalShiftInput(landscape = minimalLandscape()): CreateReachabilityShiftInput {
   const byKey = <T extends { readonly key: string }>(values: readonly T[], key: string): T => values.find((value) => value.key === key)!;
-  return createPolymorphReachabilityShift(landscape, {
+  return {
     prior_form_ref: byKey(landscape.forms, "form_a").form_ref,
     emergent_form_ref: byKey(landscape.forms, "form_b").form_ref,
     condition_refs: [byKey(landscape.conditions, "old_route").condition_ref],
@@ -59,5 +64,5 @@ export function minimalShift(landscape = minimalLandscape()) {
     same_condition_return: "not_established",
     changed_condition_recovery_route_refs: [byKey(landscape.routes, "b_to_a_recovery").route_ref],
     open_condition_refs: [byKey(landscape.open_conditions, "cause").open_condition_ref],
-  });
+  };
 }

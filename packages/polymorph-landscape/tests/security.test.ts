@@ -3,15 +3,38 @@ import { describe, expect, test } from "bun:test";
 import {
   createPolymorphLandscape,
   createPolymorphReachabilityShift,
+  createRitonavirLandscape,
+  createRitonavirReachabilityShift,
   PolymorphLandscapeError,
   validatePolymorphLandscape,
+  validatePolymorphReachabilityShift,
 } from "../src/index.js";
-import { minimalInput, minimalLandscape, minimalShift } from "./fixtures.js";
+import { minimalInput, minimalLandscape, minimalShift, minimalShiftInput } from "./fixtures.js";
 
 describe("hostile input boundary", () => {
   test("rejects proxies before traps can supply data", () => {
     const value = new Proxy(minimalInput(), {});
     expect(() => createPolymorphLandscape(value)).toThrow(PolymorphLandscapeError);
+  });
+
+  test("rejects supplied landscape proxies with zero traps before any dereference", () => {
+    const landscape = minimalLandscape();
+    const input = minimalShiftInput(landscape);
+    const shift = minimalShift(landscape);
+
+    for (const operation of [
+      (value: any) => createPolymorphReachabilityShift(value, input),
+      (value: any) => validatePolymorphReachabilityShift(value, shift),
+    ]) {
+      const trapped = trappingProxy(landscape);
+      expect(() => operation(trapped.value)).toThrow(PolymorphLandscapeError);
+      expect(trapped.count()).toBe(0);
+    }
+
+    const ritonavir = createRitonavirLandscape();
+    const trapped = trappingProxy(ritonavir);
+    expect(() => createRitonavirReachabilityShift(trapped.value as any)).toThrow(PolymorphLandscapeError);
+    expect(trapped.count()).toBe(0);
   });
 
   test("rejects accessors without invoking them", () => {
@@ -52,3 +75,21 @@ describe("hostile input boundary", () => {
     } as any)).toThrow();
   });
 });
+
+function trappingProxy<T extends object>(target: T): { readonly value: T; readonly count: () => number } {
+  let traps = 0;
+  const touch = <R>(value: R): R => {
+    traps += 1;
+    return value;
+  };
+  return {
+    value: new Proxy(target, {
+      get: (object, key, receiver) => touch(Reflect.get(object, key, receiver)),
+      getOwnPropertyDescriptor: (object, key) => touch(Reflect.getOwnPropertyDescriptor(object, key)),
+      getPrototypeOf: (object) => touch(Reflect.getPrototypeOf(object)),
+      has: (object, key) => touch(Reflect.has(object, key)),
+      ownKeys: (object) => touch(Reflect.ownKeys(object)),
+    }),
+    count: () => traps,
+  };
+}
