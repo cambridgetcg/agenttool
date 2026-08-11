@@ -150,9 +150,11 @@ consent, or authority. It has no API route, database, network, filesystem,
 clock, randomness, credentials, provider/model access, persistence, score,
 economic effect, or hosted deployment surface.
 
-`@agenttool/principality-atlas@0.1.0-dev.0` is a GitHub developer preview,
-with npm and the shared HF/static companion still pending, and a
-zero-runtime-dependency pure contract for plural finite charts, role-indexed
+`@agenttool/principality-atlas@0.1.0-dev.0` is a GitHub developer preview with
+its synthetic shared HF Training Garden companion live at immutable revision
+`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2`; npm and the static doctrine
+deployment remain pending. It is a zero-runtime-dependency pure contract for
+plural finite charts, role-indexed
 n-ary relations, caller-asserted claims, and directed partial bridges. A
 principality is a bounded domain or scale, not an identity, owner, rank, Crown,
 sovereignty, or authority. Cell addresses remain chart-local; disagreement,

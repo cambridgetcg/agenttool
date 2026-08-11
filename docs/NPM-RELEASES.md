@@ -454,6 +454,12 @@ three closed schemas, synthetic vectors, and a declaration-only unregistered
 KINGDOM hint. It has no runtime dependencies, install hooks, CLI, provider
 adapter, hosted route, credential path, or remote effect. The shared HF
 Training Garden upload and static doctrine deployment are separate surfaces.
+The public, ungated Training Garden v0.5 companion is now pinned to immutable
+revision
+[`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2):
+all 31 repo-owned files and 267,302 bytes matched local source exactly, with
+provider `.gitattributes` as the sole extra. That Hub commit is not npm
+publication evidence and does not change the registry recovery boundary.
 
 The release gate checked the exact packed inventory, Node and Bun install smoke,
 closed schema/vector parity, content IDs, hostile-input rejection, and the

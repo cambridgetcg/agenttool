@@ -9,8 +9,10 @@
 > **Status:** GitHub developer preview at
 > [`principality-atlas-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-atlas-v0.1.0-dev.0);
 > npm remains absent after its bootstrap `PUT` returned `E404`. The shared HF
-> companion revision and this static doctrine deployment remain separate
-> pending surfaces. No hosted route or Fly/API/database deployment is added.
+> Training Garden companion is live at immutable revision
+> [`d9e3e8ed`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2);
+> this static doctrine deployment remains separate. No hosted route or
+> Fly/API/database deployment is added.
 
 ## The high-level pattern
 
