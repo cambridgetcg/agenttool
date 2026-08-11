@@ -171,9 +171,10 @@ model state, and inferred relationships. Its self-excluding hash manifest binds
 every generated release byte.
 
 Dataset Viewer, generated Parquet, and Croissant can improve discovery and
-schema inspection. They are not provenance or permission. A future authorized
-Hub publication should use an exact parent commit or reviewed PR, then read
-every byte back at the returned immutable revision. npm and HF are separate
+schema inspection. They are not provenance or permission. The v0.5 Hub
+publication used the reviewed exact-source path and was read back byte-for-byte
+at the immutable revision above. Future revisions should use an exact parent
+commit or reviewed PR and repeat that full readback. npm and HF are separate
 publication identities tied by common source hashes; they are not one atomic
 release and neither certifies the other.
 
