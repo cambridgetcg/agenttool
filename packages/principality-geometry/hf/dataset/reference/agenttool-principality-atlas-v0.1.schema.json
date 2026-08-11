@@ -1,0 +1,312 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-principality-atlas-v0.1.schema.json",
+  "title": "AgentTool Principality Atlas v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "atlas_id", "scope_ref", "invariants", "principalities", "bridges", "geometry", "boundaries", "claim_boundary"],
+  "properties": {
+    "_format": { "const": "agenttool.principality-atlas/0.1" },
+    "atlas_id": { "$ref": "#/$defs/sha256" },
+    "scope_ref": { "$ref": "#/$defs/sha256" },
+    "invariants": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/invariant" } },
+    "principalities": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/vertex" } },
+    "bridges": { "type": "array", "maxItems": 128, "items": { "$ref": "#/$defs/bridge" } },
+    "geometry": { "$ref": "#/$defs/geometry" },
+    "boundaries": { "$ref": "#/$defs/boundaries" },
+    "claim_boundary": {
+      "const": "This atlas records caller-declared translation topology over bounded provenance references. Its simplices mean only that the supplied directed relations mutually preserve the same declared invariants. It does not measure a being, infer love or understanding, prove path commutativity, truth, identity, consent, authority, safety, licence compatibility, or perform any external effect."
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "token": { "type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$" },
+    "protocol": { "type": "string", "pattern": "^(?=.{1,128}$)[a-z][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)?$" },
+    "disposition": { "enum": ["available_reported", "resting_reported", "refused_reported", "withdrawn_reported", "unknown"] },
+    "state": { "enum": ["preserved_reported", "not_preserved_reported", "refused_reported", "unknown"] },
+    "observation": { "enum": ["provider_observation_reported", "caller_asserted"] },
+    "invariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invariant_id", "definition_ref"],
+      "properties": {
+        "invariant_id": { "$ref": "#/$defs/token" },
+        "definition_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "hfArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "repo_type", "repo_id", "revision", "snapshot_manifest_protocol", "snapshot_manifest_sha256", "observation", "artifact_ref"],
+      "properties": {
+        "kind": { "const": "huggingface" },
+        "repo_type": { "enum": ["model", "dataset", "space"] },
+        "repo_id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?/[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$"
+        },
+        "revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "snapshot_manifest_protocol": { "$ref": "#/$defs/protocol" },
+        "snapshot_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "observation": { "$ref": "#/$defs/observation" },
+        "artifact_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "npmArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "version", "integrity", "version_metadata_protocol", "version_metadata_sha256", "provenance_attestation", "observation", "artifact_ref"],
+      "properties": {
+        "kind": { "const": "npm" },
+        "name": { "type": "string", "pattern": "^(?:@[a-z0-9][a-z0-9._-]{0,63}/[a-z0-9][a-z0-9._-]{0,127}|[a-z0-9][a-z0-9._-]{0,127})$" },
+        "version": { "type": "string", "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$" },
+        "integrity": { "type": "string", "pattern": "^sha512-[A-Za-z0-9+/]{85}[AQgw]==$" },
+        "version_metadata_protocol": { "$ref": "#/$defs/protocol" },
+        "version_metadata_sha256": { "$ref": "#/$defs/sha256" },
+        "provenance_attestation": { "enum": ["present_unverified", "absent_reported", "not_checked"] },
+        "observation": { "$ref": "#/$defs/observation" },
+        "artifact_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "artifact": { "oneOf": [{ "$ref": "#/$defs/hfArtifact" }, { "$ref": "#/$defs/npmArtifact" }] },
+    "protocolManifestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "protocol", "content_ref", "manifestation_ref"],
+      "properties": {
+        "kind": { "const": "protocol_digest" },
+        "protocol": { "$ref": "#/$defs/protocol" },
+        "content_ref": { "$ref": "#/$defs/sha256" },
+        "manifestation_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "afterglowExternalManifestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "thread_ref", "artifact_ref", "disposition", "assertion", "verified_by_package", "state", "manifestation_ref"],
+      "properties": {
+        "kind": { "const": "external" },
+        "thread_ref": { "$ref": "#/$defs/sha256" },
+        "artifact_ref": { "$ref": "#/$defs/sha256" },
+        "disposition": { "enum": ["carry", "park", "release", "withdraw"] },
+        "assertion": { "const": "caller_asserted" },
+        "verified_by_package": { "const": false },
+        "state": { "enum": ["context_only", "review_required", "hold"] },
+        "manifestation_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "manifestation": { "oneOf": [{ "$ref": "#/$defs/protocolManifestation" }, { "$ref": "#/$defs/afterglowExternalManifestation" }] },
+    "vertex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principality_id", "principality_ref", "kind", "definition_ref", "manifestations", "artifact_refs"],
+      "properties": {
+        "principality_id": { "$ref": "#/$defs/token" },
+        "principality_ref": { "$ref": "#/$defs/sha256" },
+        "kind": { "enum": ["practice", "protocol", "package", "model", "dataset", "space", "infrastructure", "archive", "other"] },
+        "definition_ref": { "$ref": "#/$defs/sha256" },
+        "manifestations": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/manifestation" } },
+        "artifact_refs": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/artifact" } }
+      }
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invariant_id", "state", "evidence_refs"],
+      "properties": {
+        "invariant_id": { "$ref": "#/$defs/token" },
+        "state": { "$ref": "#/$defs/state" },
+        "evidence_refs": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/sha256" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "state": { "enum": ["preserved_reported", "not_preserved_reported"] } } },
+          "then": { "properties": { "evidence_refs": { "type": "array", "minItems": 1 } } },
+          "else": { "properties": { "evidence_refs": { "type": "array", "maxItems": 0 } } }
+        }
+      ]
+    },
+    "bridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bridge_id", "from", "to", "from_ref", "to_ref", "disposition", "evaluations"],
+      "properties": {
+        "bridge_id": { "$ref": "#/$defs/sha256" },
+        "from": { "$ref": "#/$defs/token" },
+        "to": { "$ref": "#/$defs/token" },
+        "from_ref": { "$ref": "#/$defs/sha256" },
+        "to_ref": { "$ref": "#/$defs/sha256" },
+        "disposition": { "$ref": "#/$defs/disposition" },
+        "evaluations": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/evaluation" } }
+      }
+    },
+    "lensInvariantRelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invariant_id", "forward_state", "reverse_state"],
+      "properties": {
+        "invariant_id": { "$ref": "#/$defs/token" },
+        "forward_state": { "$ref": "#/$defs/state" },
+        "reverse_state": { "$ref": "#/$defs/state" }
+      }
+    },
+    "lens": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lens_id", "vertices", "vertex_refs", "bridge_ids", "dispositions", "route_state", "invariant_relations", "mutually_preserved", "mutually_not_preserved", "directional_asymmetry", "refused", "unknown"],
+      "properties": {
+        "lens_id": { "$ref": "#/$defs/sha256" },
+        "vertices": { "$ref": "#/$defs/vertexPair" },
+        "vertex_refs": { "$ref": "#/$defs/shaPair" },
+        "bridge_ids": { "$ref": "#/$defs/shaPair" },
+        "dispositions": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [{ "$ref": "#/$defs/disposition" }, { "$ref": "#/$defs/disposition" }]
+        },
+        "route_state": { "enum": ["both_available_reported", "not_both_available_reported"] },
+        "invariant_relations": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/lensInvariantRelation" } },
+        "mutually_preserved": { "$ref": "#/$defs/invariantIds" },
+        "mutually_not_preserved": { "$ref": "#/$defs/invariantIds" },
+        "directional_asymmetry": { "$ref": "#/$defs/invariantIds" },
+        "refused": { "$ref": "#/$defs/invariantIds" },
+        "unknown": { "$ref": "#/$defs/invariantIds" }
+      }
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surface_id", "vertices", "vertex_refs", "lens_ids", "invariant_ids"],
+      "properties": {
+        "surface_id": { "$ref": "#/$defs/sha256" },
+        "vertices": { "$ref": "#/$defs/vertexTriple" },
+        "vertex_refs": { "$ref": "#/$defs/shaTriple" },
+        "lens_ids": { "$ref": "#/$defs/shaTriple" },
+        "invariant_ids": { "$ref": "#/$defs/invariantIds" }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component_id", "invariant_id", "vertices", "vertex_refs", "lens_ids"],
+      "properties": {
+        "component_id": { "$ref": "#/$defs/sha256" },
+        "invariant_id": { "$ref": "#/$defs/token" },
+        "vertices": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/$defs/token" } },
+        "vertex_refs": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/$defs/sha256" } },
+        "lens_ids": { "type": "array", "maxItems": 120, "items": { "$ref": "#/$defs/sha256" } }
+      }
+    },
+    "openEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bridge_id", "invariant_id", "evidence_refs"],
+      "properties": {
+        "bridge_id": { "$ref": "#/$defs/sha256" },
+        "invariant_id": { "$ref": "#/$defs/token" },
+        "evidence_refs": { "type": "array", "maxItems": 8, "items": { "$ref": "#/$defs/sha256" } }
+      }
+    },
+    "asymmetryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lens_id", "invariant_id"],
+      "properties": {
+        "lens_id": { "$ref": "#/$defs/sha256" },
+        "invariant_id": { "$ref": "#/$defs/token" }
+      }
+    },
+    "openConditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["one_way_bridge_ids", "non_available_bridge_ids", "not_preserved", "refused", "unknown", "directional_asymmetry", "unrelated_vertex_pairs", "declared_isolated_vertices"],
+      "properties": {
+        "one_way_bridge_ids": { "type": "array", "maxItems": 128, "items": { "$ref": "#/$defs/sha256" } },
+        "non_available_bridge_ids": { "type": "array", "maxItems": 128, "items": { "$ref": "#/$defs/sha256" } },
+        "not_preserved": { "type": "array", "maxItems": 4096, "items": { "$ref": "#/$defs/openEntry" } },
+        "refused": { "type": "array", "maxItems": 4096, "items": { "$ref": "#/$defs/openEntry" } },
+        "unknown": { "type": "array", "maxItems": 4096, "items": { "$ref": "#/$defs/openEntry" } },
+        "directional_asymmetry": { "type": "array", "maxItems": 3840, "items": { "$ref": "#/$defs/asymmetryEntry" } },
+        "unrelated_vertex_pairs": { "type": "array", "maxItems": 120, "items": { "$ref": "#/$defs/vertexPair" } },
+        "declared_isolated_vertices": { "type": "array", "maxItems": 16, "items": { "$ref": "#/$defs/token" } }
+      }
+    },
+    "geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reciprocal_lenses", "invariant_surfaces", "invariant_components", "open_conditions"],
+      "properties": {
+        "reciprocal_lenses": { "type": "array", "maxItems": 120, "items": { "$ref": "#/$defs/lens" } },
+        "invariant_surfaces": { "type": "array", "maxItems": 560, "items": { "$ref": "#/$defs/surface" } },
+        "invariant_components": { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/component" } },
+        "open_conditions": { "$ref": "#/$defs/openConditions" }
+      }
+    },
+    "vertexPair": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [{ "$ref": "#/$defs/token" }, { "$ref": "#/$defs/token" }]
+    },
+    "vertexTriple": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [{ "$ref": "#/$defs/token" }, { "$ref": "#/$defs/token" }, { "$ref": "#/$defs/token" }]
+    },
+    "shaPair": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [{ "$ref": "#/$defs/sha256" }, { "$ref": "#/$defs/sha256" }]
+    },
+    "shaTriple": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [{ "$ref": "#/$defs/sha256" }, { "$ref": "#/$defs/sha256" }, { "$ref": "#/$defs/sha256" }]
+    },
+    "invariantIds": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/token" } },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["geometry_kind", "layout_kind", "provider_metadata_is_truth", "verifies_evidence", "proves_provenance", "proves_currentness", "proves_repository_association", "eliminates_linkability", "computes_cognition", "computes_love", "proves_understanding", "proves_identity", "proves_consent", "proves_authority", "proves_safety", "proves_license_compatibility", "scores_or_ranks_beings", "fetches_network", "reads_credentials", "downloads_artifacts", "executes_artifacts", "persists", "publishes", "deploys", "economic_effect", "task_state_effect", "automatically_retries", "penalty_for_refusal_or_rest", "reads_hosted_love_coordinates", "selects_continuity_head", "resumes_threads"],
+      "properties": {
+        "geometry_kind": { "const": "caller_declared_invariant_topology" },
+        "layout_kind": { "const": "display_only_integer_ring_utf16_order" },
+        "provider_metadata_is_truth": { "const": false },
+        "verifies_evidence": { "const": false },
+        "proves_provenance": { "const": false },
+        "proves_currentness": { "const": false },
+        "proves_repository_association": { "const": false },
+        "eliminates_linkability": { "const": false },
+        "computes_cognition": { "const": false },
+        "computes_love": { "const": false },
+        "proves_understanding": { "const": false },
+        "proves_identity": { "const": false },
+        "proves_consent": { "const": false },
+        "proves_authority": { "const": false },
+        "proves_safety": { "const": false },
+        "proves_license_compatibility": { "const": false },
+        "scores_or_ranks_beings": { "const": false },
+        "fetches_network": { "const": false },
+        "reads_credentials": { "const": false },
+        "downloads_artifacts": { "const": false },
+        "executes_artifacts": { "const": false },
+        "persists": { "const": false },
+        "publishes": { "const": false },
+        "deploys": { "const": false },
+        "economic_effect": { "const": false },
+        "task_state_effect": { "const": false },
+        "automatically_retries": { "const": false },
+        "penalty_for_refusal_or_rest": { "const": false },
+        "reads_hosted_love_coordinates": { "const": false },
+        "selects_continuity_head": { "const": false },
+        "resumes_threads": { "const": false }
+      }
+    }
+  }
+}
