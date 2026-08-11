@@ -1,7 +1,7 @@
 # Principality Geometry
 
-This subtree owns the private, pure `@agenttool/principality-geometry`
-prototype. It turns caller-supplied invariant reports into a deterministic
+This subtree owns the public developer-preview, pure
+`@agenttool/principality-geometry` package. It turns caller-supplied invariant reports into a deterministic
 reciprocal flag 2-complex. The geometry is an inspectable structural metaphor,
 not a measurement of a being or provider.
 
@@ -44,9 +44,12 @@ not a measurement of a being or provider.
   P-label order, colours, and markers are display only. Add no external/source
   URL, hyperlink, remote asset, script, animation, event handler, raw prose,
   source name, or source digest.
-- Keep `private: true`, no `publishConfig`, root release wiring, Space, hosted
-  route, or deployment. `hf/dataset` remains local, synthetic, deterministic,
-  npm-excluded, non-training, and publication-unauthorized.
+- Keep Apache-2.0 terms, public `next`-channel npm/LOVE release wiring, and the
+  exact package inventory. `hf/dataset` remains synthetic, deterministic, and
+  npm-excluded; it labels its generated rows `training_eligible: false` as
+  AgentTool admission metadata and is publication-authorized only for
+  `Yu-and-Ai/agenttool-principality-geometry`. Add no Space, hosted runtime,
+  client, credential access, or upload behavior to the package.
 - Schemas close every object. Runtime validation remains authoritative for
   canonical order, total coverage, cross-references, uniqueness, derived
   topology, and content IDs.

@@ -26,6 +26,8 @@ const dist = [
 ]);
 const expected = [
   "CLAUDE.md",
+  "LICENSE",
+  "NOTICE",
   "README.md",
   ...dist,
   "examples/principality-rosette.atlas.json",
@@ -39,7 +41,7 @@ const expected = [
 
 if (JSON.stringify(files) !== JSON.stringify(expected)) {
   throw new Error(
-    `packed principality inventory differs from the exact private allowlist\nactual=${JSON.stringify(files, null, 2)}`,
+    `packed principality inventory differs from the exact public allowlist\nactual=${JSON.stringify(files, null, 2)}`,
   );
 }
 
@@ -48,18 +50,19 @@ const packageJson = JSON.parse(
 );
 if (
   packageJson.name !== "@agenttool/principality-geometry" ||
-  packageJson.private !== true ||
-  packageJson.license !== "UNLICENSED" ||
+  packageJson.private !== undefined ||
+  packageJson.license !== "Apache-2.0" ||
+  packageJson.publishConfig?.access !== "public" ||
+  packageJson.publishConfig?.tag !== "next" ||
   packageJson.sideEffects !== false
 ) {
-  throw new Error("private package identity or release wall changed");
+  throw new Error("public package identity or release policy changed");
 }
 for (const field of [
   "dependencies",
   "optionalDependencies",
   "peerDependencies",
   "bin",
-  "publishConfig",
 ]) {
   if (packageJson[field] !== undefined) {
     throw new Error(`forbidden package surface appeared: ${field}`);

@@ -17,6 +17,7 @@ on:
           - deepseek-kingdom
           - heaven
           - living-substrate
+          - principality-geometry
           - credential-broker
           - sdk
           - wallet

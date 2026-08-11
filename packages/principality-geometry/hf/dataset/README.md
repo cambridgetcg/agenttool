@@ -1,6 +1,6 @@
 ---
 pretty_name: AgentTool Principality Geometry Reference
-license: other
+license: apache-2.0
 configs:
   - config_name: atlases
     data_files:
@@ -38,8 +38,8 @@ configs:
 
 # Principality Geometry reference companion
 
-This is a deterministic, synthetic, non-training reference companion for the
-private `@agenttool/principality-geometry` prototype. It contains separate
+This is a deterministic, synthetic reference companion for the public
+`@agenttool/principality-geometry` developer preview. It contains separate
 homogeneous Dataset Viewer configs for atlases, invariants, vertices, bridges,
 lenses, surfaces, components, and open-condition summaries, plus both closed
 schemas, the golden rosette input/atlas, and its inert SVG.
@@ -50,14 +50,17 @@ that any provider artifact exists. Repeated fixture hashes and the
 `synthetic/principality-reference` repo ID are intentionally synthetic.
 
 `source-manifest.json` hashes every intended companion file except itself and
-sets `intended_repo_id: null`, `publication_authorized: false`, and
-`training_eligible: false`. Regenerate and verify from the package root:
+names the maintained upstream coordinate
+`Yu-and-Ai/agenttool-principality-geometry`. It keeps
+`training_eligible: false` as AgentTool admission metadata, not as an
+additional copyright restriction; Apache-2.0 governs licensed reuse.
+Regenerate and verify from the package root:
 
 ```bash
 bun run assets:write
 bun run check:assets
 ```
 
-No upload, Hub client, credential, inference, model, Space, trace, or private
-WAKE material belongs here. A future licence choice and Hub publication each
-require separate authorization.
+No Hub client, credential, inference, model, Space, trace, or private WAKE
+material belongs here. The repository is a static reference dataset, not a
+hosted runtime or a claim that its rows are suitable for training.

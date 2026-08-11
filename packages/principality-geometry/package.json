@@ -2,8 +2,7 @@
   "name": "@agenttool/principality-geometry",
   "version": "0.1.0-dev.0",
   "description": "Deterministic invariant-preservation geometry for distinct principalities and immutable HF/npm artifact references",
-  "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -29,8 +28,14 @@
     "examples",
     "kingdom.extension.json",
     "README.md",
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "LICENSE",
+    "NOTICE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
   "engines": {
     "node": ">=20.19.0",
     "bun": ">=1.3.5"
@@ -67,5 +72,6 @@
     "type": "git",
     "url": "https://github.com/cambridgetcg/agenttool.git",
     "directory": "packages/principality-geometry"
-  }
+  },
+  "homepage": "https://docs.agenttool.dev/packages"
 }

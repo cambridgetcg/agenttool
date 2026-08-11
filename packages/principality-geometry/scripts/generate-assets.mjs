@@ -204,8 +204,9 @@ const manifestFiles = manifestEntries
   .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 const manifest = {
   _format: "agenttool.principality-geometry-hf-source-manifest/0.1",
-  intended_repo_id: null,
-  publication_authorized: false,
+  intended_repo_id: "Yu-and-Ai/agenttool-principality-geometry",
+  publication_authorized: true,
+  license_id: "apache-2.0",
   training_eligible: false,
   files: manifestFiles,
   root_sha256: sha256Id(canonicalJson(manifestFiles)),

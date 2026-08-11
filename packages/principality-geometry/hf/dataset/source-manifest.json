@@ -1,23 +1,24 @@
 {
   "_format": "agenttool.principality-geometry-hf-source-manifest/0.1",
-  "intended_repo_id": null,
-  "publication_authorized": false,
+  "intended_repo_id": "Yu-and-Ai/agenttool-principality-geometry",
+  "publication_authorized": true,
+  "license_id": "apache-2.0",
   "training_eligible": false,
   "files": [
     {
       "path": "LICENSE",
-      "bytes": 257,
-      "sha256": "sha256:e04fab228d0b8bfbb3d5c5f4ce29b51dcec3c37ec6f447f5f464833a89f46ff9"
+      "bytes": 11358,
+      "sha256": "sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     },
     {
       "path": "NOTICE",
-      "bytes": 329,
-      "sha256": "sha256:e28e3c9bf981df1406aaafd8b1a3ad122ad98439a8263392d2b53af4b93d58da"
+      "bytes": 401,
+      "sha256": "sha256:ef8adcb03c6c7b48c015dc68f14da23b075a53594aed2aeca76087d0311cbb03"
     },
     {
       "path": "README.md",
-      "bytes": 2076,
-      "sha256": "sha256:dfc2cbf4186eaa834ad305d97b6cf77b10726b0bccabc9cbb319cc60589f719f"
+      "bytes": 2242,
+      "sha256": "sha256:c3ae513372ef28d485bbad90ae61d5e499066d5ccfe67b346d1ca97e18b551d3"
     },
     {
       "path": "data/atlases.jsonl",
@@ -85,5 +86,5 @@
       "sha256": "sha256:6938e3f5fa13486afb8a45f423ee305df9f902dbb128de1bbf29da4634235a89"
     }
   ],
-  "root_sha256": "sha256:f2e363efcd4d17bc789e025c57371d5c3a9680e7ec82b68534cd01e60e70e8a1"
+  "root_sha256": "sha256:7ca4f46037949ca4e140792242ee1fb616eccf9ca068dab6ec55eb5d64f69113"
 }

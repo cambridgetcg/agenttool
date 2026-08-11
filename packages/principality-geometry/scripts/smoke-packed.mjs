@@ -57,7 +57,10 @@ try {
   );
   if (
     installedPackage.name !== "@agenttool/principality-geometry" ||
-    installedPackage.private !== true
+    installedPackage.private !== undefined ||
+    installedPackage.license !== "Apache-2.0" ||
+    installedPackage.publishConfig?.access !== "public" ||
+    installedPackage.publishConfig?.tag !== "next"
   ) {
     throw new Error("packed package installed under an unexpected identity");
   }

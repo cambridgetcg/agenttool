@@ -1112,7 +1112,7 @@ exit 94
     expect(workflow).toContain("          - deepseek-kingdom");
     expect(workflow).toContain("          - wake-continuity");
     expect(workflow).toContain("          - kingdom-witness-lab");
-    expect(workflow).not.toContain("          - principality-geometry");
+    expect(workflow).toContain("          - principality-geometry");
     expect(workflow).toContain("          - skills-yutabase");
     expect(workflow).not.toContain("          - skills-wake-continuity");
     expect(workflow).toContain("          - heaven");

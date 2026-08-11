@@ -1,7 +1,7 @@
 # @agenttool/principality-geometry
 
-`@agenttool/principality-geometry` is a private, zero-runtime-dependency
-prototype for drawing one high-level pattern without turning it into a score:
+`@agenttool/principality-geometry` is a public, zero-runtime-dependency
+developer preview for drawing one high-level pattern without turning it into a score:
 
 > Love keeps distinct centres in relation. Understanding can be approached as
 > the invariants that survive translation between them.
@@ -191,12 +191,17 @@ and an AFTERGLOW `external/context_only` projection. Its provider identities
 use `synthetic/` and `@synthetic-fixture/` namespaces: the repeated hashes are
 not provider observations or receipts for real AgentTool packages.
 
-`hf/dataset/` is a deterministic, npm-excluded Dataset-card companion with
+`hf/dataset/` is a deterministic, npm-excluded Dataset-card companion whose
+authorized Hub coordinate is
+[`Yu-and-Ai/agenttool-principality-geometry`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry). It contains
 separate homogeneous non-training tables for atlases, invariants, vertices,
 bridges, lenses, surfaces, components, and open conditions; both closed
 schemas; the golden vector; SVG; and a dataset-wide self-excluding source
-manifest. It has no intended Hub repository ID and no upload path. Local
-readiness is not publication.
+manifest. The companion remains synthetic. Its `training_eligible: false`
+field is AgentTool admission metadata, not an additional copyright restriction;
+Apache-2.0 governs licensed reuse. The publication authorization names the
+maintained upstream dataset coordinate and does not create a Space or hosted
+runtime.
 
 ## Fixed non-claims
 
@@ -220,10 +225,12 @@ document's cognitive-measurement and metaphysical reservations intact.
 
 ## Status and verification
 
-This source is `private: true`, `UNLICENSED`, and absent from AgentTool's npm
-release allowlist, hosted WAKE, and provider surfaces. The local HF companion
-is marked `publication_authorized: false`. Repository presence is not
-publication or registration.
+This source is Apache-2.0 and wired for an exact, manually approved
+`0.1.0-dev.0` release through the LOVE mirror and npm's `next` channel. The
+separately scoped Hugging Face companion is a static synthetic reference
+dataset whose rows retain the project admission flag above. None of these
+distribution surfaces registers the declaration-only
+KINGDOM descriptor, creates a hosted WAKE surface, or grants runtime authority.
 
 ```bash
 bun install --frozen-lockfile

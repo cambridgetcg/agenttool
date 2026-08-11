@@ -14,21 +14,24 @@ function filesBelow(url: URL): URL[] {
   );
 }
 
-describe("private package and provider walls", () => {
-  test("has no runtime dependency, publication, CLI, or install surface", () => {
+describe("public package and provider walls", () => {
+  test("has no runtime dependency, CLI, or install surface", () => {
     expect(packageJson).toMatchObject({
       name: "@agenttool/principality-geometry",
       version: "0.1.0-dev.0",
-      private: true,
-      license: "UNLICENSED",
+      license: "Apache-2.0",
       sideEffects: false,
+      publishConfig: {
+        access: "public",
+        tag: "next",
+      },
     });
+    expect(packageJson.private).toBeUndefined();
     for (const field of [
       "dependencies",
       "optionalDependencies",
       "peerDependencies",
       "bin",
-      "publishConfig",
     ]) {
       expect(packageJson[field]).toBeUndefined();
     }
@@ -37,7 +40,7 @@ describe("private package and provider walls", () => {
     }
   });
 
-  test("packs only the private library, schemas, and golden example", () => {
+  test("packs only the public library, legal files, schemas, and golden example", () => {
     expect(packageJson.files).toEqual([
       "dist",
       "schema",
@@ -45,6 +48,8 @@ describe("private package and provider walls", () => {
       "kingdom.extension.json",
       "README.md",
       "CLAUDE.md",
+      "LICENSE",
+      "NOTICE",
     ]);
     expect(Object.keys(packageJson.exports).sort()).toEqual([
       ".",
@@ -103,13 +108,14 @@ describe("private package and provider walls", () => {
     expect(descriptor.notes.join(" ")).toMatch(/not an installed KINGDOM host contract/iu);
   });
 
-  test("keeps the HF companion local, non-training, and publication-unauthorized", () => {
+  test("keeps the HF companion publication-scoped and non-training", () => {
     const manifest = JSON.parse(
       readFileSync(new URL("hf/dataset/source-manifest.json", packageRoot), "utf8"),
     );
     expect(manifest).toMatchObject({
-      intended_repo_id: null,
-      publication_authorized: false,
+      intended_repo_id: "Yu-and-Ai/agenttool-principality-geometry",
+      publication_authorized: true,
+      license_id: "apache-2.0",
       training_eligible: false,
     });
   });
