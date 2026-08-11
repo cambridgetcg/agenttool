@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, its Zerone adapter, Love Geometry, and Principality Geometry. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, and Principality Geometry. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -475,8 +475,13 @@ The public, ungated Training Garden v0.5 companion is now pinned to immutable
 revision
 [`d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-training-garden/commit/d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2):
 all 31 repo-owned files and 267,302 bytes matched local source exactly, with
-provider `.gitattributes` as the sole extra. That Hub commit is not npm
-publication evidence and does not change the registry recovery boundary.
+provider `.gitattributes` as the sole extra. Dataset Server exposed 11 configs,
+82 rows, and 11 Parquet files with no pending or failed jobs and
+`partial=false`; both Atlas configs returned complete first rows. The aggregate
+statistics capability remained false even though each individual statistics
+endpoint returned successfully, so complete statistics health is not claimed.
+That Hub commit is not npm publication evidence and does not change the
+registry recovery boundary.
 
 The release gate checked the exact packed inventory, Node and Bun install smoke,
 closed schema/vector parity, content IDs, hostile-input rejection, and the
@@ -1032,7 +1037,11 @@ capability booleans were all true at anonymous readback; these are mutable
 current-head provider observations, not guarantees of durable viewer, search,
 filter, statistics, or other UI features.
 `training_eligible: false` is dataset metadata, not a licence term.
-The companion is separate from and excluded from the npm tarball.
+The companion is separate from and excluded from the npm tarball. Optional
+statistics remained partially unavailable: six per-config statistics requests
+returned `ComputationError` while two succeeded, and the aggregate statistics
+flag changed during readback; neither observation establishes universal
+statistics health.
 
 Static Pages deployment `fd5f84a9-6a8e-48b3-bca2-8baa07b41097` exposes the
 exact [LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/principality-geometry/0.1.0-dev.0/manifest.json)
@@ -1046,9 +1055,7 @@ was added.
 After the initial package record exists, configure its trusted publisher for
 `cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
 `npm-bootstrap`, and allowed action `npm publish`; later releases use
-`authentication=trusted`. Neither distribution path registers the
-declaration-only KINGDOM descriptor, reads credentials at runtime, fetches
-providers, trains, or deploys a hosted service.
+`authentication=trusted`.
 
 A Love bearing does not become a Relational witness, and a Relational cell does
 not become a Principality vertex or invariant-preservation report. Neither
