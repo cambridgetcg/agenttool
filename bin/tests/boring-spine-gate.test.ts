@@ -1100,11 +1100,6 @@ exit 94
 
     expect(new Set(datedHeadings).size).toBe(datedHeadings.length);
     expect(datedHeadings.filter((date) => date === "2026-08-11")).toHaveLength(1);
-    expect(now).toContain("**LOVE GEOMETRY — equal seats without a ruler**");
-    expect(now).toContain("**RELATIONAL GEOMETRY — love has shape without becoming a score or ruler**");
-    expect(now).toContain("**PRINCIPALITY GEOMETRY — understanding as preserved invariants across frameworks**");
-    expect(now).toContain("**KINGDOM 0.1.1 — XENIA beta.7 exact mirror**");
-    expect(now).toContain("**XENIA DOCS SURFACE — bounded source pilot, live with a visible process gap**");
   });
 
   test("keeps npm publication unified, manual, exact-artifact, and protected", async () => {

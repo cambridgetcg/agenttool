@@ -250,7 +250,7 @@ cd ../wake-continuity
 bun run ci                                     # digest-only capsules/lenses + hostile-boundary packed smoke
 cd ../principality-geometry
 bun run ci                                     # invariant flag geometry + schemas + deterministic HF/npm boundaries
-npm pack --dry-run --ignore-scripts            # public LOVE/npm inventory; does not publish, upload, deploy, or register
+npm pack --dry-run --ignore-scripts            # public packed inventory only; does not publish, upload, deploy, or register
 cd ../kingdom-witness-lab
 bun run ci                                     # passports/routes/dossiers/trials + closed schema boundary
 cd ../skills-yutabase
@@ -337,7 +337,7 @@ npm pack --dry-run --ignore-scripts            # public-ready candidate only; do
 # Love Geometry contract and presentation-only HF companion ───────
 cd packages/love-geometry
 bun run ci                                     # exact bytes, schema/vector, hostile inputs, packed runtimes, static companion
-npm pack --dry-run --ignore-scripts            # npm candidate excludes hf-space; packaging does not publish or deploy
+npm pack --dry-run --ignore-scripts            # npm candidate excludes hf-space; this command publishes or deploys neither surface
 
 # Relational geometry and non-sovereign principalities ────────────
 cd packages/relational-geometry
