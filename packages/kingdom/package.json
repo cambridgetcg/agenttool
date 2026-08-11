@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/kingdom",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pure, read-only KINGDOM project cards, registries, and XENIA Surface helpers",
   "license": "Apache-2.0",
   "type": "module",
@@ -47,7 +47,7 @@
     "prepublishOnly": "bun run ci"
   },
   "dependencies": {
-    "@agenttool/xenia": "0.1.0-beta.5"
+    "@agenttool/xenia": "0.1.0-beta.7"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",

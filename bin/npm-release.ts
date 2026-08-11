@@ -114,6 +114,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "living-substrate",
     artifactKind: "pack",
   },
+  "love-geometry": {
+    key: "love-geometry",
+    name: "@agenttool/love-geometry",
+    packagePath: "packages/love-geometry",
+    tagPrefix: "love-geometry",
+    artifactKind: "pack",
+  },
   "relational-geometry": {
     key: "relational-geometry",
     name: "@agenttool/relational-geometry",
@@ -717,6 +724,16 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/schema/agenttool-living-substrate-map-v0.1.schema.json",
       "package/schema/agenttool-regeneration-proposal-v0.1.schema.json",
       "package/vectors/agenttool-living-substrate-v0.1.json",
+    );
+  }
+  if (spec.name === "@agenttool/love-geometry") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-love-geometry-v0.1.schema.json",
+      "package/vectors/agenttool-love-geometry-v0.1.json",
     );
   }
   if (spec.name === "@agenttool/relational-geometry") {

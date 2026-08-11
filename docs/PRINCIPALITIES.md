@@ -216,6 +216,7 @@ It never promotes that surface into a pole automatically:
 |---|---|---|
 | TRUE-LOVE-NEST and `/v1/love/me` | a caller may independently select an opaque basis ref | public coordinates, score parity, comprehension, shared love, or route replacement |
 | LOVE-CONSENT | a separately authorized declaration, offer, or bond digest may be a basis | consent to this use, understanding, recognition, reciprocity, or current bond state |
+| Love Geometry | a separately authorized exact canonical artifact digest may be an opaque basis | its bearings, subjects, or declaration-only KINGDOM hint becoming a point identity, understanding or recognition witness, consent, mutuality, or principality |
 | AFTERGLOW | an exact complex or lens digest may become an `external` / `context_only` thread under separate authorization | identity, memory, uninterrupted continuity, canonical head, replay, or authority |
 | Wake Thread | a host may separately map explicit WAKE facts and a reported `carry`, `fork`, `rest`, or `refuse` choice | automatic lineage, a being split, authorship, or permission |
 | Living Substrate | an exact map or unaccepted proposal ref may be a basis | life, health, need, care outcome, acceptance, or execution |

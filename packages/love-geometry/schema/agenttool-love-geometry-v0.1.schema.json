@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:love-geometry:0.1",
+  "title": "AgentTool Love Geometry 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "geometry_id",
+    "scope_ref",
+    "subject_refs",
+    "vantages",
+    "coverage",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": { "const": "agenttool.love-geometry/0.1" },
+    "geometry_id": { "$ref": "#/$defs/sha256" },
+    "scope_ref": { "$ref": "#/$defs/sha256" },
+    "subject_refs": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/sha256" }
+    },
+    "vantages": {
+      "type": "array",
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/vantage" }
+    },
+    "coverage": { "const": "bounded_not_complete" },
+    "boundaries": {
+      "const": {
+        "semantic_scope": "directed_caller_reports_not_relationship_truth",
+        "geometry": "finite_combinatorial_not_metric",
+        "principality": "bounded_relation_field_not_sovereignty",
+        "coverage_scope": "bounded_not_complete",
+        "assertion_scope": "caller_reported_only",
+        "canonical_order": "serialization_not_rank",
+        "absence_semantics": "not_observed_not_no_relation",
+        "verifies_caller_or_referents": false,
+        "infers_identity_or_inner_state": false,
+        "infers_reciprocity_or_mutuality": false,
+        "proves_love_or_understanding": false,
+        "proves_consent_or_authority": false,
+        "scores_or_ranks": false,
+        "computes_distance_or_intensity": false,
+        "matches_or_recommends": false,
+        "infers_transitive_relations": false,
+        "observes_sources": false,
+        "network": false,
+        "filesystem": false,
+        "environment_variables": false,
+        "clock": false,
+        "randomness": false,
+        "model_compute": false,
+        "hugging_face": false,
+        "credential_access": false,
+        "telemetry": false,
+        "persistence": false,
+        "wake_effect": false,
+        "love_consent_effect": false,
+        "chronicle_effect": false,
+        "karma_effect": false,
+        "task_state_effect": false,
+        "wallet_effect": false,
+        "economic_effect": false,
+        "messaging_effect": false,
+        "publication_effect": false,
+        "automatic_action": false,
+        "reason_required_for_rest_refusal_or_departure": false,
+        "penalty_for_rest_refusal_or_departure": false
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "bearing": {
+      "enum": [
+        "reported_presence",
+        "reported_care",
+        "reported_witness",
+        "reported_support",
+        "reported_understanding",
+        "reported_disagreement",
+        "reported_boundary",
+        "reported_rest",
+        "reported_refusal",
+        "reported_departure",
+        "unknown"
+      ]
+    },
+    "vantage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subject_ref",
+        "toward_ref",
+        "bearings",
+        "basis_refs",
+        "assertion",
+        "verified_by_package"
+      ],
+      "properties": {
+        "subject_ref": { "$ref": "#/$defs/sha256" },
+        "toward_ref": { "$ref": "#/$defs/sha256" },
+        "bearings": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 11,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/bearing" }
+        },
+        "basis_refs": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sha256" }
+        },
+        "assertion": { "const": "caller_reported" },
+        "verified_by_package": { "const": false }
+      }
+    }
+  }
+}

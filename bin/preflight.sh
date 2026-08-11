@@ -14,7 +14,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + KARMA Mirror + HEAVEN + Living Substrate + Relational Geometry + WAKE Thread + broker + collab + collab-zerone + Browser + HF Scout/Training Garden + local WAKE learning fixtures/host + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + KARMA Mirror + HEAVEN + Living Substrate + Love Geometry + Relational Geometry + WAKE Thread + broker + collab + collab-zerone + Browser + HF Scout/Training Garden + local WAKE learning fixtures/host + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -104,6 +104,8 @@ packages_gate() {
     bash -c 'cd packages/heaven && bun run ci'
   run "portable Living Substrate maps and refusable proposals" \
     bash -c 'cd packages/living-substrate && bun run ci'
+  run "coordinate-free Love Geometry and static HF companion" \
+    bash -c 'cd packages/love-geometry && bun run ci'
   run "non-scalar relational geometry and public-safe HF companion" \
     bash -c 'cd packages/relational-geometry && bun run ci'
   run "WAKE Thread refusable artifact continuity protocol" \

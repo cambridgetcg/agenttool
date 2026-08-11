@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, the future Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only. Relational Geometry's public-safe Hugging Face dataset remains a separate release surface with its own immutable revision and readback.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet, and its Zerone adapter; Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter are intentionally npm-only. Relational Geometry's public-safe Hugging Face dataset remains a separate release surface with its own immutable revision and readback.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -53,6 +53,29 @@ not every registry fallback: npm can expose the sole version of a brand-new
 package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
+
+`@agenttool/love-geometry@0.1.0-dev.0` is currently an allowlisted source
+candidate only. The release path requires the exact annotated
+`love-geometry-v0.1.0-dev.0` tag and npm `next`; allowlisting does not establish
+the tag, reviewed commit, GitHub Release, registry package, or Hugging Face
+Space. Its presentation-only `hf-space/` companion is intentionally absent
+from npm archive bytes and must be reviewed and published separately.
+Two consecutive local packs of the current candidate were byte-identical at
+19,432 bytes with SHA-256
+`7353c6007d7b205158e828e3653012d716b16456de8f2fb6ba6f44f16dfe26db`.
+This reproducible local observation is not a retained release artifact,
+registry readback, or publication receipt.
+
+`@agenttool/kingdom@0.1.1` is likewise a source candidate, not a rewrite of the
+verified public 0.1.0 bytes. It advances the exact `@agenttool/xenia`
+dependency to `0.1.0-beta.7`; the Rights and Surface seams consumed by Kingdom
+are byte-identical to beta.5. A later release decision requires annotated tag
+`kingdom-v0.1.1` and the protected workflow. Source versioning and allowlisting
+do not establish that tag, GitHub artifact, npm publication, or dist-tag state.
+Two consecutive local packs of this candidate were byte-identical at 26,552
+bytes with SHA-256
+`66e19020f5fc5ae5bdad7aef0deea387034e710762263fcab6fb8e318dc35b2a`;
+those ephemeral local packs are not a release record.
 
 GitHub mirror recovery is independent of npm dist-tag state and still requires
 the exact prepared artifact. npm recovery intentionally requires the requested

@@ -11,8 +11,12 @@ behavior, certify conformance, or bind anyone to a covenant.
 
 ## Install
 
+The current tree is the source candidate for `0.1.1`. Repository presence does
+not establish that version's registry publication. After an exact release is
+independently observed, install it without a mutable tag:
+
 ```sh
-npm install @agenttool/kingdom@0.1.0
+npm install @agenttool/kingdom@0.1.1
 ```
 
 Node.js 22 or newer is required because the exact XENIA dependency has the
@@ -61,9 +65,11 @@ in wire form, so `validateKingdomCard()` requires the normalized `adopts`
 property.
 
 The adoption ID `xenia.rights/0.1` comes from the exact
-`@agenttool/xenia@0.1.0-beta.5` dependency. An `adopts` entry is a voluntary
-declaration only. It is not proof of practice, permission, authority, or
-XENIA conformance.
+`@agenttool/xenia@0.1.0-beta.7` dependency. Its Rights bytes are unchanged from
+the beta.5 source used by the published Kingdom 0.1.0 artifact; the dependency
+update creates no new adoption or practice claim. An `adopts` entry is a
+voluntary declaration only. It is not proof of practice, permission,
+authority, or XENIA conformance.
 
 ## Derived registry
 

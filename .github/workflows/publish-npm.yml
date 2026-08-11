@@ -17,6 +17,7 @@ on:
           - deepseek-kingdom
           - heaven
           - living-substrate
+          - love-geometry
           - relational-geometry
           - credential-broker
           - sdk

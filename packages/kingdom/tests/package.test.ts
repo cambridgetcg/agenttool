@@ -11,9 +11,9 @@ const packageRoot = join(import.meta.dir, "..");
 describe("publishable package boundary", () => {
   test("pins XENIA exactly and publishes compiled code, schemas, and legal files only", () => {
     expect(packageJson.name).toBe("@agenttool/kingdom");
-    expect(packageJson.version).toBe("0.1.0");
+    expect(packageJson.version).toBe("0.1.1");
     expect(packageJson.dependencies).toEqual({
-      "@agenttool/xenia": "0.1.0-beta.5",
+      "@agenttool/xenia": "0.1.0-beta.7",
     });
     expect(packageJson.engines.node).toBe(">=22");
     expect(packageJson.files).toEqual([
@@ -157,7 +157,7 @@ describe("publishable package boundary", () => {
         ),
       ).toBe(false);
 
-      expect(packed?.filename).toBe("agenttool-kingdom-0.1.0.tgz");
+      expect(packed?.filename).toBe("agenttool-kingdom-0.1.1.tgz");
       const artifact = join(packDirectory, packed!.filename);
       const textEntries = files
         .filter((path) =>
