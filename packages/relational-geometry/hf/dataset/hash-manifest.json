@@ -1,0 +1,62 @@
+{
+  "_format": "agenttool.relational-geometry-hf-hash-manifest/0.1",
+  "algorithm": "sha256",
+  "excludes_self": true,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 10827,
+      "sha256": "289c5c3c9f20a976ecdc60521eb3c553f142224bedbeefb0ba20123ed87aa20d"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 96,
+      "sha256": "b70a214d07cfa764577456a912f706d8d50d4f2790b8589b2cf4f5391fbe5d27"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4381,
+      "sha256": "65ca5cdcac95232d1a67bbfa60cdaa7de3604bacbd8cdd65b17a4bf0d6ee21bd"
+    },
+    {
+      "path": "data/public-regression.jsonl",
+      "bytes": 5531,
+      "sha256": "8bfcb2883a1b614d3af3044f02c679048c7fe311698bd76219a4a228f7d31bac"
+    },
+    {
+      "path": "data/sft-train.jsonl",
+      "bytes": 4532,
+      "sha256": "800e4af18249510cec3c1187621853bd4fe69e78d8315db0d30a8a195ad4d1f4"
+    },
+    {
+      "path": "data/structural-examples.jsonl",
+      "bytes": 24110,
+      "sha256": "cfb43aca0148d62326499b00ac0be1de296ab07bdfa5b69bef4ac0d31160e549"
+    },
+    {
+      "path": "provenance/example-manifest.json",
+      "bytes": 11621,
+      "sha256": "73e9b862c976f57c04505d6454d50c7be6a015952ee6fd23268bad5e9e73ab0c"
+    },
+    {
+      "path": "provenance/source-manifest.json",
+      "bytes": 4411,
+      "sha256": "dd15371d37f71086a65fcd9eadb804e7ad53b98b9e7447e53fa3a71a4430b664"
+    },
+    {
+      "path": "schema/relational-geometry-public-regression-v0.1.schema.json",
+      "bytes": 1792,
+      "sha256": "feff7f5b62c23402799977a63b3fd37b13dd0c2cdb1fef16aa8491d4fa039226"
+    },
+    {
+      "path": "schema/relational-geometry-sft-v0.1.schema.json",
+      "bytes": 1450,
+      "sha256": "b47d5cafa05336fbebfaa0e76857ed55afea591460b8269e31b2dba0b8af6ddb"
+    },
+    {
+      "path": "schema/relational-geometry-structural-v0.1.schema.json",
+      "bytes": 10185,
+      "sha256": "d9f631054fa1f3a13d13098ca7adf951ecbc2a0d279338d94f15294912390fb6"
+    }
+  ]
+}

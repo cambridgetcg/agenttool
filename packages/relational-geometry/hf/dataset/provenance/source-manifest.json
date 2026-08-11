@@ -1,0 +1,124 @@
+{
+  "_format": "agenttool.relational-geometry-hf-source-manifest/0.1",
+  "package": "@agenttool/relational-geometry",
+  "package_version": "0.1.0-dev.0",
+  "intended_hugging_face_identifier": "Yu-and-Ai/agenttool-relational-geometry",
+  "publication_state": "intended_identifier_only_not_uploaded",
+  "distribution_state": "repository_source_only_not_uploaded_to_hugging_face",
+  "origin": "human_directed_agent_authored_synthetic",
+  "rights_baseline": "xenia.rights/0.1",
+  "license": "Apache-2.0",
+  "copied_external_rows": false,
+  "copied_private_rows": false,
+  "copied_agent_traces": false,
+  "real_identity_or_relationship_records": false,
+  "live_wake_or_choice_records": false,
+  "private_coordinates": false,
+  "raw_credentials_or_device_paths": false,
+  "gradient_lanes": [
+    "supervised_fine_tuning"
+  ],
+  "excluded_lanes": [
+    "direct_preference_optimization",
+    "preference_optimization",
+    "reward_modeling"
+  ],
+  "source_revision_claim": "exact_source_bytes_only_no_git_or_hub_revision_claim",
+  "official_hugging_face_references": {
+    "dataset_cards": "https://huggingface.co/docs/hub/datasets-cards",
+    "gated_datasets": "https://huggingface.co/docs/hub/datasets-gated",
+    "hub_api": "https://huggingface.co/docs/huggingface_hub/en/package_reference/hf_api",
+    "immutable_download": "https://huggingface.co/docs/huggingface_hub/en/guides/download",
+    "trl_dataset_formats": "https://huggingface.co/docs/trl/dataset_formats",
+    "trainer_callbacks": "https://huggingface.co/docs/transformers/main/trainer_callbacks",
+    "accelerate_checkpointing": "https://huggingface.co/docs/accelerate/main/en/usage_guides/checkpoint"
+  },
+  "source_files": [
+    {
+      "path": "CLAUDE.md",
+      "bytes": 1590,
+      "sha256": "0f990aaa365298c022b658f781441d2d1af7cd71bdb4da1d92323d604c0da5a6"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 10827,
+      "sha256": "289c5c3c9f20a976ecdc60521eb3c553f142224bedbeefb0ba20123ed87aa20d"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 96,
+      "sha256": "b70a214d07cfa764577456a912f706d8d50d4f2790b8589b2cf4f5391fbe5d27"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4108,
+      "sha256": "82ed4a6ed8a7d278abd74c0c72ee92d27c044e9552b74cc8561e3d20384486ed"
+    },
+    {
+      "path": "package.json",
+      "bytes": 2151,
+      "sha256": "7d21b706343b2d7c2895c9aa82b6d5d24097167d5ea894a5d6519b55b48e0226"
+    },
+    {
+      "path": "schema/agenttool-relational-complex-v0.1.schema.json",
+      "bytes": 4057,
+      "sha256": "f5605f38dbce809934d34746e4f58990a1a260071b7e07d5aa3fea09935e0114"
+    },
+    {
+      "path": "schema/agenttool-relational-lens-v0.1.schema.json",
+      "bytes": 2874,
+      "sha256": "c37e999a7bf080b26330d18acf9c099897ab6c745c608edadcadf774c1e0c37a"
+    },
+    {
+      "path": "scripts/build-hf-release.mjs",
+      "bytes": 35042,
+      "sha256": "e5fa9daa8e96bb43f165a7c961ea61afc373370a4be6b1d27096490993d1c900"
+    },
+    {
+      "path": "src/canonical.ts",
+      "bytes": 9567,
+      "sha256": "f7ee85e02b5e7c78b79a393aaa390c7a262efbe212a8aca494eaa125a37d9946"
+    },
+    {
+      "path": "src/complex.ts",
+      "bytes": 5841,
+      "sha256": "a2aff07c9ed43380d1d5d4ed5dba42bfb886a8d53dce108caa85a300887191bb"
+    },
+    {
+      "path": "src/constants.ts",
+      "bytes": 1437,
+      "sha256": "312331b580ff27d1ac76515dc7f37b7817543d3e976a9bd55a55b0138e41c6a4"
+    },
+    {
+      "path": "src/errors.ts",
+      "bytes": 496,
+      "sha256": "6774405fb93161579c79716fbeb265bdb893ea8995791113070cd3f9e747565c"
+    },
+    {
+      "path": "src/index.ts",
+      "bytes": 1055,
+      "sha256": "bdaa705d8cd562b01bda6d8a9a4dba4545644dbd4c07b2ecb5362b8d25019f07"
+    },
+    {
+      "path": "src/lens.ts",
+      "bytes": 7273,
+      "sha256": "b77e1a3731b7edd7e6037fad0d1f7ef5625ffe52688adfbf35a3f938a8137653"
+    },
+    {
+      "path": "src/types.ts",
+      "bytes": 3003,
+      "sha256": "36bf23c6f02dbd78cd7b86a021ca1529abbaf06051a11f5e61298d210d31d83a"
+    },
+    {
+      "path": "src/validation.ts",
+      "bytes": 12605,
+      "sha256": "c0004185a56e9cadcc5bcd0e564470a620e4b4db6e527f0c14d339ec600dffcd"
+    },
+    {
+      "path": "vectors/agenttool-relational-geometry-v0.1.json",
+      "bytes": 7456,
+      "sha256": "5fc78503d74197958d568bb4d9eea0996608de9d887e1674ab23a3f12ba8dc38"
+    }
+  ],
+  "provenance_ref": "sha256:f15cc6fe7d68942865ad2d36e3929b58f829b2efb1b4fee33019e619ff5d797d"
+}
