@@ -16,6 +16,7 @@ import {
   registryPackagePath,
   releaseSpec,
   requiredArchiveEntries,
+  shouldScanArchiveEntryForSecrets,
   prepareReleaseWorkspaces,
   validateNpmTagForVersion,
   workspaceInstallArguments,
@@ -77,6 +78,16 @@ function registryFixture(): {
 }
 
 describe("standard npm release policy", () => {
+  test("scans bundled JSONL dataset rows for secret signatures", () => {
+    expect(shouldScanArchiveEntryForSecrets(
+      "package/hf/dataset/data/structural-examples.jsonl",
+      128,
+    )).toBe(true);
+    expect(shouldScanArchiveEntryForSecrets("package/data/ROWS.JSONL", 2_000_000)).toBe(true);
+    expect(shouldScanArchiveEntryForSecrets("package/data/rows.jsonl", 2_000_001)).toBe(false);
+    expect(shouldScanArchiveEntryForSecrets("package/model/checkpoint.bin", 128)).toBe(false);
+  });
+
   test("mirrors reviewed bytes without depending on optional npm state", async () => {
     const script = await readFile(join(import.meta.dir, "..", "npm-release.ts"), "utf8");
     const mirrorBody =

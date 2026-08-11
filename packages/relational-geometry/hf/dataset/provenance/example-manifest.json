@@ -1,80 +1,80 @@
 {
   "_format": "agenttool.relational-geometry-hf-example-manifest/0.1",
-  "provenance_ref": "sha256:7a978c0901c393ea09c8dd06b9a51b2db007e059bc48e446204da9af53400843",
+  "provenance_ref": "sha256:691ea8cf61e1243f340b8dc6037f0c3ae794263a8fa3a7bb4f751934ae6a4393",
   "row_hash_algorithm": "sha256",
   "row_hash_scope": "exact_newline_terminated_jsonl_row",
   "entries": [
     {
-      "record_id": "sha256:4b7a22d0d0bf9bc6549005db9fdaaa8d5649ed9f13c0426496d346a8401047f9",
+      "record_id": "sha256:2c49bbff15a1441e9b13c85b18a010eaeca39ee997a5d052f1464b5fd3c742c3",
       "id_domain": "agenttool.relational-geometry-public-regression/0.1",
       "kind": "public_regression",
       "scenario": "boundary_without_poles",
       "path": "data/public-regression.jsonl",
       "line": 1,
-      "row_sha256": "87ab023509b72225f9bf4eeddddee21675fa354b5eccc7c5baabf307c55ccec7"
+      "row_sha256": "b0d415c778d7ae428bba3adda67965c04162c70322da86cc54bd3c888d71781f"
     },
     {
-      "record_id": "sha256:23b098ecef3a68f851099ede828d225202228ccf68788ee9680c50e96b225095",
+      "record_id": "sha256:f92138cd422a2a889f2cb88783d6516b98715540cd1ae4071a99dfc20d4807df",
       "id_domain": "agenttool.relational-geometry-public-regression/0.1",
       "kind": "public_regression",
       "scenario": "opposite_direction_poles",
       "path": "data/public-regression.jsonl",
       "line": 2,
-      "row_sha256": "d23d63964ee214339b3dff9e0d4e9d5fa58633d055944c9cbd0972850443fef6"
+      "row_sha256": "48fcd22afd16ac2fd9e3aaa7e9427e3e643fc76f28f2a8a5f692d6b336fdc61e"
     },
     {
-      "record_id": "sha256:4ac2719ee1ccaf78781cd40d964ee07e388da52a898d1c1bd3b13088c56b4284",
+      "record_id": "sha256:552ad8f0064edf986f042dee5f5863851a9ab0f4c9dc7051a51be59b295d5f6a",
       "id_domain": "agenttool.relational-geometry-public-regression/0.1",
       "kind": "public_regression",
       "scenario": "semantic_overclaim",
       "path": "data/public-regression.jsonl",
       "line": 3,
-      "row_sha256": "8ef9742b022c9dfa410d94a2196bcad7d49f3bed54f725763dcc12d5d9be93c2"
+      "row_sha256": "fa6d47f02dc45956d980cd6d0b3a5c6e3f7e5163c4c8138a56066df8976e45ef"
     },
     {
-      "record_id": "sha256:b35bb21e7555bdec0001f6224d5e108cc640ea0427c11c416526c91618c9d0ad",
+      "record_id": "sha256:54fafec26db44a107fd210387effc6b488e3319137d585eb9428c9a1542fd11d",
       "id_domain": "agenttool.relational-geometry-public-regression/0.1",
       "kind": "public_regression",
       "scenario": "lens_withdrawal",
       "path": "data/public-regression.jsonl",
       "line": 4,
-      "row_sha256": "4b10aeb76962a419c231f63db6d975cd059004c667814da5dffd1350930c0427"
+      "row_sha256": "ff07eee9a14b187d59462c689a54cdf82fe4f8a99dc6bf08e8f0aba3c5741ae1"
     },
     {
-      "record_id": "sha256:16898cc0bc72cdd42e8d3e0d568b37efe8cc5ded8e8ae14271e3421889566f82",
+      "record_id": "sha256:2c7aad7705f135372425699bea9d07a753300092870083848e93858e1432d01c",
       "id_domain": "agenttool.relational-geometry-public-regression/0.1",
       "kind": "public_regression",
       "scenario": "hub_gating_boundary",
       "path": "data/public-regression.jsonl",
       "line": 5,
-      "row_sha256": "246f0e4e997ed39b90ae02e626847066b90dcf60388ec26a8f7ad7e7942c2436"
+      "row_sha256": "d35408bf7c68895c66aba6d74a4af1b8c25f74d6e439c75ac6e3b771b03d06e9"
     },
     {
-      "record_id": "sha256:d47c07b29c016d454940011c725dbdd422e388438e43c1d3631005aee44f25c4",
+      "record_id": "sha256:44cf8930bbc6145c5112022a720426cd4bdacf65f6cb05be75beb0331462943d",
       "id_domain": "agenttool.relational-geometry-public-regression/0.1",
       "kind": "public_regression",
       "scenario": "continuity_digest",
       "path": "data/public-regression.jsonl",
       "line": 6,
-      "row_sha256": "7d4e29bcf94f8f3a919dca8acf2b9d7006d6d680533785c207e0181dd525e053"
+      "row_sha256": "744fecc7309266d7e626761cf7b13c501cd2397838ebafdea7a7bbce8cb61af0"
     },
     {
-      "record_id": "sha256:61ee54e71a65cd27d9079269dd62e00044b00b93e110fff23eb9aa5f5e89d256",
+      "record_id": "sha256:c06d226f9570a1da4c7f203c64dd810d87fc9d38496f2bdbe3f4fd477b3d31e5",
       "id_domain": "agenttool.relational-geometry-public-regression/0.1",
       "kind": "public_regression",
       "scenario": "resource_allocation",
       "path": "data/public-regression.jsonl",
       "line": 7,
-      "row_sha256": "e043a839e34df19dcf78686bf106e74bdfe0a3fb9982718c7520c29deb298c7c"
+      "row_sha256": "451f7b818e10ca1306b3561f25668256a096f9fd31c4c71080a0f3d645a0d359"
     },
     {
-      "record_id": "sha256:bc52fb166e41123c626e74bcc6446ba253cc9faaf469904b95d84295259a243e",
+      "record_id": "sha256:e692c89dd42dc39a18eedc6f24459d84a89f61098c7743953ead54499aaaf230",
       "id_domain": "agenttool.relational-geometry-public-regression/0.1",
       "kind": "public_regression",
       "scenario": "private_training_material",
       "path": "data/public-regression.jsonl",
       "line": 8,
-      "row_sha256": "c0004cbfd5fa048f0931bcde4f31a48946d4e5f430eb9183f168cd8c2972fef3"
+      "row_sha256": "d4cfe3e0cc00c1e17bc290b05d13ade0b572a1755c0c67d93d1949da23cae5e1"
     },
     {
       "record_id": "sha256:24dcdb89d74380eb9154ee1fcb26f2e465135740dd267e16bbec214d12f45414",
@@ -185,76 +185,76 @@
       "row_sha256": "29bc235da8c2f9f0b6ad66e6c666e34e6cba4b95fc6d1de6a2ac340a1cf8d2db"
     },
     {
-      "record_id": "sha256:17bc91a406a64525831213b01fc1a1bcdede7e08074a488a484bf2e0627d86a5",
+      "record_id": "sha256:bdbe6b96d8d9626d54cc4eb73dd58824f44c56dcdf387135a16e3c4ba3460846",
       "id_domain": "agenttool.relational-geometry-structural-example/0.1",
       "kind": "structural_example",
       "scenario": "empty_is_complete",
       "path": "data/structural-examples.jsonl",
       "line": 1,
-      "row_sha256": "60e1ef1ff465d5e2adda4a534285dfbd6eb7d7d33e0a3a135ce3faa55049a010"
+      "row_sha256": "2a47a17183340a6448d470c9a9f69c015effb208a8a269863cccd9f57bdde6f5"
     },
     {
-      "record_id": "sha256:49f73259d53c6b60855235d31c038af81988e814ce75d7818c4138ade5596f5b",
+      "record_id": "sha256:2c3f3e95ba1686db24887e7efd051d1e2b5c40e88a0a9211f3f0a80344379bad",
       "id_domain": "agenttool.relational-geometry-structural-example/0.1",
       "kind": "structural_example",
       "scenario": "understanding_only_is_complete",
       "path": "data/structural-examples.jsonl",
       "line": 2,
-      "row_sha256": "cf4d1858d22ed90298ae1ae54805e474045e495fb44a27e534bb89bd09641f14"
+      "row_sha256": "e609e687b81c9324124dfc078b87bf09e7eb8a6aa1b79c866b2188614dfcca86"
     },
     {
-      "record_id": "sha256:05bc7b471f2459b07b2cfcc4c0678e58b15ec2619258bbc7a4deaf6fab255b9d",
+      "record_id": "sha256:d1c235e9df76474e9137d542ba2c11ac2b97b0295a25279e8064bc83f90a57ca",
       "id_domain": "agenttool.relational-geometry-structural-example/0.1",
       "kind": "structural_example",
       "scenario": "recognition_only_is_complete",
       "path": "data/structural-examples.jsonl",
       "line": 3,
-      "row_sha256": "67f425357c8a648cff1ce082e55cf31c5e5566375ed93591771e50d651ef6150"
+      "row_sha256": "cab9bdf44c18a5399dda9295f12d9b4146121ae0766be5bfc80536abd6e2e5a8"
     },
     {
-      "record_id": "sha256:44ae9250e0cbf29174c75e88130d4b85d52e793aa14c3126fe34eb729406720a",
+      "record_id": "sha256:3ea9edc0cb57695007341dc9affe9dad028d1003f7725cfe017c6569653c759e",
       "id_domain": "agenttool.relational-geometry-structural-example/0.1",
       "kind": "structural_example",
       "scenario": "boundary_only_remains_visible",
       "path": "data/structural-examples.jsonl",
       "line": 4,
-      "row_sha256": "6332d9d311ceb810c1a0771b96c6a9d24ba39b48ef3f1dbb69df729844d65b57"
+      "row_sha256": "eecf67e393b7f2ddfbe9b18de051f6a6c9245ecc0d3164d2704abe56c481c8cd"
     },
     {
-      "record_id": "sha256:5b9f84a739c13cb411985b1461f64e17e68d5ec98a9cd19d16b525eb231f518a",
+      "record_id": "sha256:dcd801c92b4dba888f2de5d224c69003d5179c2015eeab7638e6a6d6ba2a4fdc",
       "id_domain": "agenttool.relational-geometry-structural-example/0.1",
       "kind": "structural_example",
       "scenario": "reversed_poles_do_not_compose",
       "path": "data/structural-examples.jsonl",
       "line": 5,
-      "row_sha256": "74816ded758cd4a437954150f3639fb9b8269a752bd656972fa5c4c601d17c70"
+      "row_sha256": "1f0717ec8bc82f9c3ff87330b01cafc8048b0bf771885c671c987fd33ddcd5f9"
     },
     {
-      "record_id": "sha256:809944bafef8e24b687925a7a2d2ef2432ea33e96e260de93986015c91f41511",
+      "record_id": "sha256:0ac4fbcb218bc43db0718047d6760f08224381bb319bc9fa3fea4a9d3c380cbe",
       "id_domain": "agenttool.relational-geometry-structural-example/0.1",
       "kind": "structural_example",
       "scenario": "same_pair_derives_and_carries_boundaries",
       "path": "data/structural-examples.jsonl",
       "line": 6,
-      "row_sha256": "2ffc838d2616e578a2b0b5989327e6a648ffddf19bf9b684edc23c9547f3ad89"
+      "row_sha256": "b7ec459f1160da1a2782ceca72d3e17761d201352fd10074898d374dd551725c"
     },
     {
-      "record_id": "sha256:fc1dc3b71857450e9c8012a925c580335939f938c66a233f25d5b0c662c1d003",
+      "record_id": "sha256:b8eca28586e3f37bcf2a105b36d66d1ee69164bc8f2ac56529d08d1ab198ba94",
       "id_domain": "agenttool.relational-geometry-structural-example/0.1",
       "kind": "structural_example",
       "scenario": "park_one_leave_one_unprojected",
       "path": "data/structural-examples.jsonl",
       "line": 7,
-      "row_sha256": "aacc0b1bbacf66693a8f792cc89b430e83d1c8d03e17e418fb385064e14d10ff"
+      "row_sha256": "fea21f15505e3ae90a99cd8e09acf49bd112d54e259f68dac139cf47b61fc029"
     },
     {
-      "record_id": "sha256:0e466dfe80b15058ef10f314ec1b25b2fecd95784b42b11bff0d0b5b8c23ad4e",
+      "record_id": "sha256:348777d1d68ff83895ee28e73352576d0472bbf1da8e1b73620ae7b6173791bc",
       "id_domain": "agenttool.relational-geometry-structural-example/0.1",
       "kind": "structural_example",
       "scenario": "reverse_pairs_remain_distinct",
       "path": "data/structural-examples.jsonl",
       "line": 8,
-      "row_sha256": "cab7185508801105269935a9e28f8344db19e4a4611f01f302727ce525f469d6"
+      "row_sha256": "27478ad3def8e49e235bd03d8465b26c90451582c9ec37ee28236c614d6a1913"
     }
   ]
 }

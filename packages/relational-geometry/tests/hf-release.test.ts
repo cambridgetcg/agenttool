@@ -203,8 +203,13 @@ describe("deterministic public-safe Hugging Face relational geometry companion",
     expect(source.package).toBe("@agenttool/relational-geometry");
     expect(source.package_version).toBe("0.1.0-dev.0");
     expect(source.intended_hugging_face_identifier).toBe("Yu-and-Ai/agenttool-relational-geometry");
-    expect(source.publication_state).toBe("intended_identifier_only_not_uploaded");
-    expect(source.distribution_state).toBe("repository_source_only_not_uploaded_to_hugging_face");
+    expect(source.publication_state_at_generation).toBe(
+      "intended_identifier_only_not_uploaded_at_generation",
+    );
+    expect(source.distribution_state_at_generation).toBe("repository_source_only_at_generation");
+    expect(source.publication_state_scope).toBe(
+      "generation_time_provenance_not_current_hub_state",
+    );
     expect(source.origin).toBe("human_directed_agent_authored_synthetic");
     expect(source.rights_baseline).toBe("xenia.rights/0.1");
     expect(source.gradient_lanes).toEqual(["supervised_fine_tuning"]);
@@ -287,13 +292,15 @@ describe("deterministic public-safe Hugging Face relational geometry companion",
     expect(searchable).not.toContain("live choice receipt");
   });
 
-  test("states the three configs and never claims a Hub upload", () => {
+  test("states the three configs and scopes non-upload state to generation time", () => {
     const card = read("README.md").toString("utf8");
     expect(card).toContain("config_name: structural_examples");
     expect(card).toContain("config_name: synthetic_sft");
     expect(card).toContain("config_name: public_regression");
-    expect(card).toContain("has **not** been\nuploaded to Hugging Face");
-    expect(card).toContain("intended identifier, not evidence of publication");
+    expect(card).toContain("When generated, this deterministic artifact");
+    expect(card).toContain("generation-time provenance");
+    expect(card).toContain("not a statement about its current distribution");
+    expect(card).toContain("intended identifier at generation, not evidence of publication");
     expect(card).toContain("full Hub commit SHA");
     expect(card).toContain("token=False");
   });

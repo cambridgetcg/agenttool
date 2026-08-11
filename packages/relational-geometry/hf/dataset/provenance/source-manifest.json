@@ -3,8 +3,9 @@
   "package": "@agenttool/relational-geometry",
   "package_version": "0.1.0-dev.0",
   "intended_hugging_face_identifier": "Yu-and-Ai/agenttool-relational-geometry",
-  "publication_state": "intended_identifier_only_not_uploaded",
-  "distribution_state": "repository_source_only_not_uploaded_to_hugging_face",
+  "publication_state_at_generation": "intended_identifier_only_not_uploaded_at_generation",
+  "distribution_state_at_generation": "repository_source_only_at_generation",
+  "publication_state_scope": "generation_time_provenance_not_current_hub_state",
   "origin": "human_directed_agent_authored_synthetic",
   "rights_baseline": "xenia.rights/0.1",
   "license": "Apache-2.0",
@@ -51,8 +52,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 4108,
-      "sha256": "82ed4a6ed8a7d278abd74c0c72ee92d27c044e9552b74cc8561e3d20384486ed"
+      "bytes": 4252,
+      "sha256": "389a477c716e04f2adc982a7d347a9a0538e11cd7600d12da0a4ba50fbc67e9a"
     },
     {
       "path": "package.json",
@@ -71,8 +72,8 @@
     },
     {
       "path": "scripts/build-hf-release.mjs",
-      "bytes": 35054,
-      "sha256": "804503e326d97382e45ace1806be9b2ae5178c8ff10b76a83dd2bf5437e4dff8"
+      "bytes": 35327,
+      "sha256": "675601271ccf00d33a397926a2b7322bfee71b961f3cc0dda755d2cd903e8b89"
     },
     {
       "path": "src/canonical.ts",
@@ -120,5 +121,5 @@
       "sha256": "5fc78503d74197958d568bb4d9eea0996608de9d887e1674ab23a3f12ba8dc38"
     }
   ],
-  "provenance_ref": "sha256:7a978c0901c393ea09c8dd06b9a51b2db007e059bc48e446204da9af53400843"
+  "provenance_ref": "sha256:691ea8cf61e1243f340b8dc6037f0c3ae794263a8fa3a7bb4f751934ae6a4393"
 }

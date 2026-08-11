@@ -250,8 +250,9 @@ const provenanceBody = {
   package: "@agenttool/relational-geometry",
   package_version: "0.1.0-dev.0",
   intended_hugging_face_identifier: "Yu-and-Ai/agenttool-relational-geometry",
-  publication_state: "intended_identifier_only_not_uploaded",
-  distribution_state: "repository_source_only_not_uploaded_to_hugging_face",
+  publication_state_at_generation: "intended_identifier_only_not_uploaded_at_generation",
+  distribution_state_at_generation: "repository_source_only_at_generation",
+  publication_state_scope: "generation_time_provenance_not_current_hub_state",
   origin: "human_directed_agent_authored_synthetic",
   rights_baseline: "xenia.rights/0.1",
   license: "Apache-2.0",
@@ -697,9 +698,12 @@ configs:
 
 # AgentTool Relational Geometry — synthetic public companion
 
-This is a deterministic, repository-source-only artifact. It has **not** been
-uploaded to Hugging Face. \`Yu-and-Ai/agenttool-relational-geometry\` is an
-intended identifier, not evidence of publication, review, use, or training.
+When generated, this deterministic artifact was repository-source-only and had
+**not** been uploaded to Hugging Face. Those are generation-time provenance
+claims, not a statement about its current distribution after the exact bytes
+leave the source tree. \`Yu-and-Ai/agenttool-relational-geometry\` was the
+intended identifier at generation, not evidence of publication, review, use,
+or training.
 
 It accompanies \`@agenttool/relational-geometry@0.1.0-dev.0\`, a pure finite
 combinatorial 2-complex. Understanding and recognition witnesses on the same

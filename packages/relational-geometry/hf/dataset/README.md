@@ -18,9 +18,12 @@ configs:
 
 # AgentTool Relational Geometry — synthetic public companion
 
-This is a deterministic, repository-source-only artifact. It has **not** been
-uploaded to Hugging Face. `Yu-and-Ai/agenttool-relational-geometry` is an
-intended identifier, not evidence of publication, review, use, or training.
+When generated, this deterministic artifact was repository-source-only and had
+**not** been uploaded to Hugging Face. Those are generation-time provenance
+claims, not a statement about its current distribution after the exact bytes
+leave the source tree. `Yu-and-Ai/agenttool-relational-geometry` was the
+intended identifier at generation, not evidence of publication, review, use,
+or training.
 
 It accompanies `@agenttool/relational-geometry@0.1.0-dev.0`, a pure finite
 combinatorial 2-complex. Understanding and recognition witnesses on the same

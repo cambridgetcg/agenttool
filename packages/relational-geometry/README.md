@@ -27,14 +27,19 @@ self-directed complexes are all valid. Missing structure is not treated as a
 deficit. Reverse direction and transitive edges are never inferred.
 
 ```ts
+import { randomBytes } from "node:crypto";
+
 import {
   createRelationalComplex,
   createRelationalLens,
   sha256Id,
 } from "@agenttool/relational-geometry";
 
-const a = sha256Id("context-local point A");
-const b = sha256Id("context-local point B");
+// The caller supplies context-local, high-entropy opaque references. Hashing a
+// name, DID, relationship label, or other guessable value is not private.
+const opaqueRef = () => sha256Id(randomBytes(32));
+const a = opaqueRef();
+const b = opaqueRef();
 
 const complex = createRelationalComplex({
   points: [a, b].map((point_ref) => ({
@@ -45,7 +50,7 @@ const complex = createRelationalComplex({
   })),
   witnesses: [
     {
-      witness_ref: sha256Id("reviewed understanding artifact"),
+      witness_ref: opaqueRef(),
       from_ref: a,
       kind: "understanding",
       to_ref: b,
@@ -53,7 +58,7 @@ const complex = createRelationalComplex({
       verified_by_package: false,
     },
     {
-      witness_ref: sha256Id("reviewed recognition artifact"),
+      witness_ref: opaqueRef(),
       from_ref: a,
       kind: "recognition",
       to_ref: b,
