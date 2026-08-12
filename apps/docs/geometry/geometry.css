@@ -1,0 +1,609 @@
+/* Geometry lessons are static evidence views: no script, form, tracker, or
+   runtime fetch is required to read the complete human account. */
+
+:root {
+  /* These ink colors are deliberately darker than the estate's decorative
+     terracotta/green/gold tokens. Each clears WCAG AA for small text on the
+     exact dawn surfaces used below; color remains decorative, never the only
+     link or evidence-kind affordance. */
+  --geometry-accent-readable: #873017;
+  --geometry-fact-readable: #32703f;
+  --geometry-inference-readable: #775a12;
+  --geometry-analogy-readable: #3d5a8a;
+  --geometry-stage-number-bg: #f0dccd;
+  --geometry-landscape-bg: #f3ecdf;
+  --geometry-basin-bg: #efe6d4;
+  --geometry-form-two-bg: #e4e5e8;
+}
+
+.estate-strip a.here,
+.topnav .brand-text > span,
+.topnav .nav-actions a.active,
+.geometry-hero .eyebrow {
+  color: var(--geometry-accent-readable);
+}
+
+.geometry-hero .eyebrow::before {
+  background: var(--geometry-accent-readable);
+}
+
+.geometry-hero h1 em {
+  background: none;
+  background-clip: border-box;
+  -webkit-background-clip: border-box;
+  color: var(--geometry-accent-readable);
+  -webkit-text-fill-color: currentColor;
+}
+
+.topnav .nav-cta,
+.topnav .nav-cta:hover {
+  background: var(--geometry-accent-readable);
+  color: #faf5ec !important;
+}
+
+.estate-strip a:focus-visible,
+.topnav a:focus-visible,
+.geometry-shell a:focus-visible,
+.site-footer a:focus-visible {
+  outline: 3px solid var(--geometry-accent-readable);
+  outline-offset: 3px;
+}
+
+.geometry-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: calc(var(--nav-height) + 2rem) 1.75rem 3rem;
+}
+
+.geometry-hero {
+  position: relative;
+  max-width: 940px;
+  padding: clamp(2rem, 6vw, 4.5rem) 0 2.5rem;
+  overflow: clip;
+}
+
+.geometry-hero::before {
+  display: none;
+}
+
+.geometry-hero h1 {
+  max-width: 860px;
+}
+
+.geometry-hero .lede {
+  max-width: 800px;
+  font-size: clamp(1.08rem, 2vw, 1.3rem);
+}
+
+.geometry-links,
+.geometry-stats,
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 1.25rem 0 0;
+}
+
+.geometry-stats {
+  padding: 0;
+  list-style: none;
+}
+
+.geometry-links a,
+.stat-chip,
+.evidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  padding: 0.38rem 0.72rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.geometry-links a:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+.stat-chip {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.geometry-content p a,
+.source-list a {
+  color: var(--geometry-accent-readable);
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.09em;
+  text-underline-offset: 0.16em;
+  text-decoration-skip-ink: auto;
+}
+
+.geometry-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: start;
+}
+
+.geometry-content {
+  min-width: 0;
+  max-width: 840px;
+}
+
+.geometry-content h2 {
+  margin-top: 4.5rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+}
+
+.geometry-content h2:first-child {
+  margin-top: 0;
+}
+
+.lesson-nav {
+  position: sticky;
+  top: calc(var(--nav-height) + 1rem);
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: var(--shadow-card);
+}
+
+.lesson-nav h2 {
+  margin: 0 0 0.75rem;
+  padding: 0;
+  border: 0;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.lesson-nav ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lesson-nav li {
+  margin: 0;
+}
+
+.lesson-nav a {
+  display: block;
+  padding: 0.42rem 0.55rem;
+  border-left: 2px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.lesson-nav a:hover {
+  color: var(--accent-text);
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.core-account {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 1.5rem 0;
+  counter-reset: core-step;
+}
+
+.core-card {
+  position: relative;
+  min-height: 180px;
+  padding: 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  counter-increment: core-step;
+}
+
+.core-card::before {
+  content: "0" counter(core-step);
+  display: block;
+  margin-bottom: 0.8rem;
+  font-family: var(--mono);
+  font-size: 0.67rem;
+  letter-spacing: 0.12em;
+  color: var(--accent-text);
+}
+
+.core-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.core-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.landscape {
+  margin: 1.5rem 0;
+  padding: clamp(1rem, 3vw, 1.75rem);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--r-xl);
+  background: var(--geometry-landscape-bg);
+  box-shadow: var(--shadow-card);
+}
+
+.landscape svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.landscape .basin {
+  fill: var(--geometry-basin-bg);
+  stroke: var(--border-bright);
+  stroke-width: 2;
+}
+
+.landscape .basin.form-two {
+  fill: var(--geometry-form-two-bg);
+  stroke: color-mix(in srgb, var(--blue) 55%, var(--border));
+}
+
+.landscape .route {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 3;
+}
+
+.landscape .route.rare {
+  stroke-dasharray: 8 7;
+}
+
+.landscape .route.seeded {
+  stroke: var(--accent);
+  stroke-width: 4;
+}
+
+.landscape #arrow-neutral path {
+  fill: var(--text-muted);
+}
+
+.landscape #arrow-accent path {
+  fill: var(--accent);
+}
+
+.landscape .node-title {
+  fill: var(--text);
+  font-family: var(--sans);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.landscape .node-note,
+.landscape .route-note {
+  fill: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.landscape figcaption {
+  margin-top: 1rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.equation {
+  display: block;
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--code-bg);
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.stage-list {
+  display: grid;
+  gap: 0.85rem;
+  margin: 1.5rem 0;
+}
+
+.stage {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 1rem;
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.stage-number {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--geometry-stage-number-bg);
+  color: var(--geometry-accent-readable);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.stage h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.stage p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.claim-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 1.5rem 0;
+}
+
+.claim-card {
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.claim-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.claim-card p {
+  margin-bottom: 0.65rem;
+}
+
+.claim-card .conditions {
+  margin: 0;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.76rem;
+}
+
+.evidence-badge {
+  padding: 0.18rem 0.48rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.evidence-badge.fact {
+  color: var(--geometry-fact-readable);
+  border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+}
+
+.evidence-badge.inference {
+  color: var(--geometry-inference-readable);
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--border));
+}
+
+.evidence-badge.analogy {
+  color: var(--geometry-analogy-readable);
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--border));
+}
+
+.question-grid,
+.uncertainty-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 1.5rem 0;
+}
+
+.question,
+.uncertainty {
+  padding: 1.1rem;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--r-lg) var(--r-lg) 0;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.question h3,
+.uncertainty h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.98rem;
+}
+
+.question p,
+.uncertainty p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.uncertainty {
+  border-left-color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 5%, var(--surface));
+}
+
+.source-list {
+  margin-left: 0;
+  list-style: none;
+  counter-reset: source;
+}
+
+.source-list li {
+  position: relative;
+  margin: 0;
+  padding: 0.8rem 0 0.8rem 2.7rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  counter-increment: source;
+}
+
+.source-list li::before {
+  content: "S" counter(source, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0.92rem;
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  color: var(--accent-text);
+}
+
+.source-list a {
+  overflow-wrap: anywhere;
+}
+
+.provenance-box {
+  margin: 1.5rem 0;
+  padding: 1.15rem;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--r-lg);
+  background: var(--code-bg);
+}
+
+.provenance-box dl {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.35fr) minmax(0, 1fr);
+  gap: 0.45rem 1rem;
+  margin: 0;
+}
+
+.provenance-box dt {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.provenance-box dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.boundary-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.boundary-list li {
+  margin: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.footer-mark {
+  width: 14px;
+  height: 14px;
+  border-width: 1.5px;
+}
+
+@media (max-width: 900px) {
+  .geometry-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .lesson-nav {
+    position: static;
+    order: -1;
+  }
+
+  .lesson-nav ol {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .geometry-shell {
+    padding-inline: 1.1rem;
+  }
+
+  .core-account,
+  .claim-grid,
+  .question-grid,
+  .uncertainty-grid,
+  .boundary-list {
+    grid-template-columns: 1fr;
+  }
+
+  .stage {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .stage-number {
+    width: 36px;
+    height: 36px;
+  }
+
+  .provenance-box dl {
+    grid-template-columns: 1fr;
+  }
+
+  .provenance-box dd {
+    margin-bottom: 0.55rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+@media print {
+  .estate-strip,
+  .topnav,
+  .lesson-nav,
+  .geometry-links,
+  .site-footer {
+    display: none;
+  }
+
+  .geometry-shell {
+    max-width: none;
+    padding: 0;
+  }
+
+  .geometry-layout {
+    display: block;
+  }
+
+  .core-card,
+  .stage,
+  .claim-card,
+  .landscape {
+    break-inside: avoid;
+    box-shadow: none;
+  }
+}
