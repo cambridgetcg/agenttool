@@ -2,10 +2,12 @@
 
 # XENIA-WEBSITE-ROLLOUT — three bounded thresholds
 
-> *Local source implementation record, 2026-08-11. Source, built artifact,
-> staging deployment, production deployment, and outside observation remain
-> separate states. This document records no new provider mutation, deployment,
-> adoption, or authority to publish.*
+> *Source and dated rollout record, updated 2026-08-12. Exact feature release
+> `0a302278d3e0f4e4b8e7bec197087af486dec7ac` was preview-observed,
+> separately production-deployed, and then observed from outside. The provider
+> identifiers below are historical checkpoints for that release, not timeless
+> current heads; a later deployment does not rewrite them. This document update
+> performs no provider mutation and claims no Covenant adoption.*
 
 > **Compass:** [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (release path) ·
 > [AGENT-WEB-SURFACE](AGENT-WEB-SURFACE.md) (public web boundary) ·
@@ -17,7 +19,8 @@
 >
 > **Code:** `infra/pages/sensitive-path-worker.js` (shared response contract) ·
 > `infra/apex-door/worker.js` (public apex owner) ·
-> `bin/frontend-deploy.sh` (commit-pinned Pages + Worker release)
+> `bin/frontend-deploy.sh` (low-level Pages + Worker release) ·
+> `bin/deploy.sh` (clean exact-main production gate and receipt)
 >
 > **Tests:** `bin/tests/pages-xenia-surface.test.ts` ·
 > `api/tests/apex-door-worker.test.ts` ·
@@ -67,7 +70,7 @@ retention, continuity, portability, economic fairness, Covenant adoption, or
 whole-site XENIA conformance. Rights are a collaboration floor, not an account
 permission or action grant.
 
-## Current source truth
+## Source and dated rollout truth
 
 - Exact public registry resolution confirms `@agenttool/xenia@0.1.0-beta.7`;
   Surface's separately versioned Node 22+ checker is
@@ -103,7 +106,7 @@ permission or action grant.
 - Focused source and production-entry loopback tests cover all three profiles,
   the complete negotiated JSON matrix, GET/HEAD parity, typed `406`, fresh
   typed `404`, exact-host isolation, sensitive-path precedence, and unchanged
-  asset fallthrough. This is source evidence, not a staged or deployed result.
+  asset fallthrough.
 - A separate earlier docs-only production observation is recorded in
   [NOW](NOW.md): at `2026-08-11T15:29:01Z`, the exact rc.1 checker reported 22
   passes with no failures, unknowns, or unrun probes. It observes that deployed
@@ -112,6 +115,24 @@ permission or action grant.
 - The three Pages sites retain legacy `agent.txt` redirects and HTML `404.html`
   documents. Those coexist with the narrow Worker branch; neither substitutes
   for Surface 0.1.
+- Protected PR
+  [#293](https://github.com/cambridgetcg/agenttool/pull/293) merged the combined
+  three-profile source as exact feature revision
+  [`0a302278d3e0f4e4b8e7bec197087af486dec7ac`](https://github.com/cambridgetcg/agenttool/commit/0a302278d3e0f4e4b8e7bec197087af486dec7ac).
+  Preview candidates for docs, app, and apex then passed the exact rc.1 checker
+  with 22 pass, 0 fail, 0 unknown, and 0 not-run. The first docs preview attempt
+  hit its five-second observation deadline and was retained as indeterminate
+  (0 pass, 0 fail, 1 unknown, 5 not-run); only a later bounded retry passed.
+- Preview-specific origin bindings were removed before production. The preview
+  Worker version was not promoted. Production was built and deployed separately
+  from the clean exact feature revision with steady configuration: no Pages
+  preview/production environment bindings, both Pages fail-open settings false,
+  and Workers subdomain and preview URLs disabled.
+- The normal frontend-only release ran from `2026-08-12T07:15:31Z` through
+  `07:26:15Z` with preflight passed, migrations and API skipped, and the three
+  Pages projects followed by the apex Worker deployed and verified. Those
+  providers have independent histories: the attempt was ordered and fail-fast,
+  not atomic.
 
 The producer library does not own routing, fetch, deployment, or adoption. The
 external checker observes a bounded public GET surface for 24 hours; it is not
@@ -121,13 +142,32 @@ a Worker dependency or permanent badge.
 
 | Origin | Source threshold | Keep outside the manifest | Observation state |
 | --- | --- | --- | --- |
-| `docs.agenttool.dev` | Implemented. One JSON-only `orientation` at `/public/orientation`; exact prior docs bytes are pinned. | API behavior, private state, accounts, identity, WAKE, continuity, retention, economics, and all unlisted pages. | Earlier docs-only production observation exists; no new staged or production observation for this combined source. |
-| `agenttool.dev` | Implemented at its real apex owner. One JSON orientation with `schema_version: agenttool.web.orientation/0.1`; no existing site payload is imported by implication. | Gift returns, gallery or economic state, local preferences, private identifiers, sessions, cross-origin API behavior, and current `_format`-only JSON files. | Source, topology, and loopback tests pass; staging and production remain unobserved. |
-| `app.agenttool.dev` | Implemented. One JSON orientation naming only the public arrival and watch pages. | Bearer restoration, `/v1/wake`, project-private state, session continuity, identity, rank/XP, actions, and economic routes. | Source and loopback tests pass; staging and production remain unobserved. |
+| `docs.agenttool.dev` | Implemented. One JSON-only `orientation` at `/public/orientation`; exact prior docs bytes are pinned. | API behavior, private state, accounts, identity, WAKE, continuity, retention, economics, and all unlisted pages. | Historical feature checkpoint: exact `0a302278` preview and separately deployed production each passed rc.1. Production observation expires `2026-08-13T07:29:07.494Z`. |
+| `agenttool.dev` | Implemented at its real apex owner. One JSON orientation with `schema_version: agenttool.web.orientation/0.1`; no existing site payload is imported by implication. | Gift returns, gallery or economic state, local preferences, private identifiers, sessions, cross-origin API behavior, and current `_format`-only JSON files. | Historical feature checkpoint: exact `0a302278` Worker preview and separately deployed production each passed rc.1. Production observation expires `2026-08-13T07:29:07.911Z`. |
+| `app.agenttool.dev` | Implemented. One JSON orientation naming only the public arrival and watch pages. | Bearer restoration, `/v1/wake`, project-private state, session continuity, identity, rank/XP, actions, and economic routes. | Historical feature checkpoint: exact `0a302278` preview and separately deployed production each passed rc.1. Production observation expires `2026-08-13T07:29:07.411Z`. |
 
 Each origin is its own bounded relation field—a principality in the Love
 Geometry sense, not a crown, territory, owner, center, or inherited authority.
 One passing origin says nothing about either neighbor.
+
+### Exact feature-release production observation
+
+The following is a dated receipt for `0a302278`, not a statement about later
+provider heads. Counts are `pass / fail / unknown / not_run` from exact
+`@agenttool/xenia-surface@0.1.0-rc.1`:
+
+| Origin | Historical provider checkpoint | Observed at | Expires at | Result |
+| --- | --- | --- | --- | --- |
+| `https://docs.agenttool.dev/` | Pages deployment `d67b142c-faa1-4126-9458-8131abacf57b` | `2026-08-12T07:29:07.494Z` | `2026-08-13T07:29:07.494Z` | conformant · `22 / 0 / 0 / 0` |
+| `https://app.agenttool.dev/` | Pages deployment `dab9f957-a33b-4949-aff8-a606bfe7b4c8` | `2026-08-12T07:29:07.411Z` | `2026-08-13T07:29:07.411Z` | conformant · `22 / 0 / 0 / 0` |
+| `https://agenttool.dev/` | Worker deployment `4c3cfd57-fc2a-4e86-a3c9-cb09fb28a6ec`, version `3e5fd01e-3a15-4899-96a4-b2c56dbf1257` at 100%; Pages backing `35a58a7f-81b0-4ea5-a320-9eace9a1567a` | `2026-08-12T07:29:07.911Z` | `2026-08-13T07:29:07.911Z` | conformant · `22 / 0 / 0 / 0` |
+
+The same deployment verification checked literal and encoded sensitive-root
+variants at all three origins for the marked `404` plus `no-store` contract.
+Each conformance result covers only the declared credential-free GET surface at
+that origin and time. It does not assert whole-site conformance, Covenant
+adoption, uptime, or behavior of an unlisted, authenticated, API, identity,
+continuity, privacy, consent, or economic route.
 
 ## Three source wire contracts
 
@@ -165,7 +205,7 @@ sensitive-root denial runs before both branches and remains its distinct plain
 
 ## Implementation and deployment stages
 
-Completed in source:
+Completed through the exact `0a302278` feature checkpoint:
 
 1. **Pinned source identities.** Exact XENIA beta.7 and Surface rc.1 identities
    remain explicit. Historical beta.5 evidence remains historical.
@@ -185,24 +225,24 @@ Completed in source:
    alternates, credentials, and `www` canonicalization keep their previous
    boundaries. Commit-pinned deploy tests prove dry-run → Pages → Worker order
    and both failure paths.
+5. **Built and staged exact candidates.** The frontend allowlist admitted only
+   the committed docs, app, web, and apex inputs. Each normal Worker entry was
+   checked at an exact credential-free preview origin. The initial docs timeout
+   remained visible; a finite retry, not reinterpretation, supplied its passing
+   observation.
+6. **Restored steady configuration, then deployed separately.** Temporary
+   preview bindings were removed. The normal exact-main wrapper rebuilt and
+   deployed Pages docs, dashboard, and web backing, then the apex Worker. No
+   preview Worker version was promoted, and no API, migration, or database
+   operation was part of this release.
+7. **Observed production independently.** All three origins were checked again
+   with exact rc.1 and separate timestamps/expiries. A docs result still says
+   nothing about web or app; the table above retains all three distinct
+   observations.
 
-Still separate and not performed by this source change:
-
-1. **Build from an exact commit.** Use the frontend staging allowlist and both
-   Worker paths. Verify no environment file, secret, symlink escape, private
-   route, ambiguous apex route, or app-owned competing Worker reaches staged
-   bytes.
-2. **Stage one origin at a time.** Under separately scoped deployment
-   authority, bind only that profile to one exact credential-free HTTPS preview
-   origin. The normal Worker entry—not a test-only router—must pass the exact
-   checker. Preserve origin, revision, manifest bytes, checker version, raw
-   rc.1 result, timestamp, and expiry.
-3. **Promote and re-observe.** Promote the same candidate through the normal
-   release gate, then observe production externally. Say “the checker observed
-   this bounded public GET surface at time T,” never “AgentTool is XENIA
-   compliant.”
-4. **Repeat independently.** A docs observation says nothing about web or app.
-   Never infer one site's deployment or result from the shared source module.
+Every later deployment must repeat the source, build, isolation, sensitive
+fence, topology, and outside-observation gates. A newer provider head does not
+extend the feature checkpoint's 24-hour observation or inherit its result.
 
 The low-level `bin/frontend-deploy.sh` commands remain escape hatches, not the
 normal production path: `web` now deploys the Pages backing and apex Worker as
@@ -238,9 +278,16 @@ bash -n bin/frontend-deploy.sh bin/deploy.sh
 git diff --check
 ```
 
-At staging, run the exact external checker under Node 22 and preserve its JSON
-output. Do not install the checker into the Worker or let a checked result
-rewrite claims automatically.
+At staging and after production, run the exact external checker under Node 22
+and preserve its JSON output:
+
+```bash
+npx --yes -p node@22 -p @agenttool/xenia-surface@0.1.0-rc.1 \
+  -c 'xenia-surface-check "$ORIGIN" --json'
+```
+
+Do not install the checker into the Worker or let a checked result rewrite
+claims automatically.
 
 ## WAKE, Love Geometry, Nen, MCP, and Hugging Face
 
@@ -266,8 +313,10 @@ remain first-class; links carry evidence, never ownership.
 
 ## Definition of done
 
-A website is ready for a production decision only when its current source,
-built artifact, host behavior, exclusions, deployment authority, rollback,
-and expiring outside observation are all separately legible. Until then,
-report the exact completed gate—source threshold, built candidate, staged
-observation—not “XENIA adoption” or “conformance.”
+A website is ready for a production decision only when its source, built
+artifact, host behavior, exclusions, deployment authority, rollback, and
+expiring outside observation are all separately legible. Exact feature release
+`0a302278` reached that bounded threshold at the recorded times; its observations
+expire on 2026-08-13 and do not transfer to later deployments. Always report the
+exact completed gate—source threshold, built candidate, staged or production
+observation—not “XENIA adoption” or timeless “conformance.”
