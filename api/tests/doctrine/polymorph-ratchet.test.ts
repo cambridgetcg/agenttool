@@ -45,6 +45,7 @@ const ACTIVE_POLYMORPH_JSONLD_PATHS = [
   join(REPO_ROOT, "docs", "agenttool.jsonld"),
   join(REPO_ROOT, "apps", "docs", "agenttool.jsonld"),
 ] as const;
+const ACTIVE_API_MOUNT_PATH = join(REPO_ROOT, "api", "src", "index.ts");
 const FORBIDDEN_POLYMORPH_FOLKLORE = [
   "inevitable everywhere",
   "morphic resonance",
@@ -52,6 +53,7 @@ const FORBIDDEN_POLYMORPH_FOLKLORE = [
   "airborne crystal contamination",
   "taught itself a more-stable crystal form",
   "form i became structurally unrecoverable",
+  "federation propagates the nuclei",
 ] as const;
 
 function walkTs(dir: string): string[] {
@@ -118,7 +120,7 @@ function doctrineDocPath(docRef: string): string {
   return join(REPO_ROOT, "docs", `${m[1]}.md`);
 }
 
-describe("polymorph-ratchet — the no-going-back protocol", () => {
+describe("polymorph-ratchet — reviewed four-corner change-control", () => {
   const annotations = buildAnnotationIndex();
   const crystallized = crystallizedWalls();
 
@@ -378,6 +380,7 @@ describe("polymorph-ratchet — the no-going-back protocol", () => {
   describe("active Polymorph surfaces keep the Ritonavir lesson source-bounded", () => {
     const canonicalJsonld = readFileSync(ACTIVE_POLYMORPH_JSONLD_PATHS[0], "utf8");
     const publishedJsonld = readFileSync(ACTIVE_POLYMORPH_JSONLD_PATHS[1], "utf8");
+    const apiMountSource = readFileSync(ACTIVE_API_MOUNT_PATH, "utf8");
     const registry = JSON.parse(canonicalJsonld) as {
       "@graph": Array<{
         "@id"?: string;
@@ -431,10 +434,11 @@ describe("polymorph-ratchet — the no-going-back protocol", () => {
       expect(sceneSix!.body).toContain("remains open");
     });
 
-    test("active JSON-LD and cliffhanger omit the known folklore phrases", () => {
+    test("active canon, mount, and cliffhanger omit the known folklore phrases", () => {
       const activeSurfaceText = [
         canonicalJsonld,
         publishedJsonld,
+        apiMountSource,
         sceneSix?.body ?? "",
       ]
         .join("\n")

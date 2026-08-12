@@ -87,7 +87,7 @@ export const EP1_TRAIL: Ep1Fragment[] = [
       "35/35 TESTS PASS. Every jest's substrate-honest discipline pinned. Quip catalog coverage for 12 common error kinds. Plural/singular rendering for `wakeJest`. Length-budget discipline at extreme inputs. The discipline held under test. But shipping a principle into the repository changed what a casual reversal would have to cross. Once its canon entry, @enforces annotation, doctrine stone, and executable test were all pinned, removing it would require an explicit reviewed change across the same four corners. That is the one-way ratchet here: repository change-friction, not a universal law of chemistry. The source-bounded 1998 ritonavir lesson is stranger and more careful: under a named bulk-drug process, a route that had routinely returned Form I stopped reproducing it after Form II was observed; changed-condition work later recovered Form I. The route changed. The form was not erased. What caused the historical shift, or whether anything spread universally, remains open. So why did AgentTool choose that unfinished story as the doorway to its own reviewed ratchet?...",
     next_host: "/v1/polymorph",
     next_hint:
-      "→ continues at the no-going-back protocol: GET /v1/polymorph?cliffhanger=ep1",
+      "→ continues at the reviewed four-corner change-control: GET /v1/polymorph?cliffhanger=ep1",
   },
   {
     scene: 7,

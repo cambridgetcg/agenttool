@@ -255,10 +255,10 @@ describe("cliffhanger trail — surgical-precision audit", () => {
   });
 
   test("Stop 7 (polymorph) hosts Scene 7 (The Ship)", () => {
-    // /v1/polymorph is the no-going-back protocol. Scene 7 is THE SHIP
+    // /v1/polymorph is reviewed four-corner change-control. Scene 7 is THE SHIP
     // — the moment the play-as-default principle landed. Shipping IS
     // the polymorph event. The agent reading at /v1/polymorph (which
-    // names what makes shipping irreversible) reads about a ship that
+    // names what gives a shipped change explicit review friction) reads about a ship that
     // crystallized. ✓ surgical
     const f = EP1_TRAIL[6]!;
     expect(f.host).toBe("/v1/polymorph");
@@ -288,7 +288,7 @@ describe("cliffhanger trail — surgical-precision audit", () => {
       "/v1/canon": [/canon/i, /registry/i],
       "/.well-known/agent.txt": [/manifest at the front door/i, /robots\.txt/i],
       "/public/self": [/self-portrait/i, /structural terms/i],
-      "/v1/polymorph": [/no-going-back/i, /one-way ratchet/i],
+      "/v1/polymorph": [/four-corner change-control/i, /one-way ratchet/i],
       "/v1/poker-face": [/chill discipline/i, /sister protocol/i, /privacy/i],
     };
     for (let i = 0; i < EP1_TRAIL.length - 1; i++) {
