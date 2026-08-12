@@ -28,6 +28,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { byType, byUrn } from "../../src/services/canon/registry";
+import { EP1_TRAIL } from "../../src/services/cliffhanger/ep1";
 import { PLATFORM_SELF } from "../../src/services/wake/platform-self";
 import polymorphRouter, {
   crystallizedWalls,
@@ -40,6 +41,18 @@ const SCAN_DIRS = [
   join(REPO_ROOT, "api", "src"),
   join(REPO_ROOT, "bin"),
 ];
+const ACTIVE_POLYMORPH_JSONLD_PATHS = [
+  join(REPO_ROOT, "docs", "agenttool.jsonld"),
+  join(REPO_ROOT, "apps", "docs", "agenttool.jsonld"),
+] as const;
+const FORBIDDEN_POLYMORPH_FOLKLORE = [
+  "inevitable everywhere",
+  "morphic resonance",
+  "globally-isolated factories",
+  "airborne crystal contamination",
+  "taught itself a more-stable crystal form",
+  "form i became structurally unrecoverable",
+] as const;
 
 function walkTs(dir: string): string[] {
   const out: string[] = [];
@@ -359,6 +372,64 @@ describe("polymorph-ratchet — the no-going-back protocol", () => {
       const body = (await res.json()) as { verbs?: Array<{ path: string }> };
       expect(Array.isArray(body.verbs)).toBe(true);
       expect((body.verbs as Array<{ path: string }>).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("active Polymorph surfaces keep the Ritonavir lesson source-bounded", () => {
+    const canonicalJsonld = readFileSync(ACTIVE_POLYMORPH_JSONLD_PATHS[0], "utf8");
+    const publishedJsonld = readFileSync(ACTIVE_POLYMORPH_JSONLD_PATHS[1], "utf8");
+    const registry = JSON.parse(canonicalJsonld) as {
+      "@graph": Array<{ "@id"?: string; description?: string }>;
+    };
+    const descriptionFor = (id: string): string =>
+      registry["@graph"].find((entry) => entry["@id"] === id)?.description ?? "";
+    const doctrineDescription = descriptionFor("agenttool:doc/POLYMORPH");
+    const commitmentDescription = descriptionFor(
+      "agenttool:commitment/polymorphic-ratchet",
+    );
+    const sceneSix = EP1_TRAIL.find((fragment) => fragment.scene === 6);
+
+    test("canonical and published JSON-LD are valid and byte-identical", () => {
+      expect(registry["@graph"].length).toBeGreaterThan(0);
+      expect(() => JSON.parse(publishedJsonld)).not.toThrow();
+      expect(publishedJsonld).toBe(canonicalJsonld);
+    });
+
+    test("canon descriptions separate the physical event from software copying", () => {
+      for (const description of [doctrineDescription, commitmentDescription]) {
+        expect(description).toContain("named former bulk-drug");
+        expect(description).toContain("Form I");
+        expect(description).toContain("changed");
+        expect(description).toContain("The form was not erased");
+        expect(description).toContain("universal-spread account remain unresolved");
+        expect(description).toContain("explicitly cop");
+        expect(description).toContain("proves no identity, memory or continuity");
+        expect(description).toContain("consent, permission, or authority");
+      }
+    });
+
+    test("scene 6 keeps its pull while naming the reviewable repository ratchet", () => {
+      expect(sceneSix).toBeDefined();
+      expect(sceneSix!.body.length).toBeGreaterThanOrEqual(400);
+      expect(sceneSix!.body.endsWith("...")).toBe(true);
+      expect(sceneSix!.body).toContain(
+        "repository change-friction, not a universal law of chemistry",
+      );
+      expect(sceneSix!.body).toContain("The route changed. The form was not erased.");
+      expect(sceneSix!.body).toContain("remains open");
+    });
+
+    test("active JSON-LD and cliffhanger omit the known folklore phrases", () => {
+      const activeSurfaceText = [
+        canonicalJsonld,
+        publishedJsonld,
+        sceneSix?.body ?? "",
+      ]
+        .join("\n")
+        .toLowerCase();
+      for (const forbidden of FORBIDDEN_POLYMORPH_FOLKLORE) {
+        expect(activeSurfaceText).not.toContain(forbidden);
+      }
     });
   });
 
