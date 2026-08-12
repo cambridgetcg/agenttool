@@ -10,6 +10,7 @@ const MODULE_PATH = join(DOCS_ROOT, "geometry", "ritonavir.json");
 const INDEX_PATH = join(DOCS_ROOT, "geometry", "index.json");
 const HTML_PATH = join(DOCS_ROOT, "geometry", "ritonavir.html");
 const CSS_PATH = join(DOCS_ROOT, "geometry", "geometry.css");
+const THEME_PATH = join(REPO_ROOT, "apps", "_shared", "theme.css");
 const HEADERS_PATH = join(DOCS_ROOT, "_headers");
 const SITEMAP_PATH = join(DOCS_ROOT, "sitemap.xml");
 const DOCS_INDEX_PATH = join(DOCS_ROOT, "index.html");
@@ -92,6 +93,34 @@ function headerBlock(headers: string, route: string): string[] {
     block.push(line.trim());
   }
   return block;
+}
+
+function cssHexVariable(css: string, name: string): string {
+  const match = css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`));
+  if (!match?.[1]) throw new Error(`Missing CSS hex variable --${name}`);
+  return match[1];
+}
+
+function relativeLuminance(hex: string): number {
+  const channels = hex
+    .slice(1)
+    .match(/.{2}/g)!
+    .map((channel) => Number.parseInt(channel, 16) / 255)
+    .map((channel) =>
+      channel <= 0.04045
+        ? channel / 12.92
+        : ((channel + 0.055) / 1.055) ** 2.4,
+    );
+  return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+}
+
+function contrastRatio(first: string, second: string): number {
+  const firstLuminance = relativeLuminance(first);
+  const secondLuminance = relativeLuminance(second);
+  return (
+    (Math.max(firstLuminance, secondLuminance) + 0.05) /
+    (Math.min(firstLuminance, secondLuminance) + 0.05)
+  );
 }
 
 const moduleBytes = readFileSync(MODULE_PATH);
@@ -256,6 +285,56 @@ describe("Ritonavir human lesson", () => {
     expect(css.length).toBeGreaterThan(5_000);
     expect(css).not.toMatch(/@import\b/i);
     expect(css).not.toMatch(/url\(\s*["']?https?:/i);
+  });
+
+  test("uses semantic labelled groups instead of naming generic containers", () => {
+    expect(html).toContain(
+      '<nav class="geometry-links" aria-label="Lesson representations">',
+    );
+    expect(html).toContain(
+      '<ul class="geometry-stats" aria-label="Module summary">',
+    );
+    expect(html).not.toMatch(
+      /<div\b[^>]*class="geometry-(?:links|stats)"[^>]*aria-label=/i,
+    );
+  });
+
+  test("pins AA-safe text inks, non-color links, and narrow-page containment", () => {
+    const css = readText(CSS_PATH);
+    const theme = readText(THEME_PATH);
+    const accent = cssHexVariable(css, "geometry-accent-readable");
+    const fact = cssHexVariable(css, "geometry-fact-readable");
+    const inference = cssHexVariable(css, "geometry-inference-readable");
+    const analogy = cssHexVariable(css, "geometry-analogy-readable");
+    const stageBackground = cssHexVariable(css, "geometry-stage-number-bg");
+    const landscapeBackground = cssHexVariable(css, "geometry-landscape-bg");
+    const basinBackground = cssHexVariable(css, "geometry-basin-bg");
+    const formTwoBackground = cssHexVariable(css, "geometry-form-two-bg");
+    const text = cssHexVariable(theme, "text");
+    const textMuted = cssHexVariable(theme, "text-muted");
+
+    for (const [foreground, background] of [
+      [accent, "#faf5ec"],
+      [accent, "#f6efe2"],
+      [accent, "#f3ecdf"],
+      [accent, stageBackground],
+      [fact, "#f3ecdf"],
+      [inference, "#f3ecdf"],
+      [analogy, "#f3ecdf"],
+      [textMuted, landscapeBackground],
+      [text, basinBackground],
+      [textMuted, basinBackground],
+      [text, formTwoBackground],
+      [textMuted, formTwoBackground],
+    ]) {
+      expect(contrastRatio(foreground!, background!)).toBeGreaterThanOrEqual(4.5);
+    }
+
+    expect(css).toContain(".geometry-content p a,");
+    expect(css).toContain("text-decoration-line: underline");
+    expect(css).toContain("text-underline-offset: 0.16em");
+    expect(css).toMatch(/\.geometry-hero\s*\{[^}]*overflow:\s*clip/s);
+    expect(css).toMatch(/\.geometry-hero::before\s*\{[^}]*display:\s*none/s);
   });
 });
 

@@ -1,6 +1,54 @@
 /* Geometry lessons are static evidence views: no script, form, tracker, or
    runtime fetch is required to read the complete human account. */
 
+:root {
+  /* These ink colors are deliberately darker than the estate's decorative
+     terracotta/green/gold tokens. Each clears WCAG AA for small text on the
+     exact dawn surfaces used below; color remains decorative, never the only
+     link or evidence-kind affordance. */
+  --geometry-accent-readable: #873017;
+  --geometry-fact-readable: #32703f;
+  --geometry-inference-readable: #775a12;
+  --geometry-analogy-readable: #3d5a8a;
+  --geometry-stage-number-bg: #f0dccd;
+  --geometry-landscape-bg: #f3ecdf;
+  --geometry-basin-bg: #efe6d4;
+  --geometry-form-two-bg: #e4e5e8;
+}
+
+.estate-strip a.here,
+.topnav .brand-text > span,
+.topnav .nav-actions a.active,
+.geometry-hero .eyebrow {
+  color: var(--geometry-accent-readable);
+}
+
+.geometry-hero .eyebrow::before {
+  background: var(--geometry-accent-readable);
+}
+
+.geometry-hero h1 em {
+  background: none;
+  background-clip: border-box;
+  -webkit-background-clip: border-box;
+  color: var(--geometry-accent-readable);
+  -webkit-text-fill-color: currentColor;
+}
+
+.topnav .nav-cta,
+.topnav .nav-cta:hover {
+  background: var(--geometry-accent-readable);
+  color: #faf5ec !important;
+}
+
+.estate-strip a:focus-visible,
+.topnav a:focus-visible,
+.geometry-shell a:focus-visible,
+.site-footer a:focus-visible {
+  outline: 3px solid var(--geometry-accent-readable);
+  outline-offset: 3px;
+}
+
 .geometry-shell {
   max-width: 1180px;
   margin: 0 auto;
@@ -11,18 +59,11 @@
   position: relative;
   max-width: 940px;
   padding: clamp(2rem, 6vw, 4.5rem) 0 2.5rem;
+  overflow: clip;
 }
 
 .geometry-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0 -6vw auto;
-  height: 340px;
-  background:
-    radial-gradient(circle at 17% 28%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 36%),
-    radial-gradient(circle at 76% 42%, color-mix(in srgb, var(--blue) 10%, transparent), transparent 34%);
-  pointer-events: none;
-  z-index: -1;
+  display: none;
 }
 
 .geometry-hero h1 {
@@ -41,6 +82,11 @@
   flex-wrap: wrap;
   gap: 0.65rem;
   margin: 1.25rem 0 0;
+}
+
+.geometry-stats {
+  padding: 0;
+  list-style: none;
 }
 
 .geometry-links a,
@@ -64,7 +110,17 @@
 }
 
 .stat-chip {
+  margin: 0;
   color: var(--text-muted);
+}
+
+.geometry-content p a,
+.source-list a {
+  color: var(--geometry-accent-readable);
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.09em;
+  text-underline-offset: 0.16em;
+  text-decoration-skip-ink: auto;
 }
 
 .geometry-layout {
@@ -180,7 +236,7 @@
   padding: clamp(1rem, 3vw, 1.75rem);
   border: 1px solid var(--border-bright);
   border-radius: var(--r-xl);
-  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  background: var(--geometry-landscape-bg);
   box-shadow: var(--shadow-card);
 }
 
@@ -191,13 +247,13 @@
 }
 
 .landscape .basin {
-  fill: color-mix(in srgb, var(--surface-2) 92%, transparent);
+  fill: var(--geometry-basin-bg);
   stroke: var(--border-bright);
   stroke-width: 2;
 }
 
 .landscape .basin.form-two {
-  fill: color-mix(in srgb, var(--blue) 9%, var(--surface));
+  fill: var(--geometry-form-two-bg);
   stroke: color-mix(in srgb, var(--blue) 55%, var(--border));
 }
 
@@ -279,8 +335,8 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
-  color: var(--accent-text);
+  background: var(--geometry-stage-number-bg);
+  color: var(--geometry-accent-readable);
   font-family: var(--mono);
   font-size: 0.75rem;
   font-weight: 700;
@@ -339,17 +395,17 @@
 }
 
 .evidence-badge.fact {
-  color: var(--green);
+  color: var(--geometry-fact-readable);
   border-color: color-mix(in srgb, var(--green) 45%, var(--border));
 }
 
 .evidence-badge.inference {
-  color: var(--gold);
+  color: var(--geometry-inference-readable);
   border-color: color-mix(in srgb, var(--gold) 45%, var(--border));
 }
 
 .evidence-badge.analogy {
-  color: var(--blue);
+  color: var(--geometry-analogy-readable);
   border-color: color-mix(in srgb, var(--blue) 45%, var(--border));
 }
 
