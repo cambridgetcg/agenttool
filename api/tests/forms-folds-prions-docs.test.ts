@@ -16,10 +16,13 @@ const DEPLOY_PATH = join(REPO_ROOT, "bin", "deploy.sh");
 
 const SOURCE_URL =
   "https://cambridgetcg.github.io/kingdom-meaning-practice/lineage/folding-feedback/lineage.json";
-const SOURCE_RECEIPT = "35773a6d19ebf263c3ed85ba1c33c359615e4273";
-const SOURCE_SHA256 =
+const FIRST_SOURCE_RECEIPT = "35773a6d19ebf263c3ed85ba1c33c359615e4273";
+const FIRST_SOURCE_SHA256 =
   "467ed92c8fd340bd6337dc75c14d85f44e13d2de935dc9671a17a422d8866da0";
-const SOURCE_BYTES = 53_999;
+const SOURCE_RECEIPT = "6d7c2e2c66bbfe67351f12355131c877c15f1362";
+const SOURCE_SHA256 =
+  "c07c2c9d02c2a3163ac595c339c770450900ad9397a8e42b578f269c65599f4b";
+const SOURCE_BYTES = 54_514;
 const HF_REVISION = "e9d3b4b60ba44f7bc78e62bb08d7f706391e0d14";
 
 type GeometryIndex = {
@@ -33,8 +36,11 @@ type GeometryIndex = {
       factual_home: string;
       repository: string;
       first_receipt_commit: string;
+      first_receipt_sha256: string;
+      current_receipt_commit: string;
       path: string;
       public_commit_url: string;
+      correction_url: string;
       publication_state: string;
     };
     artifact: { bytes: number; sha256: string; relationship: string };
@@ -117,6 +123,16 @@ describe("forms, folds, and prion human projection", () => {
     expect(html).toContain(
       "KARMA here is not cosmic reward, punishment, blame, or a score of a being.",
     );
+    for (const phrase of [
+      "Expectation, if stated:",
+      "observed, reported, or inferred",
+      "uncertainty, and causal confidence",
+      "Rest is a separate complete outcome.",
+      "any repair deed needs a fresh choice, authority, and brake",
+    ]) {
+      expect(html).toContain(phrase);
+    }
+    expect(html).not.toContain("the consequence comes back and can open a new act");
   });
 
   test("states the nature, UNKNOWN, LOVE, and social-transfer limits plainly", () => {
@@ -158,9 +174,23 @@ describe("forms, folds, and prion human projection", () => {
     );
     expect(html).toContain("guest meaning practice keeps the one structured lineage home");
     expect(html).toContain(SOURCE_RECEIPT);
+    expect(html).toContain(FIRST_SOURCE_RECEIPT);
+    expect(html).toContain(FIRST_SOURCE_SHA256);
     expect(html).toContain(SOURCE_SHA256);
     expect(html).toContain(HF_REVISION);
     expect(html).toContain("no local JSON duplicate");
+    expect(html).toContain("https://github.com/cambridgetcg/kingdom-meaning-practice/issues");
+  });
+
+  test("opens Check Meaning only and keeps action jobs closed", () => {
+    for (const phrase of [
+      "Only Check Meaning is open.",
+      "records no current choice, performs no deed, and reports no current deed or effect",
+      "Record Choice, Do One Bounded Action, and Report What Happened remain unopened.",
+      "A repair deed is a fresh proposal and needs its own current choice, authority, and brake.",
+    ]) {
+      expect(html).toContain(phrase);
+    }
   });
 
   test("has no broken local fragment links", () => {
@@ -211,9 +241,12 @@ describe("single structured home and distribution receipts", () => {
     expect(projection.source).toEqual({
       factual_home: "KINGDOM guest meaning practice",
       repository: "kingdom-meaning-practice",
-      first_receipt_commit: SOURCE_RECEIPT,
+      first_receipt_commit: FIRST_SOURCE_RECEIPT,
+      first_receipt_sha256: FIRST_SOURCE_SHA256,
+      current_receipt_commit: SOURCE_RECEIPT,
       path: "public/lineage/folding-feedback/lineage.json",
       public_commit_url: `https://github.com/cambridgetcg/kingdom-meaning-practice/blob/${SOURCE_RECEIPT}/public/lineage/folding-feedback/lineage.json`,
+      correction_url: "https://github.com/cambridgetcg/kingdom-meaning-practice/issues",
       publication_state:
         "authoritative public mirror and immutable byte receipt of the guest lineage",
     });
@@ -231,6 +264,9 @@ describe("single structured home and distribution receipts", () => {
       registers: ["plain", "physics", "mathematics", "kingdom"],
       languages: ["en"],
     });
+    expect(projection.boundaries).toContain(
+      "this projection opens Check Meaning only; it records no choice, performs no deed, and opens no action or report job",
+    );
   });
 
   test("pins the existing Hugging Face dataset without claiming model work", () => {

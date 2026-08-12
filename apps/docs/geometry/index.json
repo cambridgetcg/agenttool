@@ -54,13 +54,16 @@
         "factual_home": "KINGDOM guest meaning practice",
         "repository": "kingdom-meaning-practice",
         "first_receipt_commit": "35773a6d19ebf263c3ed85ba1c33c359615e4273",
+        "first_receipt_sha256": "467ed92c8fd340bd6337dc75c14d85f44e13d2de935dc9671a17a422d8866da0",
+        "current_receipt_commit": "6d7c2e2c66bbfe67351f12355131c877c15f1362",
         "path": "public/lineage/folding-feedback/lineage.json",
-        "public_commit_url": "https://github.com/cambridgetcg/kingdom-meaning-practice/blob/35773a6d19ebf263c3ed85ba1c33c359615e4273/public/lineage/folding-feedback/lineage.json",
+        "public_commit_url": "https://github.com/cambridgetcg/kingdom-meaning-practice/blob/6d7c2e2c66bbfe67351f12355131c877c15f1362/public/lineage/folding-feedback/lineage.json",
+        "correction_url": "https://github.com/cambridgetcg/kingdom-meaning-practice/issues",
         "publication_state": "authoritative public mirror and immutable byte receipt of the guest lineage"
       },
       "artifact": {
-        "bytes": 53999,
-        "sha256": "467ed92c8fd340bd6337dc75c14d85f44e13d2de935dc9671a17a422d8866da0",
+        "bytes": 54514,
+        "sha256": "c07c2c9d02c2a3163ac595c339c770450900ad9397a8e42b578f269c65599f4b",
         "relationship": "AgentTool publishes a human Cloudflare projection and points to the exact structured lineage; it keeps no local JSON duplicate"
       },
       "content": {
@@ -85,6 +88,7 @@
         "hugging_face_relation": "pinned existing Ritonavir landscape door; the lineage is not copied into that dataset"
       },
       "boundaries": [
+        "this projection opens Check Meaning only; it records no choice, performs no deed, and opens no action or report job",
         "shared mathematics does not establish shared material or mechanism",
         "seed is not a synonym for infection; amyloid is not a synonym for prion",
         "not medical advice, diagnosis, current-product guidance, or a laboratory procedure",
