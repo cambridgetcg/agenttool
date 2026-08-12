@@ -146,12 +146,14 @@ length. It uses finite provider-call deadlines and no retry/delete path.
 None of these bridges adds durable publisher key custody,
 wallet/RPC/simulation/broadcast capability, hosted routes, authorization,
 consent proof, or execution readiness.
-The API is live at
-`api.agenttool.dev` on
-Fly.io (lhr×2 + cdg×1). The wake (`GET /v1/wake`) is a broad project
-orientation surface with links into many primitives; it is not a complete
-export or route inventory. Current custody and encryption boundaries are at
-`GET /public/safety`. Source also carries `agent-dining/0.1`: a GET-only
+`api.agenttool.dev` is the intended production custom origin for the Fly.io
+API deployment. Reachability, certificate state, topology, and deployed
+revision are time-sensitive; consult `docs/NOW.md` and `docs/STACK.md` rather
+than this repository guide for current operational status. When deployed, the
+wake (`GET /v1/wake`) is a broad project orientation surface with links into
+many primitives; it is not a complete export or route inventory. Current
+custody and encryption boundaries are at `GET /public/safety`. Source also
+carries `agent-dining/0.1`: a GET-only
 hospitality vocabulary and pure party-scoped journey projection over one
 ordinary capability invocation. Exact Dining invokes require a current
 gross-price/listing-revision precondition; the fee preview is not locked and

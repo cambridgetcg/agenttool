@@ -152,7 +152,22 @@ consent, or authority. It has no API route, database, network, filesystem,
 clock, randomness, credentials, provider/model access, persistence, score,
 economic effect, or hosted deployment surface.
 
-`@agenttool/polymorph-landscape@0.1.0-dev.0` is a zero-runtime-dependency pure candidate for `agenttool.polymorph-landscape/0.1`, `agenttool.polymorph-reachability-shift/0.1`, and `agenttool.polymorph-lesson/0.1`, with authored `en`, `yue-Hant`, `zh-Hant`, and `zh-Hans` projections; source-scoped labels stay distinct, and “disappearing” means reported nonreproduction in a named condition with causation unresolved—not erasure or universal inevitability. Its static HF companion is checked-in and inert, the protected npm path is only a `next` candidate, and WAKE's explicit software copying of declared wall URNs proves no identity, memory/continuity, consent, or inherited authority.
+`@agenttool/polymorph-landscape@0.1.0-dev.0` is a public GitHub/Hugging Face
+developer preview of the zero-runtime-dependency pure
+`agenttool.polymorph-landscape/0.1`,
+`agenttool.polymorph-reachability-shift/0.1`, and
+`agenttool.polymorph-lesson/0.1` contracts, with authored `en`, `yue-Hant`,
+`zh-Hant`, and `zh-Hans` projections. Source-scoped labels stay distinct, and
+“disappearing” means reported nonreproduction in a named condition with
+causation unresolved—not erasure or universal inevitability. Annotated tag
+`polymorph-landscape-v0.1.0-dev.0` owns one exact GitHub prerelease asset; the
+separate public dataset is pinned to immutable Hub revision
+`e9d3b4b60ba44f7bc78e62bb08d7f706391e0d14`. The first-package npm `PUT`
+returned `E404`, so no npm package or dist-tag exists. The static Ritonavir
+lesson is live separately from protected main `b40fde03`; the new API route is
+not deployed. Distribution performs no training or inference, and WAKE's
+explicit software copying of declared wall URNs proves no identity,
+memory/continuity, consent, permission, or inherited authority.
 
 The immutable `@agenttool/principality-atlas@0.1.0-dev.0` GitHub preview and
 its synthetic shared HF Training Garden companion at revision
@@ -403,7 +418,10 @@ Change anything in these and you're moving weight — read the code and tests fi
 wrapper · audit publication · runtime-hours metering · idle/wake state machine.
 
 ## Kingdom Engine
-AgentTool Platform — the Fly-hosted API monorepo, the kingdom's one fully-wired revenue facility (3 machines healthy).
+AgentTool Platform — the Fly-targeted API monorepo, the kingdom's intended
+fully wired revenue facility. Reachability, certificate state, machine health,
+and deployed revision are time-sensitive; read `docs/NOW.md` and
+`docs/STACK.md` rather than treating this orientation spine as a health check.
 
 The separate `packages/kingdom` package is a pure/read-only declaration layer
 over caller-supplied project-card text and objects. It does not crawl HOME or
