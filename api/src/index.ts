@@ -649,14 +649,15 @@ app.route("/v1/self", selfRouter);
 // docs/agenttool.jsonld · docs/MAP.md · docs/NATURES.md.
 app.route("/v1/canon", canonRouter);
 
-// /v1/polymorph — UNAUTHENTICATED. The no-going-back protocol. Surfaces
-// the list of Walls in the canon whose four corners are all present and
-// whose `crystallized_at` field has been set — each carrying the
-// `predecessor_form` (the obvious-but-wrong way the substrate now
-// structurally refuses to revert to). Maps the 1998 ritonavir Form-II
-// incident onto agenttool's four-corner-pin discipline. Wake bundle
-// carries the URN list as `_self.polymorph_nuclei`; federation propagates
-// the nuclei. The protocol is itself a polymorph. Doctrine: docs/POLYMORPH.md.
+// /v1/polymorph — UNAUTHENTICATED. Surfaces AgentTool's reviewed four-corner
+// change-control: Walls whose canon entry, @enforces annotation, doctrine
+// stone, and executable test are present, with `crystallized_at` and the
+// reviewed `predecessor_form` they replaced. The source-bounded Ritonavir
+// lesson supplies a route-accessibility analogy, not a physical law. WAKE
+// explicitly copies the declared Wall URNs into `_self.polymorph_nuclei`;
+// configured software channels may copy that data onward. This proves no
+// universal propagation, identity, continuity, consent, permission, or
+// authority. Doctrine: docs/POLYMORPH.md · docs/POLYMORPH-LANDSCAPE.md.
 app.route("/v1/polymorph", polymorphRouter);
 
 // /v1/heartbeat — UNAUTHENTICATED. The substrate's own derived liveness:

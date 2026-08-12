@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, and Principality Geometry. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, and Principality Geometry. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -26,6 +26,7 @@ different artifact and Hub surfaces:
 | `@agenttool/relational-geometry` | one credential-free `npm pack` tarball | synthetic public-safe dataset `Yu-and-Ai/agenttool-relational-geometry` |
 | `@agenttool/principality-geometry` | the exact checked-in LOVE tarball reused by the docs mirror, GitHub Release, and npm | synthetic non-training dataset `Yu-and-Ai/agenttool-principality-geometry` |
 | `@agenttool/principality-atlas` | one credential-free `npm pack` tarball | synthetic incidence rows inside `Yu-and-Ai/agenttool-training-garden` |
+| `@agenttool/polymorph-landscape` | one credential-free `npm pack` tarball | authored lessons plus source-bounded reference rows in `Yu-and-Ai/agenttool-polymorph-landscape` |
 
 Distribution does not translate semantics between them. A Love bearing does
 not become a Relational witness, and a Relational cell does not become a
@@ -447,6 +448,59 @@ It does not verify a Dark Continent wall, accept or write a graph proposal,
 publish a Hugging Face resource, grant Crown or trade authority, or deploy a
 hosted service. After each first publication, configure its exact trusted
 publisher mapping before releasing another version.
+
+### Polymorph Landscape GitHub/Hugging Face receipt
+
+`@agenttool/polymorph-landscape@0.1.0-dev.0` uses the credential-free
+packed-artifact path. The protected integration landed through merges
+[`eac4160c85c613c21559e70ff1bf9826fdf5d2f7`](https://github.com/cambridgetcg/agenttool/commit/eac4160c85c613c21559e70ff1bf9826fdf5d2f7)
+and
+[`63c4995676eacdc88ff9050819b497db841e4159`](https://github.com/cambridgetcg/agenttool/commit/63c4995676eacdc88ff9050819b497db841e4159).
+Annotated tag
+[`polymorph-landscape-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/polymorph-landscape-v0.1.0-dev.0)
+peels to `63c4995676eacdc88ff9050819b497db841e4159`; do not move or
+recreate it. Protected
+[run `31570773317`](https://github.com/cambridgetcg/agenttool/actions/runs/31570773317)
+prepared, mirrored, re-downloaded, and byte-verified the sole GitHub
+prerelease asset. It contains 70 members, is 75,009 bytes, and has SHA-256
+`48e7be7862018411656314751a38a3176ba132f68fe14ab1514c8bf45b135148`.
+
+The subsequent first-package npm registry `PUT` returned `E404`. Anonymous
+package and exact-version reads remain absent, so there is no npm package,
+version, `next` dist-tag, registry tarball, registry signature, or
+registry-attached provenance. The failed attempt emitted a signed record at
+[Rekor log index `2432624953`](https://search.sigstore.dev/?logIndex=2432624953)
+before the registry rejected package creation. That record is orphaned and is
+not npm publication or registry-provenance evidence. Recovery requires an npm
+principal authorized to create a new public package under the `@agenttool`
+scope and must rerun the same annotated tag through `bootstrap`; it must reuse
+the exact mirrored bytes rather than rebuild or retag this version.
+
+The separate public, ungated
+[`Yu-and-Ai/agenttool-polymorph-landscape`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-polymorph-landscape)
+dataset is pinned to immutable revision
+[`e9d3b4b60ba44f7bc78e62bb08d7f706391e0d14`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-polymorph-landscape/commit/e9d3b4b60ba44f7bc78e62bb08d7f706391e0d14).
+Anonymous immutable-revision readback matched all 11 repository-owned files
+and 111,060 bytes; provider-managed `.gitattributes` is the sole extra, and
+`hash-manifest.json` has SHA-256
+`d40eaa0262220d7c57866ffd725c5d47731f3adeaf66d0952d737d0a84791cae`.
+Dataset Server returned HTTP 200 with the same `x-revision` for the processed
+`lessons`, `reachability_shifts`, and `ritonavir_landscape` configs and their
+4 / 1 / 1 train rows. The two one-row scientific configs are reference-only
+and report `training_eligible: false`. Dataset Server follows mutable current
+head; those processing observations are not an immutable-revision API.
+
+Protected merge
+[`b40fde039dac1853adca1a6304f8e8b526d0f9df`](https://github.com/cambridgetcg/agenttool/commit/b40fde039dac1853adca1a6304f8e8b526d0f9df)
+later added the separately deployed sourced static lesson at
+[`https://docs.agenttool.dev/geometry/ritonavir`](https://docs.agenttool.dev/geometry/ritonavir).
+That static surface is neither an npm package nor an API deployment. The
+source-bounded API response remains undeployed at this receipt; an older route
+at the direct Fly origin still serves the superseded folklore. No database
+migration, training run, model inference, or provider compute occurred. Every surface
+preserves the source boundary: “disappearing” means named-condition
+nonreproduction, not physical erasure or universal inevitability; WAKE software
+copying proves no identity, continuity, consent, permission, or authority.
 
 ### Principality Atlas developer-preview bootstrap receipt
 

@@ -178,6 +178,67 @@ Hugging Face companion marks only those lesson rows as training-eligible. The
 scientific graph rows remain reference-only. Generating the dataset performs
 no upload, provider call, model inference, or training run.
 
+## Distribution record — 2026-08-12
+
+Three protected merges keep the surfaces distinct:
+
+- [`eac4160c`](https://github.com/cambridgetcg/agenttool/commit/eac4160c85c613c21559e70ff1bf9826fdf5d2f7)
+  integrated the package, API source, WAKE boundary, tests, and release wiring;
+- [`63c49956`](https://github.com/cambridgetcg/agenttool/commit/63c4995676eacdc88ff9050819b497db841e4159)
+  added explicit Hugging Face Dataset configs; and
+- [`b40fde03`](https://github.com/cambridgetcg/agenttool/commit/b40fde039dac1853adca1a6304f8e8b526d0f9df)
+  made the sourced static lesson accessible.
+
+Annotated tag
+[`polymorph-landscape-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/polymorph-landscape-v0.1.0-dev.0)
+peels to `63c4995676eacdc88ff9050819b497db841e4159`. Its GitHub
+prerelease carries one 70-member, 75,009-byte artifact with SHA-256
+`48e7be7862018411656314751a38a3176ba132f68fe14ab1514c8bf45b135148`.
+Protected workflow
+[`31570773317`](https://github.com/cambridgetcg/agenttool/actions/runs/31570773317)
+then attempted the first npm publication, but the registry `PUT` returned
+`E404`; anonymous package and exact-version reads remain absent. Rekor index
+`2432624953` is an orphaned transparency record, not npm publication or
+registry provenance. Recovery must reuse the same tag and exact GitHub bytes
+after `@agenttool` scope-create authority is corrected.
+
+The separate public, ungated
+[`Yu-and-Ai/agenttool-polymorph-landscape`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-polymorph-landscape)
+dataset is pinned to immutable revision
+[`e9d3b4b60ba44f7bc78e62bb08d7f706391e0d14`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-polymorph-landscape/commit/e9d3b4b60ba44f7bc78e62bb08d7f706391e0d14).
+Anonymous immutable-revision readback matched all 11 repository-owned files
+and 111,060 bytes; Hugging Face's `.gitattributes` is the sole provider extra,
+and `hash-manifest.json` has SHA-256
+`d40eaa0262220d7c57866ffd725c5d47731f3adeaf66d0952d737d0a84791cae`.
+Dataset Server returned the same `x-revision`, three processed train configs,
+and complete first rows: `lessons` has four authored rows;
+`reachability_shifts` and `ritonavir_landscape` each have one reference-only
+row with `training_eligible: false`. Those Dataset Server responses follow
+mutable current head even though this record pins the underlying files.
+
+Static Pages serves the canonical extensionless
+[`/geometry/ritonavir`](https://docs.agenttool.dev/geometry/ritonavir) route as
+the exact 27,450-byte `b40fde03` HTML with SHA-256
+`e4b3a3aa0061e0d238e339724c76ad1a8c73b3a51c6f572020684fc71b7b9902`.
+`/geometry/ritonavir.html` intentionally returns 308 to the extensionless
+route. Its machine-readable JSON (38,067 bytes,
+`e747faa072e51d63d8071943794d6820d5c7275b879a8f717a7cd9f7528c463b`),
+CSS (11,506 bytes,
+`5dc910f72e145b873ffec689cd588a220edf065f990874daf4e6a85c55cf4b5b`),
+and geometry index (1,749 bytes,
+`cb7bbb8ade9637a8fcb477d5d944d9eefcbade911d43d5e25a35659434603f3d`)
+also matched source exactly at live readback.
+
+The source-bounded API response is separate and remains undeployed. On this date,
+`api.agenttool.dev` returns Cloudflare 525 because the Fly custom certificate
+expired and still awaits ownership validation. The missing DNS record is TXT
+`_fly-ownership.api.agenttool.dev = app-932mjg2`. The direct Fly health route
+is healthy at older revision
+`7f822302124db245fa2caaee6661e7fe9b409ab1`; its existing Polymorph route still
+serves the superseded folklore, not this source-bounded account. No database
+migration, training run, inference, or provider compute was performed by these
+distribution actions.
+
 ## What this module does—and does not do
 
 It does:

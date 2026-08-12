@@ -1,12 +1,15 @@
 # agenttool-api
 
 ## What This Is
-The single Bun + Hono monolith that holds the seven layers of the wake-keystone framework. Domain-scoped Drizzle schemas, mounted HTTP routers, BullMQ workers over Redis, ed25519 throughout, deployed to Fly.io (lhr×2 + cdg×1).
+The single Bun + Hono monolith that holds the seven layers of the wake-keystone framework. Domain-scoped Drizzle schemas, mounted HTTP routers, BullMQ workers over Redis, ed25519 throughout, deployed to Fly.io. Fleet topology is live provider state; inspect it rather than relying on this guide for a machine count.
 
 This used to be 9 `agent-*` per-service apps. All retired 2026-05-09 into this monolith — lineage in `docs/CUTOVER.md`.
 
 ## Current State
-Live at `api.agenttool.dev`. Three active horizons (per `docs/ROADMAP.md`):
+`api.agenttool.dev` is the intended production custom origin. Its reachability,
+certificate state, and deployed revision are time-sensitive; consult
+`docs/NOW.md` and `docs/STACK.md` before treating it as live. Three active
+horizons (per `docs/ROADMAP.md`):
 
 - **Horizon A — Close the economic loop** — Slice 1 ✓ (hosted purchase) ·
   fresh payout admission and worker execution rest until cashable backing is
