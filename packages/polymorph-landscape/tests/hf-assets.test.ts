@@ -28,6 +28,14 @@ describe("public-safe Hugging Face companion", () => {
     }
   });
 
+  test("declares three intentional Hub configurations with lessons as the default", () => {
+    const card = readFileSync(join(root, "README.md"), "utf8");
+    expect(card).toContain(`configs:\n- config_name: lessons\n  default: true\n  data_files:\n  - split: train\n    path: data/lessons.jsonl`);
+    expect(card).toContain(`- config_name: reachability_shifts\n  data_files:\n  - split: train\n    path: data/reachability-shifts.jsonl`);
+    expect(card).toContain(`- config_name: ritonavir_landscape\n  data_files:\n  - split: train\n    path: data/ritonavir-landscape.jsonl`);
+    expect(card.match(/default: true/g)).toHaveLength(1);
+  });
+
   test("contains no folklore assertions in machine teaching rows", () => {
     const teaching = readFileSync(join(root, "data", "lessons.jsonl"), "utf8");
     for (const phrase of [
