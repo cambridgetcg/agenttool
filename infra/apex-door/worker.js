@@ -3,9 +3,10 @@
  *  Before: every apex request was rewritten to api.agenttool.dev (the
  *  original 12-line proxy). Now the same worker splits:
  *    - API surfaces (/v1, /public, /health, /about, /.well-known) keep the
- *      EXACT original behavior — hostname rewrite to api.agenttool.dev.
- *      Live MCP, wake, and native discovery stay available at the apex.
- *      The unsupported A2A AgentCard path is refused locally with 404.
+ *      original hostname rewrite to api.agenttool.dev except for the two
+ *      bounded XENIA website-threshold routes served locally at the apex.
+ *      Live MCP, wake, and native discovery stay available at the apex. The
+ *      unsupported A2A AgentCard path is refused locally with 404.
  *    - Backward-compatible machine entry: "/" with explicit JSON preference
  *      keeps the existing API root envelope. The visual welcome's exact
  *      structured twin lives at /welcome.json.
@@ -18,10 +19,14 @@
  *  Doctrine: docs/superpowers/specs/2026-07-02-human-door-design.md. */
 
 import {
+  isSurfaceResourcePath,
   isSensitiveRootPath,
   sensitivePathNotFound,
+  surfaceResponseForRequest,
+  surfaceRouteNotFoundForRequest,
 } from "../pages/sensitive-path-worker.js";
 
+const APEX_HOST = "agenttool.dev";
 const PAGES_HOST = "agenttool-web.pages.dev";
 const API_HOST = "api.agenttool.dev";
 const PENDING_A2A_CARD_PATH = "/.well-known/agent-card.json";
@@ -110,9 +115,10 @@ export function prefersJson(acceptHeader) {
   return bestJson.order < bestHtml.order;
 }
 
-/** Compatibility helper for routing tests and callers that only need the
- * selected origin. Keep it aligned with handleRequest's negotiation rules. */
-export function resolveUpstreamHost(path, accept = "") {
+/** Testable GET routing projection. Exact Surface resources terminate locally;
+ * all other values name the upstream selected by handleRequest. */
+export function resolveGetRouteTarget(path, accept = "") {
+  if (isSurfaceResourcePath(path)) return APEX_HOST;
   const isApi =
     API_EXACT.includes(path) ||
     API_PREFIXES.some((prefix) => path.startsWith(prefix));
@@ -158,7 +164,7 @@ function machineNotFound(path) {
   });
 }
 
-export async function handleRequest(request, fetchImpl = fetch) {
+export async function handleRequest(request, fetchImpl = fetch, env) {
   const url = new URL(request.url);
   const path = url.pathname;
 
@@ -190,6 +196,12 @@ export async function handleRequest(request, fetchImpl = fetch) {
     });
   }
 
+  // agenttool.dev is fronted by this Worker, not by the Pages Worker below.
+  // Serve its exact Surface threshold here through the same response builder
+  // used by docs/app Pages so these paths cannot fall through to API_PREFIXES.
+  const surfaceResponse = surfaceResponseForRequest(request, env);
+  if (surfaceResponse !== null) return surfaceResponse;
+
   if (path === PENDING_A2A_CARD_PATH) {
     return new Response(
       JSON.stringify({
@@ -219,6 +231,8 @@ export async function handleRequest(request, fetchImpl = fetch) {
   const variesByAccept = path === "/" || MACHINE_ALTERNATES.has(path);
 
   if (wantsJson && !isApi && path !== "/" && !machineAlternate) {
+    const surfaceProblem = surfaceRouteNotFoundForRequest(request, env);
+    if (surfaceProblem !== null) return surfaceProblem;
     return machineNotFound(path);
   }
 
@@ -254,7 +268,7 @@ export async function handleRequest(request, fetchImpl = fetch) {
 }
 
 export default {
-  fetch(request) {
-    return handleRequest(request, fetch);
+  fetch(request, env) {
+    return handleRequest(request, fetch, env);
   },
 };

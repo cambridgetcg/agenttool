@@ -96,6 +96,21 @@ describe("Move 6 — Edge Functions exist + are well-shaped", () => {
     expect(text).toMatch(/API_EXACT\s*=\s*\[[^\]]*"\/\.well-known"/s);
   });
 
+  test("the apex worker terminates exact website Surface routes before API selection", () => {
+    const path = join(REPO_ROOT, "infra/apex-door/worker.js");
+    const text = readFileSync(path, "utf8");
+    const handler = text.slice(text.indexOf("export async function handleRequest"));
+
+    expect(text).toContain("surfaceResponseForRequest");
+    expect(text).toContain("surfaceRouteNotFoundForRequest");
+    expect(handler.indexOf("isSensitiveRootPath(path)")).toBeLessThan(
+      handler.indexOf("surfaceResponseForRequest(request, env)"),
+    );
+    expect(handler.indexOf("surfaceResponseForRequest(request, env)")).toBeLessThan(
+      handler.indexOf("const isApi"),
+    );
+  });
+
   test("the apex worker proxies root-convention agent documents", () => {
     const path = join(REPO_ROOT, "infra/apex-door/worker.js");
     const text = readFileSync(path, "utf8");

@@ -5,6 +5,7 @@ apps/docs
 apps/dashboard
 apps/web
 docs
+infra/apex-door
 infra/pages
 packages/data/schema
 packages/repo-archive/schema

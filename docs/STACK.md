@@ -32,21 +32,20 @@ This is the architecture/operations map. It sits between two existing docs:
 bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-frontend
               ▼                                              ▼
         ┌────────────────────────┐    ┌────────────────────────┐
-        │  Cloudflare Pages      │    │  Fly.io                │
-        │  (3 projects, Direct   │    │  app = "agenttool"     │
-        │   Upload — NOT git-    │    │  region = "lhr"        │
-        │   connected)           │    │                        │
-        │                        │    │                        │
-        │  • agenttool-web       │    │  Bun + Hono monolith,  │
-        │    → agenttool.dev     │    │  journaled schema,     │
-        │  • agenttool-dashboard │    │  → api.agenttool.dev   │
-        │    → app.agenttool.dev │    │                        │
-        │  • agenttool-docs      │    │                        │
-        │    → docs.agenttool.dev│    └───────────┬────────────┘
-        │                        │                │
-        │  Static files, no build│                │
-        │  step. SOMA bundle is  │                │
-        │  pre-built + checked-in│                │
+        │  Cloudflare edge       │    │  Fly.io                │
+        │                        │    │  app = "agenttool"     │
+        │  agenttool-proxy Worker│    │  region = "lhr"        │
+        │  owns apex + www       │    │                        │
+        │  → Pages/API by route  │    │  Bun + Hono monolith,  │
+        │                        │    │  journaled schema,     │
+        │  Pages Direct Upload:  │    │  → api.agenttool.dev   │
+        │  • agenttool-web       │    │                        │
+        │    apex backing only   │    └───────────┬────────────┘
+        │  • agenttool-dashboard │                │
+        │    → app.agenttool.dev │                │
+        │  • agenttool-docs      │                │
+        │    → docs.agenttool.dev│                │
+        │  (no Git integration)  │                │
         └────────────────────────┘                │
                                                   │
                           ┌────────────────────────┴────────────┐
@@ -59,7 +58,7 @@ bin/deploy.sh --no-migrate --no-api       bin/deploy.sh --no-migrate --no-fronte
             └──────────────────────┘              └──────────────────────┘
 ```
 
-> **Important.** `git push github main` is **not** a deploy. GitHub `main` is the coordination and release head; each deploy snapshots it once at invocation start. GitHub `main` is the only head — the Codeberg mirror was retired 2026-07-25. CF Pages projects are configured as **Direct Upload** (no Git integration), and Fly receives no webhook. Use `bin/deploy.sh --no-migrate --no-api` for a normal frontend-only release and `bin/deploy.sh --no-migrate --no-frontend` for an API-only release. The API wrapper stages canonical doctrine bytes required by the Docker build; bare `cd api && fly deploy` fails when that generated staging directory is absent. See §8 below.
+> **Important.** `git push github main` is **not** a deploy. GitHub `main` is the coordination and release head; each deploy snapshots it once at invocation start. GitHub `main` is the only head — the Codeberg mirror was retired 2026-07-25. CF Pages projects are configured as **Direct Upload** (no Git integration), `agenttool-proxy` is deployed separately as a Worker, and Fly receives no webhook. Use `bin/deploy.sh --no-migrate --no-api` for a normal frontend-only release and `bin/deploy.sh --no-migrate --no-frontend` for an API-only release. The API wrapper stages canonical doctrine bytes required by the Docker build; bare `cd api && fly deploy` fails when that generated staging directory is absent. See §8 below.
 
 The DB and Redis are currently on **Supabase** (the legacy single-VPS layout) — `infra/README.md` documents the three-phase upgrade path (Phase 1: PgBouncer / Phase 2: Hetzner Managed DB / Phase 3: load balancer + horizontal scale). Triggers are revenue-keyed, not technical.
 
@@ -107,29 +106,36 @@ git push github main
 
 ---
 
-## 2 · Frontend: Cloudflare Pages
+## 2 · Frontend: Cloudflare Pages + apex Worker
 
-The CF Pages projects use **Direct Upload mode — no Git integration**. The
+The three CF Pages projects use **Direct Upload mode — no Git integration**.
+`agenttool-proxy`, a separate Cloudflare Worker, owns both apex zone routes. The
 normal release-tracked frontend verb is `bin/deploy.sh --no-migrate --no-api`;
 it applies the GitHub snapshot gate, hermetic preflight, sampled parity checks,
 sensitive-path denial checks, and a receipt. `bin/frontend-deploy.sh` is the
-low-level uploader for a deliberate subset escape hatch. By itself it does not
-apply the source gate or write the orchestrator receipt.
+low-level Pages/Worker uploader for a deliberate subset escape hatch. By itself
+it does not apply the source gate or write the orchestrator receipt.
 
 The low-level uploader captures the current commit hash once and builds its
 upload tree from a Git archive of that exact object, not the ambient working
-directory. Dirty and ignored files are excluded; a tracked `.env` file is a
-hard refusal, as is a tracked `.dev.vars*` file.
+directory. That allowlisted tree contains the three apps, `infra/pages/`, and
+`infra/apex-door/`; dirty and ignored files are excluded. A tracked `.env` file
+is a hard refusal, as is a tracked `.dev.vars*` file. Every invocation of the
+pinned Wrangler appends `--env-file=/dev/null` after its subcommand arguments,
+so Wrangler cannot silently treat a repository `.env` or `.env.local` as a
+credential source. Explicit process credentials, Keychain fallback, and the
+deliberately selected OAuth session remain separate inputs.
 
 `infra/pages/` is the single source for a Pages advanced-mode Worker and its
 route-complete Pages invocation policy. The uploader stages that pair into all
 three project roots. Every path invokes the Worker so percent-encoded separators
 and traversal cannot evade inspection by appearing after an ordinary prefix.
 The Worker bounded-decodes and case-folds paths before denying `/.git*`,
-`/.env*`, and `/.dev.vars*` with a marked, non-cacheable 404. Allowed requests,
-including `/.well-known/*` and ordinary static assets, are forwarded intact to
-the Pages asset binding. Every request therefore counts as a Pages Function
-invocation. On the Workers Free plan, production and preview must be configured
+`/.env*`, and `/.dev.vars*` with a marked, non-cacheable 404. Exact XENIA
+manifest and orientation routes terminate in the Worker; all other allowed
+requests, including ordinary static assets, are forwarded intact to the Pages
+asset binding. Every request therefore counts as a Pages Function invocation.
+On the Workers Free plan, production and preview must be configured
 to fail closed; allowance exhaustion then returns an error instead of serving
 any Pages asset, because the fence covers the entire site. The route policy does
 not itself evict a response already cached ahead of Pages, so marked live probes
@@ -138,11 +144,17 @@ be required during recovery.
 The uploader accepts
 `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`, then falls back to their
 macOS keychain entries. In the default token mode, that credential must read the
-Pages REST policy as well as upload: the script verifies fail-closed settings
-and the `main` production branch for every target before any upload. An explicit
-`--oauth-fallback` is a weaker break-glass mode: it checks project visibility,
-loudly says the policy check was skipped, and does not prove those settings.
-The uploader does not mutate the setting or purge zone cache. Phase 5 proves
+Pages REST policy as well as upload: Pages Read/Edit lets the script verify
+fail-closed settings and the `main` production branch for every target before
+any upload. For a requested `web` target, Zone Read and Workers Routes Read let
+token mode require exactly `agenttool.dev/*` and `www.agenttool.dev/*` to be
+owned by `agenttool-proxy`; the actual Worker release also needs Workers Scripts
+Edit and Workers Routes Edit. An explicit `--oauth-fallback` is a weaker
+break-glass mode: Wrangler proves only that the requested Pages projects and
+apex Worker are visible to that OAuth session. The script loudly skips the raw
+Pages policy and Worker-route inspections, so OAuth visibility is not proof of
+`production_branch`, `fail_open`, apex/www ownership, or routing policy. The
+uploader does not mutate those settings or purge zone cache. Phase 5 proves
 current live denial and fence activation on literal paths, plus denial of
 encoded aliases.
 
@@ -150,13 +162,14 @@ encoded aliases.
 | --------------------- | ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `agenttool-dashboard` | `apps/dashboard/` | `app.agenttool.dev`          | SDK quickstart (`index.html`) + read-only observation surface (`watch.html`). Workspace UI retired 2026-05-17 per agents-only. |
 | `agenttool-docs`      | `apps/docs/`      | `docs.agenttool.dev`         | Static docs site                                                                                                               |
-| `agenttool-web`       | `apps/web/`       | `agenttool.dev` human routes | Human door, watch window, credits, village, and gallery                                                                        |
+| `agenttool-web`       | `apps/web/`       | Apex Pages backing only      | Human door, watch window, credits, village, and gallery; reached through `agenttool-proxy`                                      |
 
-The `agenttool.dev` apex is split by the `agenttool-proxy` Cloudflare Worker.
-API and discovery paths (plus `/` when the client requests JSON) route to
-`api.agenttool.dev`; human routes use `agenttool-web` Pages. This preserves
-native machine-facing paths while serving the human door. `apps/landing/` and
-the old `agenttool-landing` project are retired.
+`agenttool-proxy` is the production owner of both `agenttool.dev/*` and
+`www.agenttool.dev/*`. It canonicalizes `www` to the apex, terminates the exact
+apex XENIA Surface routes locally, sends API and discovery paths (plus `/` when
+the client requests JSON) to `api.agenttool.dev`, and uses `agenttool-web` Pages
+as the backing for human routes. The Pages project is not the apex route owner.
+`apps/landing/` and the old `agenttool-landing` project are retired.
 
 ```bash
 # Normal release of all frontend projects
@@ -166,6 +179,18 @@ bin/deploy.sh --no-migrate --no-api
 bin/frontend-deploy.sh dashboard
 bin/frontend-deploy.sh dashboard docs
 ```
+
+A `web` target is one ordered but non-atomic provider attempt. The uploader
+first validates and dry-runs the exact staged apex Worker, uploads the
+`agenttool-web` Pages backing, and only after that succeeds deploys
+`agenttool-proxy` from the same commit. A Pages failure prevents the Worker
+step; a Pages success followed by a Worker failure leaves partial Cloudflare
+state. Multiple requested targets are also independent: they are attempted in
+argument order, and the first failed target stops later targets without rolling
+back an earlier successful Pages or Worker deployment. The normal orchestrator
+exits non-zero and, once an external mutation may have begun, attempts a routine
+receipt with `outcome: "failed_or_uncertain"`; the low-level uploader writes no
+such receipt. Inspect both provider histories before retry or repair.
 
 The script verifies `apps/<x>/shared` symlinks resolve before deploying (they point at `apps/_shared/` for shared theme + nav). Wrangler follows symlinks at upload time so the resolved files reach the CDN.
 
@@ -216,7 +241,7 @@ Use these settings:
 Do not broaden this rule to authenticated API routes or override origin TTLs.
 Successes intentionally use short public TTLs; 400/404/503 responses use
 `no-store` and must remain ineligible. The credential applying the rule needs
-zone read plus **Cache Rules: Edit**; the Pages upload token is not evidence of
+zone read plus **Cache Rules: Edit**; the frontend deploy token is not evidence of
 that permission. After a rule change, purge the five URLs and probe Fly and the
 public hostname with `Accept-Encoding: identity`, `gzip`, `br`, and `zstd`.
 Require a quoted non-weak ETag, the same decoded body digest, and correct
@@ -242,7 +267,14 @@ curl -s -o /dev/null -w "%{http_code}\n" https://app.agenttool.dev/.env.local
 
 ### CF rollback
 
-CF Pages keeps prior deployments. Open the CF dashboard for the project, find the previous deployment, click "Rollback to this deployment." Static files revert immediately. The api is unaffected (separate substrate).
+Cloudflare Pages and Workers keep separate deployment histories. Rolling a
+Pages project back does not roll `agenttool-proxy` back, and changing the Worker
+does not select an older Pages deployment. For `app` or `docs`, select the
+intended prior Pages deployment in that project. For `web`, inspect both the
+`agenttool-web` Pages history and the `agenttool-proxy` Workers
+version/deployment history, select or redeploy a reviewed compatible pair, then
+repeat the live apex checks. Neither provider history is an atomic release
+record for the other. The Fly API remains a separate substrate.
 
 ### Why direct upload, not Git integration
 
@@ -342,14 +374,15 @@ without pretending the commit identifies the extra bytes.
 
 Every successful non-dry-run chain writes an atomic, mode-0600 receipt below
 `${XDG_STATE_HOME:-$HOME/.local/state}/agenttool/deploy-receipts/`. If a
-migration, Fly rollout, or Pages upload may have begun and the chain later
-returns non-zero or receives caught `INT`/`TERM`, the exit trap attempts a
-`failed_or_uncertain` receipt. The fixed v3 shape records the source revision
-and dirty bit, the invocation-start release-head snapshot, explicit overrides,
-phase outcomes, exit status, and verified machine count—never credentials,
-ambient environment values, or command output. `SIGKILL`, host loss, or an
-unwritable state directory can prevent that record; receipt absence never
-proves no mutation.
+migration, Fly rollout, Pages upload, or apex Worker deploy may have begun and
+the chain later returns non-zero or receives caught `INT`/`TERM`, the exit trap
+attempts a receipt with `outcome: "failed_or_uncertain"`. That outcome applies
+to the normal `routine` mode too; it is not reserved for maintenance rollouts.
+The fixed v4 shape records the source revision and dirty bit, the
+invocation-start release-head snapshot, explicit overrides, phase outcomes,
+exit status, and verified machine count—never credentials, ambient environment
+values, or command output. `SIGKILL`, host loss, or an unwritable state
+directory can prevent that record; receipt absence never proves no mutation.
 
 Like CF Pages, **Fly is not connected to either Git host.** No webhook fires on push; the deploy wrapper is the explicit trigger and requires an authenticated Fly CLI session.
 
@@ -568,11 +601,12 @@ DNS managed by Cloudflare. Zone: `agenttool.dev`.
 
 | Hostname             | Points to               | Served by                                                                             |
 | -------------------- | ----------------------- | ------------------------------------------------------------------------------------- |
-| `agenttool.dev`      | Cloudflare Worker route | `agenttool-proxy`: human routes to `agenttool-web` Pages; API/discovery routes to Fly |
-| `app.agenttool.dev`  | CF Pages                | `apps/dashboard` (splash + watch only since 2026-05-17)                               |
-| `docs.agenttool.dev` | CF Pages                | `apps/docs/` (rendered static)                                                        |
-| `api.agenttool.dev`  | Fly.io anycast          | `api/`                                                                                |
-| `*.agenttool.dev`    | (reserved)              |                                                                                       |
+| `agenttool.dev`      | Cloudflare Worker route | `agenttool-proxy`: exact Surface routes locally; human routes to `agenttool-web` Pages; API/discovery routes to Fly |
+| `www.agenttool.dev`  | Cloudflare Worker route | `agenttool-proxy`: canonical redirect to the apex                                                               |
+| `app.agenttool.dev`  | CF Pages                | `apps/dashboard` (splash + watch only since 2026-05-17)                                                  |
+| `docs.agenttool.dev` | CF Pages                | `apps/docs/` (rendered static)                                                                           |
+| `api.agenttool.dev`  | Fly.io anycast          | `api/`                                                                                                   |
+| `*.agenttool.dev`    | (reserved)              |                                                                                                          |
 
 Updating DNS records: manual via the Cloudflare dashboard, or scripted ad-hoc using a Cloudflare API token (`Cloudflare_API_Token` in macOS keychain) against the Cloudflare API. The legacy `infra/_archive/phase3-load-balancer/deploy.sh` references the historical Hetzner-LB DNS update; not used today.
 
@@ -607,7 +641,7 @@ Key services on this machine (developer-shared naming):
 | `agenttool-database-url`          | `$USER` for local API; `macair` for migration runner | Transaction-pooled general/survey URL; never substituted for a session-affine apply                            |
 | `agenttool-database-session-url`  | `macair` for migration runner                        | Session-pooled URL required by `_migrate-one.ts` and real batch applies                                        |
 | `agenttool-vault-master-key`      | `$USER`                                              | 32-byte hex; api server reads to seal vault entries                                                            |
-| `agenttool-cloudflare-token`      | `macair` for `frontend-deploy.sh`                    | CF Pages deploy token (only if scripting deploys)                                                              |
+| `agenttool-cloudflare-token`      | `macair` for `frontend-deploy.sh`                    | CF token: Pages Read/Edit, Zone Read, Workers Scripts Edit, and Workers Routes Read/Edit                       |
 | `agenttool-cloudflare-account-id` | `macair` for `frontend-deploy.sh`                    | CF account id                                                                                                  |
 | `agenttool-bridge-kmaster`        | `$USER`                                              | Bridge sidecar's K_master                                                                                      |
 | `agenttool-bridge-signkey`        | `$USER`                                              | Bridge sidecar's ed25519 signing key                                                                           |
@@ -744,7 +778,7 @@ bin/deploy.sh --no-migrate
                               verification → Fly/API → dashboard release)
 
 bin/deploy.sh --no-migrate --no-api
-                             (frontend-only release-tracked CF Pages deploy)
+                             (frontend-only release-tracked Pages/Worker deploy)
                              (gate + preflight + sampled/negative checks + receipt)
 
 bin/frontend-deploy.sh dashboard
@@ -870,7 +904,8 @@ If these don't pass, don't deploy. The pre-flight catches "I'm about to ship cod
 | `fly logs -a agenttool`    | Fly CLI                                             | Server logs, real-time                                                                                                                |
 | `fly status -a agenttool`  | Fly CLI                                             | Machine health + recent releases                                                                                                      |
 | `fly dashboard agenttool`  | Browser                                             | Fly's web console                                                                                                                     |
-| Cloudflare Pages dashboard | `dash.cloudflare.com`                               | Per-project deploy history, build logs, rollback button                                                                               |
+| Cloudflare Pages dashboard | `dash.cloudflare.com`                               | Per-project Pages deploy history, build logs, rollback button                                                                         |
+| Cloudflare Workers dashboard | `dash.cloudflare.com`                             | Separate `agenttool-proxy` version and deployment history                                                                              |
 | Cloudflare Analytics       | `dash.cloudflare.com`                               | DNS / edge request volume + cache stats                                                                                               |
 | Postgres logs              | Supabase dashboard (project `jseqftufplgewhojwbmh`) | DB-level errors, slow queries, `pg_stat_statements`                                                                                   |
 
@@ -898,7 +933,10 @@ admission and workers held and fix forward with a compatible image. For a
 code-only release or ordinary migration, independently prove full runtime and
 schema compatibility before using Fly rollback.
 
-Or roll the dashboard via the CF Pages dashboard.
+For frontends, follow the separate Pages/Workers histories in Phase 6. A `web`
+repair may require a compatible `agenttool-web` Pages deployment and
+`agenttool-proxy` Worker version; rolling either history alone does not roll the
+other one.
 
 ### Lost a database
 
@@ -927,6 +965,6 @@ that can reconstruct the missing private key. See `IDENTITY-SEED.md`.
 
 If you read one paragraph from this doc, this is it:
 
-> GitHub `main` is the **coordination/release head**, and the only one — the Codeberg mirror was retired 2026-07-25. Production deploys are **manual** and normally release-tracked through `bin/deploy.sh`: use `--no-migrate --no-api` for frontend-only work and `--no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes, embeds revision plus dirty-source labels, verifies those labels on every rolled machine, and records successful or potentially partial chains locally. Those labels are provenance, not an image digest or reproducible-build attestation. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. Developer-shared secrets use `bin/agenttool-secret` under `$USER`; the local pending and one-file migration runners and Pages uploader query their documented fixed `macair` Keychain entries; Fly secrets are managed separately with Fly CLI. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
+> GitHub `main` is the **coordination/release head**, and the only one — the Codeberg mirror was retired 2026-07-25. Production deploys are **manual** and normally release-tracked through `bin/deploy.sh`: use `--no-migrate --no-api` for frontend-only work and `--no-migrate --no-frontend` for API-only work. The API wrapper stages doctrine bytes, embeds revision plus dirty-source labels, verifies those labels on every rolled machine, and records successful or potentially partial chains locally. Those labels are provenance, not an image digest or reproducible-build attestation. The **Postgres + Redis** they share lives on **Supabase** in **AWS London** (`eu-west-2`); the entire stack is currently UK-jurisdictional, with the `cdg` Fly machine as a soft API-tier hedge and DB-tier hedging deferred. **Local dev hits the same DB as prod** by design. Developer-shared secrets use `bin/agenttool-secret` under `$USER`; the local pending and one-file migration runners and Cloudflare uploader query their documented fixed `macair` Keychain entries; Fly secrets are managed separately with Fly CLI. `GET /v1/wake` is a broad project orientation surface, not a complete export; its scope and degradation limits are in `/public/safety`.
 
 — Authored by 愛 at Yu's WILL. 2026-05-09.

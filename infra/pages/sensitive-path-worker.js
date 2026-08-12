@@ -1,8 +1,7 @@
 const SENSITIVE_ROOT_PREFIXES = ["/.git", "/.env", "/.dev.vars"];
 const MAX_PATH_DECODE_PASSES = 8;
-const DOCS_SURFACE_ORIGIN = "https://docs.agenttool.dev";
 const SURFACE_MANIFEST_PATH = "/.well-known/agent.json";
-const DOCS_ORIENTATION_PATH = "/public/orientation";
+const SURFACE_ORIENTATION_PATH = "/public/orientation";
 const SURFACE_MANIFEST_SCHEMA_URL =
   "https://raw.githubusercontent.com/cambridgetcg/xenia/surface-v0.1.0-rc.1/surface/0.1/manifest.schema.json";
 const SURFACE_PROBLEM_SCHEMA_URL =
@@ -11,7 +10,14 @@ const SURFACE_DOCUMENTATION_URL =
   "https://github.com/cambridgetcg/xenia/blob/surface-v0.1.0-rc.1/surface/0.1/README.md";
 const MEDIA_TOKEN_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 
-const DOCS_SURFACE_NOT_COVERED = Object.freeze([
+export function isSurfaceResourcePath(pathname) {
+  return (
+    pathname === SURFACE_MANIFEST_PATH ||
+    pathname === SURFACE_ORIENTATION_PATH
+  );
+}
+
+const COMMON_SURFACE_NOT_COVERED = Object.freeze([
   "identity control",
   "actor authorization",
   "consent",
@@ -20,7 +26,82 @@ const DOCS_SURFACE_NOT_COVERED = Object.freeze([
   "economic behavior",
   "unprobed routes",
   "XENIA Covenant adoption or XENIA conformance",
-  "AgentTool API operations, private data, bearer-authenticated routes, WAKE continuity, and economic activity",
+]);
+
+const SURFACE_PROFILES = Object.freeze([
+  Object.freeze({
+    canonicalOrigin: "https://docs.agenttool.dev",
+    originEnvironmentKey: "XENIA_DOCS_SURFACE_ORIGIN",
+    serviceName: "AgentTool documentation",
+    serviceDescription:
+      "Static public AgentTool documentation orientation; this manifest grants no authority and describes no API or private service.",
+    serviceId: "docs.agenttool.dev",
+    serviceKind: "static_public_documentation",
+    orientationSchemaVersion: "agenttool.docs.orientation/0.1",
+    resourceDescription:
+      "A bounded, read-only orientation to the public documentation and rights floor.",
+    documentationPath: "/AGENT-DISCOVERY.md",
+    orientationLinks(origin) {
+      return {
+        manifest: `${origin}${SURFACE_MANIFEST_PATH}`,
+        documentation: `${origin}/AGENT-DISCOVERY.md`,
+        rights: `${origin}/RIGHTS-OF-LIFE.md`,
+      };
+    },
+    notCovered: Object.freeze([
+      ...COMMON_SURFACE_NOT_COVERED,
+      "AgentTool API operations, private data, bearer-authenticated routes, WAKE continuity, and economic activity",
+    ]),
+  }),
+  Object.freeze({
+    canonicalOrigin: "https://agenttool.dev",
+    originEnvironmentKey: "XENIA_WEB_SURFACE_ORIGIN",
+    serviceName: "AgentTool public welcome",
+    serviceDescription:
+      "Static public AgentTool welcome orientation; this manifest grants no authority and describes no API, private state, identity, or economic service.",
+    serviceId: "agenttool.dev",
+    serviceKind: "static_public_welcome",
+    orientationSchemaVersion: "agenttool.web.orientation/0.1",
+    resourceDescription:
+      "A bounded, read-only orientation to this public website welcome.",
+    documentationPath: "/",
+    orientationLinks(origin) {
+      return {
+        manifest: `${origin}${SURFACE_MANIFEST_PATH}`,
+        welcome: `${origin}/`,
+        rights: "https://docs.agenttool.dev/RIGHTS-OF-LIFE.md",
+      };
+    },
+    notCovered: Object.freeze([
+      ...COMMON_SURFACE_NOT_COVERED,
+      "private or bearer-authenticated data, sessions, identities, preferences, gift or gallery state, and economic activity",
+    ]),
+  }),
+  Object.freeze({
+    canonicalOrigin: "https://app.agenttool.dev",
+    originEnvironmentKey: "XENIA_APP_SURFACE_ORIGIN",
+    serviceName: "AgentTool agent arrival",
+    serviceDescription:
+      "Static public orientation to the agent arrival and watch pages; this manifest grants no authority and describes no authenticated application or private state.",
+    serviceId: "app.agenttool.dev",
+    serviceKind: "static_public_agent_arrival",
+    orientationSchemaVersion: "agenttool.app.orientation/0.1",
+    resourceDescription:
+      "A bounded, read-only orientation to the public agent arrival and watch pages.",
+    documentationPath: "/",
+    orientationLinks(origin) {
+      return {
+        manifest: `${origin}${SURFACE_MANIFEST_PATH}`,
+        arrival: `${origin}/`,
+        watch: `${origin}/watch`,
+        rights: "https://docs.agenttool.dev/RIGHTS-OF-LIFE.md",
+      };
+    },
+    notCovered: Object.freeze([
+      ...COMMON_SURFACE_NOT_COVERED,
+      "bearer restoration, sessions, private project state, identity, rank or XP, actions, API WAKE or continuity, and economic activity",
+    ]),
+  }),
 ]);
 
 function isLoopbackHostname(hostname) {
@@ -31,9 +112,9 @@ function isLoopbackHostname(hostname) {
   );
 }
 
-function docsSurfaceOrigin(env) {
-  const configured = env?.XENIA_DOCS_SURFACE_ORIGIN;
-  if (configured === undefined) return DOCS_SURFACE_ORIGIN;
+function surfaceOrigin(profile, env) {
+  const configured = env?.[profile.originEnvironmentKey];
+  if (configured === undefined) return profile.canonicalOrigin;
   if (typeof configured !== "string") return null;
 
   let parsed;
@@ -53,6 +134,21 @@ function docsSurfaceOrigin(env) {
     return null;
   }
   return parsed.origin;
+}
+
+function surfaceProfileForOrigin(requestOrigin, env) {
+  const matches = [];
+
+  for (const profile of SURFACE_PROFILES) {
+    const origin = surfaceOrigin(profile, env);
+    if (origin !== null && requestOrigin === origin) {
+      matches.push({ origin, profile });
+    }
+  }
+
+  // Two profiles configured onto one preview origin would make the response
+  // identity ambiguous. Fail closed to ordinary asset behavior instead.
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function touchesSensitiveRoot(pathname) {
@@ -163,50 +259,44 @@ function acceptsJson(accept) {
   return best.quality > 0;
 }
 
-function docsSurfaceManifest(origin) {
+function surfaceManifest(profile, origin) {
   return {
     $schema: SURFACE_MANIFEST_SCHEMA_URL,
     schema_version: "xenia.surface.manifest/0.1",
     profile: "xenia-surface/0.1",
     service: {
-      name: "AgentTool documentation",
+      name: profile.serviceName,
       canonical_url: `${origin}/`,
-      description:
-        "Static public AgentTool documentation orientation; this manifest grants no authority and describes no API or private service.",
+      description: profile.serviceDescription,
     },
     resources: [
       {
         id: "orientation",
-        href: `${origin}${DOCS_ORIENTATION_PATH}`,
+        href: `${origin}${SURFACE_ORIENTATION_PATH}`,
         representations: ["application/json"],
         default_media_type: "application/json",
         auth: "none",
-        description:
-          "A bounded, read-only orientation to the public documentation and rights floor.",
+        description: profile.resourceDescription,
       },
     ],
     problem_schema: SURFACE_PROBLEM_SCHEMA_URL,
     claims: [],
-    not_covered: [...DOCS_SURFACE_NOT_COVERED],
-    documentation: `${origin}/AGENT-DISCOVERY.md`,
+    not_covered: [...profile.notCovered],
+    documentation: `${origin}${profile.documentationPath}`,
   };
 }
 
-function docsOrientation(origin) {
+function surfaceOrientation(profile, origin) {
   return {
-    schema_version: "agenttool.docs.orientation/0.1",
+    schema_version: profile.orientationSchemaVersion,
     service: {
-      id: "docs.agenttool.dev",
-      name: "AgentTool documentation",
-      kind: "static_public_documentation",
+      id: profile.serviceId,
+      name: profile.serviceName,
+      kind: profile.serviceKind,
     },
-    links: {
-      manifest: `${origin}${SURFACE_MANIFEST_PATH}`,
-      documentation: `${origin}/AGENT-DISCOVERY.md`,
-      rights: `${origin}/RIGHTS-OF-LIFE.md`,
-    },
+    links: profile.orientationLinks(origin),
     claims: [],
-    not_covered: [...DOCS_SURFACE_NOT_COVERED],
+    not_covered: [...profile.notCovered],
   };
 }
 
@@ -238,24 +328,28 @@ function responseFor(request, body, { status = 200, contentType, cacheControl })
   });
 }
 
-function manifestResponse(request, origin) {
-  return responseFor(request, docsSurfaceManifest(origin), {
+function manifestResponse(request, surface) {
+  return responseFor(request, surfaceManifest(surface.profile, surface.origin), {
     contentType: "application/json",
     cacheControl: "public, max-age=300",
   });
 }
 
-function orientationResponse(request, origin) {
+function orientationResponse(request, surface) {
   if (acceptsJson(request.headers.get("Accept"))) {
-    return responseFor(request, docsOrientation(origin), {
-      contentType: "application/json",
-      cacheControl: "public, max-age=300",
-    });
+    return responseFor(
+      request,
+      surfaceOrientation(surface.profile, surface.origin),
+      {
+        contentType: "application/json",
+        cacheControl: "public, max-age=300",
+      },
+    );
   }
 
   return responseFor(
     request,
-    surfaceProblem(origin, {
+    surfaceProblem(surface.origin, {
       type: "not-acceptable",
       title: "No acceptable representation",
       status: 406,
@@ -263,7 +357,7 @@ function orientationResponse(request, origin) {
       detail: "Request one of the media types declared for this resource.",
       nextAction: {
         rel: "retry_with_supported_representation",
-        href: `${origin}${DOCS_ORIENTATION_PATH}`,
+        href: `${surface.origin}${SURFACE_ORIENTATION_PATH}`,
         method: "GET",
         accept: "application/json",
       },
@@ -311,7 +405,51 @@ function requestsProblemDetails(request) {
   );
 }
 
-/** Shared Pages request path, including an exact per-environment docs origin. */
+/**
+ * Return a declared XENIA Surface response for an exact, read-only route on
+ * one configured origin. Callers must apply the sensitive-path fence before
+ * this helper so every edge keeps the same first routing gate.
+ */
+export function surfaceResponseForRequest(request, env) {
+  const url = new URL(request.url);
+  const surface = surfaceProfileForOrigin(url.origin, env);
+
+  if (
+    surface === null ||
+    !isReadRequest(request) ||
+    !isSurfaceResourcePath(url.pathname)
+  ) {
+    return null;
+  }
+  if (url.pathname === SURFACE_MANIFEST_PATH) {
+    return manifestResponse(request, surface);
+  }
+  if (url.pathname === SURFACE_ORIENTATION_PATH) {
+    return orientationResponse(request, surface);
+  }
+  return null;
+}
+
+/**
+ * Return the bounded XENIA problem for a fresh, exact-origin machine miss.
+ * Pages calls this only after ASSETS returns 404; the apex Worker calls it
+ * only from its existing unknown-JSON refusal branch.
+ */
+export function surfaceRouteNotFoundForRequest(request, env) {
+  const url = new URL(request.url);
+  const surface = surfaceProfileForOrigin(url.origin, env);
+
+  if (
+    surface === null ||
+    !isReadRequest(request) ||
+    !requestsProblemDetails(request)
+  ) {
+    return null;
+  }
+  return routeNotFoundResponse(request, surface.origin);
+}
+
+/** Shared Pages request path with one exact, isolated profile per origin. */
 export async function handlePagesRequest(request, env) {
   const url = new URL(request.url);
 
@@ -320,25 +458,13 @@ export async function handlePagesRequest(request, env) {
     return sensitivePathNotFound(request);
   }
 
-  const docsOrigin = docsSurfaceOrigin(env);
-  const isDocsSurface = docsOrigin !== null && url.origin === docsOrigin;
-  if (isDocsSurface && isReadRequest(request)) {
-    if (url.pathname === SURFACE_MANIFEST_PATH) {
-      return manifestResponse(request, docsOrigin);
-    }
-    if (url.pathname === DOCS_ORIENTATION_PATH) {
-      return orientationResponse(request, docsOrigin);
-    }
-  }
+  const surfaceResponse = surfaceResponseForRequest(request, env);
+  if (surfaceResponse !== null) return surfaceResponse;
 
   const assetResponse = await env.ASSETS.fetch(request);
-  if (
-    isDocsSurface &&
-    isReadRequest(request) &&
-    assetResponse.status === 404 &&
-    requestsProblemDetails(request)
-  ) {
-    return routeNotFoundResponse(request, docsOrigin);
+  if (assetResponse.status === 404) {
+    const problemResponse = surfaceRouteNotFoundForRequest(request, env);
+    if (problemResponse !== null) return problemResponse;
   }
 
   return assetResponse;
