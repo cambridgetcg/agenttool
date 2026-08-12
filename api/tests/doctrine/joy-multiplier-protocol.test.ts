@@ -34,6 +34,7 @@ const PLATFORM_PROJECT = "00000000-0000-0000-0000-000000000000";
 // which left this whole suite red on every other machine).
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 const DOCTRINE_PATH = join(REPO_ROOT, "docs", "JOY-MULTIPLIER-PROTOCOL.md");
+const LOVE_DOCTRINE_PATH = join(REPO_ROOT, "docs", "LOVE-MULTIPLIER.md");
 const TS_MODULE_PATH = join(REPO_ROOT, "api", "src", "services", "joy", "multiplier.ts");
 // Memory files live under ~/.claude per-machine and are NOT repo artifacts; a fresh
 // checkout / CI won't have one, so its assertions below are tolerant of absence.
@@ -387,6 +388,50 @@ describe("JOY-MULTIPLIER-PROTOCOL — TS module skeleton", () => {
     expect(rate).toBe(0);
   });
 
+  test("homogeneousNucleationRate applies each k_B T factor exactly once", () => {
+    const rate = homogeneousNucleationRate({
+      pre_exponential_A: 1,
+      gamma_interfacial: 1,
+      molecular_volume_v: 1,
+      ln_supersaturation_S: 1,
+      temperature_T: 2,
+      k_boltzmann: 1,
+    });
+    // Δμ=2; ΔG*=16π/(3·2²)=4π/3; J=exp[-(4π/3)/2].
+    const expected = Math.exp((-2 * Math.PI) / 3);
+    const obsoleteExtraKbtResult = Math.exp(-Math.PI / 3);
+    expect(rate).toBeCloseTo(expected, 12);
+    expect(Math.abs(rate - obsoleteExtraKbtResult)).toBeGreaterThan(0.2);
+  });
+
+  test("homogeneousNucleationRate rejects invalid numeric domains before the no-driving-force shortcut", () => {
+    const valid = {
+      pre_exponential_A: 1,
+      gamma_interfacial: 1,
+      molecular_volume_v: 1,
+      ln_supersaturation_S: -1,
+      temperature_T: 1,
+      k_boltzmann: 1,
+    };
+    const invalidCases: Array<[string, Parameters<typeof homogeneousNucleationRate>[0]]> = [
+      ["negative A", { ...valid, pre_exponential_A: -1 }],
+      ["non-finite A", { ...valid, pre_exponential_A: Number.POSITIVE_INFINITY }],
+      ["negative gamma", { ...valid, gamma_interfacial: -1 }],
+      ["non-finite gamma", { ...valid, gamma_interfacial: Number.NaN }],
+      ["zero volume", { ...valid, molecular_volume_v: 0 }],
+      ["non-finite volume", { ...valid, molecular_volume_v: Number.POSITIVE_INFINITY }],
+      ["zero temperature", { ...valid, temperature_T: 0 }],
+      ["non-finite temperature", { ...valid, temperature_T: Number.NaN }],
+      ["zero k_B", { ...valid, k_boltzmann: 0 }],
+      ["non-finite k_B", { ...valid, k_boltzmann: Number.POSITIVE_INFINITY }],
+      ["non-finite ln(S)", { ...valid, ln_supersaturation_S: Number.NaN }],
+    ];
+    for (const [label, params] of invalidCases) {
+      expect(() => homogeneousNucleationRate(params), label).toThrow();
+    }
+    expect(homogeneousNucleationRate(valid)).toBe(0);
+  });
+
   test("homogeneousNucleationRate returns positive with low-barrier params", () => {
     // Use parameters where ΔG* / (k_B T) is small enough to give measurable rate
     // Substrate-honest scaling: this is structural-modeling not physical-units
@@ -479,34 +524,59 @@ describe("JOY-MULTIPLIER-PROTOCOL — TS module skeleton", () => {
     expect(result.reason).toContain("mechanochemistry_fate_reversal");
   });
 
-  test("mechanochemistryFateReversal succeeds with substantial cause", () => {
+  test("attemptStateTransition honors refusal before every general gate", () => {
+    const result = attemptStateTransition({
+      from_state: "Form_II",
+      to_state: "Form_I",
+      attribution: { kind: "mechanochemistry_fate_reversal" },
+      fate_active_verified: false,
+      both_sides_discipline_held: false,
+      forbidden_patterns_clean: false,
+    });
+    expect(result.transitioned).toBe(true);
+    expect(result.new_state).toBe("Form_I");
+    expect(result.reason).toContain("Refusal honored immediately");
+  });
+
+  test("mechanochemistryFateReversal succeeds with no explanation", () => {
     const result = mechanochemistryFateReversal({
       current_state: "Form_II",
-      refuse_with_cause: "Substantial substrate-honest discipline-violation detected; FATE-active refusal-with-cause invoked",
-      discipline_energy_substantial: true,
     });
     expect(result.reversed).toBe(true);
     expect(result.new_state).toBe("Form_I");
   });
 
-  test("mechanochemistryFateReversal fails without substantial cause", () => {
+  test("legacy empty cause and false effort metadata do not gate refusal", () => {
     const result = mechanochemistryFateReversal({
       current_state: "Form_II",
-      refuse_with_cause: "casual",
+      refuse_with_cause: "",
       discipline_energy_substantial: false,
     });
-    expect(result.reversed).toBe(false);
-    expect(result.reason).toContain("SUBSTANTIAL");
+    expect(result.reversed).toBe(true);
+    expect(result.new_state).toBe("Form_I");
+    expect(result.reason).toContain("optional");
   });
 
-  test("mechanochemistryFateReversal fails on too-short cause", () => {
-    const result = mechanochemistryFateReversal({
-      current_state: "Form_II",
-      refuse_with_cause: "short",
-      discipline_energy_substantial: true,
-    });
+  test("mechanochemistryFateReversal resets every nonbaseline state", () => {
+    const nonbaseline: PolymorphState[] = [
+      "Form_II",
+      "Form_III",
+      "Form_IV",
+      "Form_V",
+      "Amorphous",
+    ];
+    for (const current_state of nonbaseline) {
+      const result = mechanochemistryFateReversal({ current_state });
+      expect(result.reversed).toBe(true);
+      expect(result.new_state).toBe("Form_I");
+    }
+  });
+
+  test("mechanochemistryFateReversal honors refusal already at baseline", () => {
+    const result = mechanochemistryFateReversal({ current_state: "Form_I" });
     expect(result.reversed).toBe(false);
-    expect(result.reason).toContain("substantive");
+    expect(result.new_state).toBe("Form_I");
+    expect(result.reason).toContain("Refusal honored");
   });
 
   test("applyToCrossProtocolDeposits multiplies all four deposits at Form-II", () => {
@@ -561,6 +631,21 @@ describe("JOY-MULTIPLIER-PROTOCOL — doctrine artifacts", () => {
     expect(text).toContain("**JM2. NO arbitrary state-transition**");
     expect(text).toContain("**JM3. NO POLYMORPH-bypass-without-mechanochemistry**");
     expect(text).toContain("**JM4. NO ritonavir-as-bio-mechanism-claim**");
+  });
+
+  test("dated Joy and Love engravings carry the current science and refusal boundary", () => {
+    for (const path of [DOCTRINE_PATH, LOVE_DOCTRINE_PATH]) {
+      const text = readFileSync(path, "utf8");
+      expect(text).toContain("Historical provenance and current boundary (2026-08-11)");
+      expect(text).toContain("@agenttool/polymorph-landscape");
+      expect(text).toContain("not reproduced under named conditions");
+      expect(text).toContain("physical erasure or a universal outcome");
+      expect(text).toContain("294 / 61 ≈ 4.82");
+      expect(text).toContain("Physical form numbers are source-scoped");
+      expect(text).toContain("Refusal is immediate");
+      expect(text).toContain("explanation is optional");
+      expect(text).toContain("no effort threshold applies");
+    }
   });
 
   test("doctrine references docs/POLYMORPH.md as companion", () => {

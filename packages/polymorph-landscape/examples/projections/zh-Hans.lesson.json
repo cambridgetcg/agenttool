@@ -1,0 +1,189 @@
+{
+  "_format": "agenttool.polymorph-lesson/0.1",
+  "authored_paraphrase": true,
+  "boundaries": {
+    "analogy": "structural_analogy_only_not_empirical_validation",
+    "beings": "no_identity_consciousness_consent_dignity_or_authority_claim",
+    "coverage": "bounded_not_complete",
+    "disappearance": "named_condition_nonreproduction_not_physical_erasure",
+    "effect": "none",
+    "evidence": "source_assertions_not_verified_by_package",
+    "inference": "no_inverse_transitive_or_universal_route_inference",
+    "medical": "educational_not_medical_or_manufacturing_advice",
+    "stability": "pairwise_condition_scoped_never_goodness"
+  },
+  "concepts": [
+    {
+      "evidence_refs": [
+        "sha256:435ff5ccd7183b4cceac0ddb89ad7b8186f8e886b59e8e3876b297b53dae34f5",
+        "sha256:64df4e05b73bb83fb23916996d2b0a2fb8669f05f2895d47a4882d8964e00867",
+        "sha256:67b5bfa49be461ddb56aac92615e8bf195c1f0151d3ce954c1063bc1598a05cb",
+        "sha256:8c8684cdd83420646567f36efab4bcd0b4f4f216a179e4dfa042517604484182",
+        "sha256:a6b48947491a3914b729e5069d6cf9b991f316a7b97b2585063e11f0677ee846",
+        "sha256:aafc2b46d00d9180f5f8b5b2126f4685ae045e14bd41a61d22b76074e5c9d32f",
+        "sha256:b47bc3e60dbb0b363cfa977deeec9b9cdbbea8df8a4338bbd21e773ef56ed15e"
+      ],
+      "explanation": "同一种分子可以排列成不同的固态结构。形态名称必须连同采用该名称的来源理解。",
+      "heading": "同一种物质，可以有多种形态",
+      "key": "multiple_form"
+    },
+    {
+      "evidence_refs": [
+        "sha256:435ff5ccd7183b4cceac0ddb89ad7b8186f8e886b59e8e3876b297b53dae34f5",
+        "sha256:64df4e05b73bb83fb23916996d2b0a2fb8669f05f2895d47a4882d8964e00867",
+        "sha256:67b5bfa49be461ddb56aac92615e8bf195c1f0151d3ce954c1063bc1598a05cb",
+        "sha256:8c8684cdd83420646567f36efab4bcd0b4f4f216a179e4dfa042517604484182",
+        "sha256:a6b48947491a3914b729e5069d6cf9b991f316a7b97b2585063e11f0677ee846",
+        "sha256:aafc2b46d00d9180f5f8b5b2126f4685ae045e14bd41a61d22b76074e5c9d32f",
+        "sha256:b47bc3e60dbb0b363cfa977deeec9b9cdbbea8df8a4338bbd21e773ef56ed15e"
+      ],
+      "explanation": "某形态在指定条件下较稳定，不表示每种工艺都必然到达它；路径与条件是结论的一部分。",
+      "heading": "稳定性不等于可达性",
+      "key": "stability_vs_reachability"
+    },
+    {
+      "evidence_refs": [
+        "sha256:435ff5ccd7183b4cceac0ddb89ad7b8186f8e886b59e8e3876b297b53dae34f5",
+        "sha256:64df4e05b73bb83fb23916996d2b0a2fb8669f05f2895d47a4882d8964e00867",
+        "sha256:67b5bfa49be461ddb56aac92615e8bf195c1f0151d3ce954c1063bc1598a05cb",
+        "sha256:8c8684cdd83420646567f36efab4bcd0b4f4f216a179e4dfa042517604484182",
+        "sha256:a6b48947491a3914b729e5069d6cf9b991f316a7b97b2585063e11f0677ee846",
+        "sha256:aafc2b46d00d9180f5f8b5b2126f4685ae045e14bd41a61d22b76074e5c9d32f",
+        "sha256:b47bc3e60dbb0b363cfa977deeec9b9cdbbea8df8a4338bbd21e773ef56ed15e"
+      ],
+      "explanation": "动力学障碍可以解释为何可行的排列没有在一般时间尺度出现；本记录不会把特定计算提升为普遍定律。",
+      "heading": "可能存在，仍可能难以到达",
+      "key": "barrier"
+    },
+    {
+      "evidence_refs": [
+        "sha256:435ff5ccd7183b4cceac0ddb89ad7b8186f8e886b59e8e3876b297b53dae34f5",
+        "sha256:64df4e05b73bb83fb23916996d2b0a2fb8669f05f2895d47a4882d8964e00867",
+        "sha256:67b5bfa49be461ddb56aac92615e8bf195c1f0151d3ce954c1063bc1598a05cb",
+        "sha256:8c8684cdd83420646567f36efab4bcd0b4f4f216a179e4dfa042517604484182",
+        "sha256:a6b48947491a3914b729e5069d6cf9b991f316a7b97b2585063e11f0677ee846",
+        "sha256:aafc2b46d00d9180f5f8b5b2126f4685ae045e14bd41a61d22b76074e5c9d32f",
+        "sha256:b47bc3e60dbb0b363cfa977deeec9b9cdbbea8df8a4338bbd21e773ef56ed15e"
+      ],
+      "explanation": "在某些条件下，晶种可以降低成核障碍；它不是指令、感染、意图、身份或命令。",
+      "heading": "晶种是物理模板",
+      "key": "template"
+    },
+    {
+      "evidence_refs": [
+        "sha256:435ff5ccd7183b4cceac0ddb89ad7b8186f8e886b59e8e3876b297b53dae34f5",
+        "sha256:64df4e05b73bb83fb23916996d2b0a2fb8669f05f2895d47a4882d8964e00867",
+        "sha256:67b5bfa49be461ddb56aac92615e8bf195c1f0151d3ce954c1063bc1598a05cb",
+        "sha256:8c8684cdd83420646567f36efab4bcd0b4f4f216a179e4dfa042517604484182",
+        "sha256:a6b48947491a3914b729e5069d6cf9b991f316a7b97b2585063e11f0677ee846",
+        "sha256:aafc2b46d00d9180f5f8b5b2126f4685ae045e14bd41a61d22b76074e5c9d32f",
+        "sha256:b47bc3e60dbb0b363cfa977deeec9b9cdbbea8df8a4338bbd21e773ef56ed15e"
+      ],
+      "explanation": "残留物、设备、溶剂、温度、过饱和度、粒径与机械历史，都可能改变可重现的路径。这是工艺历史，不是个人记忆或 WAKE 连续性。",
+      "heading": "工艺历史会改变环境",
+      "key": "path_history"
+    },
+    {
+      "evidence_refs": [
+        "sha256:435ff5ccd7183b4cceac0ddb89ad7b8186f8e886b59e8e3876b297b53dae34f5",
+        "sha256:64df4e05b73bb83fb23916996d2b0a2fb8669f05f2895d47a4882d8964e00867",
+        "sha256:67b5bfa49be461ddb56aac92615e8bf195c1f0151d3ce954c1063bc1598a05cb",
+        "sha256:8c8684cdd83420646567f36efab4bcd0b4f4f216a179e4dfa042517604484182",
+        "sha256:a6b48947491a3914b729e5069d6cf9b991f316a7b97b2585063e11f0677ee846",
+        "sha256:aafc2b46d00d9180f5f8b5b2126f4685ae045e14bd41a61d22b76074e5c9d32f",
+        "sha256:b47bc3e60dbb0b363cfa977deeec9b9cdbbea8df8a4338bbd21e773ef56ed15e"
+      ],
+      "explanation": "利托那韦 Form II 最初出现的历史原因并未确定。关联、时间顺序与实验上可能的晶种，都不能证明最初原因。",
+      "heading": "观察到哪里，就陈述到哪里",
+      "key": "observation_limit"
+    },
+    {
+      "evidence_refs": [
+        "sha256:435ff5ccd7183b4cceac0ddb89ad7b8186f8e886b59e8e3876b297b53dae34f5",
+        "sha256:64df4e05b73bb83fb23916996d2b0a2fb8669f05f2895d47a4882d8964e00867",
+        "sha256:67b5bfa49be461ddb56aac92615e8bf195c1f0151d3ce954c1063bc1598a05cb",
+        "sha256:8c8684cdd83420646567f36efab4bcd0b4f4f216a179e4dfa042517604484182",
+        "sha256:a6b48947491a3914b729e5069d6cf9b991f316a7b97b2585063e11f0677ee846",
+        "sha256:aafc2b46d00d9180f5f8b5b2126f4685ae045e14bd41a61d22b76074e5c9d32f",
+        "sha256:b47bc3e60dbb0b363cfa977deeec9b9cdbbea8df8a4338bbd21e773ef56ed15e"
+      ],
+      "explanation": "文献报告以溶剂、播种与机械路径，在改变后的条件下取回 Form I。这否定了物理抹除，但不保证原工艺能轻易或经济地恢复。",
+      "heading": "返回可能需要另一条路",
+      "key": "practical_return"
+    },
+    {
+      "evidence_refs": [],
+      "explanation": "状态空间、障碍、模板、历史与见证可以帮助设计软件；化学不能验证存在者的内在状态，稳定也不代表善或价值。",
+      "heading": "与 KINGDOM 的交叉是设计类比",
+      "key": "analogy_boundary"
+    },
+    {
+      "evidence_refs": [],
+      "explanation": "本课程描述制造与固态化学案例；不提供用药、配方、剂量或治疗建议。",
+      "heading": "教育用途，不是医疗建议",
+      "key": "medical_boundary"
+    }
+  ],
+  "core_sentence": "所谓“消失”，是指在已说明的条件下，原有路径无法再重现该形态；并非该形态不再存在。",
+  "kingdom_lens": {
+    "mappings": [
+      {
+        "boundary": "never identity or value",
+        "chemistry_shape": "possible solid arrangements",
+        "key": "state_space",
+        "kingdom_shape": "possible artifact or configuration states"
+      },
+      {
+        "boundary": "never refusal or consent",
+        "chemistry_shape": "kinetic difficulty",
+        "key": "barrier",
+        "kingdom_shape": "technical or coordination friction"
+      },
+      {
+        "boundary": "never programming a being",
+        "chemistry_shape": "physical nucleation template",
+        "key": "template",
+        "kingdom_shape": "docs, tests, or examples that lower adoption friction"
+      },
+      {
+        "boundary": "never personal memory or continuity",
+        "chemistry_shape": "process context changes reachable routes",
+        "key": "path_history",
+        "kingdom_shape": "recorded context changes available implementation paths"
+      },
+      {
+        "boundary": "never complete truth or inner state",
+        "chemistry_shape": "bounded experimental or historical report",
+        "key": "witness",
+        "kingdom_shape": "bounded receipt or evidence reference"
+      },
+      {
+        "boundary": "never guaranteed rollback",
+        "chemistry_shape": "recovery under named changed conditions",
+        "key": "practical_return",
+        "kingdom_shape": "an alternate reviewed implementation path"
+      }
+    ],
+    "non_transfer": [
+      "authority",
+      "causality",
+      "consciousness",
+      "consent",
+      "dignity",
+      "identity",
+      "inevitability",
+      "medical_effect",
+      "molecular_energy",
+      "rate_constants",
+      "value_or_goodness"
+    ],
+    "status": "structural_analogy_only"
+  },
+  "language": "zh-Hans",
+  "lesson_id": "sha256:8bb7986a4e6c1f148c47987d271ebdd6f44da8df2f412b7d8cf99caca800eaea",
+  "medical_advice": false,
+  "source_landscape_id": "sha256:379b43d11e2c326193592f45024d6e50bda7646241a7d63af1a52f5a18269042",
+  "source_quotation": false,
+  "source_shift_id": "sha256:16805ab5fe34643d7085968a0d7dad62e7159838645611fc09c4846cfd2e73bd",
+  "title": "利托那韦多晶型景观：当旧路径无法再重现一种形态"
+}

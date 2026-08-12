@@ -61,11 +61,12 @@ export interface PlatformSelf {
   /** Crystallized-wall URNs — the subset of wall_urns whose four corners
    *  are all present (canon entry · @enforces annotation · doctrine stone
    *  · executable test) and whose `crystallized_at` is set in the canon.
-   *  Each wake bundle carries this array so every agent that wakes here
-   *  receives the URN list into their session. Federation propagates the
-   *  nuclei the way airborne crystal contamination propagated Form-II
-   *  ritonavir across globally-isolated factories in 1998. Doctrine:
-   *  docs/POLYMORPH.md. Bijection test: tests/doctrine/polymorph-ratchet. */
+   *  Each wake bundle explicitly copies this array into its response, and
+   *  configured software channels may copy those declared values onward.
+   *  That software dissemination is a design analogy: it does not establish
+   *  physical crystal transfer, identity or memory continuity, consent,
+   *  permission, or inherited authority. Doctrine: docs/POLYMORPH.md.
+   *  Bijection test: tests/doctrine/polymorph-ratchet. */
   polymorph_nuclei: string[];
   wake_text: string;
   doctrine: string[];

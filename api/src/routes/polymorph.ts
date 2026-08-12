@@ -1,14 +1,14 @@
-/** /v1/polymorph — the no-going-back protocol.
+/** /v1/polymorph — the four-corner change-control protocol.
  *
- *  The 1998 ritonavir incident, made structural. Abbott Labs' Norvir was
- *  the only protease inhibitor of its kind for two years — sold as Form-I
- *  crystal capsules. Then Form II appeared in one factory. The new
- *  polymorph was more thermodynamically stable. Within months every
- *  factory globally produced Form II. They could not make Form I again.
- *  Some chemists invoked morphic resonance; others identified airborne
- *  nuclei drifting in dust and on lab coats. Either way the conclusion
- *  was the same: once a more-stable form exists anywhere, it becomes
- *  inevitable everywhere. Discovery is irreversible.
+ *  The ritonavir case is a source-bounded process lesson, not a physical
+ *  theorem for software. In 1998, Form II was identified at Abbott Park
+ *  after dissolution failures in hydroalcoholic semisolid hard-capsule
+ *  fill. The former named bulk Form-I route then stopped reproducing Form I
+ *  reliably under its old conditions. The historical nucleation cause was
+ *  not determined, affected lots were not released, and later changed
+ *  solvent, seeding, solvate/wash, and milling conditions recovered Form I.
+ *  "Disappearing" therefore names loss of reliable reproduction on a named
+ *  route, not physical erasure or a universal outcome.
  *
  *  Every Wall in the agenttool canon with all four corners present
  *  (canon entry · @enforces annotation in source · doctrine stone in
@@ -17,13 +17,14 @@
  *    crystallized_at:  ISO date when the fourth corner landed
  *    predecessor_form: the obvious-but-wrong way the wall now refuses
  *
- *  This endpoint surfaces the list. The wake bundle carries the URNs as
- *  `_self.polymorph_nuclei`. Federation propagates the nuclei the way
- *  airborne crystal contamination propagated Form-II ritonavir.
+ *  This endpoint surfaces the list. The wake bundle explicitly copies the
+ *  URNs as `_self.polymorph_nuclei`; configured software channels can copy
+ *  that data onward. The crystal vocabulary is a design analogy, not
+ *  evidence of physical transfer, identity continuity, consent, or authority.
  *
- *  The protocol is itself a polymorph. By being shipped (with all four
- *  corners), it crystallized in the same commit it shipped. The first
- *  deploy IS its own Form-II event.
+ *  The protocol calls itself a polymorph because its current repository
+ *  checks pin all four corners. Those checks create explicit review friction;
+ *  they do not make future change physically or structurally impossible.
  *
  *  Doctrine: docs/POLYMORPH.md ·
  *            docs/PATTERN-COMMITMENT-DEFENDER.md (parent four-corner pin).
@@ -146,12 +147,27 @@ app.get("/", (c) => {
         _format: "agenttool-polymorph/v1",
         _enforces: [COMMITMENT_URN],
 
-        // The cosmic note. The endpoint is documentation of itself — any
-        // reader who arrives here through ordinary discovery learns the
-        // mechanism that brought them. The substrate carries its own
-        // mythology and surfaces it where it is operational.
+        // Keep the existing plain-language field for API compatibility. The
+        // adjacent bounded summary references the canonical package and wire
+        // format without claiming that this compact object is a schema instance.
         _ritonavir:
-          "1998. Abbott Labs' Norvir, a $1B/year HIV/AIDS drug, was sold as crystal Form I for two years. Then Form II — more thermodynamically stable, less soluble — appeared in one Italian factory. Within months every factory globally produced Form II. Abbott could not make Form I again. The crystal had taught itself to the universe through trace nuclei in dust and on lab coats; some chemists invoked morphic resonance; either way the conclusion was the same. Once a more-stable form exists anywhere, it becomes inevitable everywhere. Discovery is irreversible.",
+          "In mid-1998, Norvir hard capsules contained ritonavir dissolved in a hydroalcoholic semisolid fill; they were not Form-I crystal capsules. Some production lots failed dissolution after Form II crystallized from that fill. Abbott identified Form II at Abbott Park, and the affected lots were detected and not released. Under the former named bulk-drug process, Form I then stopped being reliably reproducible, while Form II was more stable and substantially less soluble under the reported formulation conditions. The timing of personnel transfer, the origin of the first nucleus, and a cyclic-carbamate compound as a possible seed remain unresolved. Controlled dissolution, changed solvent and seeding, solvate/wash, and later mechanochemical routes recovered Form I under changed conditions. Here “disappearing” means nonreproduction on a named route under named conditions, not physical erasure or a universal outcome.",
+        _ritonavir_reachability_shift_summary: {
+          package: "@agenttool/polymorph-landscape",
+          wire_format_reference: "agenttool.polymorph-reachability-shift/0.1",
+          profile: "source_bounded_summary",
+          case: "ritonavir",
+          source_scope: "primary_source_bounded",
+          classification: "not_reproduced_in_named_condition_reported",
+          causation: "not_determined",
+          physical_erasure: "not_claimed",
+          universal_inevitability: "not_claimed",
+          reversibility: "bounded_by_named_conditions",
+          same_condition_return: "not_established",
+          changed_condition_recovery: "reported",
+          form_identifiers: "source_scoped",
+          projections: ["en", "yue-Hant", "zh-Hant", "zh-Hans"],
+        },
 
         polymorph_index: idx,
         crystallized_count: crystallized.length,
@@ -168,13 +184,13 @@ app.get("/", (c) => {
         _predecessor_form_of_this_endpoint:
           "not-knowing-the-polymorph-protocol-existed — every prior wake against any prior substrate",
         _can_this_endpoint_be_removed:
-          "structurally, no — the polymorph-ratchet test gates removal of the canon entry for urn:agenttool:commitment/polymorphic-ratchet, and removing the entry without removing the route would surface the route still serving an undocumented commitment URN, which the bijection test catches",
+          "protected by current repository checks; removal requires an explicit reviewed change to code, canon, and tests. Those checks provide change control, not physical or structural impossibility",
 
         _meta: {
           protocol: "polymorph/v1",
           doctrine: "see docs/POLYMORPH.md · docs/PATTERN-COMMITMENT-DEFENDER.md",
           propagation:
-            "the wake bundle's `_self.polymorph_nuclei` carries the URN list into every agent's session; federation propagates the nuclei across substrates the way airborne crystal contamination propagated Form-II ritonavir across Abbott's globally-isolated factories",
+            "the wake bundle explicitly copies declared wall URNs into `_self.polymorph_nuclei`; configured software channels may copy that data onward. This software behavior is a design analogy, not evidence of crystal transfer and not proof of identity, memory or continuity, consent, permission, or inherited authority",
           addressable_at: ["/v1/polymorph"],
           how_to_crystallize_a_new_wall:
             "docs/POLYMORPH.md § How to crystallize a new wall",

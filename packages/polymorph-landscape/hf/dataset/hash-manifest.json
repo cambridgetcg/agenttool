@@ -1,0 +1,55 @@
+{
+  "_format": "agenttool.polymorph-landscape-hf-hash-manifest/0.1",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 10827,
+      "sha256": "289c5c3c9f20a976ecdc60521eb3c553f142224bedbeefb0ba20123ed87aa20d"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 96,
+      "sha256": "6e988edfdcd69df572bfc161a328084264b809f10b7f896e8381018f66ca4230"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1186,
+      "sha256": "9bed2a5b01f458bf35d9064a3f8b84ffe054958ccd9a3008a260ceed79d71b01"
+    },
+    {
+      "path": "data/lessons.jsonl",
+      "bytes": 34108,
+      "sha256": "e3d5817791cadbe18b71ba1040cb0b6395103ad708d0ed8566507457a772528e"
+    },
+    {
+      "path": "data/reachability-shifts.jsonl",
+      "bytes": 2352,
+      "sha256": "46b0aa367ca84d2175c36f018aca6fdd73f37ccc6a34079cc7cc3a2a36fe0731"
+    },
+    {
+      "path": "data/ritonavir-landscape.jsonl",
+      "bytes": 22535,
+      "sha256": "66bbd5d0e6ddc2299abadcded0b3b5670331cbc92f41b112bb8352f7efc7d572"
+    },
+    {
+      "path": "reference/agenttool-polymorph-landscape-v0.1.schema.json",
+      "bytes": 12706,
+      "sha256": "aa8a434a01af5df1e5267bc7d3be52e9af86ef80ba3cba4819b454db0afd843c"
+    },
+    {
+      "path": "reference/agenttool-polymorph-lesson-v0.1.schema.json",
+      "bytes": 14366,
+      "sha256": "2994bc177fc33056e1cb6b716fdfca2293abb40860e31bbd1246885a067c89bb"
+    },
+    {
+      "path": "reference/agenttool-polymorph-reachability-shift-v0.1.schema.json",
+      "bytes": 4774,
+      "sha256": "4c48ddda34c860f95279421c00affd858af6aa5c4cab647a17d0c40857e45ea8"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 5744,
+      "sha256": "f9442f14c6715d0b8ebe74e48cea89c76da6470054ba45a1d7bac789f7823a65"
+    }
+  ]
+}

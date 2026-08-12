@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-polymorph-reachability-shift-v0.1.schema.json",
+  "title": "agenttool-polymorph-reachability-shift-v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "shift_id",
+    "landscape_id",
+    "prior_form_ref",
+    "emergent_form_ref",
+    "condition_refs",
+    "before_witness_refs",
+    "appearance_witness_refs",
+    "later_witness_refs",
+    "same_condition_return",
+    "changed_condition_recovery_route_refs",
+    "open_condition_refs",
+    "classification",
+    "causation",
+    "physical_erasure",
+    "universal_inevitability",
+    "reversibility",
+    "coverage",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.polymorph-reachability-shift/0.1"
+    },
+    "shift_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "landscape_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "prior_form_ref": {
+      "$ref": "#/$defs/sha"
+    },
+    "emergent_form_ref": {
+      "$ref": "#/$defs/sha"
+    },
+    "condition_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "minItems": 1,
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "before_witness_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "minItems": 1,
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "appearance_witness_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "minItems": 1,
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "later_witness_refs": {
+      "$ref": "#/$defs/refs"
+    },
+    "same_condition_return": {
+      "enum": [
+        "not_established",
+        "not_reported",
+        "reported"
+      ]
+    },
+    "changed_condition_recovery_route_refs": {
+      "$ref": "#/$defs/refs"
+    },
+    "open_condition_refs": {
+      "$ref": "#/$defs/refs"
+    },
+    "classification": {
+      "const": "not_reproduced_in_named_condition_reported"
+    },
+    "causation": {
+      "const": "not_determined"
+    },
+    "physical_erasure": {
+      "const": "not_claimed"
+    },
+    "universal_inevitability": {
+      "const": "not_claimed"
+    },
+    "reversibility": {
+      "const": "bounded_by_named_conditions"
+    },
+    "coverage": {
+      "const": "bounded_not_complete"
+    },
+    "boundaries": {
+      "$ref": "#/$defs/boundaries"
+    }
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "materialLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "sourceLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "formLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "conditionLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "witnessScope": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "sourceUrl": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^https://(?![^/?#]*@)(?:(?:[A-Za-z0-9._~!$&'()*+,;=:@/?#\\[\\]-])|(?:%[0-9A-Fa-f]{2}))+$",
+      "maxLength": 2048
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage",
+        "evidence",
+        "inference",
+        "stability",
+        "disappearance",
+        "analogy",
+        "beings",
+        "medical",
+        "effect"
+      ],
+      "properties": {
+        "coverage": {
+          "const": "bounded_not_complete"
+        },
+        "evidence": {
+          "const": "source_assertions_not_verified_by_package"
+        },
+        "inference": {
+          "const": "no_inverse_transitive_or_universal_route_inference"
+        },
+        "stability": {
+          "const": "pairwise_condition_scoped_never_goodness"
+        },
+        "disappearance": {
+          "const": "named_condition_nonreproduction_not_physical_erasure"
+        },
+        "analogy": {
+          "const": "structural_analogy_only_not_empirical_validation"
+        },
+        "beings": {
+          "const": "no_identity_consciousness_consent_dignity_or_authority_claim"
+        },
+        "medical": {
+          "const": "educational_not_medical_or_manufacturing_advice"
+        },
+        "effect": {
+          "const": "none"
+        }
+      }
+    }
+  }
+}

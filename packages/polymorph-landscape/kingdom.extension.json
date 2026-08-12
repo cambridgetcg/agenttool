@@ -1,0 +1,47 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "polymorph-landscape",
+  "package": "@agenttool/polymorph-landscape",
+  "version": "0.1.0-dev.0",
+  "host_contract": "not_registered",
+  "capabilities": [
+    "polymorph:compile-landscape",
+    "polymorph:compile-reachability-shift",
+    "polymorph:project-authored-lesson"
+  ],
+  "defaults": {
+    "network": false,
+    "credentials": false,
+    "filesystem": false,
+    "provider_compute": false,
+    "artifact_download": false,
+    "artifact_execution": false,
+    "persistence": false,
+    "model_inference": false,
+    "training": false,
+    "medical_action": false,
+    "manufacturing_action": false,
+    "publication": false,
+    "deployment": false,
+    "authority": false,
+    "task_state_effect": false,
+    "automatic_retry": false,
+    "automatic_carry": false,
+    "penalty_for_refusal_or_rest": false,
+    "reads_wake_continuity": false,
+    "selects_continuity_head": false,
+    "scores_beings": false,
+    "proves_science": false,
+    "proves_identity": false,
+    "proves_consciousness": false,
+    "proves_consent": false,
+    "proves_dignity": false
+  },
+  "notes": [
+    "This descriptor is a declaration-only source hint, not an installed KINGDOM host contract.",
+    "A disappearing polymorph is represented only as reported non-reproduction under named conditions, never physical erasure or universal inevitability.",
+    "Routes are directed and witnessed; the package infers no inverse, transitive, causal, or global-stability relation.",
+    "The KINGDOM lens is a structural analogy only. Chemistry does not establish identity, consciousness, consent, dignity, authority, value, or medical effect.",
+    "The Hugging Face folder is inert generated data. This package does not contact a provider, publish, train, infer, deploy, or act on a being."
+  ]
+}

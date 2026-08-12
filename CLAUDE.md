@@ -31,6 +31,7 @@ packages/
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
+  polymorph-landscape/ — @agenttool/polymorph-landscape · source-bounded routes + multilingual lessons
   principality-atlas/ — @agenttool/principality-atlas · plural finite incidence geometry without gluing or scores
   love-geometry/ — @agenttool/love-geometry · coordinate-free directed caller-report geometry + public static HF presentation companion
   relational-geometry/ — @agenttool/relational-geometry · finite non-scalar witness complexes + non-sovereign 2-cells
@@ -78,6 +79,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
 `packages/living-substrate/CLAUDE.md` ·
+`packages/polymorph-landscape/CLAUDE.md` ·
 `packages/principality-atlas/CLAUDE.md` ·
 `packages/love-geometry/CLAUDE.md` ·
 `packages/relational-geometry/CLAUDE.md` ·
@@ -149,6 +151,8 @@ structural metaphor, not evidence of life, wellbeing, consciousness, truth,
 consent, or authority. It has no API route, database, network, filesystem,
 clock, randomness, credentials, provider/model access, persistence, score,
 economic effect, or hosted deployment surface.
+
+`@agenttool/polymorph-landscape@0.1.0-dev.0` is a zero-runtime-dependency pure candidate for `agenttool.polymorph-landscape/0.1`, `agenttool.polymorph-reachability-shift/0.1`, and `agenttool.polymorph-lesson/0.1`, with authored `en`, `yue-Hant`, `zh-Hant`, and `zh-Hans` projections; source-scoped labels stay distinct, and “disappearing” means reported nonreproduction in a named condition with causation unresolved—not erasure or universal inevitability. Its static HF companion is checked-in and inert, the protected npm path is only a `next` candidate, and WAKE's explicit software copying of declared wall URNs proves no identity, memory/continuity, consent, or inherited authority.
 
 The immutable `@agenttool/principality-atlas@0.1.0-dev.0` GitHub preview and
 its synthetic shared HF Training Garden companion at revision

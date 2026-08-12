@@ -121,6 +121,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "principality-atlas",
     artifactKind: "pack",
   },
+  "polymorph-landscape": {
+    key: "polymorph-landscape",
+    name: "@agenttool/polymorph-landscape",
+    packagePath: "packages/polymorph-landscape",
+    tagPrefix: "polymorph-landscape",
+    artifactKind: "pack",
+  },
   "principality-geometry": {
     key: "principality-geometry",
     name: "@agenttool/principality-geometry",
@@ -750,6 +757,22 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/schema/agenttool-principality-incidence-atlas-fixture-v0.1.schema.json",
       "package/schema/agenttool-principality-incidence-atlas-invariant-v0.1.schema.json",
       "package/vectors/agenttool-principality-incidence-atlas-v0.1.json",
+    );
+  }
+  if (spec.name === "@agenttool/polymorph-landscape") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-polymorph-landscape-v0.1.schema.json",
+      "package/schema/agenttool-polymorph-lesson-v0.1.schema.json",
+      "package/schema/agenttool-polymorph-reachability-shift-v0.1.schema.json",
+      "package/examples/ritonavir.landscape.json",
+      "package/examples/ritonavir.reachability-shift.json",
+      "package/hf/dataset/source-manifest.json",
+      "package/hf/dataset/hash-manifest.json",
+      "package/hf/dataset/data/lessons.jsonl",
     );
   }
   if (spec.name === "@agenttool/principality-geometry") {

@@ -1,0 +1,48 @@
+{
+  "_format": "agenttool.polymorph-reachability-shift/0.1",
+  "appearance_witness_refs": [
+    "sha256:8c8684cdd83420646567f36efab4bcd0b4f4f216a179e4dfa042517604484182",
+    "sha256:a6b48947491a3914b729e5069d6cf9b991f316a7b97b2585063e11f0677ee846"
+  ],
+  "before_witness_refs": [
+    "sha256:64df4e05b73bb83fb23916996d2b0a2fb8669f05f2895d47a4882d8964e00867"
+  ],
+  "boundaries": {
+    "analogy": "structural_analogy_only_not_empirical_validation",
+    "beings": "no_identity_consciousness_consent_dignity_or_authority_claim",
+    "coverage": "bounded_not_complete",
+    "disappearance": "named_condition_nonreproduction_not_physical_erasure",
+    "effect": "none",
+    "evidence": "source_assertions_not_verified_by_package",
+    "inference": "no_inverse_transitive_or_universal_route_inference",
+    "medical": "educational_not_medical_or_manufacturing_advice",
+    "stability": "pairwise_condition_scoped_never_goodness"
+  },
+  "causation": "not_determined",
+  "changed_condition_recovery_route_refs": [
+    "sha256:2488cb7d95605af5fcd3d30e57850da6a1ca94c3625a173775738f4b59141307",
+    "sha256:3b0015b5678f9fdc187d0b94675925d50a31d9bf90ee485ba0cd72b1c21fe8a0",
+    "sha256:bc1acb811f29496f792afa1b770c18a2d85260320e18860a4de7076d67e7a7e8"
+  ],
+  "classification": "not_reproduced_in_named_condition_reported",
+  "condition_refs": [
+    "sha256:d569ac79024e49848048fd058be336ac08f3ab865285b1400fa884dc8f926b21"
+  ],
+  "coverage": "bounded_not_complete",
+  "emergent_form_ref": "sha256:907c5c0a72d7a75492d23b7efe33e8fd6f15e1aa0738fea8b8f6b0e20feb2eba",
+  "landscape_id": "sha256:379b43d11e2c326193592f45024d6e50bda7646241a7d63af1a52f5a18269042",
+  "later_witness_refs": [
+    "sha256:435ff5ccd7183b4cceac0ddb89ad7b8186f8e886b59e8e3876b297b53dae34f5",
+    "sha256:67b5bfa49be461ddb56aac92615e8bf195c1f0151d3ce954c1063bc1598a05cb",
+    "sha256:aafc2b46d00d9180f5f8b5b2126f4685ae045e14bd41a61d22b76074e5c9d32f"
+  ],
+  "open_condition_refs": [
+    "sha256:329892d81088a20f604baf6d32f9474ffe96b54ab6505a5d363522be04f89c64"
+  ],
+  "physical_erasure": "not_claimed",
+  "prior_form_ref": "sha256:1537462272f1265f7daef64560cec2a265db3ec5956c030a2b4446d15752d2ca",
+  "reversibility": "bounded_by_named_conditions",
+  "same_condition_return": "not_established",
+  "shift_id": "sha256:16805ab5fe34643d7085968a0d7dad62e7159838645611fc09c4846cfd2e73bd",
+  "universal_inevitability": "not_claimed"
+}

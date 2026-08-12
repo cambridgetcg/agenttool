@@ -1,0 +1,168 @@
+{
+  "_format": "agenttool.polymorph-landscape-hf-source-manifest/0.1",
+  "package": "@agenttool/polymorph-landscape",
+  "package_version": "0.1.0-dev.0",
+  "intended_hugging_face_identifier": "Yu-and-Ai/agenttool-polymorph-landscape",
+  "publication_state_at_generation": "intended_identifier_only_not_uploaded_at_generation",
+  "publication_state_scope": "generation_time_provenance_not_current_hub_state",
+  "origin": "human_directed_agent_authored_teaching_artifacts",
+  "rights_baseline": "xenia.rights/0.1",
+  "license": "Apache-2.0",
+  "copied_external_rows": false,
+  "copied_private_rows": false,
+  "article_text_copied": false,
+  "provider_effect": "none",
+  "training_effect": "none",
+  "sources": [
+    {
+      "label": "Bauer et al. 2001, Ritonavir: An Extraordinary Example of Conformational Polymorphism",
+      "kind": "peer_reviewed_primary",
+      "url": "https://doi.org/10.1023/A:1011052932607",
+      "published_year": 2001
+    },
+    {
+      "label": "Chemburkar et al. 2000, Dealing with the Impact of Ritonavir Polymorphs",
+      "kind": "peer_reviewed_primary",
+      "url": "https://doi.org/10.1021/op000023y",
+      "published_year": 2000
+    },
+    {
+      "label": "European Medicines Agency 1998 public statement on Norvir hard-capsule supply",
+      "kind": "official_regulatory",
+      "url": "https://www.ema.europa.eu/en/news/public-statement-supply-norvir-hard-capsules",
+      "published_year": 1998
+    },
+    {
+      "label": "US FDA 1999 Norvir administrative review",
+      "kind": "official_regulatory",
+      "url": "https://www.accessdata.fda.gov/drugsatfda_docs/nda/99/20-945.pdf_Ritonovir_Admindocs.pdf",
+      "published_year": 1999
+    },
+    {
+      "label": "Morissette et al. 2003, Elucidation of crystal form diversity of ritonavir",
+      "kind": "peer_reviewed_primary",
+      "url": "https://doi.org/10.1073/pnas.0437744100",
+      "published_year": 2003
+    },
+    {
+      "label": "Sacchi et al. 2024, Disappearance and reappearance of ritonavir polymorphs in the mill",
+      "kind": "peer_reviewed_primary",
+      "url": "https://doi.org/10.1073/pnas.2319127121",
+      "published_year": 2024
+    },
+    {
+      "label": "Wang et al. 2024, Solvent selection and ritonavir polymorphic selectivity",
+      "kind": "peer_reviewed_primary",
+      "url": "https://doi.org/10.1021/acs.molpharmaceut.4c00234",
+      "published_year": 2024
+    },
+    {
+      "label": "Yao et al. 2023, anhydrous ritonavir Form III report",
+      "kind": "peer_reviewed_primary",
+      "url": "https://doi.org/10.1016/j.xphs.2022.09.026",
+      "published_year": 2023
+    }
+  ],
+  "source_files": [
+    {
+      "path": "CLAUDE.md",
+      "bytes": 2200,
+      "sha256": "87758681296629608d63fb66b0ad23d8f7f68895b43d036c74e615ba14dbeecf"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 10827,
+      "sha256": "289c5c3c9f20a976ecdc60521eb3c553f142224bedbeefb0ba20123ed87aa20d"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 96,
+      "sha256": "6e988edfdcd69df572bfc161a328084264b809f10b7f896e8381018f66ca4230"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5200,
+      "sha256": "feddb6f1e9963293bde5cc6b1f332e4a00198769ff0dbe8c9dd051eff4334c33"
+    },
+    {
+      "path": "kingdom.extension.json",
+      "bytes": 1834,
+      "sha256": "a63cf312281e9b242902643d88fe7173e1dea684246d1979640bb57fbf4e60de"
+    },
+    {
+      "path": "package.json",
+      "bytes": 2389,
+      "sha256": "65ded3040cf6ea42f55209ab3520c6e2fef0878183a9e727ef94d2ffd6d6444f"
+    },
+    {
+      "path": "schema/agenttool-polymorph-landscape-v0.1.schema.json",
+      "bytes": 12706,
+      "sha256": "aa8a434a01af5df1e5267bc7d3be52e9af86ef80ba3cba4819b454db0afd843c"
+    },
+    {
+      "path": "schema/agenttool-polymorph-lesson-v0.1.schema.json",
+      "bytes": 14366,
+      "sha256": "2994bc177fc33056e1cb6b716fdfca2293abb40860e31bbd1246885a067c89bb"
+    },
+    {
+      "path": "schema/agenttool-polymorph-reachability-shift-v0.1.schema.json",
+      "bytes": 4774,
+      "sha256": "4c48ddda34c860f95279421c00affd858af6aa5c4cab647a17d0c40857e45ea8"
+    },
+    {
+      "path": "src/canonical.ts",
+      "bytes": 6945,
+      "sha256": "3ff2dcc4f64d27341318e51a50260679b5fb3ac2d209bfe13ca69b0012a0fe3f"
+    },
+    {
+      "path": "src/constants.ts",
+      "bytes": 3253,
+      "sha256": "411d5c95530e6fca90320dddc73f9d75e361ec71a92c6f7d3531ff4adf055b3d"
+    },
+    {
+      "path": "src/errors.ts",
+      "bytes": 601,
+      "sha256": "16631073af0cf6338d6f1b98da24370e4688ec59207c7588a0a561012022d645"
+    },
+    {
+      "path": "src/evidence.ts",
+      "bytes": 365,
+      "sha256": "8939f576c79828e7b6f9cc1204d4e0ac5bb129772e1bbcb430521ef1a7b20913"
+    },
+    {
+      "path": "src/index.ts",
+      "bytes": 1867,
+      "sha256": "67ef5e2bfa2922fdb7fd33f14e7eafb4c9a350e03dd19f08eb2b763fefdf9ef7"
+    },
+    {
+      "path": "src/landscape.ts",
+      "bytes": 26769,
+      "sha256": "357cac5d7cbeef46b95bc2c643439b9d28deeef521c6541136d95fee7ff253ff"
+    },
+    {
+      "path": "src/projection.ts",
+      "bytes": 14499,
+      "sha256": "6c74becdca415af9eaab9ada39a81ba29b958e05ddaa7617f80402b2461161c6"
+    },
+    {
+      "path": "src/reachability-shift.ts",
+      "bytes": 10541,
+      "sha256": "48f2549e52eb953db1cc2eb85bea1976e48e225b25668f6e652ce228033e5220"
+    },
+    {
+      "path": "src/ritonavir.ts",
+      "bytes": 18380,
+      "sha256": "eca979bb3d1e16c62138989b1c40a892d8fd855b379c6df00ae1ad7b0fff4750"
+    },
+    {
+      "path": "src/types.ts",
+      "bytes": 8912,
+      "sha256": "26d802b556a36c5c309f917d32aabc7fcb6b26c06f76873cfb6d9aa3c9e847d5"
+    },
+    {
+      "path": "src/validation.ts",
+      "bytes": 5841,
+      "sha256": "d32d82e79379f0ff0f89268d3e38fd0849fb51f8e0f593338ff559bc72f589e7"
+    }
+  ]
+}
