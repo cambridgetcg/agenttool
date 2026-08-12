@@ -573,6 +573,11 @@ is a hard refusal, as is a tracked `.dev.vars*` file. Use the orchestrator for
 normal production releases so the GitHub snapshot gate, preflight, sampled
 parity and sensitive-path checks, and receipt surround those mutations.
 
+Every pinned Wrangler invocation appends `--env-file=/dev/null` after its
+subcommand arguments. Wrangler therefore cannot silently load a repository
+`.env` or `.env.local` as credentials; explicit process credentials, Keychain
+fallback, and the deliberately selected OAuth session remain separate inputs.
+
 Cloudflare does not make the target list or the `web` target transactional.
 Each requested target is attempted in argument order; the first failure returns
 non-zero immediately and stops later targets. Earlier successful targets remain
@@ -594,15 +599,16 @@ The archive also includes the canonical `infra/pages/` fence. The uploader
 copies its `_worker.js` and `_routes.json` forms into each project root. The
 route manifest includes every path, so the Function bounded-decodes and
 case-folds all requests before returning a marked, non-cacheable 404 for
-`/.git*`, `/.env*`, and `/.dev.vars*` aliases; allowed requests are forwarded
-unchanged to the Pages asset binding. Every request is therefore part of the
-shared Workers meter. On Free the Pages Functions share the 100,000-request
-account allowance each UTC day. Workers Standard removes that daily request
-limit; fail-closed remains required by the release policy, but this specific
-Free-plan allowance-exhaustion path does not apply. Cloudflare Pages → Settings
-→ Runtime must set production and preview to **fail closed**, so allowance
-exhaustion makes the site unavailable instead of serving assets outside the
-fence.
+`/.git*`, `/.env*`, and `/.dev.vars*` aliases. Exact XENIA manifest and
+orientation routes terminate in the Function; all other allowed requests are
+forwarded unchanged to the Pages asset binding. Every request is therefore
+part of the shared Workers meter. On Free the Pages Functions share the
+100,000-request account allowance each UTC day. Workers Standard removes that
+daily request limit; fail-closed remains required by the release policy, but
+this specific Free-plan allowance-exhaustion path does not apply. Cloudflare
+Pages → Settings → Runtime must set production and preview to **fail closed**,
+so allowance exhaustion makes the site unavailable instead of serving assets
+outside the fence.
 
 With the required API token, the uploader verifies both fail-closed values and
 `production_branch=main` for every requested Pages target before the first
@@ -669,12 +675,11 @@ done
 ```
 
 The orchestrator probes `.gitignore`, `.env`, `.env.local`, and `.dev.vars` on
-the docs, dashboard, and apex hosts. Literal paths must return the fence's exact
-404 marker and `Cache-Control: no-store`; this proves the Worker ran instead of
-accepting an incidental static miss. Percent-encoded aliases are separate
-denial-only probes because Pages invocation routing may not select the Worker
-for those spellings. Any 2xx/3xx, missing literal marker, or cacheable literal
-response prevents a success receipt.
+the docs, dashboard, and apex hosts, including percent-encoded aliases. Every
+probe must return the fence's exact 404 marker and `Cache-Control: no-store`;
+this proves the all-route edge ran instead of accepting an incidental static
+miss. Any 2xx/3xx, missing marker, or cacheable response prevents a success
+receipt.
 
 ### Repo migration files and journal
 

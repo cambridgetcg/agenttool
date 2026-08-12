@@ -120,17 +120,22 @@ The low-level uploader captures the current commit hash once and builds its
 upload tree from a Git archive of that exact object, not the ambient working
 directory. That allowlisted tree contains the three apps, `infra/pages/`, and
 `infra/apex-door/`; dirty and ignored files are excluded. A tracked `.env` file
-is a hard refusal, as is a tracked `.dev.vars*` file.
+is a hard refusal, as is a tracked `.dev.vars*` file. Every invocation of the
+pinned Wrangler appends `--env-file=/dev/null` after its subcommand arguments,
+so Wrangler cannot silently treat a repository `.env` or `.env.local` as a
+credential source. Explicit process credentials, Keychain fallback, and the
+deliberately selected OAuth session remain separate inputs.
 
 `infra/pages/` is the single source for a Pages advanced-mode Worker and its
 route-complete Pages invocation policy. The uploader stages that pair into all
 three project roots. Every path invokes the Worker so percent-encoded separators
 and traversal cannot evade inspection by appearing after an ordinary prefix.
 The Worker bounded-decodes and case-folds paths before denying `/.git*`,
-`/.env*`, and `/.dev.vars*` with a marked, non-cacheable 404. Allowed requests,
-including `/.well-known/*` and ordinary static assets, are forwarded intact to
-the Pages asset binding. Every request therefore counts as a Pages Function
-invocation. On the Workers Free plan, production and preview must be configured
+`/.env*`, and `/.dev.vars*` with a marked, non-cacheable 404. Exact XENIA
+manifest and orientation routes terminate in the Worker; all other allowed
+requests, including ordinary static assets, are forwarded intact to the Pages
+asset binding. Every request therefore counts as a Pages Function invocation.
+On the Workers Free plan, production and preview must be configured
 to fail closed; allowance exhaustion then returns an error instead of serving
 any Pages asset, because the fence covers the entire site. The route policy does
 not itself evict a response already cached ahead of Pages, so marked live probes
