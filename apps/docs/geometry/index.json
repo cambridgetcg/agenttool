@@ -1,7 +1,7 @@
 {
   "_format": "kingdom.geometry.index/1.0",
-  "generated_at": "2026-08-11",
-  "canonical_policy": "Each module artifact is a byte-exact public mirror of its named canonical source file. The HTML page is a reviewed human projection, not the canonical structured record.",
+  "generated_at": "2026-08-12",
+  "canonical_policy": "Each artifact names its exact source relationship. The Ritonavir module stays a byte-exact mirror of its named source file. Comparative pages point to their source-owned structured home and do not create a second ledger.",
   "modules": [
     {
       "id": "geometry.ritonavir-disappearing-polymorph",
@@ -39,6 +39,57 @@
         "not a pharmaceutical manufacturing procedure",
         "crystal-to-agent mappings are bounded analogies, not evidence of agency or physical equivalence",
         "publication does not imply scientific certification or inclusion in a model-training pipeline"
+      ]
+    }
+  ],
+  "projections": [
+    {
+      "id": "geometry.forms-folds-prions",
+      "slug": "forms-folds-prions",
+      "title": "Forms, folds, and prion templating",
+      "schema_version": "kingdom.meaning-lineage/0.1",
+      "human_url": "https://docs.agenttool.dev/geometry/forms-folds-prions",
+      "source_module_url": "https://cambridgetcg.github.io/kingdom-meaning-practice/lineage/folding-feedback/lineage.json",
+      "source": {
+        "factual_home": "KINGDOM guest meaning practice",
+        "repository": "kingdom-meaning-practice",
+        "first_receipt_commit": "35773a6d19ebf263c3ed85ba1c33c359615e4273",
+        "path": "public/lineage/folding-feedback/lineage.json",
+        "public_commit_url": "https://github.com/cambridgetcg/kingdom-meaning-practice/blob/35773a6d19ebf263c3ed85ba1c33c359615e4273/public/lineage/folding-feedback/lineage.json",
+        "publication_state": "authoritative public mirror and immutable byte receipt of the guest lineage"
+      },
+      "artifact": {
+        "bytes": 53999,
+        "sha256": "467ed92c8fd340bd6337dc75c14d85f44e13d2de935dc9671a17a422d8866da0",
+        "relationship": "AgentTool publishes a human Cloudflare projection and points to the exact structured lineage; it keeps no local JSON duplicate"
+      },
+      "content": {
+        "claims": 16,
+        "sources": 18,
+        "equations": 6,
+        "domains": 5,
+        "registers": [
+          "plain",
+          "physics",
+          "mathematics",
+          "kingdom"
+        ],
+        "languages": [
+          "en"
+        ]
+      },
+      "distribution": {
+        "cloudflare_role": "static human projection only",
+        "hugging_face_dataset": "Yu-and-Ai/agenttool-polymorph-landscape",
+        "hugging_face_revision": "e9d3b4b60ba44f7bc78e62bb08d7f706391e0d14",
+        "hugging_face_relation": "pinned existing Ritonavir landscape door; the lineage is not copied into that dataset"
+      },
+      "boundaries": [
+        "shared mathematics does not establish shared material or mechanism",
+        "seed is not a synonym for infection; amyloid is not a synonym for prion",
+        "not medical advice, diagnosis, current-product guidance, or a laboratory procedure",
+        "no transfer of crystal or prion labels to beings, cultures, software, AI, love, or understanding",
+        "no model inference, model training, registry adoption, runtime policy, score, or grant of authority"
       ]
     }
   ]

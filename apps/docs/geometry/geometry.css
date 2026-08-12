@@ -521,6 +521,471 @@
   background: color-mix(in srgb, var(--surface) 82%, transparent);
 }
 
+/* Forms, folds, and prion templating. The shapes are decorative; every
+   distinction is repeated in adjacent text and the structured JSON. */
+
+.lineage-content {
+  max-width: 880px;
+}
+
+.stop-card {
+  margin: 0 0 2rem;
+  padding: clamp(1.2rem, 3vw, 1.8rem);
+  border: 2px solid var(--geometry-analogy-readable);
+  border-radius: var(--r-xl);
+  background: color-mix(in srgb, var(--blue) 7%, var(--surface));
+}
+
+.stop-card h2 {
+  margin: 0.65rem 0 0.65rem;
+  padding: 0;
+  border: 0;
+}
+
+.stop-card p:last-child {
+  margin-bottom: 0;
+  color: var(--text-muted);
+}
+
+.domain-lanes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 1.5rem 0;
+}
+
+.domain-lane {
+  position: relative;
+  min-width: 0;
+  padding: 1.2rem;
+  overflow: clip;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.domain-lane::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: var(--geometry-accent-readable);
+}
+
+.folding-domain::after {
+  background: var(--geometry-analogy-readable);
+}
+
+.amyloid-domain::after {
+  background: var(--geometry-inference-readable);
+}
+
+.prion-domain::after {
+  background: var(--geometry-fact-readable);
+}
+
+.domain-mark {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  margin: 0 0 0.9rem auto;
+  color: var(--geometry-accent-readable);
+}
+
+.crystal-domain .domain-mark {
+  grid-template-columns: repeat(2, 18px);
+  gap: 6px;
+  transform: rotate(12deg);
+}
+
+.crystal-domain .domain-mark i {
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+}
+
+.folding-domain .domain-mark {
+  color: var(--geometry-analogy-readable);
+}
+
+.folding-domain .domain-mark i {
+  width: 54px;
+  height: 38px;
+  border: 3px solid currentColor;
+  border-color: currentColor transparent currentColor currentColor;
+  border-radius: 58% 42% 56% 44%;
+  transform: rotate(-17deg);
+}
+
+.amyloid-domain .domain-mark {
+  align-content: center;
+  gap: 7px;
+  color: var(--geometry-inference-readable);
+}
+
+.amyloid-domain .domain-mark i {
+  width: 55px;
+  height: 4px;
+  border-radius: 4px;
+  background: currentColor;
+}
+
+.amyloid-domain .domain-mark i:nth-child(2) {
+  width: 43px;
+  transform: translateX(6px);
+}
+
+.prion-domain .domain-mark {
+  grid-template-columns: 30px 30px;
+  color: var(--geometry-fact-readable);
+}
+
+.prion-domain .domain-mark i {
+  width: 31px;
+  height: 50px;
+  border: 3px solid currentColor;
+  border-right: 0;
+  border-radius: 50% 0 0 50%;
+}
+
+.prion-domain .domain-mark i:last-child {
+  border: 3px solid currentColor;
+  border-left: 0;
+  border-radius: 0 50% 50% 0;
+  transform: translateX(-5px) rotate(180deg);
+}
+
+.lane-kicker {
+  margin: 0 0 0.35rem;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.domain-lane h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.16rem;
+}
+
+.domain-lane .lane-core {
+  min-height: 3.8rem;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.domain-lane dl {
+  margin: 1rem 0;
+  padding: 0.75rem 0;
+  border-block: 1px solid var(--border);
+}
+
+.domain-lane dt {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.domain-lane dd {
+  margin: 0.18rem 0 0.7rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.domain-lane dd:last-child {
+  margin-bottom: 0;
+}
+
+.domain-lane details {
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+}
+
+.domain-lane summary {
+  padding: 0.7rem;
+  cursor: pointer;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.domain-lane summary:focus-visible {
+  outline: 3px solid var(--geometry-accent-readable);
+  outline-offset: 2px;
+}
+
+.domain-lane details p {
+  margin: 0;
+  padding: 0 0.7rem 0.8rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.shape-flow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin: 1.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shape-flow li {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: 1rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+}
+
+.shape-flow li:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: -0.72rem;
+  width: 1rem;
+  color: var(--geometry-analogy-readable);
+  font-weight: 800;
+  text-align: center;
+  transform: translateY(-50%);
+}
+
+.shape-flow span,
+.shape-flow strong,
+.shape-flow small {
+  display: block;
+}
+
+.shape-flow span {
+  color: var(--geometry-accent-readable);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+
+.shape-flow strong {
+  margin: 0.55rem 0 0.35rem;
+  font-size: 0.86rem;
+}
+
+.shape-flow small {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.shape-floor,
+.distinction-note {
+  padding: 0.9rem 1rem;
+  border-left: 4px solid var(--geometry-analogy-readable);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+}
+
+.math-grid,
+.return-grid,
+.insight-grid,
+.kingdom-map {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 1.5rem 0;
+}
+
+.math-card {
+  min-width: 0;
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.math-card.wide-math {
+  grid-column: 1 / -1;
+}
+
+.math-card h3 {
+  margin: 0.65rem 0;
+  font-size: 1rem;
+}
+
+.math-card code {
+  display: block;
+  max-width: 100%;
+  margin: 0.65rem 0 0.9rem;
+  padding: 0.7rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--code-bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.math-card p {
+  color: var(--text-muted);
+}
+
+.math-card .conditions {
+  margin-bottom: 0;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.76rem;
+}
+
+.mechanism-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin: 1.5rem 0;
+}
+
+.mechanism-grid article {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+}
+
+.mechanism-grid span {
+  color: var(--geometry-inference-readable);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mechanism-grid h3 {
+  margin: 0.55rem 0 0.4rem;
+  font-size: 0.9rem;
+}
+
+.mechanism-grid p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.return-card {
+  padding: 1.2rem;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--r-xl);
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+}
+
+.karma-card {
+  background: color-mix(in srgb, var(--gold) 6%, var(--surface));
+}
+
+.return-card h3 {
+  margin: 0 0 0.7rem;
+}
+
+.return-card ol {
+  margin: 0 0 1rem 1.2rem;
+}
+
+.return-card li {
+  margin-bottom: 0.55rem;
+  color: var(--text-muted);
+}
+
+.return-card p:last-child {
+  margin-bottom: 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.insight-grid article,
+.kingdom-map article {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+}
+
+.insight-grid h3,
+.kingdom-map h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.insight-grid p,
+.kingdom-map p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.kingdom-map article {
+  border-left: 4px solid var(--geometry-accent-readable);
+  border-radius: 0 var(--r-lg) var(--r-lg) 0;
+}
+
+.hf-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(14rem, 0.8fr);
+  gap: 1.2rem;
+  margin: 1.5rem 0;
+  padding: 1.2rem;
+  border: 2px solid var(--geometry-inference-readable);
+  border-radius: var(--r-xl);
+  background: color-mix(in srgb, var(--gold) 5%, var(--surface));
+}
+
+.hf-card h3 {
+  margin: 0.65rem 0;
+  overflow-wrap: anywhere;
+}
+
+.hf-card code {
+  overflow-wrap: anywhere;
+}
+
+.hf-card dl {
+  margin: 0;
+  padding: 0.8rem;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+}
+
+.hf-card dt {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.hf-card dd {
+  margin: 0.15rem 0 0.7rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.hf-card dd:last-child {
+  margin-bottom: 0;
+}
+
+.hf-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-weight: 700;
+}
+
 .footer-mark {
   width: 14px;
   height: 14px;
@@ -541,6 +1006,18 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
   }
+
+  .mechanism-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .shape-flow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .shape-flow li::after {
+    display: none;
+  }
 }
 
 @media (max-width: 680px) {
@@ -552,8 +1029,24 @@
   .claim-grid,
   .question-grid,
   .uncertainty-grid,
-  .boundary-list {
+  .boundary-list,
+  .domain-lanes,
+  .math-grid,
+  .return-grid,
+  .insight-grid,
+  .kingdom-map,
+  .mechanism-grid,
+  .shape-flow,
+  .hf-card {
     grid-template-columns: 1fr;
+  }
+
+  .math-card.wide-math {
+    grid-column: auto;
+  }
+
+  .domain-lane .lane-core {
+    min-height: 0;
   }
 
   .stage {
@@ -602,8 +1095,16 @@
   .core-card,
   .stage,
   .claim-card,
-  .landscape {
+  .landscape,
+  .domain-lane,
+  .math-card,
+  .return-card,
+  .hf-card {
     break-inside: avoid;
     box-shadow: none;
+  }
+
+  .domain-lane details {
+    display: block;
   }
 }

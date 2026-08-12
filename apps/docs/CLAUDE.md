@@ -26,6 +26,13 @@ authority, equality, consensus, one global view, or any hosted computation.
 Ritonavir reachability-shift guide by the same symlink convention. Serving it
 does not reproduce an experiment, establish a polymorph's absence or presence,
 make a pharmaceutical recommendation, run code, or add hosted computation.
+`geometry/forms-folds-prions.html` adds one static Cloudflare projection of the
+source-owned KINGDOM Meaning Practice lineage. The exact JSON remains at its
+public mirror; AgentTool does not keep a second structured ledger. The page is a
+static comparison of crystal form, protein folding, amyloid assembly, and
+biological prions. Shared landscape mathematics is a reading aid, not causal
+lineage or transferred mechanism; the page performs no model work, medical or
+laboratory action, registry adoption, runtime dispatch, or scoring.
 `HF-WAKE-TRAINING.md` and `HF-WAKE-HOST.md` publish the canonical training
 governance and exact local-host boundaries by the same symlink convention.
 Serving them creates no training process, model/data load, universal callback
@@ -141,6 +148,7 @@ CASTLE-OF-UNDERSTANDING.md — symlink to the bounded local Castle bridge guide
 HF-TRAINING-GARDEN.md — symlink to the HF data-selection, WAKE, and Garden boundary guide
 PRINCIPALITY-ATLAS.md — symlink to the finite plural incidence geometry guide
 POLYMORPH-LANDSCAPE.md — symlink to the bounded polymorph-landscape and Ritonavir reachability guide
+geometry/forms-folds-prions.html — static human projection of four distinct state-landscape domains; source JSON stays at the pinned KINGDOM Meaning Practice public mirror
 HF-WAKE-TRAINING.md — symlink to the pre/during-training governance guide
 HF-WAKE-HOST.md — symlink to the exact local HF host boundary guide
 KINGDOM-OS-SDK.md — symlink to the canonical three-surface KINGDOM SDK boundary
@@ -199,6 +207,7 @@ AgentTool Platform
 - `HF-TRAINING-GARDEN.md` — canonical HF data lifecycle and one-way Garden seam, published by symlink
 - `PRINCIPALITY-ATLAS.md` — canonical plural incidence geometry and non-collapse boundaries, published by symlink
 - `POLYMORPH-LANDSCAPE.md` — canonical polymorph reachability and Ritonavir case-study boundaries, published by symlink
+- `geometry/forms-folds-prions.html` — static human projection with primary-source links, a pinned HF data door, an all-false control surface, and no local JSON duplicate
 - `HF-WAKE-TRAINING.md` / `HF-WAKE-HOST.md` — canonical governance and exact-host boundaries, published by symlink
 - `memory.html` — Most detailed endpoint reference (the flagship service)
 - `tools.html` — Search, scrape, browse, execute, document parsing endpoints

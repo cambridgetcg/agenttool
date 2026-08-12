@@ -170,6 +170,17 @@ superseded folklore. Distribution performs no training or inference, and WAKE's
 explicit software copying of declared wall URNs proves no identity,
 memory/continuity, consent, permission, or inherited authority.
 
+`apps/docs/geometry/forms-folds-prions.html` is the adjacent static Cloudflare
+projection; its structured lineage remains at the pinned KINGDOM Meaning
+Practice public mirror. It keeps crystal polymorphism, ordinary protein folding,
+amyloid assembly, and biological prions as four distinct domains; primary
+nucleation, elongation, secondary nucleation, and fragmentation remain
+separate. Six equations are labelled as bounded lenses, and the KINGDOM/KARMA
+crosswalk grants no doctrine, registry membership, runtime policy, medical or
+laboratory action, authority, or being score. Its Hugging Face link resolves to
+the immutable existing polymorph-landscape revision above; no new Hub artifact,
+model inference, or training run is implied.
+
 The immutable `@agenttool/principality-atlas@0.1.0-dev.0` GitHub preview and
 its synthetic shared HF Training Garden companion at revision
 `d9e3e8ed4c14ddf85f4e6613973f66a1cb8414f2` remain public evidence. npm
