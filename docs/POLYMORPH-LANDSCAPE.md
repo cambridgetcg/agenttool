@@ -229,14 +229,15 @@ and geometry index (1,749 bytes,
 `cb7bbb8ade9637a8fcb477d5d944d9eefcbade911d43d5e25a35659434603f3d`)
 also matched source exactly at live readback.
 
-The API surface is separate and remains undeployed. On this date,
+The source-bounded API response is separate and remains undeployed. On this date,
 `api.agenttool.dev` returns Cloudflare 525 because the Fly custom certificate
 expired and still awaits ownership validation. The missing DNS record is TXT
 `_fly-ownership.api.agenttool.dev = app-932mjg2`. The direct Fly health route
 is healthy at older revision
-`7f822302124db245fa2caaee6661e7fe9b409ab1`; that is not evidence that the new
-Polymorph route is live. No database migration, training run, inference, or
-provider compute was performed by these distribution actions.
+`7f822302124db245fa2caaee6661e7fe9b409ab1`; its existing Polymorph route still
+serves the superseded folklore, not this source-bounded account. No database
+migration, training run, inference, or provider compute was performed by these
+distribution actions.
 
 ## What this module does—and does not do
 

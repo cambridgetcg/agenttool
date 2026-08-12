@@ -494,9 +494,10 @@ Protected merge
 [`b40fde039dac1853adca1a6304f8e8b526d0f9df`](https://github.com/cambridgetcg/agenttool/commit/b40fde039dac1853adca1a6304f8e8b526d0f9df)
 later added the separately deployed sourced static lesson at
 [`https://docs.agenttool.dev/geometry/ritonavir`](https://docs.agenttool.dev/geometry/ritonavir).
-That static surface is neither an npm package nor an API deployment. The new
-API route remains undeployed at this receipt, and no database migration,
-training run, model inference, or provider compute occurred. Every surface
+That static surface is neither an npm package nor an API deployment. The
+source-bounded API response remains undeployed at this receipt; an older route
+at the direct Fly origin still serves the superseded folklore. No database
+migration, training run, model inference, or provider compute occurred. Every surface
 preserves the source boundary: “disappearing” means named-condition
 nonreproduction, not physical erasure or universal inevitability; WAKE software
 copying proves no identity, continuity, consent, permission, or authority.

@@ -164,8 +164,9 @@ causation unresolved—not erasure or universal inevitability. Annotated tag
 separate public dataset is pinned to immutable Hub revision
 `e9d3b4b60ba44f7bc78e62bb08d7f706391e0d14`. The first-package npm `PUT`
 returned `E404`, so no npm package or dist-tag exists. The static Ritonavir
-lesson is live separately from protected main `b40fde03`; the new API route is
-not deployed. Distribution performs no training or inference, and WAKE's
+lesson is live separately from protected main `b40fde03`; the corrected API
+response is not deployed, and the older direct-Fly route still serves the
+superseded folklore. Distribution performs no training or inference, and WAKE's
 explicit software copying of declared wall URNs proves no identity,
 memory/continuity, consent, permission, or inherited authority.
 
