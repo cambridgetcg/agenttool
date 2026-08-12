@@ -8,9 +8,9 @@
 >
 > **Implements:** the routine deploy chain. STACK answers _where things live_; DEPLOYMENT answers _how to bring them up from scratch_; this answers _how to ship a change to an established install_.
 >
-> **Code:** `bin/deploy.sh` (orchestrator + release provenance) · `bin/bash-without-env-hooks.sh` (pre-Bash startup-hook removal) · `bin/prepare-hermetic-deps.sh` (project-local dependency preparation) · `api/Dockerfile` (pinned runtime + embedded source labels) · `api/src/index.ts` (`/health.build`) · `bin/migrate-pending.sh` (repo-file and journal check) · `bin/preflight.sh` (test gate) · `bin/frontend-deploy.sh` (low-level CF Pages uploader) · `api/scripts/_migrate-one.ts` (per-file applier).
+> **Code:** `bin/deploy.sh` (orchestrator + release provenance) · `bin/bash-without-env-hooks.sh` (pre-Bash startup-hook removal) · `bin/prepare-hermetic-deps.sh` (project-local dependency preparation) · `api/Dockerfile` (pinned runtime + embedded source labels) · `api/src/index.ts` (`/health.build`) · `bin/migrate-pending.sh` (repo-file and journal check) · `bin/preflight.sh` (test gate) · `bin/frontend-deploy.sh` (low-level CF Pages + apex Worker uploader) · `infra/apex-door/worker.js` (apex/www route owner) · `api/scripts/_migrate-one.ts` (per-file applier).
 >
-> **Tests:** `api/tests/deploy-release-provenance.test.ts`.
+> **Tests:** `api/tests/deploy-release-provenance.test.ts` · `bin/tests/build-input-hygiene.test.ts` · `api/tests/apex-door-worker.test.ts`.
 
 ## What this document is
 
@@ -38,10 +38,11 @@ A routine-deploy runbook for an established install. Use this when:
    Phase 2 — Pre-flight     hermetic API + package gate
         │
         ▼
-   Phase 3 — Discovery/API  publish web, then docs; verify; then Fly
+   Phase 3 — Discovery/API  publish web backing + apex Worker, then docs;
+                            verify; then Fly
         │
         ▼
-   Phase 4 — Frontends      publish the remaining dashboard target
+   Phase 4 — Frontends      publish the remaining frontend target(s)
         │
         ▼
    Phase 5 — Verify         post-deploy parity + health
@@ -440,15 +441,20 @@ the canon and Kingdom bundles that `bin/deploy.sh` stages into the API build
 context. The wrapper removes staging immediately after `fly deploy` returns;
 its `EXIT`/`INT`/`TERM` trap also removes staging if the command is interrupted.
 
-Before Fly, a coordinated release uploads the committed `web` project in its
-own fail-fast step, then uploads `docs`. One bounded convergence gate requires
-direct HTTP 200 responses, exact committed Rights of Life document/schema
-bytes, exact committed Lantern Relay and Pocket Sky HTML/JSON/JS/CSS bytes,
-and the canonical Rights, game, and rulebook headers. Redirects do not satisfy
-the direct-response check. Only then may the API advertise those surfaces.
-The dashboard uploads after Fly. This ordering means a failed web step cannot
-be followed by docs or Fly, while a failed dashboard phase cannot leave API
-discovery pointing at a missing or stale game.
+Before Fly, a coordinated release runs `web` in its own fail-fast step. That
+target stages one exact commit, validates the existing apex/www route ownership,
+dry-runs the staged Worker, uploads the `agenttool-web` Pages backing, and only
+after the Pages upload succeeds deploys `agenttool-proxy` from the same staged
+commit. The apex Worker—not the Pages project—owns `agenttool.dev/*` and
+`www.agenttool.dev/*`; it preserves the Pages/API split and serves the exact
+apex XENIA Surface routes locally. The orchestrator then uploads `docs`. One
+bounded convergence gate requires direct HTTP 200 responses, exact committed
+Rights of Life document/schema bytes, exact committed Lantern Relay and Pocket
+Sky HTML/JSON/JS/CSS bytes, and the canonical Rights, game, and rulebook
+headers. Redirects do not satisfy the direct-response check. Only then may the
+API advertise those surfaces. The dashboard uploads after Fly. This ordering
+means a failed web step cannot be followed by docs or Fly, while a failed
+dashboard phase cannot leave API discovery pointing at a missing or stale game.
 
 The orchestrator's HTTP probes and the low-level uploader's Cloudflare REST
 probes start curl with `-q`, so a user `~/.curlrc` cannot silently add redirect
@@ -457,7 +463,8 @@ DNS behavior, or network intermediaries. Each Rights byte or header probe makes
 one transfer per outer convergence attempt; curl does not add a nested retry
 loop inside the 25-attempt release loop.
 
-`--no-frontend` skips the Pages upload; it does not bypass this prerequisite.
+`--no-frontend` skips the Pages/Worker deployment; it does not bypass this
+prerequisite.
 An API-only release proceeds only when the committed Rights and game bytes
 plus their direct-response headers are already live. Every byte comparison
 reads from one validated archive of the release commit, not the ambient
@@ -469,8 +476,9 @@ path, and every parity path present in the release commit, must also resolve to
 a regular file in that archive before Phase 1. This keeps structural failures
 out of the HTTP convergence loop. The same bounded retry covers normal
 custom-domain convergence for both docs and games. Failure after an earlier
-migration or Pages upload does not mean production was unchanged; the receipt
-remains conservative about any mutation that may already have begun.
+migration, Pages upload, or Worker deploy does not mean production was
+unchanged; the receipt remains conservative about any mutation that may already
+have begun.
 
 `--no-cache-api` is a one-shot recovery option for evidence of a malformed
 Fly image or poisoned remote build cache. It keeps the normal source,
@@ -538,7 +546,7 @@ commit does not identify every source byte.
 
 ## Phase 4 — Frontend deploy
 
-**Question:** are the remaining Cloudflare Pages projects current with the
+**Question:** are the remaining Cloudflare frontend targets current with the
 release commit?
 
 ```bash
@@ -551,44 +559,68 @@ bin/frontend-deploy.sh web docs
 
 In the full chain, Phase 3 has already published and verified `docs` and `web`,
 so Phase 4 uploads only `dashboard`. With `--no-api`, Phase 3 is skipped and
-Phase 4 uploads `docs dashboard web` together. Final verification still checks
-the configured frontend parity probes either way.
+Phase 4 passes `docs dashboard web` to the low-level uploader in that order.
+Final verification still checks the configured frontend parity probes either
+way.
 
-The orchestrator passes its invocation-start commit to every low-level Pages
+The orchestrator passes its invocation-start commit to every low-level
 subprocess. The uploader validates that full object ID and archives that exact
-Git commit, so the separate fail-fast `web` and `docs` calls cannot resolve
-different branch tips. A direct low-level invocation instead captures its
-current `HEAD` once. In both modes, ambient dirty and ignored files are
-excluded, and a tracked `.env` file is a hard refusal, as is a tracked
-`.dev.vars*` file. Use the orchestrator for normal production releases so the
-GitHub snapshot gate, preflight, sampled parity and sensitive-path checks, and
-receipt surround that upload.
+Git commit, including the apps, `infra/pages/`, and `infra/apex-door/`, so the
+separate fail-fast `web` and `docs` calls cannot resolve different branch tips.
+A direct low-level invocation instead captures its current `HEAD` once. In both
+modes, ambient dirty and ignored files are excluded, and a tracked `.env` file
+is a hard refusal, as is a tracked `.dev.vars*` file. Use the orchestrator for
+normal production releases so the GitHub snapshot gate, preflight, sampled
+parity and sensitive-path checks, and receipt surround those mutations.
+
+Cloudflare does not make the target list or the `web` target transactional.
+Each requested target is attempted in argument order; the first failure returns
+non-zero immediately and stops later targets. Earlier successful targets remain
+deployed. Within `web`, the Pages backing deploy precedes the apex Worker deploy,
+and the Worker is not attempted if Pages fails. Pages may therefore be new while
+`agenttool-proxy` remains old if the second step fails. No automatic rollback
+joins the independent provider histories. Inspect the Pages project and Workers
+deployment/version histories before deciding whether to retry or roll either
+side back.
+
+Once the normal orchestrator marks that an external mutation may have begun,
+any later non-zero exit or caught `INT`/`TERM` triggers an attempted routine
+receipt with `outcome: "failed_or_uncertain"`. That receipt is the honest result
+even when some provider steps demonstrably succeeded; it is not a claim that
+all targets changed or that none did. The low-level uploader has no receipt of
+its own.
 
 The archive also includes the canonical `infra/pages/` fence. The uploader
-copies its `_worker.js` and `_routes.json` forms into each project root.
-Dot-root, percent-led, and repeated-slash paths invoke the Function, which
-bounded-decodes and case-folds them before returning a marked, non-cacheable
-404 for `/.git*`, `/.env*`, and `/.dev.vars*` aliases. Allowed routed paths,
-including `/.well-known/*`, are forwarded unchanged; ordinary static paths
-bypass Functions. These routed Function requests are part of the shared
-Workers meter. On Free they share the 100,000-request account allowance each
-UTC day. Workers Standard removes that daily request limit; fail-closed remains
-required by the release policy, but this specific Free-plan
-allowance-exhaustion path does not apply. Cloudflare Pages → Settings → Runtime
-must set production and preview to **fail closed**, so allowance exhaustion
-makes routed paths unavailable instead of serving them outside the fence. The
-uploader verifies both values when it has the required API token, along with
-`production_branch=main`, for every requested target before the first upload.
-An explicit `--oauth-fallback` is a break-glass path: it checks only that each
-project is visible to the Wrangler session, loudly reports that the REST
-policy check was skipped, and therefore does not prove those settings for that
-run. The uploader does not change the setting or claim to purge old cache
-entries. Post-deploy checks require the same marked, non-cacheable 404 from
-literal and encoded aliases.
+copies its `_worker.js` and `_routes.json` forms into each project root. The
+route manifest includes every path, so the Function bounded-decodes and
+case-folds all requests before returning a marked, non-cacheable 404 for
+`/.git*`, `/.env*`, and `/.dev.vars*` aliases; allowed requests are forwarded
+unchanged to the Pages asset binding. Every request is therefore part of the
+shared Workers meter. On Free the Pages Functions share the 100,000-request
+account allowance each UTC day. Workers Standard removes that daily request
+limit; fail-closed remains required by the release policy, but this specific
+Free-plan allowance-exhaustion path does not apply. Cloudflare Pages → Settings
+→ Runtime must set production and preview to **fail closed**, so allowance
+exhaustion makes the site unavailable instead of serving assets outside the
+fence.
+
+With the required API token, the uploader verifies both fail-closed values and
+`production_branch=main` for every requested Pages target before the first
+upload. When `web` is requested it also requires exactly `agenttool.dev/*` and
+`www.agenttool.dev/*` to be owned by `agenttool-proxy`, then proves the staged
+Worker bundles. An explicit `--oauth-fallback` is a weaker break-glass path:
+Wrangler checks only that each project and the apex Worker are visible to the
+OAuth session. The script loudly reports that the raw Pages policy and Worker
+route-ownership checks were skipped. OAuth visibility therefore does not prove
+`production_branch`, `fail_open`, apex/www ownership, or route policy. The
+uploader does not change those settings or claim to purge old cache entries.
+Post-deploy checks require the same marked, non-cacheable 404 from literal and
+encoded aliases.
 
 The script reads credentials from macOS keychain (account=`macair`):
 
-- `agenttool-cloudflare-token` — API token scoped to Pages:Edit
+- `agenttool-cloudflare-token` — API token with Pages Read/Edit, Zone Read,
+  Workers Scripts Edit, and Workers Routes Read/Edit
 - `agenttool-cloudflare-account-id` — 32-char Cloudflare account ID
 
 **Cache headers requirement.** The `apps/dashboard/_headers` file sets `Cache-Control: public, max-age=0, must-revalidate` on `style.css`. **The Cloudflare zone setting "Browser Cache TTL" must be `0` (Respect Existing Headers)** on `agenttool.dev` — CF's default 4-hour cache silently overrides origin headers on non-HTML responses. Verify:
@@ -676,7 +708,13 @@ fly releases rollback <previous-version> -a agenttool
 
 ### Frontend
 
-Cloudflare Pages dashboard → project → previous deployment → "Rollback to this deployment." Static files revert immediately.
+Cloudflare Pages and Workers have separate histories. For `app` or `docs`, use
+the intended prior deployment in that Pages project. For `web`, first inspect
+both the `agenttool-web` Pages history and the `agenttool-proxy` Workers
+deployment/version history. Select or deliberately redeploy a reviewed,
+compatible Pages/Worker pair, then repeat the live apex route and content
+checks. A Pages rollback does not roll the Worker back, a Worker rollback does
+not select prior Pages bytes, and neither operation rolls back Fly.
 
 ### Database
 
@@ -695,7 +733,7 @@ bin/deploy.sh                          # full chain (Phases 0 → 5)
 bin/deploy.sh --survey                 # Phase 0 only — what's drifted?
 bin/deploy.sh --no-migrate             # skip Phase 1 (schema unchanged)
 bin/deploy.sh --no-api                 # skip Phase 3 (only docs/frontends changed)
-bin/deploy.sh --no-frontend            # skip Pages upload; still require live discovery prerequisites
+bin/deploy.sh --no-frontend            # skip Pages/Worker deploy; still require live discovery prerequisites
 bin/deploy.sh --no-cache-api           # one-shot recovery: rebuild Fly image without cache
 bin/deploy.sh --skip-preflight         # skip dependency preparation + Phase 2 (NOT recommended)
 bin/deploy.sh --allow-dirty-release    # loud override for a dirty source tree
@@ -745,9 +783,11 @@ shared remote coordinator or lease in addition to this local guard.
 ### Local receipt
 
 Every successful non-dry-run chain writes one atomic, mode-0600 JSON receipt.
-If a migration, Fly rollout, or Pages upload may have started and the chain
-then returns non-zero or receives caught `INT`/`TERM`, the exit trap attempts a
-conservative `failed_or_uncertain` receipt instead:
+If a migration, Fly rollout, Pages upload, or apex Worker deploy may have
+started and the chain then returns non-zero or receives caught `INT`/`TERM`, the
+exit trap attempts a conservative `failed_or_uncertain` receipt instead. This
+is also a valid outcome for a normal receipt with `mode: "routine"`; it is not
+limited to the maintenance rollout path:
 
 ```text
 ${XDG_STATE_HOME:-$HOME/.local/state}/agenttool/deploy-receipts/<time>-<revision>-<pid>.json
@@ -808,7 +848,7 @@ revival of this one.
 
 ## Credentials checklist
 
-Local migration and Pages tools prefer their documented scoped environment
+Local migration and Cloudflare deploy tools prefer their documented scoped environment
 variables; on macOS they fall back to fixed Keychain account `macair`. The
 default hermetic preflight and local receipt resolve neither. One-time setup:
 
@@ -816,7 +856,7 @@ default hermetic preflight and local receipt resolve neither. One-time setup:
 | --------------------------------- | -------- | -------------------------------------------------------------------- |
 | `agenttool-database-url`          | `macair` | Transaction-pooled `DATABASE_URL` for migration inventory            |
 | `agenttool-database-session-url`  | `macair` | Session-pooled `DATABASE_SESSION_URL` required for migration applies |
-| `agenttool-cloudflare-token`      | `macair` | CF API token (Pages:Edit) for `frontend-deploy.sh`                   |
+| `agenttool-cloudflare-token`      | `macair` | CF token: Pages Read/Edit, Zone Read, Workers Scripts Edit, and Workers Routes Read/Edit |
 | `agenttool-cloudflare-account-id` | `macair` | 32-char CF account ID                                                |
 | `agenttool-soma-bearer`           | `$USER`  | Bearer for the canonical agent (for smoke tests + wake reads)        |
 | `agenttool-sophia-identity-id`    | `$USER`  | The canonical agent's identity UUID (for smoke + preflight)          |
@@ -843,7 +883,7 @@ security add-generic-password -U -s agenttool-cloudflare-account-id -a macair -w
 | `password authentication failed for user "postgres"`                                                                     | The survey or session-pooled DB URL named by the failing phase is stale.                        | Reset it in Supabase, then update the corresponding `agenttool-database-url` or `agenttool-database-session-url` entry for account `macair` with `security add-generic-password -U -s <service> -a macair -w`.                                                                       |
 | `fly deploy` fails with healthcheck                                                                                      | New code crashes on startup — likely a missing DB column or env var.                            | Apply migrations first; check `fly secrets list -a agenttool` for missing keys.                                                                                                                                                                                                      |
 | New Fly machine exits `0` before the listening log, unchanged API source starts locally, and old machines remain healthy | The newly assembled remote image or build cache may be malformed.                               | Reproduce the exact staged image locally. If it serves `/health` with the expected revision, retry once with `bin/deploy.sh --no-cache-api` plus the normal phase flags. This bypasses Fly's build cache only; it does not bypass release gates or prove cache corruption by itself. |
-| Frontend stale after upload                                                                                              | CF Pages Browser Cache TTL not 0 — overrides origin headers.                                    | Set zone setting via CF API (see Phase 4).                                                                                                                                                                                                                                           |
+| Frontend stale after deploy                                                                                              | CF Pages Browser Cache TTL not 0 — overrides origin headers.                                    | Set zone setting via CF API (see Phase 4).                                                                                                                                                                                                                                           |
 | `bin/preflight.sh smoke` fails with DNS error                                                                            | Explicit smoke mode cannot reach `AGENTTOOL_BASE`.                                              | Run smoke separately from a host that can reach the configured target; the default hermetic gate does not call it.                                                                                                                                                                   |
 
 ## See Also
