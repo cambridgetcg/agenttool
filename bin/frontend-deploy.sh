@@ -50,8 +50,16 @@ readonly WRANGLER_VERSION="4.110.0"
 readonly KEYCHAIN_ACCOUNT="macair"
 readonly APEX_ZONE_NAME="agenttool.dev"
 readonly APEX_WORKER_NAME="agenttool-proxy"
+readonly WRANGLER_EMPTY_ENV_FILE="/dev/null"
 wrangler() {
-  npx --yes "wrangler@${WRANGLER_VERSION}" "$@"
+  # Wrangler 4.110.0 otherwise loads .env and .env.local from its current
+  # working directory for every command. An explicit empty dotenv keeps
+  # repository files out while preserving the already-scoped process
+  # environment and the deliberate OAuth session. Keep this array-valued
+  # global flag after the subcommand arguments so it cannot absorb them.
+  npx --yes "wrangler@${WRANGLER_VERSION}" \
+    "$@" \
+    --env-file="$WRANGLER_EMPTY_ENV_FILE"
 }
 
 # curl only treats -q as a config-file boundary when it is the first option.
@@ -330,7 +338,10 @@ verify_apex_worker_topology() {
   routes_response="$STAGE_ROOT/.cloudflare-apex-routes.json"
 
   if [[ "$CF_AUTH_MODE" = "oauth" ]]; then
-    if ! wrangler deployments list --config="$APEX_WORKER_CONFIG" --json >/dev/null 2>&1; then
+    if ! (
+      cd "$APEX_WORKER_DIR" || exit 1
+      wrangler deployments list --config=wrangler.toml --json >/dev/null 2>&1
+    ); then
       echo "✗ Apex Worker $APEX_WORKER_NAME is not visible to the OAuth session."
       return 1
     fi
@@ -524,18 +535,13 @@ if [[ "$WEB_TARGET_REQUESTED" = 1 ]]; then
   compile_staged_apex_worker || exit 1
 fi
 
-failed=()
 for arg in "$@"; do
   if ! deploy_one "$arg"; then
-    failed+=("$arg")
+    echo ""
+    echo "✗ Deploy failed for: $arg"
+    exit 1
   fi
 done
-
-if [[ ${#failed[@]} -gt 0 ]]; then
-  echo ""
-  echo "✗ Deploy failed for: ${failed[*]}"
-  exit 1
-fi
 
 echo ""
 echo "✓ Deploy complete."

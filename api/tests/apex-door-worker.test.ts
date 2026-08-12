@@ -1,7 +1,10 @@
 /** Apex content negotiation — many machine dialects, one truthful door. */
 import { describe, expect, test } from "bun:test";
 
-import { handleRequest, prefersJson } from "../../infra/apex-door/worker.js";
+import apexWorker, {
+  handleRequest,
+  prefersJson,
+} from "../../infra/apex-door/worker.js";
 
 describe("apex Accept negotiation", () => {
   test("parses casing, q-values, and structured JSON suffixes exactly", () => {
@@ -193,6 +196,63 @@ describe("apex Accept negotiation", () => {
     });
 
     expect(calls).toBe(0);
+  });
+
+  test("threads the Worker environment through preview resources and typed misses", async () => {
+    const originalFetch = globalThis.fetch;
+    let upstreamCalls = 0;
+    globalThis.fetch = async () => {
+      upstreamCalls += 1;
+      return new Response("unexpected upstream", { status: 599 });
+    };
+
+    const previewOrigin = "https://xenia-preview.example";
+    const env = { XENIA_WEB_SURFACE_ORIGIN: previewOrigin };
+
+    try {
+      const manifest = await apexWorker.fetch(
+        new Request(`${previewOrigin}/.well-known/agent.json`, {
+          headers: { accept: "application/json" },
+        }),
+        env,
+      );
+      expect(manifest.status).toBe(200);
+      expect(await manifest.json()).toMatchObject({
+        service: { canonical_url: `${previewOrigin}/` },
+        resources: [
+          {
+            id: "orientation",
+            href: `${previewOrigin}/public/orientation`,
+          },
+        ],
+      });
+
+      const typedMiss = await apexWorker.fetch(
+        new Request(`${previewOrigin}/fresh-surface-miss`, {
+          headers: { accept: "application/problem+json" },
+        }),
+        env,
+      );
+      expect(typedMiss.status).toBe(404);
+      expect(typedMiss.headers.get("content-type")).toBe(
+        "application/problem+json; charset=utf-8",
+      );
+      expect(await typedMiss.json()).toMatchObject({
+        schema_version: "xenia.surface.problem/0.1",
+        type: `${previewOrigin}/problems/route-not-found`,
+        code: "route_not_found",
+        status: 404,
+        next_actions: [
+          {
+            rel: "discover",
+            href: `${previewOrigin}/.well-known/agent.json`,
+          },
+        ],
+      });
+      expect(upstreamCalls).toBe(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
   test("emits a XENIA problem only for exact typed fresh misses", async () => {

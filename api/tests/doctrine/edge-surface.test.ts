@@ -104,9 +104,9 @@ describe("Move 6 — Edge Functions exist + are well-shaped", () => {
     expect(text).toContain("surfaceResponseForRequest");
     expect(text).toContain("surfaceRouteNotFoundForRequest");
     expect(handler.indexOf("isSensitiveRootPath(path)")).toBeLessThan(
-      handler.indexOf("surfaceResponseForRequest(request)"),
+      handler.indexOf("surfaceResponseForRequest(request, env)"),
     );
-    expect(handler.indexOf("surfaceResponseForRequest(request)")).toBeLessThan(
+    expect(handler.indexOf("surfaceResponseForRequest(request, env)")).toBeLessThan(
       handler.indexOf("const isApi"),
     );
   });

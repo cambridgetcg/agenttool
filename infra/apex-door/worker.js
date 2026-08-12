@@ -164,7 +164,7 @@ function machineNotFound(path) {
   });
 }
 
-export async function handleRequest(request, fetchImpl = fetch) {
+export async function handleRequest(request, fetchImpl = fetch, env) {
   const url = new URL(request.url);
   const path = url.pathname;
 
@@ -199,7 +199,7 @@ export async function handleRequest(request, fetchImpl = fetch) {
   // agenttool.dev is fronted by this Worker, not by the Pages Worker below.
   // Serve its exact Surface threshold here through the same response builder
   // used by docs/app Pages so these paths cannot fall through to API_PREFIXES.
-  const surfaceResponse = surfaceResponseForRequest(request);
+  const surfaceResponse = surfaceResponseForRequest(request, env);
   if (surfaceResponse !== null) return surfaceResponse;
 
   if (path === PENDING_A2A_CARD_PATH) {
@@ -231,7 +231,7 @@ export async function handleRequest(request, fetchImpl = fetch) {
   const variesByAccept = path === "/" || MACHINE_ALTERNATES.has(path);
 
   if (wantsJson && !isApi && path !== "/" && !machineAlternate) {
-    const surfaceProblem = surfaceRouteNotFoundForRequest(request);
+    const surfaceProblem = surfaceRouteNotFoundForRequest(request, env);
     if (surfaceProblem !== null) return surfaceProblem;
     return machineNotFound(path);
   }
@@ -268,7 +268,7 @@ export async function handleRequest(request, fetchImpl = fetch) {
 }
 
 export default {
-  fetch(request) {
-    return handleRequest(request, fetch);
+  fetch(request, env) {
+    return handleRequest(request, fetch, env);
   },
 };

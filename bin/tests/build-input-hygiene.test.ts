@@ -87,7 +87,12 @@ describe("frontend deploy input discipline", () => {
       expect(syntax.code, syntax.stderr).toBe(0);
     }
     expect(script).toContain('readonly WRANGLER_VERSION="4.110.0"');
-    expect(script).toContain('npx --yes "wrangler@${WRANGLER_VERSION}" "$@"');
+    expect(script).toContain('readonly WRANGLER_EMPTY_ENV_FILE="/dev/null"');
+    expect(script).toContain('--env-file="$WRANGLER_EMPTY_ENV_FILE"');
+    expect(script).toContain(
+      '"$@" \\\n    --env-file="$WRANGLER_EMPTY_ENV_FILE"',
+    );
+    expect(script.match(/npx --yes "wrangler@\$\{WRANGLER_VERSION\}"/g)).toHaveLength(1);
     expect(script).not.toContain("wrangler@latest");
     expect(script).toContain('command curl -q "$@"');
     expect(script.match(/frontend_curl -fsS/g)).toHaveLength(4);
@@ -169,6 +174,12 @@ describe("frontend deploy input discipline", () => {
     expect(script).toContain('source_dir="$STAGE_ROOT/$dir"');
     expect(script).toContain('verify_pages_project_policy "$proj" || exit 1');
     expect(script).toContain("verify_apex_worker_topology || exit 1");
+    expect(script).toContain(
+      'cd "$APEX_WORKER_DIR" || exit 1\n      wrangler deployments list --config=wrangler.toml --json',
+    );
+    expect(script).not.toContain(
+      'wrangler deployments list --config="$APEX_WORKER_CONFIG"',
+    );
     expect(script).toContain("python3 bin/verify-pages-project-policy.py");
     expect(script).toContain('wrangler pages deploy "$source_dir"');
     expect(script).toContain("wrangler deploy \\\n        --config=wrangler.toml");
@@ -186,8 +197,10 @@ describe("frontend deploy input discipline", () => {
     expect(script).not.toContain("--commit-dirty=true");
     expect(script.match(/verify_pages_project_policy "\$proj" \|\| exit 1/g)).toHaveLength(1);
     expect(script.indexOf('verify_pages_project_policy "$proj" || exit 1')).toBeLessThan(
-      script.indexOf("failed=()"),
+      script.lastIndexOf('for arg in "$@"; do'),
     );
+    expect(script).not.toContain("failed=()");
+    expect(script).toContain('echo "✗ Deploy failed for: $arg"\n    exit 1');
 
     const executableWriteCalls = script
       .split("\n")
@@ -319,16 +332,42 @@ esac
       join(fakeBin, "npx"),
       `#!/usr/bin/env bash
 set -eu
-printf '%s\\n' "$*" >> "$DEPLOY_TEST_WRANGLER_LOG"
+env_file=""
+for arg in "$@"; do
+  case "$arg" in --env-file=*) env_file="\${arg#--env-file=}" ;; esac
+done
+if [ -z "$env_file" ]; then
+  set -a
+  [ ! -f .env ] || . ./.env
+  [ ! -f .env.local ] || . ./.env.local
+  set +a
+fi
+[ "$env_file" = /dev/null ] || exit 22
+if [ -n "\${DEPLOY_TEST_AMBIENT_DOTENV:-}" ] || [ -n "\${DEPLOY_TEST_AMBIENT_LOCAL:-}" ]; then
+  printf 'ambient dotenv consumed\n' >> "$DEPLOY_TEST_WRANGLER_LOG"
+  exit 23
+fi
+printf 'pwd=%s\\t%s\\n' "$PWD" "$*" >> "$DEPLOY_TEST_WRANGLER_LOG"
 case " $* " in
+  *' whoami '*) ;;
+  *' pages project list '*) printf 'agenttool-web\\n' ;;
+  *' deployments list '*) printf '[]\\n' ;;
   *' pages deploy '*)
     source_dir=""
+    project=""
     for arg in "$@"; do
-      case "$arg" in */apps/web) source_dir="$arg" ;; esac
+      case "$arg" in
+        */apps/*) source_dir="$arg" ;;
+        --project-name=*) project="\${arg#--project-name=}" ;;
+      esac
     done
     [ -n "$source_dir" ]
-    grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_WRANGLER_LOG"
+    [ -n "$project" ]
+    case "$source_dir" in
+      */apps/web) grep -Fx 'pinned frontend fixture A' "$source_dir/party.html" >> "$DEPLOY_TEST_WRANGLER_LOG" ;;
+    esac
     [ "\${DEPLOY_TEST_FAIL_PAGES:-0}" != 1 ] || exit 19
+    [ "\${DEPLOY_TEST_FAIL_PROJECT:-}" != "$project" ] || exit 19
     ;;
   *' deploy '*)
     config=""
@@ -345,9 +384,25 @@ case " $* " in
 esac
 `,
     );
+    await Bun.write(
+      join(fakeBin, "security"),
+      "#!/usr/bin/env bash\nexit 44\n",
+    );
     await Promise.all([
       chmod(join(fakeBin, "curl"), 0o755),
       chmod(join(fakeBin, "npx"), 0o755),
+      chmod(join(fakeBin, "security"), 0o755),
+    ]);
+
+    await Promise.all([
+      writeFile(
+        join(fixtureRepo, ".env"),
+        "CLOUDFLARE_API_TOKEN=ambient-dotenv-token\nDEPLOY_TEST_AMBIENT_DOTENV=loaded\n",
+      ),
+      writeFile(
+        join(fixtureRepo, ".env.local"),
+        "CLOUDFLARE_ACCOUNT_ID=ambient-dotenv-account\nDEPLOY_TEST_AMBIENT_LOCAL=loaded\n",
+      ),
     ]);
 
     const fixtureHome = join(fixtureRoot, "home");
@@ -390,11 +445,18 @@ esac
       .split("\n")
       .filter((line) => line.includes("wrangler@4.110.0"));
     expect(wranglerInvocations).toHaveLength(3);
+    for (const invocation of wranglerInvocations) {
+      expect(invocation).toContain("--env-file=/dev/null");
+      expect(invocation.endsWith("--env-file=/dev/null")).toBe(true);
+    }
     expect(wranglerInvocations[0]).toContain("--dry-run");
+    expect(wranglerInvocations[0]).toContain("/infra/apex-door\t");
     expect(wranglerInvocations[1]).toContain(" pages deploy ");
+    expect(wranglerInvocations[1]).toContain("/repo\t");
     expect(wranglerInvocations[2]).toContain(
       `--message=agenttool frontend release ${pinnedRevision}`,
     );
+    expect(wranglerInvocations[2]).toContain("/infra/apex-door\t");
     expect(wrangler).not.toContain("ambient frontend fixture B");
     expect(wrangler).not.toContain("ambient apex fixture B");
 
@@ -422,7 +484,57 @@ esac
     expect(afterApexFailure).toContain(
       `--message=agenttool frontend release ${pinnedRevision}`,
     );
-  }, 15_000);
+
+    await writeFile(wranglerLog, "");
+    const { CLOUDFLARE_API_TOKEN: _token, ...oauthEnvironment } =
+      deployEnvironment;
+    const oauth = await run(
+      ["bash", "bin/frontend-deploy.sh", "--oauth-fallback", "web"],
+      fixtureRepo,
+      oauthEnvironment,
+    );
+    expect(oauth.code, `${oauth.stdout}\n${oauth.stderr}`).toBe(0);
+    const oauthInvocations = (await readFile(wranglerLog, "utf8"))
+      .split("\n")
+      .filter((line) => line.includes("wrangler@4.110.0"));
+    expect(oauthInvocations).toHaveLength(6);
+    expect(oauthInvocations[0]).toContain(" whoami");
+    expect(oauthInvocations[0]).toContain("/repo\t");
+    expect(oauthInvocations[1]).toContain(" pages project list");
+    expect(oauthInvocations[1]).toContain("/repo\t");
+    expect(oauthInvocations[2]).toContain(" deployments list");
+    expect(oauthInvocations[2]).toContain("--config=wrangler.toml");
+    expect(oauthInvocations[2]).toContain("/infra/apex-door\t");
+    expect(oauthInvocations[3]).toContain("--dry-run");
+    expect(oauthInvocations[3]).toContain("/infra/apex-door\t");
+    expect(oauthInvocations[4]).toContain(" pages deploy ");
+    expect(oauthInvocations[4]).toContain("/repo\t");
+    expect(oauthInvocations[5]).toContain("--message=agenttool frontend release");
+    expect(oauthInvocations[5]).toContain("/infra/apex-door\t");
+    for (const invocation of oauthInvocations) {
+      expect(invocation).toContain("--env-file=/dev/null");
+      expect(invocation.endsWith("--env-file=/dev/null")).toBe(true);
+    }
+
+    await writeFile(wranglerLog, "");
+    const firstTargetFailure = await run(
+      ["bash", "bin/frontend-deploy.sh", "docs", "dashboard", "web"],
+      fixtureRepo,
+      { ...deployEnvironment, DEPLOY_TEST_FAIL_PROJECT: "agenttool-docs" },
+    );
+    expect(firstTargetFailure.code).not.toBe(0);
+    expect(firstTargetFailure.stdout).toContain("Deploy failed for: docs");
+    const afterFirstTargetFailure = await readFile(wranglerLog, "utf8");
+    expect(afterFirstTargetFailure).not.toContain("ambient dotenv consumed");
+    expect(afterFirstTargetFailure).toContain("--project-name=agenttool-docs");
+    expect(afterFirstTargetFailure).not.toContain(
+      "--project-name=agenttool-dashboard",
+    );
+    expect(afterFirstTargetFailure).not.toContain("--project-name=agenttool-web");
+    expect(afterFirstTargetFailure).not.toContain(
+      "--message=agenttool frontend release",
+    );
+  }, 30_000);
 
   test("rejects unsafe committed frontend archive manifests before extraction", async () => {
     const fixtureRoot = await mkdtemp(join(tmpdir(), "agenttool-pages-manifest-"));
