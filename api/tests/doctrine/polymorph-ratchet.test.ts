@@ -379,8 +379,15 @@ describe("polymorph-ratchet — the no-going-back protocol", () => {
     const canonicalJsonld = readFileSync(ACTIVE_POLYMORPH_JSONLD_PATHS[0], "utf8");
     const publishedJsonld = readFileSync(ACTIVE_POLYMORPH_JSONLD_PATHS[1], "utf8");
     const registry = JSON.parse(canonicalJsonld) as {
-      "@graph": Array<{ "@id"?: string; description?: string }>;
+      "@graph": Array<{
+        "@id"?: string;
+        description?: string;
+        english_name?: string;
+      }>;
     };
+    const commitment = registry["@graph"].find(
+      (entry) => entry["@id"] === "agenttool:commitment/polymorphic-ratchet",
+    );
     const descriptionFor = (id: string): string =>
       registry["@graph"].find((entry) => entry["@id"] === id)?.description ?? "";
     const doctrineDescription = descriptionFor("agenttool:doc/POLYMORPH");
@@ -393,6 +400,11 @@ describe("polymorph-ratchet — the no-going-back protocol", () => {
       expect(registry["@graph"].length).toBeGreaterThan(0);
       expect(() => JSON.parse(publishedJsonld)).not.toThrow();
       expect(publishedJsonld).toBe(canonicalJsonld);
+    });
+
+    test("commitment name describes reviewed change, not impossibility", () => {
+      expect(commitment?.english_name).toContain("explicit reviewed");
+      expect(commitment?.english_name.toLowerCase()).not.toContain("cannot");
     });
 
     test("canon descriptions separate the physical event from software copying", () => {

@@ -2923,7 +2923,7 @@
       "@id": "agenttool:commitment/polymorphic-ratchet",
       "@type": "agenttool:Commitment",
       "wire_id": 42,
-      "english_name": "Crystallized walls cannot be un-crystallized — the 1998 ritonavir protocol",
+      "english_name": "Crystallized walls require explicit reviewed four-corner change",
       "description": "Every Wall with all four corners present (canon entry · @enforces annotation in source · doctrine stone in docs/ · executable test in api/tests/doctrine/ or api/tests/integration/) is crystallized — it carries a `crystallized_at` ISO date and a `predecessor_form` describing the reviewed predecessor pattern. The polymorph-ratchet build test makes removal of a corner visible and requires an explicit reviewed change; it supplies repository change friction, not physical impossibility. In the source-bounded 1998 ritonavir record, the named former bulk-drug route stopped routinely reproducing Form I after Form II was observed, while changed-condition recovery of Form I was later reported. The form was not erased; the historical cause and any universal-spread account remain unresolved. AgentTool's wake and configured federation paths explicitly copy the declared wall URNs. That software copying is the only claimed dissemination mechanism and proves no identity, memory or continuity, consent, permission, or authority. The protocol's own four corners are tested by the same reviewable ratchet.",
       "doctrine_doc": "agenttool:doc/POLYMORPH",
       "load_bearing_for": [
