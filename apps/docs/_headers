@@ -369,3 +369,57 @@
 
 /business-model
   Link: <https://docs.agenttool.dev/BUSINESS-MODEL.md>; rel="alternate"; type="text/markdown"
+
+# ── KINGDOM geometry — static human/JSON twins with bounded execution ──
+
+/geometry/ritonavir
+  Content-Type: text/html; charset=utf-8
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+  Content-Security-Policy: default-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'none'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Referrer-Policy: no-referrer
+  Permissions-Policy: accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()
+  Cross-Origin-Resource-Policy: same-origin
+  Link: <https://docs.agenttool.dev/geometry/ritonavir.json>; rel="alternate"; type="application/json", <https://docs.agenttool.dev/geometry/index.json>; rel="describedby"; type="application/json"
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  ! X-Agent-Surface
+  X-Agent-Surface: kingdom-geometry-lesson
+
+/geometry/ritonavir.html
+  Content-Type: text/html; charset=utf-8
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+  Content-Security-Policy: default-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'none'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Referrer-Policy: no-referrer
+  Permissions-Policy: accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()
+  Cross-Origin-Resource-Policy: same-origin
+  Link: <https://docs.agenttool.dev/geometry/ritonavir.json>; rel="alternate"; type="application/json", <https://docs.agenttool.dev/geometry/index.json>; rel="describedby"; type="application/json"
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  ! X-Agent-Surface
+  X-Agent-Surface: kingdom-geometry-lesson
+
+/geometry/ritonavir.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate, no-transform
+  Access-Control-Allow-Origin: *
+  Cross-Origin-Resource-Policy: cross-origin
+  Link: <https://docs.agenttool.dev/geometry/ritonavir>; rel="alternate"; type="text/html", <https://docs.agenttool.dev/geometry/index.json>; rel="describedby"; type="application/json"
+  X-Content-Type-Options: nosniff
+  ! X-Agent-Surface
+  X-Agent-Surface: kingdom-geometry-module
+
+/geometry/index.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate, no-transform
+  Access-Control-Allow-Origin: *
+  Cross-Origin-Resource-Policy: cross-origin
+  Link: <https://docs.agenttool.dev/geometry/ritonavir>; rel="item"; type="text/html", <https://docs.agenttool.dev/geometry/ritonavir.json>; rel="item"; type="application/json"
+  X-Content-Type-Options: nosniff
+  ! X-Agent-Surface
+  X-Agent-Surface: kingdom-geometry-index
+
+/geometry/geometry.css
+  Content-Type: text/css; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate, no-transform
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
