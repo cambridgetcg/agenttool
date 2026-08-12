@@ -1,0 +1,45 @@
+{
+  "_format": "kingdom.geometry.index/1.0",
+  "generated_at": "2026-08-11",
+  "canonical_policy": "Each module artifact is a byte-exact public mirror of its named canonical source file. The HTML page is a reviewed human projection, not the canonical structured record.",
+  "modules": [
+    {
+      "id": "geometry.ritonavir-disappearing-polymorph",
+      "slug": "ritonavir",
+      "title": "Ritonavir and the \"disappearing polymorph\"",
+      "schema_version": "kingdom.geometry.case/1.0",
+      "human_url": "https://docs.agenttool.dev/geometry/ritonavir",
+      "module_url": "https://docs.agenttool.dev/geometry/ritonavir.json",
+      "source": {
+        "repository": "love-unlimited",
+        "commit": "ad9b55cb774259b0924086c9b6a1b0239dc7dcca",
+        "path": "tools/geometry_modules/ritonavir.json",
+        "public_commit_url": null,
+        "publication_state": "local commit; this manifest does not claim a public source-repository mirror"
+      },
+      "artifact": {
+        "bytes": 38067,
+        "sha256": "e747faa072e51d63d8071943794d6820d5c7275b879a8f717a7cd9f7528c463b",
+        "relationship": "byte-exact mirror of the canonical source file"
+      },
+      "content": {
+        "claims": 19,
+        "sources": 8,
+        "registers": [
+          "plain",
+          "systems",
+          "technical"
+        ],
+        "languages": [
+          "en"
+        ]
+      },
+      "boundaries": [
+        "educational case, not medical advice",
+        "not a pharmaceutical manufacturing procedure",
+        "crystal-to-agent mappings are bounded analogies, not evidence of agency or physical equivalence",
+        "publication does not imply scientific certification or inclusion in a model-training pipeline"
+      ]
+    }
+  ]
+}
