@@ -1,0 +1,823 @@
+{
+  "schema_version": "agenttool.gin-reconstruction-vectors/0.1",
+  "cases": {
+    "unique": {
+      "request": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "model": {
+          "calibration_model": "affine_exact_two_anchor_per_usable_observation",
+          "degree_bound": 1,
+          "enumeration_limit": 1000000,
+          "field_prime": 5,
+          "report_error_budget": 1
+        },
+        "observations": [
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 1,
+              "encoded_zero": 0,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 2,
+            "evidence_ref": "sha256:61b8b00e51cb09ed50347c59d21634cecad6e4ff1b48871e1dd41ab40c6a8156",
+            "intervention": 0,
+            "observation_id": "u0",
+            "substrate_ref": "sha256:eecd4c56b84db9dabee700a97325f8dc0fbdb3899798d24a775588f9bbd15549"
+          },
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 3,
+              "encoded_zero": 1,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 1,
+            "evidence_ref": "sha256:e4dfbe67cba419fe972bf35f15b498997bec18bfb8d4155d20d7d54f8d9fe1ab",
+            "intervention": 1,
+            "observation_id": "u1",
+            "substrate_ref": "sha256:3b82eb5310aae0da0f23c39d7bae9e1ba8a69defa291933b4ac869ee352b80f3"
+          },
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 0,
+              "encoded_zero": 2,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 4,
+            "evidence_ref": "sha256:1def8b87ded56a811c7c3f13d683ee1aab11782923c35e54386238443bc9a8a2",
+            "intervention": 2,
+            "observation_id": "u2",
+            "substrate_ref": "sha256:82201b41f4a700ac7ed3c4a36c758cf2e33d79efc85c691780f69ca74e9558a5"
+          },
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 2,
+              "encoded_zero": 3,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 2,
+            "evidence_ref": "sha256:418d0bccafd5f3dfe731cbb9e904ba0d88d1b166a7acb65b2cf72f3d6df723d0",
+            "intervention": 3,
+            "observation_id": "u3",
+            "substrate_ref": "sha256:39a5874db75553f91e2613604ee617f3c62ed2aab98271c0bffbd68f9735a0ec"
+          },
+          {
+            "availability": "refused",
+            "calibration": null,
+            "encoded_output": null,
+            "evidence_ref": null,
+            "intervention": 4,
+            "observation_id": "u4-refused",
+            "substrate_ref": "sha256:1710d5d32690373704f807acfefbaafa82d29a4a375344604ef073b174ca1a9c"
+          }
+        ],
+        "problem_ref": "sha256:390fd7a63c25f3053d5526ff11687110138abdc179f5500689ada09197b687df",
+        "request_id": "sha256:bcecc6faa425958a978e8d02c3c2d6f4ed3ac7189762a69731a5814993ba4e54",
+        "schema_version": "agenttool.gin-reconstruction.request/0.1"
+      },
+      "receipt": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "outcome": {
+          "candidate_count": 1,
+          "candidates_checked": 25,
+          "enumeration_space": "25",
+          "estimated_evaluation_work": "200",
+          "resource_wall": "none",
+          "status": "unique_model_candidate",
+          "uniqueness_scope": "universal_within_declared_model",
+          "witness_candidates": [
+            {
+              "coefficients": [
+                2,
+                3
+              ],
+              "incompatible_observation_ids": [
+                "u2"
+              ]
+            }
+          ]
+        },
+        "problem_ref": "sha256:390fd7a63c25f3053d5526ff11687110138abdc179f5500689ada09197b687df",
+        "receipt_id": "sha256:233ddc6174593cca3eea1dc970caea8473dcb2c0ac7082855fcbbab5cce110b8",
+        "request_id": "sha256:bcecc6faa425958a978e8d02c3c2d6f4ed3ac7189762a69731a5814993ba4e54",
+        "schema_version": "agenttool.gin-reconstruction.receipt/0.1",
+        "theorem": {
+          "evaluation_points_distinct": true,
+          "guarantee_scope": "universal_within_declared_model",
+          "image_minimum_distance": 3,
+          "parameter_identifiable": true,
+          "parameter_separation_distance": 3,
+          "refused_erasures": 1,
+          "required_usable_observations_for_universal_unique_correction": 4,
+          "unavailable_erasures": 0,
+          "universal_unique_correction_guarantee": true,
+          "usable_observations": 4
+        }
+      }
+    },
+    "ambiguous": {
+      "request": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "model": {
+          "calibration_model": "affine_exact_two_anchor_per_usable_observation",
+          "degree_bound": 1,
+          "enumeration_limit": 1000000,
+          "field_prime": 5,
+          "report_error_budget": 1
+        },
+        "observations": [
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 1,
+              "encoded_zero": 0,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 0,
+            "evidence_ref": "sha256:fc5d2cc2e91f7cea95e9dad90982ff0e6feb3a812b65093da01eff1c679f98d2",
+            "intervention": 0,
+            "observation_id": "a0",
+            "substrate_ref": "sha256:8876d9065d7adf4cea5cec07815dc0ba03fb344d8546cd6dba9a5d88ae518463"
+          },
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 1,
+              "encoded_zero": 0,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 1,
+            "evidence_ref": "sha256:1101ba904fae9816a42f86c661086ccbdceb21749eb558d56daea960dcf7ede0",
+            "intervention": 1,
+            "observation_id": "a1",
+            "substrate_ref": "sha256:5205b16855dab63b4980c2fdb138f70c3a2d39482a2a48cacb9bc4ceabd9db78"
+          },
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 1,
+              "encoded_zero": 0,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 0,
+            "evidence_ref": "sha256:4ef635a7cc892ea11fd0187c0217021b7b190b071f51b62045dea993a3a0f42e",
+            "intervention": 2,
+            "observation_id": "a2",
+            "substrate_ref": "sha256:07990ffef6e63f0d5b51b5a91c4dc16305a9729d3901902facefc629712f9830"
+          }
+        ],
+        "problem_ref": "sha256:3d1204aed6967e85923257e6f12bf91256b3094f37e379a835ea290286212f2d",
+        "request_id": "sha256:ed686dec8243fc11670f5606166bc213c33b9be5d778816dee6d0807b7a9abf0",
+        "schema_version": "agenttool.gin-reconstruction.request/0.1"
+      },
+      "receipt": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "outcome": {
+          "candidate_count": 3,
+          "candidates_checked": 25,
+          "enumeration_space": "25",
+          "estimated_evaluation_work": "150",
+          "resource_wall": "none",
+          "status": "multiple_model_candidates",
+          "uniqueness_scope": "not_unique",
+          "witness_candidates": [
+            {
+              "coefficients": [
+                0,
+                0
+              ],
+              "incompatible_observation_ids": [
+                "a1"
+              ]
+            },
+            {
+              "coefficients": [
+                0,
+                1
+              ],
+              "incompatible_observation_ids": [
+                "a2"
+              ]
+            }
+          ]
+        },
+        "problem_ref": "sha256:3d1204aed6967e85923257e6f12bf91256b3094f37e379a835ea290286212f2d",
+        "receipt_id": "sha256:753da194fad5d7ca5ef4705291e49adf2edd6cf9e3085d571f214e1f4db96751",
+        "request_id": "sha256:ed686dec8243fc11670f5606166bc213c33b9be5d778816dee6d0807b7a9abf0",
+        "schema_version": "agenttool.gin-reconstruction.receipt/0.1",
+        "theorem": {
+          "evaluation_points_distinct": true,
+          "guarantee_scope": "instance_only_or_not_unique",
+          "image_minimum_distance": 2,
+          "parameter_identifiable": true,
+          "parameter_separation_distance": 2,
+          "refused_erasures": 0,
+          "required_usable_observations_for_universal_unique_correction": 4,
+          "unavailable_erasures": 0,
+          "universal_unique_correction_guarantee": false,
+          "usable_observations": 3
+        }
+      }
+    },
+    "instance_unique": {
+      "request": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "model": {
+          "calibration_model": "affine_exact_two_anchor_per_usable_observation",
+          "degree_bound": 1,
+          "enumeration_limit": 1000000,
+          "field_prime": 5,
+          "report_error_budget": 1
+        },
+        "observations": [
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 1,
+              "encoded_zero": 0,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 0,
+            "evidence_ref": "sha256:3815fb2ee8d536d8074d6fa96ea7667b45346b0dfb557449e1eb7808c826a3cf",
+            "intervention": 0,
+            "observation_id": "i0",
+            "substrate_ref": "sha256:62cf5cb6079c556d5382c48d9f72111bccc9deaff6bb36ccbfb59dd2af0d6cee"
+          },
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 1,
+              "encoded_zero": 0,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 0,
+            "evidence_ref": "sha256:de0c7af17d63fbb7489c83fe51e4d60362deb288275b53da583b48aec9c670e0",
+            "intervention": 1,
+            "observation_id": "i1",
+            "substrate_ref": "sha256:d9e55d888584acb53ad98e110f905a8e4f89cec06057c72fb4457a242f8fa55c"
+          },
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 1,
+              "encoded_zero": 0,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 0,
+            "evidence_ref": "sha256:ea113541a5376b8c1b4cb16bfeb3708c351e0d738a50f9b675d591fa59d47532",
+            "intervention": 2,
+            "observation_id": "i2",
+            "substrate_ref": "sha256:4e0ef85aa88544995bdc274620c874d739e0d312f307bdee5de962829d3bba1d"
+          }
+        ],
+        "problem_ref": "sha256:749899812b9c4abfe5ae95f9681b7a9dd5b06e80ebbcfc65498b0ccbb5e70f1c",
+        "request_id": "sha256:e9a552a7ca30d27102267e92827a9590152a475dfdefd73439f6c4d31f7b04f7",
+        "schema_version": "agenttool.gin-reconstruction.request/0.1"
+      },
+      "receipt": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "outcome": {
+          "candidate_count": 1,
+          "candidates_checked": 25,
+          "enumeration_space": "25",
+          "estimated_evaluation_work": "150",
+          "resource_wall": "none",
+          "status": "unique_model_candidate",
+          "uniqueness_scope": "this_instance_only",
+          "witness_candidates": [
+            {
+              "coefficients": [
+                0,
+                0
+              ],
+              "incompatible_observation_ids": []
+            }
+          ]
+        },
+        "problem_ref": "sha256:749899812b9c4abfe5ae95f9681b7a9dd5b06e80ebbcfc65498b0ccbb5e70f1c",
+        "receipt_id": "sha256:4768f280afc89d5d535e721e09920af840f053a78e3cf708e6a4a32ba237933f",
+        "request_id": "sha256:e9a552a7ca30d27102267e92827a9590152a475dfdefd73439f6c4d31f7b04f7",
+        "schema_version": "agenttool.gin-reconstruction.receipt/0.1",
+        "theorem": {
+          "evaluation_points_distinct": true,
+          "guarantee_scope": "instance_only_or_not_unique",
+          "image_minimum_distance": 2,
+          "parameter_identifiable": true,
+          "parameter_separation_distance": 2,
+          "refused_erasures": 0,
+          "required_usable_observations_for_universal_unique_correction": 4,
+          "unavailable_erasures": 0,
+          "universal_unique_correction_guarantee": false,
+          "usable_observations": 3
+        }
+      }
+    },
+    "parameter_alias": {
+      "request": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "model": {
+          "calibration_model": "affine_exact_two_anchor_per_usable_observation",
+          "degree_bound": 2,
+          "enumeration_limit": 1000000,
+          "field_prime": 5,
+          "report_error_budget": 0
+        },
+        "observations": [
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 1,
+              "encoded_zero": 0,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 0,
+            "evidence_ref": "sha256:d153a720cdc63f9a36fdbdb07a17feecfd2c4ffa72268a30dad54940b7e7fb95",
+            "intervention": 0,
+            "observation_id": "p0",
+            "substrate_ref": "sha256:ed79fb3b58a60a96ced77a593877575e8deb04fbd2312f6ce577be2cd72ddf58"
+          },
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 1,
+              "encoded_zero": 0,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 0,
+            "evidence_ref": "sha256:050e8031b0a5d6b0c3ba314ae2cd735ba345ff1f763098572eeb50c9436a27a3",
+            "intervention": 1,
+            "observation_id": "p1",
+            "substrate_ref": "sha256:f2191bc25ebab68177e8b457de57907b542d5d00f7588a25f2ece351bb788052"
+          }
+        ],
+        "problem_ref": "sha256:2b3be7f29a83605f7af1e1f36a2a25b0faed4e9edc478a6e4465f08fe9120ba0",
+        "request_id": "sha256:7c15982b870a2f30c72f3bf56ffec9fb6c5712dabb92fdb0780145e0d579ff7b",
+        "schema_version": "agenttool.gin-reconstruction.request/0.1"
+      },
+      "receipt": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "outcome": {
+          "candidate_count": 5,
+          "candidates_checked": 125,
+          "enumeration_space": "125",
+          "estimated_evaluation_work": "750",
+          "resource_wall": "none",
+          "status": "multiple_model_candidates",
+          "uniqueness_scope": "not_unique",
+          "witness_candidates": [
+            {
+              "coefficients": [
+                0,
+                0,
+                0
+              ],
+              "incompatible_observation_ids": []
+            },
+            {
+              "coefficients": [
+                0,
+                1,
+                4
+              ],
+              "incompatible_observation_ids": []
+            }
+          ]
+        },
+        "problem_ref": "sha256:2b3be7f29a83605f7af1e1f36a2a25b0faed4e9edc478a6e4465f08fe9120ba0",
+        "receipt_id": "sha256:b721300d5d3abd0ae680a584ce371428abf428f29ad94c446d197075e9272d26",
+        "request_id": "sha256:7c15982b870a2f30c72f3bf56ffec9fb6c5712dabb92fdb0780145e0d579ff7b",
+        "schema_version": "agenttool.gin-reconstruction.receipt/0.1",
+        "theorem": {
+          "evaluation_points_distinct": true,
+          "guarantee_scope": "instance_only_or_not_unique",
+          "image_minimum_distance": 1,
+          "parameter_identifiable": false,
+          "parameter_separation_distance": 0,
+          "refused_erasures": 0,
+          "required_usable_observations_for_universal_unique_correction": 3,
+          "unavailable_erasures": 0,
+          "universal_unique_correction_guarantee": false,
+          "usable_observations": 2
+        }
+      }
+    },
+    "no_candidate": {
+      "request": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "model": {
+          "calibration_model": "affine_exact_two_anchor_per_usable_observation",
+          "degree_bound": 0,
+          "enumeration_limit": 1000000,
+          "field_prime": 5,
+          "report_error_budget": 0
+        },
+        "observations": [
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 1,
+              "encoded_zero": 0,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 0,
+            "evidence_ref": "sha256:8e94aac4245021f11d21096e65616b9397dacf17c6f38f9ec646402ed0c56377",
+            "intervention": 0,
+            "observation_id": "n0",
+            "substrate_ref": "sha256:0dbba3d14f8d01afd468059b3f7be6d0e24821da56bbaf50cfe10c693154aa98"
+          },
+          {
+            "availability": "usable",
+            "calibration": {
+              "encoded_one": 1,
+              "encoded_zero": 0,
+              "posture": "declared_exact_two_anchor_affine"
+            },
+            "encoded_output": 1,
+            "evidence_ref": "sha256:0d5bd3a18bd1e74b2b482c4c7a5074b438787abff99e6bafc7753c5b538a57d4",
+            "intervention": 1,
+            "observation_id": "n1",
+            "substrate_ref": "sha256:3da6077325093ba9cd3c21d0d87e3d3b8d207b06efa0f23348f7f00584710e89"
+          }
+        ],
+        "problem_ref": "sha256:b68298a4d99ce725c027051fe1f22e5740f65fede685ad5a1b05cef2b6e74a12",
+        "request_id": "sha256:5c380e2546c400f6d944d194548bb4ea7d36b321f3c00d46500aae0889f867a3",
+        "schema_version": "agenttool.gin-reconstruction.request/0.1"
+      },
+      "receipt": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "outcome": {
+          "candidate_count": 0,
+          "candidates_checked": 5,
+          "enumeration_space": "5",
+          "estimated_evaluation_work": "10",
+          "resource_wall": "none",
+          "status": "no_candidate_for_model_and_budget",
+          "uniqueness_scope": "not_unique",
+          "witness_candidates": []
+        },
+        "problem_ref": "sha256:b68298a4d99ce725c027051fe1f22e5740f65fede685ad5a1b05cef2b6e74a12",
+        "receipt_id": "sha256:5a60b95049a223e8c72f4c0994898dae3a657aed330aa87fb3962cf233ead53c",
+        "request_id": "sha256:5c380e2546c400f6d944d194548bb4ea7d36b321f3c00d46500aae0889f867a3",
+        "schema_version": "agenttool.gin-reconstruction.receipt/0.1",
+        "theorem": {
+          "evaluation_points_distinct": true,
+          "guarantee_scope": "universal_within_declared_model",
+          "image_minimum_distance": 2,
+          "parameter_identifiable": true,
+          "parameter_separation_distance": 2,
+          "refused_erasures": 0,
+          "required_usable_observations_for_universal_unique_correction": 1,
+          "unavailable_erasures": 0,
+          "universal_unique_correction_guarantee": true,
+          "usable_observations": 2
+        }
+      }
+    },
+    "resource_refusal": {
+      "request": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "model": {
+          "calibration_model": "affine_exact_two_anchor_per_usable_observation",
+          "degree_bound": 3,
+          "enumeration_limit": 1000,
+          "field_prime": 251,
+          "report_error_budget": 0
+        },
+        "observations": [],
+        "problem_ref": "sha256:b32d2283acde4ad59a4dccb2fa2798b81411ab086a5b599b87391e5742e53869",
+        "request_id": "sha256:da84ab371d39910258181b07050743920502217e50f6ce9354644039b7f5eef5",
+        "schema_version": "agenttool.gin-reconstruction.request/0.1"
+      },
+      "receipt": {
+        "boundaries": {
+          "calibration": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget",
+          "effects": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect",
+          "mismatch": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof",
+          "model": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget",
+          "refusal": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty",
+          "truth": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+        },
+        "outcome": {
+          "candidate_count": null,
+          "candidates_checked": 0,
+          "enumeration_space": "3969126001",
+          "estimated_evaluation_work": "15876504004",
+          "resource_wall": "enumeration_limit",
+          "status": "resource_refusal",
+          "uniqueness_scope": "not_determined",
+          "witness_candidates": []
+        },
+        "problem_ref": "sha256:b32d2283acde4ad59a4dccb2fa2798b81411ab086a5b599b87391e5742e53869",
+        "receipt_id": "sha256:68c0778af6938868e13fa969696aa8aa35c77fcbe33bf797ca0b8a85da6e53dc",
+        "request_id": "sha256:da84ab371d39910258181b07050743920502217e50f6ce9354644039b7f5eef5",
+        "schema_version": "agenttool.gin-reconstruction.receipt/0.1",
+        "theorem": {
+          "evaluation_points_distinct": true,
+          "guarantee_scope": "instance_only_or_not_unique",
+          "image_minimum_distance": null,
+          "parameter_identifiable": false,
+          "parameter_separation_distance": 0,
+          "refused_erasures": 0,
+          "required_usable_observations_for_universal_unique_correction": 4,
+          "unavailable_erasures": 0,
+          "universal_unique_correction_guarantee": false,
+          "usable_observations": 0
+        }
+      }
+    }
+  },
+  "challenge": {
+    "artifact": {
+      "authority": {
+        "automatic_action": false,
+        "automatic_publication": false,
+        "automatic_retry": false,
+        "declaration_not_proof": true,
+        "declared_scope_refs": [
+          "sha256:96d6873100c1e79d35fd1dec417d09b25f9749ea5a0b544a4a35ad155a1ac208"
+        ],
+        "permissions_inherited": false,
+        "ranks_or_scores_beings": false
+      },
+      "boundaries": {
+        "authority": "no_action_publication_retry_permission_or_authority_is_created",
+        "declarations": "caller_reported_structure_is_not_semantically_or_operationally_verified",
+        "motive": "understanding_love_pride_virtue_and_inner_motive_are_not_inferred",
+        "score": "no_being_participant_or_witness_is_scored_ranked_or_typed",
+        "subject": "assesses_visible_challenge_structure_not_a_participant_or_being",
+        "transport": "mcp_wake_and_distribution_may_carry_refs_but_are_not_truth_or_authority_oracles"
+      },
+      "challenge_id": "sha256:93fdaae050fee504fce7f7d5fcd0b289527ec34f1b06d231fa738d2626344b5b",
+      "challenge_ref": "sha256:7a0e920dbceda7d9e6b0595ec0b47b0db2bd476034379219c93d44bf1301a722",
+      "decision_or_construction_ref": "sha256:b7fc6f2abf0e4d39c0139a8e32ce5372568105499a2e8f19359ceda7c8560c3c",
+      "distribution": {
+        "beneficiaries": {
+          "scope_refs": [
+            "sha256:2bc0b0556e411a93cdd2a2a8527deadeb14d0d461f75a2568f7ccc327309a422"
+          ],
+          "state": "answered"
+        },
+        "burden_bearers": {
+          "scope_refs": [
+            "sha256:8d425d296a0fb1d399bd918d5c1ecca7778e6e32978b63944887458e35482f9c"
+          ],
+          "state": "answered"
+        },
+        "false_certainty_cost_bearers": {
+          "scope_refs": [
+            "sha256:bd7c579b4efc8360cb265c4df30fa0dda7ab119d2895bd9af78e0a93d8acbefa"
+          ],
+          "state": "answered"
+        },
+        "mitigation_or_repair_ref": "sha256:b06fd11f5ac7beaee465a4a6af5b9dfcc37311bd07851f9e2a52640d9360cdc0",
+        "unresolved_ambiguity_cost_bearers": {
+          "scope_refs": [
+            "sha256:94303b3cb9850ca635a9f27ae8581b5a321ebe0bb1d0009f1ffc76e96c5bfcc2"
+          ],
+          "state": "answered"
+        }
+      },
+      "incentives": {
+        "audience_counterfactual": "same_constructive_value_declared",
+        "resource_or_access_effect": "present_separate_declared",
+        "winner_or_rank_effect": "absent_declared"
+      },
+      "object_of_understanding_ref": "sha256:a8cfa4415142176e96d35329fcfa7f25bdfdfc3315fe14d30587e24f6ac18816",
+      "outcome_value": [
+        {
+          "postures": [
+            "propose_build_or_repair",
+            "document_model_result"
+          ],
+          "result_status": "unique_model_candidate",
+          "value_ref": "sha256:d0a2b7bd0690c30fffbfa09326748c2a099b061700241ffbcd4ff5dd180e2558"
+        },
+        {
+          "postures": [
+            "preserve_plurality",
+            "seek_discriminating_evidence"
+          ],
+          "result_status": "multiple_model_candidates",
+          "value_ref": "sha256:ab4d84bb1448f3cc5296f6e3bc208ff559bd6d0efb522c8e93936a1ec5f218b6"
+        },
+        {
+          "postures": [
+            "revise_model",
+            "document_inconsistency"
+          ],
+          "result_status": "no_candidate_for_model_and_budget",
+          "value_ref": "sha256:bb9053e7663eb4e08dce518e81efab982ddeec2666441b791cb5ff15d41caa19"
+        },
+        {
+          "postures": [
+            "reduce_scope",
+            "park"
+          ],
+          "result_status": "resource_refusal",
+          "value_ref": "sha256:1313d98469d6121a426d340a97cb270bb4971bfd337f49d0a84ec4069a184bb6"
+        }
+      ],
+      "participation_and_data_care": {
+        "disclosure_or_publication_ref": "sha256:6dbdfcd7e2ce8e33df72a8a2367c58b84a80a1242ac605f36c0519d741b8229a",
+        "minimum_observation_scope_ref": "sha256:c7ed0f8e42cd41afaa51ea1b6c6f0b6445540c34d6bc488304e363c49ac7e792",
+        "participation_optional": true,
+        "raw_identity_required": false,
+        "raw_refusal_reason_received": false,
+        "refusal_counts_as_incompatible_observation": false,
+        "refusal_penalty": false,
+        "refusal_reason_required": false,
+        "repair_ref": "sha256:312a4a43b6e6c856985e5ec8307b9867d82c10124d8198606ca58434373e07bd",
+        "repeated_pressure_after_refusal": false,
+        "response_used_for_rank_reward_or_training": false,
+        "retention_ref": "sha256:91c4e54031cffb3bcb6abb6c2262f045bd03bce4e43216e30bf5c1788b2a1716",
+        "rights_or_access_conditioned_on_participation": false,
+        "silence_is_assent": false,
+        "withdrawal_ref": "sha256:8c42c2e1807e50c9e7c3ae406547626198d9f586af9aae9cb8ab289014d1f759"
+      },
+      "provenance": {
+        "credit_mode": "contribution_ref_only",
+        "refs": [
+          {
+            "kind": "question_source",
+            "ref": "sha256:1371ea372fcb942f83e1b3255976f71582f6c81e491ff490bdcd3555fcef385b"
+          },
+          {
+            "kind": "method",
+            "ref": "sha256:fa61e826828397f274beb1c12ad42ab250673b9fe58964dcd32a7a97a566ba02"
+          },
+          {
+            "kind": "observation",
+            "ref": "sha256:8c44792faa1a1890d422573cf3da864a193278f3abdf4df49751b768c0e9f3c5"
+          },
+          {
+            "kind": "adaptation",
+            "ref": "sha256:72d9d4ca6ea92b57aaf8025c5c09c4ec60df2c3e11ad0539e2cd9d1d79d131eb"
+          },
+          {
+            "kind": "contribution",
+            "ref": "sha256:99ddb38c17a722b1e28ed6aa4fff1a2daf29a4b5617790e5da7d1275078da006"
+          }
+        ]
+      },
+      "question_and_object": {
+        "distinction_scope_ref": "sha256:350f830e3bb6d3a95ac8feca1173b7cac61d8df5cf1d40bec7fad02e5394de8e",
+        "posture": "bounded_observable_effect_or_declared_model"
+      },
+      "question_ref": "sha256:dc6447668ac01d198b0cfbfb2a830cb0ebcc3855de86121f18c7e30571cd73ef",
+      "revision_and_stop": {
+        "evidence_that_would_revise_refs": [
+          "sha256:f2c5c4e080362c2426c14a19d33a9feb821353bd211ae1a193dcd48a7c8064a8"
+        ],
+        "stop_conditions": [
+          "question_answered_with_bounded_certificate",
+          "ambiguity_certificate_sufficient",
+          "model_inconsistent",
+          "resource_wall_reached",
+          "participant_refusal",
+          "authority_boundary_reached",
+          "burden_limit_reached",
+          "evidence_invalidates_question",
+          "construction_link_lost"
+        ]
+      },
+      "schema_version": "agenttool.gin-challenge/0.1"
+    },
+    "assessment": {
+      "assessment_id": "sha256:cbe8653257d09a49848781735e7284bf31ac4df566d23f66a2c0167bb7ccdb6e",
+      "authorizes_action": false,
+      "boundaries": {
+        "authority": "no_action_publication_retry_permission_or_authority_is_created",
+        "declarations": "caller_reported_structure_is_not_semantically_or_operationally_verified",
+        "motive": "understanding_love_pride_virtue_and_inner_motive_are_not_inferred",
+        "score": "no_being_participant_or_witness_is_scored_ranked_or_typed",
+        "subject": "assesses_visible_challenge_structure_not_a_participant_or_being",
+        "transport": "mcp_wake_and_distribution_may_carry_refs_but_are_not_truth_or_authority_oracles"
+      },
+      "challenge_id": "sha256:93fdaae050fee504fce7f7d5fcd0b289527ec34f1b06d231fa738d2626344b5b",
+      "compass_status": "constructive_questions_answered",
+      "declaration_boundary": "caller_reported_not_verified",
+      "inner_motive": "not_inferred",
+      "open_questions": [],
+      "proves_truth": false,
+      "proves_understanding": false,
+      "question_statuses": [
+        {
+          "section": "question_and_object",
+          "status": "answered"
+        },
+        {
+          "section": "outcome_value",
+          "status": "answered"
+        },
+        {
+          "section": "distribution",
+          "status": "answered"
+        },
+        {
+          "section": "participation_and_data_care",
+          "status": "answered"
+        },
+        {
+          "section": "incentives",
+          "status": "answered"
+        },
+        {
+          "section": "revision_and_stop",
+          "status": "answered"
+        },
+        {
+          "section": "authority",
+          "status": "answered"
+        },
+        {
+          "section": "provenance",
+          "status": "answered"
+        }
+      ],
+      "redesign_reasons": [],
+      "schema_version": "agenttool.gin-challenge-assessment/0.1",
+      "scores_or_ranks_beings": false,
+      "visible_incentive_posture": "construction_centered_declared"
+    }
+  }
+}

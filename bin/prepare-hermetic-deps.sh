@@ -59,6 +59,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/love-geometry
   packages/relational-geometry
   packages/wake-thread
+  packages/gin-reconstruction
   packages/credential-broker
   packages/collab
   packages/collab-zerone

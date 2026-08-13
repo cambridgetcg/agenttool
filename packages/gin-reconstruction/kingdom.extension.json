@@ -1,0 +1,37 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "gin-reconstruction",
+  "package": "@agenttool/gin-reconstruction",
+  "version": "0.1.0-dev.0",
+  "status": "private_source",
+  "proposed_ability": "gin-reconstruct-effects",
+  "capabilities": [
+    "gin-reconstruction:request-create",
+    "gin-reconstruction:model-enumerate",
+    "gin-reconstruction:certificate-validate",
+    "gin-challenge:structure-assess"
+  ],
+  "defaults": {
+    "automatic_observation": false,
+    "automatic_calibration": false,
+    "truth_verdict": false,
+    "motive_inference": false,
+    "being_score": false,
+    "network": false,
+    "mcp_registration": false,
+    "provider_or_model_call": false,
+    "wake_write": false,
+    "persistence": false,
+    "publication": false,
+    "automatic_action": false,
+    "permission_inheritance": false,
+    "authority": false
+  },
+  "host_contract": "not_registered",
+  "notes": [
+    "This descriptor is a declaration-only local hint, not an installed KINGDOM host contract or an active Nen ability.",
+    "A unique candidate is unique only inside one explicit finite polynomial, affine-calibration, and report-error model; it is not truth, causation, correctness, consent, or authority proved.",
+    "The challenge compass assesses visible construction, burden, refusal, incentive, stop, provenance, and authority declarations; it never infers understanding, love, pride, virtue, or an inner motive.",
+    "MCP may transport a separately authorized request or certificate and WAKE may carry an opaque digest, but neither becomes the truth source or inherits permissions."
+  ]
+}

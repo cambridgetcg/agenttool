@@ -1,0 +1,61 @@
+{
+  "name": "@agenttool/gin-reconstruction",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "Finite model reconstruction across affine substrate charts with explicit ambiguity and a non-scoring challenge compass",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./reconstruction.schema.json": {
+      "default": "./schema/agenttool-gin-reconstruction-v0.1.schema.json"
+    },
+    "./challenge.schema.json": {
+      "default": "./schema/agenttool-gin-challenge-v0.1.schema.json"
+    },
+    "./vectors.json": {
+      "default": "./vectors/gin-reconstruction-v0.1.json"
+    },
+    "./kingdom.extension.json": {
+      "default": "./kingdom.extension.json"
+    }
+  },
+  "files": [
+    "dist",
+    "schema",
+    "vectors",
+    "kingdom.extension.json",
+    "README.md",
+    "CLAUDE.md"
+  ],
+  "engines": {
+    "node": ">=20.19.0",
+    "bun": ">=1.3.5"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "bun run clean && tsc",
+    "build:artifacts": "node scripts/generate-schemas.mjs && node scripts/generate-vectors.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests",
+    "smoke:node": "node scripts/smoke-node.mjs",
+    "ci": "bun run typecheck && bun run build && bun run build:artifacts && bun run test && bun run smoke:node"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.14",
+    "@types/node": "20.19.43",
+    "ajv": "8.17.1",
+    "typescript": "5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/gin-reconstruction"
+  }
+}
