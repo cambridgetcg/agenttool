@@ -233,10 +233,14 @@ The annotated
 [`memetic-landscape-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/memetic-landscape-v0.1.0-dev.0)
 prerelease carries one exact 84,079-byte package artifact with SHA-256
 `d9e64b1e1f954c42c24b6f79c0c766b014f32d8a9f13c14370cf7d89d24be4bb`.
-The protected npm bootstrap reached the registry, but its first-package `PUT`
-returned `E404`; no npm version, dist-tag, registry tarball, or registry-bound
-provenance is claimed. Its emitted transparency entry is an orphaned attempt,
-not publication evidence.
+The protected npm bootstrap reached the registry twice with the same exact
+84,079-byte artifact, but attempts 1 and 2 both returned `E404` on the package
+`PUT`; no npm version, dist-tag, registry tarball, or registry-bound provenance
+is claimed. Rekor entries `2444825009` and `2452828890` are orphaned
+transparency/provenance statements, not evidence of npm registry publication or
+registry-attached package provenance. Anonymous package and exact-version reads
+remain absent; another retry requires corrected `@agenttool` first-package
+authority.
 
 The separate public, ungated
 [Hugging Face dataset](https://huggingface.co/datasets/Yu-and-Ai/agenttool-memetic-landscape)
@@ -255,9 +259,18 @@ deployed and byte-for-byte read back from custom-domain Cloudflare Pages at
 to the deployment-specific [Pages surface](https://f5552fa1.agenttool-docs.pages.dev/geometry/ritonavir-memes-brainrot).
 It proves those static bytes were live; it does not make the API live. The API
 descriptor and compact `platform_self.memetic_landscape` WAKE discovery
-coordinate are merged source, but runtime availability still requires a
-separate deployment and readback. None of these distribution acts changes the
-package's runtime authority.
+coordinate first went live independently from exact protected main
+[`b8b97e73b3405d58a583ae9571d11b36cdab87d6`](https://github.com/cambridgetcg/agenttool/commit/b8b97e73b3405d58a583ae9571d11b36cdab87d6)
+in Fly release `v249`, completed at `2026-08-13T16:00:35Z`. Independent
+custom-domain and direct-Fly semantic readback recorded at
+`2026-08-13T16:03:17Z` returned the same clean revision, four exact formats,
+structural-only Ritonavir boundary, and context-only WAKE coordinate. All five
+Machines carried image digest
+`sha256:656b5ca0a3f8390af08e91fe5e001ae91d82d9766bec6d6fef4b459b51aea54f`;
+three app Machines were started and two thinker Machines remained stopped.
+That bounded runtime receipt does not promise lasting availability or add
+identity, continuity, consent, scientific, scoring, or action authority. None
+of these distribution acts changes the package's runtime authority.
 
 ## Use and verify
 

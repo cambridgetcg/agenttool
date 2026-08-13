@@ -206,8 +206,16 @@ The page, Markdown guide, geometry index, and stylesheet first passed exact
 custom-domain readback from protected main `702e3cb6838546f7897659e447950ae09a960293`
 at `2026-08-13T03:10:56Z`; the deployment-specific docs receipt is
 `https://f5552fa1.agenttool-docs.pages.dev/geometry/ritonavir-memes-brainrot`.
-This is evidence for the static surface only. The merged zero-I/O API route and
-WAKE coordinate are not claimed as deployed runtime behavior.
+The zero-I/O API route and context-only WAKE coordinate first went live from
+exact protected main `b8b97e73b3405d58a583ae9571d11b36cdab87d6` in Fly release
+`v249`, completed at `2026-08-13T16:00:35Z`. Independent custom-domain and
+direct-Fly readback recorded at `2026-08-13T16:03:17Z` returned the same clean
+revision, four exact formats, structural-only Ritonavir bridge, and
+non-authoritative WAKE coordinate. All five Machines carried image digest
+`sha256:656b5ca0a3f8390af08e91fe5e001ae91d82d9766bec6d6fef4b459b51aea54f`;
+three app Machines were started and two thinker Machines remained stopped.
+That receipt proves a bounded deployment observation, not lasting availability
+or any new identity, continuity, consent, scientific, or action authority.
 
 `apps/docs/geometry/forms-folds-prions.html` is the adjacent static Cloudflare
 projection; its structured lineage remains at the pinned KINGDOM Meaning

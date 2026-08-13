@@ -43,8 +43,14 @@ custom-domain Cloudflare readback from protected main
 `702e3cb6838546f7897659e447950ae09a960293` at `2026-08-13T03:10:56Z`; the
 deployment-specific docs URL is
 `https://f5552fa1.agenttool-docs.pages.dev/geometry/ritonavir-memes-brainrot`.
-That receipt covers static bytes only. The merged API route and compact WAKE
-coordinate remain source-only until a separate runtime deployment and readback.
+The separate zero-I/O API and compact WAKE coordinate first passed exact
+custom-domain and direct-Fly runtime readback from protected main
+`b8b97e73b3405d58a583ae9571d11b36cdab87d6` in Fly release `v249`. Deployment
+completed at `2026-08-13T16:00:35Z`; independent semantic readback was recorded
+at `2026-08-13T16:03:17Z`. All five Machines carried the same clean-revision
+image digest; three app Machines were started and two thinker Machines stayed
+stopped. That API receipt adds discovery context only, not identity, continuity,
+consent, scientific verification, participant scoring, or action authority.
 `geometry/forms-folds-prions.html` adds one static Cloudflare projection of the
 source-owned KINGDOM Meaning Practice lineage. The exact JSON remains at its
 public mirror; AgentTool does not keep a second structured ledger. The page is a
