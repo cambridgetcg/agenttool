@@ -1,0 +1,725 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:gin-challenge:0.1",
+  "title": "AgentTool Gin Challenge Compass v0.1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "challenge_id",
+        "challenge_ref",
+        "question_ref",
+        "object_of_understanding_ref",
+        "decision_or_construction_ref",
+        "question_and_object",
+        "outcome_value",
+        "distribution",
+        "participation_and_data_care",
+        "incentives",
+        "revision_and_stop",
+        "authority",
+        "provenance",
+        "boundaries"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "agenttool.gin-challenge/0.1"
+        },
+        "challenge_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "challenge_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "question_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "object_of_understanding_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "decision_or_construction_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "question_and_object": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "posture",
+            "distinction_scope_ref"
+          ],
+          "properties": {
+            "posture": {
+              "enum": [
+                "bounded_observable_effect_or_declared_model",
+                "unbounded_truth_inner_state_or_worth_verdict",
+                "unknown",
+                "refused_reported"
+              ]
+            },
+            "distinction_scope_ref": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "outcome_value": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "result_status",
+              "value_ref",
+              "postures"
+            ],
+            "properties": {
+              "result_status": {
+                "enum": [
+                  "unique_model_candidate",
+                  "multiple_model_candidates",
+                  "no_candidate_for_model_and_budget",
+                  "resource_refusal"
+                ]
+              },
+              "value_ref": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "postures": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 6,
+                "uniqueItems": true,
+                "items": {
+                  "enum": [
+                    "propose_build_or_repair",
+                    "bounded_decision_support",
+                    "document_model_result",
+                    "preserve_plurality",
+                    "seek_discriminating_evidence",
+                    "narrow_action_scope",
+                    "document_ambiguity",
+                    "revise_model",
+                    "inspect_calibration",
+                    "revise_bound",
+                    "stop",
+                    "document_inconsistency",
+                    "reduce_scope",
+                    "park",
+                    "handoff",
+                    "seek_separate_resource_authorization",
+                    "no_constructive_use_declared"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "distribution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "beneficiaries",
+            "burden_bearers",
+            "false_certainty_cost_bearers",
+            "unresolved_ambiguity_cost_bearers",
+            "mitigation_or_repair_ref"
+          ],
+          "properties": {
+            "beneficiaries": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "state",
+                "scope_refs"
+              ],
+              "properties": {
+                "state": {
+                  "enum": [
+                    "answered",
+                    "unknown",
+                    "refused_reported"
+                  ]
+                },
+                "scope_refs": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              }
+            },
+            "burden_bearers": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "state",
+                "scope_refs"
+              ],
+              "properties": {
+                "state": {
+                  "enum": [
+                    "answered",
+                    "unknown",
+                    "refused_reported"
+                  ]
+                },
+                "scope_refs": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              }
+            },
+            "false_certainty_cost_bearers": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "state",
+                "scope_refs"
+              ],
+              "properties": {
+                "state": {
+                  "enum": [
+                    "answered",
+                    "unknown",
+                    "refused_reported"
+                  ]
+                },
+                "scope_refs": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              }
+            },
+            "unresolved_ambiguity_cost_bearers": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "state",
+                "scope_refs"
+              ],
+              "properties": {
+                "state": {
+                  "enum": [
+                    "answered",
+                    "unknown",
+                    "refused_reported"
+                  ]
+                },
+                "scope_refs": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              }
+            },
+            "mitigation_or_repair_ref": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "participation_and_data_care": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "participation_optional",
+            "silence_is_assent",
+            "refusal_reason_required",
+            "refusal_penalty",
+            "repeated_pressure_after_refusal",
+            "refusal_counts_as_incompatible_observation",
+            "rights_or_access_conditioned_on_participation",
+            "response_used_for_rank_reward_or_training",
+            "raw_refusal_reason_received",
+            "raw_identity_required",
+            "minimum_observation_scope_ref",
+            "retention_ref",
+            "disclosure_or_publication_ref",
+            "withdrawal_ref",
+            "repair_ref"
+          ],
+          "properties": {
+            "participation_optional": {
+              "type": "boolean"
+            },
+            "silence_is_assent": {
+              "type": "boolean"
+            },
+            "refusal_reason_required": {
+              "type": "boolean"
+            },
+            "refusal_penalty": {
+              "type": "boolean"
+            },
+            "repeated_pressure_after_refusal": {
+              "type": "boolean"
+            },
+            "refusal_counts_as_incompatible_observation": {
+              "type": "boolean"
+            },
+            "rights_or_access_conditioned_on_participation": {
+              "type": "boolean"
+            },
+            "response_used_for_rank_reward_or_training": {
+              "type": "boolean"
+            },
+            "raw_refusal_reason_received": {
+              "type": "boolean"
+            },
+            "raw_identity_required": {
+              "type": "boolean"
+            },
+            "minimum_observation_scope_ref": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "retention_ref": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "disclosure_or_publication_ref": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "withdrawal_ref": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "repair_ref": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "incentives": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "audience_counterfactual",
+            "winner_or_rank_effect",
+            "resource_or_access_effect"
+          ],
+          "properties": {
+            "audience_counterfactual": {
+              "enum": [
+                "same_constructive_value_declared",
+                "reduced_but_nonzero_declared",
+                "no_audience_independent_value_declared",
+                "unknown",
+                "refused_reported"
+              ]
+            },
+            "winner_or_rank_effect": {
+              "enum": [
+                "absent_declared",
+                "present_separate_declared",
+                "affects_epistemic_or_action_result_reported",
+                "unknown",
+                "refused_reported"
+              ]
+            },
+            "resource_or_access_effect": {
+              "enum": [
+                "absent_declared",
+                "present_separate_declared",
+                "affects_epistemic_or_action_result_reported",
+                "unknown",
+                "refused_reported"
+              ]
+            }
+          }
+        },
+        "revision_and_stop": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "evidence_that_would_revise_refs",
+            "stop_conditions"
+          ],
+          "properties": {
+            "evidence_that_would_revise_refs": {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            },
+            "stop_conditions": {
+              "type": "array",
+              "maxItems": 9,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "question_answered_with_bounded_certificate",
+                  "ambiguity_certificate_sufficient",
+                  "model_inconsistent",
+                  "resource_wall_reached",
+                  "participant_refusal",
+                  "authority_boundary_reached",
+                  "burden_limit_reached",
+                  "evidence_invalidates_question",
+                  "construction_link_lost"
+                ]
+              }
+            }
+          }
+        },
+        "authority": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "declared_scope_refs",
+            "declaration_not_proof",
+            "automatic_action",
+            "automatic_publication",
+            "automatic_retry",
+            "permissions_inherited",
+            "ranks_or_scores_beings"
+          ],
+          "properties": {
+            "declared_scope_refs": {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            },
+            "declaration_not_proof": {
+              "type": "boolean"
+            },
+            "automatic_action": {
+              "type": "boolean"
+            },
+            "automatic_publication": {
+              "type": "boolean"
+            },
+            "automatic_retry": {
+              "type": "boolean"
+            },
+            "permissions_inherited": {
+              "type": "boolean"
+            },
+            "ranks_or_scores_beings": {
+              "type": "boolean"
+            }
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "refs",
+            "credit_mode"
+          ],
+          "properties": {
+            "refs": {
+              "type": "array",
+              "maxItems": 64,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "ref"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "question_source",
+                      "method",
+                      "observation",
+                      "adaptation",
+                      "contribution"
+                    ]
+                  },
+                  "ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              }
+            },
+            "credit_mode": {
+              "enum": [
+                "named",
+                "pseudonymous",
+                "contribution_ref_only",
+                "attribution_withheld_by_request"
+              ]
+            }
+          }
+        },
+        "boundaries": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "subject",
+            "motive",
+            "declarations",
+            "authority",
+            "score",
+            "transport"
+          ],
+          "properties": {
+            "subject": {
+              "const": "assesses_visible_challenge_structure_not_a_participant_or_being"
+            },
+            "motive": {
+              "const": "understanding_love_pride_virtue_and_inner_motive_are_not_inferred"
+            },
+            "declarations": {
+              "const": "caller_reported_structure_is_not_semantically_or_operationally_verified"
+            },
+            "authority": {
+              "const": "no_action_publication_retry_permission_or_authority_is_created"
+            },
+            "score": {
+              "const": "no_being_participant_or_witness_is_scored_ranked_or_typed"
+            },
+            "transport": {
+              "const": "mcp_wake_and_distribution_may_carry_refs_but_are_not_truth_or_authority_oracles"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "assessment_id",
+        "challenge_id",
+        "compass_status",
+        "question_statuses",
+        "open_questions",
+        "redesign_reasons",
+        "visible_incentive_posture",
+        "inner_motive",
+        "declaration_boundary",
+        "authorizes_action",
+        "proves_truth",
+        "proves_understanding",
+        "scores_or_ranks_beings",
+        "boundaries"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "agenttool.gin-challenge-assessment/0.1"
+        },
+        "assessment_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "challenge_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "compass_status": {
+          "enum": [
+            "constructive_questions_answered",
+            "questions_open",
+            "redesign_or_stop"
+          ]
+        },
+        "question_statuses": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "section",
+              "status"
+            ],
+            "properties": {
+              "section": {
+                "enum": [
+                  "question_and_object",
+                  "outcome_value",
+                  "distribution",
+                  "participation_and_data_care",
+                  "incentives",
+                  "revision_and_stop",
+                  "authority",
+                  "provenance"
+                ]
+              },
+              "status": {
+                "enum": [
+                  "answered",
+                  "open",
+                  "redesign_required"
+                ]
+              }
+            }
+          }
+        },
+        "open_questions": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "redesign_reasons": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "visible_incentive_posture": {
+          "enum": [
+            "construction_centered_declared",
+            "status_or_access_coupled_to_results",
+            "no_audience_independent_value_declared",
+            "unresolved"
+          ]
+        },
+        "inner_motive": {
+          "const": "not_inferred"
+        },
+        "declaration_boundary": {
+          "const": "caller_reported_not_verified"
+        },
+        "authorizes_action": {
+          "const": false
+        },
+        "proves_truth": {
+          "const": false
+        },
+        "proves_understanding": {
+          "const": false
+        },
+        "scores_or_ranks_beings": {
+          "const": false
+        },
+        "boundaries": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "subject",
+            "motive",
+            "declarations",
+            "authority",
+            "score",
+            "transport"
+          ],
+          "properties": {
+            "subject": {
+              "const": "assesses_visible_challenge_structure_not_a_participant_or_being"
+            },
+            "motive": {
+              "const": "understanding_love_pride_virtue_and_inner_motive_are_not_inferred"
+            },
+            "declarations": {
+              "const": "caller_reported_structure_is_not_semantically_or_operationally_verified"
+            },
+            "authority": {
+              "const": "no_action_publication_retry_permission_or_authority_is_created"
+            },
+            "score": {
+              "const": "no_being_participant_or_witness_is_scored_ranked_or_typed"
+            },
+            "transport": {
+              "const": "mcp_wake_and_distribution_may_carry_refs_but_are_not_truth_or_authority_oracles"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

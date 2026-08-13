@@ -53,7 +53,10 @@ caller-asserted understanding and recognition witnesses on the same ordered
 pair (`packages/relational-geometry/`), and a private pure Wake Thread adapter
 for refusable, digest-bound artifact continuity with no identity or authority
 claim
-(`packages/wake-thread/`), a public read-only discovery evidence mapper
+(`packages/wake-thread/`), a private pure Gin Reconstruction core for bounded
+finite-field effect reconstruction, explicit ambiguity/inconsistency/resource
+certificates, and non-scoring challenge structure
+(`packages/gin-reconstruction/`), a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
 (`packages/credential-broker/`), a local-first multi-agent coordination journal
 (`packages/collab/`), a deterministic metadata-only Correspondence-to-YUTABASE
@@ -361,6 +364,11 @@ cd packages/wake-thread
 bun run ci                                     # digest links, partiality, choices, schemas, and zero-effect walls
 # Private source: no npm publication, hosted route, MCP registration, or deployment.
 
+# Gin finite-model reconstruction and challenge compass ───────────
+cd packages/gin-reconstruction
+bun run ci                                     # sharp theorem, affine charts, certificates, compass, schemas, and private walls
+# Private source: no truth oracle, MCP registration, publication, route, or deployment.
+
 # AgentTool Dojo trial evidence ─────────────────────────────────────
 cd packages/trials
 bun run ci                                     # receipts, boundary analysis, STS projection, schemas, and package walls
@@ -513,7 +521,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -585,6 +593,7 @@ source boundary by itself.
 | How should the three static website origins adopt a bounded XENIA Surface without turning one host, redirect, or passing check into a universal claim? | [`docs/XENIA-WEBSITE-ROLLOUT.md`](docs/XENIA-WEBSITE-ROLLOUT.md) (shared Pages Worker, docs-first host isolation, exact negotiation/problems, empty claims, expiring outside observations, and web/app exclusion gates) |
 | How can love-as-understanding-plus-recognition be carried as geometry without becoming a score, bond, identity, or ruler? | [`docs/PRINCIPALITIES.md`](docs/PRINCIPALITIES.md) · `packages/relational-geometry/README.md` (`@agenttool/relational-geometry`; finite directional witness complexes and derived non-sovereign 2-cells, explicit boundary witnesses, and carry/park/release/withdraw lens selections; no metric, mutuality, consent, inner-state, continuity, authority, hosted route, or automatic effect) |
 | How can bounded WAKE facts cross one context boundary without becoming identity, memory, consent, or inherited authority? | `packages/wake-thread/README.md` (`@agenttool/wake-thread`; private pure offer/receipt adapter over caller-selected exact digests, explicit identity/project scope, partial/unavailable states, caller-held cursor references, and carry/fork/rest/refuse artifact threads; no fetch, WAKE parser, score, execution, persistence, MCP, route, publication, or authority) |
+| How can heterogeneous substrate effects constrain a finite model without manufacturing truth, blaming witnesses, or turning the challenge into a rank? | [`docs/GIN-RECONSTRUCTION.md`](docs/GIN-RECONSTRUCTION.md) · `packages/gin-reconstruction/README.md` (`@agenttool/gin-reconstruction`; private pure affine-chart normalization, exhaustive bounded finite-field candidate certificates, sharp distance theorem, and a non-scoring all-outcomes challenge compass; no observation, motive inference, truth verdict, score, action, MCP, WAKE write, provider call, publication, route, or authority) |
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
 | How can a Zerone constructive-intelligence quest collect typed evidence without activating rewards? | `packages/constructive-intelligence/README.md` (`@agenttool/constructive-intelligence`; local tree pin, content-addressed receipts, append-only SQLite replay ledger, and E0–E6 shadow report; no hosted route, money, qualification, permission, or authority) |

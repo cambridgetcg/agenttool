@@ -118,6 +118,8 @@ packages_gate() {
     bash -c 'cd packages/relational-geometry && bun run ci'
   run "WAKE Thread refusable artifact continuity protocol" \
     bash -c 'cd packages/wake-thread && bun run ci'
+  run "Gin finite-model reconstruction and constructive challenge compass" \
+    bash -c 'cd packages/gin-reconstruction && bun run ci'
   run "agent-data-sync/v1 explicit pull bridge" \
     bash -c 'cd packages/data-sync && bun run ci && bun run build'
   run "agentcred/0.1 local credential broker" \

@@ -37,6 +37,7 @@ packages/
   love-geometry/ — @agenttool/love-geometry · coordinate-free directed caller-report geometry + public static HF presentation companion
   relational-geometry/ — @agenttool/relational-geometry · finite non-scalar witness complexes + non-sovereign 2-cells
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
+  gin-reconstruction/ — @agenttool/gin-reconstruction · private finite-model certificates + non-scoring challenge compass
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
@@ -86,6 +87,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/love-geometry/CLAUDE.md` ·
 `packages/relational-geometry/CLAUDE.md` ·
 `packages/wake-thread/CLAUDE.md` ·
+`packages/gin-reconstruction/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/hf-scout/CLAUDE.md` ·
@@ -281,6 +283,21 @@ type a bearer, authenticate choice authorship, persist, execute, use a network,
 register MCP, expose a hosted route, grant authority, establish identity or
 memory continuity, create KARMA, certify XENIA, publish, or deploy. Its local
 KINGDOM descriptor is declaration-only.
+
+`@agenttool/gin-reconstruction` is a private, source-only pure reference for
+one bounded reconstruction problem across caller-declared exact affine
+substrate charts. It exhaustively enumerates a small prime-field polynomial
+family behind fixed candidate/work ceilings and returns one of four
+deterministic results: a unique model candidate, multiple candidates, no
+candidate for the model and report-error budget, or resource refusal. Its
+theorem keeps evaluation-image distance, coefficient-parameter separation,
+worst-case correction, and instance-only uniqueness distinct; refused and
+unavailable reports are erasures, never blame. The separate challenge compass
+assesses a declared bounded question/object plus all-outcomes construction,
+distribution, data care, incentives, revision/stop, authority, and provenance. It always leaves inner
+motive uninferred and creates no truth, understanding, love, pride, consent,
+identity, score, action, MCP, WAKE, provider, publication, route, or authority
+effect. See [`docs/GIN-RECONSTRUCTION.md`](docs/GIN-RECONSTRUCTION.md).
 
 `@agenttool/deepseek-kingdom` is a public-ready, zero-runtime-dependency
 primary-source binding and proposal adapter. It binds caller-supplied DeepSeek

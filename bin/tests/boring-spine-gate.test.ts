@@ -509,6 +509,7 @@ describe("boring test spine", () => {
       "packages/love-geometry",
       "packages/relational-geometry",
       "packages/wake-thread",
+      "packages/gin-reconstruction",
       "packages/credential-broker",
       "packages/collab",
       "packages/collab-zerone",
@@ -593,6 +594,8 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/love-geometry && bun run ci");
     expect(preflight).toContain("cd packages/relational-geometry && bun run ci");
     expect(preflight).toContain("cd packages/wake-thread && bun run ci");
+    expect(preflight).toContain("cd packages/gin-reconstruction && bun run ci");
+    expect(workflow).toContain("WAKE Thread, Gin Reconstruction, broker");
     expect(preflight).toContain("cd packages/hf-training-garden && bun run ci");
     expect(preflight).toContain("bun test tests/learning-release.test.ts");
     expect(preflight).toContain("node scripts/check-learning-idempotence.mjs");
@@ -1014,9 +1017,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(50);
+      expect(calls).toHaveLength(51);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        41,
+        42,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         9,
