@@ -128,6 +128,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "polymorph-landscape",
     artifactKind: "pack",
   },
+  "memetic-landscape": {
+    key: "memetic-landscape",
+    name: "@agenttool/memetic-landscape",
+    packagePath: "packages/memetic-landscape",
+    tagPrefix: "memetic-landscape",
+    artifactKind: "pack",
+  },
   "principality-geometry": {
     key: "principality-geometry",
     name: "@agenttool/principality-geometry",
@@ -770,6 +777,24 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/schema/agenttool-polymorph-reachability-shift-v0.1.schema.json",
       "package/examples/ritonavir.landscape.json",
       "package/examples/ritonavir.reachability-shift.json",
+      "package/hf/dataset/source-manifest.json",
+      "package/hf/dataset/hash-manifest.json",
+      "package/hf/dataset/data/lessons.jsonl",
+    );
+  }
+  if (spec.name === "@agenttool/memetic-landscape") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-memetic-landscape-v0.1.schema.json",
+      "package/schema/agenttool-memetic-lesson-v0.1.schema.json",
+      "package/schema/agenttool-memetic-reachability-shift-v0.1.schema.json",
+      "package/schema/agenttool-polymorph-memetic-analogy-v0.1.schema.json",
+      "package/examples/brainrot.landscape.json",
+      "package/examples/brainrot.reachability-shift.json",
+      "package/examples/ritonavir.analogy.json",
       "package/hf/dataset/source-manifest.json",
       "package/hf/dataset/hash-manifest.json",
       "package/hf/dataset/data/lessons.jsonl",

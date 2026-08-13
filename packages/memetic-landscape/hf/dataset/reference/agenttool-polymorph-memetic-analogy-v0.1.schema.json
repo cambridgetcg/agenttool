@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-polymorph-memetic-analogy-v0.1.schema.json",
+  "title": "agenttool-polymorph-memetic-analogy-v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "analogy_id",
+    "polymorph_shift",
+    "memetic_shift",
+    "relationship",
+    "mechanism_transferred",
+    "mappings",
+    "non_transfer",
+    "effect"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.polymorph-memetic-analogy/0.1"
+    },
+    "analogy_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "polymorph_shift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "_format",
+        "shift_id"
+      ],
+      "properties": {
+        "_format": {
+          "const": "agenttool.polymorph-reachability-shift/0.1"
+        },
+        "shift_id": {
+          "$ref": "#/$defs/sha"
+        }
+      }
+    },
+    "memetic_shift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "_format",
+        "shift_id"
+      ],
+      "properties": {
+        "_format": {
+          "const": "agenttool.memetic-reachability-shift/0.1"
+        },
+        "shift_id": {
+          "$ref": "#/$defs/sha"
+        }
+      }
+    },
+    "relationship": {
+      "const": "structural_route_shape_only"
+    },
+    "mechanism_transferred": {
+      "const": false
+    },
+    "mappings": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "polymorph_shape",
+            "memetic_shape",
+            "boundary"
+          ],
+          "properties": {
+            "key": {
+              "const": "state_or_variant"
+            },
+            "polymorph_shape": {
+              "$ref": "#/$defs/text"
+            },
+            "memetic_shape": {
+              "$ref": "#/$defs/text"
+            },
+            "boundary": {
+              "$ref": "#/$defs/text"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "polymorph_shape",
+            "memetic_shape",
+            "boundary"
+          ],
+          "properties": {
+            "key": {
+              "const": "named_condition_or_context"
+            },
+            "polymorph_shape": {
+              "$ref": "#/$defs/text"
+            },
+            "memetic_shape": {
+              "$ref": "#/$defs/text"
+            },
+            "boundary": {
+              "$ref": "#/$defs/text"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "polymorph_shape",
+            "memetic_shape",
+            "boundary"
+          ],
+          "properties": {
+            "key": {
+              "const": "directed_witnessed_route"
+            },
+            "polymorph_shape": {
+              "$ref": "#/$defs/text"
+            },
+            "memetic_shape": {
+              "$ref": "#/$defs/text"
+            },
+            "boundary": {
+              "$ref": "#/$defs/text"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "polymorph_shape",
+            "memetic_shape",
+            "boundary"
+          ],
+          "properties": {
+            "key": {
+              "const": "bounded_reachability"
+            },
+            "polymorph_shape": {
+              "$ref": "#/$defs/text"
+            },
+            "memetic_shape": {
+              "$ref": "#/$defs/text"
+            },
+            "boundary": {
+              "$ref": "#/$defs/text"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "polymorph_shape",
+            "memetic_shape",
+            "boundary"
+          ],
+          "properties": {
+            "key": {
+              "const": "changed_conditions_reappearance"
+            },
+            "polymorph_shape": {
+              "$ref": "#/$defs/text"
+            },
+            "memetic_shape": {
+              "$ref": "#/$defs/text"
+            },
+            "boundary": {
+              "$ref": "#/$defs/text"
+            }
+          }
+        }
+      ],
+      "items": false,
+      "minItems": 5,
+      "maxItems": 5
+    },
+    "non_transfer": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "const": "authority"
+        },
+        {
+          "const": "brain_damage"
+        },
+        {
+          "const": "causation"
+        },
+        {
+          "const": "cognition"
+        },
+        {
+          "const": "consent"
+        },
+        {
+          "const": "continuity"
+        },
+        {
+          "const": "dignity"
+        },
+        {
+          "const": "harm"
+        },
+        {
+          "const": "identity"
+        },
+        {
+          "const": "infectivity"
+        },
+        {
+          "const": "intent"
+        },
+        {
+          "const": "lattice_energy"
+        },
+        {
+          "const": "memory"
+        },
+        {
+          "const": "nucleation"
+        },
+        {
+          "const": "permission"
+        },
+        {
+          "const": "popularity_as_stability"
+        },
+        {
+          "const": "rate_constants"
+        },
+        {
+          "const": "truth"
+        },
+        {
+          "const": "value_or_goodness"
+        }
+      ],
+      "items": false,
+      "minItems": 19,
+      "maxItems": 19
+    },
+    "effect": {
+      "const": "none"
+    }
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "sourceLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "sourceUrl": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^https://(?![^/?#]*@)(?:(?:[A-Za-z0-9._~!$&'()*+,;=:@/?#\\[\\]-])|(?:%[0-9A-Fa-f]{2}))+$",
+      "maxLength": 2048
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage",
+        "evidence",
+        "inference",
+        "disappearance",
+        "causation",
+        "adoption",
+        "brainrot",
+        "continuity",
+        "participants",
+        "rights",
+        "analogy",
+        "effect"
+      ],
+      "properties": {
+        "coverage": {
+          "const": "bounded_not_complete"
+        },
+        "evidence": {
+          "const": "source_assertions_not_verified_by_package"
+        },
+        "inference": {
+          "const": "no_inverse_transitive_semantic_or_universal_route_inference"
+        },
+        "disappearance": {
+          "const": "bounded_nonobservation_or_nonreproduction_not_erasure"
+        },
+        "causation": {
+          "const": "timing_exposure_similarity_and_popularity_do_not_establish_causation"
+        },
+        "adoption": {
+          "const": "exposure_view_copy_or_share_does_not_establish_adoption"
+        },
+        "brainrot": {
+          "const": "package_does_not_infer_or_assign_diagnosis_or_person_label"
+        },
+        "continuity": {
+          "const": "content_ids_routes_and_reappearance_do_not_prove_personal_memory_identity_or_continuity"
+        },
+        "participants": {
+          "const": "structured_participant_model_absent_package_does_not_treat_people_as_hosts_vectors_substrates_barriers_or_ranked_objects"
+        },
+        "rights": {
+          "const": "package_does_not_infer_waiver_of_refusal_rest_play_privacy_or_nonparticipation"
+        },
+        "analogy": {
+          "const": "structural_route_shape_only_no_mechanism_transfer"
+        },
+        "effect": {
+          "const": "none"
+        }
+      }
+    }
+  }
+}

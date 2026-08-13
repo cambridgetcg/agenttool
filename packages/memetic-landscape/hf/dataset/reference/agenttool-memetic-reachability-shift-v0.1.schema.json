@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-memetic-reachability-shift-v0.1.schema.json",
+  "title": "agenttool-memetic-reachability-shift-v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "shift_id",
+    "landscape_id",
+    "focus_variant_ref",
+    "prior_context_refs",
+    "changed_context_refs",
+    "before_evidence_refs",
+    "shift_evidence_refs",
+    "later_evidence_refs",
+    "competing_variant_refs",
+    "changed_context_route_refs",
+    "open_question_refs",
+    "outcome",
+    "classification",
+    "causation",
+    "physical_erasure",
+    "adoption_from_exposure",
+    "mental_health_effect",
+    "population_effect",
+    "reversibility",
+    "coverage",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.memetic-reachability-shift/0.1"
+    },
+    "shift_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "landscape_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "focus_variant_ref": {
+      "$ref": "#/$defs/sha"
+    },
+    "prior_context_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "minItems": 1,
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "changed_context_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "minItems": 1,
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "before_evidence_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "minItems": 1,
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "shift_evidence_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "minItems": 1,
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "later_evidence_refs": {
+      "$ref": "#/$defs/refs"
+    },
+    "competing_variant_refs": {
+      "$ref": "#/$defs/refs"
+    },
+    "changed_context_route_refs": {
+      "$ref": "#/$defs/refs"
+    },
+    "open_question_refs": {
+      "$ref": "#/$defs/refs"
+    },
+    "outcome": {
+      "enum": [
+        "less_observed",
+        "more_observed",
+        "reappeared",
+        "unknown"
+      ]
+    },
+    "classification": {
+      "const": "bounded_reachability_shift_caller_reported"
+    },
+    "causation": {
+      "const": "not_determined"
+    },
+    "physical_erasure": {
+      "const": "not_claimed"
+    },
+    "adoption_from_exposure": {
+      "const": "not_inferred"
+    },
+    "mental_health_effect": {
+      "const": "not_inferred"
+    },
+    "population_effect": {
+      "const": "not_inferred"
+    },
+    "reversibility": {
+      "const": "bounded_by_named_contexts"
+    },
+    "coverage": {
+      "const": "bounded_not_complete"
+    },
+    "boundaries": {
+      "$ref": "#/$defs/boundaries"
+    }
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "sourceLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "sourceUrl": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^https://(?![^/?#]*@)(?:(?:[A-Za-z0-9._~!$&'()*+,;=:@/?#\\[\\]-])|(?:%[0-9A-Fa-f]{2}))+$",
+      "maxLength": 2048
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage",
+        "evidence",
+        "inference",
+        "disappearance",
+        "causation",
+        "adoption",
+        "brainrot",
+        "continuity",
+        "participants",
+        "rights",
+        "analogy",
+        "effect"
+      ],
+      "properties": {
+        "coverage": {
+          "const": "bounded_not_complete"
+        },
+        "evidence": {
+          "const": "source_assertions_not_verified_by_package"
+        },
+        "inference": {
+          "const": "no_inverse_transitive_semantic_or_universal_route_inference"
+        },
+        "disappearance": {
+          "const": "bounded_nonobservation_or_nonreproduction_not_erasure"
+        },
+        "causation": {
+          "const": "timing_exposure_similarity_and_popularity_do_not_establish_causation"
+        },
+        "adoption": {
+          "const": "exposure_view_copy_or_share_does_not_establish_adoption"
+        },
+        "brainrot": {
+          "const": "package_does_not_infer_or_assign_diagnosis_or_person_label"
+        },
+        "continuity": {
+          "const": "content_ids_routes_and_reappearance_do_not_prove_personal_memory_identity_or_continuity"
+        },
+        "participants": {
+          "const": "structured_participant_model_absent_package_does_not_treat_people_as_hosts_vectors_substrates_barriers_or_ranked_objects"
+        },
+        "rights": {
+          "const": "package_does_not_infer_waiver_of_refusal_rest_play_privacy_or_nonparticipation"
+        },
+        "analogy": {
+          "const": "structural_route_shape_only_no_mechanism_transfer"
+        },
+        "effect": {
+          "const": "none"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,576 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-memetic-landscape-v0.1.schema.json",
+  "title": "agenttool-memetic-landscape-v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "landscape_id",
+    "topic",
+    "sources",
+    "variants",
+    "contexts",
+    "evidence",
+    "observations",
+    "routes",
+    "open_questions",
+    "caller_text_semantics_verified",
+    "coverage",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.memetic-landscape/0.1"
+    },
+    "landscape_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "topic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "topic_ref",
+        "key",
+        "label",
+        "grouping_basis",
+        "assertion",
+        "semantic_identity_verified"
+      ],
+      "properties": {
+        "topic_ref": {
+          "$ref": "#/$defs/sha"
+        },
+        "key": {
+          "$ref": "#/$defs/token"
+        },
+        "label": {
+          "$ref": "#/$defs/label"
+        },
+        "grouping_basis": {
+          "$ref": "#/$defs/text"
+        },
+        "assertion": {
+          "const": "caller_reported"
+        },
+        "semantic_identity_verified": {
+          "const": false
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_ref",
+          "key",
+          "label",
+          "kind",
+          "url",
+          "published_year",
+          "content_verified_by_package"
+        ],
+        "properties": {
+          "source_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "label": {
+            "$ref": "#/$defs/sourceLabel"
+          },
+          "kind": {
+            "enum": [
+              "official_lexicography",
+              "peer_reviewed_primary"
+            ]
+          },
+          "url": {
+            "$ref": "#/$defs/sourceUrl"
+          },
+          "published_year": {
+            "type": "integer",
+            "minimum": 1800,
+            "maximum": 2200
+          },
+          "content_verified_by_package": {
+            "const": false
+          }
+        }
+      },
+      "minItems": 1,
+      "maxItems": 512
+    },
+    "variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "variant_ref",
+          "key",
+          "label",
+          "description",
+          "source_refs",
+          "family_grouping",
+          "semantic_identity_verified",
+          "meaning_equivalence_not_claimed"
+        ],
+        "properties": {
+          "variant_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "label": {
+            "$ref": "#/$defs/label"
+          },
+          "description": {
+            "$ref": "#/$defs/text"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "family_grouping": {
+            "const": "caller_scoped"
+          },
+          "semantic_identity_verified": {
+            "const": false
+          },
+          "meaning_equivalence_not_claimed": {
+            "const": true
+          }
+        }
+      },
+      "minItems": 1,
+      "maxItems": 512
+    },
+    "contexts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "context_ref",
+          "key",
+          "label",
+          "kind",
+          "description",
+          "aggregate_only"
+        ],
+        "properties": {
+          "context_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "label": {
+            "$ref": "#/$defs/label"
+          },
+          "kind": {
+            "enum": [
+              "audience_window",
+              "external_event",
+              "historical_record",
+              "network_topology",
+              "observation_window",
+              "platform_surface",
+              "ranking_state",
+              "synthetic_teaching"
+            ]
+          },
+          "description": {
+            "$ref": "#/$defs/text"
+          },
+          "aggregate_only": {
+            "const": true
+          }
+        }
+      },
+      "minItems": 1,
+      "maxItems": 512
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "evidence_ref",
+          "key",
+          "kind",
+          "posture",
+          "statement",
+          "scope",
+          "source_refs",
+          "verified_by_package"
+        ],
+        "properties": {
+          "evidence_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "kind": {
+            "enum": [
+              "authored_synthesis",
+              "definition_record",
+              "model_result",
+              "observational_measurement",
+              "randomized_experiment",
+              "reported_history"
+            ]
+          },
+          "posture": {
+            "enum": [
+              "authored_paraphrase",
+              "modeled_hypothesis",
+              "observed_primary",
+              "official_record",
+              "randomized_evidence"
+            ]
+          },
+          "statement": {
+            "$ref": "#/$defs/text"
+          },
+          "scope": {
+            "$ref": "#/$defs/scope"
+          },
+          "source_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "verified_by_package": {
+            "const": false
+          }
+        }
+      },
+      "minItems": 1,
+      "maxItems": 512
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "observation_ref",
+          "key",
+          "variant_ref",
+          "context_refs",
+          "evidence_refs",
+          "status",
+          "scope",
+          "erasure_inferred",
+          "individual_state_inferred"
+        ],
+        "properties": {
+          "observation_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "variant_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "context_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "status": {
+            "enum": [
+              "not_observed_in_bounded_sample",
+              "reported_absent_in_bounded_sample",
+              "reported_present",
+              "unknown"
+            ]
+          },
+          "scope": {
+            "const": "bounded_sample_only"
+          },
+          "erasure_inferred": {
+            "const": false
+          },
+          "individual_state_inferred": {
+            "const": false
+          }
+        }
+      },
+      "maxItems": 512
+    },
+    "routes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "route_ref",
+          "key",
+          "from_variant_ref",
+          "to_variant_ref",
+          "context_refs",
+          "evidence_refs",
+          "act",
+          "causal_posture",
+          "alternative_explanations",
+          "direction",
+          "adoption_inferred",
+          "meaning_equivalence_inferred"
+        ],
+        "properties": {
+          "route_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "from_variant_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "to_variant_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "context_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/sha"
+            },
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true
+          },
+          "act": {
+            "enum": [
+              "copy",
+              "edit",
+              "quote",
+              "reintroduce",
+              "remix",
+              "share",
+              "translate"
+            ]
+          },
+          "causal_posture": {
+            "enum": [
+              "authored_teaching_relation",
+              "descriptive_observation",
+              "modeled_hypothesis",
+              "randomized_evidence",
+              "source_reported_hypothesis",
+              "unknown"
+            ]
+          },
+          "alternative_explanations": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "common_context",
+                "external_event",
+                "homophily",
+                "ranking",
+                "selection",
+                "semantic_drift",
+                "unmeasured"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 7,
+            "uniqueItems": true
+          },
+          "direction": {
+            "const": "observed_or_authored_only_no_inverse_or_transitive_inference"
+          },
+          "adoption_inferred": {
+            "const": false
+          },
+          "meaning_equivalence_inferred": {
+            "const": false
+          }
+        }
+      },
+      "maxItems": 512
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "open_question_ref",
+          "key",
+          "question",
+          "evidence_refs",
+          "status"
+        ],
+        "properties": {
+          "open_question_ref": {
+            "$ref": "#/$defs/sha"
+          },
+          "key": {
+            "$ref": "#/$defs/token"
+          },
+          "question": {
+            "$ref": "#/$defs/text"
+          },
+          "evidence_refs": {
+            "$ref": "#/$defs/refs"
+          },
+          "status": {
+            "const": "open_not_resolved_by_package"
+          }
+        }
+      },
+      "maxItems": 512
+    },
+    "caller_text_semantics_verified": {
+      "const": false
+    },
+    "coverage": {
+      "const": "bounded_not_complete"
+    },
+    "boundaries": {
+      "$ref": "#/$defs/boundaries"
+    }
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "sourceLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "sourceUrl": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^https://(?![^/?#]*@)(?:(?:[A-Za-z0-9._~!$&'()*+,;=:@/?#\\[\\]-])|(?:%[0-9A-Fa-f]{2}))+$",
+      "maxLength": 2048
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage",
+        "evidence",
+        "inference",
+        "disappearance",
+        "causation",
+        "adoption",
+        "brainrot",
+        "continuity",
+        "participants",
+        "rights",
+        "analogy",
+        "effect"
+      ],
+      "properties": {
+        "coverage": {
+          "const": "bounded_not_complete"
+        },
+        "evidence": {
+          "const": "source_assertions_not_verified_by_package"
+        },
+        "inference": {
+          "const": "no_inverse_transitive_semantic_or_universal_route_inference"
+        },
+        "disappearance": {
+          "const": "bounded_nonobservation_or_nonreproduction_not_erasure"
+        },
+        "causation": {
+          "const": "timing_exposure_similarity_and_popularity_do_not_establish_causation"
+        },
+        "adoption": {
+          "const": "exposure_view_copy_or_share_does_not_establish_adoption"
+        },
+        "brainrot": {
+          "const": "package_does_not_infer_or_assign_diagnosis_or_person_label"
+        },
+        "continuity": {
+          "const": "content_ids_routes_and_reappearance_do_not_prove_personal_memory_identity_or_continuity"
+        },
+        "participants": {
+          "const": "structured_participant_model_absent_package_does_not_treat_people_as_hosts_vectors_substrates_barriers_or_ranked_objects"
+        },
+        "rights": {
+          "const": "package_does_not_infer_waiver_of_refusal_rest_play_privacy_or_nonparticipation"
+        },
+        "analogy": {
+          "const": "structural_route_shape_only_no_mechanism_transfer"
+        },
+        "effect": {
+          "const": "none"
+        }
+      }
+    }
+  }
+}

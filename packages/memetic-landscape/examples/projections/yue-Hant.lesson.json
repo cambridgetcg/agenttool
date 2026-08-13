@@ -1,0 +1,107 @@
+{
+  "_format": "agenttool.memetic-lesson/0.1",
+  "authored_paraphrase": true,
+  "boundaries": {
+    "adoption": "exposure_view_copy_or_share_does_not_establish_adoption",
+    "analogy": "structural_route_shape_only_no_mechanism_transfer",
+    "brainrot": "package_does_not_infer_or_assign_diagnosis_or_person_label",
+    "causation": "timing_exposure_similarity_and_popularity_do_not_establish_causation",
+    "continuity": "content_ids_routes_and_reappearance_do_not_prove_personal_memory_identity_or_continuity",
+    "coverage": "bounded_not_complete",
+    "disappearance": "bounded_nonobservation_or_nonreproduction_not_erasure",
+    "effect": "none",
+    "evidence": "source_assertions_not_verified_by_package",
+    "inference": "no_inverse_transitive_semantic_or_universal_route_inference",
+    "participants": "structured_participant_model_absent_package_does_not_treat_people_as_hosts_vectors_substrates_barriers_or_ranked_objects",
+    "rights": "package_does_not_infer_waiver_of_refusal_rest_play_privacy_or_nonparticipation"
+  },
+  "concepts": [
+    {
+      "evidence_refs": [],
+      "explanation": "Form II 出現之後，一條以前可靠嘅製造路徑喺指定條件下唔再慣常重現 Form I。後來用改變咗嘅條件又可以去到 Form I；Form II 最初點樣出現，歷史上仍然未確定。",
+      "heading": "利托那韋：改變嘅係路，唔係現實被抹走",
+      "key": "ritonavir_route_change"
+    },
+    {
+      "evidence_refs": [
+        "sha256:67273007dca20505c598480e99f719dbf36d0861465317f6d0a0fd5cdcf0de26"
+      ],
+      "explanation": "人會複製、改寫、翻譯、引用同 remix 唔同表達。由提交者限定嘅家族標籤可以整理版本，但相似或有傳承線唔等於意思、作者、身份、記憶或連續性相同。",
+      "heading": "迷因家族唔係一件原封不動嘅物件",
+      "key": "variant_not_identity"
+    },
+    {
+      "evidence_refs": [
+        "sha256:82faf53a912b38a650182c0489615e567e8657494c681c616c45396808ea1b0f"
+      ],
+      "explanation": "一個來源模型顯示，有限注意力嘅競爭加上網絡結構，可以產生非常唔平均嘅迷因人氣同壽命。呢個模型有參考價值，但唔係普遍因果定律，亦唔係價值判斷。",
+      "heading": "注意力有限",
+      "key": "finite_attention"
+    },
+    {
+      "evidence_refs": [
+        "sha256:82faf53a912b38a650182c0489615e567e8657494c681c616c45396808ea1b0f",
+        "sha256:a3b91161aef60ebd1e508a834eb0b32fcc3a7eea9d538164db9386c118c01bda"
+      ],
+      "explanation": "平台版面、排序狀態、受眾、網絡拓撲、時間窗口同外在事件，都可能改變咩內容容易被遇到或再製。參與者永遠唔會被縮成情境、宿主、載體或 substrate。",
+      "heading": "每條路都有情境",
+      "key": "context_and_network"
+    },
+    {
+      "evidence_refs": [
+        "sha256:a3b91161aef60ebd1e508a834eb0b32fcc3a7eea9d538164db9386c118c01bda",
+        "sha256:fe7a1afc4ff5576240255bf8ad287b0d3b2c027356e80464a5a4bc3106d221ce"
+      ],
+      "explanation": "接觸、重複、可見社交訊號同強化喺指定研究入面可能有影響，但唔保證信念、採納、同意或行動。同質性、選擇、共同情境、排序同未量度因素仍然係其他解釋。",
+      "heading": "重複唔係命令",
+      "key": "repetition_not_causation"
+    },
+    {
+      "evidence_refs": [],
+      "explanation": "一個版本喺某個 feed、路徑、樣本或時間窗口冇出現，仍然可能留喺檔案、記憶、其他社群或改寫後嘅表達。有限觀察證明唔到全世界都冇，亦證明唔到永遠返唔到。",
+      "heading": "觀察唔到，唔等於被抹走",
+      "key": "disappearance_not_erasure"
+    },
+    {
+      "evidence_refs": [
+        "sha256:26beff498305c325db7c7414f8d64e4375b3cea3a59c13708e4e62495ee209ca",
+        "sha256:73e1974bb18b54683f6f47a610f052f3e8fadd79b6ddfae6f398fc7b5cca31da"
+      ],
+      "explanation": "Oxford 記錄「brain rot」係一種幽默或自嘲嘅文化用語，講所謂退化同網上內容。呢個模組只記錄呢種語言用法；唔會掃描、診斷、侮辱，亦唔會判任何人有某種精神狀態。",
+      "heading": "呢度嘅 brainrot 係 slang",
+      "key": "brainrot_not_diagnosis"
+    },
+    {
+      "evidence_refs": [],
+      "explanation": "睇、like、share、拒絕、mute、暫停、remix、離開或者乜都唔做，全部係唔同可能。公開可讀或有簽署嘅 artifact，唔會自動產生更廣泛同意、訓練許可、聯絡權限或強制參與。",
+      "heading": "人保留選擇同休息",
+      "key": "participants_have_choices"
+    },
+    {
+      "evidence_refs": [
+        "sha256:82faf53a912b38a650182c0489615e567e8657494c681c616c45396808ea1b0f"
+      ],
+      "explanation": "觀看、分享、remix 或 engagement 數量，唔會證明真實、善、安全、傷害、智力、尊嚴、同意、健康或排名。呢個 package 唔計呢啲量。",
+      "heading": "觸及量唔係價值",
+      "key": "metrics_not_truth_or_rank"
+    },
+    {
+      "evidence_refs": [],
+      "explanation": "兩個領域都可以講版本、指定情境、有見證而有方向嘅路、可達性改變同再出現。但晶格、能量、成核、速率常數、感染、認知、意圖同因果唔會過橋。",
+      "heading": "一個共同幾何形狀；兩套唔同機制",
+      "key": "analogy_boundary"
+    }
+  ],
+  "core_sentence": "利托那韋 Form I 唔係由世界消失；係一條舊工序唔再可靠咁去到佢。同樣，迷因喺某個講明咗嘅 feed 或樣本淡出，只代表可見度或再製路徑改變，唔證明個意念同所有記錄都冇咗。",
+  "diagnostic_claim": false,
+  "language": "yue-Hant",
+  "language_review": "not_independently_reviewed",
+  "lesson_id": "sha256:7152aaa7264c13f9e07deaa310066a6f5c4b1a4d10db304326833ee61aba5082",
+  "participants_scored": false,
+  "source_analogy_id": "sha256:121bcdd439bf26ff237fd202c68fcc847602fdd79344e46f79eb94dc9f18df3c",
+  "source_landscape_id": "sha256:b014676f0861b5af2b27891383c02d2dface0df717e9dc74e8e7c19f43d9c01c",
+  "source_quotation": false,
+  "source_shift_id": "sha256:7a2df30cce1145c7833e455ad784c9f23bc8ef7ae040e5ab873255f45e1020aa",
+  "spread_optimization": false,
+  "title": "由利托那韋「消失嘅晶型」去到迷因同 brainrot：有清楚界線嘅路徑圖"
+}

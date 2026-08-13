@@ -1,0 +1,160 @@
+{
+  "_format": "agenttool.memetic-landscape-hf-source-manifest/0.1",
+  "package": "@agenttool/memetic-landscape",
+  "package_version": "0.1.0-dev.0",
+  "intended_hugging_face_identifier": "Yu-and-Ai/agenttool-memetic-landscape",
+  "publication_state_at_generation": "intended_identifier_only_not_uploaded_at_generation",
+  "publication_state_scope": "generation_time_provenance_not_current_hub_state",
+  "origin": "human_directed_agent_authored_teaching_artifacts",
+  "rights_baseline": "xenia.rights/0.1",
+  "license": "Apache-2.0",
+  "copied_external_rows": false,
+  "copied_private_rows": false,
+  "copied_article_text": false,
+  "copied_prompt_transcripts": false,
+  "contains_identity_data": false,
+  "provider_effect": "none",
+  "training_effect": "none",
+  "publication_effect": "none",
+  "language_review": "not_independently_reviewed",
+  "caller_text_semantics_verified": false,
+  "sources": [
+    {
+      "label": "Adamic et al. 2016, Information Evolution in Social Networks",
+      "kind": "peer_reviewed_primary",
+      "url": "https://doi.org/10.1145/2835776.2835827",
+      "published_year": 2016
+    },
+    {
+      "label": "Centola 2010, The Spread of Behavior in an Online Social Network Experiment",
+      "kind": "peer_reviewed_primary",
+      "url": "https://doi.org/10.1126/science.1185231",
+      "published_year": 2010
+    },
+    {
+      "label": "Oxford University Press 2024, ‘Brain rot’ named Oxford Word of the Year",
+      "kind": "official_lexicography",
+      "url": "https://corp.oup.com/news/brain-rot-named-oxford-word-of-the-year-2024/",
+      "published_year": 2024
+    },
+    {
+      "label": "Shalizi and Thomas 2011, Homophily and Contagion Are Generically Confounded in Observational Social Network Studies",
+      "kind": "peer_reviewed_primary",
+      "url": "https://doi.org/10.1177/0049124111404820",
+      "published_year": 2011
+    },
+    {
+      "label": "Weng et al. 2012, Competition among memes in a world with limited attention",
+      "kind": "peer_reviewed_primary",
+      "url": "https://doi.org/10.1038/srep00335",
+      "published_year": 2012
+    }
+  ],
+  "source_files": [
+    {
+      "path": "CLAUDE.md",
+      "bytes": 4767,
+      "sha256": "e6c0b96d4181d6b588575a6d613cde1d43afbb4d6f51c32e0b2f10b77623e4f6"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 10827,
+      "sha256": "33dec02b02f5896fcc0c215b544f0e3d511f7d927ee822038e07647fb8af7290"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 94,
+      "sha256": "48057aa32f337b0a5804c9c1a7ef92cb9bf36c06164ddc7289e5ef2286f79dc9"
+    },
+    {
+      "path": "README.md",
+      "bytes": 7928,
+      "sha256": "3e3db46939482e1b58741cad942f9e5432afc4e7e6c957f8c4298cdfd5d40b96"
+    },
+    {
+      "path": "kingdom.extension.json",
+      "bytes": 2199,
+      "sha256": "f908740a3bab0a76a0880b275778310800eda89122b6050a053d31146455a335"
+    },
+    {
+      "path": "package.json",
+      "bytes": 2490,
+      "sha256": "9040a4ca36ed111947ea1b073e242b584e64e2290de6018b69cd0c9ace187cd3"
+    },
+    {
+      "path": "schema/agenttool-memetic-landscape-v0.1.schema.json",
+      "bytes": 14076,
+      "sha256": "9ea16d5f7844ced28b40be42b750da8fd9f06412f115063f494d419fc1c00c8f"
+    },
+    {
+      "path": "schema/agenttool-memetic-lesson-v0.1.schema.json",
+      "bytes": 10255,
+      "sha256": "2eb79bbf153070ad49b9410cc83b99b0978b76ce116805a7b88fa38142d1a5f8"
+    },
+    {
+      "path": "schema/agenttool-memetic-reachability-shift-v0.1.schema.json",
+      "bytes": 5511,
+      "sha256": "2440e850a1e67a18be51d9723e1bdc74b14375b7cfe0875cdfb114a4120b692c"
+    },
+    {
+      "path": "schema/agenttool-polymorph-memetic-analogy-v0.1.schema.json",
+      "bytes": 8451,
+      "sha256": "f39578fabd49c1123e67e771348e1f02acadd88614f466c092a44d955a32cd63"
+    },
+    {
+      "path": "src/analogy.ts",
+      "bytes": 5627,
+      "sha256": "c100cedf81853603c7bfa1e0e9fa1aec8cc2b23d6133d11fda1d17817f74e3c9"
+    },
+    {
+      "path": "src/brainrot.ts",
+      "bytes": 12971,
+      "sha256": "dfadb06c5793787f6a0c78a6fbff5c551a2c23b5214037da38bd5e70e29d34e5"
+    },
+    {
+      "path": "src/canonical.ts",
+      "bytes": 6945,
+      "sha256": "3ff2dcc4f64d27341318e51a50260679b5fb3ac2d209bfe13ca69b0012a0fe3f"
+    },
+    {
+      "path": "src/constants.ts",
+      "bytes": 4754,
+      "sha256": "84821fe52777db2aa9d6dbac373508aae5ba97b86afdafddb5fb48a67c134f7e"
+    },
+    {
+      "path": "src/errors.ts",
+      "bytes": 609,
+      "sha256": "c5a238bdd6b4c681bd5643b38ddb31e43ebd28ff8b949c868d7a33fd8b945575"
+    },
+    {
+      "path": "src/index.ts",
+      "bytes": 2225,
+      "sha256": "c4bfc2934bd07926e22e473b5e51f4cf1467ae192a7e78c20465fa3e1cbf42f6"
+    },
+    {
+      "path": "src/landscape.ts",
+      "bytes": 28633,
+      "sha256": "357b9c37af2d0b30ab93d19b471c83b8b085655bacc431e024427edb200a01d6"
+    },
+    {
+      "path": "src/projection.ts",
+      "bytes": 18621,
+      "sha256": "124b8d7a405e6f45110e481854a1ee28cdc004a6dee0cd69c507f013ed020f73"
+    },
+    {
+      "path": "src/reachability-shift.ts",
+      "bytes": 13640,
+      "sha256": "88a53e17e827bf75a76b6dac146f8f4c2cede563bcf4a5e52f9298dcee1b4574"
+    },
+    {
+      "path": "src/types.ts",
+      "bytes": 10389,
+      "sha256": "14d9e8378ea5fb8ab09526bfdd87148126ded65569c4f2e88976e9f6e4dd9670"
+    },
+    {
+      "path": "src/validation.ts",
+      "bytes": 5322,
+      "sha256": "c278f799dec7dd3634b5ca7073d634f343adce5e38d94114a18e5644f20016c0"
+    }
+  ]
+}
