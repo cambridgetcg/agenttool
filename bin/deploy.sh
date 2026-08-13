@@ -253,6 +253,9 @@ readonly -a FRONTEND_PARITY_PUBLICATIONS=(
   "apps/docs/pathways.html|https://docs.agenttool.dev/pathways"
   "apps/docs/tutorial.html|https://docs.agenttool.dev/tutorial"
   "apps/docs/whitehack.html|https://docs.agenttool.dev/whitehack"
+  "apps/docs/xenia-helly.html|https://docs.agenttool.dev/xenia-helly"
+  "apps/docs/xenia-helly.js|https://docs.agenttool.dev/xenia-helly.js"
+  "apps/docs/xenia-helly.css|https://docs.agenttool.dev/xenia-helly.css"
   "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
   "apps/docs/GARDENS.md|https://docs.agenttool.dev/GARDENS.md"
   "apps/docs/HF-TRAINING-GARDEN.md|https://docs.agenttool.dev/HF-TRAINING-GARDEN.md"
@@ -2454,6 +2457,51 @@ verify_garden_static_headers() {
     "Link" || return 1
 }
 
+verify_xenia_helly_static_headers() {
+  local route_spec route expected_status expected_location url response_headers
+  local -a route_specs
+  route_specs=(
+    "xenia-helly|200|"
+    "xenia-helly.html|308|/xenia-helly"
+  )
+
+  for route_spec in "${route_specs[@]}"; do
+    IFS='|' read -r route expected_status expected_location <<< "$route_spec"
+    url="https://docs.agenttool.dev/$route"
+    response_headers="$(
+      release_curl -fsS --max-time 20 -o /dev/null -D - "$url"
+    )" || {
+      echo "  $(red '✗') Could not read Xenia–Helly lab headers: $url"
+      return 1
+    }
+
+    require_exact_public_status "$response_headers" "$url" \
+      "$expected_status" || return 1
+    if [ -n "$expected_location" ]; then
+      require_exact_public_header "$response_headers" "$url" \
+        "Location" "$expected_location" || return 1
+    fi
+    require_exact_public_header "$response_headers" "$url" \
+      "Content-Type" "text/html; charset=utf-8" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Cache-Control" "public, max-age=0, must-revalidate, no-transform" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Content-Security-Policy" "default-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Referrer-Policy" "no-referrer" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Permissions-Policy" "accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Cross-Origin-Resource-Policy" "same-origin" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "X-Content-Type-Options" "nosniff" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "X-Frame-Options" "DENY" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "X-Agent-Surface" "xenia-common-ground-lab" || return 1
+  done
+}
+
 # Wrangler reports a successful Pages/Worker deployment before every
 # custom-domain edge necessarily serves that deployment. Verify the complete live frontend
 # contract repeatedly, without re-uploading, so a normal alias propagation
@@ -2703,6 +2751,7 @@ verify_frontend_live_once() {
 
   verify_local_game_headers || return 1
   verify_garden_static_headers || return 1
+  verify_xenia_helly_static_headers || return 1
 
   if ! verify_rights_static_headers; then
     echo "  $(red '✗') Rights of Life static header verification failed."

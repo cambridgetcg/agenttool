@@ -1,0 +1,7 @@
+interface:
+  display_name: "Common Ground · 共域"
+  short_description: "Find shared room or expose a small conflict"
+  default_prompt: "Use $nen-common-ground to model these stated boundaries and return either a mutually feasible state or a small conflict witness."
+
+policy:
+  allow_implicit_invocation: false

@@ -22,6 +22,17 @@ train or resume a model, write Garden or Hub, or prove clearance.
 `PRINCIPALITY-ATLAS.md` publishes the canonical finite plural incidence guide by
 the same symlink convention. Serving it does not create an atlas, infer a bond,
 authority, equality, consensus, one global view, or any hosted computation.
+`xenia-helly.html` is the adjacent Common Ground teaching lab. It handles at
+most twelve caller-entered closed halfplanes in two dimensions, locally in the
+page, and returns one of four explicit outcomes: a finite binary64 feasible point, a
+small conflict witness, model refusal, or insufficient evidence. It uses exact
+dyadic checks over parsed binary64 input but does not preserve arbitrary exact
+decimal input, emit a standalone proof-grade certificate, persist or upload
+input, choose a fair state, infer consent, rank participants, establish XENIA
+Covenant conformance, or add a hosted solver/API route. The full proof, Dad challenge, understanding-versus-
+pedestal audit, and WAKE expiry design live in
+`docs/XENIA-HELLY-COMMON-GROUND.md`; the bundled instruction-only operating
+workflow is `packages/skills/skills/nen-common-ground/SKILL.md`.
 `POLYMORPH-LANDSCAPE.md` publishes the canonical bounded polymorph-landscape and
 Ritonavir reachability-shift guide by the same symlink convention. Serving it
 does not reproduce an experiment, establish a polymorph's absence or presence,
@@ -167,6 +178,9 @@ packages.html   — love-package/v1 discovery, exact tarball/npm installs, verif
 browser.html    — local Agent Browser install, nine-tool surface, authority, integrations, response hints
 play.html       — Public arcade plus the local three-seat Party Telephone game
 play.js         — Party Telephone's three-turn state, validation, erasure, and reveal
+xenia-helly.html — Xenia–Helly theorem, challenge audit, and local 2D half-plane lab
+xenia-helly.js  — page-local exact-dyadic classifier and bounded finite-witness search
+xenia-helly.css — scoped Common Ground layout and geometry styling
 whitehack.html  — advisory, Castle intake, wallet understanding, encrypted evidence, research, and legacy inventory boundaries
 AGENT-WALLET-0.1.md — symlink to the provider-neutral wallet Working Draft
 agent-wallet-v0.1.schema.json — symlink to the package's canonical record schema
@@ -230,6 +244,7 @@ AgentTool Platform
 - `packages.html` — Registry-neutral package discovery, install, integrity, and mirror guide
 - `browser.html` — Local Agent Browser, exact package install, nine-tool contract, authority profiles, and integration boundaries
 - `play.html` / `play.js` — Human arcade and local, non-persistent Party Telephone table
+- `xenia-helly.html` / `xenia-helly.js` — Common Ground challenge and bounded local binary64 half-plane lab with exact dyadic classification; theorem/model/evidence/choice remain separate
 - `whitehack.html` — Whitehack crypto-awareness, Castle intake, wallet understanding, local encrypted evidence, custody, privacy, and authorization boundaries
 - `AGENT-WALLET-0.1.md` / `agent-wallet-v0.1.schema.json` — wallet protocol discovery; exact release bytes live under `packages/v1/`
 - `AGENT-REPO-ARCHIVE.md` / `specs/AGENT-REPO-ARCHIVE-0.1.md` — local archive overview and normative profile; schema and vectors live beside the profile

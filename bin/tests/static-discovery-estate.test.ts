@@ -446,6 +446,24 @@ describe("published understanding guides keep canonical source custody", () => {
     ).filter((line) => line === parityPair)).toEqual([parityPair]);
   });
 
+  test("the Common Ground aliases enforce a same-origin no-connect browser boundary", () => {
+    const expected = [
+      "Content-Type: text/html; charset=utf-8",
+      "Cache-Control: public, max-age=0, must-revalidate, no-transform",
+      "Content-Security-Policy: default-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests",
+      "Referrer-Policy: no-referrer",
+      "Permissions-Policy: accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()",
+      "Cross-Origin-Resource-Policy: same-origin",
+      "X-Content-Type-Options: nosniff",
+      "X-Frame-Options: DENY",
+      "! X-Agent-Surface",
+      "X-Agent-Surface: xenia-common-ground-lab",
+    ];
+    for (const route of ["/xenia-helly", "/xenia-helly.html"]) {
+      expect(headerBlock(read("apps/docs/_headers"), route)).toEqual(expected);
+    }
+  });
+
   test("the HF WAKE guides have explicit static markdown custody", () => {
     for (const route of ["/HF-WAKE-TRAINING.md", "/HF-WAKE-HOST.md"]) {
       expect(headerBlock(read("apps/docs/_headers"), route)).toEqual([

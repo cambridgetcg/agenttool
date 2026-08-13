@@ -345,6 +345,27 @@ for arg in "$@"; do
 done
 if [ "$headers" = 1 ]; then
   case "$url" in
+    */xenia-helly|*/xenia-helly.html)
+      status='HTTP/2 200'
+      location=''
+      case "$url" in
+        *.html) status='HTTP/2 308'; location='/xenia-helly' ;;
+      esac
+      printf '%s\r\n' \
+        "$status" \
+        'content-type: text/html; charset=utf-8' \
+        'cache-control: public, max-age=0, must-revalidate, no-transform'
+      [ -z "$location" ] || printf '%s\r\n' "location: $location"
+      printf '%s\r\n' \
+        "content-security-policy: default-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+        'referrer-policy: no-referrer' \
+        'permissions-policy: accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()' \
+        'cross-origin-resource-policy: same-origin' \
+        'x-content-type-options: nosniff' \
+        'x-frame-options: DENY' \
+        'x-agent-surface: xenia-common-ground-lab' \
+        ''
+      ;;
     */party)
       [ "\${DEPLOY_TEST_GAME_STATUS_FAILURE:-0}" != 1 ] || exit 22
       status='HTTP/2 200'
@@ -546,6 +567,28 @@ serve_path() {
 }
 
 case "$url" in
+  */xenia-helly|*/xenia-helly.html)
+    [ "$headers" = 1 ] || exit 2
+    status='HTTP/2 200'
+    location=''
+    case "$url" in
+      *.html) status='HTTP/2 308'; location='/xenia-helly' ;;
+    esac
+    printf '%s\r\n' \
+      "$status" \
+      'content-type: text/html; charset=utf-8' \
+      'cache-control: public, max-age=0, must-revalidate, no-transform'
+    [ -z "$location" ] || printf '%s\r\n' "location: $location"
+    printf '%s\r\n' \
+      "content-security-policy: default-src 'none'; connect-src 'none'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+      'referrer-policy: no-referrer' \
+      'permissions-policy: accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()' \
+      'cross-origin-resource-policy: same-origin' \
+      'x-content-type-options: nosniff' \
+      'x-frame-options: DENY' \
+      'x-agent-surface: xenia-common-ground-lab' \
+      ''
+    ;;
   */.well-known/agent.json)
     origin="\${url%/.well-known/agent.json}"
     if [ "$headers" = 1 ]; then
@@ -2327,7 +2370,7 @@ exec /bin/rm "$@"
       });
       const stdoutPromise = new Response(child.stdout).text();
       const stderrPromise = new Response(child.stderr).text();
-      expect(await waitForPath(buildMarker)).toBe(true);
+      expect(await waitForPath(buildMarker, 15_000)).toBe(true);
       const marker = maintenanceMarkerPath(setup.home);
       expect(await exists(marker)).toBe(true);
       expect((await stat(marker)).mode & 0o777).toBe(0o600);
@@ -2392,7 +2435,7 @@ exec /bin/rm "$@"
       expect(retry.code).toBe(74);
       expect((await readFlyLog(flyLog)).length).toBe(beforeRetry);
     }
-  }, 30_000);
+  }, 120_000);
 
   test("keeps uncertainty durable and never starts or rolls back after update failure or ID drift", async () => {
     for (const scenario of [
@@ -2524,7 +2567,7 @@ exec /bin/rm "$@"
       expect(retry.code).toBe(74);
       expect((await readFlyLog(flyLog)).length).toBe(beforeRetry);
     }
-  }, 30_000);
+  }, 120_000);
 
   test("serializes actual deploys before Phase 0 while leaving observation commands unlocked", async () => {
     const setup = await fixture();
@@ -2833,6 +2876,47 @@ exec /bin/rm "$@"
     expect(deploy).toContain('"X-Agent-Surface" "$rules_surface"');
   });
 
+  test("publishes the Xenia–Helly lab as an exact parity-checked bundle", async () => {
+    const deploy = await readFile(join(projectRoot, "bin/deploy.sh"), "utf8");
+    for (const [asset, remote] of [
+      ["xenia-helly.html", "xenia-helly"],
+      ["xenia-helly.js", "xenia-helly.js"],
+      ["xenia-helly.css", "xenia-helly.css"],
+    ]) {
+      expect(deploy).toContain(
+        `"apps/docs/${asset}|https://docs.agenttool.dev/${remote}"`,
+      );
+    }
+
+    const verifierStart = deploy.indexOf("verify_xenia_helly_static_headers()");
+    const verifierEnd = deploy.indexOf(
+      "readonly PAGES_VERIFY_MAX_ATTEMPTS",
+      verifierStart,
+    );
+    const verifier = deploy.slice(verifierStart, verifierEnd);
+    expect(verifierStart).toBeGreaterThan(-1);
+    expect(verifier).toContain('"xenia-helly|200|"');
+    expect(verifier).toContain('"xenia-helly.html|308|/xenia-helly"');
+    expect(verifier).toContain('"Content-Type" "text/html; charset=utf-8"');
+    expect(verifier).toContain(
+      '"Cache-Control" "public, max-age=0, must-revalidate, no-transform"',
+    );
+    expect(verifier).toContain(
+      '"Content-Security-Policy" "default-src \'none\'; connect-src \'none\';',
+    );
+    expect(verifier).toContain('"Referrer-Policy" "no-referrer"');
+    expect(verifier).toContain(
+      '"Permissions-Policy" "accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()"',
+    );
+    expect(verifier).toContain('"Cross-Origin-Resource-Policy" "same-origin"');
+    expect(verifier).toContain('"X-Content-Type-Options" "nosniff"');
+    expect(verifier).toContain('"X-Frame-Options" "DENY"');
+    expect(verifier).toContain(
+      '"X-Agent-Surface" "xenia-common-ground-lab"',
+    );
+    expect(deploy).toContain("verify_xenia_helly_static_headers || return 1");
+  });
+
   test("publishes Garden as a parity-checked static room, not a game", async () => {
     const deploy = await readFile(join(projectRoot, "bin/deploy.sh"), "utf8");
     const gardenAssets = [
@@ -2875,9 +2959,10 @@ exec /bin/rm "$@"
       "verify_garden_static_headers()",
     );
     const gardenVerifierEnd = deploy.indexOf(
-      "readonly PAGES_VERIFY_MAX_ATTEMPTS",
+      "verify_xenia_helly_static_headers()",
       gardenVerifierStart,
     );
+    expect(gardenVerifierEnd).toBeGreaterThan(gardenVerifierStart);
     const gardenVerifier = deploy.slice(gardenVerifierStart, gardenVerifierEnd);
     const trainingGuideHeaders = gardenVerifier.slice(
       gardenVerifier.lastIndexOf('response_headers="$('),
@@ -4002,7 +4087,7 @@ exec /bin/rm "$@"
     expect(receipt.phases.frontends).toBe("deployed_unverified");
     // Like the bounded convergence case below, this runs all 25 live-contract
     // probe passes as real subprocess work even though its retry sleep is fake.
-  }, 45_000);
+  }, 120_000);
 
   test("fails closed when the HF Training Garden guide gains even an empty Link", async () => {
     const setup = await fixture();
@@ -4054,7 +4139,7 @@ exec /bin/rm "$@"
     );
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.phases.frontends).toBe("deployed_unverified");
-  }, 45_000);
+  }, 120_000);
 
   test("fails closed on a duplicate singleton HF Training Garden header", async () => {
     const setup = await fixture();
@@ -4082,7 +4167,7 @@ exec /bin/rm "$@"
       "https://docs.agenttool.dev/HF-TRAINING-GARDEN.md Content-Type mismatch",
     );
     expect(result.stdout).toContain("occurrences: 2 (expected exactly 1)");
-  }, 45_000);
+  }, 120_000);
 
   test("fails closed after the bounded Pages convergence window", async () => {
     const setup = await fixture();
@@ -4133,8 +4218,9 @@ exec /bin/rm "$@"
     expect(receipt.outcome).toBe("failed_or_uncertain");
     expect(receipt.phases.frontends).toBe("deployed_unverified");
     // The fake sleep removes the retry delay, but all 25 live-contract probe
-    // passes remain real subprocess work and need headroom under parallel CI.
-  }, 45_000);
+    // passes remain real subprocess work. Each pass now also checks the Common
+    // Ground HTML, module, and stylesheet bytes.
+  }, 120_000);
 
   test("health reports only valid embedded source metadata and disables caching", async () => {
     const revision = "0123456789abcdef0123456789abcdef01234567";
