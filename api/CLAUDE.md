@@ -69,6 +69,7 @@ Mounted in `api/src/index.ts`. Each one has a one-line doc-string in the `endpoi
 | `/.well-known` · `/.well-known/api-catalog` · `/v1/openapi.json` | bounded public discovery and exact HTTP contract | `docs/AGENT-DISCOVERY.md` |
 | `/v1/mcp` · `/v1/mcp/canon` | established public read-only canon/platform MCP · separate two-tool public-canon search/fetch MCP | `docs/AGENT-DISCOVERY.md` |
 | `GET /v1/wake` | the keystone — md/anthropic/openai/gemini/cohere format | (implicit — every primitive surfaces here) |
+| `GET /v1/memetic-landscape` | unauthenticated zero-I/O discovery for canonical artifact-variant geometry; its `platform_self.memetic_landscape` WAKE coordinate is context only, never identity, memory, consent, authority, or continuity | `docs/MEMETIC-LANDSCAPE.md` |
 | `/v1/identities` · `/v1/keys` | DID + ed25519 · attestations · recovery | `docs/IDENTITY-ANCHOR.md` |
 | `/v1/memories` · `/v1/traces` | memory tiers + reasoning records | `docs/MEMORY-TIERS.md` |
 | `/v1/strands` | encrypted thoughts under K_master · SSE-streamable | `docs/STRANDS.md` |

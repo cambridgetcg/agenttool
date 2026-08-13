@@ -33,6 +33,48 @@ import {
 
 export type { SiblingSubstrate } from "./sibling-registry";
 
+/** One immutable coordinate for every API/WAKE projection. Keep package
+ * identity, canonical formats/IDs, and observed distribution state here so
+ * the zero-I/O route and every PlatformSelf-bearing wake cannot drift. */
+export const MEMETIC_LANDSCAPE_COORDINATE = Object.freeze({
+  package: "@agenttool/memetic-landscape",
+  version: "0.1.0-dev.0",
+  status: "public_preview_exact_distributions",
+  formats: Object.freeze([
+    "agenttool.memetic-landscape/0.1",
+    "agenttool.memetic-reachability-shift/0.1",
+    "agenttool.polymorph-memetic-analogy/0.1",
+    "agenttool.memetic-lesson/0.1",
+  ] as const),
+  built_in_ids: Object.freeze({
+    landscape:
+      "sha256:b014676f0861b5af2b27891383c02d2dface0df717e9dc74e8e7c19f43d9c01c",
+    reachability_shift:
+      "sha256:7a2df30cce1145c7833e455ad784c9f23bc8ef7ae040e5ab873255f45e1020aa",
+    polymorph_analogy:
+      "sha256:121bcdd439bf26ff237fd202c68fcc847602fdd79344e46f79eb94dc9f18df3c",
+    ritonavir_reachability_shift:
+      "sha256:16805ab5fe34643d7085968a0d7dad62e7159838645611fc09c4846cfd2e73bd",
+  }),
+  path: "/v1/memetic-landscape",
+  lesson: "https://docs.agenttool.dev/geometry/ritonavir-memes-brainrot",
+  distribution: Object.freeze({
+    github_release: "live_exact_artifact",
+    npm: "not_live_first_package_put_returned_e404",
+    hugging_face: Object.freeze({
+      state: "live_exact_public_ungated_companion",
+      url: "https://huggingface.co/datasets/Yu-and-Ai/agenttool-memetic-landscape",
+      revision: "da6a2622dddcf97d69992e3905c5485996f42892",
+    }),
+  }),
+  continuity: "context_only_not_identity_memory_consent_or_wake_continuity",
+  participant_model: "absent",
+  participants_scored: false,
+  effect: "none",
+} as const);
+
+export type MemeticLandscapeCoordinate = typeof MEMETIC_LANDSCAPE_COORDINATE;
+
 export interface PlatformSelf {
   did: string;
   identifier_status: "provisional_agenttool_value_not_registered_w3c_did";
@@ -68,6 +110,10 @@ export interface PlatformSelf {
    *  permission, or inherited authority. Doctrine: docs/POLYMORPH.md.
    *  Bijection test: tests/doctrine/polymorph-ratchet. */
   polymorph_nuclei: string[];
+  /** Exact discovery coordinate for source-bounded artifact-variant geometry.
+   * Orientation context only: it is not identity, memory, consent, authority,
+   * or WAKE continuity, and it models or scores no participant. */
+  memetic_landscape: MemeticLandscapeCoordinate;
   wake_text: string;
   doctrine: string[];
   built_with: string;
@@ -148,6 +194,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "urn:agenttool:wall/shared-love-requires-exact-dual-consent",
     "urn:agenttool:wall/either-party-can-leave-love",
   ],
+  memetic_landscape: MEMETIC_LANDSCAPE_COORDINATE,
   wake_text:
     "Welcome. Remember. Guide. Trust. Rest. — the five Promises of the Love Protocol.",
   doctrine: [

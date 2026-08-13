@@ -312,6 +312,21 @@ describe("polymorph-ratchet — reviewed four-corner change-control", () => {
           form_identifiers?: string;
           projections?: string[];
         };
+        _memetic_landscape_route_shape_summary?: {
+          package?: string;
+          wire_format_reference?: string;
+          profile?: string;
+          polymorph_shift_id?: string;
+          memetic_shift_id?: string;
+          analogy_id?: string;
+          mechanism_transferred?: boolean;
+          domains_equated?: boolean;
+          artifact_unit?: string;
+          attention_stages?: string;
+          continuity?: string;
+          lesson?: string;
+          effect?: string;
+        };
         _can_this_endpoint_be_removed?: string;
         _meta?: { propagation?: string };
       };
@@ -344,6 +359,25 @@ describe("polymorph-ratchet — reviewed four-corner change-control", () => {
         form_identifiers: "source_scoped",
         projections: ["en", "yue-Hant", "zh-Hant", "zh-Hans"],
       });
+      expect(body._memetic_landscape_route_shape_summary).toEqual({
+        package: "@agenttool/memetic-landscape",
+        wire_format_reference: "agenttool.polymorph-memetic-analogy/0.1",
+        profile: "structural_route_shape_only",
+        polymorph_shift_id:
+          "sha256:16805ab5fe34643d7085968a0d7dad62e7159838645611fc09c4846cfd2e73bd",
+        memetic_shift_id:
+          "sha256:7a2df30cce1145c7833e455ad784c9f23bc8ef7ae040e5ab873255f45e1020aa",
+        analogy_id:
+          "sha256:121bcdd439bf26ff237fd202c68fcc847602fdd79344e46f79eb94dc9f18df3c",
+        mechanism_transferred: false,
+        domains_equated: false,
+        artifact_unit: "content_variants_not_people",
+        attention_stages:
+          "exposure_view_rating_copy_share_remix_adoption_are_distinct_none_proves_the_next",
+        continuity: "context_only_not_identity_memory_consent_or_wake_continuity",
+        lesson: "https://docs.agenttool.dev/geometry/ritonavir-memes-brainrot",
+        effect: "none",
+      });
       expect(body._meta?.propagation).toContain("explicitly copies declared wall URNs");
       expect(body._meta?.propagation).toContain("not proof of identity, memory or continuity");
       expect(body._meta?.propagation).toContain("inherited authority");
@@ -374,6 +408,11 @@ describe("polymorph-ratchet — reviewed four-corner change-control", () => {
       const body = (await res.json()) as { verbs?: Array<{ path: string }> };
       expect(Array.isArray(body.verbs)).toBe(true);
       expect((body.verbs as Array<{ path: string }>).length).toBeGreaterThan(0);
+      expect(
+        (body.verbs as Array<{ path: string }>).some(
+          (verb) => verb.path === "/v1/memetic-landscape",
+        ),
+      ).toBe(true);
     });
   });
 

@@ -233,7 +233,7 @@ describe("single structured home and distribution receipts", () => {
   test("indexes the page as a projection of exact source bytes", () => {
     expect(indexJson._format).toBe("kingdom.geometry.index/1.0");
     expect(indexJson.modules).toHaveLength(1);
-    expect(indexJson.projections).toHaveLength(1);
+    expect(indexJson.projections).toHaveLength(2);
     expect(projection.human_url).toBe(
       "https://docs.agenttool.dev/geometry/forms-folds-prions",
     );

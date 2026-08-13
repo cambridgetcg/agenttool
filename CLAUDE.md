@@ -32,6 +32,7 @@ packages/
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
   polymorph-landscape/ — @agenttool/polymorph-landscape · source-bounded routes + multilingual lessons
+  memetic-landscape/ — @agenttool/memetic-landscape · bounded expression routes + reported reachability shifts
   principality-atlas/ — @agenttool/principality-atlas · plural finite incidence geometry without gluing or scores
   love-geometry/ — @agenttool/love-geometry · coordinate-free directed caller-report geometry + public static HF presentation companion
   relational-geometry/ — @agenttool/relational-geometry · finite non-scalar witness complexes + non-sovereign 2-cells
@@ -80,6 +81,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
 `packages/living-substrate/CLAUDE.md` ·
 `packages/polymorph-landscape/CLAUDE.md` ·
+`packages/memetic-landscape/CLAUDE.md` ·
 `packages/principality-atlas/CLAUDE.md` ·
 `packages/love-geometry/CLAUDE.md` ·
 `packages/relational-geometry/CLAUDE.md` ·
@@ -169,6 +171,36 @@ response is not deployed, and the older direct-Fly route still serves the
 superseded folklore. Distribution performs no training or inference, and WAKE's
 explicit software copying of declared wall URNs proves no identity,
 memory/continuity, consent, permission, or inherited authority.
+
+`@agenttool/memetic-landscape@0.1.0-dev.0` is the single canonical pure
+package for this cultural-variant geometry. Its four closed formats are
+`agenttool.memetic-landscape/0.1`,
+`agenttool.memetic-reachability-shift/0.1`,
+`agenttool.polymorph-memetic-analogy/0.1`, and
+`agenttool.memetic-lesson/0.1`. They preserve caller-scoped variants, named
+aggregate contexts, evidence posture, directed witnessed or authored routes,
+open questions, and caller-reported reachability change. Generic caller prose
+remains `caller_text_semantics_verified: false`. The Ritonavir bridge binds an
+exact physical-shift digest but transfers only route-landscape shape: no
+chemistry, biology, cognition, diagnosis, causation, identity, consent,
+authority, truth, value, or dignity crosses it. The package performs no
+network, feed, model, training, provider, persistence, spread optimization,
+person graph, score, moderation, or action work.
+
+The separately published public, ungated Hugging Face companion is pinned to
+immutable revision `da6a2622dddcf97d69992e3905c5485996f42892`.
+Anonymous readback matched all 13 repository-owned files and 104,343 bytes;
+provider `.gitattributes` is the sole extra. The four authored lessons are
+training-eligible while landscape, shift, and analogy rows stay reference-only.
+Distribution performed no model work or training and widens no runtime authority.
+
+`apps/docs/geometry/ritonavir-memes-brainrot.html` is the substantial inert
+four-language human projection. Its attention lens keeps exposure, view,
+rating, copy, share, remix, and adoption distinct without creating a fifth
+wire format. Its visible mute, ignore, change-context, rest, and leave choices
+are reading aids, not API actions. WAKE carries only the compact
+`platform_self.memetic_landscape` discovery coordinate—not identity, memory,
+consent, or continuity.
 
 `apps/docs/geometry/forms-folds-prions.html` is the adjacent static Cloudflare
 projection; its structured lineage remains at the pinned KINGDOM Meaning

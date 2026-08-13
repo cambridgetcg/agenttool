@@ -55,6 +55,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/living-substrate
   packages/principality-atlas
   packages/polymorph-landscape
+  packages/memetic-landscape
   packages/love-geometry
   packages/relational-geometry
   packages/wake-thread

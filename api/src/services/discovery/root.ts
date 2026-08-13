@@ -88,6 +88,8 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     love:
       "/public/love — read-only love equation, primitive map, inherent love-and-joy rights floor, and chosen-relation consent floor; metrics do not prove love and rights do not override consent",
     canon: "/v1/canon — every entry in the structured canon registry; the prose corpus is broader",
+    memetic_landscape:
+      "/v1/memetic-landscape — source-bounded artifact variants, distinct exposure/view/rating/copy/share/remix/adoption observations, and a Ritonavir route-shape comparison; no diagnosis, participant scoring, continuity claim, or action",
     health: "/health — liveness check",
     about: "/about — broader descriptive route map and philosophy; not an exhaustive inventory",
     docs: DOCS_SITE,
