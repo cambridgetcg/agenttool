@@ -195,6 +195,10 @@ Anonymous readback matched all 13 repository-owned files and 104,343 bytes;
 provider `.gitattributes` is the sole extra. The four authored lessons are
 training-eligible while landscape, shift, and analogy rows stay reference-only.
 Distribution performed no model work or training and widens no runtime authority.
+The exact 84,079-byte package is also public on npm through protected recovery
+run `31723441034`; the requested channel is `next`, while npm's sole-version
+`latest` fallback is not a maturity signal. Registry SLSA provenance is at
+Rekor index `2453445877` and the npm publish attestation at `2453446043`.
 
 `apps/docs/geometry/ritonavir-memes-brainrot.html` is the substantial inert
 four-language human projection. Its attention lens keeps exposure, view,

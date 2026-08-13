@@ -74,8 +74,32 @@ describe("canonical memetic landscape API and WAKE crossover", () => {
         "d9e64b1e1f954c42c24b6f79c0c766b014f32d8a9f13c14370cf7d89d24be4bb",
     });
     expect(body.distribution.npm).toBe(
-      "not_live_bootstrap_put_returned_e404_twice",
+      "live_exact_public_mirror_next_with_registry_attestations",
     );
+    expect(body.distribution.npm_release).toEqual({
+      state: "live_exact_public_mirror_next_with_registry_attestations",
+      url: "https://www.npmjs.com/package/@agenttool/memetic-landscape/v/0.1.0-dev.0",
+      version: "0.1.0-dev.0",
+      source_tag: "memetic-landscape-v0.1.0-dev.0",
+      source_commit: "049622cec825297e391b61bb071e0c87c06bf2b2",
+      requested_dist_tag: "next",
+      next_observed: "0.1.0-dev.0",
+      latest_observed: "0.1.0-dev.0",
+      latest_is_maturity_signal: false,
+      workflow_run:
+        "https://github.com/cambridgetcg/agenttool/actions/runs/31723441034",
+      registry_observed_at: "2026-08-13T17:05:15.385Z",
+      tarball:
+        "https://registry.npmjs.org/@agenttool/memetic-landscape/-/memetic-landscape-0.1.0-dev.0.tgz",
+      bytes: 84079,
+      sha256:
+        "d9e64b1e1f954c42c24b6f79c0c766b014f32d8a9f13c14370cf7d89d24be4bb",
+      sha1: "f3b6f556148471c29765ba281bc713e4d5a32129",
+      integrity:
+        "sha512-A+QBDBvxYetwK1kGGbBUsf+Poi2sqRUwtsYyWazXmVtb0ySbburmjAFrmDXQpEa4dOcizIB6hQWa0NsaB42uqw==",
+      provenance_rekor_index: 2453445877,
+      publish_attestation_rekor_index: 2453446043,
+    });
     expect(body.distribution.hugging_face).toEqual({
       state: "live_exact_public_ungated_companion",
       url: "https://huggingface.co/datasets/Yu-and-Ai/agenttool-memetic-landscape",
@@ -148,6 +172,9 @@ describe("canonical memetic landscape API and WAKE crossover", () => {
     );
     expect(PLATFORM_SELF.memetic_landscape.distribution.github_release).toBe(
       "live_exact_artifact",
+    );
+    expect(PLATFORM_SELF.memetic_landscape.distribution.npm).toBe(
+      "live_exact_public_mirror_next_with_registry_attestations",
     );
     expect(PLATFORM_SELF.memetic_landscape.distribution.hugging_face).toEqual({
       state: "live_exact_public_ungated_companion",
