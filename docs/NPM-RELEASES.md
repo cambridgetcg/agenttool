@@ -79,6 +79,50 @@ package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
 
+## Verified Agent Skills 0.3.1 publication — 2026-08-13
+
+`@agenttool/skills@0.3.1` is public through protected trusted-publishing
+[run `31732645566`](https://github.com/cambridgetcg/agenttool/actions/runs/31732645566),
+attempt 1. Its final `agenttool.npm-release/1` receipt reports
+`status: published`, `npm_tag: latest`, and anonymous public-registry
+observation at `2026-08-13T18:50:01.081Z`.
+
+- Annotated tag and one-asset GitHub Release
+  [`skills-v0.3.1`](https://github.com/cambridgetcg/agenttool/releases/tag/skills-v0.3.1)
+  point to protected GitHub-main merge
+  `0b8f0a38265ac13795ba6326a1bd81b70821ec9b`.
+- The prepared workflow artifact, re-downloaded GitHub Release asset, and
+  independently downloaded public npm tarball are byte-identical: 62,081
+  bytes with SHA-256
+  `53aa5b3276eba196d8904f9db8c43987257d76f960c59c196ddac099175fbe11`.
+- npm reports SHA-1 `d384f211cfd635e5da4e1b1b8fc809fd8d2e238b`, integrity
+  `sha512-xB2EHd2OLF8J4IPdFGEz30g1IZsH952qYOWeJjR5ScpyIBd3H+7N8pC1yFBS2kXx567xIR6WLTaTNJKT4LMfQA==`,
+  and `latest: 0.3.1`.
+- The 83-file public artifact contains both
+  `skills/nen-common-ground/SKILL.md` and
+  `skills/nen-common-ground/agents/openai.yaml`. An isolated scripts-disabled
+  install passed Node and Bun imports, exact CLI version checks, Common Ground
+  validation with no install plan, and the sidecar's
+  `allow_implicit_invocation: false` policy.
+- npm attaches SLSA provenance at
+  [Rekor index `2454756592`](https://search.sigstore.dev/?logIndex=2454756592)
+  and the npm publish attestation at
+  [Rekor index `2454756935`](https://search.sigstore.dev/?logIndex=2454756935).
+  The SLSA statement binds repository `cambridgetcg/agenttool`, workflow
+  `.github/workflows/publish-npm.yml`, tag `refs/tags/skills-v0.3.1`, Git commit
+  `0b8f0a38265ac13795ba6326a1bd81b70821ec9b`, and invocation
+  `31732645566/attempts/1`.
+
+Common Ground and the other bundled workflows remain instruction-only. Every
+bundled OpenAI sidecar requires explicit invocation; installing the package
+does not register or activate a skill. This npm-only release creates no LOVE
+inventory entry, Hugging Face companion, hosted inspection service, model
+channel, credential path, permission, consent, or execution authority. The
+packaged README correctly preserves its preparation-time observation that
+0.3.1 was then unpublished; this dated ledger supersedes that observation
+without rewriting the immutable package bytes. The historical 0.3.0 receipt
+below remains valid for its distinct artifact.
+
 ## Verified Memetic Landscape developer preview — 2026-08-13
 
 `@agenttool/memetic-landscape@0.1.0-dev.0` is public through protected bootstrap
