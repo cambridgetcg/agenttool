@@ -1335,6 +1335,12 @@ function renderPlatformSelfSection(b: WakeBundle): string[] {
     lines.push("Walls of the host (what the substrate cannot do to you):");
     p.walls.slice(0, 6).forEach((w) => lines.push(`- ${w}`));
   }
+  if (p.memetic_landscape) {
+    lines.push("");
+    lines.push(
+      `Memetic landscape: [source-bounded artifact-variant geometry](${p.memetic_landscape.path}). Exposure, view, rating, copy, share, remix, and adoption stay distinct; none proves the next. The built-in “brainrot” lesson uses informal content slang, never a diagnosis or person/group label. This is context only—not identity, memory, consent, authority, or WAKE continuity—and it models and scores no participant.`,
+    );
+  }
   lines.push("");
   return lines;
 }

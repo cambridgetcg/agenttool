@@ -88,11 +88,54 @@ Research gives several useful but bounded pieces:
   studies without strong assumptions. Timing and similarity alone are not a
   causal proof.
   [Sociological Methods & Research](https://doi.org/10.1177/0049124111404820)
+- Salganik, Dodds, and Watts found that visible social information made success
+  more unequal and less predictable in one randomized artificial music market.
+  That result concerns its experimental choices and market; popularity still
+  does not become quality, truth, or a universal force.
+  [Science](https://doi.org/10.1126/science.1121066)
+- Leskovec, Backstrom, and Kleinberg tracked quoted phrase variants across a
+  bounded news-and-blog corpus. Their operational clusters help study mutation
+  and timing; they do not prove semantic identity or one complete lineage.
+  [KDD 2009](https://doi.org/10.1145/1557019.1557077)
+- Goel et al. distinguish large-broadcast diffusion from multigeneration
+  diffusion and report a wide structural range in a large Twitter dataset.
+  Popularity and structural virality are therefore not synonyms.
+  [Management Science](https://doi.org/10.1287/mnsc.2015.2158)
+- Huszár et al. compare ranked and reverse-chronological Twitter feeds through
+  a long-running randomized holdback and report content-reach differences in
+  the studied political domain. It is not a result about every platform,
+  recommender, population, content type, or downstream belief.
+  [PNAS](https://doi.org/10.1073/pnas.2025334119)
+- Pennycook, Cannon, and Rand found that prior exposure increased perceived
+  accuracy for headline stimuli in their experiments, with boundary
+  conditions. Repetition is therefore a scoped research lens—not proof that a
+  view becomes belief, harm, identity, or diagnosis.
+  [Journal of Experimental Psychology: General](https://doi.org/10.1037/xge0000465)
 
 The module therefore records evidence posture and alternative explanations on
 every route. It can preserve a reported observation, a modelled hypothesis, a
 randomized result, an official record, or an authored teaching relation without
 quietly promoting one into another.
+
+### One attention lens, not another wire protocol
+
+The static lesson uses this deliberately plain sequence:
+
+```text
+exposed   viewed   rated   copied   shared   remixed   adopted
+   └──── every item is a separate bounded observation ────┘
+```
+
+No item proves the next one. None proves attention, belief, endorsement,
+consent, understanding, truth, quality, identity, continuity, or harm. The
+list is a teaching lens over source-bounded evidence; it is not a fifth package
+format, platform event schema, recommender audit, person model, or causal
+pipeline.
+
+The human page also makes ordinary brakes visible: ignore, mute, unfollow,
+change context, pause, rest, refuse, and leave. Those are participant choices,
+not failed propagation, low scores, polymorph recovery routes, or actions this
+module can take.
 
 ## “Brainrot” without diagnosing anybody
 
@@ -186,11 +229,28 @@ examples, and an inert Hugging Face dataset folder. Package generation does not
 upload, publish, train, infer, moderate, diagnose, contact a provider, read a
 feed, or act on a participant.
 
-Publication remains a separate reviewed operation. npm receives one exact
-tarball through the protected release workflow; Hugging Face receives the exact
-checked-in `hf/dataset/` bytes and is verified again at an immutable Hub
-revision. A static teaching page is a third, read-only surface. None of those
-distribution acts changes the package's runtime authority.
+The annotated
+[`memetic-landscape-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/memetic-landscape-v0.1.0-dev.0)
+prerelease carries one exact 84,079-byte package artifact with SHA-256
+`d9e64b1e1f954c42c24b6f79c0c766b014f32d8a9f13c14370cf7d89d24be4bb`.
+The protected npm bootstrap reached the registry, but its first-package `PUT`
+returned `E404`; no npm version, dist-tag, registry tarball, or registry-bound
+provenance is claimed. Its emitted transparency entry is an orphaned attempt,
+not publication evidence.
+
+The separate public, ungated
+[Hugging Face dataset](https://huggingface.co/datasets/Yu-and-Ai/agenttool-memetic-landscape)
+is pinned to immutable revision
+[`da6a2622dddcf97d69992e3905c5485996f42892`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-memetic-landscape/commit/da6a2622dddcf97d69992e3905c5485996f42892).
+Anonymous readback matched all 13 repository-owned files and 104,343 bytes
+exactly; provider `.gitattributes` was the sole extra. The four authored lesson
+rows remain training-eligible and the landscape, shift, and analogy rows remain
+reference-only. Publication performed no model work or training.
+
+A static teaching page is another read-only surface, and API/WAKE discovery is
+another deployment. Until each has a live readback receipt, source preparation
+does not claim it is deployed. None of these distribution acts changes the
+package's runtime authority.
 
 ## Use and verify
 

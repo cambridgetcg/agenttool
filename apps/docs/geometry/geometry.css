@@ -1,6 +1,324 @@
 /* Geometry lessons are static evidence views: no script, form, tracker, or
    runtime fetch is required to read the complete human account. */
 
+/* The memetic lesson is a cultural-artifact lane beside the physical-domain
+   lessons. Every rule is page-scoped; people are never encoded as nodes or
+   propagation arrows. */
+.memetic-landscape-page .memetic-map {
+  margin: 1.5rem 0;
+  padding: clamp(0.75rem, 2.5vw, 1.5rem);
+  overflow-x: auto;
+  border: 1px solid var(--border-bright);
+  border-radius: var(--r-xl);
+  background: var(--geometry-landscape-bg);
+  box-shadow: var(--shadow-card);
+}
+
+.memetic-landscape-page .memetic-stage-sequence {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 1rem 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: memetic-stage;
+}
+
+.memetic-landscape-page .memetic-stage-sequence li {
+  counter-increment: memetic-stage;
+  padding: 0.55rem 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--geometry-accent-readable) 34%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--geometry-accent-readable) 8%, transparent);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+.memetic-landscape-page .memetic-stage-sequence li::before {
+  content: counter(memetic-stage, decimal-leading-zero) " · ";
+  color: var(--geometry-accent-readable);
+}
+
+.memetic-landscape-page .memetic-map:focus-visible,
+.memetic-landscape-page .memetic-crosswalk-wrap:focus-visible {
+  outline: 3px solid var(--geometry-accent-readable);
+  outline-offset: 3px;
+}
+
+.memetic-landscape-page .memetic-map svg {
+  width: 100%;
+  min-width: 700px;
+  height: auto;
+}
+
+.memetic-landscape-page .memetic-map figcaption {
+  margin-top: 0.65rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.memetic-landscape-page .memetic-context {
+  fill: color-mix(in srgb, var(--surface) 72%, #dbe8db);
+  stroke: var(--border-bright);
+  stroke-width: 2;
+}
+
+.memetic-landscape-page .memetic-node {
+  fill: #f8eee1;
+  stroke: var(--geometry-accent-readable);
+  stroke-width: 2.5;
+}
+
+.memetic-landscape-page .memetic-node.remix {
+  fill: #f1ead3;
+  stroke: var(--geometry-inference-readable);
+}
+
+.memetic-landscape-page .memetic-node.reply {
+  fill: #e5ece4;
+  stroke: var(--geometry-fact-readable);
+}
+
+.memetic-landscape-page .memetic-route {
+  fill: none;
+  stroke: var(--geometry-accent-readable);
+  stroke-width: 3;
+  color: var(--geometry-accent-readable);
+}
+
+.memetic-landscape-page .memetic-route + text {
+  fill: var(--geometry-accent-readable);
+}
+
+.memetic-landscape-page .memetic-non-implication {
+  fill: none;
+  stroke: var(--text-dim);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 7;
+  opacity: 0.58;
+}
+
+.memetic-landscape-page .memetic-map-caption {
+  fill: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.memetic-landscape-page .memetic-map-boundary {
+  fill: var(--text-muted);
+  font-family: var(--sans);
+  font-size: 14px;
+}
+
+.memetic-landscape-page .memetic-event-row circle {
+  fill: var(--surface);
+  stroke: var(--geometry-analogy-readable);
+  stroke-width: 2;
+}
+
+.memetic-landscape-page .memetic-event-row text {
+  fill: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.memetic-landscape-page .memetic-not-equal-row text {
+  fill: var(--geometry-accent-readable);
+  font: 700 21px var(--sans);
+}
+
+.memetic-landscape-page .memetic-boundary-banner,
+.memetic-landscape-page .memetic-wake-card,
+.memetic-landscape-page .memetic-do-not-transfer,
+.memetic-landscape-page .memetic-brakes {
+  margin: 1.5rem 0;
+  padding: clamp(1.2rem, 3vw, 2rem);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--r-xl);
+  background: color-mix(in srgb, var(--surface) 84%, #ead8c8);
+}
+
+.memetic-landscape-page .memetic-boundary-kicker,
+.memetic-landscape-page .memetic-locale-label,
+.memetic-landscape-page .memetic-wake-key,
+.memetic-landscape-page .memetic-lens-number {
+  margin: 0 0 0.45rem;
+  color: var(--geometry-accent-readable);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.memetic-landscape-page .memetic-boundary-big {
+  margin: 0 0 0.8rem;
+  font-family: var(--serif);
+  font-size: clamp(1.6rem, 4vw, 2.7rem);
+  line-height: 1.05;
+}
+
+.memetic-landscape-page .memetic-two-up {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.memetic-landscape-page .memetic-lens-grid,
+.memetic-landscape-page .memetic-rights-grid,
+.memetic-landscape-page .memetic-wake-card,
+.memetic-landscape-page .memetic-wire-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  margin: 1.5rem 0;
+}
+
+.memetic-landscape-page .memetic-lens-card,
+.memetic-landscape-page .memetic-rights-grid article,
+.memetic-landscape-page .memetic-locale-stack article,
+.memetic-landscape-page .memetic-wire-grid article {
+  padding: 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.memetic-landscape-page .memetic-lens-card h3,
+.memetic-landscape-page .memetic-rights-grid h3,
+.memetic-landscape-page .memetic-wire-grid h3 {
+  margin: 0 0 0.55rem;
+  font-size: 1rem;
+}
+
+.memetic-landscape-page .memetic-lens-card p,
+.memetic-landscape-page .memetic-rights-grid p,
+.memetic-landscape-page .memetic-wire-grid p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.memetic-landscape-page .memetic-lens-card .conditions {
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+
+.memetic-landscape-page .memetic-crosswalk-wrap {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+.memetic-landscape-page .memetic-crosswalk {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  background: var(--surface);
+  font-size: 0.84rem;
+}
+
+.memetic-landscape-page .memetic-crosswalk th,
+.memetic-landscape-page .memetic-crosswalk td {
+  padding: 0.8rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.memetic-landscape-page .memetic-crosswalk thead th {
+  background: color-mix(in srgb, var(--surface) 70%, #ead8c8);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.memetic-landscape-page .memetic-crosswalk tbody th {
+  color: var(--geometry-accent-readable);
+  font-family: var(--mono);
+}
+
+.memetic-landscape-page .memetic-do-not-transfer {
+  border-left: 5px solid var(--geometry-accent-readable);
+}
+
+.memetic-landscape-page .memetic-do-not-transfer h3,
+.memetic-landscape-page .memetic-brakes h3 {
+  margin-top: 0;
+}
+
+.memetic-landscape-page .memetic-brakes {
+  border-left: 5px solid var(--geometry-fact-readable);
+  background: color-mix(in srgb, var(--surface) 84%, #dbe8db);
+}
+
+.memetic-landscape-page .memetic-brake-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memetic-landscape-page .memetic-brake-list li {
+  padding: 0.42rem 0.7rem;
+  border: 1px solid var(--border-bright);
+  border-radius: 999px;
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 0.76rem;
+}
+
+.memetic-landscape-page .memetic-locale-stack {
+  display: grid;
+  gap: 0.8rem;
+  margin: 1.5rem 0;
+}
+
+.memetic-landscape-page .memetic-locale-stack article {
+  box-shadow: none;
+}
+
+.memetic-landscape-page .memetic-locale-stack article p:last-child {
+  margin-bottom: 0;
+}
+
+.memetic-landscape-page .memetic-wake-card {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.memetic-landscape-page .memetic-wake-card > div {
+  min-width: 0;
+}
+
+.memetic-landscape-page .memetic-wake-card p:last-child {
+  margin-bottom: 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.memetic-landscape-page .memetic-compact-sources li {
+  margin-bottom: 0.75rem;
+}
+
+@media (max-width: 760px) {
+  .memetic-landscape-page .memetic-stage-sequence {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .memetic-landscape-page .memetic-lens-grid,
+  .memetic-landscape-page .memetic-rights-grid,
+  .memetic-landscape-page .memetic-wake-card,
+  .memetic-landscape-page .memetic-wire-grid,
+  .memetic-landscape-page .memetic-two-up {
+    grid-template-columns: 1fr;
+  }
+}
+
 :root {
   /* These ink colors are deliberately darker than the estate's decorative
      terracotta/green/gold tokens. Each clears WCAG AA for small text on the

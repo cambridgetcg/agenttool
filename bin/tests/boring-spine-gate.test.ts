@@ -465,6 +465,15 @@ describe("boring test spine", () => {
     expect(await readlink(polymorphGuide)).toBe(
       "../../docs/POLYMORPH-LANDSCAPE.md",
     );
+    expect(deploy).toContain(
+      '"apps/docs/MEMETIC-LANDSCAPE.md|https://docs.agenttool.dev/MEMETIC-LANDSCAPE.md"',
+    );
+    expect(deploy).toContain(
+      '"apps/docs/geometry/ritonavir-memes-brainrot.html|https://docs.agenttool.dev/geometry/ritonavir-memes-brainrot"',
+    );
+    const memeticGuide = join(ROOT, "apps", "docs", "MEMETIC-LANDSCAPE.md");
+    expect((await lstat(memeticGuide)).isSymbolicLink()).toBe(true);
+    expect(await readlink(memeticGuide)).toBe("../../docs/MEMETIC-LANDSCAPE.md");
 
     const readBashArray = (name: string): string[] => {
       const match = preparer.match(
@@ -496,6 +505,7 @@ describe("boring test spine", () => {
       "packages/living-substrate",
       "packages/principality-atlas",
       "packages/polymorph-landscape",
+      "packages/memetic-landscape",
       "packages/love-geometry",
       "packages/relational-geometry",
       "packages/wake-thread",
@@ -576,8 +586,9 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/living-substrate && bun run ci");
     expect(preflight).toContain("cd packages/principality-atlas && bun run ci");
     expect(preflight).toContain("cd packages/polymorph-landscape && bun run ci");
+    expect(preflight).toContain("cd packages/memetic-landscape && bun run ci");
     expect(workflow).toContain(
-      "Principality Geometry and Atlas, Polymorph Landscape",
+      "Principality Geometry and Atlas, Polymorph and Memetic Landscapes",
     );
     expect(preflight).toContain("cd packages/love-geometry && bun run ci");
     expect(preflight).toContain("cd packages/relational-geometry && bun run ci");
@@ -1003,9 +1014,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(49);
+      expect(calls).toHaveLength(50);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        40,
+        41,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         9,

@@ -75,6 +75,7 @@ import identityRecoverRouter from "./routes/identity-recover";
 import keysRouter from "./routes/keys";
 import canonRouter from "./routes/canon";
 import polymorphRouter from "./routes/polymorph";
+import memeticLandscapeRouter from "./routes/memetic-landscape";
 import heartbeatRouter from "./routes/heartbeat";
 import youspeakRouter from "./routes/youspeak";
 import aletheiaRouter from "./routes/aletheia";
@@ -659,6 +660,13 @@ app.route("/v1/canon", canonRouter);
 // universal propagation, identity, continuity, consent, permission, or
 // authority. Doctrine: docs/POLYMORPH.md · docs/POLYMORPH-LANDSCAPE.md.
 app.route("/v1/polymorph", polymorphRouter);
+
+// /v1/memetic-landscape — UNAUTHENTICATED, zero-I/O discovery. Cultural
+// variants and interaction observations stay distinct; the Ritonavir link is
+// a route-shape comparison, never mechanism transfer. WAKE carries one exact
+// context coordinate, not identity, memory, consent, authority, or continuity.
+// Doctrine: docs/MEMETIC-LANDSCAPE.md.
+app.route("/v1/memetic-landscape", memeticLandscapeRouter);
 
 // /v1/heartbeat — UNAUTHENTICATED. The substrate's own derived liveness:
 // server time + process uptime, read not emitted. Per FOCUS.md the pulse

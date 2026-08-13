@@ -26,6 +26,18 @@ authority, equality, consensus, one global view, or any hosted computation.
 Ritonavir reachability-shift guide by the same symlink convention. Serving it
 does not reproduce an experiment, establish a polymorph's absence or presence,
 make a pharmaceutical recommendation, run code, or add hosted computation.
+`MEMETIC-LANDSCAPE.md` publishes the adjacent canonical cultural-artifact
+geometry guide. `geometry/ritonavir-memes-brainrot.html` is its inert
+four-language teaching projection. It exposes only the package's four closed
+wires; broader attention research stays a page-only lens. Artifact routes remain
+separate from interaction claims, people are never vectors or scores, the
+built-in “brain rot” case stays cultural slang rather than diagnosis, and the
+Ritonavir link transfers no mechanism. Generic caller prose remains explicitly
+semantically unverified. Its separate public, ungated Hugging Face dataset is
+pinned to immutable revision `da6a2622dddcf97d69992e3905c5485996f42892`;
+all 13 repository-owned files and 104,343 bytes matched anonymous readback,
+with provider `.gitattributes` as the sole extra. That mirror performs no
+training and does not make the static or API surface live.
 `geometry/forms-folds-prions.html` adds one static Cloudflare projection of the
 source-owned KINGDOM Meaning Practice lineage. The exact JSON remains at its
 public mirror; AgentTool does not keep a second structured ledger. The page is a
@@ -148,7 +160,9 @@ CASTLE-OF-UNDERSTANDING.md — symlink to the bounded local Castle bridge guide
 HF-TRAINING-GARDEN.md — symlink to the HF data-selection, WAKE, and Garden boundary guide
 PRINCIPALITY-ATLAS.md — symlink to the finite plural incidence geometry guide
 POLYMORPH-LANDSCAPE.md — symlink to the bounded polymorph-landscape and Ritonavir reachability guide
+MEMETIC-LANDSCAPE.md — symlink to source-bounded cultural variants, reachability shifts, the canonical polymorph analogy, and authored lessons
 geometry/forms-folds-prions.html — static human projection of four distinct state-landscape domains; source JSON stays at the pinned KINGDOM Meaning Practice public mirror
+geometry/ritonavir-memes-brainrot.html — inert four-language cultural-artifact route comparison; page-only attention lenses, visible exit brakes, and no people-as-vectors, diagnosis, mechanism transfer, script, or local graph duplicate
 HF-WAKE-TRAINING.md — symlink to the pre/during-training governance guide
 HF-WAKE-HOST.md — symlink to the exact local HF host boundary guide
 KINGDOM-OS-SDK.md — symlink to the canonical three-surface KINGDOM SDK boundary
@@ -207,7 +221,9 @@ AgentTool Platform
 - `HF-TRAINING-GARDEN.md` — canonical HF data lifecycle and one-way Garden seam, published by symlink
 - `PRINCIPALITY-ATLAS.md` — canonical plural incidence geometry and non-collapse boundaries, published by symlink
 - `POLYMORPH-LANDSCAPE.md` — canonical polymorph reachability and Ritonavir case-study boundaries, published by symlink
+- `MEMETIC-LANDSCAPE.md` — canonical memetic-variant, reachability, analogy, and brain-rot-language boundaries, published by symlink
 - `geometry/forms-folds-prions.html` — static human projection with primary-source links, a pinned HF data door, an all-false control surface, and no local JSON duplicate
+- `geometry/ritonavir-memes-brainrot.html` — static four-language projection with primary-source links, participant brakes, a context-only WAKE coordinate, and no script or local graph duplicate
 - `HF-WAKE-TRAINING.md` / `HF-WAKE-HOST.md` — canonical governance and exact-host boundaries, published by symlink
 - `memory.html` — Most detailed endpoint reference (the flagship service)
 - `tools.html` — Search, scrape, browse, execute, document parsing endpoints

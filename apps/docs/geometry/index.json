@@ -1,7 +1,7 @@
 {
   "_format": "kingdom.geometry.index/1.0",
-  "generated_at": "2026-08-12",
-  "canonical_policy": "Each artifact names its exact source relationship. The Ritonavir module stays a byte-exact mirror of its named source file. Comparative pages point to their source-owned structured home and do not create a second ledger.",
+  "generated_at": "2026-08-13",
+  "canonical_policy": "Each artifact names its exact source relationship. The Ritonavir module stays a byte-exact mirror of its named source file. Comparative pages point to their source-owned structured home and do not create a second ledger. Cultural artifacts remain in a separate non-physical lane whose participants are never modeled as vectors.",
   "modules": [
     {
       "id": "geometry.ritonavir-disappearing-polymorph",
@@ -94,6 +94,63 @@
         "not medical advice, diagnosis, current-product guidance, or a laboratory procedure",
         "no transfer of crystal or prion labels to beings, cultures, software, AI, love, or understanding",
         "no model inference, model training, registry adoption, runtime policy, score, or grant of authority"
+      ]
+    },
+    {
+      "id": "geometry.ritonavir-memes-brainrot",
+      "slug": "ritonavir-memes-brainrot",
+      "title": "Routes, remixes, and brainrot",
+      "schema_version": "agenttool.polymorph-memetic-analogy/0.1",
+      "human_url": "https://docs.agenttool.dev/geometry/ritonavir-memes-brainrot",
+      "source_module_urls": [
+        "https://github.com/cambridgetcg/agenttool/tree/main/packages/memetic-landscape",
+        "https://api.agenttool.dev/v1/memetic-landscape"
+      ],
+      "source": {
+        "factual_home": "AgentTool Memetic Landscape package",
+        "repository": "agenttool",
+        "path": "packages/memetic-landscape",
+        "public_source_url": "https://github.com/cambridgetcg/agenttool/tree/main/packages/memetic-landscape",
+        "correction_url": "https://github.com/cambridgetcg/agenttool/issues",
+        "publication_state": "repository source plus prepared static human projection; API and static availability must be checked independently"
+      },
+      "artifact": {
+        "relationship": "AgentTool publishes an inert multilingual human projection and points to package-owned schemas, examples, and generated Hugging Face assets; the geometry index keeps no duplicate graph"
+      },
+      "content": {
+        "package_sources": 5,
+        "additional_page_sources": 5,
+        "formats": [
+          "agenttool.memetic-landscape/0.1",
+          "agenttool.memetic-reachability-shift/0.1",
+          "agenttool.polymorph-memetic-analogy/0.1",
+          "agenttool.memetic-lesson/0.1"
+        ],
+        "attention_lens": "page_only_not_a_wire",
+        "languages": [
+          "en",
+          "yue-Hant",
+          "zh-Hant",
+          "zh-Hans"
+        ]
+      },
+      "distribution": {
+        "cloudflare_role": "static human projection only",
+        "hugging_face_identifier": "Yu-and-Ai/agenttool-memetic-landscape",
+        "hugging_face_url": "https://huggingface.co/datasets/Yu-and-Ai/agenttool-memetic-landscape",
+        "hugging_face_revision": "da6a2622dddcf97d69992e3905c5485996f42892",
+        "hugging_face_state": "public_ungated_exact_anonymous_readback_13_files_104343_bytes_provider_gitattributes_only_extra",
+        "npm_package": "@agenttool/memetic-landscape",
+        "npm_state": "canonical package identity; registry availability is not claimed by this index"
+      },
+      "boundaries": [
+        "the Ritonavir crossover is a structural route-shape comparison only; no chemical, protein, amyloid, prion, cognitive, or cultural mechanism is transferred or equated",
+        "attention and diffusion research is a teaching lens only and creates no fifth wire",
+        "artifact transformations and interaction words are distinct; exposure does not prove attention, belief, adoption, endorsement, consent, identity, harm, or truth",
+        "brainrot is retained as source-bounded cultural slang in the built-in lesson, never diagnosis, person or group essence, health score, or neurological claim",
+        "participants may ignore, mute, unfollow, change context, pause, rest, refuse, or leave and are never vectors, hosts, infected material, or ranked points",
+        "artifact lineage and content IDs do not establish authorship, licence, identity, memory, consent, or WAKE continuity",
+        "no fetching, tracking, recommender audit, virality prediction, moderation, model inference, training, publication action, deployment action, or authority"
       ]
     }
   ]

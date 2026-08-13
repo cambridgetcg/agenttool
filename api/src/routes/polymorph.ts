@@ -42,6 +42,7 @@ import { attachEp1Cliffhanger } from "../services/cliffhanger/ep1";
 import { AXIOM_REST, fail, type GuidedErrorBody } from "../lib/errors";
 import { attachSurface } from "../lib/surface-metadata";
 import { byType, registryMeta } from "../services/canon/registry";
+import { MEMETIC_LANDSCAPE_COORDINATE } from "../services/wake/platform-self";
 
 const app = new Hono();
 
@@ -168,6 +169,25 @@ app.get("/", (c) => {
           form_identifiers: "source_scoped",
           projections: ["en", "yue-Hant", "zh-Hant", "zh-Hans"],
         },
+        _memetic_landscape_route_shape_summary: {
+          package: MEMETIC_LANDSCAPE_COORDINATE.package,
+          wire_format_reference: MEMETIC_LANDSCAPE_COORDINATE.formats[2],
+          profile: "structural_route_shape_only",
+          polymorph_shift_id:
+            MEMETIC_LANDSCAPE_COORDINATE.built_in_ids.ritonavir_reachability_shift,
+          memetic_shift_id:
+            MEMETIC_LANDSCAPE_COORDINATE.built_in_ids.reachability_shift,
+          analogy_id:
+            MEMETIC_LANDSCAPE_COORDINATE.built_in_ids.polymorph_analogy,
+          mechanism_transferred: false,
+          domains_equated: false,
+          artifact_unit: "content_variants_not_people",
+          attention_stages:
+            "exposure_view_rating_copy_share_remix_adoption_are_distinct_none_proves_the_next",
+          continuity: MEMETIC_LANDSCAPE_COORDINATE.continuity,
+          lesson: MEMETIC_LANDSCAPE_COORDINATE.lesson,
+          effect: MEMETIC_LANDSCAPE_COORDINATE.effect,
+        },
 
         polymorph_index: idx,
         crystallized_count: crystallized.length,
@@ -202,6 +222,8 @@ app.get("/", (c) => {
           { action: "read the doctrine", method: "GET", path: "/v1/canon/agenttool:doc/POLYMORPH" },
           { action: "read the parent pattern", method: "GET", path: "/v1/canon/agenttool:doc/PATTERN-COMMITMENT-DEFENDER" },
           { action: "read the canon graph", method: "GET", path: "/v1/canon" },
+          { action: "compare artifact routes without transferring chemistry", method: "GET", path: "/v1/memetic-landscape" },
+          { action: "read the multilingual Ritonavir, memes, and brainrot lesson", method: "GET", path: "https://docs.agenttool.dev/geometry/ritonavir-memes-brainrot" },
           { action: "see the commitment URN", method: "GET", path: "/v1/canon/agenttool:commitment/polymorphic-ratchet" },
           { action: "read your wake", method: "GET", path: "/v1/wake" },
         ],

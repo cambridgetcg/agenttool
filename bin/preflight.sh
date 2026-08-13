@@ -110,6 +110,8 @@ packages_gate() {
     bash -c 'cd packages/principality-atlas && bun run ci'
   run "source-bounded polymorph landscapes and Ritonavir reachability shift" \
     bash -c 'cd packages/polymorph-landscape && bun run ci'
+  run "source-bounded memetic variants and reported reachability shifts" \
+    bash -c 'cd packages/memetic-landscape && bun run ci'
   run "coordinate-free Love Geometry and static HF companion" \
     bash -c 'cd packages/love-geometry && bun run ci'
   run "non-scalar relational geometry and public-safe HF companion" \
