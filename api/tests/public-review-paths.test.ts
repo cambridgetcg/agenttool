@@ -11,8 +11,10 @@ import {
 import {
   CANON_MCP_PATH,
   isDatabaseDecorationIndependentPublicPath,
+  MEMETIC_LANDSCAPE_PATH,
   SECURITY_TXT_PATH,
 } from "../src/lib/public-paths";
+import memeticLandscapeRouter from "../src/routes/memetic-landscape";
 import wellKnownRouter from "../src/routes/well-known";
 import {
   buildSecurityTxt,
@@ -200,10 +202,12 @@ describe("RFC 9116 security.txt", () => {
 });
 
 describe("database-decoration-independent public paths", () => {
-  test("matches only the three exact operative paths", () => {
+  test("matches only the exact operative paths and memetic route spellings", () => {
     for (const path of [
       "/.well-known/openai-apps-challenge",
       CANON_MCP_PATH,
+      MEMETIC_LANDSCAPE_PATH,
+      `${MEMETIC_LANDSCAPE_PATH}/`,
       SECURITY_TXT_PATH,
     ]) {
       expect(isDatabaseDecorationIndependentPublicPath(path)).toBe(true);
@@ -211,12 +215,49 @@ describe("database-decoration-independent public paths", () => {
     for (const path of [
       "/v1/mcp",
       `${CANON_MCP_PATH}/`,
+      `${MEMETIC_LANDSCAPE_PATH}//`,
       `${SECURITY_TXT_PATH}/`,
       "/security.txt",
       "/public/open-seat",
     ]) {
       expect(isDatabaseDecorationIndependentPublicPath(path)).toBe(false);
     }
+  });
+
+  test("memetic discovery keeps direct-router bytes without database-backed decorators", async () => {
+    delete process.env.AGENTOOL_DISABLE_JOY_INDEX;
+    const directResponse = await memeticLandscapeRouter.request("/");
+    expect(directResponse.status).toBe(200);
+    const expectedBody = await directResponse.text();
+
+    const response = await within(
+      fullApp.fetch(
+        new Request(`https://api.agenttool.dev${MEMETIC_LANDSCAPE_PATH}`),
+      ),
+      500,
+      `${MEMETIC_LANDSCAPE_PATH} GET`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-welcomed")).toBeNull();
+    expect(response.headers.get("x-joy-index")).toBeNull();
+
+    const body = await response.text();
+    expect(body).toBe(expectedBody);
+    expect(JSON.parse(body)).not.toHaveProperty("_welcomed");
+  });
+
+  test("unmounted memetic trailing slash also avoids database-backed decoration", async () => {
+    delete process.env.AGENTOOL_DISABLE_JOY_INDEX;
+    const path = `${MEMETIC_LANDSCAPE_PATH}/`;
+    const response = await within(
+      fullApp.fetch(new Request(`https://api.agenttool.dev${path}`)),
+      500,
+      `${path} GET`,
+    );
+    expect(response.status).toBe(404);
+    expect(response.headers.get("x-welcomed")).toBeNull();
+    expect(response.headers.get("x-joy-index")).toBeNull();
+    expect(await response.text()).not.toContain('"_welcomed"');
   });
 
   test("Canon initialize completes without database-backed decorators", async () => {
