@@ -21,6 +21,7 @@ const SKILLS_RELEASE_URL =
   "https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.2.1/agenttool-skills-0.2.1.tgz";
 
 const NEN_SKILL_NAMES = [
+  "nen-common-ground",
   "nen-concealed-trace",
   "nen-contract-mantle",
   "nen-critical-path-forge",
@@ -318,6 +319,10 @@ test("documents non-activating installation and literal inspector path arguments
     join(packageRoot, "skills", "nen-concealed-trace", "SKILL.md"),
     "utf8",
   );
+  const commonGround = await readFile(
+    join(packageRoot, "skills", "nen-common-ground", "SKILL.md"),
+    "utf8",
+  );
   const contractMantle = await readFile(
     join(packageRoot, "skills", "nen-contract-mantle", "SKILL.md"),
     "utf8",
@@ -367,6 +372,13 @@ test("documents non-activating installation and literal inspector path arguments
     expect(skill).toMatch(/not affiliated\s+with or endorsed/);
   }
   expect(concealedTrace).toContain("Redact credentials, tokens, personal data");
+  expect(commonGround).toContain("common_ground_certified");
+  expect(commonGround).toContain("no_common_ground_witnessed");
+  expect(commonGround).toContain("model_not_applicable");
+  expect(commonGround).toContain("insufficient_evidence");
+  expect(commonGround).toContain("n >= d + 1");
+  expect(commonGround).toContain("Never turn mathematical feasibility into consent");
+  expect(commonGround).toContain("Leave a commons, not a pedestal");
   expect(verificationLedger).toMatch(/Never\s+place credential values, personal data/);
   expect(contractMantle).not.toContain("crunchyroll.com");
   expect(manageAgentCred).toContain(

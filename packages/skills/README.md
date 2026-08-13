@@ -152,13 +152,15 @@ register, activate, install, copy, or execute them:
   transfers the mechanism into an original adaptation with exemplar,
   contrast, and transfer checks.
 
-Version `0.2.1` carries an unofficial, instruction-only Nen operating
-suite. These are original agent workflows inspired by the rule and
-tradeoff design of *Hunter × Hunter*; they reproduce no story text, character
-likenesses, or artwork:
+Current source adds Common Ground to the unofficial, instruction-only Nen
+operating suite. The published `0.3.0` npm and GitHub artifacts contain the
+eight earlier Nen skills and do not contain Common Ground. These are original
+agent workflows inspired by the rule and tradeoff design of *Hunter × Hunter*;
+they reproduce no story text, character likenesses, or artwork:
 
 | Skill | Productive ability | Vow |
 | --- | --- | --- |
+| [`nen-common-ground`](skills/nen-common-ground/SKILL.md) | Find a feasible shared state or a small conflict witness | Never move a boundary to manufacture harmony |
 | [`nen-contract-mantle`](skills/nen-contract-mantle/SKILL.md) | Hold a living task contract through long work | Never let scope drift silently |
 | [`nen-dependency-perimeter`](skills/nen-dependency-perimeter/SKILL.md) | Map a finite blast radius before mutation | The selected field is not the whole system |
 | [`nen-concealed-trace`](skills/nen-concealed-trace/SKILL.md) | Concentrate diagnosis on one hidden seam | Do not generalize beyond the aperture |
