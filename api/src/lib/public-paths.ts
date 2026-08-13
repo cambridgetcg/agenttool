@@ -9,6 +9,7 @@
 import { OPENAI_APPS_CHALLENGE_PATH } from "./domain-verification";
 
 export const CANON_MCP_PATH = "/v1/mcp/canon";
+export const MEMETIC_LANDSCAPE_PATH = "/v1/memetic-landscape";
 export const SECURITY_TXT_ROUTE = "/security.txt";
 export const SECURITY_TXT_PATH = `/.well-known${SECURITY_TXT_ROUTE}`;
 
@@ -18,6 +19,8 @@ export function isDatabaseDecorationIndependentPublicPath(
   return (
     path === OPENAI_APPS_CHALLENGE_PATH ||
     path === CANON_MCP_PATH ||
+    path === MEMETIC_LANDSCAPE_PATH ||
+    path === `${MEMETIC_LANDSCAPE_PATH}/` ||
     path === SECURITY_TXT_PATH
   );
 }
