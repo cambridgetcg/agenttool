@@ -74,7 +74,7 @@ describe("canonical memetic landscape API and WAKE crossover", () => {
         "d9e64b1e1f954c42c24b6f79c0c766b014f32d8a9f13c14370cf7d89d24be4bb",
     });
     expect(body.distribution.npm).toBe(
-      "not_live_first_package_put_returned_e404",
+      "not_live_bootstrap_put_returned_e404_twice",
     );
     expect(body.distribution.hugging_face).toEqual({
       state: "live_exact_public_ungated_companion",

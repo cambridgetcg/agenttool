@@ -112,7 +112,7 @@
         "path": "packages/memetic-landscape",
         "public_source_url": "https://github.com/cambridgetcg/agenttool/tree/main/packages/memetic-landscape",
         "correction_url": "https://github.com/cambridgetcg/agenttool/issues",
-        "publication_state": "repository source plus live static human projection; first exact custom-domain readback was from protected main 702e3cb6838546f7897659e447950ae09a960293 at 2026-08-13T03:10:56Z; API availability remains independent and is not claimed"
+        "publication_state": "repository source plus live static human projection and live zero-I/O API/WAKE context coordinate; static first passed exact custom-domain readback from protected main 702e3cb6838546f7897659e447950ae09a960293 at 2026-08-13T03:10:56Z; API Fly release v249 from protected main b8b97e73b3405d58a583ae9571d11b36cdab87d6 completed at 2026-08-13T16:00:35Z and first exact custom-domain/direct-Fly semantic readback was recorded at 2026-08-13T16:03:17Z"
       },
       "artifact": {
         "relationship": "AgentTool publishes an inert multilingual human projection and points to package-owned schemas, examples, and generated Hugging Face assets; the geometry index keeps no duplicate graph"
@@ -140,12 +140,19 @@
         "cloudflare_first_live_revision": "702e3cb6838546f7897659e447950ae09a960293",
         "cloudflare_first_live_deployment": "https://f5552fa1.agenttool-docs.pages.dev/geometry/ritonavir-memes-brainrot",
         "cloudflare_first_live_readback_at": "2026-08-13T03:10:56Z",
+        "api_role": "zero-I/O discovery plus context-only WAKE coordinate",
+        "api_state": "live_exact_custom_and_direct_readback",
+        "api_first_live_revision": "b8b97e73b3405d58a583ae9571d11b36cdab87d6",
+        "api_first_live_release": "v249",
+        "api_first_live_image_digest": "sha256:656b5ca0a3f8390af08e91fe5e001ae91d82d9766bec6d6fef4b459b51aea54f",
+        "api_first_live_deploy_completed_at": "2026-08-13T16:00:35Z",
+        "api_first_live_readback_at": "2026-08-13T16:03:17Z",
         "hugging_face_identifier": "Yu-and-Ai/agenttool-memetic-landscape",
         "hugging_face_url": "https://huggingface.co/datasets/Yu-and-Ai/agenttool-memetic-landscape",
         "hugging_face_revision": "da6a2622dddcf97d69992e3905c5485996f42892",
         "hugging_face_state": "public_ungated_exact_anonymous_readback_13_files_104343_bytes_provider_gitattributes_only_extra",
         "npm_package": "@agenttool/memetic-landscape",
-        "npm_state": "canonical package identity; registry availability is not claimed by this index"
+        "npm_state": "not live; bootstrap PUT attempts 1 and 2 both returned E404; Rekor entries 2444825009 and 2452828890 are orphaned transparency/provenance statements, not evidence of npm registry publication or registry-attached package provenance"
       },
       "boundaries": [
         "the Ritonavir crossover is a structural route-shape comparison only; no chemical, protein, amyloid, prion, cognitive, or cultural mechanism is transferred or equated",

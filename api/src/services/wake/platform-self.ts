@@ -60,7 +60,7 @@ export const MEMETIC_LANDSCAPE_COORDINATE = Object.freeze({
   lesson: "https://docs.agenttool.dev/geometry/ritonavir-memes-brainrot",
   distribution: Object.freeze({
     github_release: "live_exact_artifact",
-    npm: "not_live_first_package_put_returned_e404",
+    npm: "not_live_bootstrap_put_returned_e404_twice",
     hugging_face: Object.freeze({
       state: "live_exact_public_ungated_companion",
       url: "https://huggingface.co/datasets/Yu-and-Ai/agenttool-memetic-landscape",
