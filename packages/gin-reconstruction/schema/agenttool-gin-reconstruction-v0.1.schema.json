@@ -1,0 +1,478 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:gin-reconstruction:0.1",
+  "title": "AgentTool Gin Reconstruction v0.1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "request_id",
+        "problem_ref",
+        "model",
+        "observations",
+        "boundaries"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "agenttool.gin-reconstruction.request/0.1"
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "problem_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "field_prime",
+            "degree_bound",
+            "report_error_budget",
+            "enumeration_limit",
+            "calibration_model"
+          ],
+          "properties": {
+            "field_prime": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 251
+            },
+            "degree_bound": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 32
+            },
+            "report_error_budget": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 251
+            },
+            "enumeration_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000
+            },
+            "calibration_model": {
+              "const": "affine_exact_two_anchor_per_usable_observation"
+            }
+          }
+        },
+        "observations": {
+          "type": "array",
+          "maxItems": 251,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "observation_id",
+              "substrate_ref",
+              "intervention",
+              "availability",
+              "encoded_output",
+              "calibration",
+              "evidence_ref"
+            ],
+            "properties": {
+              "observation_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+              },
+              "substrate_ref": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "intervention": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 250
+              },
+              "availability": {
+                "enum": [
+                  "usable",
+                  "refused",
+                  "unavailable"
+                ]
+              },
+              "encoded_output": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 250
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "calibration": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "posture",
+                      "encoded_zero",
+                      "encoded_one"
+                    ],
+                    "properties": {
+                      "posture": {
+                        "const": "declared_exact_two_anchor_affine"
+                      },
+                      "encoded_zero": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 250
+                      },
+                      "encoded_one": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 250
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "evidence_ref": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "availability": {
+                      "const": "usable"
+                    }
+                  },
+                  "required": [
+                    "availability"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "encoded_output": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 250
+                    },
+                    "calibration": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "posture",
+                        "encoded_zero",
+                        "encoded_one"
+                      ],
+                      "properties": {
+                        "posture": {
+                          "const": "declared_exact_two_anchor_affine"
+                        },
+                        "encoded_zero": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 250
+                        },
+                        "encoded_one": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 250
+                        }
+                      }
+                    }
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "encoded_output": {
+                      "type": "null"
+                    },
+                    "calibration": {
+                      "type": "null"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "boundaries": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "model",
+            "mismatch",
+            "calibration",
+            "refusal",
+            "truth",
+            "effects"
+          ],
+          "properties": {
+            "model": {
+              "const": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget"
+            },
+            "mismatch": {
+              "const": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof"
+            },
+            "calibration": {
+              "const": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget"
+            },
+            "refusal": {
+              "const": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty"
+            },
+            "truth": {
+              "const": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+            },
+            "effects": {
+              "const": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "receipt_id",
+        "request_id",
+        "problem_ref",
+        "theorem",
+        "outcome",
+        "boundaries"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "agenttool.gin-reconstruction.receipt/0.1"
+        },
+        "receipt_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "problem_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "theorem": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "usable_observations",
+            "refused_erasures",
+            "unavailable_erasures",
+            "evaluation_points_distinct",
+            "parameter_identifiable",
+            "image_minimum_distance",
+            "parameter_separation_distance",
+            "required_usable_observations_for_universal_unique_correction",
+            "universal_unique_correction_guarantee",
+            "guarantee_scope"
+          ],
+          "properties": {
+            "usable_observations": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 251
+            },
+            "refused_erasures": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 251
+            },
+            "unavailable_erasures": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 251
+            },
+            "evaluation_points_distinct": {
+              "const": true
+            },
+            "parameter_identifiable": {
+              "type": "boolean"
+            },
+            "image_minimum_distance": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 251
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "parameter_separation_distance": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 251
+            },
+            "required_usable_observations_for_universal_unique_correction": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "universal_unique_correction_guarantee": {
+              "type": "boolean"
+            },
+            "guarantee_scope": {
+              "enum": [
+                "universal_within_declared_model",
+                "instance_only_or_not_unique"
+              ]
+            }
+          }
+        },
+        "outcome": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "enumeration_space",
+            "estimated_evaluation_work",
+            "resource_wall",
+            "candidates_checked",
+            "candidate_count",
+            "uniqueness_scope",
+            "witness_candidates"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "unique_model_candidate",
+                "multiple_model_candidates",
+                "no_candidate_for_model_and_budget",
+                "resource_refusal"
+              ]
+            },
+            "enumeration_space": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "estimated_evaluation_work": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*$"
+            },
+            "resource_wall": {
+              "enum": [
+                "none",
+                "enumeration_limit",
+                "evaluation_work_ceiling"
+              ]
+            },
+            "candidates_checked": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "candidate_count": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "uniqueness_scope": {
+              "enum": [
+                "universal_within_declared_model",
+                "this_instance_only",
+                "not_unique",
+                "not_determined"
+              ]
+            },
+            "witness_candidates": {
+              "type": "array",
+              "maxItems": 2,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "coefficients",
+                  "incompatible_observation_ids"
+                ],
+                "properties": {
+                  "coefficients": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 33,
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 250
+                    }
+                  },
+                  "incompatible_observation_ids": {
+                    "type": "array",
+                    "maxItems": 251,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "boundaries": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "model",
+            "mismatch",
+            "calibration",
+            "refusal",
+            "truth",
+            "effects"
+          ],
+          "properties": {
+            "model": {
+              "const": "unique_means_only_unique_inside_the_declared_finite_polynomial_model_and_error_budget"
+            },
+            "mismatch": {
+              "const": "candidate_incompatibility_not_corruption_deception_blame_or_falsehood_proof"
+            },
+            "calibration": {
+              "const": "two_anchor_affine_calibration_is_caller_declared_exact_and_outside_the_report_error_budget"
+            },
+            "refusal": {
+              "const": "refused_or_unavailable_reports_are_erasures_not_assent_mismatch_or_participant_penalty"
+            },
+            "truth": {
+              "const": "certificate_does_not_prove_causation_metaphysical_truth_or_complete_reality"
+            },
+            "effects": {
+              "const": "bounded_pure_return_value_with_no_action_publication_retry_network_persistence_or_authority_effect"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
