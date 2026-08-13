@@ -1,0 +1,425 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-memetic-lesson-v0.1.schema.json",
+  "title": "agenttool-memetic-lesson-v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "lesson_id",
+    "source_landscape_id",
+    "source_shift_id",
+    "source_analogy_id",
+    "language",
+    "title",
+    "core_sentence",
+    "concepts",
+    "language_review",
+    "authored_paraphrase",
+    "source_quotation",
+    "diagnostic_claim",
+    "spread_optimization",
+    "participants_scored",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.memetic-lesson/0.1"
+    },
+    "lesson_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "source_landscape_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "source_shift_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "source_analogy_id": {
+      "$ref": "#/$defs/sha"
+    },
+    "language": {
+      "enum": [
+        "en",
+        "yue-Hant",
+        "zh-Hans",
+        "zh-Hant"
+      ]
+    },
+    "title": {
+      "$ref": "#/$defs/text"
+    },
+    "core_sentence": {
+      "$ref": "#/$defs/text"
+    },
+    "concepts": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "ritonavir_route_change"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "variant_not_identity"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "finite_attention"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "context_and_network"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "repetition_not_causation"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "disappearance_not_erasure"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "brainrot_not_diagnosis"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "participants_have_choices"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "metrics_not_truth_or_rank"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "key",
+            "heading",
+            "explanation",
+            "evidence_refs"
+          ],
+          "properties": {
+            "key": {
+              "const": "analogy_boundary"
+            },
+            "heading": {
+              "$ref": "#/$defs/text"
+            },
+            "explanation": {
+              "$ref": "#/$defs/text"
+            },
+            "evidence_refs": {
+              "$ref": "#/$defs/refs"
+            }
+          }
+        }
+      ],
+      "items": false,
+      "minItems": 10,
+      "maxItems": 10
+    },
+    "language_review": {
+      "const": "not_independently_reviewed"
+    },
+    "authored_paraphrase": {
+      "const": true
+    },
+    "source_quotation": {
+      "const": false
+    },
+    "diagnostic_claim": {
+      "const": false
+    },
+    "spread_optimization": {
+      "const": false
+    },
+    "participants_scored": {
+      "const": false
+    },
+    "boundaries": {
+      "$ref": "#/$defs/boundaries"
+    }
+  },
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "token": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,127}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "sourceLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "scope": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "sourceUrl": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^https://(?![^/?#]*@)(?:(?:[A-Za-z0-9._~!$&'()*+,;=:@/?#\\[\\]-])|(?:%[0-9A-Fa-f]{2}))+$",
+      "maxLength": 2048
+    },
+    "refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sha"
+      },
+      "maxItems": 512,
+      "uniqueItems": true
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage",
+        "evidence",
+        "inference",
+        "disappearance",
+        "causation",
+        "adoption",
+        "brainrot",
+        "continuity",
+        "participants",
+        "rights",
+        "analogy",
+        "effect"
+      ],
+      "properties": {
+        "coverage": {
+          "const": "bounded_not_complete"
+        },
+        "evidence": {
+          "const": "source_assertions_not_verified_by_package"
+        },
+        "inference": {
+          "const": "no_inverse_transitive_semantic_or_universal_route_inference"
+        },
+        "disappearance": {
+          "const": "bounded_nonobservation_or_nonreproduction_not_erasure"
+        },
+        "causation": {
+          "const": "timing_exposure_similarity_and_popularity_do_not_establish_causation"
+        },
+        "adoption": {
+          "const": "exposure_view_copy_or_share_does_not_establish_adoption"
+        },
+        "brainrot": {
+          "const": "package_does_not_infer_or_assign_diagnosis_or_person_label"
+        },
+        "continuity": {
+          "const": "content_ids_routes_and_reappearance_do_not_prove_personal_memory_identity_or_continuity"
+        },
+        "participants": {
+          "const": "structured_participant_model_absent_package_does_not_treat_people_as_hosts_vectors_substrates_barriers_or_ranked_objects"
+        },
+        "rights": {
+          "const": "package_does_not_infer_waiver_of_refusal_rest_play_privacy_or_nonparticipation"
+        },
+        "analogy": {
+          "const": "structural_route_shape_only_no_mechanism_transfer"
+        },
+        "effect": {
+          "const": "none"
+        }
+      }
+    }
+  }
+}

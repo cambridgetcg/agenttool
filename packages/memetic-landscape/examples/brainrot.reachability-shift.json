@@ -1,0 +1,49 @@
+{
+  "_format": "agenttool.memetic-reachability-shift/0.1",
+  "adoption_from_exposure": "not_inferred",
+  "before_evidence_refs": [
+    "sha256:ad5bac630bb4a7b1d89f7468657f99f7b0e9165a17c2c984f2f273eb5a1b9f3f"
+  ],
+  "boundaries": {
+    "adoption": "exposure_view_copy_or_share_does_not_establish_adoption",
+    "analogy": "structural_route_shape_only_no_mechanism_transfer",
+    "brainrot": "package_does_not_infer_or_assign_diagnosis_or_person_label",
+    "causation": "timing_exposure_similarity_and_popularity_do_not_establish_causation",
+    "continuity": "content_ids_routes_and_reappearance_do_not_prove_personal_memory_identity_or_continuity",
+    "coverage": "bounded_not_complete",
+    "disappearance": "bounded_nonobservation_or_nonreproduction_not_erasure",
+    "effect": "none",
+    "evidence": "source_assertions_not_verified_by_package",
+    "inference": "no_inverse_transitive_semantic_or_universal_route_inference",
+    "participants": "structured_participant_model_absent_package_does_not_treat_people_as_hosts_vectors_substrates_barriers_or_ranked_objects",
+    "rights": "package_does_not_infer_waiver_of_refusal_rest_play_privacy_or_nonparticipation"
+  },
+  "causation": "not_determined",
+  "changed_context_refs": [
+    "sha256:e431535a0bcabba7e0ab9492b2b961caea21fb8460afd528df5d4ee5207d8ada"
+  ],
+  "changed_context_route_refs": [],
+  "classification": "bounded_reachability_shift_caller_reported",
+  "competing_variant_refs": [],
+  "coverage": "bounded_not_complete",
+  "focus_variant_ref": "sha256:42e23ceb04850f7197216507b99d95bc224f59cbc213310644366547c523ce0b",
+  "landscape_id": "sha256:b014676f0861b5af2b27891383c02d2dface0df717e9dc74e8e7c19f43d9c01c",
+  "later_evidence_refs": [
+    "sha256:73e1974bb18b54683f6f47a610f052f3e8fadd79b6ddfae6f398fc7b5cca31da"
+  ],
+  "mental_health_effect": "not_inferred",
+  "open_question_refs": [
+    "sha256:8db6c47de3a25b875f912becca56a2af86b4b82c5c08ba963cd5eaa011e9814a"
+  ],
+  "outcome": "more_observed",
+  "physical_erasure": "not_claimed",
+  "population_effect": "not_inferred",
+  "prior_context_refs": [
+    "sha256:0de7e37eaa61f1075fbf7eb0192a658f90dffb48acbe4a61a515d356a39504e1"
+  ],
+  "reversibility": "bounded_by_named_contexts",
+  "shift_evidence_refs": [
+    "sha256:4a45603513bfd211520d3a570fbcd4727b787afe8c2e3c34364ca5d1337ed347"
+  ],
+  "shift_id": "sha256:7a2df30cce1145c7833e455ad784c9f23bc8ef7ae040e5ab873255f45e1020aa"
+}

@@ -1,0 +1,51 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "memetic-landscape",
+  "package": "@agenttool/memetic-landscape",
+  "version": "0.1.0-dev.0",
+  "host_contract": "not_registered",
+  "capabilities": [
+    "memetic:compile-landscape",
+    "memetic:compile-reachability-shift",
+    "memetic:compile-polymorph-analogy",
+    "memetic:project-authored-lesson"
+  ],
+  "defaults": {
+    "network": false,
+    "credentials": false,
+    "filesystem": false,
+    "provider_compute": false,
+    "artifact_download": false,
+    "artifact_execution": false,
+    "persistence": false,
+    "model_inference": false,
+    "training": false,
+    "diagnosis": false,
+    "moderation": false,
+    "spread_optimization": false,
+    "publication": false,
+    "deployment": false,
+    "authority": false,
+    "task_state_effect": false,
+    "automatic_retry": false,
+    "automatic_carry": false,
+    "penalty_for_refusal_or_rest": false,
+    "reads_wake_continuity": false,
+    "selects_continuity_head": false,
+    "scores_beings": false,
+    "proves_science": false,
+    "proves_identity": false,
+    "proves_consciousness": false,
+    "proves_consent": false,
+    "proves_dignity": false
+  },
+  "notes": [
+    "This descriptor is a declaration-only source hint, not an installed KINGDOM host contract.",
+    "Caller free text is preserved under caller_text_semantics_verified: false; structural validation is not content moderation or semantic verification.",
+    "A bounded reachability change is not erasure, universal spread, adoption, causation, or a forecast.",
+    "The built-in brainrot case is a sourced cultural label and playful register. The package itself never infers or assigns a diagnosis or person label.",
+    "There is no structured participant model; the package does not infer that people are hosts, vectors, infected material, barriers, defects, or ranked substrates.",
+    "The polymorph crossover transfers only a route-landscape shape; it transfers no physical, biological, cognitive, medical, moral, or authority mechanism.",
+    "The Hugging Face folder is inert generated data. This package does not contact a provider, publish, train, infer, moderate, deploy, or act on a being."
+  ]
+}

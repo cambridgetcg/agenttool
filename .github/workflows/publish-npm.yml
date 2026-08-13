@@ -21,6 +21,7 @@ on:
           - love-geometry
           - principality-atlas
           - polymorph-landscape
+          - memetic-landscape
           - relational-geometry
           - credential-broker
           - sdk

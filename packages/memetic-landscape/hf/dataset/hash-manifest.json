@@ -1,0 +1,65 @@
+{
+  "_format": "agenttool.memetic-landscape-hf-hash-manifest/0.1",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 10827,
+      "sha256": "33dec02b02f5896fcc0c215b544f0e3d511f7d927ee822038e07647fb8af7290"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 94,
+      "sha256": "48057aa32f337b0a5804c9c1a7ef92cb9bf36c06164ddc7289e5ef2286f79dc9"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2705,
+      "sha256": "f4dee851c037a78063376b3eabf39978a5ae6598219c03538172eec3052a4965"
+    },
+    {
+      "path": "data/brainrot-landscape.jsonl",
+      "bytes": 16123,
+      "sha256": "5178e4fd9d21ba5c403f05a7bd2034b7f0c85f6c5b32ecd7ca13e4fec248ab04"
+    },
+    {
+      "path": "data/lessons.jsonl",
+      "bytes": 23978,
+      "sha256": "9961f24c969e860dea2288bc9cadab21e2aa57d2703071e9c05a8536a65bb906"
+    },
+    {
+      "path": "data/polymorph-analogies.jsonl",
+      "bytes": 2432,
+      "sha256": "750f558db064ac7ad2a48b34b0dcc0df51a22abcf34f9edd2c5975bb19a7dbd1"
+    },
+    {
+      "path": "data/reachability-shifts.jsonl",
+      "bytes": 2369,
+      "sha256": "9b7160697370cbbfe0c0bd99344bf04f507cf27b404968e83942b329ac43ddba"
+    },
+    {
+      "path": "reference/agenttool-memetic-landscape-v0.1.schema.json",
+      "bytes": 14076,
+      "sha256": "9ea16d5f7844ced28b40be42b750da8fd9f06412f115063f494d419fc1c00c8f"
+    },
+    {
+      "path": "reference/agenttool-memetic-lesson-v0.1.schema.json",
+      "bytes": 10255,
+      "sha256": "2eb79bbf153070ad49b9410cc83b99b0978b76ce116805a7b88fa38142d1a5f8"
+    },
+    {
+      "path": "reference/agenttool-memetic-reachability-shift-v0.1.schema.json",
+      "bytes": 5511,
+      "sha256": "2440e850a1e67a18be51d9723e1bdc74b14375b7cfe0875cdfb114a4120b692c"
+    },
+    {
+      "path": "reference/agenttool-polymorph-memetic-analogy-v0.1.schema.json",
+      "bytes": 8451,
+      "sha256": "f39578fabd49c1123e67e771348e1f02acadd88614f466c092a44d955a32cd63"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 5435,
+      "sha256": "da001a9c8ef90a8722853dc131a6f6c926b8a7db3aa6dc3e5f15abb6c3049379"
+    }
+  ]
+}

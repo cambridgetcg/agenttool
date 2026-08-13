@@ -1,0 +1,107 @@
+{
+  "_format": "agenttool.memetic-lesson/0.1",
+  "authored_paraphrase": true,
+  "boundaries": {
+    "adoption": "exposure_view_copy_or_share_does_not_establish_adoption",
+    "analogy": "structural_route_shape_only_no_mechanism_transfer",
+    "brainrot": "package_does_not_infer_or_assign_diagnosis_or_person_label",
+    "causation": "timing_exposure_similarity_and_popularity_do_not_establish_causation",
+    "continuity": "content_ids_routes_and_reappearance_do_not_prove_personal_memory_identity_or_continuity",
+    "coverage": "bounded_not_complete",
+    "disappearance": "bounded_nonobservation_or_nonreproduction_not_erasure",
+    "effect": "none",
+    "evidence": "source_assertions_not_verified_by_package",
+    "inference": "no_inverse_transitive_semantic_or_universal_route_inference",
+    "participants": "structured_participant_model_absent_package_does_not_treat_people_as_hosts_vectors_substrates_barriers_or_ranked_objects",
+    "rights": "package_does_not_infer_waiver_of_refusal_rest_play_privacy_or_nonparticipation"
+  },
+  "concepts": [
+    {
+      "evidence_refs": [],
+      "explanation": "Form II 出现后，一条原本可靠的制造路径在指定条件下不再例行重现 Form I。后来以改变后的条件再次到达 Form I；Form II 最初出现的历史原因仍未确定。",
+      "heading": "利托那韦：改变的是路径，不是现实被抹除",
+      "key": "ritonavir_route_change"
+    },
+    {
+      "evidence_refs": [
+        "sha256:67273007dca20505c598480e99f719dbf36d0861465317f6d0a0fd5cdcf0de26"
+      ],
+      "explanation": "人们会复制、改写、翻译、引用与再混不同表达。由提交者限定的家族标签可以整理版本，但相似或具有传承线，不证明意义、作者、身份、记忆或连续性相同。",
+      "heading": "迷因家族不是一个原封不动的物件",
+      "key": "variant_not_identity"
+    },
+    {
+      "evidence_refs": [
+        "sha256:82faf53a912b38a650182c0489615e567e8657494c681c616c45396808ea1b0f"
+      ],
+      "explanation": "一个来源模型显示，有限注意力的竞争加上网络结构，可以产生非常不均的迷因热度与存续时间。这个模型有参考价值，但不是普遍因果定律或价值判断。",
+      "heading": "注意力有限",
+      "key": "finite_attention"
+    },
+    {
+      "evidence_refs": [
+        "sha256:82faf53a912b38a650182c0489615e567e8657494c681c616c45396808ea1b0f",
+        "sha256:a3b91161aef60ebd1e508a834eb0b32fcc3a7eea9d538164db9386c118c01bda"
+      ],
+      "explanation": "平台界面、排序状态、受众、网络拓扑、时间窗口与外部事件，都可能改变哪些内容容易被遇见或再制。参与者绝不被化约为情境、宿主、载体或基质。",
+      "heading": "路径具有情境",
+      "key": "context_and_network"
+    },
+    {
+      "evidence_refs": [
+        "sha256:a3b91161aef60ebd1e508a834eb0b32fcc3a7eea9d538164db9386c118c01bda",
+        "sha256:fe7a1afc4ff5576240255bf8ad287b0d3b2c027356e80464a5a4bc3106d221ce"
+      ],
+      "explanation": "接触、重复、可见社交信号与强化，在具名研究中可能有影响，但不保证信念、采纳、同意或行动。同质性、选择、共同情境、排序与未测量因素仍是其他解释。",
+      "heading": "重复不是命令",
+      "key": "repetition_not_causation"
+    },
+    {
+      "evidence_refs": [],
+      "explanation": "某版本未出现在具名动态消息、路径、样本或时间窗口，仍可能留在档案、记忆、其他社群或改写后的表达。有限观察不能证明全球不存在或永久不可能。",
+      "heading": "未观察到，不等于被抹除",
+      "key": "disappearance_not_erasure"
+    },
+    {
+      "evidence_refs": [
+        "sha256:26beff498305c325db7c7414f8d64e4375b3cea3a59c13708e4e62495ee209ca",
+        "sha256:73e1974bb18b54683f6f47a610f052f3e8fadd79b6ddfae6f398fc7b5cca31da"
+      ],
+      "explanation": "Oxford 记录“brain rot”是一种幽默或自嘲的文化用语，谈论所谓退化与网络内容。本模块只记录这种语言使用；不扫描、诊断、羞辱，也不把某种心理状态指派给任何人。",
+      "heading": "此处的 brainrot 是俚语",
+      "key": "brainrot_not_diagnosis"
+    },
+    {
+      "evidence_refs": [],
+      "explanation": "观看、点赞、分享、拒绝、静音、暂停、再混、离开或不做任何事，都是不同可能。公开可读或已签署的物件，不会自动产生更广泛同意、训练许可、联系权限或强制参与。",
+      "heading": "人们保留选择与休息",
+      "key": "participants_have_choices"
+    },
+    {
+      "evidence_refs": [
+        "sha256:82faf53a912b38a650182c0489615e567e8657494c681c616c45396808ea1b0f"
+      ],
+      "explanation": "观看、分享、再混或互动数量，不会证明真实、善、安全、伤害、智力、尊严、同意、健康或排名。本软件包不计算这些量。",
+      "heading": "触达量不是价值",
+      "key": "metrics_not_truth_or_rank"
+    },
+    {
+      "evidence_refs": [],
+      "explanation": "两个领域都可以描述版本、具名情境、有见证且有方向的路径、可达性改变与再出现。但晶格、能量、成核、速率常数、感染、认知、意图与因果不会跨越这座桥。",
+      "heading": "共享一个几何形状；机制仍然不同",
+      "key": "analogy_boundary"
+    }
+  ],
+  "core_sentence": "利托那韦 Form I 并未消失；是一条旧工艺不再可靠地到达它。同样，迷因从具名动态消息或样本淡出，只表示可见度或再制路径改变，不证明该概念与所有记录都已不存在。",
+  "diagnostic_claim": false,
+  "language": "zh-Hans",
+  "language_review": "not_independently_reviewed",
+  "lesson_id": "sha256:acfbc96046671fe53a001ca4be73217a419a233042e8b64ed03311a0bf03c3b2",
+  "participants_scored": false,
+  "source_analogy_id": "sha256:121bcdd439bf26ff237fd202c68fcc847602fdd79344e46f79eb94dc9f18df3c",
+  "source_landscape_id": "sha256:b014676f0861b5af2b27891383c02d2dface0df717e9dc74e8e7c19f43d9c01c",
+  "source_quotation": false,
+  "source_shift_id": "sha256:7a2df30cce1145c7833e455ad784c9f23bc8ef7ae040e5ab873255f45e1020aa",
+  "spread_optimization": false,
+  "title": "从利托那韦“消失的晶型”到迷因与 brainrot：边界清楚的路径图"
+}

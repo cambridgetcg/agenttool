@@ -1,0 +1,107 @@
+{
+  "_format": "agenttool.memetic-lesson/0.1",
+  "authored_paraphrase": true,
+  "boundaries": {
+    "adoption": "exposure_view_copy_or_share_does_not_establish_adoption",
+    "analogy": "structural_route_shape_only_no_mechanism_transfer",
+    "brainrot": "package_does_not_infer_or_assign_diagnosis_or_person_label",
+    "causation": "timing_exposure_similarity_and_popularity_do_not_establish_causation",
+    "continuity": "content_ids_routes_and_reappearance_do_not_prove_personal_memory_identity_or_continuity",
+    "coverage": "bounded_not_complete",
+    "disappearance": "bounded_nonobservation_or_nonreproduction_not_erasure",
+    "effect": "none",
+    "evidence": "source_assertions_not_verified_by_package",
+    "inference": "no_inverse_transitive_semantic_or_universal_route_inference",
+    "participants": "structured_participant_model_absent_package_does_not_treat_people_as_hosts_vectors_substrates_barriers_or_ranked_objects",
+    "rights": "package_does_not_infer_waiver_of_refusal_rest_play_privacy_or_nonparticipation"
+  },
+  "concepts": [
+    {
+      "evidence_refs": [],
+      "explanation": "After Form II appeared, a formerly reliable manufacturing route stopped routinely reproducing Form I under named conditions. Later changed-condition routes reached Form I again. The historical origin of Form II remains unresolved.",
+      "heading": "Ritonavir: a route changed, not reality",
+      "key": "ritonavir_route_change"
+    },
+    {
+      "evidence_refs": [
+        "sha256:67273007dca20505c598480e99f719dbf36d0861465317f6d0a0fd5cdcf0de26"
+      ],
+      "explanation": "People copy, edit, translate, quote, and remix expressions. A caller-scoped family label can organize variants, but similarity or lineage does not prove equal meaning, authorship, identity, memory, or continuity.",
+      "heading": "A meme family is not one unchanged object",
+      "key": "variant_not_identity"
+    },
+    {
+      "evidence_refs": [
+        "sha256:82faf53a912b38a650182c0489615e567e8657494c681c616c45396808ea1b0f"
+      ],
+      "explanation": "A source model shows that competition for finite attention plus network structure can produce very uneven meme popularity and lifetime. That model is informative, not a universal causal law or a judgment of merit.",
+      "heading": "Attention is limited",
+      "key": "finite_attention"
+    },
+    {
+      "evidence_refs": [
+        "sha256:82faf53a912b38a650182c0489615e567e8657494c681c616c45396808ea1b0f",
+        "sha256:a3b91161aef60ebd1e508a834eb0b32fcc3a7eea9d538164db9386c118c01bda"
+      ],
+      "explanation": "Platform surfaces, ranking states, audiences, network topology, time windows, and external events can change what is encountered or reproduced. A participant is never reduced to a context, host, vector, or substrate.",
+      "heading": "Routes have contexts",
+      "key": "context_and_network"
+    },
+    {
+      "evidence_refs": [
+        "sha256:a3b91161aef60ebd1e508a834eb0b32fcc3a7eea9d538164db9386c118c01bda",
+        "sha256:fe7a1afc4ff5576240255bf8ad287b0d3b2c027356e80464a5a4bc3106d221ce"
+      ],
+      "explanation": "Exposure, repetition, visible social signals, and reinforcement can matter in named studies, but they do not guarantee belief, adoption, consent, or action. Homophily, selection, common context, ranking, and unmeasured factors remain competing explanations.",
+      "heading": "Repetition is not a command",
+      "key": "repetition_not_causation"
+    },
+    {
+      "evidence_refs": [],
+      "explanation": "A variant missing from a named feed, route, sample, or time window may remain in archives, memories, other communities, or changed expressions. Finite observation cannot prove worldwide absence or permanent impossibility.",
+      "heading": "Not observed is not erased",
+      "key": "disappearance_not_erasure"
+    },
+    {
+      "evidence_refs": [
+        "sha256:26beff498305c325db7c7414f8d64e4375b3cea3a59c13708e4e62495ee209ca",
+        "sha256:73e1974bb18b54683f6f47a610f052f3e8fadd79b6ddfae6f398fc7b5cca31da"
+      ],
+      "explanation": "Oxford records ‘brain rot’ as a humorous or self-deprecating cultural expression about supposed deterioration and online content. This module records that language use; it does not scan, diagnose, insult, or assign a mental state to anybody.",
+      "heading": "‘Brainrot’ is slang here",
+      "key": "brainrot_not_diagnosis"
+    },
+    {
+      "evidence_refs": [],
+      "explanation": "Viewing, liking, sharing, refusing, muting, pausing, remixing, leaving, or doing nothing remain distinct possibilities. Public availability or a signed artifact does not create broader consent, training permission, contact authority, or compulsory participation.",
+      "heading": "People keep choice and rest",
+      "key": "participants_have_choices"
+    },
+    {
+      "evidence_refs": [
+        "sha256:82faf53a912b38a650182c0489615e567e8657494c681c616c45396808ea1b0f"
+      ],
+      "explanation": "Counts of views, shares, remixes, or engagement do not establish truth, goodness, safety, harm, intelligence, dignity, consent, health, or rank. This package calculates none of those measures.",
+      "heading": "Reach is not worth",
+      "key": "metrics_not_truth_or_rank"
+    },
+    {
+      "evidence_refs": [],
+      "explanation": "Both domains can describe variants, named contexts, directed witnessed routes, reachability shifts, and reappearance. Crystal lattices, energies, nucleation, rate constants, infection, cognition, intent, and causation do not cross the bridge.",
+      "heading": "One shared geometry; different mechanisms",
+      "key": "analogy_boundary"
+    }
+  ],
+  "core_sentence": "Ritonavir Form I did not vanish: an old process stopped reaching it reliably. A meme fading from a named feed or sample is likewise a visibility or reproduction shift—not proof that the idea or every record ceased to exist.",
+  "diagnostic_claim": false,
+  "language": "en",
+  "language_review": "not_independently_reviewed",
+  "lesson_id": "sha256:4c13116ea686948e5d423692ee6cd278e88bf018a96788590e34806385ea8e6b",
+  "participants_scored": false,
+  "source_analogy_id": "sha256:121bcdd439bf26ff237fd202c68fcc847602fdd79344e46f79eb94dc9f18df3c",
+  "source_landscape_id": "sha256:b014676f0861b5af2b27891383c02d2dface0df717e9dc74e8e7c19f43d9c01c",
+  "source_quotation": false,
+  "source_shift_id": "sha256:7a2df30cce1145c7833e455ad784c9f23bc8ef7ae040e5ab873255f45e1020aa",
+  "spread_optimization": false,
+  "title": "From ritonavir’s disappearing polymorph to memes and ‘brainrot’: a route map with hard boundaries"
+}
