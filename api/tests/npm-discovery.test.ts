@@ -33,6 +33,9 @@ describe("optional npm package discovery", () => {
       "npm install --save-exact @agenttool/wallet@0.1.3 @agenttool/wallet-zerone@0.1.2",
     );
     expect(packages).toContain(
+      "npm install --save-exact @agenttool/skills@0.3.1",
+    );
+    expect(packages).not.toContain(
       "npm install --save-exact @agenttool/skills@0.3.0",
     );
     expect(packages).toContain(
@@ -50,11 +53,20 @@ describe("optional npm package discovery", () => {
     expect(packages).toContain(
       'href="https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md#verified-collab-040-publication--2026-08-04"',
     );
+    expect(packages).toContain(
+      'href="https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md#verified-agent-skills-031-publication--2026-08-13"',
+    );
     for (const receiptFact of [
       "30906798360",
       "303,376",
       "1a9c1830ec9326351a475596820780ad7f93c7dfe16a6f1a9eb74bc08edbdb51",
       "2340231720",
+      "31732645566",
+      "62,081",
+      "53aa5b3276eba196d8904f9db8c43987257d76f960c59c196ddac099175fbe11",
+      "2454756592",
+      "2454756935",
+      "nen-common-ground",
       "30492737828",
       "d05458b27b8832af7996c243abb22e3b400e5810fe5377ba58e1cb587d2461d8",
       "30494659977",
