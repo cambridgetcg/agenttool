@@ -14,16 +14,19 @@ After a package artifact is deliberately installed, its binary is
 `agenttool-skill`. Installation alone does not activate or register the
 bundled skills.
 
-Version 0.3.0 is the current source identity. On 2026-08-01, a separate
-read-only registry check found that the exact npm release and npm `latest`
-both resolved to 0.3.0. Registry tags remain mutable selectors, and an exact
-version is provenance rather than proof of publisher identity or safety.
+Version 0.3.1 is the current source identity. On 2026-08-13, a separate
+read-only registry check found that the last public exact npm release and npm
+`latest` both resolved to 0.3.0. This 0.3.1 source candidate has not been
+tagged, mirrored, or published. Registry tags remain mutable selectors, and
+an exact version is provenance rather than proof of publisher identity or
+safety.
 
 For the checksum-pinned archive recipe below,
 the last public artifact verified while preparing
-it was the 0.2.1 GitHub Release. Its original registry observation was:
-“npm 0.2.1 is unavailable and npm `latest` remains 0.1.0”. That observation is
-historical, not the current registry state.
+it was the 0.3.0 GitHub Release. Its npm counterpart was public and npm
+`latest` resolved to 0.3.0 at that readback. These are preparation-time
+observations, not claims about the future 0.3.1 publication or the mutable
+current registry state.
 Pin and verify the exact artifact before installation:
 
 ```sh
@@ -44,11 +47,11 @@ Pin and verify the exact artifact before installation:
     [ "$actual_checksum" = "$expected_checksum" ]
   }
 
-  archive='agenttool-skills-0.2.1.tgz'
-  expected_sha256='6fc378a4edaa10760095fe8c4655c42798741fa2f5f985a16627368726ceb391'
+  archive='agenttool-skills-0.3.0.tgz'
+  expected_sha256='6526f2bbcaf1ac6025b0cbc5347f2b8836123ef3ed5f5407a98fdb2263497a87'
   curl -q --fail --location \
     --output "$archive" \
-    'https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.2.1/agenttool-skills-0.2.1.tgz' &&
+    'https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.3.0/agenttool-skills-0.3.0.tgz' &&
     verify_sha256 "$archive" "$expected_sha256" &&
     npm install --ignore-scripts --no-audit --no-fund "./$archive" &&
     [ -x ./node_modules/.bin/agenttool-skill ] &&
@@ -152,11 +155,12 @@ register, activate, install, copy, or execute them:
   transfers the mechanism into an original adaptation with exemplar,
   contrast, and transfer checks.
 
-Current source adds Common Ground to the unofficial, instruction-only Nen
-operating suite. The published `0.3.0` npm and GitHub artifacts contain the
-eight earlier Nen skills and do not contain Common Ground. These are original
-agent workflows inspired by the rule and tradeoff design of *Hunter × Hunter*;
-they reproduce no story text, character likenesses, or artwork:
+Version 0.3.1 source adds Common Ground to the unofficial, instruction-only
+Nen operating suite. The published `0.3.0` npm and GitHub artifacts contain
+the eight earlier Nen skills and do not contain Common Ground. These are
+original agent workflows inspired by the rule and tradeoff design of
+*Hunter × Hunter*; they reproduce no story text, character likenesses, or
+artwork:
 
 | Skill | Productive ability | Vow |
 | --- | --- | --- |
@@ -174,7 +178,7 @@ The skills have no script, credential, MCP, network, or hosted-runtime
 requirement. Bundling does not activate them, and their metaphors do not grant
 permission or change AgentTool's existing TypeScript/Python Nen mappings.
 Every bundled OpenAI sidecar requires explicit invocation while trigger and
-composition behavior are evaluated. The 0.2.1 GitHub Release archive has no
+composition behavior are evaluated. The 0.3.0 GitHub Release archive has no
 host installer, plugin manifest, or automatic discovery registration;
 installing the package alone does not register these skills with Codex, Claude,
 or another host.

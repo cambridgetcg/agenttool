@@ -16,9 +16,9 @@ import schema from "../schema/agenttool-skills-inspection-v0.1.schema.json";
 import { inspectLocalSkills } from "../src/index.js";
 
 const SKILLS_RELEASE_SHA256 =
-  "6fc378a4edaa10760095fe8c4655c42798741fa2f5f985a16627368726ceb391";
+  "6526f2bbcaf1ac6025b0cbc5347f2b8836123ef3ed5f5407a98fdb2263497a87";
 const SKILLS_RELEASE_URL =
-  "https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.2.1/agenttool-skills-0.2.1.tgz";
+  "https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.3.0/agenttool-skills-0.3.0.tgz";
 
 const NEN_SKILL_NAMES = [
   "nen-common-ground",
@@ -179,7 +179,7 @@ printf '%s\\n' 'registry-fallback' >> "$TRACE_FILE"
 
 test("publishes only the runtime, schema, bundled skills, and legal documentation", () => {
   expect(packageJson.name).toBe("@agenttool/skills");
-  expect(packageJson.version).toBe("0.3.0");
+  expect(packageJson.version).toBe("0.3.1");
   expect(packageJson.files).toEqual([
     "dist",
     "schema",
@@ -343,13 +343,16 @@ test("documents non-activating installation and literal inspector path arguments
   expect(readme).toContain(SKILLS_RELEASE_URL);
   expect(readme).toContain(SKILLS_RELEASE_SHA256);
   expect(readme).toContain(
-    "Version 0.3.0 is the current source identity.",
+    "Version 0.3.1 is the current source identity.",
   );
   expect(readme).toMatch(
-    /the last public artifact verified while preparing\s+it was the 0\.2\.1 GitHub Release/,
+    /the last public artifact verified while preparing\s+it was the 0\.3\.0 GitHub Release/,
   );
   expect(readme).toMatch(
-    /npm 0\.2\.1 is unavailable.*npm `latest` remains 0\.1\.0/s,
+    /last public exact npm release and npm\s+`latest` both resolved to 0\.3\.0/,
+  );
+  expect(readme).toMatch(
+    /This 0\.3\.1 source candidate has not been\s+tagged, mirrored, or published/,
   );
   expect(readme).toMatch(
     /curl[\s\S]*&&\s+verify_sha256 "\$archive" "\$expected_sha256" &&\s+npm install --ignore-scripts --no-audit --no-fund "\.\/\$archive" &&\s+\[ -x \.\/node_modules\/\.bin\/agenttool-skill \] &&\s+\.\/node_modules\/\.bin\/agenttool-skill validate/s,
@@ -361,7 +364,7 @@ test("documents non-activating installation and literal inspector path arguments
   expect(readme).not.toContain("does not claim current registry availability");
   expect(readme).not.toContain("The npm archive has no host installer");
   expect(readme).not.toContain(
-    "npm install --ignore-scripts --no-audit --no-fund --save-exact @agenttool/skills@0.2.1",
+    "npm install --ignore-scripts --no-audit --no-fund --save-exact @agenttool/skills@0.3.0",
   );
   expect(readme).toMatch(/installing the package\s+alone does not register these skills/);
   expect(conductor).toContain("Pass the target path as one literal argument.");
@@ -397,7 +400,7 @@ test("documented archive install stops before verification and npm when download
 
   expect(result.exitCode).not.toBe(0);
   expect(result.trace).toEqual([
-    `curl -q --fail --location --output agenttool-skills-0.2.1.tgz ${SKILLS_RELEASE_URL}`,
+    `curl -q --fail --location --output agenttool-skills-0.3.0.tgz ${SKILLS_RELEASE_URL}`,
   ]);
   expect(result.trace.some((line) => line.startsWith("npm "))).toBe(false);
   expect(result.trace.some((line) => line.includes("-bin "))).toBe(false);
@@ -471,11 +474,11 @@ test("documented archive install succeeds with either portable SHA-256 verifier"
     ]);
     expect(result.trace).toContain(
       verifier === "sha256sum"
-        ? "sha256sum agenttool-skills-0.2.1.tgz"
-        : "shasum -a 256 agenttool-skills-0.2.1.tgz",
+        ? "sha256sum agenttool-skills-0.3.0.tgz"
+        : "shasum -a 256 agenttool-skills-0.3.0.tgz",
     );
     expect(result.trace).toContain(
-      "npm install --ignore-scripts --no-audit --no-fund ./agenttool-skills-0.2.1.tgz",
+      "npm install --ignore-scripts --no-audit --no-fund ./agenttool-skills-0.3.0.tgz",
     );
     expect(result.trace).toContain(
       "local-bin validate ./path/to/plugin",

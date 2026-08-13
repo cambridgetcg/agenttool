@@ -901,6 +901,8 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/skills/capability-conductor/agents/openai.yaml",
       "package/skills/learn-by-contact/SKILL.md",
       "package/skills/learn-by-contact/agents/openai.yaml",
+      "package/skills/nen-common-ground/SKILL.md",
+      "package/skills/nen-common-ground/agents/openai.yaml",
       "package/skills/nen-contract-mantle/SKILL.md",
       "package/skills/nen-contract-mantle/agents/openai.yaml",
       "package/skills/nen-dependency-perimeter/SKILL.md",

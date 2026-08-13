@@ -290,8 +290,8 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/correspondence-yutabase", "0.1.0-dev.0")).toBe(
       "agenttool-correspondence-yutabase-0.1.0-dev.0.tgz",
     );
-    expect(expectedTag(releaseSpec("skills"), "0.3.0")).toBe("skills-v0.3.0");
-    expect(packedFilename("@agenttool/skills", "0.3.0")).toBe("agenttool-skills-0.3.0.tgz");
+    expect(expectedTag(releaseSpec("skills"), "0.3.1")).toBe("skills-v0.3.1");
+    expect(packedFilename("@agenttool/skills", "0.3.1")).toBe("agenttool-skills-0.3.1.tgz");
     expect(expectedTag(releaseSpec("browser"), "0.6.0")).toBe("browser-v0.6.0");
     expect(packedFilename("@agenttool/browser", "0.6.0")).toBe("agenttool-browser-0.6.0.tgz");
     expect(expectedTag(releaseSpec("repo-archive"), "0.1.0-dev.0")).toBe(
@@ -733,6 +733,8 @@ describe("standard npm release policy", () => {
       "package/skills/capability-conductor/agents/openai.yaml",
       "package/skills/learn-by-contact/SKILL.md",
       "package/skills/learn-by-contact/agents/openai.yaml",
+      "package/skills/nen-common-ground/SKILL.md",
+      "package/skills/nen-common-ground/agents/openai.yaml",
       "package/skills/nen-contract-mantle/SKILL.md",
       "package/skills/nen-contract-mantle/agents/openai.yaml",
       "package/skills/nen-dependency-perimeter/SKILL.md",
