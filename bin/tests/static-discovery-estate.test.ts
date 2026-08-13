@@ -409,6 +409,43 @@ describe("published understanding guides keep canonical source custody", () => {
     ]);
   });
 
+  test("Gin Reconstruction is one canonical, bounded static doctrine surface", () => {
+    const guidePath = join(REPO_ROOT, "apps/docs/GIN-RECONSTRUCTION.md");
+    expect(lstatSync(guidePath).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(guidePath)).toBe(
+      "../../docs/GIN-RECONSTRUCTION.md",
+    );
+
+    expect(headerBlock(
+      read("apps/docs/_headers"),
+      "/GIN-RECONSTRUCTION.md",
+    )).toEqual([
+      "Content-Type: text/markdown; charset=utf-8",
+      "Cache-Control: public, max-age=300, must-revalidate, no-transform",
+      "Access-Control-Allow-Origin: *",
+      "X-Content-Type-Options: nosniff",
+    ]);
+
+    const publicUrl = "https://docs.agenttool.dev/GIN-RECONSTRUCTION.md";
+    expect(sitemapUrls(read("apps/docs/sitemap.xml")).filter(
+      (url) => url === publicUrl,
+    )).toEqual([publicUrl]);
+
+    const llmsEntry = "- [GIN-RECONSTRUCTION.md](https://docs.agenttool.dev/GIN-RECONSTRUCTION.md): Bounded finite-field effect reconstruction with explicit ambiguity, model-and-budget inconsistency, resource refusal, and a non-scoring all-outcomes challenge compass; no truth, motive, rank, or action certificate.";
+    expect(read("apps/docs/llms.txt").split(/\r?\n/).filter(
+      (line) => line === llmsEntry,
+    )).toEqual([llmsEntry]);
+
+    expect(read("apps/docs/index.html")).toContain(
+      '<a href="GIN-RECONSTRUCTION.md"><span class="glyph">∴</span>Gin Reconstruction<span class="sidebar-tag">new</span></a>',
+    );
+
+    const parityPair = '"apps/docs/GIN-RECONSTRUCTION.md|https://docs.agenttool.dev/GIN-RECONSTRUCTION.md"';
+    expect(read("bin/deploy.sh").split(/\r?\n/).map(
+      (line) => line.trim(),
+    ).filter((line) => line === parityPair)).toEqual([parityPair]);
+  });
+
   test("the HF WAKE guides have explicit static markdown custody", () => {
     for (const route of ["/HF-WAKE-TRAINING.md", "/HF-WAKE-HOST.md"]) {
       expect(headerBlock(read("apps/docs/_headers"), route)).toEqual([

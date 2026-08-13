@@ -257,6 +257,7 @@ readonly -a FRONTEND_PARITY_PUBLICATIONS=(
   "apps/docs/GARDENS.md|https://docs.agenttool.dev/GARDENS.md"
   "apps/docs/HF-TRAINING-GARDEN.md|https://docs.agenttool.dev/HF-TRAINING-GARDEN.md"
   "apps/docs/PRINCIPALITY-ATLAS.md|https://docs.agenttool.dev/PRINCIPALITY-ATLAS.md"
+  "apps/docs/GIN-RECONSTRUCTION.md|https://docs.agenttool.dev/GIN-RECONSTRUCTION.md"
   "apps/docs/POLYMORPH-LANDSCAPE.md|https://docs.agenttool.dev/POLYMORPH-LANDSCAPE.md"
   "apps/docs/MEMETIC-LANDSCAPE.md|https://docs.agenttool.dev/MEMETIC-LANDSCAPE.md"
   "apps/docs/geometry/ritonavir.html|https://docs.agenttool.dev/geometry/ritonavir"
