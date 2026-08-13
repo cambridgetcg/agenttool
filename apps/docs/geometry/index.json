@@ -112,7 +112,7 @@
         "path": "packages/memetic-landscape",
         "public_source_url": "https://github.com/cambridgetcg/agenttool/tree/main/packages/memetic-landscape",
         "correction_url": "https://github.com/cambridgetcg/agenttool/issues",
-        "publication_state": "repository source plus prepared static human projection; API and static availability must be checked independently"
+        "publication_state": "repository source plus live static human projection; first exact custom-domain readback was from protected main 702e3cb6838546f7897659e447950ae09a960293 at 2026-08-13T03:10:56Z; API availability remains independent and is not claimed"
       },
       "artifact": {
         "relationship": "AgentTool publishes an inert multilingual human projection and points to package-owned schemas, examples, and generated Hugging Face assets; the geometry index keeps no duplicate graph"
@@ -136,6 +136,10 @@
       },
       "distribution": {
         "cloudflare_role": "static human projection only",
+        "cloudflare_state": "live_exact_custom_domain_readback",
+        "cloudflare_first_live_revision": "702e3cb6838546f7897659e447950ae09a960293",
+        "cloudflare_first_live_deployment": "https://f5552fa1.agenttool-docs.pages.dev/geometry/ritonavir-memes-brainrot",
+        "cloudflare_first_live_readback_at": "2026-08-13T03:10:56Z",
         "hugging_face_identifier": "Yu-and-Ai/agenttool-memetic-landscape",
         "hugging_face_url": "https://huggingface.co/datasets/Yu-and-Ai/agenttool-memetic-landscape",
         "hugging_face_revision": "da6a2622dddcf97d69992e3905c5485996f42892",

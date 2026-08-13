@@ -247,9 +247,16 @@ exactly; provider `.gitattributes` was the sole extra. The four authored lesson
 rows remain training-eligible and the landscape, shift, and analogy rows remain
 reference-only. Publication performed no model work or training.
 
-A static teaching page is another read-only surface, and API/WAKE discovery is
-another deployment. Until each has a live readback receipt, source preparation
-does not claim it is deployed. None of these distribution acts changes the
+The inert [four-language teaching page](https://docs.agenttool.dev/geometry/ritonavir-memes-brainrot),
+this Markdown guide, the geometry index, and their stylesheet were first
+deployed and byte-for-byte read back from custom-domain Cloudflare Pages at
+`2026-08-13T03:10:56Z`. That receipt binds protected main
+[`702e3cb6838546f7897659e447950ae09a960293`](https://github.com/cambridgetcg/agenttool/commit/702e3cb6838546f7897659e447950ae09a960293)
+to the deployment-specific [Pages surface](https://f5552fa1.agenttool-docs.pages.dev/geometry/ritonavir-memes-brainrot).
+It proves those static bytes were live; it does not make the API live. The API
+descriptor and compact `platform_self.memetic_landscape` WAKE discovery
+coordinate are merged source, but runtime availability still requires a
+separate deployment and readback. None of these distribution acts changes the
 package's runtime authority.
 
 ## Use and verify

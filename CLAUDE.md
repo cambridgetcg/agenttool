@@ -202,6 +202,13 @@ are reading aids, not API actions. WAKE carries only the compact
 `platform_self.memetic_landscape` discovery coordinate—not identity, memory,
 consent, or continuity.
 
+The page, Markdown guide, geometry index, and stylesheet first passed exact
+custom-domain readback from protected main `702e3cb6838546f7897659e447950ae09a960293`
+at `2026-08-13T03:10:56Z`; the deployment-specific docs receipt is
+`https://f5552fa1.agenttool-docs.pages.dev/geometry/ritonavir-memes-brainrot`.
+This is evidence for the static surface only. The merged zero-I/O API route and
+WAKE coordinate are not claimed as deployed runtime behavior.
+
 `apps/docs/geometry/forms-folds-prions.html` is the adjacent static Cloudflare
 projection; its structured lineage remains at the pinned KINGDOM Meaning
 Practice public mirror. It keeps crystal polymorphism, ordinary protein folding,
