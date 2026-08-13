@@ -233,14 +233,26 @@ The annotated
 [`memetic-landscape-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/memetic-landscape-v0.1.0-dev.0)
 prerelease carries one exact 84,079-byte package artifact with SHA-256
 `d9e64b1e1f954c42c24b6f79c0c766b014f32d8a9f13c14370cf7d89d24be4bb`.
-The protected npm bootstrap reached the registry twice with the same exact
-84,079-byte artifact, but attempts 1 and 2 both returned `E404` on the package
-`PUT`; no npm version, dist-tag, registry tarball, or registry-bound provenance
-is claimed. Rekor entries `2444825009` and `2452828890` are orphaned
-transparency/provenance statements, not evidence of npm registry publication or
-registry-attached package provenance. Anonymous package and exact-version reads
-remain absent; another retry requires corrected `@agenttool` first-package
-authority.
+The first two protected npm bootstrap attempts reached the registry with that
+same exact artifact but returned `E404` on the package `PUT`. Their Rekor
+entries `2444825009` and `2452828890` remain historical orphaned
+transparency/provenance statements, not evidence that either failed attempt
+published a package.
+
+Protected recovery
+[`31723441034`](https://github.com/cambridgetcg/agenttool/actions/runs/31723441034)
+then published `@agenttool/memetic-landscape@0.1.0-dev.0` with requested npm
+dist-tag `next` and anonymously read back the registry package, exact version,
+and tarball at `2026-08-13T17:05:15.385Z`. The npm tarball is byte-identical to
+the GitHub prerelease asset: 84,079 bytes with SHA-256
+`d9e64b1e1f954c42c24b6f79c0c766b014f32d8a9f13c14370cf7d89d24be4bb`.
+npm exposes both `next` and its sole-version fallback `latest` as
+`0.1.0-dev.0`; that fallback is not a stable-release or maturity claim. The
+registry attaches SLSA provenance at Rekor index
+[`2453445877`](https://search.sigstore.dev/?logIndex=2453445877) and the npm
+publish attestation at index
+[`2453446043`](https://search.sigstore.dev/?logIndex=2453446043). Both bind the
+exact public artifact; they do not widen its runtime authority.
 
 The separate public, ungated
 [Hugging Face dataset](https://huggingface.co/datasets/Yu-and-Ai/agenttool-memetic-landscape)

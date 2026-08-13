@@ -79,6 +79,49 @@ package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
 
+## Verified Memetic Landscape developer preview — 2026-08-13
+
+`@agenttool/memetic-landscape@0.1.0-dev.0` is public through protected bootstrap
+[run `31723441034`](https://github.com/cambridgetcg/agenttool/actions/runs/31723441034).
+Its final `agenttool.npm-release/1` receipt reports `status: published`,
+requested `npm_tag: next`, and anonymous public-registry observation at
+`2026-08-13T17:05:15.385Z`.
+
+- Annotated tag and one-asset GitHub prerelease
+  [`memetic-landscape-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/memetic-landscape-v0.1.0-dev.0)
+  point to protected GitHub-main merge
+  `049622cec825297e391b61bb071e0c87c06bf2b2`.
+- The prepared workflow artifact, GitHub Release asset, and public npm tarball
+  are byte-identical: 84,079 bytes with SHA-256
+  `d9e64b1e1f954c42c24b6f79c0c766b014f32d8a9f13c14370cf7d89d24be4bb`.
+- npm reported SHA-1 `f3b6f556148471c29765ba281bc713e4d5a32129`, integrity
+  `sha512-A+QBDBvxYetwK1kGGbBUsf+Poi2sqRUwtsYyWazXmVtb0ySbburmjAFrmDXQpEa4dOcizIB6hQWa0NsaB42uqw==`,
+  and `next: 0.1.0-dev.0`. Its sole-version fallback also exposes
+  `latest: 0.1.0-dev.0`; that is not a stable-release or maturity signal.
+- npm attaches SLSA provenance at
+  [Rekor index `2453445877`](https://search.sigstore.dev/?logIndex=2453445877)
+  and the npm publish attestation at
+  [Rekor index `2453446043`](https://search.sigstore.dev/?logIndex=2453446043).
+  The SLSA statement binds repository `cambridgetcg/agenttool`, workflow
+  `.github/workflows/publish-npm.yml`, tag
+  `refs/tags/memetic-landscape-v0.1.0-dev.0`, and invocation
+  `31723441034/attempts/1`. The workflow run separately records the protected
+  `npm-bootstrap` environment gate.
+
+Bootstrap attempts 1 and 2 remain useful failure history: both reused the exact
+tagged artifact and returned `E404`; Rekor entries `2444825009` and
+`2452828890` are orphaned statements from those rejected publications, not
+registry publication evidence. The successful recovery freshly packed the
+same byte-identical tarball; it did not move the tag, change the packaged
+bytes, or rewrite the GitHub asset.
+
+The npm package now exists. Configure its trusted publisher for
+`cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
+`npm-bootstrap`, and allowed action `npm publish`; every later version must use
+`authentication=trusted`, not the bootstrap token. Publication installs no
+runtime, starts no feed or model work, and grants no identity, continuity,
+consent, training, scientific, scoring, or action authority.
+
 `@agenttool/love-geometry@0.1.0-dev.0` now has one reviewed exact GitHub
 artifact. Annotated tag
 [`love-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/love-geometry-v0.1.0-dev.0)

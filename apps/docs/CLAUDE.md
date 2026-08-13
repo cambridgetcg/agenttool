@@ -37,7 +37,10 @@ semantically unverified. Its separate public, ungated Hugging Face dataset is
 pinned to immutable revision `da6a2622dddcf97d69992e3905c5485996f42892`;
 all 13 repository-owned files and 104,343 bytes matched anonymous readback,
 with provider `.gitattributes` as the sole extra. That mirror performs no
-training and does not itself make the static or API surface live. Independently,
+training and does not itself make the static or API surface live. The exact
+84,079-byte package is separately public on npm through protected recovery run
+`31723441034`, requested on `next`; npm's sole-version `latest` fallback is not
+a maturity signal. Independently,
 the page, Markdown guide, geometry index, and stylesheet first passed exact
 custom-domain Cloudflare readback from protected main
 `702e3cb6838546f7897659e447950ae09a960293` at `2026-08-13T03:10:56Z`; the
