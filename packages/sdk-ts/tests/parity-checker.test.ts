@@ -53,6 +53,7 @@ describe("SDK parity checker", () => {
       "dark_continent",
       "data",
       "data.sync",
+      "dining",
       "economy",
       "grace",
       "handoff",

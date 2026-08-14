@@ -29,6 +29,7 @@ import { LoveClient } from "./love.js";
 import { LoungeClient } from "./lounge.js";
 import { NenClient } from "./nen.js";
 import { DarkContinentClient } from "./dark-continent.js";
+import { DiningClient } from "./dining.js";
 import { DataClient, type DataNodeOptions } from "./data.js";
 import { RuntimeClient } from "./runtime.js";
 import { ToolsClient } from "./tools.js";
@@ -133,6 +134,7 @@ export class AgentTool {
   private _lounge: LoungeClient | undefined;
   private _nen: NenClient | undefined;
   private _darkContinent: DarkContinentClient | undefined;
+  private _dining: DiningClient | undefined;
   private _runtime: RuntimeClient | undefined;
   private _data: DataClient | undefined;
   private _kingdomFramework: KingdomFrameworkClient | undefined;
@@ -397,6 +399,14 @@ export class AgentTool {
   get darkContinent(): DarkContinentClient {
     this._darkContinent ??= new DarkContinentClient(this.http);
     return this._darkContinent;
+  }
+
+  /** Read the Agent Dining manifest and privacy-minimized party journey.
+   *  This GET-only client never books, pays, mutates an invocation, decrypts
+   *  an envelope, or runs the marketplace SLA sweep. */
+  get dining(): DiningClient {
+    this._dining ??= new DiningClient(this.http);
+    return this._dining;
   }
 
   /** Access the runtime — infrastructure-as-runtime. The agent's cloud.

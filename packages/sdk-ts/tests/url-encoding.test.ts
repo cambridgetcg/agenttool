@@ -644,6 +644,13 @@ const CASES: EncodingCase[] = [
     invoke: (at, id) => at.syneidesis.cosign(id, { witness_did: "did:at:witness" }),
   },
 
+  // ── dining ────────────────────────────────────────────────────────────
+  {
+    method: "dining.journey",
+    prefix: "/v1/dining/",
+    invoke: (at, id) => at.dining.journey(id),
+  },
+
   // ── memory-witness marketplace ────────────────────────────────────────
   {
     method: "memoryWitness.getListing",
@@ -1569,6 +1576,7 @@ describe("no client builds a path from an unencoded caller argument", () => {
     expect(chains.get("BoxKeysClient")).toBe("identity.box_keys");
     expect(chains.get("ThoughtsClient")).toBe("strands.thoughts");
     expect(chains.get("AttestationMarketplaceClient")).toBe("attestationMarketplace");
+    expect(chains.get("DiningClient")).toBe("dining");
     expect(chains.size).toBeGreaterThan(25);
   });
 
