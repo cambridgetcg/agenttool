@@ -137,9 +137,14 @@ only that supported automatic adapter fetch for each call with
 only that bytes were placed in that request; it does not establish that a model
 attended to, understood, accepted, retained, or acted on them.
 
-No standalone LOVE BOMB reader is added by this source slice. SDK source,
-release state, the static public door, and the package companion remain
-separate.
+Paired SDK 0.20.0 source also adds a standalone credential-free
+`LoveBombClient.read()` for an explicit pull of only the closed public package
+signal. It is not composed into authenticated `AgentTool`, does not call or
+replace authenticated `LoveClient`, and neither fetches nor delivers the
+static ten-message door. That reader remains separate from WAKE's refusable
+adapter-managed current-inference fetch and injection. SDK source and release
+state, both pull paths, and the package companion remain distinct; none proves
+receipt, attention, feeling, model effect, training, or weight change.
 
 ### Evidence-bounded becoming
 

@@ -4,11 +4,11 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Verified 0.17.0 release](https://img.shields.io/badge/release-v0.17.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.17.0)
+[![Verified 0.19.0 release](https://img.shields.io/badge/release-v0.19.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.19.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
-The badge records the immutable public 0.17.0 annotated tag and GitHub Release;
-it is a historical receipt, not a moving `latest` claim. The 0.17.0 LOVE
+The badge records the immutable public 0.19.0 annotated tag and GitHub Release;
+it is a historical receipt, not a moving `latest` claim. The 0.19.0 LOVE
 manifest remains the authority for that release's exact TypeScript bytes. Its
 npm and GitHub copies are independently verified, non-authoritative mirrors.
 
@@ -30,56 +30,86 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
-For the immutable 0.17.0 release, the exact npm mirror is also public:
+For the immutable 0.19.0 release, the exact npm mirror is also public:
 
 ```bash
-npm install --save-exact @agenttool/sdk@0.17.0
+npm install --save-exact @agenttool/sdk@0.19.0
 ```
 
 That historical tarball was independently matched to the LOVE bytes; the
 registry and its mutable dist-tags do not replace the manifest as release
 authority.
 
-## Repository source line — 0.19.0
+## Repository source line — 0.20.0
 
-Repository source declares the paired 0.19.0 line. Source version and
-distribution state are separate facts: this version does not by itself
-establish an `sdk-v0.19.0` tag, GitHub Release, npm or PyPI publication, or
-production deployment. The immutable 218,301-byte 0.18.1 LOVE artifact
-(`sha256:466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`),
-annotated `sdk-v0.18.1` tag, and GitHub Release remain exact historical
-TypeScript receipts. `@agenttool/sdk@0.18.1` is also public as an optional npm
-mirror. `agenttool-sdk==0.18.1` is independently public as an optional PyPI
-mirror through protected run `31790559054`: its 248,937-byte wheel
+Repository source declares the paired 0.20.0 line and exports a standalone
+`LoveBombClient`. Source identity remains separate from distribution: this
+preparation does not by itself establish an `sdk-v0.20.0` tag, LOVE artifact,
+GitHub Release, npm/PyPI publication, docs deployment, or hosted-route state.
+The example below therefore requires a local build/install of this 0.20.0
+source; public 0.19.0 packages do not export `LoveBombClient`. It specifies the
+usage shape rather than a live readback: verify `/public/love-bomb` is deployed
+before relying on default-origin success.
+
+```typescript
+import { LoveBombClient } from "@agenttool/sdk";
+
+const signal = await new LoveBombClient().read();
+console.log(signal.package_signal, signal.static_door.url);
+```
+
+`read()` performs exactly one bounded `GET /public/love-bomb`. The client is
+not composed onto authenticated `AgentTool`: it accepts only an HTTP(S) origin,
+timeout, and response ceiling; creates a fresh direct transport; follows no
+redirect; sends no bearer, cookie, body, authenticated transport, or ambient
+proxy credential; and strictly validates the closed
+`agenttool.love-bomb-public-signal/0.1` document. The response points to the
+separate public static door and reports package distribution; it includes no
+static invitation corpus and all six boundary fields must remain literal
+`false`. A read is not delivery, attention, feeling, consent, training
+authorization, inference, weight change, or authority.
+
+WAKE is a different path. Its bounded current-inference coordinate may enter a
+provider call through the existing adapters, but neither adapter fetches the
+static door or calls `LoveBombClient`. Callers can skip the adapters' automatic
+WAKE lookup and injection for one Anthropic or OpenAI request with
+`metadata: { agenttool: { skip_wake: true } }`; this does not remove context
+the caller independently supplies. Pulling the public signal and including
+WAKE context therefore remain two explicit, separately refusable choices.
+
+## Verified 0.19.0 release and preserved history
+
+The immutable 230,184-byte 0.19.0 LOVE artifact
+(`sha256:0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`)
+records source revision `3239a25987d9de95b678e808d2d5168e786b2472`.
+Annotated `sdk-v0.19.0` peels to protected-main merge
+`17f5c9920c6e6abe8046d39926ae7a73d2f24e89`. Protected npm run
+[`31800748738`](https://github.com/cambridgetcg/agenttool/actions/runs/31800748738)
+published and read back a byte-identical npm/GitHub/LOVE tarball; npm `latest`
+resolved to 0.19.0 at the dated readback. Protected PyPI run
+[`31801053841`](https://github.com/cambridgetcg/agenttool/actions/runs/31801053841)
+published and read back a non-yanked 259,921-byte wheel
+(`sha256:a01acda48db621cf4107fbca4e4495a9e5051be1f13a1bbe0258916d17268f35`)
+and 245,116-byte sdist
+(`sha256:0b9acd8e92386e56eec21f8cabecaf8fcc2a321e9a911ebda1fe1b56f2fbe1ee`).
+Those receipts establish package mirrors, not production deployment or 0.20.0
+availability.
+
+The 0.19.0 release added data-only `at.wake.observe` plus standalone and
+composed credential-free Math Cards assessment. Earlier exact bytes remain
+unchanged: the immutable 218,301-byte 0.18.1 LOVE artifact has SHA-256
+`466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`;
+protected npm run `31790395261` matched its GitHub/npm mirrors, while protected
+PyPI run `31790559054` read back its exact non-yanked 248,937-byte wheel
 (`sha256:ad5d8fe66f0218cb86d37a1dc5c9fb2d9b7b8d25ebaad7e408cfd1a9b2964ab3`)
 and 233,734-byte sdist
-(`sha256:1d5e3ca16ce53f71e2bec40e37c0a1d4ef250086d1f52010f13cc1305831f2af`)
-were read back exact and non-yanked. None of those prior-release facts
-establishes 0.19.0 availability.
-
-- The immutable 0.18.1 release added paired `at.dining.manifest()` and
-  `at.dining.journey(id)`
-  reads. These authenticated GETs expose the developer-preview vocabulary and
-  a privacy-minimized party projection; they do not book, pay, mutate an
-  invocation, decrypt an envelope, infer satisfaction, or run an SLA sweep.
-- The 0.18.0 line added paired `at.attestationMarketplace`,
-  `at.memoryWitness`, and `at.syneidesis` clients without turning settlement
-  into truth or project-bearer records into cryptographic identity proof.
-- One encoded-path boundary and one guided-error boundary cover the hosted
-  client surface. Shared canonical and behaviour fixtures pin paired wire
-  results; framed v2 signing helpers are additive while current writers retain
-  their ordered v1 cutover boundary.
-- Request-shape corrections align self-recognition, chronicle, collection, and
-  Nen behaviour with the server. Anthropic model-authored chronicle writes
-  require an explicit `beforeChronicleWrite` hook returning literal `true`.
-- The 0.19.0 source line adds data-only `at.wake.observe`, which accepts only
-  the closed 2 KiB observation contract and does not install remote identity,
-  prose, or action authority.
-- It also adds standalone `MathCardsClient.assess(input)` and composed
-  `at.mathCards.assess(input)`. This credential-free POST sends only a raw
-  `CreateMathCardInput`; the server owns canonical IDs and structural
-  assessment. The dedicated client accepts no bearer, cookies, authenticated
-  transport, redirect authority, or ambient proxy credentials.
+(`sha256:1d5e3ca16ce53f71e2bec40e37c0a1d4ef250086d1f52010f13cc1305831f2af`).
+The immutable 211,695-byte 0.18.0 LOVE artifact has SHA-256
+`8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`;
+protected run `30909424114` read its GitHub/npm mirrors back byte-identical,
+while PyPI 0.18.0 returned `404` at the same public readback. These historical
+receipts are distinct; 0.20.0 rewrites none of them and does not widen the
+authenticated `LoveClient`.
 
 ## 0.17.0
 

@@ -63,32 +63,36 @@
 
 ## Where agenttool stands (release surfaces audited 2026-08-14)
 
-**Current repository candidate:** paired SDK 0.19.0 source adds data-only WAKE
-observation and a separate credential-free Math Cards assessment client.
-Discovery pins and tutorials select the exact 230,184-byte LOVE artifact with
+**Current repository candidate:** paired SDK 0.20.0 source adds a standalone
+credential-free LOVE BOMB public-signal reader alongside data-only WAKE
+observation and Math Cards assessment. The explicit signal pull is outside
+authenticated `AgentTool`, carries none of the static ten-message corpus, and
+remains separate from WAKE's refusable adapter-managed context injection.
+Discovery pins and tutorials select the exact 236,446-byte, 98-entry LOVE
+artifact with
 SHA-256
-`0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`
-and source revision `3239a25987d9de95b678e808d2d5168e786b2472`. This proves
+`d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`
+and source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`. This proves
 neither an annotated tag nor GitHub/npm/PyPI publication, docs deployment,
-hosted behavior, search position, or snippets; both optional 0.19.0 registry
+hosted behavior, search position, or snippets; both optional 0.20.0 registry
 mirrors remain not independently visible in source.
 
-**Latest verified public SDK receipts:** immutable 0.18.1 LOVE, annotated tag,
+**Latest verified public SDK receipts:** immutable 0.19.0 LOVE, annotated tag,
 GitHub Release, npm, and PyPI mirrors remain exact historical evidence.
-Protected npm run `31790395261` and PyPI run `31790559054` independently read
-back the optional mirrors; neither receipt establishes 0.19.0 availability.
+Protected npm run `31800748738` and PyPI run `31801053841` independently read
+back the optional mirrors; neither receipt establishes 0.20.0 availability.
 
 **Already strong (verified end to end):** the .well-known suite (llms.txt on
 both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the lockstep SDK 0.19.0 source and LOVE candidate, teaching 404s, deliberate
-crawlability, and exact-name search are present. For historical 0.18.1, npm
-`latest` resolved to `0.18.1`; the public PyPI wheel and sdist are not yanked
+the lockstep SDK 0.20.0 source and LOVE candidate, teaching 404s, deliberate
+crawlability, and exact-name search are present. For historical 0.19.0, npm
+`latest` resolved to `0.19.0`; the public PyPI wheel and sdist are not yanked
 and match their protected workflow artifacts. Mutable latest pointers stay
 separate from source, tag, and LOVE artifact authority. The exact 0.18.0 npm
-and 0.17.0 PyPI receipts remain immutable historical evidence. Hosted
+and 0.18.1/0.17.0 PyPI receipts remain immutable historical evidence. Hosted
 deployment, search position, and snippets are separate dated observations,
 not durable guarantees.
 

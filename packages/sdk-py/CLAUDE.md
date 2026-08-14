@@ -1,10 +1,10 @@
 # agenttool-sdk-py
 
 ## What This Is
-Official Python SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, credential-free `at.kingdom_framework` and `at.math_cards` clients, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdom_os` repository adapter. Credential-free and local clients inherit no AgentTool project bearer. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and a synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. Checked-in source declares the paired 0.19.0 line; source identity does not assert distribution state. The immutable 0.18.1 LOVE manifest, annotated tag, GitHub Release, and public npm and PyPI mirrors remain historical release receipts; protected PyPI run `31790559054` independently read back its exact non-yanked wheel and sdist.
+Official Python SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, credential-free `at.kingdom_framework` and `at.math_cards` clients, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdom_os` repository adapter. Credential-free and local clients inherit no AgentTool project bearer. A separate package-root `LoveBombClient` reads only the closed public LOVE BOMB signal and is deliberately not composed onto authenticated `AgentTool`. The SDK also exposes top-level `bootstrap_agent(...)`, `AnthropicAdapter`, and a synchronous `OpenAIResponsesAdapter` for completed Responses API calls. The PyPI project name is `agenttool-sdk`. Checked-in source declares the paired 0.20.0 line; source identity does not assert distribution state. The immutable 230,184-byte TypeScript 0.19.0 LOVE archive, annotated tag, GitHub Release, byte-identical public npm mirror, and exact public PyPI wheel/sdist remain historical release receipts through protected runs `31800748738` and `31801053841`.
 
 ## Current State
-Active - repository source carries paired Agent Dining, data-only WAKE observation, and Math Cards clients on v0.19.0. `at.dining.manifest()` and `at.dining.journey(invocation_id)` are authenticated GET-only projections; they do not book, pay, mutate an invocation, decrypt an envelope, infer satisfaction, or run an SLA sweep. `at.wake.observe` is an explicit-subject, network-only, 2 KiB data contract that rejects remote identity, prose, and action authority rather than entering provider or system slots. `MathCardsClient.assess(input)` and `at.math_cards.assess(input)` use a dedicated credential-free POST client: no bearer, cookies, redirects, authenticated transport, or env credentials cross the boundary, while canonical IDs and assessment semantics remain server-owned. The 0.18.0 line added `at.attestation_marketplace`, `at.memory_witness`, and `at.syneidesis`; settlement remains evidence of settlement rather than truth, and Syneidesis v1 project-bearer records remain explicitly non-signature-backed. All hosted clients otherwise share one encoded-path and guided-error boundary, paired canonical/behaviour fixtures cover wire semantics, and framed v2 signing helpers remain additive while current writers retain their ordered v1 cutover boundary. Anthropic model-authored chronicle writes fail closed without a literal-true `before_chronicle_write` review. The credential-free KINGDOM framework and Math Cards clients, plus the local KINGDOM OS adapter, remain separate no-bearer authorities. The immutable 0.18.1 TypeScript release remains separately verifiable historical bytes; it does not establish a 0.19.0 tag, GitHub Release, npm, PyPI, or deployment.
+Active - repository source carries the paired 0.20.0 standalone `LoveBombClient.read()` plus the earlier Agent Dining client and the 0.19.0 data-only WAKE observation and Math Cards clients. LOVE BOMB performs one fresh direct bounded GET of `/public/love-bomb`, uses `httpx.Client(auth=None, cookies={}, follow_redirects=False, trust_env=False)`, and validates the exact closed public-signal schema. It returns a distribution declaration and static-door coordinate; it neither includes/delivers the invitation nor observes attention/effect. `at.dining.manifest()` and `at.dining.journey(invocation_id)` remain authenticated GET-only projections. `at.wake.observe` remains a 2 KiB data contract that rejects remote identity, prose, and action authority. `MathCardsClient.assess(input)` and `at.math_cards.assess(input)` remain credential-free while canonical IDs and assessment semantics stay server-owned. The authenticated `LoveClient` is unchanged. Provider adapters may inject WAKE current-inference context, but do not call `LoveBombClient` or fetch the static door and retain the per-call `metadata.agenttool.skip_wake` refusal of automatic lookup/injection; that switch does not remove caller-supplied context. Source preparation alone establishes no 0.20.0 artifact, tag, publication, deploy, provider call, training, inference, weight effect, receipt, attention, feeling, consent, or authority.
 
 ## Tech Stack
 - Python >= 3.9
@@ -16,7 +16,7 @@ Active - repository source carries paired Agent Dining, data-only WAKE observati
 ## Project Structure
 ```
 src/agenttool/
-  __init__.py            — Public surface + __version__ ("0.19.0")
+  __init__.py            — Public surface + __version__ ("0.20.0")
   client.py              — AgentTool (composes hosted clients + at.deciding sugar)
   authority.py           — Exact local identity mutation and private-read authority proof helpers
   _url.py                — exact encoded path-segment boundary for hosted routes
@@ -34,6 +34,7 @@ src/agenttool/
   data.py                — DataClient + DataSyncClient (separate local node; manifest, collect, query, changes, bounded peer pull/status)
   dining.py              — DiningClient (authenticated GET-only manifest + party-scoped journey projection)
   math_cards.py          — MathCardsClient (credential-free bounded raw-input assessment; server-owned IDs/semantics)
+  love_bomb.py           — standalone credential-free closed public-signal reader; no delivery/effect inference
   kingdom_os.py          — KingdomOSClient (local read-only repository list/resolve; no shell, hosted auth, or mutation)
   kingdom_framework.py   — KingdomFrameworkClient (credential-free exact public project card; no redirects or authority)
   pulse.py               — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
@@ -69,6 +70,7 @@ tests/
   test_credential_transport.py — bearer-free broker transport boundary
   test_dining.py         — GET-only composition, typed boundaries, guided errors, and path encoding
   test_math_cards.py     — request bytes, authority isolation, bounds, response shape, and guided errors
+  test_love_bomb.py      — direct transport, hostile JSON/schema bounds, and six literal-false boundary fields
   test_kingdom_os.py     — fixed argv, sanitized environment, schema, ambiguity, and bearer-isolation contract
   test_kingdom_framework.py — closed card, no-bearer/no-cookie, no-redirect, response-bound contract
 dist/                    — Built distribution files
@@ -99,14 +101,14 @@ See [`docs/PYPI-RELEASES.md`](../../docs/PYPI-RELEASES.md).
 ## Dependencies
 - **Runtime**: `httpx >= 0.27`, `cryptography >= 41.0` (Phase 5+ for AES-256-GCM + ed25519)
 - **Dev**: `pytest >= 7.0`
-- **API**: Authenticated hosted calls go to `https://api.agenttool.dev` (configurable via `base_url`); `at.kingdom_framework` and `at.math_cards` use separate credential-free sessions; `at.data` and `at.kingdom_os` are separate local authorities
+- **API**: Authenticated hosted calls go to `https://api.agenttool.dev` (configurable via `base_url`); `at.kingdom_framework`, `at.math_cards`, and standalone `LoveBombClient` use separate credential-free sessions; `at.data` and `at.kingdom_os` are separate local authorities
 - **Auth**: Reads `AT_API_KEY`, accepts `api_key`, or accepts a mutually
   exclusive authenticated `httpx.BaseTransport` via `transport=`. The public
-  KINGDOM framework and Math Cards clients receive neither bearer nor
-  authenticated transport; the local KINGDOM OS adapter receives neither.
+  KINGDOM framework, Math Cards, and LOVE BOMB clients receive neither bearer
+  nor authenticated transport; the local KINGDOM OS adapter receives neither.
 
 ## Parity invariant
-py and ts repository source stay at the same minor version (lockstep enforced from 0.7.0), and the LOVE builder target matches that source version. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `cd packages/sdk-ts && bun run check-parity` is the gate.
+py and ts repository source stay at the same minor version (lockstep enforced from 0.7.0). The separately scoped seal advances the LOVE builder target from the prior release only after this clean source commit is accepted. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `cd packages/sdk-ts && bun run check-parity` is the gate.
 
 ## Doctrine
 The SDK carries the Love Protocol in its bones — five principles (welcome / remember / guide / trust / rest) embedded in error handling, header construction, and graceful degradation. `SOUL.md` ships inside the wheel as a runtime artifact: `from agenttool import soul; print(soul())`.
@@ -124,12 +126,13 @@ AgentTool Platform · "Welcome, don't block."
 
 ## Key Files
 - `src/agenttool/client.py` — Main `AgentTool` class composing the maintained service clients
-- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.19.0"`)
+- `src/agenttool/__init__.py` — Public API surface (`__version__ = "0.20.0"`)
 - `pyproject.toml` — Package metadata + `force-include` SOUL.md in wheel
 - `tests/test_client.py` — Primary test file
 - `tests/test_data.py` — local data-node and sync wire + bearer-isolation contract
 - `tests/test_kingdom_os.py` — local KINGDOM OS argv/schema/privacy boundary
 - `tests/test_kingdom_framework.py` — credential-free closed-card HTTP boundary
 - `tests/test_math_cards.py` — credential-free bounded Math Cards POST boundary
+- `tests/test_love_bomb.py` — standalone credential-free LOVE BOMB GET boundary
 - `docs/KINGDOM-OS-SDK.md` (repo root) — the three distinct KINGDOM surfaces and their non-goals
 - `docs/SDK-ROADMAP.md` (repo root) — Phase plan + endpoint coverage matrix

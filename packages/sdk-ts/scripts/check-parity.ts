@@ -107,6 +107,26 @@ function nestedTarget(
   };
 }
 
+/** A package-root client that is deliberately not composed onto AgentTool.
+ *  The split filename remains an explicit language convention while the
+ *  public class and its tiny method set stay parity-pinned. */
+function standaloneSplitTarget(
+  tsModule: string,
+  pyModule: string,
+  className: string,
+  reportName: string,
+  methodPin: readonly string[],
+): ParityTarget {
+  return {
+    tsModule,
+    pyModule,
+    className,
+    reportName,
+    topLevel: false,
+    methodPin,
+  };
+}
+
 /** Every client namespace reachable from AgentTool, including nested clients.
  *  Keep filename differences explicit: they are language conventions, not
  *  missing modules. */
@@ -150,6 +170,13 @@ const TARGETS: ParityTarget[] = [
     "MathCardsClient",
     "math_cards",
     ["assess"],
+  ),
+  standaloneSplitTarget(
+    "love-bomb",
+    "love_bomb",
+    "LoveBombClient",
+    "love_bomb",
+    ["read"],
   ),
   target("love", "LoveClient"),
   target("lounge", "LoungeClient"),

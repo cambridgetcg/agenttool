@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { gunzipSync } from "node:zlib";
 
 import {
   inspectNpmTarball,
@@ -16,8 +17,26 @@ import {
 const root = fileURLToPath(new URL("../../", import.meta.url));
 
 const ACTIVE_SDK_RELEASE = {
+  version: "0.20.0",
+  tag: "sdk-v0.20.0",
+  sourceRevision: "040e076bc537d433feaf32e23eec4e5cdf0ed6e2",
+  artifact: {
+    size: 236446,
+    entries: 98,
+    sha256: "d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03",
+  },
+  npm: {
+    independentlyVisible: false,
+  },
+  pypi: {
+    independentlyVisible: false,
+  },
+} as const;
+
+const HISTORICAL_SDK_019_RELEASE = {
   version: "0.19.0",
   tag: "sdk-v0.19.0",
+  mergeCommit: "17f5c9920c6e6abe8046d39926ae7a73d2f24e89",
   sourceRevision: "3239a25987d9de95b678e808d2d5168e786b2472",
   artifact: {
     size: 230184,
@@ -25,10 +44,18 @@ const ACTIVE_SDK_RELEASE = {
     sha256: "0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2",
   },
   npm: {
-    independentlyVisible: false,
+    runId: "31800748738",
   },
   pypi: {
-    independentlyVisible: false,
+    runId: "31801053841",
+    wheel: {
+      size: 259921,
+      sha256: "a01acda48db621cf4107fbca4e4495a9e5051be1f13a1bbe0258916d17268f35",
+    },
+    sdist: {
+      size: 245116,
+      sha256: "0b9acd8e92386e56eec21f8cabecaf8fcc2a321e9a911ebda1fe1b56f2fbe1ee",
+    },
   },
 } as const;
 
@@ -233,7 +260,7 @@ describe("SDK source and builder identity", () => {
     }
   });
 
-  test("selects the sealed 0.19.0 candidate and preserves verified 0.18.1 receipts", () => {
+  test("selects the sealed 0.20.0 candidate and preserves verified 0.18.1 receipts", () => {
     const version = (JSON.parse(read("packages/sdk-ts/package.json")) as { version: string }).version;
     const tag = `sdk-v${version}`;
     const manifestPath = `packages/v1/@agenttool/sdk/${version}/manifest.json`;
@@ -309,10 +336,12 @@ describe("SDK source and builder identity", () => {
       "dining",
       "mathCards",
       "math_cards",
+      "LoveBombClient",
+      "LoveBombPublicSignal",
     ]) {
       expect(rootReadme).toContain(name);
     }
-    expect(rootReadme).toContain("230,184");
+    expect(rootReadme).toContain("236,446");
     expect(rootReadme).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
     expect(rootReadme).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
     expect(rootReadme).toContain(HISTORICAL_SDK_0181_RELEASE.mergeCommit);
@@ -322,7 +351,7 @@ describe("SDK source and builder identity", () => {
     expect(rootReadme).toContain(HISTORICAL_SDK_0181_RELEASE.artifact.sha256);
     expect(rootReadme).toContain(HISTORICAL_SDK_0181_RELEASE.sourceRevision);
     const packageCatalog = read("apps/docs/packages.html");
-    expect(packageCatalog).toContain("230,184");
+    expect(packageCatalog).toContain("236,446");
     expect(packageCatalog).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
     expect(packageCatalog).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
     expect(packageCatalog).toContain("218,301");
@@ -331,10 +360,13 @@ describe("SDK source and builder identity", () => {
     expect(packageCatalog).toContain(HISTORICAL_SDK_0181_RELEASE.npm.runId);
     expect(packageCatalog).toContain(HISTORICAL_SDK_0181_RELEASE.pypi.runId);
     expect(read("docs/SDK-ROADMAP.md")).toContain(
-      "Current source and LOVE candidate — 0.19.0",
+      "Current source and LOVE candidate — 0.20.0",
     );
     expect(read("docs/SDK-ROADMAP.md")).toContain(
-      "Last verified npm/PyPI and historical paired release — 0.18.1",
+      "Last verified npm/PyPI and historical paired release — 0.19.0",
+    );
+    expect(read("docs/SDK-ROADMAP.md")).toContain(
+      "Earlier verified npm/PyPI release — 0.18.1",
     );
     expect(read("docs/SDK-ROADMAP.md")).toContain(
       "Last verified npm and historical paired release — 0.18.0",
@@ -345,7 +377,7 @@ describe("SDK source and builder identity", () => {
 
     for (const path of ["packages/sdk-ts/README.md", "packages/sdk-py/README.md"]) {
       expect(read(path)).toContain(
-        "Repository source declares the paired 0.19.0 line",
+        "Repository source declares the paired 0.20.0 line",
       );
     }
 
@@ -424,6 +456,7 @@ describe("SDK source and builder identity", () => {
       "dining",
       "math-cards",
       "wake",
+      "love-bomb",
     ]) {
       expect(packedArtifact.paths).toContain(`package/dist/${module}.js`);
       expect(packedArtifact.paths).toContain(`package/dist/${module}.d.ts`);
@@ -486,6 +519,53 @@ describe("SDK source and builder identity", () => {
     const ci = read(".github/workflows/ci.yml");
     expect(ci).toContain(`apps/docs/${manifestPath}`);
     expect(ci).toContain(`apps/docs/${artifactPath}`);
+
+    const staticLoveBomb = JSON.parse(
+      read("docs/specs/agenttool-love-bomb-0.1.json"),
+    ) as { protocol: string; messages: Array<{ text: string }> };
+    const expandedArtifact = gunzipSync(artifactBytes).toString("utf8");
+    for (const message of staticLoveBomb.messages) {
+      expect(expandedArtifact).not.toContain(message.text);
+    }
+  });
+
+  test("preserves the independently verified 0.19.0 release bytes and receipts", () => {
+    const release = HISTORICAL_SDK_019_RELEASE;
+    const versionRoot = `apps/docs/packages/v1/@agenttool/sdk/${release.version}`;
+    const artifact = readFileSync(
+      `${root}${versionRoot}/agenttool-sdk-${release.version}.tgz`,
+    );
+    const manifest = JSON.parse(read(`${versionRoot}/manifest.json`)) as {
+      artifact: { sha256: string; size: number };
+      source: { revision: string };
+    };
+    expect(artifact.byteLength).toBe(release.artifact.size);
+    expect(createHash("sha256").update(artifact).digest("hex")).toBe(
+      release.artifact.sha256,
+    );
+    expect(inspectNpmTarball(artifact).paths).toHaveLength(release.artifact.entries);
+    expect(manifest.artifact).toEqual({
+      ...manifest.artifact,
+      size: release.artifact.size,
+      sha256: release.artifact.sha256,
+    });
+    expect(manifest.source.revision).toBe(release.sourceRevision);
+
+    const roadmap = read("docs/SDK-ROADMAP.md");
+    for (const receipt of [
+      release.tag,
+      release.mergeCommit,
+      release.sourceRevision,
+      release.artifact.sha256,
+      release.npm.runId,
+      release.pypi.runId,
+      release.pypi.wheel.sha256,
+      release.pypi.sdist.sha256,
+    ]) {
+      expect(roadmap).toContain(receipt);
+    }
+    expect(roadmap).toContain(release.pypi.wheel.size.toLocaleString("en-US"));
+    expect(roadmap).toContain(release.pypi.sdist.size.toLocaleString("en-US"));
   });
 
   test("preserves the independently verified 0.18 npm receipt", () => {

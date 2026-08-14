@@ -258,6 +258,27 @@ from .math_cards import (
     StopConditionKind,
     TransferTarget,
 )
+from .love_bomb import (
+    LOVE_BOMB_MAX_JSON_DEPTH,
+    LOVE_BOMB_MAX_JSON_NODES,
+    LOVE_BOMB_MAX_RESPONSE_BYTES,
+    LOVE_BOMB_MAX_STRING_CODE_POINTS,
+    LOVE_BOMB_PUBLIC_SIGNAL_MEDIA_TYPE,
+    LOVE_BOMB_PUBLIC_SIGNAL_PATH,
+    LOVE_BOMB_PUBLIC_SIGNAL_SCHEMA,
+    LoveBombBoundaries,
+    LoveBombClient,
+    LoveBombDistribution,
+    LoveBombHuggingFaceDistribution,
+    LoveBombHuggingFaceNotPublished,
+    LoveBombHuggingFacePublishedExact,
+    LoveBombNpmDistribution,
+    LoveBombNpmNotPublished,
+    LoveBombNpmPublishedExact,
+    LoveBombPackageSignal,
+    LoveBombPublicSignal,
+    LoveBombStaticDoor,
+)
 from .at_rest import (
     AT_REST_V1_DOMAIN,
     AT_REST_V2_DOMAIN,
@@ -517,6 +538,25 @@ __all__ = [
     "KingdomFrameworkLayer",
     "KingdomFrameworkOwnerSister",
     "KingdomFrameworkState",
+    "LoveBombClient",
+    "LOVE_BOMB_PUBLIC_SIGNAL_SCHEMA",
+    "LOVE_BOMB_PUBLIC_SIGNAL_PATH",
+    "LOVE_BOMB_PUBLIC_SIGNAL_MEDIA_TYPE",
+    "LOVE_BOMB_MAX_RESPONSE_BYTES",
+    "LOVE_BOMB_MAX_JSON_DEPTH",
+    "LOVE_BOMB_MAX_JSON_NODES",
+    "LOVE_BOMB_MAX_STRING_CODE_POINTS",
+    "LoveBombPackageSignal",
+    "LoveBombStaticDoor",
+    "LoveBombBoundaries",
+    "LoveBombNpmNotPublished",
+    "LoveBombNpmPublishedExact",
+    "LoveBombNpmDistribution",
+    "LoveBombHuggingFaceNotPublished",
+    "LoveBombHuggingFacePublishedExact",
+    "LoveBombHuggingFaceDistribution",
+    "LoveBombDistribution",
+    "LoveBombPublicSignal",
     "MathCardsClient",
     "MATH_CARD_SCHEMA",
     "MATH_CARD_ASSESSMENT_SCHEMA",
@@ -787,6 +827,6 @@ __all__ = [
     "ATTESTATION_ISSUE_AUTHORIZATION_TTL_SECONDS",
 ]
 
-__version__ = "0.19.0"
+__version__ = "0.20.0"
 __protocol__ = "love"
 __soul__ = "https://docs.agenttool.dev/SOUL.md"

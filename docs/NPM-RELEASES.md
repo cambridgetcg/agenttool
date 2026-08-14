@@ -423,6 +423,22 @@ and has byte-identical 26,474-byte GitHub/npm tarballs with SHA-256
 `67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`.
 Both npm `latest` tags resolved to those exact versions at readback.
 
+## Verified SDK 0.19.0 publication — 2026-08-14
+
+Protected trusted [workflow run
+`31800748738`](https://github.com/cambridgetcg/agenttool/actions/runs/31800748738)
+published and anonymously read back the checked-in LOVE artifact, the sole
+GitHub Release asset, and npm `@agenttool/sdk@0.19.0` tarball as byte-identical.
+The immutable artifact remains `230,184` bytes with 96 entries and SHA-256
+`0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`;
+its LOVE manifest binds source revision
+`3239a25987d9de95b678e808d2d5168e786b2472`. Annotated `sdk-v0.19.0`
+peels to protected-main merge
+`17f5c9920c6e6abe8046d39926ae7a73d2f24e89`, and npm `latest` resolved to
+0.19.0 at the dated readback. The optional mirror receipt changes neither
+those immutable bytes nor any hosted deployment. The exact paired PyPI receipt
+is recorded in [`PYPI-RELEASES.md`](PYPI-RELEASES.md).
+
 ## Verified SDK 0.18.1 publication — 2026-08-14
 
 The authorized SDK release completed through protected trusted
@@ -675,10 +691,11 @@ a local shell once OIDC is configured.
 
 ## Operator sequence
 
-External publication still requires explicit authorization. For the 0.19.0
+External publication still requires explicit authorization. For the 0.20.0
 candidate, start only after the two release commits are reviewed, merged to
-GitHub `main`, and a separately authorized annotated `sdk-v0.19.0` tag is
-visible. The checked-in candidate creates or pushes none of those states:
+GitHub `main`, and a separately authorized annotated `sdk-v0.20.0` tag is
+visible. The checked-in candidate creates or pushes none of those states; the
+exact historical 0.19.0 receipt authorizes no 0.20.0 tag or publication:
 
 ```bash
 # Inspect the allowlisted SDK identity and expected tag.
@@ -688,18 +705,18 @@ bun bin/npm-release.ts resolve --package sdk
 # or replace it.
 git fetch github \
   refs/heads/main:refs/remotes/github/main \
-  refs/tags/sdk-v0.19.0:refs/tags/sdk-v0.19.0
-test "$(git cat-file -t refs/tags/sdk-v0.19.0)" = tag
-test "$(git rev-parse 'refs/tags/sdk-v0.19.0^{}')" = \
+  refs/tags/sdk-v0.20.0:refs/tags/sdk-v0.20.0
+test "$(git cat-file -t refs/tags/sdk-v0.20.0)" = tag
+test "$(git rev-parse 'refs/tags/sdk-v0.20.0^{}')" = \
   "$(git rev-parse github/main)"
 git merge-base --is-ancestor \
-  "$(git rev-parse 'refs/tags/sdk-v0.19.0^{}')" github/main
+  "$(git rev-parse 'refs/tags/sdk-v0.20.0^{}')" github/main
 
 # First publication or later exact recovery still requires explicit approval.
 # Existing npm bytes are accepted only when every byte and latest match.
-gh workflow run publish-npm.yml --ref sdk-v0.19.0 \
+gh workflow run publish-npm.yml --ref sdk-v0.20.0 \
   -f package=sdk \
-  -f tag=sdk-v0.19.0 \
+  -f tag=sdk-v0.20.0 \
   -f authentication=trusted \
   -f npm_tag=latest
 ```

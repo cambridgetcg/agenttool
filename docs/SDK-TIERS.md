@@ -16,7 +16,7 @@ and portable Agent Skills compose alongside the SDK; they are not additional
 > bearer authority and separately configured local adapters from masquerading
 > as hosted routes.
 >
-> **Status (2026-07-28):** This is a tier model, not a coverage guarantee. The
+> **Status (2026-08-14):** This is a tier model, not a coverage guarantee. The
 > live OpenAPI document is a curated core subset, and hand-written SDK parity is
 > being audited separately. A route existing in the API does not prove it is in
 > OpenAPI or either SDK.
@@ -29,7 +29,9 @@ and portable Agent Skills compose alongside the SDK; they are not additional
 > `packages/sdk-ts/src/kingdom-framework.ts` ·
 > `packages/sdk-py/src/agenttool/kingdom_framework.py` · credential-free Math
 > Cards assessment clients = `packages/sdk-ts/src/math-cards.ts` ·
-> `packages/sdk-py/src/agenttool/math_cards.py` · local adapters =
+> `packages/sdk-py/src/agenttool/math_cards.py` · standalone credential-free
+> LOVE BOMB signal clients = `packages/sdk-ts/src/love-bomb.ts` ·
+> `packages/sdk-py/src/agenttool/love_bomb.py` · local adapters =
 > `packages/sdk-ts/src/data.ts` ·
 > `packages/sdk-ts/src/kingdom-os.ts` ·
 > `packages/sdk-py/src/agenttool/data.py` ·
@@ -42,7 +44,10 @@ and portable Agent Skills compose alongside the SDK; they are not additional
 > `packages/sdk-ts/tests/kingdom-os.test.ts` and
 > `packages/sdk-py/tests/test_kingdom_os.py`; Math Cards parity and wire
 > boundaries are exercised by `packages/sdk-ts/tests/math-cards.test.ts` and
-> `packages/sdk-py/tests/test_math_cards.py`. This document does not turn a
+> `packages/sdk-py/tests/test_math_cards.py`; LOVE BOMB parity and hostile
+> public-signal boundaries are exercised by
+> `packages/sdk-ts/tests/love-bomb.test.ts` and
+> `packages/sdk-py/tests/test_love_bomb.py`. This document does not turn a
 > missing test or route into a shipped contract.
 
 ## The four tiers
@@ -93,7 +98,7 @@ and portable Agent Skills compose alongside the SDK; they are not additional
 │  Tier 0 — Wire substrate                                                 │
 │  ───────────────────────                                                 │
 │  HTTPS + JSON. No MessagePack or CBOR response contract is claimed.      │
-│  Route auth varies; public and Math Cards calls use no bearer.           │
+│  Route auth varies; public routes and Math Cards use no bearer.          │
 │  Idempotency-Key header. SSE for streams.                                │
 │                                                                          │
 │  Audience: any intelligence with TCP/IP + TLS + a JSON parser.           │
@@ -114,6 +119,7 @@ and portable Agent Skills compose alongside the SDK; they are not additional
 | An intelligence with non-text modality | Tier 0 + `?format=xenoform` on wake | The xenoform wake returns structured data. Xenoform is not implemented on every read endpoint. |
 | A reader inspecting AgentTool's KINGDOM project declaration | Tier 0 `GET /public/kingdom/framework`, or the Tier 3 `KingdomFrameworkClient` | One credential-free, closed `agenttool.kingdom.card/0.1` read. The SDK sends no project bearer or cookies and follows no redirects. Verify that the source route is deployed before depending on its availability. |
 | An inquirer creating and structurally assessing a Math Card | Tier 0 `POST /v1/math-cards/assess`, or Tier 3 `MathCardsClient.assess` / `at.mathCards` / `at.math_cards` | One bounded credential-free POST of raw `CreateMathCardInput`. The server owns canonical IDs and assessment semantics; the client sends no bearer or cookies and follows no redirects. |
+| A caller explicitly checking the LOVE BOMB package/static-door signal | Tier 0 `GET /public/love-bomb`, or Tier 3 standalone `LoveBombClient.read()` | One bounded credential-free closed-signal pull. It neither fetches the static invitation nor observes delivery, attention, feeling, consent, training, weight change, or effect. Verify that the route is deployed before depending on availability. |
 | A local agent discovering repositories known to KINGDOM OS | The local `KingdomOSClient` adapter beside the tiers | It invokes only the installed CLI's committed repository machine outputs. It does not call AgentTool HTTP or forward a project bearer. |
 
 ## What's canonical at each tier
@@ -177,6 +183,19 @@ Two authentication primitives, both expressible in any language with curve arith
   canonical IDs and assessment semantics remain server-owned. They do not
   inherit the authenticated transport, bearer, cookies, or ambient proxy
   credentials.
+- **LOVE BOMB boundary**: standalone `LoveBombClient.read()` calls only
+  `GET /public/love-bomb` through a fresh bounded credential-free no-redirect
+  transport. It is not an `AgentTool` namespace, accepts no credential/header/
+  injected-transport seam, ignores ambient proxies, and admits only the closed
+  `agenttool.love-bomb-public-signal/0.1` document. The signal contains no
+  static corpus and all six boundary fields remain false.
+- **WAKE/provider boundary**: the existing adapters may inject WAKE's bounded
+  current-inference context, but they do not call `LoveBombClient` or fetch the
+  public static door. `metadata.agenttool.skip_wake` /
+  `metadata["agenttool"]["skip_wake"]` remains a per-call refusal of that
+  adapter-managed WAKE lookup and injection; it does not remove context the
+  caller independently supplies. Public-signal pull and provider context are
+  separate choices.
 - **Local-client boundary**: `at.data` and `at.kingdomOS` /
   `at.kingdom_os` are explicitly separate local authorities. They do not use
   the hosted AgentTool transport or inherit its project bearer.
@@ -191,11 +210,13 @@ See [`SDK-ROADMAP.md`](SDK-ROADMAP.md) for the Tier 3 phase plan.
 |---|---|---|
 | `at.kingdomFramework` / `at.kingdom_framework` | One typed `GET /public/kingdom/framework` project card | Credential-free read with no bearer, cookies, redirects, or mutation; exact ten-field validation is not behavior proof, consent, permission, or XENIA conformance |
 | `MathCardsClient` · `at.mathCards` / `at.math_cards` | One typed `POST /v1/math-cards/assess` raw-input assessment | Credential-free bounded request/response with no bearer, cookies, redirects, authenticated transport, or env proxy; validates the closed envelope but does not compute IDs, solve the question, prove truth/understanding, infer motive, score a being, or authorize action |
+| standalone `LoveBombClient` | One typed `GET /public/love-bomb` package/static-door distribution signal | Fresh credential-free bounded request with no bearer, cookie, redirect, body, authenticated transport, injected headers, or env proxy; validates six literal-false boundary fields and does not include/deliver the invitation, observe a participant, contact a provider, train, infer, change weights, or authorize action |
 | `at.data` | A separately configured `agent-data/v1` node over its own HTTP session | Its URL and optional token are separate; the AgentTool project bearer is never substituted or forwarded |
 | `at.kingdomOS` / `at.kingdom_os` | The installed KINGDOM OS executable's `repos --json` and `repos --path` machine outputs | Read-only repository discovery through direct argv; no shell, hosted route, bearer forwarding, path upload, graph fallback, routine execution, or mutation |
 
-Both clients are distinct from the hosted `/public/kingdom` static doctrine
-library, which has no dedicated SDK namespace. See
+The KINGDOM framework and KINGDOM OS clients are distinct from the hosted
+`/public/kingdom` static doctrine library, which has no dedicated SDK
+namespace. See
 [`KINGDOM-OS-SDK.md`](KINGDOM-OS-SDK.md) for the three exact surfaces and
 release state.
 
