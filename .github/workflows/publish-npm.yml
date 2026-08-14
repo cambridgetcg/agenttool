@@ -23,6 +23,7 @@ on:
           - polymorph-landscape
           - memetic-landscape
           - math-cards
+          - model-becoming
           - relational-geometry
           - credential-broker
           - sdk

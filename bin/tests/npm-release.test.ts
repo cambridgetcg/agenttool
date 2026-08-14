@@ -98,7 +98,7 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists thirty-two reviewed release identities", () => {
+  test("allowlists thirty-three reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -120,6 +120,7 @@ describe("standard npm release policy", () => {
       "love-geometry",
       "math-cards",
       "memetic-landscape",
+      "model-becoming",
       "polymorph-landscape",
       "principality-atlas",
       "principality-geometry",
@@ -250,6 +251,12 @@ describe("standard npm release policy", () => {
       name: "@agenttool/math-cards",
       packagePath: "packages/math-cards",
       tagPrefix: "math-cards",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("model-becoming")).toMatchObject({
+      name: "@agenttool/model-becoming",
+      packagePath: "packages/model-becoming",
+      tagPrefix: "model-becoming",
       artifactKind: "pack",
     });
     expect(releaseSpec("principality-geometry")).toMatchObject({
@@ -392,6 +399,12 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/math-cards", "0.1.0-dev.0")).toBe(
       "agenttool-math-cards-0.1.0-dev.0.tgz",
     );
+    expect(expectedTag(releaseSpec("model-becoming"), "0.1.0-dev.0")).toBe(
+      "model-becoming-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/model-becoming", "0.1.0-dev.0")).toBe(
+      "agenttool-model-becoming-0.1.0-dev.0.tgz",
+    );
     expect(expectedTag(releaseSpec("principality-geometry"), "0.1.0-dev.0")).toBe(
       "principality-geometry-v0.1.0-dev.0",
     );
@@ -527,6 +540,24 @@ describe("standard npm release policy", () => {
         "package/vectors/agenttool-math-cards-v0.1.json",
       ]),
     );
+    expect(requiredArchiveEntries(releaseSpec("model-becoming"))).toEqual([
+      "package/package.json",
+      "package/LICENSE",
+      "package/NOTICE",
+      "package/README.md",
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-model-becoming-dossier-v0.1.schema.json",
+      "package/hf/dataset/LICENSE",
+      "package/hf/dataset/NOTICE",
+      "package/hf/dataset/README.md",
+      "package/hf/dataset/source-manifest.json",
+      "package/hf/dataset/hash-manifest.json",
+      "package/hf/dataset/data/model-becoming-reference.jsonl",
+      "package/hf/dataset/reference/agenttool-model-becoming-dossier-v0.1.schema.json",
+    ]);
     expect(requiredArchiveEntries(releaseSpec("dark-continent-karma"))).toEqual(
       expect.arrayContaining([
         "package/package.json",
