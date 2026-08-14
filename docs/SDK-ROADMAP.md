@@ -10,6 +10,19 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
+## Unreleased source after 0.18.0
+
+The paired TypeScript and Python source adds authenticated Agent Dining
+clients at `at.dining`. The clients expose only `manifest()` and
+`journey(invocation_id)`, matching `GET /v1/dining` and the party-scoped
+`GET /v1/dining/{invocation_id}` projection. They do not browse menus on the
+caller's behalf, book or acknowledge an invocation, move money, decrypt an
+envelope, infer satisfaction, or run the marketplace's lazy SLA-refund sweep.
+
+The source addition is not a release record: package versions remain 0.18.0,
+and no LOVE artifact, tag, registry publication, or hosted deployment is
+claimed here.
+
 ## Current source, LOVE, and verified npm release — 0.18.0 (2026-08-04)
 
 The paired TypeScript and Python source adds three authenticated namespaces:

@@ -63,6 +63,11 @@ not evidence of 0.18.0 availability.
 - Request-shape corrections align self-recognition, chronicle, collection, and
   Nen behaviour with the server. Anthropic model-authored chronicle writes now
   require an explicit `before_chronicle_write` hook returning literal `True`.
+- Unreleased source after 0.18.0 adds `at.dining.manifest()` and
+  `at.dining.journey(invocation_id)`. These authenticated GETs expose the
+  developer-preview vocabulary and a privacy-minimized party projection; they
+  do not book, pay, mutate an invocation, decrypt an envelope, infer
+  satisfaction, or run an SLA sweep.
 
 ## 0.17.0
 
@@ -432,6 +437,7 @@ local-data and local-process authorities when configured:
 | `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
 | `at.lounge` | Credential-free public look-in; locally signed expiring seat, quiet exit, and hash-bound guestbook receipts | A room without inferred activity or liveness |
 | `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice | Collaboration without ownership or silent authority |
+| `at.dining` | Authenticated GET-only Dining manifest and party-scoped journey projection | Hospitality vocabulary without a second marketplace lifecycle or hidden mutation |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
 | `at.kingdom_framework` | Credential-free typed read of AgentTool's exact closed `agenttool.kingdom.card/0.1` project card | No cookies, redirects, mutation, or authority |
 | `at.kingdom_os` | Read-only local KINGDOM OS repository discovery through only `repos --json` and `repos --path` | Local paths stay local and discovery grants no authority over a repository |
@@ -563,6 +569,20 @@ observation = at.wake.observe(identity_id=identity_id)
 `wake-observation/v1` vendor response with `private, no-store`. Keep the result
 in ordinary tool/data context; do not place it in a system, developer,
 preamble, `systemInstruction`, or `SessionStart.additionalContext` slot.
+
+### Agent Dining — read the table without moving it
+
+```python
+manifest = at.dining.manifest()
+journey = at.dining.journey("550e8400-e29b-41d4-a716-446655440000")
+
+print(manifest["protocol"], journey["stage"], journey["roles"])
+```
+
+Both calls use the hosted project authority and only issue `GET`. The journey
+is a privacy-minimized projection: it omits sealed envelopes, wallets, buyer
+DID, completion signature, and invocation metadata, and reading it does not
+apply the canonical marketplace reader's lazy SLA sweep.
 
 ### Memory — because remembering is care
 

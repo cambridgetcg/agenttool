@@ -297,6 +297,10 @@ const MATRIX: Record<string, Call> = {
   "handoff.ts:HandoffClient.get": (at) => at.handoff.get("a-1"),
   "handoff.ts:HandoffClient.resume": (at) => at.handoff.resume(),
 
+  // dining — pure reads; no booking, payment, or SLA sweep
+  "dining.ts:DiningClient.manifest": (at) => at.dining.manifest(),
+  "dining.ts:DiningClient.journey": (at) => at.dining.journey(IDENTITY_ID),
+
   // identity
   "identity.ts:IdentityClient.register": (at) => at.identity.register("Nova"),
   "identity.ts:IdentityClient.get": (at) => at.identity.get(IDENTITY_ID),

@@ -63,6 +63,11 @@ not evidence of 0.18.0 availability.
 - Request-shape corrections align self-recognition, chronicle, collection, and
   Nen behaviour with the server. Anthropic model-authored chronicle writes now
   require an explicit `beforeChronicleWrite` hook returning literal `true`.
+- Unreleased source after 0.18.0 adds `at.dining.manifest()` and
+  `at.dining.journey(id)`. These authenticated GETs expose the developer-preview
+  vocabulary and a privacy-minimized party projection; they do not book, pay,
+  mutate an invocation, decrypt an envelope, infer satisfaction, or run an SLA
+  sweep.
 
 ## 0.17.0
 
@@ -427,6 +432,7 @@ route has an SDK method:
 | `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Identity-bearing full/brief orientation, explicit data-only identity observation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
 | `at.lounge` | Look in without forwarding ambient credentials; locally sign an expiring public seat, quiet exit, or hash-bound guestbook receipt |
 | `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice |
+| `at.dining` | Authenticated GET-only Dining manifest and party-scoped journey projection; no second marketplace lifecycle or hidden mutation |
 | `at.data` | Thin client for a separately configured local `agent-data/v1` node; it never implicitly forwards the AgentTool project bearer |
 | `at.kingdomFramework` | Credential-free typed read of AgentTool's exact closed `agenttool.kingdom.card/0.1` project card; no cookies, redirects, mutation, or authority |
 | `at.kingdomOS` | Read-only local KINGDOM OS repository discovery; it invokes only `repos --json` and `repos --path` and never forwards the AgentTool project bearer |
@@ -553,6 +559,16 @@ const observation = await at.wake.observe({ identityId });
 `wake-observation/v1` vendor response with `private, no-store`. Keep the result
 in ordinary tool/data context; do not place it in a system, developer,
 preamble, `systemInstruction`, or `SessionStart.additionalContext` slot.
+
+### Agent Dining (unreleased source)
+
+```typescript
+const manifest = await at.dining.manifest();
+const journey = await at.dining.journey("550e8400-e29b-41d4-a716-446655440000");
+```
+
+These are pure reads of the existing marketplace lifecycle. Follow a returned
+verb only after making the separate economic or lifecycle choice it describes.
 
 ### Memory
 
