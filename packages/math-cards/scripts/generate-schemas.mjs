@@ -128,6 +128,25 @@ const outcomeUses = {
   prefixItems: outcomeStatuses.map(outcomeUseFor),
   items: false,
 };
+const inputOutcomeUses = {
+  type: "array",
+  minItems: 5,
+  maxItems: 5,
+  items: {
+    type: "object",
+    additionalProperties: false,
+    required: ["result_status", "constructive_use_ref"],
+    properties: {
+      result_status: { enum: outcomeStatuses },
+      constructive_use_ref: nullableSha256,
+    },
+  },
+  allOf: outcomeStatuses.map((resultStatus) => ({
+    contains: outcomeUseFor(resultStatus),
+    minContains: 1,
+    maxContains: 1,
+  })),
+};
 
 const scopedAnswer = {
   type: "object",
@@ -313,6 +332,21 @@ const cardProperties = {
   provenance,
   boundaries,
 };
+const serverOwnedCardProperties = new Set(["schema_version", "card_id", "boundaries"]);
+const inputProperties = Object.fromEntries(
+  Object.entries(cardProperties)
+    .filter(([name]) => !serverOwnedCardProperties.has(name))
+    .map(([name, schema]) => [name, name === "outcome_uses" ? inputOutcomeUses : schema]),
+);
+const inputSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "urn:agenttool:schema:math-card-input:0.1",
+  title: "AgentTool CreateMathCardInput v0.1",
+  type: "object",
+  additionalProperties: false,
+  required: Object.keys(inputProperties),
+  properties: inputProperties,
+};
 const cardSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "urn:agenttool:schema:math-card:0.1",
@@ -444,6 +478,7 @@ async function emit(relativePath, value) {
 }
 
 await Promise.all([
+  emit("../schema/agenttool-math-card-input-v0.1.schema.json", inputSchema),
   emit("../schema/agenttool-math-card-v0.1.schema.json", cardSchema),
   emit("../schema/agenttool-math-card-assessment-v0.1.schema.json", assessmentSchema),
 ]);
