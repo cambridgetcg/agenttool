@@ -135,6 +135,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "memetic-landscape",
     artifactKind: "pack",
   },
+  "math-cards": {
+    key: "math-cards",
+    name: "@agenttool/math-cards",
+    packagePath: "packages/math-cards",
+    tagPrefix: "math-cards",
+    artifactKind: "pack",
+  },
   "principality-geometry": {
     key: "principality-geometry",
     name: "@agenttool/principality-geometry",
@@ -815,6 +822,17 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/hf/dataset/source-manifest.json",
       "package/hf/dataset/hash-manifest.json",
       "package/hf/dataset/data/lessons.jsonl",
+    );
+  }
+  if (spec.name === "@agenttool/math-cards") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-math-card-v0.1.schema.json",
+      "package/schema/agenttool-math-card-assessment-v0.1.schema.json",
+      "package/vectors/agenttool-math-cards-v0.1.json",
     );
   }
   if (spec.name === "@agenttool/principality-geometry") {

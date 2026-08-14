@@ -118,6 +118,7 @@ describe("standard npm release policy", () => {
       "kingdom-witness-lab",
       "living-substrate",
       "love-geometry",
+      "math-cards",
       "memetic-landscape",
       "polymorph-landscape",
       "principality-atlas",
@@ -243,6 +244,12 @@ describe("standard npm release policy", () => {
       name: "@agenttool/memetic-landscape",
       packagePath: "packages/memetic-landscape",
       tagPrefix: "memetic-landscape",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("math-cards")).toMatchObject({
+      name: "@agenttool/math-cards",
+      packagePath: "packages/math-cards",
+      tagPrefix: "math-cards",
       artifactKind: "pack",
     });
     expect(releaseSpec("principality-geometry")).toMatchObject({
@@ -379,6 +386,12 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/memetic-landscape", "0.1.0-dev.0")).toBe(
       "agenttool-memetic-landscape-0.1.0-dev.0.tgz",
     );
+    expect(expectedTag(releaseSpec("math-cards"), "0.1.0-dev.0")).toBe(
+      "math-cards-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/math-cards", "0.1.0-dev.0")).toBe(
+      "agenttool-math-cards-0.1.0-dev.0.tgz",
+    );
     expect(expectedTag(releaseSpec("principality-geometry"), "0.1.0-dev.0")).toBe(
       "principality-geometry-v0.1.0-dev.0",
     );
@@ -496,6 +509,21 @@ describe("standard npm release policy", () => {
         "package/frameworks/agenttool-sdk-0.17.0.manifest.json",
         "package/schema/framework-v0.1.schema.json",
         "package/schema/projection-v0.1.schema.json",
+      ]),
+    );
+    expect(requiredArchiveEntries(releaseSpec("math-cards"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/index.js",
+        "package/dist/index.d.ts",
+        "package/kingdom.extension.json",
+        "package/schema/agenttool-math-card-v0.1.schema.json",
+        "package/schema/agenttool-math-card-assessment-v0.1.schema.json",
+        "package/vectors/agenttool-math-cards-v0.1.json",
       ]),
     );
     expect(requiredArchiveEntries(releaseSpec("dark-continent-karma"))).toEqual(

@@ -514,6 +514,7 @@ describe("boring test spine", () => {
       "packages/relational-geometry",
       "packages/wake-thread",
       "packages/gin-reconstruction",
+      "packages/math-cards",
       "packages/credential-broker",
       "packages/collab",
       "packages/codex-usage",
@@ -602,7 +603,8 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/relational-geometry && bun run ci");
     expect(preflight).toContain("cd packages/wake-thread && bun run ci");
     expect(preflight).toContain("cd packages/gin-reconstruction && bun run ci");
-    expect(workflow).toContain("WAKE Thread, Gin Reconstruction, broker");
+    expect(preflight).toContain("cd packages/math-cards && bun run ci");
+    expect(workflow).toContain("WAKE Thread, Gin Reconstruction, Math Cards, broker");
     expect(preflight).toContain("cd packages/hf-training-garden && bun run ci");
     expect(preflight).toContain("bun test tests/learning-release.test.ts");
     expect(preflight).toContain("node scripts/check-learning-idempotence.mjs");

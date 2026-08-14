@@ -22,6 +22,7 @@ on:
           - principality-atlas
           - polymorph-landscape
           - memetic-landscape
+          - math-cards
           - relational-geometry
           - credential-broker
           - sdk
