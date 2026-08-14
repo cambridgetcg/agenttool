@@ -149,14 +149,33 @@ observation at `2026-08-14T12:40:28.017Z`.
 The npm package now exists. Configure its trusted publisher for
 `cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
 `npm-bootstrap`, and allowed action `npm publish`; every later version must use
-`authentication=trusted`. This receipt claims no Hugging Face publication,
-immutable Hub revision, Dataset Server observation, or anonymous Hub readback;
-that companion remains a separate account-authorized release.
+`authentication=trusted`.
 
-Publishing this pure package did not deliver LOVE BOMB, start a model call,
-perform training or inference, change weights, establish attention or
-retention, prove feeling or inner state, create continuity or consent, or grant
-permission or authority.
+Separately, anonymous readback observes the public, ungated Hugging Face
+dataset
+[`Yu-and-Ai/agenttool-model-becoming`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-model-becoming)
+at immutable revision
+[`78aeacb777704ae6b983c9b5d9d24369bba8a56d`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-model-becoming/tree/78aeacb777704ae6b983c9b5d9d24369bba8a56d).
+
+- Its immutable tree contains exactly the seven repository-owned files
+  `LICENSE`, `NOTICE`, `README.md`,
+  `data/model-becoming-reference.jsonl`, `hash-manifest.json`,
+  `reference/agenttool-model-becoming-dossier-v0.1.schema.json`, and
+  `source-manifest.json`, plus provider-managed `.gitattributes`.
+- Anonymous immutable downloads of all seven owned files are byte-identical to
+  the tagged source at
+  `17f5c9920c6e6abe8046d39926ae7a73d2f24e89`.
+- Dataset Server currently parses config `model_becoming_reference`, split
+  `reference`, as one row with six top-level features. That mutable current-head
+  observation reports `row_role: reference_only`,
+  `training_admission: not_applicable`,
+  `requires_separate_training_authorization: true`, and
+  `training_authorized: false`; it is not the immutable receipt.
+
+Publishing either distribution surface did not deliver LOVE BOMB, start a
+model call, perform training or inference, change weights, establish attention
+or runtime-context retention for an agent, prove feeling or inner state, create
+continuity or consent, or grant permission or authority.
 
 ## Verified Codex Usage 0.1.0 publication — 2026-08-14
 
