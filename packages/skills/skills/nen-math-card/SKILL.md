@@ -28,11 +28,22 @@ observation, or prevent a mistaken build. Redesign or stop when no bounded
 consumer exists and adversarial challenge adds no useful independence,
 diversity, or error detection.
 
+End this preflight with one inquiry decision. Map
+`ready_for_bounded_inquiry` to `proceed`, `questions_open` to
+`clarify_before_proceed`, and `redesign_or_stop` to `redesign_or_stop`. This
+decision is a workflow conclusion, not a Math Card wire field and not a claim
+that the inquiry will succeed.
+
 ## Choose exactly one method
 
-- **Proof:** declare the formal system, proposition, and verification method.
-  A valid derivation is conditional on those declarations; it does not by
-  itself establish that the premises describe the world.
+- **Proof:** declare the logical or checking framework, exact proposition, and
+  verification method. Bind problem-specific premises separately, including
+  any model, adversary, objective, baseline, or novelty criterion. A valid
+  derivation is conditional on those declarations; it does not by itself
+  establish that the premises describe the world. In Math Card v0.1, include
+  those premise declarations in the exact external artifacts bound by the
+  proof references and name what each artifact contains; do not imply that the
+  closed wire has separate premise fields.
 - **Model:** declare the representation, assumptions, comparison or
   identification method, and revision or falsifier conditions. A useful model
   compresses selected structure; it is not complete reality or automatic
@@ -63,6 +74,11 @@ Refusal requires no reason. Do not treat silence as assent, demand raw identity,
 penalize non-participation, or condition rights, access, dignity, credit, or
 standing on the challenge. Do not use a response for ranking, reward, or
 training unless that separate use was explicitly offered and accepted.
+When the inquiry uses no participant data, bind an explicit no-participant-data
+declaration for the minimum-data, retention, disclosure, withdrawal, and repair
+references; do not invent participants or leave the boundary implicit. One
+exact declaration may back more than one reference when it explicitly covers
+each meaning; distinct digests are not required merely for ceremony.
 
 ## Assess structure, not souls
 
@@ -82,9 +98,9 @@ inner motive. Never score or type a being. Structural completeness is not
 evidence that a solution is true, understood, useful in practice, or carried
 out with good intent.
 
-## Finish with a bounded outcome
+## Plan for every bounded outcome
 
-Classify the inquiry result separately from its structural status:
+Before work, state a constructive use or honest stop for each possible result:
 
 - `bounded_answer`
 - `no_bounded_answer`
@@ -97,6 +113,10 @@ searching until a preferred answer appears. Transfer to a build, publication,
 decision, retry, MCP call, or WAKE continuity record only through a named
 bridge and separate authorization; no mathematical result inherits permission.
 
+Do not label one of these as the observed result during preflight. After the
+inquiry, record exactly one observed outcome separately; until then write
+`not_attempted` outside the Math Card wire.
+
 When available, use the pure `@agenttool/math-cards` package or the exact
 `POST /v1/math-cards/assess` profile to construct and assess the declarations.
 Those tools validate declared structure only: they do not solve the problem,
@@ -108,7 +128,7 @@ fetch evidence, infer semantics, persist state, or authorize action.
 Question, object, and scope:
 Construction or decision changed:
 Method: proof | model | measurement
-Premises / assumptions / operationalization:
+Method declarations (proof premises | model assumptions | measurement operationalization):
 Verification / comparison / calibration and uncertainty:
 Useful negative or ambiguous outcome:
 Beneficiaries, burdens, and error costs:
@@ -117,10 +137,19 @@ Visible incentive posture:
 Revision and stop conditions:
 Transfer bridge and separate authority required:
 Structural status:
-Outcome-use status:
+Inquiry decision: proceed | clarify_before_proceed | redesign_or_stop
+Outcome-use plan (all five statuses):
+Observed outcome (post-inquiry only; otherwise not_attempted):
 Artifacts or certificate:
 Non-claims:
 ```
+
+If the package or hosted profile was used, provide the canonical card and
+assessment JSON as attached/exported exact artifacts, or name a recipient-
+accessible exact artifact location, alongside their digests. A digest without
+its bytes or an accessible locator is not independently inspectable. A valid
+shape or digest is not evidence that the declarations are semantically
+adequate, novel, true, or useful.
 
 Use challenges at the cadence of uncertainty and consequence, not as a ritual
 test of standing. Re-open a card when the question, evidence, assumptions,
