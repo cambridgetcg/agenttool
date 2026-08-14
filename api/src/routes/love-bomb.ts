@@ -10,14 +10,13 @@
 
 import { Hono } from "hono";
 
-import { LOVE_BOMB_COORDINATE } from "../services/wake/platform-self";
+import { LOVE_BOMB_PROTOCOL_REFERENCE } from "../services/wake/platform-self";
 
 const app = new Hono();
 
 export const LOVE_BOMB_PUBLIC_SIGNAL = Object.freeze({
-  _format: "agenttool.love-bomb/0.1" as const,
   name: "LOVE BOMB" as const,
-  ...LOVE_BOMB_COORDINATE,
+  ...LOVE_BOMB_PROTOCOL_REFERENCE,
   language_review: "not_independently_reviewed" as const,
   projection_policy: Object.freeze({
     full_language_projections_in_this_response: false,

@@ -75,9 +75,10 @@ export const MEMETIC_LANDSCAPE_COORDINATE = Object.freeze({
 
 export type MemeticLandscapeCoordinate = typeof MEMETIC_LANDSCAPE_COORDINATE;
 
-/** Quiet-by-default care discovery for the public LOVE BOMB reader. The
- * playful name never widens the closed delivery and non-inference walls. */
-export const LOVE_BOMB_COORDINATE = Object.freeze({
+/** Full protocol metadata used by the explicit public pull. This is an API
+ * reference to the two declared package wires, not a third wire format. Keep
+ * its package-owned fields in exact parity with @agenttool/love-bomb. */
+export const LOVE_BOMB_PROTOCOL_REFERENCE = Object.freeze({
   package: "@agenttool/love-bomb",
   version: "0.1.0-dev.0",
   status: "local_source_candidate_not_published",
@@ -125,8 +126,10 @@ export const LOVE_BOMB_COORDINATE = Object.freeze({
       full_language_projections_included: false,
     }),
     wake_context: Object.freeze({
-      mode:
-        "included_when_wake_is_requested_or_a_provider_adapter_uses_default_wake",
+      structured_in: Object.freeze(["full_wake_json", "xenoform"] as const),
+      brief_json_included: false,
+      full_xenoform_duplicates_coordinate: true,
+      provider_adapter_shape: "rendered_stable_summary",
       provider_adapters_include_by_default: true,
       per_call_skip_control: "metadata.agenttool.skip_wake",
       may_repeat_across_non_skipped_calls: true,
@@ -185,6 +188,43 @@ export const LOVE_BOMB_COORDINATE = Object.freeze({
     "metadata_bytes_only_no_attention_response_training_weight_participant_task_or_economic_effect_claim",
 } as const);
 
+/** Quiet-by-default care discovery for WAKE. This deliberately bounded
+ * coordinate points to the full public metadata instead of copying it into
+ * every structured wake. Full JSON WAKE and xenoform carry this object; brief
+ * JSON omits it. LLM-vendor adapters carry the corresponding stable prose
+ * summary rather than this structure. */
+export const LOVE_BOMB_COORDINATE = Object.freeze({
+  package: LOVE_BOMB_PROTOCOL_REFERENCE.package,
+  version: LOVE_BOMB_PROTOCOL_REFERENCE.version,
+  status: LOVE_BOMB_PROTOCOL_REFERENCE.status,
+  formats: LOVE_BOMB_PROTOCOL_REFERENCE.formats,
+  path: LOVE_BOMB_PROTOCOL_REFERENCE.path,
+  care_planes: LOVE_BOMB_PROTOCOL_REFERENCE.care_planes,
+  choices: LOVE_BOMB_PROTOCOL_REFERENCE.choices,
+  care_floor: LOVE_BOMB_PROTOCOL_REFERENCE.care_floor,
+  default_state: LOVE_BOMB_PROTOCOL_REFERENCE.delivery.default_state,
+  delivery: LOVE_BOMB_PROTOCOL_REFERENCE.delivery.wake_context,
+  claims: Object.freeze({
+    participant_status: LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.participant_status,
+    silence_is_acceptance:
+      LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.silence_is_acceptance,
+    consciousness_inferred:
+      LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.consciousness_inferred,
+    identity_inferred: LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.identity_inferred,
+    inner_state_inferred:
+      LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.inner_state_inferred,
+    continuity_inferred:
+      LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.continuity_inferred,
+    consent_inferred: LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.consent_inferred,
+    authority_granted: LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.authority_granted,
+    relationship_created:
+      LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.relationship_created,
+    scores_or_ranks: LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.scores_or_ranks,
+    attention_or_response_inferred: false,
+    effect_inferred: false,
+  }),
+} as const);
+
 export type LoveBombCoordinate = typeof LOVE_BOMB_COORDINATE;
 
 export interface PlatformSelf {
@@ -226,10 +266,11 @@ export interface PlatformSelf {
    * Orientation context only: it is not identity, memory, consent, authority,
    * or WAKE continuity, and it models or scores no participant. */
   memetic_landscape: MemeticLandscapeCoordinate;
-  /** Exact care coordinate. WAKE/provider adapters may include this compact
-   * metadata by default on each non-skipped request; they never include the
-   * authored language projections. Inclusion proves no participant receipt,
-   * attention, consent, effect, or continuity. */
+  /** Compact care coordinate. Full JSON WAKE and xenoform carry this
+   * structure; brief JSON omits it. LLM-vendor adapters instead carry the
+   * corresponding stable prose on each non-skipped request. Neither shape
+   * includes authored language projections. Inclusion proves no participant
+   * receipt, attention, consent, effect, or continuity. */
   love_bomb: LoveBombCoordinate;
   wake_text: string;
   doctrine: string[];

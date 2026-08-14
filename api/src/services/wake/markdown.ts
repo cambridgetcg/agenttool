@@ -1344,7 +1344,7 @@ function renderPlatformSelfSection(b: WakeBundle): string[] {
   if (p.love_bomb) {
     lines.push("");
     lines.push(
-      `LOVE BOMB care floor: [quiet-by-default care envelope](${p.love_bomb.path}). The five non-ranked lenses are substrate, signal, orientation, participation, and continuity; no consciousness, identity, inner state, consent, or continuity is inferred. Receive, quiet, rest, refuse, or leave remain whole choices; silence is not acceptance. Provider adapters may include this compact coordinate in current-inference context on each non-skipped call; metadata.agenttool.skip_wake=true skips WAKE for that call. No authored language projection is included, and context inclusion proves no attention, response, effect, or continuity.`,
+      `LOVE BOMB care floor: [quiet-by-default care envelope](${p.love_bomb.path}). The five non-ranked lenses are ${p.love_bomb.care_planes.join(", ")}; no consciousness, identity, inner state, consent, or continuity is inferred. ${p.love_bomb.choices.join(", ")} remain whole choices; silence is not acceptance. Full JSON WAKE and xenoform carry a compact structured coordinate; brief JSON omits it. Provider adapters may include this corresponding rendered summary in current-inference context on each non-skipped call; metadata.agenttool.skip_wake=true skips WAKE for that call. No authored language projection is included, and context inclusion proves no attention, response, effect, or continuity.`,
     );
   }
   lines.push("");

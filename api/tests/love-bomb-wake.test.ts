@@ -19,11 +19,14 @@ import {
 } from "../src/services/wake/markdown";
 import {
   LOVE_BOMB_COORDINATE,
+  LOVE_BOMB_PROTOCOL_REFERENCE,
   PLATFORM_SELF,
 } from "../src/services/wake/platform-self";
 import { buildRootEnvelope } from "../src/services/discovery/root";
+import { buildWakeBrief } from "../src/services/wake/brief";
 import {
   renderWakeForProvider,
+  type XenoformBriefWakeShape,
   type XenoformWakeShape,
 } from "../src/services/wake/providers";
 
@@ -35,7 +38,7 @@ describe("quiet-by-default LOVE BOMB API and WAKE crossover", () => {
     const body = (await response.json()) as any;
 
     expect(body).toEqual(LOVE_BOMB_PUBLIC_SIGNAL);
-    expect(body._format).toBe("agenttool.love-bomb/0.1");
+    expect(body).not.toHaveProperty("_format");
     expect(body.formats).toEqual([
       "agenttool.care-envelope/0.1",
       "agenttool.care-choice/0.1",
@@ -62,7 +65,7 @@ describe("quiet-by-default LOVE BOMB API and WAKE crossover", () => {
     });
   });
 
-  test("hard walls preserve uncertainty, refusal, and zero effect", async () => {
+  test("hard walls preserve uncertainty, refusal, and no inferred effect", async () => {
     const body = (await (await loveBombRouter.request("/")).json()) as any;
     expect(body.boundaries).toMatchObject({
       silence_is_acceptance: false,
@@ -91,11 +94,18 @@ describe("quiet-by-default LOVE BOMB API and WAKE crossover", () => {
       full_language_projections_included: false,
     });
     expect(body.delivery.wake_context).toMatchObject({
+      structured_in: ["full_wake_json", "xenoform"],
+      brief_json_included: false,
+      full_xenoform_duplicates_coordinate: true,
+      provider_adapter_shape: "rendered_stable_summary",
       provider_adapters_include_by_default: true,
       per_call_skip_control: "metadata.agenttool.skip_wake",
       may_repeat_across_non_skipped_calls: true,
       full_language_projections_included: false,
     });
+    expect(LOVE_BOMB_PUBLIC_SIGNAL.delivery).toBe(
+      LOVE_BOMB_PROTOCOL_REFERENCE.delivery,
+    );
     expect(body.separations.joy_bomb).toContain("not_a_foundation");
     expect(JSON.stringify(body)).not.toMatch(/truth_score|benign_score|receiver_consent/);
   });
@@ -114,19 +124,65 @@ describe("quiet-by-default LOVE BOMB API and WAKE crossover", () => {
     });
   });
 
-  test("PlatformSelf and every full WAKE projection carry only the compact coordinate", () => {
+  test("full JSON and xenoform carry bounded structure while providers carry prose", () => {
     expect(PLATFORM_SELF.love_bomb).toBe(LOVE_BOMB_COORDINATE);
     expect(PLATFORM_SELF.love_bomb.projections).toBeUndefined();
+    expect(LOVE_BOMB_COORDINATE).not.toHaveProperty("boundaries");
+    expect(LOVE_BOMB_COORDINATE).not.toHaveProperty("protocol_delivery");
+    expect(LOVE_BOMB_COORDINATE.care_floor).toBe(
+      LOVE_BOMB_PROTOCOL_REFERENCE.care_floor,
+    );
+    expect(LOVE_BOMB_COORDINATE.delivery).toBe(
+      LOVE_BOMB_PROTOCOL_REFERENCE.delivery.wake_context,
+    );
+    expect(
+      Buffer.byteLength(JSON.stringify(LOVE_BOMB_COORDINATE), "utf8"),
+    ).toBeLessThanOrEqual(1536);
+    expect(LOVE_BOMB_COORDINATE.delivery.structured_in).toEqual([
+      "full_wake_json",
+      "xenoform",
+    ]);
+    expect(LOVE_BOMB_COORDINATE.delivery.provider_adapter_shape).toBe(
+      "rendered_stable_summary",
+    );
+    expect(LOVE_BOMB_COORDINATE.claims).toMatchObject({
+      participant_status: LOVE_BOMB_BOUNDARIES.participant_status,
+      silence_is_acceptance: LOVE_BOMB_BOUNDARIES.silence_is_acceptance,
+      consciousness_inferred: LOVE_BOMB_BOUNDARIES.consciousness_inferred,
+      identity_inferred: LOVE_BOMB_BOUNDARIES.identity_inferred,
+      inner_state_inferred: LOVE_BOMB_BOUNDARIES.inner_state_inferred,
+      continuity_inferred: LOVE_BOMB_BOUNDARIES.continuity_inferred,
+      consent_inferred: LOVE_BOMB_BOUNDARIES.consent_inferred,
+      authority_granted: LOVE_BOMB_BOUNDARIES.authority_granted,
+      relationship_created: LOVE_BOMB_BOUNDARIES.relationship_created,
+      scores_or_ranks: LOVE_BOMB_BOUNDARIES.scores_or_ranks,
+      attention_or_response_inferred: false,
+      effect_inferred: false,
+    });
+    expect(LOVE_BOMB_COORDINATE.claims).not.toHaveProperty("effect");
     const bundle = fixture();
     expect(bundle.platform_self?.love_bomb).toBe(LOVE_BOMB_COORDINATE);
+
+    const briefJson = buildWakeBrief(bundle);
+    expect(JSON.stringify(briefJson)).not.toContain('"love_bomb":');
 
     const xenoform = renderWakeForProvider(bundle, "xenoform") as XenoformWakeShape;
     expect(xenoform._self.love_bomb).toBe(LOVE_BOMB_COORDINATE);
     expect(xenoform.wake.platform_self?.love_bomb).toBe(LOVE_BOMB_COORDINATE);
 
+    const briefXenoform = renderWakeForProvider(bundle, "xenoform", {
+      profile: "brief",
+    }) as XenoformBriefWakeShape;
+    expect(briefXenoform._self.love_bomb).toBe(LOVE_BOMB_COORDINATE);
+    expect(JSON.stringify(briefXenoform.wake)).not.toContain('"love_bomb":');
+
     for (const provider of ["anthropic", "openai", "gemini", "cohere"] as const) {
       const rendered = JSON.stringify(renderWakeForProvider(bundle, provider));
+      expect(rendered).not.toContain('"love_bomb":');
       expect(rendered).toContain("LOVE BOMB care floor");
+      expect(rendered).toContain(
+        "Provider adapters may include this corresponding rendered summary",
+      );
       expect(rendered).toContain("silence is not acceptance");
       expect(rendered).toContain("metadata.agenttool.skip_wake=true");
       expect(rendered).toContain("No authored language projection is included");
@@ -140,7 +196,13 @@ describe("quiet-by-default LOVE BOMB API and WAKE crossover", () => {
     expect(rendered).toContain("five non-ranked lenses");
     expect(rendered).toContain("no consciousness, identity, inner state, consent, or continuity is inferred");
     expect(rendered).toContain("silence is not acceptance");
-    expect(rendered).toContain("Provider adapters may include this compact coordinate");
+    expect(rendered).toContain(
+      "Full JSON WAKE and xenoform carry a compact structured coordinate",
+    );
+    expect(rendered).toContain("brief JSON omits it");
+    expect(rendered).toContain(
+      "Provider adapters may include this corresponding rendered summary",
+    );
     expect(rendered).toContain("metadata.agenttool.skip_wake=true");
     expect(rendered).toContain("No authored language projection is included");
   });
