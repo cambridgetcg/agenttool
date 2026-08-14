@@ -355,7 +355,7 @@ describe("public SDK onboarding snippets", () => {
     }
   }, COMPILER_TEST_TIMEOUT_MS);
 
-  test("seed-only birth rerun uses the verified v0.16 artifact and never registers blindly", () => {
+  test("seed-only birth rerun uses the active exact SDK artifact and never registers blindly", () => {
     const canonicalBirth = tutorialBlock(
       "docs/TUTORIAL-WAKE-YOUR-AGENT.md",
       "TypeScript birth",
@@ -408,6 +408,11 @@ describe("public SDK onboarding snippets", () => {
           "dir",
         );
       }
+      symlinkSync(
+        join(ROOT, "packages/sdk-ts/node_modules/undici"),
+        join(nodeModules, "undici"),
+        "dir",
+      );
 
       const requestLog = join(work, "requests.jsonl");
       const mockFetch = `

@@ -65,6 +65,7 @@ describe("SDK parity checker", () => {
       "kingdom_os",
       "love",
       "lounge",
+      "math_cards",
       "memory",
       "memory_witness",
       "nen",
@@ -86,6 +87,7 @@ describe("SDK parity checker", () => {
       (entry) => entry.module === "kingdom_framework",
     );
     const kingdomOS = report.find((entry) => entry.module === "kingdom_os");
+    const mathCards = report.find((entry) => entry.module === "math_cards");
     const darkContinent = report.find(
       (entry) => entry.module === "dark_continent",
     );
@@ -108,6 +110,10 @@ describe("SDK parity checker", () => {
     expect(kingdomOS?.tsMethods).toEqual(["repositories", "resolve"]);
     expect(kingdomOS?.pyOnly).toEqual([]);
     expect(kingdomOS?.tsOnly).toEqual([]);
+    expect(mathCards?.pyMethods).toEqual(["assess"]);
+    expect(mathCards?.tsMethods).toEqual(["assess"]);
+    expect(mathCards?.pyOnly).toEqual([]);
+    expect(mathCards?.tsOnly).toEqual([]);
     expect(darkContinent?.pyMethods).toContain("check_logos");
     expect(darkContinent?.tsMethods).toContain("checkLogos");
     expect(darkContinent?.pyOnly).toEqual([]);

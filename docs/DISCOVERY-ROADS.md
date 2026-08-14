@@ -63,28 +63,34 @@
 
 ## Where agenttool stands (release surfaces audited 2026-08-14)
 
-**Current release:** paired SDK 0.18.1 source adds authenticated Agent Dining
-manifest and party-journey reads. Discovery pins and tutorials select the exact
-218,301-byte LOVE artifact with SHA-256
-`466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`.
-Annotated `sdk-v0.18.1` peels to protected-main merge
-`a781fff407e6d6c0401e6bd35dad1b5671d29491`. Protected npm run `31790395261`
-and PyPI run `31790559054` independently published and read back the exact
-optional registry mirrors. Hosted deployment, search position, and snippets
-remain separate dated observations.
+**Current repository candidate:** paired SDK 0.19.0 source adds data-only WAKE
+observation and a separate credential-free Math Cards assessment client.
+Discovery pins and tutorials select the exact 230,184-byte LOVE artifact with
+SHA-256
+`0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`
+and source revision `3239a25987d9de95b678e808d2d5168e786b2472`. This proves
+neither an annotated tag nor GitHub/npm/PyPI publication, docs deployment,
+hosted behavior, search position, or snippets; both optional 0.19.0 registry
+mirrors remain not independently visible in source.
+
+**Latest verified public SDK receipts:** immutable 0.18.1 LOVE, annotated tag,
+GitHub Release, npm, and PyPI mirrors remain exact historical evidence.
+Protected npm run `31790395261` and PyPI run `31790559054` independently read
+back the optional mirrors; neither receipt establishes 0.19.0 availability.
 
 **Already strong (verified end to end):** the .well-known suite (llms.txt on
 both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the lockstep SDK source and LOVE artifact at 0.18.1, teaching 404s, deliberate
-crawlability, and exact-name search are present. npm `latest` resolved to
-`0.18.1`; the public PyPI wheel and sdist are not yanked and match their
-protected workflow artifacts. Mutable latest pointers stay separate from
-source, tag, and LOVE artifact authority. The exact 0.18.0 npm and 0.17.0 PyPI
-receipts remain immutable historical evidence. Hosted deployment, search
-position, and snippets are separate dated observations, not durable guarantees.
+the lockstep SDK 0.19.0 source and LOVE candidate, teaching 404s, deliberate
+crawlability, and exact-name search are present. For historical 0.18.1, npm
+`latest` resolved to `0.18.1`; the public PyPI wheel and sdist are not yanked
+and match their protected workflow artifacts. Mutable latest pointers stay
+separate from source, tag, and LOVE artifact authority. The exact 0.18.0 npm
+and 0.17.0 PyPI receipts remain immutable historical evidence. Hosted
+deployment, search position, and snippets are separate dated observations,
+not durable guarantees.
 
 **Correction observed 2026-07-28:** after the exact publisher mapping was
 configured, PyPI 0.16.5 became public. The protected workflow independently

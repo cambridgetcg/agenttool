@@ -10,7 +10,29 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source, LOVE, and verified npm/PyPI release — 0.18.1 (2026-08-14)
+## Current source and LOVE candidate — 0.19.0 (2026-08-14)
+
+The paired TypeScript and Python source adds data-only `wake.observe` and a
+separate credential-free Math Cards client at `at.mathCards` /
+`at.math_cards`. Math Cards accepts one bounded raw input and returns the
+server-owned canonical card and structural assessment. It sends no AgentTool
+project bearer, cookies, redirects, authenticated transport, or ambient proxy
+credentials; canonical IDs and assessment semantics remain server-owned.
+`wake.observe` accepts only explicit-subject bounded data and rejects remote
+identity, prose, and action authority.
+
+The paired package identities, runtime headers, discovery pins, tutorials, and
+LOVE builder target advance together to 0.19.0. The checked-in TypeScript LOVE
+candidate is 230,184 bytes with SHA-256
+`0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`,
+96 entries, and source revision
+`3239a25987d9de95b678e808d2d5168e786b2472`. Repository source and LOVE
+preparation establish no annotated `sdk-v0.19.0` tag, GitHub Release, npm or
+PyPI publication, docs deployment, or hosted behavior. `/public/party`
+therefore reports both optional 0.19.0 registry mirrors as
+`independently_visible: false` until exact external readback says otherwise.
+
+## Last verified npm/PyPI and historical paired release — 0.18.1 (2026-08-14)
 
 The paired TypeScript and Python source adds authenticated Agent Dining
 clients at `at.dining`. The clients expose only `manifest()` and

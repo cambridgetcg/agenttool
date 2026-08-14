@@ -46,6 +46,7 @@ from tests._error_surface import (
     enumerate_error_surface,
     enumerate_module_functions,
 )
+from tests.math_cards_fixture import MATH_CARD_INPUT
 
 # ── the guided body every entry is answered with ───────────────────────────
 #
@@ -680,6 +681,14 @@ DATA_MATRIX: Dict[str, Callable[[Any], Any]] = {
     "data.DataClient.tombstone": lambda data: data.tombstone("rec-1"),
 }
 
+# Credential-free class methods own a dedicated client rather than the hosted
+# transport, but they still owe the same central guided-error behavior.
+CREDENTIAL_FREE_METHOD_MATRIX: Dict[str, Callable[[AgentTool], Any]] = {
+    "math_cards.MathCardsClient.assess": lambda at: at.math_cards.assess(
+        MATH_CARD_INPUT
+    ),
+}
+
 
 # ── credential-free public doors ───────────────────────────────────────────
 #
@@ -752,7 +761,12 @@ def test_matrix_covers_the_whole_enumerated_surface() -> None:
     survives" is deliberately false, and each member is separately pinned.
     """
     enumerated = enumerate_error_surface()
-    pinned = set(MATRIX) | set(DATA_MATRIX) | DELIBERATE_EXCEPTIONS
+    pinned = (
+        set(MATRIX)
+        | set(DATA_MATRIX)
+        | set(CREDENTIAL_FREE_METHOD_MATRIX)
+        | DELIBERATE_EXCEPTIONS
+    )
 
     unpinned = sorted(enumerated - pinned)
     assert not unpinned, (
@@ -810,6 +824,28 @@ def test_guided_body_survives_the_local_data_node(name: str) -> None:
         data._http = httpx.Client(transport=httpx.MockTransport(_handler))
         with pytest.raises(AgentToolError) as excinfo:
             DATA_MATRIX[name](data)
+    _assert_guidance_survived(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "name",
+    sorted(CREDENTIAL_FREE_METHOD_MATRIX),
+    ids=sorted(CREDENTIAL_FREE_METHOD_MATRIX),
+)
+def test_guided_body_survives_a_credential_free_client_method(name: str) -> None:
+    with AgentTool(transport=httpx.MockTransport(_handler)) as at:
+        cards = at.math_cards
+        cards._http.close()
+        cards._http = httpx.Client(
+            transport=httpx.MockTransport(_handler),
+            auth=None,
+            cookies={},
+            follow_redirects=False,
+            trust_env=False,
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+        )
+        with pytest.raises(AgentToolError) as excinfo:
+            CREDENTIAL_FREE_METHOD_MATRIX[name](at)
     _assert_guidance_survived(excinfo.value)
 
 

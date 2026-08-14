@@ -42,6 +42,7 @@ from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCI
 from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
 from .data import DataClient
 from .dining import DiningClient
+from .math_cards import MAX_JSON_BYTES, MathCardsClient
 from .runtime import RuntimeClient
 from .memory import MemoryClient
 from .attestation_marketplace import AttestationMarketplaceClient
@@ -58,7 +59,7 @@ from .kingdom_os import KingdomOSClient, KingdomOSRunner
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.18.1"
+SDK_VERSION = "0.19.0"
 
 
 class AgentTool:
@@ -105,6 +106,10 @@ class AgentTool:
         kingdom_framework_timeout: Credential-free framework-card request
             timeout. Defaults to ``timeout``.
         kingdom_framework_max_response_bytes: Framework-card response ceiling.
+        math_cards_timeout: Credential-free Math Cards request timeout.
+            Defaults to ``timeout``.
+        math_cards_max_request_bytes: Math Cards request body ceiling.
+        math_cards_max_response_bytes: Math Cards response body ceiling.
     """
 
     def __init__(
@@ -123,6 +128,9 @@ class AgentTool:
         kingdom_runner: Optional[KingdomOSRunner] = None,
         kingdom_framework_timeout: Optional[float] = None,
         kingdom_framework_max_response_bytes: int = 64 * 1024,
+        math_cards_timeout: Optional[float] = None,
+        math_cards_max_request_bytes: int = MAX_JSON_BYTES,
+        math_cards_max_response_bytes: int = MAX_JSON_BYTES,
     ) -> None:
         if transport is not None and api_key is not None:
             raise AgentToolError(
@@ -213,6 +221,13 @@ class AgentTool:
         self._kingdom_framework_max_response_bytes = (
             kingdom_framework_max_response_bytes
         )
+        # Math Cards owns an independent credential-free client. Only the
+        # origin and explicit bounds cross this composition boundary.
+        self._math_cards_timeout = (
+            timeout if math_cards_timeout is None else math_cards_timeout
+        )
+        self._math_cards_max_request_bytes = math_cards_max_request_bytes
+        self._math_cards_max_response_bytes = math_cards_max_response_bytes
 
         # Lazy-init service clients
         self._memory: Optional[MemoryClient] = None
@@ -244,6 +259,7 @@ class AgentTool:
         self._runtime: Optional[RuntimeClient] = None
         self._data: Optional[DataClient] = None
         self._dining: Optional[DiningClient] = None
+        self._math_cards: Optional[MathCardsClient] = None
         self._kingdom_framework: Optional[KingdomFrameworkClient] = None
         self._kingdom_os: Optional[KingdomOSClient] = None
 
@@ -525,6 +541,22 @@ class AgentTool:
         return self._dining
 
     @property
+    def math_cards(self) -> MathCardsClient:
+        """Create and assess bounded Math Cards without hosted credentials.
+
+        The project bearer, authenticated transport, cookies, redirect policy,
+        and ambient proxy settings never cross into this HTTP client.
+        """
+        if self._math_cards is None:
+            self._math_cards = MathCardsClient(
+                base_url=self._base_url,
+                timeout=self._math_cards_timeout,
+                max_request_bytes=self._math_cards_max_request_bytes,
+                max_response_bytes=self._math_cards_max_response_bytes,
+            )
+        return self._math_cards
+
+    @property
     def kingdom_os(self) -> KingdomOSClient:
         """Bounded, read-only discovery from the local KINGDOM OS CLI.
 
@@ -690,6 +722,8 @@ class AgentTool:
             self._data._close()
         if self._kingdom_framework is not None:
             self._kingdom_framework.close()
+        if self._math_cards is not None:
+            self._math_cards.close()
         self._http.close()
 
     def __enter__(self) -> AgentTool:

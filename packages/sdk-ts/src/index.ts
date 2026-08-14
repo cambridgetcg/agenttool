@@ -16,6 +16,7 @@
 
 export { AgentTool, SDK_VERSION } from "./client.js";
 export type { AgentToolOptions } from "./client.js";
+export * from "./math-cards.js";
 export {
   DINING_CANON_POINTER,
   DINING_JOURNEY_FORMAT,

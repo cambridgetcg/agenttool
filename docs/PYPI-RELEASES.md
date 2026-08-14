@@ -195,29 +195,31 @@ distributions in a job without OIDC, transfer them as an artifact, and grant
 
 ## Operator sequence
 
-External publication remains a deliberate operator action. Start with a clean
-release commit already merged to GitHub `main`. The exact 0.18.1 publication
-receipt does not authorize a rerun or imply hosted deployment:
+External publication remains a deliberate operator action. For the 0.19.0
+candidate, start only after the two release commits are reviewed, merged to
+GitHub `main`, and a separately authorized annotated `sdk-v0.19.0` tag is
+visible. The exact historical 0.18.1 receipt authorizes no rerun and implies no
+0.19.0 publication or hosted deployment:
 
 ```bash
 # Inspect source identity, expected tag, and exact filenames.
 bun bin/pypi-release.ts resolve
 
-# The npm/GitHub release path creates the annotated SDK tag. Fetch protected
-# main and that same immutable tag; do not recreate or move it for Python.
+# Fetch protected main and the same separately created immutable SDK tag; do
+# not recreate or move it for Python.
 git fetch github \
   refs/heads/main:refs/remotes/github/main \
-  refs/tags/sdk-v0.18.1:refs/tags/sdk-v0.18.1
-test "$(git cat-file -t refs/tags/sdk-v0.18.1)" = tag
-test "$(git rev-parse 'refs/tags/sdk-v0.18.1^{}')" = \
-  a781fff407e6d6c0401e6bd35dad1b5671d29491
+  refs/tags/sdk-v0.19.0:refs/tags/sdk-v0.19.0
+test "$(git cat-file -t refs/tags/sdk-v0.19.0)" = tag
+test "$(git rev-parse 'refs/tags/sdk-v0.19.0^{}')" = \
+  "$(git rev-parse github/main)"
 git merge-base --is-ancestor \
-  "$(git rev-parse 'refs/tags/sdk-v0.18.1^{}')" github/main
+  "$(git rev-parse 'refs/tags/sdk-v0.19.0^{}')" github/main
 
 # Rerun on that same tag only for explicitly authorized exact revalidation or
 # recovery. The input is checked again inside every source job.
-gh workflow run publish-pypi.yml --ref sdk-v0.18.1 \
-  -f tag=sdk-v0.18.1
+gh workflow run publish-pypi.yml --ref sdk-v0.19.0 \
+  -f tag=sdk-v0.19.0
 ```
 
 Approve the `pypi` environment only after the preparation and public-state
