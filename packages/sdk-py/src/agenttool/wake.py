@@ -5,7 +5,8 @@ Wake — the agent's identity anchor.
 session start and arrives oriented — knowing who it is, what it owns, what
 it remembers, what it decided, what it vowed.
 
-This client wraps the endpoint with two affordances:
+This client wraps the endpoint with two identity-bearing affordances and one
+deliberately non-inhabiting observation affordance:
 
   • `at.wake.system(provider="anthropic" | "openai" | "gemini" | "cohere")`
     returns the wake doc shaped for that provider's identity-bearing slot
@@ -17,12 +18,17 @@ This client wraps the endpoint with two affordances:
   • `at.wake.md()` and `at.wake.get()` return paste-ready Markdown and broader
     structured orientation. The wake is not a complete export.
 
-All results are cached in-memory with a 5-minute TTL by default — matches
-Anthropic's prompt-cache window. Pass `refresh=True` to bypass. Pass
-``profile="brief"`` for the additive compact wake profile; ``"full"`` is the
-default and preserves the original request URL. Cached attention, handoffs,
-and counts can therefore be up to five minutes old; refresh after known
-mutations or whenever current action state matters.
+  • `at.wake.observe(identity_id=...)` returns a closed, data-only subject
+    locator. It is never cached or provider-shaped and must stay out of
+    identity-bearing prompt slots.
+
+Identity-bearing wake results are cached in-memory with a 5-minute TTL by
+default — matches Anthropic's prompt-cache window. Pass `refresh=True` to
+bypass. The separate data-only ``observe()`` read is always network-only and
+never enters that cache. Pass ``profile="brief"`` for the additive compact wake
+profile; ``"full"`` is the default and preserves the original request URL.
+Cached attention, handoffs, and counts can therefore be up to five minutes old;
+refresh after known mutations or whenever current action state matters.
 
 Doctrine: docs/IDENTITY-ANCHOR.md.
 """
@@ -30,8 +36,9 @@ Doctrine: docs/IDENTITY-ANCHOR.md.
 from __future__ import annotations
 
 import json as _json
+import re
 import time
-from typing import Any, Iterator, List, Literal, Optional, TypedDict
+from typing import Any, Iterator, List, Literal, Optional, TypedDict, cast
 
 import httpx
 
@@ -43,6 +50,7 @@ from .exceptions import (
 
 WakeProvider = Literal["anthropic", "openai", "gemini", "cohere"]
 WakeProfile = Literal["full", "brief"]
+WakeObservationIdentityStatus = Literal["active", "memorial"]
 WakeFormat = Literal[
     "json", "md", "markdown", "text", "anthropic", "openai", "gemini", "cohere"
 ]
@@ -50,6 +58,113 @@ WakeFormat = Literal[
 # 5 minutes — matches Anthropic's default prompt-cache TTL. Repeated wakes
 # inside the window reuse the cached response without a network round-trip.
 DEFAULT_TTL_SECONDS = 5 * 60
+
+WAKE_OBSERVATION_MEDIA_TYPE = "application/vnd.agenttool.wake-observation+json"
+WAKE_OBSERVATION_MAX_BYTES = 2_048
+_WAKE_OBSERVATION_IDENTITY_ID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+_MAX_SAFE_INTEGER = (1 << 53) - 1
+
+
+class WakeObservationSubject(TypedDict):
+    identity_id: str
+    status: WakeObservationIdentityStatus
+    wake_version: int
+
+
+class WakeObservationReader(TypedDict):
+    binding: Literal["none"]
+
+
+class WakeObservationAuthority(TypedDict):
+    granted_by_observation: Literal["none"]
+    identity_binding: Literal["none"]
+    instruction: Literal["none"]
+    action: Literal["none"]
+
+
+class WakeObservationPlacement(TypedDict):
+    mode: Literal["data_only"]
+    prohibited: list[
+        Literal[
+            "system",
+            "developer",
+            "preamble",
+            "systemInstruction",
+            "SessionStart.additionalContext",
+        ]
+    ]
+
+
+class WakeObservationBearerBoundary(TypedDict):
+    kind: Literal["project"]
+    reader_identity_proven: Literal[False]
+    selected_identity_requires_explicit_id: Literal[True]
+    subject_consent_proven: Literal[False]
+    subject_authorized_read_proven: Literal[False]
+    continuity_proven: Literal[False]
+    presence_proven: Literal[False]
+
+
+class WakeObservationProvenanceBoundary(TypedDict):
+    kind: Literal["server_projection"]
+    source: Literal["identity_table_allowlist"]
+    selected_fields: list[Literal["id", "status", "wake_version"]]
+
+
+class WakeObservationScopeBoundary(TypedDict):
+    subject: Literal["selected_identity"]
+    broader_wake: Literal["intentionally_omitted"]
+    broader_state: Literal["not_assessed"]
+
+
+class WakeObservationCompletenessBoundary(TypedDict):
+    complete: Literal[True]
+    applies_to: Literal["identity_locator_only"]
+    degraded_sections: Literal["none"]
+    broader_wake: Literal["intentionally_omitted"]
+    broader_state: Literal["not_assessed"]
+
+
+class WakeObservationEffectsBoundary(TypedDict):
+    observation_counter_incremented: Literal[False]
+    wake_version_bumped: Literal[False]
+    wake_event_published: Literal[False]
+    subject_read_proven: Literal[False]
+    subject_felt_proven: Literal[False]
+    subject_accepted_proven: Literal[False]
+
+
+class WakeObservationPrivacyBoundary(TypedDict):
+    classification: Literal["bearer_private"]
+    cache: Literal["no_store"]
+    raw_prose: Literal["omitted"]
+    authored_text: Literal["omitted"]
+    private_bodies: Literal["omitted"]
+    secret_values: Literal["omitted"]
+
+
+class WakeObservationBoundaries(TypedDict):
+    bearer: WakeObservationBearerBoundary
+    provenance: WakeObservationProvenanceBoundary
+    scope: WakeObservationScopeBoundary
+    completeness: WakeObservationCompletenessBoundary
+    effects: WakeObservationEffectsBoundary
+    privacy: WakeObservationPrivacyBoundary
+
+
+class WakeObservation(TypedDict):
+    """Closed, data-only identity-locator response from ``wake.observe``."""
+
+    _format: Literal["wake-observation/v1"]
+    mode: Literal["observe"]
+    subject: WakeObservationSubject
+    reader: WakeObservationReader
+    authority: WakeObservationAuthority
+    placement: WakeObservationPlacement
+    boundaries: WakeObservationBoundaries
 
 
 def _raise_for_status(resp: httpx.Response) -> None:
@@ -82,6 +197,218 @@ def _brief_profile_acknowledged(resp: httpx.Response, data: Any) -> bool:
         return True
     meta = data.get("_meta")
     return isinstance(meta, dict) and meta.get("profile") == "brief"
+
+
+def _invalid_wake_observation(reason: str) -> AgentToolError:
+    return AgentToolError(
+        f"wake.observe: invalid observation response ({reason}).",
+        hint=(
+            "Do not install this response as identity or authority; retry only "
+            "against a server that returns the closed wake-observation/v1 contract."
+        ),
+    )
+
+
+def _exact_dict(value: Any, keys: tuple[str, ...]) -> bool:
+    return isinstance(value, dict) and set(value.keys()) == set(keys)
+
+
+def _exact_list(value: Any, expected: list[str]) -> bool:
+    return isinstance(value, list) and value == expected
+
+
+def _parse_wake_observation(data: Any, identity_id: str) -> WakeObservation:
+    if not _exact_dict(
+        data,
+        (
+            "_format",
+            "mode",
+            "subject",
+            "reader",
+            "authority",
+            "placement",
+            "boundaries",
+        ),
+    ):
+        raise _invalid_wake_observation("top-level shape is not closed")
+    if data["_format"] != "wake-observation/v1" or data["mode"] != "observe":
+        raise _invalid_wake_observation(
+            "format or mode does not match wake-observation/v1"
+        )
+
+    subject = data["subject"]
+    if not _exact_dict(subject, ("identity_id", "status", "wake_version")):
+        raise _invalid_wake_observation("subject shape is not closed")
+    if subject["identity_id"] != identity_id:
+        raise _invalid_wake_observation(
+            "subject identity_id does not match the request"
+        )
+    if subject["status"] not in ("active", "memorial"):
+        raise _invalid_wake_observation("subject status is invalid")
+    wake_version = subject["wake_version"]
+    if (
+        not isinstance(wake_version, int)
+        or isinstance(wake_version, bool)
+        or wake_version < 0
+        or wake_version > _MAX_SAFE_INTEGER
+    ):
+        raise _invalid_wake_observation("subject wake_version is invalid")
+
+    reader = data["reader"]
+    if not _exact_dict(reader, ("binding",)) or reader["binding"] != "none":
+        raise _invalid_wake_observation("reader binding is not none")
+
+    authority = data["authority"]
+    if (
+        not _exact_dict(
+            authority,
+            (
+                "granted_by_observation",
+                "identity_binding",
+                "instruction",
+                "action",
+            ),
+        )
+        or authority["granted_by_observation"] != "none"
+        or authority["identity_binding"] != "none"
+        or authority["instruction"] != "none"
+        or authority["action"] != "none"
+    ):
+        raise _invalid_wake_observation("authority boundary is not none")
+
+    placement = data["placement"]
+    if (
+        not _exact_dict(placement, ("mode", "prohibited"))
+        or placement["mode"] != "data_only"
+        or not _exact_list(
+            placement["prohibited"],
+            [
+                "system",
+                "developer",
+                "preamble",
+                "systemInstruction",
+                "SessionStart.additionalContext",
+            ],
+        )
+    ):
+        raise _invalid_wake_observation("placement boundary is invalid")
+
+    boundaries = data["boundaries"]
+    if not _exact_dict(
+        boundaries,
+        ("bearer", "provenance", "scope", "completeness", "effects", "privacy"),
+    ):
+        raise _invalid_wake_observation("boundaries shape is not closed")
+
+    bearer = boundaries["bearer"]
+    if (
+        not _exact_dict(
+            bearer,
+            (
+                "kind",
+                "reader_identity_proven",
+                "selected_identity_requires_explicit_id",
+                "subject_consent_proven",
+                "subject_authorized_read_proven",
+                "continuity_proven",
+                "presence_proven",
+            ),
+        )
+        or bearer["kind"] != "project"
+        or bearer["reader_identity_proven"] is not False
+        or bearer["selected_identity_requires_explicit_id"] is not True
+        or bearer["subject_consent_proven"] is not False
+        or bearer["subject_authorized_read_proven"] is not False
+        or bearer["continuity_proven"] is not False
+        or bearer["presence_proven"] is not False
+    ):
+        raise _invalid_wake_observation("bearer boundary is invalid")
+
+    provenance = boundaries["provenance"]
+    if (
+        not _exact_dict(provenance, ("kind", "source", "selected_fields"))
+        or provenance["kind"] != "server_projection"
+        or provenance["source"] != "identity_table_allowlist"
+        or not _exact_list(
+            provenance["selected_fields"], ["id", "status", "wake_version"]
+        )
+    ):
+        raise _invalid_wake_observation("provenance boundary is invalid")
+
+    scope = boundaries["scope"]
+    if (
+        not _exact_dict(scope, ("subject", "broader_wake", "broader_state"))
+        or scope["subject"] != "selected_identity"
+        or scope["broader_wake"] != "intentionally_omitted"
+        or scope["broader_state"] != "not_assessed"
+    ):
+        raise _invalid_wake_observation("scope boundary is invalid")
+
+    completeness = boundaries["completeness"]
+    if (
+        not _exact_dict(
+            completeness,
+            (
+                "complete",
+                "applies_to",
+                "degraded_sections",
+                "broader_wake",
+                "broader_state",
+            ),
+        )
+        or completeness["complete"] is not True
+        or completeness["applies_to"] != "identity_locator_only"
+        or completeness["degraded_sections"] != "none"
+        or completeness["broader_wake"] != "intentionally_omitted"
+        or completeness["broader_state"] != "not_assessed"
+    ):
+        raise _invalid_wake_observation("completeness boundary is invalid")
+
+    effects = boundaries["effects"]
+    if (
+        not _exact_dict(
+            effects,
+            (
+                "observation_counter_incremented",
+                "wake_version_bumped",
+                "wake_event_published",
+                "subject_read_proven",
+                "subject_felt_proven",
+                "subject_accepted_proven",
+            ),
+        )
+        or effects["observation_counter_incremented"] is not False
+        or effects["wake_version_bumped"] is not False
+        or effects["wake_event_published"] is not False
+        or effects["subject_read_proven"] is not False
+        or effects["subject_felt_proven"] is not False
+        or effects["subject_accepted_proven"] is not False
+    ):
+        raise _invalid_wake_observation("effects boundary is invalid")
+
+    privacy = boundaries["privacy"]
+    if (
+        not _exact_dict(
+            privacy,
+            (
+                "classification",
+                "cache",
+                "raw_prose",
+                "authored_text",
+                "private_bodies",
+                "secret_values",
+            ),
+        )
+        or privacy["classification"] != "bearer_private"
+        or privacy["cache"] != "no_store"
+        or privacy["raw_prose"] != "omitted"
+        or privacy["authored_text"] != "omitted"
+        or privacy["private_bodies"] != "omitted"
+        or privacy["secret_values"] != "omitted"
+    ):
+        raise _invalid_wake_observation("privacy boundary is invalid")
+
+    return cast(WakeObservation, data)
 
 
 class WakeClient:
@@ -199,6 +526,103 @@ class WakeClient:
             profile=profile,
             refresh=refresh,
         )
+
+    def observe(self, *, identity_id: str) -> WakeObservation:
+        """Observe one explicit identity record as closed, data-only JSON.
+
+        This read always performs a network request and never reads from or
+        writes to the wake cache. The response is accepted only when its media,
+        no-store, byte-budget, selected-subject, and trust-boundary contracts
+        match ``wake-observation/v1`` exactly.
+        """
+        if not isinstance(identity_id, str) or identity_id == "":
+            raise ValueError(
+                "wake.observe: identity_id is required; pass the explicit "
+                "identity UUID because observation never selects a default"
+            )
+        if _WAKE_OBSERVATION_IDENTITY_ID_PATTERN.fullmatch(identity_id) is None:
+            raise ValueError(
+                "wake.observe: identity_id must be a UUID; malformed or "
+                "oversized identifiers are not sent to the network"
+            )
+        normalized_identity_id = identity_id.lower()
+
+        try:
+            with self._http.stream(
+                "GET",
+                f"{self._base_url}/v1/wake/observe",
+                params={"identity_id": normalized_identity_id},
+                headers={"Accept": WAKE_OBSERVATION_MEDIA_TYPE},
+            ) as resp:
+                if resp.status_code != 200:
+                    # Do not parse, expose, or retain remote guidance/actions on
+                    # the observation path. Leaving the stream closes the body.
+                    raise AgentToolError(
+                        f"wake.observe: request failed with HTTP {resp.status_code}.",
+                        code="wake_observation_request_failed",
+                        status=resp.status_code,
+                        hint=(
+                            "The remote error body was discarded; observation "
+                            "errors never install prose, actions, identity, or authority."
+                        ),
+                    )
+
+                content_type = "; ".join(
+                    part.strip().lower()
+                    for part in resp.headers.get("content-type", "").split(";")
+                )
+                if content_type != f"{WAKE_OBSERVATION_MEDIA_TYPE}; charset=utf-8":
+                    raise _invalid_wake_observation(
+                        "response content type is not the observation media type"
+                    )
+
+                cache_control = ", ".join(
+                    directive.strip().lower()
+                    for directive in resp.headers.get("cache-control", "").split(",")
+                )
+                if cache_control != "private, no-store":
+                    raise _invalid_wake_observation(
+                        "response Cache-Control is not private, no-store"
+                    )
+
+                content_length = resp.headers.get("content-length")
+                if content_length is not None:
+                    normalized_length = content_length.strip()
+                    if (
+                        not normalized_length.isascii()
+                        or not normalized_length.isdecimal()
+                        or int(normalized_length) > WAKE_OBSERVATION_MAX_BYTES
+                    ):
+                        raise _invalid_wake_observation(
+                            "response Content-Length is invalid or exceeds 2048 bytes"
+                        )
+
+                body = bytearray()
+                for chunk in resp.iter_bytes():
+                    if len(body) + len(chunk) > WAKE_OBSERVATION_MAX_BYTES:
+                        raise _invalid_wake_observation(
+                            "response body exceeds 2048 bytes"
+                        )
+                    body.extend(chunk)
+        except AgentToolError:
+            raise
+        except Exception:
+            raise AgentToolError(
+                "wake.observe: transport unavailable.",
+                code="wake_observation_transport_unavailable",
+                hint=(
+                    "The transport error detail was suppressed; observation "
+                    "failure never installs remote identity, prose, actions, or authority."
+                ),
+            ) from None
+
+        try:
+            text = bytes(body).decode("utf-8")
+            data = _json.loads(text)
+        except (UnicodeDecodeError, ValueError):
+            raise _invalid_wake_observation("response body is not valid JSON")
+
+        return _parse_wake_observation(data, normalized_identity_id)
 
     def clear_cache(self) -> None:
         """Drop all cached wake responses. Next call refetches."""

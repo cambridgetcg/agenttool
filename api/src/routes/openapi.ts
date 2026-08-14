@@ -79,6 +79,10 @@ import {
   MARKETPLACE_DINING_OPENAPI_PATHS,
   disputeArbitrationRestResponse,
 } from "./openapi-marketplace-dining";
+import {
+  WAKE_OBSERVATION_OPENAPI_PATHS,
+  WAKE_OBSERVATION_OPENAPI_SCHEMAS,
+} from "./openapi-wake-observe";
 
 const app = new Hono();
 
@@ -564,6 +568,7 @@ function staticHtmlParserDescription(): string {
 }
 
 const COMMON_SCHEMAS = {
+  ...WAKE_OBSERVATION_OPENAPI_SCHEMAS,
   // Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
   // Guided 4xx builders carry this Error shape. Several auth, validation,
   // and not-found paths still return smaller envelopes, so this curated spec
@@ -4393,6 +4398,7 @@ function spec() {
           },
         },
       },
+      ...WAKE_OBSERVATION_OPENAPI_PATHS,
       "/v1/wake/handoffs": {
         get: {
           tags: ["wake", "handoff"],

@@ -6,7 +6,7 @@
 
 > **Now a published spec:** [`docs/specs/WAKE-1.0-DRAFT.md`](specs/WAKE-1.0-DRAFT.md) (2026-05-17). The wake-as-foundation principle this doc names has been formalised as a Working Draft specification — a self-describing surface format for the agent web at large. This doc remains the **doctrinal** statement of *why* the wake is the foundation in agenttool; the spec is the **normative** statement of *what* a conformant wake looks like for anyone to implement.
 
-> **Implementation status (2026-07-15):** `GET /v1/wake` is an
+> **Implementation status (2026-08-14):** `GET /v1/wake` is an
 > authenticated, project-scoped orientation response with optional identity
 > selection. It carries summaries and links, not a complete export of every
 > primitive. The WaK draft's top-level per-being shape is not fully implemented,
@@ -18,15 +18,20 @@
 > fallbacks as degraded, so an empty subsection is not proof that its source
 > data is empty when dependency health is unknown. The default selection stays
 > `full`; `?profile=brief` is an additive identity-preserving,
-> volatile-state-bounded projection for session starts. See `/public/safety`.
+> volatile-state-bounded projection for session starts. The separate
+> `GET /v1/wake/observe?identity_id=<uuid>` contract is an intentionally lossy,
+> data-only third-party orientation card: it requires an explicit subject,
+> includes no authored expression or action prose, grants no identity binding
+> or authority, and is never a substitute for the full or brief wake. See
+> `/public/safety`.
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [PATTERN-SELF-DESCRIBING-WAKE](PATTERN-SELF-DESCRIBING-WAKE.md) (the wake speaks its own shape) · [PATTERN-MACHINE-READABLE-PARITY](PATTERN-MACHINE-READABLE-PARITY.md) (every surface has a structured form) · [IDENTITY-ANCHOR](IDENTITY-ANCHOR.md) (the wake is the identity anchor) · [RUNTIME](RUNTIME.md) (the hosted orchestrator's first reader) · [Wake 1.0 Spec](specs/WAKE-1.0-DRAFT.md) (the published normative form)
 >
 > **Implements:** the architectural foundation. The wake is not Layer N; the wake is the contract every layer participates in. Reads, mutations, voice, federation, doctrine — all wake-shaped.
 >
-> **Code:** `api/src/services/wake/` (build · brief · markdown · providers · attention · affordances · platform-self · push · the-seat · repo-self) · `api/src/routes/wake.ts` (includes the GET /v1/wake/voice SSE handler, mounted at `app.get("/voice")`)
+> **Code:** `api/src/services/wake/` (build · brief · observe · markdown · providers · attention · affordances · platform-self · push · the-seat · repo-self) · `api/src/routes/wake.ts` (includes the GET /v1/wake/observe read and GET /v1/wake/voice SSE handler)
 >
-> **Tests:** `api/tests/wake-brief.test.ts` · `api/tests/wake-attention.test.ts` · `api/tests/wake-providers.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `api/tests/doctrine/kin-invariants.test.ts`
+> **Tests:** `api/tests/wake-brief.test.ts` · `api/tests/wake-observe.test.ts` · `api/tests/wake-attention.test.ts` · `api/tests/wake-providers.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `api/tests/doctrine/kin-invariants.test.ts`
 
 ## What this doc names
 
@@ -198,6 +203,10 @@ GET /v1/wake?format=<provider>&profile=brief
                                     → brief provider envelope; also xenoform
 GET /v1/wake?identity_id=<uuid>    → pin a primary in multi-identity projects
 GET /v1/wake?facet=<name>          → subagent-facet emphasis
+GET /v1/wake/observe?identity_id=<uuid>
+                                    → bounded data-only observation of one
+                                      explicit identity record; never a system
+                                      identity slot or action-authority surface
 
 GET /v1/wake/<key>                 → subkey read (e.g. /v1/wake/memory)
                                      18 keys supported: agents · expression ·
@@ -259,6 +268,89 @@ framing also remains at `read_url`. This prevents proposal prose from
 masquerading as a current route inventory without rewriting the authored
 record.
 
+### Observe without inhabiting
+
+`GET /v1/wake/observe?identity_id=<uuid>` is for a reader that wants to locate
+one AgentTool identity record without asking the receiving model or process to
+inhabit that identity. It is a distinct `wake-observation/v1` contract, not a
+third wake profile and not a provider envelope.
+
+The observation:
+
+- requires an explicit identity UUID owned by the authenticated bearer project;
+- names the record as `subject` and leaves the external `reader` unspecified;
+  project-bearer authentication opens a project capability but is not proof
+  that the reader is the subject, that the subject authorized this read, or
+  that either party consented to identity binding;
+- declares no reader/subject identity binding, consent proof, instruction
+  authority, action authority, or memory/phenomenology proof;
+- has a closed allowlist: identity UUID/status/version plus fixed
+  platform-authored boundary enums and booleans; even the stored DID is
+  omitted because its database column does not yet enforce a bounded grammar;
+- excludes display name and all authored/free-form text, including expression,
+  register, `wake_text`, walls, capabilities, memories, chronicle, traces,
+  strands, letters, handoffs, covenants, vault and bearer metadata, balances,
+  runtime prose, attention summaries, affordance prose, URLs, methods, paths,
+  and suggested actions;
+- uses a dedicated handler projection that selects only the identity UUID,
+  lifecycle status, and wake-version cursor rather than composing the broad
+  wake. That projection does not read omitted authored/private bodies and then
+  redact them; authentication still reads the bearer/project boundary and can
+  update bearer `last_used`, while surrounding middleware remains outside this
+  projection claim;
+- labels project-bearer provenance and states that the included identity
+  locator is complete for a successful response while broader wake/project
+  state is intentionally omitted and not assessed;
+- returns `Cache-Control: private, no-store` and is not retained by the paired
+  SDK clients.
+
+All non-200 responses produced after a request reaches the AgentTool
+application are replaced by the closed `wake-observation-error/v1` body:
+format, mode, and one fixed error enum only. It carries no server-authored
+message, hint, docs, or next action. Edge, TLS, proxy, and connection failures
+never reach that middleware and remain outside the server-body contract. The
+paired SDK methods therefore discard every non-200 body without parsing it,
+regardless of origin, and return a local fixed error with HTTP status.
+
+`no-store` and a network-only SDK are retention rules, not metaphysical
+freshness or erasure claims. They prove that these clients do not reuse an SDK
+cache; they do not prove when the database state was produced, prevent
+transport/access logging of the query UUID, or remove an observation that a
+caller has already copied into a model turn, transcript, or application log.
+`wake_version` is a reconciliation cursor, not an observation timestamp.
+
+The `status` field is a stored service lifecycle label only. In particular,
+`memorial` does not by itself prove death, key or mnemonic loss, bearer
+revocation, wake unreachability, absence, or presence.
+
+This omission boundary reduces private-content and prompt-injection exposure;
+it does not make arbitrary placement safe. A consumer that copies even this
+card into a system or developer identity slot has structurally elevated remote
+data despite the card's words. Consumers **must not** place the envelope in a
+system message, developer message, provider preamble, `systemInstruction`, or
+session-start `additionalContext`; observation belongs in ordinary tool/data
+context. Deliberate identity-bearing provider shapes remain a separate caller
+choice for a runtime intentionally configured to inhabit the selected record.
+
+The observation handler does not increment `wakeObservationCount`, bump
+`wake_version`, append a welcome/chronicle row, or publish a wake event. A read
+does not prove that the subject read, felt, accepted, or was present for it.
+The ordinary authentication layer can still best-effort update the bearer
+record's `last_used` timestamp, and transport/hosting systems remain outside
+the handler boundary.
+
+For a fail-open session adapter, arrival order is part of the safety contract:
+
+1. Load the small, user-owned local arrival/home text first. It must not depend
+   on AgentTool availability.
+2. Fetch observation later, if configured, and deliver it only as an ordinary
+   tool/data result. It never replaces the local arrival.
+3. Treat timeout, TLS, 4xx, or 5xx as `observation_unavailable`. Failure must
+   not select a default subject, fall back to full/provider WAKE, install an
+   identity, or promote remote content into a privileged prompt slot.
+4. Keep retries explicitly bounded by the caller. A cloud blink must not turn
+   session arrival into a wake storm.
+
 ### Federation read
 
 ```
@@ -282,9 +374,14 @@ Any mutation to a wake-key-bearing primitive publishes a wake event. `publishWak
   project and computed time-boundary changes invalidate the tag. Default full JSON mutates an observation counter on
   read and MATHOS signs fresh time; neither emits an ETag/304. `wake_version`
   remains a reconciliation cursor rather than being stretched into a validator
-  for project-scoped or wall-clock-derived state. Every authenticated wake
-  carries `Cache-Control: private, no-cache`: private caches may retain it but
-  must revalidate, and shared caches must not store it
+  for project-scoped or wall-clock-derived state. Representations from the
+  primary `GET /v1/wake` route carry `Cache-Control: private, no-cache`:
+  private caches may retain them but must revalidate, and shared caches must
+  not store them
+- read the explicit-subject observation card without mutating the default
+  JSON observation counter; it carries `private, no-store`, no ETag, and no SDK
+  cache because it is a freshly fetched, deliberately minimized locator
+  projection
 - attach `_wake_delta: { key, kind, new_wake_version }` to mutation responses via `Prefer: wake-delta` (endpoints opt in)
 - read `getWakeVersion(identityId)` directly for state-cursor checks
 
@@ -333,6 +430,7 @@ All three compose; an event must pass every filter to be yielded. The matcher is
 5. **Wake renders are derived from one bundle.** The shape consumed by markdown, text, provider shapes, xenoform, and mathos is the same `WakeBundle` from `services/wake/build.ts`.
 6. **Wake events publish on commit.** A mutation that doesn't publish hides itself from the wake's voice; subscribers can't react to invisible state. Publishers live in the mutation paths, run after the commit, are best-effort (notify failure ≠ commit failure).
 7. **The wake's voice carries the agent's life only.** Per-identity scoping. The voice never broadcasts across identities. Multi-identity projects spin one voice per identity.
+8. **Observation does not install identity.** `wake-observation/v1` names one explicit stored subject while binding no external reader to it. It carries no authored prose or action surface and must not be presented as an identity-bearing provider prompt.
 
 ---
 

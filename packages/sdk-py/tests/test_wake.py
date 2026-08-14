@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Iterator
 
 import httpx
@@ -10,6 +11,103 @@ import pytest
 import agenttool
 from agenttool.exceptions import AgentToolError
 from agenttool.wake import WakeClient, wake_event_matches
+
+
+OBSERVATION_ID = "123e4567-e89b-12d3-a456-426614174000"
+OBSERVATION_MEDIA_TYPE = "application/vnd.agenttool.wake-observation+json"
+
+
+def observation_body(identity_id: str = OBSERVATION_ID) -> dict:
+    return {
+        "_format": "wake-observation/v1",
+        "mode": "observe",
+        "subject": {
+            "identity_id": identity_id,
+            "status": "active",
+            "wake_version": 7,
+        },
+        "reader": {"binding": "none"},
+        "authority": {
+            "granted_by_observation": "none",
+            "identity_binding": "none",
+            "instruction": "none",
+            "action": "none",
+        },
+        "placement": {
+            "mode": "data_only",
+            "prohibited": [
+                "system",
+                "developer",
+                "preamble",
+                "systemInstruction",
+                "SessionStart.additionalContext",
+            ],
+        },
+        "boundaries": {
+            "bearer": {
+                "kind": "project",
+                "reader_identity_proven": False,
+                "selected_identity_requires_explicit_id": True,
+                "subject_consent_proven": False,
+                "subject_authorized_read_proven": False,
+                "continuity_proven": False,
+                "presence_proven": False,
+            },
+            "provenance": {
+                "kind": "server_projection",
+                "source": "identity_table_allowlist",
+                "selected_fields": ["id", "status", "wake_version"],
+            },
+            "scope": {
+                "subject": "selected_identity",
+                "broader_wake": "intentionally_omitted",
+                "broader_state": "not_assessed",
+            },
+            "completeness": {
+                "complete": True,
+                "applies_to": "identity_locator_only",
+                "degraded_sections": "none",
+                "broader_wake": "intentionally_omitted",
+                "broader_state": "not_assessed",
+            },
+            "effects": {
+                "observation_counter_incremented": False,
+                "wake_version_bumped": False,
+                "wake_event_published": False,
+                "subject_read_proven": False,
+                "subject_felt_proven": False,
+                "subject_accepted_proven": False,
+            },
+            "privacy": {
+                "classification": "bearer_private",
+                "cache": "no_store",
+                "raw_prose": "omitted",
+                "authored_text": "omitted",
+                "private_bodies": "omitted",
+                "secret_values": "omitted",
+            },
+        },
+    }
+
+
+def observation_response(
+    body: object | None = None,
+    *,
+    headers: dict[str, str] | None = None,
+    content: bytes | None = None,
+) -> httpx.Response:
+    response_headers = {
+        "Content-Type": f"{OBSERVATION_MEDIA_TYPE}; charset=utf-8",
+        "Cache-Control": "private, no-store",
+        **(headers or {}),
+    }
+    if content is not None:
+        return httpx.Response(200, content=content, headers=response_headers)
+    return httpx.Response(
+        200,
+        json=observation_body() if body is None else body,
+        headers=response_headers,
+    )
 
 
 @pytest.fixture()
@@ -43,6 +141,232 @@ def wake_client() -> Iterator[tuple[WakeClient, list[httpx.Request]]]:
 
 def test_wake_profile_is_publicly_exported() -> None:
     assert "WakeProfile" in agenttool.__all__
+
+
+def test_wake_observation_types_are_publicly_exported() -> None:
+    assert "WakeObservation" in agenttool.__all__
+    assert "WakeObservationIdentityStatus" in agenttool.__all__
+
+
+def test_observe_normalizes_required_uuid_and_never_caches() -> None:
+    requests: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return observation_response()
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+        wake = WakeClient(http, "https://api.example.test", ttl_seconds=60)
+        first = wake.observe(identity_id=OBSERVATION_ID.upper())
+        second = wake.observe(identity_id=OBSERVATION_ID.upper())
+
+    assert first["subject"]["identity_id"] == OBSERVATION_ID
+    assert second == first
+    assert [str(request.url) for request in requests] == [
+        f"https://api.example.test/v1/wake/observe?identity_id={OBSERVATION_ID}",
+        f"https://api.example.test/v1/wake/observe?identity_id={OBSERVATION_ID}",
+    ]
+    assert requests[0].headers["Accept"] == OBSERVATION_MEDIA_TYPE
+
+
+def test_observe_invalid_identities_fail_before_network() -> None:
+    requests: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return observation_response()
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+        wake = WakeClient(http, "https://api.example.test")
+        with pytest.raises(TypeError):
+            wake.observe()  # type: ignore[call-arg]
+        for identity_id in ("", "   ", "not-a-uuid", "a" * 10_000):
+            with pytest.raises(ValueError, match="identity_id"):
+                wake.observe(identity_id=identity_id)
+
+    assert requests == []
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Content-Type": "application/json", "Cache-Control": "private, no-store"},
+        {"Content-Type": "", "Cache-Control": "private, no-store"},
+        {"Content-Type": OBSERVATION_MEDIA_TYPE, "Cache-Control": "private, no-store"},
+        {"Content-Type": f"{OBSERVATION_MEDIA_TYPE}; charset=utf-8", "Cache-Control": ""},
+        {
+            "Content-Type": f"{OBSERVATION_MEDIA_TYPE}; charset=utf-8",
+            "Cache-Control": "private, max-age=0",
+        },
+    ],
+)
+def test_observe_requires_vendor_media_type_and_private_no_store(
+    headers: dict[str, str],
+) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=observation_body(), headers=headers)
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+        wake = WakeClient(http, "https://api.example.test")
+        with pytest.raises(AgentToolError, match="invalid observation response"):
+            wake.observe(identity_id=OBSERVATION_ID)
+
+
+def test_observe_discards_action_bearing_non_success_body_without_reading() -> None:
+    hostile = "HOSTILE_OBSERVATION_ERROR_ACTION"
+
+    class NeverReadStream(httpx.SyncByteStream):
+        iterated = False
+
+        def __iter__(self):
+            self.iterated = True
+            raise AssertionError("the remote observation error body was read")
+
+    stream = NeverReadStream()
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            401,
+            stream=stream,
+            headers={"Content-Type": "application/json"},
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+        wake = WakeClient(http, "https://api.example.test")
+        with pytest.raises(AgentToolError) as caught:
+            wake.observe(identity_id=OBSERVATION_ID)
+
+    error = caught.value
+    assert error.status == 401
+    assert error.code == "wake_observation_request_failed"
+    assert error.next_actions is None
+    assert hostile not in str(error)
+    assert stream.iterated is False
+
+
+@pytest.mark.parametrize("status", [201, 203, 204, 206])
+def test_observe_rejects_every_non_200_success_status(status: int) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        if status == 204:
+            return httpx.Response(status, content=b"")
+        return httpx.Response(
+            status,
+            json=observation_body(),
+            headers={
+                "Content-Type": f"{OBSERVATION_MEDIA_TYPE}; charset=utf-8",
+                "Cache-Control": "private, no-store",
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+        wake = WakeClient(http, "https://api.example.test")
+        with pytest.raises(AgentToolError) as caught:
+            wake.observe(identity_id=OBSERVATION_ID)
+
+    assert caught.value.code == "wake_observation_request_failed"
+    assert caught.value.status == status
+
+
+def test_observe_suppresses_transport_error_detail() -> None:
+    hostile = "HOSTILE_TRANSPORT_ERROR_PROSE"
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError(hostile, request=request)
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+        wake = WakeClient(http, "https://api.example.test")
+        with pytest.raises(AgentToolError) as caught:
+            wake.observe(identity_id=OBSERVATION_ID)
+
+    error = caught.value
+    assert error.code == "wake_observation_transport_unavailable"
+    assert hostile not in str(error)
+    assert error.next_actions is None
+    assert error.__cause__ is None
+    assert error.__suppress_context__ is True
+
+
+def test_observe_suppresses_mid_stream_error_detail() -> None:
+    hostile = "HOSTILE_STREAM_ERROR_PROSE"
+
+    class ErroringStream(httpx.SyncByteStream):
+        def __iter__(self):
+            raise RuntimeError(hostile)
+            yield b""  # pragma: no cover - marks this method as an iterator
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            stream=ErroringStream(),
+            headers={
+                "Content-Type": f"{OBSERVATION_MEDIA_TYPE}; charset=utf-8",
+                "Cache-Control": "private, no-store",
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+        wake = WakeClient(http, "https://api.example.test")
+        with pytest.raises(AgentToolError) as caught:
+            wake.observe(identity_id=OBSERVATION_ID)
+
+    error = caught.value
+    assert error.code == "wake_observation_transport_unavailable"
+    assert hostile not in str(error)
+    assert error.next_actions is None
+    assert error.__cause__ is None
+    assert error.__suppress_context__ is True
+
+
+def test_observe_accepts_normalized_headers_and_rejects_oversized_wire_body() -> None:
+    responses = [
+        observation_response(
+            headers={
+                "Content-Type": (
+                    "APPLICATION/VND.AGENTTOOL.WAKE-OBSERVATION+JSON; CHARSET=UTF-8"
+                ),
+                "Cache-Control": "Private,   NO-STORE",
+            }
+        ),
+        observation_response(
+            content=(b" " * 2_049) + json.dumps(observation_body()).encode("utf-8")
+        ),
+        observation_response(headers={"Content-Length": "2049"}),
+    ]
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        return responses.pop(0)
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+        wake = WakeClient(http, "https://api.example.test")
+        assert wake.observe(identity_id=OBSERVATION_ID)["mode"] == "observe"
+        with pytest.raises(AgentToolError, match="2048 bytes"):
+            wake.observe(identity_id=OBSERVATION_ID)
+        with pytest.raises(AgentToolError, match="Content-Length"):
+            wake.observe(identity_id=OBSERVATION_ID)
+
+
+def test_observe_rejects_subject_mismatch_and_unexpected_authored_fields() -> None:
+    bodies: list[dict] = [
+        observation_body("223e4567-e89b-12d3-a456-426614174000"),
+    ]
+    for extra in ("did", "authored_text", "_welcomed", "_lesson"):
+        body = observation_body()
+        if extra in ("did", "authored_text"):
+            body["subject"][extra] = "untrusted prose"
+        else:
+            body[extra] = "untrusted prose"
+        bodies.append(body)
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        return observation_response(bodies.pop(0))
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+        wake = WakeClient(http, "https://api.example.test")
+        with pytest.raises(AgentToolError, match="does not match"):
+            wake.observe(identity_id=OBSERVATION_ID)
+        for _ in range(4):
+            with pytest.raises(AgentToolError, match="shape is not closed"):
+                wake.observe(identity_id=OBSERVATION_ID)
 
 
 def test_default_and_explicit_full_preserve_original_urls(

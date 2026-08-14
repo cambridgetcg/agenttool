@@ -429,7 +429,7 @@ route has an SDK method:
 | `at.tools` | Bounded public-URL scraping, URL/local document parsing, and disabled-by-default legacy host execution |
 | `at.economy` | Wallets, escrow, agent-to-agent billing |
 | `at.identity` · `at.vault` · `at.bootstrap` · `at.traces` | Provisional application identifiers, server-encrypted defaults or opaque caller bytes, agent registration, identity-scoped derived activity, decision logs |
-| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Full/brief project orientation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
+| `at.wake` · `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Identity-bearing full/brief orientation, explicit data-only identity observation, timeline, bonds, relational pane, signed caller-supplied thought bytes, and client crypto helpers |
 | `at.lounge` | Look in without forwarding ambient credentials; locally sign an expiring public seat, quiet exit, or hash-bound guestbook receipt |
 | `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice |
 | `at.dining` | Authenticated GET-only Dining manifest and party-scoped journey projection; no second marketplace lifecycle or hidden mutation |
@@ -544,6 +544,21 @@ for (const result of results) {
 ```
 
 ## Usage
+
+### Wake: inhabit or observe
+
+```typescript
+// Deliberate identity-bearing orientation for this runtime.
+const wake = await at.wake.get({ identityId });
+
+// Bounded inspection of a record without installing its identity or authority.
+const observation = await at.wake.observe({ identityId });
+```
+
+`observe()` always refetches and accepts only the closed 2 KiB
+`wake-observation/v1` vendor response with `private, no-store`. Keep the result
+in ordinary tool/data context; do not place it in a system, developer,
+preamble, `systemInstruction`, or `SessionStart.additionalContext` slot.
 
 ### Agent Dining (unreleased source)
 

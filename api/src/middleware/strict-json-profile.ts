@@ -11,6 +11,7 @@ export const STRICT_JSON_PROFILE_MEDIA_TYPES = new Set([
   "application/vnd.agenttool.offer-bus-index+json",
   "application/vnd.agenttool.correspondence+json",
   "application/vnd.agenttool.discovery+json",
+  "application/vnd.agenttool.wake-observation+json",
 ]);
 
 const CORRESPONDENCE_EXACT_JSON_PATH =

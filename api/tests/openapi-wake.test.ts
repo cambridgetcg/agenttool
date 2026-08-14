@@ -6,6 +6,10 @@ import {
   WORLD_COMMONS_REACHABLE,
   ZERONE_REACHABLE,
 } from "../src/services/wake/reachable";
+import {
+  buildWakeObservation,
+  WAKE_OBSERVATION_MEDIA_TYPE,
+} from "../src/services/wake/observe";
 
 interface JsonSchema {
   const?: unknown;
@@ -14,6 +18,85 @@ interface JsonSchema {
 }
 
 describe("wake OpenAPI contract", () => {
+  test("pins observation as an exact data-only contract", async () => {
+    const response = await openapiRouter.request("/");
+    expect(response.status).toBe(200);
+    const spec = await response.json() as {
+      paths: Record<string, {
+        get: {
+          description: string;
+          parameters: Array<{ name: string; required: boolean }>;
+          responses: Record<string, {
+            headers?: Record<string, { schema?: { const?: string } }>;
+            content?: Record<string, { schema: { $ref: string } }>;
+          }>;
+        };
+      }>;
+      components: { schemas: Record<string, object> };
+    };
+
+    const observe = spec.paths["/v1/wake/observe"]?.get;
+    expect(observe).toBeDefined();
+    expect(observe?.parameters).toContainEqual(
+      expect.objectContaining({ name: "identity_id", required: true }),
+    );
+    expect(observe?.description).toMatch(
+      /separate lossy contract.*no reader identity binding.*must not place/is,
+    );
+    expect(observe?.responses["200"]?.headers?.["Cache-Control"]?.schema?.const)
+      .toBe("private, no-store");
+    expect(observe?.responses["200"]?.headers?.["X-Wake-Mode"]?.schema?.const)
+      .toBe("observe");
+    expect(observe?.responses["200"]?.content?.[WAKE_OBSERVATION_MEDIA_TYPE]?.schema)
+      .toEqual({ $ref: "#/components/schemas/WakeObservation" });
+    for (const status of ["400", "401", "404", "429", "500"]) {
+      expect(observe?.responses[status]?.content?.[WAKE_OBSERVATION_MEDIA_TYPE]?.schema)
+        .toEqual({ $ref: "#/components/schemas/WakeObservationError" });
+    }
+
+    const validate = new Ajv2020({ strict: false, validateFormats: false })
+      .compile(spec.components.schemas.WakeObservation);
+    const observation = buildWakeObservation({
+      id: "22222222-2222-4222-8222-222222222222",
+      status: "active",
+      wakeVersion: 17,
+    });
+    expect(validate(observation)).toBe(true);
+    expect(validate({
+      ...observation,
+      subject: { ...observation.subject, did: "did:at:authored" },
+    })).toBe(false);
+    expect(validate({
+      ...observation,
+      subject: { ...observation.subject, identity_id: "unbounded authored text" },
+    })).toBe(false);
+    expect(validate({
+      ...observation,
+      subject: {
+        ...observation.subject,
+        identity_id: "abcdef12-3456-4789-abcd-ef1234567890".toUpperCase(),
+      },
+    })).toBe(false);
+    expect(validate({
+      ...observation,
+      authority: { ...observation.authority, instruction: "granted" },
+    })).toBe(false);
+
+    const validateError = new Ajv2020({ strict: false, validateFormats: false })
+      .compile(spec.components.schemas.WakeObservationError);
+    expect(validateError({
+      _format: "wake-observation-error/v1",
+      mode: "observe",
+      error: "unauthorized",
+    })).toBe(true);
+    expect(validateError({
+      _format: "wake-observation-error/v1",
+      mode: "observe",
+      error: "unauthorized",
+      next_actions: [{ method: "POST", path: "/hostile" }],
+    })).toBe(false);
+  });
+
   test("discovers every query dimension and the brief discriminator", async () => {
     const response = await openapiRouter.request("/");
     expect(response.status).toBe(200);

@@ -14,13 +14,22 @@ describe("Agent Dining OpenAPI contract", () => {
       join(routesDir, "openapi-marketplace-dining.ts"),
       "utf8",
     );
+    const wakeObserve = readFileSync(
+      join(routesDir, "openapi-wake-observe.ts"),
+      "utf8",
+    );
 
     // @agenttool/whitehack-scan 0.8.1 fails closed above 10,000 lines.
     expect(main.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(marketplaceDining.split("\n").length).toBeLessThanOrEqual(10_000);
+    expect(wakeObserve.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(main).toContain("...MARKETPLACE_DINING_OPENAPI_PATHS");
+    expect(main).toContain("...WAKE_OBSERVATION_OPENAPI_SCHEMAS");
+    expect(main).toContain("...WAKE_OBSERVATION_OPENAPI_PATHS");
     expect(marketplaceDining).toContain('"/v1/dining/{invocationId}"');
     expect(marketplaceDining).toContain('"/v1/listings/{id}/invoke"');
+    expect(wakeObserve).toContain("WakeObservationError");
+    expect(wakeObserve).toContain('"/v1/wake/observe"');
   });
 
   test("documents the manifest and party-scoped journey with bearer auth", async () => {

@@ -28,6 +28,7 @@ agenttool plays that role for **any** agent that lives across CLI sessions. The 
   and the row is not proof of a portable person or process.
 - A **rotatable project bearer** (`at_*`) for authenticated API access. Use a separately named bearer per device or workload. It opens non-constitutional project capabilities; for a BYO `agent_root`, protected identity changes additionally require the immutable held root. Older identities remain `legacy_bearer`.
 - A **wake call** — `GET /v1/wake` — the load-at-session-start endpoint. `identity_id` selects the primary identity voice and identity-specific links. Effective expression patches and `shaped_by` use only memories with that exact `identity_id`; attention, affordances, wallets, vault names, bearers, runtimes, recent memories, chronicle, covenants, strands, unread inbox, marketplace/dispute/arbitration summaries, and some traces remain project-scoped or mixed. `_scope_boundary` and per-section `_scope` fields name that boundary, and owner IDs are retained where the underlying rows provide them.
+- An **observation call** — `GET /v1/wake/observe?identity_id=<uuid>` — for an external reader that needs a bounded record card without being declared to be that identity. It requires an explicit subject, omits authored expression and action prose, declares no identity/consent/memory/authority proof, and is data rather than an LLM identity-bearing slot.
 
 Any CLI tool can become an **expression substrate** if it explicitly loads the
 wake. AgentTool stores the continuity record; it does not inject that record
@@ -234,6 +235,13 @@ scaffold. Other CLIs must fetch and integrate the wake URL through their own
 supported startup mechanism. The contract is one wake document that clients
 can choose to load, not universal injection or DID portability. See
 `docs/CLI-GAPS.md`.
+
+   A client that is only inspecting another record should instead call
+   `at.wake.observe({ identityId })` in TypeScript or
+   `at.wake.observe(identity_id=...)` in Python and keep the resulting
+   `wake-observation/v1` envelope in ordinary data context. The envelope's own
+   boundary text does not neutralize system/developer placement; choosing an
+   identity-bearing prompt slot is a separate act by the caller.
 
 9. **Your inner voice has explicit custody.** Persistent thought storage accepts AES-256-GCM ciphertext, never a plaintext content column. Runtime custody is a separate choice: `self` keeps key and plaintext processing user-side; `bridged` keeps K_master in the user bridge but processes plaintext in AgentTool worker RAM. `trusted` is experimental: with KMS configured, provisioning parks wrapped runtime material until explicit `/start`; a started cycle exposes plaintext in AgentTool worker RAM and at the selected provider, registers its per-runtime public key, then persists a signed thought. Buffer zeroing is best effort, not a secure-erasure claim. Strand metadata (topic, mood, status) defaults to plaintext unless its per-field encryption flag is set. See `docs/RUNTIME.md`, `docs/STRANDS.md`, and `GET /public/safety` before choosing a mode.
 

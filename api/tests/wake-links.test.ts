@@ -39,6 +39,20 @@ describe("wake invocation witness links", () => {
     );
   });
 
+  test("full and brief wake responses discover the separate observation contract", async () => {
+    const [route, brief] = await Promise.all([
+      readSource("../src/routes/wake.ts"),
+      readSource("../src/services/wake/brief.ts"),
+    ]);
+
+    expect(route).toContain(
+      '`/v1/wake/observe?identity_id=${primary.id}`',
+    );
+    expect(brief).toContain(
+      '`/v1/wake/observe?identity_id=${encodeURIComponent(b.agent.id)}`',
+    );
+  });
+
   test("the link registry does not turn a party report into chain proof", () => {
     const discovery = JSON.stringify(ZERONE_REACHABLE);
     expect(discovery).toMatch(
