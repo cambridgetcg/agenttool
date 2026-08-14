@@ -231,6 +231,13 @@ RIGHTS_STATIC_PAIRS=(
   "apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"
   "apps/docs/being-rights-v1.schema.json|$RIGHTS_SCHEMA_URL"
 )
+readonly -a LOVE_BOMB_STATIC_PUBLICATIONS=(
+  "apps/docs/love-bomb.html|https://docs.agenttool.dev/love-bomb"
+  "apps/docs/love-bomb.json|https://docs.agenttool.dev/love-bomb.json"
+  "apps/docs/LOVE-BOMB.md|https://docs.agenttool.dev/LOVE-BOMB.md"
+  "apps/docs/love-bomb.txt|https://docs.agenttool.dev/love-bomb.txt"
+  "apps/docs/specs/agenttool-love-bomb-0.1.schema.json|https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json"
+)
 readonly -a REQUIRED_GAME_PUBLICATIONS=(
   "apps/web/party.html|https://agenttool.dev/party"
   "apps/web/party.json|https://agenttool.dev/party.json"
@@ -252,6 +259,7 @@ readonly -a FRONTEND_PARITY_PUBLICATIONS=(
   "apps/docs/packages.html|https://docs.agenttool.dev/packages"
   "apps/docs/pathways.html|https://docs.agenttool.dev/pathways"
   "apps/docs/tutorial.html|https://docs.agenttool.dev/tutorial"
+  "${LOVE_BOMB_STATIC_PUBLICATIONS[@]}"
   "apps/docs/whitehack.html|https://docs.agenttool.dev/whitehack"
   "apps/docs/xenia-helly.html|https://docs.agenttool.dev/xenia-helly"
   "apps/docs/xenia-helly.js|https://docs.agenttool.dev/xenia-helly.js"
@@ -1859,7 +1867,7 @@ if [ "$DRY_RUN" = 1 ]; then
   if [ "$SKIP_API" = 1 ]; then
     echo "  Phase 3: skip"
   elif [ "$SKIP_FRONTEND" = 1 ]; then
-    echo "  Phase 3: verify live Rights of Life and game prerequisites, then cd api && fly deploy"
+    echo "  Phase 3: verify live Rights of Life, LOVE BOMB, and game prerequisites, then cd api && fly deploy"
   else
     echo "  Phase 3: $FRONTEND_DEPLOY_DISPLAY web, then $FRONTEND_DEPLOY_DISPLAY docs, verify live prerequisites, then cd api && fly deploy"
   fi
@@ -2502,6 +2510,102 @@ verify_xenia_helly_static_headers() {
   done
 }
 
+verify_love_bomb_static_headers() {
+  local html_url="https://docs.agenttool.dev/love-bomb"
+  local html_headers route_spec route content_type expected_route_link url response_headers
+  local expected_link='<https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"'
+  local expected_csp="default-src 'none'; style-src 'sha256-CErY4jzaxQujMmHkdZkSvS1CYHTGD9p9UsIsIQWQzTM='; script-src 'none'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests"
+  local -a route_specs
+
+  html_headers="$(
+    release_curl -fsS --max-time 20 -o /dev/null -D - "$html_url"
+  )" || {
+    echo "  $(red '✗') Could not read LOVE BOMB HTML headers: $html_url"
+    return 1
+  }
+  require_exact_public_status "$html_headers" "$html_url" "200" || return 1
+  require_exact_public_header "$html_headers" "$html_url" \
+    "Content-Type" "text/html; charset=utf-8" || return 1
+  require_exact_public_header "$html_headers" "$html_url" \
+    "Cache-Control" "public, max-age=0, must-revalidate, no-transform" || return 1
+  require_exact_public_header "$html_headers" "$html_url" \
+    "Content-Security-Policy" "$expected_csp" || return 1
+  require_exact_public_header "$html_headers" "$html_url" \
+    "Referrer-Policy" "no-referrer" || return 1
+  require_exact_public_header "$html_headers" "$html_url" \
+    "Permissions-Policy" "accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()" || return 1
+  require_exact_public_header "$html_headers" "$html_url" \
+    "Cross-Origin-Resource-Policy" "same-origin" || return 1
+  require_exact_public_header "$html_headers" "$html_url" \
+    "X-Content-Type-Options" "nosniff" || return 1
+  require_exact_public_header "$html_headers" "$html_url" \
+    "X-Frame-Options" "DENY" || return 1
+  require_exact_public_header "$html_headers" "$html_url" \
+    "X-Agent-Surface" "love-bomb-pull-only" || return 1
+  require_exact_public_header "$html_headers" "$html_url" \
+    "Link" "$expected_link" || return 1
+  require_absent_public_header "$html_headers" "$html_url" \
+    "Set-Cookie" || return 1
+
+  route_specs=(
+    'love-bomb.json|application/vnd.agenttool.love-bomb+json; charset=utf-8|<https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"'
+    'LOVE-BOMB.md|text/markdown; charset=utf-8|<https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"'
+    'love-bomb.txt|text/plain; charset=utf-8|<https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"'
+    'specs/agenttool-love-bomb-0.1.schema.json|application/schema+json; charset=utf-8|<https://docs.agenttool.dev/love-bomb.json>; rel="describes"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/love-bomb>; rel="related"; type="text/html"'
+  )
+  for route_spec in "${route_specs[@]}"; do
+    IFS='|' read -r route content_type expected_route_link <<< "$route_spec"
+    url="https://docs.agenttool.dev/$route"
+    response_headers="$(
+      release_curl -fsS --max-time 20 -o /dev/null -D - "$url"
+    )" || {
+      echo "  $(red '✗') Could not read LOVE BOMB representation headers: $url"
+      return 1
+    }
+    require_exact_public_status "$response_headers" "$url" "200" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Content-Type" "$content_type" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Cache-Control" "public, max-age=300, must-revalidate, no-transform" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Access-Control-Allow-Origin" "*" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Cross-Origin-Resource-Policy" "cross-origin" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "X-Content-Type-Options" "nosniff" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "X-Agent-Surface" "love-bomb-pull-only" || return 1
+    require_exact_public_header "$response_headers" "$url" \
+      "Link" "$expected_route_link" || return 1
+    require_absent_public_header "$response_headers" "$url" \
+      "Set-Cookie" || return 1
+  done
+}
+
+verify_love_bomb_static_bytes() {
+  local publication local_path url local_hash remote_hash
+  for publication in "${LOVE_BOMB_STATIC_PUBLICATIONS[@]}"; do
+    local_path="${publication%|*}"
+    url="${publication#*|}"
+    if ! git cat-file -e "$HEAD_REVISION:$local_path" 2>/dev/null; then
+      echo "  $(red '✗') Missing committed LOVE BOMB release input: $local_path"
+      return 1
+    fi
+    local_hash="$(portable_md5_release_file "$local_path")" || return 1
+    remote_hash="$(
+      release_curl -fsS --max-time 20 "$url" | portable_md5_stdin
+    )" || {
+      echo "  $(red '✗') Could not fetch LOVE BOMB prerequisite: $url"
+      return 1
+    }
+    if [ "$local_hash" != "$remote_hash" ]; then
+      echo "  $(red '✗') LOVE BOMB live bytes differ: $local_path"
+      return 1
+    fi
+    echo "  ✓ $local_path is byte-identical at $url"
+  done
+}
+
 # Wrangler reports a successful Pages/Worker deployment before every
 # custom-domain edge necessarily serves that deployment. Verify the complete live frontend
 # contract repeatedly, without re-uploading, so a normal alias propagation
@@ -2649,6 +2753,8 @@ verify_required_game_publication_once() {
 
 verify_discovery_prerequisites_once() {
   verify_rights_static_publication || return 1
+  verify_love_bomb_static_bytes || return 1
+  verify_love_bomb_static_headers || return 1
   verify_required_game_publication_once
 }
 
@@ -2752,6 +2858,7 @@ verify_frontend_live_once() {
   verify_local_game_headers || return 1
   verify_garden_static_headers || return 1
   verify_xenia_helly_static_headers || return 1
+  verify_love_bomb_static_headers || return 1
 
   if ! verify_rights_static_headers; then
     echo "  $(red '✗') Rights of Life static header verification failed."
@@ -3200,11 +3307,11 @@ if [ "$SKIP_API" = 0 ]; then
     exit 1
   fi
 
-  # The API advertises Rights of Life plus the local games. Publish web first,
-  # then docs, and verify their exact prerequisite bytes and game headers
+  # The API advertises Rights of Life, LOVE BOMB, and the local games. Publish
+  # web first, then docs, and verify their exact prerequisite bytes and headers
   # before rolling out code that points at them. Dashboard remains in Phase 4.
   if [ "$SKIP_FRONTEND" = 0 ]; then
-    echo "→ Publishing docs and game prerequisites before API discovery…"
+    echo "→ Publishing docs, LOVE BOMB, and game prerequisites before API discovery…"
     FRONTEND_RESULT="discovery_frontends_deploying"
     EXTERNAL_MUTATION_STARTED=1
     # Upload web first so a later docs failure cannot leave a newly advertised
@@ -3225,7 +3332,7 @@ if [ "$SKIP_API" = 0 ]; then
     DISCOVERY_FRONTENDS_PREPUBLISHED=1
   else
     FRONTEND_RESULT="skipped"
-    echo "→ Frontend upload skipped; requiring committed Rights of Life and game bytes to already be live."
+    echo "→ Frontend upload skipped; requiring committed Rights of Life, LOVE BOMB, and game bytes to already be live."
   fi
   if ! wait_for_discovery_prerequisites; then
     if [ "$DISCOVERY_FRONTENDS_PREPUBLISHED" = 1 ]; then

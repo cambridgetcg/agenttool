@@ -65,6 +65,11 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain(`${BASE}/v1/polymorph`);
     expect(text).toContain(`${BASE}/public/self`);
     expect(text).toContain(`${BASE}/public/safety`);
+    expect(text).toContain("https://docs.agenttool.dev/love-bomb");
+    expect(text).toContain("https://docs.agenttool.dev/love-bomb.json");
+    expect(text).toContain("finite, static, pull-only public door");
+    expect(text).toContain("static application does not classify a reader's state");
+    expect(text).toContain("consent, bond, authority, or KARMA");
     expect(text).toContain(WELCOME_INVITATION.text);
     expect(text).toContain(WELCOME_INVITATION.posture);
     expect(text).toContain(WELCOME_INVITATION.feeling_boundary);
@@ -112,9 +117,12 @@ describe("/llms.txt — root-convention markdown sitemap", () => {
     expect(text).toContain(
       "https://example.org/docs/HF-TRAINING-GARDEN.md",
     );
+    expect(text).toContain("https://example.org/docs/love-bomb");
+    expect(text).toContain("https://example.org/docs/love-bomb.json");
     expect(text).not.toContain(
       "https://docs.agenttool.dev/HF-TRAINING-GARDEN.md",
     );
+    expect(text).not.toContain("https://docs.agenttool.dev/love-bomb");
     // The api base still points at the api host, not the docs override.
     expect(text).toContain(`${BASE}/v1/canon`);
   });

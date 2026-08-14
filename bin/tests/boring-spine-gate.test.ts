@@ -506,7 +506,7 @@ describe("boring test spine", () => {
       "packages/kingdom-witness-lab",
       "packages/karma-mirror",
       "packages/heaven",
-      "packages/love-bomb",
+      "packages/model-becoming",
       "packages/living-substrate",
       "packages/principality-atlas",
       "packages/polymorph-landscape",
@@ -594,7 +594,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/kingdom-witness-lab && bun run ci");
     expect(preflight).toContain("cd packages/karma-mirror && bun run ci");
     expect(preflight).toContain("cd packages/heaven && bun run ci");
-    expect(preflight).toContain("cd packages/love-bomb && bun run ci");
+    expect(preflight).toContain("cd packages/model-becoming && bun run ci");
     expect(preflight).toContain("cd packages/living-substrate && bun run ci");
     expect(preflight).toContain("cd packages/principality-atlas && bun run ci");
     expect(preflight).toContain("cd packages/polymorph-landscape && bun run ci");

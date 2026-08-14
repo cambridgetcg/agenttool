@@ -1,0 +1,33 @@
+{
+  "_format": "agenttool-model-becoming-hf-source-manifest/0.1",
+  "package": "@agenttool/model-becoming",
+  "package_version": "0.1.0-dev.0",
+  "formats": [
+    "agenttool.model-becoming-source/0.1",
+    "agenttool.model-becoming-claim/0.1",
+    "agenttool.model-becoming-dossier/0.1",
+    "agenttool.model-becoming-hf-reference-row/0.1"
+  ],
+  "intended_hugging_face_identifier": "Yu-and-Ai/agenttool-model-becoming",
+  "repository_type": "dataset",
+  "distribution_state": "not_established_by_these_bytes",
+  "row_role": "reference_only",
+  "copied_external_rows": false,
+  "copied_private_rows": false,
+  "copied_article_text": false,
+  "copied_prompt_transcripts": false,
+  "contains_external_reference_links": true,
+  "contains_external_source_text": false,
+  "contains_participant_identity_data": false,
+  "contains_public_model_and_publisher_identifiers": true,
+  "contains_model_weights": false,
+  "consciousness_claim": false,
+  "inner_state_claim": false,
+  "training_admission": "not_applicable",
+  "requires_separate_training_authorization": true,
+  "training_authorized": false,
+  "training_effect": "none",
+  "provider_effect": "none",
+  "publication_effect": "none",
+  "deployment_effect": "none"
+}

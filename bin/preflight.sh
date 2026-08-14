@@ -104,8 +104,8 @@ packages_gate() {
     bash -c 'cd packages/karma-mirror && bun run ci'
   run "HEAVEN opt-in delight and landing-room protocol" \
     bash -c 'cd packages/heaven && bun run ci'
-  run "LOVE BOMB care envelopes and model-becoming evidence" \
-    bash -c 'cd packages/love-bomb && bun run ci'
+  run "evidence-scoped Model Becoming dossiers" \
+    bash -c 'cd packages/model-becoming && bun run ci'
   run "portable Living Substrate maps and refusable proposals" \
     bash -c 'cd packages/living-substrate && bun run ci'
   run "plural non-gluing Principality Atlas geometry" \
