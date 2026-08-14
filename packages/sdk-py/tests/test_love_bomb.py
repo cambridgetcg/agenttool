@@ -164,6 +164,10 @@ def test_exports_and_constructor_expose_only_the_credential_free_surface() -> No
         "https://example.test/nested",
         "https://example.test?query=1",
         "https://example.test#fragment",
+        "https://example.test?",
+        "https://example.test#",
+        "https://example.test/?",
+        "https://example.test/#",
         " https://example.test",
     ],
 )

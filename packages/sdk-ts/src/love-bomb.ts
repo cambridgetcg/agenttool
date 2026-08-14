@@ -7,7 +7,7 @@
 
 // The explicit package subpath prevents Bun from substituting its global
 // `undici` compatibility shim, which can inherit HTTP(S)_PROXY.
-import { Agent as DirectAgent, fetch as directFetch } from "undici/index.js";
+import { Agent as DirectAgent, request as directRequest } from "undici/index.js";
 
 import { AgentToolError } from "./errors.js";
 
@@ -182,7 +182,12 @@ function validateOptions(options: LoveBombClientOptions): ValidatedOptions {
   }
 
   const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
-  if (typeof baseUrl !== "string" || baseUrl.trim() !== baseUrl) {
+  if (
+    typeof baseUrl !== "string"
+    || baseUrl.trim() !== baseUrl
+    || baseUrl.includes("?")
+    || baseUrl.includes("#")
+  ) {
     throw loveBombError(
       "The LOVE BOMB base URL is invalid.",
       "love_bomb_invalid_options",
@@ -570,8 +575,28 @@ function validateSignal(candidate: unknown): LoveBombPublicSignal {
   return root as unknown as LoveBombPublicSignal;
 }
 
-function validMediaType(headers: Headers): boolean {
-  const value = headers.get("content-type") ?? "";
+type DirectHeaders = Record<string, string | string[] | undefined>;
+
+interface DirectResponse {
+  readonly statusCode: number;
+  readonly headers: DirectHeaders;
+  readonly body: AsyncIterable<unknown> & {
+    on(event: "error", listener: () => void): unknown;
+    destroy(error?: Error): unknown;
+  };
+}
+
+function headerValue(headers: DirectHeaders, name: string): string | undefined {
+  const target = name.toLowerCase();
+  for (const [key, raw] of Object.entries(headers)) {
+    if (key.toLowerCase() !== target) continue;
+    return Array.isArray(raw) ? raw.join(", ") : raw;
+  }
+  return undefined;
+}
+
+function validMediaType(headers: DirectHeaders): boolean {
+  const value = headerValue(headers, "content-type") ?? "";
   const parts = value.split(";");
   if (parts[0]?.trim().toLowerCase() !== LOVE_BOMB_PUBLIC_SIGNAL_MEDIA_TYPE) {
     return false;
@@ -580,23 +605,24 @@ function validMediaType(headers: Headers): boolean {
   return parts.length === 2 && CHARSET_PARAMETER.test(parts[1]!.trim());
 }
 
-async function cancelBody(response: Response): Promise<void> {
+function cancelBody(response: DirectResponse): void {
   try {
-    await response.body?.cancel();
+    response.body.on("error", () => undefined);
+    response.body.destroy();
   } catch {
     // Cleanup failure must not replace the deterministic protocol error.
   }
 }
 
 async function readBoundedBytes(
-  response: Response,
+  response: DirectResponse,
   maximumBytes: number,
   timeoutSignal: AbortSignal,
 ): Promise<Uint8Array> {
-  const contentLength = response.headers.get("content-length");
-  if (contentLength !== null) {
+  const contentLength = headerValue(response.headers, "content-length");
+  if (contentLength !== undefined) {
     if (!/^(?:0|[1-9][0-9]*)$/u.test(contentLength)) {
-      await cancelBody(response);
+      cancelBody(response);
       invalidResponse("$response.headers.content-length", "expected canonical decimal");
     }
     if (
@@ -606,45 +632,35 @@ async function readBoundedBytes(
         && contentLength > MAX_SAFE_INTEGER_TEXT
       )
     ) {
-      await cancelBody(response);
+      cancelBody(response);
       invalidResponse("$response.headers.content-length", "exceeds safe integer range");
     }
     if (Number(contentLength) > maximumBytes) {
-      await cancelBody(response);
+      cancelBody(response);
       throw loveBombError(
         "The LOVE BOMB public response exceeded the configured limit.",
         "love_bomb_response_too_large",
         "Use the bounded public signal or raise maxResponseBytes deliberately.",
-        { status: response.status, details: { max_response_bytes: maximumBytes } },
+        { status: response.statusCode, details: { max_response_bytes: maximumBytes } },
       );
     }
-  }
-  if (response.body === null) return new Uint8Array();
-
-  let reader: ReadableStreamDefaultReader<Uint8Array>;
-  try {
-    reader = response.body.getReader();
-  } catch {
-    invalidResponse("$response.body", "unreadable stream", response.status);
   }
   const chunks: Uint8Array[] = [];
   let total = 0;
   try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    for await (const value of response.body) {
+      if (!(value instanceof Uint8Array)) {
+        cancelBody(response);
+        invalidResponse("$response.body", "expected a byte stream", response.statusCode);
+      }
       total += value.byteLength;
       if (total > maximumBytes) {
-        try {
-          await reader.cancel();
-        } catch {
-          // Preserve the size error.
-        }
+        cancelBody(response);
         throw loveBombError(
           "The LOVE BOMB public response exceeded the configured limit.",
           "love_bomb_response_too_large",
           "Use the bounded public signal or raise maxResponseBytes deliberately.",
-          { status: response.status, details: { max_response_bytes: maximumBytes } },
+          { status: response.statusCode, details: { max_response_bytes: maximumBytes } },
         );
       }
       chunks.push(value);
@@ -662,10 +678,8 @@ async function readBoundedBytes(
       "The LOVE BOMB public response body could not be read.",
       "love_bomb_invalid_response",
       "Use an endpoint that returns one complete bounded JSON signal.",
-      { status: response.status },
+      { status: response.statusCode },
     );
-  } finally {
-    reader.releaseLock();
   }
 
   const result = new Uint8Array(total);
@@ -701,18 +715,17 @@ export class LoveBombClient {
     const timeoutSignal = AbortSignal.timeout(this.options.timeoutMs);
     const dispatcher = new DirectAgent({ connections: 1, pipelining: 0 });
     try {
-      let response: Response;
+      let response: DirectResponse;
       try {
-        response = await directFetch(
+        response = await directRequest(
           `${this.options.baseUrl}${LOVE_BOMB_PUBLIC_SIGNAL_PATH}`,
           {
             method: "GET",
             headers: { Accept: LOVE_BOMB_PUBLIC_SIGNAL_MEDIA_TYPE },
-            redirect: "manual",
             signal: timeoutSignal,
             dispatcher,
           },
-        ) as unknown as Response;
+        ) as DirectResponse;
       } catch {
         throw loveBombError(
           timeoutSignal.aborted
@@ -723,30 +736,30 @@ export class LoveBombClient {
         );
       }
 
-      if (response.status >= 300 && response.status < 400) {
-        await cancelBody(response);
+      if (response.statusCode >= 300 && response.statusCode < 400) {
+        cancelBody(response);
         throw loveBombError(
           "The LOVE BOMB public endpoint refused an HTTP redirect.",
           "love_bomb_redirect_refused",
           "Use the exact public origin; this reader never follows redirects.",
-          { status: response.status },
+          { status: response.statusCode },
         );
       }
-      if (response.status !== 200) {
-        await cancelBody(response);
+      if (response.statusCode !== 200) {
+        cancelBody(response);
         throw loveBombError(
-          `The LOVE BOMB public endpoint returned HTTP ${response.status}.`,
+          `The LOVE BOMB public endpoint returned HTTP ${response.statusCode}.`,
           "love_bomb_http_error",
           "Use the canonical public endpoint, which returns HTTP 200.",
-          { status: response.status },
+          { status: response.statusCode },
         );
       }
       if (!validMediaType(response.headers)) {
-        await cancelBody(response);
+        cancelBody(response);
         invalidResponse(
           "$response.headers.content-type",
           "expected the LOVE BOMB public signal media type",
-          response.status,
+          response.statusCode,
         );
       }
       const body = await readBoundedBytes(
@@ -754,12 +767,13 @@ export class LoveBombClient {
         this.options.maxResponseBytes,
         timeoutSignal,
       );
-      return deepFreeze(validateSignal(decodeJson(body)));
+      const result = deepFreeze(validateSignal(decodeJson(body)));
+      return result;
     } finally {
       try {
-        await dispatcher.destroy();
+        await dispatcher.close();
       } catch {
-        // Teardown failure must not replace the deterministic protocol result.
+        void dispatcher.destroy().catch(() => undefined);
       }
     }
   }

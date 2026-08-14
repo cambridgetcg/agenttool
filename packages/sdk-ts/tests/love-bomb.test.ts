@@ -159,6 +159,10 @@ describe("LoveBombClient credential-free public boundary", () => {
     "https://example.test/nested",
     "https://example.test?query=1",
     "https://example.test#fragment",
+    "https://example.test?",
+    "https://example.test#",
+    "https://example.test/?",
+    "https://example.test/#",
     " https://example.test",
   ])("rejects a non-origin base URL: %s", (baseUrl) => {
     expect(() => new LoveBombClient({ baseUrl })).toThrow(AgentToolError);
@@ -309,7 +313,7 @@ describe("LoveBombClient credential-free public boundary", () => {
   });
 });
 
-function hostileDocuments(): Array<BodyInit> {
+function hostileDocuments(): Array<readonly [string, BodyInit]> {
   const validText = JSON.stringify(signal());
   const duplicate = `${validText.slice(0, -1)},"schema_version":"${LOVE_BOMB_PUBLIC_SIGNAL_SCHEMA}"}`;
   const escapedDuplicate = `${validText.slice(0, -1)},"schema_\\u0076ersion":"${LOVE_BOMB_PUBLIC_SIGNAL_SCHEMA}"}`;
@@ -332,29 +336,29 @@ function hostileDocuments(): Array<BodyInit> {
   publishedBadIntegrity.distribution.npm.integrity = `sha512-${"A".repeat(88)}`;
 
   return [
-    Uint8Array.of(0xff),
-    new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(validText)]),
-    '{"x":NaN}',
-    '{"x":"\\ud800"}',
-    duplicate,
-    escapedDuplicate,
-    JSON.stringify(extraRoot),
-    JSON.stringify(nestedExtra),
-    JSON.stringify(trueBoundary),
-    JSON.stringify(badSemver),
-    JSON.stringify(badFormats),
-    JSON.stringify(npmExtra),
-    JSON.stringify(hfTraining),
-    JSON.stringify(publishedBadRevision),
-    JSON.stringify(publishedBadIntegrity),
-    `${"[".repeat(LOVE_BOMB_MAX_JSON_DEPTH)}null${"]".repeat(LOVE_BOMB_MAX_JSON_DEPTH)}`,
-    JSON.stringify(Array.from({ length: LOVE_BOMB_MAX_JSON_NODES }, () => null)),
-    JSON.stringify("x".repeat(LOVE_BOMB_MAX_STRING_CODE_POINTS + 1)),
+    ["invalid UTF-8", Uint8Array.of(0xff)],
+    ["UTF-8 BOM", new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode(validText)])],
+    ["non-finite constant", '{"x":NaN}'],
+    ["unpaired surrogate", '{"x":"\\ud800"}'],
+    ["duplicate key", duplicate],
+    ["escaped duplicate-key alias", escapedDuplicate],
+    ["extra root key", JSON.stringify(extraRoot)],
+    ["extra nested key", JSON.stringify(nestedExtra)],
+    ["true boundary", JSON.stringify(trueBoundary)],
+    ["noncanonical SemVer", JSON.stringify(badSemver)],
+    ["misordered formats", JSON.stringify(badFormats)],
+    ["wrong npm union keys", JSON.stringify(npmExtra)],
+    ["training authorization", JSON.stringify(hfTraining)],
+    ["noncanonical HF revision", JSON.stringify(publishedBadRevision)],
+    ["invalid npm integrity", JSON.stringify(publishedBadIntegrity)],
+    ["JSON depth limit", `${"[".repeat(LOVE_BOMB_MAX_JSON_DEPTH)}null${"]".repeat(LOVE_BOMB_MAX_JSON_DEPTH)}`],
+    ["JSON node limit", JSON.stringify(Array.from({ length: LOVE_BOMB_MAX_JSON_NODES }, () => null))],
+    ["string code-point limit", JSON.stringify("x".repeat(LOVE_BOMB_MAX_STRING_CODE_POINTS + 1))],
   ];
 }
 
 describe("LoveBombClient hostile response admission", () => {
-  test.each(hostileDocuments())("rejects duplicate, malformed, unbounded, or non-closed JSON", async (body) => {
+  test.each(hostileDocuments())("rejects %s", async (_name, body) => {
     const error = await withServer(
       () => wireResponse(body),
       (baseUrl) => caught(new LoveBombClient({ baseUrl }).read()),

@@ -157,7 +157,12 @@ def _invalid(path: str, reason: str, *, status: int = 200) -> None:
 
 
 def _normalize_base_url(value: str) -> str:
-    if not isinstance(value, str) or value != value.strip():
+    if (
+        not isinstance(value, str)
+        or value != value.strip()
+        or "?" in value
+        or "#" in value
+    ):
         raise _love_bomb_error(
             "The LOVE BOMB base URL is invalid.",
             "love_bomb_invalid_options",
