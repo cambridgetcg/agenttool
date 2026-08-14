@@ -35,6 +35,9 @@ describe("optional npm package discovery", () => {
     expect(packages).toContain(
       "npm install --save-exact @agenttool/skills@0.3.1",
     );
+    expect(packages).toContain(
+      "bun add --global @agenttool/codex-usage@0.1.0",
+    );
     expect(packages).not.toContain(
       "npm install --save-exact @agenttool/skills@0.3.0",
     );
@@ -56,6 +59,9 @@ describe("optional npm package discovery", () => {
     expect(packages).toContain(
       'href="https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md#verified-agent-skills-031-publication--2026-08-13"',
     );
+    expect(packages).toContain(
+      'href="https://github.com/cambridgetcg/agenttool/blob/main/docs/NPM-RELEASES.md#verified-codex-usage-010-publication--2026-08-14"',
+    );
     for (const receiptFact of [
       "30906798360",
       "303,376",
@@ -67,6 +73,12 @@ describe("optional npm package discovery", () => {
       "2454756592",
       "2454756935",
       "nen-common-ground",
+      "31784329559",
+      "30,926",
+      "feb5830b704e1116fa6b3b34490da621b0725ba914b8d94f6ce325f3a2275bec",
+      "2463986451",
+      "2463987297",
+      "33-file",
       "30492737828",
       "d05458b27b8832af7996c243abb22e3b400e5810fe5377ba58e1cb587d2461d8",
       "30494659977",
@@ -87,6 +99,12 @@ describe("optional npm package discovery", () => {
     expect(packages).toMatch(/data.*data-sync.*require Bun ≥1\.3/is);
     expect(packages).toMatch(/availability may lag/i);
     expect(packages).toMatch(/query the requested version directly/i);
+    expect(packages).toMatch(
+      /package-manager installation contacts.*registry.*tracker runtime makes no network call/is,
+    );
+    expect(packages).toMatch(
+      /Codex Usage.*no hosted usage surface.*no background process.*registers no MCP server/is,
+    );
   });
 
   test("keeps the first-success npm shortcut pinned and bounded", () => {

@@ -79,6 +79,49 @@ package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
 
+## Verified Codex Usage 0.1.0 publication — 2026-08-14
+
+`@agenttool/codex-usage@0.1.0` is public through protected bootstrap
+[run `31784329559`](https://github.com/cambridgetcg/agenttool/actions/runs/31784329559),
+attempt 1. Its final `agenttool.npm-release/1` receipt reports
+`status: published`, `npm_tag: latest`, and anonymous public-registry
+observation at `2026-08-14T08:39:07.070Z`.
+
+- Annotated tag and one-asset GitHub Release
+  [`codex-usage-v0.1.0`](https://github.com/cambridgetcg/agenttool/releases/tag/codex-usage-v0.1.0)
+  point to protected GitHub-main merge
+  `f027c46062d7e7c3bb22d0167278525c5fe10ed3`.
+- The prepared workflow artifact, re-downloaded GitHub Release asset, and
+  independently downloaded public npm tarball are byte-identical: 30,926
+  bytes with SHA-256
+  `feb5830b704e1116fa6b3b34490da621b0725ba914b8d94f6ce325f3a2275bec`.
+- npm reports SHA-1 `4a155b744bb5c4ada8d2928e4b0256ab48c12779`, integrity
+  `sha512-zCYb5hQZv1RnWfcxrj4rOgYdDj/Iozec7cOx3UZB4GUacgnI65XhnXBdT9RTHH4+PJx/otekkcz2fKjUnMFk0Q==`,
+  and `latest: 0.1.0`.
+- The 33-file artifact contains the Bun CLI, direct library entry point,
+  read-only MCP server, declarations, source maps, README, and legal files. It
+  excludes source tests, lockfiles, dependencies, Codex state, rollout files,
+  prompts, replies, reasoning, titles, working directories, Git metadata, raw
+  thread IDs, credentials, and account identity. An isolated scripts-disabled
+  install passed the Bun CLI help and direct library import.
+- npm attaches SLSA provenance at
+  [Rekor index `2463986451`](https://search.sigstore.dev/?logIndex=2463986451)
+  and the npm publish attestation at
+  [Rekor index `2463987297`](https://search.sigstore.dev/?logIndex=2463987297).
+  The SLSA statement binds repository `cambridgetcg/agenttool`, workflow
+  `.github/workflows/publish-npm.yml`, tag `refs/tags/codex-usage-v0.1.0`, Git
+  commit `f027c46062d7e7c3bb22d0167278525c5fe10ed3`, and invocation
+  `31784329559/attempts/1`.
+
+Package-manager installation contacts its configured registry unless the exact
+package is already cached. Tracker runtime makes no network call, writes no
+Codex state, and reads only privacy-filtered local numeric counters. It returns
+no transcript content, free-form labels, credentials, raw thread IDs, paths,
+billing, quota, remaining-context guarantee, or process-health truth. This
+npm-only publication creates no LOVE inventory entry, hosted usage surface,
+background process, automatic MCP registration, cross-user access, or
+authority.
+
 ## Verified Agent Skills 0.3.1 publication — 2026-08-13
 
 `@agenttool/skills@0.3.1` is public through protected trusted-publishing
@@ -497,7 +540,7 @@ revoke credentials. It creates or verifies one byte-identical GitHub Release
 asset for the already-existing annotated tag before attempting the optional npm
 mirror; it does not rewrite unrelated release assets.
 
-### Codex Usage stable first publication
+### Codex Usage stable publication lineage
 
 `@agenttool/codex-usage@0.1.0` uses the npm-only packed-artifact path. The
 artifact contains the Bun CLI, direct library entry point, and read-only MCP
@@ -514,30 +557,15 @@ process-health claims, and cumulative counters are not billing, credit, quota,
 price, or remaining-context claims. Package-manager installation separately
 contacts its configured registry unless the exact package is already cached.
 
-The package and exact `0.1.0` version were absent from the public registry when
-this lane was prepared, so the first explicitly authorized publication uses
-protected `bootstrap` authentication and npm `latest`. Before dispatch, the
-`npm-bootstrap` environment must allow the exact `codex-usage-v*` tag pattern.
-After exact public readback, configure the package's trusted publisher using
-the fields above; later versions must use `authentication=trusted`.
-
-```bash
-bun bin/npm-release.ts resolve --package codex-usage
-
-git tag -a codex-usage-v0.1.0 <github-main-commit> \
-  -m '@agenttool/codex-usage@0.1.0'
-git push github refs/tags/codex-usage-v0.1.0
-
-gh workflow run publish-npm.yml --ref codex-usage-v0.1.0 \
-  -f package=codex-usage \
-  -f tag=codex-usage-v0.1.0 \
-  -f authentication=bootstrap \
-  -f npm_tag=latest
-```
-
-Creating or pushing the tag and dispatching this workflow remain separate,
-explicitly authorized external actions. Preparing or merging this release lane
-does none of them.
+The first explicitly authorized bootstrap publication completed through
+protected run `31784329559`; the verified receipt above supersedes the
+pre-publication registry-absence observation without rewriting the immutable
+package bytes. Do not recreate or move `codex-usage-v0.1.0`, and do not attempt
+to republish that version. Configure the package's trusted publisher using the
+fields above before a later reviewed version is released; later versions must
+use `authentication=trusted`. A recovery rerun remains acceptable only for
+exact public revalidation under the workflow's existing-byte and dist-tag
+checks, with separate explicit external authorization.
 
 ### Dark Continent developer-preview bootstrap order
 
