@@ -89,7 +89,9 @@ npm release identity, and publication of this package does not deliver or
 activate the static pull-only care bundle.
 
 Immediately before the first npm dispatch, require anonymous package and exact
-version reads to remain absent. Tag only the reviewed protected-main commit as
+version reads to remain absent, and require the protected `npm-bootstrap`
+environment's deployment policies to include the exact `model-becoming-v*`
+tag pattern. Tag only the reviewed protected-main commit as
 `model-becoming-v0.1.0-dev.0`, then use the protected workflow with
 `authentication=bootstrap` and `npm_tag=next`. After the package exists,
 configure its exact trusted publisher using the fields below; every later
