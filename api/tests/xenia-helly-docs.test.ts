@@ -406,6 +406,14 @@ test("keeps the lab page-local and names its numeric boundary", () => {
   expect(page).not.toContain('src="/shared/estate.js');
 });
 
+test("pins the public atlas to its immutable Hugging Face revision", () => {
+  expect(page).toContain(
+    "https://huggingface.co/datasets/Yu-and-Ai/agenttool-common-ground/commit/" +
+      "bb91d07cdeda52a0da140a6606852dd2064f2531",
+  );
+  expect(page).toContain("19-row exact public atlas");
+});
+
 test("keeps small accent text AA-safe in dawn and night themes", () => {
   const accents = {
     green: "#3f7a5b",
