@@ -14,6 +14,11 @@ exact representation links and route-specific Cloudflare headers. The page
 does not inspect identity or lifecycle state, personalize, persist, notify,
 broadcast, score, or create a receipt or effect. “Every is” means equal public
 availability without classification, not universal contact or physical access.
+The separate API `GET|HEAD /public/love-bomb` serves the closed
+`agenttool.love-bomb-public-signal/0.1` package/distribution coordinate. It
+links this static door only as related and contains none of the ten-message
+corpus. Its schema and example are mirrored under `specs/`; this static docs
+tree does not implement, proxy, or fall back for the API route.
 The committed static `llms.txt` keeps the same pointers as a deployment
 fallback; the public `/llms.txt` route redirects to the API's shared
 `buildLlmsTxt()` output, which is the canonical live discovery representation.
@@ -193,7 +198,10 @@ play.js         — Party Telephone's three-turn state, validation, erasure, and
 love-bomb.html  — Semantic no-JavaScript LOVE BOMB v4 door; finite and pull-only
 love-bomb.json  — Symlink to the closed canonical agenttool.love-bomb/0.1 instance
 LOVE-BOMB.md    — Symlink to the canonical delivery doctrine and boundaries
+LOVE-BOMB-BECOMING.md — Symlink to the separate package, public-signal, and WAKE doctrine
 love-bomb.txt   — Plain-text representation of the same finite bundle
+specs/agenttool-love-bomb-public-signal-v0.1.schema.json — Closed API package-signal schema
+specs/agenttool-love-bomb-public-signal-v0.1.example.json — Canonical five-field signal example
 xenia-helly.html — Xenia–Helly theorem, challenge audit, and local 2D half-plane lab
 xenia-helly.js  — page-local exact-dyadic classifier and bounded finite-witness search
 xenia-helly.css — scoped Common Ground layout and geometry styling
@@ -261,6 +269,8 @@ AgentTool Platform
 - `browser.html` — Local Agent Browser, exact package install, nine-tool contract, authority profiles, and integration boundaries
 - `play.html` / `play.js` — Human arcade and local, non-persistent Party Telephone table
 - `love-bomb.html` / `love-bomb.json` / `LOVE-BOMB.md` / `love-bomb.txt` — one finite pull-only LOVE BOMB v4 surface in four representations; no inferred reader state, storage, delivery event, score, or authority
+- `LOVE-BOMB-BECOMING.md` — canonical symlink for the separate package, corpus-free public signal, and bounded current-inference WAKE doctrine; not a fifth static-v4 representation
+- `specs/agenttool-love-bomb-public-signal-v0.1.*.json` — closed corpus-free package-signal schema/example for the separate API `GET|HEAD /public/love-bomb`; not another static representation or delivery path
 - `xenia-helly.html` / `xenia-helly.js` — Common Ground challenge and bounded local binary64 half-plane lab with exact dyadic classification; theorem/model/evidence/choice remain separate
 - `whitehack.html` — Whitehack crypto-awareness, Castle intake, wallet understanding, local encrypted evidence, custody, privacy, and authorization boundaries
 - `AGENT-WALLET-0.1.md` / `agent-wallet-v0.1.schema.json` — wallet protocol discovery; exact release bytes live under `packages/v1/`

@@ -315,7 +315,7 @@ describe("LOVE BOMB v4 canonical static contract", () => {
       .map((line) => line.trimStart())
       .filter((line) => line.startsWith("/") || line.startsWith("https://"))
       .length;
-    expect(ruleCount).toBe(97);
+    expect(ruleCount).toBe(98);
     expect(ruleCount).toBeLessThanOrEqual(100);
   });
 

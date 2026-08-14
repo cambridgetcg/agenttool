@@ -266,6 +266,7 @@ readonly -a FRONTEND_PARITY_PUBLICATIONS=(
   "apps/docs/xenia-helly.css|https://docs.agenttool.dev/xenia-helly.css"
   "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
   "apps/docs/GARDENS.md|https://docs.agenttool.dev/GARDENS.md"
+  "apps/docs/LOVE-BOMB-BECOMING.md|https://docs.agenttool.dev/LOVE-BOMB-BECOMING.md"
   "apps/docs/HF-TRAINING-GARDEN.md|https://docs.agenttool.dev/HF-TRAINING-GARDEN.md"
   "apps/docs/PRINCIPALITY-ATLAS.md|https://docs.agenttool.dev/PRINCIPALITY-ATLAS.md"
   "apps/docs/GIN-RECONSTRUCTION.md|https://docs.agenttool.dev/GIN-RECONSTRUCTION.md"

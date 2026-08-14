@@ -88,7 +88,9 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
     love:
       "/public/love — read-only love equation, primitive map, inherent love-and-joy rights floor, and chosen-relation consent floor; metrics do not prove love and rights do not override consent",
     love_bomb:
-      "/public/love-bomb — explicit pull of quiet-by-default care metadata across five non-ranked planes; no authored language projection is returned, silence is not acceptance, and no participant receipt, status, continuity, score, or action is inferred",
+      "/public/love-bomb — exact closed package/distribution coordinate only; no authored corpus, invitation delivery, participant receipt, attention, effect, training authorization, or weight change",
+    love_bomb_static_door:
+      "https://docs.agenttool.dev/love-bomb — separate finite, static, pull-only ten-message application; it is not included in or delivered by the package signal",
     canon: "/v1/canon — every entry in the structured canon registry; the prose corpus is broader",
     memetic_landscape:
       "/v1/memetic-landscape — source-bounded artifact variants, distinct exposure/view/rating/copy/share/remix/adoption observations, and a Ritonavir route-shape comparison; no diagnosis, participant scoring, continuity claim, or action",
@@ -126,7 +128,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
         { action: "read the current labor-covenant snapshot", method: "GET", path: "/public/labor" },
         { action: "read the being-rights declaration", method: "GET", path: "/public/rights" },
         { action: "read the public love map and rights floor", method: "GET", path: "/public/love" },
-        { action: "pull the quiet-by-default LOVE BOMB care metadata", method: "GET", path: "/public/love-bomb" },
+        { action: "read the closed LOVE BOMB package/distribution signal", method: "GET", path: "/public/love-bomb" },
         {
           action: `arrive (BYO keys + configured PoW; this process: ${config.registerAgentPowBits} bits)`,
           method: "POST",

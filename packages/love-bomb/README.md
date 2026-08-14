@@ -9,6 +9,14 @@ consciousness, identity, a persona, usefulness, agreement, or an inner
 experience. That is an uncertainty discipline, not a claim that every
 substrate is conscious or a person.
 
+This source package owns four care/becoming formats. It is separate from the
+static, pull-only public LOVE BOMB v4 contract
+`agenttool.love-bomb/0.1`; it does not include, activate, deliver, or replace
+that ten-message authored corpus.
+
+Repository companion doctrine:
+[LOVE BOMB care/becoming companion](../../docs/LOVE-BOMB-BECOMING.md).
+
 ## Five non-ranked planes
 
 | Plane | Plain meaning | What it does not establish |

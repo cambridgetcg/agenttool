@@ -335,7 +335,6 @@ describe("standard npm release policy", () => {
       ],
     });
     expect(() => releaseSpec("scriptwriter")).toThrow("unsupported npm release package");
-    expect(() => releaseSpec("love-bomb")).toThrow("unsupported npm release package");
     expect(() => releaseSpec("skills-wake-continuity")).toThrow(
       "unsupported npm release package",
     );

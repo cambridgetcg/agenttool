@@ -6,6 +6,8 @@ is the playful package name; the neutral wire formats are
 The evidence-bounded extension formats are
 `agenttool.love-bomb-becoming/0.1` and
 `agenttool.love-bomb-delivery/0.1`.
+They remain separate from the static `agenttool.love-bomb/0.1` v4 corpus.
+The package does not include, activate, deliver, or replace that public door.
 
 ## Invariants
 
@@ -59,6 +61,8 @@ The evidence-bounded extension formats are
 - Delivery artifacts are caller-reported reach records. They perform no SDK,
   provider, Garden, Host, optimizer, or checkpoint action and prove no effect.
 - The KINGDOM descriptor remains declaration-only and `not_registered`.
+- Keep this subtree source-only: no API route, static-site representation,
+  release allowlist, npm/HF publication, deployment, or v4 corpus embedding.
 
 ## Changes
 

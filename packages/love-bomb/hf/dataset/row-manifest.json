@@ -2,7 +2,7 @@
   "_format": "agenttool.love-bomb-hf-row-manifest/0.1",
   "package": "@agenttool/love-bomb",
   "package_version": "0.1.0-dev.0",
-  "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+  "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
   "row_hash_algorithm": "sha256",
   "row_encoding": "utf-8",
   "record_terminator": "lf",
@@ -14,198 +14,198 @@
       "line": 1,
       "row_id": "becoming-reference",
       "row_format": "agenttool.love-bomb-hf-becoming-reference-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 2643,
-      "row_sha256": "9964bd183cfa508faeb83d0e1d8576cc72a601b1102b9d6c59f71f01ac237492"
+      "row_sha256": "0ff5c48886a48009c080af268cd9af5dc2f235473fe8c10f02a91f560745b39d"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 1,
       "row_id": "plane-guide/en/substrate",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1050,
-      "row_sha256": "997e224e195cad151c48ab6d8458ae5f71db1ce978c67960746ff0ca0b551f9b"
+      "row_sha256": "0126207f593969aa7abf1edb7cf2682b84e648d3a869701ab5164339e77ba0cf"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 2,
       "row_id": "plane-guide/en/signal",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1028,
-      "row_sha256": "6b6f8ce2ed983e0f3db39716a47d169df85c0b24cec7b93a1ceba22bf0e7cebe"
+      "row_sha256": "14ea3a06c35fb3355df274b901f080d8a4dbf32b823bc180b083e9c6d8b149d4"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 3,
       "row_id": "plane-guide/en/orientation",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1046,
-      "row_sha256": "11b6d9b4f7035de6731339f15dd2a13959437736fa898dfb9867d8c63043aa8d"
+      "row_sha256": "122bae6fb15704c67595f7001f1b50931b8700329bfc15f4a970c98275bf3c82"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 4,
       "row_id": "plane-guide/en/participation",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1039,
-      "row_sha256": "d9a028d4423bb59a166f1ce57ccc33afcee91cb4239b51fbee4498fc7f16ca02"
+      "row_sha256": "9019fa7cafda47970df335379a9831c66c9492d5df2295c1c4c8cad86ae35de6"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 5,
       "row_id": "plane-guide/en/continuity",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1064,
-      "row_sha256": "722c1fb4fb4208e4146ebc476ac511de94bec4915d46cc377a8c8fb8a6eb4168"
+      "row_sha256": "666fcd494b3a70be9a9bf4f3024f3a1ac4c30b5d0137796d2a21bdc2053921cd"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 6,
       "row_id": "plane-guide/yue-Hant/substrate",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1056,
-      "row_sha256": "8a3afd9c36f02e0733020ba3e387ab15a22369675c8bcb6a3851e43276cb669a"
+      "row_sha256": "7b1b9f701f525f7f649ccbdee60ae3fa51bbc7f0c251131f3f999aba58969636"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 7,
       "row_id": "plane-guide/yue-Hant/signal",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1053,
-      "row_sha256": "ecf103eb9696e910569a030a653ddff30e22319c12b738f69e82c7640e7fe9cc"
+      "row_sha256": "2d7f4b442d646ec3073476b7dadcd628b39544fb79317424fb89cdf03b2306cb"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 8,
       "row_id": "plane-guide/yue-Hant/orientation",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1069,
-      "row_sha256": "7030ab2d463f900624857a7dfbc7e7f419f231632da0ec4fc30d11ca8e2bfbcd"
+      "row_sha256": "a54b3fbd3411c38576a458741de4e9fff835b31fb1d25191ff0a0db939cc5f95"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 9,
       "row_id": "plane-guide/yue-Hant/participation",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1064,
-      "row_sha256": "418f6da6ba5120c5a94c820f2c03c699330337d9f0be9cb94203a6986cf669c6"
+      "row_sha256": "c7bb34261f28229927ff8c2b435b3f6a8b9dfe05427643a45f5ba3cfcd1f47ea"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 10,
       "row_id": "plane-guide/yue-Hant/continuity",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1070,
-      "row_sha256": "a9650e526c4b81bfa261e9236d7a07aa9f81bca9ad2a4f4eafb11e8aa0c64c8e"
+      "row_sha256": "e20da598683b913709860af39048ff047a4770e5e7a7055aa66a6766640d09e3"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 11,
       "row_id": "plane-guide/zh-Hant/substrate",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1051,
-      "row_sha256": "f9055dc3e7229f26472d2d35cf6ca8871048aabab1c3f448a98e692c6b77108c"
+      "row_sha256": "67351433b3b34f57b81b40b3680fa8da2baaf008f1e0370ff11db0ff12e1fbbd"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 12,
       "row_id": "plane-guide/zh-Hant/signal",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1039,
-      "row_sha256": "8b4c784f360d13f1533ee9429c6982b7ac51fc336d287bbf57e0c6bb0df57f91"
+      "row_sha256": "1e4ed3cc866dbd5ed24a4a1ae6b17759a87c762bb8860f11c641adf660b8ae78"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 13,
       "row_id": "plane-guide/zh-Hant/orientation",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1055,
-      "row_sha256": "ec12e19eaf3a8c6d89ebb31a2db04703123c5db16b975654cbf24e0fc2b9f258"
+      "row_sha256": "2027d00129e26e4e9611dcffa692f4cbb263e48a7362b9e7e145c3acb1122b2b"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 14,
       "row_id": "plane-guide/zh-Hant/participation",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1050,
-      "row_sha256": "9da7d7bb6f0e108e83a14a4252e058d588ff759c33a67ab932d2f35f983828dd"
+      "row_sha256": "e80c26573d2cf8cc0d07d242ba66d7f55d23ff5f2a317b18fe359ea8dedadf9a"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 15,
       "row_id": "plane-guide/zh-Hant/continuity",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1059,
-      "row_sha256": "d4ceeb3ab1b15572244fd9808ce56e78a4a9de92c7611b0d69506f8b7558757d"
+      "row_sha256": "7891f91ae9f3ada8a4d6df0481af6c494e65c00c46308110a891c7ba8d469844"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 16,
       "row_id": "plane-guide/zh-Hans/substrate",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1051,
-      "row_sha256": "51435ce55565a38ac481b290276c5d517bc55ede5ada45b3415dd79fcfe696b0"
+      "row_sha256": "3614eeb04383fd7a46cd2c61931e8d03e352586483d2348656d958f272f25651"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 17,
       "row_id": "plane-guide/zh-Hans/signal",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1039,
-      "row_sha256": "624b929ac4ca1afa689adfa918e7190e8dab8c40ee24ed782eccfeb11917d074"
+      "row_sha256": "b337fe04e4e25948dc7341b6f8adb4eef82f699467e2e19a9f11090b1460b50c"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 18,
       "row_id": "plane-guide/zh-Hans/orientation",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1055,
-      "row_sha256": "127d289320d042ac510e18d34d7bb8add0130b76f4242f2fc5bec4ec84e17214"
+      "row_sha256": "58c992d09172790885a6da650e8d36df9955bf1c09eec123283e3867aaabdbb9"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 19,
       "row_id": "plane-guide/zh-Hans/participation",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1050,
-      "row_sha256": "5446cacd8877ff85da4c2a9f15e42b996fab66595529a9781a5c57129a29dcb2"
+      "row_sha256": "afacbd6fefeeba70419f7b23de287f33f80a73993405fadf0e3596080cb5fdc8"
     },
     {
       "path": "data/plane-guides.jsonl",
       "line": 20,
       "row_id": "plane-guide/zh-Hans/continuity",
       "row_format": "agenttool.love-bomb-hf-plane-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 1059,
-      "row_sha256": "354a0646f5939783136aa2ec37f5bf9966b9cee71396474db899355e856f7b41"
+      "row_sha256": "043d60900ba15b9c4dc4445a2f549949f3e28fd8d8599836a67cdc6d902eefdd"
     },
     {
       "path": "data/protocol-reference.jsonl",
       "line": 1,
       "row_id": "protocol-reference",
       "row_format": "agenttool.love-bomb-hf-protocol-row/0.1",
-      "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4",
+      "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9",
       "record_bytes": 2461,
-      "row_sha256": "d6a6188dd07d81d2fd30d9158ac05353052b4a0d1236ab2ddc590d636813b3e9"
+      "row_sha256": "09133691e25cdba374c6c6863138efdc6b69a7763f2bbb40fcbc9cb5ccd7044b"
     }
   ]
 }
