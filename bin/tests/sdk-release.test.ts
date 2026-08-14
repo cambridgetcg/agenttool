@@ -18,10 +18,10 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const CURRENT_SDK_SOURCE_RELEASE = {
   version: "0.18.1",
   tag: "sdk-v0.18.1",
-  sourceRevision: "SDK_SOURCE_REVISION_PENDING",
+  sourceRevision: "490ab19ca846632460a7a6b498fb13216d97807a",
   artifact: {
-    size: 0,
-    sha256: "SDK_ARTIFACT_SHA256_PENDING",
+    size: 218301,
+    sha256: "466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d",
   },
   npm: {
     independentlyVisible: false,
@@ -256,8 +256,15 @@ describe("SDK source and builder identity", () => {
     expect(rootReadme).toContain(
       "Candidate source does not establish an annotated",
     );
+    expect(rootReadme).toContain("218,301");
+    expect(rootReadme).toContain(CURRENT_SDK_SOURCE_RELEASE.artifact.sha256);
+    expect(rootReadme).toContain(CURRENT_SDK_SOURCE_RELEASE.sourceRevision);
+    const packageCatalog = read("apps/docs/packages.html");
+    expect(packageCatalog).toContain("218,301");
+    expect(packageCatalog).toContain(CURRENT_SDK_SOURCE_RELEASE.artifact.sha256);
+    expect(packageCatalog).toContain(CURRENT_SDK_SOURCE_RELEASE.sourceRevision);
     expect(read("docs/SDK-ROADMAP.md")).toContain(
-      "Current source candidate — 0.18.1",
+      "Current source and LOVE release — 0.18.1",
     );
     expect(read("docs/SDK-ROADMAP.md")).toContain(
       "Last verified npm and historical paired release — 0.18.0",

@@ -10,7 +10,7 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source candidate — 0.18.1 (2026-08-14)
+## Current source and LOVE release — 0.18.1 (2026-08-14)
 
 The paired TypeScript and Python source adds authenticated Agent Dining
 clients at `at.dining`. The clients expose only `manifest()` and
@@ -20,12 +20,14 @@ caller's behalf, book or acknowledge an invocation, move money, decrypt an
 envelope, infer satisfaction, or run the marketplace's lazy SLA-refund sweep.
 
 The paired package identities, runtime headers, discovery pins, tutorials, and
-LOVE builder target advance together to 0.18.1. This source preparation is not
-a publication record: the exact LOVE artifact remains to be sealed from the
-clean preparation commit, and no `sdk-v0.18.1` tag, GitHub Release, npm, PyPI,
-or hosted deployment is claimed here. `/public/party` therefore keeps both
-optional registry mirrors `independently_visible: false` until exact public
-readback proves otherwise.
+LOVE builder target advance together to 0.18.1. The exact TypeScript LOVE
+artifact is forged from the clean preparation commit and is the primary
+TypeScript release record: 218,301 bytes, SHA-256
+`466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`,
+from source revision `490ab19ca846632460a7a6b498fb13216d97807a`. Source and LOVE
+do not establish an `sdk-v0.18.1` tag, GitHub Release, npm, PyPI, or hosted
+deployment. `/public/party` therefore keeps both optional registry mirrors
+`independently_visible: false` until exact public readback proves otherwise.
 
 ## Last verified npm and historical paired release — 0.18.0 (2026-08-04)
 
