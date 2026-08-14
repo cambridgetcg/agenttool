@@ -142,6 +142,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "math-cards",
     artifactKind: "pack",
   },
+  "model-becoming": {
+    key: "model-becoming",
+    name: "@agenttool/model-becoming",
+    packagePath: "packages/model-becoming",
+    tagPrefix: "model-becoming",
+    artifactKind: "pack",
+  },
   "principality-geometry": {
     key: "principality-geometry",
     name: "@agenttool/principality-geometry",
@@ -834,6 +841,22 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/schema/agenttool-math-card-v0.1.schema.json",
       "package/schema/agenttool-math-card-assessment-v0.1.schema.json",
       "package/vectors/agenttool-math-cards-v0.1.json",
+    );
+  }
+  if (spec.name === "@agenttool/model-becoming") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-model-becoming-dossier-v0.1.schema.json",
+      "package/hf/dataset/LICENSE",
+      "package/hf/dataset/NOTICE",
+      "package/hf/dataset/README.md",
+      "package/hf/dataset/source-manifest.json",
+      "package/hf/dataset/hash-manifest.json",
+      "package/hf/dataset/data/model-becoming-reference.jsonl",
+      "package/hf/dataset/reference/agenttool-model-becoming-dossier-v0.1.schema.json",
     );
   }
   if (spec.name === "@agenttool/principality-geometry") {
