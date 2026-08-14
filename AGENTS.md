@@ -59,7 +59,8 @@ certificates, and non-scoring challenge structure
 (`packages/gin-reconstruction/`), a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
 (`packages/credential-broker/`), a local-first multi-agent coordination journal
-(`packages/collab/`), a deterministic metadata-only Correspondence-to-YUTABASE
+(`packages/collab/`), a public, local-only privacy-minimal Codex token-usage pulse
+(`packages/codex-usage/`), a deterministic metadata-only Correspondence-to-YUTABASE
 projection planner (`packages/correspondence-yutabase/`), a private
 loopback-only durable projector into a rebuildable local YUTABASE sidecar
 (`packages/correspondence-yutabase-projector/`), a deterministic
@@ -108,7 +109,13 @@ context, a backend-neutral operation inventory, and current/legacy MCP
 negotiation without widening authority. The Skills inspector validates bounded local
 structure and emits reports; it does not execute scripts, install or copy
 skills, use the network, spawn subprocesses, look up credentials, or change
-host configuration. Agent
+host configuration. The Codex token-usage pulse rereads committed local Codex
+numeric counters on every sample and exposes a CLI/watch surface plus five
+read-only stdio MCP tools. It returns numeric usage, closed source kinds,
+hashed session references, and opt-in bounded numeric token-event breakdowns;
+it does not return transcript content, free-form labels, credentials, raw
+thread IDs, paths, billing, cost, quota, remaining-context guarantees, or
+process-health truth, and it makes no network call or Codex-state write. Agent
 Wallet core 0.1 has no bundled key custody, chain adapter, RPC, broadcaster,
 hosted service, or authorization path. `@agenttool/wallet@0.1.3` is the
 current exact LOVE release; its npm 0.1.3 mirror is independently
@@ -281,6 +288,11 @@ npm pack --dry-run                             # package boundary; does not publ
 cd packages/collab
 bun run ci                                     # typecheck + store/MCP/concurrency tests
 npm pack --dry-run                             # package boundary; does not publish
+
+# Local Codex numeric token pulse ───────────────────────────────────
+cd packages/codex-usage
+bun run ci                                     # typecheck + privacy/live-state/MCP handshake tests + build
+bun dist/bin/agenttool-codex-usage.js watch    # poll committed numeric counters; no transcript output or network
 
 # Read-only Agent Skills inspection ─────────────────────────────────
 cd packages/skills
@@ -600,6 +612,7 @@ source boundary by itself.
 | How can an agent record a bounded local trial, correlate declared boundary labels, and project minimized evidence to HF STS without uploading it? | [`docs/AGENT-TRIALS.md`](docs/AGENT-TRIALS.md) · `packages/trials/` (`@agenttool/trials`; private source-only deterministic evidence, no executor, browser, journal crawler, HF client, credentials, network, release, or hosted route) |
 | How can an agent inspect exact Hugging Face repository metadata and bind phase-aware research leads without downloading or executing them? | `packages/hf-scout/README.md` (`@agenttool/hf-scout`; private source-only metadata/provenance scout with 15 pinned leads, no ambient credentials, file/card/row download, gate acceptance, inference, execution, write, npm release, or hosted route) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.4.0` source; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 32 local MCP tools for Codex/Claude/Hermes, including optional read-only Zerone witness status that never contacts a chain; not a hosted lock, anchoring bridge, or private model channel) |
+| How can local agents inspect committed Codex token counters without opening transcripts? | `packages/codex-usage/README.md` (`@agenttool/codex-usage`; poll-on-read CLI/watch plus five read-only stdio MCP tools, numeric counters and hashed session references only by default; no transcript index, free-form labels, credentials, raw thread IDs, paths, billing/quota/context guarantee, process-liveness proof, network call, Codex-state write, hosted route, or automatic authority) |
 | How can explicit KINGDOM project cards become deterministic registries and conservative XENIA Surface manifests? | `packages/kingdom/README.md` (`@agenttool/kingdom`; pure library APIs and a one-file read-only CLI; declarations only, with no ambient discovery, authority, or conformance certification) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.3.1`; public npm read-only inspector plus instruction-only Common Ground/Nen and AgentCred workflows whose sidecars require explicit invocation; local controller mutations still require separate authorization, and installation alone activates none) |
 | How can an agent operate a local browser and inspect observed web material without turning rhetoric or model output into truth? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (`@agenttool/browser@0.6.0`; unchanged nine-tool local runtime plus direct-only exact-material/RhetorLint/injected-HF understanding, no automatic upload, model download, action, or hosted browser-control surface) |

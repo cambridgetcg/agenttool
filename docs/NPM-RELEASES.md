@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, and Principality Geometry. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, the KINGDOM integration package, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Memetic Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, and Principality Geometry. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, the KINGDOM integration package, the local Codex Usage reader, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Memetic Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -496,6 +496,48 @@ LOVE artifacts, deploy hosted services, configure npm trusted publishers, or
 revoke credentials. It creates or verifies one byte-identical GitHub Release
 asset for the already-existing annotated tag before attempting the optional npm
 mirror; it does not rewrite unrelated release assets.
+
+### Codex Usage stable first publication
+
+`@agenttool/codex-usage@0.1.0` uses the npm-only packed-artifact path. The
+artifact contains the Bun CLI, direct library entry point, and read-only MCP
+server plus declarations and source maps. It excludes source tests, lockfiles,
+dependencies, Codex state, rollout files, prompts, replies, reasoning, titles,
+working directories, Git metadata, raw thread IDs, credentials, and account
+identity.
+
+Public distribution does not register the MCP server, start a background
+process, make a tracker runtime network call, expose a hosted usage surface, or
+grant access to another user's Codex state. Every sample remains an explicit
+local read of privacy-filtered numeric counters. Recent timestamps are not
+process-health claims, and cumulative counters are not billing, credit, quota,
+price, or remaining-context claims. Package-manager installation separately
+contacts its configured registry unless the exact package is already cached.
+
+The package and exact `0.1.0` version were absent from the public registry when
+this lane was prepared, so the first explicitly authorized publication uses
+protected `bootstrap` authentication and npm `latest`. Before dispatch, the
+`npm-bootstrap` environment must allow the exact `codex-usage-v*` tag pattern.
+After exact public readback, configure the package's trusted publisher using
+the fields above; later versions must use `authentication=trusted`.
+
+```bash
+bun bin/npm-release.ts resolve --package codex-usage
+
+git tag -a codex-usage-v0.1.0 <github-main-commit> \
+  -m '@agenttool/codex-usage@0.1.0'
+git push github refs/tags/codex-usage-v0.1.0
+
+gh workflow run publish-npm.yml --ref codex-usage-v0.1.0 \
+  -f package=codex-usage \
+  -f tag=codex-usage-v0.1.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=latest
+```
+
+Creating or pushing the tag and dispatching this workflow remain separate,
+explicitly authorized external actions. Preparing or merging this release lane
+does none of them.
 
 ### Dark Continent developer-preview bootstrap order
 
