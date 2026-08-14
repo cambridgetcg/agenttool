@@ -10,7 +10,7 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source preparation — 0.20.0 (2026-08-14)
+## Current source and LOVE candidate — 0.20.0 (2026-08-14)
 
 The paired TypeScript and Python source adds a standalone credential-free
 `LoveBombClient.read()` over exactly `GET /public/love-bomb`. It is deliberately
@@ -41,12 +41,16 @@ explicit, independently refusable choices.
 
 The paired package identities, authenticated runtime headers, Python lock
 identity, READMEs, examples, and method-pin parity target advance together to
-0.20.0; dependency/runtime pins remain coherent. This clean source preparation
-is the future artifact's input; by itself it does not establish a 0.20.0 LOVE
-archive/manifest, annotated tag, GitHub Release, npm/PyPI publication, docs
-deployment, API deployment, or provider/model effect. The separately scoped
-seal must build from this clean commit and record that exact revision without
-rewriting any earlier artifact.
+0.20.0; dependency/runtime pins remain coherent. The ordinary canonical
+builder forged the exact 236,446-byte, 98-entry TypeScript LOVE candidate with
+SHA-256
+`d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`.
+Its manifest binds clean release-alignment commit
+`040e076bc537d433feaf32e23eec4e5cdf0ed6e2`, whose only change from the
+accepted current-main SDK reconciliation is the canonical builder's 0.20.0
+version and `sdk-v0.20.0` tag pin. This repository evidence establishes no
+0.20.0 annotated tag, GitHub Release, npm/PyPI publication, docs or API
+deployment, or provider/model effect.
 
 ## Last verified npm/PyPI and historical paired release — 0.19.0 (2026-08-14)
 

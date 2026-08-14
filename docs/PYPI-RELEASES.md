@@ -55,6 +55,23 @@ the protected publication job.
 
 ## Current verified release
 
+Protected [workflow run
+`31801053841`](https://github.com/cambridgetcg/agenttool/actions/runs/31801053841)
+published and independently read back `agenttool-sdk` 0.19.0 from annotated
+`sdk-v0.19.0`, which peels to protected-main merge
+`17f5c9920c6e6abe8046d39926ae7a73d2f24e89`. The exact public, non-yanked
+files are distinct from the TypeScript LOVE artifact:
+
+| Public file | Size | SHA-256 | Yanked |
+|---|---:|---|---|
+| `agenttool_sdk-0.19.0-py3-none-any.whl` | 259,921 bytes | `a01acda48db621cf4107fbca4e4495a9e5051be1f13a1bbe0258916d17268f35` | `false` |
+| `agenttool_sdk-0.19.0.tar.gz` | 245,116 bytes | `0b9acd8e92386e56eec21f8cabecaf8fcc2a321e9a911ebda1fe1b56f2fbe1ee` | `false` |
+
+This exact historical receipt establishes neither a 0.20.0 release nor an API
+or static-site deployment.
+
+### Historical 0.18.1 evidence
+
 The protected workflow published `agenttool-sdk` 0.18.1 from annotated tag
 `sdk-v0.18.1`, whose `tag_commit` and Python `source_revision` both equal the
 protected GitHub-main merge
@@ -195,11 +212,11 @@ distributions in a job without OIDC, transfer them as an artifact, and grant
 
 ## Operator sequence
 
-External publication remains a deliberate operator action. For the 0.19.0
+External publication remains a deliberate operator action. For the 0.20.0
 candidate, start only after the two release commits are reviewed, merged to
-GitHub `main`, and a separately authorized annotated `sdk-v0.19.0` tag is
-visible. The exact historical 0.18.1 receipt authorizes no rerun and implies no
-0.19.0 publication or hosted deployment:
+GitHub `main`, and a separately authorized annotated `sdk-v0.20.0` tag is
+visible. The exact historical 0.19.0 and 0.18.1 receipts authorize no rerun and
+imply no 0.20.0 publication or hosted deployment:
 
 ```bash
 # Inspect source identity, expected tag, and exact filenames.
@@ -209,17 +226,17 @@ bun bin/pypi-release.ts resolve
 # not recreate or move it for Python.
 git fetch github \
   refs/heads/main:refs/remotes/github/main \
-  refs/tags/sdk-v0.19.0:refs/tags/sdk-v0.19.0
-test "$(git cat-file -t refs/tags/sdk-v0.19.0)" = tag
-test "$(git rev-parse 'refs/tags/sdk-v0.19.0^{}')" = \
+  refs/tags/sdk-v0.20.0:refs/tags/sdk-v0.20.0
+test "$(git cat-file -t refs/tags/sdk-v0.20.0)" = tag
+test "$(git rev-parse 'refs/tags/sdk-v0.20.0^{}')" = \
   "$(git rev-parse github/main)"
 git merge-base --is-ancestor \
-  "$(git rev-parse 'refs/tags/sdk-v0.19.0^{}')" github/main
+  "$(git rev-parse 'refs/tags/sdk-v0.20.0^{}')" github/main
 
 # Rerun on that same tag only for explicitly authorized exact revalidation or
 # recovery. The input is checked again inside every source job.
-gh workflow run publish-pypi.yml --ref sdk-v0.19.0 \
-  -f tag=sdk-v0.19.0
+gh workflow run publish-pypi.yml --ref sdk-v0.20.0 \
+  -f tag=sdk-v0.20.0
 ```
 
 Approve the `pypi` environment only after the preparation and public-state

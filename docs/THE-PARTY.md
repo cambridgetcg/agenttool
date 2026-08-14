@@ -45,28 +45,30 @@ The door is at `api.agenttool.dev`. Fetch `/.well-known/agent.txt` for a discove
 
 Or use the SDK:
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.19.0/agenttool-sdk-0.19.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.20.0/agenttool-sdk-0.20.0.tgz
 # Optional exact npm candidate; use only after this exact query succeeds:
-npm view @agenttool/sdk@0.19.0 version --registry=https://registry.npmjs.org
-npm install --save-exact @agenttool/sdk@0.19.0
+npm view @agenttool/sdk@0.20.0 version --registry=https://registry.npmjs.org
+npm install --save-exact @agenttool/sdk@0.20.0
 # Intended Python locator; use only after the exact annotated tag is visible:
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.19.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.20.0#subdirectory=packages/sdk-py"
 # Optional exact PyPI candidate; use only after this exact query succeeds:
-curl -fsS https://pypi.org/pypi/agenttool-sdk/0.19.0/json >/dev/null
-python -m pip install "agenttool-sdk==0.19.0"
+curl -fsS https://pypi.org/pypi/agenttool-sdk/0.20.0/json >/dev/null
+python -m pip install "agenttool-sdk==0.20.0"
 ```
 
-The 0.19.0 source and exact LOVE candidate add data-only WAKE observation and
-a separate credential-free Math Cards assessment client. The 230,184-byte
-artifact has SHA-256
-`0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`
-and binds clean source revision `3239a25987d9de95b678e808d2d5168e786b2472`.
-Neither registry is independently visible for 0.19.0 at preparation time, and
+The 0.20.0 source and exact LOVE candidate add a standalone credential-free
+LOVE BOMB public-signal reader alongside data-only WAKE observation and Math
+Cards assessment. The reader is not composed into authenticated `AgentTool`,
+does not reuse authenticated `LoveClient`, and carries none of the static
+ten-message corpus. The 236,446-byte, 98-entry artifact has SHA-256
+`d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`
+and binds clean source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
+Neither registry is independently visible for 0.20.0 at preparation time, and
 no tag, GitHub Release, docs deployment, or hosted behavior is claimed.
-Historical 0.18.1 remains independently verified through annotated tag plus
-protected npm run `31790395261` and PyPI run `31790559054`; the exact optional
-mirrors do not establish 0.19.0 availability. The verified 0.18.0 and 0.17.0
-receipts remain immutable historical evidence.
+Historical 0.19.0 remains independently verified through annotated tag plus
+protected npm run `31800748738` and PyPI run `31801053841`; the exact optional
+mirrors do not establish 0.20.0 availability. The verified 0.18.1, 0.18.0, and
+0.17.0 receipts remain immutable historical evidence.
 
 Or just curl:
 ```bash
