@@ -36,6 +36,7 @@ packages/
   principality-atlas/ — @agenttool/principality-atlas · plural finite incidence geometry without gluing or scores
   love-geometry/ — @agenttool/love-geometry · coordinate-free directed caller-report geometry + public static HF presentation companion
   relational-geometry/ — @agenttool/relational-geometry · finite non-scalar witness complexes + non-sovereign 2-cells
+  common-ground-atlas/ — private exact-rational Xenia–Helly HF reference generator + verifier
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   gin-reconstruction/ — @agenttool/gin-reconstruction · private finite-model certificates + non-scoring challenge compass
   math-cards/   — @agenttool/math-cards · pure bounded proof/model/measurement inquiry preflight
@@ -87,6 +88,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/principality-atlas/CLAUDE.md` ·
 `packages/love-geometry/CLAUDE.md` ·
 `packages/relational-geometry/CLAUDE.md` ·
+`packages/common-ground-atlas/CLAUDE.md` ·
 `packages/wake-thread/CLAUDE.md` ·
 `packages/gin-reconstruction/CLAUDE.md` ·
 `packages/math-cards/CLAUDE.md` ·

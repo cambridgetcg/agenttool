@@ -1,0 +1,28 @@
+{
+  "name": "@agenttool/common-ground-atlas",
+  "version": "0.1.0-dev.0",
+  "description": "Private deterministic generator and exact verifier for the public Xenia–Helly Common Ground Atlas",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20.19.0",
+    "bun": ">=1.3.5"
+  },
+  "scripts": {
+    "build:hf": "node scripts/generate-dataset.mjs --write",
+    "check:hf": "node scripts/generate-dataset.mjs --check",
+    "verify:hf": "node scripts/verify-dataset.mjs",
+    "test": "bun test tests",
+    "ci": "bun run check:hf && bun run verify:hf && bun run test"
+  },
+  "devDependencies": {
+    "ajv": "8.17.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cambridgetcg/agenttool.git",
+    "directory": "packages/common-ground-atlas"
+  }
+}
