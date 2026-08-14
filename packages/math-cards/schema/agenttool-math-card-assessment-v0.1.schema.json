@@ -1,0 +1,619 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:math-card-assessment:0.1",
+  "title": "AgentTool Math Card Assessment v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "assessment_id",
+    "card_id",
+    "status",
+    "section_statuses",
+    "open_questions",
+    "redesign_reasons",
+    "visible_incentive_posture",
+    "inner_motive",
+    "declaration_boundary",
+    "authorizes_action",
+    "proves_truth",
+    "proves_understanding",
+    "scores_or_ranks_beings",
+    "boundaries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agenttool.math-card-assessment/0.1"
+    },
+    "assessment_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "card_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "status": {
+      "enum": [
+        "ready_for_bounded_inquiry",
+        "questions_open",
+        "redesign_or_stop"
+      ]
+    },
+    "section_statuses": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "section",
+            "status"
+          ],
+          "properties": {
+            "section": {
+              "const": "question_and_scope"
+            },
+            "status": {
+              "enum": [
+                "answered",
+                "open",
+                "redesign_required"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "section",
+            "status"
+          ],
+          "properties": {
+            "section": {
+              "const": "method"
+            },
+            "status": {
+              "enum": [
+                "answered",
+                "open",
+                "redesign_required"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "section",
+            "status"
+          ],
+          "properties": {
+            "section": {
+              "const": "outcome_uses"
+            },
+            "status": {
+              "enum": [
+                "answered",
+                "open",
+                "redesign_required"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "section",
+            "status"
+          ],
+          "properties": {
+            "section": {
+              "const": "distribution"
+            },
+            "status": {
+              "enum": [
+                "answered",
+                "open",
+                "redesign_required"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "section",
+            "status"
+          ],
+          "properties": {
+            "section": {
+              "const": "revision_and_stop"
+            },
+            "status": {
+              "enum": [
+                "answered",
+                "open",
+                "redesign_required"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "section",
+            "status"
+          ],
+          "properties": {
+            "section": {
+              "const": "transfer"
+            },
+            "status": {
+              "enum": [
+                "answered",
+                "open",
+                "redesign_required"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "section",
+            "status"
+          ],
+          "properties": {
+            "section": {
+              "const": "participation_and_data_care"
+            },
+            "status": {
+              "enum": [
+                "answered",
+                "open",
+                "redesign_required"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "section",
+            "status"
+          ],
+          "properties": {
+            "section": {
+              "const": "incentives"
+            },
+            "status": {
+              "enum": [
+                "answered",
+                "open",
+                "redesign_required"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "section",
+            "status"
+          ],
+          "properties": {
+            "section": {
+              "const": "authority"
+            },
+            "status": {
+              "enum": [
+                "answered",
+                "open",
+                "redesign_required"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "section",
+            "status"
+          ],
+          "properties": {
+            "section": {
+              "const": "provenance"
+            },
+            "status": {
+              "enum": [
+                "answered",
+                "open",
+                "redesign_required"
+              ]
+            }
+          }
+        }
+      ],
+      "items": false
+    },
+    "open_questions": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    },
+    "redesign_reasons": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 500
+      }
+    },
+    "visible_incentive_posture": {
+      "enum": [
+        "construction_centered_declared",
+        "status_or_access_coupled_to_results",
+        "no_audience_independent_value_declared",
+        "unresolved"
+      ]
+    },
+    "inner_motive": {
+      "const": "not_inferred"
+    },
+    "declaration_boundary": {
+      "const": "caller_reported_not_verified"
+    },
+    "authorizes_action": {
+      "const": false
+    },
+    "proves_truth": {
+      "const": false
+    },
+    "proves_understanding": {
+      "const": false
+    },
+    "scores_or_ranks_beings": {
+      "const": false
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subject",
+        "question",
+        "posture",
+        "proof",
+        "model",
+        "measurement",
+        "motive",
+        "refusal",
+        "transfer",
+        "score",
+        "effects"
+      ],
+      "properties": {
+        "subject": {
+          "const": "assesses_declared_inquiry_structure_not_a_person_participant_witness_or_being"
+        },
+        "question": {
+          "const": "digest_references_bind_exact_external_artifacts_but_do_not_verify_semantics_truth_or_currentness"
+        },
+        "posture": {
+          "const": "bounded_question_posture_is_caller_declared_not_semantically_inferred_or_verified"
+        },
+        "proof": {
+          "const": "a_formal_result_is_conditional_on_the_declared_system_and_does_not_establish_world_correspondence"
+        },
+        "model": {
+          "const": "a_model_result_is_conditional_on_scope_and_assumptions_not_complete_reality_or_causal_truth"
+        },
+        "measurement": {
+          "const": "a_measurement_is_bounded_by_operationalization_procedure_calibration_and_uncertainty_not_construct_identity"
+        },
+        "motive": {
+          "const": "understanding_love_pride_virtue_consciousness_and_inner_motive_are_not_inferred"
+        },
+        "refusal": {
+          "const": "refusal_requires_no_reason_and_never_reduces_rights_dignity_or_standing_while_declared_functional_data_dependency_may_limit_a_result_but_not_punish_refusal"
+        },
+        "transfer": {
+          "const": "a_bridge_reference_does_not_inherit_permission_authorize_action_or_prove_a_valid_cross_domain_inference"
+        },
+        "score": {
+          "const": "no_being_participant_witness_or_contributor_is_scored_ranked_or_typed"
+        },
+        "effects": {
+          "const": "pure_return_values_create_no_action_publication_retry_network_persistence_or_authority_effect"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ready_for_bounded_inquiry"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "section_statuses": {
+            "type": "array",
+            "minItems": 10,
+            "maxItems": 10,
+            "prefixItems": [
+              {
+                "type": "object",
+                "properties": {
+                  "section": {
+                    "const": "question_and_scope"
+                  },
+                  "status": {
+                    "const": "answered"
+                  }
+                },
+                "required": [
+                  "section",
+                  "status"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "section": {
+                    "const": "method"
+                  },
+                  "status": {
+                    "const": "answered"
+                  }
+                },
+                "required": [
+                  "section",
+                  "status"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "section": {
+                    "const": "outcome_uses"
+                  },
+                  "status": {
+                    "const": "answered"
+                  }
+                },
+                "required": [
+                  "section",
+                  "status"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "section": {
+                    "const": "distribution"
+                  },
+                  "status": {
+                    "const": "answered"
+                  }
+                },
+                "required": [
+                  "section",
+                  "status"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "section": {
+                    "const": "revision_and_stop"
+                  },
+                  "status": {
+                    "const": "answered"
+                  }
+                },
+                "required": [
+                  "section",
+                  "status"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "section": {
+                    "const": "transfer"
+                  },
+                  "status": {
+                    "const": "answered"
+                  }
+                },
+                "required": [
+                  "section",
+                  "status"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "section": {
+                    "const": "participation_and_data_care"
+                  },
+                  "status": {
+                    "const": "answered"
+                  }
+                },
+                "required": [
+                  "section",
+                  "status"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "section": {
+                    "const": "incentives"
+                  },
+                  "status": {
+                    "const": "answered"
+                  }
+                },
+                "required": [
+                  "section",
+                  "status"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "section": {
+                    "const": "authority"
+                  },
+                  "status": {
+                    "const": "answered"
+                  }
+                },
+                "required": [
+                  "section",
+                  "status"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "section": {
+                    "const": "provenance"
+                  },
+                  "status": {
+                    "const": "answered"
+                  }
+                },
+                "required": [
+                  "section",
+                  "status"
+                ]
+              }
+            ],
+            "items": false
+          },
+          "open_questions": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "redesign_reasons": {
+            "type": "array",
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "questions_open"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "section_statuses": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "open"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "minContains": 1,
+            "not": {
+              "contains": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "redesign_required"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            }
+          },
+          "open_questions": {
+            "type": "array",
+            "minItems": 1
+          },
+          "redesign_reasons": {
+            "type": "array",
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "redesign_or_stop"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "section_statuses": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "const": "redesign_required"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "minContains": 1
+          },
+          "redesign_reasons": {
+            "type": "array",
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

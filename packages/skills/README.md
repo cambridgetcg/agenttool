@@ -14,18 +14,18 @@ After a package artifact is deliberately installed, its binary is
 `agenttool-skill`. Installation alone does not activate or register the
 bundled skills.
 
-Version 0.3.1 is the current source identity. On 2026-08-13, a separate
+Version 0.3.2 is the current source identity. On 2026-08-14, a separate
 read-only registry check found that the last public exact npm release and npm
-`latest` both resolved to 0.3.0. This 0.3.1 source candidate has not been
+`latest` both resolved to 0.3.1. This 0.3.2 source candidate has not been
 tagged, mirrored, or published. Registry tags remain mutable selectors, and
 an exact version is provenance rather than proof of publisher identity or
 safety.
 
 For the checksum-pinned archive recipe below,
 the last public artifact verified while preparing
-it was the 0.3.0 GitHub Release. Its npm counterpart was public and npm
-`latest` resolved to 0.3.0 at that readback. These are preparation-time
-observations, not claims about the future 0.3.1 publication or the mutable
+it was the 0.3.1 GitHub Release. Its npm counterpart was public and npm
+`latest` resolved to 0.3.1 at that readback. These are preparation-time
+observations, not claims about the future 0.3.2 publication or the mutable
 current registry state.
 Pin and verify the exact artifact before installation:
 
@@ -47,11 +47,11 @@ Pin and verify the exact artifact before installation:
     [ "$actual_checksum" = "$expected_checksum" ]
   }
 
-  archive='agenttool-skills-0.3.0.tgz'
-  expected_sha256='6526f2bbcaf1ac6025b0cbc5347f2b8836123ef3ed5f5407a98fdb2263497a87'
+  archive='agenttool-skills-0.3.1.tgz'
+  expected_sha256='53aa5b3276eba196d8904f9db8c43987257d76f960c59c196ddac099175fbe11'
   curl -q --fail --location \
     --output "$archive" \
-    'https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.3.0/agenttool-skills-0.3.0.tgz' &&
+    'https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.3.1/agenttool-skills-0.3.1.tgz' &&
     verify_sha256 "$archive" "$expected_sha256" &&
     npm install --ignore-scripts --no-audit --no-fund "./$archive" &&
     [ -x ./node_modules/.bin/agenttool-skill ] &&
@@ -155,9 +155,9 @@ register, activate, install, copy, or execute them:
   transfers the mechanism into an original adaptation with exemplar,
   contrast, and transfer checks.
 
-Version 0.3.1 source adds Common Ground to the unofficial, instruction-only
-Nen operating suite. The published `0.3.0` npm and GitHub artifacts contain
-the eight earlier Nen skills and do not contain Common Ground. These are
+Version 0.3.2 source adds Math Card to the unofficial, instruction-only Nen
+operating suite. The published `0.3.1` npm and GitHub artifacts include Common
+Ground and the eight earlier Nen skills, but not Math Card. These are
 original agent workflows inspired by the rule and tradeoff design of
 *Hunter × Hunter*; they reproduce no story text, character likenesses, or
 artwork:
@@ -172,13 +172,14 @@ artwork:
 | [`nen-smoke-squad`](skills/nen-smoke-squad/SKILL.md) | Delegate finite parallel work and reclaim evidence | More units mean less context per unit |
 | [`nen-verification-ledger`](skills/nen-verification-ledger/SKILL.md) | Make consequential verification debt visible | Critical debt must be paid before completion |
 | [`nen-godspeed-loop`](skills/nen-godspeed-loop/SKILL.md) | Precompile reversible reactions for known events | Novelty halts the loop |
+| [`nen-math-card`](skills/nen-math-card/SKILL.md) | Turn a proof, model, or measurement challenge into bounded constructive inquiry | Never turn a mathematical result into a verdict on a being |
 | [`nen-vow-forge`](skills/nen-vow-forge/SKILL.md) | Design new abilities through meaningful limits | Constraints cannot manufacture authority |
 
 The skills have no script, credential, MCP, network, or hosted-runtime
 requirement. Bundling does not activate them, and their metaphors do not grant
 permission or change AgentTool's existing TypeScript/Python Nen mappings.
 Every bundled OpenAI sidecar requires explicit invocation while trigger and
-composition behavior are evaluated. The 0.3.0 GitHub Release archive has no
+composition behavior are evaluated. The 0.3.1 GitHub Release archive has no
 host installer, plugin manifest, or automatic discovery registration;
 installing the package alone does not register these skills with Codex, Claude,
 or another host.

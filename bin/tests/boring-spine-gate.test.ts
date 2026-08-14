@@ -514,6 +514,7 @@ describe("boring test spine", () => {
       "packages/relational-geometry",
       "packages/wake-thread",
       "packages/gin-reconstruction",
+      "packages/math-cards",
       "packages/credential-broker",
       "packages/collab",
       "packages/codex-usage",
@@ -602,7 +603,8 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/relational-geometry && bun run ci");
     expect(preflight).toContain("cd packages/wake-thread && bun run ci");
     expect(preflight).toContain("cd packages/gin-reconstruction && bun run ci");
-    expect(workflow).toContain("WAKE Thread, Gin Reconstruction, broker");
+    expect(preflight).toContain("cd packages/math-cards && bun run ci");
+    expect(workflow).toContain("WAKE Thread, Gin Reconstruction, Math Cards, broker");
     expect(preflight).toContain("cd packages/hf-training-garden && bun run ci");
     expect(preflight).toContain("bun test tests/learning-release.test.ts");
     expect(preflight).toContain("node scripts/check-learning-idempotence.mjs");
@@ -663,12 +665,13 @@ describe("boring test spine", () => {
     expect(workflow).toContain('report.skills[0].name !== "capability-conductor"');
     expect(workflow).toContain('report.skills[0].name !== "learn-by-contact"');
     expect(workflow).toContain(
-      'test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.1"',
+      'test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.2"',
     );
-    expect(workflow).toContain('test "$(node "$cli" --version)" = "0.3.1"');
-    expect(workflow).toContain('test "$(bun "$cli" --version)" = "0.3.1"');
+    expect(workflow).toContain('test "$(node "$cli" --version)" = "0.3.2"');
+    expect(workflow).toContain('test "$(bun "$cli" --version)" = "0.3.2"');
     for (const skillName of [
       "nen-common-ground",
+      "nen-math-card",
       "nen-contract-mantle",
       "nen-dependency-perimeter",
       "nen-concealed-trace",
@@ -1025,9 +1028,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(52);
+      expect(calls).toHaveLength(53);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        43,
+        44,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         9,

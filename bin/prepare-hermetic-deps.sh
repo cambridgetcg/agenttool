@@ -60,6 +60,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/relational-geometry
   packages/wake-thread
   packages/gin-reconstruction
+  packages/math-cards
   packages/credential-broker
   packages/collab
   packages/codex-usage
