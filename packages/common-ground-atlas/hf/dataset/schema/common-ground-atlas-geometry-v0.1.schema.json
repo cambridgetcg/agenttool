@@ -1,0 +1,782 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/common-ground-atlas-geometry-v0.1.schema.json",
+  "title": "Exact public-safe Xenia–Helly geometry reference case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "case_id",
+    "training_eligible",
+    "visibility",
+    "synthetic",
+    "provenance_ref",
+    "public_safety",
+    "does_not_establish",
+    "evaluation_profile",
+    "input",
+    "expected"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.common-ground-atlas.geometry/0.1"
+    },
+    "case_id": {
+      "type": "string",
+      "pattern": "^cg-[gwa][0-9]{2}-[a-z0-9-]+$"
+    },
+    "training_eligible": {
+      "const": false
+    },
+    "visibility": {
+      "const": "public_reference"
+    },
+    "synthetic": {
+      "const": true
+    },
+    "provenance_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "public_safety": {
+      "$ref": "#/$defs/publicSafety"
+    },
+    "does_not_establish": {
+      "$ref": "#/$defs/doesNotEstablish"
+    },
+    "evaluation_profile": {
+      "const": "agenttool.xenia-helly-lab-binary64/0.1"
+    },
+    "input": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/halfplaneInput"
+        },
+        {
+          "$ref": "#/$defs/nonconvexInput"
+        }
+      ]
+    },
+    "expected": {
+      "$ref": "#/$defs/geometryExpected"
+    }
+  },
+  "$defs": {
+    "rational": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "string",
+          "pattern": "^(?:0|-?[1-9][0-9]*)$"
+        },
+        "denominator": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/rational"
+        },
+        "y": {
+          "$ref": "#/$defs/rational"
+        }
+      }
+    },
+    "publicSafety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "contains_personal_data",
+        "contains_private_constraints",
+        "contains_real_participant_records",
+        "contains_credentials",
+        "copied_agent_traces",
+        "copied_fictional_story_content"
+      ],
+      "properties": {
+        "origin": {
+          "const": "human_directed_agent_authored_synthetic"
+        },
+        "contains_personal_data": {
+          "const": false
+        },
+        "contains_private_constraints": {
+          "const": false
+        },
+        "contains_real_participant_records": {
+          "const": false
+        },
+        "contains_credentials": {
+          "const": false
+        },
+        "copied_agent_traces": {
+          "const": false
+        },
+        "copied_fictional_story_content": {
+          "const": false
+        }
+      }
+    },
+    "doesNotEstablish": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consensus",
+        "consent",
+        "fairness",
+        "authority",
+        "identity_continuity",
+        "continuous_selection",
+        "culprit"
+      ],
+      "properties": {
+        "consensus": {
+          "const": true
+        },
+        "consent": {
+          "const": true
+        },
+        "fairness": {
+          "const": true
+        },
+        "authority": {
+          "const": true
+        },
+        "identity_continuity": {
+          "const": true
+        },
+        "continuous_selection": {
+          "const": true
+        },
+        "culprit": {
+          "const": true
+        }
+      }
+    },
+    "sourceNumber": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "literal",
+        "exact",
+        "binary64_hex",
+        "parse_relation"
+      ],
+      "properties": {
+        "literal": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 420
+        },
+        "exact": {
+          "$ref": "#/$defs/rational"
+        },
+        "binary64_hex": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "parse_relation": {
+          "enum": [
+            "exact",
+            "underflow_to_signed_zero"
+          ]
+        }
+      }
+    },
+    "halfplane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source_ref",
+        "a",
+        "b",
+        "c"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^g[0-9]{2}-[a-z0-9-]+$"
+        },
+        "source_ref": {
+          "type": "string",
+          "pattern": "^synthetic:constraint/g[0-9]{2}-[a-z0-9-]+$"
+        },
+        "a": {
+          "$ref": "#/$defs/sourceNumber"
+        },
+        "b": {
+          "$ref": "#/$defs/sourceNumber"
+        },
+        "c": {
+          "$ref": "#/$defs/sourceNumber"
+        }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coordinate_model_version",
+        "dimension",
+        "axes",
+        "coordinate_selector",
+        "representation_omission"
+      ],
+      "properties": {
+        "coordinate_model_version": {
+          "type": "string",
+          "pattern": "^synthetic-cartesian-2d/0\\.[0-9]+$"
+        },
+        "dimension": {
+          "const": 2
+        },
+        "axes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "meaning",
+              "unit"
+            ],
+            "properties": {
+              "id": {
+                "enum": [
+                  "x",
+                  "y"
+                ]
+              },
+              "meaning": {
+                "enum": [
+                  "synthetic_coordinate_1",
+                  "synthetic_coordinate_2"
+                ]
+              },
+              "unit": {
+                "const": "abstract"
+              }
+            }
+          }
+        },
+        "coordinate_selector": {
+          "const": "fixture_author"
+        },
+        "representation_omission": {
+          "const": "not_a_world_model"
+        }
+      }
+    },
+    "halfplaneInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "model",
+        "constraints"
+      ],
+      "properties": {
+        "kind": {
+          "const": "halfplane_family"
+        },
+        "model": {
+          "$ref": "#/$defs/model"
+        },
+        "constraints": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": {
+            "$ref": "#/$defs/halfplane"
+          }
+        }
+      }
+    },
+    "nonconvexInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "model",
+        "alternatives"
+      ],
+      "properties": {
+        "kind": {
+          "const": "nonconvex_union"
+        },
+        "model": {
+          "$ref": "#/$defs/model"
+        },
+        "alternatives": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/halfplane"
+          }
+        }
+      }
+    },
+    "multiplier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "constraint_id",
+        "weight"
+      ],
+      "properties": {
+        "constraint_id": {
+          "type": "string",
+          "pattern": "^g[0-9]{2}-[a-z0-9-]+$"
+        },
+        "weight": {
+          "$ref": "#/$defs/rational"
+        }
+      }
+    },
+    "deletionWitness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "omitted_constraint_id",
+        "point",
+        "satisfies_constraint_ids"
+      ],
+      "properties": {
+        "omitted_constraint_id": {
+          "type": "string",
+          "pattern": "^g[0-9]{2}-[a-z0-9-]+$"
+        },
+        "point": {
+          "$ref": "#/$defs/point"
+        },
+        "satisfies_constraint_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^g[0-9]{2}-[a-z0-9-]+$"
+          }
+        }
+      }
+    },
+    "knifeEdgeProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "active_constraint_ids",
+        "positive_normal_dependence",
+        "rank_witness_constraint_ids"
+      ],
+      "properties": {
+        "active_constraint_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^g[0-9]{2}-[a-z0-9-]+$"
+          }
+        },
+        "positive_normal_dependence": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/multiplier"
+          }
+        },
+        "rank_witness_constraint_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^g[0-9]{2}-[a-z0-9-]+$"
+          }
+        }
+      }
+    },
+    "feasibleCertificate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "input_sha256",
+        "point",
+        "binary64_point",
+        "membership_constraint_ids",
+        "robustness",
+        "knife_edge_proof"
+      ],
+      "properties": {
+        "kind": {
+          "const": "feasible_point"
+        },
+        "input_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "point": {
+          "$ref": "#/$defs/point"
+        },
+        "binary64_point": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "x_hex",
+                "y_hex"
+              ],
+              "properties": {
+                "x_hex": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{16}$"
+                },
+                "y_hex": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{16}$"
+                }
+              }
+            }
+          ]
+        },
+        "membership_constraint_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^g[0-9]{2}-[a-z0-9-]+$"
+          }
+        },
+        "robustness": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "metric",
+            "radius",
+            "status",
+            "tight_constraint_ids"
+          ],
+          "properties": {
+            "metric": {
+              "const": "l_infinity_at_witness"
+            },
+            "radius": {
+              "$ref": "#/$defs/rational"
+            },
+            "status": {
+              "enum": [
+                "robust",
+                "knife_edge"
+              ]
+            },
+            "tight_constraint_ids": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 12,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^g[0-9]{2}-[a-z0-9-]+$"
+              }
+            }
+          }
+        },
+        "knife_edge_proof": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/knifeEdgeProof"
+            }
+          ]
+        }
+      }
+    },
+    "conflictCertificate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "input_sha256",
+        "constraint_ids",
+        "farkas_multipliers",
+        "deletion_witnesses"
+      ],
+      "properties": {
+        "kind": {
+          "const": "minimal_conflict"
+        },
+        "input_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "constraint_ids": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^g[0-9]{2}-[a-z0-9-]+$"
+          }
+        },
+        "farkas_multipliers": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/multiplier"
+          }
+        },
+        "deletion_witnesses": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/deletionWitness"
+          }
+        }
+      }
+    },
+    "modelRefusalCertificate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "input_sha256",
+        "affected_constraint_ids",
+        "convexity_counterexample"
+      ],
+      "properties": {
+        "kind": {
+          "const": "model_refusal"
+        },
+        "input_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "affected_constraint_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^g[0-9]{2}-[a-z0-9-]+$"
+          }
+        },
+        "convexity_counterexample": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "left_point",
+                "right_point",
+                "midpoint"
+              ],
+              "properties": {
+                "left_point": {
+                  "$ref": "#/$defs/point"
+                },
+                "right_point": {
+                  "$ref": "#/$defs/point"
+                },
+                "midpoint": {
+                  "$ref": "#/$defs/point"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "exactDiagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "point",
+        "farkas_multipliers"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "feasible",
+            "infeasible"
+          ]
+        },
+        "point": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/point"
+            }
+          ]
+        },
+        "farkas_multipliers": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/multiplier"
+          }
+        }
+      }
+    },
+    "insufficientCertificate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "input_sha256",
+        "exact_diagnostic",
+        "representability_obstruction"
+      ],
+      "properties": {
+        "kind": {
+          "const": "insufficient_evidence"
+        },
+        "input_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "exact_diagnostic": {
+          "$ref": "#/$defs/exactDiagnostic"
+        },
+        "representability_obstruction": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "coordinate",
+                "required_value",
+                "reason"
+              ],
+              "properties": {
+                "coordinate": {
+                  "enum": [
+                    "x",
+                    "y"
+                  ]
+                },
+                "required_value": {
+                  "$ref": "#/$defs/rational"
+                },
+                "reason": {
+                  "const": "reduced_denominator_not_power_of_two"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "geometryExpected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "theorem_status",
+        "outcome",
+        "reason_code",
+        "numeric_issue_constraint_ids",
+        "certificate"
+      ],
+      "properties": {
+        "theorem_status": {
+          "enum": [
+            "feasible",
+            "infeasible",
+            "not_applicable"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "common_ground_certified",
+            "no_common_ground_witnessed",
+            "model_not_applicable",
+            "insufficient_evidence"
+          ]
+        },
+        "reason_code": {
+          "enum": [
+            "exact_membership",
+            "knife_edge_exact_membership",
+            "minimal_conflict",
+            "no_finite_binary64_witness",
+            "numeric_literal_not_preserved",
+            "zero_normal_not_declared_halfplane",
+            "nonconvex_region",
+            "stable_conflict_despite_numeric_issue"
+          ]
+        },
+        "numeric_issue_constraint_ids": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^g[0-9]{2}-[a-z0-9-]+$"
+          }
+        },
+        "certificate": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/feasibleCertificate"
+            },
+            {
+              "$ref": "#/$defs/conflictCertificate"
+            },
+            {
+              "$ref": "#/$defs/modelRefusalCertificate"
+            },
+            {
+              "$ref": "#/$defs/insufficientCertificate"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "_format": "agenttool.common-ground-atlas.hash-manifest/0.1",
+  "algorithm": "sha256",
+  "excludes_self": true,
+  "provider_managed_files_not_bound": [
+    ".gitattributes"
+  ],
+  "local_metadata_directories_not_bound": [
+    ".git",
+    ".cache/huggingface"
+  ],
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 279,
+      "sha256": "d02c0e6ac328ae126374df4460ac36671adc6bd899dde6d6d4764420685706a9"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2658,
+      "sha256": "888e0f8dca5df8ef77404b95f24b3f96a2855f1464ba4158174dae7c0e386bba"
+    },
+    {
+      "path": "data/analogy-audit.jsonl",
+      "bytes": 7653,
+      "sha256": "04590ff04e924afe9e9695c3cecda45fea284fa8b907fd04d6617856289df771"
+    },
+    {
+      "path": "data/exact-geometry.jsonl",
+      "bytes": 30456,
+      "sha256": "15045aed1964d0384c2572f2ee43a894be9d264d84d409c5a06985366cb57bcd"
+    },
+    {
+      "path": "data/wake-continuity.jsonl",
+      "bytes": 6022,
+      "sha256": "263223562468968941cffdc63033a61d40d92d7783e4ed098bfbf3c507d1ff32"
+    },
+    {
+      "path": "provenance/row-manifest.json",
+      "bytes": 5350,
+      "sha256": "13b9ebf57c59593817e0333ddacac258d5f846edcbe3b7f8000ecbf0a543801e"
+    },
+    {
+      "path": "provenance/source-manifest.json",
+      "bytes": 4507,
+      "sha256": "bf4956f21b33643385d00f5d1df2eae6530507a4baf77e95407d26d2e856ec02"
+    },
+    {
+      "path": "schema/common-ground-atlas-analogy-v0.1.schema.json",
+      "bytes": 7795,
+      "sha256": "abab36bccdd42fb6faa7ebae839663c073f2879ecf882321a8283ab0b538f04f"
+    },
+    {
+      "path": "schema/common-ground-atlas-geometry-v0.1.schema.json",
+      "bytes": 18412,
+      "sha256": "66446df6299aa41561e0c6f9d8ca3b5ab07cc89a3660ddcb178532b7162b8314"
+    },
+    {
+      "path": "schema/common-ground-atlas-wake-v0.1.schema.json",
+      "bytes": 5754,
+      "sha256": "9de5aec24006e9d57b00caeebd034e68daa64ea0e5debdf6cc1ecfb1f490310a"
+    },
+    {
+      "path": "verification/verify.py",
+      "bytes": 42787,
+      "sha256": "b4a85464600a1ad1718996cd124c20e07f0a8927ea478dd25a17614e4ba7f125"
+    }
+  ]
+}
