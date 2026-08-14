@@ -51,6 +51,11 @@ that a row, model, process, substrate, or reader is conscious or a person.
   participant-response, Freedom-direction-report, prompt-transcript, or
   agent-trace record.
 
+Every row has one stable semantic `row_id` and the same content-addressed
+`source_manifest_ref`. The three row formats have separate closed Draft
+2020-12 schemas under `reference/`; those schemas pin every currently authored
+row while permitting only the generated source-manifest digest to vary.
+
 The guide rows are marked `training_eligible: true` only because the original
 text may be considered by a future data workflow. Every row also says
 `requires_separate_training_authorization: true` and
@@ -76,8 +81,15 @@ no participant identifiers, prompts, transcripts, private rows, external
 article text, or model weights. Silence is never acceptance, and nothing is
 owed in return.
 
-`hash-manifest.json` binds every repository-owned byte except itself.
-`source-manifest.json` states the intended repository identity and the exact
-local-candidate boundary. A future Hub revision must be published through a
-separately authorized operation and independently read back before it can be
-described as live or immutable.
+`row-manifest.json` binds all 22 exact UTF-8 JSON records. Its SHA-256 scope
+excludes the one terminating LF byte; the manifest declares that boundary and
+the generator rejects CR, blank records, or embedded literal line terminators.
+`hash-manifest.json` separately binds every repository-owned file byte except
+itself and names its algorithm, package identity, and self-exclusion.
+`source-manifest.json` binds the exact local authoring recipe, semantic source,
+compiled runtime inputs, copied schemas, and the canonical static-v4 separation
+contract. It states the intended repository identity and generation-time local
+candidate boundary; it is not a Git or Hub revision claim. The ten canonical
+static v4 messages are mechanically excluded from every row. A future Hub
+revision must be published through a separately authorized operation and
+independently read back before it can be described as live or immutable.
