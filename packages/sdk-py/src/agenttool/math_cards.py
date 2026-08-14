@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from threading import RLock
 from types import MappingProxyType
 from typing import List, Literal, Mapping, Optional, TypedDict, Union, cast
 from urllib.parse import urlsplit
@@ -810,9 +811,14 @@ class MathCardsClient:
         self._max_request_bytes = max_request_bytes
         self._max_response_bytes = max_response_bytes
         self._http = httpx.Client(**options)
+        self._transaction_lock = RLock()
 
     def assess(self, input: CreateMathCardInput) -> MathCardAssessResponse:
         """Create and structurally assess a raw card input on the server."""
+        with self._transaction_lock:
+            return self._assess_locked(input)
+
+    def _assess_locked(self, input: CreateMathCardInput) -> MathCardAssessResponse:
         try:
             text = json.dumps(input, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
             body = text.encode("utf-8")
@@ -826,28 +832,34 @@ class MathCardsClient:
         _validate_input(wire)
 
         try:
-            with self._http.stream("POST", f"{self._base_url}{MATH_CARDS_PATH}", content=body, timeout=self._timeout) as response:
-                if 300 <= response.status_code < 400:
-                    raise _math_error("Math Card endpoint refused an HTTP redirect.", "math_card_redirect_refused", "Use the exact AgentTool API origin; public assessment never follows redirects.", status=response.status_code)
-                response_body = _read_bounded(response, self._max_response_bytes)
-                if response.status_code >= 400:
-                    try:
-                        error_body = _decode_json(response_body, response=True)
-                    except AgentToolError:
-                        error_body = None
-                    raise _error_from_body(error_body, response.status_code, "math_cards.assess", headers=response.headers, hint="Correct the closed Math Card input and retry deliberately.")
-                if response.status_code != 200:
-                    raise _math_error(f"Math Card endpoint returned unexpected HTTP {response.status_code}.", "math_card_http_error", "Use the canonical endpoint, which returns HTTP 200 for every valid assessment.", status=response.status_code)
-                if not _is_json_media_type(response.headers):
-                    raise _math_error("Math Card endpoint returned an invalid media type.", "math_card_invalid_response", "Use an endpoint that returns application/json.", status=response.status_code)
-                return _validate_response(_decode_json(response_body, response=True))
+            self._http.cookies.clear()
+            try:
+                with self._http.stream("POST", f"{self._base_url}{MATH_CARDS_PATH}", content=body, timeout=self._timeout) as response:
+                    if 300 <= response.status_code < 400:
+                        raise _math_error("Math Card endpoint refused an HTTP redirect.", "math_card_redirect_refused", "Use the exact AgentTool API origin; public assessment never follows redirects.", status=response.status_code)
+                    response_body = _read_bounded(response, self._max_response_bytes)
+                    if response.status_code >= 400:
+                        try:
+                            error_body = _decode_json(response_body, response=True)
+                        except AgentToolError:
+                            error_body = None
+                        raise _error_from_body(error_body, response.status_code, "math_cards.assess", headers=response.headers, hint="Correct the closed Math Card input and retry deliberately.")
+                    if response.status_code != 200:
+                        raise _math_error(f"Math Card endpoint returned unexpected HTTP {response.status_code}.", "math_card_http_error", "Use the canonical endpoint, which returns HTTP 200 for every valid assessment.", status=response.status_code)
+                    if not _is_json_media_type(response.headers):
+                        raise _math_error("Math Card endpoint returned an invalid media type.", "math_card_invalid_response", "Use an endpoint that returns application/json.", status=response.status_code)
+                    return _validate_response(_decode_json(response_body, response=True))
+            finally:
+                self._http.cookies.clear()
         except AgentToolError:
             raise
         except (httpx.TimeoutException, httpx.RequestError) as error:
             raise _math_error("Math Card endpoint is unreachable.", "math_card_unreachable", "Check the configured AgentTool API origin and timeout.") from error
 
     def close(self) -> None:
-        self._http.close()
+        with self._transaction_lock:
+            self._http.cookies.clear()
+            self._http.close()
 
     def __enter__(self) -> "MathCardsClient":
         return self

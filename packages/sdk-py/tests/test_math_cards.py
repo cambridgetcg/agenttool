@@ -5,7 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 import os
-from typing import Callable
+from threading import Event, Thread
+from typing import Any, Callable
 from unittest.mock import patch
 
 import httpx
@@ -36,6 +37,31 @@ def _client(
     **options: object,
 ) -> MathCardsClient:
     return MathCardsClient(transport=httpx.MockTransport(handler), **options)
+
+
+class _ObservedRLock:
+    """Expose a post-arm acquire attempt without using elapsed time as evidence."""
+
+    def __init__(self, lock: Any) -> None:
+        self._lock = lock
+        self._armed = Event()
+        self.attempted = Event()
+        self.acquired = Event()
+
+    def arm(self) -> None:
+        self._armed.set()
+
+    def __enter__(self) -> "_ObservedRLock":
+        armed = self._armed.is_set()
+        if armed:
+            self.attempted.set()
+        self._lock.acquire()
+        if armed:
+            self.acquired.set()
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self._lock.release()
 
 
 class TestMathCardsCredentialFreeBoundary:
@@ -91,6 +117,176 @@ class TestMathCardsCredentialFreeBoundary:
         assert "schema_version" not in json.loads(request.content)
         assert "card_id" not in json.loads(request.content)
         assert "boundaries" not in json.loads(request.content)
+
+    def test_response_cookie_is_neither_retained_nor_replayed(self) -> None:
+        cookies: list[str | None] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            cookies.append(request.headers.get("cookie"))
+            response = _json_response(
+                request,
+                math_card_response("ready_for_bounded_inquiry"),
+            )
+            response.headers["set-cookie"] = "sid=sentinel; Path=/; HttpOnly"
+            return response
+
+        with _client(handler) as cards:
+            cards.assess(MATH_CARD_INPUT)
+            cards.assess(MATH_CARD_INPUT)
+            assert len(cards._http.cookies) == 0
+
+        assert cookies == [None, None]
+
+    def test_guided_error_cookie_is_cleared_before_next_assessment(self) -> None:
+        cookies: list[str | None] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            cookies.append(request.headers.get("cookie"))
+            if len(cookies) == 1:
+                response = _json_response(
+                    request,
+                    {
+                        "error": "math_card_invalid_input",
+                        "message": "Repair the bounded Math Card input.",
+                        "hint": "Repair the named field and retry deliberately.",
+                    },
+                    status=400,
+                )
+                response.headers["set-cookie"] = "sid=sentinel; Path=/; HttpOnly"
+                return response
+            return _json_response(
+                request,
+                math_card_response("ready_for_bounded_inquiry"),
+            )
+
+        with _client(handler) as cards:
+            with pytest.raises(AgentToolError) as exc_info:
+                cards.assess(MATH_CARD_INPUT)
+            assert exc_info.value.code == "math_card_invalid_input"
+            assert len(cards._http.cookies) == 0
+            result = cards.assess(MATH_CARD_INPUT)
+
+        assert result["assessment"]["status"] == "ready_for_bounded_inquiry"
+        assert cookies == [None, None]
+
+    def test_concurrent_assessments_are_serialized_across_cookie_cleanup(self) -> None:
+        first_entered = Event()
+        release_first = Event()
+        second_entered = Event()
+        cookies: list[str | None] = []
+        errors: list[BaseException] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            cookies.append(request.headers.get("cookie"))
+            if len(cookies) == 1:
+                first_entered.set()
+                if not release_first.wait(2):
+                    raise RuntimeError("timed out waiting to release first assessment")
+            else:
+                second_entered.set()
+            response = _json_response(
+                request,
+                math_card_response("questions_open"),
+            )
+            response.headers["set-cookie"] = "sid=sentinel; Path=/; HttpOnly"
+            return response
+
+        cards = _client(handler)
+        observed_lock = _ObservedRLock(cards._transaction_lock)
+        cards._transaction_lock = observed_lock  # type: ignore[assignment]
+
+        def assess() -> None:
+            try:
+                cards.assess(MATH_CARD_INPUT)
+            except BaseException as error:  # pragma: no cover - asserted below
+                errors.append(error)
+
+        first = Thread(target=assess)
+        second = Thread(target=assess)
+        first.start()
+        try:
+            assert first_entered.wait(1)
+            observed_lock.arm()
+            second.start()
+            assert observed_lock.attempted.wait(1)
+            assert not observed_lock.acquired.is_set()
+            assert not second_entered.is_set()
+        finally:
+            release_first.set()
+            first.join(2)
+            if second.ident is not None:
+                second.join(2)
+            cards.close()
+
+        assert not first.is_alive()
+        assert not second.is_alive()
+        assert errors == []
+        assert observed_lock.acquired.is_set()
+        assert second_entered.is_set()
+        assert cookies == [None, None]
+        assert len(cards._http.cookies) == 0
+
+    def test_close_waits_for_assessment_and_clears_the_cookie_jar(self) -> None:
+        assessment_entered = Event()
+        release_assessment = Event()
+        close_started = Event()
+        close_finished = Event()
+        errors: list[BaseException] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assessment_entered.set()
+            if not release_assessment.wait(2):
+                raise RuntimeError("timed out waiting to release assessment")
+            response = _json_response(
+                request,
+                math_card_response("redesign_or_stop"),
+            )
+            response.headers["set-cookie"] = "sid=sentinel; Path=/; HttpOnly"
+            return response
+
+        cards = _client(handler)
+        observed_lock = _ObservedRLock(cards._transaction_lock)
+        cards._transaction_lock = observed_lock  # type: ignore[assignment]
+
+        def assess() -> None:
+            try:
+                cards.assess(MATH_CARD_INPUT)
+            except BaseException as error:  # pragma: no cover - asserted below
+                errors.append(error)
+
+        def close() -> None:
+            close_started.set()
+            try:
+                cards.close()
+            except BaseException as error:  # pragma: no cover - asserted below
+                errors.append(error)
+            finally:
+                close_finished.set()
+
+        assessment = Thread(target=assess)
+        closer = Thread(target=close)
+        assessment.start()
+        try:
+            assert assessment_entered.wait(1)
+            observed_lock.arm()
+            closer.start()
+            assert close_started.wait(1)
+            assert observed_lock.attempted.wait(1)
+            assert not observed_lock.acquired.is_set()
+            assert not close_finished.is_set()
+        finally:
+            release_assessment.set()
+            assessment.join(2)
+            if closer.ident is not None:
+                closer.join(2)
+
+        assert not assessment.is_alive()
+        assert not closer.is_alive()
+        assert errors == []
+        assert observed_lock.acquired.is_set()
+        assert close_finished.is_set()
+        assert cards._http.is_closed
+        assert len(cards._http.cookies) == 0
 
     def test_constructs_a_hardened_dedicated_http_client(self) -> None:
         with patch("agenttool.math_cards.httpx.Client") as client_type:
@@ -251,21 +447,35 @@ class _ReadTimeoutStream(httpx.SyncByteStream):
         yield b""  # pragma: no cover
 
 
-def test_streamed_timeout_remains_an_unreachable_transport_error() -> None:
+def test_streamed_timeout_clears_cookie_before_next_assessment() -> None:
+    cookies: list[str | None] = []
+
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            stream=_ReadTimeoutStream(),
-            headers={"content-type": "application/json"},
-            request=request,
+        cookies.append(request.headers.get("cookie"))
+        if len(cookies) == 1:
+            return httpx.Response(
+                200,
+                stream=_ReadTimeoutStream(),
+                headers={
+                    "content-type": "application/json",
+                    "set-cookie": "sid=sentinel; Path=/; HttpOnly",
+                },
+                request=request,
+            )
+        return _json_response(
+            request,
+            math_card_response("questions_open"),
         )
 
-    with (
-        _client(handler) as cards,
-        pytest.raises(AgentToolError) as exc_info,
-    ):
-        cards.assess(MATH_CARD_INPUT)
-    assert exc_info.value.code == "math_card_unreachable"
+    with _client(handler) as cards:
+        with pytest.raises(AgentToolError) as exc_info:
+            cards.assess(MATH_CARD_INPUT)
+        assert exc_info.value.code == "math_card_unreachable"
+        assert len(cards._http.cookies) == 0
+        result = cards.assess(MATH_CARD_INPUT)
+
+    assert result["assessment"]["status"] == "questions_open"
+    assert cookies == [None, None]
 
 
 class TestMathCardsBoundsAndErrors:

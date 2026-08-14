@@ -49,9 +49,14 @@ artifact
 (`sha256:466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`),
 annotated `sdk-v0.18.1` tag, and GitHub Release remain exact historical
 receipts. `@agenttool/sdk@0.18.1` is also public as an optional npm mirror;
-none of these is a Python distribution. PyPI 0.18.1 remains absent, so PyPI
-0.17.0 remains the last independently verified Python registry mirror. None
-of those prior-release facts establishes 0.19.0 availability.
+none of these is a Python distribution. `agenttool-sdk==0.18.1` is
+independently public as an optional PyPI mirror through protected run
+`31790559054`: its 248,937-byte wheel
+(`sha256:ad5d8fe66f0218cb86d37a1dc5c9fb2d9b7b8d25ebaad7e408cfd1a9b2964ab3`)
+and 233,734-byte sdist
+(`sha256:1d5e3ca16ce53f71e2bec40e37c0a1d4ef250086d1f52010f13cc1305831f2af`)
+were read back exact and non-yanked. None of those prior-release facts
+establishes 0.19.0 availability.
 
 - The immutable 0.18.1 release added paired `at.dining.manifest()` and
   `at.dining.journey(invocation_id)` reads. These authenticated GETs expose the
