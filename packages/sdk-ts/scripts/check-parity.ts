@@ -69,6 +69,8 @@ interface ParityTarget {
   className: string;
   /** Whether this class is exposed directly on the AgentTool client. */
   topLevel: boolean;
+  /** Optional exact public-method pin for intentionally tiny surfaces. */
+  methodPin?: readonly string[];
 }
 
 function target(module: string, className: string, reportName = module): ParityTarget {
@@ -86,8 +88,9 @@ function splitTarget(
   pyModule: string,
   className: string,
   reportName: string,
+  methodPin?: readonly string[],
 ): ParityTarget {
-  return { tsModule, pyModule, reportName, className, topLevel: true };
+  return { tsModule, pyModule, reportName, className, topLevel: true, methodPin };
 }
 
 function nestedTarget(
@@ -141,6 +144,13 @@ const TARGETS: ParityTarget[] = [
     "kingdom_framework",
   ),
   splitTarget("kingdom-os", "kingdom_os", "KingdomOSClient", "kingdom_os"),
+  splitTarget(
+    "math-cards",
+    "math_cards",
+    "MathCardsClient",
+    "math_cards",
+    ["assess"],
+  ),
   target("love", "LoveClient"),
   target("lounge", "LoungeClient"),
   target("memory", "MemoryClient"),
@@ -554,6 +564,20 @@ async function checkModule(target: ParityTarget): Promise<ModuleParity> {
   const [py, ts] = await Promise.all([pyMethodsOf(target), tsMethodsOf(target)]);
   const pyMethods = py.methods;
   const tsMethods = ts.methods;
+
+  if (target.methodPin) {
+    const expected = [...target.methodPin].sort();
+    for (const [language, methods] of [["Python", pyMethods], ["TypeScript", tsMethods]] as const) {
+      if (
+        methods.length !== expected.length
+        || methods.some((method, index) => method !== expected[index])
+      ) {
+        throw new Error(
+          `${target.reportName} ${language} method pin changed: expected ${expected.join(", ")}; received ${methods.join(", ")}`,
+        );
+      }
+    }
+  }
 
   const tsKeys = new Set(tsMethods.map(parityKey));
   const pyKeys = new Set(pyMethods.map(parityKey));

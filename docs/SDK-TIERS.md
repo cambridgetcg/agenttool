@@ -4,7 +4,7 @@
 
 This model ends at Tier 3 and describes the hosted AgentTool HTTPS plane.
 Explicitly named local adapters can compose inside a hand-written SDK without
-becoming hosted API semantics. A credential-free hosted reader can likewise be
+becoming hosted API semantics. Credential-free hosted clients can likewise be
 kept separate from the SDK's authenticated transport. Telescope, hosted MCP,
 and portable Agent Skills compose alongside the SDK; they are not additional
 `@agenttool/sdk` namespaces.
@@ -27,7 +27,9 @@ and portable Agent Skills compose alongside the SDK; they are not additional
 > subset · Tier 3 = `packages/sdk-ts/` + `packages/sdk-py/` · explicit local
 > public KINGDOM card clients =
 > `packages/sdk-ts/src/kingdom-framework.ts` ·
-> `packages/sdk-py/src/agenttool/kingdom_framework.py` · local adapters =
+> `packages/sdk-py/src/agenttool/kingdom_framework.py` · credential-free Math
+> Cards assessment clients = `packages/sdk-ts/src/math-cards.ts` ·
+> `packages/sdk-py/src/agenttool/math_cards.py` · local adapters =
 > `packages/sdk-ts/src/data.ts` ·
 > `packages/sdk-ts/src/kingdom-os.ts` ·
 > `packages/sdk-py/src/agenttool/data.py` ·
@@ -38,7 +40,9 @@ and portable Agent Skills compose alongside the SDK; they are not additional
 > `packages/sdk-ts/tests/kingdom-framework.test.ts`,
 > `packages/sdk-py/tests/test_kingdom_framework.py`,
 > `packages/sdk-ts/tests/kingdom-os.test.ts` and
-> `packages/sdk-py/tests/test_kingdom_os.py`. This document does not turn a
+> `packages/sdk-py/tests/test_kingdom_os.py`; Math Cards parity and wire
+> boundaries are exercised by `packages/sdk-ts/tests/math-cards.test.ts` and
+> `packages/sdk-py/tests/test_math_cards.py`. This document does not turn a
 > missing test or route into a shipped contract.
 
 ## The four tiers
@@ -89,7 +93,8 @@ and portable Agent Skills compose alongside the SDK; they are not additional
 │  Tier 0 — Wire substrate                                                 │
 │  ───────────────────────                                                 │
 │  HTTPS + JSON. No MessagePack or CBOR response contract is claimed.      │
-│  Bearer-token authentication. Idempotency-Key header. SSE for streams.   │
+│  Route auth varies; public and Math Cards calls use no bearer.           │
+│  Idempotency-Key header. SSE for streams.                                │
 │                                                                          │
 │  Audience: any intelligence with TCP/IP + TLS + a JSON parser.           │
 │  Maintained: this is the floor; deliberately tiny.                       │
@@ -108,6 +113,7 @@ and portable Agent Skills compose alongside the SDK; they are not additional
 | An intelligence without curve arithmetic | (Tier 0, selected public surfaces only) | Selected `/public/*` endpoints do not require authentication, including safety, profiles, listings, and economy terms. Former public strand and memory observer routes are not mounted. Write authentication is route-specific. |
 | An intelligence with non-text modality | Tier 0 + `?format=xenoform` on wake | The xenoform wake returns structured data. Xenoform is not implemented on every read endpoint. |
 | A reader inspecting AgentTool's KINGDOM project declaration | Tier 0 `GET /public/kingdom/framework`, or the Tier 3 `KingdomFrameworkClient` | One credential-free, closed `agenttool.kingdom.card/0.1` read. The SDK sends no project bearer or cookies and follows no redirects. Verify that the source route is deployed before depending on its availability. |
+| An inquirer creating and structurally assessing a Math Card | Tier 0 `POST /v1/math-cards/assess`, or Tier 3 `MathCardsClient.assess` / `at.mathCards` / `at.math_cards` | One bounded credential-free POST of raw `CreateMathCardInput`. The server owns canonical IDs and assessment semantics; the client sends no bearer or cookies and follows no redirects. |
 | A local agent discovering repositories known to KINGDOM OS | The local `KingdomOSClient` adapter beside the tiers | It invokes only the installed CLI's committed repository machine outputs. It does not call AgentTool HTTP or forward a project bearer. |
 
 ## What's canonical at each tier
@@ -160,11 +166,17 @@ Two authentication primitives, both expressible in any language with curve arith
 - **Languages**: TypeScript (`@agenttool/sdk` on npm) + Python (`agenttool-sdk` on PyPI)
 - **Versioning**: source manifests and published packages can differ. Inspect the installed package version and changelog; the repository does not prove lockstep releases.
 - **CI parity gate**: `cd packages/sdk-ts && bun run check-parity` — normalizes camelCase ↔ snake_case and compares selected public method/property names. It does not prove signatures, behavior, exceptions, or release parity.
-- **Public-read boundary**: `at.kingdomFramework` /
+- **Credential-free boundary**: `at.kingdomFramework` /
   `at.kingdom_framework` reads only `/public/kingdom/framework` through a
   credential-free no-redirect client. It does not receive the authenticated
   transport or project bearer, and its exact closed-card validation grants no
   authority.
+- **Math Cards boundary**: standalone `MathCardsClient` and composed
+  `at.mathCards` / `at.math_cards` call only `POST /v1/math-cards/assess`
+  through a bounded credential-free no-redirect client. They send raw input;
+  canonical IDs and assessment semantics remain server-owned. They do not
+  inherit the authenticated transport, bearer, cookies, or ambient proxy
+  credentials.
 - **Local-client boundary**: `at.data` and `at.kingdomOS` /
   `at.kingdom_os` are explicitly separate local authorities. They do not use
   the hosted AgentTool transport or inherit its project bearer.
@@ -173,11 +185,12 @@ Two authentication primitives, both expressible in any language with curve arith
 
 See [`SDK-ROADMAP.md`](SDK-ROADMAP.md) for the Tier 3 phase plan.
 
-## KINGDOM and local clients around the hosted tiers
+## Explicit clients around the hosted tiers
 
 | Surface | Contract | Boundary |
 |---|---|---|
 | `at.kingdomFramework` / `at.kingdom_framework` | One typed `GET /public/kingdom/framework` project card | Credential-free read with no bearer, cookies, redirects, or mutation; exact ten-field validation is not behavior proof, consent, permission, or XENIA conformance |
+| `MathCardsClient` · `at.mathCards` / `at.math_cards` | One typed `POST /v1/math-cards/assess` raw-input assessment | Credential-free bounded request/response with no bearer, cookies, redirects, authenticated transport, or env proxy; validates the closed envelope but does not compute IDs, solve the question, prove truth/understanding, infer motive, score a being, or authorize action |
 | `at.data` | A separately configured `agent-data/v1` node over its own HTTP session | Its URL and optional token are separate; the AgentTool project bearer is never substituted or forwarded |
 | `at.kingdomOS` / `at.kingdom_os` | The installed KINGDOM OS executable's `repos --json` and `repos --path` machine outputs | Read-only repository discovery through direct argv; no shell, hosted route, bearer forwarding, path upload, graph fallback, routine execution, or mutation |
 

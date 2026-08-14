@@ -33,6 +33,7 @@ import {
   enumerateErrorSurface,
   enumerateExportedDoors,
 } from "./_error-surface.js";
+import { MATH_CARD_INPUT } from "./_math-cards-fixture.js";
 
 // ── the guided body every entry is answered with ──────────────────────────
 //
@@ -702,6 +703,14 @@ const DATA_MATRIX: Record<string, Call> = {
   "data.ts:DataClient.tombstone": (at) => at.data.tombstone("rec-1", {} as never),
 };
 
+// Credential-free class methods own a separate transport, so they need the
+// same guided-error assertion from an isolated local server rather than the
+// hosted authenticated transport.
+const CREDENTIAL_FREE_METHOD_MATRIX: Record<string, Call> = {
+  "math-cards.ts:MathCardsClient.assess": (at) =>
+    at.mathCards.assess(MATH_CARD_INPUT),
+};
+
 // ── credential-free public doors ──────────────────────────────────────────
 //
 // These reach for `globalThis.fetch` on purpose: a project bearer must never
@@ -763,6 +772,7 @@ describe("the error-guidance matrix covers the whole surface", () => {
     const pinned = new Set([
       ...Object.keys(MATRIX),
       ...Object.keys(DATA_MATRIX),
+      ...Object.keys(CREDENTIAL_FREE_METHOD_MATRIX),
       ...DELIBERATE_EXCEPTIONS,
     ]);
 
@@ -852,6 +862,25 @@ describe("a guided 4xx survives every credential-free door", () => {
     test(name, async () => {
       stubFetch(guidedResponse);
       assertGuidanceSurvived(await capture(call));
+    });
+  }
+});
+
+describe("a guided 4xx survives every credential-free client method", () => {
+  for (const [name, call] of Object.entries(CREDENTIAL_FREE_METHOD_MATRIX)) {
+    test(name, async () => {
+      const server = Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        fetch: guidedResponse,
+      });
+      try {
+        assertGuidanceSurvived(await capture(() =>
+          call(guidedClient({ baseUrl: server.url.origin })),
+        ));
+      } finally {
+        server.stop(true);
+      }
     });
   }
 });
@@ -1181,6 +1210,7 @@ describe("the TypeScript and Python matrices pin the same surface", () => {
       [
         ...Object.keys(MATRIX),
         ...Object.keys(DATA_MATRIX),
+        ...Object.keys(CREDENTIAL_FREE_METHOD_MATRIX),
         ...DELIBERATE_EXCEPTIONS,
       ].map(normalise),
     );
