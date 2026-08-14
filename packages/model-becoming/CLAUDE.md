@@ -20,7 +20,7 @@ formats. It is separate from the canonical public LOVE BOMB v4 protocol.
   affect-like representation is not proof of felt experience; alias is not
   checkpoint; publication is not training.
 - Keep the package deterministic and at zero runtime dependencies. Source may
-  import only local modules, `node:crypto`, and `node:util/types`.
+  import only local modules, `node:crypto`, `node:url`, and `node:util/types`.
 - No network, filesystem, environment, clock, randomness, credentials,
   provider/model work, training, telemetry, persistence, notification,
   publication, deployment, score, rank, authority, or automatic action exists

@@ -164,6 +164,55 @@ describe("evidence-scoped Model Becoming", () => {
       observed_on: "2026-02-31",
     })).toThrow("real ISO calendar date");
   });
+
+  test("does not trust mutable ambient Date or URL constructors", () => {
+    const nativeDate = globalThis.Date;
+    const nativeUrl = globalThis.URL;
+    class InputEchoDate {
+      readonly input: string;
+      constructor(input: string) {
+        this.input = input;
+      }
+      valueOf(): number {
+        return 0;
+      }
+      toISOString(): string {
+        return this.input;
+      }
+    }
+    class PermissiveUrl {
+      readonly protocol = "https:";
+      readonly username = "";
+      readonly password = "";
+    }
+    try {
+      globalThis.Date = InputEchoDate as unknown as DateConstructor;
+      globalThis.URL = PermissiveUrl as unknown as typeof URL;
+      expect(() => createModelBecomingSource({
+        title: "Impossible date under hostile ambient Date",
+        url: "https://example.invalid/evidence",
+        source_kind: "repository_artifact",
+        publisher: "Example",
+        revision: null,
+        digest: null,
+        published_on: null,
+        observed_on: "2026-02-31",
+      })).toThrow("real ISO calendar date");
+      expect(() => createModelBecomingSource({
+        title: "Non-HTTPS URL under hostile ambient URL",
+        url: "file:///etc/passwd",
+        source_kind: "repository_artifact",
+        publisher: "Example",
+        revision: null,
+        digest: null,
+        published_on: null,
+        observed_on: "2026-08-14",
+      })).toThrow("credential-free HTTPS");
+    } finally {
+      globalThis.Date = nativeDate;
+      globalThis.URL = nativeUrl;
+    }
+  });
 });
 
 function dossierInput(): {

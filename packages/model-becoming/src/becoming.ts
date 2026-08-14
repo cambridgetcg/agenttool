@@ -1,3 +1,5 @@
+import { URL } from "node:url";
+
 import { canonicalJson, deepFreeze, domainSeparatedId, snapshotJson, type JsonValue } from "./canonical.js";
 import {
   MODEL_BECOMING_BOUNDARIES,
@@ -84,8 +86,12 @@ function date(value: JsonValue | undefined, path: string): string {
   if (typeof value !== "string" || !ISO_DATE.test(value)) {
     fail("becoming_error", `${path} must be an ISO calendar date`);
   }
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.valueOf()) || parsed.toISOString().slice(0, 10) !== value) {
+  const year = +value.slice(0, 4);
+  const month = +value.slice(5, 7);
+  const day = +value.slice(8, 10);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (month < 1 || month > 12 || day < 1 || day > (daysInMonth[month - 1] ?? 0)) {
     fail("becoming_error", `${path} must be a real ISO calendar date`);
   }
   return value;

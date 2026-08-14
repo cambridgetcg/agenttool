@@ -29,12 +29,12 @@ describe("package capability boundary", () => {
     ]);
   });
 
-  test("core imports only local modules and the two declared Node built-ins", () => {
+  test("core imports only local modules and the three declared Node built-ins", () => {
     const imports = readdirSync(join(root, "src"))
       .filter((name) => name.endsWith(".ts"))
       .flatMap((name) => readFileSync(join(root, "src", name), "utf8").match(/from\s+["']([^"']+)["']/g) ?? []);
     for (const statement of imports) {
-      expect(statement).toMatch(/from ["'](?:\.\/|node:crypto|node:util\/types)/);
+      expect(statement).toMatch(/from ["'](?:\.\/|node:crypto|node:url|node:util\/types)/);
     }
   });
 
