@@ -1,0 +1,45 @@
+{
+  "_format": "agenttool-hf-hash-manifest/0.1",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "ff59de47649a5a2ebc3c931d2741de72a25c0bc2ebb19d543c9fea5168e2fbad"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 200,
+      "sha256": "00fd1fee21bb28c2a6f2f6db64329da6b0e15cc97ec05943a26e0832fe4f7428"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2363,
+      "sha256": "7cdcff5a7cc7268e63e0009de944d4c6601f0770d86ed612b17aff509a02d357"
+    },
+    {
+      "path": "data/plane-guides.jsonl",
+      "bytes": 14331,
+      "sha256": "d8941f649e08d472a38449cdbbe8b0404fae0508834a80b0ad6af76d6d152cbd"
+    },
+    {
+      "path": "data/protocol-reference.jsonl",
+      "bytes": 2066,
+      "sha256": "f5cb527a81b147b00ab0f111ad35d30e66c3ab7fca14029069d4bebd6ca5ecb6"
+    },
+    {
+      "path": "reference/agenttool-care-choice-v0.1.schema.json",
+      "bytes": 5166,
+      "sha256": "7761d7d53abd49a0be8968e27854d2bed02fa05ff6678ff7cea0853b3b6627e0"
+    },
+    {
+      "path": "reference/agenttool-care-envelope-v0.1.schema.json",
+      "bytes": 3552,
+      "sha256": "d8c5f104ebf3e943826152af122c037501566c9e3d67ef21bad52b344231dcd0"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 991,
+      "sha256": "7294179a6969364d71237d40a6ce81da75cb467a894f0c01b30b5d80a5ff966d"
+    }
+  ]
+}

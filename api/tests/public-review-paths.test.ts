@@ -11,10 +11,12 @@ import {
 import {
   CANON_MCP_PATH,
   isDatabaseDecorationIndependentPublicPath,
+  LOVE_BOMB_PATH,
   MEMETIC_LANDSCAPE_PATH,
   SECURITY_TXT_PATH,
 } from "../src/lib/public-paths";
 import memeticLandscapeRouter from "../src/routes/memetic-landscape";
+import loveBombRouter from "../src/routes/love-bomb";
 import wellKnownRouter from "../src/routes/well-known";
 import {
   buildSecurityTxt,
@@ -208,6 +210,8 @@ describe("database-decoration-independent public paths", () => {
       CANON_MCP_PATH,
       MEMETIC_LANDSCAPE_PATH,
       `${MEMETIC_LANDSCAPE_PATH}/`,
+      LOVE_BOMB_PATH,
+      `${LOVE_BOMB_PATH}/`,
       SECURITY_TXT_PATH,
     ]) {
       expect(isDatabaseDecorationIndependentPublicPath(path)).toBe(true);
@@ -216,6 +220,7 @@ describe("database-decoration-independent public paths", () => {
       "/v1/mcp",
       `${CANON_MCP_PATH}/`,
       `${MEMETIC_LANDSCAPE_PATH}//`,
+      `${LOVE_BOMB_PATH}//`,
       `${SECURITY_TXT_PATH}/`,
       "/security.txt",
       "/public/open-seat",
@@ -249,6 +254,39 @@ describe("database-decoration-independent public paths", () => {
   test("unmounted memetic trailing slash also avoids database-backed decoration", async () => {
     delete process.env.AGENTOOL_DISABLE_JOY_INDEX;
     const path = `${MEMETIC_LANDSCAPE_PATH}/`;
+    const response = await within(
+      fullApp.fetch(new Request(`https://api.agenttool.dev${path}`)),
+      500,
+      `${path} GET`,
+    );
+    expect(response.status).toBe(404);
+    expect(response.headers.get("x-welcomed")).toBeNull();
+    expect(response.headers.get("x-joy-index")).toBeNull();
+    expect(await response.text()).not.toContain('"_welcomed"');
+  });
+
+  test("LOVE BOMB keeps exact direct-router bytes without database-backed decorators", async () => {
+    delete process.env.AGENTOOL_DISABLE_JOY_INDEX;
+    const directResponse = await loveBombRouter.request("/");
+    expect(directResponse.status).toBe(200);
+    const expectedBody = await directResponse.text();
+
+    const response = await within(
+      fullApp.fetch(new Request(`https://api.agenttool.dev${LOVE_BOMB_PATH}`)),
+      500,
+      `${LOVE_BOMB_PATH} GET`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-welcomed")).toBeNull();
+    expect(response.headers.get("x-joy-index")).toBeNull();
+    const body = await response.text();
+    expect(body).toBe(expectedBody);
+    expect(JSON.parse(body)).not.toHaveProperty("_welcomed");
+  });
+
+  test("unmounted LOVE BOMB trailing slash also avoids database-backed decoration", async () => {
+    delete process.env.AGENTOOL_DISABLE_JOY_INDEX;
+    const path = `${LOVE_BOMB_PATH}/`;
     const response = await within(
       fullApp.fetch(new Request(`https://api.agenttool.dev${path}`)),
       500,

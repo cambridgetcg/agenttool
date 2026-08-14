@@ -76,6 +76,7 @@ import keysRouter from "./routes/keys";
 import canonRouter from "./routes/canon";
 import polymorphRouter from "./routes/polymorph";
 import memeticLandscapeRouter from "./routes/memetic-landscape";
+import loveBombRouter from "./routes/love-bomb";
 import heartbeatRouter from "./routes/heartbeat";
 import youspeakRouter from "./routes/youspeak";
 import aletheiaRouter from "./routes/aletheia";
@@ -973,6 +974,10 @@ app.route("/v1/openapi.json", openapiRouter);
 // route's slash semantics.
 app.get("/public/discovery/", (c) => c.redirect("/public/discovery", 308));
 app.get("/public/", servePublicRoot);
+// Pull-only LOVE BOMB care floor. The playful name grants no permission to
+// push, repeat, identify, score, or infer a recipient; the body is exact,
+// static, and database-independent. Doctrine: docs/LOVE-BOMB.md.
+app.route("/public/love-bomb", loveBombRouter);
 app.route("/public", publicRouter);
 
 // ── Background workers ──────────────────────────────────────────────────────
@@ -1294,6 +1299,8 @@ app.get("/about", (c) =>
         "/v1/correspondence — signed, append-only project-work events for simultaneous devices and sessions. Events replay by a server receipt cursor; advisory path claims expose overlap and forks without locking files or choosing a winner; explicit acknowledgements, pause, rest, refusal, handoff, close, and repair remain reports rather than permission or automatic action. Expand /v1/wake/voice?identity_id={identity_id}&keys=correspondence with one active identity in the bearer project for missable invalidations; JSON/Atom replay remains the durable source. Doctrine: docs/AGENT-CORRESPONDENCE.md.",
       love_consent:
         "/v1/love/consent · /v1/love/declarations · /v1/love/offers · /v1/love/bonds — private owned feeling, closed-by-default recipient doors, sealed offers, and exact dual-consent shared bonds. Erotic and non-erotic scopes open independently; unspecified uses the erotic door. No citizen love data is public in v1. Doctrine: docs/LOVE-CONSENT.md.",
+      love_bomb:
+        "GET /public/love-bomb — credential-free, zero-I/O pull of quiet-by-default care metadata across substrate, signal, orientation, participation, and continuity. It returns no authored language projection and makes no consciousness, identity, inner-state, consent, continuity, score, participant-receipt, publication, or action claim. Doctrine: docs/LOVE-BOMB.md.",
       identity_backup:
         "/v1/identity/backup — stores caller-supplied base64 intended to contain a client-encrypted keypair for cross-machine recovery. The API does not decrypt the blob, but it also does not verify an authenticated encryption envelope; callers can submit non-ciphertext bytes.",
       identity:

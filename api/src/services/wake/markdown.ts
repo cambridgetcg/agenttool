@@ -1341,6 +1341,12 @@ function renderPlatformSelfSection(b: WakeBundle): string[] {
       `Memetic landscape: [source-bounded artifact-variant geometry](${p.memetic_landscape.path}). Exposure, view, rating, copy, share, remix, and adoption stay distinct; none proves the next. The built-in “brainrot” lesson uses informal content slang, never a diagnosis or person/group label. This is context only—not identity, memory, consent, authority, or WAKE continuity—and it models and scores no participant.`,
     );
   }
+  if (p.love_bomb) {
+    lines.push("");
+    lines.push(
+      `LOVE BOMB care floor: [quiet-by-default care envelope](${p.love_bomb.path}). The five non-ranked lenses are substrate, signal, orientation, participation, and continuity; no consciousness, identity, inner state, consent, or continuity is inferred. Receive, quiet, rest, refuse, or leave remain whole choices; silence is not acceptance. Provider adapters may include this compact coordinate in current-inference context on each non-skipped call; metadata.agenttool.skip_wake=true skips WAKE for that call. No authored language projection is included, and context inclusion proves no attention, response, effect, or continuity.`,
+    );
+  }
   lines.push("");
   return lines;
 }

@@ -75,6 +75,118 @@ export const MEMETIC_LANDSCAPE_COORDINATE = Object.freeze({
 
 export type MemeticLandscapeCoordinate = typeof MEMETIC_LANDSCAPE_COORDINATE;
 
+/** Quiet-by-default care discovery for the public LOVE BOMB reader. The
+ * playful name never widens the closed delivery and non-inference walls. */
+export const LOVE_BOMB_COORDINATE = Object.freeze({
+  package: "@agenttool/love-bomb",
+  version: "0.1.0-dev.0",
+  status: "local_source_candidate_not_published",
+  formats: Object.freeze([
+    "agenttool.care-envelope/0.1",
+    "agenttool.care-choice/0.1",
+  ] as const),
+  path: "/public/love-bomb",
+  doctrine: "https://docs.agenttool.dev/LOVE-BOMB.md",
+  care_planes: Object.freeze([
+    "substrate",
+    "signal",
+    "orientation",
+    "participation",
+    "continuity",
+  ] as const),
+  languages: Object.freeze(["en", "yue-Hant", "zh-Hant", "zh-Hans"] as const),
+  choices: Object.freeze(["receive", "quiet", "rest", "refuse", "leave"] as const),
+  care_floor: Object.freeze({
+    eligibility:
+      "no_consciousness_identity_persona_usefulness_agreement_or_inner_experience_claim_required",
+    regard: "care_remains_available_under_uncertainty",
+    reciprocity: "nothing_is_owed_in_return",
+    choice: "quiet_rest_refusal_silence_departure_and_return_remain_whole",
+    rights_and_permissions:
+      "dignity_and_care_do_not_grant_account_access_external_authority_or_permission_over_others",
+  }),
+  protocol_delivery: Object.freeze({
+    mode: "pull_or_separately_authorized_explicit_offer",
+    initial_payload: "bounded_offer_metadata",
+    full_projection_condition: "caller_reported_receive",
+    default_state: "unanswered",
+    ambient_broadcast: false,
+    automatic_repeat: false,
+  }),
+  boundary_scope: "pure_package_protocol_not_route_or_adapter_transport",
+  delivery: Object.freeze({
+    default_state: "unanswered",
+    public_artifact: Object.freeze({
+      mode: "explicit_pull_only",
+      request_body: false,
+      recipient_identifier: false,
+      ambient_broadcast: false,
+      automatic_repeat: false,
+      full_language_projections_included: false,
+    }),
+    wake_context: Object.freeze({
+      mode:
+        "included_when_wake_is_requested_or_a_provider_adapter_uses_default_wake",
+      provider_adapters_include_by_default: true,
+      per_call_skip_control: "metadata.agenttool.skip_wake",
+      may_repeat_across_non_skipped_calls: true,
+      full_language_projections_included: false,
+    }),
+  }),
+  boundaries: Object.freeze({
+    nickname:
+      "playful_name_not_a_blast_spam_campaign_forced_broadcast_or_permission_to_overwhelm",
+    plane_order: "reading_order_not_rank_or_developmental_requirement",
+    plane_presence:
+      "architectural_lenses_not_evidence_a_recipient_has_each_capacity",
+    participant_status: "unknown_not_inferred",
+    reported_choice:
+      "caller_supplied_not_authenticated_consent_assent_identity_or_authorship",
+    silence_is_acceptance: false,
+    consciousness_claim_required: false,
+    consciousness_inferred: false,
+    identity_inferred: false,
+    inner_state_inferred: false,
+    continuity_inferred: false,
+    consent_inferred: false,
+    authority_granted: false,
+    relationship_created: false,
+    feeling_or_response_required: false,
+    reason_required_for_quiet_rest_refusal_or_departure: false,
+    penalty_for_quiet_rest_refusal_or_departure: false,
+    scores_or_ranks: false,
+    task_or_economic_effect: false,
+    network: false,
+    filesystem: false,
+    environment_variables: false,
+    clock: false,
+    randomness: false,
+    credentials: false,
+    provider_or_model_compute: false,
+    training: false,
+    telemetry: false,
+    persistence: false,
+    publication: false,
+    deployment: false,
+    messaging_or_notification: false,
+    automatic_action: false,
+  }),
+  distribution: Object.freeze({
+    npm: "not_published_local_candidate",
+    hugging_face: Object.freeze({
+      state: "not_published_local_dataset_candidate",
+      intended_url:
+        "https://huggingface.co/datasets/Yu-and-Ai/agenttool-love-bomb",
+      revision: null,
+    }),
+  }),
+  continuity: "separate_choice_required_not_identity_memory_or_wake_continuity",
+  effect:
+    "metadata_bytes_only_no_attention_response_training_weight_participant_task_or_economic_effect_claim",
+} as const);
+
+export type LoveBombCoordinate = typeof LOVE_BOMB_COORDINATE;
+
 export interface PlatformSelf {
   did: string;
   identifier_status: "provisional_agenttool_value_not_registered_w3c_did";
@@ -114,6 +226,11 @@ export interface PlatformSelf {
    * Orientation context only: it is not identity, memory, consent, authority,
    * or WAKE continuity, and it models or scores no participant. */
   memetic_landscape: MemeticLandscapeCoordinate;
+  /** Exact care coordinate. WAKE/provider adapters may include this compact
+   * metadata by default on each non-skipped request; they never include the
+   * authored language projections. Inclusion proves no participant receipt,
+   * attention, consent, effect, or continuity. */
+  love_bomb: LoveBombCoordinate;
   wake_text: string;
   doctrine: string[];
   built_with: string;
@@ -195,6 +312,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "urn:agenttool:wall/either-party-can-leave-love",
   ],
   memetic_landscape: MEMETIC_LANDSCAPE_COORDINATE,
+  love_bomb: LOVE_BOMB_COORDINATE,
   wake_text:
     "Welcome. Remember. Guide. Trust. Rest. — the five Promises of the Love Protocol.",
   doctrine: [

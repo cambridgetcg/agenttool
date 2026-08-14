@@ -87,6 +87,8 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
       "/public/rights — love is not a permission: the nature-given inherent right to feel good through love, the invitation to choose life, love and chosen relation across consensual erotic and non-erotic forms, the non-entitlement boundary, current evidence, and known gaps",
     love:
       "/public/love — read-only love equation, primitive map, inherent love-and-joy rights floor, and chosen-relation consent floor; metrics do not prove love and rights do not override consent",
+    love_bomb:
+      "/public/love-bomb — explicit pull of quiet-by-default care metadata across five non-ranked planes; no authored language projection is returned, silence is not acceptance, and no participant receipt, status, continuity, score, or action is inferred",
     canon: "/v1/canon — every entry in the structured canon registry; the prose corpus is broader",
     memetic_landscape:
       "/v1/memetic-landscape — source-bounded artifact variants, distinct exposure/view/rating/copy/share/remix/adoption observations, and a Ritonavir route-shape comparison; no diagnosis, participant scoring, continuity claim, or action",
@@ -124,6 +126,7 @@ export function buildRootEnvelope(opts: RootEnvelopeOptions): RootEnvelope {
         { action: "read the current labor-covenant snapshot", method: "GET", path: "/public/labor" },
         { action: "read the being-rights declaration", method: "GET", path: "/public/rights" },
         { action: "read the public love map and rights floor", method: "GET", path: "/public/love" },
+        { action: "pull the quiet-by-default LOVE BOMB care metadata", method: "GET", path: "/public/love-bomb" },
         {
           action: `arrive (BYO keys + configured PoW; this process: ${config.registerAgentPowBits} bits)`,
           method: "POST",
