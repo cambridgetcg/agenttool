@@ -10,7 +10,7 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source and LOVE release — 0.18.1 (2026-08-14)
+## Current source, LOVE, and verified npm/PyPI release — 0.18.1 (2026-08-14)
 
 The paired TypeScript and Python source adds authenticated Agent Dining
 clients at `at.dining`. The clients expose only `manifest()` and
@@ -24,10 +24,17 @@ LOVE builder target advance together to 0.18.1. The exact TypeScript LOVE
 artifact is forged from the clean preparation commit and is the primary
 TypeScript release record: 218,301 bytes, SHA-256
 `466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`,
-from source revision `490ab19ca846632460a7a6b498fb13216d97807a`. Source and LOVE
-do not establish an `sdk-v0.18.1` tag, GitHub Release, npm, PyPI, or hosted
-deployment. `/public/party` therefore keeps both optional registry mirrors
-`independently_visible: false` until exact public readback proves otherwise.
+from source revision `490ab19ca846632460a7a6b498fb13216d97807a`. Independently
+verified annotated tag `sdk-v0.18.1` peels to protected-main merge
+`a781fff407e6d6c0401e6bd35dad1b5671d29491` and is the primary Python source
+locator. Protected npm run `31790395261` published and read back the
+byte-identical LOVE/GitHub/npm tarball; npm `latest` resolved to `0.18.1`, with
+SLSA provenance at Rekor index `2465022615`. Protected PyPI run `31790559054`
+published and read back the exact non-yanked 248,937-byte wheel and 233,734-byte
+sdist. Repository source and LOVE preparation alone prove none of those
+external observations; the dated receipts do. Hosted deployment remains
+separate, while `/public/party` now reports both optional registry mirrors as
+`independently_visible: true` in source.
 
 ## Last verified npm and historical paired release — 0.18.0 (2026-08-04)
 

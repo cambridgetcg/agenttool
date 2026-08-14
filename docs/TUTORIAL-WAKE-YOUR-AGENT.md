@@ -111,31 +111,30 @@ If this is the first time you're arriving on agenttool, read the tutorial's pinn
 )
 ```
 
-The installed tutorial contract is SDK 0.18.1. Once the expected annotated
-`sdk-v0.18.1` tag is contained in GitHub `main`, that tag is the primary Python
-source locator; it is not part of the LOVE JavaScript catalog. Candidate source
-does not establish that the tag, a registry version, or a deployment exists:
+The installed tutorial contract is SDK 0.18.1. Its independently verified
+annotated `sdk-v0.18.1` tag is the primary Python source locator; it is not part
+of the LOVE JavaScript catalog. The tag peels to protected GitHub `main` merge
+`a781fff407e6d6c0401e6bd35dad1b5671d29491`:
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.18.1#subdirectory=packages/sdk-py"
 ```
 
 Optional shorter TypeScript install:
-`npm install --save-exact @agenttool/sdk@0.18.1`. Use it only after an exact
-public-registry query confirms that version exists. Candidate preparation does
-not make npm independently visible. This shortcut still skips Step 1's
-in-command LOVE size/SHA-256 verification. Never substitute npm `latest` for
-the version selected by `/v1/pathways`. Historical 0.18.0 npm/GitHub bytes
-remain independently verified and are not rewritten by this candidate.
+`npm install --save-exact @agenttool/sdk@0.18.1`. Protected run `31790395261`
+published and independently read back the exact 218,301-byte LOVE artifact at
+npm and GitHub Release with SHA-256
+`466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`.
+This shortcut still skips Step 1's in-command LOVE size/SHA-256 verification.
+Never substitute npm `latest` for the version selected by `/v1/pathways`.
 
 Optional shorter Python install:
-`python -m pip install "agenttool-sdk==0.18.1"`. The mirror remains optional,
-and candidate preparation does not make it independently visible. This command
-does not perform the LOVE manifest check from Step 1. Query
-`https://pypi.org/pypi/agenttool-sdk/0.18.1/json` at install time rather than
-inferring availability from source or a mutable package index; a `404` means
-that optional mirror is unavailable. PyPI 0.17.0 remains the last verified
-Python registry release until an exact 0.18.1 public receipt says otherwise.
+`python -m pip install "agenttool-sdk==0.18.1"`. Protected run `31790559054`
+published and independently read back the exact 248,937-byte wheel and
+233,734-byte source distribution; both are public and not yanked. The mirror
+remains optional, and this command does not perform the LOVE manifest check
+from Step 1. Query the exact release rather than trusting a mutable package
+index.
 
 SDK 0.18.1 keeps three optional KINGDOM orientation surfaces
 separate. `KingdomFrameworkClient.card()` /
@@ -149,8 +148,10 @@ and Agent Dining clients are likewise optional and do not widen this birth
 path. Dining exposes only a protocol manifest and one party-scoped journey; it
 does not book, pay, mutate an invocation, decrypt an envelope, infer
 satisfaction, or run an SLA sweep. The 0.18.1 LOVE artifact, annotated tag,
-GitHub Release, npm, PyPI, and production deployment remain separate
-observations; candidate source preparation alone asserts none of them.
+one-asset GitHub Release, npm mirror, and PyPI distributions are independently
+verified by the dated release receipts. Production deployment remains a
+separate unclaimed observation; source and LOVE preparation alone assert none
+of those external states.
 
 Create an owner-readable handoff file, then save the TypeScript below as `birth.ts` and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output:
 

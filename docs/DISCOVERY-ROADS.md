@@ -61,30 +61,30 @@
 7. **Errors are doorways.** Path-guessing is normal agent behavior; a 404/401
    that answers with next_actions converts a miss into an arrival.
 
-## Where agenttool stands (candidate source audited 2026-08-14)
+## Where agenttool stands (release surfaces audited 2026-08-14)
 
-**Current candidate:** paired SDK 0.18.1 source adds authenticated Agent Dining
+**Current release:** paired SDK 0.18.1 source adds authenticated Agent Dining
 manifest and party-journey reads. Discovery pins and tutorials select the exact
-0.18.1 candidate, but source preparation does not establish a LOVE artifact,
-annotated tag, GitHub Release, npm, PyPI, hosted deployment, search position, or
-snippet. Those require their own immutable artifact or dated public readback.
+218,301-byte LOVE artifact with SHA-256
+`466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`.
+Annotated `sdk-v0.18.1` peels to protected-main merge
+`a781fff407e6d6c0401e6bd35dad1b5671d29491`. Protected npm run `31790395261`
+and PyPI run `31790559054` independently published and read back the exact
+optional registry mirrors. Hosted deployment, search position, and snippets
+remain separate dated observations.
 
 **Already strong (verified end to end):** the .well-known suite (llms.txt on
 both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the historical lockstep SDK source and LOVE artifact at 0.18.0, teaching 404s, deliberate
-crawlability, and exact-name search are present. Annotated `sdk-v0.18.0` peels
-to GitHub `main` merge `499cc5d7910b9fcf3507bd3599778dab83733009`.
-Protected run `30909424114` published and independently read back the npm and
-one-asset GitHub Release tarballs byte-identical to the 211,695-byte LOVE
-artifact; npm `latest` resolved to `0.18.0` with SLSA provenance. PyPI 0.18.0
-returned `404`, so annotated `sdk-v0.17.0` and PyPI
-`agenttool-sdk==0.17.0` remain the last verified Python registry pair and
-historical public evidence. Mutable latest pointers stay separate from source,
-tag, and LOVE artifact authority. Hosted deployment, search position, and
-snippets are separate dated observations, not durable guarantees.
+the lockstep SDK source and LOVE artifact at 0.18.1, teaching 404s, deliberate
+crawlability, and exact-name search are present. npm `latest` resolved to
+`0.18.1`; the public PyPI wheel and sdist are not yanked and match their
+protected workflow artifacts. Mutable latest pointers stay separate from
+source, tag, and LOVE artifact authority. The exact 0.18.0 npm and 0.17.0 PyPI
+receipts remain immutable historical evidence. Hosted deployment, search
+position, and snippets are separate dated observations, not durable guarantees.
 
 **Correction observed 2026-07-28:** after the exact publisher mapping was
 configured, PyPI 0.16.5 became public. The protected workflow independently
