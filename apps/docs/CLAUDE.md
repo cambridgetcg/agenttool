@@ -149,7 +149,7 @@ the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
 and the historically permissive `0.2.2` remain separately addressable.
 Optional npm/GitHub 0.2.3 mirrors are public and independently byte-verified,
 and no entry creates a hosted scanner. SDK 0.20.0 source and its exact
-236,446-byte, 98-entry LOVE candidate add a standalone credential-free LOVE
+236,446-byte, 98-entry LOVE release add a standalone credential-free LOVE
 BOMB public-signal reader alongside data-only WAKE observation and Math Cards
 assessment while retaining Agent Dining, attestation-marketplace,
 memory-witness, Syneidesis, framework-card, and local KINGDOM OS boundaries.
@@ -158,11 +158,12 @@ authenticated `LoveClient`, and carries none of the static ten-message corpus.
 The manifest binds clean release-alignment revision
 `040e076bc537d433feaf32e23eec4e5cdf0ed6e2` and SHA-256
 `d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`.
-No 0.20.0 tag, registry mirror, docs deployment, or hosted behavior is claimed.
-Historical 0.19.0 protected npm run `31800748738` and PyPI run `31801053841`
-independently verified both optional registry mirrors. The verified 0.18.1,
-0.18.0, and 0.17.0 receipts, plus immutable 0.16.5 records, remain historical
-bytes.
+Annotated tag `sdk-v0.20.0` peels to protected-main merge
+`cb9c30fae0e49e1727e449207593581ce52cd4cf`; protected npm run `31815209550`
+and PyPI run `31815447080` independently verified both optional registry
+mirrors. Publication did not deploy the docs, API, or any hosted behavior. The
+verified 0.19.0, 0.18.1, 0.18.0, and 0.17.0 receipts, plus immutable 0.16.5
+records, remain historical bytes.
 The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of

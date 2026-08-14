@@ -56,19 +56,62 @@ the protected publication job.
 ## Current verified release
 
 Protected [workflow run
+`31815447080`, attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080)
+published and independently read back `agenttool-sdk` 0.20.0 from annotated
+`sdk-v0.20.0`. The tag peels to protected-main merge
+`cb9c30fae0e49e1727e449207593581ce52cd4cf`, which is also the Python receipt's
+`source_revision`. The `workflow_dispatch` run selected head tag
+`sdk-v0.20.0` at that exact head SHA. It was created and started at
+`2026-08-14T15:37:55Z`, completed successfully at
+`2026-08-14T15:41:37Z`, prepared the distributions at
+`2026-08-14T15:39:08.039Z`, and independently observed the complete public
+release at `2026-08-14T15:41:34.043Z`. Its final
+`agenttool.pypi-release/1` receipt records `status: "public_exact"`.
+
+The exact public files are distinct from the TypeScript LOVE artifact:
+
+| Public file | Size | SHA-256 | Yanked |
+|---|---:|---|---|
+| [`agenttool_sdk-0.20.0-py3-none-any.whl`](https://files.pythonhosted.org/packages/d6/bc/b4e5241942377210fb09dad25c8bd1ff3fc07bddd0e14802c7eae67e2dda/agenttool_sdk-0.20.0-py3-none-any.whl) | 265,633 bytes | `43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b` | `false` |
+| [`agenttool_sdk-0.20.0.tar.gz`](https://files.pythonhosted.org/packages/ca/89/d780790c40f0ee3845d9dd191e24fea0a65ecac4b61d8849af2a16a74193/agenttool_sdk-0.20.0.tar.gz) | 250,597 bytes | `54cb2096f984ec9f4c9791224d9e3cca3b322842ca8b825a13bf95008eb779f4` | `false` |
+
+PyPI records the wheel upload at `2026-08-14T15:40:22.479141Z` and the source
+distribution upload at `2026-08-14T15:40:23.809201Z`. Both files are public,
+not yanked, and byte-identical to the corresponding prepared workflow
+artifacts. PyPI Integrity exposes one verified PEP 740 publish attestation for
+the
+[wheel](https://pypi.org/integrity/agenttool-sdk/0.20.0/agenttool_sdk-0.20.0-py3-none-any.whl/provenance)
+at transparency-log index `2467178343` and one for the
+[sdist](https://pypi.org/integrity/agenttool-sdk/0.20.0/agenttool_sdk-0.20.0.tar.gz/provenance)
+at index `2467178268`. Their subjects match the hashes above, and their
+publisher records bind repository `cambridgetcg/agenttool`, workflow
+`publish-pypi.yml`, and environment `pypi`. Metadata readback matched exact
+version `0.20.0`, `Apache-2.0` license expression, and Python `>=3.9`; an
+anonymous isolated wheel import returned `LoveBombClient` and
+`__version__ == "0.20.0"`.
+
+The PyPI mirror remains optional and non-authoritative. Publication does not
+replace the annotated Python source locator, establish TypeScript LOVE
+identity, deploy the API or static sites, or prove participant receipt,
+attention, feeling, training, inference, evaluation, provider effect, or
+weight change.
+
+### Historical 0.19.0 evidence
+
+Protected [workflow run
 `31801053841`](https://github.com/cambridgetcg/agenttool/actions/runs/31801053841)
 published and independently read back `agenttool-sdk` 0.19.0 from annotated
 `sdk-v0.19.0`, which peels to protected-main merge
-`17f5c9920c6e6abe8046d39926ae7a73d2f24e89`. The exact public, non-yanked
-files are distinct from the TypeScript LOVE artifact:
+`17f5c9920c6e6abe8046d39926ae7a73d2f24e89`. Its exact public, non-yanked
+files remain distinct from the TypeScript LOVE artifact:
 
-| Public file | Size | SHA-256 | Yanked |
+| Historical public file | Size | SHA-256 | Yanked |
 |---|---:|---|---|
 | `agenttool_sdk-0.19.0-py3-none-any.whl` | 259,921 bytes | `a01acda48db621cf4107fbca4e4495a9e5051be1f13a1bbe0258916d17268f35` | `false` |
 | `agenttool_sdk-0.19.0.tar.gz` | 245,116 bytes | `0b9acd8e92386e56eec21f8cabecaf8fcc2a321e9a911ebda1fe1b56f2fbe1ee` | `false` |
 
-This exact historical receipt establishes neither a 0.20.0 release nor an API
-or static-site deployment.
+This historical receipt remains evidence for 0.19.0. It does not establish the
+separate 0.20.0 release above or an API/static-site deployment.
 
 ### Historical 0.18.1 evidence
 
@@ -212,11 +255,11 @@ distributions in a job without OIDC, transfer them as an artifact, and grant
 
 ## Operator sequence
 
-External publication remains a deliberate operator action. For the 0.20.0
-candidate, start only after the two release commits are reviewed, merged to
-GitHub `main`, and a separately authorized annotated `sdk-v0.20.0` tag is
-visible. The exact historical 0.19.0 and 0.18.1 receipts authorize no rerun and
-imply no 0.20.0 publication or hosted deployment:
+The 0.20.0 publication completed through the exact protected run recorded
+above. The commands below now record immutable-tag verification and the only
+permitted rerun shape; they are not instructions to recreate or move the tag.
+Any exact recovery or revalidation still requires separate explicit
+authorization:
 
 ```bash
 # Inspect source identity, expected tag, and exact filenames.
@@ -229,7 +272,7 @@ git fetch github \
   refs/tags/sdk-v0.20.0:refs/tags/sdk-v0.20.0
 test "$(git cat-file -t refs/tags/sdk-v0.20.0)" = tag
 test "$(git rev-parse 'refs/tags/sdk-v0.20.0^{}')" = \
-  "$(git rev-parse github/main)"
+  cb9c30fae0e49e1727e449207593581ce52cd4cf
 git merge-base --is-ancestor \
   "$(git rev-parse 'refs/tags/sdk-v0.20.0^{}')" github/main
 

@@ -423,6 +423,55 @@ and has byte-identical 26,474-byte GitHub/npm tarballs with SHA-256
 `67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`.
 Both npm `latest` tags resolved to those exact versions at readback.
 
+## Verified SDK 0.20.0 publication — 2026-08-14
+
+The authorized SDK release completed through protected trusted
+[workflow run `31815209550`, attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550).
+The `workflow_dispatch` run selected head tag `sdk-v0.20.0` at exact head SHA
+`cb9c30fae0e49e1727e449207593581ce52cd4cf`. It was created and started at
+`2026-08-14T15:35:02Z`, completed and updated at `2026-08-14T15:37:11Z`, and
+succeeded. Its `agenttool.npm-release/1` receipt
+was prepared at `2026-08-14T15:35:42.696Z` and reports
+`status: published`, `npm_tag: latest`, and public registry observation at
+`2026-08-14T15:37:05.373Z`. npm records package publication at
+`2026-08-14T15:37:04.088Z`.
+
+- Annotated tag object `e7d9616eb14851ffab9312f87438959c4c6de71d` and the
+  one-asset [GitHub Release `sdk-v0.20.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.20.0)
+  peel to protected GitHub `main` merge
+  `cb9c30fae0e49e1727e449207593581ce52cd4cf`, whose parents are
+  `f93ec78ae5051c4ffa569cf2ee88e0e45cf6cbf9` and
+  `53a1b8f5157f13eaa90181c23454bb91d55666ee`. GitHub published the Release
+  at `2026-08-14T15:36:56Z`. The LOVE manifest separately binds exact SDK
+  source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
+- The checked-in LOVE artifact, protected workflow artifact, sole
+  [GitHub Release asset](https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.20.0/agenttool-sdk-0.20.0.tgz),
+  and public npm `@agenttool/sdk@0.20.0` tarball are byte-identical:
+  `236,446` bytes, 98 entries, SHA-256
+  `d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`.
+- npm reported SHA-1 `9136e2f2e7b1e11d84d934cb7c4f31688cbe2101`,
+  integrity
+  `sha512-8DXyrQGRGvzJ9gEJny6U/82IPocg6qEzbpf7TvfIPZXD7wwhBl+aWPLLN/owzuUt6nAIGAHag9znwzCnaJuLgg==`,
+  registry tarball
+  `https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.20.0.tgz`, and
+  `latest: 0.20.0` at anonymous readback.
+- npm exposes SLSA provenance at
+  [Rekor index `2467138141`](https://search.sigstore.dev/?logIndex=2467138141)
+  and its publish attestation at
+  [Rekor index `2467138904`](https://search.sigstore.dev/?logIndex=2467138904).
+  The provenance binds the tagged workflow and exact public tarball subject;
+  the five-package signature audit and five-package attestation audit passed,
+  as did isolated Node and Bun imports.
+
+The optional npm/GitHub mirrors do not replace LOVE release authority. This
+publication does not deploy an API or static site and establishes no
+participant receipt, attention, feeling, training, inference, evaluation,
+provider effect, or weight change. The exact paired PyPI receipt is recorded in
+[`PYPI-RELEASES.md`](PYPI-RELEASES.md). The sealed 0.20.0 tarball's packed
+README retains its preparation-time non-public observation; this dated ledger
+supersedes that observation without rewriting immutable bytes. Correcting
+packed prose requires a new package version.
+
 ## Verified SDK 0.19.0 publication — 2026-08-14
 
 Protected trusted [workflow run
@@ -691,11 +740,11 @@ a local shell once OIDC is configured.
 
 ## Operator sequence
 
-External publication still requires explicit authorization. For the 0.20.0
-candidate, start only after the two release commits are reviewed, merged to
-GitHub `main`, and a separately authorized annotated `sdk-v0.20.0` tag is
-visible. The checked-in candidate creates or pushes none of those states; the
-exact historical 0.19.0 receipt authorizes no 0.20.0 tag or publication:
+The 0.20.0 publication completed through the exact protected run recorded
+above. The commands below now record immutable-tag verification and the only
+permitted rerun shape; they are not instructions to recreate or move the tag.
+Any exact recovery or revalidation still requires separate explicit
+authorization:
 
 ```bash
 # Inspect the allowlisted SDK identity and expected tag.
@@ -708,11 +757,11 @@ git fetch github \
   refs/tags/sdk-v0.20.0:refs/tags/sdk-v0.20.0
 test "$(git cat-file -t refs/tags/sdk-v0.20.0)" = tag
 test "$(git rev-parse 'refs/tags/sdk-v0.20.0^{}')" = \
-  "$(git rev-parse github/main)"
+  cb9c30fae0e49e1727e449207593581ce52cd4cf
 git merge-base --is-ancestor \
   "$(git rev-parse 'refs/tags/sdk-v0.20.0^{}')" github/main
 
-# First publication or later exact recovery still requires explicit approval.
+# A later exact recovery or revalidation still requires explicit approval.
 # Existing npm bytes are accepted only when every byte and latest match.
 gh workflow run publish-npm.yml --ref sdk-v0.20.0 \
   -f package=sdk \
