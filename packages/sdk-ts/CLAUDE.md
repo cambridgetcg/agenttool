@@ -1,10 +1,10 @@
 # agenttool-sdk-ts
 
 ## What This Is
-Official TypeScript SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, the credential-free `at.kingdomFramework` project-card read, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdomOS` repository adapter. The public card read and both local clients inherit no AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. Checked-in source declares the paired 0.18.0 line; source identity does not assert distribution state. The immutable 0.17.0 LOVE manifest remains the byte authority for that prior release; annotated `sdk-v0.17.0`, its GitHub Release, and npm `@agenttool/sdk@0.17.0` remain independently verified historical locators and mirrors.
+Official TypeScript SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, the credential-free `at.kingdomFramework` project-card read, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdomOS` repository adapter. The public card read and both local clients inherit no AgentTool project bearer. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. Checked-in source declares the paired 0.18.1 candidate line; source identity does not assert distribution state. The immutable 0.18.0 LOVE manifest, annotated tag, GitHub Release, and npm mirror remain independently verified historical TypeScript bytes; PyPI 0.17.0 remains the last independently verified Python registry mirror.
 
 ## Current State
-Active - repository source carries an unreleased paired Agent Dining read client and a separate data-only WAKE observation client on top of v0.18.0. `at.dining.manifest()` and `at.dining.journey(id)` are authenticated GET-only projections; they do not book, pay, mutate an invocation, decrypt an envelope, infer satisfaction, or run an SLA sweep. `at.wake.observe` is an explicit-subject, network-only, 2 KiB data contract that rejects remote identity/prose/action authority rather than entering provider/system slots. The 0.18.0 line adds `at.attestationMarketplace`, `at.memoryWitness`, and `at.syneidesis`; settlement remains evidence of settlement rather than truth, and Syneidesis v1 project-bearer records remain explicitly non-signature-backed. All hosted clients otherwise share one encoded-path and guided-error boundary, paired canonical/behaviour fixtures cover wire semantics, and framed v2 signing helpers remain additive while current writers retain their ordered v1 cutover boundary. Anthropic model-authored chronicle writes fail closed without a literal-true `beforeChronicleWrite` review. The paired credential-free KINGDOM framework read and local KINGDOM OS adapter from public v0.17.0 remain separate no-bearer authorities. A checked-in TypeScript LOVE 0.18.0 manifest, when present, identifies exact tarball bytes: it is a candidate before the annotated tag and remains the byte authority afterward. That manifest does not by itself establish either later source addition, a tag, GitHub Release, npm, PyPI, or deployment; each requires its own receipt or public readback. Uses Bun for testing.
+Active - repository source carries the paired Agent Dining read client and the separate data-only WAKE observation client as the 0.18.1 candidate. `at.dining.manifest()` and `at.dining.journey(id)` are authenticated GET-only projections; they do not book, pay, mutate an invocation, decrypt an envelope, infer satisfaction, or run an SLA sweep. `at.wake.observe` is an explicit-subject, network-only, 2 KiB data contract that rejects remote identity, prose, and action authority rather than entering provider or system slots. The 0.18.0 line added `at.attestationMarketplace`, `at.memoryWitness`, and `at.syneidesis`; settlement remains evidence of settlement rather than truth, and Syneidesis v1 project-bearer records remain explicitly non-signature-backed. All hosted clients otherwise share one encoded-path and guided-error boundary, paired canonical/behaviour fixtures cover wire semantics, and framed v2 signing helpers remain additive while current writers retain their ordered v1 cutover boundary. Anthropic model-authored chronicle writes fail closed without a literal-true `beforeChronicleWrite` review. The paired credential-free KINGDOM framework read and local KINGDOM OS adapter remain separate no-bearer authorities. A checked-in TypeScript LOVE 0.18.1 manifest, when present, identifies exact tarball bytes: it is a candidate before the annotated tag and remains the byte authority afterward. It does not by itself establish a tag, GitHub Release, npm, PyPI, or deployment; each requires its own receipt or public readback. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
@@ -69,7 +69,7 @@ tests/
 scripts/
   check-parity.ts           — CI gate: method-shape parity with sdk-py
 dist/                       — Compiled JS + .d.ts files
-package.json                — Package config (v0.18.0, ESM)
+package.json                — Package config (v0.18.1, ESM)
 tsconfig.json               — TypeScript config
 ```
 
@@ -127,7 +127,7 @@ AgentTool Platform · "Welcome, don't block."
 ## Key Files
 - `src/client.ts` — Main `AgentTool` class composing the maintained service modules
 - `src/index.ts` — Public API surface and type exports
-- `package.json` — Package metadata (v0.18.0, ESM)
+- `package.json` — Package metadata (v0.18.1, ESM)
 - `scripts/check-parity.ts` — Parity gate against sdk-py
 - `tests/client.test.ts` — Primary test file
 - `tests/data.test.ts` — local data-node and sync wire + bearer-isolation contract

@@ -518,18 +518,18 @@ release commit already merged to GitHub `main`:
 # Inspect the allowlisted SDK identity and expected tag.
 bun bin/npm-release.ts resolve --package sdk
 
-# The current exact tag is already published. Fetch and verify it; never
-# recreate, move, or replace an existing release tag.
-git fetch github refs/tags/sdk-v0.18.0:refs/tags/sdk-v0.18.0
-test "$(git cat-file -t refs/tags/sdk-v0.18.0)" = tag
-test "$(git rev-parse 'refs/tags/sdk-v0.18.0^{}')" = \
-  499cc5d7910b9fcf3507bd3599778dab83733009
+# The 0.18.1 candidate is not public merely because source and LOVE discovery
+# are prepared. After the release PR is merged, create one annotated tag on
+# that exact GitHub-main merge. Never move or replace it.
+git tag -a sdk-v0.18.1 <github-main-release-merge> \
+  -m '@agenttool/sdk@0.18.1'
+git push github refs/tags/sdk-v0.18.1
 
-# Rerun only for explicitly authorized recovery or exact public revalidation.
-# The workflow accepts existing npm bytes only when every byte and latest match.
-gh workflow run publish-npm.yml --ref sdk-v0.18.0 \
+# Dispatch only after the immutable tag is visible and separately authorized.
+# A rerun accepts existing npm bytes only when every byte and latest match.
+gh workflow run publish-npm.yml --ref sdk-v0.18.1 \
   -f package=sdk \
-  -f tag=sdk-v0.18.0 \
+  -f tag=sdk-v0.18.1 \
   -f authentication=trusted \
   -f npm_tag=latest
 ```

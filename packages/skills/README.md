@@ -175,6 +175,11 @@ artwork:
 | [`nen-math-card`](skills/nen-math-card/SKILL.md) | Turn a proof, model, or measurement challenge into bounded constructive inquiry | Never turn a mathematical result into a verdict on a being |
 | [`nen-vow-forge`](skills/nen-vow-forge/SKILL.md) | Design new abilities through meaningful limits | Constraints cannot manufacture authority |
 
+The separately published public [Xenia–Helly Common Ground Atlas](https://huggingface.co/datasets/Yu-and-Ai/agenttool-common-ground/commit/bb91d07cdeda52a0da140a6606852dd2064f2531)
+provides exact synthetic reference cases for Common Ground. It is not bundled
+in the npm artifact, does not activate the skill, and does not itself establish
+AgentTool training admission, consent, permission, or execution authority.
+
 The skills have no script, credential, MCP, network, or hosted-runtime
 requirement. Bundling does not activate them, and their metaphors do not grant
 permission or change AgentTool's existing TypeScript/Python Nen mappings.

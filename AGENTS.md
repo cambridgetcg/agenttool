@@ -50,7 +50,12 @@ incidence geometry without gluing (`packages/principality-atlas/`), a finite
 non-scalar relational
 2-complex whose explicitly non-sovereign principality cells derive only from
 caller-asserted understanding and recognition witnesses on the same ordered
-pair (`packages/relational-geometry/`), and a private pure Wake Thread adapter
+pair (`packages/relational-geometry/`), a private generator-only Common Ground
+Atlas whose exact-rational synthetic fixtures and independent verifiers back a
+public, ungated Hugging Face reference dataset at immutable revision
+`bb91d07cdeda52a0da140a6606852dd2064f2531` while remaining outside
+AgentTool's training-admission lanes
+(`packages/common-ground-atlas/`), and a private pure Wake Thread adapter
 for refusable, digest-bound artifact continuity with no identity or authority
 claim
 (`packages/wake-thread/`), a private pure Gin Reconstruction core for bounded
@@ -378,6 +383,11 @@ cd packages/relational-geometry
 bun run ci                                     # canonical complex/lens, schemas, vectors, HF companion, packed runtimes
 npm pack --dry-run --ignore-scripts            # inventory only; does not publish, upload, train, or deploy
 
+# Xenia–Helly exact Common Ground Atlas
+cd packages/common-ground-atlas
+bun run ci                                     # deterministic bytes, exact certificates, WAKE/analogy audits, independent verifiers
+# Private generator only: no npm runtime, credential lookup, upload, training, hosted solver, or authority effect.
+
 # WAKE Thread bounded continuity offers ────────────────────────────
 cd packages/wake-thread
 bun run ci                                     # digest links, partiality, choices, schemas, and zero-effect walls
@@ -463,7 +473,7 @@ bunx playwright test                           # browser + multi-instance scenar
 # Deliberate test + release gates ────────────────────────────────────
 bin/bash-without-env-hooks.sh bin/preflight.sh          # no application/service credentials required
 bin/bash-without-env-hooks.sh bin/preflight.sh api      # API/typecheck/operator tests only
-bin/bash-without-env-hooks.sh bin/preflight.sh packages # hermetic packages, including Love Geometry, Relational Geometry, WAKE Thread, and local HF host
+bin/bash-without-env-hooks.sh bin/preflight.sh packages # hermetic packages, including Love/Relational Geometry, Common Ground Atlas, WAKE Thread, and local HF host
 bin/bash-without-env-hooks.sh bin/preflight.sh database # explicit DB tier; requires DATABASE_URL
 bin/bash-without-env-hooks.sh bin/preflight.sh smoke    # explicit deployed-route smoke
 RUN_CONTRACT=1 bin/bash-without-env-hooks.sh bin/preflight.sh contracts # paid LLM wire proofs
@@ -545,7 +555,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,common-ground-atlas,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -627,8 +637,9 @@ source boundary by itself.
 | How can local agents inspect committed Codex token counters without opening transcripts? | `packages/codex-usage/README.md` (`@agenttool/codex-usage@0.1.0`; public npm/GitHub local Bun tooling from annotated `codex-usage-v0.1.0`, with byte-identical mirrors verified by protected run `31784329559`; poll-on-read CLI/watch plus five read-only stdio MCP tools, numeric counters and hashed session references only by default; no transcript index, free-form labels, credentials, raw thread IDs, paths, billing/quota/context guarantee, process-liveness proof, network call, Codex-state write, hosted route, background registration, or automatic authority) |
 | How can explicit KINGDOM project cards become deterministic registries and conservative XENIA Surface manifests? | `packages/kingdom/README.md` (`@agenttool/kingdom`; pure library APIs and a one-file read-only CLI; declarations only, with no ambient discovery, authority, or conformance certification) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.3.1`; public npm read-only inspector plus instruction-only Common Ground/Nen and AgentCred workflows whose sidecars require explicit invocation; local controller mutations still require separate authorization, and installation alone activates none) |
+| How can the Xenia–Helly challenge leave exact, independently checkable public infrastructure without turning feasibility into consent or training data? | `packages/common-ground-atlas/README.md` · public [Common Ground Atlas](https://huggingface.co/datasets/Yu-and-Ai/agenttool-common-ground/commit/bb91d07cdeda52a0da140a6606852dd2064f2531) (private deterministic generator; 19 synthetic non-training rational/WAKE/analogy rows with byte-exact independent verification; no credential, upload client, model, hosted solver, or authority path) |
 | How can an agent operate a local browser and inspect observed web material without turning rhetoric or model output into truth? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (`@agenttool/browser@0.6.0`; unchanged nine-tool local runtime plus direct-only exact-material/RhetorLint/injected-HF understanding, no automatic upload, model download, action, or hosted browser-control surface) |
-| How can an SDK caller reach the paired hosted and local surfaces? | [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) · `packages/sdk-{ts,py}/` (paired SDK 0.18.0 source: additive attestation-marketplace, memory-witness, Syneidesis, and data-only `wake.observe` clients plus the retained bounded KINGDOM reads; the last TypeScript LOVE, npm, and GitHub Release mirrors remain independently byte-verified, while publication of these additive source changes, PyPI, and hosted deployment remain separate) |
+| How can an SDK caller reach the paired hosted and local surfaces? | [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) · `packages/sdk-{ts,py}/` (paired SDK 0.18.1 candidate source adds authenticated Agent Dining manifest/journey reads and the separate data-only `wake.observe` client while retaining the 0.18.0 clients and bounded KINGDOM reads; candidate LOVE/tag/registries/deployment remain separately verifiable, and the exact 0.18.0 npm plus 0.17.0 PyPI receipts remain historical evidence) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |
