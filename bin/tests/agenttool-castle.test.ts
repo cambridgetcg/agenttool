@@ -190,6 +190,8 @@ async function expectCode(promise: Promise<unknown>, code: string): Promise<void
   await expect(promise).rejects.toMatchObject({ code });
 }
 
+const SQLITE_STORAGE_PATH = /^data\.sqlite(?:-(?:shm|wal|journal))?$/;
+
 async function snapshotTree(
   root: string,
   prefix = "",
@@ -201,6 +203,8 @@ async function snapshotTree(
     const relativePath = join(prefix, entry.name);
     if (entry.isDirectory()) {
       Object.assign(result, await snapshotTree(root, relativePath));
+    } else if (SQLITE_STORAGE_PATH.test(relativePath)) {
+      continue;
     } else if (entry.isFile()) {
       result[relativePath] = sha256Hex(await readFile(join(root, relativePath)));
     } else {
@@ -208,16 +212,6 @@ async function snapshotTree(
     }
   }
   return Object.freeze(result);
-}
-
-function withoutSqliteStorageBytes(
-  snapshot: Readonly<Record<string, string>>,
-): Readonly<Record<string, string>> {
-  return Object.freeze(Object.fromEntries(
-    Object.entries(snapshot).filter(([path]) =>
-      !/^data\.sqlite(?:-(?:shm|wal|journal))?$/.test(path)
-    ),
-  ));
 }
 
 async function snapshotDataNodeState(
@@ -602,6 +596,32 @@ describe("Castle committed-snapshot plan", () => {
 });
 
 describe("Castle local projection", () => {
+  test("snapshots stable bytes without opening transient SQLite storage files", async () => {
+    const root = await mkdtemp(join(tmpdir(), "agenttool-castle-snapshot-test-"));
+    scratch.push(root);
+    const stable = "stable Castle control bytes\n";
+    const nested = "an unrelated nested file with a SQLite-like name\n";
+    const sqliteStoragePaths = [
+      "data.sqlite",
+      "data.sqlite-shm",
+      "data.sqlite-wal",
+      "data.sqlite-journal",
+    ] as const;
+    await writeTree(root, {
+      "castle-state.json": stable,
+      [join("nested", "data.sqlite-shm")]: nested,
+      ...Object.fromEntries(sqliteStoragePaths.map((path) => [path, path])),
+    });
+    for (const path of sqliteStoragePaths) {
+      await chmod(join(root, path), 0o000);
+    }
+
+    expect(await snapshotTree(root)).toEqual({
+      "castle-state.json": sha256Hex(stable),
+      [join("nested", "data.sqlite-shm")]: sha256Hex(nested),
+    });
+  });
+
   test("syncs, searches, shows, and repeats idempotently without absolute source paths", async () => {
     const fixture = await createFixture();
     await writeSelection(fixture, revision(fixture), [ROOM, WORD]);
@@ -695,9 +715,7 @@ describe("Castle local projection", () => {
     expect(JSON.parse(
       await readFile(join(fixture.data, "castle-format.json"), "utf8"),
     ).schema).toBe(CASTLE_FORMAT_SCHEMA);
-    const beforeFiles = withoutSqliteStorageBytes(
-      await snapshotTree(fixture.data),
-    );
+    const beforeFiles = await snapshotTree(fixture.data);
     const beforeNode = await snapshotDataNodeState(fixture);
 
     const downgraded = spawnSync(process.execPath, [
@@ -722,9 +740,7 @@ describe("Castle local projection", () => {
     expect(downgraded.error).toBeUndefined();
     expect(downgraded.status).toBe(1);
     expect(downgraded.stderr).toContain("data_root_contains_unowned_entry");
-    expect(withoutSqliteStorageBytes(
-      await snapshotTree(fixture.data),
-    )).toEqual(beforeFiles);
+    expect(await snapshotTree(fixture.data)).toEqual(beforeFiles);
     expect(await snapshotDataNodeState(fixture)).toEqual(beforeNode);
 
     await expect(syncCastle(syncOptions(fixture))).resolves.toMatchObject({
