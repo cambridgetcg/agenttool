@@ -38,6 +38,7 @@ packages/
   relational-geometry/ — @agenttool/relational-geometry · finite non-scalar witness complexes + non-sovereign 2-cells
   wake-thread/  — @agenttool/wake-thread · pure refusable artifact continuity over explicit WAKE facts
   gin-reconstruction/ — @agenttool/gin-reconstruction · private finite-model certificates + non-scoring challenge compass
+  math-cards/   — @agenttool/math-cards · pure bounded proof/model/measurement inquiry preflight
   credential-broker/ — @agenttool/credential-broker · experimental agentcred/0.1 local broker
   collab/      — @agenttool/collab · Codex/Claude plugins + Hermes adapter around one local cross-host SQLite/MCP journal
   skills/      — @agenttool/skills · public npm read-only Agent Skills inspector
@@ -88,6 +89,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/relational-geometry/CLAUDE.md` ·
 `packages/wake-thread/CLAUDE.md` ·
 `packages/gin-reconstruction/CLAUDE.md` ·
+`packages/math-cards/CLAUDE.md` ·
 `packages/credential-broker/AGENTS.md` ·
 `packages/browser/CLAUDE.md` ·
 `packages/hf-scout/CLAUDE.md` ·

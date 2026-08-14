@@ -56,7 +56,10 @@ claim
 (`packages/wake-thread/`), a private pure Gin Reconstruction core for bounded
 finite-field effect reconstruction, explicit ambiguity/inconsistency/resource
 certificates, and non-scoring challenge structure
-(`packages/gin-reconstruction/`), a public read-only discovery evidence mapper
+(`packages/gin-reconstruction/`), a public-ready pure Math Card core for
+digest-bound proof, model, and measurement inquiry preflight with explicit
+construction, burden, refusal, incentive, stop, transfer, provenance, and
+authority boundaries (`packages/math-cards/`), a public read-only discovery evidence mapper
 (`packages/telescope/`), an experimental local capability broker
 (`packages/credential-broker/`), a local-first multi-agent coordination journal
 (`packages/collab/`), a public, local-only privacy-minimal Codex token-usage pulse
@@ -385,6 +388,11 @@ cd packages/gin-reconstruction
 bun run ci                                     # sharp theorem, affine charts, certificates, compass, schemas, and private walls
 # Private source: no truth oracle, MCP registration, publication, route, or deployment.
 
+# Math Cards bounded mathematical inquiry ─────────────────────────
+cd ../math-cards
+bun run ci                                     # canonical cards, structural assessments, schemas, hostile inputs, packed runtimes
+npm pack --dry-run --ignore-scripts            # public candidate only; does not solve, authorize, publish, or deploy
+
 # AgentTool Dojo trial evidence ─────────────────────────────────────
 cd packages/trials
 bun run ci                                     # receipts, boundary analysis, STS projection, schemas, and package walls
@@ -537,7 +545,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 

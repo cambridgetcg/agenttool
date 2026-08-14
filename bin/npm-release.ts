@@ -135,6 +135,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "memetic-landscape",
     artifactKind: "pack",
   },
+  "math-cards": {
+    key: "math-cards",
+    name: "@agenttool/math-cards",
+    packagePath: "packages/math-cards",
+    tagPrefix: "math-cards",
+    artifactKind: "pack",
+  },
   "principality-geometry": {
     key: "principality-geometry",
     name: "@agenttool/principality-geometry",
@@ -817,6 +824,17 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/hf/dataset/data/lessons.jsonl",
     );
   }
+  if (spec.name === "@agenttool/math-cards") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-math-card-v0.1.schema.json",
+      "package/schema/agenttool-math-card-assessment-v0.1.schema.json",
+      "package/vectors/agenttool-math-cards-v0.1.json",
+    );
+  }
   if (spec.name === "@agenttool/principality-geometry") {
     entries.push(
       "package/CLAUDE.md",
@@ -928,6 +946,8 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/skills/nen-concealed-trace/agents/openai.yaml",
       "package/skills/nen-critical-path-forge/SKILL.md",
       "package/skills/nen-critical-path-forge/agents/openai.yaml",
+      "package/skills/nen-math-card/SKILL.md",
+      "package/skills/nen-math-card/agents/openai.yaml",
       "package/skills/nen-smoke-squad/SKILL.md",
       "package/skills/nen-smoke-squad/agents/openai.yaml",
       "package/skills/nen-verification-ledger/SKILL.md",

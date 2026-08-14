@@ -1,0 +1,6 @@
+interface:
+  display_name: "Math Card · 數理鍛"
+  short_description: "Frame constructive proof, model, and measurement"
+  default_prompt: "Use $nen-math-card to decide whether this mathematical challenge can answer a bounded constructive question."
+policy:
+  allow_implicit_invocation: false

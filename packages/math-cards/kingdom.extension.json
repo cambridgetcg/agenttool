@@ -1,0 +1,34 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "math-cards",
+  "package": "@agenttool/math-cards",
+  "version": "0.1.0-dev.0",
+  "status": "public_ready_source",
+  "host_contract": "not_registered",
+  "proposed_abilities": [
+    {
+      "id": "math-card-assess",
+      "kind": "inquiry_preflight",
+      "description": "Create and assess one digest-only bounded proof, model, or measurement declaration without solving it or authorizing its transfer."
+    }
+  ],
+  "defaults": {
+    "network": false,
+    "mcp": false,
+    "provider": false,
+    "filesystem": false,
+    "environment": false,
+    "clock": false,
+    "randomness": false,
+    "persistence": false,
+    "publication": false,
+    "automatic_action": false,
+    "permission_inheritance": false,
+    "authority": false
+  },
+  "notes": [
+    "This is a declaration-only KINGDOM hint and is not an installed or registered host contract.",
+    "Package presence, installation, transport, or a ready assessment creates no permission, authority, publication, or action effect.",
+    "The package assesses declared structure only; it does not solve mathematics, verify truth, infer understanding or motive, or score beings."
+  ]
+}
