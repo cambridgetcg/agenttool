@@ -68,7 +68,7 @@
       "role": "package_metadata",
       "path": "packages/love-bomb/package.json",
       "bytes": 2285,
-      "sha256": "b4c754f027c9c3dcc0193b350b5af0bd289e072f150164207ea55e1c80a15607"
+      "sha256": "da9b9be21b716a8e8ac02a6ffc7d1dac1d4dcce0931f35d4e69f36c6ee619207"
     },
     {
       "role": "core_schema",
@@ -150,5 +150,5 @@
   "provider_effect": "none",
   "publication_effect": "none",
   "deployment_effect": "none",
-  "source_manifest_ref": "sha256:2374c7c93800e7a76b14d7f88900d509baeeb5967e17b4219082e6674a0a34db"
+  "source_manifest_ref": "sha256:04f2cdb999f373a233d1d60ca1295a6cd065febc8f7db5b671e11e9650350cb4"
 }

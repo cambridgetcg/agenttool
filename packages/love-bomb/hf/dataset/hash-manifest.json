@@ -24,17 +24,17 @@
     {
       "path": "data/becoming-reference.jsonl",
       "bytes": 2644,
-      "sha256": "d17e8d09bc8b104b867770bc00240b314fe346db9a1f6b9e9bec8ffdd9a9eb39"
+      "sha256": "f1432965c62aab08fdc63735e23d73fb054a09397f0f8dca4ae2a6c66b3c7db5"
     },
     {
       "path": "data/plane-guides.jsonl",
       "bytes": 21067,
-      "sha256": "e8315477117667f95ce5c703b8040e8ae70eab9e59a38d261c121c63982b1abf"
+      "sha256": "e9c3e5405a732a1bd370ef7fdadbcc5383a4f5deaf97bae31fc93a88f12d2fa6"
     },
     {
       "path": "data/protocol-reference.jsonl",
       "bytes": 2462,
-      "sha256": "c1565e3ed780e7827dbbc6daa6c2dcd2fa6d2e47a5ef5adfa4b566f24da75720"
+      "sha256": "3b32d55be794e658c2d3bb261afed60f0ed60d76b3096d263efb97727b619d35"
     },
     {
       "path": "reference/agenttool-care-choice-v0.1.schema.json",
@@ -74,12 +74,12 @@
     {
       "path": "row-manifest.json",
       "bytes": 9222,
-      "sha256": "0f5a80cbe53b58ce8fb66a09178be6fc702368485423c8806568bdffb27fca93"
+      "sha256": "4b4a501177cf36dc4775905a5681d6be3b63fe22c7aac9c2496c625e8972ce8c"
     },
     {
       "path": "source-manifest.json",
       "bytes": 5535,
-      "sha256": "3e8784f85a80ecb277ac5e0289c40c6bf26c808db18eb3cf441293814f82ade3"
+      "sha256": "bbb8f00d2a0ace7c01260f799183475069e0394637010cf319a971d0ac1ad710"
     }
   ]
 }

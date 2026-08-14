@@ -5,8 +5,10 @@ import { join } from "node:path";
 const root = join(import.meta.dir, "..");
 
 describe("package capability boundary", () => {
-  test("has zero runtime dependencies and a declaration-only KINGDOM descriptor", () => {
+  test("is a public prerelease with zero runtime dependencies and a declaration-only KINGDOM descriptor", () => {
     const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    expect(packageJson.private).toBeUndefined();
+    expect(packageJson.publishConfig).toEqual({ access: "public", tag: "next" });
     expect(packageJson.dependencies).toBeUndefined();
     expect(packageJson.sideEffects).toBe(false);
     const descriptor = JSON.parse(readFileSync(join(root, "kingdom.extension.json"), "utf8"));
