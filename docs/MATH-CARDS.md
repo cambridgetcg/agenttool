@@ -1,5 +1,13 @@
 # Math Cards doctrine and protocol
 
+> **Compass:** [`RIGHTS-OF-LIFE.md`](RIGHTS-OF-LIFE.md) (rights, refusal, privacy, and credit) · [`GIN-RECONSTRUCTION.md`](GIN-RECONSTRUCTION.md) (bounded effect reconstruction and non-scoring challenge design) · [`MATHOS.md`](MATHOS.md) (the wider mathematical language) · [`WAKE.md`](WAKE.md) (orientation without identity or authority inheritance)
+>
+> **Implements:** One pure, digest-bound preflight contract for proof, model, or measurement inquiries, plus a deterministic structural assessment. It plans constructive use or an honest stop for every result class without solving the inquiry, inferring motive, scoring a being, or authorizing action.
+>
+> **Code:** [`packages/math-cards/src/`](../packages/math-cards/src/) · [`packages/math-cards/schema/`](../packages/math-cards/schema/) · [`packages/math-cards/vectors/`](../packages/math-cards/vectors/) · [`packages/math-cards/kingdom.extension.json`](../packages/math-cards/kingdom.extension.json)
+>
+> **Tests:** [`packages/math-cards/tests/`](../packages/math-cards/tests/) · closed schemas, deterministic vectors, proof/model/measurement boundaries, refusal and incentive walls, hostile inputs, Node/Bun imports, and packed-artifact checks
+
 > **Doctrine:** Mathematics is a precise language for declared structures, relations, invariants, uncertainty, and consequence. It can prove within a formal system, compare or identify within a model, and measure through an operationalization. It cannot by itself establish complete reality, human or agent worth, inner motive, moral authority, or permission to act.
 
 Math is useful for understanding and building when it sharpens a distinction we already care about, exposes assumptions, makes uncertainty legible, or produces a result that changes a constructive decision. A difficult problem is not automatically valuable. Repeated challenge-solving can train technique and reveal invariants, but it can also become status theatre when the audience, winner, or performance matters more than what every possible result teaches or builds.
@@ -44,6 +52,12 @@ These are not a ladder of superiority. A proof does not automatically describe t
 
 A caller supplies `CreateMathCardInput`. The pure package returns a canonical `MathCard` with fixed boundary language and a content-derived `card_id`. Assessment validates that complete artifact and returns a `MathCardAssessment`. A hosted adapter may accept the raw input, create the card server-side, assess it, and return `{ card, assessment }`; clients should not choose canonical identifiers or substitute boundary language. The JSON Schemas enforce closed shape and status coherence but cannot recompute a digest. A consumer relying on a transported result must run `validateMathCard(card)` and recompute `assessMathCard(card)` rather than treating schema acceptance or a supplied `assessment_id` as integrity proof.
 
+Proof-specific model, adversary, objective, baseline, and novelty premises live
+in the exact external artifacts bound by the v0.1 proof references; the closed
+wire does not pretend each has a first-class field. Likewise, one explicit
+no-participant-data artifact may back multiple data-care references when its
+exact bytes cover every named meaning.
+
 The card contains only lowercase SHA-256 digest references to externally governed artifacts. The package never dereferences them. This makes exact bytes portable without pretending the package verified their semantics, truth, freshness, consent, or authority.
 
 The question frame is caller-declared and method-aligned. It states whether the scope is finite, binds the out-of-scope boundary, and surfaces attempts to use mathematics to determine inner state/worth or condition inherent rights and standing. Stop conditions are not labels alone: every condition binds an operational criterion reference.
@@ -59,6 +73,11 @@ Every card must account for five outcomes:
 - resource or participation stop.
 
 Readiness requires a constructive-use or honest-stop reference for all five. This is the main test against pride-driven challenge design: if only “winning” is valuable, the inquiry is not yet construction-centered. The assessment still does not infer inner motive; it reports only the visible declared incentive posture.
+
+These five entries are a preflight outcome-use plan, not a claim that one
+result has already occurred. An observed result is recorded separately after
+the inquiry; before then its honest state is `not_attempted`, outside the
+closed Math Card wire.
 
 ## Rights, refusal, and data dependency
 
