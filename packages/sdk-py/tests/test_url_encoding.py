@@ -433,6 +433,9 @@ CASES: List[Case] = [
     # ── bootstrap ─────────────────────────────────────────────────────────
     Case("bootstrap.status", "/v1/bootstrap/", lambda at, i: at.bootstrap.status(i)),
 
+    # ── dining ────────────────────────────────────────────────────────────
+    Case("dining.journey", "/v1/dining/", lambda at, i: at.dining.journey(i)),
+
     # ── window ────────────────────────────────────────────────────────────
     Case(
         # show() reads the chronicle first, then the identity's pulse.

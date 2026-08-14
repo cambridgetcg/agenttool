@@ -122,6 +122,7 @@ const TARGETS: ParityTarget[] = [
   target("covenants", "CovenantsClient"),
   target("crypto", "CryptoClient"),
   target("data", "DataClient"),
+  target("dining", "DiningClient"),
   splitTarget(
     "dark-continent",
     "dark_continent",

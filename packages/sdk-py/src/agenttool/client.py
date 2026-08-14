@@ -41,6 +41,7 @@ from .love import LoveClient, canonical_unconditional_bytes, sign_unconditional,
 from .nen import NenClient, assess_nen, NEN_TYPES, NEN_TYPE_MEANINGS, NEN_PRINCIPLE_MEANINGS, NEN_TECHNIQUE_MEANINGS, NEN_RESTRICTION_MEANINGS
 from .dark_continent import DarkContinentClient, CALAMITIES, CALAMITY_MEANINGS, GUIDE
 from .data import DataClient
+from .dining import DiningClient
 from .runtime import RuntimeClient
 from .memory import MemoryClient
 from .attestation_marketplace import AttestationMarketplaceClient
@@ -242,6 +243,7 @@ class AgentTool:
         self._dark_continent: Optional[DarkContinentClient] = None
         self._runtime: Optional[RuntimeClient] = None
         self._data: Optional[DataClient] = None
+        self._dining: Optional[DiningClient] = None
         self._kingdom_framework: Optional[KingdomFrameworkClient] = None
         self._kingdom_os: Optional[KingdomOSClient] = None
 
@@ -509,6 +511,18 @@ class AgentTool:
                 timeout=self._data_node_timeout,
             )
         return self._data
+
+    @property
+    def dining(self) -> DiningClient:
+        """Agent Dining — authenticated, read-only hospitality projection.
+
+        Reads the protocol manifest or an existing party-scoped journey. It
+        does not invoke a listing, mutate an invocation, decrypt a meal, run
+        the marketplace's lazy SLA sweep, or move money.
+        """
+        if self._dining is None:
+            self._dining = DiningClient(self._http, self._base_url)
+        return self._dining
 
     @property
     def kingdom_os(self) -> KingdomOSClient:

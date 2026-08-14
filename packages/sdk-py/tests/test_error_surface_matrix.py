@@ -175,6 +175,9 @@ MATRIX: Dict[str, Callable[[AgentTool], Any]] = {
     "chronicle.ChronicleClient.list": lambda at: at.chronicle.list(),
     # client
     "client.AgentTool.request": lambda at: at.request("GET", "/v1/anything"),
+    # dining (authenticated GET-only projection)
+    "dining.DiningClient.manifest": lambda at: at.dining.manifest(),
+    "dining.DiningClient.journey": lambda at: at.dining.journey(IDENTITY_ID),
     # correspondence
     "correspondence.CorrespondenceClient.append": lambda at: at.correspondence.append(
         project_id=IDENTITY_ID,

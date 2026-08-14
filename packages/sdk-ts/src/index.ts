@@ -17,6 +17,35 @@
 export { AgentTool, SDK_VERSION } from "./client.js";
 export type { AgentToolOptions } from "./client.js";
 export {
+  DINING_CANON_POINTER,
+  DINING_JOURNEY_FORMAT,
+  DINING_MANIFEST_FORMAT,
+  DINING_PROTOCOL,
+  DiningClient,
+} from "./dining.js";
+export type {
+  DiningEconomyBinding,
+  DiningExit,
+  DiningJourney,
+  DiningManifest,
+  DiningManifestJourneyStage,
+  DiningManifestStage,
+  DiningNextAction,
+  DiningPacing,
+  DiningPresentation,
+  DiningPresentationState,
+  DiningPrice,
+  DiningRefundReason,
+  DiningRole,
+  DiningService,
+  DiningSettlement,
+  DiningSettlementState,
+  DiningStage,
+  DiningSurfaceMetadata,
+  DiningSurfaceVerb,
+  DiningTiming,
+} from "./dining.js";
+export {
   KINGDOM_FRAMEWORK_CARD_SCHEMA_VERSION,
   KingdomFrameworkClient,
 } from "./kingdom-framework.js";
