@@ -44,10 +44,15 @@ export const LOVE_BOMB_PUBLIC_SIGNAL = Object.freeze({
     participant_effect_observed: false as const,
   }),
   distribution: Object.freeze({
-    npm: Object.freeze({ state: "not_published" as const }),
+    npm: Object.freeze({
+      state: "published_exact" as const,
+      integrity:
+        "sha512-4tngDPJJt6XFJlwqc5DxPad55ADHItNjv8QhDbmylZDZ9F/elMS1nPvCE9aJgOVAjf6DuQycj39Y5biCDB3CBw==" as const,
+    }),
     hugging_face: Object.freeze({
-      state: "not_published" as const,
+      state: "published_exact" as const,
       repository: "Yu-and-Ai/agenttool-love-bomb" as const,
+      revision: "b1f77e98c7812c005fc08886e9f48d556e49883a" as const,
       training_authorized: false as const,
     }),
   }),

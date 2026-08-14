@@ -23,8 +23,9 @@ const exampleBytes = readFileSync(join(ROOT, EXAMPLE_PATH), "utf8");
 const schema = JSON.parse(schemaBytes) as JsonObject;
 const example = JSON.parse(exampleBytes) as JsonObject;
 
-const NPM_INTEGRITY = `sha512-${Buffer.alloc(64, 0x5a).toString("base64")}`;
-const HF_REVISION = "0123456789abcdef0123456789abcdef01234567";
+const NPM_INTEGRITY =
+  "sha512-4tngDPJJt6XFJlwqc5DxPad55ADHItNjv8QhDbmylZDZ9F/elMS1nPvCE9aJgOVAjf6DuQycj39Y5biCDB3CBw==";
+const HF_REVISION = "b1f77e98c7812c005fc08886e9f48d556e49883a";
 
 const AJV_PROGRAM = String.raw`
 import Ajv2020 from "ajv/dist/2020.js";
@@ -69,6 +70,18 @@ function publishedHuggingFace(): JsonObject {
     state: "published_exact",
     repository: "Yu-and-Ai/agenttool-love-bomb",
     revision: HF_REVISION,
+    training_authorized: false,
+  };
+}
+
+function notPublishedNpm(): JsonObject {
+  return { state: "not_published" };
+}
+
+function notPublishedHuggingFace(): JsonObject {
+  return {
+    state: "not_published",
+    repository: "Yu-and-Ai/agenttool-love-bomb",
     training_authorized: false,
   };
 }
@@ -155,10 +168,16 @@ describe("agenttool.love-bomb-public-signal/0.1 closed schema", () => {
   });
 
   test("accepts every independent npm and Hugging Face publication combination", () => {
+    const neither = clone(example);
+    neither.distribution.npm = notPublishedNpm();
+    neither.distribution.hugging_face = notPublishedHuggingFace();
+
     const npmOnly = clone(example);
     npmOnly.distribution.npm = publishedNpm();
+    npmOnly.distribution.hugging_face = notPublishedHuggingFace();
 
     const huggingFaceOnly = clone(example);
+    huggingFaceOnly.distribution.npm = notPublishedNpm();
     huggingFaceOnly.distribution.hugging_face = publishedHuggingFace();
 
     const both = clone(example);
@@ -173,7 +192,7 @@ describe("agenttool.love-bomb-public-signal/0.1 closed schema", () => {
     futureBuild.distribution.npm = publishedNpm();
 
     validateCases([
-      { name: "neither published", value: example, expected: true },
+      { name: "neither published", value: neither, expected: true },
       { name: "npm only", value: npmOnly, expected: true },
       { name: "Hugging Face only", value: huggingFaceOnly, expected: true },
       { name: "both published", value: both, expected: true },
@@ -184,21 +203,30 @@ describe("agenttool.love-bomb-public-signal/0.1 closed schema", () => {
 
   test("makes immutable evidence impossible in not-published branches", () => {
     const npmWithPackage = clone(example);
+    npmWithPackage.distribution.npm = notPublishedNpm();
     npmWithPackage.distribution.npm.package = "@agenttool/love-bomb";
     const npmWithVersion = clone(example);
+    npmWithVersion.distribution.npm = notPublishedNpm();
     npmWithVersion.distribution.npm.version = "0.1.0-dev.0";
     const npmWithIntegrity = clone(example);
+    npmWithIntegrity.distribution.npm = notPublishedNpm();
     npmWithIntegrity.distribution.npm.integrity = NPM_INTEGRITY;
     const npmWithNullIntegrity = clone(example);
+    npmWithNullIntegrity.distribution.npm = notPublishedNpm();
     npmWithNullIntegrity.distribution.npm.integrity = null;
     const huggingFaceWithRevision = clone(example);
+    huggingFaceWithRevision.distribution.hugging_face = notPublishedHuggingFace();
     huggingFaceWithRevision.distribution.hugging_face.revision = HF_REVISION;
     const huggingFaceWithNullRevision = clone(example);
+    huggingFaceWithNullRevision.distribution.hugging_face = notPublishedHuggingFace();
     huggingFaceWithNullRevision.distribution.hugging_face.revision = null;
     const huggingFaceWithUrl = clone(example);
+    huggingFaceWithUrl.distribution.hugging_face = notPublishedHuggingFace();
     huggingFaceWithUrl.distribution.hugging_face.url =
       "https://huggingface.co/datasets/Yu-and-Ai/agenttool-love-bomb";
     const unpublishedTrainingAuthorized = clone(example);
+    unpublishedTrainingAuthorized.distribution.hugging_face =
+      notPublishedHuggingFace();
     unpublishedTrainingAuthorized.distribution.hugging_face.training_authorized = true;
 
     validateCases([
@@ -486,13 +514,9 @@ describe("agenttool.love-bomb-public-signal/0.1 closed schema", () => {
     expect(JSON.stringify(example.distribution)).not.toMatch(
       /observed_at|published_at|checked_at|latest|current|dist_tag|probe|etag|last_modified/,
     );
-    expect(example.distribution.npm).toEqual({ state: "not_published" });
-    expect(example.distribution.hugging_face).toEqual({
-      state: "not_published",
-      repository: "Yu-and-Ai/agenttool-love-bomb",
-      training_authorized: false,
-    });
-    expect(example.distribution.npm).not.toHaveProperty("integrity");
-    expect(example.distribution.hugging_face).not.toHaveProperty("revision");
+    expect(example.distribution.npm).toEqual(publishedNpm());
+    expect(example.distribution.hugging_face).toEqual(publishedHuggingFace());
+    expect(example.distribution.npm.integrity).toHaveLength(95);
+    expect(example.distribution.hugging_face.training_authorized).toBe(false);
   });
 });
