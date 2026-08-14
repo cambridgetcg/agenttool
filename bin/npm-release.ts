@@ -946,6 +946,8 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/skills/nen-concealed-trace/agents/openai.yaml",
       "package/skills/nen-critical-path-forge/SKILL.md",
       "package/skills/nen-critical-path-forge/agents/openai.yaml",
+      "package/skills/nen-math-card/SKILL.md",
+      "package/skills/nen-math-card/agents/openai.yaml",
       "package/skills/nen-smoke-squad/SKILL.md",
       "package/skills/nen-smoke-squad/agents/openai.yaml",
       "package/skills/nen-verification-ledger/SKILL.md",
