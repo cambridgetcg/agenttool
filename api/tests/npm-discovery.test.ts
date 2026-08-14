@@ -18,7 +18,7 @@ const CURRENT_NPM_SPECIFIERS = [
   "@agenttool/credential-broker@0.3.1",
   "@agenttool/data@0.3.1",
   "@agenttool/data-sync@0.1.2",
-  "@agenttool/sdk@0.18.0",
+  "@agenttool/sdk@0.18.1",
   "@agenttool/telescope@0.2.3",
   "@agenttool/wallet@0.1.3",
 ] as const;
@@ -112,7 +112,7 @@ describe("optional npm package discovery", () => {
     const published = read("apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md");
     expect(published).toBe(canonical);
     expect(canonical).toContain(
-      "npm install --save-exact @agenttool/sdk@0.18.0",
+      "npm install --save-exact @agenttool/sdk@0.18.1",
     );
     expect(canonical).toMatch(/skips Step 1.*in-command LOVE/is);
     expect(canonical).toMatch(/never substitute npm `latest`/i);
@@ -121,17 +121,19 @@ describe("optional npm package discovery", () => {
   test("describes npm as optional in repository-level orientation", () => {
     const rootReadme = read("README.md");
     expect(rootReadme).toContain(
-      "npm install --save-exact @agenttool/sdk@0.18.0",
+      "npm install --save-exact @agenttool/sdk@0.18.1",
     );
     const pythonSource =
-      "git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.18.0#subdirectory=packages/sdk-py";
-    const exactPyPI = 'python -m pip install "agenttool-sdk==0.18.0"';
+      "git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.18.1#subdirectory=packages/sdk-py";
+    const exactPyPI = 'python -m pip install "agenttool-sdk==0.18.1"';
     expect(rootReadme).toContain(pythonSource);
     expect(rootReadme).toContain(exactPyPI);
     expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
       rootReadme.indexOf(exactPyPI),
     );
-    expect(rootReadme).toMatch(/PyPI 0\.18\.0.*returned `404`/is);
+    expect(rootReadme).toMatch(
+      /PyPI 0\.18\.1 remains.*Candidate preparation does not make it public; query the exact release/is,
+    );
     expect(rootReadme).toContain("30909424114");
     expect(rootReadme).toContain(
       "8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a",
@@ -143,7 +145,7 @@ describe("optional npm package discovery", () => {
     expect(rootReadme).toMatch(/LOVE manifests remain release authority/i);
     expect(rootReadme).toMatch(/mutable dist-tags are informational/i);
     expect(rootReadme).toMatch(/command alone does\s+not verify the manifest/i);
-    expect(rootReadme).toMatch(/independently verified LOVE path/i);
+    expect(rootReadme).toMatch(/start with the exact LOVE path/i);
   });
 
   test("publishes the npm trust boundary in OpenAPI", async () => {

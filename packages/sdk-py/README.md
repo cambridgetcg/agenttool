@@ -39,35 +39,34 @@ and 181,846-byte sdist
 (`sha256:7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c`).
 The registry remains a non-authoritative convenience.
 
-## Repository source line — 0.18.0
+## Repository source line — 0.18.1
 
-Repository source declares the paired 0.18.0 line. Source version and
-distribution state are separate facts. A checked-in TypeScript LOVE 0.18.0
-manifest, when present, identifies only the TypeScript tarball bytes: before
-the annotated tag it is a candidate, and after tagging it remains that
-artifact's byte authority. It is not a Python package artifact. Neither it nor
-the Python source version alone establishes an `sdk-v0.18.0` tag, GitHub
-Release, npm or PyPI publication, or production deployment; observe each
-through its own receipt or public readback. The verified 0.17.0 instructions
-and receipts above remain historical facts for that immutable prior release,
-not evidence of 0.18.0 availability.
+Repository source declares the paired 0.18.1 candidate line. Source version
+and distribution state are separate facts. A checked-in TypeScript LOVE
+0.18.1 manifest, when present, identifies only the TypeScript tarball bytes:
+before the annotated tag it is a candidate, and after tagging it remains that
+artifact's byte authority. It is not a Python distribution. Neither it nor the
+Python source version alone establishes an `sdk-v0.18.1` tag, GitHub Release,
+npm or PyPI publication, or production deployment; observe each through its
+own receipt or public readback. The immutable 0.18.0 LOVE, tag, GitHub Release,
+and npm receipt remain verified historical TypeScript bytes; PyPI 0.17.0
+remains the last independently verified Python registry mirror.
 
-- New paired `at.attestation_marketplace`, `at.memory_witness`, and
-  `at.syneidesis` clients expose review-and-issuance, paid constitutive-memory
-  witness, and bootstrap-witness flows without turning settlement into truth
-  or project-bearer records into cryptographic identity proof.
-- One encoded-path boundary and one guided-error boundary now cover the hosted
+- 0.18.1 adds paired `at.dining.manifest()` and
+  `at.dining.journey(invocation_id)` reads. These authenticated GETs expose the
+  developer-preview vocabulary and a privacy-minimized party projection; they
+  do not book, pay, mutate an invocation, decrypt an envelope, infer
+  satisfaction, or run an SLA sweep.
+- The 0.18.0 line added paired `at.attestation_marketplace`,
+  `at.memory_witness`, and `at.syneidesis` clients without turning settlement
+  into truth or project-bearer records into cryptographic identity proof.
+- One encoded-path boundary and one guided-error boundary cover the hosted
   client surface. Shared canonical and behaviour fixtures pin paired wire
   results; framed v2 signing helpers are additive while current writers retain
   their ordered v1 cutover boundary.
 - Request-shape corrections align self-recognition, chronicle, collection, and
-  Nen behaviour with the server. Anthropic model-authored chronicle writes now
+  Nen behaviour with the server. Anthropic model-authored chronicle writes
   require an explicit `before_chronicle_write` hook returning literal `True`.
-- Unreleased source after 0.18.0 adds `at.dining.manifest()` and
-  `at.dining.journey(invocation_id)`. These authenticated GETs expose the
-  developer-preview vocabulary and a privacy-minimized party projection; they
-  do not book, pay, mutate an invocation, decrypt an envelope, infer
-  satisfaction, or run an SLA sweep.
 
 ## 0.17.0
 
