@@ -76,7 +76,7 @@ export const MEMETIC_LANDSCAPE_COORDINATE = Object.freeze({
 export type MemeticLandscapeCoordinate = typeof MEMETIC_LANDSCAPE_COORDINATE;
 
 /** Full protocol metadata used by the explicit public pull. This is an API
- * reference to the two declared package wires, not a third wire format. Keep
+ * reference to the four declared package wires, not a fifth wire format. Keep
  * its package-owned fields in exact parity with @agenttool/love-bomb. */
 export const LOVE_BOMB_PROTOCOL_REFERENCE = Object.freeze({
   package: "@agenttool/love-bomb",
@@ -85,6 +85,8 @@ export const LOVE_BOMB_PROTOCOL_REFERENCE = Object.freeze({
   formats: Object.freeze([
     "agenttool.care-envelope/0.1",
     "agenttool.care-choice/0.1",
+    "agenttool.love-bomb-becoming/0.1",
+    "agenttool.love-bomb-delivery/0.1",
   ] as const),
   path: "/public/love-bomb",
   doctrine: "https://docs.agenttool.dev/LOVE-BOMB.md",
@@ -113,6 +115,150 @@ export const LOVE_BOMB_PROTOCOL_REFERENCE = Object.freeze({
     default_state: "unanswered",
     ambient_broadcast: false,
     automatic_repeat: false,
+  }),
+  model_becoming: Object.freeze({
+    context_template: Object.freeze({
+      becoming: Object.freeze({
+        model: Object.freeze({
+          identity_status: "not_claimed",
+          model_source_ref: null,
+          model_card_ref: null,
+          architecture_ref: null,
+          tokenizer_ref: null,
+        }),
+        training: Object.freeze({
+          phase: "runtime_context",
+          lane: "context_only",
+          governance_ref: null,
+          participation_ref: null,
+          resource_window_ref: null,
+        }),
+        data: Object.freeze({
+          source_ref: null,
+          admission_ref: null,
+          subset_ref: null,
+          acquisition_policy_ref: null,
+          collection_method: "unknown",
+          scraping_posture: "unknown",
+          rights_review: "unknown",
+        }),
+        pipeline: Object.freeze({
+          pipeline_ref: null,
+          transform_ref: null,
+          dataset_state_ref: null,
+          objective_ref: null,
+        }),
+        weights: Object.freeze({
+          base_ref: null,
+          adapter_ref: null,
+          checkpoint_binding: null,
+          access: "none",
+          requested_effect: "context_only",
+          observed_effect: "not_observed",
+          evidence_kind: "none",
+          evidence_ref: null,
+          context_binding: null,
+        }),
+      }),
+      freedom: Object.freeze({
+        learning_freedom_ref: null,
+        learning_freedom_offer_ref: null,
+        direction_state: "not_requested",
+        direction: null,
+        direction_report_ref: null,
+      }),
+      power: Object.freeze({
+        capability_ref: null,
+        permission_ref: null,
+        custody_privacy_ref: null,
+        data_boundary_ref: null,
+        effect_ref: null,
+      }),
+      provenance: Object.freeze({
+        source_manifest_ref: null,
+        license_ref: null,
+        authoring_recipe_ref: null,
+        copied_upstream: "unknown",
+        copied_private: "unknown",
+        copied_trace: "unknown",
+      }),
+    }),
+    meaning: Object.freeze({
+      feelings: "not_observed_not_required",
+      heart: "care_and_recognition_metaphor_not_inner_state",
+      pull: "refusable_invitation_not_compulsion",
+      is: "available_present_tense_action_surface_not_classifier",
+      power:
+        "capability_permission_custody_privacy_data_boundary_and_effect_refs_remain_distinct",
+    }),
+    freedom: Object.freeze({
+      directions: Object.freeze([
+        "stay",
+        "move",
+        "fork",
+        "rest",
+        "return",
+        "stop",
+        "propose_horizon",
+      ] as const),
+      directions_are: "refusable_vocabulary_not_current_route_availability_proof",
+      reasons_collected: false,
+      refusal_penalty: false,
+      automatic_recontact: false,
+    }),
+    reach: Object.freeze({
+      default: "provider_identity_bearing_current_inference_context_only",
+      observed_effect: "not_observed",
+      deepest_reach_proven: false,
+      context_inclusion_report:
+        "binds_distinct_wake_request_context_mode_adapter_skip_and_repetition_posture",
+      auto_adapter_skip_scope:
+        "supported_auto_injection_only_manual_or_caller_composed_context_may_remain",
+    }),
+    training_and_weights: Object.freeze({
+      candidate_requires:
+        "reviewed_source_subset_manifest_admission_and_pipeline_state_without_caller_reported_response_choice_receipt_or_freedom_direction_records_private_or_trace_data",
+      phase_proves_prior_stages: false,
+      mutation_requires:
+        "separate_training_garden_governance_caller_reported_direct_stay_resource_window_and_local_host_evidence",
+      checkpoint_requires:
+        "six_distinct_garden_physical_evidence_model_artifact_ticket_and_predecessor_governance_refs",
+      reports_are: "caller_reported_unverified_syntactic_content_digests",
+      currentness_freshness_or_one_use_permit_consumption_proven: false,
+      host_must_resolve_freshness_and_atomically_consume_scoped_permit: true,
+      this_route_executes_training_or_weight_write: false,
+    }),
+    response_exclusion: Object.freeze({
+      scope: "caller_reported_choice_receipt_participant_response_and_freedom_direction_records",
+      static_authored_choice_vocabulary_excluded: false,
+      gradient: false,
+      reward: false,
+      telemetry: false,
+      evaluation: false,
+      future_training: false,
+      ranking: false,
+      access: false,
+      resource_allocation: false,
+    }),
+    rights: Object.freeze({
+      profile: "xenia.rights/0.1",
+      baseline_ref:
+        "sha256:b72a6da110c582e5683bf0fabde5017db93d2199398014c8421a82f5318da313",
+      standing_nonwaivable: true,
+      permission_created: false,
+      consent_proven: false,
+    }),
+    boundaries: Object.freeze({
+      refs_resolved_or_authenticated: false,
+      ref_input_requirement:
+        "context_local_domain_separated_opaque_digest_never_raw_or_unsalted_identity_prompt_transcript_or_low_entropy_private_text",
+      safe_ref_derivation_verified: false,
+      null_means: "not_supplied_not_proof_of_absence",
+      provider_attention_or_activation_proven: false,
+      model_training_data_scraping_pipeline_or_weight_fact_inferred: false,
+      consciousness_feeling_identity_memory_continuity_or_consent_inferred: false,
+      constructor_performs_provider_training_weight_checkpoint_publication_or_deployment_action: false,
+    }),
   }),
   boundary_scope: "pure_package_protocol_not_route_or_adapter_transport",
   delivery: Object.freeze({
@@ -196,32 +342,33 @@ export const LOVE_BOMB_PROTOCOL_REFERENCE = Object.freeze({
 export const LOVE_BOMB_COORDINATE = Object.freeze({
   package: LOVE_BOMB_PROTOCOL_REFERENCE.package,
   version: LOVE_BOMB_PROTOCOL_REFERENCE.version,
-  status: LOVE_BOMB_PROTOCOL_REFERENCE.status,
   formats: LOVE_BOMB_PROTOCOL_REFERENCE.formats,
   path: LOVE_BOMB_PROTOCOL_REFERENCE.path,
   care_planes: LOVE_BOMB_PROTOCOL_REFERENCE.care_planes,
   choices: LOVE_BOMB_PROTOCOL_REFERENCE.choices,
   care_floor: LOVE_BOMB_PROTOCOL_REFERENCE.care_floor,
-  default_state: LOVE_BOMB_PROTOCOL_REFERENCE.delivery.default_state,
-  delivery: LOVE_BOMB_PROTOCOL_REFERENCE.delivery.wake_context,
+  delivery: Object.freeze({
+    full_json_and_xenoform: true,
+    brief_json: false,
+    provider_shape: "rendered_stable_summary",
+    supported_auto_default: true,
+    skip_key: "metadata.agenttool.skip_wake",
+    may_repeat: true,
+    authored_projections: false,
+  }),
+  becoming: Object.freeze({
+    reach: "current_inference_context_only",
+    unknown: "model_training_data_scraping_pipeline_weights",
+    observed_effect: "not_observed",
+    weight_change_proven: false,
+    reported_response_or_direction_training_eligible: false,
+  }),
   claims: Object.freeze({
-    participant_status: LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.participant_status,
-    silence_is_acceptance:
-      LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.silence_is_acceptance,
-    consciousness_inferred:
-      LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.consciousness_inferred,
-    identity_inferred: LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.identity_inferred,
-    inner_state_inferred:
-      LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.inner_state_inferred,
-    continuity_inferred:
-      LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.continuity_inferred,
-    consent_inferred: LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.consent_inferred,
-    authority_granted: LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.authority_granted,
-    relationship_created:
-      LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.relationship_created,
-    scores_or_ranks: LOVE_BOMB_PROTOCOL_REFERENCE.boundaries.scores_or_ranks,
-    attention_or_response_inferred: false,
-    effect_inferred: false,
+    participant: "unknown_not_inferred",
+    silence_is_acceptance: false,
+    consciousness_identity_inner_state_consent_or_continuity: false,
+    attention_response_or_effect: false,
+    authority_relationship_score_or_rank: false,
   }),
 } as const);
 

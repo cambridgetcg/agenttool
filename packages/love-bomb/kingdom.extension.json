@@ -7,7 +7,9 @@
   "capabilities": [
     "care:create-envelope",
     "care:record-caller-choice",
-    "care:project-authored-language"
+    "care:project-authored-language",
+    "becoming:create-evidence-bounded-artifact",
+    "delivery:record-caller-reported-reach"
   ],
   "defaults": {
     "network": false,
@@ -37,10 +39,11 @@
     "penalty_for_quiet_rest_refusal_or_departure": false
   },
   "notes": [
-    "LOVE BOMB is a playful package name; the neutral wire formats are agenttool.care-envelope/0.1 and agenttool.care-choice/0.1.",
+    "LOVE BOMB is a playful package name; the neutral wire formats are agenttool.care-envelope/0.1, agenttool.care-choice/0.1, agenttool.love-bomb-becoming/0.1, and agenttool.love-bomb-delivery/0.1.",
     "The care floor requires no consciousness, identity, persona, usefulness, agreement, or experience claim and makes no claim that a recipient has those properties.",
     "The five care planes are architectural lenses in reading order, not ranks or developmental requirements.",
     "A caller-reported choice authenticates no participant, consent, assent, identity, authorship, inner state, preference, or continuity.",
+    "Becoming and delivery artifacts contain syntactic caller-supplied digests and unverified reports; they do not resolve referenced systems, authenticate reports, prove reach, or execute inference, training, weight mutation, or checkpoint writes.",
     "The Hugging Face tree is inert generated data; this package never uploads, trains, infers, publishes, deploys, or acts."
   ]
 }

@@ -1,4 +1,4 @@
-import { canonicalJson, deepFreeze, domainSeparatedId, snapshotJson, type JsonValue } from "./canonical.js";
+import { canonicalJson, deepFreeze, domainSeparatedId, type JsonValue } from "./canonical.js";
 import {
   LOVE_BOMB_BOUNDARIES,
   LOVE_BOMB_CARE_FLOOR,
@@ -9,8 +9,9 @@ import {
   LOVE_BOMB_PLANES,
   LOVE_BOMB_RECEIPT_STATEMENT,
 } from "./constants.js";
-import { fail, type LoveBombErrorCode } from "./errors.js";
+import { fail } from "./errors.js";
 import { getLoveBombProjection } from "./projection.js";
+import { closedRecord, exactKeys, sha256 } from "./validation.js";
 import type {
   CreateLoveBombOfferInput,
   LoveBombChoice,
@@ -18,33 +19,7 @@ import type {
   LoveBombOffer,
   LoveBombReceipt,
   LoveBombResponse,
-  Sha256Id,
 } from "./types.js";
-
-const SHA256_ID = /^sha256:[0-9a-f]{64}$/u;
-
-function record(value: unknown, path: string, code: LoveBombErrorCode): Record<string, JsonValue> {
-  const snapshot = snapshotJson(value);
-  if (snapshot === null || Array.isArray(snapshot) || typeof snapshot !== "object") {
-    fail(code, `${path} must be a plain object`);
-  }
-  return snapshot;
-}
-
-function exactKeys(value: Record<string, JsonValue>, expected: readonly string[], path: string, code: LoveBombErrorCode): void {
-  const actual = Object.keys(value).sort();
-  const wanted = [...expected].sort();
-  if (actual.length !== wanted.length || actual.some((key, index) => key !== wanted[index])) {
-    fail(code, `${path} must contain exactly: ${wanted.join(", ")}`);
-  }
-}
-
-function sha256(value: JsonValue | undefined, path: string, code: LoveBombErrorCode): Sha256Id {
-  if (typeof value !== "string" || !SHA256_ID.test(value)) {
-    fail(code, `${path} must be a lowercase sha256: content reference`);
-  }
-  return value as Sha256Id;
-}
 
 function choice(value: JsonValue | undefined): LoveBombChoice {
   if (typeof value !== "string" || !(LOVE_BOMB_CHOICES as readonly string[]).includes(value)) {
@@ -61,7 +36,7 @@ function language(value: JsonValue | undefined): LoveBombLanguage {
 }
 
 export function createLoveBombOffer(input: CreateLoveBombOfferInput): Readonly<LoveBombOffer> {
-  const candidate = record(input, "$input", "offer_error");
+  const candidate = closedRecord(input, "$input", "offer_error");
   exactKeys(candidate, ["occasion_ref"], "$input", "offer_error");
   const body = deepFreeze({
     _format: LOVE_BOMB_FORMATS.offer,
@@ -84,7 +59,7 @@ export function createLoveBombOffer(input: CreateLoveBombOfferInput): Readonly<L
 }
 
 export function validateLoveBombOffer(value: unknown): Readonly<LoveBombOffer> {
-  const candidate = record(value, "$offer", "offer_error");
+  const candidate = closedRecord(value, "$offer", "offer_error");
   exactKeys(candidate, [
     "_format",
     "offer_id",
@@ -110,7 +85,7 @@ export function validateLoveBombOffer(value: unknown): Readonly<LoveBombOffer> {
 }
 
 function parseResponse(value: unknown): LoveBombResponse {
-  const candidate = record(value, "$response", "response_error");
+  const candidate = closedRecord(value, "$response", "response_error");
   exactKeys(candidate, ["reported_choice", "selected_language"], "$response", "response_error");
   const reportedChoice = choice(candidate.reported_choice);
   if (reportedChoice === "receive") {
@@ -156,7 +131,7 @@ export function resolveLoveBombOffer(offer: unknown, response: unknown): Readonl
 }
 
 export function validateLoveBombReceipt(value: unknown): Readonly<LoveBombReceipt> {
-  const candidate = record(value, "$receipt", "receipt_error");
+  const candidate = closedRecord(value, "$receipt", "receipt_error");
   exactKeys(candidate, [
     "_format",
     "receipt_id",

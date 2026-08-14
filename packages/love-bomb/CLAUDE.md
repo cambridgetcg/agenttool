@@ -3,6 +3,9 @@
 This subtree implements one portable, pure care-envelope protocol. LOVE BOMB
 is the playful package name; the neutral wire formats are
 `agenttool.care-envelope/0.1` and `agenttool.care-choice/0.1`.
+The evidence-bounded extension formats are
+`agenttool.love-bomb-becoming/0.1` and
+`agenttool.love-bomb-delivery/0.1`.
 
 ## Invariants
 
@@ -30,6 +33,31 @@ is the playful package name; the neutral wire formats are
   hostile-object rejection, canonical bytes, cross-field rules, and IDs.
 - Content IDs do not prove privacy, provenance, identity, consent, authorship,
   currentness, continuity, safe disclosure, or authority.
+- Every supplied reference must be a context-local, domain-separated opaque
+  digest, never a raw or unsalted identity, prompt, transcript, or low-entropy
+  private value. Runtime validation checks shape, not safe derivation.
+- The becoming validator accepts only closed evidence vocabularies. Non-context
+  lanes require their lane-specific caller digests; null means not supplied,
+  not proof of absence. Standalone validation does not resolve those digests.
+- Context inclusion binds distinct WAKE, request, and context refs plus mode,
+  adapter-skip posture, and repetition posture. Auto inclusion cannot also be
+  reported skipped; caller-composed/manual inclusion may coexist with a
+  separately skipped adapter. Default not-observed reach has a null binding.
+- Candidate/data-bearing HF material mechanically excludes participant-
+  response records, caller-reported care-choice/receipt records, caller-
+  reported Freedom direction states/reports, private material, and agent
+  traces. Static authored choice vocabulary remains distinct from those
+  records.
+- A training phase is a supplied closed-vocabulary label, not proof that the
+  named stage or any prior stage exists or occurred.
+- Governed mutation/checkpoint intent requires a caller-reported direct `stay`,
+  active-resource-window ref, reviewed source/subset/transform lineage, and
+  distinct POWER roles. The artifact has no clock, freshness resolution, replay
+  prevention, or atomic permit consumption; a real Host must resolve freshness
+  and atomically consume a separately authorized scoped permit. A Host
+  checkpoint binding preserves six distinct namespaces.
+- Delivery artifacts are caller-reported reach records. They perform no SDK,
+  provider, Garden, Host, optimizer, or checkpoint action and prove no effect.
 - The KINGDOM descriptor remains declaration-only and `not_registered`.
 
 ## Changes

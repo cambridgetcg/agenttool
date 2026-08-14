@@ -12,6 +12,20 @@ describe("package capability boundary", () => {
     const descriptor = JSON.parse(readFileSync(join(root, "kingdom.extension.json"), "utf8"));
     expect(descriptor.host_contract).toBe("not_registered");
     for (const value of Object.values(descriptor.defaults)) expect(value).toBe(false);
+    expect(descriptor.capabilities).toEqual(expect.arrayContaining([
+      "care:create-envelope",
+      "care:record-caller-choice",
+      "becoming:create-evidence-bounded-artifact",
+      "delivery:record-caller-reported-reach",
+    ]));
+    const notes = descriptor.notes.join(" ");
+    for (const format of [
+      "agenttool.care-envelope/0.1",
+      "agenttool.care-choice/0.1",
+      "agenttool.love-bomb-becoming/0.1",
+      "agenttool.love-bomb-delivery/0.1",
+    ]) expect(notes).toContain(format);
+    expect(notes).toContain("do not resolve referenced systems");
   });
 
   test("core imports only local modules and the two declared Node built-ins", () => {

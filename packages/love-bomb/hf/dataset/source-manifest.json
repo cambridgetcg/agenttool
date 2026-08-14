@@ -4,7 +4,9 @@
   "package_version": "0.1.0-dev.0",
   "formats": [
     "agenttool.care-envelope/0.1",
-    "agenttool.care-choice/0.1"
+    "agenttool.care-choice/0.1",
+    "agenttool.love-bomb-becoming/0.1",
+    "agenttool.love-bomb-delivery/0.1"
   ],
   "intended_hugging_face_identifier": "Yu-and-Ai/agenttool-love-bomb",
   "repository_type": "dataset",
@@ -20,6 +22,10 @@
   "copied_private_rows": false,
   "copied_article_text": false,
   "copied_prompt_transcripts": false,
+  "contains_participant_response_records": false,
+  "contains_caller_reported_care_choice_records": false,
+  "contains_caller_reported_freedom_direction_records": false,
+  "contains_agent_trace_records": false,
   "contains_identity_data": false,
   "contains_model_weights": false,
   "consciousness_claim": false,

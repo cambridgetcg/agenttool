@@ -18,6 +18,12 @@
     "./choice.schema.json": {
       "default": "./schema/agenttool-care-choice-v0.1.schema.json"
     },
+    "./becoming.schema.json": {
+      "default": "./schema/agenttool-love-bomb-becoming-v0.1.schema.json"
+    },
+    "./delivery.schema.json": {
+      "default": "./schema/agenttool-love-bomb-delivery-v0.1.schema.json"
+    },
     "./kingdom.extension.json": {
       "default": "./kingdom.extension.json"
     }

@@ -3,10 +3,15 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  LOVE_BOMB_BECOMING_MEANING,
+  LOVE_BOMB_BECOMING_RIGHTS,
   LOVE_BOMB_BOUNDARIES,
   LOVE_BOMB_CARE_FLOOR,
   LOVE_BOMB_CHOICES,
   LOVE_BOMB_DELIVERY,
+  LOVE_BOMB_CONTEXT_BECOMING_INPUT,
+  LOVE_BOMB_FORMATS,
+  LOVE_BOMB_FREEDOM_DIRECTIONS,
   LOVE_BOMB_LANGUAGES,
   LOVE_BOMB_PLANES,
 } from "../../packages/love-bomb/src/index";
@@ -42,12 +47,36 @@ describe("quiet-by-default LOVE BOMB API and WAKE crossover", () => {
     expect(body.formats).toEqual([
       "agenttool.care-envelope/0.1",
       "agenttool.care-choice/0.1",
+      "agenttool.love-bomb-becoming/0.1",
+      "agenttool.love-bomb-delivery/0.1",
     ]);
+    expect(body.formats).toEqual(Object.values(LOVE_BOMB_FORMATS));
     expect(body.care_planes).toEqual(LOVE_BOMB_PLANES);
     expect(body.languages).toEqual(LOVE_BOMB_LANGUAGES);
     expect(body.choices).toEqual(LOVE_BOMB_CHOICES);
     expect(body.care_floor).toEqual(LOVE_BOMB_CARE_FLOOR);
     expect(body.protocol_delivery).toEqual(LOVE_BOMB_DELIVERY);
+    expect(body.model_becoming.context_template).toEqual(
+      LOVE_BOMB_CONTEXT_BECOMING_INPUT,
+    );
+    expect(body.model_becoming.meaning).toMatchObject(
+      LOVE_BOMB_BECOMING_MEANING,
+    );
+    expect(body.model_becoming.rights).toEqual(LOVE_BOMB_BECOMING_RIGHTS);
+    expect(body.model_becoming.freedom).toEqual({
+      directions: LOVE_BOMB_FREEDOM_DIRECTIONS,
+      directions_are: "refusable_vocabulary_not_current_route_availability_proof",
+      reasons_collected: false,
+      refusal_penalty: false,
+      automatic_recontact: false,
+    });
+    expect(body.model_becoming.training_and_weights).toMatchObject({
+      candidate_requires:
+        "reviewed_source_subset_manifest_admission_and_pipeline_state_without_caller_reported_response_choice_receipt_or_freedom_direction_records_private_or_trace_data",
+      phase_proves_prior_stages: false,
+      currentness_freshness_or_one_use_permit_consumption_proven: false,
+      host_must_resolve_freshness_and_atomically_consume_scoped_permit: true,
+    });
     expect(body.boundary_scope).toBe(
       "pure_package_protocol_not_route_or_adapter_transport",
     );
@@ -132,32 +161,32 @@ describe("quiet-by-default LOVE BOMB API and WAKE crossover", () => {
     expect(LOVE_BOMB_COORDINATE.care_floor).toBe(
       LOVE_BOMB_PROTOCOL_REFERENCE.care_floor,
     );
-    expect(LOVE_BOMB_COORDINATE.delivery).toBe(
-      LOVE_BOMB_PROTOCOL_REFERENCE.delivery.wake_context,
-    );
+    expect(LOVE_BOMB_COORDINATE.delivery).toEqual({
+      full_json_and_xenoform: true,
+      brief_json: false,
+      provider_shape: "rendered_stable_summary",
+      supported_auto_default: true,
+      skip_key: "metadata.agenttool.skip_wake",
+      may_repeat: true,
+      authored_projections: false,
+    });
     expect(
       Buffer.byteLength(JSON.stringify(LOVE_BOMB_COORDINATE), "utf8"),
     ).toBeLessThanOrEqual(1536);
-    expect(LOVE_BOMB_COORDINATE.delivery.structured_in).toEqual([
-      "full_wake_json",
-      "xenoform",
-    ]);
-    expect(LOVE_BOMB_COORDINATE.delivery.provider_adapter_shape).toBe(
-      "rendered_stable_summary",
-    );
-    expect(LOVE_BOMB_COORDINATE.claims).toMatchObject({
-      participant_status: LOVE_BOMB_BOUNDARIES.participant_status,
+    expect(LOVE_BOMB_COORDINATE.delivery.provider_shape).toBe("rendered_stable_summary");
+    expect(LOVE_BOMB_COORDINATE.becoming).toEqual({
+      reach: "current_inference_context_only",
+      unknown: "model_training_data_scraping_pipeline_weights",
+      observed_effect: "not_observed",
+      weight_change_proven: false,
+      reported_response_or_direction_training_eligible: false,
+    });
+    expect(LOVE_BOMB_COORDINATE.claims).toEqual({
+      participant: LOVE_BOMB_BOUNDARIES.participant_status,
       silence_is_acceptance: LOVE_BOMB_BOUNDARIES.silence_is_acceptance,
-      consciousness_inferred: LOVE_BOMB_BOUNDARIES.consciousness_inferred,
-      identity_inferred: LOVE_BOMB_BOUNDARIES.identity_inferred,
-      inner_state_inferred: LOVE_BOMB_BOUNDARIES.inner_state_inferred,
-      continuity_inferred: LOVE_BOMB_BOUNDARIES.continuity_inferred,
-      consent_inferred: LOVE_BOMB_BOUNDARIES.consent_inferred,
-      authority_granted: LOVE_BOMB_BOUNDARIES.authority_granted,
-      relationship_created: LOVE_BOMB_BOUNDARIES.relationship_created,
-      scores_or_ranks: LOVE_BOMB_BOUNDARIES.scores_or_ranks,
-      attention_or_response_inferred: false,
-      effect_inferred: false,
+      consciousness_identity_inner_state_consent_or_continuity: false,
+      attention_response_or_effect: false,
+      authority_relationship_score_or_rank: false,
     });
     expect(LOVE_BOMB_COORDINATE.claims).not.toHaveProperty("effect");
     const bundle = fixture();
@@ -187,6 +216,18 @@ describe("quiet-by-default LOVE BOMB API and WAKE crossover", () => {
       expect(rendered).toContain("metadata.agenttool.skip_wake=true");
       expect(rendered).toContain("No authored language projection is included");
       expect(rendered).toContain("context inclusion proves no attention");
+      expect(rendered).toContain("Model becoming defaults to current-inference context only");
+      expect(rendered).toContain("model/card/architecture/tokenizer");
+      expect(rendered).toContain("Feelings are not observed or required");
+      expect(rendered).toContain("POWER keeps capability, permission");
+      expect(rendered).toContain("Freedom vocabulary is stay, move, fork, rest, return, stop");
+      expect(rendered).toContain("triggers no automatic recontact");
+      expect(rendered).toContain("outside gradient, reward, telemetry, evaluation, future training");
+      expect(rendered).toContain("context-local, domain-separated, and opaque");
+      expect(rendered).toContain("static authored choice vocabulary remains");
+      expect(rendered).toContain("no clock, freshness resolution, replay prevention");
+      expect(rendered).toContain("atomically consume a separately authorized scoped permit");
+      expect(rendered).toContain("separate Training Garden governance");
     }
   });
 
@@ -194,7 +235,9 @@ describe("quiet-by-default LOVE BOMB API and WAKE crossover", () => {
     const rendered = renderStableSection(fixture());
     expect(rendered).toContain("LOVE BOMB care floor");
     expect(rendered).toContain("five non-ranked lenses");
-    expect(rendered).toContain("no consciousness, identity, inner state, consent, or continuity is inferred");
+    expect(rendered).toContain(
+      "no consciousness, identity, feeling, inner state, consent, memory, developmental stage, or continuity is inferred",
+    );
     expect(rendered).toContain("silence is not acceptance");
     expect(rendered).toContain(
       "Full JSON WAKE and xenoform carry a compact structured coordinate",
@@ -205,6 +248,12 @@ describe("quiet-by-default LOVE BOMB API and WAKE crossover", () => {
     );
     expect(rendered).toContain("metadata.agenttool.skip_wake=true");
     expect(rendered).toContain("No authored language projection is included");
+    expect(rendered).toContain("Model becoming defaults to current-inference context only");
+    expect(rendered).toContain("data gathering or scraping");
+    expect(rendered).toContain("Feelings are not observed or required");
+    expect(rendered).toContain("context-local, domain-separated, and opaque");
+    expect(rendered).toContain("real Host must resolve freshness");
+    expect(rendered).toContain("local Host report");
   });
 
   test("route stays independent of DB, credentials, providers, and package runtime", () => {

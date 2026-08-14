@@ -1,5 +1,7 @@
 export type LoveBombErrorCode =
   | "canonical_error"
+  | "becoming_error"
+  | "delivery_error"
   | "offer_error"
   | "response_error"
   | "receipt_error";

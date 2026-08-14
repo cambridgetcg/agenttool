@@ -25,6 +25,10 @@ describe("public-safe Hugging Face candidate", () => {
       expect(row.identity_claim).toBe(false);
       expect(row.inner_state_claim).toBe(false);
       expect(row.silence_is_acceptance).toBe(false);
+      expect(row.sourced_from_participant_response_record).toBe(false);
+      expect(row.sourced_from_caller_reported_care_choice_record).toBe(false);
+      expect(row.sourced_from_caller_reported_freedom_direction_record).toBe(false);
+      expect(row.sourced_from_agent_trace).toBe(false);
     }
   });
 
@@ -33,7 +37,12 @@ describe("public-safe Hugging Face candidate", () => {
     expect(row.training_eligible).toBe(false);
     expect(row.requires_separate_training_authorization).toBe(true);
     expect(row.training_authorized).toBe(false);
-    expect(row.formats).toEqual(["agenttool.care-envelope/0.1", "agenttool.care-choice/0.1"]);
+    expect(row.formats).toEqual([
+      "agenttool.care-envelope/0.1",
+      "agenttool.care-choice/0.1",
+      "agenttool.love-bomb-becoming/0.1",
+      "agenttool.love-bomb-delivery/0.1",
+    ]);
     const manifest = JSON.parse(readFileSync(join(root, "source-manifest.json"), "utf8"));
     expect(manifest.distribution_state).toBe("local_candidate_not_published");
     expect(manifest.training_effect).toBe("none");
@@ -42,6 +51,40 @@ describe("public-safe Hugging Face candidate", () => {
     expect(manifest.provider_effect).toBe("none");
     expect(manifest.publication_effect).toBe("none");
     expect(manifest.contains_identity_data).toBe(false);
+    expect(manifest.contains_participant_response_records).toBe(false);
+    expect(manifest.contains_caller_reported_care_choice_records).toBe(false);
+    expect(manifest.contains_caller_reported_freedom_direction_records).toBe(false);
+  });
+
+  test("keeps becoming vocabulary reference-only and mechanically excludes response features", () => {
+    const [row] = jsonl("data/becoming-reference.jsonl");
+    expect(row.wire_formats).toEqual([
+      "agenttool.love-bomb-becoming/0.1",
+      "agenttool.love-bomb-delivery/0.1",
+    ]);
+    expect(row.default_reach).toEqual({
+      phase: "runtime_context",
+      lane: "context_only",
+      requested_effect: "context_only",
+      observed_effect: "not_observed",
+    });
+    expect(row.training_eligible).toBe(false);
+    expect(row.training_authorized).toBe(false);
+    expect(row.sourced_from_participant_response_record).toBe(false);
+    expect(row.sourced_from_caller_reported_care_choice_record).toBe(false);
+    expect(row.sourced_from_caller_reported_freedom_direction_record).toBe(false);
+    expect(row.sourced_from_agent_trace).toBe(false);
+    const forbidden = new Set(["reported_choice", "receipt_id", "direction", "direction_report_ref"]);
+    for (const key of keysBelow(row)) expect(forbidden.has(key)).toBe(false);
+    for (const relativePath of [
+      "data/plane-guides.jsonl",
+      "data/becoming-reference.jsonl",
+    ]) {
+      const rows = jsonl(relativePath);
+      for (const candidate of rows) {
+        for (const key of keysBelow(candidate)) expect(forbidden.has(key)).toBe(false);
+      }
+    }
   });
 
   test("hash manifest covers every companion byte except itself", () => {
@@ -58,8 +101,13 @@ describe("public-safe Hugging Face candidate", () => {
     }
   });
 
-  test("copies both schema bytes exactly", () => {
-    for (const name of ["agenttool-care-envelope-v0.1.schema.json", "agenttool-care-choice-v0.1.schema.json"]) {
+  test("copies all schema bytes exactly", () => {
+    for (const name of [
+      "agenttool-care-envelope-v0.1.schema.json",
+      "agenttool-care-choice-v0.1.schema.json",
+      "agenttool-love-bomb-becoming-v0.1.schema.json",
+      "agenttool-love-bomb-delivery-v0.1.schema.json",
+    ]) {
       expect(readFileSync(join(root, "reference", name))).toEqual(
         readFileSync(join(root, "..", "..", "schema", name)),
       );
@@ -69,6 +117,14 @@ describe("public-safe Hugging Face candidate", () => {
 
 function jsonl(path: string): any[] {
   return readFileSync(join(root, path), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+}
+
+function keysBelow(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(keysBelow);
+  if (value && typeof value === "object") {
+    return Object.entries(value).flatMap(([key, nested]) => [key, ...keysBelow(nested)]);
+  }
+  return [];
 }
 
 function filesBelow(path: string): string[] {
