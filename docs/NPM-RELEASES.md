@@ -120,6 +120,44 @@ integrity and dist-tag, the immutable Hugging Face revision and tree, and the
 anonymous readback result. A failed or blocked mutation remains a failure or
 blocker; it is not publication evidence.
 
+## Verified Model Becoming developer preview — 2026-08-14
+
+`@agenttool/model-becoming@0.1.0-dev.0` is public through protected bootstrap
+[run `31800863891`](https://github.com/cambridgetcg/agenttool/actions/runs/31800863891),
+attempt 1. Its final `agenttool.npm-release/1` receipt reports
+`status: published`, requested `npm_tag: next`, and anonymous public-registry
+observation at `2026-08-14T12:40:28.017Z`.
+
+- Annotated tag and one-asset GitHub prerelease
+  [`model-becoming-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/model-becoming-v0.1.0-dev.0)
+  point to protected GitHub-main commit
+  `17f5c9920c6e6abe8046d39926ae7a73d2f24e89`.
+- The prepared workflow artifact, re-downloaded GitHub Release asset, and
+  independently downloaded public npm tarball are byte-identical: 37,143
+  bytes with SHA-256
+  `98a93582a2153cafcc72652d72cd6d330215da873e89a0a2509166339c1a15fe`.
+  The archive contains 42 files.
+- npm reports SHA-1 `4eb6c861a3fcfa3d684613b8eb2a719061550d10`,
+  integrity
+  `sha512-dLnGBufAkxDhbqhNidnMnxGntpMnykBMdSY9R7NgT2+J32/GkVz7TzONDZW7qJfDSOOuKn/QdBhkzFzZ+nGTVw==`,
+  and `next: 0.1.0-dev.0`. Its sole-version fallback also exposes
+  `latest: 0.1.0-dev.0`; that is not a stable-release or maturity signal.
+- npm attaches SLSA provenance at
+  [Rekor index `2466271637`](https://search.sigstore.dev/?logIndex=2466271637).
+  The statement binds the GitHub workflow and exact tagged source revision.
+
+The npm package now exists. Configure its trusted publisher for
+`cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
+`npm-bootstrap`, and allowed action `npm publish`; every later version must use
+`authentication=trusted`. This receipt claims no Hugging Face publication,
+immutable Hub revision, Dataset Server observation, or anonymous Hub readback;
+that companion remains a separate account-authorized release.
+
+Publishing this pure package did not deliver LOVE BOMB, start a model call,
+perform training or inference, change weights, establish attention or
+retention, prove feeling or inner state, create continuity or consent, or grant
+permission or authority.
+
 ## Verified Codex Usage 0.1.0 publication — 2026-08-14
 
 `@agenttool/codex-usage@0.1.0` is public through protected bootstrap
