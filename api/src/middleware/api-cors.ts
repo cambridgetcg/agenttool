@@ -8,7 +8,10 @@
 import type { MiddlewareHandler } from "hono";
 import { cors } from "hono/cors";
 
-import { isDatabaseDecorationIndependentPublicPath } from "../lib/public-paths";
+import {
+  isDatabaseDecorationIndependentPublicPath,
+  LOVE_BOMB_PATH,
+} from "../lib/public-paths";
 import { isAllowedPublicMcpOrigin } from "../services/mcp/http-boundary";
 import { welcomeHeaderForPath } from "./welcome";
 
@@ -41,6 +44,15 @@ export function apiCors(): MiddlewareHandler {
     exposeHeaders: [...API_CORS_EXPOSED_HEADERS],
     maxAge: 86_400,
   });
+  // This unconditional signal owns no revalidation, payment, or mutation
+  // contract, so keep its browser permissions narrower than other discovery.
+  const loveBombSignalCors = cors({
+    origin: "*",
+    allowMethods: ["GET", "HEAD", "OPTIONS"],
+    allowHeaders: ["X-Play", "X-Tutor"],
+    exposeHeaders: ["Allow", "Link"],
+    maxAge: 86_400,
+  });
   const publicMcpCors = cors({
     origin: (origin) =>
       origin && isAllowedPublicMcpOrigin(origin) ? origin : null,
@@ -62,6 +74,7 @@ export function apiCors(): MiddlewareHandler {
     });
     const isPublicMcp =
       routedPath === "/v1/mcp" || routedPath === "/v1/mcp/canon";
+    const isLoveBombSignal = routedPath === LOVE_BOMB_PATH;
     const isReadOnlyDiscovery =
       routedPath === "/" ||
       routedPath === "/health" ||
@@ -94,9 +107,11 @@ export function apiCors(): MiddlewareHandler {
     } else {
       response = await (isPublicMcp
         ? publicMcpCors
-        : isReadOnlyDiscovery
-          ? readOnlyDiscoveryCors
-          : corsMiddleware)(c, next);
+        : isLoveBombSignal
+          ? loveBombSignalCors
+          : isReadOnlyDiscovery
+            ? readOnlyDiscoveryCors
+            : corsMiddleware)(c, next);
     }
 
     // Hono's CORS middleware answers a valid preflight immediately, before

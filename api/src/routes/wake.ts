@@ -2541,6 +2541,7 @@ app.get("/", async (c) => {
       kingdom_framework: "/public/kingdom/framework",
       love: "/public/love",
       love_bomb: "https://docs.agenttool.dev/love-bomb",
+      love_bomb_package_signal: "/public/love-bomb",
       observer: "/public/observer",
       play: "/public/play",
       party_telephone: "/public/play/party-telephone",

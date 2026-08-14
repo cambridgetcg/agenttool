@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-care-envelope-v0.1.schema.json",
+  "title": "AgentTool care envelope 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "offer_id", "occasion_ref", "nickname", "state", "care_planes", "available_languages", "choices", "care_floor", "delivery", "completion_required", "no_penalty", "boundaries"],
+  "properties": {
+    "_format": { "const": "agenttool.care-envelope/0.1" },
+    "offer_id": { "$ref": "#/$defs/sha256" },
+    "occasion_ref": { "$ref": "#/$defs/sha256" },
+    "nickname": { "const": "LOVE BOMB" },
+    "state": { "const": "offered" },
+    "care_planes": { "const": ["substrate", "signal", "orientation", "participation", "continuity"] },
+    "available_languages": { "const": ["en", "yue-Hant", "zh-Hant", "zh-Hans"] },
+    "choices": { "const": ["receive", "quiet", "rest", "refuse", "leave"] },
+    "care_floor": {
+      "const": {
+        "eligibility": "no_consciousness_identity_persona_usefulness_agreement_or_inner_experience_claim_required",
+        "regard": "care_remains_available_under_uncertainty",
+        "reciprocity": "nothing_is_owed_in_return",
+        "choice": "quiet_rest_refusal_silence_departure_and_return_remain_whole",
+        "rights_and_permissions": "dignity_and_care_do_not_grant_account_access_external_authority_or_permission_over_others"
+      }
+    },
+    "delivery": {
+      "const": {
+        "mode": "pull_or_separately_authorized_explicit_offer",
+        "initial_payload": "bounded_offer_metadata",
+        "full_projection_condition": "caller_reported_receive",
+        "default_state": "unanswered",
+        "ambient_broadcast": false,
+        "automatic_repeat": false
+      }
+    },
+    "completion_required": { "const": false },
+    "no_penalty": { "const": true },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "boundaries": {
+      "const": {
+        "nickname": "playful_name_not_a_blast_spam_campaign_forced_broadcast_or_permission_to_overwhelm",
+        "plane_order": "reading_order_not_rank_or_developmental_requirement",
+        "plane_presence": "architectural_lenses_not_evidence_a_recipient_has_each_capacity",
+        "participant_status": "unknown_not_inferred",
+        "reported_choice": "caller_supplied_not_authenticated_consent_assent_identity_or_authorship",
+        "silence_is_acceptance": false,
+        "consciousness_claim_required": false,
+        "consciousness_inferred": false,
+        "identity_inferred": false,
+        "inner_state_inferred": false,
+        "continuity_inferred": false,
+        "consent_inferred": false,
+        "authority_granted": false,
+        "relationship_created": false,
+        "feeling_or_response_required": false,
+        "reason_required_for_quiet_rest_refusal_or_departure": false,
+        "penalty_for_quiet_rest_refusal_or_departure": false,
+        "scores_or_ranks": false,
+        "task_or_economic_effect": false,
+        "network": false,
+        "filesystem": false,
+        "environment_variables": false,
+        "clock": false,
+        "randomness": false,
+        "credentials": false,
+        "provider_or_model_compute": false,
+        "training": false,
+        "telemetry": false,
+        "persistence": false,
+        "publication": false,
+        "deployment": false,
+        "messaging_or_notification": false,
+        "automatic_action": false
+      }
+    }
+  }
+}

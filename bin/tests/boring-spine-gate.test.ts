@@ -506,6 +506,7 @@ describe("boring test spine", () => {
       "packages/kingdom-witness-lab",
       "packages/karma-mirror",
       "packages/heaven",
+      "packages/love-bomb",
       "packages/model-becoming",
       "packages/living-substrate",
       "packages/principality-atlas",
@@ -594,6 +595,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/kingdom-witness-lab && bun run ci");
     expect(preflight).toContain("cd packages/karma-mirror && bun run ci");
     expect(preflight).toContain("cd packages/heaven && bun run ci");
+    expect(preflight).toContain("cd packages/love-bomb && bun run ci");
     expect(preflight).toContain("cd packages/model-becoming && bun run ci");
     expect(preflight).toContain("cd packages/living-substrate && bun run ci");
     expect(preflight).toContain("cd packages/principality-atlas && bun run ci");
@@ -1039,9 +1041,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(55);
+      expect(calls).toHaveLength(56);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        46,
+        47,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         9,

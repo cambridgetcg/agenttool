@@ -156,6 +156,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "principality-geometry",
     artifactKind: "love",
   },
+  "love-bomb": {
+    key: "love-bomb",
+    name: "@agenttool/love-bomb",
+    packagePath: "packages/love-bomb",
+    tagPrefix: "love-bomb",
+    artifactKind: "pack",
+  },
   "love-geometry": {
     key: "love-geometry",
     name: "@agenttool/love-geometry",
@@ -880,6 +887,37 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/kingdom.extension.json",
       "package/schema/agenttool-love-geometry-v0.1.schema.json",
       "package/vectors/agenttool-love-geometry-v0.1.json",
+    );
+  }
+  if (spec.name === "@agenttool/love-bomb") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-care-choice-v0.1.schema.json",
+      "package/schema/agenttool-care-envelope-v0.1.schema.json",
+      "package/schema/agenttool-love-bomb-becoming-v0.1.schema.json",
+      "package/schema/agenttool-love-bomb-delivery-v0.1.schema.json",
+      "package/schema/agenttool-love-bomb-hf-becoming-reference-row-v0.1.schema.json",
+      "package/schema/agenttool-love-bomb-hf-plane-row-v0.1.schema.json",
+      "package/schema/agenttool-love-bomb-hf-protocol-row-v0.1.schema.json",
+      "package/hf/dataset/LICENSE",
+      "package/hf/dataset/NOTICE",
+      "package/hf/dataset/README.md",
+      "package/hf/dataset/data/becoming-reference.jsonl",
+      "package/hf/dataset/data/plane-guides.jsonl",
+      "package/hf/dataset/data/protocol-reference.jsonl",
+      "package/hf/dataset/reference/agenttool-care-choice-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-care-envelope-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-love-bomb-becoming-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-love-bomb-delivery-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-love-bomb-hf-becoming-reference-row-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-love-bomb-hf-plane-row-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-love-bomb-hf-protocol-row-v0.1.schema.json",
+      "package/hf/dataset/row-manifest.json",
+      "package/hf/dataset/source-manifest.json",
+      "package/hf/dataset/hash-manifest.json",
     );
   }
   if (spec.name === "@agenttool/relational-geometry") {

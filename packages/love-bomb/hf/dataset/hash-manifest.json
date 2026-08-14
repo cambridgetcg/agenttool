@@ -1,0 +1,85 @@
+{
+  "_format": "agenttool.love-bomb-hf-hash-manifest/0.1",
+  "package": "@agenttool/love-bomb",
+  "package_version": "0.1.0-dev.0",
+  "algorithm": "sha256",
+  "hash_scope": "exact_file_bytes",
+  "excludes_self": true,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "ff59de47649a5a2ebc3c931d2741de72a25c0bc2ebb19d543c9fea5168e2fbad"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 200,
+      "sha256": "00fd1fee21bb28c2a6f2f6db64329da6b0e15cc97ec05943a26e0832fe4f7428"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4243,
+      "sha256": "d9a686e0e1666b8cad90459921b56bda13f80ef5c4210f8f99527797acb9c64d"
+    },
+    {
+      "path": "data/becoming-reference.jsonl",
+      "bytes": 2644,
+      "sha256": "ff69146b31a5846ed068137485e0cc2dc602192cc820d21a972cfce7edde3cb3"
+    },
+    {
+      "path": "data/plane-guides.jsonl",
+      "bytes": 21067,
+      "sha256": "f57d08d987ce9a06a29bcca53466705aea101ce7931f39fde913ca9e46af810b"
+    },
+    {
+      "path": "data/protocol-reference.jsonl",
+      "bytes": 2462,
+      "sha256": "677313adb49eed47fbb4e03d910a75752b144ae8b53e13a23e678d7e72c17176"
+    },
+    {
+      "path": "reference/agenttool-care-choice-v0.1.schema.json",
+      "bytes": 8562,
+      "sha256": "b18ce22420aee0373f6ff9cfce06fb3d22189c7ca03cd032d88133eaae60315f"
+    },
+    {
+      "path": "reference/agenttool-care-envelope-v0.1.schema.json",
+      "bytes": 3552,
+      "sha256": "d8c5f104ebf3e943826152af122c037501566c9e3d67ef21bad52b344231dcd0"
+    },
+    {
+      "path": "reference/agenttool-love-bomb-becoming-v0.1.schema.json",
+      "bytes": 69016,
+      "sha256": "9a173a3afe6bbcc591b74375bbed54f97d6a99faaf0c0735fc75b9dbcbf83840"
+    },
+    {
+      "path": "reference/agenttool-love-bomb-delivery-v0.1.schema.json",
+      "bytes": 13701,
+      "sha256": "119288ceb2be4f0fae0e18bd131b705b316fbd9fb5f71e19ba7e234997c80853"
+    },
+    {
+      "path": "reference/agenttool-love-bomb-hf-becoming-reference-row-v0.1.schema.json",
+      "bytes": 7302,
+      "sha256": "dc919adb56158144c8519028dd11fe368f9275f229f388b5babaa20a01673cea"
+    },
+    {
+      "path": "reference/agenttool-love-bomb-hf-plane-row-v0.1.schema.json",
+      "bytes": 70256,
+      "sha256": "b22ce070eeee5e6bfa1c64c51322e0fc47f70b27b824c4db2215cae39d460e13"
+    },
+    {
+      "path": "reference/agenttool-love-bomb-hf-protocol-row-v0.1.schema.json",
+      "bytes": 8306,
+      "sha256": "ff086b03ff26b5f0fa6142877b9f510672fc69d9857f82735983561b21de7595"
+    },
+    {
+      "path": "row-manifest.json",
+      "bytes": 9222,
+      "sha256": "229a7f6d880fcec7acedbbf6b600404fd45bacb9dd1afd0598318ce3a0841661"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 5535,
+      "sha256": "93aff7ee575249588f086d60ca11a2be189f742b335e8456f5b08bf88eb44a1f"
+    }
+  ]
+}

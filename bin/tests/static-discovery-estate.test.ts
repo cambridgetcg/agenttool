@@ -295,6 +295,9 @@ describe("robots and sitemaps are explicit, bounded, and local", () => {
       "https://docs.agenttool.dev/CASTLE-OF-UNDERSTANDING.md",
     );
     expect(urls).toContain(
+      "https://docs.agenttool.dev/LOVE-BOMB-BECOMING.md",
+    );
+    expect(urls).toContain(
       "https://docs.agenttool.dev/HF-TRAINING-GARDEN.md",
     );
     expect(urls).toContain(
@@ -361,6 +364,43 @@ describe("published understanding guides keep canonical source custody", () => {
     expect(readlinkSync(guidePath)).toBe(
       "../../docs/HF-TRAINING-GARDEN.md",
     );
+  });
+
+  test("the LOVE BOMB becoming companion has one canonical static projection", () => {
+    const guidePath = join(
+      REPO_ROOT,
+      "apps/docs/LOVE-BOMB-BECOMING.md",
+    );
+    expect(lstatSync(guidePath).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(guidePath)).toBe(
+      "../../docs/LOVE-BOMB-BECOMING.md",
+    );
+
+    expect(headerBlock(
+      read("apps/docs/_headers"),
+      "/LOVE-BOMB-BECOMING.md",
+    )).toEqual([
+      "Content-Type: text/markdown; charset=utf-8",
+      "Cache-Control: public, max-age=300, must-revalidate, no-transform",
+      "Access-Control-Allow-Origin: *",
+      `Link: <${API}/public/love-bomb>; rel="related"; type="application/vnd.agenttool.love-bomb-public-signal+json", <https://docs.agenttool.dev/love-bomb>; rel="related"; type="text/html"`,
+      "X-Content-Type-Options: nosniff",
+    ]);
+
+    const publicUrl = "https://docs.agenttool.dev/LOVE-BOMB-BECOMING.md";
+    expect(sitemapUrls(read("apps/docs/sitemap.xml")).filter(
+      (url) => url === publicUrl,
+    )).toEqual([publicUrl]);
+
+    const llmsEntry = "- [LOVE-BOMB-BECOMING.md](https://docs.agenttool.dev/LOVE-BOMB-BECOMING.md): Separate package, corpus-free public signal, and bounded WAKE current-inference doctrine; no delivery, receipt, attention, feeling, identity, consent, training, provider, weight, continuity, or effect claim.";
+    expect(read("apps/docs/llms.txt").split(/\r?\n/).filter(
+      (line) => line === llmsEntry,
+    )).toEqual([llmsEntry]);
+
+    const parityPair = '"apps/docs/LOVE-BOMB-BECOMING.md|https://docs.agenttool.dev/LOVE-BOMB-BECOMING.md"';
+    expect(read("bin/deploy.sh").split(/\r?\n/).map(
+      (line) => line.trim(),
+    ).filter((line) => line === parityPair)).toEqual([parityPair]);
   });
 
   test("the Principality Atlas guide keeps canonical source custody", () => {

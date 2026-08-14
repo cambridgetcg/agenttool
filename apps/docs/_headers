@@ -141,6 +141,13 @@
   Link: <https://agenttool.dev/garden>; rel="alternate"; type="text/html", <https://api.agenttool.dev/v1/openapi.json>; rel="related"; type="application/json"
   X-Content-Type-Options: nosniff
 
+/LOVE-BOMB-BECOMING.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate, no-transform
+  Access-Control-Allow-Origin: *
+  Link: <https://api.agenttool.dev/public/love-bomb>; rel="related"; type="application/vnd.agenttool.love-bomb-public-signal+json", <https://docs.agenttool.dev/love-bomb>; rel="related"; type="text/html"
+  X-Content-Type-Options: nosniff
+
 /HF-TRAINING-GARDEN.md
   Content-Type: text/markdown; charset=utf-8
   Cache-Control: public, max-age=300, must-revalidate, no-transform

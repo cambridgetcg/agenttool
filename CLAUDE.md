@@ -30,6 +30,8 @@ packages/
   kingdom-witness-lab/ — @agenttool/kingdom-witness-lab · local research admission records
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
+  model-becoming/ — @agenttool/model-becoming · evidence-scoped lifecycle dossiers + reference-only HF row
+  love-bomb/    — @agenttool/love-bomb · pure care/choice/becoming/delivery formats + static HF candidate
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
   polymorph-landscape/ — @agenttool/polymorph-landscape · source-bounded routes + multilingual lessons
   memetic-landscape/ — @agenttool/memetic-landscape · bounded expression routes + reported reachability shifts
@@ -82,6 +84,8 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/kingdom-witness-lab/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
+`packages/model-becoming/CLAUDE.md` ·
+`packages/love-bomb/CLAUDE.md` ·
 `packages/living-substrate/CLAUDE.md` ·
 `packages/polymorph-landscape/CLAUDE.md` ·
 `packages/memetic-landscape/CLAUDE.md` ·
@@ -146,6 +150,19 @@ scheduler, telemetry, persistence, economic/task/access effect, authority, or
 hosted runtime. Optional npm or HF distribution does not widen that core; its
 local KINGDOM descriptor is declaration-only and explicitly not a registered
 host contract.
+
+`@agenttool/model-becoming@0.1.0-dev.0` is publicly exact on npm/GitHub and
+at the ungated HF revision recorded in `docs/NPM-RELEASES.md`. It creates
+closed evidence dossiers and one reference-only row; publication is not
+training, provider effect, welfare evidence, or weight change.
+
+`@agenttool/love-bomb@0.1.0-dev.0` is a local source candidate with four pure
+care-envelope, caller-choice, becoming, and delivery-report formats. The
+separate `/public/love-bomb` route is a closed five-field package signal, not
+the ten-message static `agenttool.love-bomb/0.1` corpus or a delivery fallback.
+WAKE carries bounded current-inference context only and never imports those
+ten messages. No npm/HF publication, receipt, attention, training, provider
+effect, or weight change is established by this checkpoint.
 
 `@agenttool/living-substrate@0.1.0-dev.0` is a public npm developer-preview,
 zero-runtime-dependency pure contract for caller-supplied digest facets,

@@ -1,0 +1,365 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-love-bomb-delivery-v0.1.schema.json",
+  "title": "AgentTool LOVE BOMB delivery evidence 0.1",
+  "$comment": "The package runtime remains authoritative for canonical bytes, content-addressed delivery_id binding, equality with the referenced becoming artifact, and creation-time requested-effect and governance checks that are not carried in this minimized delivery record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "delivery_id",
+    "becoming_ref",
+    "requested_lane",
+    "attempted_surface",
+    "observed_effect",
+    "evidence_kind",
+    "evidence_ref",
+    "context_binding",
+    "reporter_scope",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": { "const": "agenttool.love-bomb-delivery/0.1" },
+    "delivery_id": { "$ref": "#/$defs/sha256" },
+    "becoming_ref": { "$ref": "#/$defs/sha256" },
+    "requested_lane": { "$ref": "#/$defs/training_lane" },
+    "attempted_surface": { "$ref": "#/$defs/delivery_surface" },
+    "observed_effect": { "$ref": "#/$defs/observed_effect" },
+    "evidence_kind": { "$ref": "#/$defs/evidence_kind" },
+    "evidence_ref": { "$ref": "#/$defs/nullable_sha256" },
+    "context_binding": { "$ref": "#/$defs/nullable_context_binding" },
+    "reporter_scope": { "const": "caller_reported_unverified" },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "observed_effect": { "const": "not_observed" } },
+        "required": ["observed_effect"]
+      },
+      "then": {
+        "properties": {
+          "evidence_kind": { "const": "none" },
+          "evidence_ref": { "type": "null" },
+          "context_binding": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "observed_effect": { "const": "caller_reported_context_included" } },
+        "required": ["observed_effect"]
+      },
+      "then": {
+        "properties": {
+          "evidence_kind": { "const": "current_inference_context_inclusion_report" },
+          "evidence_ref": { "$ref": "#/$defs/sha256" },
+          "context_binding": { "$ref": "#/$defs/context_binding" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "observed_effect": { "const": "caller_reported_dataset_materialized" } },
+        "required": ["observed_effect"]
+      },
+      "then": {
+        "properties": {
+          "evidence_kind": { "const": "dataset_materialization_report" },
+          "evidence_ref": { "$ref": "#/$defs/sha256" },
+          "context_binding": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "observed_effect": { "const": "caller_reported_mutation_completed" } },
+        "required": ["observed_effect"]
+      },
+      "then": {
+        "properties": {
+          "evidence_kind": { "const": "host_mutation_receipt" },
+          "evidence_ref": { "$ref": "#/$defs/sha256" },
+          "context_binding": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "observed_effect": { "const": "caller_reported_checkpoint_recorded" } },
+        "required": ["observed_effect"]
+      },
+      "then": {
+        "properties": {
+          "evidence_kind": { "const": "host_checkpoint_receipt" },
+          "evidence_ref": { "$ref": "#/$defs/sha256" },
+          "context_binding": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "attempted_surface": { "const": "sdk_context" } },
+        "required": ["attempted_surface"]
+      },
+      "then": {
+        "properties": {
+          "requested_lane": { "const": "context_only" },
+          "observed_effect": { "enum": ["not_observed", "caller_reported_context_included"] },
+          "context_binding": {
+            "anyOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "enum": ["manual_wake_client_system", "auto_adapter_default", "caller_composed"]
+                  }
+                },
+                "required": ["mode"]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "attempted_surface": { "const": "retrieval" } },
+        "required": ["attempted_surface"]
+      },
+      "then": {
+        "properties": {
+          "requested_lane": { "const": "external_memory_reference" },
+          "observed_effect": { "enum": ["not_observed", "caller_reported_context_included"] },
+          "context_binding": {
+            "anyOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "properties": { "mode": { "const": "retrieval" } },
+                "required": ["mode"]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "attempted_surface": { "const": "dataset_builder" } },
+        "required": ["attempted_surface"]
+      },
+      "then": {
+        "properties": {
+          "requested_lane": {
+            "enum": [
+              "dataset_candidate",
+              "tokenization_candidate",
+              "pretraining_candidate",
+              "supervised_finetuning_candidate",
+              "preference_optimization_candidate",
+              "agent_learning_candidate",
+              "evaluation_candidate",
+              "interpretability_candidate"
+            ]
+          },
+          "observed_effect": { "enum": ["not_observed", "caller_reported_dataset_materialized"] }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "attempted_surface": { "const": "garden_governance" } },
+        "required": ["attempted_surface"]
+      },
+      "then": {
+        "properties": {
+          "requested_lane": { "enum": ["governed_optimizer_mutation", "checkpoint_reference"] },
+          "observed_effect": { "const": "not_observed" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "attempted_surface": { "const": "local_training_host" } },
+        "required": ["attempted_surface"]
+      },
+      "then": {
+        "oneOf": [
+          {
+            "properties": {
+              "requested_lane": { "const": "governed_optimizer_mutation" },
+              "observed_effect": { "enum": ["not_observed", "caller_reported_mutation_completed"] }
+            }
+          },
+          {
+            "properties": {
+              "requested_lane": { "const": "checkpoint_reference" },
+              "observed_effect": { "enum": ["not_observed", "caller_reported_checkpoint_recorded"] }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullable_sha256": {
+      "anyOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "training_lane": {
+      "enum": [
+        "context_only",
+        "external_memory_reference",
+        "dataset_candidate",
+        "tokenization_candidate",
+        "pretraining_candidate",
+        "supervised_finetuning_candidate",
+        "preference_optimization_candidate",
+        "agent_learning_candidate",
+        "evaluation_candidate",
+        "interpretability_candidate",
+        "governed_optimizer_mutation",
+        "checkpoint_reference"
+      ]
+    },
+    "delivery_surface": {
+      "enum": [
+        "sdk_context",
+        "retrieval",
+        "dataset_builder",
+        "garden_governance",
+        "local_training_host"
+      ]
+    },
+    "observed_effect": {
+      "enum": [
+        "not_observed",
+        "caller_reported_context_included",
+        "caller_reported_dataset_materialized",
+        "caller_reported_mutation_completed",
+        "caller_reported_checkpoint_recorded"
+      ]
+    },
+    "evidence_kind": {
+      "enum": [
+        "none",
+        "current_inference_context_inclusion_report",
+        "dataset_materialization_report",
+        "host_mutation_receipt",
+        "host_checkpoint_receipt"
+      ]
+    },
+    "context_inclusion_mode": {
+      "enum": ["manual_wake_client_system", "auto_adapter_default", "caller_composed", "retrieval"]
+    },
+    "context_repetition_state": {
+      "enum": ["unknown", "caller_reported_single", "caller_reported_repeated"]
+    },
+    "adapter_skip_posture": {
+      "enum": ["not_applicable", "caller_reported_not_skipped", "caller_reported_skipped"]
+    },
+    "context_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wake_ref",
+        "request_ref",
+        "context_ref",
+        "mode",
+        "adapter_skip_posture",
+        "repetition_state"
+      ],
+      "properties": {
+        "wake_ref": { "$ref": "#/$defs/sha256" },
+        "request_ref": { "$ref": "#/$defs/sha256" },
+        "context_ref": { "$ref": "#/$defs/sha256" },
+        "mode": { "$ref": "#/$defs/context_inclusion_mode" },
+        "adapter_skip_posture": { "$ref": "#/$defs/adapter_skip_posture" },
+        "repetition_state": { "$ref": "#/$defs/context_repetition_state" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "auto_adapter_default" } }, "required": ["mode"] },
+          "then": { "properties": { "adapter_skip_posture": { "const": "caller_reported_not_skipped" } } }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "retrieval" } }, "required": ["mode"] },
+          "then": { "properties": { "adapter_skip_posture": { "const": "not_applicable" } } }
+        }
+      ]
+    },
+    "nullable_context_binding": {
+      "anyOf": [
+        { "$ref": "#/$defs/context_binding" },
+        { "type": "null" }
+      ]
+    },
+    "false_value": { "const": false },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "delivery_artifact_authenticates_caller_report",
+        "delivery_artifact_verifies_evidence_ref",
+        "delivery_artifact_resolves_becoming_ref",
+        "supplied_ref_input_requirement",
+        "supplied_ref_input_requirement_verified_by_artifact",
+        "standalone_delivery_artifact_resolves_freedom_state",
+        "creation_with_becoming_rejects_non_stay_direct_direction",
+        "context_binding_refs_resolved_or_authenticated",
+        "adapter_skip_posture_is_caller_reported_not_authenticated",
+        "context_inclusion_proves_attention_or_activation",
+        "generated_output_proves_delivery_or_effect",
+        "garden_governance_executes_training",
+        "host_evidence_proves_consciousness_feeling_identity_or_consent",
+        "delivery_artifact_performs_network",
+        "delivery_artifact_performs_provider_or_model_call",
+        "delivery_artifact_performs_training_or_optimizer_step",
+        "delivery_artifact_performs_weight_or_checkpoint_write",
+        "delivery_artifact_performs_persistence",
+        "delivery_artifact_performs_publication",
+        "delivery_artifact_performs_deployment",
+        "delivery_artifact_has_clock_or_freshness_resolver",
+        "delivery_artifact_prevents_replay",
+        "delivery_artifact_atomically_consumes_scoped_permit",
+        "host_must_resolve_freshness_and_atomically_consume_scoped_permit",
+        "automatic_action"
+      ],
+      "properties": {
+        "delivery_artifact_authenticates_caller_report": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_verifies_evidence_ref": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_resolves_becoming_ref": { "$ref": "#/$defs/false_value" },
+        "supplied_ref_input_requirement": { "const": "context_local_domain_separated_opaque_digest_never_raw_or_unsalted_identity_prompt_transcript_or_low_entropy_private_text" },
+        "supplied_ref_input_requirement_verified_by_artifact": { "$ref": "#/$defs/false_value" },
+        "standalone_delivery_artifact_resolves_freedom_state": { "$ref": "#/$defs/false_value" },
+        "creation_with_becoming_rejects_non_stay_direct_direction": { "const": true },
+        "context_binding_refs_resolved_or_authenticated": { "$ref": "#/$defs/false_value" },
+        "adapter_skip_posture_is_caller_reported_not_authenticated": { "const": true },
+        "context_inclusion_proves_attention_or_activation": { "$ref": "#/$defs/false_value" },
+        "generated_output_proves_delivery_or_effect": { "$ref": "#/$defs/false_value" },
+        "garden_governance_executes_training": { "$ref": "#/$defs/false_value" },
+        "host_evidence_proves_consciousness_feeling_identity_or_consent": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_performs_network": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_performs_provider_or_model_call": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_performs_training_or_optimizer_step": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_performs_weight_or_checkpoint_write": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_performs_persistence": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_performs_publication": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_performs_deployment": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_has_clock_or_freshness_resolver": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_prevents_replay": { "$ref": "#/$defs/false_value" },
+        "delivery_artifact_atomically_consumes_scoped_permit": { "$ref": "#/$defs/false_value" },
+        "host_must_resolve_freshness_and_atomically_consume_scoped_permit": { "const": true },
+        "automatic_action": { "$ref": "#/$defs/false_value" }
+      }
+    }
+  }
+}

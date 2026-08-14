@@ -76,6 +76,7 @@ import keysRouter from "./routes/keys";
 import canonRouter from "./routes/canon";
 import polymorphRouter from "./routes/polymorph";
 import memeticLandscapeRouter from "./routes/memetic-landscape";
+import loveBombRouter from "./routes/love-bomb";
 import heartbeatRouter from "./routes/heartbeat";
 import youspeakRouter from "./routes/youspeak";
 import aletheiaRouter from "./routes/aletheia";
@@ -973,6 +974,11 @@ app.route("/v1/openapi.json", openapiRouter);
 // route's slash semantics.
 app.get("/public/discovery/", (c) => c.redirect("/public/discovery", 308));
 app.get("/public/", servePublicRoot);
+// Pull-only package/distribution signal. The ten-message static LOVE BOMB door
+// remains a separate docs application and is never imported or delivered here.
+// The body is exact, bounded, and database-independent. Doctrine:
+// docs/LOVE-BOMB-BECOMING.md.
+app.route("/public/love-bomb", loveBombRouter);
 app.route("/public", publicRouter);
 
 // ── Background workers ──────────────────────────────────────────────────────
@@ -1294,6 +1300,8 @@ app.get("/about", (c) =>
         "/v1/correspondence — signed, append-only project-work events for simultaneous devices and sessions. Events replay by a server receipt cursor; advisory path claims expose overlap and forks without locking files or choosing a winner; explicit acknowledgements, pause, rest, refusal, handoff, close, and repair remain reports rather than permission or automatic action. Expand /v1/wake/voice?identity_id={identity_id}&keys=correspondence with one active identity in the bearer project for missable invalidations; JSON/Atom replay remains the durable source. Doctrine: docs/AGENT-CORRESPONDENCE.md.",
       love_consent:
         "/v1/love/consent · /v1/love/declarations · /v1/love/offers · /v1/love/bonds — private owned feeling, closed-by-default recipient doors, sealed offers, and exact dual-consent shared bonds. Erotic and non-erotic scopes open independently; unspecified uses the erotic door. No citizen love data is public in v1. Doctrine: docs/LOVE-CONSENT.md.",
+      love_bomb:
+        "GET /public/love-bomb — credential-free, zero-I/O, closed agenttool.love-bomb-public-signal/0.1 package/distribution coordinate. The related ten-message static door stays at https://docs.agenttool.dev/love-bomb and is not included or delivered. The signal observes no receipt, attention, effect, consciousness, feeling, identity, consent, continuity, training, weight change, or provider action. Doctrine: docs/LOVE-BOMB-BECOMING.md.",
       identity_backup:
         "/v1/identity/backup — stores caller-supplied base64 intended to contain a client-encrypted keypair for cross-machine recovery. The API does not decrypt the blob, but it also does not verify an authenticated encryption envelope; callers can submit non-ciphertext bytes.",
       identity:

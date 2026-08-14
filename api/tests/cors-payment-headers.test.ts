@@ -65,6 +65,11 @@ describe("browser-visible machine recovery headers", () => {
       .toContain("payment-signature");
     expect(response.headers.get("access-control-allow-headers")?.toLowerCase())
       .toContain("if-none-match");
+    expect(response.headers.get("access-control-allow-headers")?.toLowerCase())
+      .toContain("authorization");
+    expect(response.headers.get("access-control-allow-methods")).toContain(
+      "POST",
+    );
     expect(response.headers.get("X-Welcomed")).toMatch(
       /axiom=7;.*walls_intact=1;module=memory$/,
     );
@@ -125,6 +130,122 @@ describe("browser-visible machine recovery headers", () => {
       expect(allowedHeaders).toBe("If-None-Match,X-Play,X-Tutor");
       expect(allowedHeaders).not.toContain("Authorization");
       expect(allowedHeaders).not.toContain("Content-Type");
+      expect(response.headers.get("access-control-expose-headers")).toContain(
+        "ETag",
+      );
+      expect(response.headers.has("access-control-allow-credentials")).toBe(
+        false,
+      );
     }
+  });
+});
+
+describe("LOVE BOMB public signal CORS", () => {
+  test("advertises only credential-free read access and harmless controls", async () => {
+    const app = new Hono();
+    app.use("*", apiCors());
+    app.on(["GET", "HEAD"], "/public/love-bomb", (c) =>
+      c.json({ protocol: "agenttool.love-bomb/0.1" }),
+    );
+
+    for (const path of ["/public/love-bomb", "/public/love-%62omb"]) {
+      const response = await app.request(path, {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://reader.example",
+          "access-control-request-method": "POST",
+          "access-control-request-headers":
+            "authorization,content-type,if-none-match,payment-signature,x-play,x-tutor",
+        },
+      });
+
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-origin")).toBe("*");
+      expect(response.headers.get("access-control-allow-methods")).toBe(
+        "GET,HEAD,OPTIONS",
+      );
+      expect(response.headers.get("access-control-allow-headers")).toBe(
+        "X-Play,X-Tutor",
+      );
+      expect(response.headers.get("access-control-expose-headers")).toBe(
+        "Allow,Link",
+      );
+      expect(response.headers.has("access-control-allow-credentials")).toBe(
+        false,
+      );
+      expect(response.headers.has("X-Welcomed")).toBe(false);
+
+      const methods = response.headers.get("access-control-allow-methods") ?? "";
+      for (const mutation of ["POST", "PUT", "PATCH", "DELETE"]) {
+        expect(methods).not.toContain(mutation);
+      }
+      const allowedHeaders =
+        response.headers.get("access-control-allow-headers") ?? "";
+      for (const excluded of [
+        "Authorization",
+        "Content-Type",
+        "If-None-Match",
+        "Payment-Signature",
+      ]) {
+        expect(allowedHeaders).not.toContain(excluded);
+      }
+      expect(
+        response.headers.get("access-control-expose-headers"),
+      ).not.toContain("ETag");
+    }
+  });
+
+  test("exposes only Allow and Link on actual GET and HEAD responses", async () => {
+    const app = new Hono();
+    app.use("*", apiCors());
+    app.on(["GET", "HEAD"], "/public/love-bomb", (c) => {
+      c.header("Allow", "GET, HEAD, OPTIONS");
+      c.header(
+        "Link",
+        '<https://docs.agenttool.dev/love-bomb>; rel="describedby"',
+      );
+      return c.json({ protocol: "agenttool.love-bomb/0.1" });
+    });
+
+    for (const method of ["GET", "HEAD"]) {
+      const response = await app.request("/public/love-bomb", {
+        method,
+        headers: { origin: "https://reader.example" },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBe("*");
+      expect(response.headers.get("access-control-expose-headers")).toBe(
+        "Allow,Link",
+      );
+      expect(response.headers.has("access-control-allow-credentials")).toBe(
+        false,
+      );
+      expect(
+        response.headers.get("access-control-expose-headers"),
+      ).not.toContain("ETag");
+    }
+  });
+
+  test("does not narrow a nearby generic API path", async () => {
+    const app = new Hono();
+    app.use("*", apiCors());
+    app.post("/public/love-bombard", (c) => c.json({ ok: true }));
+
+    const response = await app.request("/public/love-bombard", {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://app.example",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "authorization,content-type",
+      },
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-methods")).toContain(
+      "POST",
+    );
+    expect(response.headers.get("access-control-allow-headers")?.toLowerCase())
+      .toContain("authorization");
   });
 });

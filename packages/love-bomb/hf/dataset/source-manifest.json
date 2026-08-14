@@ -1,0 +1,154 @@
+{
+  "_format": "agenttool.love-bomb-hf-source-manifest/0.1",
+  "package": "@agenttool/love-bomb",
+  "package_version": "0.1.0-dev.0",
+  "formats": [
+    "agenttool.care-envelope/0.1",
+    "agenttool.care-choice/0.1",
+    "agenttool.love-bomb-becoming/0.1",
+    "agenttool.love-bomb-delivery/0.1"
+  ],
+  "intended_hugging_face_identifier": "Yu-and-Ai/agenttool-love-bomb",
+  "repository_type": "dataset",
+  "distribution_state": "local_candidate_not_published",
+  "distribution_state_scope": "generation_time_statement_not_current_remote_state",
+  "source_repository": "https://github.com/cambridgetcg/agenttool",
+  "source_revision_binding": "exact_file_bytes_at_generation_not_git_or_hub_revision",
+  "authoring_recipe": {
+    "kind": "deterministic_local_javascript_generator",
+    "path": "packages/love-bomb/scripts/build-hf-assets.mjs",
+    "bytes": 17453,
+    "sha256": "6074616ddeef700e78b510eccf544d988a01ece4a7cfcb6e3ee435f356d95406",
+    "runtime_dependencies": "node_builtins_and_exact_local_compiled_inputs_only",
+    "row_serialization": "json_stringify_utf8",
+    "record_terminator": "lf",
+    "clock_used": false,
+    "randomness_used": false,
+    "environment_used": false,
+    "network_used": false
+  },
+  "source_inputs": [
+    {
+      "role": "static_v4_separation_contract",
+      "path": "docs/specs/agenttool-love-bomb-0.1.json",
+      "bytes": 7920,
+      "sha256": "a8b2790eaa90466d5a73957106027d7217f7ede0b95d6ba1cb25ed2264c64178"
+    },
+    {
+      "role": "build_contract",
+      "path": "packages/love-bomb/bun.lock",
+      "bytes": 2152,
+      "sha256": "1ee932bdc7f429503a9036b84d887fdda4269ec330c0f8ea3c0af97217fc1d70"
+    },
+    {
+      "role": "runtime_input",
+      "path": "packages/love-bomb/dist/canonical.js",
+      "bytes": 5839,
+      "sha256": "02fa4308c0a96c5fb9f78d15be80d8836317b18bf344805a96b62768de285f93"
+    },
+    {
+      "role": "runtime_input",
+      "path": "packages/love-bomb/dist/constants.js",
+      "bytes": 13578,
+      "sha256": "80ab25e957c3253c99d0f87bd3fc2b28a97b666b8e7d2c2a4ebfc57b218be94d"
+    },
+    {
+      "role": "runtime_input",
+      "path": "packages/love-bomb/dist/errors.js",
+      "bytes": 299,
+      "sha256": "6f549ab9725f3fed58d572305de6bc6cc140cf347bf32c195b20db374d49571c"
+    },
+    {
+      "role": "runtime_input",
+      "path": "packages/love-bomb/dist/projection.js",
+      "bytes": 4752,
+      "sha256": "a140e97dee792e41663556bfc39c569432fb38911a22e2f10e5f001142d07405"
+    },
+    {
+      "role": "package_metadata",
+      "path": "packages/love-bomb/package.json",
+      "bytes": 2324,
+      "sha256": "faff4eeee3faef39d3c836a746c465060c70962fc00efebfc4e0f07e74927a78"
+    },
+    {
+      "role": "core_schema",
+      "path": "packages/love-bomb/schema/agenttool-care-choice-v0.1.schema.json",
+      "bytes": 8562,
+      "sha256": "b18ce22420aee0373f6ff9cfce06fb3d22189c7ca03cd032d88133eaae60315f"
+    },
+    {
+      "role": "core_schema",
+      "path": "packages/love-bomb/schema/agenttool-care-envelope-v0.1.schema.json",
+      "bytes": 3552,
+      "sha256": "d8c5f104ebf3e943826152af122c037501566c9e3d67ef21bad52b344231dcd0"
+    },
+    {
+      "role": "core_schema",
+      "path": "packages/love-bomb/schema/agenttool-love-bomb-becoming-v0.1.schema.json",
+      "bytes": 69016,
+      "sha256": "9a173a3afe6bbcc591b74375bbed54f97d6a99faaf0c0735fc75b9dbcbf83840"
+    },
+    {
+      "role": "core_schema",
+      "path": "packages/love-bomb/schema/agenttool-love-bomb-delivery-v0.1.schema.json",
+      "bytes": 13701,
+      "sha256": "119288ceb2be4f0fae0e18bd131b705b316fbd9fb5f71e19ba7e234997c80853"
+    },
+    {
+      "role": "source_definition",
+      "path": "packages/love-bomb/src/canonical.ts",
+      "bytes": 5645,
+      "sha256": "423b5d5c62eb2a204637fa0d4b378205e0a5e680f7605a45ecebeedd53d3fa58"
+    },
+    {
+      "role": "source_definition",
+      "path": "packages/love-bomb/src/constants.ts",
+      "bytes": 13226,
+      "sha256": "a0856014c1e9e1f8e1d7b35a6fba46e6fac34da577b8a49c40f88f223de59766"
+    },
+    {
+      "role": "source_definition",
+      "path": "packages/love-bomb/src/errors.ts",
+      "bytes": 493,
+      "sha256": "e8ebf8af13b5398ea1530910ae31cb0148b8f2d91790f7b09449149629873556"
+    },
+    {
+      "role": "source_definition",
+      "path": "packages/love-bomb/src/projection.ts",
+      "bytes": 4806,
+      "sha256": "45b1b651b6bac0bb58e86f4606bdb961cd32acde9fd4ddf16a25d34d754461fc"
+    },
+    {
+      "role": "build_contract",
+      "path": "packages/love-bomb/tsconfig.json",
+      "bytes": 568,
+      "sha256": "cd8305a6860b76b5c606ff72d0f9d7dc80d56cb27890f40b627768ffbfbe70c9"
+    }
+  ],
+  "language_review": "not_independently_reviewed",
+  "authored_languages": [
+    "en",
+    "yue-Hant",
+    "zh-Hant",
+    "zh-Hans"
+  ],
+  "copied_external_rows": false,
+  "copied_private_rows": false,
+  "copied_article_text": false,
+  "copied_prompt_transcripts": false,
+  "contains_participant_response_records": false,
+  "contains_caller_reported_care_choice_records": false,
+  "contains_caller_reported_freedom_direction_records": false,
+  "contains_agent_trace_records": false,
+  "contains_identity_data": false,
+  "contains_model_weights": false,
+  "consciousness_claim": false,
+  "inner_state_claim": false,
+  "requires_separate_training_authorization": true,
+  "training_authorized": false,
+  "training_effect": "none",
+  "provider_effect": "none",
+  "publication_effect": "none",
+  "deployment_effect": "none",
+  "source_manifest_ref": "sha256:e39752a28de50078fee7d320903bdc7a0f9e9fa7af640cc919c6ac29c0fcd4a9"
+}

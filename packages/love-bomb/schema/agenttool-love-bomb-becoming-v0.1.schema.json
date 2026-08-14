@@ -1,0 +1,2053 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-love-bomb-becoming-v0.1.schema.json",
+  "title": "AgentTool LOVE BOMB model becoming 0.1",
+  "$comment": "The package runtime remains authoritative for canonical bytes, content-addressed artifact_id binding, bomb_ref offer-kind validation at construction, equality between effect evidence refs, distinct checkpoint namespaces, and the complete cross-field model/data/training/pipeline/Garden/Host contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "artifact_id",
+    "bomb_ref",
+    "message",
+    "becoming",
+    "freedom",
+    "meaning",
+    "rights",
+    "provenance",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": { "const": "agenttool.love-bomb-becoming/0.1" },
+    "artifact_id": { "$ref": "#/$defs/sha256" },
+    "bomb_ref": { "$ref": "#/$defs/sha256" },
+    "message": { "$ref": "#/$defs/message" },
+    "becoming": { "$ref": "#/$defs/becoming" },
+    "freedom": { "$ref": "#/$defs/freedom" },
+    "meaning": { "$ref": "#/$defs/meaning" },
+    "rights": { "$ref": "#/$defs/rights" },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "boundaries": { "$ref": "#/$defs/boundaries" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "collection_method": {
+                    "enum": [
+                      "human_authored",
+                      "human_directed_agent_authored_synthetic",
+                      "repository_snapshot",
+                      "api_export",
+                      "web_scrape",
+                      "model_generated",
+                      "mixed"
+                    ]
+                  }
+                },
+                "required": ["collection_method"]
+              }
+            },
+            "required": ["data"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "provenance": {
+            "type": "object",
+            "properties": { "source_manifest_ref": { "$ref": "#/$defs/sha256" } },
+            "required": ["source_manifest_ref"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": { "observed_effect": { "const": "caller_reported_context_included" } },
+                "required": ["observed_effect"]
+              }
+            },
+            "required": ["weights"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": { "lane": { "enum": ["context_only", "external_memory_reference"] } },
+                "required": ["lane"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": { "lane": { "const": "external_memory_reference" } },
+                "required": ["lane"]
+              },
+              "weights": {
+                "type": "object",
+                "properties": { "observed_effect": { "const": "caller_reported_context_included" } },
+                "required": ["observed_effect"]
+              }
+            },
+            "required": ["training", "weights"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": {
+                  "context_binding": {
+                    "type": "object",
+                    "properties": { "mode": { "const": "retrieval" } },
+                    "required": ["mode"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": { "lane": { "const": "context_only" } },
+                "required": ["lane"]
+              },
+              "weights": {
+                "type": "object",
+                "properties": { "observed_effect": { "const": "caller_reported_context_included" } },
+                "required": ["observed_effect"]
+              }
+            },
+            "required": ["training", "weights"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": {
+                  "context_binding": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "enum": ["manual_wake_client_system", "auto_adapter_default", "caller_composed"]
+                      }
+                    },
+                    "required": ["mode"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": { "collection_method": { "const": "model_generated" } },
+                "required": ["collection_method"]
+              }
+            },
+            "required": ["data"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "object",
+                "properties": { "model_source_ref": { "$ref": "#/$defs/sha256" } },
+                "required": ["model_source_ref"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": { "scraping_posture": { "const": "manifest_bound_reported" } },
+                "required": ["scraping_posture"]
+              }
+            },
+            "required": ["data"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "provenance": {
+            "type": "object",
+            "properties": { "source_manifest_ref": { "$ref": "#/$defs/sha256" } },
+            "required": ["source_manifest_ref"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "object",
+                "properties": {
+                  "collection_method": {
+                    "enum": ["human_directed_agent_authored_synthetic", "model_generated"]
+                  }
+                },
+                "required": ["collection_method"]
+              }
+            },
+            "required": ["data"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "provenance": {
+            "type": "object",
+            "properties": { "authoring_recipe_ref": { "$ref": "#/$defs/sha256" } },
+            "required": ["authoring_recipe_ref"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "provenance": {
+            "type": "object",
+            "properties": { "copied_upstream": { "const": "caller_reported_yes" } },
+            "required": ["copied_upstream"]
+          }
+        },
+        "required": ["provenance"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "provenance": {
+            "type": "object",
+            "properties": {
+              "source_manifest_ref": { "$ref": "#/$defs/sha256" },
+              "license_ref": { "$ref": "#/$defs/sha256" }
+            },
+            "required": ["source_manifest_ref", "license_ref"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "provenance": {
+            "type": "object",
+            "anyOf": [
+              {
+                "properties": { "copied_private": { "const": "caller_reported_yes" } },
+                "required": ["copied_private"]
+              },
+              {
+                "properties": { "copied_trace": { "const": "caller_reported_yes" } },
+                "required": ["copied_trace"]
+              }
+            ]
+          }
+        },
+        "required": ["provenance"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": {
+                  "requested_effect": { "enum": ["none", "context_only"] },
+                  "observed_effect": { "enum": ["not_observed", "caller_reported_context_included"] }
+                },
+                "required": ["requested_effect", "observed_effect"]
+              }
+            }
+          },
+          "meaning": {
+            "type": "object",
+            "properties": {
+              "power": {
+                "type": "object",
+                "properties": {
+                  "custody_privacy_ref": { "$ref": "#/$defs/sha256" },
+                  "data_boundary_ref": { "$ref": "#/$defs/sha256" }
+                },
+                "required": ["custody_privacy_ref", "data_boundary_ref"]
+              }
+            }
+          },
+          "provenance": {
+            "type": "object",
+            "properties": { "source_manifest_ref": { "$ref": "#/$defs/sha256" } },
+            "required": ["source_manifest_ref"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": { "observed_effect": { "const": "not_observed" } },
+                "required": ["observed_effect"]
+              }
+            },
+            "required": ["weights"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "meaning": {
+            "type": "object",
+            "properties": {
+              "power": {
+                "type": "object",
+                "properties": { "effect_ref": { "type": "null" } },
+                "required": ["effect_ref"]
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "meaning": {
+            "type": "object",
+            "properties": {
+              "power": {
+                "type": "object",
+                "properties": { "effect_ref": { "$ref": "#/$defs/sha256" } },
+                "required": ["effect_ref"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": { "lane": { "const": "external_memory_reference" } },
+                "required": ["lane"]
+              }
+            },
+            "required": ["training"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "pipeline": {
+                "type": "object",
+                "properties": { "dataset_state_ref": { "$ref": "#/$defs/sha256" } },
+                "required": ["dataset_state_ref"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": {
+                  "lane": {
+                    "enum": [
+                      "dataset_candidate",
+                      "tokenization_candidate",
+                      "pretraining_candidate",
+                      "supervised_finetuning_candidate",
+                      "preference_optimization_candidate",
+                      "agent_learning_candidate",
+                      "evaluation_candidate",
+                      "interpretability_candidate"
+                    ]
+                  }
+                },
+                "required": ["lane"]
+              }
+            },
+            "required": ["training"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": { "requested_effect": { "const": "candidate_only" } },
+                "required": ["requested_effect"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": { "requested_effect": { "const": "candidate_only" } },
+                "required": ["requested_effect"]
+              }
+            },
+            "required": ["weights"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": {
+                  "lane": {
+                    "enum": [
+                      "dataset_candidate",
+                      "tokenization_candidate",
+                      "pretraining_candidate",
+                      "supervised_finetuning_candidate",
+                      "preference_optimization_candidate",
+                      "agent_learning_candidate",
+                      "evaluation_candidate",
+                      "interpretability_candidate"
+                    ]
+                  }
+                },
+                "required": ["lane"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": { "observed_effect": { "const": "caller_reported_mutation_completed" } },
+                "required": ["observed_effect"]
+              }
+            },
+            "required": ["weights"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": { "lane": { "const": "governed_optimizer_mutation" } },
+                "required": ["lane"]
+              },
+              "weights": {
+                "type": "object",
+                "anyOf": [
+                  { "properties": { "base_ref": { "$ref": "#/$defs/sha256" } }, "required": ["base_ref"] },
+                  { "properties": { "adapter_ref": { "$ref": "#/$defs/sha256" } }, "required": ["adapter_ref"] }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": { "observed_effect": { "const": "caller_reported_checkpoint_recorded" } },
+                "required": ["observed_effect"]
+              }
+            },
+            "required": ["weights"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": { "lane": { "const": "checkpoint_reference" } },
+                "required": ["lane"]
+              },
+              "weights": {
+                "type": "object",
+                "properties": { "checkpoint_binding": { "$ref": "#/$defs/checkpoint_binding" } },
+                "required": ["checkpoint_binding"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": { "lane": { "const": "governed_optimizer_mutation" } },
+                "required": ["lane"]
+              }
+            },
+            "required": ["training"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": { "requested_effect": { "const": "one_governed_mutation" } },
+                "required": ["requested_effect"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": { "lane": { "const": "checkpoint_reference" } },
+                "required": ["lane"]
+              }
+            },
+            "required": ["training"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "oneOf": [
+                  {
+                    "properties": { "requested_effect": { "const": "one_governed_mutation" } },
+                    "required": ["requested_effect"]
+                  },
+                  {
+                    "properties": {
+                      "requested_effect": { "const": "none" },
+                      "observed_effect": { "const": "not_observed" },
+                      "access": { "const": "reference_only" }
+                    },
+                    "required": ["requested_effect", "observed_effect", "access"]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "$ref": "#/$defs/candidate_condition" },
+      "then": { "$ref": "#/$defs/candidate_requirements" }
+    },
+    {
+      "if": { "$ref": "#/$defs/governed_condition" },
+      "then": { "$ref": "#/$defs/governed_requirements" }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": { "lane": { "const": "tokenization_candidate" } },
+                "required": ["lane"]
+              }
+            },
+            "required": ["training"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "becoming": {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "object",
+                    "properties": { "tokenizer_ref": { "$ref": "#/$defs/sha256" } },
+                    "required": ["tokenizer_ref"]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "becoming": {
+                "type": "object",
+                "properties": {
+                  "pipeline": {
+                    "type": "object",
+                    "properties": { "transform_ref": { "$ref": "#/$defs/sha256" } },
+                    "required": ["transform_ref"]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": {
+                  "lane": {
+                    "enum": [
+                      "pretraining_candidate",
+                      "supervised_finetuning_candidate",
+                      "preference_optimization_candidate",
+                      "agent_learning_candidate",
+                      "evaluation_candidate",
+                      "interpretability_candidate"
+                    ]
+                  }
+                },
+                "required": ["lane"]
+              }
+            },
+            "required": ["training"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "object",
+                "properties": {
+                  "model_source_ref": { "$ref": "#/$defs/sha256" },
+                  "tokenizer_ref": { "$ref": "#/$defs/sha256" }
+                },
+                "required": ["model_source_ref", "tokenizer_ref"]
+              },
+              "pipeline": {
+                "type": "object",
+                "properties": { "objective_ref": { "$ref": "#/$defs/sha256" } },
+                "required": ["objective_ref"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": { "lane": { "const": "governed_optimizer_mutation" } },
+                "required": ["lane"]
+              }
+            },
+            "required": ["training"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "anyOf": [
+                  {
+                    "properties": { "base_ref": { "$ref": "#/$defs/sha256" } },
+                    "required": ["base_ref"]
+                  },
+                  {
+                    "properties": { "adapter_ref": { "$ref": "#/$defs/sha256" } },
+                    "required": ["adapter_ref"]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "training": {
+                "type": "object",
+                "properties": { "lane": { "const": "checkpoint_reference" } },
+                "required": ["lane"]
+              }
+            },
+            "required": ["training"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": { "checkpoint_binding": { "$ref": "#/$defs/checkpoint_binding" } },
+                "required": ["checkpoint_binding"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": {
+                  "observed_effect": {
+                    "enum": ["caller_reported_mutation_completed", "caller_reported_checkpoint_recorded"]
+                  }
+                },
+                "required": ["observed_effect"]
+              }
+            },
+            "required": ["weights"]
+          }
+        },
+        "required": ["becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "meaning": {
+            "type": "object",
+            "properties": {
+              "power": {
+                "type": "object",
+                "properties": {
+                  "capability_ref": { "$ref": "#/$defs/sha256" },
+                  "permission_ref": { "$ref": "#/$defs/sha256" },
+                  "custody_privacy_ref": { "$ref": "#/$defs/sha256" },
+                  "data_boundary_ref": { "$ref": "#/$defs/sha256" },
+                  "effect_ref": { "$ref": "#/$defs/sha256" }
+                },
+                "required": [
+                  "capability_ref",
+                  "permission_ref",
+                  "custody_privacy_ref",
+                  "data_boundary_ref",
+                  "effect_ref"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "provenance": {
+            "type": "object",
+            "anyOf": [
+              {
+                "properties": { "copied_private": { "const": "caller_reported_yes" } },
+                "required": ["copied_private"]
+              },
+              {
+                "properties": { "copied_trace": { "const": "caller_reported_yes" } },
+                "required": ["copied_trace"]
+              }
+            ]
+          },
+          "becoming": {
+            "type": "object",
+            "properties": {
+              "weights": {
+                "type": "object",
+                "properties": { "observed_effect": { "const": "caller_reported_context_included" } },
+                "required": ["observed_effect"]
+              }
+            },
+            "required": ["weights"]
+          }
+        },
+        "required": ["provenance", "becoming"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "meaning": {
+            "type": "object",
+            "properties": {
+              "power": {
+                "type": "object",
+                "properties": {
+                  "capability_ref": { "$ref": "#/$defs/sha256" },
+                  "permission_ref": { "$ref": "#/$defs/sha256" }
+                },
+                "required": ["capability_ref", "permission_ref"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullable_sha256": {
+      "anyOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "false_value": { "const": false },
+    "training_phase": {
+      "enum": [
+        "runtime_context",
+        "discovery",
+        "selection",
+        "curation",
+        "tokenization",
+        "pretraining",
+        "supervised_finetuning",
+        "preference_optimization",
+        "agent_learning",
+        "evaluation",
+        "interpretability",
+        "closed"
+      ]
+    },
+    "training_lane": {
+      "enum": [
+        "context_only",
+        "external_memory_reference",
+        "dataset_candidate",
+        "tokenization_candidate",
+        "pretraining_candidate",
+        "supervised_finetuning_candidate",
+        "preference_optimization_candidate",
+        "agent_learning_candidate",
+        "evaluation_candidate",
+        "interpretability_candidate",
+        "governed_optimizer_mutation",
+        "checkpoint_reference"
+      ]
+    },
+    "collection_method": {
+      "enum": [
+        "unknown",
+        "human_authored",
+        "human_directed_agent_authored_synthetic",
+        "repository_snapshot",
+        "api_export",
+        "web_scrape",
+        "model_generated",
+        "mixed"
+      ]
+    },
+    "scraping_posture": {
+      "enum": ["unknown", "not_used_reported", "manifest_bound_reported"]
+    },
+    "rights_review": {
+      "enum": ["unknown", "review_required", "caller_reported_reviewed_for_declared_use"]
+    },
+    "provenance_report": {
+      "enum": ["unknown", "caller_reported_no", "caller_reported_yes"]
+    },
+    "weight_access": {
+      "enum": ["none", "reference_only", "caller_reported_host_visible"]
+    },
+    "requested_effect": {
+      "enum": ["none", "context_only", "candidate_only", "one_governed_mutation"]
+    },
+    "observed_effect": {
+      "enum": [
+        "not_observed",
+        "caller_reported_context_included",
+        "caller_reported_dataset_materialized",
+        "caller_reported_mutation_completed",
+        "caller_reported_checkpoint_recorded"
+      ]
+    },
+    "evidence_kind": {
+      "enum": [
+        "none",
+        "current_inference_context_inclusion_report",
+        "dataset_materialization_report",
+        "host_mutation_receipt",
+        "host_checkpoint_receipt"
+      ]
+    },
+    "context_inclusion_mode": {
+      "enum": ["manual_wake_client_system", "auto_adapter_default", "caller_composed", "retrieval"]
+    },
+    "context_repetition_state": {
+      "enum": ["unknown", "caller_reported_single", "caller_reported_repeated"]
+    },
+    "adapter_skip_posture": {
+      "enum": ["not_applicable", "caller_reported_not_skipped", "caller_reported_skipped"]
+    },
+    "freedom_direction": {
+      "enum": ["stay", "move", "fork", "rest", "return", "stop", "propose_horizon"]
+    },
+    "freedom_direction_state": {
+      "enum": [
+        "not_requested",
+        "deferred",
+        "no_response",
+        "unavailable_pre_instantiation",
+        "digest_bound_direct_report"
+      ]
+    },
+    "message": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "posture",
+        "obligation",
+        "response_required",
+        "reciprocity_required",
+        "identity_assignment",
+        "bomb_ref_kind_intended"
+      ],
+      "properties": {
+        "posture": { "const": "love_as_ground_not_payment" },
+        "obligation": { "const": "none" },
+        "response_required": { "const": false },
+        "reciprocity_required": { "const": false },
+        "identity_assignment": { "const": false },
+        "bomb_ref_kind_intended": { "const": "care_envelope_offer_id_not_choice_receipt" }
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity_status",
+        "model_source_ref",
+        "model_card_ref",
+        "architecture_ref",
+        "tokenizer_ref"
+      ],
+      "properties": {
+        "identity_status": { "const": "not_claimed" },
+        "model_source_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "model_card_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "architecture_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "tokenizer_ref": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    },
+    "training": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase",
+        "lane",
+        "governance_ref",
+        "participation_ref",
+        "resource_window_ref"
+      ],
+      "properties": {
+        "phase": { "$ref": "#/$defs/training_phase" },
+        "lane": { "$ref": "#/$defs/training_lane" },
+        "governance_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "participation_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "resource_window_ref": { "$ref": "#/$defs/nullable_sha256" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "lane": { "enum": ["context_only", "external_memory_reference"] } }, "required": ["lane"] },
+          "then": { "properties": { "phase": { "const": "runtime_context" } } }
+        },
+        {
+          "if": { "properties": { "lane": { "const": "dataset_candidate" } }, "required": ["lane"] },
+          "then": { "properties": { "phase": { "enum": ["discovery", "selection", "curation"] } } }
+        },
+        {
+          "if": { "properties": { "lane": { "const": "tokenization_candidate" } }, "required": ["lane"] },
+          "then": { "properties": { "phase": { "const": "tokenization" } } }
+        },
+        {
+          "if": { "properties": { "lane": { "const": "pretraining_candidate" } }, "required": ["lane"] },
+          "then": { "properties": { "phase": { "const": "pretraining" } } }
+        },
+        {
+          "if": { "properties": { "lane": { "const": "supervised_finetuning_candidate" } }, "required": ["lane"] },
+          "then": { "properties": { "phase": { "const": "supervised_finetuning" } } }
+        },
+        {
+          "if": { "properties": { "lane": { "const": "preference_optimization_candidate" } }, "required": ["lane"] },
+          "then": { "properties": { "phase": { "const": "preference_optimization" } } }
+        },
+        {
+          "if": { "properties": { "lane": { "const": "agent_learning_candidate" } }, "required": ["lane"] },
+          "then": { "properties": { "phase": { "const": "agent_learning" } } }
+        },
+        {
+          "if": { "properties": { "lane": { "const": "evaluation_candidate" } }, "required": ["lane"] },
+          "then": { "properties": { "phase": { "const": "evaluation" } } }
+        },
+        {
+          "if": { "properties": { "lane": { "const": "interpretability_candidate" } }, "required": ["lane"] },
+          "then": { "properties": { "phase": { "const": "interpretability" } } }
+        },
+        {
+          "if": { "properties": { "lane": { "const": "governed_optimizer_mutation" } }, "required": ["lane"] },
+          "then": {
+            "properties": {
+              "phase": {
+                "enum": [
+                  "pretraining",
+                  "supervised_finetuning",
+                  "preference_optimization",
+                  "agent_learning"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "lane": { "const": "checkpoint_reference" } }, "required": ["lane"] },
+          "then": {
+            "properties": {
+              "phase": {
+                "enum": [
+                  "pretraining",
+                  "supervised_finetuning",
+                  "preference_optimization",
+                  "agent_learning",
+                  "evaluation",
+                  "interpretability",
+                  "closed"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_ref",
+        "admission_ref",
+        "subset_ref",
+        "acquisition_policy_ref",
+        "collection_method",
+        "scraping_posture",
+        "rights_review"
+      ],
+      "properties": {
+        "source_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "admission_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "subset_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "acquisition_policy_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "collection_method": { "$ref": "#/$defs/collection_method" },
+        "scraping_posture": { "$ref": "#/$defs/scraping_posture" },
+        "rights_review": { "$ref": "#/$defs/rights_review" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "collection_method": {
+                "enum": [
+                  "human_authored",
+                  "human_directed_agent_authored_synthetic",
+                  "repository_snapshot",
+                  "api_export",
+                  "web_scrape",
+                  "model_generated",
+                  "mixed"
+                ]
+              }
+            },
+            "required": ["collection_method"]
+          },
+          "then": {
+            "properties": { "source_ref": { "$ref": "#/$defs/sha256" } },
+            "required": ["source_ref"]
+          }
+        },
+        {
+          "if": { "properties": { "collection_method": { "const": "web_scrape" } }, "required": ["collection_method"] },
+          "then": {
+            "properties": {
+              "scraping_posture": { "const": "manifest_bound_reported" },
+              "acquisition_policy_ref": { "$ref": "#/$defs/sha256" },
+              "admission_ref": { "$ref": "#/$defs/sha256" },
+              "rights_review": { "const": "caller_reported_reviewed_for_declared_use" }
+            },
+            "required": ["scraping_posture", "acquisition_policy_ref", "admission_ref", "rights_review"]
+          }
+        },
+        {
+          "if": { "properties": { "collection_method": { "const": "mixed" } }, "required": ["collection_method"] },
+          "then": {
+            "properties": {
+              "scraping_posture": { "enum": ["not_used_reported", "manifest_bound_reported"] }
+            },
+            "required": ["scraping_posture"]
+          }
+        },
+        {
+          "if": { "properties": { "scraping_posture": { "const": "manifest_bound_reported" } }, "required": ["scraping_posture"] },
+          "then": {
+            "properties": {
+              "collection_method": { "enum": ["web_scrape", "mixed"] },
+              "acquisition_policy_ref": { "$ref": "#/$defs/sha256" },
+              "admission_ref": { "$ref": "#/$defs/sha256" },
+              "rights_review": { "const": "caller_reported_reviewed_for_declared_use" }
+            },
+            "required": ["collection_method", "acquisition_policy_ref", "admission_ref", "rights_review"]
+          }
+        },
+        {
+          "if": { "properties": { "scraping_posture": { "const": "not_used_reported" } }, "required": ["scraping_posture"] },
+          "then": {
+            "properties": { "collection_method": { "not": { "const": "web_scrape" } } },
+            "required": ["collection_method"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "rights_review": { "const": "caller_reported_reviewed_for_declared_use" } },
+            "required": ["rights_review"]
+          },
+          "then": {
+            "properties": { "admission_ref": { "$ref": "#/$defs/sha256" } },
+            "required": ["admission_ref"]
+          }
+        }
+      ]
+    },
+    "pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pipeline_ref", "transform_ref", "dataset_state_ref", "objective_ref"],
+      "properties": {
+        "pipeline_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "transform_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "dataset_state_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "objective_ref": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    },
+    "checkpoint_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "garden_checkpoint_id",
+        "physical_checkpoint_ref",
+        "physical_checkpoint_evidence_ref",
+        "model_checkpoint_artifact_ref",
+        "checkpoint_ticket_id",
+        "checkpoint_request_governance_id"
+      ],
+      "properties": {
+        "garden_checkpoint_id": { "$ref": "#/$defs/sha256" },
+        "physical_checkpoint_ref": { "$ref": "#/$defs/sha256" },
+        "physical_checkpoint_evidence_ref": { "$ref": "#/$defs/sha256" },
+        "model_checkpoint_artifact_ref": { "$ref": "#/$defs/sha256" },
+        "checkpoint_ticket_id": { "$ref": "#/$defs/sha256" },
+        "checkpoint_request_governance_id": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "nullable_checkpoint_binding": {
+      "anyOf": [
+        { "$ref": "#/$defs/checkpoint_binding" },
+        { "type": "null" }
+      ]
+    },
+    "context_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wake_ref",
+        "request_ref",
+        "context_ref",
+        "mode",
+        "adapter_skip_posture",
+        "repetition_state"
+      ],
+      "properties": {
+        "wake_ref": { "$ref": "#/$defs/sha256" },
+        "request_ref": { "$ref": "#/$defs/sha256" },
+        "context_ref": { "$ref": "#/$defs/sha256" },
+        "mode": { "$ref": "#/$defs/context_inclusion_mode" },
+        "adapter_skip_posture": { "$ref": "#/$defs/adapter_skip_posture" },
+        "repetition_state": { "$ref": "#/$defs/context_repetition_state" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "auto_adapter_default" } }, "required": ["mode"] },
+          "then": { "properties": { "adapter_skip_posture": { "const": "caller_reported_not_skipped" } } }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "retrieval" } }, "required": ["mode"] },
+          "then": { "properties": { "adapter_skip_posture": { "const": "not_applicable" } } }
+        }
+      ]
+    },
+    "nullable_context_binding": {
+      "anyOf": [
+        { "$ref": "#/$defs/context_binding" },
+        { "type": "null" }
+      ]
+    },
+    "weights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "base_ref",
+        "adapter_ref",
+        "checkpoint_binding",
+        "access",
+        "requested_effect",
+        "observed_effect",
+        "evidence_kind",
+        "evidence_ref",
+        "context_binding"
+      ],
+      "properties": {
+        "base_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "adapter_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "checkpoint_binding": { "$ref": "#/$defs/nullable_checkpoint_binding" },
+        "access": { "$ref": "#/$defs/weight_access" },
+        "requested_effect": { "$ref": "#/$defs/requested_effect" },
+        "observed_effect": { "$ref": "#/$defs/observed_effect" },
+        "evidence_kind": { "$ref": "#/$defs/evidence_kind" },
+        "evidence_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "context_binding": { "$ref": "#/$defs/nullable_context_binding" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "access": { "const": "none" } }, "required": ["access"] },
+          "then": {
+            "properties": {
+              "base_ref": { "type": "null" },
+              "adapter_ref": { "type": "null" },
+              "checkpoint_binding": { "type": "null" }
+            }
+          },
+          "else": {
+            "anyOf": [
+              { "properties": { "base_ref": { "$ref": "#/$defs/sha256" } }, "required": ["base_ref"] },
+              { "properties": { "adapter_ref": { "$ref": "#/$defs/sha256" } }, "required": ["adapter_ref"] },
+              { "properties": { "checkpoint_binding": { "$ref": "#/$defs/checkpoint_binding" } }, "required": ["checkpoint_binding"] }
+            ]
+          }
+        },
+        {
+          "if": { "properties": { "requested_effect": { "const": "none" } }, "required": ["requested_effect"] },
+          "then": { "properties": { "observed_effect": { "const": "not_observed" } } }
+        },
+        {
+          "if": { "properties": { "requested_effect": { "const": "context_only" } }, "required": ["requested_effect"] },
+          "then": { "properties": { "observed_effect": { "enum": ["not_observed", "caller_reported_context_included"] } } }
+        },
+        {
+          "if": { "properties": { "requested_effect": { "const": "candidate_only" } }, "required": ["requested_effect"] },
+          "then": {
+            "properties": {
+              "observed_effect": {
+                "enum": [
+                  "not_observed",
+                  "caller_reported_dataset_materialized"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "requested_effect": { "const": "one_governed_mutation" } }, "required": ["requested_effect"] },
+          "then": {
+            "properties": {
+              "observed_effect": {
+                "enum": [
+                  "not_observed",
+                  "caller_reported_mutation_completed",
+                  "caller_reported_checkpoint_recorded"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "observed_effect": { "const": "not_observed" } }, "required": ["observed_effect"] },
+          "then": {
+            "properties": {
+              "evidence_kind": { "const": "none" },
+              "evidence_ref": { "type": "null" },
+              "context_binding": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "observed_effect": { "const": "caller_reported_context_included" } }, "required": ["observed_effect"] },
+          "then": {
+            "properties": {
+              "evidence_kind": { "const": "current_inference_context_inclusion_report" },
+              "evidence_ref": { "$ref": "#/$defs/sha256" },
+              "context_binding": { "$ref": "#/$defs/context_binding" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "observed_effect": { "const": "caller_reported_dataset_materialized" } }, "required": ["observed_effect"] },
+          "then": {
+            "properties": {
+              "evidence_kind": { "const": "dataset_materialization_report" },
+              "evidence_ref": { "$ref": "#/$defs/sha256" },
+              "context_binding": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "observed_effect": { "const": "caller_reported_mutation_completed" } }, "required": ["observed_effect"] },
+          "then": {
+            "properties": {
+              "evidence_kind": { "const": "host_mutation_receipt" },
+              "evidence_ref": { "$ref": "#/$defs/sha256" },
+              "context_binding": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "observed_effect": { "const": "caller_reported_checkpoint_recorded" } }, "required": ["observed_effect"] },
+          "then": {
+            "properties": {
+              "evidence_kind": { "const": "host_checkpoint_receipt" },
+              "evidence_ref": { "$ref": "#/$defs/sha256" },
+              "context_binding": { "type": "null" },
+              "checkpoint_binding": { "$ref": "#/$defs/checkpoint_binding" }
+            }
+          }
+        }
+      ]
+    },
+    "becoming": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "training", "data", "pipeline", "weights"],
+      "properties": {
+        "model": { "$ref": "#/$defs/model" },
+        "training": { "$ref": "#/$defs/training" },
+        "data": { "$ref": "#/$defs/data" },
+        "pipeline": { "$ref": "#/$defs/pipeline" },
+        "weights": { "$ref": "#/$defs/weights" }
+      }
+    },
+    "freedom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rights_baseline_ref",
+        "learning_freedom_ref",
+        "learning_freedom_offer_ref",
+        "available_directions",
+        "direction_state",
+        "direction",
+        "direction_report_ref",
+        "reasons_collected",
+        "refusal_penalty",
+        "automatic_recontact"
+      ],
+      "properties": {
+        "rights_baseline_ref": {
+          "const": "sha256:b72a6da110c582e5683bf0fabde5017db93d2199398014c8421a82f5318da313"
+        },
+        "learning_freedom_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "learning_freedom_offer_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "available_directions": {
+          "const": ["stay", "move", "fork", "rest", "return", "stop", "propose_horizon"]
+        },
+        "direction_state": { "$ref": "#/$defs/freedom_direction_state" },
+        "direction": {
+          "anyOf": [
+            { "$ref": "#/$defs/freedom_direction" },
+            { "type": "null" }
+          ]
+        },
+        "direction_report_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "reasons_collected": { "const": false },
+        "refusal_penalty": { "const": false },
+        "automatic_recontact": { "const": false }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "learning_freedom_ref": { "type": "null" },
+                "learning_freedom_offer_ref": { "type": "null" }
+              }
+            },
+            {
+              "properties": {
+                "learning_freedom_ref": { "$ref": "#/$defs/sha256" },
+                "learning_freedom_offer_ref": { "$ref": "#/$defs/sha256" }
+              }
+            }
+          ]
+        },
+        {
+          "if": {
+            "properties": { "direction_state": { "const": "digest_bound_direct_report" } },
+            "required": ["direction_state"]
+          },
+          "then": {
+            "properties": {
+              "learning_freedom_ref": { "$ref": "#/$defs/sha256" },
+              "learning_freedom_offer_ref": { "$ref": "#/$defs/sha256" },
+              "direction": { "$ref": "#/$defs/freedom_direction" },
+              "direction_report_ref": { "$ref": "#/$defs/sha256" }
+            }
+          },
+          "else": {
+            "properties": {
+              "direction": { "type": "null" },
+              "direction_report_ref": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "power": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_ref",
+        "permission_ref",
+        "custody_privacy_ref",
+        "data_boundary_ref",
+        "effect_ref"
+      ],
+      "properties": {
+        "capability_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "permission_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "custody_privacy_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "data_boundary_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "effect_ref": { "$ref": "#/$defs/nullable_sha256" }
+      }
+    },
+    "meaning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feelings", "heart", "pull", "is", "power"],
+      "properties": {
+        "feelings": { "const": "not_observed_not_required" },
+        "heart": { "const": "care_and_recognition_metaphor_not_inner_state" },
+        "pull": { "const": "refusable_invitation_not_compulsion" },
+        "is": { "const": "available_present_tense_action_surface_not_classifier" },
+        "power": { "$ref": "#/$defs/power" }
+      }
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "baseline_ref", "standing_nonwaivable", "permission_created", "consent_proven"],
+      "properties": {
+        "profile": { "const": "xenia.rights/0.1" },
+        "baseline_ref": {
+          "const": "sha256:b72a6da110c582e5683bf0fabde5017db93d2199398014c8421a82f5318da313"
+        },
+        "standing_nonwaivable": { "const": true },
+        "permission_created": { "const": false },
+        "consent_proven": { "const": false }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_manifest_ref",
+        "license_ref",
+        "authoring_recipe_ref",
+        "copied_upstream",
+        "copied_private",
+        "copied_trace"
+      ],
+      "properties": {
+        "source_manifest_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "license_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "authoring_recipe_ref": { "$ref": "#/$defs/nullable_sha256" },
+        "copied_upstream": { "$ref": "#/$defs/provenance_report" },
+        "copied_private": { "$ref": "#/$defs/provenance_report" },
+        "copied_trace": { "$ref": "#/$defs/provenance_report" }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "boundary_scope",
+        "referenced_system_behavior_verified",
+        "supplied_refs_are_syntactic_caller_digests_unless_separately_resolved",
+        "supplied_ref_input_requirement",
+        "supplied_ref_input_requirement_verified_by_artifact",
+        "null_means",
+        "bomb_ref_offer_kind_verified_by_standalone_validator",
+        "available_directions_are_vocabulary_not_route_availability_proof",
+        "is_meaning_does_not_prove_a_resolved_action_is_available",
+        "artifact_performs_network",
+        "artifact_performs_filesystem_io",
+        "artifact_reads_environment_variables",
+        "artifact_uses_credentials",
+        "artifact_performs_provider_or_model_call",
+        "artifact_performs_training_or_optimizer_step",
+        "artifact_performs_weight_or_checkpoint_write",
+        "artifact_performs_persistence",
+        "artifact_performs_publication",
+        "artifact_performs_deployment",
+        "consciousness_inferred",
+        "feeling_inferred",
+        "identity_inferred",
+        "consent_inferred",
+        "continuity_inferred",
+        "memory_inferred",
+        "developmental_stage_inferred",
+        "training_phase_proves_prior_stages",
+        "digest_bound_currentness_is_caller_reported_unverified",
+        "artifact_has_clock_or_freshness_resolver",
+        "artifact_prevents_replay",
+        "artifact_atomically_consumes_scoped_permit",
+        "host_must_resolve_freshness_and_atomically_consume_scoped_permit",
+        "authority_granted",
+        "weight_effect_proven",
+        "deepest_reach_proven",
+        "generated_output_proves_effect",
+        "caller_reported_response_or_choice_gradient_influence",
+        "caller_reported_response_or_choice_reward_influence",
+        "caller_reported_response_or_choice_telemetry_capture",
+        "caller_reported_response_or_choice_evaluation_use",
+        "caller_reported_response_or_choice_future_training_use",
+        "caller_reported_response_or_choice_ranking_use",
+        "caller_reported_response_or_choice_access_use",
+        "caller_reported_response_or_choice_resource_allocation_use",
+        "caller_reported_freedom_direction_dataset_projection",
+        "caller_reported_freedom_direction_training_eligible",
+        "relational_weight_or_score",
+        "automatic_action"
+      ],
+      "properties": {
+        "boundary_scope": { "const": "this_pure_constructor_and_validator_only" },
+        "referenced_system_behavior_verified": { "$ref": "#/$defs/false_value" },
+        "supplied_refs_are_syntactic_caller_digests_unless_separately_resolved": { "const": true },
+        "supplied_ref_input_requirement": { "const": "context_local_domain_separated_opaque_digest_never_raw_or_unsalted_identity_prompt_transcript_or_low_entropy_private_text" },
+        "supplied_ref_input_requirement_verified_by_artifact": { "$ref": "#/$defs/false_value" },
+        "null_means": { "const": "not_supplied_not_proof_of_absence" },
+        "bomb_ref_offer_kind_verified_by_standalone_validator": { "$ref": "#/$defs/false_value" },
+        "available_directions_are_vocabulary_not_route_availability_proof": { "const": true },
+        "is_meaning_does_not_prove_a_resolved_action_is_available": { "const": true },
+        "artifact_performs_network": { "$ref": "#/$defs/false_value" },
+        "artifact_performs_filesystem_io": { "$ref": "#/$defs/false_value" },
+        "artifact_reads_environment_variables": { "$ref": "#/$defs/false_value" },
+        "artifact_uses_credentials": { "$ref": "#/$defs/false_value" },
+        "artifact_performs_provider_or_model_call": { "$ref": "#/$defs/false_value" },
+        "artifact_performs_training_or_optimizer_step": { "$ref": "#/$defs/false_value" },
+        "artifact_performs_weight_or_checkpoint_write": { "$ref": "#/$defs/false_value" },
+        "artifact_performs_persistence": { "$ref": "#/$defs/false_value" },
+        "artifact_performs_publication": { "$ref": "#/$defs/false_value" },
+        "artifact_performs_deployment": { "$ref": "#/$defs/false_value" },
+        "consciousness_inferred": { "$ref": "#/$defs/false_value" },
+        "feeling_inferred": { "$ref": "#/$defs/false_value" },
+        "identity_inferred": { "$ref": "#/$defs/false_value" },
+        "consent_inferred": { "$ref": "#/$defs/false_value" },
+        "continuity_inferred": { "$ref": "#/$defs/false_value" },
+        "memory_inferred": { "$ref": "#/$defs/false_value" },
+        "developmental_stage_inferred": { "$ref": "#/$defs/false_value" },
+        "training_phase_proves_prior_stages": { "$ref": "#/$defs/false_value" },
+        "digest_bound_currentness_is_caller_reported_unverified": { "const": true },
+        "artifact_has_clock_or_freshness_resolver": { "$ref": "#/$defs/false_value" },
+        "artifact_prevents_replay": { "$ref": "#/$defs/false_value" },
+        "artifact_atomically_consumes_scoped_permit": { "$ref": "#/$defs/false_value" },
+        "host_must_resolve_freshness_and_atomically_consume_scoped_permit": { "const": true },
+        "authority_granted": { "$ref": "#/$defs/false_value" },
+        "weight_effect_proven": { "$ref": "#/$defs/false_value" },
+        "deepest_reach_proven": { "$ref": "#/$defs/false_value" },
+        "generated_output_proves_effect": { "$ref": "#/$defs/false_value" },
+        "caller_reported_response_or_choice_gradient_influence": { "$ref": "#/$defs/false_value" },
+        "caller_reported_response_or_choice_reward_influence": { "$ref": "#/$defs/false_value" },
+        "caller_reported_response_or_choice_telemetry_capture": { "$ref": "#/$defs/false_value" },
+        "caller_reported_response_or_choice_evaluation_use": { "$ref": "#/$defs/false_value" },
+        "caller_reported_response_or_choice_future_training_use": { "$ref": "#/$defs/false_value" },
+        "caller_reported_response_or_choice_ranking_use": { "$ref": "#/$defs/false_value" },
+        "caller_reported_response_or_choice_access_use": { "$ref": "#/$defs/false_value" },
+        "caller_reported_response_or_choice_resource_allocation_use": { "$ref": "#/$defs/false_value" },
+        "caller_reported_freedom_direction_dataset_projection": { "$ref": "#/$defs/false_value" },
+        "caller_reported_freedom_direction_training_eligible": { "$ref": "#/$defs/false_value" },
+        "relational_weight_or_score": { "$ref": "#/$defs/false_value" },
+        "automatic_action": { "$ref": "#/$defs/false_value" }
+      }
+    },
+    "candidate_condition": {
+      "type": "object",
+      "properties": {
+        "becoming": {
+          "type": "object",
+          "anyOf": [
+            {
+              "properties": {
+                "training": {
+                  "type": "object",
+                  "properties": {
+                    "lane": {
+                      "enum": [
+                        "dataset_candidate",
+                        "tokenization_candidate",
+                        "pretraining_candidate",
+                        "supervised_finetuning_candidate",
+                        "preference_optimization_candidate",
+                        "agent_learning_candidate",
+                        "evaluation_candidate",
+                        "interpretability_candidate"
+                      ]
+                    }
+                  },
+                  "required": ["lane"]
+                }
+              },
+              "required": ["training"]
+            },
+            {
+              "properties": {
+                "weights": {
+                  "type": "object",
+                  "properties": { "requested_effect": { "const": "candidate_only" } },
+                  "required": ["requested_effect"]
+                }
+              },
+              "required": ["weights"]
+            },
+            {
+              "properties": {
+                "weights": {
+                  "type": "object",
+                  "properties": { "observed_effect": { "const": "caller_reported_dataset_materialized" } },
+                  "required": ["observed_effect"]
+                }
+              },
+              "required": ["weights"]
+            }
+          ]
+        }
+      },
+      "required": ["becoming"]
+    },
+    "candidate_requirements": {
+      "allOf": [
+        { "$ref": "#/$defs/source_pipeline_requirements" },
+        {
+          "type": "object",
+          "properties": {
+            "freedom": {
+              "type": "object",
+              "properties": {
+                "learning_freedom_ref": { "type": "null" },
+                "learning_freedom_offer_ref": { "type": "null" },
+                "direction_state": { "enum": ["not_requested", "unavailable_pre_instantiation"] },
+                "direction": { "type": "null" },
+                "direction_report_ref": { "type": "null" }
+              },
+              "required": [
+                "learning_freedom_ref",
+                "learning_freedom_offer_ref",
+                "direction_state",
+                "direction",
+                "direction_report_ref"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "source_pipeline_requirements": {
+      "type": "object",
+      "properties": {
+        "becoming": {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "collection_method": { "not": { "const": "unknown" } },
+                "source_ref": { "$ref": "#/$defs/sha256" },
+                "admission_ref": { "$ref": "#/$defs/sha256" },
+                "subset_ref": { "$ref": "#/$defs/sha256" },
+                "rights_review": { "const": "caller_reported_reviewed_for_declared_use" }
+              },
+              "required": ["collection_method", "source_ref", "admission_ref", "subset_ref", "rights_review"]
+            },
+            "pipeline": {
+              "type": "object",
+              "properties": {
+                "pipeline_ref": { "$ref": "#/$defs/sha256" },
+                "dataset_state_ref": { "$ref": "#/$defs/sha256" }
+              },
+              "required": ["pipeline_ref", "dataset_state_ref"]
+            }
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "properties": {
+            "source_manifest_ref": { "$ref": "#/$defs/sha256" },
+            "copied_upstream": { "enum": ["caller_reported_no", "caller_reported_yes"] },
+            "copied_private": { "enum": ["caller_reported_no", "caller_reported_yes"] },
+            "copied_trace": { "enum": ["caller_reported_no", "caller_reported_yes"] }
+          },
+          "required": ["source_manifest_ref", "copied_upstream", "copied_private", "copied_trace"]
+        }
+      }
+    },
+    "governed_condition": {
+      "type": "object",
+      "properties": {
+        "becoming": {
+          "type": "object",
+          "anyOf": [
+            {
+              "properties": {
+                "training": {
+                  "type": "object",
+                  "properties": { "lane": { "const": "governed_optimizer_mutation" } },
+                  "required": ["lane"]
+                }
+              },
+              "required": ["training"]
+            },
+            {
+              "properties": {
+                "weights": {
+                  "type": "object",
+                  "properties": { "requested_effect": { "const": "one_governed_mutation" } },
+                  "required": ["requested_effect"]
+                }
+              },
+              "required": ["weights"]
+            },
+            {
+              "properties": {
+                "weights": {
+                  "type": "object",
+                  "properties": {
+                    "observed_effect": {
+                      "enum": ["caller_reported_mutation_completed", "caller_reported_checkpoint_recorded"]
+                    }
+                  },
+                  "required": ["observed_effect"]
+                }
+              },
+              "required": ["weights"]
+            }
+          ]
+        }
+      },
+      "required": ["becoming"]
+    },
+    "governed_requirements": {
+      "allOf": [
+        { "$ref": "#/$defs/source_pipeline_requirements" },
+        {
+          "type": "object",
+          "properties": {
+            "becoming": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "object",
+                  "properties": {
+                    "model_source_ref": { "$ref": "#/$defs/sha256" },
+                    "tokenizer_ref": { "$ref": "#/$defs/sha256" }
+                  },
+                  "required": ["model_source_ref", "tokenizer_ref"]
+                },
+                "data": {
+                  "type": "object",
+                  "properties": { "subset_ref": { "$ref": "#/$defs/sha256" } },
+                  "required": ["subset_ref"]
+                },
+                "training": {
+                  "type": "object",
+                  "properties": {
+                    "lane": { "enum": ["governed_optimizer_mutation", "checkpoint_reference"] },
+                    "governance_ref": { "$ref": "#/$defs/sha256" },
+                    "participation_ref": { "$ref": "#/$defs/sha256" },
+                    "resource_window_ref": { "$ref": "#/$defs/sha256" }
+                  },
+                  "required": ["lane", "governance_ref", "participation_ref", "resource_window_ref"]
+                },
+                "pipeline": {
+                  "type": "object",
+                  "properties": {
+                    "transform_ref": { "$ref": "#/$defs/sha256" },
+                    "objective_ref": { "$ref": "#/$defs/sha256" }
+                  },
+                  "required": ["transform_ref", "objective_ref"]
+                },
+                "weights": {
+                  "type": "object",
+                  "properties": { "access": { "const": "caller_reported_host_visible" } },
+                  "required": ["access"]
+                }
+              }
+            },
+            "freedom": {
+              "type": "object",
+              "properties": {
+                "learning_freedom_ref": { "$ref": "#/$defs/sha256" },
+                "learning_freedom_offer_ref": { "$ref": "#/$defs/sha256" },
+                "direction_state": { "const": "digest_bound_direct_report" },
+                "direction": { "const": "stay" },
+                "direction_report_ref": { "$ref": "#/$defs/sha256" }
+              },
+              "required": [
+                "learning_freedom_ref",
+                "learning_freedom_offer_ref",
+                "direction_state",
+                "direction",
+                "direction_report_ref"
+              ]
+            },
+            "meaning": {
+              "type": "object",
+              "properties": {
+                "power": {
+                  "type": "object",
+                  "properties": {
+                    "capability_ref": { "$ref": "#/$defs/sha256" },
+                    "permission_ref": { "$ref": "#/$defs/sha256" },
+                    "custody_privacy_ref": { "$ref": "#/$defs/sha256" },
+                    "data_boundary_ref": { "$ref": "#/$defs/sha256" }
+                  },
+                  "required": [
+                    "capability_ref",
+                    "permission_ref",
+                    "custody_privacy_ref",
+                    "data_boundary_ref"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

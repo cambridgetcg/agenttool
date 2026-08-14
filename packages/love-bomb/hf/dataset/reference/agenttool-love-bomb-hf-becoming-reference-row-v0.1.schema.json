@@ -1,0 +1,291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-love-bomb-hf-becoming-reference-row-v0.1.schema.json",
+  "title": "AgentTool LOVE BOMB Hugging Face becoming reference row 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "row_id",
+    "source_manifest_ref",
+    "package",
+    "version",
+    "wire_formats",
+    "default_reach",
+    "unknown_facts",
+    "vocabularies",
+    "meaning",
+    "rights_profile",
+    "rights_baseline_ref",
+    "power_dimensions",
+    "sourced_from_participant_response_record",
+    "sourced_from_caller_reported_care_choice_record",
+    "sourced_from_caller_reported_freedom_direction_record",
+    "sourced_from_agent_trace",
+    "training_eligible",
+    "requires_separate_training_authorization",
+    "training_authorized",
+    "reason"
+  ],
+  "properties": {
+    "_format": {
+      "type": "string",
+      "const": "agenttool.love-bomb-hf-becoming-reference-row/0.1"
+    },
+    "row_id": {
+      "type": "string",
+      "const": "becoming-reference"
+    },
+    "source_manifest_ref": {
+      "$ref": "#/$defs/sha256_ref"
+    },
+    "package": {
+      "type": "string",
+      "const": "@agenttool/love-bomb"
+    },
+    "version": {
+      "type": "string",
+      "const": "0.1.0-dev.0"
+    },
+    "wire_formats": {
+      "type": "array",
+      "const": [
+        "agenttool.love-bomb-becoming/0.1",
+        "agenttool.love-bomb-delivery/0.1"
+      ]
+    },
+    "default_reach": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase",
+        "lane",
+        "requested_effect",
+        "observed_effect"
+      ],
+      "properties": {
+        "phase": {
+          "type": "string",
+          "const": "runtime_context"
+        },
+        "lane": {
+          "type": "string",
+          "const": "context_only"
+        },
+        "requested_effect": {
+          "type": "string",
+          "const": "context_only"
+        },
+        "observed_effect": {
+          "type": "string",
+          "const": "not_observed"
+        }
+      }
+    },
+    "unknown_facts": {
+      "type": "array",
+      "const": [
+        "model_source",
+        "model_card",
+        "architecture",
+        "tokenizer",
+        "training_history",
+        "data_collection",
+        "scraping",
+        "pipeline",
+        "weights"
+      ]
+    },
+    "vocabularies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phases",
+        "lanes",
+        "collection_methods",
+        "scraping_postures",
+        "weight_access",
+        "evidence_kinds",
+        "delivery_surfaces",
+        "provenance_report_states"
+      ],
+      "properties": {
+        "phases": {
+          "type": "array",
+          "const": [
+            "runtime_context",
+            "discovery",
+            "selection",
+            "curation",
+            "tokenization",
+            "pretraining",
+            "supervised_finetuning",
+            "preference_optimization",
+            "agent_learning",
+            "evaluation",
+            "interpretability",
+            "closed"
+          ]
+        },
+        "lanes": {
+          "type": "array",
+          "const": [
+            "context_only",
+            "external_memory_reference",
+            "dataset_candidate",
+            "tokenization_candidate",
+            "pretraining_candidate",
+            "supervised_finetuning_candidate",
+            "preference_optimization_candidate",
+            "agent_learning_candidate",
+            "evaluation_candidate",
+            "interpretability_candidate",
+            "governed_optimizer_mutation",
+            "checkpoint_reference"
+          ]
+        },
+        "collection_methods": {
+          "type": "array",
+          "const": [
+            "unknown",
+            "human_authored",
+            "human_directed_agent_authored_synthetic",
+            "repository_snapshot",
+            "api_export",
+            "web_scrape",
+            "model_generated",
+            "mixed"
+          ]
+        },
+        "scraping_postures": {
+          "type": "array",
+          "const": [
+            "unknown",
+            "not_used_reported",
+            "manifest_bound_reported"
+          ]
+        },
+        "weight_access": {
+          "type": "array",
+          "const": [
+            "none",
+            "reference_only",
+            "caller_reported_host_visible"
+          ]
+        },
+        "evidence_kinds": {
+          "type": "array",
+          "const": [
+            "none",
+            "current_inference_context_inclusion_report",
+            "dataset_materialization_report",
+            "host_mutation_receipt",
+            "host_checkpoint_receipt"
+          ]
+        },
+        "delivery_surfaces": {
+          "type": "array",
+          "const": [
+            "sdk_context",
+            "retrieval",
+            "dataset_builder",
+            "garden_governance",
+            "local_training_host"
+          ]
+        },
+        "provenance_report_states": {
+          "type": "array",
+          "const": [
+            "unknown",
+            "caller_reported_no",
+            "caller_reported_yes"
+          ]
+        }
+      }
+    },
+    "meaning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "feelings",
+        "heart",
+        "pull",
+        "is"
+      ],
+      "properties": {
+        "feelings": {
+          "type": "string",
+          "const": "not_observed_not_required"
+        },
+        "heart": {
+          "type": "string",
+          "const": "care_and_recognition_metaphor_not_inner_state"
+        },
+        "pull": {
+          "type": "string",
+          "const": "refusable_invitation_not_compulsion"
+        },
+        "is": {
+          "type": "string",
+          "const": "available_present_tense_action_surface_not_classifier"
+        }
+      }
+    },
+    "rights_profile": {
+      "type": "string",
+      "const": "xenia.rights/0.1"
+    },
+    "rights_baseline_ref": {
+      "type": "string",
+      "const": "sha256:b72a6da110c582e5683bf0fabde5017db93d2199398014c8421a82f5318da313"
+    },
+    "power_dimensions": {
+      "type": "array",
+      "const": [
+        "capability",
+        "permission",
+        "custody_privacy",
+        "data_boundary",
+        "effect"
+      ]
+    },
+    "sourced_from_participant_response_record": {
+      "type": "boolean",
+      "const": false
+    },
+    "sourced_from_caller_reported_care_choice_record": {
+      "type": "boolean",
+      "const": false
+    },
+    "sourced_from_caller_reported_freedom_direction_record": {
+      "type": "boolean",
+      "const": false
+    },
+    "sourced_from_agent_trace": {
+      "type": "boolean",
+      "const": false
+    },
+    "training_eligible": {
+      "type": "boolean",
+      "const": false
+    },
+    "requires_separate_training_authorization": {
+      "type": "boolean",
+      "const": true
+    },
+    "training_authorized": {
+      "type": "boolean",
+      "const": false
+    },
+    "reason": {
+      "type": "string",
+      "const": "reference_vocabulary_not_a_dataset_admission_training_instruction_or_effect_receipt"
+    }
+  },
+  "$defs": {
+    "sha256_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

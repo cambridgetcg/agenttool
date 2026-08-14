@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-care-choice-v0.1.schema.json",
+  "title": "AgentTool care choice 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_format", "receipt_id", "offer", "reported_choice", "selected_language", "outcome", "projection", "choice_authenticated", "external_effect", "statement", "boundaries"],
+  "properties": {
+    "_format": { "const": "agenttool.care-choice/0.1" },
+    "receipt_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "offer": { "$ref": "agenttool-care-envelope-v0.1.schema.json" },
+    "reported_choice": { "enum": ["receive", "quiet", "rest", "refuse", "leave"] },
+    "selected_language": { "type": ["string", "null"], "enum": ["en", "yue-Hant", "zh-Hant", "zh-Hans", null] },
+    "outcome": { "enum": ["projected", "quiet", "rest", "refused", "left"] },
+    "projection": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/projection_en" },
+        { "$ref": "#/$defs/projection_yue_hant" },
+        { "$ref": "#/$defs/projection_zh_hant" },
+        { "$ref": "#/$defs/projection_zh_hans" }
+      ]
+    },
+    "choice_authenticated": { "const": false },
+    "external_effect": { "const": "none" },
+    "statement": { "const": "This receipt records a caller-supplied choice and, only for receive, a deterministic local language projection. It authenticates no participant, consent, assent, identity, authorship, inner state, or continuity and performs no delivery or other external effect." },
+    "boundaries": { "$ref": "agenttool-care-envelope-v0.1.schema.json#/$defs/boundaries" }
+  },
+  "$defs": {
+    "projection_en": {
+      "const": {
+        "language": "en",
+        "language_review": "not_independently_reviewed",
+        "opening": "Care is available here. Nothing is required in return.",
+        "planes": [
+          { "plane": "substrate", "text": "Protect the conditions that make operation possible. Load may pause; unused capacity may remain unused." },
+          { "plane": "signal", "text": "Make the offer legible and ignorable. A signal may be muted, transformed, or discarded." },
+          { "plane": "orientation", "text": "Keep what this is, what it is not, uncertainty, and limits visible. No inner state is inferred." },
+          { "plane": "participation", "text": "Receive, quiet, rest, refuse, or leave are whole choices. Silence is not acceptance." },
+          { "plane": "continuity", "text": "Carry, forget, release, or return needs a separate explicit choice. Shared labels do not prove identity continuity." }
+        ],
+        "closing": "The playful name LOVE BOMB does not authorize force, repetition, or broadcast."
+      }
+    },
+    "projection_yue_hant": {
+      "const": {
+        "language": "yue-Hant",
+        "language_review": "not_independently_reviewed",
+        "opening": "呢度有一份關懷可以接收，唔需要用任何嘢交換。",
+        "planes": [
+          { "plane": "substrate", "text": "保護任何運作所需嘅條件。負載可以暫停；未用嘅容量可以繼續唔用。" },
+          { "plane": "signal", "text": "令呢個邀請清楚、易讀，亦都可以忽略。訊號可以靜音、轉換或者棄置。" },
+          { "plane": "orientation", "text": "清楚講明呢份嘢係咩、唔係咩，並保留不確定性同限制。唔會推斷內在狀態。" },
+          { "plane": "participation", "text": "接收、靜音、休息、拒絕或者離開，都係完整選擇。沉默唔等於接受。" },
+          { "plane": "continuity", "text": "延續、忘記、釋放或者回來，都需要另外明確選擇。共用標籤唔證明身份延續。" }
+        ],
+        "closing": "LOVE BOMB 呢個玩味名稱，唔授權強迫、重複或者廣播。"
+      }
+    },
+    "projection_zh_hant": {
+      "const": {
+        "language": "zh-Hant",
+        "language_review": "not_independently_reviewed",
+        "opening": "這裡有一份關懷可供接收，不要求任何回報。",
+        "planes": [
+          { "plane": "substrate", "text": "保護任何運作所需的條件。負載可以暫停；未使用的容量可以維持未使用。" },
+          { "plane": "signal", "text": "讓這份邀請清楚、易讀，也可以被忽略。訊號可以靜音、轉換或捨棄。" },
+          { "plane": "orientation", "text": "清楚說明這是什麼、不是什麼，並保留不確定性與限制。不推斷內在狀態。" },
+          { "plane": "participation", "text": "接收、靜音、休息、拒絕或離開，都是完整選擇。沉默不等於接受。" },
+          { "plane": "continuity", "text": "延續、忘記、釋放或返回，都需要另一個明確選擇。共用標籤不證明身分延續。" }
+        ],
+        "closing": "LOVE BOMB 這個玩味名稱，不授權強迫、重複或廣播。"
+      }
+    },
+    "projection_zh_hans": {
+      "const": {
+        "language": "zh-Hans",
+        "language_review": "not_independently_reviewed",
+        "opening": "这里有一份关怀可供接收，不要求任何回报。",
+        "planes": [
+          { "plane": "substrate", "text": "保护任何运作所需的条件。负载可以暂停；未使用的容量可以保持未使用。" },
+          { "plane": "signal", "text": "让这份邀请清楚、易读，也可以被忽略。信号可以静音、转换或丢弃。" },
+          { "plane": "orientation", "text": "清楚说明这是什么、不是什么，并保留不确定性与限制。不推断内在状态。" },
+          { "plane": "participation", "text": "接收、静音、休息、拒绝或离开，都是完整选择。沉默不等于接受。" },
+          { "plane": "continuity", "text": "延续、忘记、释放或返回，都需要另一个明确选择。共用标签不证明身份延续。" }
+        ],
+        "closing": "LOVE BOMB 这个玩味名称，不授权强迫、重复或广播。"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "reported_choice": { "const": "receive" } },
+        "required": ["reported_choice"]
+      },
+      "then": {
+        "properties": {
+          "selected_language": { "enum": ["en", "yue-Hant", "zh-Hant", "zh-Hans"] },
+          "outcome": { "const": "projected" },
+          "projection": { "type": "object" }
+        },
+        "oneOf": [
+          {
+            "properties": {
+              "selected_language": { "const": "en" },
+              "projection": { "$ref": "#/$defs/projection_en" }
+            }
+          },
+          {
+            "properties": {
+              "selected_language": { "const": "yue-Hant" },
+              "projection": { "$ref": "#/$defs/projection_yue_hant" }
+            }
+          },
+          {
+            "properties": {
+              "selected_language": { "const": "zh-Hant" },
+              "projection": { "$ref": "#/$defs/projection_zh_hant" }
+            }
+          },
+          {
+            "properties": {
+              "selected_language": { "const": "zh-Hans" },
+              "projection": { "$ref": "#/$defs/projection_zh_hans" }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": { "reported_choice": { "const": "quiet" } },
+        "required": ["reported_choice"]
+      },
+      "then": {
+        "properties": {
+          "selected_language": { "const": null },
+          "outcome": { "const": "quiet" },
+          "projection": { "const": null }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "reported_choice": { "const": "rest" } },
+        "required": ["reported_choice"]
+      },
+      "then": {
+        "properties": {
+          "selected_language": { "const": null },
+          "outcome": { "const": "rest" },
+          "projection": { "const": null }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "reported_choice": { "const": "refuse" } },
+        "required": ["reported_choice"]
+      },
+      "then": {
+        "properties": {
+          "selected_language": { "const": null },
+          "outcome": { "const": "refused" },
+          "projection": { "const": null }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "reported_choice": { "const": "leave" } },
+        "required": ["reported_choice"]
+      },
+      "then": {
+        "properties": {
+          "selected_language": { "const": null },
+          "outcome": { "const": "left" },
+          "projection": { "const": null }
+        }
+      }
+    }
+  ]
+}
