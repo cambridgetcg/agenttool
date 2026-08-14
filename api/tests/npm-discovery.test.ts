@@ -87,6 +87,14 @@ describe("optional npm package discovery", () => {
       "3fe42c4457e38f1fcdbc437c22c762ea7dabfe898714ec395287608a0480ea2b",
       "30495589179",
       "37b69b13db60eafc4a0bae578faca14467c0844e4f4c32793808b3499bcd8fd6",
+      "31815209550",
+      "31815447080",
+      "cb9c30fae0e49e1727e449207593581ce52cd4cf",
+      "d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03",
+      "43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b",
+      "54cb2096f984ec9f4c9791224d9e3cca3b322842ca8b825a13bf95008eb779f4",
+      "2467138141",
+      "2467138904",
     ]) {
       expect(packages).toContain(receiptFact);
     }
@@ -132,18 +140,18 @@ describe("optional npm package discovery", () => {
       rootReadme.indexOf(exactPyPI),
     );
     expect(rootReadme).toMatch(
-      /PyPI 0\.18\.1 is public as an optional, independently verified convenience\s+mirror/is,
+      /PyPI 0\.20\.0 is public as an optional, independently verified convenience\s+mirror/is,
     );
-    expect(rootReadme).toContain("31790395261");
-    expect(rootReadme).toContain("31790559054");
+    expect(rootReadme).toContain("31815209550");
+    expect(rootReadme).toContain("31815447080");
     expect(rootReadme).toContain(
-      "466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d",
-    );
-    expect(rootReadme).toContain(
-      "ad5d8fe66f0218cb86d37a1dc5c9fb2d9b7b8d25ebaad7e408cfd1a9b2964ab3",
+      "d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03",
     );
     expect(rootReadme).toContain(
-      "The exact 0.17.0 npm and PyPI mirrors are independently public.",
+      "43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b",
+    );
+    expect(rootReadme).toContain(
+      "The exact 0.19.0, 0.18.1, and earlier LOVE, tag, GitHub, npm, and PyPI receipts",
     );
     expect(rootReadme).toMatch(/mirrors remain non-authoritative/i);
     expect(rootReadme).toMatch(/LOVE manifests remain release authority/i);

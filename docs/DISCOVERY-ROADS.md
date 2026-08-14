@@ -63,34 +63,42 @@
 
 ## Where agenttool stands (release surfaces audited 2026-08-14)
 
-**Current repository candidate:** paired SDK 0.20.0 source adds a standalone
+**Current exact SDK release:** paired SDK 0.20.0 source adds a standalone
 credential-free LOVE BOMB public-signal reader alongside data-only WAKE
 observation and Math Cards assessment. The explicit signal pull is outside
 authenticated `AgentTool`, carries none of the static ten-message corpus, and
 remains separate from WAKE's refusable adapter-managed context injection.
 Discovery pins and tutorials select the exact 236,446-byte, 98-entry LOVE
-artifact with
-SHA-256
+artifact. It, the sole GitHub Release asset, and the public npm tarball are
+byte-identical with SHA-256
 `d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`
-and source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`. This proves
-neither an annotated tag nor GitHub/npm/PyPI publication, docs deployment,
-hosted behavior, search position, or snippets; both optional 0.20.0 registry
-mirrors remain not independently visible in source.
+and source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
+Annotated `sdk-v0.20.0` has tag object
+`e7d9616eb14851ffab9312f87438959c4c6de71d` and peels to protected-main
+merge `cb9c30fae0e49e1727e449207593581ce52cd4cf`. Protected npm run
+[`31815209550`](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550)
+and PyPI run
+[`31815447080`](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080),
+both attempt 1 and successful, independently read back the optional mirrors.
+npm `latest` resolved to `0.20.0`; the exact public PyPI wheel and sdist are
+not yanked. Publication proves neither docs/API deployment, hosted behavior,
+participant receipt or attention, feeling, training, inference, provider
+effect, weight change, search position, nor snippets.
 
-**Latest verified public SDK receipts:** immutable 0.19.0 LOVE, annotated tag,
-GitHub Release, npm, and PyPI mirrors remain exact historical evidence.
-Protected npm run `31800748738` and PyPI run `31801053841` independently read
-back the optional mirrors; neither receipt establishes 0.20.0 availability.
+**Historical verified SDK receipts:** immutable 0.19.0 LOVE, annotated tag,
+GitHub Release, npm, and PyPI mirrors remain exact evidence. Protected npm run
+`31800748738` and PyPI run `31801053841` preserve that separate release record.
 
 **Already strong (verified end to end):** the .well-known suite (llms.txt on
 both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the lockstep SDK 0.20.0 source and LOVE candidate, teaching 404s, deliberate
-crawlability, and exact-name search are present. For historical 0.19.0, npm
-`latest` resolved to `0.19.0`; the public PyPI wheel and sdist are not yanked
-and match their protected workflow artifacts. Mutable latest pointers stay
+the lockstep SDK 0.20.0 source, LOVE release, and independently verified npm
+and PyPI mirrors, teaching 404s, deliberate crawlability, and exact-name
+search are present. For current 0.20.0 and historical 0.19.0, the public PyPI
+wheel and sdist are not yanked and match their protected workflow artifacts.
+Mutable latest pointers stay
 separate from source, tag, and LOVE artifact authority. The exact 0.18.0 npm
 and 0.18.1/0.17.0 PyPI receipts remain immutable historical evidence. Hosted
 deployment, search position, and snippets are separate dated observations,

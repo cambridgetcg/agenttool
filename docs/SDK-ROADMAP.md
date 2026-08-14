@@ -10,7 +10,7 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source and LOVE candidate — 0.20.0 (2026-08-14)
+## Current source, LOVE, and verified npm/PyPI release — 0.20.0 (2026-08-14)
 
 The paired TypeScript and Python source adds a standalone credential-free
 `LoveBombClient.read()` over exactly `GET /public/love-bomb`. It is deliberately
@@ -42,17 +42,36 @@ explicit, independently refusable choices.
 The paired package identities, authenticated runtime headers, Python lock
 identity, READMEs, examples, and method-pin parity target advance together to
 0.20.0; dependency/runtime pins remain coherent. The ordinary canonical
-builder forged the exact 236,446-byte, 98-entry TypeScript LOVE candidate with
+builder forged the exact 236,446-byte, 98-entry TypeScript LOVE release with
 SHA-256
 `d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`.
 Its manifest binds clean release-alignment commit
 `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`, whose only change from the
 accepted current-main SDK reconciliation is the canonical builder's 0.20.0
-version and `sdk-v0.20.0` tag pin. This repository evidence establishes no
-0.20.0 annotated tag, GitHub Release, npm/PyPI publication, docs or API
-deployment, or provider/model effect.
+version and `sdk-v0.20.0` tag pin.
 
-## Last verified npm/PyPI and historical paired release — 0.19.0 (2026-08-14)
+Annotated tag object `e7d9616eb14851ffab9312f87438959c4c6de71d` peels to
+protected-main merge `cb9c30fae0e49e1727e449207593581ce52cd4cf`.
+Protected npm [run `31815209550`, attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550)
+published and independently read back the LOVE artifact, sole GitHub Release
+asset, and npm tarball as byte-identical; npm `latest` resolved to 0.20.0, with exact SRI
+`sha512-8DXyrQGRGvzJ9gEJny6U/82IPocg6qEzbpf7TvfIPZXD7wwhBl+aWPLLN/owzuUt6nAIGAHag9znwzCnaJuLgg==`
+and SLSA/publish Rekor indices `2467138141` / `2467138904`. Protected PyPI
+[run `31815447080`, attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080)
+published and independently read back the exact non-yanked 265,633-byte wheel
+(`sha256:43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b`;
+Integrity index `2467178343`) and 250,597-byte sdist
+(`sha256:54cb2096f984ec9f4c9791224d9e3cca3b322842ca8b825a13bf95008eb779f4`;
+Integrity index `2467178268`). `/public/party` therefore reports both optional
+mirrors as `independently_visible: true` in source while retaining
+`authority: false`. These exact publication receipts establish neither docs
+nor API deployment and prove no participant receipt, attention, feeling,
+training, inference, evaluation, provider effect, or weight change. The sealed
+0.20.0 tarball's packed README retains its preparation-time non-public
+observation; these dated receipts supersede it without rewriting immutable
+bytes.
+
+## Historical verified npm/PyPI paired release — 0.19.0 (2026-08-14)
 
 The immutable 230,184-byte TypeScript LOVE artifact has SHA-256
 `0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`,
@@ -69,8 +88,9 @@ published and read back the exact non-yanked 259,921-byte wheel
 (`sha256:a01acda48db621cf4107fbca4e4495a9e5051be1f13a1bbe0258916d17268f35`)
 and 245,116-byte sdist
 (`sha256:0b9acd8e92386e56eec21f8cabecaf8fcc2a321e9a911ebda1fe1b56f2fbe1ee`).
-These receipts establish exact package mirrors only; they do not prove a
-production deployment or establish any 0.20.0 release state.
+These receipts establish exact historical package mirrors only; they do not
+prove a production deployment. The separate current section above establishes
+the independently verified 0.20.0 release state.
 
 The 0.19.0 line added data-only `wake.observe` and a separate credential-free
 Math Cards client at `at.mathCards` / `at.math_cards`. Math Cards accepts one

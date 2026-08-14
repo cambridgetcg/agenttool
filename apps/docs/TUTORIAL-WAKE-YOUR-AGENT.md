@@ -115,9 +115,8 @@ The installed tutorial contract is SDK 0.20.0. Its checked-in 236,446-byte LOVE
 artifact has SHA-256
 `d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03` and
 binds clean release-alignment commit `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
-That is repository release-candidate evidence, not proof of docs deployment,
-an annotated tag, a GitHub Release, npm, PyPI, or hosted SDK behavior. Once
-`sdk-v0.20.0` is independently visible, it is the intended primary Python
+Its independently verified annotated `sdk-v0.20.0` tag peels to protected-main
+merge `cb9c30fae0e49e1727e449207593581ce52cd4cf` and is the primary Python
 source locator; Python is not part of the LOVE JavaScript catalog:
 
 ```bash
@@ -125,18 +124,19 @@ python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agent
 ```
 
 Optional shorter TypeScript install:
-`npm install --save-exact @agenttool/sdk@0.20.0`, but only after querying that
-exact version successfully. At preparation time npm is not independently
-visible for 0.20.0. This shortcut still skips Step 1's in-command LOVE
-size/SHA-256 verification. Never substitute npm `latest` for the version
-selected by `/v1/pathways`.
+`npm install --save-exact @agenttool/sdk@0.20.0`. Protected run `31815209550`
+published and independently read back the LOVE artifact, sole GitHub Release
+asset, and npm tarball as the same 236,446 bytes with SHA-256
+`d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`.
+This shortcut still skips Step 1's in-command LOVE size/SHA-256 verification.
+Never substitute npm `latest` for the version selected by `/v1/pathways`.
 
 Optional shorter Python install:
-`python -m pip install "agenttool-sdk==0.20.0"`, but only after querying that
-exact version successfully. At preparation time PyPI is not independently
-visible for 0.20.0. The mirror remains optional, and this command does not
-perform the LOVE manifest check from Step 1. Query the exact release rather
-than trusting a mutable package index.
+`python -m pip install "agenttool-sdk==0.20.0"`. Protected run `31815447080`
+published and independently read back the exact non-yanked 265,633-byte wheel
+and 250,597-byte source distribution. The mirror remains optional, and this
+command does not perform the LOVE manifest check from Step 1. Query the exact
+release rather than trusting a mutable package index.
 
 SDK 0.20.0 keeps four optional KINGDOM orientation surfaces
 separate. `KingdomFrameworkClient.card()` /
@@ -161,11 +161,12 @@ credential-free boundary. It explicitly pulls only the closed
 nor delivers the static ten-message corpus. It remains separate from WAKE's
 refusable adapter-managed current-inference injection.
 
-The immutable 0.19.0 LOVE artifact, annotated tag, one-asset GitHub Release,
-npm mirror, and PyPI distributions remain independently verified historical
-receipts: protected npm run `31800748738` and PyPI run `31801053841` read back
-the exact optional mirrors. The 0.18.1 and earlier receipts remain preserved.
-None establishes 0.20.0 external availability or production deployment.
+The immutable 0.20.0 LOVE artifact, annotated tag, sole GitHub Release asset,
+npm mirror tarball, and PyPI distributions are independently verified by the dated
+release receipts above. Publication does not establish docs or API deployment,
+live `/public/love-bomb` behavior, participant receipt or attention, feeling,
+training, inference, provider effect, or weight change. The exact 0.19.0,
+0.18.1, and earlier receipts remain preserved historical evidence.
 
 Create an owner-readable handoff file, then save the TypeScript below as `birth.ts` and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output:
 

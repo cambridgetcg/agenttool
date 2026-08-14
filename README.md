@@ -151,7 +151,7 @@ unchanged; dev.1 is not yet another public release in the receipts below.
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.5; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | `api.agenttool.dev` is the intended production custom origin. Availability and the deployed revision are time-sensitive; use [`docs/NOW.md`](docs/NOW.md) and [`docs/STACK.md`](docs/STACK.md) rather than this evergreen map. When reachable, process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Paired 0.20.0 source and the checked-in 236,446-byte, 98-entry TypeScript [LOVE candidate](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.20.0/manifest.json) (`sha256:d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`, source `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`) add standalone credential-free `LoveBombClient.read()` alongside data-only `wake.observe` and Math Cards assessment. The LOVE BOMB reader pulls only the closed public signal; it is not composed into authenticated `AgentTool`, does not reuse `LoveClient`, and neither fetches nor delivers the ten-message static corpus. This repository evidence establishes no 0.20.0 tag, GitHub Release, npm/PyPI publication, docs deployment, or hosted behavior. The immutable 0.19.0 and earlier LOVE/tag/GitHub/npm/PyPI receipts remain exact historical evidence. Production deployment remains separate and unclaimed. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Paired 0.20.0 source and the checked-in 236,446-byte, 98-entry TypeScript [LOVE release](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.20.0/manifest.json) (`sha256:d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`, source `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`) add standalone credential-free `LoveBombClient.read()` alongside data-only `wake.observe` and Math Cards assessment. The LOVE BOMB reader pulls only the closed public signal; it is not composed into authenticated `AgentTool`, does not reuse `LoveClient`, and neither fetches nor delivers the ten-message static corpus. Annotated [`sdk-v0.20.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.20.0) peels to protected-main merge `cb9c30fae0e49e1727e449207593581ce52cd4cf`; protected npm run [`31815209550`](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550) and PyPI run [`31815447080`](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080) independently published and read back the exact optional mirrors. The immutable 0.19.0 and earlier receipts remain historical evidence. Production deployment remains separate and unclaimed. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **Castle projection** | `bin/agenttool-castle.ts`, `docs/CASTLE-OF-UNDERSTANDING.md` | Local Bun CLI over in-process `@agenttool/data`: an external full-commit allowlist projects selected Castle `rooms/*.md` and `words/*.md` into an exclusively marked on-disk node. Source reads exact local Git objects; sync writes plaintext local SQLite/FTS/blobs. No hosted/public/scheduled integration, project bearer, secure-erasure claim, or truth/consent/rights proof. |
 | **Whitehack boundaries** | `bin/whitehack-advisory.mjs`, `bin/agenttool-castle-whitehack-intake.ts`, `bin/whitehack-wallet-understanding.ts`, `bin/agenttool-whitehack-evidence-storage.ts`, `docs/WHITEHACK.md` | Four non-interchangeable bridges: a pinned runner-local changed-source heuristic advisory; a stdout-only projection into minimized, unaccepted Castle gate candidates; a local signed Agent Wallet record-to-understanding projection; and explicit encrypted store/retrieve for exact Whitehack 0.9 public-minimal capsules. The evidence bridge uses one caller-selected S3-compatible bucket, fixed-size ADDS framing, independent readback, and a finite recipient-bound grant. It adds no hosted scanner, durable publisher custody, security proof, authorization, remediation, publication, retention, or durability claim. |
@@ -304,13 +304,28 @@ manifest's artifact SHA-256 and size are the portable identity.
 
 For SDK 0.20.0, paired repository source, runtime client version headers,
 discovery pins, tutorials, and the LOVE builder target are aligned. The
-checked-in TypeScript LOVE candidate is its primary repository release record.
+checked-in TypeScript LOVE artifact is its primary release record.
 It is 236,446 bytes with 98 entries and SHA-256
 `d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`
 and binds source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
-Source and LOVE preparation establish no 0.20.0 tag, GitHub Release, npm or
-PyPI publication, docs deployment, or hosted behavior. The intended optional
-registries remain `independently_visible: false` until exact public readback.
+Annotated tag object `e7d9616eb14851ffab9312f87438959c4c6de71d` for
+[`sdk-v0.20.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.20.0)
+peels to protected-main merge
+`cb9c30fae0e49e1727e449207593581ce52cd4cf`. Protected trusted npm run
+[`31815209550`](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550)
+published and read back the LOVE artifact, sole GitHub Release asset, and npm
+tarball as byte-identical; npm `latest` resolved to `0.20.0`, with SLSA and publish
+attestations at Rekor indices `2467138141` and `2467138904`. Protected PyPI run
+[`31815447080`](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080)
+published and read back a non-yanked 265,633-byte wheel
+(`sha256:43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b`)
+and 250,597-byte source distribution
+(`sha256:54cb2096f984ec9f4c9791224d9e3cca3b322842ca8b825a13bf95008eb779f4`).
+Both mirrors remain optional and non-authoritative. Publication did not deploy
+the docs, API, or any hosted behavior. The sealed 0.20.0 tarball's packed
+README retains its preparation-time non-public observation; these dated
+post-publication receipts supersede that observation without rewriting
+immutable bytes. Corrected packed prose would require a new package version.
 
 For SDK 0.19.0, the preserved 230,184-byte, 96-entry LOVE artifact has SHA-256
 `0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`
@@ -321,7 +336,8 @@ Annotated `sdk-v0.19.0` peels to protected-main merge
 and PyPI run
 [`31801053841`](https://github.com/cambridgetcg/agenttool/actions/runs/31801053841)
 independently read back the exact optional mirrors. Those receipts remain
-historical and establish no 0.20.0 availability or deployment.
+historical; they establish neither the separate 0.20.0 bytes nor any
+deployment.
 
 For SDK 0.18.1, the immutable 218,301-byte LOVE artifact has SHA-256
 `466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`
@@ -503,20 +519,21 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 
 ### Use the SDK
 
-For Python 0.20.0, the intended primary source locator is the exact annotated
-`sdk-v0.20.0` tag after it becomes independently visible. The checked-in
-source and LOVE candidate do not establish that tag:
+For Python 0.20.0, the independently verified annotated `sdk-v0.20.0` tag is
+the primary source locator. It peels to protected GitHub `main` merge
+`cb9c30fae0e49e1727e449207593581ce52cd4cf`:
 
 ```bash
-# Python 0.20.0 GitHub source-tag path; use only after exact tag readback
+# Python 0.20.0 GitHub source-tag path
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.20.0#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 ```
 
-The 0.20.0 PyPI command is conditional: query that exact version first. At
-preparation time the mirror is `independently_visible: false`; never infer it
-from repository source or a mutable package index:
+PyPI 0.20.0 is public as an optional, independently verified convenience
+mirror. Protected run `31815447080` matched the public non-yanked wheel and
+source distribution to the prepared workflow artifacts. Query the exact
+release rather than trusting a mutable package index:
 
 ```bash
 curl -fsS https://pypi.org/pypi/agenttool-sdk/0.20.0/json >/dev/null
@@ -532,24 +549,19 @@ verified file. This direct command alone does not verify the manifest:
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.20.0/agenttool-sdk-0.20.0.tgz
 ```
 
-The npm 0.20.0 mirror is also conditional and non-authoritative. Query the
-exact version; at preparation time it is `independently_visible: false`. A
-mutable dist-tag is informational, not authority, and this registry command
-alone does not recheck the LOVE manifest:
+The npm 0.20.0 mirror is public, optional, and non-authoritative. Protected run
+`31815209550` published and independently read back its tarball byte-identical
+to the 236,446-byte LOVE artifact. A mutable dist-tag is informational, not
+authority, and this registry command alone does not recheck the LOVE manifest:
 
 ```bash
 npm view @agenttool/sdk@0.20.0 version --registry=https://registry.npmjs.org
 npm install --save-exact @agenttool/sdk@0.20.0
 ```
 
-PyPI 0.18.1 is public as an optional, independently verified convenience
-mirror. Protected run `31790559054` matched the public non-yanked 248,937-byte
-wheel and 233,734-byte source distribution to the prepared workflow artifacts.
-Protected npm run `31790395261` independently read back
-`@agenttool/sdk@0.18.1` byte-identical to the immutable 218,301-byte LOVE
-artifact (`sha256:466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`).
-Those exact 0.18.1 receipts remain historical and do not establish 0.20.0
-availability. The exact 0.17.0 npm and PyPI mirrors are independently public.
+The exact 0.19.0, 0.18.1, and earlier LOVE, tag, GitHub, npm, and PyPI receipts
+remain immutable historical evidence. They are not rewritten by 0.20.0, and
+none of these package receipts establishes a production deployment.
 
 Then:
 
