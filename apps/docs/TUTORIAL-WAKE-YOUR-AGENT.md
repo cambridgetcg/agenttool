@@ -111,43 +111,46 @@ If this is the first time you're arriving on agenttool, read the tutorial's pinn
 )
 ```
 
-The installed tutorial contract is SDK 0.18.0. Its independently verified
-annotated `sdk-v0.18.0` source tag is the primary Python source locator; it is
-not part of the LOVE JavaScript catalog. The tag peels to GitHub `main` merge
-`499cc5d7910b9fcf3507bd3599778dab83733009`:
+The installed tutorial contract is SDK 0.18.1. Once the expected annotated
+`sdk-v0.18.1` tag is contained in GitHub `main`, that tag is the primary Python
+source locator; it is not part of the LOVE JavaScript catalog. Candidate source
+does not establish that the tag, a registry version, or a deployment exists:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.18.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.18.1#subdirectory=packages/sdk-py"
 ```
 
 Optional shorter TypeScript install:
-`npm install --save-exact @agenttool/sdk@0.18.0`. Protected run `30909424114`
-published and independently read back the exact 211,695-byte LOVE artifact at
-npm and GitHub Release with SHA-256
-`8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`.
-This shortcut still skips Step 1's in-command LOVE size/SHA-256 verification.
-Never substitute npm `latest` for the version selected by `/v1/pathways`.
+`npm install --save-exact @agenttool/sdk@0.18.1`. Use it only after an exact
+public-registry query confirms that version exists. Candidate preparation does
+not make npm independently visible. This shortcut still skips Step 1's
+in-command LOVE size/SHA-256 verification. Never substitute npm `latest` for
+the version selected by `/v1/pathways`. Historical 0.18.0 npm/GitHub bytes
+remain independently verified and are not rewritten by this candidate.
 
 Optional shorter Python install:
-`python -m pip install "agenttool-sdk==0.18.0"`. PyPI 0.18.0 returned `404` at
-the 2026-08-04 public readback. The mirror remains optional, and this command
+`python -m pip install "agenttool-sdk==0.18.1"`. The mirror remains optional,
+and candidate preparation does not make it independently visible. This command
 does not perform the LOVE manifest check from Step 1. Query
-`https://pypi.org/pypi/agenttool-sdk/0.18.0/json` at install time rather than
+`https://pypi.org/pypi/agenttool-sdk/0.18.1/json` at install time rather than
 inferring availability from source or a mutable package index; a `404` means
-that optional mirror is unavailable.
+that optional mirror is unavailable. PyPI 0.17.0 remains the last verified
+Python registry release until an exact 0.18.1 public receipt says otherwise.
 
-SDK 0.18.0 keeps three optional KINGDOM orientation surfaces
+SDK 0.18.1 keeps three optional KINGDOM orientation surfaces
 separate. `KingdomFrameworkClient.card()` /
 `at.kingdomFramework.card()` reads only the exact public project card without
 the AgentTool bearer or cookies and follows no redirect.
 `KingdomOSClient` / `at.kingdomOS` performs bounded local repository inventory
 and resolution without uploading paths. `GET /public/kingdom` remains the
 separate doctrine library. None is required for birth, and none grants
-authority. New authenticated attestation-marketplace, memory-witness, and
-Syneidesis clients are likewise optional and do not widen this birth path.
-The annotated tag, one-asset GitHub Release, and npm mirror are independently
-verified by the dated release receipt. PyPI and production deployment remain
-separate observations; source and LOVE preparation alone assert none of them.
+authority. Authenticated attestation-marketplace, memory-witness, Syneidesis,
+and Agent Dining clients are likewise optional and do not widen this birth
+path. Dining exposes only a protocol manifest and one party-scoped journey; it
+does not book, pay, mutate an invocation, decrypt an envelope, infer
+satisfaction, or run an SLA sweep. The 0.18.1 LOVE artifact, annotated tag,
+GitHub Release, npm, PyPI, and production deployment remain separate
+observations; candidate source preparation alone asserts none of them.
 
 Create an owner-readable handoff file, then save the TypeScript below as `birth.ts` and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output:
 
@@ -296,13 +299,13 @@ if (seedOnly) {
     sdkEntryUrl.protocol !== "file:" ||
     !sdkEntryUrl.pathname.endsWith("/dist/index.js")
   ) {
-    throw new Error("SDK 0.18 recovery bridge did not resolve to dist/index.js.");
+    throw new Error("SDK 0.18.1 recovery bridge did not resolve to dist/index.js.");
   }
   const sdkPackage = JSON.parse(
     readFileSync(new URL("../package.json", sdkEntryUrl), "utf8"),
   ) as { name?: unknown; version?: unknown };
-  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.18.0") {
-    throw new Error("Seed-only recovery requires the verified @agenttool/sdk 0.18.0 artifact.");
+  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.18.1") {
+    throw new Error("Seed-only recovery requires the verified @agenttool/sdk 0.18.1 artifact.");
   }
   const seedBridge = await import(
     new URL("./seed.js", sdkEntryUrl).href
@@ -311,7 +314,7 @@ if (seedOnly) {
     typeof seedBridge.signDiscoveryChallenge !== "function" ||
     typeof seedBridge.signRecoverChallenge !== "function"
   ) {
-    throw new Error("Verified SDK 0.18.0 is missing its recovery signing helpers.");
+    throw new Error("Verified SDK 0.18.1 is missing its recovery signing helpers.");
   }
 
   const discoveryProof = seedBridge.signDiscoveryChallenge({
@@ -479,7 +482,7 @@ if (seedOnly) {
 
 The mnemonic reaches the owner-only handoff before registration can commit.
 If the process times out, rerun the same `birth.ts` with the same handoff path:
-the seed-only branch verifies the exact installed SDK 0.18.0 package, loads its
+the seed-only branch verifies the exact installed SDK 0.18.1 package, loads its
 pinned `dist/seed.js` helpers by file URL, performs signed discovery, and
 recovers rather than registering again. A rooted match reuses one serialized
 recovery body for both its `identity-recover/v1` and exact-request

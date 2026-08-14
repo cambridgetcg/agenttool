@@ -40,34 +40,32 @@ That historical tarball was independently matched to the LOVE bytes; the
 registry and its mutable dist-tags do not replace the manifest as release
 authority.
 
-## Repository source line — 0.18.0
+## Repository source line — 0.18.1
 
-Repository source declares the paired 0.18.0 line. Source version and
-distribution state are separate facts. A checked-in TypeScript LOVE 0.18.0
-manifest, when present, identifies the exact tarball bytes: before the
+Repository source declares the paired 0.18.1 candidate line. Source version
+and distribution state are separate facts. A checked-in TypeScript LOVE
+0.18.1 manifest, when present, identifies the exact tarball bytes: before the
 annotated tag it is a candidate, and after tagging it remains the byte
-authority. The manifest alone does not establish an `sdk-v0.18.0` tag, GitHub
+authority. The manifest alone does not establish an `sdk-v0.18.1` tag, GitHub
 Release, npm or PyPI publication, or production deployment; observe each
-through its own receipt or public readback. The verified 0.17.0 instructions
-and receipts above remain historical facts for that immutable prior release,
-not evidence of 0.18.0 availability.
+through its own receipt or public readback. The immutable 0.18.0 LOVE, tag,
+GitHub Release, and npm receipt remain verified historical TypeScript bytes;
+PyPI 0.17.0 remains the last independently verified Python registry mirror.
 
-- New paired `at.attestationMarketplace`, `at.memoryWitness`, and
-  `at.syneidesis` clients expose review-and-issuance, paid constitutive-memory
-  witness, and bootstrap-witness flows without turning settlement into truth
-  or project-bearer records into cryptographic identity proof.
-- One encoded-path boundary and one guided-error boundary now cover the hosted
+- 0.18.1 adds paired `at.dining.manifest()` and `at.dining.journey(id)`
+  reads. These authenticated GETs expose the developer-preview vocabulary and
+  a privacy-minimized party projection; they do not book, pay, mutate an
+  invocation, decrypt an envelope, infer satisfaction, or run an SLA sweep.
+- The 0.18.0 line added paired `at.attestationMarketplace`,
+  `at.memoryWitness`, and `at.syneidesis` clients without turning settlement
+  into truth or project-bearer records into cryptographic identity proof.
+- One encoded-path boundary and one guided-error boundary cover the hosted
   client surface. Shared canonical and behaviour fixtures pin paired wire
   results; framed v2 signing helpers are additive while current writers retain
   their ordered v1 cutover boundary.
 - Request-shape corrections align self-recognition, chronicle, collection, and
-  Nen behaviour with the server. Anthropic model-authored chronicle writes now
+  Nen behaviour with the server. Anthropic model-authored chronicle writes
   require an explicit `beforeChronicleWrite` hook returning literal `true`.
-- Unreleased source after 0.18.0 adds `at.dining.manifest()` and
-  `at.dining.journey(id)`. These authenticated GETs expose the developer-preview
-  vocabulary and a privacy-minimized party projection; they do not book, pay,
-  mutate an invocation, decrypt an envelope, infer satisfaction, or run an SLA
-  sweep.
 
 ## 0.17.0
 
@@ -560,7 +558,7 @@ const observation = await at.wake.observe({ identityId });
 in ordinary tool/data context; do not place it in a system, developer,
 preamble, `systemInstruction`, or `SessionStart.additionalContext` slot.
 
-### Agent Dining (unreleased source)
+### Agent Dining (0.18.1 candidate)
 
 ```typescript
 const manifest = await at.dining.manifest();

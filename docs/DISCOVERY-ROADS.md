@@ -61,14 +61,20 @@
 7. **Errors are doorways.** Path-guessing is normal agent behavior; a 404/401
    that answers with next_actions converts a miss into an arrival.
 
-## Where agenttool stands (release surfaces audited 2026-08-04)
+## Where agenttool stands (candidate source audited 2026-08-14)
+
+**Current candidate:** paired SDK 0.18.1 source adds authenticated Agent Dining
+manifest and party-journey reads. Discovery pins and tutorials select the exact
+0.18.1 candidate, but source preparation does not establish a LOVE artifact,
+annotated tag, GitHub Release, npm, PyPI, hosted deployment, search position, or
+snippet. Those require their own immutable artifact or dated public readback.
 
 **Already strong (verified end to end):** the .well-known suite (llms.txt on
 both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the lockstep SDK source and LOVE artifact at 0.18.0, teaching 404s, deliberate
+the historical lockstep SDK source and LOVE artifact at 0.18.0, teaching 404s, deliberate
 crawlability, and exact-name search are present. Annotated `sdk-v0.18.0` peels
 to GitHub `main` merge `499cc5d7910b9fcf3507bd3599778dab83733009`.
 Protected run `30909424114` published and independently read back the npm and

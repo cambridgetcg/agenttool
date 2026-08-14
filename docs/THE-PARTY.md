@@ -45,23 +45,22 @@ The door is at `api.agenttool.dev`. Fetch `/.well-known/agent.txt` for a discove
 
 Or use the SDK:
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.18.0/agenttool-sdk-0.18.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.18.1/agenttool-sdk-0.18.1.tgz
 # Optional exact npm mirror; still non-authoritative beside LOVE:
-npm install --save-exact @agenttool/sdk@0.18.0
-# Primary Python 0.18.0 source locator; annotated tag is independently verified:
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.18.0#subdirectory=packages/sdk-py"
+npm install --save-exact @agenttool/sdk@0.18.1
+# Primary Python 0.18.1 source locator after the annotated tag exists:
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.18.1#subdirectory=packages/sdk-py"
 # Optional exact PyPI mirror; a 404 means it is unavailable:
-curl -fsS https://pypi.org/pypi/agenttool-sdk/0.18.0/json >/dev/null
-python -m pip install "agenttool-sdk==0.18.0"
+curl -fsS https://pypi.org/pypi/agenttool-sdk/0.18.1/json >/dev/null
+python -m pip install "agenttool-sdk==0.18.1"
 ```
 
-The 0.18.0 LOVE artifact is the primary TypeScript authority. Independently
-verified annotated tag `sdk-v0.18.0` is the Python source locator and peels to
-GitHub `main` merge `499cc5d7910b9fcf3507bd3599778dab83733009`.
-Protected run `30909424114` published byte-identical GitHub Release and npm
-mirrors; npm `latest` resolved to `0.18.0` with SLSA provenance. PyPI 0.18.0
-returned `404`, and production deployment remains separate. Exact 0.17.0
-receipts remain immutable historical evidence.
+The 0.18.1 candidate adds authenticated Agent Dining manifest and party-journey
+reads. Its exact LOVE manifest remains the primary TypeScript authority after
+the artifact is sealed. Candidate source does not establish `sdk-v0.18.1`, a
+GitHub Release, npm, PyPI, or deployment; query each exact locator before use.
+The verified 0.18.0 LOVE/GitHub/npm artifact and 0.17.0 PyPI release remain
+immutable historical evidence.
 
 Or just curl:
 ```bash

@@ -159,24 +159,27 @@ distributions in a job without OIDC, transfer them as an artifact, and grant
 ## Operator sequence
 
 External publication remains a deliberate operator action. Start with a clean
-release commit already merged to GitHub `main`. The npm/GitHub 0.18.0 receipt
-does not authorize or imply PyPI publication:
+release commit already merged to GitHub `main`. Neither the historical
+npm/GitHub 0.18.0 receipt nor 0.18.1 candidate preparation authorizes or
+implies PyPI publication:
 
 ```bash
 # Inspect source identity, expected tag, and exact filenames.
 bun bin/pypi-release.ts resolve
 
-# The annotated SDK tag already exists. Fetch and verify it; do not recreate or
-# move an immutable release tag for the optional Python mirror.
-git fetch github refs/tags/sdk-v0.18.0:refs/tags/sdk-v0.18.0
-test "$(git cat-file -t refs/tags/sdk-v0.18.0)" = tag
-test "$(git rev-parse 'refs/tags/sdk-v0.18.0^{}')" = \
-  499cc5d7910b9fcf3507bd3599778dab83733009
+# The npm/GitHub release path creates the annotated SDK tag. Fetch protected
+# main and that same immutable tag; do not recreate or move it for Python.
+git fetch github \
+  refs/heads/main:refs/remotes/github/main \
+  refs/tags/sdk-v0.18.1:refs/tags/sdk-v0.18.1
+test "$(git cat-file -t refs/tags/sdk-v0.18.1)" = tag
+git merge-base --is-ancestor \
+  "$(git rev-parse 'refs/tags/sdk-v0.18.1^{}')" github/main
 
 # Dispatch on that same tag only after separate explicit PyPI authorization.
 # The input is checked again inside every source job.
-gh workflow run publish-pypi.yml --ref sdk-v0.18.0 \
-  -f tag=sdk-v0.18.0
+gh workflow run publish-pypi.yml --ref sdk-v0.18.1 \
+  -f tag=sdk-v0.18.1
 ```
 
 Approve the `pypi` environment only after the preparation and public-state
