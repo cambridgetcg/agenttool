@@ -830,6 +830,7 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/dist/index.js",
       "package/dist/index.d.ts",
       "package/kingdom.extension.json",
+      "package/schema/agenttool-math-card-input-v0.1.schema.json",
       "package/schema/agenttool-math-card-v0.1.schema.json",
       "package/schema/agenttool-math-card-assessment-v0.1.schema.json",
       "package/vectors/agenttool-math-cards-v0.1.json",

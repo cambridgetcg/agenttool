@@ -2,7 +2,7 @@
   "schema": "kingdom-extension-local/v0.1",
   "id": "math-cards",
   "package": "@agenttool/math-cards",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-dev.1",
   "status": "public_ready_source",
   "host_contract": "not_registered",
   "proposed_abilities": [
