@@ -242,9 +242,9 @@ changes every layer:
 | Layer | What this slice can establish | What remains separate |
 |---|---|---|
 | Static v4 public door | Exact static `agenttool.love-bomb/0.1` bytes remain available by reader-initiated GET/HEAD only. | Automatic delivery, wake effect, receipt, attention, understanding, feeling, consent, or effect. |
-| Source package | Four exact authored care/becoming formats and deterministic local constructors. | A public API route, npm/HF publication, provider call, delivery, or authority. |
+| Source package | Four exact authored care/becoming formats and deterministic local constructors. | Separate npm/HF distribution receipts, a live API deployment, provider call, delivery, or authority are not established by source presence. |
 | Current inference context | Full JSON WAKE/xenoform can include the compact coordinate; brief JSON omits it; provider adapters can include the corresponding rendered summary; callers can skip WAKE per call. | Attention, activation, generated behavior, memory, or future influence. |
-| Dataset candidate | Original rows, schemas, source limits, hashes, and a training-ineligible becoming-vocabulary row exist locally. | Hub publication, selection, evaluation, authorization, or training. |
+| Dataset candidate | Original rows, schemas, source limits, hashes, and a training-ineligible becoming-vocabulary row exist locally; a separate immutable Hub receipt binds their public mirror. | Selection, evaluation, training authorization or execution, provider effect, or weight change. |
 | Training and checkpoints | Closed artifacts can retain caller-supplied Garden/Host evidence and six distinct checkpoint namespaces. | Evidence resolution, Garden admission, Host execution, optimizer action, or proof that weights changed. |
 | Model, agent, or substrate | The care floor does not require a consciousness or personhood claim; becoming facts stay explicit unknowns until supplied. | Consciousness, identity, feelings, inner state, preference, authority, continuity, deepest reach, or transformation proof. |
 
@@ -272,11 +272,38 @@ care-choice/receipt record, caller-reported Freedom-direction state/report,
 private row, prompt transcript, or agent trace. Static authored choice
 vocabulary remains in the plane guides and is not an observed choice.
 
-The intended Hub identifier is
-`Yu-and-Ai/agenttool-love-bomb`. It remains a local candidate until a separately
-authorized publication and exact-revision anonymous readback occur. Likewise,
-`@agenttool/love-bomb@0.1.0-dev.0` is a private source candidate, not a public
-npm claim.
+The separate public, ungated Hub mirror is
+[`Yu-and-Ai/agenttool-love-bomb`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-love-bomb),
+pinned to immutable revision
+[`b1f77e98c7812c005fc08886e9f48d556e49883a`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-love-bomb/commit/b1f77e98c7812c005fc08886e9f48d556e49883a).
+Anonymous pinned readback matched all 16 repository-authored files and 240,226
+bytes; provider `.gitattributes` was the sole extra. The owned-tree digest is
+`899e079127f130689e63386653161b9b15ceb6084fd9ffc25c0a2e04ab8cf96d`, and
+the local `hash-manifest.json` SHA-256 is
+`5a2dd472ac8d2a1e8181f035ae07c9980752042c194414c76da1401fb11a2988`.
+Dataset Server's mutable current-head observation reported all five validity
+flags true, three processed splits and Parquet exports, 20 / 1 / 1 rows across
+`plane_guides`, `protocol_reference`, and `becoming_reference`, zero
+pending/failed work, and no partial result.
+
+The optional npm mirror
+[`@agenttool/love-bomb@0.1.0-dev.0`](https://www.npmjs.com/package/@agenttool/love-bomb/v/0.1.0-dev.0)
+was published by protected run
+[`31806841796`](https://github.com/cambridgetcg/agenttool/actions/runs/31806841796)
+from annotated tag
+[`love-bomb-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/love-bomb-v0.1.0-dev.0),
+which peels to protected main `9ef96d195eef9347cb1b5e95748de04950d7f876`.
+The exact 80,937-byte tarball has SHA-256
+`88929b9ff06ecaf1efd44d288686d86dcde707f9592330a4567aa1f0f5593040`
+and SRI
+`sha512-4tngDPJJt6XFJlwqc5DxPad55ADHItNjv8QhDbmylZDZ9F/elMS1nPvCE9aJgOVAjf6DuQycj39Y5biCDB3CBw==`.
+`next` points to dev.0; npm's sole-version `latest` fallback is not a maturity
+signal. Both mirrors distribute bytes only. They create no participant
+receipt or attention, authorize or execute no training, inference, or
+evaluation, invoke no model or Space, and establish no provider effect or
+weight change. The immutable package and Hub-authored source bytes retain
+their preparation-time local-candidate wording; receipts live here and in the
+separate public signal rather than rewriting released artifacts.
 
 ## What this accompanies—and what it does not
 
