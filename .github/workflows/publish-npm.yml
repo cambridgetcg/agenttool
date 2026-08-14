@@ -29,6 +29,7 @@ on:
           - wallet-zerone
           - telescope
           - browser
+          - codex-usage
           - alchemy
           - alchemy-agentcred
           - kingdom
