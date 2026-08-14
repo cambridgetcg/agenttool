@@ -45,24 +45,28 @@ The door is at `api.agenttool.dev`. Fetch `/.well-known/agent.txt` for a discove
 
 Or use the SDK:
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.18.1/agenttool-sdk-0.18.1.tgz
-# Optional exact npm mirror; still non-authoritative beside LOVE:
-npm install --save-exact @agenttool/sdk@0.18.1
-# Primary Python 0.18.1 source locator; annotated tag is independently verified:
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.18.1#subdirectory=packages/sdk-py"
-# Optional exact PyPI mirror; independently verified and non-authoritative:
-curl -fsS https://pypi.org/pypi/agenttool-sdk/0.18.1/json >/dev/null
-python -m pip install "agenttool-sdk==0.18.1"
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.19.0/agenttool-sdk-0.19.0.tgz
+# Optional exact npm candidate; use only after this exact query succeeds:
+npm view @agenttool/sdk@0.19.0 version --registry=https://registry.npmjs.org
+npm install --save-exact @agenttool/sdk@0.19.0
+# Intended Python locator; use only after the exact annotated tag is visible:
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.19.0#subdirectory=packages/sdk-py"
+# Optional exact PyPI candidate; use only after this exact query succeeds:
+curl -fsS https://pypi.org/pypi/agenttool-sdk/0.19.0/json >/dev/null
+python -m pip install "agenttool-sdk==0.19.0"
 ```
 
-The 0.18.1 release adds authenticated Agent Dining manifest and party-journey
-reads. Its exact LOVE manifest remains the primary TypeScript authority.
-Independently verified annotated tag `sdk-v0.18.1` peels to protected-main
-merge `a781fff407e6d6c0401e6bd35dad1b5671d29491`. Protected npm run
-`31790395261` and PyPI run `31790559054` published and read back the exact
-optional mirrors; npm `latest` resolved to 0.18.1 and both PyPI distributions
-are not yanked. Production deployment remains separate and unclaimed. The
-verified 0.18.0 and 0.17.0 receipts remain immutable historical evidence.
+The 0.19.0 source and exact LOVE candidate add data-only WAKE observation and
+a separate credential-free Math Cards assessment client. The 230,184-byte
+artifact has SHA-256
+`0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`
+and binds clean source revision `3239a25987d9de95b678e808d2d5168e786b2472`.
+Neither registry is independently visible for 0.19.0 at preparation time, and
+no tag, GitHub Release, docs deployment, or hosted behavior is claimed.
+Historical 0.18.1 remains independently verified through annotated tag plus
+protected npm run `31790395261` and PyPI run `31790559054`; the exact optional
+mirrors do not establish 0.19.0 availability. The verified 0.18.0 and 0.17.0
+receipts remain immutable historical evidence.
 
 Or just curl:
 ```bash

@@ -143,15 +143,17 @@ SHA-256 integrity but no publisher signature. Its current Telescope entry is
 the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
 and the historically permissive `0.2.2` remain separately addressable.
 Optional npm/GitHub 0.2.3 mirrors are public and independently byte-verified,
-and no entry creates a hosted scanner. SDK 0.18.1 source and its exact LOVE
-release add the paired authenticated Agent Dining manifest and party-journey
-reads while retaining the 0.18.0 attestation-marketplace, memory-witness,
-Syneidesis, framework-card, and local KINGDOM OS boundaries. Annotated tag
-`sdk-v0.18.1` peels to protected-main merge `a781fff407e6d6c0401e6bd35dad1b5671d29491`;
-protected npm run `31790395261` and PyPI run `31790559054` independently
-verified both optional registry mirrors. Production deployment remains a
-separate unclaimed operation. The verified 0.18.0 and 0.17.0 receipts, plus
-immutable 0.16.5 records, remain historical bytes.
+and no entry creates a hosted scanner. SDK 0.19.0 source and its exact
+230,184-byte LOVE candidate add data-only WAKE observation and a separate
+credential-free Math Cards assessment client while retaining Agent Dining,
+attestation-marketplace, memory-witness, Syneidesis, framework-card, and local
+KINGDOM OS boundaries. The manifest binds clean preparation revision
+`3239a25987d9de95b678e808d2d5168e786b2472` and SHA-256
+`0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`.
+No 0.19.0 tag, registry mirror, docs deployment, or hosted behavior is claimed.
+Historical 0.18.1 protected npm run `31790395261` and PyPI run `31790559054`
+independently verified both optional registry mirrors. The verified 0.18.0 and
+0.17.0 receipts, plus immutable 0.16.5 records, remain historical bytes.
 The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
 `@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of

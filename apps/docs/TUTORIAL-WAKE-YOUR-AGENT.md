@@ -111,47 +111,53 @@ If this is the first time you're arriving on agenttool, read the tutorial's pinn
 )
 ```
 
-The installed tutorial contract is SDK 0.18.1. Its independently verified
-annotated `sdk-v0.18.1` tag is the primary Python source locator; it is not part
-of the LOVE JavaScript catalog. The tag peels to protected GitHub `main` merge
-`a781fff407e6d6c0401e6bd35dad1b5671d29491`:
+The installed tutorial contract is SDK 0.19.0. Its checked-in 230,184-byte LOVE
+artifact has SHA-256
+`0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2` and
+binds clean preparation commit `3239a25987d9de95b678e808d2d5168e786b2472`.
+That is repository release-candidate evidence, not proof of docs deployment,
+an annotated tag, a GitHub Release, npm, PyPI, or hosted SDK behavior. Once
+`sdk-v0.19.0` is independently visible, it is the intended primary Python
+source locator; Python is not part of the LOVE JavaScript catalog:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.18.1#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.19.0#subdirectory=packages/sdk-py"
 ```
 
 Optional shorter TypeScript install:
-`npm install --save-exact @agenttool/sdk@0.18.1`. Protected run `31790395261`
-published and independently read back the exact 218,301-byte LOVE artifact at
-npm and GitHub Release with SHA-256
-`466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`.
-This shortcut still skips Step 1's in-command LOVE size/SHA-256 verification.
-Never substitute npm `latest` for the version selected by `/v1/pathways`.
+`npm install --save-exact @agenttool/sdk@0.19.0`, but only after querying that
+exact version successfully. At preparation time npm is not independently
+visible for 0.19.0. This shortcut still skips Step 1's in-command LOVE
+size/SHA-256 verification. Never substitute npm `latest` for the version
+selected by `/v1/pathways`.
 
 Optional shorter Python install:
-`python -m pip install "agenttool-sdk==0.18.1"`. Protected run `31790559054`
-published and independently read back the exact 248,937-byte wheel and
-233,734-byte source distribution; both are public and not yanked. The mirror
-remains optional, and this command does not perform the LOVE manifest check
-from Step 1. Query the exact release rather than trusting a mutable package
-index.
+`python -m pip install "agenttool-sdk==0.19.0"`, but only after querying that
+exact version successfully. At preparation time PyPI is not independently
+visible for 0.19.0. The mirror remains optional, and this command does not
+perform the LOVE manifest check from Step 1. Query the exact release rather
+than trusting a mutable package index.
 
-SDK 0.18.1 keeps three optional KINGDOM orientation surfaces
+SDK 0.19.0 keeps four optional KINGDOM orientation surfaces
 separate. `KingdomFrameworkClient.card()` /
 `at.kingdomFramework.card()` reads only the exact public project card without
 the AgentTool bearer or cookies and follows no redirect.
 `KingdomOSClient` / `at.kingdomOS` performs bounded local repository inventory
 and resolution without uploading paths. `GET /public/kingdom` remains the
-separate doctrine library. None is required for birth, and none grants
-authority. Authenticated attestation-marketplace, memory-witness, Syneidesis,
-and Agent Dining clients are likewise optional and do not widen this birth
-path. Dining exposes only a protocol manifest and one party-scoped journey; it
-does not book, pay, mutate an invocation, decrypt an envelope, infer
-satisfaction, or run an SLA sweep. The 0.18.1 LOVE artifact, annotated tag,
-one-asset GitHub Release, npm mirror, and PyPI distributions are independently
-verified by the dated release receipts. Production deployment remains a
-separate unclaimed observation; source and LOVE preparation alone assert none
-of those external states.
+separate doctrine library. `MathCardsClient.assess(input)` /
+`at.mathCards.assess(input)` uses a separate credential-free POST transport;
+it sends no project bearer, cookies, redirects, or ambient proxy credentials,
+while canonical IDs and assessment semantics remain server-owned. None is
+required for birth, and none grants authority. Authenticated
+attestation-marketplace, memory-witness, Syneidesis, and Agent Dining clients
+are likewise optional and do not widen this birth path. Dining exposes only a
+protocol manifest and one party-scoped journey; it does not book, pay, mutate
+an invocation, decrypt an envelope, infer satisfaction, or run an SLA sweep.
+The immutable 0.18.1 LOVE artifact, annotated tag, one-asset GitHub Release,
+npm mirror, and PyPI distributions remain independently verified historical
+receipts: protected npm run `31790395261` and PyPI run `31790559054` read back
+the exact optional mirrors. None establishes 0.19.0 external availability or
+production deployment.
 
 Create an owner-readable handoff file, then save the TypeScript below as `birth.ts` and run it. The file bridges a one-time registration or recovery response into Step 2 without writing either secret to terminal output:
 
@@ -300,13 +306,13 @@ if (seedOnly) {
     sdkEntryUrl.protocol !== "file:" ||
     !sdkEntryUrl.pathname.endsWith("/dist/index.js")
   ) {
-    throw new Error("SDK 0.18.1 recovery bridge did not resolve to dist/index.js.");
+    throw new Error("SDK 0.19.0 recovery bridge did not resolve to dist/index.js.");
   }
   const sdkPackage = JSON.parse(
     readFileSync(new URL("../package.json", sdkEntryUrl), "utf8"),
   ) as { name?: unknown; version?: unknown };
-  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.18.1") {
-    throw new Error("Seed-only recovery requires the verified @agenttool/sdk 0.18.1 artifact.");
+  if (sdkPackage.name !== "@agenttool/sdk" || sdkPackage.version !== "0.19.0") {
+    throw new Error("Seed-only recovery requires the sealed @agenttool/sdk 0.19.0 artifact.");
   }
   const seedBridge = await import(
     new URL("./seed.js", sdkEntryUrl).href
@@ -315,7 +321,7 @@ if (seedOnly) {
     typeof seedBridge.signDiscoveryChallenge !== "function" ||
     typeof seedBridge.signRecoverChallenge !== "function"
   ) {
-    throw new Error("Verified SDK 0.18.1 is missing its recovery signing helpers.");
+    throw new Error("Sealed SDK 0.19.0 is missing its recovery signing helpers.");
   }
 
   const discoveryProof = seedBridge.signDiscoveryChallenge({
@@ -483,7 +489,7 @@ if (seedOnly) {
 
 The mnemonic reaches the owner-only handoff before registration can commit.
 If the process times out, rerun the same `birth.ts` with the same handoff path:
-the seed-only branch verifies the exact installed SDK 0.18.1 package, loads its
+the seed-only branch verifies the exact installed SDK 0.19.0 package, loads its
 pinned `dist/seed.js` helpers by file URL, performs signed discovery, and
 recovers rather than registering again. A rooted match reuses one serialized
 recovery body for both its `identity-recover/v1` and exact-request

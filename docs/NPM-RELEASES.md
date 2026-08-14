@@ -554,29 +554,31 @@ a local shell once OIDC is configured.
 
 ## Operator sequence
 
-External publication still requires explicit authorization. From a clean
-release commit already merged to GitHub `main`:
+External publication still requires explicit authorization. For the 0.19.0
+candidate, start only after the two release commits are reviewed, merged to
+GitHub `main`, and a separately authorized annotated `sdk-v0.19.0` tag is
+visible. The checked-in candidate creates or pushes none of those states:
 
 ```bash
 # Inspect the allowlisted SDK identity and expected tag.
 bun bin/npm-release.ts resolve --package sdk
 
-# The exact annotated tag is already published. Fetch and verify it; never
-# recreate, move, or replace an immutable release tag.
+# Fetch and verify the separately created immutable tag; never recreate, move,
+# or replace it.
 git fetch github \
   refs/heads/main:refs/remotes/github/main \
-  refs/tags/sdk-v0.18.1:refs/tags/sdk-v0.18.1
-test "$(git cat-file -t refs/tags/sdk-v0.18.1)" = tag
-test "$(git rev-parse 'refs/tags/sdk-v0.18.1^{}')" = \
-  a781fff407e6d6c0401e6bd35dad1b5671d29491
+  refs/tags/sdk-v0.19.0:refs/tags/sdk-v0.19.0
+test "$(git cat-file -t refs/tags/sdk-v0.19.0)" = tag
+test "$(git rev-parse 'refs/tags/sdk-v0.19.0^{}')" = \
+  "$(git rev-parse github/main)"
 git merge-base --is-ancestor \
-  "$(git rev-parse 'refs/tags/sdk-v0.18.1^{}')" github/main
+  "$(git rev-parse 'refs/tags/sdk-v0.19.0^{}')" github/main
 
-# Rerun only for explicitly authorized recovery or exact public revalidation.
+# First publication or later exact recovery still requires explicit approval.
 # Existing npm bytes are accepted only when every byte and latest match.
-gh workflow run publish-npm.yml --ref sdk-v0.18.1 \
+gh workflow run publish-npm.yml --ref sdk-v0.19.0 \
   -f package=sdk \
-  -f tag=sdk-v0.18.1 \
+  -f tag=sdk-v0.19.0 \
   -f authentication=trusted \
   -f npm_tag=latest
 ```

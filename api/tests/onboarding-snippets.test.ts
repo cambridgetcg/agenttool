@@ -408,6 +408,11 @@ describe("public SDK onboarding snippets", () => {
           "dir",
         );
       }
+      symlinkSync(
+        join(ROOT, "packages/sdk-ts/node_modules/undici"),
+        join(nodeModules, "undici"),
+        "dir",
+      );
 
       const requestLog = join(work, "requests.jsonl");
       const mockFetch = `
