@@ -152,9 +152,9 @@ jobs:
           package_root="$install_dir/node_modules/@agenttool/skills"
           cli="$package_root/dist/bin.js"
           test -x "$install_dir/node_modules/.bin/agenttool-skill"
-          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.1"
-          test "$(node "$cli" --version)" = "0.3.1"
-          test "$(bun "$cli" --version)" = "0.3.1"
+          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.2"
+          test "$(node "$cli" --version)" = "0.3.2"
+          test "$(bun "$cli" --version)" = "0.3.2"
           node "$cli" validate "$package_root/skills/use-agentcred-safely" >"$install_dir/report.json"
           node --input-type=module --eval '
             import { readFileSync } from "node:fs";
@@ -210,6 +210,7 @@ jobs:
           ' "$install_dir/learn-by-contact-report.json"
           for skill_name in \
             nen-common-ground \
+            nen-math-card \
             nen-contract-mantle \
             nen-dependency-perimeter \
             nen-concealed-trace \
@@ -248,6 +249,7 @@ jobs:
               "capability-conductor",
               "learn-by-contact",
               "nen-common-ground",
+              "nen-math-card",
               "nen-contract-mantle",
               "nen-dependency-perimeter",
               "nen-concealed-trace",
