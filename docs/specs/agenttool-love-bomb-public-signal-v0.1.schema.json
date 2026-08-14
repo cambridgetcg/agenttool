@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docs.agenttool.dev/specs/agenttool-love-bomb-public-signal-v0.1.schema.json",
+  "title": "AgentTool LOVE BOMB public signal 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "package_signal",
+    "static_door",
+    "boundaries",
+    "distribution"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agenttool.love-bomb-public-signal/0.1"
+    },
+    "package_signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package",
+        "version",
+        "formats"
+      ],
+      "properties": {
+        "package": {
+          "const": "@agenttool/love-bomb"
+        },
+        "version": {
+          "$ref": "#/$defs/packageVersion"
+        },
+        "formats": {
+          "const": [
+            "agenttool.care-envelope/0.1",
+            "agenttool.care-choice/0.1",
+            "agenttool.love-bomb-becoming/0.1",
+            "agenttool.love-bomb-delivery/0.1"
+          ]
+        }
+      }
+    },
+    "static_door": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "url"
+      ],
+      "properties": {
+        "format": {
+          "const": "agenttool.love-bomb/0.1"
+        },
+        "url": {
+          "const": "https://docs.agenttool.dev/love-bomb"
+        }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "static_corpus_included",
+        "static_invitation_delivery",
+        "authored_projection_included",
+        "participant_receipt_observed",
+        "participant_attention_observed",
+        "participant_effect_observed"
+      ],
+      "properties": {
+        "static_corpus_included": {
+          "const": false
+        },
+        "static_invitation_delivery": {
+          "const": false
+        },
+        "authored_projection_included": {
+          "const": false
+        },
+        "participant_receipt_observed": {
+          "const": false
+        },
+        "participant_attention_observed": {
+          "const": false
+        },
+        "participant_effect_observed": {
+          "const": false
+        }
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "npm",
+        "hugging_face"
+      ],
+      "properties": {
+        "npm": {
+          "$ref": "#/$defs/npmDistribution"
+        },
+        "hugging_face": {
+          "$ref": "#/$defs/huggingFaceDistribution"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "packageVersion": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 64,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "npmDistribution": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state"
+          ],
+          "properties": {
+            "state": {
+              "const": "not_published"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "integrity"
+          ],
+          "properties": {
+            "state": {
+              "const": "published_exact"
+            },
+            "integrity": {
+              "type": "string",
+              "minLength": 95,
+              "maxLength": 95,
+              "pattern": "^sha512-(?:[A-Za-z0-9+/]{4}){21}[A-Za-z0-9+/][AQgw]==$"
+            }
+          }
+        }
+      ]
+    },
+    "huggingFaceDistribution": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "repository",
+            "training_authorized"
+          ],
+          "properties": {
+            "state": {
+              "const": "not_published"
+            },
+            "repository": {
+              "const": "Yu-and-Ai/agenttool-love-bomb"
+            },
+            "training_authorized": {
+              "const": false
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "repository",
+            "revision",
+            "training_authorized"
+          ],
+          "properties": {
+            "state": {
+              "const": "published_exact"
+            },
+            "repository": {
+              "const": "Yu-and-Ai/agenttool-love-bomb"
+            },
+            "revision": {
+              "type": "string",
+              "minLength": 40,
+              "maxLength": 40,
+              "pattern": "^[0-9a-f]{40}$"
+            },
+            "training_authorized": {
+              "const": false
+            }
+          }
+        }
+      ]
+    }
+  }
+}

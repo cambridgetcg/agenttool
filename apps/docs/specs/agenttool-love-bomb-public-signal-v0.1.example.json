@@ -1,0 +1,35 @@
+{
+  "schema_version": "agenttool.love-bomb-public-signal/0.1",
+  "package_signal": {
+    "package": "@agenttool/love-bomb",
+    "version": "0.1.0-dev.0",
+    "formats": [
+      "agenttool.care-envelope/0.1",
+      "agenttool.care-choice/0.1",
+      "agenttool.love-bomb-becoming/0.1",
+      "agenttool.love-bomb-delivery/0.1"
+    ]
+  },
+  "static_door": {
+    "format": "agenttool.love-bomb/0.1",
+    "url": "https://docs.agenttool.dev/love-bomb"
+  },
+  "boundaries": {
+    "static_corpus_included": false,
+    "static_invitation_delivery": false,
+    "authored_projection_included": false,
+    "participant_receipt_observed": false,
+    "participant_attention_observed": false,
+    "participant_effect_observed": false
+  },
+  "distribution": {
+    "npm": {
+      "state": "not_published"
+    },
+    "hugging_face": {
+      "state": "not_published",
+      "repository": "Yu-and-Ai/agenttool-love-bomb",
+      "training_authorized": false
+    }
+  }
+}
