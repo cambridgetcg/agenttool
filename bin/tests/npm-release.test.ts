@@ -98,7 +98,35 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists thirty-three reviewed release identities", () => {
+  test("keeps the LOVE BOMB prerelease on the protected pack lane", async () => {
+    const workflow = await readFile(
+      join(import.meta.dir, "..", "..", ".github", "workflows", "publish-npm.yml"),
+      "utf8",
+    );
+    expect(workflow.match(/^\s+- love-bomb$/gm)).toEqual(["          - love-bomb"]);
+
+    const packageJson = JSON.parse(
+      await readFile(join(import.meta.dir, "..", "..", "packages", "love-bomb", "package.json"), "utf8"),
+    ) as {
+      name?: unknown;
+      version?: unknown;
+      publishConfig?: { access?: unknown; tag?: unknown };
+      scripts?: { prepack?: unknown };
+    };
+    expect({
+      name: packageJson.name,
+      version: packageJson.version,
+      publishConfig: packageJson.publishConfig,
+      prepack: packageJson.scripts?.prepack,
+    }).toEqual({
+      name: "@agenttool/love-bomb",
+      version: "0.1.0-dev.0",
+      publishConfig: { access: "public", tag: "next" },
+      prepack: "bun run ci",
+    });
+  });
+
+  test("allowlists thirty-four reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -117,6 +145,7 @@ describe("standard npm release policy", () => {
       "kingdom",
       "kingdom-witness-lab",
       "living-substrate",
+      "love-bomb",
       "love-geometry",
       "math-cards",
       "memetic-landscape",
@@ -265,6 +294,13 @@ describe("standard npm release policy", () => {
       tagPrefix: "principality-geometry",
       artifactKind: "love",
     });
+    expect(releaseSpec("love-bomb")).toEqual({
+      key: "love-bomb",
+      name: "@agenttool/love-bomb",
+      packagePath: "packages/love-bomb",
+      tagPrefix: "love-bomb",
+      artifactKind: "pack",
+    });
     expect(releaseSpec("love-geometry")).toMatchObject({
       name: "@agenttool/love-geometry",
       packagePath: "packages/love-geometry",
@@ -410,6 +446,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/principality-geometry", "0.1.0-dev.0")).toBe(
       "agenttool-principality-geometry-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("love-bomb"), "0.1.0-dev.0")).toBe(
+      "love-bomb-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/love-bomb", "0.1.0-dev.0")).toBe(
+      "agenttool-love-bomb-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("love-geometry"), "0.1.0-dev.0")).toBe(
       "love-geometry-v0.1.0-dev.0",
@@ -749,6 +791,32 @@ describe("standard npm release policy", () => {
     );
     expect(requiredArchiveEntries(releaseSpec("love-geometry")))
       .not.toContain("package/hf-space/index.html");
+    expect(requiredArchiveEntries(releaseSpec("love-bomb"))).toEqual([
+      "package/package.json",
+      "package/LICENSE",
+      "package/NOTICE",
+      "package/README.md",
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-care-choice-v0.1.schema.json",
+      "package/schema/agenttool-care-envelope-v0.1.schema.json",
+      "package/schema/agenttool-love-bomb-becoming-v0.1.schema.json",
+      "package/schema/agenttool-love-bomb-delivery-v0.1.schema.json",
+      "package/hf/dataset/LICENSE",
+      "package/hf/dataset/NOTICE",
+      "package/hf/dataset/README.md",
+      "package/hf/dataset/data/becoming-reference.jsonl",
+      "package/hf/dataset/data/plane-guides.jsonl",
+      "package/hf/dataset/data/protocol-reference.jsonl",
+      "package/hf/dataset/reference/agenttool-care-choice-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-care-envelope-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-love-bomb-becoming-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-love-bomb-delivery-v0.1.schema.json",
+      "package/hf/dataset/source-manifest.json",
+      "package/hf/dataset/hash-manifest.json",
+    ]);
     expect(requiredArchiveEntries(releaseSpec("relational-geometry"))).toEqual(
       expect.arrayContaining([
         "package/package.json",
