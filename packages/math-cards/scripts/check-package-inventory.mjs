@@ -23,6 +23,7 @@ const expected = [
   "kingdom.extension.json",
   "package.json",
   "schema/agenttool-math-card-assessment-v0.1.schema.json",
+  "schema/agenttool-math-card-input-v0.1.schema.json",
   "schema/agenttool-math-card-v0.1.schema.json",
   "vectors/agenttool-math-cards-v0.1.json",
 ].sort();

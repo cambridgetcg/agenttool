@@ -10,7 +10,7 @@ describe("public package boundary", () => {
   test("is zero-runtime-dependency, side-effect-free, Apache-2.0, and public-ready", () => {
     expect(packageJson).toMatchObject({
       name: "@agenttool/math-cards",
-      version: "0.1.0-dev.0",
+      version: "0.1.0-dev.1",
       license: "Apache-2.0",
       sideEffects: false,
       publishConfig: { access: "public", tag: "next" },
@@ -25,11 +25,12 @@ describe("public package boundary", () => {
     }
   });
 
-  test("exports only the runtime, two schemas, vectors, and declaration hint", () => {
+  test("exports only the runtime, three schemas, vectors, and declaration hint", () => {
     expect(Object.keys(packageJson.exports).sort()).toEqual([
       ".",
       "./assessment.schema.json",
       "./card.schema.json",
+      "./input.schema.json",
       "./kingdom.extension.json",
       "./vectors.json",
     ]);
@@ -60,7 +61,7 @@ describe("public package boundary", () => {
       schema: "kingdom-extension-local/v0.1",
       id: "math-cards",
       package: "@agenttool/math-cards",
-      version: "0.1.0-dev.0",
+      version: "0.1.0-dev.1",
       status: "public_ready_source",
       host_contract: "not_registered",
     });
@@ -81,6 +82,7 @@ describe("public package boundary", () => {
     const files = packed[0]!.files.map((entry) => entry.path).sort();
     for (const expected of [
       "dist/index.js",
+      "schema/agenttool-math-card-input-v0.1.schema.json",
       "schema/agenttool-math-card-v0.1.schema.json",
       "schema/agenttool-math-card-assessment-v0.1.schema.json",
       "vectors/agenttool-math-cards-v0.1.json",

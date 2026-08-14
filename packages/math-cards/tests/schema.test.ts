@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 
-import { MATH_CARD_BOUNDARIES } from "../src/index.js";
+import {
+  MATH_CARD_BOUNDARIES,
+  MathCardError,
+  createMathCard,
+} from "../src/index.js";
 import { jsonClone, vectors } from "./fixtures.js";
 
 const root = join(import.meta.dir, "..");
@@ -11,16 +15,22 @@ const cardSchema = JSON.parse(readFileSync(
   join(root, "schema", "agenttool-math-card-v0.1.schema.json"),
   "utf8",
 ));
+const inputSchema = JSON.parse(readFileSync(
+  join(root, "schema", "agenttool-math-card-input-v0.1.schema.json"),
+  "utf8",
+));
 const assessmentSchema = JSON.parse(readFileSync(
   join(root, "schema", "agenttool-math-card-assessment-v0.1.schema.json"),
   "utf8",
 ));
 const ajv = new Ajv2020({ allErrors: true, strict: true });
+const validateInput = ajv.compile(inputSchema);
 const validateCard = ajv.compile(cardSchema);
 const validateAssessment = ajv.compile(assessmentSchema);
 
 describe("portable Draft 2020-12 schemas", () => {
   test("strictly compile and accept all generated runtime artifacts", () => {
+    expect(inputSchema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
     expect(cardSchema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
     expect(assessmentSchema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
     for (const entry of [
@@ -28,9 +38,55 @@ describe("portable Draft 2020-12 schemas", () => {
       vectors.cases.incomplete_model,
       vectors.cases.redesign_measurement,
     ]) {
+      expect(validateInput(entry.input), JSON.stringify(validateInput.errors)).toBe(true);
+      expect(createMathCard(jsonClone(entry.input))).toEqual(entry.card);
       expect(validateCard(entry.card), JSON.stringify(validateCard.errors)).toBe(true);
       expect(validateAssessment(entry.assessment), JSON.stringify(validateAssessment.errors)).toBe(true);
     }
+    expect(validateInput(vectors.cases.malformed.input)).toBe(false);
+    expect(() => createMathCard(jsonClone(vectors.cases.malformed.input))).toThrow(MathCardError);
+  });
+
+  test("derives the closed creation input from the card shape minus server-owned fields", () => {
+    const serverOwned = ["schema_version", "card_id", "boundaries"];
+    const expectedNames = Object.keys(cardSchema.properties).filter((name) => !serverOwned.includes(name));
+    expect(inputSchema).toMatchObject({
+      $id: "urn:agenttool:schema:math-card-input:0.1",
+      title: "AgentTool CreateMathCardInput v0.1",
+      type: "object",
+      additionalProperties: false,
+      required: expectedNames,
+    });
+    expect(Object.keys(inputSchema.properties)).toEqual(expectedNames);
+    for (const name of expectedNames.filter((name) => name !== "outcome_uses")) {
+      expect(inputSchema.properties[name]).toEqual(cardSchema.properties[name]);
+    }
+    for (const name of expectedNames) {
+      const missing = jsonClone(vectors.cases.ready_proof.input);
+      delete missing[name];
+      expect(validateInput(missing), JSON.stringify(validateInput.errors)).toBe(false);
+      expect(() => createMathCard(missing)).toThrow(MathCardError);
+    }
+    for (const name of serverOwned) {
+      expect(inputSchema.properties[name]).toBeUndefined();
+      expect(inputSchema.required).not.toContain(name);
+      const widened = jsonClone(vectors.cases.ready_proof.input);
+      widened[name] = vectors.cases.ready_proof.card[name];
+      expect(validateInput(widened), JSON.stringify(validateInput.errors)).toBe(false);
+      expect(() => createMathCard(widened)).toThrow(MathCardError);
+    }
+  });
+
+  test("matches runtime acceptance before canonical outcome-use ordering", () => {
+    const reordered = jsonClone(vectors.cases.ready_proof.input);
+    reordered.outcome_uses.reverse();
+    expect(validateInput(reordered), JSON.stringify(validateInput.errors)).toBe(true);
+    expect(createMathCard(reordered)).toEqual(vectors.cases.ready_proof.card);
+
+    const duplicateStatus = jsonClone(vectors.cases.ready_proof.input);
+    duplicateStatus.outcome_uses[1].result_status = duplicateStatus.outcome_uses[0].result_status;
+    expect(validateInput(duplicateStatus), JSON.stringify(validateInput.errors)).toBe(false);
+    expect(() => createMathCard(duplicateStatus)).toThrow(MathCardError);
   });
 
   test("pins every runtime boundary constant exactly", () => {

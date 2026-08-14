@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "0.1.0-dev.0" as const;
+export const PACKAGE_VERSION = "0.1.0-dev.1" as const;
 
 export const MATH_CARD_SCHEMA = "agenttool.math-card/0.1" as const;
 export const MATH_CARD_ASSESSMENT_SCHEMA = "agenttool.math-card-assessment/0.1" as const;

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   MATH_CARD_ASSESSMENT_SCHEMA,
   MATH_CARD_SCHEMA,
+  PACKAGE_VERSION,
   assessMathCard,
   canonicalJson,
   sha256Id,
@@ -17,7 +18,8 @@ const card = validateMathCard(vectors.cases.ready_proof.card);
 const assessment = assessMathCard(card);
 
 if (
-  MATH_CARD_SCHEMA !== "agenttool.math-card/0.1"
+  PACKAGE_VERSION !== "0.1.0-dev.1"
+  || MATH_CARD_SCHEMA !== "agenttool.math-card/0.1"
   || MATH_CARD_ASSESSMENT_SCHEMA !== "agenttool.math-card-assessment/0.1"
   || assessment.status !== "ready_for_bounded_inquiry"
   || assessment.card_id !== card.card_id
