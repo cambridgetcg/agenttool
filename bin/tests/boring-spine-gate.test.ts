@@ -238,6 +238,10 @@ describe("boring test spine", () => {
       "CDP_API_KEY_SECRET",
       "EMBASSY_RECEIPT_SECRET",
       "OPENAI_APPS_CHALLENGE",
+      "AGENTOOL_CODEX_USAGE_DB",
+      "CODEX_HOME",
+      "CODEX_SQLITE_HOME",
+      "CODEX_THREAD_ID",
       "PIP_CONFIG_FILE",
       "BASH_ENV",
       "ENV",
@@ -512,6 +516,7 @@ describe("boring test spine", () => {
       "packages/gin-reconstruction",
       "packages/credential-broker",
       "packages/collab",
+      "packages/codex-usage",
       "packages/collab-zerone",
       "packages/browser",
       "packages/hf-scout",
@@ -574,6 +579,8 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/data-sync && bun run ci && bun run build");
     expect(preflight).toContain("cd packages/credential-broker && bun run ci");
     expect(preflight).toContain("cd packages/collab && bun run ci");
+    expect(preflight).toContain("cd packages/codex-usage && bun run ci");
+    expect(workflow).toContain("broker, collab, Codex usage, collab-zerone");
     expect(preflight).toContain("cd packages/browser && bun run ci");
     expect(preflight).toContain("cd packages/repo-archive && bun run ci");
     expect(preflight).toContain("cd packages/dark-continent-contract && bun run ci");
@@ -1018,9 +1025,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(51);
+      expect(calls).toHaveLength(52);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        42,
+        43,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         9,
@@ -1172,6 +1179,7 @@ exit 94
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("          - skills");
     expect(workflow).toContain("          - browser");
+    expect(workflow).toContain("          - codex-usage");
     expect(workflow).toContain("          - alchemy");
     expect(workflow).toContain("          - alchemy-agentcred");
     expect(workflow).toContain("          - kingdom");

@@ -201,6 +201,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "browser",
     artifactKind: "love",
   },
+  "codex-usage": {
+    key: "codex-usage",
+    name: "@agenttool/codex-usage",
+    packagePath: "packages/codex-usage",
+    tagPrefix: "codex-usage",
+    artifactKind: "pack",
+  },
   alchemy: {
     key: "alchemy",
     name: "@agenttool/alchemy",
@@ -679,6 +686,16 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/dist/agenttool-browser-mcp.js",
       "package/dist/THIRD_PARTY_LICENSES",
       "package/dist/vendor/playwright-core/index.mjs",
+    );
+  }
+  if (spec.name === "@agenttool/codex-usage") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/bin/agenttool-codex-usage.js",
+      "package/dist/src/index.js",
+      "package/dist/src/index.d.ts",
+      "package/dist/src/mcp.js",
+      "package/dist/src/mcp.d.ts",
     );
   }
   if (spec.name === "@agenttool/repo-archive") {

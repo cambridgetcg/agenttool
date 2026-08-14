@@ -62,6 +62,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/gin-reconstruction
   packages/credential-broker
   packages/collab
+  packages/codex-usage
   packages/collab-zerone
   packages/browser
   packages/hf-scout

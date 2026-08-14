@@ -98,12 +98,13 @@ describe("standard npm release policy", () => {
     expect(mirrorBody).not.toContain("pollRegistry");
   });
 
-  test("allowlists thirty reviewed release identities", () => {
+  test("allowlists thirty-one reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
       "alchemy-agentcred",
       "browser",
+      "codex-usage",
       "collab",
       "correspondence-yutabase",
       "credential-broker",
@@ -150,6 +151,12 @@ describe("standard npm release policy", () => {
       name: "@agenttool/browser",
       packagePath: "packages/browser",
       artifactKind: "love",
+    });
+    expect(releaseSpec("codex-usage")).toMatchObject({
+      name: "@agenttool/codex-usage",
+      packagePath: "packages/codex-usage",
+      tagPrefix: "codex-usage",
+      artifactKind: "pack",
     });
     expect(releaseSpec("alchemy")).toMatchObject({
       name: "@agenttool/alchemy",
@@ -294,6 +301,12 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/skills", "0.3.1")).toBe("agenttool-skills-0.3.1.tgz");
     expect(expectedTag(releaseSpec("browser"), "0.6.0")).toBe("browser-v0.6.0");
     expect(packedFilename("@agenttool/browser", "0.6.0")).toBe("agenttool-browser-0.6.0.tgz");
+    expect(expectedTag(releaseSpec("codex-usage"), "0.1.0")).toBe(
+      "codex-usage-v0.1.0",
+    );
+    expect(packedFilename("@agenttool/codex-usage", "0.1.0")).toBe(
+      "agenttool-codex-usage-0.1.0.tgz",
+    );
     expect(expectedTag(releaseSpec("repo-archive"), "0.1.0-dev.0")).toBe(
       "repo-archive-v0.1.0-dev.0",
     );
@@ -450,6 +463,20 @@ describe("standard npm release policy", () => {
     );
     expect(requiredArchiveEntries(releaseSpec("browser")))
       .not.toContain("package/.claude-plugin/plugin.json");
+    expect(requiredArchiveEntries(releaseSpec("codex-usage"))).toEqual(
+      expect.arrayContaining([
+        "package/package.json",
+        "package/LICENSE",
+        "package/NOTICE",
+        "package/README.md",
+        "package/CLAUDE.md",
+        "package/dist/bin/agenttool-codex-usage.js",
+        "package/dist/src/index.js",
+        "package/dist/src/index.d.ts",
+        "package/dist/src/mcp.js",
+        "package/dist/src/mcp.d.ts",
+      ]),
+    );
     expect(requiredArchiveEntries(releaseSpec("repo-archive"))).toEqual(expect.arrayContaining([
       "package/dist/index.js",
       "package/dist/cli.js",
