@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, and Principality Geometry. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, Math Cards, the KINGDOM integration package, the local Codex Usage reader, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Memetic Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, and Principality Geometry. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, Math Cards, Model Becoming, the KINGDOM integration package, the local Codex Usage reader, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Memetic Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -29,6 +29,7 @@ different artifact and Hub surfaces:
 | `@agenttool/polymorph-landscape` | one credential-free `npm pack` tarball | authored lessons plus source-bounded reference rows in `Yu-and-Ai/agenttool-polymorph-landscape` |
 | `@agenttool/memetic-landscape` | one credential-free `npm pack` tarball | authored lessons plus source-bounded reference rows in `Yu-and-Ai/agenttool-memetic-landscape` |
 | `@agenttool/math-cards` | one credential-free `npm pack` tarball containing the pure protocol, closed schemas, vectors, and declaration-only KINGDOM hint | none; npm/GitHub distribution does not imply a Hugging Face dataset, Space, model, or training surface |
+| `@agenttool/model-becoming` | one credential-free `npm pack` tarball containing the pure zero-dependency dossier runtime, schemas, pinned Moonshot reference, and exact Hub projection | reference-only, non-training dataset `Yu-and-Ai/agenttool-model-becoming`; publication and immutable readback remain separate |
 
 Distribution does not translate semantics between them. A Love bearing does
 not become a Relational witness, and a Relational cell does not become a
@@ -79,6 +80,45 @@ not every registry fallback: npm can expose the sole version of a brand-new
 package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
+
+## Model Becoming developer-preview publication boundary
+
+`@agenttool/model-becoming@0.1.0-dev.0` is a zero-runtime-dependency packed
+candidate. It is separate from canonical LOVE BOMB v4: `love-bomb` is not an
+npm release identity, and publication of this package does not deliver or
+activate the static pull-only care bundle.
+
+Immediately before the first npm dispatch, require anonymous package and exact
+version reads to remain absent, and require the protected `npm-bootstrap`
+environment's deployment policies to include the exact `model-becoming-v*`
+tag pattern. Tag only the reviewed protected-main commit as
+`model-becoming-v0.1.0-dev.0`, then use the protected workflow with
+`authentication=bootstrap` and `npm_tag=next`. After the package exists,
+configure its exact trusted publisher using the fields below; every later
+version uses `authentication=trusted`. Never publish this package from a local
+shell.
+
+The Hugging Face companion is a separate dataset repository at
+`Yu-and-Ai/agenttool-model-becoming`. Publish the seven repository-owned files
+from the exact release checkout private-first, reject unexpected existing
+content, bind the upload to the observed parent commit, and compare every byte
+at the returned immutable revision before making it public. Then repeat the
+complete immutable readback anonymously; allow only Hugging Face's
+provider-managed `.gitattributes` in addition to the seven owned files.
+Dataset Server config `model_becoming_reference`, split `reference`, and its
+single row are mutable current-head observations rather than immutable proof.
+
+The row remains `reference_only`, with `training_admission: not_applicable`,
+`requires_separate_training_authorization: true`, and
+`training_authorized: false`. Publishing either surface performs no training,
+inference, retention, evaluation, weight update, model modification, delivery,
+attention, consent, identity, continuity, or authority effect.
+
+Do not add a success receipt prospectively. After actual observation, record
+the protected commit and workflow run, exact GitHub/npm bytes and hashes, npm
+integrity and dist-tag, the immutable Hugging Face revision and tree, and the
+anonymous readback result. A failed or blocked mutation remains a failure or
+blocker; it is not publication evidence.
 
 ## Verified Codex Usage 0.1.0 publication — 2026-08-14
 
