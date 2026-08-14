@@ -475,6 +475,10 @@ def _scoped_answer(value: object, path: str, *, response: bool = False) -> None:
     _exact(item, {"state", "scope_refs"}, path, response=response)
     _enum(item["state"], ANSWER_STATES, f"{path}.state", response=response)
     _digest_list(item["scope_refs"], f"{path}.scope_refs", response=response)
+    if item["state"] == "answered" and len(item["scope_refs"]) == 0:
+        _fail(f"{path}.scope_refs", "answered requires at least one scope reference", response=response)
+    if item["state"] != "answered" and len(item["scope_refs"]) != 0:
+        _fail(f"{path}.scope_refs", f"must be empty when state is {item['state']}", response=response)
 
 
 def _method(value: object, path: str, *, response: bool = False) -> None:
@@ -657,11 +661,13 @@ def _boundaries(value: object, path: str) -> None:
 def _response_strings(value: object, path: str) -> None:
     entries = _array(value, MAX_REFERENCE_LIST, path, response=True)
     for index, entry in enumerate(entries):
+        if not isinstance(entry, str):
+            _fail(f"{path}[{index}]", "expected bounded Unicode string", response=True)
         try:
-            encoded = entry.encode("utf-8") if isinstance(entry, str) else b""
+            encoded = entry.encode("utf-8")
         except UnicodeEncodeError:
-            encoded = b""
-        if not isinstance(entry, str) or len(encoded) > MAX_STRING_BYTES:
+            _fail(f"{path}[{index}]", "expected bounded Unicode string", response=True)
+        if len(encoded) > MAX_STRING_BYTES:
             _fail(f"{path}[{index}]", "expected bounded Unicode string", response=True)
 
 
@@ -742,6 +748,8 @@ def _read_bounded(response: httpx.Response, maximum: int) -> bytes:
                 raise _math_error("Math Card response exceeded the configured limit.", "math_card_response_too_large", "Use the bounded assessment endpoint or raise max_response_bytes deliberately.", status=response.status_code, details={"max_response_bytes": maximum})
             body.extend(chunk)
     except AgentToolError:
+        raise
+    except httpx.TimeoutException:
         raise
     except Exception as error:
         raise _math_error("Math Card response body could not be read.", "math_card_invalid_response", "Use an endpoint that returns one complete bounded JSON envelope.", status=response.status_code) from error

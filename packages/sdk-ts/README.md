@@ -806,6 +806,13 @@ ordering, and assessment semantics remain server-owned. `at.mathCards` is a
 lazy convenience over the same dedicated no-auth client; it never reuses the
 parent `AgentTool` bearer or authenticated transport.
 
+On the declared Node and Bun runtimes, Math Cards uses an explicit one-shot
+`undici` package dispatcher rather than Bun's global `fetch` compatibility
+shim. That direct dispatcher does not consult `HTTP_PROXY` / `HTTPS_PROXY`, so
+startup proxy credentials cannot cross this public no-auth boundary. Redirects
+remain manual, response bytes remain bounded while streaming, and the
+dispatcher is closed after each assessment.
+
 ### Public KINGDOM framework project card
 
 Read AgentTool's canonical project card without an AgentTool account:

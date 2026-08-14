@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import os
 from typing import Callable
@@ -10,6 +11,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
+import agenttool
 from agenttool import AgentTool, AgentToolError, MathCardsClient
 from tests.math_cards_fixture import MATH_CARD_INPUT, math_card_response
 
@@ -37,6 +39,10 @@ def _client(
 
 
 class TestMathCardsCredentialFreeBoundary:
+    def test_transport_path_stays_module_private_at_root(self) -> None:
+        assert "MATH_CARDS_PATH" not in agenttool.__all__
+        assert not hasattr(agenttool, "MATH_CARDS_PATH")
+
     def test_exact_request_bytes_and_no_bearer_cookie_or_env_proxy(self) -> None:
         requests: list[httpx.Request] = []
         sentinel = "math-cards-secret-must-not-cross"
@@ -158,6 +164,108 @@ def test_accepts_each_server_owned_assessment_status(status: str) -> None:
         result = cards.assess(MATH_CARD_INPUT)
     assert result["assessment"]["status"] == status
     assert result["card"]["card_id"] == result["assessment"]["card_id"]
+
+
+@pytest.mark.parametrize(
+    ("state", "scope_refs"),
+    [
+        ("answered", []),
+        ("unknown", [MATH_CARD_INPUT["scope_ref"]]),
+    ],
+)
+def test_rejects_invalid_scoped_answer_input_before_network(
+    state: str,
+    scope_refs: list[str],
+) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return _json_response(request, math_card_response("questions_open"))
+
+    candidate = deepcopy(MATH_CARD_INPUT)
+    candidate["distribution"]["beneficiaries"] = {
+        "state": state,
+        "scope_refs": scope_refs,
+    }
+    with (
+        _client(handler) as cards,
+        pytest.raises(AgentToolError) as exc_info,
+    ):
+        cards.assess(candidate)
+    assert exc_info.value.code == "math_card_invalid_input"
+    assert calls == 0
+
+
+@pytest.mark.parametrize(
+    ("state", "scope_refs"),
+    [
+        ("answered", []),
+        ("unknown", [MATH_CARD_INPUT["scope_ref"]]),
+    ],
+)
+def test_rejects_invalid_scoped_answer_in_returned_card(
+    state: str,
+    scope_refs: list[str],
+) -> None:
+    body = math_card_response("questions_open")
+    body["card"]["distribution"]["beneficiaries"] = {
+        "state": state,
+        "scope_refs": scope_refs,
+    }
+    with (
+        _client(lambda request: _json_response(request, body)) as cards,
+        pytest.raises(AgentToolError) as exc_info,
+    ):
+        cards.assess(MATH_CARD_INPUT)
+    assert exc_info.value.code == "math_card_invalid_response"
+
+
+def test_rejects_escaped_lone_surrogate_in_response_string() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = math_card_response("questions_open")
+        body["assessment"]["open_questions"] = ["\ud800"]
+        return httpx.Response(
+            200,
+            content=json.dumps(
+                body,
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("ascii"),
+            headers={"content-type": "application/json"},
+            request=request,
+        )
+
+    with (
+        _client(handler) as cards,
+        pytest.raises(AgentToolError) as exc_info,
+    ):
+        cards.assess(MATH_CARD_INPUT)
+    assert exc_info.value.code == "math_card_invalid_response"
+
+
+class _ReadTimeoutStream(httpx.SyncByteStream):
+    def __iter__(self):
+        raise httpx.ReadTimeout("synthetic streamed read timeout")
+        yield b""  # pragma: no cover
+
+
+def test_streamed_timeout_remains_an_unreachable_transport_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            stream=_ReadTimeoutStream(),
+            headers={"content-type": "application/json"},
+            request=request,
+        )
+
+    with (
+        _client(handler) as cards,
+        pytest.raises(AgentToolError) as exc_info,
+    ):
+        cards.assess(MATH_CARD_INPUT)
+    assert exc_info.value.code == "math_card_unreachable"
 
 
 class TestMathCardsBoundsAndErrors:

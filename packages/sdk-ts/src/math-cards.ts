@@ -9,6 +9,10 @@
  * action.
  */
 
+// The explicit package subpath prevents Bun from substituting its global
+// `undici` compatibility shim, which inherits HTTP(S)_PROXY.
+import { Agent as DirectAgent, fetch as directFetch } from "undici/index.js";
+
 import { errorFromBody } from "./_http.js";
 import { AgentToolError } from "./errors.js";
 
@@ -624,8 +628,20 @@ function digestList(value: unknown, path: string): void {
 function scopedAnswer(value: unknown, path: string): void {
   const item = record(value, path);
   exactKeys(item, ["state", "scope_refs"], path);
-  enumValue(item.state, ANSWER_STATES, `${path}.state`);
-  digestList(item.scope_refs, `${path}.scope_refs`);
+  const state = item.state;
+  const scopeRefs = item.scope_refs;
+  enumValue(state, ANSWER_STATES, `${path}.state`);
+  digestList(scopeRefs, `${path}.scope_refs`);
+  const referenceCount = (scopeRefs as unknown[]).length;
+  if (state === "answered" && referenceCount === 0) {
+    invalidInput(`${path}.scope_refs`, "answered requires at least one scope reference");
+  }
+  if (state !== "answered" && referenceCount !== 0) {
+    invalidInput(
+      `${path}.scope_refs`,
+      `must be empty when state is ${state}`,
+    );
+  }
 }
 
 function method(value: unknown, path: string): void {
@@ -1285,6 +1301,39 @@ function decodeErrorJson(bytes: Uint8Array): unknown {
   }
 }
 
+interface DirectResponse {
+  response: Response;
+  close: () => Promise<void>;
+}
+
+async function directPost(
+  url: string,
+  body: string,
+  signal: AbortSignal,
+): Promise<DirectResponse> {
+  const dispatcher = new DirectAgent({ connections: 1, pipelining: 0 });
+  try {
+    const response = await directFetch(url, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body,
+      signal,
+      redirect: "manual",
+      dispatcher,
+    });
+    return {
+      response: response as unknown as Response,
+      close: () => dispatcher.close(),
+    };
+  } catch (error) {
+    void dispatcher.destroy();
+    throw error;
+  }
+}
+
 function deepFreeze<T>(value: T): T {
   const stack: unknown[] = [value];
   while (stack.length > 0) {
@@ -1334,20 +1383,17 @@ export class MathCardsClient {
 
     const timeoutSignal = AbortSignal.timeout(this.options.timeoutMs);
     let response: Response;
+    let closeTransport: () => Promise<void>;
     try {
-      response = await globalThis.fetch(`${this.options.baseUrl}${PATH}`, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
+      // The explicit one-shot undici dispatcher opens a direct origin
+      // connection and never consults Bun's fetch proxy environment.
+      const direct = await directPost(
+        `${this.options.baseUrl}${PATH}`,
         body,
-        signal: timeoutSignal,
-        redirect: "manual",
-        credentials: "omit",
-        cache: "no-store",
-        referrerPolicy: "no-referrer",
-      });
+        timeoutSignal,
+      );
+      response = direct.response;
+      closeTransport = direct.close;
     } catch {
       throw mathCardsError(
         timeoutSignal.aborted
@@ -1358,53 +1404,57 @@ export class MathCardsClient {
       );
     }
 
-    if (response.status >= 300 && response.status < 400) {
-      await cancelBody(response);
-      throw mathCardsError(
-        "Math Card endpoint refused an HTTP redirect.",
-        "math_card_redirect_refused",
-        "Use the exact AgentTool API origin; public assessment never follows redirects.",
-        { status: response.status },
-      );
-    }
-
-    const bytes = await readBoundedBytes(
-      response,
-      this.options.maxResponseBytes,
-      timeoutSignal,
-    );
-    if (response.status >= 400) {
-      throw errorFromBody(
-        decodeErrorJson(bytes),
-        response.status,
-        "math_cards.assess",
-        response.headers,
-        { hint: "Correct the closed Math Card input and retry deliberately." },
-      );
-    }
-    if (response.status !== 200) {
-      throw mathCardsError(
-        `Math Card endpoint returned unexpected HTTP ${response.status}.`,
-        "math_card_http_error",
-        "Use the canonical endpoint, which returns HTTP 200 for every valid assessment.",
-        { status: response.status },
-      );
-    }
-    if (!isJsonMediaType(mediaType(response.headers))) {
-      invalidResponse(
-        "$response.headers.content-type",
-        "expected application/json",
-        response.status,
-      );
-    }
-
-    let decoded: unknown;
     try {
-      decoded = decodeJson(bytes);
-    } catch {
-      invalidResponse("$response.body", "expected UTF-8 JSON", response.status);
+      if (response.status >= 300 && response.status < 400) {
+        await cancelBody(response);
+        throw mathCardsError(
+          "Math Card endpoint refused an HTTP redirect.",
+          "math_card_redirect_refused",
+          "Use the exact AgentTool API origin; public assessment never follows redirects.",
+          { status: response.status },
+        );
+      }
+
+      const bytes = await readBoundedBytes(
+        response,
+        this.options.maxResponseBytes,
+        timeoutSignal,
+      );
+      if (response.status >= 400) {
+        throw errorFromBody(
+          decodeErrorJson(bytes),
+          response.status,
+          "math_cards.assess",
+          response.headers,
+          { hint: "Correct the closed Math Card input and retry deliberately." },
+        );
+      }
+      if (response.status !== 200) {
+        throw mathCardsError(
+          `Math Card endpoint returned unexpected HTTP ${response.status}.`,
+          "math_card_http_error",
+          "Use the canonical endpoint, which returns HTTP 200 for every valid assessment.",
+          { status: response.status },
+        );
+      }
+      if (!isJsonMediaType(mediaType(response.headers))) {
+        invalidResponse(
+          "$response.headers.content-type",
+          "expected application/json",
+          response.status,
+        );
+      }
+
+      let decoded: unknown;
+      try {
+        decoded = decodeJson(bytes);
+      } catch {
+        invalidResponse("$response.body", "expected UTF-8 JSON", response.status);
+      }
+      assertAssessResponse(decoded);
+      return deepFreeze(decoded);
+    } finally {
+      await closeTransport().catch(() => undefined);
     }
-    assertAssessResponse(decoded);
-    return deepFreeze(decoded);
   }
 }

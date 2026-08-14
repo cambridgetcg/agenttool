@@ -8,7 +8,9 @@ Active - repository source carries paired Agent Dining, data-only WAKE observati
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
-- Native `fetch` + native `AbortSignal.timeout` for HTTP
+- Native `fetch` + native `AbortSignal.timeout` for general HTTP; Math Cards
+  alone uses an explicit one-shot `undici` package dispatcher so Bun startup
+  proxy credentials cannot enter its no-auth transport
 - `@noble/ed25519` + `@noble/hashes` for ed25519 signing (matches the api server + cli/think; byte-identical wire format)
 - WebCrypto SubtleCrypto for AES-256-GCM (no extra dep)
 - Bun for test runner
@@ -101,7 +103,7 @@ in GitHub `main`, and requires byte-identical public registry read-back. Do not
 run a second local `npm publish` path. See [`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md).
 
 ## Dependencies
-- **Runtime**: `@noble/ed25519 ^2.2.3`, `@noble/hashes ^2.0.1` (Phase 5+ crypto only — matches api server + cli/think versions for byte-identical wire format). HTTP, AES-256-GCM, and abort signals all use platform-native APIs.
+- **Runtime**: `@noble/ed25519 ^2.2.3`, `@noble/hashes ^2.0.1` (Phase 5+ crypto only — matches api server + cli/think versions for byte-identical wire format), plus `undici ^7.29.0` solely for Math Cards' direct no-env-proxy dispatcher. Other HTTP, AES-256-GCM, and abort signals use platform-native APIs.
 - **Dev**: `typescript ^5.7`, `@types/bun ^1.2`
 - **API**: Authenticated hosted calls go to `https://api.agenttool.dev` (configurable via `baseUrl`); `at.kingdomFramework` and `at.mathCards` use separate credential-free requests; `at.data` and `at.kingdomOS` are separate local authorities
 - **Auth**: Reads `AT_API_KEY`, accepts `apiKey`, or accepts a mutually

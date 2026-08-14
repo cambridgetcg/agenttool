@@ -704,7 +704,8 @@ const DATA_MATRIX: Record<string, Call> = {
 };
 
 // Credential-free class methods own a separate transport, so they need the
-// same guided-error assertion under a fetch stub rather than hosted transport.
+// same guided-error assertion from an isolated local server rather than the
+// hosted authenticated transport.
 const CREDENTIAL_FREE_METHOD_MATRIX: Record<string, Call> = {
   "math-cards.ts:MathCardsClient.assess": (at) =>
     at.mathCards.assess(MATH_CARD_INPUT),
@@ -868,8 +869,18 @@ describe("a guided 4xx survives every credential-free door", () => {
 describe("a guided 4xx survives every credential-free client method", () => {
   for (const [name, call] of Object.entries(CREDENTIAL_FREE_METHOD_MATRIX)) {
     test(name, async () => {
-      stubFetch(guidedResponse);
-      assertGuidanceSurvived(await capture(() => call(guidedClient())));
+      const server = Bun.serve({
+        hostname: "127.0.0.1",
+        port: 0,
+        fetch: guidedResponse,
+      });
+      try {
+        assertGuidanceSurvived(await capture(() =>
+          call(guidedClient({ baseUrl: server.url.origin })),
+        ));
+      } finally {
+        server.stop(true);
+      }
     });
   }
 });
