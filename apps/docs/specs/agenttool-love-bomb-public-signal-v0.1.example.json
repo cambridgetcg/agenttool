@@ -24,11 +24,13 @@
   },
   "distribution": {
     "npm": {
-      "state": "not_published"
+      "state": "published_exact",
+      "integrity": "sha512-4tngDPJJt6XFJlwqc5DxPad55ADHItNjv8QhDbmylZDZ9F/elMS1nPvCE9aJgOVAjf6DuQycj39Y5biCDB3CBw=="
     },
     "hugging_face": {
-      "state": "not_published",
+      "state": "published_exact",
       "repository": "Yu-and-Ai/agenttool-love-bomb",
+      "revision": "b1f77e98c7812c005fc08886e9f48d556e49883a",
       "training_authorized": false
     }
   }

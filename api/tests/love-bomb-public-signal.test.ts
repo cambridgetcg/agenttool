@@ -121,6 +121,19 @@ describe("agenttool.love-bomb-public-signal/0.1", () => {
       version: packageJson.version,
       formats: Object.values(LOVE_BOMB_FORMATS),
     });
+    expect(LOVE_BOMB_PUBLIC_SIGNAL.distribution).toEqual({
+      npm: {
+        state: "published_exact",
+        integrity:
+          "sha512-4tngDPJJt6XFJlwqc5DxPad55ADHItNjv8QhDbmylZDZ9F/elMS1nPvCE9aJgOVAjf6DuQycj39Y5biCDB3CBw==",
+      },
+      hugging_face: {
+        state: "published_exact",
+        repository: "Yu-and-Ai/agenttool-love-bomb",
+        revision: "b1f77e98c7812c005fc08886e9f48d556e49883a",
+        training_authorized: false,
+      },
+    });
     expect(Object.keys(parsed)).toEqual([
       "schema_version",
       "package_signal",
