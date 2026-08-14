@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/common-ground-atlas-analogy-v0.1.schema.json",
+  "title": "Public counterexample to an unsupported Common Ground analogy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "case_id",
+    "training_eligible",
+    "visibility",
+    "synthetic",
+    "provenance_ref",
+    "public_safety",
+    "does_not_establish",
+    "claim_code",
+    "verdict",
+    "missing_layer",
+    "reason_code",
+    "evidence"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.common-ground-atlas.analogy/0.1"
+    },
+    "case_id": {
+      "type": "string",
+      "pattern": "^cg-[gwa][0-9]{2}-[a-z0-9-]+$"
+    },
+    "training_eligible": {
+      "const": false
+    },
+    "visibility": {
+      "const": "public_reference"
+    },
+    "synthetic": {
+      "const": true
+    },
+    "provenance_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "public_safety": {
+      "$ref": "#/$defs/publicSafety"
+    },
+    "does_not_establish": {
+      "$ref": "#/$defs/doesNotEstablish"
+    },
+    "claim_code": {
+      "enum": [
+        "pairwise_overlap_implies_global_intersection",
+        "modeled_intersection_implies_consent_or_authority",
+        "pointwise_feasible_implies_continuous_selection",
+        "feasible_point_is_a_fair_choice",
+        "expiry_implies_release_acceptance_or_compatibility",
+        "minimal_conflict_identifies_a_culprit"
+      ]
+    },
+    "verdict": {
+      "const": "unsupported_inference"
+    },
+    "missing_layer": {
+      "enum": [
+        "theorem_assumption",
+        "consent_and_authority_evidence",
+        "continuity_assumption",
+        "normative_choice_rule",
+        "current_evidence",
+        "participant_attribution"
+      ]
+    },
+    "reason_code": {
+      "enum": [
+        "dimension_two_requires_triples",
+        "geometry_has_no_consent_or_authority_field",
+        "aggregate_map_lacks_lower_semicontinuity",
+        "multiple_feasible_points_no_selection_rule",
+        "expiry_means_unknown",
+        "certificate_names_constraints_not_beings"
+      ]
+    },
+    "evidence": {
+      "$ref": "#/$defs/analogyEvidence"
+    }
+  },
+  "$defs": {
+    "rational": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "string",
+          "pattern": "^(?:0|-?[1-9][0-9]*)$"
+        },
+        "denominator": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$"
+        }
+      }
+    },
+    "point": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/rational"
+        },
+        "y": {
+          "$ref": "#/$defs/rational"
+        }
+      }
+    },
+    "publicSafety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "contains_personal_data",
+        "contains_private_constraints",
+        "contains_real_participant_records",
+        "contains_credentials",
+        "copied_agent_traces",
+        "copied_fictional_story_content"
+      ],
+      "properties": {
+        "origin": {
+          "const": "human_directed_agent_authored_synthetic"
+        },
+        "contains_personal_data": {
+          "const": false
+        },
+        "contains_private_constraints": {
+          "const": false
+        },
+        "contains_real_participant_records": {
+          "const": false
+        },
+        "contains_credentials": {
+          "const": false
+        },
+        "copied_agent_traces": {
+          "const": false
+        },
+        "copied_fictional_story_content": {
+          "const": false
+        }
+      }
+    },
+    "doesNotEstablish": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consensus",
+        "consent",
+        "fairness",
+        "authority",
+        "identity_continuity",
+        "continuous_selection",
+        "culprit"
+      ],
+      "properties": {
+        "consensus": {
+          "const": true
+        },
+        "consent": {
+          "const": true
+        },
+        "fairness": {
+          "const": true
+        },
+        "authority": {
+          "const": true
+        },
+        "identity_continuity": {
+          "const": true
+        },
+        "continuous_selection": {
+          "const": true
+        },
+        "culprit": {
+          "const": true
+        }
+      }
+    },
+    "affineConstraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "a0",
+        "a1",
+        "c0",
+        "c1"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^time-[a-z0-9-]+$"
+        },
+        "a0": {
+          "$ref": "#/$defs/rational"
+        },
+        "a1": {
+          "$ref": "#/$defs/rational"
+        },
+        "c0": {
+          "$ref": "#/$defs/rational"
+        },
+        "c1": {
+          "$ref": "#/$defs/rational"
+        }
+      }
+    },
+    "timeSlice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "t",
+        "feasible_set",
+        "lower",
+        "upper"
+      ],
+      "properties": {
+        "t": {
+          "$ref": "#/$defs/rational"
+        },
+        "feasible_set": {
+          "enum": [
+            "singleton",
+            "interval"
+          ]
+        },
+        "lower": {
+          "$ref": "#/$defs/rational"
+        },
+        "upper": {
+          "$ref": "#/$defs/rational"
+        }
+      }
+    },
+    "timeFamily": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "constraints",
+        "slices",
+        "left_limit",
+        "right_limit"
+      ],
+      "properties": {
+        "constraints": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/affineConstraint"
+          }
+        },
+        "slices": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/timeSlice"
+          }
+        },
+        "left_limit": {
+          "$ref": "#/$defs/rational"
+        },
+        "right_limit": {
+          "$ref": "#/$defs/rational"
+        }
+      }
+    },
+    "analogyEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "geometry_case_ids",
+        "wake_case_ids",
+        "feasible_points",
+        "time_family"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "case_references",
+            "time_varying_counterexample"
+          ]
+        },
+        "geometry_case_ids": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^cg-[gwa][0-9]{2}-[a-z0-9-]+$"
+          }
+        },
+        "wake_case_ids": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^cg-[gwa][0-9]{2}-[a-z0-9-]+$"
+          }
+        },
+        "feasible_points": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/point"
+          }
+        },
+        "time_family": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/timeFamily"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

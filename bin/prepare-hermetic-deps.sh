@@ -58,6 +58,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/memetic-landscape
   packages/love-geometry
   packages/relational-geometry
+  packages/common-ground-atlas
   packages/wake-thread
   packages/gin-reconstruction
   packages/math-cards

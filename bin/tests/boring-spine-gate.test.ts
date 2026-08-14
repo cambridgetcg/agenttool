@@ -512,6 +512,7 @@ describe("boring test spine", () => {
       "packages/memetic-landscape",
       "packages/love-geometry",
       "packages/relational-geometry",
+      "packages/common-ground-atlas",
       "packages/wake-thread",
       "packages/gin-reconstruction",
       "packages/math-cards",
@@ -599,8 +600,16 @@ describe("boring test spine", () => {
     expect(workflow).toContain(
       "Principality Geometry and Atlas, Polymorph and Memetic Landscapes",
     );
+    expect(workflow).toContain(
+      "Memetic Landscapes, Common Ground Atlas, KINGDOM research",
+    );
     expect(preflight).toContain("cd packages/love-geometry && bun run ci");
     expect(preflight).toContain("cd packages/relational-geometry && bun run ci");
+    expect(preflight).toContain("cd packages/common-ground-atlas && bun run ci");
+    expect(preflight.match(/git diff --exit-code HEAD -- packages\/common-ground-atlas\/hf\/dataset/g))
+      .toHaveLength(2);
+    expect(preflight.match(/git status --short --untracked-files=all -- packages\/common-ground-atlas\/hf\/dataset/g))
+      .toHaveLength(2);
     expect(preflight).toContain("cd packages/wake-thread && bun run ci");
     expect(preflight).toContain("cd packages/gin-reconstruction && bun run ci");
     expect(preflight).toContain("cd packages/math-cards && bun run ci");
@@ -1028,9 +1037,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(53);
+      expect(calls).toHaveLength(54);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        44,
+        45,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         9,

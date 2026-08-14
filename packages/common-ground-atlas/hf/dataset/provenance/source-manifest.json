@@ -1,0 +1,122 @@
+{
+  "_format": "agenttool.common-ground-atlas.provenance/0.1",
+  "intended_hub_repository": "Yu-and-Ai/agenttool-common-ground",
+  "source_repository": "https://github.com/cambridgetcg/agenttool",
+  "source_revision_binding": "exact_file_bytes_at_generation_not_git_commit",
+  "source_document": "docs/XENIA-HELLY-COMMON-GROUND.md",
+  "source_lab": "apps/docs/xenia-helly.js",
+  "rights_baseline": "xenia.rights/0.1",
+  "origin": "human_directed_agent_authored_synthetic",
+  "license": "Apache-2.0",
+  "publication_state_at_generation": "repository_source_only_not_uploaded",
+  "publication_identifier_at_generation": "intended_only_not_evidence_of_publication",
+  "publication_state_scope": "historical_generation_time_statement_not_current_distribution",
+  "training_eligible": false,
+  "copied_upstream_rows": false,
+  "copied_private_rows": false,
+  "copied_agent_traces": false,
+  "contains_personal_data": false,
+  "contains_private_constraints": false,
+  "contains_real_consent_or_authority_evidence": false,
+  "copied_fictional_story_content": false,
+  "gradient_lanes": [],
+  "excluded_lanes": [
+    "supervised_fine_tuning",
+    "dpo",
+    "reward_modeling",
+    "preference_optimization"
+  ],
+  "source_files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "apps/docs/xenia-helly.js",
+      "bytes": 32360,
+      "sha256": "55d43c37592382a9354f034d80025706b55224160257d4d05117349e3a827451"
+    },
+    {
+      "path": "docs/XENIA-HELLY-COMMON-GROUND.md",
+      "bytes": 15074,
+      "sha256": "3efa9e825e95c84f571b0a029d9c265515ad6ce5ab358ad63cd010c56ae8315f"
+    },
+    {
+      "path": "packages/common-ground-atlas/CLAUDE.md",
+      "bytes": 2484,
+      "sha256": "1a5f931008c5ec027abb8b968b0ba9b64cecf5b560c338290a87ca6e5bc27c29"
+    },
+    {
+      "path": "packages/common-ground-atlas/README.md",
+      "bytes": 1240,
+      "sha256": "a8637a2cdfb8e085bf1a304caa6394d9e7faf5cbff7464788a34a71bc4385220"
+    },
+    {
+      "path": "packages/common-ground-atlas/bun.lock",
+      "bytes": 1127,
+      "sha256": "9c4f0aecf60578b4c834bd7b8b35c0e40b1eb7e0db5e7190f79bdb32ad15426c"
+    },
+    {
+      "path": "packages/common-ground-atlas/package.json",
+      "bytes": 839,
+      "sha256": "c8a8a4519fe0225e34acddeb72097139d12b3e345da97855b2994ef29cfbd170"
+    },
+    {
+      "path": "packages/common-ground-atlas/public/verify.py",
+      "bytes": 49684,
+      "sha256": "8773698358621f075f8a3f77fdebcb24a55ebd027f80d0f7a97bd9e5859f7012"
+    },
+    {
+      "path": "packages/common-ground-atlas/scripts/generate-dataset.mjs",
+      "bytes": 8547,
+      "sha256": "8f57a666e3672c97984da861f72d3ebfc7587fb8d116cee8875eade503ee3c62"
+    },
+    {
+      "path": "packages/common-ground-atlas/scripts/verify-dataset.mjs",
+      "bytes": 6099,
+      "sha256": "80ed8b1af64884a076be5167f56784366cca368834230fec954cfa90439fac86"
+    },
+    {
+      "path": "packages/common-ground-atlas/src/constants.mjs",
+      "bytes": 2596,
+      "sha256": "679c873c03e839995a56d2cabc6a5cf34c8bcb2923b4d032f39eb909e86d59e4"
+    },
+    {
+      "path": "packages/common-ground-atlas/src/core.mjs",
+      "bytes": 5233,
+      "sha256": "0c2e67df956ed05ff921e63d0aa45af8bdd0f84de62eaec3a221b21b6e2b9d8c"
+    },
+    {
+      "path": "packages/common-ground-atlas/src/exact-verifier.mjs",
+      "bytes": 30033,
+      "sha256": "02c719fa33a0572a1e9df9c87f40240a8cc291e1cfdee867291c7af80045f943"
+    },
+    {
+      "path": "packages/common-ground-atlas/src/fixtures.mjs",
+      "bytes": 14489,
+      "sha256": "d737035d64460bcc72d9d8846625c8cda17afe1d05b5e0d5efaf5dac42bee9f0"
+    },
+    {
+      "path": "packages/common-ground-atlas/src/provenance.mjs",
+      "bytes": 911,
+      "sha256": "0f4bb237a921c3bfd8b99cb47c471d41bd7c37c2a8a98033ff1efd56e1dabbb4"
+    },
+    {
+      "path": "packages/common-ground-atlas/src/schemas.mjs",
+      "bytes": 15731,
+      "sha256": "0103fd2452ee71ecb63e400e58e75a2430099c3042e5ebd953254b4e71201bd1"
+    },
+    {
+      "path": "packages/common-ground-atlas/tests/atlas.test.mjs",
+      "bytes": 17084,
+      "sha256": "3b214f45b4d72db723bf5079d5103ca2752f4cf7d68fa3b5dacf8f3761eb4fdb"
+    },
+    {
+      "path": "packages/skills/skills/nen-common-ground/SKILL.md",
+      "bytes": 5747,
+      "sha256": "6e18ee03891dd9c993c761585647631938cac963e56231d78ed6e20d5e852a4d"
+    }
+  ],
+  "provenance_ref": "sha256:c85a5bca7d2ef634b93a335c31f7244a8ec91e35f81522216f11bc69ac2c6be1"
+}
