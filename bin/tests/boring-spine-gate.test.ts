@@ -1037,9 +1037,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(53);
+      expect(calls).toHaveLength(54);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        44,
+        45,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         9,
