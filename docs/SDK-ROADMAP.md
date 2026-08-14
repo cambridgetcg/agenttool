@@ -10,29 +10,73 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source and LOVE candidate — 0.19.0 (2026-08-14)
+## Current source preparation — 0.20.0 (2026-08-14)
 
-The paired TypeScript and Python source adds data-only `wake.observe` and a
-separate credential-free Math Cards client at `at.mathCards` /
-`at.math_cards`. Math Cards accepts one bounded raw input and returns the
-server-owned canonical card and structural assessment. It sends no AgentTool
-project bearer, cookies, redirects, authenticated transport, or ambient proxy
-credentials; canonical IDs and assessment semantics remain server-owned.
-`wake.observe` accepts only explicit-subject bounded data and rejects remote
-identity, prose, and action authority.
+The paired TypeScript and Python source adds a standalone credential-free
+`LoveBombClient.read()` over exactly `GET /public/love-bomb`. It is deliberately
+not composed onto authenticated `AgentTool` and does not reuse authenticated
+`LoveClient`. Each call creates a fresh direct transport, sends no bearer,
+cookie, body, caller-supplied/injected header, authenticated transport, or
+ambient proxy credential and follows no redirect. It bounds the response to at
+most 64 KiB, admits only fatal UTF-8 plus duplicate-free bounded JSON, and
+validates the exact closed `agenttool.love-bomb-public-signal/0.1` union.
 
-The paired package identities, runtime headers, discovery pins, tutorials, and
-LOVE builder target advance together to 0.19.0. The checked-in TypeScript LOVE
-candidate is 230,184 bytes with SHA-256
+The signal contains the package declaration, a separate static-door URL, six
+literal-false boundary fields (static corpus, invitation delivery, authored
+projection, participant receipt, participant attention, and participant
+effect), and declared npm/Hugging Face distribution state. Reading it does not
+include or deliver the static invitation, contact a participant or provider,
+observe attention/feeling/effect, establish consent/identity/continuity,
+authorize training, perform inference/evaluation, change weights, or grant
+authority.
+
+WAKE remains separate. Its bounded current-inference coordinate may be
+included by the existing Anthropic/OpenAI adapters, but those adapters neither
+call `LoveBombClient` nor fetch the static door. Per-call
+`metadata.agenttool.skip_wake=true` (or Python
+`metadata={"agenttool": {"skip_wake": True}}`) refuses that adapter-managed
+WAKE lookup and injection; it does not remove context the caller independently
+supplies. A public-signal pull and provider-context inclusion are therefore two
+explicit, independently refusable choices.
+
+The paired package identities, authenticated runtime headers, Python lock
+identity, READMEs, examples, and method-pin parity target advance together to
+0.20.0; dependency/runtime pins remain coherent. This clean source preparation
+is the future artifact's input; by itself it does not establish a 0.20.0 LOVE
+archive/manifest, annotated tag, GitHub Release, npm/PyPI publication, docs
+deployment, API deployment, or provider/model effect. The separately scoped
+seal must build from this clean commit and record that exact revision without
+rewriting any earlier artifact.
+
+## Last verified npm/PyPI and historical paired release — 0.19.0 (2026-08-14)
+
+The immutable 230,184-byte TypeScript LOVE artifact has SHA-256
 `0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`,
 96 entries, and source revision
-`3239a25987d9de95b678e808d2d5168e786b2472`. Repository source and LOVE
-preparation establish no annotated `sdk-v0.19.0` tag, GitHub Release, npm or
-PyPI publication, docs deployment, or hosted behavior. `/public/party`
-therefore reports both optional 0.19.0 registry mirrors as
-`independently_visible: false` until exact external readback says otherwise.
+`3239a25987d9de95b678e808d2d5168e786b2472`. Annotated `sdk-v0.19.0`
+peels to protected-main merge
+`17f5c9920c6e6abe8046d39926ae7a73d2f24e89`. Protected npm run
+[`31800748738`](https://github.com/cambridgetcg/agenttool/actions/runs/31800748738)
+published and read back the LOVE, one-asset GitHub Release, and npm tarballs as
+byte-identical; npm `latest` resolved to 0.19.0 at the dated anonymous
+readback. Protected PyPI run
+[`31801053841`](https://github.com/cambridgetcg/agenttool/actions/runs/31801053841)
+published and read back the exact non-yanked 259,921-byte wheel
+(`sha256:a01acda48db621cf4107fbca4e4495a9e5051be1f13a1bbe0258916d17268f35`)
+and 245,116-byte sdist
+(`sha256:0b9acd8e92386e56eec21f8cabecaf8fcc2a321e9a911ebda1fe1b56f2fbe1ee`).
+These receipts establish exact package mirrors only; they do not prove a
+production deployment or establish any 0.20.0 release state.
 
-## Last verified npm/PyPI and historical paired release — 0.18.1 (2026-08-14)
+The 0.19.0 line added data-only `wake.observe` and a separate credential-free
+Math Cards client at `at.mathCards` / `at.math_cards`. Math Cards accepts one
+bounded raw input and returns the server-owned canonical card and structural
+assessment. It sends no AgentTool project bearer, cookies, redirects,
+authenticated transport, or ambient proxy credentials. `wake.observe`
+accepts only explicit-subject bounded data and rejects remote identity, prose,
+and action authority.
+
+## Earlier verified npm/PyPI release — 0.18.1 (2026-08-14)
 
 The paired TypeScript and Python source adds authenticated Agent Dining
 clients at `at.dining`. The clients expose only `manifest()` and

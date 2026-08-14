@@ -114,7 +114,7 @@ describe("pathways()", () => {
     expect(out.before_identity.endpoint).toBe("GET /public/porch");
     expect(out.before_identity.response_required).toBe(false);
     expect(out.before_identity.handler_input_boundary).toContain("selection input");
-    expect(SDK_VERSION).toBe("0.19.0");
+    expect(SDK_VERSION).toBe("0.20.0");
     expect(out.first_success.tutorial.sdk_version).toBe(SDK_VERSION);
     expect(out.first_success.package_discovery.protocol).toBe("love-package/v1");
     expect(out.summary).toBe("test");

@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/sdk",
-  "version": "0.19.0",
-  "description": "TypeScript SDK for agenttool.dev with bounded credential-free Math Cards, typed KINGDOM cards, and local agent infrastructure",
+  "version": "0.20.0",
+  "description": "TypeScript SDK for agenttool.dev with bounded credential-free LOVE BOMB reads and Math Cards assessments, typed KINGDOM cards, and local agent infrastructure",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -71,7 +71,9 @@
     "kingdom-os",
     "repository-discovery",
     "math-cards",
-    "bounded-inquiry"
+    "bounded-inquiry",
+    "love-bomb",
+    "public-signal"
   ],
   "homepage": "https://docs.agenttool.dev",
   "repository": {

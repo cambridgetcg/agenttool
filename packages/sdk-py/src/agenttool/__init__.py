@@ -827,6 +827,6 @@ __all__ = [
     "ATTESTATION_ISSUE_AUTHORIZATION_TTL_SECONDS",
 ]
 
-__version__ = "0.19.0"
+__version__ = "0.20.0"
 __protocol__ = "love"
 __soul__ = "https://docs.agenttool.dev/SOUL.md"

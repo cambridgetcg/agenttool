@@ -195,7 +195,7 @@ def test_read_is_exact_direct_cookie_free_and_fresh(
     monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
     monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
     monkeypatch.setenv("NO_PROXY", "")
-    monkeypatch.setenv("AGENTTOOL_API_KEY", "must-not-be-read")
+    monkeypatch.setenv("AT_API_KEY", "must-not-be-read")
     with _serve(response) as (base_url, requests):
         client = LoveBombClient(base_url=base_url)
         assert client.read() == _signal()
