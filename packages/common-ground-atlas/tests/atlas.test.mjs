@@ -200,6 +200,55 @@ test("public verifier rejects consistently rehashed semantic contradictions", ()
       analogy[0].missing_layer = "normative_choice_rule";
       analogy[0].reason_code = "multiple_feasible_points_no_selection_rule";
     }],
+    ["string-valued nonclaim", ({ geometry }) => {
+      geometry[3].does_not_establish.consent = "yes";
+    }],
+    ["numeric safety flag", ({ geometry }) => {
+      geometry[3].public_safety.contains_credentials = 0;
+    }],
+    ["malformed unreferenced case id", ({ geometry }) => {
+      geometry[3].case_id = "not-a-cg-id";
+    }],
+    ["wrong config case-id category", ({ geometry }) => {
+      geometry[3].case_id = "cg-w04-wrong-config";
+    }],
+    ["invalid withdrawn WAKE model version", ({ wake }) => {
+      wake[3].evidence.coordinate_model_version = "invalid";
+    }],
+    ["invalid withdrawn WAKE input digest", ({ wake }) => {
+      wake[3].evidence.input_sha256 = "invalid";
+    }],
+    ["numeric false WAKE reuse flag", ({ wake }) => {
+      wake[3].expected.certificate_reuse_permitted_after_reverification = 0;
+    }],
+    ["overlong exact source literal", ({ geometry }) => {
+      const row = geometry[3];
+      row.input.constraints[0].a.literal = "0".repeat(421);
+      row.expected.certificate.input_sha256 = domainDigest(INPUT_DIGEST_DOMAIN, row.input);
+    }],
+    ["fourth feasible fairness alternative", ({ analogy }) => {
+      analogy[3].evidence.feasible_points.push(
+        {
+          x: { numerator: "0", denominator: "1" },
+          y: { numerator: "0", denominator: "1" },
+        },
+        {
+          x: { numerator: "3", denominator: "1" },
+          y: { numerator: "0", denominator: "1" },
+        },
+      );
+    }],
+    ["thirteenth redundant halfplane", ({ geometry }) => {
+      const row = geometry[0];
+      for (let index = 1; index <= 9; index += 1) {
+        const extra = structuredClone(row.input.constraints[3]);
+        extra.id = `g01-redundant-${String(index).padStart(2, "0")}`;
+        extra.source_ref = `synthetic:constraint/${extra.id}`;
+        row.input.constraints.push(extra);
+        row.expected.certificate.membership_constraint_ids.push(extra.id);
+      }
+      row.expected.certificate.input_sha256 = domainDigest(INPUT_DIGEST_DOMAIN, row.input);
+    }],
   ];
 
   for (const [label, mutate] of attacks) {
@@ -320,6 +369,21 @@ test("rejects stale continuity promotion and analogy drift", () => {
   expectRejected(({ analogy }) => {
     analogy[0].missing_layer = "normative_choice_rule";
     analogy[0].reason_code = "multiple_feasible_points_no_selection_rule";
+  });
+});
+
+test("rejects non-boolean common fields and cross-config case ids", () => {
+  expectRejected(({ geometry }) => {
+    geometry[3].does_not_establish.consent = "yes";
+  });
+  expectRejected(({ geometry }) => {
+    geometry[3].public_safety.contains_credentials = 0;
+  });
+  expectRejected(({ geometry }) => {
+    geometry[3].case_id = "not-a-cg-id";
+  });
+  expectRejected(({ geometry }) => {
+    geometry[3].case_id = "cg-w04-wrong-config";
   });
 });
 

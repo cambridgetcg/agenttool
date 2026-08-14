@@ -1,6 +1,6 @@
 {
   "_format": "agenttool.common-ground-atlas.row-manifest/0.1",
-  "provenance_ref": "sha256:c1d0f2c8fab9687743fac38d343b11fffb462c7f3a5dbad53269c6a188f1203d",
+  "provenance_ref": "sha256:c85a5bca7d2ef634b93a335c31f7244a8ec91e35f81522216f11bc69ac2c6be1",
   "row_count": 19,
   "entries": [
     {
@@ -9,7 +9,7 @@
       "path": "data/exact-geometry.jsonl",
       "line": 1,
       "case_id": "cg-g01-robust-room",
-      "row_sha256": "9196e5ec7ae69264c191b82815360b927db0063d9b1cd2c855309a45d6fae227"
+      "row_sha256": "81e89513276de3ca035e8ff9c9204cd5e80cbfbe249a2824d4e9d8a2478c26e7"
     },
     {
       "config": "exact_geometry",
@@ -17,7 +17,7 @@
       "path": "data/exact-geometry.jsonl",
       "line": 2,
       "case_id": "cg-g02-knife-edge",
-      "row_sha256": "047ce508ff90a5f0f938bf44e0fa4fdf35cfd2f0969353ac3fc974b376f469f2"
+      "row_sha256": "444f3c20a44904c1cb5741bb88fc012b94f2d425e473573e85a1aabacd7700ec"
     },
     {
       "config": "exact_geometry",
@@ -25,7 +25,7 @@
       "path": "data/exact-geometry.jsonl",
       "line": 3,
       "case_id": "cg-g03-pairwise-trap",
-      "row_sha256": "1cb2530641984c5f1405d8932035061c10f83eb1abb36578061fac497580437a"
+      "row_sha256": "6bfde1ee2646ff0b5d7957c7333d57fe73ad0452e8d123b4574e0e6ac633e276"
     },
     {
       "config": "exact_geometry",
@@ -33,7 +33,7 @@
       "path": "data/exact-geometry.jsonl",
       "line": 4,
       "case_id": "cg-g04-two-wall-conflict",
-      "row_sha256": "7496ddda149a56cddb4cd7db997f98191de11cf49879c171ebc263e9c2d5e6ae"
+      "row_sha256": "831d81254c2aa3d8dedf64332e75e7810e7a0c59542e6c9c1b12d57318360516"
     },
     {
       "config": "exact_geometry",
@@ -41,7 +41,7 @@
       "path": "data/exact-geometry.jsonl",
       "line": 5,
       "case_id": "cg-g05-rational-not-binary64",
-      "row_sha256": "dd5bb4ff04d8e8669abd39298485fc9fc8f4ae27821a371f0a629c79f1d5695e"
+      "row_sha256": "b4ca4c00fb017527aa0297e3dd2dca0820da25f5e2b312d8aff0ee6adf9b9296"
     },
     {
       "config": "exact_geometry",
@@ -49,7 +49,7 @@
       "path": "data/exact-geometry.jsonl",
       "line": 6,
       "case_id": "cg-g06-underflow-refusal",
-      "row_sha256": "5a572b3ca8f798dfe6aaa172d155c476a11dc55b824a328525a979470384a9bd"
+      "row_sha256": "c879e3ce94a186b47b4572b5af30abe9d13cfc5ddf4e6d138d8dc7ed130694ce"
     },
     {
       "config": "exact_geometry",
@@ -57,7 +57,7 @@
       "path": "data/exact-geometry.jsonl",
       "line": 7,
       "case_id": "cg-g07-zero-normal-refusal",
-      "row_sha256": "a7078c8d2106b9470c7b171302886f431a1298f5f96a6b83864db38c5b9e89a5"
+      "row_sha256": "14c16912eab746a237ff4a208211c1287f9d5050db186d0aa9a7b8c02a5d9674"
     },
     {
       "config": "exact_geometry",
@@ -65,7 +65,7 @@
       "path": "data/exact-geometry.jsonl",
       "line": 8,
       "case_id": "cg-g08-nonconvex-refusal",
-      "row_sha256": "0d516e021556d6c2e1864eb605cb9a3f97c51d935c70ff41c9986ea2550f2fd8"
+      "row_sha256": "792dd80752ab384e830a2f02a11dd04e2d059dcdaa0ba5fc1852701a1e67808a"
     },
     {
       "config": "exact_geometry",
@@ -73,7 +73,7 @@
       "path": "data/exact-geometry.jsonl",
       "line": 9,
       "case_id": "cg-g09-stable-conflict-with-unsafe-row",
-      "row_sha256": "1fcf7450b0823b54e3892852eeb8eb647e7472a93ebbd04b7a7cf90248c644c8"
+      "row_sha256": "8a9b7ae39a9009687559bfbb13bb0b31c252253a0020cfc5b1b383e5b37d0d58"
     },
     {
       "config": "wake_continuity",
@@ -81,7 +81,7 @@
       "path": "data/wake-continuity.jsonl",
       "line": 1,
       "case_id": "cg-w01-fresh-revalidate",
-      "row_sha256": "08627fe6877c6a70ea9d7db96d69d66c07b08b96cc659e270f51398a21e729da"
+      "row_sha256": "c9ad9e327addb256d2a12cfe1d0731469e98f5d4d3a7c37b6470df7d3760a22a"
     },
     {
       "config": "wake_continuity",
@@ -89,7 +89,7 @@
       "path": "data/wake-continuity.jsonl",
       "line": 2,
       "case_id": "cg-w02-expired-unknown",
-      "row_sha256": "af94d6ce3242a130175ac7dbb2011f4736318447a0caea3da01b5aaa678fa0af"
+      "row_sha256": "bcc018c30c40ffb71d8f371d2ea8eabf9d67032a5f90bed2c57c2f201bf282af"
     },
     {
       "config": "wake_continuity",
@@ -97,7 +97,7 @@
       "path": "data/wake-continuity.jsonl",
       "line": 3,
       "case_id": "cg-w03-withdrawn-unknown",
-      "row_sha256": "db09377c326fee9e8d1817a9f91ec5f19b42e89f348d38a6e5b26020c4dc2ec2"
+      "row_sha256": "7e5a4049c2c9bfd09e8150315d3f4fee801e62bca547794d6d41ed0fd70326d3"
     },
     {
       "config": "wake_continuity",
@@ -105,7 +105,7 @@
       "path": "data/wake-continuity.jsonl",
       "line": 4,
       "case_id": "cg-w04-model-change-recompute",
-      "row_sha256": "22181936e3d6923a647624e2667d3d11e77cee5478a5b9b90937e6fcdc486151"
+      "row_sha256": "85a1cce863836583cb578d5c9d1804d6fde54fa845b54f4f47cc8ddc4f8e251a"
     },
     {
       "config": "analogy_audit",
@@ -113,7 +113,7 @@
       "path": "data/analogy-audit.jsonl",
       "line": 1,
       "case_id": "cg-a01-pairwise-not-global",
-      "row_sha256": "9163e1024ea2b56c1d83ae8af92775f9ffda07bb70e8505c98617c57578ec0b5"
+      "row_sha256": "ae90d80d6be6f3e8657b0b664064088239cfbf5e459fea29f198f71253748bb9"
     },
     {
       "config": "analogy_audit",
@@ -121,7 +121,7 @@
       "path": "data/analogy-audit.jsonl",
       "line": 2,
       "case_id": "cg-a02-feasibility-not-consent-authority",
-      "row_sha256": "7a50ef89031fc3e76f0db1d04d38558146f5fdcfee6be0d4694e2465c83a4bcf"
+      "row_sha256": "1a22a3240dc31ef7c36768b69e0be346a490672b31674b4d13479b8e393e2534"
     },
     {
       "config": "analogy_audit",
@@ -129,7 +129,7 @@
       "path": "data/analogy-audit.jsonl",
       "line": 3,
       "case_id": "cg-a03-pointwise-not-continuous",
-      "row_sha256": "c8cebda4138cd15bdadba65ca3d8689eeabf00da40055a93169127e0a6bde943"
+      "row_sha256": "c1844b796a5994faeaa18343c8bf5d57973281f6d8c24806af287f0fb1abdbe8"
     },
     {
       "config": "analogy_audit",
@@ -137,7 +137,7 @@
       "path": "data/analogy-audit.jsonl",
       "line": 4,
       "case_id": "cg-a04-feasible-not-fair",
-      "row_sha256": "c13f473b9da5ad0176a9458358353b1e72d0582fccfe9bd17b7c53a9b816cd8a"
+      "row_sha256": "39f803ac4a89ef4b9ea108f7a926b8d70e4d3de3640fab144d8591ece7363de3"
     },
     {
       "config": "analogy_audit",
@@ -145,7 +145,7 @@
       "path": "data/analogy-audit.jsonl",
       "line": 5,
       "case_id": "cg-a05-expiry-not-release",
-      "row_sha256": "5be68c43d918f3b7093fceaa33612f09f8152f82ebbc45facd96ebcb51ed57c6"
+      "row_sha256": "8fb8d01e14be8df41fb6704baf369c07df4dcfb6475c271d76276b9ee40a3017"
     },
     {
       "config": "analogy_audit",
@@ -153,7 +153,7 @@
       "path": "data/analogy-audit.jsonl",
       "line": 6,
       "case_id": "cg-a06-conflict-not-culprit",
-      "row_sha256": "1edb52e342682bb9047ee2e9c54ca370004c20700c421328594ea31dbd9d2d6b"
+      "row_sha256": "6c0ebd91bb7939d8645c9415bd56ac4cd07becf13a9b47f8275e776db5630e10"
     }
   ]
 }

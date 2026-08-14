@@ -28,27 +28,27 @@
     {
       "path": "data/analogy-audit.jsonl",
       "bytes": 7653,
-      "sha256": "04590ff04e924afe9e9695c3cecda45fea284fa8b907fd04d6617856289df771"
+      "sha256": "f1f212f7d77603a8434cb3ae020a39b98c1aa89424171eaeaca5b42c01847805"
     },
     {
       "path": "data/exact-geometry.jsonl",
       "bytes": 30456,
-      "sha256": "15045aed1964d0384c2572f2ee43a894be9d264d84d409c5a06985366cb57bcd"
+      "sha256": "05fa754e97346598d40a0f8388d5048f809891bb541a46c0e331e10ed75b0a89"
     },
     {
       "path": "data/wake-continuity.jsonl",
       "bytes": 6022,
-      "sha256": "263223562468968941cffdc63033a61d40d92d7783e4ed098bfbf3c507d1ff32"
+      "sha256": "626ea7dae312e200ec3e1ac680452c3ef684c8b621d1e811b08eb06c493dd5ee"
     },
     {
       "path": "provenance/row-manifest.json",
       "bytes": 5350,
-      "sha256": "13b9ebf57c59593817e0333ddacac258d5f846edcbe3b7f8000ecbf0a543801e"
+      "sha256": "26534e53535a08f5f89e99a6ffb4e595c3ecb93a24ef4dfae33f375eeeced152"
     },
     {
       "path": "provenance/source-manifest.json",
       "bytes": 4507,
-      "sha256": "bf4956f21b33643385d00f5d1df2eae6530507a4baf77e95407d26d2e856ec02"
+      "sha256": "a633777172311a9191b8224e69399ea34db3fa05daa0c2837301d7413ae0ddea"
     },
     {
       "path": "schema/common-ground-atlas-analogy-v0.1.schema.json",
@@ -67,8 +67,8 @@
     },
     {
       "path": "verification/verify.py",
-      "bytes": 42787,
-      "sha256": "b4a85464600a1ad1718996cd124c20e07f0a8927ea478dd25a17614e4ba7f125"
+      "bytes": 49684,
+      "sha256": "8773698358621f075f8a3f77fdebcb24a55ebd027f80d0f7a97bd9e5859f7012"
     }
   ]
 }

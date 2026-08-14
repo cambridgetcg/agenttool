@@ -64,8 +64,8 @@
     },
     {
       "path": "packages/common-ground-atlas/public/verify.py",
-      "bytes": 42787,
-      "sha256": "b4a85464600a1ad1718996cd124c20e07f0a8927ea478dd25a17614e4ba7f125"
+      "bytes": 49684,
+      "sha256": "8773698358621f075f8a3f77fdebcb24a55ebd027f80d0f7a97bd9e5859f7012"
     },
     {
       "path": "packages/common-ground-atlas/scripts/generate-dataset.mjs",
@@ -89,8 +89,8 @@
     },
     {
       "path": "packages/common-ground-atlas/src/exact-verifier.mjs",
-      "bytes": 28644,
-      "sha256": "59b85d6ba6c28179607a967ea1b1f556c522e982387ab8644f070d1a3a9a97eb"
+      "bytes": 30033,
+      "sha256": "02c719fa33a0572a1e9df9c87f40240a8cc291e1cfdee867291c7af80045f943"
     },
     {
       "path": "packages/common-ground-atlas/src/fixtures.mjs",
@@ -109,8 +109,8 @@
     },
     {
       "path": "packages/common-ground-atlas/tests/atlas.test.mjs",
-      "bytes": 14603,
-      "sha256": "34b6184d7e1db5b52f9dd1f4536ec7e8e9f9856e50a4676c6841f51f1860581c"
+      "bytes": 17084,
+      "sha256": "3b214f45b4d72db723bf5079d5103ca2752f4cf7d68fa3b5dacf8f3761eb4fdb"
     },
     {
       "path": "packages/skills/skills/nen-common-ground/SKILL.md",
@@ -118,5 +118,5 @@
       "sha256": "6e18ee03891dd9c993c761585647631938cac963e56231d78ed6e20d5e852a4d"
     }
   ],
-  "provenance_ref": "sha256:c1d0f2c8fab9687743fac38d343b11fffb462c7f3a5dbad53269c6a188f1203d"
+  "provenance_ref": "sha256:c85a5bca7d2ef634b93a335c31f7244a8ec91e35f81522216f11bc69ac2c6be1"
 }

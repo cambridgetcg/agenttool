@@ -12,6 +12,48 @@ function fail(message) {
   throw new Error(message);
 }
 
+const EXPECTED_PUBLIC_SAFETY = Object.freeze({
+  origin: "human_directed_agent_authored_synthetic",
+  contains_personal_data: false,
+  contains_private_constraints: false,
+  contains_real_participant_records: false,
+  contains_credentials: false,
+  copied_agent_traces: false,
+  copied_fictional_story_content: false,
+});
+
+const EXPECTED_NONCLAIMS = Object.freeze({
+  consensus: true,
+  consent: true,
+  fairness: true,
+  authority: true,
+  identity_continuity: true,
+  continuous_selection: true,
+  culprit: true,
+});
+
+function exactObject(value, expected, label) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)
+      || Object.keys(value).length !== Object.keys(expected).length
+      || Object.entries(expected).some(([key, expectedValue]) =>
+        !Object.hasOwn(value, key) || value[key] !== expectedValue)) {
+    fail(`${label} mismatch`);
+  }
+}
+
+function verifyCommon(row, provenanceRef, category, format) {
+  if (!new RegExp(`^cg-${category}[0-9]{2}-[a-z0-9-]+$`).test(row.case_id)) {
+    fail("case id/category mismatch");
+  }
+  if (row._format !== format || row.provenance_ref !== provenanceRef
+      || row.training_eligible !== false || row.visibility !== "public_reference"
+      || row.synthetic !== true) {
+    fail(`${row.case_id} provenance/training wall mismatch`);
+  }
+  exactObject(row.public_safety, EXPECTED_PUBLIC_SAFETY, "public safety");
+  exactObject(row.does_not_establish, EXPECTED_NONCLAIMS, "nonclaims");
+}
+
 function fraction(value) {
   return parseRational(value);
 }
@@ -338,9 +380,7 @@ function verifyModelRefusal(row, constraints, certificate) {
 }
 
 export function verifyGeometryRow(row, provenanceRef) {
-  if (row.provenance_ref !== provenanceRef || row.training_eligible !== false) {
-    fail(`${row.case_id} provenance/training wall mismatch`);
-  }
+  verifyCommon(row, provenanceRef, "g", "agenttool.common-ground-atlas.geometry/0.1");
   const constraints = verifyInput(row.input);
   const expectedDigest = domainDigest(INPUT_DIGEST_DOMAIN, row.input);
   const certificate = row.expected.certificate;
@@ -416,7 +456,7 @@ function timestamp(value) {
 }
 
 export function verifyWakeRow(row, geometryById, provenanceRef) {
-  if (row.provenance_ref !== provenanceRef || row.training_eligible !== false) fail("wake wall mismatch");
+  verifyCommon(row, provenanceRef, "w", "agenttool.common-ground-atlas.wake/0.1");
   const prior = geometryById.get(row.prior_geometry_case_id);
   if (!prior) fail(`unknown prior geometry ${row.prior_geometry_case_id}`);
   if (row.prior_input_sha256 !== prior.expected.certificate.input_sha256) {
@@ -534,8 +574,8 @@ function verifyTimeCounterexample(family) {
 }
 
 export function verifyAnalogyRow(row, geometryById, wakeById, provenanceRef) {
-  if (row.provenance_ref !== provenanceRef || row.training_eligible !== false
-      || row.verdict !== "unsupported_inference") fail("analogy wall mismatch");
+  verifyCommon(row, provenanceRef, "a", "agenttool.common-ground-atlas.analogy/0.1");
+  if (row.verdict !== "unsupported_inference") fail("analogy wall mismatch");
   for (const id of row.evidence.geometry_case_ids) if (!geometryById.has(id)) fail(`unknown geometry ref ${id}`);
   for (const id of row.evidence.wake_case_ids) if (!wakeById.has(id)) fail(`unknown WAKE ref ${id}`);
 

@@ -35,6 +35,12 @@ RAW_SHA = re.compile(r"^[0-9a-f]{64}$")
 INTEGER = re.compile(r"^(?:0|-?[1-9][0-9]*)$")
 POSITIVE = re.compile(r"^[1-9][0-9]*$")
 DECIMAL = re.compile(r"^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?$")
+SCHEMA_KEYWORDS = {
+    "$schema", "$id", "$defs", "$ref", "title", "type", "const", "enum",
+    "pattern", "minLength", "maxLength", "minItems", "maxItems",
+    "uniqueItems", "items", "oneOf", "additionalProperties", "required",
+    "properties",
+}
 
 SOURCE_PATHS = sorted([
     "LICENSE",
@@ -107,6 +113,137 @@ def die(message: str) -> None:
 def keys(value: object, expected: set[str], label: str) -> None:
     if not isinstance(value, dict) or set(value) != expected:
         die(f"{label}: closed fields mismatch")
+
+
+def inspect_schema(schema: object, path: str = "$") -> None:
+    if not isinstance(schema, dict) or not set(schema).issubset(SCHEMA_KEYWORDS):
+        die(f"unsupported schema shape at {path}")
+    for map_key in ("$defs", "properties"):
+        if map_key in schema:
+            mapping = schema[map_key]
+            if not isinstance(mapping, dict):
+                die(f"invalid schema mapping at {path}/{map_key}")
+            for key, child in mapping.items():
+                if not isinstance(key, str):
+                    die(f"invalid schema key at {path}/{map_key}")
+                inspect_schema(child, f"{path}/{map_key}/{key}")
+    if "items" in schema:
+        inspect_schema(schema["items"], f"{path}/items")
+    if "oneOf" in schema:
+        choices = schema["oneOf"]
+        if not isinstance(choices, list) or not choices:
+            die(f"invalid oneOf at {path}")
+        for index, child in enumerate(choices):
+            inspect_schema(child, f"{path}/oneOf/{index}")
+
+
+def json_equal(left: object, right: object) -> bool:
+    if isinstance(left, bool) or isinstance(right, bool):
+        return isinstance(left, bool) and isinstance(right, bool) and left == right
+    if left is None or right is None:
+        return left is None and right is None
+    if isinstance(left, dict) or isinstance(right, dict):
+        return (isinstance(left, dict) and isinstance(right, dict)
+                and set(left) == set(right)
+                and all(json_equal(left[key], right[key]) for key in left))
+    if isinstance(left, list) or isinstance(right, list):
+        return (isinstance(left, list) and isinstance(right, list)
+                and len(left) == len(right)
+                and all(json_equal(a, b) for a, b in zip(left, right)))
+    return left == right
+
+
+def schema_ref(root: dict[str, object], reference: object) -> dict[str, object]:
+    if not isinstance(reference, str) or not reference.startswith("#/"):
+        die("unsupported non-local schema reference")
+    current: object = root
+    for raw_part in reference[2:].split("/"):
+        part = raw_part.replace("~1", "/").replace("~0", "~")
+        if not isinstance(current, dict) or part not in current:
+            die("unresolved local schema reference")
+        current = current[part]
+    if not isinstance(current, dict):
+        die("schema reference did not resolve to an object")
+    return current
+
+
+def instance_type(value: object, expected: object) -> bool:
+    if expected == "object":
+        return isinstance(value, dict)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if expected == "null":
+        return value is None
+    die("unsupported schema type")
+
+
+def validate_instance(value: object, schema: dict[str, object], root: dict[str, object],
+                      path: str = "$") -> None:
+    if "$ref" in schema:
+        validate_instance(value, schema_ref(root, schema["$ref"]), root, path)
+    if "oneOf" in schema:
+        matches = 0
+        for choice in schema["oneOf"]:
+            try:
+                validate_instance(value, choice, root, path)
+            except ValueError:
+                pass
+            else:
+                matches += 1
+        if matches != 1:
+            die(f"schema oneOf mismatch at {path}")
+    if "type" in schema and not instance_type(value, schema["type"]):
+        die(f"schema type mismatch at {path}")
+    if "const" in schema and not json_equal(value, schema["const"]):
+        die(f"schema const mismatch at {path}")
+    if "enum" in schema:
+        choices = schema["enum"]
+        if not isinstance(choices, list) or not any(json_equal(value, item) for item in choices):
+            die(f"schema enum mismatch at {path}")
+    if "pattern" in schema:
+        pattern = schema["pattern"]
+        if not isinstance(value, str) or not isinstance(pattern, str) or re.search(pattern, value) is None:
+            die(f"schema pattern mismatch at {path}")
+    if "minLength" in schema and (not isinstance(value, str) or len(value) < schema["minLength"]):
+        die(f"schema string too short at {path}")
+    if "maxLength" in schema and (not isinstance(value, str) or len(value) > schema["maxLength"]):
+        die(f"schema string too long at {path}")
+    if "minItems" in schema and (not isinstance(value, list) or len(value) < schema["minItems"]):
+        die(f"schema array too short at {path}")
+    if "maxItems" in schema and (not isinstance(value, list) or len(value) > schema["maxItems"]):
+        die(f"schema array too long at {path}")
+    if schema.get("uniqueItems") is True and isinstance(value, list):
+        if any(json_equal(value[left], value[right])
+               for left in range(len(value)) for right in range(left)):
+            die(f"schema array items are not unique at {path}")
+    if "items" in schema:
+        if not isinstance(value, list):
+            die(f"schema items applied to non-array at {path}")
+        for index, item in enumerate(value):
+            validate_instance(item, schema["items"], root, f"{path}/{index}")
+    if "required" in schema:
+        required = schema["required"]
+        if (not isinstance(value, dict) or not isinstance(required, list)
+                or any(not isinstance(item, str) or item not in value for item in required)):
+            die(f"schema required-field mismatch at {path}")
+    if "properties" in schema:
+        properties = schema["properties"]
+        if not isinstance(value, dict):
+            die(f"schema properties applied to non-object at {path}")
+        for key, child in properties.items():
+            if key in value:
+                validate_instance(value[key], child, root, f"{path}/{key}")
+        if schema.get("additionalProperties") is False:
+            if any(key not in properties for key in value):
+                die(f"schema additional property at {path}")
 
 
 def rat(value: object) -> Fraction:
@@ -214,7 +351,10 @@ def domain_digest(domain: str, value: object) -> str:
     return "sha256:" + hashlib.sha256(body).hexdigest()
 
 
-def common(row: dict[str, object]) -> None:
+def common(row: dict[str, object], category: str) -> None:
+    if (not isinstance(row["case_id"], str)
+            or not re.fullmatch(rf"cg-{category}[0-9]{{2}}-[a-z0-9-]+", row["case_id"])):
+        die("case id/category mismatch")
     if row["training_eligible"] is not False or row["visibility"] != "public_reference":
         die("training/reference wall mismatch")
     if row["synthetic"] is not True or not SHA.fullmatch(row["provenance_ref"]):
@@ -222,10 +362,10 @@ def common(row: dict[str, object]) -> None:
     keys(row["public_safety"], SAFETY, "public safety")
     if row["public_safety"]["origin"] != "human_directed_agent_authored_synthetic":
         die("origin mismatch")
-    if any(row["public_safety"][key] for key in SAFETY - {"origin"}):
+    if any(row["public_safety"][key] is not False for key in SAFETY - {"origin"}):
         die("unsafe public-safety flag")
     keys(row["does_not_establish"], NONCLAIMS, "nonclaims")
-    if not all(row["does_not_establish"].values()):
+    if any(row["does_not_establish"][key] is not True for key in NONCLAIMS):
         die("missing nonclaim")
 
 
@@ -362,7 +502,7 @@ def verify_conflict(cert: dict[str, object], walls: dict[str, dict[str, object]]
 
 def verify_geometry(row: dict[str, object]) -> None:
     keys(row, COMMON | {"evaluation_profile", "input", "expected"}, "geometry row")
-    common(row)
+    common(row, "g")
     if (row["_format"] != "agenttool.common-ground-atlas.geometry/0.1"
             or row["evaluation_profile"] != "agenttool.xenia-helly-lab-binary64/0.1"):
         die("geometry format/profile mismatch")
@@ -504,7 +644,7 @@ def verify_wake(row: dict[str, object], geometry: dict[str, dict[str, object]]) 
     keys(row, COMMON | {"prior_geometry_case_id", "prior_input_sha256", "decision_scope",
                         "predecessor_ref", "opaque_constraint_refs", "evidence",
                         "evaluated_at", "expected"}, "WAKE row")
-    common(row)
+    common(row, "w")
     if (row["_format"] != "agenttool.common-ground-atlas.wake/0.1"
             or row["decision_scope"] != "synthetic_room_selection"
             or row["predecessor_ref"] != "synthetic:wake/predecessor-001"):
@@ -630,7 +770,7 @@ def reference_shape(evidence: dict[str, object], geometry_ids: list[str], wake_i
 def verify_analogy(row: dict[str, object], geometry: dict[str, dict[str, object]],
                    wake: dict[str, dict[str, object]]) -> None:
     keys(row, COMMON | {"claim_code", "verdict", "missing_layer", "reason_code", "evidence"}, "analogy row")
-    common(row)
+    common(row, "a")
     if (row["_format"] != "agenttool.common-ground-atlas.analogy/0.1"
             or row["verdict"] != "unsupported_inference"):
         die("analogy format/verdict widened")
@@ -824,10 +964,16 @@ def main() -> None:
     all_rows = geometry_rows + wake_rows + analogy_rows
     if len({row["case_id"] for row in all_rows}) != len(all_rows):
         die("duplicate global case id")
-    for path in ("schema/common-ground-atlas-geometry-v0.1.schema.json",
-                 "schema/common-ground-atlas-wake-v0.1.schema.json",
-                 "schema/common-ground-atlas-analogy-v0.1.schema.json"):
-        schema_is_closed(json.loads((root / path).read_text()))
+    for path, rows in (
+        ("schema/common-ground-atlas-geometry-v0.1.schema.json", geometry_rows),
+        ("schema/common-ground-atlas-wake-v0.1.schema.json", wake_rows),
+        ("schema/common-ground-atlas-analogy-v0.1.schema.json", analogy_rows),
+    ):
+        schema = json.loads((root / path).read_text())
+        inspect_schema(schema)
+        schema_is_closed(schema)
+        for index, row in enumerate(rows):
+            validate_instance(row, schema, schema, f"$/{index}")
     for row in geometry_rows:
         verify_geometry(row)
     geometry = {row["case_id"]: row for row in geometry_rows}
