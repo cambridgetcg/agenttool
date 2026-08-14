@@ -132,11 +132,15 @@ describe("optional npm package discovery", () => {
       rootReadme.indexOf(exactPyPI),
     );
     expect(rootReadme).toMatch(
-      /PyPI 0\.18\.1 remains.*Candidate preparation does not make it public; query the exact release/is,
+      /PyPI 0\.18\.1 is public as an optional, independently verified convenience\s+mirror/is,
     );
-    expect(rootReadme).toContain("30909424114");
+    expect(rootReadme).toContain("31790395261");
+    expect(rootReadme).toContain("31790559054");
     expect(rootReadme).toContain(
-      "8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a",
+      "466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d",
+    );
+    expect(rootReadme).toContain(
+      "ad5d8fe66f0218cb86d37a1dc5c9fb2d9b7b8d25ebaad7e408cfd1a9b2964ab3",
     );
     expect(rootReadme).toContain(
       "The exact 0.17.0 npm and PyPI mirrors are independently public.",

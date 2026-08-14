@@ -302,6 +302,49 @@ and has byte-identical 26,474-byte GitHub/npm tarballs with SHA-256
 `67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`.
 Both npm `latest` tags resolved to those exact versions at readback.
 
+## Verified SDK 0.18.1 publication — 2026-08-14
+
+The authorized SDK release completed through protected trusted
+[workflow run `31790395261`, attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/31790395261).
+Its `agenttool.npm-release/1` receipt was prepared at
+`2026-08-14T10:00:27.912Z` and reports `status: published`,
+`npm_tag: latest`, and public registry observation at
+`2026-08-14T10:01:53.201Z`. npm records package publication at
+`2026-08-14T10:01:51.920Z`.
+
+- Annotated tag object `a4e79909f73bd390d8ab0a58cb7ca9b7ed0dd5be` and the
+  one-asset [GitHub Release `sdk-v0.18.1`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.18.1)
+  peel to protected GitHub `main` merge
+  `a781fff407e6d6c0401e6bd35dad1b5671d29491`. GitHub published the Release at
+  `2026-08-14T10:01:44Z`. The LOVE manifest separately binds exact SDK source
+  revision `490ab19ca846632460a7a6b498fb13216d97807a`.
+- The checked-in LOVE artifact, protected workflow artifact, sole GitHub
+  Release asset, and public npm `@agenttool/sdk@0.18.1` tarball are
+  byte-identical: `218,301` bytes, 94 entries, SHA-256
+  `466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`.
+- npm reported SHA-1 `9c53f2658d4a6db476b7bacb78fac45605c834cc`,
+  integrity
+  `sha512-BN7CN87sbzp08A3t79QlzHdgL8/IYOspX16taHnGZpLxOg5PmlDH3QfO9MxXXPwMaBHK/S/tR31bNKWIU+OI1Q==`,
+  registry tarball
+  `https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.18.1.tgz`, and
+  `latest: 0.18.1` at anonymous readback.
+- npm exposes its publish attestation at
+  [Rekor index `2465023133`](https://search.sigstore.dev/?logIndex=2465023133)
+  and SLSA provenance at
+  [Rekor index `2465022615`](https://search.sigstore.dev/?logIndex=2465022615).
+  The provenance binds package `@agenttool/sdk@0.18.1`, tag
+  `refs/tags/sdk-v0.18.1`, repository `cambridgetcg/agenttool`, workflow
+  `.github/workflows/publish-npm.yml`, and the exact public tarball subject.
+
+The npm and GitHub mirrors remain optional, non-authoritative conveniences;
+the exact LOVE manifest size and SHA-256 remain the portable TypeScript release
+identity. Separately authorized PyPI run `31790559054` published and verified
+the paired 0.18.1 Python distributions; its exact receipt is recorded in
+[`PYPI-RELEASES.md`](PYPI-RELEASES.md). Packed SDK READMEs preserve their
+preparation-time observations rather than rewriting immutable 0.18.1 bytes.
+Neither package publication changed a database schema or deployed the API or
+static sites.
+
 ## Verified SDK 0.18.0 publication — 2026-08-04
 
 The authorized SDK release completed through protected trusted
@@ -518,15 +561,19 @@ release commit already merged to GitHub `main`:
 # Inspect the allowlisted SDK identity and expected tag.
 bun bin/npm-release.ts resolve --package sdk
 
-# The 0.18.1 candidate is not public merely because source and LOVE discovery
-# are prepared. After the release PR is merged, create one annotated tag on
-# that exact GitHub-main merge. Never move or replace it.
-git tag -a sdk-v0.18.1 <github-main-release-merge> \
-  -m '@agenttool/sdk@0.18.1'
-git push github refs/tags/sdk-v0.18.1
+# The exact annotated tag is already published. Fetch and verify it; never
+# recreate, move, or replace an immutable release tag.
+git fetch github \
+  refs/heads/main:refs/remotes/github/main \
+  refs/tags/sdk-v0.18.1:refs/tags/sdk-v0.18.1
+test "$(git cat-file -t refs/tags/sdk-v0.18.1)" = tag
+test "$(git rev-parse 'refs/tags/sdk-v0.18.1^{}')" = \
+  a781fff407e6d6c0401e6bd35dad1b5671d29491
+git merge-base --is-ancestor \
+  "$(git rev-parse 'refs/tags/sdk-v0.18.1^{}')" github/main
 
-# Dispatch only after the immutable tag is visible and separately authorized.
-# A rerun accepts existing npm bytes only when every byte and latest match.
+# Rerun only for explicitly authorized recovery or exact public revalidation.
+# Existing npm bytes are accepted only when every byte and latest match.
 gh workflow run publish-npm.yml --ref sdk-v0.18.1 \
   -f package=sdk \
   -f tag=sdk-v0.18.1 \

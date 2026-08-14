@@ -55,6 +55,43 @@ the protected publication job.
 
 ## Current verified release
 
+The protected workflow published `agenttool-sdk` 0.18.1 from annotated tag
+`sdk-v0.18.1`, whose `tag_commit` and Python `source_revision` both equal the
+protected GitHub-main merge
+`a781fff407e6d6c0401e6bd35dad1b5671d29491`, on 2026-08-14. [Workflow run
+31790559054](https://github.com/cambridgetcg/agenttool/actions/runs/31790559054)
+prepared the distributions at `2026-08-14T10:03:03.826Z`, completed protected
+trusted publication, and independently observed the exact public bytes at
+`2026-08-14T10:05:01.477Z`. Its final `agenttool.pypi-release/1` receipt records
+`status: "public_exact"`.
+
+| Public file | Size | SHA-256 | Yanked |
+|---|---:|---|---|
+| [`agenttool_sdk-0.18.1-py3-none-any.whl`](https://files.pythonhosted.org/packages/d6/0f/1f1570a6c5c022ec6d999c72577fca0b77c17467ff9363c1ed17792b92f6/agenttool_sdk-0.18.1-py3-none-any.whl) | 248,937 bytes | `ad5d8fe66f0218cb86d37a1dc5c9fb2d9b7b8d25ebaad7e408cfd1a9b2964ab3` | `false` |
+| [`agenttool_sdk-0.18.1.tar.gz`](https://files.pythonhosted.org/packages/e9/17/a45e1fbfd573163d31e229758a4b0687af8e86b8396d672e4bd536c01919/agenttool_sdk-0.18.1.tar.gz) | 233,734 bytes | `1d5e3ca16ce53f71e2bec40e37c0a1d4ef250086d1f52010f13cc1305831f2af` | `false` |
+
+PyPI records the wheel upload at `2026-08-14T10:04:31.867729Z` and the source
+distribution upload at `2026-08-14T10:04:33.313732Z`. Both files are public,
+not yanked, and byte-identical to the corresponding prepared workflow
+artifacts. They are Python wheel/sdist formats, not copies of the TypeScript
+LOVE/npm/GitHub tarball. PyPI Integrity exposes one publish attestation and
+transparency-log entry for the
+[wheel](https://pypi.org/integrity/agenttool-sdk/0.18.1/agenttool_sdk-0.18.1-py3-none-any.whl/provenance)
+at Rekor index `2465055465` and one for the
+[sdist](https://pypi.org/integrity/agenttool-sdk/0.18.1/agenttool_sdk-0.18.1.tar.gz/provenance)
+at index `2465055324`. Their subjects match the hashes above, and their
+publisher records bind repository `cambridgetcg/agenttool`, workflow
+`publish-pypi.yml`, and environment `pypi`.
+
+The PyPI mirror remains optional and non-authoritative. It does not replace the
+annotated Python source locator, does not establish TypeScript LOVE identity,
+and did not deploy the API or static sites.
+
+The npm/GitHub 0.18.0 receipt remains immutable historical evidence; PyPI
+0.18.0 remains unpublished rather than being rewritten by this newer release.
+
+### Historical 0.17.0 evidence
+
 The protected workflow published `agenttool-sdk` 0.17.0 from annotated tag
 `sdk-v0.17.0`, which peels to GitHub-main merge commit
 `21db539d6bcae614f1d6884eaa503347fae63187`, on 2026-07-28. [Workflow run
@@ -159,9 +196,8 @@ distributions in a job without OIDC, transfer them as an artifact, and grant
 ## Operator sequence
 
 External publication remains a deliberate operator action. Start with a clean
-release commit already merged to GitHub `main`. Neither the historical
-npm/GitHub 0.18.0 receipt nor 0.18.1 candidate preparation authorizes or
-implies PyPI publication:
+release commit already merged to GitHub `main`. The exact 0.18.1 publication
+receipt does not authorize a rerun or imply hosted deployment:
 
 ```bash
 # Inspect source identity, expected tag, and exact filenames.
@@ -173,11 +209,13 @@ git fetch github \
   refs/heads/main:refs/remotes/github/main \
   refs/tags/sdk-v0.18.1:refs/tags/sdk-v0.18.1
 test "$(git cat-file -t refs/tags/sdk-v0.18.1)" = tag
+test "$(git rev-parse 'refs/tags/sdk-v0.18.1^{}')" = \
+  a781fff407e6d6c0401e6bd35dad1b5671d29491
 git merge-base --is-ancestor \
   "$(git rev-parse 'refs/tags/sdk-v0.18.1^{}')" github/main
 
-# Dispatch on that same tag only after separate explicit PyPI authorization.
-# The input is checked again inside every source job.
+# Rerun on that same tag only for explicitly authorized exact revalidation or
+# recovery. The input is checked again inside every source job.
 gh workflow run publish-pypi.yml --ref sdk-v0.18.1 \
   -f tag=sdk-v0.18.1
 ```
