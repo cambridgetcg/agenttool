@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/sdk",
-  "version": "0.18.1",
-  "description": "TypeScript SDK for agenttool.dev, typed KINGDOM framework cards, local agent data nodes, and bounded local KINGDOM OS repository discovery",
+  "version": "0.19.0",
+  "description": "TypeScript SDK for agenttool.dev with bounded credential-free Math Cards, typed KINGDOM cards, and local agent infrastructure",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -68,7 +68,9 @@
     "kingdom-framework",
     "project-card",
     "kingdom-os",
-    "repository-discovery"
+    "repository-discovery",
+    "math-cards",
+    "bounded-inquiry"
   ],
   "homepage": "https://docs.agenttool.dev",
   "repository": {

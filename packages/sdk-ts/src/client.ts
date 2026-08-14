@@ -30,6 +30,7 @@ import { LoungeClient } from "./lounge.js";
 import { NenClient } from "./nen.js";
 import { DarkContinentClient } from "./dark-continent.js";
 import { DiningClient } from "./dining.js";
+import { MathCardsClient, type MathCardsOptions } from "./math-cards.js";
 import { DataClient, type DataNodeOptions } from "./data.js";
 import { RuntimeClient } from "./runtime.js";
 import { ToolsClient } from "./tools.js";
@@ -48,7 +49,7 @@ import { KingdomOSClient, type KingdomOSOptions } from "./kingdom-os.js";
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
  *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
  *  with package.json (parity invariant: ts + py ship the same version). */
-export const SDK_VERSION = "0.18.1";
+export const SDK_VERSION = "0.19.0";
 
 /** Connection settings for the hosted AgentTool API and optional local adapters. */
 export interface AgentToolOptions {
@@ -80,6 +81,14 @@ export interface AgentToolOptions {
     "timeout" | "maxResponseBytes"
   >;
   /**
+   * Bounds for the separate credential-free Math Cards assessment call.
+   * Its base URL remains the hosted `baseUrl`; no hosted auth is shared.
+   */
+  mathCards?: Pick<
+    MathCardsOptions,
+    "timeout" | "maxRequestBytes" | "maxResponseBytes"
+  >;
+  /**
    * Local KINGDOM OS repository adapter. This configuration is never given
    * the hosted API bearer or transport.
    */
@@ -107,6 +116,7 @@ export class AgentTool {
   private readonly http: HttpConfig;
   private readonly dataNode: DataNodeOptions | undefined;
   private readonly kingdomFrameworkOptions: KingdomFrameworkOptions;
+  private readonly mathCardsOptions: MathCardsOptions;
   private readonly kingdomOSOptions: KingdomOSOptions;
   private _memory: MemoryClient | undefined;
   private _memoryWitness: MemoryWitnessClient | undefined;
@@ -135,6 +145,7 @@ export class AgentTool {
   private _nen: NenClient | undefined;
   private _darkContinent: DarkContinentClient | undefined;
   private _dining: DiningClient | undefined;
+  private _mathCards: MathCardsClient | undefined;
   private _runtime: RuntimeClient | undefined;
   private _data: DataClient | undefined;
   private _kingdomFramework: KingdomFrameworkClient | undefined;
@@ -219,6 +230,12 @@ export class AgentTool {
       baseUrl: this.http.baseUrl,
       timeout: options?.kingdomFramework?.timeout ?? this.http.timeout / 1000,
       maxResponseBytes: options?.kingdomFramework?.maxResponseBytes,
+    };
+    this.mathCardsOptions = {
+      baseUrl: this.http.baseUrl,
+      timeout: options?.mathCards?.timeout ?? this.http.timeout / 1000,
+      maxRequestBytes: options?.mathCards?.maxRequestBytes,
+      maxResponseBytes: options?.mathCards?.maxResponseBytes,
     };
     this.kingdomOSOptions = { ...options?.kingdomOS };
   }
@@ -407,6 +424,13 @@ export class AgentTool {
   get dining(): DiningClient {
     this._dining ??= new DiningClient(this.http);
     return this._dining;
+  }
+
+  /** Create and assess bounded Math Cards without forwarding the configured
+   * project bearer, authenticated transport, cookies, or redirect authority. */
+  get mathCards(): MathCardsClient {
+    this._mathCards ??= new MathCardsClient(this.mathCardsOptions);
+    return this._mathCards;
   }
 
   /** Access the runtime — infrastructure-as-runtime. The agent's cloud.

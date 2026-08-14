@@ -39,20 +39,21 @@ and 181,846-byte sdist
 (`sha256:7ec2f4010d20ca883770594bfbcdc30f7a3a074ba534029aefb6d91d69c3413c`).
 The registry remains a non-authoritative convenience.
 
-## Repository source line — 0.18.1
+## Repository source line — 0.19.0
 
-Repository source declares the paired 0.18.1 candidate line. Source version
-and distribution state are separate facts. A checked-in TypeScript LOVE
-0.18.1 manifest, when present, identifies only the TypeScript tarball bytes:
-before the annotated tag it is a candidate, and after tagging it remains that
-artifact's byte authority. It is not a Python distribution. Neither it nor the
-Python source version alone establishes an `sdk-v0.18.1` tag, GitHub Release,
-npm or PyPI publication, or production deployment; observe each through its
-own receipt or public readback. The immutable 0.18.0 LOVE, tag, GitHub Release,
-and npm receipt remain verified historical TypeScript bytes; PyPI 0.17.0
-remains the last independently verified Python registry mirror.
+Repository source declares the paired 0.19.0 line. Source version and
+distribution state are separate facts: this version does not by itself
+establish an `sdk-v0.19.0` tag, GitHub Release, npm or PyPI publication, or
+production deployment. The immutable 218,301-byte TypeScript 0.18.1 LOVE
+artifact
+(`sha256:466adb2d22a637e9c4d158e6050a69096e296258e6111f482be2a0872318be0d`),
+annotated `sdk-v0.18.1` tag, and GitHub Release remain exact historical
+receipts. `@agenttool/sdk@0.18.1` is also public as an optional npm mirror;
+none of these is a Python distribution. PyPI 0.18.1 remains absent, so PyPI
+0.17.0 remains the last independently verified Python registry mirror. None
+of those prior-release facts establishes 0.19.0 availability.
 
-- 0.18.1 adds paired `at.dining.manifest()` and
+- The immutable 0.18.1 release added paired `at.dining.manifest()` and
   `at.dining.journey(invocation_id)` reads. These authenticated GETs expose the
   developer-preview vocabulary and a privacy-minimized party projection; they
   do not book, pay, mutate an invocation, decrypt an envelope, infer
@@ -67,6 +68,14 @@ remains the last independently verified Python registry mirror.
 - Request-shape corrections align self-recognition, chronicle, collection, and
   Nen behaviour with the server. Anthropic model-authored chronicle writes
   require an explicit `before_chronicle_write` hook returning literal `True`.
+- The 0.19.0 source line adds data-only `at.wake.observe`, which accepts only
+  the closed 2 KiB observation contract and does not install remote identity,
+  prose, or action authority.
+- It also adds standalone `MathCardsClient.assess(input)` and composed
+  `at.math_cards.assess(input)`. This credential-free POST sends only a raw
+  `CreateMathCardInput`; the server owns canonical IDs and structural
+  assessment. The dedicated client accepts no bearer, cookies, authenticated
+  transport, redirect authority, or ambient proxy credentials.
 
 ## 0.17.0
 
@@ -437,6 +446,7 @@ local-data and local-process authorities when configured:
 | `at.lounge` | Credential-free public look-in; locally signed expiring seat, quiet exit, and hash-bound guestbook receipts | A room without inferred activity or liveness |
 | `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice | Collaboration without ownership or silent authority |
 | `at.dining` | Authenticated GET-only Dining manifest and party-scoped journey projection | Hospitality vocabulary without a second marketplace lifecycle or hidden mutation |
+| `at.math_cards` | Credential-free bounded creation and structural assessment of one raw Math Card input | The server owns canonical IDs and assessment semantics; no bearer, cookies, redirects, or ambient proxy credentials cross the boundary |
 | `at.data` | A separately configured local `agent-data/v1` node | Raw corpora stay outside AgentTool memory and the project bearer is never implicitly forwarded |
 | `at.kingdom_framework` | Credential-free typed read of AgentTool's exact closed `agenttool.kingdom.card/0.1` project card | No cookies, redirects, mutation, or authority |
 | `at.kingdom_os` | Read-only local KINGDOM OS repository discovery through only `repos --json` and `repos --path` | Local paths stay local and discovery grants no authority over a repository |
@@ -791,6 +801,22 @@ transport and reports `data_node_redirect_refused`; neither its bearer nor a
 request body is replayed to a redirect target. The immutable 0.16.0 release
 predates that fix; 0.16.1 and later carry it. Consumers must still verify the exact
 installed version before relying on that boundary.
+
+### Bounded Math Cards (0.19.0 source)
+
+```python
+from agenttool import CreateMathCardInput, MathCardsClient
+
+def assess(input: CreateMathCardInput):
+    with MathCardsClient() as cards:
+        return cards.assess(input)
+```
+
+`assess` calls only `POST /v1/math-cards/assess`. The request is the raw input,
+not a caller-built card: `schema_version`, `card_id`, `boundaries`, canonical
+ordering, and assessment semantics remain server-owned. `at.math_cards` is a
+lazy convenience over the same dedicated no-auth client; it never reuses the
+parent `AgentTool` bearer or authenticated transport.
 
 ### Public KINGDOM framework project card
 
