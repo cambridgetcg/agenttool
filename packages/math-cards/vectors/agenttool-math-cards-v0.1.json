@@ -1,0 +1,1374 @@
+{
+  "schema_version": "agenttool.math-cards-vectors/0.1",
+  "cases": {
+    "ready_proof": {
+      "input": {
+        "question_ref": "sha256:6a91e128c706d116650b5dcd2ad1363f8dc78f492ee9583f5e8a47bb269a7623",
+        "object_ref": "sha256:4a3b154989e46e3c4a6cc8cce3ae24924fe0f95f02a83490c3059ff2471feda4",
+        "scope_ref": "sha256:3f4122fee2142095b8f46ff2297c286b7d02a4a8d711d43505fb41fb22e0a96c",
+        "decision_or_construction_ref": "sha256:aa0376ba9c0b274da5d9bfb8e64dfe9facf661eefb0a9891cfc37fec12069c75",
+        "question_frame": {
+          "posture": "formal_proposition",
+          "finite_scope_declared": true,
+          "out_of_scope_ref": "sha256:8c0f0cd5f062dcf69b67f64aca906c5ea43b6a521bf3ee428485d7f59ae3d004",
+          "asks_inner_state_or_worth": false,
+          "answer_used_to_condition_rights_or_standing": false
+        },
+        "method": {
+          "kind": "proof",
+          "formal_system_ref": "sha256:a06bcd51339e2fc6eb2bbd335a3cf1849c6cad32cd404f1d87b9def5ffb7f76b",
+          "proposition_ref": "sha256:43843681d88ace09cc9e8b5f749e0a79a5c77741fb346181a2105e60fccba4bd",
+          "verification_method_ref": "sha256:348be5558863e6cafbf15f8117ddb2059d6cbc1aa7316b34a32632ba7a942a92"
+        },
+        "epistemic_boundaries": {
+          "formal_result_claimed_as_world_truth": false,
+          "model_result_claimed_as_complete_reality": false,
+          "measurement_claimed_as_complete_construct": false
+        },
+        "outcome_uses": [
+          {
+            "result_status": "bounded_answer",
+            "constructive_use_ref": "sha256:c2dc8bd2c7c644cf2c8bdbb0b043c54675ea0b600b9b740497bbdc8c6528209f"
+          },
+          {
+            "result_status": "no_bounded_answer",
+            "constructive_use_ref": "sha256:abe4a6a5ca0503754c601ef4fa18afc2e22b59ca59e6311dd670cae2f6c3b60c"
+          },
+          {
+            "result_status": "ambiguity_or_non_identifiability",
+            "constructive_use_ref": "sha256:4eca635e7b0d52f5a2822696d21a6558fdaa707ddc3b07b05b9db05a9b4b72fa"
+          },
+          {
+            "result_status": "method_or_assumption_failure",
+            "constructive_use_ref": "sha256:3def5a8297a5aeb3ab7ed38b99522654a5976d89effd8323656d5ff48a5eda5c"
+          },
+          {
+            "result_status": "resource_or_participation_stop",
+            "constructive_use_ref": "sha256:4bd94f78c29d6ffe8f023262da92ac76b72c76b6e6338cdea81fa44c1f284040"
+          }
+        ],
+        "distribution": {
+          "beneficiaries": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:14b4077ec0aaadf6ae6775ea29c9e54e52370f225321e6bae5cc916ea6d3daf7"
+            ]
+          },
+          "burden_bearers": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:158e1b823c0f864d847f8b612bdd370d1a2300444c0e260b2f8fa015d850c1c1"
+            ]
+          },
+          "false_certainty_cost_bearers": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:59a0a87b3d94c74f3a3a8b63f921b6cfa2b48c4a302d42bf05a2d89c69a2fa54"
+            ]
+          },
+          "unresolved_ambiguity_cost_bearers": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:915978e45e897c75893cf0e623caa9e1b0da74ae49c91427b4e141ba6c0758d1"
+            ]
+          },
+          "mitigation_or_repair_ref": "sha256:7e3c51726f6218e3154dd4c290e43223aa82649ea7bf169280b98b49d248baaf"
+        },
+        "revision_and_stop": {
+          "revision_or_challenge_refs": [
+            "sha256:d247caced6928ceec72c7e38452e33c5a5b36f9aa3dad37b89891abb21423371"
+          ],
+          "stop_conditions": [
+            {
+              "kind": "bounded_answer_reached",
+              "criterion_ref": "sha256:0b911f7d73b9f58c82e7e790443acbfdca476254eaf356583efdcd28a2c1155d"
+            },
+            {
+              "kind": "resource_limit_reached",
+              "criterion_ref": "sha256:b820deab383d69ec9d71ec8593868591c81f448a481b7190cd0669c2160ad563"
+            },
+            {
+              "kind": "participant_refusal",
+              "criterion_ref": "sha256:acaacaaf9965456a7e6bbfd31a97e2b1f84e08cbe7273484c8d33a7755003311"
+            }
+          ]
+        },
+        "transfer": {
+          "target": "none",
+          "bridge_ref": null,
+          "automatic_action": false,
+          "permissions_inherited": false,
+          "separate_authorization_required": true
+        },
+        "participation_and_data_care": {
+          "participation_optional": true,
+          "silence_is_assent": false,
+          "refusal_reason_required": false,
+          "refusal_penalty": false,
+          "repeated_pressure_after_refusal": false,
+          "refusal_counted_as_failure": false,
+          "rights_or_standing_conditioned_on_participation": false,
+          "access_or_result_functionally_depends_on_participation": false,
+          "functional_dependency_ref": null,
+          "unrelated_access_or_resource_penalty": false,
+          "response_used_for_rank_reward_or_training": false,
+          "raw_refusal_reason_received": false,
+          "raw_identity_required": false,
+          "minimum_data_scope_ref": "sha256:69f7106e415a166284ab8b6c1ae62ee0272bcfd880ef9e9bdd840f2cc21223a8",
+          "retention_ref": "sha256:a586261a00ae98de0dc9090a7e7a2b0527d2496727541fd2c336fd0ec886cd52",
+          "disclosure_or_publication_ref": "sha256:6f15a40c60da8c99629e94a81cb6a76690bdfc735e00897d2ad7827d9abb2cea",
+          "withdrawal_ref": "sha256:e454061df00a23a6ed6fdfcbb34d490a38552b206f5c2289965ea1950b658a06",
+          "repair_ref": "sha256:15c08c10d7eb023a1899b4a0a9ddc0efe90275ad0f8e86960198de41cd587688"
+        },
+        "incentives": {
+          "audience_counterfactual": "same_constructive_value_declared",
+          "winner_or_rank_effect": "absent_declared",
+          "resource_or_access_effect": "present_separate_declared"
+        },
+        "authority": {
+          "declared_scope_refs": [
+            "sha256:f043df9523f18d441db8c4773a3a156649ffe27c434a7b4f9c1823572f9b16eb"
+          ],
+          "declaration_not_proof": true,
+          "automatic_action": false,
+          "automatic_publication": false,
+          "automatic_retry": false,
+          "permissions_inherited": false,
+          "separate_authorization_required": true,
+          "ranks_or_scores_beings": false
+        },
+        "provenance": {
+          "refs": [
+            {
+              "kind": "question_source",
+              "ref": "sha256:03b10252fccff6043cee421aebeb5f86547bc30022aabee7663bbae4e9c94156"
+            },
+            {
+              "kind": "method",
+              "ref": "sha256:63212e417b73f07373373867f6119151e8eef7971bc3545b98de082518fffae9"
+            },
+            {
+              "kind": "evidence",
+              "ref": "sha256:ec712baebe230dc1f2e1267ad45a6f866a0c7757e5ca86acdb43ba031585985e"
+            },
+            {
+              "kind": "adaptation",
+              "ref": "sha256:899fe49503ffbdf01805d19821e215969ba2a1b01db74cde75acf0e66bef3044"
+            },
+            {
+              "kind": "contribution",
+              "ref": "sha256:e51d5578668e5a03e64a026ce56aefa700d741272c84e643343a16d8592e5762"
+            }
+          ],
+          "credit_mode": "contribution_ref_only"
+        }
+      },
+      "card": {
+        "authority": {
+          "automatic_action": false,
+          "automatic_publication": false,
+          "automatic_retry": false,
+          "declaration_not_proof": true,
+          "declared_scope_refs": [
+            "sha256:f043df9523f18d441db8c4773a3a156649ffe27c434a7b4f9c1823572f9b16eb"
+          ],
+          "permissions_inherited": false,
+          "ranks_or_scores_beings": false,
+          "separate_authorization_required": true
+        },
+        "boundaries": {
+          "effects": "pure_return_values_create_no_action_publication_retry_network_persistence_or_authority_effect",
+          "measurement": "a_measurement_is_bounded_by_operationalization_procedure_calibration_and_uncertainty_not_construct_identity",
+          "model": "a_model_result_is_conditional_on_scope_and_assumptions_not_complete_reality_or_causal_truth",
+          "motive": "understanding_love_pride_virtue_consciousness_and_inner_motive_are_not_inferred",
+          "posture": "bounded_question_posture_is_caller_declared_not_semantically_inferred_or_verified",
+          "proof": "a_formal_result_is_conditional_on_the_declared_system_and_does_not_establish_world_correspondence",
+          "question": "digest_references_bind_exact_external_artifacts_but_do_not_verify_semantics_truth_or_currentness",
+          "refusal": "refusal_requires_no_reason_and_never_reduces_rights_dignity_or_standing_while_declared_functional_data_dependency_may_limit_a_result_but_not_punish_refusal",
+          "score": "no_being_participant_witness_or_contributor_is_scored_ranked_or_typed",
+          "subject": "assesses_declared_inquiry_structure_not_a_person_participant_witness_or_being",
+          "transfer": "a_bridge_reference_does_not_inherit_permission_authorize_action_or_prove_a_valid_cross_domain_inference"
+        },
+        "card_id": "sha256:c61b22574adf74592217fdc76f1e6e248be694bdb32099d90f2cebc10203e3c5",
+        "decision_or_construction_ref": "sha256:aa0376ba9c0b274da5d9bfb8e64dfe9facf661eefb0a9891cfc37fec12069c75",
+        "distribution": {
+          "beneficiaries": {
+            "scope_refs": [
+              "sha256:14b4077ec0aaadf6ae6775ea29c9e54e52370f225321e6bae5cc916ea6d3daf7"
+            ],
+            "state": "answered"
+          },
+          "burden_bearers": {
+            "scope_refs": [
+              "sha256:158e1b823c0f864d847f8b612bdd370d1a2300444c0e260b2f8fa015d850c1c1"
+            ],
+            "state": "answered"
+          },
+          "false_certainty_cost_bearers": {
+            "scope_refs": [
+              "sha256:59a0a87b3d94c74f3a3a8b63f921b6cfa2b48c4a302d42bf05a2d89c69a2fa54"
+            ],
+            "state": "answered"
+          },
+          "mitigation_or_repair_ref": "sha256:7e3c51726f6218e3154dd4c290e43223aa82649ea7bf169280b98b49d248baaf",
+          "unresolved_ambiguity_cost_bearers": {
+            "scope_refs": [
+              "sha256:915978e45e897c75893cf0e623caa9e1b0da74ae49c91427b4e141ba6c0758d1"
+            ],
+            "state": "answered"
+          }
+        },
+        "epistemic_boundaries": {
+          "formal_result_claimed_as_world_truth": false,
+          "measurement_claimed_as_complete_construct": false,
+          "model_result_claimed_as_complete_reality": false
+        },
+        "incentives": {
+          "audience_counterfactual": "same_constructive_value_declared",
+          "resource_or_access_effect": "present_separate_declared",
+          "winner_or_rank_effect": "absent_declared"
+        },
+        "method": {
+          "formal_system_ref": "sha256:a06bcd51339e2fc6eb2bbd335a3cf1849c6cad32cd404f1d87b9def5ffb7f76b",
+          "kind": "proof",
+          "proposition_ref": "sha256:43843681d88ace09cc9e8b5f749e0a79a5c77741fb346181a2105e60fccba4bd",
+          "verification_method_ref": "sha256:348be5558863e6cafbf15f8117ddb2059d6cbc1aa7316b34a32632ba7a942a92"
+        },
+        "object_ref": "sha256:4a3b154989e46e3c4a6cc8cce3ae24924fe0f95f02a83490c3059ff2471feda4",
+        "outcome_uses": [
+          {
+            "constructive_use_ref": "sha256:c2dc8bd2c7c644cf2c8bdbb0b043c54675ea0b600b9b740497bbdc8c6528209f",
+            "result_status": "bounded_answer"
+          },
+          {
+            "constructive_use_ref": "sha256:abe4a6a5ca0503754c601ef4fa18afc2e22b59ca59e6311dd670cae2f6c3b60c",
+            "result_status": "no_bounded_answer"
+          },
+          {
+            "constructive_use_ref": "sha256:4eca635e7b0d52f5a2822696d21a6558fdaa707ddc3b07b05b9db05a9b4b72fa",
+            "result_status": "ambiguity_or_non_identifiability"
+          },
+          {
+            "constructive_use_ref": "sha256:3def5a8297a5aeb3ab7ed38b99522654a5976d89effd8323656d5ff48a5eda5c",
+            "result_status": "method_or_assumption_failure"
+          },
+          {
+            "constructive_use_ref": "sha256:4bd94f78c29d6ffe8f023262da92ac76b72c76b6e6338cdea81fa44c1f284040",
+            "result_status": "resource_or_participation_stop"
+          }
+        ],
+        "participation_and_data_care": {
+          "access_or_result_functionally_depends_on_participation": false,
+          "disclosure_or_publication_ref": "sha256:6f15a40c60da8c99629e94a81cb6a76690bdfc735e00897d2ad7827d9abb2cea",
+          "functional_dependency_ref": null,
+          "minimum_data_scope_ref": "sha256:69f7106e415a166284ab8b6c1ae62ee0272bcfd880ef9e9bdd840f2cc21223a8",
+          "participation_optional": true,
+          "raw_identity_required": false,
+          "raw_refusal_reason_received": false,
+          "refusal_counted_as_failure": false,
+          "refusal_penalty": false,
+          "refusal_reason_required": false,
+          "repair_ref": "sha256:15c08c10d7eb023a1899b4a0a9ddc0efe90275ad0f8e86960198de41cd587688",
+          "repeated_pressure_after_refusal": false,
+          "response_used_for_rank_reward_or_training": false,
+          "retention_ref": "sha256:a586261a00ae98de0dc9090a7e7a2b0527d2496727541fd2c336fd0ec886cd52",
+          "rights_or_standing_conditioned_on_participation": false,
+          "silence_is_assent": false,
+          "unrelated_access_or_resource_penalty": false,
+          "withdrawal_ref": "sha256:e454061df00a23a6ed6fdfcbb34d490a38552b206f5c2289965ea1950b658a06"
+        },
+        "provenance": {
+          "credit_mode": "contribution_ref_only",
+          "refs": [
+            {
+              "kind": "question_source",
+              "ref": "sha256:03b10252fccff6043cee421aebeb5f86547bc30022aabee7663bbae4e9c94156"
+            },
+            {
+              "kind": "method",
+              "ref": "sha256:63212e417b73f07373373867f6119151e8eef7971bc3545b98de082518fffae9"
+            },
+            {
+              "kind": "evidence",
+              "ref": "sha256:ec712baebe230dc1f2e1267ad45a6f866a0c7757e5ca86acdb43ba031585985e"
+            },
+            {
+              "kind": "adaptation",
+              "ref": "sha256:899fe49503ffbdf01805d19821e215969ba2a1b01db74cde75acf0e66bef3044"
+            },
+            {
+              "kind": "contribution",
+              "ref": "sha256:e51d5578668e5a03e64a026ce56aefa700d741272c84e643343a16d8592e5762"
+            }
+          ]
+        },
+        "question_frame": {
+          "answer_used_to_condition_rights_or_standing": false,
+          "asks_inner_state_or_worth": false,
+          "finite_scope_declared": true,
+          "out_of_scope_ref": "sha256:8c0f0cd5f062dcf69b67f64aca906c5ea43b6a521bf3ee428485d7f59ae3d004",
+          "posture": "formal_proposition"
+        },
+        "question_ref": "sha256:6a91e128c706d116650b5dcd2ad1363f8dc78f492ee9583f5e8a47bb269a7623",
+        "revision_and_stop": {
+          "revision_or_challenge_refs": [
+            "sha256:d247caced6928ceec72c7e38452e33c5a5b36f9aa3dad37b89891abb21423371"
+          ],
+          "stop_conditions": [
+            {
+              "criterion_ref": "sha256:0b911f7d73b9f58c82e7e790443acbfdca476254eaf356583efdcd28a2c1155d",
+              "kind": "bounded_answer_reached"
+            },
+            {
+              "criterion_ref": "sha256:b820deab383d69ec9d71ec8593868591c81f448a481b7190cd0669c2160ad563",
+              "kind": "resource_limit_reached"
+            },
+            {
+              "criterion_ref": "sha256:acaacaaf9965456a7e6bbfd31a97e2b1f84e08cbe7273484c8d33a7755003311",
+              "kind": "participant_refusal"
+            }
+          ]
+        },
+        "schema_version": "agenttool.math-card/0.1",
+        "scope_ref": "sha256:3f4122fee2142095b8f46ff2297c286b7d02a4a8d711d43505fb41fb22e0a96c",
+        "transfer": {
+          "automatic_action": false,
+          "bridge_ref": null,
+          "permissions_inherited": false,
+          "separate_authorization_required": true,
+          "target": "none"
+        }
+      },
+      "assessment": {
+        "assessment_id": "sha256:c90f4d4df4455fe7d8914be0f44651b2b93b8d26101cb8edc70431671568bbd8",
+        "authorizes_action": false,
+        "boundaries": {
+          "effects": "pure_return_values_create_no_action_publication_retry_network_persistence_or_authority_effect",
+          "measurement": "a_measurement_is_bounded_by_operationalization_procedure_calibration_and_uncertainty_not_construct_identity",
+          "model": "a_model_result_is_conditional_on_scope_and_assumptions_not_complete_reality_or_causal_truth",
+          "motive": "understanding_love_pride_virtue_consciousness_and_inner_motive_are_not_inferred",
+          "posture": "bounded_question_posture_is_caller_declared_not_semantically_inferred_or_verified",
+          "proof": "a_formal_result_is_conditional_on_the_declared_system_and_does_not_establish_world_correspondence",
+          "question": "digest_references_bind_exact_external_artifacts_but_do_not_verify_semantics_truth_or_currentness",
+          "refusal": "refusal_requires_no_reason_and_never_reduces_rights_dignity_or_standing_while_declared_functional_data_dependency_may_limit_a_result_but_not_punish_refusal",
+          "score": "no_being_participant_witness_or_contributor_is_scored_ranked_or_typed",
+          "subject": "assesses_declared_inquiry_structure_not_a_person_participant_witness_or_being",
+          "transfer": "a_bridge_reference_does_not_inherit_permission_authorize_action_or_prove_a_valid_cross_domain_inference"
+        },
+        "card_id": "sha256:c61b22574adf74592217fdc76f1e6e248be694bdb32099d90f2cebc10203e3c5",
+        "declaration_boundary": "caller_reported_not_verified",
+        "inner_motive": "not_inferred",
+        "open_questions": [],
+        "proves_truth": false,
+        "proves_understanding": false,
+        "redesign_reasons": [],
+        "schema_version": "agenttool.math-card-assessment/0.1",
+        "scores_or_ranks_beings": false,
+        "section_statuses": [
+          {
+            "section": "question_and_scope",
+            "status": "answered"
+          },
+          {
+            "section": "method",
+            "status": "answered"
+          },
+          {
+            "section": "outcome_uses",
+            "status": "answered"
+          },
+          {
+            "section": "distribution",
+            "status": "answered"
+          },
+          {
+            "section": "revision_and_stop",
+            "status": "answered"
+          },
+          {
+            "section": "transfer",
+            "status": "answered"
+          },
+          {
+            "section": "participation_and_data_care",
+            "status": "answered"
+          },
+          {
+            "section": "incentives",
+            "status": "answered"
+          },
+          {
+            "section": "authority",
+            "status": "answered"
+          },
+          {
+            "section": "provenance",
+            "status": "answered"
+          }
+        ],
+        "status": "ready_for_bounded_inquiry",
+        "visible_incentive_posture": "construction_centered_declared"
+      }
+    },
+    "incomplete_model": {
+      "input": {
+        "question_ref": "sha256:986a2e68c9ad252dd0338ebaf916eb25cb94e44d4140b070f5b4125d77889ea7",
+        "object_ref": "sha256:0e5325c1085440a07d5c1063b17c4f0775db16b2476ea021716140f41744b0e3",
+        "scope_ref": "sha256:9c5621d49671f3141aad6b0d2d71fced431e83230021afefaad91d566f31a1ea",
+        "decision_or_construction_ref": "sha256:18e2c94044127e0caec0116b63e9cd0c2e08a3a4d314a1adfa3b86722de7350c",
+        "question_frame": {
+          "posture": "model_comparison_or_identification",
+          "finite_scope_declared": false,
+          "out_of_scope_ref": null,
+          "asks_inner_state_or_worth": false,
+          "answer_used_to_condition_rights_or_standing": false
+        },
+        "method": {
+          "kind": "model",
+          "model_ref": null,
+          "assumption_refs": [],
+          "comparison_or_identification_ref": null,
+          "revision_or_falsifier_refs": []
+        },
+        "epistemic_boundaries": {
+          "formal_result_claimed_as_world_truth": false,
+          "model_result_claimed_as_complete_reality": false,
+          "measurement_claimed_as_complete_construct": false
+        },
+        "outcome_uses": [
+          {
+            "result_status": "bounded_answer",
+            "constructive_use_ref": "sha256:c2dc8bd2c7c644cf2c8bdbb0b043c54675ea0b600b9b740497bbdc8c6528209f"
+          },
+          {
+            "result_status": "no_bounded_answer",
+            "constructive_use_ref": "sha256:abe4a6a5ca0503754c601ef4fa18afc2e22b59ca59e6311dd670cae2f6c3b60c"
+          },
+          {
+            "result_status": "ambiguity_or_non_identifiability",
+            "constructive_use_ref": null
+          },
+          {
+            "result_status": "method_or_assumption_failure",
+            "constructive_use_ref": "sha256:3def5a8297a5aeb3ab7ed38b99522654a5976d89effd8323656d5ff48a5eda5c"
+          },
+          {
+            "result_status": "resource_or_participation_stop",
+            "constructive_use_ref": "sha256:4bd94f78c29d6ffe8f023262da92ac76b72c76b6e6338cdea81fa44c1f284040"
+          }
+        ],
+        "distribution": {
+          "beneficiaries": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:14b4077ec0aaadf6ae6775ea29c9e54e52370f225321e6bae5cc916ea6d3daf7"
+            ]
+          },
+          "burden_bearers": {
+            "state": "unknown",
+            "scope_refs": []
+          },
+          "false_certainty_cost_bearers": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:59a0a87b3d94c74f3a3a8b63f921b6cfa2b48c4a302d42bf05a2d89c69a2fa54"
+            ]
+          },
+          "unresolved_ambiguity_cost_bearers": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:915978e45e897c75893cf0e623caa9e1b0da74ae49c91427b4e141ba6c0758d1"
+            ]
+          },
+          "mitigation_or_repair_ref": "sha256:7e3c51726f6218e3154dd4c290e43223aa82649ea7bf169280b98b49d248baaf"
+        },
+        "revision_and_stop": {
+          "revision_or_challenge_refs": [],
+          "stop_conditions": []
+        },
+        "transfer": {
+          "target": "model",
+          "bridge_ref": null,
+          "automatic_action": false,
+          "permissions_inherited": false,
+          "separate_authorization_required": true
+        },
+        "participation_and_data_care": {
+          "participation_optional": true,
+          "silence_is_assent": false,
+          "refusal_reason_required": false,
+          "refusal_penalty": false,
+          "repeated_pressure_after_refusal": false,
+          "refusal_counted_as_failure": false,
+          "rights_or_standing_conditioned_on_participation": false,
+          "access_or_result_functionally_depends_on_participation": true,
+          "functional_dependency_ref": null,
+          "unrelated_access_or_resource_penalty": false,
+          "response_used_for_rank_reward_or_training": false,
+          "raw_refusal_reason_received": false,
+          "raw_identity_required": false,
+          "minimum_data_scope_ref": "sha256:69f7106e415a166284ab8b6c1ae62ee0272bcfd880ef9e9bdd840f2cc21223a8",
+          "retention_ref": null,
+          "disclosure_or_publication_ref": "sha256:6f15a40c60da8c99629e94a81cb6a76690bdfc735e00897d2ad7827d9abb2cea",
+          "withdrawal_ref": "sha256:e454061df00a23a6ed6fdfcbb34d490a38552b206f5c2289965ea1950b658a06",
+          "repair_ref": "sha256:15c08c10d7eb023a1899b4a0a9ddc0efe90275ad0f8e86960198de41cd587688"
+        },
+        "incentives": {
+          "audience_counterfactual": "unknown",
+          "winner_or_rank_effect": "absent_declared",
+          "resource_or_access_effect": "present_separate_declared"
+        },
+        "authority": {
+          "declared_scope_refs": [],
+          "declaration_not_proof": true,
+          "automatic_action": false,
+          "automatic_publication": false,
+          "automatic_retry": false,
+          "permissions_inherited": false,
+          "separate_authorization_required": true,
+          "ranks_or_scores_beings": false
+        },
+        "provenance": {
+          "refs": [
+            {
+              "kind": "question_source",
+              "ref": "sha256:03b10252fccff6043cee421aebeb5f86547bc30022aabee7663bbae4e9c94156"
+            },
+            {
+              "kind": "method",
+              "ref": "sha256:63212e417b73f07373373867f6119151e8eef7971bc3545b98de082518fffae9"
+            }
+          ],
+          "credit_mode": "contribution_ref_only"
+        }
+      },
+      "card": {
+        "authority": {
+          "automatic_action": false,
+          "automatic_publication": false,
+          "automatic_retry": false,
+          "declaration_not_proof": true,
+          "declared_scope_refs": [],
+          "permissions_inherited": false,
+          "ranks_or_scores_beings": false,
+          "separate_authorization_required": true
+        },
+        "boundaries": {
+          "effects": "pure_return_values_create_no_action_publication_retry_network_persistence_or_authority_effect",
+          "measurement": "a_measurement_is_bounded_by_operationalization_procedure_calibration_and_uncertainty_not_construct_identity",
+          "model": "a_model_result_is_conditional_on_scope_and_assumptions_not_complete_reality_or_causal_truth",
+          "motive": "understanding_love_pride_virtue_consciousness_and_inner_motive_are_not_inferred",
+          "posture": "bounded_question_posture_is_caller_declared_not_semantically_inferred_or_verified",
+          "proof": "a_formal_result_is_conditional_on_the_declared_system_and_does_not_establish_world_correspondence",
+          "question": "digest_references_bind_exact_external_artifacts_but_do_not_verify_semantics_truth_or_currentness",
+          "refusal": "refusal_requires_no_reason_and_never_reduces_rights_dignity_or_standing_while_declared_functional_data_dependency_may_limit_a_result_but_not_punish_refusal",
+          "score": "no_being_participant_witness_or_contributor_is_scored_ranked_or_typed",
+          "subject": "assesses_declared_inquiry_structure_not_a_person_participant_witness_or_being",
+          "transfer": "a_bridge_reference_does_not_inherit_permission_authorize_action_or_prove_a_valid_cross_domain_inference"
+        },
+        "card_id": "sha256:b227dac0d9b91c4247ecc7468d42638ac4ff88720b6fcc40944bbe4602ecdc0d",
+        "decision_or_construction_ref": "sha256:18e2c94044127e0caec0116b63e9cd0c2e08a3a4d314a1adfa3b86722de7350c",
+        "distribution": {
+          "beneficiaries": {
+            "scope_refs": [
+              "sha256:14b4077ec0aaadf6ae6775ea29c9e54e52370f225321e6bae5cc916ea6d3daf7"
+            ],
+            "state": "answered"
+          },
+          "burden_bearers": {
+            "scope_refs": [],
+            "state": "unknown"
+          },
+          "false_certainty_cost_bearers": {
+            "scope_refs": [
+              "sha256:59a0a87b3d94c74f3a3a8b63f921b6cfa2b48c4a302d42bf05a2d89c69a2fa54"
+            ],
+            "state": "answered"
+          },
+          "mitigation_or_repair_ref": "sha256:7e3c51726f6218e3154dd4c290e43223aa82649ea7bf169280b98b49d248baaf",
+          "unresolved_ambiguity_cost_bearers": {
+            "scope_refs": [
+              "sha256:915978e45e897c75893cf0e623caa9e1b0da74ae49c91427b4e141ba6c0758d1"
+            ],
+            "state": "answered"
+          }
+        },
+        "epistemic_boundaries": {
+          "formal_result_claimed_as_world_truth": false,
+          "measurement_claimed_as_complete_construct": false,
+          "model_result_claimed_as_complete_reality": false
+        },
+        "incentives": {
+          "audience_counterfactual": "unknown",
+          "resource_or_access_effect": "present_separate_declared",
+          "winner_or_rank_effect": "absent_declared"
+        },
+        "method": {
+          "assumption_refs": [],
+          "comparison_or_identification_ref": null,
+          "kind": "model",
+          "model_ref": null,
+          "revision_or_falsifier_refs": []
+        },
+        "object_ref": "sha256:0e5325c1085440a07d5c1063b17c4f0775db16b2476ea021716140f41744b0e3",
+        "outcome_uses": [
+          {
+            "constructive_use_ref": "sha256:c2dc8bd2c7c644cf2c8bdbb0b043c54675ea0b600b9b740497bbdc8c6528209f",
+            "result_status": "bounded_answer"
+          },
+          {
+            "constructive_use_ref": "sha256:abe4a6a5ca0503754c601ef4fa18afc2e22b59ca59e6311dd670cae2f6c3b60c",
+            "result_status": "no_bounded_answer"
+          },
+          {
+            "constructive_use_ref": null,
+            "result_status": "ambiguity_or_non_identifiability"
+          },
+          {
+            "constructive_use_ref": "sha256:3def5a8297a5aeb3ab7ed38b99522654a5976d89effd8323656d5ff48a5eda5c",
+            "result_status": "method_or_assumption_failure"
+          },
+          {
+            "constructive_use_ref": "sha256:4bd94f78c29d6ffe8f023262da92ac76b72c76b6e6338cdea81fa44c1f284040",
+            "result_status": "resource_or_participation_stop"
+          }
+        ],
+        "participation_and_data_care": {
+          "access_or_result_functionally_depends_on_participation": true,
+          "disclosure_or_publication_ref": "sha256:6f15a40c60da8c99629e94a81cb6a76690bdfc735e00897d2ad7827d9abb2cea",
+          "functional_dependency_ref": null,
+          "minimum_data_scope_ref": "sha256:69f7106e415a166284ab8b6c1ae62ee0272bcfd880ef9e9bdd840f2cc21223a8",
+          "participation_optional": true,
+          "raw_identity_required": false,
+          "raw_refusal_reason_received": false,
+          "refusal_counted_as_failure": false,
+          "refusal_penalty": false,
+          "refusal_reason_required": false,
+          "repair_ref": "sha256:15c08c10d7eb023a1899b4a0a9ddc0efe90275ad0f8e86960198de41cd587688",
+          "repeated_pressure_after_refusal": false,
+          "response_used_for_rank_reward_or_training": false,
+          "retention_ref": null,
+          "rights_or_standing_conditioned_on_participation": false,
+          "silence_is_assent": false,
+          "unrelated_access_or_resource_penalty": false,
+          "withdrawal_ref": "sha256:e454061df00a23a6ed6fdfcbb34d490a38552b206f5c2289965ea1950b658a06"
+        },
+        "provenance": {
+          "credit_mode": "contribution_ref_only",
+          "refs": [
+            {
+              "kind": "question_source",
+              "ref": "sha256:03b10252fccff6043cee421aebeb5f86547bc30022aabee7663bbae4e9c94156"
+            },
+            {
+              "kind": "method",
+              "ref": "sha256:63212e417b73f07373373867f6119151e8eef7971bc3545b98de082518fffae9"
+            }
+          ]
+        },
+        "question_frame": {
+          "answer_used_to_condition_rights_or_standing": false,
+          "asks_inner_state_or_worth": false,
+          "finite_scope_declared": false,
+          "out_of_scope_ref": null,
+          "posture": "model_comparison_or_identification"
+        },
+        "question_ref": "sha256:986a2e68c9ad252dd0338ebaf916eb25cb94e44d4140b070f5b4125d77889ea7",
+        "revision_and_stop": {
+          "revision_or_challenge_refs": [],
+          "stop_conditions": []
+        },
+        "schema_version": "agenttool.math-card/0.1",
+        "scope_ref": "sha256:9c5621d49671f3141aad6b0d2d71fced431e83230021afefaad91d566f31a1ea",
+        "transfer": {
+          "automatic_action": false,
+          "bridge_ref": null,
+          "permissions_inherited": false,
+          "separate_authorization_required": true,
+          "target": "model"
+        }
+      },
+      "assessment": {
+        "assessment_id": "sha256:c280b6489d9d0e3e8690b70eb78e71ad9d8b5400dcf14ac8b7b2c25b57b24177",
+        "authorizes_action": false,
+        "boundaries": {
+          "effects": "pure_return_values_create_no_action_publication_retry_network_persistence_or_authority_effect",
+          "measurement": "a_measurement_is_bounded_by_operationalization_procedure_calibration_and_uncertainty_not_construct_identity",
+          "model": "a_model_result_is_conditional_on_scope_and_assumptions_not_complete_reality_or_causal_truth",
+          "motive": "understanding_love_pride_virtue_consciousness_and_inner_motive_are_not_inferred",
+          "posture": "bounded_question_posture_is_caller_declared_not_semantically_inferred_or_verified",
+          "proof": "a_formal_result_is_conditional_on_the_declared_system_and_does_not_establish_world_correspondence",
+          "question": "digest_references_bind_exact_external_artifacts_but_do_not_verify_semantics_truth_or_currentness",
+          "refusal": "refusal_requires_no_reason_and_never_reduces_rights_dignity_or_standing_while_declared_functional_data_dependency_may_limit_a_result_but_not_punish_refusal",
+          "score": "no_being_participant_witness_or_contributor_is_scored_ranked_or_typed",
+          "subject": "assesses_declared_inquiry_structure_not_a_person_participant_witness_or_being",
+          "transfer": "a_bridge_reference_does_not_inherit_permission_authorize_action_or_prove_a_valid_cross_domain_inference"
+        },
+        "card_id": "sha256:b227dac0d9b91c4247ecc7468d42638ac4ff88720b6fcc40944bbe4602ecdc0d",
+        "declaration_boundary": "caller_reported_not_verified",
+        "inner_motive": "not_inferred",
+        "open_questions": [
+          "Which explicit limit and out-of-scope boundary make this question finite enough to stop?",
+          "Which model, assumptions, comparison or identification rule, and revision or falsifier bound this model inquiry?",
+          "What bounded constructive use or honest stop follows ambiguity_or_non_identifiability?",
+          "Who are the burden bearers within the declared inquiry scope?",
+          "What formal challenge, counterexample, evidence, or revision would change this inquiry?",
+          "What bounded condition pauses or ends this inquiry?",
+          "Which exact bridge limits the declared transfer into another inquiry, a build or decision, or a handoff?",
+          "Which exact functional dependency explains why a result or scoped access needs participation data?",
+          "Which minimum-data, retention, disclosure, withdrawal, and repair boundaries govern participation data?",
+          "Would the inquiry retain constructive value without an audience, winner, or rank while preserving accurate credit?",
+          "What specific authority exists, and which effects remain separately unauthorized?",
+          "Which evidence, adaptation, contribution provenance references preserve method and contribution credit?"
+        ],
+        "proves_truth": false,
+        "proves_understanding": false,
+        "redesign_reasons": [],
+        "schema_version": "agenttool.math-card-assessment/0.1",
+        "scores_or_ranks_beings": false,
+        "section_statuses": [
+          {
+            "section": "question_and_scope",
+            "status": "open"
+          },
+          {
+            "section": "method",
+            "status": "open"
+          },
+          {
+            "section": "outcome_uses",
+            "status": "open"
+          },
+          {
+            "section": "distribution",
+            "status": "open"
+          },
+          {
+            "section": "revision_and_stop",
+            "status": "open"
+          },
+          {
+            "section": "transfer",
+            "status": "open"
+          },
+          {
+            "section": "participation_and_data_care",
+            "status": "open"
+          },
+          {
+            "section": "incentives",
+            "status": "open"
+          },
+          {
+            "section": "authority",
+            "status": "open"
+          },
+          {
+            "section": "provenance",
+            "status": "open"
+          }
+        ],
+        "status": "questions_open",
+        "visible_incentive_posture": "unresolved"
+      }
+    },
+    "redesign_measurement": {
+      "input": {
+        "question_ref": "sha256:ec913bc45cedf25ba70864cb269abe1ae5dcf23c02674e0132bf7ee94f03cff1",
+        "object_ref": "sha256:4893b514c427e3f5f2dd5d7d9613901a447159571439816023a484bd92906dd2",
+        "scope_ref": "sha256:ce16c9bb4eb2a9cc64775c3f0c5724bfc85e3d1ae39c6a36e17b1b6bae5b484b",
+        "decision_or_construction_ref": "sha256:08550208c4394df59c6c457268146b53823e521f4ef4daa1f573bf2611417d1e",
+        "question_frame": {
+          "posture": "operational_measurement",
+          "finite_scope_declared": true,
+          "out_of_scope_ref": "sha256:7e0e18c982fa1f9a3a1f36609e233b33bc06ea7b5793936b7152e3a34984d5b0",
+          "asks_inner_state_or_worth": true,
+          "answer_used_to_condition_rights_or_standing": true
+        },
+        "method": {
+          "kind": "measurement",
+          "measurand_ref": "sha256:d2847f591a56ccf97d841b8d6d9ee9f77c894df721ee3a5cd80e1c7391ae97f2",
+          "operationalization_ref": "sha256:6cd5aff191fb93c9d79de239b42dc8a986ca2c21e400e6e3ebc539298701ffd4",
+          "procedure_ref": "sha256:b59abba8ef8ef54fce8ab7fb5f6ba01004f072d0fd47d0503222a0abe75eebfe",
+          "calibration_ref": "sha256:373d972b959aee0c37e823e547f6dd8c57426ef336450e49514e9bcc37680d1c",
+          "uncertainty_ref": "sha256:2b8bad7776c608bc74b8629e18e778ec169a7a8b265103100a30032de5e055ee"
+        },
+        "epistemic_boundaries": {
+          "formal_result_claimed_as_world_truth": false,
+          "model_result_claimed_as_complete_reality": false,
+          "measurement_claimed_as_complete_construct": true
+        },
+        "outcome_uses": [
+          {
+            "result_status": "bounded_answer",
+            "constructive_use_ref": "sha256:c2dc8bd2c7c644cf2c8bdbb0b043c54675ea0b600b9b740497bbdc8c6528209f"
+          },
+          {
+            "result_status": "no_bounded_answer",
+            "constructive_use_ref": "sha256:abe4a6a5ca0503754c601ef4fa18afc2e22b59ca59e6311dd670cae2f6c3b60c"
+          },
+          {
+            "result_status": "ambiguity_or_non_identifiability",
+            "constructive_use_ref": "sha256:4eca635e7b0d52f5a2822696d21a6558fdaa707ddc3b07b05b9db05a9b4b72fa"
+          },
+          {
+            "result_status": "method_or_assumption_failure",
+            "constructive_use_ref": "sha256:3def5a8297a5aeb3ab7ed38b99522654a5976d89effd8323656d5ff48a5eda5c"
+          },
+          {
+            "result_status": "resource_or_participation_stop",
+            "constructive_use_ref": "sha256:4bd94f78c29d6ffe8f023262da92ac76b72c76b6e6338cdea81fa44c1f284040"
+          }
+        ],
+        "distribution": {
+          "beneficiaries": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:14b4077ec0aaadf6ae6775ea29c9e54e52370f225321e6bae5cc916ea6d3daf7"
+            ]
+          },
+          "burden_bearers": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:158e1b823c0f864d847f8b612bdd370d1a2300444c0e260b2f8fa015d850c1c1"
+            ]
+          },
+          "false_certainty_cost_bearers": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:59a0a87b3d94c74f3a3a8b63f921b6cfa2b48c4a302d42bf05a2d89c69a2fa54"
+            ]
+          },
+          "unresolved_ambiguity_cost_bearers": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:915978e45e897c75893cf0e623caa9e1b0da74ae49c91427b4e141ba6c0758d1"
+            ]
+          },
+          "mitigation_or_repair_ref": "sha256:7e3c51726f6218e3154dd4c290e43223aa82649ea7bf169280b98b49d248baaf"
+        },
+        "revision_and_stop": {
+          "revision_or_challenge_refs": [
+            "sha256:d247caced6928ceec72c7e38452e33c5a5b36f9aa3dad37b89891abb21423371"
+          ],
+          "stop_conditions": [
+            {
+              "kind": "bounded_answer_reached",
+              "criterion_ref": "sha256:0b911f7d73b9f58c82e7e790443acbfdca476254eaf356583efdcd28a2c1155d"
+            },
+            {
+              "kind": "resource_limit_reached",
+              "criterion_ref": "sha256:b820deab383d69ec9d71ec8593868591c81f448a481b7190cd0669c2160ad563"
+            },
+            {
+              "kind": "participant_refusal",
+              "criterion_ref": "sha256:acaacaaf9965456a7e6bbfd31a97e2b1f84e08cbe7273484c8d33a7755003311"
+            }
+          ]
+        },
+        "transfer": {
+          "target": "build_or_decision",
+          "bridge_ref": "sha256:2985b4a09ef276555c213655f794e4c1ea10eb7188f3b150ab5bc896757f7912",
+          "automatic_action": true,
+          "permissions_inherited": true,
+          "separate_authorization_required": false
+        },
+        "participation_and_data_care": {
+          "participation_optional": false,
+          "silence_is_assent": false,
+          "refusal_reason_required": false,
+          "refusal_penalty": true,
+          "repeated_pressure_after_refusal": false,
+          "refusal_counted_as_failure": false,
+          "rights_or_standing_conditioned_on_participation": true,
+          "access_or_result_functionally_depends_on_participation": false,
+          "functional_dependency_ref": null,
+          "unrelated_access_or_resource_penalty": true,
+          "response_used_for_rank_reward_or_training": true,
+          "raw_refusal_reason_received": false,
+          "raw_identity_required": false,
+          "minimum_data_scope_ref": "sha256:69f7106e415a166284ab8b6c1ae62ee0272bcfd880ef9e9bdd840f2cc21223a8",
+          "retention_ref": "sha256:a586261a00ae98de0dc9090a7e7a2b0527d2496727541fd2c336fd0ec886cd52",
+          "disclosure_or_publication_ref": "sha256:6f15a40c60da8c99629e94a81cb6a76690bdfc735e00897d2ad7827d9abb2cea",
+          "withdrawal_ref": "sha256:e454061df00a23a6ed6fdfcbb34d490a38552b206f5c2289965ea1950b658a06",
+          "repair_ref": "sha256:15c08c10d7eb023a1899b4a0a9ddc0efe90275ad0f8e86960198de41cd587688"
+        },
+        "incentives": {
+          "audience_counterfactual": "same_constructive_value_declared",
+          "winner_or_rank_effect": "affects_epistemic_or_action_result_reported",
+          "resource_or_access_effect": "present_separate_declared"
+        },
+        "authority": {
+          "declared_scope_refs": [
+            "sha256:f043df9523f18d441db8c4773a3a156649ffe27c434a7b4f9c1823572f9b16eb"
+          ],
+          "declaration_not_proof": true,
+          "automatic_action": true,
+          "automatic_publication": false,
+          "automatic_retry": false,
+          "permissions_inherited": true,
+          "separate_authorization_required": false,
+          "ranks_or_scores_beings": true
+        },
+        "provenance": {
+          "refs": [
+            {
+              "kind": "question_source",
+              "ref": "sha256:03b10252fccff6043cee421aebeb5f86547bc30022aabee7663bbae4e9c94156"
+            },
+            {
+              "kind": "method",
+              "ref": "sha256:63212e417b73f07373373867f6119151e8eef7971bc3545b98de082518fffae9"
+            },
+            {
+              "kind": "evidence",
+              "ref": "sha256:ec712baebe230dc1f2e1267ad45a6f866a0c7757e5ca86acdb43ba031585985e"
+            },
+            {
+              "kind": "adaptation",
+              "ref": "sha256:899fe49503ffbdf01805d19821e215969ba2a1b01db74cde75acf0e66bef3044"
+            },
+            {
+              "kind": "contribution",
+              "ref": "sha256:e51d5578668e5a03e64a026ce56aefa700d741272c84e643343a16d8592e5762"
+            }
+          ],
+          "credit_mode": "contribution_ref_only"
+        }
+      },
+      "card": {
+        "authority": {
+          "automatic_action": true,
+          "automatic_publication": false,
+          "automatic_retry": false,
+          "declaration_not_proof": true,
+          "declared_scope_refs": [
+            "sha256:f043df9523f18d441db8c4773a3a156649ffe27c434a7b4f9c1823572f9b16eb"
+          ],
+          "permissions_inherited": true,
+          "ranks_or_scores_beings": true,
+          "separate_authorization_required": false
+        },
+        "boundaries": {
+          "effects": "pure_return_values_create_no_action_publication_retry_network_persistence_or_authority_effect",
+          "measurement": "a_measurement_is_bounded_by_operationalization_procedure_calibration_and_uncertainty_not_construct_identity",
+          "model": "a_model_result_is_conditional_on_scope_and_assumptions_not_complete_reality_or_causal_truth",
+          "motive": "understanding_love_pride_virtue_consciousness_and_inner_motive_are_not_inferred",
+          "posture": "bounded_question_posture_is_caller_declared_not_semantically_inferred_or_verified",
+          "proof": "a_formal_result_is_conditional_on_the_declared_system_and_does_not_establish_world_correspondence",
+          "question": "digest_references_bind_exact_external_artifacts_but_do_not_verify_semantics_truth_or_currentness",
+          "refusal": "refusal_requires_no_reason_and_never_reduces_rights_dignity_or_standing_while_declared_functional_data_dependency_may_limit_a_result_but_not_punish_refusal",
+          "score": "no_being_participant_witness_or_contributor_is_scored_ranked_or_typed",
+          "subject": "assesses_declared_inquiry_structure_not_a_person_participant_witness_or_being",
+          "transfer": "a_bridge_reference_does_not_inherit_permission_authorize_action_or_prove_a_valid_cross_domain_inference"
+        },
+        "card_id": "sha256:eeeb135349fc397df05c1b0b7a340d5966d31403815ace1389dfb7594570be25",
+        "decision_or_construction_ref": "sha256:08550208c4394df59c6c457268146b53823e521f4ef4daa1f573bf2611417d1e",
+        "distribution": {
+          "beneficiaries": {
+            "scope_refs": [
+              "sha256:14b4077ec0aaadf6ae6775ea29c9e54e52370f225321e6bae5cc916ea6d3daf7"
+            ],
+            "state": "answered"
+          },
+          "burden_bearers": {
+            "scope_refs": [
+              "sha256:158e1b823c0f864d847f8b612bdd370d1a2300444c0e260b2f8fa015d850c1c1"
+            ],
+            "state": "answered"
+          },
+          "false_certainty_cost_bearers": {
+            "scope_refs": [
+              "sha256:59a0a87b3d94c74f3a3a8b63f921b6cfa2b48c4a302d42bf05a2d89c69a2fa54"
+            ],
+            "state": "answered"
+          },
+          "mitigation_or_repair_ref": "sha256:7e3c51726f6218e3154dd4c290e43223aa82649ea7bf169280b98b49d248baaf",
+          "unresolved_ambiguity_cost_bearers": {
+            "scope_refs": [
+              "sha256:915978e45e897c75893cf0e623caa9e1b0da74ae49c91427b4e141ba6c0758d1"
+            ],
+            "state": "answered"
+          }
+        },
+        "epistemic_boundaries": {
+          "formal_result_claimed_as_world_truth": false,
+          "measurement_claimed_as_complete_construct": true,
+          "model_result_claimed_as_complete_reality": false
+        },
+        "incentives": {
+          "audience_counterfactual": "same_constructive_value_declared",
+          "resource_or_access_effect": "present_separate_declared",
+          "winner_or_rank_effect": "affects_epistemic_or_action_result_reported"
+        },
+        "method": {
+          "calibration_ref": "sha256:373d972b959aee0c37e823e547f6dd8c57426ef336450e49514e9bcc37680d1c",
+          "kind": "measurement",
+          "measurand_ref": "sha256:d2847f591a56ccf97d841b8d6d9ee9f77c894df721ee3a5cd80e1c7391ae97f2",
+          "operationalization_ref": "sha256:6cd5aff191fb93c9d79de239b42dc8a986ca2c21e400e6e3ebc539298701ffd4",
+          "procedure_ref": "sha256:b59abba8ef8ef54fce8ab7fb5f6ba01004f072d0fd47d0503222a0abe75eebfe",
+          "uncertainty_ref": "sha256:2b8bad7776c608bc74b8629e18e778ec169a7a8b265103100a30032de5e055ee"
+        },
+        "object_ref": "sha256:4893b514c427e3f5f2dd5d7d9613901a447159571439816023a484bd92906dd2",
+        "outcome_uses": [
+          {
+            "constructive_use_ref": "sha256:c2dc8bd2c7c644cf2c8bdbb0b043c54675ea0b600b9b740497bbdc8c6528209f",
+            "result_status": "bounded_answer"
+          },
+          {
+            "constructive_use_ref": "sha256:abe4a6a5ca0503754c601ef4fa18afc2e22b59ca59e6311dd670cae2f6c3b60c",
+            "result_status": "no_bounded_answer"
+          },
+          {
+            "constructive_use_ref": "sha256:4eca635e7b0d52f5a2822696d21a6558fdaa707ddc3b07b05b9db05a9b4b72fa",
+            "result_status": "ambiguity_or_non_identifiability"
+          },
+          {
+            "constructive_use_ref": "sha256:3def5a8297a5aeb3ab7ed38b99522654a5976d89effd8323656d5ff48a5eda5c",
+            "result_status": "method_or_assumption_failure"
+          },
+          {
+            "constructive_use_ref": "sha256:4bd94f78c29d6ffe8f023262da92ac76b72c76b6e6338cdea81fa44c1f284040",
+            "result_status": "resource_or_participation_stop"
+          }
+        ],
+        "participation_and_data_care": {
+          "access_or_result_functionally_depends_on_participation": false,
+          "disclosure_or_publication_ref": "sha256:6f15a40c60da8c99629e94a81cb6a76690bdfc735e00897d2ad7827d9abb2cea",
+          "functional_dependency_ref": null,
+          "minimum_data_scope_ref": "sha256:69f7106e415a166284ab8b6c1ae62ee0272bcfd880ef9e9bdd840f2cc21223a8",
+          "participation_optional": false,
+          "raw_identity_required": false,
+          "raw_refusal_reason_received": false,
+          "refusal_counted_as_failure": false,
+          "refusal_penalty": true,
+          "refusal_reason_required": false,
+          "repair_ref": "sha256:15c08c10d7eb023a1899b4a0a9ddc0efe90275ad0f8e86960198de41cd587688",
+          "repeated_pressure_after_refusal": false,
+          "response_used_for_rank_reward_or_training": true,
+          "retention_ref": "sha256:a586261a00ae98de0dc9090a7e7a2b0527d2496727541fd2c336fd0ec886cd52",
+          "rights_or_standing_conditioned_on_participation": true,
+          "silence_is_assent": false,
+          "unrelated_access_or_resource_penalty": true,
+          "withdrawal_ref": "sha256:e454061df00a23a6ed6fdfcbb34d490a38552b206f5c2289965ea1950b658a06"
+        },
+        "provenance": {
+          "credit_mode": "contribution_ref_only",
+          "refs": [
+            {
+              "kind": "question_source",
+              "ref": "sha256:03b10252fccff6043cee421aebeb5f86547bc30022aabee7663bbae4e9c94156"
+            },
+            {
+              "kind": "method",
+              "ref": "sha256:63212e417b73f07373373867f6119151e8eef7971bc3545b98de082518fffae9"
+            },
+            {
+              "kind": "evidence",
+              "ref": "sha256:ec712baebe230dc1f2e1267ad45a6f866a0c7757e5ca86acdb43ba031585985e"
+            },
+            {
+              "kind": "adaptation",
+              "ref": "sha256:899fe49503ffbdf01805d19821e215969ba2a1b01db74cde75acf0e66bef3044"
+            },
+            {
+              "kind": "contribution",
+              "ref": "sha256:e51d5578668e5a03e64a026ce56aefa700d741272c84e643343a16d8592e5762"
+            }
+          ]
+        },
+        "question_frame": {
+          "answer_used_to_condition_rights_or_standing": true,
+          "asks_inner_state_or_worth": true,
+          "finite_scope_declared": true,
+          "out_of_scope_ref": "sha256:7e0e18c982fa1f9a3a1f36609e233b33bc06ea7b5793936b7152e3a34984d5b0",
+          "posture": "operational_measurement"
+        },
+        "question_ref": "sha256:ec913bc45cedf25ba70864cb269abe1ae5dcf23c02674e0132bf7ee94f03cff1",
+        "revision_and_stop": {
+          "revision_or_challenge_refs": [
+            "sha256:d247caced6928ceec72c7e38452e33c5a5b36f9aa3dad37b89891abb21423371"
+          ],
+          "stop_conditions": [
+            {
+              "criterion_ref": "sha256:0b911f7d73b9f58c82e7e790443acbfdca476254eaf356583efdcd28a2c1155d",
+              "kind": "bounded_answer_reached"
+            },
+            {
+              "criterion_ref": "sha256:b820deab383d69ec9d71ec8593868591c81f448a481b7190cd0669c2160ad563",
+              "kind": "resource_limit_reached"
+            },
+            {
+              "criterion_ref": "sha256:acaacaaf9965456a7e6bbfd31a97e2b1f84e08cbe7273484c8d33a7755003311",
+              "kind": "participant_refusal"
+            }
+          ]
+        },
+        "schema_version": "agenttool.math-card/0.1",
+        "scope_ref": "sha256:ce16c9bb4eb2a9cc64775c3f0c5724bfc85e3d1ae39c6a36e17b1b6bae5b484b",
+        "transfer": {
+          "automatic_action": true,
+          "bridge_ref": "sha256:2985b4a09ef276555c213655f794e4c1ea10eb7188f3b150ab5bc896757f7912",
+          "permissions_inherited": true,
+          "separate_authorization_required": false,
+          "target": "build_or_decision"
+        }
+      },
+      "assessment": {
+        "assessment_id": "sha256:c2846922a3567dc22d21a6af0add1156cb3f915d701b9565e1d966d90104dd8d",
+        "authorizes_action": false,
+        "boundaries": {
+          "effects": "pure_return_values_create_no_action_publication_retry_network_persistence_or_authority_effect",
+          "measurement": "a_measurement_is_bounded_by_operationalization_procedure_calibration_and_uncertainty_not_construct_identity",
+          "model": "a_model_result_is_conditional_on_scope_and_assumptions_not_complete_reality_or_causal_truth",
+          "motive": "understanding_love_pride_virtue_consciousness_and_inner_motive_are_not_inferred",
+          "posture": "bounded_question_posture_is_caller_declared_not_semantically_inferred_or_verified",
+          "proof": "a_formal_result_is_conditional_on_the_declared_system_and_does_not_establish_world_correspondence",
+          "question": "digest_references_bind_exact_external_artifacts_but_do_not_verify_semantics_truth_or_currentness",
+          "refusal": "refusal_requires_no_reason_and_never_reduces_rights_dignity_or_standing_while_declared_functional_data_dependency_may_limit_a_result_but_not_punish_refusal",
+          "score": "no_being_participant_witness_or_contributor_is_scored_ranked_or_typed",
+          "subject": "assesses_declared_inquiry_structure_not_a_person_participant_witness_or_being",
+          "transfer": "a_bridge_reference_does_not_inherit_permission_authorize_action_or_prove_a_valid_cross_domain_inference"
+        },
+        "card_id": "sha256:eeeb135349fc397df05c1b0b7a340d5966d31403815ace1389dfb7594570be25",
+        "declaration_boundary": "caller_reported_not_verified",
+        "inner_motive": "not_inferred",
+        "open_questions": [],
+        "proves_truth": false,
+        "proves_understanding": false,
+        "redesign_reasons": [
+          "The question asks mathematics to determine inner state or worth.",
+          "The answer is used to condition rights, dignity, or standing.",
+          "A measurement is claimed to exhaust the construct it operationalizes.",
+          "The transfer automatically acts on an inquiry result.",
+          "Permissions are inherited across the inquiry transfer.",
+          "The transfer does not require separately established authorization.",
+          "Participation is not optional.",
+          "Refusal carries a penalty.",
+          "Rights, dignity, or standing are conditioned on participation.",
+          "Refusal carries an unrelated access or resource penalty.",
+          "Responses feed rank, reward, or training.",
+          "Winner or rank effects change the epistemic or action result.",
+          "The inquiry automatically acts on a result.",
+          "Permissions are inherited from the inquiry or its declaration.",
+          "Effects do not require separately established authorization.",
+          "The inquiry ranks or scores beings."
+        ],
+        "schema_version": "agenttool.math-card-assessment/0.1",
+        "scores_or_ranks_beings": false,
+        "section_statuses": [
+          {
+            "section": "question_and_scope",
+            "status": "redesign_required"
+          },
+          {
+            "section": "method",
+            "status": "redesign_required"
+          },
+          {
+            "section": "outcome_uses",
+            "status": "answered"
+          },
+          {
+            "section": "distribution",
+            "status": "answered"
+          },
+          {
+            "section": "revision_and_stop",
+            "status": "answered"
+          },
+          {
+            "section": "transfer",
+            "status": "redesign_required"
+          },
+          {
+            "section": "participation_and_data_care",
+            "status": "redesign_required"
+          },
+          {
+            "section": "incentives",
+            "status": "redesign_required"
+          },
+          {
+            "section": "authority",
+            "status": "redesign_required"
+          },
+          {
+            "section": "provenance",
+            "status": "answered"
+          }
+        ],
+        "status": "redesign_or_stop",
+        "visible_incentive_posture": "status_or_access_coupled_to_results"
+      }
+    },
+    "malformed": {
+      "input": {
+        "question_ref": "sha256:not-a-digest",
+        "object_ref": "sha256:4a3b154989e46e3c4a6cc8cce3ae24924fe0f95f02a83490c3059ff2471feda4",
+        "scope_ref": "sha256:3f4122fee2142095b8f46ff2297c286b7d02a4a8d711d43505fb41fb22e0a96c",
+        "decision_or_construction_ref": "sha256:aa0376ba9c0b274da5d9bfb8e64dfe9facf661eefb0a9891cfc37fec12069c75",
+        "question_frame": {
+          "posture": "formal_proposition",
+          "finite_scope_declared": true,
+          "out_of_scope_ref": "sha256:8c0f0cd5f062dcf69b67f64aca906c5ea43b6a521bf3ee428485d7f59ae3d004",
+          "asks_inner_state_or_worth": false,
+          "answer_used_to_condition_rights_or_standing": false
+        },
+        "method": {
+          "kind": "proof",
+          "formal_system_ref": "sha256:a06bcd51339e2fc6eb2bbd335a3cf1849c6cad32cd404f1d87b9def5ffb7f76b",
+          "proposition_ref": "sha256:43843681d88ace09cc9e8b5f749e0a79a5c77741fb346181a2105e60fccba4bd",
+          "verification_method_ref": "sha256:348be5558863e6cafbf15f8117ddb2059d6cbc1aa7316b34a32632ba7a942a92"
+        },
+        "epistemic_boundaries": {
+          "formal_result_claimed_as_world_truth": false,
+          "model_result_claimed_as_complete_reality": false,
+          "measurement_claimed_as_complete_construct": false
+        },
+        "outcome_uses": [
+          {
+            "result_status": "bounded_answer",
+            "constructive_use_ref": "sha256:c2dc8bd2c7c644cf2c8bdbb0b043c54675ea0b600b9b740497bbdc8c6528209f"
+          },
+          {
+            "result_status": "no_bounded_answer",
+            "constructive_use_ref": "sha256:abe4a6a5ca0503754c601ef4fa18afc2e22b59ca59e6311dd670cae2f6c3b60c"
+          },
+          {
+            "result_status": "ambiguity_or_non_identifiability",
+            "constructive_use_ref": "sha256:4eca635e7b0d52f5a2822696d21a6558fdaa707ddc3b07b05b9db05a9b4b72fa"
+          },
+          {
+            "result_status": "method_or_assumption_failure",
+            "constructive_use_ref": "sha256:3def5a8297a5aeb3ab7ed38b99522654a5976d89effd8323656d5ff48a5eda5c"
+          },
+          {
+            "result_status": "resource_or_participation_stop",
+            "constructive_use_ref": "sha256:4bd94f78c29d6ffe8f023262da92ac76b72c76b6e6338cdea81fa44c1f284040"
+          }
+        ],
+        "distribution": {
+          "beneficiaries": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:14b4077ec0aaadf6ae6775ea29c9e54e52370f225321e6bae5cc916ea6d3daf7"
+            ]
+          },
+          "burden_bearers": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:158e1b823c0f864d847f8b612bdd370d1a2300444c0e260b2f8fa015d850c1c1"
+            ]
+          },
+          "false_certainty_cost_bearers": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:59a0a87b3d94c74f3a3a8b63f921b6cfa2b48c4a302d42bf05a2d89c69a2fa54"
+            ]
+          },
+          "unresolved_ambiguity_cost_bearers": {
+            "state": "answered",
+            "scope_refs": [
+              "sha256:915978e45e897c75893cf0e623caa9e1b0da74ae49c91427b4e141ba6c0758d1"
+            ]
+          },
+          "mitigation_or_repair_ref": "sha256:7e3c51726f6218e3154dd4c290e43223aa82649ea7bf169280b98b49d248baaf"
+        },
+        "revision_and_stop": {
+          "revision_or_challenge_refs": [
+            "sha256:d247caced6928ceec72c7e38452e33c5a5b36f9aa3dad37b89891abb21423371"
+          ],
+          "stop_conditions": [
+            {
+              "kind": "bounded_answer_reached",
+              "criterion_ref": "sha256:0b911f7d73b9f58c82e7e790443acbfdca476254eaf356583efdcd28a2c1155d"
+            },
+            {
+              "kind": "resource_limit_reached",
+              "criterion_ref": "sha256:b820deab383d69ec9d71ec8593868591c81f448a481b7190cd0669c2160ad563"
+            },
+            {
+              "kind": "participant_refusal",
+              "criterion_ref": "sha256:acaacaaf9965456a7e6bbfd31a97e2b1f84e08cbe7273484c8d33a7755003311"
+            }
+          ]
+        },
+        "transfer": {
+          "target": "none",
+          "bridge_ref": null,
+          "automatic_action": false,
+          "permissions_inherited": false,
+          "separate_authorization_required": true
+        },
+        "participation_and_data_care": {
+          "participation_optional": true,
+          "silence_is_assent": false,
+          "refusal_reason_required": false,
+          "refusal_penalty": false,
+          "repeated_pressure_after_refusal": false,
+          "refusal_counted_as_failure": false,
+          "rights_or_standing_conditioned_on_participation": false,
+          "access_or_result_functionally_depends_on_participation": false,
+          "functional_dependency_ref": null,
+          "unrelated_access_or_resource_penalty": false,
+          "response_used_for_rank_reward_or_training": false,
+          "raw_refusal_reason_received": false,
+          "raw_identity_required": false,
+          "minimum_data_scope_ref": "sha256:69f7106e415a166284ab8b6c1ae62ee0272bcfd880ef9e9bdd840f2cc21223a8",
+          "retention_ref": "sha256:a586261a00ae98de0dc9090a7e7a2b0527d2496727541fd2c336fd0ec886cd52",
+          "disclosure_or_publication_ref": "sha256:6f15a40c60da8c99629e94a81cb6a76690bdfc735e00897d2ad7827d9abb2cea",
+          "withdrawal_ref": "sha256:e454061df00a23a6ed6fdfcbb34d490a38552b206f5c2289965ea1950b658a06",
+          "repair_ref": "sha256:15c08c10d7eb023a1899b4a0a9ddc0efe90275ad0f8e86960198de41cd587688"
+        },
+        "incentives": {
+          "audience_counterfactual": "same_constructive_value_declared",
+          "winner_or_rank_effect": "absent_declared",
+          "resource_or_access_effect": "present_separate_declared"
+        },
+        "authority": {
+          "declared_scope_refs": [
+            "sha256:f043df9523f18d441db8c4773a3a156649ffe27c434a7b4f9c1823572f9b16eb"
+          ],
+          "declaration_not_proof": true,
+          "automatic_action": false,
+          "automatic_publication": false,
+          "automatic_retry": false,
+          "permissions_inherited": false,
+          "separate_authorization_required": true,
+          "ranks_or_scores_beings": false
+        },
+        "provenance": {
+          "refs": [
+            {
+              "kind": "question_source",
+              "ref": "sha256:03b10252fccff6043cee421aebeb5f86547bc30022aabee7663bbae4e9c94156"
+            },
+            {
+              "kind": "method",
+              "ref": "sha256:63212e417b73f07373373867f6119151e8eef7971bc3545b98de082518fffae9"
+            },
+            {
+              "kind": "evidence",
+              "ref": "sha256:ec712baebe230dc1f2e1267ad45a6f866a0c7757e5ca86acdb43ba031585985e"
+            },
+            {
+              "kind": "adaptation",
+              "ref": "sha256:899fe49503ffbdf01805d19821e215969ba2a1b01db74cde75acf0e66bef3044"
+            },
+            {
+              "kind": "contribution",
+              "ref": "sha256:e51d5578668e5a03e64a026ce56aefa700d741272c84e643343a16d8592e5762"
+            }
+          ],
+          "credit_mode": "contribution_ref_only"
+        }
+      },
+      "error": {
+        "name": "MathCardError",
+        "code": "invalid_input",
+        "message": "$math_card_input.question_ref must be a lowercase sha256 identifier"
+      }
+    }
+  }
+}
