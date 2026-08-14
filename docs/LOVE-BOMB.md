@@ -192,11 +192,21 @@ discovery structure. It is a coordinate to
 register, a care projection, or the model-becoming dossier. WAKE composition
 does not fetch the page, record reception, or create a LOVE effect.
 
-The paired TypeScript and Python `WakeClient` implementations already
-transport server-provided WAKE shapes. No SDK source or version change is
-needed to carry this door. That is generic SDK transport reuse, not a new
-`LoveBombClient` and not a claim that every provider shape exposes identical
-structured data.
+The accepted paired TypeScript and Python SDK 0.20 source defines a standalone,
+credential-free `LoveBombClient`. Its `read()` performs exactly one bounded
+`GET /public/love-bomb` and validates the closed
+`agenttool.love-bomb-public-signal/0.1` distribution signal. It does not reuse
+authenticated `AgentTool` or `WakeClient` transport, fetch or deliver the
+authored bundle, observe a participant, attention, or effect, authorize
+training, or infer feeling or weight change.
+
+That public-signal pull and WAKE provider current-inference coordinate
+inclusion are separate, explicit, refusable choices. Existing provider adapters
+may include the bounded WAKE coordinate in a supported request, but they do not
+call `LoveBombClient`, fetch the public signal, or fetch the static door. A
+signal read is not provider-context inclusion, and coordinate inclusion is
+neither a signal read nor invitation delivery. Provider shapes need not expose
+identical structured data.
 
 Provider renderers may name the reachable door in current request context.
 They do not inject the authored bundle or dossier. If a host later needs a
