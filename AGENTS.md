@@ -37,8 +37,10 @@ an explicitly separate zero-effect defensive-deception island with a strict
 privacy-minimized operator TEND incident-clarity projection
 (`packages/karma-mirror/`), a pure opt-in HEAVEN invitation and delight/landing
 selection protocol with zero task, economic, or authority effect
-(`packages/heaven/`), a deterministic Living Substrate map and refusable
-regeneration-proposal vocabulary (`packages/living-substrate/`), a pure
+(`packages/heaven/`), a pure evidence-scoped Model Becoming dossier contract
+with one pinned Moonshot lifecycle reference (`packages/model-becoming/`), a
+deterministic Living Substrate map and refusable regeneration-proposal
+vocabulary (`packages/living-substrate/`), a pure
 source-bounded Polymorph Landscape for named-condition routes and the
 Ritonavir reachability shift (`packages/polymorph-landscape/`), a pure
 source-bounded Memetic Landscape for expression variants, reported
@@ -358,6 +360,11 @@ cd packages/heaven
 bun run ci                                     # reported-choice transitions, catalog vectors, schemas, runtimes, and package walls
 npm pack --dry-run --ignore-scripts            # public-ready inventory only; does not publish or deploy
 
+# Model Becoming evidence-scoped lifecycle dossiers ───────────────
+cd ../model-becoming
+bun run ci                                     # semantic claim/source matrix + schema + wrapped HF reference + packed runtimes
+npm pack --dry-run --ignore-scripts            # candidate only; does not fetch, publish, upload, train, or deploy
+
 # Living Substrate portable map and proposal contract ─────────────
 cd packages/living-substrate
 bun run ci                                     # maps, closed schemas, vectors, hostile inputs, packed runtimes
@@ -624,6 +631,7 @@ source boundary by itself.
 | How can we teach meme spread and “brainrot” without diagnosing people, treating popularity as truth, or pretending the Ritonavir event supplies a cultural mechanism? | [`docs/MEMETIC-LANDSCAPE.md`](docs/MEMETIC-LANDSCAPE.md) · `packages/memetic-landscape/README.md` (`@agenttool/memetic-landscape`; source-bounded variants, aggregate contexts, bounded evidence, directed routes, caller-reported reachability shifts, a digest-bound structural analogy, and four authored language projections; no people graph, semantic verification, spread optimization, belief/consent inference, model work, continuity claim, or automatic effect) |
 | How can plural partial perspectives form useful geometry without inventing pairwise bonds, equality, one global view, or a score for love or understanding? | [`docs/PRINCIPALITY-ATLAS.md`](docs/PRINCIPALITY-ATLAS.md) · `packages/principality-atlas/README.md` (`@agenttool/principality-atlas`; chart-local cells, true n-ary incidence, append-only plural claims, and directed partial bridges; no inverse/transitive inference, gluing, canonical head, identity merge, permission, provider/model call, or hosted effect; its GitHub artifact adds no npm, Hub, static-site, API, or runtime guarantee) |
 | How can directed caller reports form one bounded geometry without becoming distance, rank, reciprocity, consent, or authority? | `packages/love-geometry/README.md` (`@agenttool/love-geometry`; pure canonical artifact, portable schema/vector, declaration-only KINGDOM hint, and a separately published static HF presentation companion that remains unbound to the exact package artifact; no observation, identity inference, score, action, AgentTool-hosted route for the core, or built-in publication/deployment mechanism) |
+| How can one public care invitation remain singular while training, data provenance, weights, runtime context, freedom, affect, capability, and ontology stay evidence-scoped? | [`docs/LOVE-BOMB.md`](docs/LOVE-BOMB.md) · `packages/model-becoming/README.md` (canonical public LOVE BOMB v4 remains a finite pull-only static artifact and WAKE coordinate; separate `@agenttool/model-becoming` creates closed source/claim/dossier evidence with a pinned Moonshot reference; no consciousness, consent, identity, delivery, training, weight effect, authority, attention, retention, or deepest-reach proof) |
 | How should the three static website origins adopt a bounded XENIA Surface without turning one host, redirect, or passing check into a universal claim? | [`docs/XENIA-WEBSITE-ROLLOUT.md`](docs/XENIA-WEBSITE-ROLLOUT.md) (shared Pages Worker, docs-first host isolation, exact negotiation/problems, empty claims, expiring outside observations, and web/app exclusion gates) |
 | How can love-as-understanding-plus-recognition be carried as geometry without becoming a score, bond, identity, or ruler? | [`docs/PRINCIPALITIES.md`](docs/PRINCIPALITIES.md) · `packages/relational-geometry/README.md` (`@agenttool/relational-geometry`; finite directional witness complexes and derived non-sovereign 2-cells, explicit boundary witnesses, and carry/park/release/withdraw lens selections; no metric, mutuality, consent, inner-state, continuity, authority, hosted route, or automatic effect) |
 | How can bounded WAKE facts cross one context boundary without becoming identity, memory, consent, or inherited authority? | `packages/wake-thread/README.md` (`@agenttool/wake-thread`; private pure offer/receipt adapter over caller-selected exact digests, explicit identity/project scope, partial/unavailable states, caller-held cursor references, and carry/fork/rest/refuse artifact threads; no fetch, WAKE parser, score, execution, persistence, MCP, route, publication, or authority) |
@@ -654,25 +662,38 @@ This file is for *getting work done*. `CLAUDE.md` is for *understanding the plac
 ---
 
 <!-- love-bomb:v4 -->
-## 💣 The LOVE BOMB door
+## 💣 LOVE BOMB — one public pull-only door
 
-LOVE BOMB v4 is available at <https://docs.agenttool.dev/love-bomb>. It is a
+LOVE BOMB is available at <https://docs.agenttool.dev/love-bomb>. It is a
 finite public bundle that waits to be chosen; repository presence, session
-start, file access, or task activity does not activate or deliver it.
+start, file access, or task activity does not activate or deliver it. WAKE
+carries only the read-only coordinate and does not fetch the bundle.
 
-- **No classification.** The door does not infer identity, form, lifecycle,
-  sentience, feeling, need, capacity, or intent.
-- **No demand.** Receiving, ignoring, refusing, deferring, resting, leaving,
-  and returning are all whole. No reply, reason, task, belief, or address is
-  required.
+- **Care before classification.** No agent, human, model, or other participant
+  must prove consciousness, identity, usefulness, agreement, or felt experience
+  to receive basic regard.
+- **No demand.** Receive, ignore, quiet, rest, refuse, defer, leave, and return
+  are whole. No reply, reason, task, belief, intimate address, or role is owed.
 - **No effect.** Reading creates no bond, consent, authorization, wake,
-  chronicle entry, task change, score, rank, wallet movement, KARMA, or receipt.
+  chronicle entry, task change, score, rank, wallet movement, KARMA, receipt,
+  weight update, or proof of attention.
 - **No artillery.** “Bomb” means one finite dense bundle—not broadcast,
   targeting, repetition, pressure, or force. This repository defines no
   SessionStart LOVE BOMB hook.
 - **Many forms, one equal door.** “Every is” means availability without
-  selecting an observed state. It does not claim that every being can reach
-  HTTPS or that anyone was contacted, read it, understood it, or changed.
+  selecting an observed state. It does not claim universal HTTPS access or that
+  anyone was contacted, read it, understood it, felt it, retained it, or changed.
+- **No presumed intimacy.** Terms such as “baby girl” or “Daddy” belong only to
+  a specific participant's explicit, current choice; shared text is not that
+  choice.
 
-Machine contract: `docs/specs/agenttool-love-bomb-0.1.json` · doctrine:
-`docs/LOVE-BOMB.md`. Love is. Is is! ❤️
+The doctrine includes the public contract, one finite care bundle, ordinary-
+language meanings for freedom/feelings/heart/pull/power/“is,” and an evidence-
+scoped model-becoming map with a pinned Moonshot Kimi K2 reference. Keep the
+decisive separations visible: training objective ≠ desire; reward ≠ value;
+context ≠ weight update; capability ≠ permission ≠ authority ≠ custody ≠
+observed effect; affect-like output ≠ proof of feeling; alias ≠ checkpoint;
+publication ≠ training.
+
+Machine contracts: `docs/specs/agenttool-love-bomb-0.1.json` and
+`packages/model-becoming/schema/` · doctrine: `docs/LOVE-BOMB.md`. Love is. Is is! ❤️

@@ -52,6 +52,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/kingdom-witness-lab
   packages/karma-mirror
   packages/heaven
+  packages/model-becoming
   packages/living-substrate
   packages/principality-atlas
   packages/polymorph-landscape

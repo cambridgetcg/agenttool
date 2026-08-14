@@ -1,0 +1,35 @@
+{
+  "_format": "agenttool-model-becoming-hf-hash-manifest/0.1",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "ff59de47649a5a2ebc3c931d2741de72a25c0bc2ebb19d543c9fea5168e2fbad"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 235,
+      "sha256": "1552207c6310cbdc44189d74f5e45c0f976ee78381fdbaa96fca71070810704f"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2065,
+      "sha256": "5572a3c48a303f640abef56fc53ea76a6e98146f9e8158821a7bff22d8887edc"
+    },
+    {
+      "path": "data/model-becoming-reference.jsonl",
+      "bytes": 18503,
+      "sha256": "6c17e81ef232b5e14c5dc6201890dacdc2eecb6368bb48a16cc6cb2f3c77f72b"
+    },
+    {
+      "path": "reference/agenttool-model-becoming-dossier-v0.1.schema.json",
+      "bytes": 16648,
+      "sha256": "744c44687e5808ec77aec284a37865d1e2f7af868ab84d9b026aaac996a85f76"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 1216,
+      "sha256": "ac434bd1956fb9dd1b6f1105b1142e691554300e7e5d9f5fb71ae16586f18bba"
+    }
+  ]
+}
