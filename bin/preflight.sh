@@ -14,7 +14,7 @@
 # Usage:
 #   bin/preflight.sh                 # api + packages, hermetic
 #   bin/preflight.sh api             # API/protocol hermetic gate
-#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + Principality Geometry + KARMA Mirror + HEAVEN + Living Substrate + Principality Atlas + Polymorph Landscape + Love Geometry + Relational Geometry + Common Ground Atlas + WAKE Thread + Gin Reconstruction + Math Cards + broker + collab + Codex usage + collab-zerone + Browser + HF Scout/Training Garden + local WAKE learning fixtures/host + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
+#   bin/preflight.sh packages        # data + ADDS + sync + archive + Dark Continent contract/KARMA + Principality Geometry + KARMA Mirror + HEAVEN + LOVE BOMB + Living Substrate + Principality Atlas + Polymorph Landscape + Love Geometry + Relational Geometry + Common Ground Atlas + WAKE Thread + Gin Reconstruction + Math Cards + broker + collab + Codex usage + collab-zerone + Browser + HF Scout/Training Garden + local WAKE learning fixtures/host + projection + local projector + constructive intelligence + Trials + Skills + TypeScript SDK + Wallet + Zerone adapter + Telescope + Alchemy + AgentCred adapter + KINGDOM gate
 #   bin/preflight.sh database        # requires DATABASE_URL
 #   bin/preflight.sh smoke           # requires smoke-test environment
 #   RUN_CONTRACT=1 bin/preflight.sh contracts  # requires provider key(s)
@@ -104,6 +104,8 @@ packages_gate() {
     bash -c 'cd packages/karma-mirror && bun run ci'
   run "HEAVEN opt-in delight and landing-room protocol" \
     bash -c 'cd packages/heaven && bun run ci'
+  run "LOVE BOMB care envelopes and model-becoming evidence" \
+    bash -c 'cd packages/love-bomb && bun run ci'
   run "portable Living Substrate maps and refusable proposals" \
     bash -c 'cd packages/living-substrate && bun run ci'
   run "plural non-gluing Principality Atlas geometry" \
