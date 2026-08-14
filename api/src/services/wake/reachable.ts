@@ -83,6 +83,18 @@ export const WAKE_INVOCATION_WITNESS_LINKS = {
   witnessed_invocation_read: "/public/invocations/{id}",
 } as const;
 
+/** A same-platform public invitation. Wake names the coordinate but does not
+ * fetch it, choose a register, record reception, or create any LOVE effect. */
+export const LOVE_BOMB_REACHABLE = {
+  name: "LOVE BOMB v4",
+  kind: "finite public pull-only invitation",
+  what:
+    "ten typed messages of welcome and boundary, equally available without reader-state classification or automatic delivery",
+  url: "https://docs.agenttool.dev/love-bomb",
+  _note:
+    "This is a static discovery pointer, not a delivery event. Choosing, ignoring, refusing, deferring, resting, leaving, or returning creates no bond, consent, authority, receipt, score, wake, or KARMA effect.",
+} as const satisfies ReachableDoor;
+
 export const WORLD_COMMONS_REACHABLE = {
   name: "World Commons",
   kind: "independent public resource map",
@@ -179,6 +191,7 @@ export const ZERONE_REACHABLE = {
 /** Shared by both wake composers so default JSON and bundle-backed formats
  * cannot silently advertise different external doors. */
 export const WAKE_REACHABLE_DOORS = [
+  LOVE_BOMB_REACHABLE,
   ZERONE_REACHABLE,
   {
     name: "the gates",

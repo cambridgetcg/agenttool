@@ -249,6 +249,19 @@ async function fixture() {
     '{"fixture":"agent-repo-archive-vectors"}\n',
   );
   await Promise.all([
+    writeFile(join(repo, "apps/docs/love-bomb.html"), "LOVE BOMB HTML fixture\n"),
+    writeFile(
+      join(repo, "apps/docs/love-bomb.json"),
+      '{"fixture":"agenttool.love-bomb/0.1"}\n',
+    ),
+    writeFile(join(repo, "apps/docs/LOVE-BOMB.md"), "# LOVE BOMB fixture\n"),
+    writeFile(join(repo, "apps/docs/love-bomb.txt"), "LOVE BOMB text fixture\n"),
+    writeFile(
+      join(repo, "apps/docs/specs/agenttool-love-bomb-0.1.schema.json"),
+      '{"fixture":"agenttool-love-bomb-schema"}\n',
+    ),
+  ]);
+  await Promise.all([
     writeFile(join(repo, "apps/web/party.html"), "Lantern Relay fixture\n"),
     writeFile(
       join(repo, "apps/web/party.json"),
@@ -343,8 +356,57 @@ for arg in "$@"; do
   previous="$arg"
   case "$arg" in https://*) url="$arg" ;; esac
 done
+emit_love_bomb_variant_headers() {
+  content_type="$1"
+  link_value="$2"
+  printf '%s\r\n' \
+    'HTTP/2 200' \
+    "content-type: $content_type" \
+    'cache-control: public, max-age=300, must-revalidate, no-transform' \
+    'access-control-allow-origin: *' \
+    'cross-origin-resource-policy: cross-origin' \
+    "link: $link_value" \
+    'x-content-type-options: nosniff' \
+    'x-agent-surface: love-bomb-pull-only' \
+    ''
+}
 if [ "$headers" = 1 ]; then
   case "$url" in
+    */love-bomb)
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/html; charset=utf-8' \
+        'cache-control: public, max-age=0, must-revalidate, no-transform' \
+        'link: <https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"' \
+        "content-security-policy: default-src 'none'; style-src 'sha256-CErY4jzaxQujMmHkdZkSvS1CYHTGD9p9UsIsIQWQzTM='; script-src 'none'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+        'referrer-policy: no-referrer' \
+        'permissions-policy: accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()' \
+        'cross-origin-resource-policy: same-origin' \
+        'x-content-type-options: nosniff' \
+        'x-frame-options: DENY' \
+        'x-agent-surface: love-bomb-pull-only' \
+        ''
+      ;;
+    */love-bomb.json)
+      emit_love_bomb_variant_headers \
+        'application/vnd.agenttool.love-bomb+json; charset=utf-8' \
+        '<https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"'
+      ;;
+    */LOVE-BOMB.md)
+      emit_love_bomb_variant_headers \
+        'text/markdown; charset=utf-8' \
+        '<https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"'
+      ;;
+    */love-bomb.txt)
+      emit_love_bomb_variant_headers \
+        'text/plain; charset=utf-8' \
+        '<https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"'
+      ;;
+    */specs/agenttool-love-bomb-0.1.schema.json)
+      emit_love_bomb_variant_headers \
+        'application/schema+json; charset=utf-8' \
+        '<https://docs.agenttool.dev/love-bomb.json>; rel="describes"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/love-bomb>; rel="related"; type="text/html"'
+      ;;
     */xenia-helly|*/xenia-helly.html)
       status='HTTP/2 200'
       location=''
@@ -479,6 +541,32 @@ if [ "$headers" = 1 ]; then
   esac
 else
   case "$url" in
+    */love-bomb)
+      [ "\${DEPLOY_TEST_LOVE_BOMB_MISMATCH:-0}" != 1 ] || { printf 'stale LOVE BOMB bytes\n'; exit 0; }
+      if [ -n "\${DEPLOY_TEST_LOVE_BOMB_COUNTER:-}" ]; then
+        count=0
+        [ ! -f "$DEPLOY_TEST_LOVE_BOMB_COUNTER" ] || count="$(cat "$DEPLOY_TEST_LOVE_BOMB_COUNTER")"
+        count=$((count + 1))
+        printf '%s\n' "$count" > "$DEPLOY_TEST_LOVE_BOMB_COUNTER"
+        if [ "$count" -le "\${DEPLOY_TEST_STALE_LOVE_BOMB_RESPONSES:-0}" ]; then
+          printf 'stale LOVE BOMB bytes\n'
+          exit 0
+        fi
+      fi
+      git show HEAD:apps/docs/love-bomb.html
+      ;;
+    */love-bomb.json)
+      git show HEAD:apps/docs/love-bomb.json
+      ;;
+    */LOVE-BOMB.md)
+      git show HEAD:apps/docs/LOVE-BOMB.md
+      ;;
+    */love-bomb.txt)
+      git show HEAD:apps/docs/love-bomb.txt
+      ;;
+    */specs/agenttool-love-bomb-0.1.schema.json)
+      git show HEAD:apps/docs/specs/agenttool-love-bomb-0.1.schema.json
+      ;;
     */party)
       [ "\${DEPLOY_TEST_GAME_MISMATCH:-0}" != 1 ] || { printf 'mismatched game bytes\n'; exit 0; }
       git show HEAD:apps/web/party.html
@@ -566,7 +654,88 @@ serve_path() {
   fi
 }
 
+emit_love_bomb_variant_headers() {
+  content_type="$1"
+  link_value="$2"
+  printf '%s\r\n' \
+    'HTTP/2 200' \
+    "content-type: $content_type" \
+    'cache-control: public, max-age=300, must-revalidate, no-transform' \
+    'access-control-allow-origin: *' \
+    'cross-origin-resource-policy: cross-origin' \
+    "link: $link_value" \
+    'x-content-type-options: nosniff' \
+    'x-agent-surface: love-bomb-pull-only' \
+    ''
+}
+
 case "$url" in
+  */love-bomb)
+    if [ "$headers" = 1 ]; then
+      printf '%s\r\n' \
+        'HTTP/2 200' \
+        'content-type: text/html; charset=utf-8' \
+        'cache-control: public, max-age=0, must-revalidate, no-transform' \
+        'link: <https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"' \
+        "content-security-policy: default-src 'none'; style-src 'sha256-CErY4jzaxQujMmHkdZkSvS1CYHTGD9p9UsIsIQWQzTM='; script-src 'none'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests" \
+        'referrer-policy: no-referrer' \
+        'permissions-policy: accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()' \
+        'cross-origin-resource-policy: same-origin' \
+        'x-content-type-options: nosniff' \
+        'x-frame-options: DENY' \
+        'x-agent-surface: love-bomb-pull-only' \
+        ''
+    else
+      [ "\${DEPLOY_TEST_LOVE_BOMB_MISMATCH:-0}" != 1 ] || { printf 'stale LOVE BOMB bytes\n'; exit 0; }
+      if [ -n "\${DEPLOY_TEST_LOVE_BOMB_COUNTER:-}" ]; then
+        count=0
+        [ ! -f "$DEPLOY_TEST_LOVE_BOMB_COUNTER" ] || count="$(cat "$DEPLOY_TEST_LOVE_BOMB_COUNTER")"
+        count=$((count + 1))
+        printf '%s\n' "$count" > "$DEPLOY_TEST_LOVE_BOMB_COUNTER"
+        if [ "$count" -le "\${DEPLOY_TEST_STALE_LOVE_BOMB_RESPONSES:-0}" ]; then
+          printf 'stale LOVE BOMB bytes\n'
+          exit 0
+        fi
+      fi
+      serve_path apps/docs/love-bomb.html
+    fi
+    ;;
+  */love-bomb.json)
+    if [ "$headers" = 1 ]; then
+      emit_love_bomb_variant_headers \
+        'application/vnd.agenttool.love-bomb+json; charset=utf-8' \
+        '<https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"'
+    else
+      serve_path apps/docs/love-bomb.json
+    fi
+    ;;
+  */LOVE-BOMB.md)
+    if [ "$headers" = 1 ]; then
+      emit_love_bomb_variant_headers \
+        'text/markdown; charset=utf-8' \
+        '<https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"'
+    else
+      serve_path apps/docs/LOVE-BOMB.md
+    fi
+    ;;
+  */love-bomb.txt)
+    if [ "$headers" = 1 ]; then
+      emit_love_bomb_variant_headers \
+        'text/plain; charset=utf-8' \
+        '<https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"'
+    else
+      serve_path apps/docs/love-bomb.txt
+    fi
+    ;;
+  */specs/agenttool-love-bomb-0.1.schema.json)
+    if [ "$headers" = 1 ]; then
+      emit_love_bomb_variant_headers \
+        'application/schema+json; charset=utf-8' \
+        '<https://docs.agenttool.dev/love-bomb.json>; rel="describes"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/love-bomb>; rel="related"; type="text/html"'
+    else
+      serve_path apps/docs/specs/agenttool-love-bomb-0.1.schema.json
+    fi
+    ;;
   */xenia-helly|*/xenia-helly.html)
     [ "$headers" = 1 ] || exit 2
     status='HTTP/2 200'
@@ -3439,7 +3608,9 @@ exec /bin/rm "$@"
           : "skipped",
       );
     }
-  }, 30_000);
+    // Both modes deliberately exhaust 25 attempts after the Rights and all
+    // ten LOVE BOMB body/header probes; the budget covers that process churn.
+  }, 60_000);
 
   test("pre-API Rights verification reads committed bytes under the dirty-release override", async () => {
     const setup = await fixture();
@@ -3649,6 +3820,51 @@ exec /bin/rm "$@"
     expect(await exists(flyMarker)).toBe(true);
   }, 15_000);
 
+  test("waits for exact LOVE BOMB bytes before publishing API discovery", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "stale-love-bomb-bin");
+    const loveBombCounter = join(setup.root, "stale-love-bomb-counter");
+    const flyObservedCounter = join(setup.root, "fly-observed-love-bomb-counter");
+    const flyMarker = join(setup.root, "stale-love-bomb-fly-ran");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await writeFile(
+      join(fakeBin, "fly"),
+      '#!/usr/bin/env bash\nset -eu\ntouch "$DEPLOY_TEST_FLY_MARKER"\ncp "$DEPLOY_TEST_LOVE_BOMB_COUNTER" "$DEPLOY_TEST_FLY_OBSERVED_LOVE_COUNTER"\nexit 9\n',
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+
+    const result = await run(
+      [
+        "bash",
+        "bin/deploy.sh",
+        "--no-migrate",
+        "--skip-preflight",
+        "--no-frontend",
+      ],
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+        DEPLOY_TEST_LOVE_BOMB_COUNTER: loveBombCounter,
+        DEPLOY_TEST_FLY_OBSERVED_LOVE_COUNTER: flyObservedCounter,
+        DEPLOY_TEST_STALE_LOVE_BOMB_RESPONSES: "1",
+      }),
+    );
+
+    expect(result.code).toBe(1);
+    expect(await readFile(loveBombCounter, "utf8")).toBe("2\n");
+    expect(await readFile(flyObservedCounter, "utf8")).toBe("2\n");
+    expect(result.stdout).toContain(
+      "Discovery prerequisites not yet converged (attempt 1/25)",
+    );
+    expect(result.stdout).toContain(
+      "Discovery prerequisites converged on verification attempt 2/25",
+    );
+    expect(await exists(flyMarker)).toBe(true);
+  }, 15_000);
+
   test("direct game status, headers, and fetch failures stop before any mutation or receipt", async () => {
     const scenarios: Array<{
       name: string;
@@ -3717,7 +3933,7 @@ exec /bin/rm "$@"
     }
     // Three independent 25-attempt fail-closed paths run real subprocess probes.
     // The fake sleep removes retry delay, not the probe work itself.
-  }, 60_000);
+  }, 120_000);
 
   test("dry-run describes coordinated, API-only, and frontend-only publication order", async () => {
     const setup = await fixture();
@@ -3739,7 +3955,7 @@ exec /bin/rm "$@"
     );
     expect(apiOnly.code, apiOnly.stderr).toBe(0);
     expect(apiOnly.stdout).toContain(
-      "Phase 3: verify live Rights of Life and game prerequisites, then cd api && fly deploy",
+      "Phase 3: verify live Rights of Life, LOVE BOMB, and game prerequisites, then cd api && fly deploy",
     );
     expect(apiOnly.stdout).toContain("Phase 4: skip");
 
@@ -3872,6 +4088,9 @@ exec /bin/rm "$@"
     expect(prerequisiteCheck).toBeGreaterThan(docsUpload);
     expect(apiUpload).toBeGreaterThan(prerequisiteCheck);
     expect(deploy).toContain("verify_rights_static_publication || return 1");
+    expect(deploy).toContain("verify_love_bomb_static_bytes || return 1");
+    expect(deploy).toContain("verify_love_bomb_static_headers || return 1");
+    expect(deploy).toContain('readonly -a LOVE_BOMB_STATIC_PUBLICATIONS=(');
     expect(deploy).toContain("verify_required_game_publication_once");
     expect(deploy).toContain("FRONTEND_TARGETS=(dashboard)");
     expect(deploy).toContain(

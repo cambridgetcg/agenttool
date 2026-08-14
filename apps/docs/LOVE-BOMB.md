@@ -1,0 +1,1 @@
+../../docs/LOVE-BOMB.md

@@ -289,6 +289,61 @@
 /whitehack
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 
+# LOVE BOMB v4 is one finite, static, pull-only door. The HTML executes no
+# script and the machine/readable twins stay public and cross-origin usable.
+/love-bomb
+  Content-Type: text/html; charset=utf-8
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+  Link: <https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"
+  Content-Security-Policy: default-src 'none'; style-src 'sha256-CErY4jzaxQujMmHkdZkSvS1CYHTGD9p9UsIsIQWQzTM='; script-src 'none'; connect-src 'none'; img-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; worker-src 'none'; child-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; upgrade-insecure-requests
+  Referrer-Policy: no-referrer
+  Permissions-Policy: accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()
+  Cross-Origin-Resource-Policy: same-origin
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  ! X-Agent-Surface
+  X-Agent-Surface: love-bomb-pull-only
+
+/love-bomb.json
+  Content-Type: application/vnd.agenttool.love-bomb+json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate, no-transform
+  Access-Control-Allow-Origin: *
+  Cross-Origin-Resource-Policy: cross-origin
+  Link: <https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"
+  X-Content-Type-Options: nosniff
+  ! X-Agent-Surface
+  X-Agent-Surface: love-bomb-pull-only
+
+/LOVE-BOMB.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate, no-transform
+  Access-Control-Allow-Origin: *
+  Cross-Origin-Resource-Policy: cross-origin
+  Link: <https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/love-bomb.txt>; rel="alternate"; type="text/plain", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"
+  X-Content-Type-Options: nosniff
+  ! X-Agent-Surface
+  X-Agent-Surface: love-bomb-pull-only
+
+/love-bomb.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate, no-transform
+  Access-Control-Allow-Origin: *
+  Cross-Origin-Resource-Policy: cross-origin
+  Link: <https://docs.agenttool.dev/love-bomb>; rel="canonical"; type="text/html", <https://docs.agenttool.dev/love-bomb.json>; rel="alternate"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/LOVE-BOMB.md>; rel="alternate"; type="text/markdown", <https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json>; rel="describedby"; type="application/schema+json"
+  X-Content-Type-Options: nosniff
+  ! X-Agent-Surface
+  X-Agent-Surface: love-bomb-pull-only
+
+/specs/agenttool-love-bomb-0.1.schema.json
+  Content-Type: application/schema+json; charset=utf-8
+  Cache-Control: public, max-age=300, must-revalidate, no-transform
+  Access-Control-Allow-Origin: *
+  Cross-Origin-Resource-Policy: cross-origin
+  Link: <https://docs.agenttool.dev/love-bomb.json>; rel="describes"; type="application/vnd.agenttool.love-bomb+json", <https://docs.agenttool.dev/love-bomb>; rel="related"; type="text/html"
+  X-Content-Type-Options: nosniff
+  ! X-Agent-Surface
+  X-Agent-Surface: love-bomb-pull-only
+
 # Common Ground executes only committed same-origin presentation and solver
 # code. The browser enforces the solver's no-network boundary for both aliases.
 /xenia-helly

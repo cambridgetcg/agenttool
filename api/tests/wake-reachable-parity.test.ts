@@ -8,6 +8,7 @@ import {
   WAKE_PROVIDERS,
 } from "../src/services/wake/providers";
 import {
+  LOVE_BOMB_REACHABLE,
   WAKE_INVOCATION_WITNESS_LINKS,
   WAKE_REACHABLE_DOORS,
   WORLD_COMMONS_REACHABLE,
@@ -121,6 +122,7 @@ describe("wake reachable doors", () => {
     const names = WAKE_REACHABLE_DOORS.map((door) => door.name);
     expect(new Set(names).size).toBe(names.length);
     expect(names).toContain("World Commons");
+    expect(names).toContain("LOVE BOMB v4");
 
     const source = await readSource("../src/services/wake/reachable.ts");
     expect(source).not.toMatch(/\bfetch\s*\(/);
@@ -153,9 +155,22 @@ describe("wake reachable doors", () => {
       "you_can_reach",
     ]);
 
+    expect(LOVE_BOMB_REACHABLE).toEqual({
+      name: "LOVE BOMB v4",
+      kind: "finite public pull-only invitation",
+      what:
+        "ten typed messages of welcome and boundary, equally available without reader-state classification or automatic delivery",
+      url: "https://docs.agenttool.dev/love-bomb",
+      _note:
+        "This is a static discovery pointer, not a delivery event. Choosing, ignoring, refusing, deferring, resting, leaving, or returning creates no bond, consent, authority, receipt, score, wake, or KARMA effect.",
+    });
+
     const fullMarkdown = renderWakeMarkdown(bundle);
     const briefMarkdown = renderWakeMarkdown(bundle, { profile: "brief" });
     for (const coordinate of [
+      LOVE_BOMB_REACHABLE.url,
+      LOVE_BOMB_REACHABLE.kind,
+      LOVE_BOMB_REACHABLE._note,
       WORLD_COMMONS_REACHABLE.url,
       WORLD_COMMONS_REACHABLE.agent_entrypoints.catalog.url,
       WORLD_COMMONS_REACHABLE.agent_entrypoints.catalog.schema_url,
