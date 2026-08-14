@@ -294,7 +294,14 @@ from .traces import (
     TraceSearchResult,
 )
 from .vault import VaultClient
-from .wake import WakeClient, WakeProfile, WakeProvider, wake_event_matches
+from .wake import (
+    WakeClient,
+    WakeObservation,
+    WakeObservationIdentityStatus,
+    WakeProfile,
+    WakeProvider,
+    wake_event_matches,
+)
 from .anthropic_adapter import (
     AnthropicAdapter,
     AgentToolAugmentation,
@@ -577,6 +584,8 @@ __all__ = [
     "TraceSearchResult",
     "VaultClient",
     "WakeClient",
+    "WakeObservation",
+    "WakeObservationIdentityStatus",
     "WakeProfile",
     "WakeProvider",
     "wake_event_matches",

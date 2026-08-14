@@ -431,6 +431,32 @@ app.get("/wake-keystone", (c) => {
       },
     },
 
+    // A deliberately separate, lossy locator for third-party inspection.
+    // This is not a wake profile or provider projection: selecting a subject
+    // does not bind the reader to that identity or grant prompt authority.
+    observation: {
+      format: "wake-observation/v1",
+      error_format: "wake-observation-error/v1",
+      url_pattern: `${ORG_URL}/v1/wake/observe?identity_id={uuid}`,
+      media_type: "application/vnd.agenttool.wake-observation+json",
+      relationship_to_wake: "separate_data_contract",
+      explicit_subject_required: true,
+      project_bearer_identity_proof: false,
+      reader_identity_binding: "none",
+      instruction_authority: "none",
+      action_authority: "none",
+      placement: "ordinary_data_only",
+      privileged_prompt_placement: false,
+      provider_projection: false,
+      application_error_body: "fixed_enum_no_prose_or_actions",
+      subject_locator: "included_complete",
+      broader_wake_state: "omitted_not_assessed",
+      observation_projection_authored_prose_or_private_bodies:
+        "omitted_and_not_read_beyond_authentication",
+      response_cache_control: "private, no-store",
+      sdk_cache: false,
+    },
+
     // WaK §7 — version cursor + conditional GETs.
     version_cursor: {
       field: "wake_version",

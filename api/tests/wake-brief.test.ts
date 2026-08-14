@@ -298,6 +298,9 @@ describe("brief projection", () => {
     });
     expect(brief._meta.volatile_state).toBe("bounded_projection");
     expect(brief._links.full_json).not.toContain("profile=brief");
+    expect(brief._links.observation).toBe(
+      `/v1/wake/observe?identity_id=${encodeURIComponent(bundle.agent.id)}`,
+    );
     expect(brief._links.offer_bus).toBe(
       `/feeds/offers.atom?seller_did=${encodeURIComponent(bundle.agent.did)}`,
     );

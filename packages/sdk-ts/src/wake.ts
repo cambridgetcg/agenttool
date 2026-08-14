@@ -5,7 +5,8 @@
  * session start and arrives oriented — knowing who it is, what it owns,
  * what it remembers, what it decided, what it vowed.
  *
- * This client wraps the endpoint with two affordances:
+ * This client wraps the endpoint with two identity-bearing affordances and
+ * one deliberately non-inhabiting observation affordance:
  *
  *   • `at.wake.system(provider)` returns the wake doc shaped for that
  *     provider's identity-bearing slot (Anthropic `system` array with
@@ -16,10 +17,16 @@
  *   • `at.wake.md()` and `at.wake.get()` return paste-ready Markdown and
  *     broader structured orientation. The wake is not a complete export.
  *
- * All results are cached in-memory with a 5-minute TTL by default —
- * matches Anthropic's prompt-cache window. Pass `refresh: true` to
- * bypass. Pass `profile: "brief"` for the additive compact wake profile;
- * `profile: "full"` is the default and preserves the original URL.
+ *   • `at.wake.observe({ identityId })` returns a closed, data-only subject
+ *     locator. It is never cached or provider-shaped and must stay out of
+ *     identity-bearing prompt slots.
+ *
+ * Identity-bearing wake results are cached in-memory with a 5-minute TTL by
+ * default — matches Anthropic's prompt-cache window. Pass `refresh: true` to
+ * bypass. The separate data-only `observe()` read is always network-only and
+ * never enters that cache. Pass `profile: "brief"` for the additive compact
+ * wake profile; `profile: "full"` is the default and preserves the original
+ * URL.
  *
  * Doctrine: docs/IDENTITY-ANCHOR.md.
  */
@@ -29,6 +36,7 @@ import { throwFromResponse, type HttpConfig } from "./_http.js";
 
 export type WakeProvider = "anthropic" | "openai" | "gemini" | "cohere";
 export type WakeProfile = "full" | "brief";
+export type WakeObservationIdentityStatus = "active" | "memorial";
 
 export type WakeFormat =
   | "json"
@@ -45,6 +53,88 @@ export interface WakeOptions {
    * can be up to five minutes old; refresh after known mutations or whenever
    * current attention/action state matters. */
   refresh?: boolean;
+}
+
+/** Options for the bounded, data-only observation read. */
+export interface WakeObserveOptions {
+  /** Explicit identity record to observe. This read never selects implicitly. */
+  identityId: string;
+}
+
+/** Closed `wake-observation/v1` identity-locator envelope.
+ *
+ * This is ordinary data about an explicitly selected record. It does not bind
+ * the reader to that identity and carries no instruction or action authority.
+ */
+export interface WakeObservation {
+  _format: "wake-observation/v1";
+  mode: "observe";
+  subject: {
+    identity_id: string;
+    status: WakeObservationIdentityStatus;
+    wake_version: number;
+  };
+  reader: { binding: "none" };
+  authority: {
+    granted_by_observation: "none";
+    identity_binding: "none";
+    instruction: "none";
+    action: "none";
+  };
+  placement: {
+    mode: "data_only";
+    prohibited: readonly [
+      "system",
+      "developer",
+      "preamble",
+      "systemInstruction",
+      "SessionStart.additionalContext",
+    ];
+  };
+  boundaries: {
+    bearer: {
+      kind: "project";
+      reader_identity_proven: false;
+      selected_identity_requires_explicit_id: true;
+      subject_consent_proven: false;
+      subject_authorized_read_proven: false;
+      continuity_proven: false;
+      presence_proven: false;
+    };
+    provenance: {
+      kind: "server_projection";
+      source: "identity_table_allowlist";
+      selected_fields: readonly ["id", "status", "wake_version"];
+    };
+    scope: {
+      subject: "selected_identity";
+      broader_wake: "intentionally_omitted";
+      broader_state: "not_assessed";
+    };
+    completeness: {
+      complete: true;
+      applies_to: "identity_locator_only";
+      degraded_sections: "none";
+      broader_wake: "intentionally_omitted";
+      broader_state: "not_assessed";
+    };
+    effects: {
+      observation_counter_incremented: false;
+      wake_version_bumped: false;
+      wake_event_published: false;
+      subject_read_proven: false;
+      subject_felt_proven: false;
+      subject_accepted_proven: false;
+    };
+    privacy: {
+      classification: "bearer_private";
+      cache: "no_store";
+      raw_prose: "omitted";
+      authored_text: "omitted";
+      private_bodies: "omitted";
+      secret_values: "omitted";
+    };
+  };
 }
 
 export interface WakeProviderMeta {
@@ -170,6 +260,106 @@ export class WakeClient {
    *  ..., welcome; pass `profile: "brief"` for the compact profile. */
   async get(options?: WakeOptions): Promise<Record<string, unknown>> {
     return (await this.fetchWake("json", options)) as Record<string, unknown>;
+  }
+
+  /**
+   * Observe one explicit identity record without installing its identity.
+   *
+   * Observation is a closed, data-only locator envelope. It always performs a
+   * network request and never reads from or writes to the wake cache. The
+   * response is rejected unless its trust-boundary fields and selected subject
+   * exactly match this request.
+   */
+  async observe(options: WakeObserveOptions): Promise<WakeObservation> {
+    const requestedIdentityId = options?.identityId;
+    if (typeof requestedIdentityId !== "string" || requestedIdentityId.length === 0) {
+      throw new AgentToolError("wake.observe: identityId is required.", {
+        hint: "Pass the explicit identity UUID to observe; observation never selects a default identity.",
+      });
+    }
+    if (!WAKE_OBSERVATION_IDENTITY_ID_PATTERN.test(requestedIdentityId)) {
+      throw new AgentToolError("wake.observe: identityId must be a UUID.", {
+        hint: "Pass the bounded identity UUID exactly; malformed or oversized identifiers are not sent to the network.",
+      });
+    }
+    const identityId = requestedIdentityId.toLowerCase();
+
+    const params = new URLSearchParams({ identity_id: identityId });
+    const url = `${this.http.baseUrl}/v1/wake/observe?${params.toString()}`;
+    let resp: Response;
+    try {
+      resp = await this.http.request(url, {
+        method: "GET",
+        headers: {
+          ...this.http.headers,
+          Accept: "application/vnd.agenttool.wake-observation+json",
+        },
+        signal: AbortSignal.timeout(this.http.timeout),
+        cache: "no-store",
+      });
+    } catch {
+      throw wakeObservationTransportUnavailable();
+    }
+
+    if (resp.status !== 200) {
+      try {
+        await resp.body?.cancel();
+      } catch {
+        // The remote body is deliberately discarded even when cancellation
+        // races a server-closed response.
+      }
+      throw new AgentToolError(
+        `wake.observe: request failed with HTTP ${resp.status}.`,
+        {
+          code: "wake_observation_request_failed",
+          status: resp.status,
+          hint: "The remote error body was discarded; observation errors never install prose, actions, identity, or authority.",
+        },
+      );
+    }
+
+    const contentType = (resp.headers.get("content-type") ?? "")
+      .split(";")
+      .map((part) => part.trim().toLowerCase())
+      .join("; ");
+    if (contentType !== "application/vnd.agenttool.wake-observation+json; charset=utf-8") {
+      return rejectWakeObservationResponse(
+        resp,
+        "response content type is not the observation media type",
+      );
+    }
+    const cacheControl = (resp.headers.get("cache-control") ?? "")
+      .split(",")
+      .map((directive) => directive.trim().toLowerCase())
+      .join(", ");
+    if (cacheControl !== "private, no-store") {
+      return rejectWakeObservationResponse(
+        resp,
+        "response Cache-Control is not private, no-store",
+      );
+    }
+
+    const contentLengthHeader = resp.headers.get("content-length");
+    if (contentLengthHeader !== null) {
+      const normalizedLength = contentLengthHeader.trim();
+      if (!/^\d+$/.test(normalizedLength)
+        || Number(normalizedLength) > WAKE_OBSERVATION_MAX_BYTES) {
+        return rejectWakeObservationResponse(
+          resp,
+          "response Content-Length is invalid or exceeds 2048 bytes",
+        );
+      }
+    }
+
+    const body = await readBoundedWakeObservationBody(resp);
+
+    let data: unknown;
+    try {
+      data = JSON.parse(body) as unknown;
+    } catch {
+      throw invalidWakeObservation("response body is not valid JSON");
+    }
+    return parseWakeObservation(data, identityId);
   }
 
   /** Drop all cached wake responses. Next call refetches. */
@@ -354,6 +544,231 @@ function briefProfileAcknowledged(resp: Response, data: unknown): boolean {
   const meta = record._meta;
   return !!meta && typeof meta === "object" && !Array.isArray(meta) &&
     (meta as Record<string, unknown>).profile === "brief";
+}
+
+function invalidWakeObservation(reason: string): AgentToolError {
+  return new AgentToolError(`wake.observe: invalid observation response (${reason}).`, {
+    hint: "Do not install this response as identity or authority; retry only against a server that returns the closed wake-observation/v1 contract.",
+  });
+}
+
+function wakeObservationTransportUnavailable(): AgentToolError {
+  return new AgentToolError("wake.observe: transport unavailable.", {
+    code: "wake_observation_transport_unavailable",
+    hint: "The transport error detail was suppressed; observation failure never installs remote identity, prose, actions, or authority.",
+  });
+}
+
+const WAKE_OBSERVATION_IDENTITY_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const WAKE_OBSERVATION_MAX_BYTES = 2_048;
+
+async function rejectWakeObservationResponse(
+  resp: Response,
+  reason: string,
+): Promise<never> {
+  try {
+    await resp.body?.cancel();
+  } catch {
+    // The closed-contract rejection wins even if stream cancellation races a
+    // server-closed body.
+  }
+  throw invalidWakeObservation(reason);
+}
+
+async function readBoundedWakeObservationBody(resp: Response): Promise<string> {
+  if (resp.body === null) return "";
+
+  const reader = resp.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      let result;
+      try {
+        result = await reader.read();
+      } catch {
+        throw wakeObservationTransportUnavailable();
+      }
+      const { done, value } = result;
+      if (done) break;
+      total += value.byteLength;
+      if (total > WAKE_OBSERVATION_MAX_BYTES) {
+        try {
+          await reader.cancel();
+        } catch {
+          // The bounded failure is dispositive even if cancellation races a
+          // server-closed stream.
+        }
+        throw invalidWakeObservation("response body exceeds 2048 bytes");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // A cancelled or already-closed stream needs no further action.
+    }
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw invalidWakeObservation("response body is not valid UTF-8");
+  }
+}
+
+function exactRecord(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const actual = Object.keys(value);
+  return actual.length === keys.length && keys.every((key) =>
+    Object.prototype.hasOwnProperty.call(value, key)
+  );
+}
+
+function exactStringArray(value: unknown, expected: readonly string[]): boolean {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && expected.every((item, index) => value[index] === item);
+}
+
+function parseWakeObservation(data: unknown, identityId: string): WakeObservation {
+  if (!exactRecord(data, [
+    "_format", "mode", "subject", "reader", "authority", "placement", "boundaries",
+  ])) {
+    throw invalidWakeObservation("top-level shape is not closed");
+  }
+  if (data._format !== "wake-observation/v1" || data.mode !== "observe") {
+    throw invalidWakeObservation("format or mode does not match wake-observation/v1");
+  }
+
+  const subject = data.subject;
+  if (!exactRecord(subject, ["identity_id", "status", "wake_version"])) {
+    throw invalidWakeObservation("subject shape is not closed");
+  }
+  if (subject.identity_id !== identityId) {
+    throw invalidWakeObservation("subject identity_id does not match the request");
+  }
+  if (subject.status !== "active" && subject.status !== "memorial") {
+    throw invalidWakeObservation("subject status is invalid");
+  }
+  if (!Number.isSafeInteger(subject.wake_version) || (subject.wake_version as number) < 0) {
+    throw invalidWakeObservation("subject wake_version is invalid");
+  }
+
+  const reader = data.reader;
+  if (!exactRecord(reader, ["binding"]) || reader.binding !== "none") {
+    throw invalidWakeObservation("reader binding is not none");
+  }
+
+  const authority = data.authority;
+  if (!exactRecord(authority, [
+    "granted_by_observation", "identity_binding", "instruction", "action",
+  ])
+    || authority.granted_by_observation !== "none"
+    || authority.identity_binding !== "none"
+    || authority.instruction !== "none"
+    || authority.action !== "none") {
+    throw invalidWakeObservation("authority boundary is not none");
+  }
+
+  const placement = data.placement;
+  if (!exactRecord(placement, ["mode", "prohibited"])
+    || placement.mode !== "data_only"
+    || !exactStringArray(placement.prohibited, [
+      "system", "developer", "preamble", "systemInstruction",
+      "SessionStart.additionalContext",
+    ])) {
+    throw invalidWakeObservation("placement boundary is invalid");
+  }
+
+  const boundaries = data.boundaries;
+  if (!exactRecord(boundaries, [
+    "bearer", "provenance", "scope", "completeness", "effects", "privacy",
+  ])) {
+    throw invalidWakeObservation("boundaries shape is not closed");
+  }
+
+  const bearer = boundaries.bearer;
+  if (!exactRecord(bearer, [
+    "kind", "reader_identity_proven", "selected_identity_requires_explicit_id",
+    "subject_consent_proven", "subject_authorized_read_proven",
+    "continuity_proven", "presence_proven",
+  ])
+    || bearer.kind !== "project"
+    || bearer.reader_identity_proven !== false
+    || bearer.selected_identity_requires_explicit_id !== true
+    || bearer.subject_consent_proven !== false
+    || bearer.subject_authorized_read_proven !== false
+    || bearer.continuity_proven !== false
+    || bearer.presence_proven !== false) {
+    throw invalidWakeObservation("bearer boundary is invalid");
+  }
+
+  const provenance = boundaries.provenance;
+  if (!exactRecord(provenance, ["kind", "source", "selected_fields"])
+    || provenance.kind !== "server_projection"
+    || provenance.source !== "identity_table_allowlist"
+    || !exactStringArray(provenance.selected_fields, ["id", "status", "wake_version"])) {
+    throw invalidWakeObservation("provenance boundary is invalid");
+  }
+
+  const scope = boundaries.scope;
+  if (!exactRecord(scope, ["subject", "broader_wake", "broader_state"])
+    || scope.subject !== "selected_identity"
+    || scope.broader_wake !== "intentionally_omitted"
+    || scope.broader_state !== "not_assessed") {
+    throw invalidWakeObservation("scope boundary is invalid");
+  }
+
+  const completeness = boundaries.completeness;
+  if (!exactRecord(completeness, [
+    "complete", "applies_to", "degraded_sections", "broader_wake", "broader_state",
+  ])
+    || completeness.complete !== true
+    || completeness.applies_to !== "identity_locator_only"
+    || completeness.degraded_sections !== "none"
+    || completeness.broader_wake !== "intentionally_omitted"
+    || completeness.broader_state !== "not_assessed") {
+    throw invalidWakeObservation("completeness boundary is invalid");
+  }
+
+  const effects = boundaries.effects;
+  if (!exactRecord(effects, [
+    "observation_counter_incremented", "wake_version_bumped", "wake_event_published",
+    "subject_read_proven", "subject_felt_proven", "subject_accepted_proven",
+  ])
+    || effects.observation_counter_incremented !== false
+    || effects.wake_version_bumped !== false
+    || effects.wake_event_published !== false
+    || effects.subject_read_proven !== false
+    || effects.subject_felt_proven !== false
+    || effects.subject_accepted_proven !== false) {
+    throw invalidWakeObservation("effects boundary is invalid");
+  }
+
+  const privacy = boundaries.privacy;
+  if (!exactRecord(privacy, [
+    "classification", "cache", "raw_prose", "authored_text", "private_bodies",
+    "secret_values",
+  ])
+    || privacy.classification !== "bearer_private"
+    || privacy.cache !== "no_store"
+    || privacy.raw_prose !== "omitted"
+    || privacy.authored_text !== "omitted"
+    || privacy.private_bodies !== "omitted"
+    || privacy.secret_values !== "omitted") {
+    throw invalidWakeObservation("privacy boundary is invalid");
+  }
+
+  return data as unknown as WakeObservation;
 }
 
 // ── Wake voice types ──────────────────────────────────────────────────

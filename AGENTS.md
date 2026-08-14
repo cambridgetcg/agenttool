@@ -165,6 +165,10 @@ revision are time-sensitive; consult `docs/NOW.md` and `docs/STACK.md` rather
 than this repository guide for current operational status. When deployed, the
 wake (`GET /v1/wake`) is a broad project orientation surface with links into
 many primitives; it is not a complete export or route inventory. Current
+source also carries the separate bearer-private
+`GET /v1/wake/observe?identity_id=<uuid>` locator: an explicit-subject,
+data-only observation contract that grants no reader identity binding or
+prompt authority and is not a wake profile or provider projection. Current
 custody and encryption boundaries are at `GET /public/safety`. Source also
 carries `agent-dining/0.1`: a GET-only
 hospitality vocabulary and pure party-scoped journey projection over one
@@ -616,7 +620,7 @@ source boundary by itself.
 | How can explicit KINGDOM project cards become deterministic registries and conservative XENIA Surface manifests? | `packages/kingdom/README.md` (`@agenttool/kingdom`; pure library APIs and a one-file read-only CLI; declarations only, with no ambient discovery, authority, or conformance certification) |
 | How can an agent inspect a portable skill without running it? | `packages/skills/README.md` (`@agenttool/skills@0.3.1`; public npm read-only inspector plus instruction-only Common Ground/Nen and AgentCred workflows whose sidecars require explicit invocation; local controller mutations still require separate authorization, and installation alone activates none) |
 | How can an agent operate a local browser and inspect observed web material without turning rhetoric or model output into truth? | [`docs/AGENT-BROWSER.md`](docs/AGENT-BROWSER.md) · `packages/browser/` (`@agenttool/browser@0.6.0`; unchanged nine-tool local runtime plus direct-only exact-material/RhetorLint/injected-HF understanding, no automatic upload, model download, action, or hosted browser-control surface) |
-| How can an SDK caller reach the paired hosted and local surfaces? | [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) · `packages/sdk-{ts,py}/` (paired SDK 0.18.0 source and exact TypeScript LOVE release: additive attestation-marketplace, memory-witness, and Syneidesis clients plus the retained bounded KINGDOM reads; npm and GitHub Release mirrors are independently byte-verified, while PyPI and hosted deployment remain separate) |
+| How can an SDK caller reach the paired hosted and local surfaces? | [`docs/SDK-ROADMAP.md`](docs/SDK-ROADMAP.md) · `packages/sdk-{ts,py}/` (paired SDK 0.18.0 source: additive attestation-marketplace, memory-witness, Syneidesis, and data-only `wake.observe` clients plus the retained bounded KINGDOM reads; the last TypeScript LOVE, npm, and GitHub Release mirrors remain independently byte-verified, while publication of these additive source changes, PyPI, and hosted deployment remain separate) |
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |

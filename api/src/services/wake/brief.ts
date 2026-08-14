@@ -181,6 +181,7 @@ export interface WakeBrief {
     markdown: string;
     full_json: string;
     full_markdown: string;
+    observation: string;
     attention: string;
     affordances: string;
     handoffs: string;
@@ -510,6 +511,7 @@ export function buildWakeBrief(
       markdown: `/v1/wake?format=md&profile=brief&${identityQuery}${facetQuery}`,
       full_json: `/v1/wake?${identityQuery}${facetQuery}`,
       full_markdown: `/v1/wake?format=md&${identityQuery}${facetQuery}`,
+      observation: `/v1/wake/observe?identity_id=${encodeURIComponent(b.agent.id)}`,
       attention: `/v1/wake/attention?${identityQuery}`,
       affordances: `/v1/wake/affordances?${identityQuery}`,
       handoffs: handoffReadPath,

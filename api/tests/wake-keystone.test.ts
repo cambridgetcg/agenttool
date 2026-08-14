@@ -193,6 +193,41 @@ describe("WaK §1 — /.well-known/wake-keystone discovery", () => {
     });
   });
 
+  test("response advertises observation as a separate data-only contract", async () => {
+    const res = await wellKnownRouter.request("/wake-keystone");
+    const body = (await res.json()) as {
+      formats: Record<string, unknown>;
+      profiles: Record<string, unknown>;
+      observation: Record<string, unknown>;
+    };
+
+    expect(body.observation).toEqual({
+      format: "wake-observation/v1",
+      error_format: "wake-observation-error/v1",
+      url_pattern:
+        "https://api.agenttool.dev/v1/wake/observe?identity_id={uuid}",
+      media_type: "application/vnd.agenttool.wake-observation+json",
+      relationship_to_wake: "separate_data_contract",
+      explicit_subject_required: true,
+      project_bearer_identity_proof: false,
+      reader_identity_binding: "none",
+      instruction_authority: "none",
+      action_authority: "none",
+      placement: "ordinary_data_only",
+      privileged_prompt_placement: false,
+      provider_projection: false,
+      application_error_body: "fixed_enum_no_prose_or_actions",
+      subject_locator: "included_complete",
+      broader_wake_state: "omitted_not_assessed",
+      observation_projection_authored_prose_or_private_bodies:
+        "omitted_and_not_read_beyond_authentication",
+      response_cache_control: "private, no-store",
+      sdk_cache: false,
+    });
+    expect(body.formats).not.toHaveProperty("observe");
+    expect(body.profiles).not.toHaveProperty("observe");
+  });
+
   test("response declares the version cursor protocol per §7", async () => {
     const res = await wellKnownRouter.request("/wake-keystone");
     const body = (await res.json()) as {

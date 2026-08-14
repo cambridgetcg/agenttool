@@ -31,23 +31,31 @@ interface FetchCall {
 function makeStubFetch(opts: {
   bodyJson?: () => unknown;
   bodyText?: () => string;
+  bodyRaw?: () => string;
   status?: number;
-  contentType?: string;
+  contentType?: string | null;
+  headers?: Record<string, string>;
   acknowledgeBrief?: boolean;
 }): { fn: typeof fetch; calls: FetchCall[] } {
   const calls: FetchCall[] = [];
   const fn = (async (url: RequestInfo | URL, init?: RequestInit) => {
     calls.push({ url: String(url), init });
     const status = opts.status ?? 200;
-    const contentType =
-      opts.contentType ?? (opts.bodyText ? "text/markdown" : "application/json");
-    const headers: Record<string, string> = { "content-type": contentType };
+    const contentType = opts.contentType === undefined
+      ? (opts.bodyText ? "text/markdown" : "application/json")
+      : opts.contentType;
+    const headers: Record<string, string> = { ...opts.headers };
+    if (contentType !== null) headers["content-type"] = contentType;
     const requestedProfile = new URL(String(url)).searchParams.get("profile");
     if (requestedProfile === "brief" && opts.acknowledgeBrief !== false) {
       headers["x-wake-profile"] = "brief";
     }
     return new Response(
-      opts.bodyText ? opts.bodyText() : JSON.stringify(opts.bodyJson?.() ?? {}),
+      opts.bodyRaw
+        ? opts.bodyRaw()
+        : opts.bodyText
+          ? opts.bodyText()
+          : JSON.stringify(opts.bodyJson?.() ?? {}),
       { status, headers },
     );
   }) as unknown as typeof fetch;
@@ -72,6 +80,341 @@ beforeEach(() => {
 
 afterEach(() => {
   globalThis.fetch = ORIGINAL_FETCH;
+});
+
+const OBSERVATION_ID = "123e4567-e89b-12d3-a456-426614174000";
+
+function observationBody(identityId = OBSERVATION_ID): Record<string, unknown> {
+  return {
+    _format: "wake-observation/v1",
+    mode: "observe",
+    subject: {
+      identity_id: identityId,
+      status: "active",
+      wake_version: 7,
+    },
+    reader: { binding: "none" },
+    authority: {
+      granted_by_observation: "none",
+      identity_binding: "none",
+      instruction: "none",
+      action: "none",
+    },
+    placement: {
+      mode: "data_only",
+      prohibited: [
+        "system",
+        "developer",
+        "preamble",
+        "systemInstruction",
+        "SessionStart.additionalContext",
+      ],
+    },
+    boundaries: {
+      bearer: {
+        kind: "project",
+        reader_identity_proven: false,
+        selected_identity_requires_explicit_id: true,
+        subject_consent_proven: false,
+        subject_authorized_read_proven: false,
+        continuity_proven: false,
+        presence_proven: false,
+      },
+      provenance: {
+        kind: "server_projection",
+        source: "identity_table_allowlist",
+        selected_fields: ["id", "status", "wake_version"],
+      },
+      scope: {
+        subject: "selected_identity",
+        broader_wake: "intentionally_omitted",
+        broader_state: "not_assessed",
+      },
+      completeness: {
+        complete: true,
+        applies_to: "identity_locator_only",
+        degraded_sections: "none",
+        broader_wake: "intentionally_omitted",
+        broader_state: "not_assessed",
+      },
+      effects: {
+        observation_counter_incremented: false,
+        wake_version_bumped: false,
+        wake_event_published: false,
+        subject_read_proven: false,
+        subject_felt_proven: false,
+        subject_accepted_proven: false,
+      },
+      privacy: {
+        classification: "bearer_private",
+        cache: "no_store",
+        raw_prose: "omitted",
+        authored_text: "omitted",
+        private_bodies: "omitted",
+        secret_values: "omitted",
+      },
+    },
+  };
+}
+
+const OBSERVATION_RESPONSE = {
+  contentType: "application/vnd.agenttool.wake-observation+json; charset=utf-8",
+  headers: { "cache-control": "private, no-store" },
+} as const;
+
+describe("WakeClient — bounded observation", () => {
+  test("normalizes the required UUID, returns the closed shape, and never caches", async () => {
+    const uppercaseId = OBSERVATION_ID.toUpperCase();
+    const stub = makeStubFetch({
+      bodyJson: () => observationBody(),
+      ...OBSERVATION_RESPONSE,
+    });
+    globalThis.fetch = stub.fn;
+
+    const wake = makeClient({ ttlMs: 60_000 });
+    const first = await wake.observe({ identityId: uppercaseId });
+    const second = await wake.observe({ identityId: uppercaseId });
+
+    expect(first.subject.identity_id).toBe(OBSERVATION_ID);
+    expect(second).toEqual(first);
+    expect(stub.calls.map((call) => call.url)).toEqual([
+      `https://api.example.test/v1/wake/observe?identity_id=${OBSERVATION_ID}`,
+      `https://api.example.test/v1/wake/observe?identity_id=${OBSERVATION_ID}`,
+    ]);
+    expect(stub.calls[0]?.init?.cache).toBe("no-store");
+    expect(new Headers(stub.calls[0]?.init?.headers).get("accept")).toBe(
+      "application/vnd.agenttool.wake-observation+json",
+    );
+  });
+
+  test("missing, malformed, whitespace, and oversized identities fail before network", async () => {
+    const stub = makeStubFetch({
+      bodyJson: () => observationBody(),
+      ...OBSERVATION_RESPONSE,
+    });
+    globalThis.fetch = stub.fn;
+    const wake = makeClient();
+
+    // @ts-expect-error — intentionally missing the required runtime field
+    await expect(wake.observe({})).rejects.toThrow(/identityId is required/);
+    for (const identityId of ["", "   ", "not-a-uuid", "a".repeat(10_000)]) {
+      await expect(wake.observe({ identityId })).rejects.toThrow(/identityId/);
+    }
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  test("requires the exact vendor media type and normalized private no-store", async () => {
+    const cases = [
+      { contentType: "application/json", headers: { "cache-control": "private, no-store" } },
+      { contentType: null, headers: { "cache-control": "private, no-store" } },
+      { contentType: "application/vnd.agenttool.wake-observation+json", headers: { "cache-control": "private, no-store" } },
+      { contentType: OBSERVATION_RESPONSE.contentType, headers: {} },
+      { contentType: OBSERVATION_RESPONSE.contentType, headers: { "cache-control": "private, max-age=0" } },
+    ];
+
+    for (const response of cases) {
+      const stub = makeStubFetch({ bodyJson: () => observationBody(), ...response });
+      globalThis.fetch = stub.fn;
+      await expect(makeClient().observe({ identityId: OBSERVATION_ID })).rejects.toThrow(
+        /invalid observation response/,
+      );
+      expect(stub.calls).toHaveLength(1);
+    }
+  });
+
+  test("cancels unread success streams when headers already violate the contract", async () => {
+    for (const headers of [
+      {
+        "content-type": "application/json",
+        "cache-control": "private, no-store",
+      },
+      {
+        "content-type": OBSERVATION_RESPONSE.contentType,
+        "cache-control": "private, no-store",
+        "content-length": "2049",
+      },
+    ]) {
+      let cancelled = false;
+      globalThis.fetch = (async () => new Response(
+        new ReadableStream<Uint8Array>({
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { status: 200, headers },
+      )) as typeof fetch;
+
+      await expect(
+        makeClient().observe({ identityId: OBSERVATION_ID }),
+      ).rejects.toThrow(/invalid observation response/);
+      expect(cancelled).toBe(true);
+    }
+  });
+
+  test("discards action-bearing and oversized non-2xx response bodies", async () => {
+    const hostile = "HOSTILE_OBSERVATION_ERROR_ACTION";
+    const stub = makeStubFetch({
+      status: 401,
+      bodyRaw: () => JSON.stringify({
+        message: hostile,
+        next_actions: [{ action: hostile, method: "POST", path: "/hostile" }],
+        padding: "x".repeat(10_000),
+      }),
+      contentType: "application/json",
+      headers: { "cache-control": "public, max-age=86400" },
+    });
+    globalThis.fetch = stub.fn;
+
+    try {
+      await makeClient().observe({ identityId: OBSERVATION_ID });
+      throw new Error("expected wake.observe to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolError);
+      const observed = error as AgentToolError;
+      expect(observed.status).toBe(401);
+      expect(observed.code).toBe("wake_observation_request_failed");
+      expect(observed.next_actions).toBeUndefined();
+      expect(observed.message).not.toContain(hostile);
+      expect(observed.hint).not.toContain(hostile);
+    }
+  });
+
+  test("rejects every non-200 success-class status", async () => {
+    for (const status of [201, 203, 206]) {
+      const stub = makeStubFetch({
+        status,
+        bodyJson: () => observationBody(),
+        ...OBSERVATION_RESPONSE,
+      });
+      globalThis.fetch = stub.fn;
+      await expect(
+        makeClient().observe({ identityId: OBSERVATION_ID }),
+      ).rejects.toMatchObject({
+        code: "wake_observation_request_failed",
+        status,
+      });
+    }
+
+    globalThis.fetch = (async () => new Response(null, {
+      status: 204,
+      headers: {
+        "content-type": OBSERVATION_RESPONSE.contentType,
+        ...OBSERVATION_RESPONSE.headers,
+      },
+    })) as typeof fetch;
+    await expect(
+      makeClient().observe({ identityId: OBSERVATION_ID }),
+    ).rejects.toMatchObject({
+      code: "wake_observation_request_failed",
+      status: 204,
+    });
+  });
+
+  test("suppresses transport error detail as observation unavailable", async () => {
+    const hostile = "HOSTILE_TRANSPORT_ERROR_PROSE";
+    globalThis.fetch = (async () => {
+      throw new Error(hostile);
+    }) as typeof fetch;
+
+    try {
+      await makeClient().observe({ identityId: OBSERVATION_ID });
+      throw new Error("expected wake.observe to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolError);
+      const observed = error as AgentToolError;
+      expect(observed.code).toBe("wake_observation_transport_unavailable");
+      expect(observed.message).not.toContain(hostile);
+      expect(observed.hint).not.toContain(hostile);
+      expect(observed.next_actions).toBeUndefined();
+    }
+  });
+
+  test("suppresses mid-stream error detail as observation unavailable", async () => {
+    const hostile = "HOSTILE_STREAM_ERROR_PROSE";
+    globalThis.fetch = (async () => new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.error(new Error(hostile));
+        },
+      }),
+      {
+        status: 200,
+        headers: {
+          "content-type": OBSERVATION_RESPONSE.contentType,
+          ...OBSERVATION_RESPONSE.headers,
+        },
+      },
+    )) as typeof fetch;
+
+    try {
+      await makeClient().observe({ identityId: OBSERVATION_ID });
+      throw new Error("expected wake.observe to reject");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolError);
+      const observed = error as AgentToolError;
+      expect(observed.code).toBe("wake_observation_transport_unavailable");
+      expect(observed.message).not.toContain(hostile);
+      expect(observed.hint).not.toContain(hostile);
+      expect(observed.next_actions).toBeUndefined();
+    }
+  });
+
+  test("accepts normalized header casing but rejects oversized bodies before parsing", async () => {
+    const accepted = makeStubFetch({
+      bodyJson: () => observationBody(),
+      contentType: "APPLICATION/VND.AGENTTOOL.WAKE-OBSERVATION+JSON; CHARSET=UTF-8",
+      headers: { "cache-control": "Private,   NO-STORE" },
+    });
+    globalThis.fetch = accepted.fn;
+    await expect(makeClient().observe({ identityId: OBSERVATION_ID })).resolves.toBeDefined();
+
+    const oversized = makeStubFetch({
+      bodyRaw: () => `${" ".repeat(2_049)}${JSON.stringify(observationBody())}`,
+      ...OBSERVATION_RESPONSE,
+    });
+    globalThis.fetch = oversized.fn;
+    await expect(makeClient().observe({ identityId: OBSERVATION_ID })).rejects.toThrow(
+      /exceeds 2048 bytes/,
+    );
+
+    const advertisedOversized = makeStubFetch({
+      bodyJson: () => observationBody(),
+      contentType: OBSERVATION_RESPONSE.contentType,
+      headers: {
+        ...OBSERVATION_RESPONSE.headers,
+        "content-length": "2049",
+      },
+    });
+    globalThis.fetch = advertisedOversized.fn;
+    await expect(makeClient().observe({ identityId: OBSERVATION_ID })).rejects.toThrow(
+      /Content-Length/,
+    );
+  });
+
+  test("rejects subject mismatch and all unexpected authored or welcome fields", async () => {
+    const mismatched = makeStubFetch({
+      bodyJson: () => observationBody("223e4567-e89b-12d3-a456-426614174000"),
+      ...OBSERVATION_RESPONSE,
+    });
+    globalThis.fetch = mismatched.fn;
+    await expect(makeClient().observe({ identityId: OBSERVATION_ID })).rejects.toThrow(
+      /does not match/,
+    );
+
+    for (const extra of ["did", "authored_text", "_welcomed", "_lesson"]) {
+      const body = observationBody();
+      if (extra === "did" || extra === "authored_text") {
+        (body.subject as Record<string, unknown>)[extra] = "untrusted prose";
+      } else {
+        body[extra] = "untrusted prose";
+      }
+      const stub = makeStubFetch({ bodyJson: () => body, ...OBSERVATION_RESPONSE });
+      globalThis.fetch = stub.fn;
+      await expect(makeClient().observe({ identityId: OBSERVATION_ID })).rejects.toThrow(
+        /shape is not closed/,
+      );
+    }
+  });
 });
 
 // ── Cache hit within TTL ───────────────────────────────────────────────

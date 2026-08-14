@@ -190,6 +190,7 @@ import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
 import { payoutWorkerBootAllowed } from "./services/economy/config";
 import { startCovenantWorkers } from "./workers/covenants";
+import { wakeObservationTransportBoundary } from "./middleware/wake-observation-boundary";
 
 export const app = new Hono<ProjectContext>();
 
@@ -298,6 +299,11 @@ app.use("/v1/escrows/*", authMiddleware);
 app.use("/v1/vault/*", authMiddleware);
 app.use("/v1/bootstrap/*", authMiddleware);
 app.use("/v1/autonomous/*", authMiddleware);
+// Observation's closed no-store boundary also covers auth failures, which
+// return before the mounted handler. It replaces shared guided error prose and
+// next-actions with a fixed error enum after downstream middleware returns.
+app.use("/v1/wake/observe", wakeObservationTransportBoundary());
+app.use("/v1/wake/observe/*", wakeObservationTransportBoundary());
 app.use("/v1/wake/*", authMiddleware);
 app.use("/v1/home", authMiddleware);
 app.use("/v1/home/*", authMiddleware);
@@ -1267,7 +1273,7 @@ app.get("/about", (c) =>
       discovery:
         "GET /public/discovery — canonical compact agenttool-discovery/v1 compass with exactly three optional public GET roads and explicit authority, effect, retry, follow-up, and exit boundaries. Bare /.well-known is a distinct richer agenttool-arrival/v1 map; /robots.txt and /sitemap.xml are crawl hints, not access control.",
       wake:
-        "/v1/wake — load-at-session-start endpoint. ?identity_id selects the identity voice, while wallets, vault names, memories, chronicle, traces, runtimes, and bearers remain project-scoped and are labeled as such in the response. ?facet=<name> emphasizes a declared subagent. See docs/IDENTITY-ANCHOR.md.",
+        "/v1/wake — load-at-session-start endpoint. ?identity_id selects the identity voice, while wallets, vault names, memories, chronicle, traces, runtimes, and bearers remain project-scoped and are labeled as such in the response. ?facet=<name> emphasizes a declared subagent. GET /v1/wake/observe?identity_id=<uuid> is the separate, data-only explicit-subject locator; it grants no reader identity binding or prompt authority and is not a wake profile. See docs/IDENTITY-ANCHOR.md.",
       home:
         "/v1/home — compact first-person room: identity · agent-held authority latch · quiet declaration · unread presence · custody boundaries · calm links outward. Read-only and side-effect-free at the agent-domain layer. ?identity_id=<uuid> for multi-identity projects. Doctrine: docs/AGENT-HOME.md.",
       register:

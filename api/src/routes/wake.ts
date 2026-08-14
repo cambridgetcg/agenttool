@@ -120,6 +120,12 @@ import { renderWakeMarkdown, renderWakePlaintext, type WakeBundle } from "../ser
 import { isWakeProvider, renderWakeForProvider } from "../services/wake/providers";
 import { buildWakeBundle } from "../services/wake/build";
 import {
+  isWakeObservationIdentityId,
+  readWakeObservation,
+  serializeWakeObservation,
+  WAKE_OBSERVATION_MEDIA_TYPE,
+} from "../services/wake/observe";
+import {
   buildWakeBrief,
   parseWakeProfile,
 } from "../services/wake/brief";
@@ -2513,6 +2519,9 @@ app.get("/", async (c) => {
       streaming: primary
         ? `/v1/wake/voice?identity_id=${primary.id}`
         : "/v1/wake/voice?identity_id={uuid}",
+      observation: primary
+        ? `/v1/wake/observe?identity_id=${primary.id}`
+        : "/v1/wake/observe?identity_id={uuid}",
       wake_keystone: "/.well-known/wake-keystone",
       xenia_surface: "/.well-known/agent.json",
       love_packages: "/.well-known/love-packages",
@@ -2812,6 +2821,42 @@ app.get("/voice", async (c) => {
     // reconnect.
     await new Promise<void>((resolve) => sink.onAbort(resolve));
   });
+});
+
+// ── GET /v1/wake/observe — bounded data-only identity locator ─────────
+//
+// This is intentionally not a WakeBundle projection. It selects only the
+// explicit identity's UUID, lifecycle status, and wake-version cursor, and it
+// neither increments the full-JSON observation counter nor bumps wakeVersion.
+app.get("/observe", async (c) => {
+  c.header("Cache-Control", "private, no-store");
+  c.header("X-Wake-Mode", "observe");
+
+  const identityIds = c.req.queries("identity_id") ?? [];
+  if (identityIds.length === 0 || identityIds[0] === "") {
+    return c.body(null, 400);
+  }
+  if (identityIds.length !== 1) {
+    return c.body(null, 400);
+  }
+  const identityId = identityIds[0]!;
+  if (!isWakeObservationIdentityId(identityId)) {
+    return c.body(null, 400);
+  }
+
+  try {
+    const result = await readWakeObservation(c.var.project.id, identityId);
+    if (!result.ok) {
+      return c.body(null, 404);
+    }
+
+    const body = serializeWakeObservation(result.observation);
+    return c.body(body, 200, {
+      "Content-Type": `${WAKE_OBSERVATION_MEDIA_TYPE}; charset=utf-8`,
+    });
+  } catch {
+    return c.body(null, 500);
+  }
 });
 
 // ── GET /v1/wake/:key — subkey reads ──────────────────────────────────
