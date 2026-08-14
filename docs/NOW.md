@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-13 (Agent Skills 0.3.1 GitHub/npm receipt, Memetic Landscape GitHub/npm/Hugging Face/static/API receipts, and Gin Reconstruction GitHub/static receipts live; the Gin package remains private and source-only)
+> Updated: 2026-08-14 (Codex Usage 0.1.0 GitHub/npm receipt live; Agent Skills 0.3.1 and the 2026-08-13 Memetic Landscape/Gin receipts remain current)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-08-14)
+
+| Ship | Commit / receipt | What |
+|---|---|---|
+| **CODEX USAGE 0.1.0 — live counters without transcripts** | Protected [PR #309](https://github.com/cambridgetcg/agenttool/pull/309) merged as [`f027c460`](https://github.com/cambridgetcg/agenttool/commit/f027c46062d7e7c3bb22d0167278525c5fe10ed3); annotated [tag/Release](https://github.com/cambridgetcg/agenttool/releases/tag/codex-usage-v0.1.0); protected bootstrap [run `31784329559`](https://github.com/cambridgetcg/agenttool/actions/runs/31784329559) | `@agenttool/codex-usage@0.1.0` is the public local Bun CLI/watch, direct library, and five-tool read-only stdio MCP pulse over committed Codex numeric counters. Protected publication and independent anonymous readback matched one 33-file, 30,926-byte GitHub/npm artifact with SHA-256 `feb5830b704e1116fa6b3b34490da621b0725ba914b8d94f6ce325f3a2275bec`; npm `latest` resolved to `0.1.0`, with SLSA and publish attestations at Rekor indices `2463986451` and `2463987297`. An isolated scripts-disabled install passed the Bun CLI help and direct library import. Package-manager installation contacts its configured registry, but tracker runtime makes no network call. It writes no Codex state and returns no transcript content, free-form labels, credentials, raw thread IDs, paths, billing/quota/remaining-context claim, or process-health truth. Publication creates no LOVE artifact, hosted usage surface, background process, automatic MCP registration, cross-user access, or authority. |
 
 ## Just landed (2026-08-13)
 
