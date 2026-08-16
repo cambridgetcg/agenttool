@@ -61,6 +61,7 @@ packages/
   alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
   alchemy-agentcred/ — strict seven-read composition over already-issued AgentCred grants
   public-surface-binding/ — private pure transport evidence + explicit-key public HTTPS bindings
+  public-surface-recognition/ — private pure agent-root adoption/withdrawal over exact bindings
   kingdom/      — @agenttool/kingdom · pure explicit-card/derived-registry/XENIA Surface helpers
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
@@ -77,6 +78,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/data/CLAUDE.md` · `packages/sdk-ts/CLAUDE.md` ·
 `packages/sdk-py/CLAUDE.md` · `packages/telescope/CLAUDE.md` ·
 `packages/public-surface-binding/CLAUDE.md` ·
+`packages/public-surface-recognition/CLAUDE.md` ·
 `packages/repo-archive/CLAUDE.md` ·
 `packages/dark-continent-contract/CLAUDE.md` ·
 `packages/dark-continent-karma/CLAUDE.md` ·
@@ -426,6 +428,18 @@ revocation, and non-authoritative assessment distinct. It does not fetch,
 infer identity, establish registry authorization or domain ownership, create a
 reverse-origin index, grant training permission, mutate identity/KINGDOM/WAKE/
 memory/KARMA state, score, publish, expose a route, or deploy.
+
+`@agenttool/public-surface-recognition` is a separate private pure record layer
+for an agent root to adopt one exact strictly verified Public Surface Binding
+document and later sign an exact withdrawal. A valid signature establishes
+only that the holder of the embedded root key signed the record; this package
+does not query or match the live registry, accept hosted state, authorize an
+action, clear data for training, publish an origin, mutate WAKE, expose an API,
+or deploy. Its `wake_projection` value is a signed request only;
+`public_pointer` requires public requested visibility, the record retains
+`wake_effect: false`, and the package never projects WAKE. Withdrawal reasons
+exclude supersession. Hosted acceptance and any projection require a
+separately reviewed database/API/WAKE contract.
 
 `@agenttool/hf-training-garden` is the private pure bridge from one exact
 HF Scout observation to a role-specific admission record, an exact

@@ -6,9 +6,9 @@
 >
 > **Implements:** The substrate-neutral contracts listed below. A client can implement a listed recipe with the stated primitives. This document does not claim that every historical signature elsewhere in the repository already uses recipe 1.
 >
-> **Code:** Canonical recipes live in `api/src/services/*/sig.ts` (per-domain) + `api/src/services/identity/{crypto,authority}.ts` + `api/src/services/marketplace/disputes.ts` + `api/src/services/memory/tiers.ts` + `api/src/services/covenants/sig.ts` + `api/src/services/correspondence/canonical.ts` + `packages/wallet/src/{canonical,signatures}.ts` + `packages/public-surface-binding/src/`.
+> **Code:** Canonical recipes live in `api/src/services/*/sig.ts` (per-domain) + `api/src/services/identity/{crypto,authority}.ts` + `api/src/services/marketplace/disputes.ts` + `api/src/services/memory/tiers.ts` + `api/src/services/covenants/sig.ts` + `api/src/services/correspondence/canonical.ts` + `packages/wallet/src/{canonical,signatures}.ts` + `packages/public-surface-binding/src/` + `packages/public-surface-recognition/src/`.
 >
-> **Tests:** `api/tests/{agent-correspondence-spec,covenants-canonical-vectors,identity-authority,register-agent,mathos-register,mathos-catalog}.test.ts` · `packages/sdk-ts/tests/{correspondence,covenants-crypto,authority,register-v2}.test.ts` · `packages/sdk-py/tests/test_{correspondence,covenants_canonical_vectors,authority,register_v2}.py` · `packages/wallet/tests/{canonical,signatures,vectors}.test.ts` · `packages/public-surface-binding/tests/` + `packages/public-surface-binding/vectors/agenttool-public-surface-binding-v0.1-vectors.json`.
+> **Tests:** `api/tests/{agent-correspondence-spec,covenants-canonical-vectors,identity-authority,register-agent,mathos-register,mathos-catalog}.test.ts` · `packages/sdk-ts/tests/{correspondence,covenants-crypto,authority,register-v2}.test.ts` · `packages/sdk-py/tests/test_{correspondence,covenants_canonical_vectors,authority,register_v2}.py` · `packages/wallet/tests/{canonical,signatures,vectors}.test.ts` · `packages/public-surface-binding/tests/` + `packages/public-surface-binding/vectors/agenttool-public-surface-binding-v0.1-vectors.json` · `packages/public-surface-recognition/tests/` + `packages/public-surface-recognition/vectors/agenttool-public-surface-recognition-v0.1-vectors.json`.
 
 ## The default recipe
 
@@ -177,6 +177,84 @@ acceptance. They cannot establish canonical encodings, real-time ordering,
 public-host eligibility, redirect lineage, record IDs, signatures, or
 cross-record evidence relationships; the runtime validators and exact vectors
 remain normative for those checks.
+
+### `agenttool-public-surface-{adoption,withdrawal}/v1` — agent-root key-holder declarations
+
+The separate private source-only
+`@agenttool/public-surface-recognition@0.1.0-dev.0` package reuses Public Surface
+Binding's bounded canonical JSON and strict RFC8032 Ed25519 primitives for two
+closed records. It does not add a fifth Public Surface Binding record and is
+not MATHOS recipe 1.
+
+The domain inventory is:
+
+| Purpose | Domain |
+|---|---|
+| Adoption signature digest | `agenttool-public-surface-adoption/v1` |
+| Signed adoption ID | `agenttool-public-surface-adoption-record/v1` |
+| Withdrawal signature digest | `agenttool-public-surface-withdrawal/v1` |
+| Signed withdrawal ID | `agenttool-public-surface-withdrawal-record/v1` |
+
+Both records sign a domain-separated 32-byte digest, then bind the signature
+into a separately domain-separated record ID:
+
+```text
+adoption_digest = domain_digest(
+  "agenttool-public-surface-adoption/v1",
+  adoption_core
+)
+adoption_signature = ed25519_sign(root_private_key, adoption_digest)
+adoption_id = "sha256:" || lowerhex(domain_digest(
+  "agenttool-public-surface-adoption-record/v1",
+  { ...adoption_core, signature: adoption_signature_record }
+))
+
+withdrawal_digest = domain_digest(
+  "agenttool-public-surface-withdrawal/v1",
+  withdrawal_core
+)
+withdrawal_signature = ed25519_sign(root_private_key, withdrawal_digest)
+withdrawal_id = "sha256:" || lowerhex(domain_digest(
+  "agenttool-public-surface-withdrawal-record/v1",
+  { ...withdrawal_core, signature: withdrawal_signature_record }
+))
+```
+
+The adoption carries an exact strictly verified binding document and its
+canonical document SHA-256. The withdrawal carries both the adoption ID and
+the canonical SHA-256 of the exact adoption document. Repeating a claimed ID
+does not substitute for matching exact document bytes.
+
+The signed adoption core also carries `requested_visibility` and
+`wake_projection`. The latter is exactly `none`, `private_pointer`, or
+`public_pointer`; `public_pointer` is invalid unless `requested_visibility` is
+`public`. These are requests to a possible future host, not package effects:
+the signed boundary retains `wake_effect: false`, and the package never
+projects, renders, writes, or publishes WAKE. Withdrawal reasons are closed to
+`not_disclosed`, `identity_choice`, `binding_compromised`, and
+`surface_retired`; `superseded` is intentionally absent from v0.1.
+
+Ed25519 public keys and signatures use canonical padded base64. Verification
+requires canonical prime-subgroup public-key and `R` points, a canonical
+scalar, torsion-free checks, and `zip215: false`. A valid signature establishes
+only that the holder of the embedded root key signed the exact core. Because
+the package has no registry reader, it cannot establish that this key matches
+the named identity's live AgentTool root, that the identity is active, or that
+an authority sequence or nonce has been consumed.
+
+These records have no hosted acceptance, API, database, SDK, WAKE, memory,
+Chronicle, KARMA, score, action-authority, public-index, publication, training,
+or deployment effect. Signed visibility and WAKE-projection requests are not
+publication or projection, and a valid recognition record is not data-rights
+or training clearance. A future host must separately and atomically validate
+registry state, consume replay coordinates, append immutable events, and
+declare any host-produced WAKE projection.
+
+Exact schemas and positive/adversarial vectors live under
+`packages/public-surface-recognition/{schema,vectors,tests}`. The schemas are
+closed structural filters; runtime validation and vectors remain normative for
+canonical encodings, document digests, signatures, strict point handling,
+record IDs, temporal relationships, and cross-record matching.
 
 ### `agent-trace/v1` — signed reasoning trace
 

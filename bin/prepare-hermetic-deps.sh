@@ -81,6 +81,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/wallet-zerone
   packages/telescope
   packages/public-surface-binding
+  packages/public-surface-recognition
   packages/alchemy
   packages/kingdom
 )
@@ -94,6 +95,7 @@ readonly -a LOCAL_PROVIDER_WORKSPACES=(
   packages/alchemy
   packages/wake-continuity
   packages/hf-scout
+  packages/public-surface-binding
   packages/skills-yutabase
 )
 
@@ -207,8 +209,9 @@ prepare_packages() {
   done
 
   # Preserve the exact refresh behavior validated in CI. Bun needs --force for
-  # four consumers to recopy freshly built file dependencies; the projector
+  # consumers to recopy freshly built file dependencies; the projector
   # resolves its local peer correctly without it.
+  install_workspace packages/public-surface-recognition --force
   install_workspace packages/data-sync --force
   install_workspace packages/correspondence-yutabase-projector
   install_workspace packages/alchemy-agentcred --force

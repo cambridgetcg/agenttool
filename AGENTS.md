@@ -71,7 +71,9 @@ digest-bound proof, model, and measurement inquiry preflight with explicit
 construction, burden, refusal, incentive, stop, transfer, provenance, and
 authority boundaries (`packages/math-cards/`), a public read-only discovery evidence mapper
 (`packages/telescope/`), a private pure public-HTTPS transport-evidence and
-explicit-key binding package (`packages/public-surface-binding/`), an experimental local capability broker
+explicit-key binding package (`packages/public-surface-binding/`), a private
+pure agent-root public-surface adoption and withdrawal package
+(`packages/public-surface-recognition/`), an experimental local capability broker
 (`packages/credential-broker/`), a local-first multi-agent coordination journal
 (`packages/collab/`), a public, local-only privacy-minimal Codex token-usage pulse
 (`packages/codex-usage/`), a deterministic metadata-only Correspondence-to-YUTABASE
@@ -446,6 +448,10 @@ node dist/cli.js scan api.agenttool.dev         # explicit live read-only dogfoo
 cd packages/public-surface-binding
 bun run ci                                     # schemas + vectors + hostile inputs + Node smoke
 
+# Public Surface Recognition (private pure records; no hosted acceptance) ──
+cd packages/public-surface-recognition
+bun run ci                                     # schemas + vectors + strict root signatures + Node smoke
+
 # Agent Wallet (source record/lifecycle primitives; no custody or RPC) ──
 cd packages/wallet
 bun run ci                                     # typecheck + security/schema/vector tests + build
@@ -628,6 +634,7 @@ source boundary by itself.
 | Read the substrate's structural self (unauth) | `GET /public/self` — `{ platform: PlatformSelf, repo: RepoSelf }` |
 | How would another language reach the API? | [`docs/SDK-TIERS.md`](docs/SDK-TIERS.md) (four-tier stack) · [`docs/CANONICAL-BYTES.md`](docs/CANONICAL-BYTES.md) (signing recipes) |
 | How can an explicit key-holder declaration relate an AgentTool identity to exact observed public-HTTPS bytes without inferring identity, registry authority, domain ownership, or training permission? | `packages/public-surface-binding/README.md` (private pure observation/binding/revocation/assessment records; no fetch, reverse-origin index, identity mutation, hosted route, WAKE/memory/KARMA effect, or deployment) |
+| How can an agent root explicitly adopt and later withdraw one exact verified surface binding without turning that declaration into registry truth, action authority, or training clearance? | `packages/public-surface-recognition/README.md` (private pure adoption/withdrawal records; no hosted acceptance, registry query, API/database/WAKE effect, public index, release, or deployment) |
 | How does an agent keep and query raw collected data locally? | [`docs/AGENT-DATA-PROTOCOL.md`](docs/AGENT-DATA-PROTOCOL.md) · `packages/data/` (reference node) |
 | How can selected committed Castle words and rooms be projected locally, how can Whitehack offer unaccepted gate candidates, and where do privacy, authority, lifecycle, and withdrawal stop? | [`docs/CASTLE-OF-UNDERSTANDING.md`](docs/CASTLE-OF-UNDERSTANDING.md) · `bin/agenttool-castle.ts` · `bin/agenttool-castle-whitehack-intake.ts` |
 | How can committed repository history be encrypted and independently restored from multiple zones? | [`docs/AGENT-REPO-ARCHIVE.md`](docs/AGENT-REPO-ARCHIVE.md) · `packages/repo-archive/` (local simulator; no cloud adapter or durability guarantee) |

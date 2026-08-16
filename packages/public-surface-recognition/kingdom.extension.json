@@ -1,0 +1,59 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "public-surface-recognition",
+  "package": "@agenttool/public-surface-recognition",
+  "version": "0.1.0-dev.0",
+  "status": "private_source",
+  "host_contract": "not_registered",
+  "proposed_abilities": [
+    {
+      "id": "public-surface-binding-adopt",
+      "kind": "agent_root_key_holder_declaration",
+      "description": "Create or verify an agent-root-signed declaration over one exact strictly verified public-surface binding without claiming live registry match or hosted acceptance."
+    },
+    {
+      "id": "public-surface-adoption-withdraw",
+      "kind": "agent_root_key_holder_withdrawal",
+      "description": "Create or verify a separately signed withdrawal over one exact adoption without mutating or erasing the adopted record."
+    }
+  ],
+  "defaults": {
+    "network": false,
+    "dns": false,
+    "crawler": false,
+    "automatic_fetch": false,
+    "automatic_binding": false,
+    "automatic_adoption": false,
+    "identity_inference": false,
+    "identity_mutation": false,
+    "registry_lookup": false,
+    "registry_authorization": false,
+    "hosted_acceptance": false,
+    "domain_ownership": false,
+    "filesystem": false,
+    "environment": false,
+    "clock": false,
+    "randomness": false,
+    "persistence": false,
+    "telemetry": false,
+    "mcp": false,
+    "hosted_route": false,
+    "public_index": false,
+    "publication": false,
+    "training": false,
+    "score": false,
+    "permission_inheritance": false,
+    "wake_effect": false,
+    "memory_effect": false,
+    "karma_effect": false,
+    "automatic_action": false,
+    "authority": false
+  },
+  "notes": [
+    "This descriptor is a declaration-only local hint, not an installed KINGDOM host contract or active Nen ability.",
+    "A valid signature proves only that the holder of the embedded root key signed the exact canonical adoption or withdrawal; it does not prove live registry match, hosted acceptance, action authorization, or training clearance.",
+    "wake_projection is a signed request only: public_pointer requires requested_visibility public, every record keeps wake_effect false, and this package never projects or publishes a WAKE pointer.",
+    "Withdrawal reasons are closed to not_disclosed, identity_choice, binding_compromised, and surface_retired; superseded is intentionally absent and replacement requires a separate adoption.",
+    "The records have no API, database, WAKE, Chronicle, memory, observation-counter, KARMA, score, training, public-index, publication, or deployment effect."
+  ]
+}
