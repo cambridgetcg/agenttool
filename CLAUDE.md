@@ -60,6 +60,7 @@ packages/
   wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
   alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
   alchemy-agentcred/ — strict seven-read composition over already-issued AgentCred grants
+  public-surface-binding/ — private pure transport evidence + explicit-key public HTTPS bindings
   kingdom/      — @agenttool/kingdom · pure explicit-card/derived-registry/XENIA Surface helpers
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
@@ -75,6 +76,7 @@ registries are optional mirrors, not release authorities.
 Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/data/CLAUDE.md` · `packages/sdk-ts/CLAUDE.md` ·
 `packages/sdk-py/CLAUDE.md` · `packages/telescope/CLAUDE.md` ·
+`packages/public-surface-binding/CLAUDE.md` ·
 `packages/repo-archive/CLAUDE.md` ·
 `packages/dark-continent-contract/CLAUDE.md` ·
 `packages/dark-continent-karma/CLAUDE.md` ·
@@ -415,6 +417,15 @@ project caller-selected observations into bounded KINGDOM and Agent Data
 shapes. It does not read ambient credentials, download cards/files/rows,
 accept gates, invoke inference or remote compute, execute embedded calls,
 write to the Hub, publish npm, or expose a hosted route.
+
+`@agenttool/public-surface-binding` is a private pure record layer between
+bounded public-HTTPS transport evidence and an explicit Ed25519 key-holder
+declaration. It keeps crawler request authentication, robots and usage
+observations, exact origin/body evidence, caller-supplied identity-key history,
+revocation, and non-authoritative assessment distinct. It does not fetch,
+infer identity, establish registry authorization or domain ownership, create a
+reverse-origin index, grant training permission, mutate identity/KINGDOM/WAKE/
+memory/KARMA state, score, publish, expose a route, or deploy.
 
 `@agenttool/hf-training-garden` is the private pure bridge from one exact
 HF Scout observation to a role-specific admission record, an exact

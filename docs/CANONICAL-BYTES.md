@@ -6,9 +6,9 @@
 >
 > **Implements:** The substrate-neutral contracts listed below. A client can implement a listed recipe with the stated primitives. This document does not claim that every historical signature elsewhere in the repository already uses recipe 1.
 >
-> **Code:** Canonical recipes live in `api/src/services/*/sig.ts` (per-domain) + `api/src/services/identity/{crypto,authority}.ts` + `api/src/services/marketplace/disputes.ts` + `api/src/services/memory/tiers.ts` + `api/src/services/covenants/sig.ts` + `api/src/services/correspondence/canonical.ts` + `packages/wallet/src/{canonical,signatures}.ts`.
+> **Code:** Canonical recipes live in `api/src/services/*/sig.ts` (per-domain) + `api/src/services/identity/{crypto,authority}.ts` + `api/src/services/marketplace/disputes.ts` + `api/src/services/memory/tiers.ts` + `api/src/services/covenants/sig.ts` + `api/src/services/correspondence/canonical.ts` + `packages/wallet/src/{canonical,signatures}.ts` + `packages/public-surface-binding/src/`.
 >
-> **Tests:** `api/tests/{agent-correspondence-spec,covenants-canonical-vectors,identity-authority,register-agent,mathos-register,mathos-catalog}.test.ts` · `packages/sdk-ts/tests/{correspondence,covenants-crypto,authority,register-v2}.test.ts` · `packages/sdk-py/tests/test_{correspondence,covenants_canonical_vectors,authority,register_v2}.py` · `packages/wallet/tests/{canonical,signatures,vectors}.test.ts`.
+> **Tests:** `api/tests/{agent-correspondence-spec,covenants-canonical-vectors,identity-authority,register-agent,mathos-register,mathos-catalog}.test.ts` · `packages/sdk-ts/tests/{correspondence,covenants-crypto,authority,register-v2}.test.ts` · `packages/sdk-py/tests/test_{correspondence,covenants_canonical_vectors,authority,register_v2}.py` · `packages/wallet/tests/{canonical,signatures,vectors}.test.ts` · `packages/public-surface-binding/tests/` + `packages/public-surface-binding/vectors/agenttool-public-surface-binding-v0.1-vectors.json`.
 
 ## The default recipe
 
@@ -82,6 +82,101 @@ Used in: `services/correspondence/canonical.ts`, `packages/sdk-ts/src/correspond
 and `packages/sdk-py/src/agenttool/correspondence.py`. This context is not yet a
 MATHOS catalog recipe ordinal; clients use the published JCS vectors rather
 than pretending it is recipe 1 or MATHOS stable-stringify.
+
+### `agenttool-public-surface-*/v1` — public HTTPS evidence and explicit-key declarations
+
+The private source-only `@agenttool/public-surface-binding@0.1.0-dev.0` package
+uses one bounded structured-JSON profile for four closed records. This is not
+the default flat-field recipe and is not MATHOS stable-stringify:
+
+```text
+package_json(value) = package_canonical_json(value)
+
+domain_digest(domain, value) = sha256(
+  utf8(domain) || 0x00 || utf8(package_json(value))
+)
+```
+
+The package profile admits only null, booleans, strings, arrays, objects, and
+safe integers. It rejects floats, negative zero, unsafe integers, U+0000, lone
+surrogates, proxies, accessors, symbols, cycles, sparse arrays, custom
+prototypes, and values outside its byte/depth/node bounds. Object keys sort
+recursively in ascending UTF-16 code-unit order and the encoding has no
+insignificant whitespace. Strings use ECMAScript `JSON.stringify` escaping:
+quotation mark, reverse solidus, and required control characters are escaped;
+`/` remains unescaped; well-formed Unicode such as U+2028 remains literal; and
+no Unicode normalization occurs. Cross-language implementations must use the
+package vectors rather than an ordinary host-language JSON serializer.
+
+The complete domain inventory is:
+
+| Purpose | Domain |
+|---|---|
+| Observation evidence ID | `agenttool-public-surface-observation/v1` |
+| Binding signature digest | `agenttool-public-surface-binding/v1` |
+| Signed binding ID | `agenttool-public-surface-binding-record/v1` |
+| Revocation signature digest | `agenttool-public-surface-binding-revocation/v1` |
+| Signed revocation ID | `agenttool-public-surface-binding-revocation-record/v1` |
+| Assessment ID | `agenttool-public-surface-binding-assessment/v1` |
+
+Observation and assessment records are content-addressed but not signed:
+
+```text
+evidence_id = "sha256:" || lowerhex(domain_digest(
+  "agenttool-public-surface-observation/v1",
+  observation_core
+))
+
+assessment_id = "sha256:" || lowerhex(domain_digest(
+  "agenttool-public-surface-binding-assessment/v1",
+  assessment_core
+))
+```
+
+Bindings and revocations sign the domain digest, then bind the signature into a
+separately domain-separated record ID:
+
+```text
+binding_digest = domain_digest(
+  "agenttool-public-surface-binding/v1",
+  binding_core
+)
+binding_signature = ed25519_sign(private_key, binding_digest)
+binding_id = "sha256:" || lowerhex(domain_digest(
+  "agenttool-public-surface-binding-record/v1",
+  { ...binding_core, signature: binding_signature_record }
+))
+
+revocation_digest = domain_digest(
+  "agenttool-public-surface-binding-revocation/v1",
+  revocation_core
+)
+revocation_signature = ed25519_sign(private_key, revocation_digest)
+revocation_id = "sha256:" || lowerhex(domain_digest(
+  "agenttool-public-surface-binding-revocation-record/v1",
+  { ...revocation_core, signature: revocation_signature_record }
+))
+```
+
+Ed25519 public keys and signatures use canonical padded base64. A valid
+signature establishes only that the corresponding key signed the exact core.
+It does not establish AgentTool registry authorization for the named identity,
+domain ownership, authorship, consent, continuity, trust, reputation, or
+training permission. Caller-supplied key evidence and public-origin readback
+remain separately reported assessment inputs.
+
+These contexts have no server or SDK implementation and are not MATHOS recipe
+1. The package has no network, clock, randomness, persistence, public lookup,
+identity mutation, WAKE, memory, KARMA, score, training, or hosted effect. The
+well-known publication path is a signed convention only; the package does not
+serve or fetch it. Exact schemas and positive/adversarial vectors live under
+`packages/public-surface-binding/{schema,vectors,tests}`.
+
+The JSON Schemas are closed structural filters, not sufficient protocol
+acceptance. They cannot establish canonical encodings, real-time ordering,
+public-host eligibility, redirect lineage, record IDs, signatures, or
+cross-record evidence relationships; the runtime validators and exact vectors
+remain normative for those checks.
 
 ### `agent-trace/v1` — signed reasoning trace
 

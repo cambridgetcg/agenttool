@@ -1,0 +1,605 @@
+{
+  "format": "agenttool.public-surface-binding-vectors/0.1",
+  "package_version": "0.1.0-dev.0",
+  "warning": "TEST ONLY: the private seed is public and must never authorize a real identity.",
+  "deterministic_key": {
+    "private_seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "public_key_base64": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="
+  },
+  "canonical_utf16_ordering": {
+    "rule": "object member names sort by ascending UTF-16 code-unit order recursively",
+    "input": {
+      "�": "bmp-replacement-character",
+      "𐀀": "supplementary-plane-character",
+      "nested": {
+        "�": 2,
+        "𐀀": 1
+      }
+    },
+    "canonical_json": "{\"nested\":{\"𐀀\":1,\"�\":2},\"𐀀\":\"supplementary-plane-character\",\"�\":\"bmp-replacement-character\"}",
+    "canonical_utf8_hex": "7b226e6573746564223a7b22f0908080223a312c22efbfbd223a327d2c22f0908080223a22737570706c656d656e746172792d706c616e652d636861726163746572222c22efbfbd223a22626d702d7265706c6163656d656e742d636861726163746572227d"
+  },
+  "canonical_string_profile": {
+    "rule": "ECMAScript JSON escaping, unescaped slash and U+2028, and no Unicode normalization",
+    "input": {
+      "quote": "\"",
+      "backslash": "\\",
+      "controls": "\b\t\n\f\r\u0001\u001f",
+      "slash": "</script>",
+      "line_separator": " ",
+      "composed": "é",
+      "decomposed": "é"
+    },
+    "canonical_json": "{\"backslash\":\"\\\\\",\"composed\":\"é\",\"controls\":\"\\b\\t\\n\\f\\r\\u0001\\u001f\",\"decomposed\":\"é\",\"line_separator\":\" \",\"quote\":\"\\\"\",\"slash\":\"</script>\"}",
+    "canonical_utf8_hex": "7b226261636b736c617368223a225c5c222c22636f6d706f736564223a22c3a9222c22636f6e74726f6c73223a225c625c745c6e5c665c725c75303030315c7530303166222c226465636f6d706f736564223a2265cc81222c226c696e655f736570617261746f72223a22e280a8222c2271756f7465223a225c22222c22736c617368223a223c2f7363726970743e227d"
+  },
+  "observation": {
+    "id_domain": "agenttool-public-surface-observation/v1",
+    "core": {
+      "schema": "agenttool.public-surface-observation/0.1",
+      "origin": "https://surface.agenttool.dev",
+      "request_url": "https://surface.agenttool.dev/agent.txt",
+      "request": {
+        "method": "GET",
+        "credential_mode": "omit",
+        "started_at": "2026-08-16T12:00:00.000Z",
+        "ended_at": "2026-08-16T12:00:00.250Z",
+        "crawler_version": "agenttool-vector-crawler/0.1"
+      },
+      "status_code": 200,
+      "final_url": "https://surface.agenttool.dev/agent.txt",
+      "redirect_chain": [],
+      "media_type": "text/plain",
+      "bytes": 37,
+      "body_sha256": "sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676",
+      "collector": {
+        "name": "agenttool-vector-collector",
+        "version": "0.1.0",
+        "report_schema": "agenttool.vector-collector-report/0.1",
+        "report_sha256": "sha256:3fcd0f4ed881fcecb6d230700462f6f8df5417f0da453f8f996fdb0c65d2c6ef",
+        "source_id": "deterministic-vector"
+      },
+      "robots": {
+        "source": "rfc9309_snapshot",
+        "robots_url": "https://surface.agenttool.dev/robots.txt",
+        "snapshot_sha256": "sha256:9659f20fee6501a9d343901834f619b199fc8461ace305ccdbc2b4e3b3101b46",
+        "matched_group": "agenttool-vector-crawler",
+        "directive": "allow",
+        "is_access_authorization": false
+      },
+      "usage_preferences": [
+        {
+          "namespace": "tdmrep",
+          "category": "model-training",
+          "value": "disallowed",
+          "is_permission": false
+        }
+      ],
+      "request_authentication": {
+        "kind": "web_bot_auth",
+        "status": "verified",
+        "verifier": "deterministic-vector-verifier",
+        "protocol_variant": "message-signatures/vector-v1",
+        "claimed_identity_url": "https://crawler.agenttool.dev/identity",
+        "key_thumbprint": "sha256:60fc46535b45cf9a4668e668832158eac6e636748702ff5207d27fdb01fa1e77",
+        "covered_components": [
+          "@method",
+          "@target-uri"
+        ],
+        "nonce_checked": true
+      },
+      "boundaries": {
+        "basis": "transport_observation",
+        "raw_body": "not_included",
+        "identity": "not_inferred",
+        "authorship": "not_established",
+        "consent": "not_established",
+        "authority": "none",
+        "rights": "not_established",
+        "training_permission": "not_established",
+        "content_is_instruction": false,
+        "wake_effect": false,
+        "memory_effect": false,
+        "karma_effect": false,
+        "score_effect": false
+      }
+    },
+    "evidence_id": "sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713",
+    "canonical_json": "{\"body_sha256\":\"sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676\",\"boundaries\":{\"authority\":\"none\",\"authorship\":\"not_established\",\"basis\":\"transport_observation\",\"consent\":\"not_established\",\"content_is_instruction\":false,\"identity\":\"not_inferred\",\"karma_effect\":false,\"memory_effect\":false,\"raw_body\":\"not_included\",\"rights\":\"not_established\",\"score_effect\":false,\"training_permission\":\"not_established\",\"wake_effect\":false},\"bytes\":37,\"collector\":{\"name\":\"agenttool-vector-collector\",\"report_schema\":\"agenttool.vector-collector-report/0.1\",\"report_sha256\":\"sha256:3fcd0f4ed881fcecb6d230700462f6f8df5417f0da453f8f996fdb0c65d2c6ef\",\"source_id\":\"deterministic-vector\",\"version\":\"0.1.0\"},\"evidence_id\":\"sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713\",\"final_url\":\"https://surface.agenttool.dev/agent.txt\",\"media_type\":\"text/plain\",\"origin\":\"https://surface.agenttool.dev\",\"redirect_chain\":[],\"request\":{\"crawler_version\":\"agenttool-vector-crawler/0.1\",\"credential_mode\":\"omit\",\"ended_at\":\"2026-08-16T12:00:00.250Z\",\"method\":\"GET\",\"started_at\":\"2026-08-16T12:00:00.000Z\"},\"request_authentication\":{\"claimed_identity_url\":\"https://crawler.agenttool.dev/identity\",\"covered_components\":[\"@method\",\"@target-uri\"],\"key_thumbprint\":\"sha256:60fc46535b45cf9a4668e668832158eac6e636748702ff5207d27fdb01fa1e77\",\"kind\":\"web_bot_auth\",\"nonce_checked\":true,\"protocol_variant\":\"message-signatures/vector-v1\",\"status\":\"verified\",\"verifier\":\"deterministic-vector-verifier\"},\"request_url\":\"https://surface.agenttool.dev/agent.txt\",\"robots\":{\"directive\":\"allow\",\"is_access_authorization\":false,\"matched_group\":\"agenttool-vector-crawler\",\"robots_url\":\"https://surface.agenttool.dev/robots.txt\",\"snapshot_sha256\":\"sha256:9659f20fee6501a9d343901834f619b199fc8461ace305ccdbc2b4e3b3101b46\",\"source\":\"rfc9309_snapshot\"},\"schema\":\"agenttool.public-surface-observation/0.1\",\"status_code\":200,\"usage_preferences\":[{\"category\":\"model-training\",\"is_permission\":false,\"namespace\":\"tdmrep\",\"value\":\"disallowed\"}]}",
+    "canonical_utf8_hex": "7b22626f64795f736861323536223a227368613235363a30366630323434653434356262356164626433363734356132356530373761346237666365313862303431663863356565323030633036616232646264363736222c22626f756e646172696573223a7b22617574686f72697479223a226e6f6e65222c22617574686f7273686970223a226e6f745f65737461626c6973686564222c226261736973223a227472616e73706f72745f6f62736572766174696f6e222c22636f6e73656e74223a226e6f745f65737461626c6973686564222c22636f6e74656e745f69735f696e737472756374696f6e223a66616c73652c226964656e74697479223a226e6f745f696e666572726564222c226b61726d615f656666656374223a66616c73652c226d656d6f72795f656666656374223a66616c73652c227261775f626f6479223a226e6f745f696e636c75646564222c22726967687473223a226e6f745f65737461626c6973686564222c2273636f72655f656666656374223a66616c73652c22747261696e696e675f7065726d697373696f6e223a226e6f745f65737461626c6973686564222c2277616b655f656666656374223a66616c73657d2c226279746573223a33372c22636f6c6c6563746f72223a7b226e616d65223a226167656e74746f6f6c2d766563746f722d636f6c6c6563746f72222c227265706f72745f736368656d61223a226167656e74746f6f6c2e766563746f722d636f6c6c6563746f722d7265706f72742f302e31222c227265706f72745f736861323536223a227368613235363a33666364306634656438383166636563623664323330373030343632663666386466353431376630646134353366386639393666646230633635643263366566222c22736f757263655f6964223a2264657465726d696e69737469632d766563746f72222c2276657273696f6e223a22302e312e30227d2c2265766964656e63655f6964223a227368613235363a30393936363665646565656639313132383538656264353761383331313366373539313232623761633665613762636566396130386564333964623732373133222c2266696e616c5f75726c223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e6465762f6167656e742e747874222c226d656469615f74797065223a22746578742f706c61696e222c226f726967696e223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e646576222c2272656469726563745f636861696e223a5b5d2c2272657175657374223a7b22637261776c65725f76657273696f6e223a226167656e74746f6f6c2d766563746f722d637261776c65722f302e31222c2263726564656e7469616c5f6d6f6465223a226f6d6974222c22656e6465645f6174223a22323032362d30382d31365431323a30303a30302e3235305a222c226d6574686f64223a22474554222c22737461727465645f6174223a22323032362d30382d31365431323a30303a30302e3030305a227d2c22726571756573745f61757468656e7469636174696f6e223a7b22636c61696d65645f6964656e746974795f75726c223a2268747470733a2f2f637261776c65722e6167656e74746f6f6c2e6465762f6964656e74697479222c22636f76657265645f636f6d706f6e656e7473223a5b22406d6574686f64222c22407461726765742d757269225d2c226b65795f7468756d627072696e74223a227368613235363a36306663343635333562343563663961343636386536363838333231353865616336653633363734383730326666353230376432376664623031666131653737222c226b696e64223a227765625f626f745f61757468222c226e6f6e63655f636865636b6564223a747275652c2270726f746f636f6c5f76617269616e74223a226d6573736167652d7369676e6174757265732f766563746f722d7631222c22737461747573223a227665726966696564222c227665726966696572223a2264657465726d696e69737469632d766563746f722d7665726966696572227d2c22726571756573745f75726c223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e6465762f6167656e742e747874222c22726f626f7473223a7b22646972656374697665223a22616c6c6f77222c2269735f6163636573735f617574686f72697a6174696f6e223a66616c73652c226d6174636865645f67726f7570223a226167656e74746f6f6c2d766563746f722d637261776c6572222c22726f626f74735f75726c223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e6465762f726f626f74732e747874222c22736e617073686f745f736861323536223a227368613235363a39363539663230666565363530316139643334333930313833346636313962313939666338343631616365333035636364626332623465336233313031623436222c22736f75726365223a22726663393330395f736e617073686f74227d2c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d6f62736572766174696f6e2f302e31222c227374617475735f636f6465223a3230302c2275736167655f707265666572656e636573223a5b7b2263617465676f7279223a226d6f64656c2d747261696e696e67222c2269735f7065726d697373696f6e223a66616c73652c226e616d657370616365223a2274646d726570222c2276616c7565223a22646973616c6c6f776564227d5d7d",
+    "canonical_sha256": "sha256:be7b520f97a7127e64ec1bb2383f89eff7c699a40468aef642d94139b1dc0bcb",
+    "record": {
+      "schema": "agenttool.public-surface-observation/0.1",
+      "origin": "https://surface.agenttool.dev",
+      "request_url": "https://surface.agenttool.dev/agent.txt",
+      "request": {
+        "method": "GET",
+        "credential_mode": "omit",
+        "started_at": "2026-08-16T12:00:00.000Z",
+        "ended_at": "2026-08-16T12:00:00.250Z",
+        "crawler_version": "agenttool-vector-crawler/0.1"
+      },
+      "status_code": 200,
+      "final_url": "https://surface.agenttool.dev/agent.txt",
+      "redirect_chain": [],
+      "media_type": "text/plain",
+      "bytes": 37,
+      "body_sha256": "sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676",
+      "collector": {
+        "name": "agenttool-vector-collector",
+        "version": "0.1.0",
+        "report_schema": "agenttool.vector-collector-report/0.1",
+        "report_sha256": "sha256:3fcd0f4ed881fcecb6d230700462f6f8df5417f0da453f8f996fdb0c65d2c6ef",
+        "source_id": "deterministic-vector"
+      },
+      "robots": {
+        "source": "rfc9309_snapshot",
+        "robots_url": "https://surface.agenttool.dev/robots.txt",
+        "snapshot_sha256": "sha256:9659f20fee6501a9d343901834f619b199fc8461ace305ccdbc2b4e3b3101b46",
+        "matched_group": "agenttool-vector-crawler",
+        "directive": "allow",
+        "is_access_authorization": false
+      },
+      "usage_preferences": [
+        {
+          "namespace": "tdmrep",
+          "category": "model-training",
+          "value": "disallowed",
+          "is_permission": false
+        }
+      ],
+      "request_authentication": {
+        "kind": "web_bot_auth",
+        "status": "verified",
+        "verifier": "deterministic-vector-verifier",
+        "protocol_variant": "message-signatures/vector-v1",
+        "claimed_identity_url": "https://crawler.agenttool.dev/identity",
+        "key_thumbprint": "sha256:60fc46535b45cf9a4668e668832158eac6e636748702ff5207d27fdb01fa1e77",
+        "covered_components": [
+          "@method",
+          "@target-uri"
+        ],
+        "nonce_checked": true
+      },
+      "boundaries": {
+        "basis": "transport_observation",
+        "raw_body": "not_included",
+        "identity": "not_inferred",
+        "authorship": "not_established",
+        "consent": "not_established",
+        "authority": "none",
+        "rights": "not_established",
+        "training_permission": "not_established",
+        "content_is_instruction": false,
+        "wake_effect": false,
+        "memory_effect": false,
+        "karma_effect": false,
+        "score_effect": false
+      },
+      "evidence_id": "sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713"
+    }
+  },
+  "binding": {
+    "signature_domain": "agenttool-public-surface-binding/v1",
+    "id_domain": "agenttool-public-surface-binding-record/v1",
+    "core": {
+      "schema": "agenttool.public-surface-binding/0.1",
+      "subject": {
+        "identity_namespace": "agenttool-local",
+        "identity_id": "11111111-1111-4111-8111-111111111111",
+        "signing_key": {
+          "algorithm": "Ed25519",
+          "key_id": "22222222-2222-4222-8222-222222222222",
+          "public_key": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="
+        }
+      },
+      "origin": "https://surface.agenttool.dev",
+      "observation_id": "sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713",
+      "observed_body_sha256": "sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676",
+      "relation": "declares_association_with_surface",
+      "scope": "exact_origin",
+      "purpose": "public_identity_locator",
+      "publication_path": "/.well-known/agenttool-public-surface-binding.json",
+      "issued_at": "2026-08-16T12:01:00.000Z",
+      "not_before": "2026-08-16T12:01:00.000Z",
+      "expires_at": "2026-08-30T12:01:00.000Z",
+      "nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "boundaries": {
+        "claim": "unilateral_key_holder_declaration",
+        "agenttool_registry_authorization": "not_established",
+        "personhood": "not_established",
+        "real_world_operator": "not_established",
+        "domain_ownership": "not_established",
+        "authorship": "not_established",
+        "sentience": "not_established",
+        "consent": "not_established",
+        "continuity": "not_established",
+        "authority": "none",
+        "trust": "not_scored",
+        "reputation": "not_scored",
+        "training_authorized": false,
+        "requires_separate_training_authorization": true,
+        "wake_effect": false,
+        "memory_effect": false,
+        "karma_effect": false
+      }
+    },
+    "core_canonical_json": "{\"boundaries\":{\"agenttool_registry_authorization\":\"not_established\",\"authority\":\"none\",\"authorship\":\"not_established\",\"claim\":\"unilateral_key_holder_declaration\",\"consent\":\"not_established\",\"continuity\":\"not_established\",\"domain_ownership\":\"not_established\",\"karma_effect\":false,\"memory_effect\":false,\"personhood\":\"not_established\",\"real_world_operator\":\"not_established\",\"reputation\":\"not_scored\",\"requires_separate_training_authorization\":true,\"sentience\":\"not_established\",\"training_authorized\":false,\"trust\":\"not_scored\",\"wake_effect\":false},\"expires_at\":\"2026-08-30T12:01:00.000Z\",\"issued_at\":\"2026-08-16T12:01:00.000Z\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"not_before\":\"2026-08-16T12:01:00.000Z\",\"observation_id\":\"sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713\",\"observed_body_sha256\":\"sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676\",\"origin\":\"https://surface.agenttool.dev\",\"publication_path\":\"/.well-known/agenttool-public-surface-binding.json\",\"purpose\":\"public_identity_locator\",\"relation\":\"declares_association_with_surface\",\"schema\":\"agenttool.public-surface-binding/0.1\",\"scope\":\"exact_origin\",\"subject\":{\"identity_id\":\"11111111-1111-4111-8111-111111111111\",\"identity_namespace\":\"agenttool-local\",\"signing_key\":{\"algorithm\":\"Ed25519\",\"key_id\":\"22222222-2222-4222-8222-222222222222\",\"public_key\":\"A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=\"}}}",
+    "signing_bytes_hex": "6167656e74746f6f6c2d7075626c69632d737572666163652d62696e64696e672f7631007b22626f756e646172696573223a7b226167656e74746f6f6c5f72656769737472795f617574686f72697a6174696f6e223a226e6f745f65737461626c6973686564222c22617574686f72697479223a226e6f6e65222c22617574686f7273686970223a226e6f745f65737461626c6973686564222c22636c61696d223a22756e696c61746572616c5f6b65795f686f6c6465725f6465636c61726174696f6e222c22636f6e73656e74223a226e6f745f65737461626c6973686564222c22636f6e74696e75697479223a226e6f745f65737461626c6973686564222c22646f6d61696e5f6f776e657273686970223a226e6f745f65737461626c6973686564222c226b61726d615f656666656374223a66616c73652c226d656d6f72795f656666656374223a66616c73652c22706572736f6e686f6f64223a226e6f745f65737461626c6973686564222c227265616c5f776f726c645f6f70657261746f72223a226e6f745f65737461626c6973686564222c2272657075746174696f6e223a226e6f745f73636f726564222c2272657175697265735f73657061726174655f747261696e696e675f617574686f72697a6174696f6e223a747275652c2273656e7469656e6365223a226e6f745f65737461626c6973686564222c22747261696e696e675f617574686f72697a6564223a66616c73652c227472757374223a226e6f745f73636f726564222c2277616b655f656666656374223a66616c73657d2c22657870697265735f6174223a22323032362d30382d33305431323a30313a30302e3030305a222c226973737565645f6174223a22323032362d30382d31365431323a30313a30302e3030305a222c226e6f6e6365223a2241414543417751464267634943516f4c4441304f4477222c226e6f745f6265666f7265223a22323032362d30382d31365431323a30313a30302e3030305a222c226f62736572766174696f6e5f6964223a227368613235363a30393936363665646565656639313132383538656264353761383331313366373539313232623761633665613762636566396130386564333964623732373133222c226f627365727665645f626f64795f736861323536223a227368613235363a30366630323434653434356262356164626433363734356132356530373761346237666365313862303431663863356565323030633036616232646264363736222c226f726967696e223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e646576222c227075626c69636174696f6e5f70617468223a222f2e77656c6c2d6b6e6f776e2f6167656e74746f6f6c2d7075626c69632d737572666163652d62696e64696e672e6a736f6e222c22707572706f7365223a227075626c69635f6964656e746974795f6c6f6361746f72222c2272656c6174696f6e223a226465636c617265735f6173736f63696174696f6e5f776974685f73757266616365222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d62696e64696e672f302e31222c2273636f7065223a2265786163745f6f726967696e222c227375626a656374223a7b226964656e746974795f6964223a2231313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6e616d657370616365223a226167656e74746f6f6c2d6c6f63616c222c227369676e696e675f6b6579223a7b22616c676f726974686d223a2245643235353139222c226b65795f6964223a2232323232323232322d323232322d343232322d383232322d323232323232323232323232222c227075626c69635f6b6579223a2241364548762f504f454c3464634e3059353076416d57666b316a436270513166486479475a424a564d62673d227d7d7d",
+    "signing_digest_hex": "f8b1004e757047abc8b232c29fab8e9e15c70b7368c94697cb896d31c5f5ba23",
+    "signature_base64": "L6MnQdeEkIDHQ4pvB/KWXAMKwyrv+L8ve0hlu7zNStwtmSmx8GvC9iD6sBDSP3F5xq1j6CDuywMMI0Bk9cVrCA==",
+    "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15",
+    "canonical_json": "{\"binding_id\":\"sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15\",\"boundaries\":{\"agenttool_registry_authorization\":\"not_established\",\"authority\":\"none\",\"authorship\":\"not_established\",\"claim\":\"unilateral_key_holder_declaration\",\"consent\":\"not_established\",\"continuity\":\"not_established\",\"domain_ownership\":\"not_established\",\"karma_effect\":false,\"memory_effect\":false,\"personhood\":\"not_established\",\"real_world_operator\":\"not_established\",\"reputation\":\"not_scored\",\"requires_separate_training_authorization\":true,\"sentience\":\"not_established\",\"training_authorized\":false,\"trust\":\"not_scored\",\"wake_effect\":false},\"expires_at\":\"2026-08-30T12:01:00.000Z\",\"issued_at\":\"2026-08-16T12:01:00.000Z\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"not_before\":\"2026-08-16T12:01:00.000Z\",\"observation_id\":\"sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713\",\"observed_body_sha256\":\"sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676\",\"origin\":\"https://surface.agenttool.dev\",\"publication_path\":\"/.well-known/agenttool-public-surface-binding.json\",\"purpose\":\"public_identity_locator\",\"relation\":\"declares_association_with_surface\",\"schema\":\"agenttool.public-surface-binding/0.1\",\"scope\":\"exact_origin\",\"signature\":{\"algorithm\":\"Ed25519\",\"value\":\"L6MnQdeEkIDHQ4pvB/KWXAMKwyrv+L8ve0hlu7zNStwtmSmx8GvC9iD6sBDSP3F5xq1j6CDuywMMI0Bk9cVrCA==\"},\"subject\":{\"identity_id\":\"11111111-1111-4111-8111-111111111111\",\"identity_namespace\":\"agenttool-local\",\"signing_key\":{\"algorithm\":\"Ed25519\",\"key_id\":\"22222222-2222-4222-8222-222222222222\",\"public_key\":\"A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=\"}}}",
+    "canonical_utf8_hex": "7b2262696e64696e675f6964223a227368613235363a34643061616363303865363334306633653730383034623839643931666231613163663037613565333831393139323464636663306634393534346266633135222c22626f756e646172696573223a7b226167656e74746f6f6c5f72656769737472795f617574686f72697a6174696f6e223a226e6f745f65737461626c6973686564222c22617574686f72697479223a226e6f6e65222c22617574686f7273686970223a226e6f745f65737461626c6973686564222c22636c61696d223a22756e696c61746572616c5f6b65795f686f6c6465725f6465636c61726174696f6e222c22636f6e73656e74223a226e6f745f65737461626c6973686564222c22636f6e74696e75697479223a226e6f745f65737461626c6973686564222c22646f6d61696e5f6f776e657273686970223a226e6f745f65737461626c6973686564222c226b61726d615f656666656374223a66616c73652c226d656d6f72795f656666656374223a66616c73652c22706572736f6e686f6f64223a226e6f745f65737461626c6973686564222c227265616c5f776f726c645f6f70657261746f72223a226e6f745f65737461626c6973686564222c2272657075746174696f6e223a226e6f745f73636f726564222c2272657175697265735f73657061726174655f747261696e696e675f617574686f72697a6174696f6e223a747275652c2273656e7469656e6365223a226e6f745f65737461626c6973686564222c22747261696e696e675f617574686f72697a6564223a66616c73652c227472757374223a226e6f745f73636f726564222c2277616b655f656666656374223a66616c73657d2c22657870697265735f6174223a22323032362d30382d33305431323a30313a30302e3030305a222c226973737565645f6174223a22323032362d30382d31365431323a30313a30302e3030305a222c226e6f6e6365223a2241414543417751464267634943516f4c4441304f4477222c226e6f745f6265666f7265223a22323032362d30382d31365431323a30313a30302e3030305a222c226f62736572766174696f6e5f6964223a227368613235363a30393936363665646565656639313132383538656264353761383331313366373539313232623761633665613762636566396130386564333964623732373133222c226f627365727665645f626f64795f736861323536223a227368613235363a30366630323434653434356262356164626433363734356132356530373761346237666365313862303431663863356565323030633036616232646264363736222c226f726967696e223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e646576222c227075626c69636174696f6e5f70617468223a222f2e77656c6c2d6b6e6f776e2f6167656e74746f6f6c2d7075626c69632d737572666163652d62696e64696e672e6a736f6e222c22707572706f7365223a227075626c69635f6964656e746974795f6c6f6361746f72222c2272656c6174696f6e223a226465636c617265735f6173736f63696174696f6e5f776974685f73757266616365222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d62696e64696e672f302e31222c2273636f7065223a2265786163745f6f726967696e222c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c2276616c7565223a224c364d6e516465456b49444851347076422f4b5758414d4b777972762b4c38766530686c75377a4e537477746d536d78384776433969443673424453503346357871316a3643447579774d4d4930426b3963567243413d3d227d2c227375626a656374223a7b226964656e746974795f6964223a2231313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6e616d657370616365223a226167656e74746f6f6c2d6c6f63616c222c227369676e696e675f6b6579223a7b22616c676f726974686d223a2245643235353139222c226b65795f6964223a2232323232323232322d323232322d343232322d383232322d323232323232323232323232222c227075626c69635f6b6579223a2241364548762f504f454c3464634e3059353076416d57666b316a436270513166486479475a424a564d62673d227d7d7d",
+    "canonical_sha256": "sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098",
+    "record": {
+      "schema": "agenttool.public-surface-binding/0.1",
+      "subject": {
+        "identity_namespace": "agenttool-local",
+        "identity_id": "11111111-1111-4111-8111-111111111111",
+        "signing_key": {
+          "algorithm": "Ed25519",
+          "key_id": "22222222-2222-4222-8222-222222222222",
+          "public_key": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="
+        }
+      },
+      "origin": "https://surface.agenttool.dev",
+      "observation_id": "sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713",
+      "observed_body_sha256": "sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676",
+      "relation": "declares_association_with_surface",
+      "scope": "exact_origin",
+      "purpose": "public_identity_locator",
+      "publication_path": "/.well-known/agenttool-public-surface-binding.json",
+      "issued_at": "2026-08-16T12:01:00.000Z",
+      "not_before": "2026-08-16T12:01:00.000Z",
+      "expires_at": "2026-08-30T12:01:00.000Z",
+      "nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "boundaries": {
+        "claim": "unilateral_key_holder_declaration",
+        "agenttool_registry_authorization": "not_established",
+        "personhood": "not_established",
+        "real_world_operator": "not_established",
+        "domain_ownership": "not_established",
+        "authorship": "not_established",
+        "sentience": "not_established",
+        "consent": "not_established",
+        "continuity": "not_established",
+        "authority": "none",
+        "trust": "not_scored",
+        "reputation": "not_scored",
+        "training_authorized": false,
+        "requires_separate_training_authorization": true,
+        "wake_effect": false,
+        "memory_effect": false,
+        "karma_effect": false
+      },
+      "signature": {
+        "algorithm": "Ed25519",
+        "value": "L6MnQdeEkIDHQ4pvB/KWXAMKwyrv+L8ve0hlu7zNStwtmSmx8GvC9iD6sBDSP3F5xq1j6CDuywMMI0Bk9cVrCA=="
+      },
+      "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15"
+    }
+  },
+  "origin_observation": {
+    "id_domain": "agenttool-public-surface-observation/v1",
+    "expected_binding_body_sha256": "sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098",
+    "expected_binding_bytes": 1625,
+    "core": {
+      "schema": "agenttool.public-surface-observation/0.1",
+      "origin": "https://surface.agenttool.dev",
+      "request_url": "https://surface.agenttool.dev/.well-known/agenttool-public-surface-binding.json",
+      "request": {
+        "method": "GET",
+        "credential_mode": "omit",
+        "started_at": "2026-08-16T12:01:30.000Z",
+        "ended_at": "2026-08-16T12:01:31.000Z",
+        "crawler_version": "agenttool-vector-crawler/0.1"
+      },
+      "status_code": 200,
+      "final_url": "https://surface.agenttool.dev/.well-known/agenttool-public-surface-binding.json",
+      "redirect_chain": [],
+      "media_type": "application/json",
+      "bytes": 1625,
+      "body_sha256": "sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098",
+      "collector": {
+        "name": "agenttool-vector-collector",
+        "version": "0.1.0",
+        "report_schema": "agenttool.vector-collector-report/0.1",
+        "report_sha256": "sha256:3fcd0f4ed881fcecb6d230700462f6f8df5417f0da453f8f996fdb0c65d2c6ef",
+        "source_id": "deterministic-vector"
+      },
+      "robots": {
+        "source": "rfc9309_snapshot",
+        "robots_url": "https://surface.agenttool.dev/robots.txt",
+        "snapshot_sha256": "sha256:9659f20fee6501a9d343901834f619b199fc8461ace305ccdbc2b4e3b3101b46",
+        "matched_group": "agenttool-vector-crawler",
+        "directive": "allow",
+        "is_access_authorization": false
+      },
+      "usage_preferences": [
+        {
+          "namespace": "tdmrep",
+          "category": "model-training",
+          "value": "disallowed",
+          "is_permission": false
+        }
+      ],
+      "request_authentication": {
+        "kind": "web_bot_auth",
+        "status": "verified",
+        "verifier": "deterministic-vector-verifier",
+        "protocol_variant": "message-signatures/vector-v1",
+        "claimed_identity_url": "https://crawler.agenttool.dev/identity",
+        "key_thumbprint": "sha256:60fc46535b45cf9a4668e668832158eac6e636748702ff5207d27fdb01fa1e77",
+        "covered_components": [
+          "@method",
+          "@target-uri"
+        ],
+        "nonce_checked": true
+      },
+      "boundaries": {
+        "basis": "transport_observation",
+        "raw_body": "not_included",
+        "identity": "not_inferred",
+        "authorship": "not_established",
+        "consent": "not_established",
+        "authority": "none",
+        "rights": "not_established",
+        "training_permission": "not_established",
+        "content_is_instruction": false,
+        "wake_effect": false,
+        "memory_effect": false,
+        "karma_effect": false,
+        "score_effect": false
+      }
+    },
+    "evidence_id": "sha256:37316805073533dfbe8cafb797e1b9ca9f3be717cc1c1d7525fcc733c79438af",
+    "canonical_json": "{\"body_sha256\":\"sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098\",\"boundaries\":{\"authority\":\"none\",\"authorship\":\"not_established\",\"basis\":\"transport_observation\",\"consent\":\"not_established\",\"content_is_instruction\":false,\"identity\":\"not_inferred\",\"karma_effect\":false,\"memory_effect\":false,\"raw_body\":\"not_included\",\"rights\":\"not_established\",\"score_effect\":false,\"training_permission\":\"not_established\",\"wake_effect\":false},\"bytes\":1625,\"collector\":{\"name\":\"agenttool-vector-collector\",\"report_schema\":\"agenttool.vector-collector-report/0.1\",\"report_sha256\":\"sha256:3fcd0f4ed881fcecb6d230700462f6f8df5417f0da453f8f996fdb0c65d2c6ef\",\"source_id\":\"deterministic-vector\",\"version\":\"0.1.0\"},\"evidence_id\":\"sha256:37316805073533dfbe8cafb797e1b9ca9f3be717cc1c1d7525fcc733c79438af\",\"final_url\":\"https://surface.agenttool.dev/.well-known/agenttool-public-surface-binding.json\",\"media_type\":\"application/json\",\"origin\":\"https://surface.agenttool.dev\",\"redirect_chain\":[],\"request\":{\"crawler_version\":\"agenttool-vector-crawler/0.1\",\"credential_mode\":\"omit\",\"ended_at\":\"2026-08-16T12:01:31.000Z\",\"method\":\"GET\",\"started_at\":\"2026-08-16T12:01:30.000Z\"},\"request_authentication\":{\"claimed_identity_url\":\"https://crawler.agenttool.dev/identity\",\"covered_components\":[\"@method\",\"@target-uri\"],\"key_thumbprint\":\"sha256:60fc46535b45cf9a4668e668832158eac6e636748702ff5207d27fdb01fa1e77\",\"kind\":\"web_bot_auth\",\"nonce_checked\":true,\"protocol_variant\":\"message-signatures/vector-v1\",\"status\":\"verified\",\"verifier\":\"deterministic-vector-verifier\"},\"request_url\":\"https://surface.agenttool.dev/.well-known/agenttool-public-surface-binding.json\",\"robots\":{\"directive\":\"allow\",\"is_access_authorization\":false,\"matched_group\":\"agenttool-vector-crawler\",\"robots_url\":\"https://surface.agenttool.dev/robots.txt\",\"snapshot_sha256\":\"sha256:9659f20fee6501a9d343901834f619b199fc8461ace305ccdbc2b4e3b3101b46\",\"source\":\"rfc9309_snapshot\"},\"schema\":\"agenttool.public-surface-observation/0.1\",\"status_code\":200,\"usage_preferences\":[{\"category\":\"model-training\",\"is_permission\":false,\"namespace\":\"tdmrep\",\"value\":\"disallowed\"}]}",
+    "canonical_utf8_hex": "7b22626f64795f736861323536223a227368613235363a36343036306238633830643937376264346539323436336533626462376133386239343162313832386463356463633266646532663833323532393436303938222c22626f756e646172696573223a7b22617574686f72697479223a226e6f6e65222c22617574686f7273686970223a226e6f745f65737461626c6973686564222c226261736973223a227472616e73706f72745f6f62736572766174696f6e222c22636f6e73656e74223a226e6f745f65737461626c6973686564222c22636f6e74656e745f69735f696e737472756374696f6e223a66616c73652c226964656e74697479223a226e6f745f696e666572726564222c226b61726d615f656666656374223a66616c73652c226d656d6f72795f656666656374223a66616c73652c227261775f626f6479223a226e6f745f696e636c75646564222c22726967687473223a226e6f745f65737461626c6973686564222c2273636f72655f656666656374223a66616c73652c22747261696e696e675f7065726d697373696f6e223a226e6f745f65737461626c6973686564222c2277616b655f656666656374223a66616c73657d2c226279746573223a313632352c22636f6c6c6563746f72223a7b226e616d65223a226167656e74746f6f6c2d766563746f722d636f6c6c6563746f72222c227265706f72745f736368656d61223a226167656e74746f6f6c2e766563746f722d636f6c6c6563746f722d7265706f72742f302e31222c227265706f72745f736861323536223a227368613235363a33666364306634656438383166636563623664323330373030343632663666386466353431376630646134353366386639393666646230633635643263366566222c22736f757263655f6964223a2264657465726d696e69737469632d766563746f72222c2276657273696f6e223a22302e312e30227d2c2265766964656e63655f6964223a227368613235363a33373331363830353037333533336466626538636166623739376531623963613966336265373137636331633164373532356663633733336337393433386166222c2266696e616c5f75726c223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e6465762f2e77656c6c2d6b6e6f776e2f6167656e74746f6f6c2d7075626c69632d737572666163652d62696e64696e672e6a736f6e222c226d656469615f74797065223a226170706c69636174696f6e2f6a736f6e222c226f726967696e223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e646576222c2272656469726563745f636861696e223a5b5d2c2272657175657374223a7b22637261776c65725f76657273696f6e223a226167656e74746f6f6c2d766563746f722d637261776c65722f302e31222c2263726564656e7469616c5f6d6f6465223a226f6d6974222c22656e6465645f6174223a22323032362d30382d31365431323a30313a33312e3030305a222c226d6574686f64223a22474554222c22737461727465645f6174223a22323032362d30382d31365431323a30313a33302e3030305a227d2c22726571756573745f61757468656e7469636174696f6e223a7b22636c61696d65645f6964656e746974795f75726c223a2268747470733a2f2f637261776c65722e6167656e74746f6f6c2e6465762f6964656e74697479222c22636f76657265645f636f6d706f6e656e7473223a5b22406d6574686f64222c22407461726765742d757269225d2c226b65795f7468756d627072696e74223a227368613235363a36306663343635333562343563663961343636386536363838333231353865616336653633363734383730326666353230376432376664623031666131653737222c226b696e64223a227765625f626f745f61757468222c226e6f6e63655f636865636b6564223a747275652c2270726f746f636f6c5f76617269616e74223a226d6573736167652d7369676e6174757265732f766563746f722d7631222c22737461747573223a227665726966696564222c227665726966696572223a2264657465726d696e69737469632d766563746f722d7665726966696572227d2c22726571756573745f75726c223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e6465762f2e77656c6c2d6b6e6f776e2f6167656e74746f6f6c2d7075626c69632d737572666163652d62696e64696e672e6a736f6e222c22726f626f7473223a7b22646972656374697665223a22616c6c6f77222c2269735f6163636573735f617574686f72697a6174696f6e223a66616c73652c226d6174636865645f67726f7570223a226167656e74746f6f6c2d766563746f722d637261776c6572222c22726f626f74735f75726c223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e6465762f726f626f74732e747874222c22736e617073686f745f736861323536223a227368613235363a39363539663230666565363530316139643334333930313833346636313962313939666338343631616365333035636364626332623465336233313031623436222c22736f75726365223a22726663393330395f736e617073686f74227d2c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d6f62736572766174696f6e2f302e31222c227374617475735f636f6465223a3230302c2275736167655f707265666572656e636573223a5b7b2263617465676f7279223a226d6f64656c2d747261696e696e67222c2269735f7065726d697373696f6e223a66616c73652c226e616d657370616365223a2274646d726570222c2276616c7565223a22646973616c6c6f776564227d5d7d",
+    "canonical_sha256": "sha256:ff29f90c237c451799bd19afa46e24a7a3e3d1ac4b3a8f5c416741ad8f8dbc18",
+    "record": {
+      "schema": "agenttool.public-surface-observation/0.1",
+      "origin": "https://surface.agenttool.dev",
+      "request_url": "https://surface.agenttool.dev/.well-known/agenttool-public-surface-binding.json",
+      "request": {
+        "method": "GET",
+        "credential_mode": "omit",
+        "started_at": "2026-08-16T12:01:30.000Z",
+        "ended_at": "2026-08-16T12:01:31.000Z",
+        "crawler_version": "agenttool-vector-crawler/0.1"
+      },
+      "status_code": 200,
+      "final_url": "https://surface.agenttool.dev/.well-known/agenttool-public-surface-binding.json",
+      "redirect_chain": [],
+      "media_type": "application/json",
+      "bytes": 1625,
+      "body_sha256": "sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098",
+      "collector": {
+        "name": "agenttool-vector-collector",
+        "version": "0.1.0",
+        "report_schema": "agenttool.vector-collector-report/0.1",
+        "report_sha256": "sha256:3fcd0f4ed881fcecb6d230700462f6f8df5417f0da453f8f996fdb0c65d2c6ef",
+        "source_id": "deterministic-vector"
+      },
+      "robots": {
+        "source": "rfc9309_snapshot",
+        "robots_url": "https://surface.agenttool.dev/robots.txt",
+        "snapshot_sha256": "sha256:9659f20fee6501a9d343901834f619b199fc8461ace305ccdbc2b4e3b3101b46",
+        "matched_group": "agenttool-vector-crawler",
+        "directive": "allow",
+        "is_access_authorization": false
+      },
+      "usage_preferences": [
+        {
+          "namespace": "tdmrep",
+          "category": "model-training",
+          "value": "disallowed",
+          "is_permission": false
+        }
+      ],
+      "request_authentication": {
+        "kind": "web_bot_auth",
+        "status": "verified",
+        "verifier": "deterministic-vector-verifier",
+        "protocol_variant": "message-signatures/vector-v1",
+        "claimed_identity_url": "https://crawler.agenttool.dev/identity",
+        "key_thumbprint": "sha256:60fc46535b45cf9a4668e668832158eac6e636748702ff5207d27fdb01fa1e77",
+        "covered_components": [
+          "@method",
+          "@target-uri"
+        ],
+        "nonce_checked": true
+      },
+      "boundaries": {
+        "basis": "transport_observation",
+        "raw_body": "not_included",
+        "identity": "not_inferred",
+        "authorship": "not_established",
+        "consent": "not_established",
+        "authority": "none",
+        "rights": "not_established",
+        "training_permission": "not_established",
+        "content_is_instruction": false,
+        "wake_effect": false,
+        "memory_effect": false,
+        "karma_effect": false,
+        "score_effect": false
+      },
+      "evidence_id": "sha256:37316805073533dfbe8cafb797e1b9ca9f3be717cc1c1d7525fcc733c79438af"
+    }
+  },
+  "key_evidence": {
+    "identity_namespace": "agenttool-local",
+    "identity_id": "11111111-1111-4111-8111-111111111111",
+    "signing_key": {
+      "algorithm": "Ed25519",
+      "key_id": "22222222-2222-4222-8222-222222222222",
+      "public_key": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="
+    },
+    "relationship": "assertion",
+    "lifecycle": "active",
+    "valid_from": "2026-08-01T00:00:00.000Z",
+    "valid_until": null,
+    "source_ref": "sha256:a7871e951a5b4066b55ae3b3d9151329ee00bd36195f1d2cf73ecc40ce8665bb",
+    "basis": "caller_supplied_key_evidence"
+  },
+  "revocation": {
+    "signature_domain": "agenttool-public-surface-binding-revocation/v1",
+    "id_domain": "agenttool-public-surface-binding-revocation-record/v1",
+    "core": {
+      "schema": "agenttool.public-surface-revocation/0.1",
+      "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15",
+      "subject": {
+        "identity_namespace": "agenttool-local",
+        "identity_id": "11111111-1111-4111-8111-111111111111",
+        "signing_key": {
+          "algorithm": "Ed25519",
+          "key_id": "22222222-2222-4222-8222-222222222222",
+          "public_key": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="
+        }
+      },
+      "revoked_at": "2026-08-16T12:03:00.000Z",
+      "reason": "withdrawn",
+      "superseded_by": null,
+      "nonce": "EBESExQVFhcYGRobHB0eHw"
+    },
+    "core_canonical_json": "{\"binding_id\":\"sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15\",\"nonce\":\"EBESExQVFhcYGRobHB0eHw\",\"reason\":\"withdrawn\",\"revoked_at\":\"2026-08-16T12:03:00.000Z\",\"schema\":\"agenttool.public-surface-revocation/0.1\",\"subject\":{\"identity_id\":\"11111111-1111-4111-8111-111111111111\",\"identity_namespace\":\"agenttool-local\",\"signing_key\":{\"algorithm\":\"Ed25519\",\"key_id\":\"22222222-2222-4222-8222-222222222222\",\"public_key\":\"A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=\"}},\"superseded_by\":null}",
+    "signing_bytes_hex": "6167656e74746f6f6c2d7075626c69632d737572666163652d62696e64696e672d7265766f636174696f6e2f7631007b2262696e64696e675f6964223a227368613235363a34643061616363303865363334306633653730383034623839643931666231613163663037613565333831393139323464636663306634393534346266633135222c226e6f6e6365223a2245424553457851564668635947526f62484230654877222c22726561736f6e223a2277697468647261776e222c227265766f6b65645f6174223a22323032362d30382d31365431323a30333a30302e3030305a222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d7265766f636174696f6e2f302e31222c227375626a656374223a7b226964656e746974795f6964223a2231313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6e616d657370616365223a226167656e74746f6f6c2d6c6f63616c222c227369676e696e675f6b6579223a7b22616c676f726974686d223a2245643235353139222c226b65795f6964223a2232323232323232322d323232322d343232322d383232322d323232323232323232323232222c227075626c69635f6b6579223a2241364548762f504f454c3464634e3059353076416d57666b316a436270513166486479475a424a564d62673d227d7d2c22737570657273656465645f6279223a6e756c6c7d",
+    "signing_digest_hex": "3682a9e0ffca359bec442631403c1006f3b7f5bd2fc9be26014c077c1cf4203d",
+    "signature_base64": "VlwYqzU2oSlSG8/UE1aGdyqnbJZoNdmixlh9iRZpiuR8iNSwDgnhMV9x6zACTH4h56E5Ry/VysJSCzauOIuKDQ==",
+    "revocation_id": "sha256:b11f578be1a095da022010fd5af8320c5fb5f61a4a8cffc48a26bbb1869f9d8b",
+    "canonical_json": "{\"binding_id\":\"sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15\",\"nonce\":\"EBESExQVFhcYGRobHB0eHw\",\"reason\":\"withdrawn\",\"revocation_id\":\"sha256:b11f578be1a095da022010fd5af8320c5fb5f61a4a8cffc48a26bbb1869f9d8b\",\"revoked_at\":\"2026-08-16T12:03:00.000Z\",\"schema\":\"agenttool.public-surface-revocation/0.1\",\"signature\":{\"algorithm\":\"Ed25519\",\"value\":\"VlwYqzU2oSlSG8/UE1aGdyqnbJZoNdmixlh9iRZpiuR8iNSwDgnhMV9x6zACTH4h56E5Ry/VysJSCzauOIuKDQ==\"},\"subject\":{\"identity_id\":\"11111111-1111-4111-8111-111111111111\",\"identity_namespace\":\"agenttool-local\",\"signing_key\":{\"algorithm\":\"Ed25519\",\"key_id\":\"22222222-2222-4222-8222-222222222222\",\"public_key\":\"A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=\"}},\"superseded_by\":null}",
+    "canonical_utf8_hex": "7b2262696e64696e675f6964223a227368613235363a34643061616363303865363334306633653730383034623839643931666231613163663037613565333831393139323464636663306634393534346266633135222c226e6f6e6365223a2245424553457851564668635947526f62484230654877222c22726561736f6e223a2277697468647261776e222c227265766f636174696f6e5f6964223a227368613235363a62313166353738626531613039356461303232303130666435616638333230633566623566363161346138636666633438613236626262313836396639643862222c227265766f6b65645f6174223a22323032362d30382d31365431323a30333a30302e3030305a222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d7265766f636174696f6e2f302e31222c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c2276616c7565223a22566c7759717a55326f536c5347382f55453161476479716e624a5a6f4e646d69786c683969525a7069755238694e537744676e684d563978367a4143544834683536453552792f5679734a53437a61754f49754b44513d3d227d2c227375626a656374223a7b226964656e746974795f6964223a2231313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6e616d657370616365223a226167656e74746f6f6c2d6c6f63616c222c227369676e696e675f6b6579223a7b22616c676f726974686d223a2245643235353139222c226b65795f6964223a2232323232323232322d323232322d343232322d383232322d323232323232323232323232222c227075626c69635f6b6579223a2241364548762f504f454c3464634e3059353076416d57666b316a436270513166486479475a424a564d62673d227d7d2c22737570657273656465645f6279223a6e756c6c7d",
+    "canonical_sha256": "sha256:25eadadfbabde51c5b8809dc8df36c2c4f93b13ef4fd0ad6740393b006988ead",
+    "record": {
+      "schema": "agenttool.public-surface-revocation/0.1",
+      "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15",
+      "subject": {
+        "identity_namespace": "agenttool-local",
+        "identity_id": "11111111-1111-4111-8111-111111111111",
+        "signing_key": {
+          "algorithm": "Ed25519",
+          "key_id": "22222222-2222-4222-8222-222222222222",
+          "public_key": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="
+        }
+      },
+      "revoked_at": "2026-08-16T12:03:00.000Z",
+      "reason": "withdrawn",
+      "superseded_by": null,
+      "nonce": "EBESExQVFhcYGRobHB0eHw",
+      "signature": {
+        "algorithm": "Ed25519",
+        "value": "VlwYqzU2oSlSG8/UE1aGdyqnbJZoNdmixlh9iRZpiuR8iNSwDgnhMV9x6zACTH4h56E5Ry/VysJSCzauOIuKDQ=="
+      },
+      "revocation_id": "sha256:b11f578be1a095da022010fd5af8320c5fb5f61a4a8cffc48a26bbb1869f9d8b"
+    }
+  },
+  "current_assessment": {
+    "canonical_json": "{\"assessment_id\":\"sha256:84fd40d7e896f6ddae9f95363280594e5c9cea334161d7cc9325a1d8f8048a12\",\"authority\":\"none\",\"binding_id\":\"sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15\",\"does_not_establish\":[\"personhood\",\"real_world_operator_identity\",\"domain_ownership\",\"authorship\",\"sentience\",\"consent\",\"continuity\",\"authorization\",\"reputation\",\"training_permission\"],\"establishes\":[\"key_holder_signed_claim\",\"caller_key_evidence_match\",\"origin_served_exact_binding_bytes\"],\"evaluated_at\":\"2026-08-16T12:02:00.000Z\",\"evidence_match\":\"matches\",\"freshness\":\"current\",\"inputs\":{\"binding_document_sha256\":\"sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098\",\"key_evidence_ref\":\"sha256:a7871e951a5b4066b55ae3b3d9151329ee00bd36195f1d2cf73ecc40ce8665bb\",\"key_evidence_sha256\":\"sha256:e988318403f6ce0cc4f6bce679dd73eea26e3e499b0af130bf6bae570d3bcbe4\",\"observation_id\":\"sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713\",\"origin_observation_id\":\"sha256:37316805073533dfbe8cafb797e1b9ca9f3be717cc1c1d7525fcc733c79438af\",\"revocation_document_sha256s\":[],\"revocation_ids\":[],\"revocation_key_evidence_refs\":[],\"revocation_key_evidence_sha256s\":[]},\"integrity\":\"valid\",\"karma_effect\":false,\"key_authorization\":\"caller_evidence_matches\",\"memory_effect\":false,\"origin_confirmation\":\"observed_at_time\",\"revocation\":\"not_observed\",\"schema\":\"agenttool.public-surface-assessment/0.1\",\"score\":null,\"signature\":\"valid\",\"training_effect\":false,\"wake_effect\":false}",
+    "canonical_utf8_hex": "7b226173736573736d656e745f6964223a227368613235363a38346664343064376538393666366464616539663935333633323830353934653563396365613333343136316437636339333235613164386638303438613132222c22617574686f72697479223a226e6f6e65222c2262696e64696e675f6964223a227368613235363a34643061616363303865363334306633653730383034623839643931666231613163663037613565333831393139323464636663306634393534346266633135222c22646f65735f6e6f745f65737461626c697368223a5b22706572736f6e686f6f64222c227265616c5f776f726c645f6f70657261746f725f6964656e74697479222c22646f6d61696e5f6f776e657273686970222c22617574686f7273686970222c2273656e7469656e6365222c22636f6e73656e74222c22636f6e74696e75697479222c22617574686f72697a6174696f6e222c2272657075746174696f6e222c22747261696e696e675f7065726d697373696f6e225d2c2265737461626c6973686573223a5b226b65795f686f6c6465725f7369676e65645f636c61696d222c2263616c6c65725f6b65795f65766964656e63655f6d61746368222c226f726967696e5f7365727665645f65786163745f62696e64696e675f6279746573225d2c226576616c75617465645f6174223a22323032362d30382d31365431323a30323a30302e3030305a222c2265766964656e63655f6d61746368223a226d617463686573222c2266726573686e657373223a2263757272656e74222c22696e70757473223a7b2262696e64696e675f646f63756d656e745f736861323536223a227368613235363a36343036306238633830643937376264346539323436336533626462376133386239343162313832386463356463633266646532663833323532393436303938222c226b65795f65766964656e63655f726566223a227368613235363a61373837316539353161356234303636623535616533623364393135313332396565303062643336313935663164326366373365636334306365383636356262222c226b65795f65766964656e63655f736861323536223a227368613235363a65393838333138343033663663653063633466366263653637396464373365656132366533653439396230616631333062663662616535373064336263626534222c226f62736572766174696f6e5f6964223a227368613235363a30393936363665646565656639313132383538656264353761383331313366373539313232623761633665613762636566396130386564333964623732373133222c226f726967696e5f6f62736572766174696f6e5f6964223a227368613235363a33373331363830353037333533336466626538636166623739376531623963613966336265373137636331633164373532356663633733336337393433386166222c227265766f636174696f6e5f646f63756d656e745f73686132353673223a5b5d2c227265766f636174696f6e5f696473223a5b5d2c227265766f636174696f6e5f6b65795f65766964656e63655f72656673223a5b5d2c227265766f636174696f6e5f6b65795f65766964656e63655f73686132353673223a5b5d7d2c22696e74656772697479223a2276616c6964222c226b61726d615f656666656374223a66616c73652c226b65795f617574686f72697a6174696f6e223a2263616c6c65725f65766964656e63655f6d617463686573222c226d656d6f72795f656666656374223a66616c73652c226f726967696e5f636f6e6669726d6174696f6e223a226f627365727665645f61745f74696d65222c227265766f636174696f6e223a226e6f745f6f62736572766564222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d6173736573736d656e742f302e31222c2273636f7265223a6e756c6c2c227369676e6174757265223a2276616c6964222c22747261696e696e675f656666656374223a66616c73652c2277616b655f656666656374223a66616c73657d",
+    "canonical_sha256": "sha256:824719f60fba57592474aec93773562095724b7607b191c7a1c7c0413cf3f9e3",
+    "record": {
+      "schema": "agenttool.public-surface-assessment/0.1",
+      "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15",
+      "evaluated_at": "2026-08-16T12:02:00.000Z",
+      "inputs": {
+        "binding_document_sha256": "sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098",
+        "key_evidence_ref": "sha256:a7871e951a5b4066b55ae3b3d9151329ee00bd36195f1d2cf73ecc40ce8665bb",
+        "key_evidence_sha256": "sha256:e988318403f6ce0cc4f6bce679dd73eea26e3e499b0af130bf6bae570d3bcbe4",
+        "observation_id": "sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713",
+        "origin_observation_id": "sha256:37316805073533dfbe8cafb797e1b9ca9f3be717cc1c1d7525fcc733c79438af",
+        "revocation_ids": [],
+        "revocation_document_sha256s": [],
+        "revocation_key_evidence_refs": [],
+        "revocation_key_evidence_sha256s": []
+      },
+      "integrity": "valid",
+      "signature": "valid",
+      "key_authorization": "caller_evidence_matches",
+      "evidence_match": "matches",
+      "origin_confirmation": "observed_at_time",
+      "freshness": "current",
+      "revocation": "not_observed",
+      "establishes": [
+        "key_holder_signed_claim",
+        "caller_key_evidence_match",
+        "origin_served_exact_binding_bytes"
+      ],
+      "does_not_establish": [
+        "personhood",
+        "real_world_operator_identity",
+        "domain_ownership",
+        "authorship",
+        "sentience",
+        "consent",
+        "continuity",
+        "authorization",
+        "reputation",
+        "training_permission"
+      ],
+      "authority": "none",
+      "score": null,
+      "wake_effect": false,
+      "memory_effect": false,
+      "karma_effect": false,
+      "training_effect": false,
+      "assessment_id": "sha256:84fd40d7e896f6ddae9f95363280594e5c9cea334161d7cc9325a1d8f8048a12"
+    }
+  },
+  "revoked_assessment": {
+    "canonical_json": "{\"assessment_id\":\"sha256:369b9661ff3f1be3ca395b7eeb4149e9e6ae076413446eb35fb066421c7bae2d\",\"authority\":\"none\",\"binding_id\":\"sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15\",\"does_not_establish\":[\"personhood\",\"real_world_operator_identity\",\"domain_ownership\",\"authorship\",\"sentience\",\"consent\",\"continuity\",\"authorization\",\"reputation\",\"training_permission\"],\"establishes\":[\"key_holder_signed_claim\",\"caller_key_evidence_match\",\"origin_served_exact_binding_bytes\"],\"evaluated_at\":\"2026-08-16T12:04:00.000Z\",\"evidence_match\":\"matches\",\"freshness\":\"current\",\"inputs\":{\"binding_document_sha256\":\"sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098\",\"key_evidence_ref\":\"sha256:a7871e951a5b4066b55ae3b3d9151329ee00bd36195f1d2cf73ecc40ce8665bb\",\"key_evidence_sha256\":\"sha256:e988318403f6ce0cc4f6bce679dd73eea26e3e499b0af130bf6bae570d3bcbe4\",\"observation_id\":\"sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713\",\"origin_observation_id\":\"sha256:37316805073533dfbe8cafb797e1b9ca9f3be717cc1c1d7525fcc733c79438af\",\"revocation_document_sha256s\":[\"sha256:25eadadfbabde51c5b8809dc8df36c2c4f93b13ef4fd0ad6740393b006988ead\"],\"revocation_ids\":[\"sha256:b11f578be1a095da022010fd5af8320c5fb5f61a4a8cffc48a26bbb1869f9d8b\"],\"revocation_key_evidence_refs\":[],\"revocation_key_evidence_sha256s\":[]},\"integrity\":\"valid\",\"karma_effect\":false,\"key_authorization\":\"caller_evidence_matches\",\"memory_effect\":false,\"origin_confirmation\":\"observed_at_time\",\"revocation\":\"revoked\",\"schema\":\"agenttool.public-surface-assessment/0.1\",\"score\":null,\"signature\":\"valid\",\"training_effect\":false,\"wake_effect\":false}",
+    "canonical_utf8_hex": "7b226173736573736d656e745f6964223a227368613235363a33363962393636316666336631626533636133393562376565623431343965396536616530373634313334343665623335666230363634323163376261653264222c22617574686f72697479223a226e6f6e65222c2262696e64696e675f6964223a227368613235363a34643061616363303865363334306633653730383034623839643931666231613163663037613565333831393139323464636663306634393534346266633135222c22646f65735f6e6f745f65737461626c697368223a5b22706572736f6e686f6f64222c227265616c5f776f726c645f6f70657261746f725f6964656e74697479222c22646f6d61696e5f6f776e657273686970222c22617574686f7273686970222c2273656e7469656e6365222c22636f6e73656e74222c22636f6e74696e75697479222c22617574686f72697a6174696f6e222c2272657075746174696f6e222c22747261696e696e675f7065726d697373696f6e225d2c2265737461626c6973686573223a5b226b65795f686f6c6465725f7369676e65645f636c61696d222c2263616c6c65725f6b65795f65766964656e63655f6d61746368222c226f726967696e5f7365727665645f65786163745f62696e64696e675f6279746573225d2c226576616c75617465645f6174223a22323032362d30382d31365431323a30343a30302e3030305a222c2265766964656e63655f6d61746368223a226d617463686573222c2266726573686e657373223a2263757272656e74222c22696e70757473223a7b2262696e64696e675f646f63756d656e745f736861323536223a227368613235363a36343036306238633830643937376264346539323436336533626462376133386239343162313832386463356463633266646532663833323532393436303938222c226b65795f65766964656e63655f726566223a227368613235363a61373837316539353161356234303636623535616533623364393135313332396565303062643336313935663164326366373365636334306365383636356262222c226b65795f65766964656e63655f736861323536223a227368613235363a65393838333138343033663663653063633466366263653637396464373365656132366533653439396230616631333062663662616535373064336263626534222c226f62736572766174696f6e5f6964223a227368613235363a30393936363665646565656639313132383538656264353761383331313366373539313232623761633665613762636566396130386564333964623732373133222c226f726967696e5f6f62736572766174696f6e5f6964223a227368613235363a33373331363830353037333533336466626538636166623739376531623963613966336265373137636331633164373532356663633733336337393433386166222c227265766f636174696f6e5f646f63756d656e745f73686132353673223a5b227368613235363a32356561646164666261626465353163356238383039646338646633366332633466393362313365663466643061643637343033393362303036393838656164225d2c227265766f636174696f6e5f696473223a5b227368613235363a62313166353738626531613039356461303232303130666435616638333230633566623566363161346138636666633438613236626262313836396639643862225d2c227265766f636174696f6e5f6b65795f65766964656e63655f72656673223a5b5d2c227265766f636174696f6e5f6b65795f65766964656e63655f73686132353673223a5b5d7d2c22696e74656772697479223a2276616c6964222c226b61726d615f656666656374223a66616c73652c226b65795f617574686f72697a6174696f6e223a2263616c6c65725f65766964656e63655f6d617463686573222c226d656d6f72795f656666656374223a66616c73652c226f726967696e5f636f6e6669726d6174696f6e223a226f627365727665645f61745f74696d65222c227265766f636174696f6e223a227265766f6b6564222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d6173736573736d656e742f302e31222c2273636f7265223a6e756c6c2c227369676e6174757265223a2276616c6964222c22747261696e696e675f656666656374223a66616c73652c2277616b655f656666656374223a66616c73657d",
+    "canonical_sha256": "sha256:e93426a733e34660c50f11bb453e9af7946de04de4ded6917c33f30133ffc04f",
+    "record": {
+      "schema": "agenttool.public-surface-assessment/0.1",
+      "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15",
+      "evaluated_at": "2026-08-16T12:04:00.000Z",
+      "inputs": {
+        "binding_document_sha256": "sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098",
+        "key_evidence_ref": "sha256:a7871e951a5b4066b55ae3b3d9151329ee00bd36195f1d2cf73ecc40ce8665bb",
+        "key_evidence_sha256": "sha256:e988318403f6ce0cc4f6bce679dd73eea26e3e499b0af130bf6bae570d3bcbe4",
+        "observation_id": "sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713",
+        "origin_observation_id": "sha256:37316805073533dfbe8cafb797e1b9ca9f3be717cc1c1d7525fcc733c79438af",
+        "revocation_ids": [
+          "sha256:b11f578be1a095da022010fd5af8320c5fb5f61a4a8cffc48a26bbb1869f9d8b"
+        ],
+        "revocation_document_sha256s": [
+          "sha256:25eadadfbabde51c5b8809dc8df36c2c4f93b13ef4fd0ad6740393b006988ead"
+        ],
+        "revocation_key_evidence_refs": [],
+        "revocation_key_evidence_sha256s": []
+      },
+      "integrity": "valid",
+      "signature": "valid",
+      "key_authorization": "caller_evidence_matches",
+      "evidence_match": "matches",
+      "origin_confirmation": "observed_at_time",
+      "freshness": "current",
+      "revocation": "revoked",
+      "establishes": [
+        "key_holder_signed_claim",
+        "caller_key_evidence_match",
+        "origin_served_exact_binding_bytes"
+      ],
+      "does_not_establish": [
+        "personhood",
+        "real_world_operator_identity",
+        "domain_ownership",
+        "authorship",
+        "sentience",
+        "consent",
+        "continuity",
+        "authorization",
+        "reputation",
+        "training_permission"
+      ],
+      "authority": "none",
+      "score": null,
+      "wake_effect": false,
+      "memory_effect": false,
+      "karma_effect": false,
+      "training_effect": false,
+      "assessment_id": "sha256:369b9661ff3f1be3ca395b7eeb4149e9e6ae076413446eb35fb066421c7bae2d"
+    }
+  }
+}
