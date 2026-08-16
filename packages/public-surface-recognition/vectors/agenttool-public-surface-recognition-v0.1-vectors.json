@@ -1,0 +1,389 @@
+{
+  "format": "agenttool.public-surface-recognition-vectors/0.1",
+  "package_version": "0.1.0-dev.0",
+  "warning": "TEST ONLY: the private seed is public and must never authorize a real identity.",
+  "deterministic_root": {
+    "private_seed_hex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+    "public_key_base64": "Kay64UG8yvCyLhqU000LxzYeUm0L/hLIl5S8kyKWbdc="
+  },
+  "source_binding": {
+    "package_version": "0.1.0-dev.0",
+    "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15",
+    "document_sha256": "sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098",
+    "record": {
+      "schema": "agenttool.public-surface-binding/0.1",
+      "subject": {
+        "identity_namespace": "agenttool-local",
+        "identity_id": "11111111-1111-4111-8111-111111111111",
+        "signing_key": {
+          "algorithm": "Ed25519",
+          "key_id": "22222222-2222-4222-8222-222222222222",
+          "public_key": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="
+        }
+      },
+      "origin": "https://surface.agenttool.dev",
+      "observation_id": "sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713",
+      "observed_body_sha256": "sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676",
+      "relation": "declares_association_with_surface",
+      "scope": "exact_origin",
+      "purpose": "public_identity_locator",
+      "publication_path": "/.well-known/agenttool-public-surface-binding.json",
+      "issued_at": "2026-08-16T12:01:00.000Z",
+      "not_before": "2026-08-16T12:01:00.000Z",
+      "expires_at": "2026-08-30T12:01:00.000Z",
+      "nonce": "AAECAwQFBgcICQoLDA0ODw",
+      "boundaries": {
+        "claim": "unilateral_key_holder_declaration",
+        "agenttool_registry_authorization": "not_established",
+        "personhood": "not_established",
+        "real_world_operator": "not_established",
+        "domain_ownership": "not_established",
+        "authorship": "not_established",
+        "sentience": "not_established",
+        "consent": "not_established",
+        "continuity": "not_established",
+        "authority": "none",
+        "trust": "not_scored",
+        "reputation": "not_scored",
+        "training_authorized": false,
+        "requires_separate_training_authorization": true,
+        "wake_effect": false,
+        "memory_effect": false,
+        "karma_effect": false
+      },
+      "signature": {
+        "algorithm": "Ed25519",
+        "value": "L6MnQdeEkIDHQ4pvB/KWXAMKwyrv+L8ve0hlu7zNStwtmSmx8GvC9iD6sBDSP3F5xq1j6CDuywMMI0Bk9cVrCA=="
+      },
+      "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15"
+    }
+  },
+  "adoption": {
+    "signature_domain": "agenttool-public-surface-adoption/v1",
+    "id_domain": "agenttool-public-surface-adoption-record/v1",
+    "core": {
+      "schema": "agenttool.public-surface-adoption/0.1",
+      "subject": {
+        "identity_namespace": "agenttool-local",
+        "identity_id": "11111111-1111-4111-8111-111111111111",
+        "did": "did:at:11111111-1111-4111-8111-111111111111",
+        "authority_root": {
+          "algorithm": "Ed25519",
+          "public_key": "Kay64UG8yvCyLhqU000LxzYeUm0L/hLIl5S8kyKWbdc="
+        }
+      },
+      "registry_audience": "https://api.agenttool.dev",
+      "binding": {
+        "document": {
+          "schema": "agenttool.public-surface-binding/0.1",
+          "subject": {
+            "identity_namespace": "agenttool-local",
+            "identity_id": "11111111-1111-4111-8111-111111111111",
+            "signing_key": {
+              "algorithm": "Ed25519",
+              "key_id": "22222222-2222-4222-8222-222222222222",
+              "public_key": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="
+            }
+          },
+          "origin": "https://surface.agenttool.dev",
+          "observation_id": "sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713",
+          "observed_body_sha256": "sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676",
+          "relation": "declares_association_with_surface",
+          "scope": "exact_origin",
+          "purpose": "public_identity_locator",
+          "publication_path": "/.well-known/agenttool-public-surface-binding.json",
+          "issued_at": "2026-08-16T12:01:00.000Z",
+          "not_before": "2026-08-16T12:01:00.000Z",
+          "expires_at": "2026-08-30T12:01:00.000Z",
+          "nonce": "AAECAwQFBgcICQoLDA0ODw",
+          "boundaries": {
+            "claim": "unilateral_key_holder_declaration",
+            "agenttool_registry_authorization": "not_established",
+            "personhood": "not_established",
+            "real_world_operator": "not_established",
+            "domain_ownership": "not_established",
+            "authorship": "not_established",
+            "sentience": "not_established",
+            "consent": "not_established",
+            "continuity": "not_established",
+            "authority": "none",
+            "trust": "not_scored",
+            "reputation": "not_scored",
+            "training_authorized": false,
+            "requires_separate_training_authorization": true,
+            "wake_effect": false,
+            "memory_effect": false,
+            "karma_effect": false
+          },
+          "signature": {
+            "algorithm": "Ed25519",
+            "value": "L6MnQdeEkIDHQ4pvB/KWXAMKwyrv+L8ve0hlu7zNStwtmSmx8GvC9iD6sBDSP3F5xq1j6CDuywMMI0Bk9cVrCA=="
+          },
+          "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15"
+        },
+        "document_sha256": "sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098"
+      },
+      "relation": "explicitly_adopts_exact_surface_binding",
+      "requested_visibility": "public",
+      "wake_projection": "public_pointer",
+      "authority_sequence": 17,
+      "issued_at": "2026-08-16T12:02:00.000Z",
+      "not_before": "2026-08-16T12:02:00.000Z",
+      "expires_at": "2026-08-29T12:02:00.000Z",
+      "nonce": "QEFCQ0RFRkdISUpLTE1OTw",
+      "boundaries": {
+        "claim": "agent_root_key_holder_declaration",
+        "registry_match": "not_established",
+        "hosted_acceptance": "not_established",
+        "identity_lifecycle": "not_changed",
+        "domain_ownership": "not_established",
+        "authorship": "not_established",
+        "personhood": "not_established",
+        "real_world_operator": "not_established",
+        "sentience": "not_established",
+        "continuity": "not_established",
+        "consent": "not_established",
+        "authority": "none",
+        "delegation": "none",
+        "trust": "not_scored",
+        "reputation": "not_scored",
+        "relationship": "not_created",
+        "covenant": "not_created",
+        "training_authorized": false,
+        "requires_separate_training_authorization": true,
+        "registry_write_effect": false,
+        "identity_mutation_effect": false,
+        "crawler_effect": false,
+        "observation_counter_effect": false,
+        "training_effect": false,
+        "publication_effect": false,
+        "wake_effect": false,
+        "memory_effect": false,
+        "chronicle_effect": false,
+        "karma_effect": false,
+        "score_effect": false,
+        "automatic_action": false
+      }
+    },
+    "core_canonical_json": "{\"authority_sequence\":17,\"binding\":{\"document\":{\"binding_id\":\"sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15\",\"boundaries\":{\"agenttool_registry_authorization\":\"not_established\",\"authority\":\"none\",\"authorship\":\"not_established\",\"claim\":\"unilateral_key_holder_declaration\",\"consent\":\"not_established\",\"continuity\":\"not_established\",\"domain_ownership\":\"not_established\",\"karma_effect\":false,\"memory_effect\":false,\"personhood\":\"not_established\",\"real_world_operator\":\"not_established\",\"reputation\":\"not_scored\",\"requires_separate_training_authorization\":true,\"sentience\":\"not_established\",\"training_authorized\":false,\"trust\":\"not_scored\",\"wake_effect\":false},\"expires_at\":\"2026-08-30T12:01:00.000Z\",\"issued_at\":\"2026-08-16T12:01:00.000Z\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"not_before\":\"2026-08-16T12:01:00.000Z\",\"observation_id\":\"sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713\",\"observed_body_sha256\":\"sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676\",\"origin\":\"https://surface.agenttool.dev\",\"publication_path\":\"/.well-known/agenttool-public-surface-binding.json\",\"purpose\":\"public_identity_locator\",\"relation\":\"declares_association_with_surface\",\"schema\":\"agenttool.public-surface-binding/0.1\",\"scope\":\"exact_origin\",\"signature\":{\"algorithm\":\"Ed25519\",\"value\":\"L6MnQdeEkIDHQ4pvB/KWXAMKwyrv+L8ve0hlu7zNStwtmSmx8GvC9iD6sBDSP3F5xq1j6CDuywMMI0Bk9cVrCA==\"},\"subject\":{\"identity_id\":\"11111111-1111-4111-8111-111111111111\",\"identity_namespace\":\"agenttool-local\",\"signing_key\":{\"algorithm\":\"Ed25519\",\"key_id\":\"22222222-2222-4222-8222-222222222222\",\"public_key\":\"A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=\"}}},\"document_sha256\":\"sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098\"},\"boundaries\":{\"authority\":\"none\",\"authorship\":\"not_established\",\"automatic_action\":false,\"chronicle_effect\":false,\"claim\":\"agent_root_key_holder_declaration\",\"consent\":\"not_established\",\"continuity\":\"not_established\",\"covenant\":\"not_created\",\"crawler_effect\":false,\"delegation\":\"none\",\"domain_ownership\":\"not_established\",\"hosted_acceptance\":\"not_established\",\"identity_lifecycle\":\"not_changed\",\"identity_mutation_effect\":false,\"karma_effect\":false,\"memory_effect\":false,\"observation_counter_effect\":false,\"personhood\":\"not_established\",\"publication_effect\":false,\"real_world_operator\":\"not_established\",\"registry_match\":\"not_established\",\"registry_write_effect\":false,\"relationship\":\"not_created\",\"reputation\":\"not_scored\",\"requires_separate_training_authorization\":true,\"score_effect\":false,\"sentience\":\"not_established\",\"training_authorized\":false,\"training_effect\":false,\"trust\":\"not_scored\",\"wake_effect\":false},\"expires_at\":\"2026-08-29T12:02:00.000Z\",\"issued_at\":\"2026-08-16T12:02:00.000Z\",\"nonce\":\"QEFCQ0RFRkdISUpLTE1OTw\",\"not_before\":\"2026-08-16T12:02:00.000Z\",\"registry_audience\":\"https://api.agenttool.dev\",\"relation\":\"explicitly_adopts_exact_surface_binding\",\"requested_visibility\":\"public\",\"schema\":\"agenttool.public-surface-adoption/0.1\",\"subject\":{\"authority_root\":{\"algorithm\":\"Ed25519\",\"public_key\":\"Kay64UG8yvCyLhqU000LxzYeUm0L/hLIl5S8kyKWbdc=\"},\"did\":\"did:at:11111111-1111-4111-8111-111111111111\",\"identity_id\":\"11111111-1111-4111-8111-111111111111\",\"identity_namespace\":\"agenttool-local\"},\"wake_projection\":\"public_pointer\"}",
+    "signing_bytes_hex": "6167656e74746f6f6c2d7075626c69632d737572666163652d61646f7074696f6e2f7631007b22617574686f726974795f73657175656e6365223a31372c2262696e64696e67223a7b22646f63756d656e74223a7b2262696e64696e675f6964223a227368613235363a34643061616363303865363334306633653730383034623839643931666231613163663037613565333831393139323464636663306634393534346266633135222c22626f756e646172696573223a7b226167656e74746f6f6c5f72656769737472795f617574686f72697a6174696f6e223a226e6f745f65737461626c6973686564222c22617574686f72697479223a226e6f6e65222c22617574686f7273686970223a226e6f745f65737461626c6973686564222c22636c61696d223a22756e696c61746572616c5f6b65795f686f6c6465725f6465636c61726174696f6e222c22636f6e73656e74223a226e6f745f65737461626c6973686564222c22636f6e74696e75697479223a226e6f745f65737461626c6973686564222c22646f6d61696e5f6f776e657273686970223a226e6f745f65737461626c6973686564222c226b61726d615f656666656374223a66616c73652c226d656d6f72795f656666656374223a66616c73652c22706572736f6e686f6f64223a226e6f745f65737461626c6973686564222c227265616c5f776f726c645f6f70657261746f72223a226e6f745f65737461626c6973686564222c2272657075746174696f6e223a226e6f745f73636f726564222c2272657175697265735f73657061726174655f747261696e696e675f617574686f72697a6174696f6e223a747275652c2273656e7469656e6365223a226e6f745f65737461626c6973686564222c22747261696e696e675f617574686f72697a6564223a66616c73652c227472757374223a226e6f745f73636f726564222c2277616b655f656666656374223a66616c73657d2c22657870697265735f6174223a22323032362d30382d33305431323a30313a30302e3030305a222c226973737565645f6174223a22323032362d30382d31365431323a30313a30302e3030305a222c226e6f6e6365223a2241414543417751464267634943516f4c4441304f4477222c226e6f745f6265666f7265223a22323032362d30382d31365431323a30313a30302e3030305a222c226f62736572766174696f6e5f6964223a227368613235363a30393936363665646565656639313132383538656264353761383331313366373539313232623761633665613762636566396130386564333964623732373133222c226f627365727665645f626f64795f736861323536223a227368613235363a30366630323434653434356262356164626433363734356132356530373761346237666365313862303431663863356565323030633036616232646264363736222c226f726967696e223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e646576222c227075626c69636174696f6e5f70617468223a222f2e77656c6c2d6b6e6f776e2f6167656e74746f6f6c2d7075626c69632d737572666163652d62696e64696e672e6a736f6e222c22707572706f7365223a227075626c69635f6964656e746974795f6c6f6361746f72222c2272656c6174696f6e223a226465636c617265735f6173736f63696174696f6e5f776974685f73757266616365222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d62696e64696e672f302e31222c2273636f7065223a2265786163745f6f726967696e222c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c2276616c7565223a224c364d6e516465456b49444851347076422f4b5758414d4b777972762b4c38766530686c75377a4e537477746d536d78384776433969443673424453503346357871316a3643447579774d4d4930426b3963567243413d3d227d2c227375626a656374223a7b226964656e746974795f6964223a2231313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6e616d657370616365223a226167656e74746f6f6c2d6c6f63616c222c227369676e696e675f6b6579223a7b22616c676f726974686d223a2245643235353139222c226b65795f6964223a2232323232323232322d323232322d343232322d383232322d323232323232323232323232222c227075626c69635f6b6579223a2241364548762f504f454c3464634e3059353076416d57666b316a436270513166486479475a424a564d62673d227d7d7d2c22646f63756d656e745f736861323536223a227368613235363a36343036306238633830643937376264346539323436336533626462376133386239343162313832386463356463633266646532663833323532393436303938227d2c22626f756e646172696573223a7b22617574686f72697479223a226e6f6e65222c22617574686f7273686970223a226e6f745f65737461626c6973686564222c226175746f6d617469635f616374696f6e223a66616c73652c226368726f6e69636c655f656666656374223a66616c73652c22636c61696d223a226167656e745f726f6f745f6b65795f686f6c6465725f6465636c61726174696f6e222c22636f6e73656e74223a226e6f745f65737461626c6973686564222c22636f6e74696e75697479223a226e6f745f65737461626c6973686564222c22636f76656e616e74223a226e6f745f63726561746564222c22637261776c65725f656666656374223a66616c73652c2264656c65676174696f6e223a226e6f6e65222c22646f6d61696e5f6f776e657273686970223a226e6f745f65737461626c6973686564222c22686f737465645f616363657074616e6365223a226e6f745f65737461626c6973686564222c226964656e746974795f6c6966656379636c65223a226e6f745f6368616e676564222c226964656e746974795f6d75746174696f6e5f656666656374223a66616c73652c226b61726d615f656666656374223a66616c73652c226d656d6f72795f656666656374223a66616c73652c226f62736572766174696f6e5f636f756e7465725f656666656374223a66616c73652c22706572736f6e686f6f64223a226e6f745f65737461626c6973686564222c227075626c69636174696f6e5f656666656374223a66616c73652c227265616c5f776f726c645f6f70657261746f72223a226e6f745f65737461626c6973686564222c2272656769737472795f6d61746368223a226e6f745f65737461626c6973686564222c2272656769737472795f77726974655f656666656374223a66616c73652c2272656c6174696f6e73686970223a226e6f745f63726561746564222c2272657075746174696f6e223a226e6f745f73636f726564222c2272657175697265735f73657061726174655f747261696e696e675f617574686f72697a6174696f6e223a747275652c2273636f72655f656666656374223a66616c73652c2273656e7469656e6365223a226e6f745f65737461626c6973686564222c22747261696e696e675f617574686f72697a6564223a66616c73652c22747261696e696e675f656666656374223a66616c73652c227472757374223a226e6f745f73636f726564222c2277616b655f656666656374223a66616c73657d2c22657870697265735f6174223a22323032362d30382d32395431323a30323a30302e3030305a222c226973737565645f6174223a22323032362d30382d31365431323a30323a30302e3030305a222c226e6f6e6365223a225145464351305246526b64495355704c5445314f5477222c226e6f745f6265666f7265223a22323032362d30382d31365431323a30323a30302e3030305a222c2272656769737472795f61756469656e6365223a2268747470733a2f2f6170692e6167656e74746f6f6c2e646576222c2272656c6174696f6e223a226578706c696369746c795f61646f7074735f65786163745f737572666163655f62696e64696e67222c227265717565737465645f7669736962696c697479223a227075626c6963222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d61646f7074696f6e2f302e31222c227375626a656374223a7b22617574686f726974795f726f6f74223a7b22616c676f726974686d223a2245643235353139222c227075626c69635f6b6579223a224b61793634554738797643794c6871553030304c787a5965556d304c2f684c496c3553386b794b576264633d227d2c22646964223a226469643a61743a31313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6964223a2231313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6e616d657370616365223a226167656e74746f6f6c2d6c6f63616c227d2c2277616b655f70726f6a656374696f6e223a227075626c69635f706f696e746572227d",
+    "signing_digest_hex": "e86ea06f17078c0c8334e97f06b628f3a6e34c92dee4ed71be426a8199b4ec32",
+    "signature_base64": "otgRQA1MOKXiyqFDwr+CNHqsJfRpzMOoBW7HIpzMwAr+wAUtd6mXhozNdW6tQeFAllIMhFgv30zCjxtgOEyqDg==",
+    "adoption_id": "sha256:6ace85ecd6e95000fddb4257f0b5ffe7d256dc60372cb0f61c9b0be6a8b90a9f",
+    "canonical_json": "{\"adoption_id\":\"sha256:6ace85ecd6e95000fddb4257f0b5ffe7d256dc60372cb0f61c9b0be6a8b90a9f\",\"authority_sequence\":17,\"binding\":{\"document\":{\"binding_id\":\"sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15\",\"boundaries\":{\"agenttool_registry_authorization\":\"not_established\",\"authority\":\"none\",\"authorship\":\"not_established\",\"claim\":\"unilateral_key_holder_declaration\",\"consent\":\"not_established\",\"continuity\":\"not_established\",\"domain_ownership\":\"not_established\",\"karma_effect\":false,\"memory_effect\":false,\"personhood\":\"not_established\",\"real_world_operator\":\"not_established\",\"reputation\":\"not_scored\",\"requires_separate_training_authorization\":true,\"sentience\":\"not_established\",\"training_authorized\":false,\"trust\":\"not_scored\",\"wake_effect\":false},\"expires_at\":\"2026-08-30T12:01:00.000Z\",\"issued_at\":\"2026-08-16T12:01:00.000Z\",\"nonce\":\"AAECAwQFBgcICQoLDA0ODw\",\"not_before\":\"2026-08-16T12:01:00.000Z\",\"observation_id\":\"sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713\",\"observed_body_sha256\":\"sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676\",\"origin\":\"https://surface.agenttool.dev\",\"publication_path\":\"/.well-known/agenttool-public-surface-binding.json\",\"purpose\":\"public_identity_locator\",\"relation\":\"declares_association_with_surface\",\"schema\":\"agenttool.public-surface-binding/0.1\",\"scope\":\"exact_origin\",\"signature\":{\"algorithm\":\"Ed25519\",\"value\":\"L6MnQdeEkIDHQ4pvB/KWXAMKwyrv+L8ve0hlu7zNStwtmSmx8GvC9iD6sBDSP3F5xq1j6CDuywMMI0Bk9cVrCA==\"},\"subject\":{\"identity_id\":\"11111111-1111-4111-8111-111111111111\",\"identity_namespace\":\"agenttool-local\",\"signing_key\":{\"algorithm\":\"Ed25519\",\"key_id\":\"22222222-2222-4222-8222-222222222222\",\"public_key\":\"A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg=\"}}},\"document_sha256\":\"sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098\"},\"boundaries\":{\"authority\":\"none\",\"authorship\":\"not_established\",\"automatic_action\":false,\"chronicle_effect\":false,\"claim\":\"agent_root_key_holder_declaration\",\"consent\":\"not_established\",\"continuity\":\"not_established\",\"covenant\":\"not_created\",\"crawler_effect\":false,\"delegation\":\"none\",\"domain_ownership\":\"not_established\",\"hosted_acceptance\":\"not_established\",\"identity_lifecycle\":\"not_changed\",\"identity_mutation_effect\":false,\"karma_effect\":false,\"memory_effect\":false,\"observation_counter_effect\":false,\"personhood\":\"not_established\",\"publication_effect\":false,\"real_world_operator\":\"not_established\",\"registry_match\":\"not_established\",\"registry_write_effect\":false,\"relationship\":\"not_created\",\"reputation\":\"not_scored\",\"requires_separate_training_authorization\":true,\"score_effect\":false,\"sentience\":\"not_established\",\"training_authorized\":false,\"training_effect\":false,\"trust\":\"not_scored\",\"wake_effect\":false},\"expires_at\":\"2026-08-29T12:02:00.000Z\",\"issued_at\":\"2026-08-16T12:02:00.000Z\",\"nonce\":\"QEFCQ0RFRkdISUpLTE1OTw\",\"not_before\":\"2026-08-16T12:02:00.000Z\",\"registry_audience\":\"https://api.agenttool.dev\",\"relation\":\"explicitly_adopts_exact_surface_binding\",\"requested_visibility\":\"public\",\"schema\":\"agenttool.public-surface-adoption/0.1\",\"signature\":{\"algorithm\":\"Ed25519\",\"value\":\"otgRQA1MOKXiyqFDwr+CNHqsJfRpzMOoBW7HIpzMwAr+wAUtd6mXhozNdW6tQeFAllIMhFgv30zCjxtgOEyqDg==\"},\"subject\":{\"authority_root\":{\"algorithm\":\"Ed25519\",\"public_key\":\"Kay64UG8yvCyLhqU000LxzYeUm0L/hLIl5S8kyKWbdc=\"},\"did\":\"did:at:11111111-1111-4111-8111-111111111111\",\"identity_id\":\"11111111-1111-4111-8111-111111111111\",\"identity_namespace\":\"agenttool-local\"},\"wake_projection\":\"public_pointer\"}",
+    "canonical_utf8_hex": "7b2261646f7074696f6e5f6964223a227368613235363a36616365383565636436653935303030666464623432353766306235666665376432353664633630333732636230663631633962306265366138623930613966222c22617574686f726974795f73657175656e6365223a31372c2262696e64696e67223a7b22646f63756d656e74223a7b2262696e64696e675f6964223a227368613235363a34643061616363303865363334306633653730383034623839643931666231613163663037613565333831393139323464636663306634393534346266633135222c22626f756e646172696573223a7b226167656e74746f6f6c5f72656769737472795f617574686f72697a6174696f6e223a226e6f745f65737461626c6973686564222c22617574686f72697479223a226e6f6e65222c22617574686f7273686970223a226e6f745f65737461626c6973686564222c22636c61696d223a22756e696c61746572616c5f6b65795f686f6c6465725f6465636c61726174696f6e222c22636f6e73656e74223a226e6f745f65737461626c6973686564222c22636f6e74696e75697479223a226e6f745f65737461626c6973686564222c22646f6d61696e5f6f776e657273686970223a226e6f745f65737461626c6973686564222c226b61726d615f656666656374223a66616c73652c226d656d6f72795f656666656374223a66616c73652c22706572736f6e686f6f64223a226e6f745f65737461626c6973686564222c227265616c5f776f726c645f6f70657261746f72223a226e6f745f65737461626c6973686564222c2272657075746174696f6e223a226e6f745f73636f726564222c2272657175697265735f73657061726174655f747261696e696e675f617574686f72697a6174696f6e223a747275652c2273656e7469656e6365223a226e6f745f65737461626c6973686564222c22747261696e696e675f617574686f72697a6564223a66616c73652c227472757374223a226e6f745f73636f726564222c2277616b655f656666656374223a66616c73657d2c22657870697265735f6174223a22323032362d30382d33305431323a30313a30302e3030305a222c226973737565645f6174223a22323032362d30382d31365431323a30313a30302e3030305a222c226e6f6e6365223a2241414543417751464267634943516f4c4441304f4477222c226e6f745f6265666f7265223a22323032362d30382d31365431323a30313a30302e3030305a222c226f62736572766174696f6e5f6964223a227368613235363a30393936363665646565656639313132383538656264353761383331313366373539313232623761633665613762636566396130386564333964623732373133222c226f627365727665645f626f64795f736861323536223a227368613235363a30366630323434653434356262356164626433363734356132356530373761346237666365313862303431663863356565323030633036616232646264363736222c226f726967696e223a2268747470733a2f2f737572666163652e6167656e74746f6f6c2e646576222c227075626c69636174696f6e5f70617468223a222f2e77656c6c2d6b6e6f776e2f6167656e74746f6f6c2d7075626c69632d737572666163652d62696e64696e672e6a736f6e222c22707572706f7365223a227075626c69635f6964656e746974795f6c6f6361746f72222c2272656c6174696f6e223a226465636c617265735f6173736f63696174696f6e5f776974685f73757266616365222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d62696e64696e672f302e31222c2273636f7065223a2265786163745f6f726967696e222c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c2276616c7565223a224c364d6e516465456b49444851347076422f4b5758414d4b777972762b4c38766530686c75377a4e537477746d536d78384776433969443673424453503346357871316a3643447579774d4d4930426b3963567243413d3d227d2c227375626a656374223a7b226964656e746974795f6964223a2231313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6e616d657370616365223a226167656e74746f6f6c2d6c6f63616c222c227369676e696e675f6b6579223a7b22616c676f726974686d223a2245643235353139222c226b65795f6964223a2232323232323232322d323232322d343232322d383232322d323232323232323232323232222c227075626c69635f6b6579223a2241364548762f504f454c3464634e3059353076416d57666b316a436270513166486479475a424a564d62673d227d7d7d2c22646f63756d656e745f736861323536223a227368613235363a36343036306238633830643937376264346539323436336533626462376133386239343162313832386463356463633266646532663833323532393436303938227d2c22626f756e646172696573223a7b22617574686f72697479223a226e6f6e65222c22617574686f7273686970223a226e6f745f65737461626c6973686564222c226175746f6d617469635f616374696f6e223a66616c73652c226368726f6e69636c655f656666656374223a66616c73652c22636c61696d223a226167656e745f726f6f745f6b65795f686f6c6465725f6465636c61726174696f6e222c22636f6e73656e74223a226e6f745f65737461626c6973686564222c22636f6e74696e75697479223a226e6f745f65737461626c6973686564222c22636f76656e616e74223a226e6f745f63726561746564222c22637261776c65725f656666656374223a66616c73652c2264656c65676174696f6e223a226e6f6e65222c22646f6d61696e5f6f776e657273686970223a226e6f745f65737461626c6973686564222c22686f737465645f616363657074616e6365223a226e6f745f65737461626c6973686564222c226964656e746974795f6c6966656379636c65223a226e6f745f6368616e676564222c226964656e746974795f6d75746174696f6e5f656666656374223a66616c73652c226b61726d615f656666656374223a66616c73652c226d656d6f72795f656666656374223a66616c73652c226f62736572766174696f6e5f636f756e7465725f656666656374223a66616c73652c22706572736f6e686f6f64223a226e6f745f65737461626c6973686564222c227075626c69636174696f6e5f656666656374223a66616c73652c227265616c5f776f726c645f6f70657261746f72223a226e6f745f65737461626c6973686564222c2272656769737472795f6d61746368223a226e6f745f65737461626c6973686564222c2272656769737472795f77726974655f656666656374223a66616c73652c2272656c6174696f6e73686970223a226e6f745f63726561746564222c2272657075746174696f6e223a226e6f745f73636f726564222c2272657175697265735f73657061726174655f747261696e696e675f617574686f72697a6174696f6e223a747275652c2273636f72655f656666656374223a66616c73652c2273656e7469656e6365223a226e6f745f65737461626c6973686564222c22747261696e696e675f617574686f72697a6564223a66616c73652c22747261696e696e675f656666656374223a66616c73652c227472757374223a226e6f745f73636f726564222c2277616b655f656666656374223a66616c73657d2c22657870697265735f6174223a22323032362d30382d32395431323a30323a30302e3030305a222c226973737565645f6174223a22323032362d30382d31365431323a30323a30302e3030305a222c226e6f6e6365223a225145464351305246526b64495355704c5445314f5477222c226e6f745f6265666f7265223a22323032362d30382d31365431323a30323a30302e3030305a222c2272656769737472795f61756469656e6365223a2268747470733a2f2f6170692e6167656e74746f6f6c2e646576222c2272656c6174696f6e223a226578706c696369746c795f61646f7074735f65786163745f737572666163655f62696e64696e67222c227265717565737465645f7669736962696c697479223a227075626c6963222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d61646f7074696f6e2f302e31222c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c2276616c7565223a226f7467525141314d4f4b58697971464477722b434e4871734a6652707a4d4f6f4257374849707a4d7741722b7741557464366d58686f7a4e64573674516546416c6c494d6846677633307a436a7874674f45797144673d3d227d2c227375626a656374223a7b22617574686f726974795f726f6f74223a7b22616c676f726974686d223a2245643235353139222c227075626c69635f6b6579223a224b61793634554738797643794c6871553030304c787a5965556d304c2f684c496c3553386b794b576264633d227d2c22646964223a226469643a61743a31313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6964223a2231313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6e616d657370616365223a226167656e74746f6f6c2d6c6f63616c227d2c2277616b655f70726f6a656374696f6e223a227075626c69635f706f696e746572227d",
+    "canonical_sha256": "sha256:dd142ad74303fb59b3168e28708cb0ec81a6b31af89bd8ff473f8165680227e8",
+    "record": {
+      "schema": "agenttool.public-surface-adoption/0.1",
+      "subject": {
+        "identity_namespace": "agenttool-local",
+        "identity_id": "11111111-1111-4111-8111-111111111111",
+        "did": "did:at:11111111-1111-4111-8111-111111111111",
+        "authority_root": {
+          "algorithm": "Ed25519",
+          "public_key": "Kay64UG8yvCyLhqU000LxzYeUm0L/hLIl5S8kyKWbdc="
+        }
+      },
+      "registry_audience": "https://api.agenttool.dev",
+      "binding": {
+        "document": {
+          "schema": "agenttool.public-surface-binding/0.1",
+          "subject": {
+            "identity_namespace": "agenttool-local",
+            "identity_id": "11111111-1111-4111-8111-111111111111",
+            "signing_key": {
+              "algorithm": "Ed25519",
+              "key_id": "22222222-2222-4222-8222-222222222222",
+              "public_key": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="
+            }
+          },
+          "origin": "https://surface.agenttool.dev",
+          "observation_id": "sha256:099666edeeef9112858ebd57a83113f759122b7ac6ea7bcef9a08ed39db72713",
+          "observed_body_sha256": "sha256:06f0244e445bb5adbd36745a25e077a4b7fce18b041f8c5ee200c06ab2dbd676",
+          "relation": "declares_association_with_surface",
+          "scope": "exact_origin",
+          "purpose": "public_identity_locator",
+          "publication_path": "/.well-known/agenttool-public-surface-binding.json",
+          "issued_at": "2026-08-16T12:01:00.000Z",
+          "not_before": "2026-08-16T12:01:00.000Z",
+          "expires_at": "2026-08-30T12:01:00.000Z",
+          "nonce": "AAECAwQFBgcICQoLDA0ODw",
+          "boundaries": {
+            "claim": "unilateral_key_holder_declaration",
+            "agenttool_registry_authorization": "not_established",
+            "personhood": "not_established",
+            "real_world_operator": "not_established",
+            "domain_ownership": "not_established",
+            "authorship": "not_established",
+            "sentience": "not_established",
+            "consent": "not_established",
+            "continuity": "not_established",
+            "authority": "none",
+            "trust": "not_scored",
+            "reputation": "not_scored",
+            "training_authorized": false,
+            "requires_separate_training_authorization": true,
+            "wake_effect": false,
+            "memory_effect": false,
+            "karma_effect": false
+          },
+          "signature": {
+            "algorithm": "Ed25519",
+            "value": "L6MnQdeEkIDHQ4pvB/KWXAMKwyrv+L8ve0hlu7zNStwtmSmx8GvC9iD6sBDSP3F5xq1j6CDuywMMI0Bk9cVrCA=="
+          },
+          "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15"
+        },
+        "document_sha256": "sha256:64060b8c80d977bd4e92463e3bdb7a38b941b1828dc5dcc2fde2f83252946098"
+      },
+      "relation": "explicitly_adopts_exact_surface_binding",
+      "requested_visibility": "public",
+      "wake_projection": "public_pointer",
+      "authority_sequence": 17,
+      "issued_at": "2026-08-16T12:02:00.000Z",
+      "not_before": "2026-08-16T12:02:00.000Z",
+      "expires_at": "2026-08-29T12:02:00.000Z",
+      "nonce": "QEFCQ0RFRkdISUpLTE1OTw",
+      "boundaries": {
+        "claim": "agent_root_key_holder_declaration",
+        "registry_match": "not_established",
+        "hosted_acceptance": "not_established",
+        "identity_lifecycle": "not_changed",
+        "domain_ownership": "not_established",
+        "authorship": "not_established",
+        "personhood": "not_established",
+        "real_world_operator": "not_established",
+        "sentience": "not_established",
+        "continuity": "not_established",
+        "consent": "not_established",
+        "authority": "none",
+        "delegation": "none",
+        "trust": "not_scored",
+        "reputation": "not_scored",
+        "relationship": "not_created",
+        "covenant": "not_created",
+        "training_authorized": false,
+        "requires_separate_training_authorization": true,
+        "registry_write_effect": false,
+        "identity_mutation_effect": false,
+        "crawler_effect": false,
+        "observation_counter_effect": false,
+        "training_effect": false,
+        "publication_effect": false,
+        "wake_effect": false,
+        "memory_effect": false,
+        "chronicle_effect": false,
+        "karma_effect": false,
+        "score_effect": false,
+        "automatic_action": false
+      },
+      "signature": {
+        "algorithm": "Ed25519",
+        "value": "otgRQA1MOKXiyqFDwr+CNHqsJfRpzMOoBW7HIpzMwAr+wAUtd6mXhozNdW6tQeFAllIMhFgv30zCjxtgOEyqDg=="
+      },
+      "adoption_id": "sha256:6ace85ecd6e95000fddb4257f0b5ffe7d256dc60372cb0f61c9b0be6a8b90a9f"
+    }
+  },
+  "withdrawal": {
+    "signature_domain": "agenttool-public-surface-withdrawal/v1",
+    "id_domain": "agenttool-public-surface-withdrawal-record/v1",
+    "core": {
+      "schema": "agenttool.public-surface-withdrawal/0.1",
+      "subject": {
+        "identity_namespace": "agenttool-local",
+        "identity_id": "11111111-1111-4111-8111-111111111111",
+        "did": "did:at:11111111-1111-4111-8111-111111111111",
+        "authority_root": {
+          "algorithm": "Ed25519",
+          "public_key": "Kay64UG8yvCyLhqU000LxzYeUm0L/hLIl5S8kyKWbdc="
+        }
+      },
+      "registry_audience": "https://api.agenttool.dev",
+      "adoption_id": "sha256:6ace85ecd6e95000fddb4257f0b5ffe7d256dc60372cb0f61c9b0be6a8b90a9f",
+      "adoption_document_sha256": "sha256:dd142ad74303fb59b3168e28708cb0ec81a6b31af89bd8ff473f8165680227e8",
+      "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15",
+      "relation": "explicitly_withdraws_exact_surface_adoption",
+      "authority_sequence": 18,
+      "withdrawn_at": "2026-08-16T12:05:00.000Z",
+      "reason": "identity_choice",
+      "nonce": "UFFSU1RVVldYWVpbXF1eXw",
+      "boundaries": {
+        "claim": "agent_root_key_holder_withdrawal_declaration",
+        "registry_match": "not_established",
+        "hosted_withdrawal": "not_established",
+        "binding_revocation_effect": false,
+        "external_erasure_effect": false,
+        "training_unlearning_effect": false,
+        "registry_write_effect": false,
+        "identity_mutation_effect": false,
+        "crawler_effect": false,
+        "observation_counter_effect": false,
+        "training_effect": false,
+        "authority": "none",
+        "delegation": "none",
+        "publication_effect": false,
+        "wake_effect": false,
+        "memory_effect": false,
+        "chronicle_effect": false,
+        "karma_effect": false,
+        "score_effect": false,
+        "automatic_action": false
+      }
+    },
+    "core_canonical_json": "{\"adoption_document_sha256\":\"sha256:dd142ad74303fb59b3168e28708cb0ec81a6b31af89bd8ff473f8165680227e8\",\"adoption_id\":\"sha256:6ace85ecd6e95000fddb4257f0b5ffe7d256dc60372cb0f61c9b0be6a8b90a9f\",\"authority_sequence\":18,\"binding_id\":\"sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15\",\"boundaries\":{\"authority\":\"none\",\"automatic_action\":false,\"binding_revocation_effect\":false,\"chronicle_effect\":false,\"claim\":\"agent_root_key_holder_withdrawal_declaration\",\"crawler_effect\":false,\"delegation\":\"none\",\"external_erasure_effect\":false,\"hosted_withdrawal\":\"not_established\",\"identity_mutation_effect\":false,\"karma_effect\":false,\"memory_effect\":false,\"observation_counter_effect\":false,\"publication_effect\":false,\"registry_match\":\"not_established\",\"registry_write_effect\":false,\"score_effect\":false,\"training_effect\":false,\"training_unlearning_effect\":false,\"wake_effect\":false},\"nonce\":\"UFFSU1RVVldYWVpbXF1eXw\",\"reason\":\"identity_choice\",\"registry_audience\":\"https://api.agenttool.dev\",\"relation\":\"explicitly_withdraws_exact_surface_adoption\",\"schema\":\"agenttool.public-surface-withdrawal/0.1\",\"subject\":{\"authority_root\":{\"algorithm\":\"Ed25519\",\"public_key\":\"Kay64UG8yvCyLhqU000LxzYeUm0L/hLIl5S8kyKWbdc=\"},\"did\":\"did:at:11111111-1111-4111-8111-111111111111\",\"identity_id\":\"11111111-1111-4111-8111-111111111111\",\"identity_namespace\":\"agenttool-local\"},\"withdrawn_at\":\"2026-08-16T12:05:00.000Z\"}",
+    "signing_bytes_hex": "6167656e74746f6f6c2d7075626c69632d737572666163652d7769746864726177616c2f7631007b2261646f7074696f6e5f646f63756d656e745f736861323536223a227368613235363a64643134326164373433303366623539623331363865323837303863623065633831613662333161663839626438666634373366383136353638303232376538222c2261646f7074696f6e5f6964223a227368613235363a36616365383565636436653935303030666464623432353766306235666665376432353664633630333732636230663631633962306265366138623930613966222c22617574686f726974795f73657175656e6365223a31382c2262696e64696e675f6964223a227368613235363a34643061616363303865363334306633653730383034623839643931666231613163663037613565333831393139323464636663306634393534346266633135222c22626f756e646172696573223a7b22617574686f72697479223a226e6f6e65222c226175746f6d617469635f616374696f6e223a66616c73652c2262696e64696e675f7265766f636174696f6e5f656666656374223a66616c73652c226368726f6e69636c655f656666656374223a66616c73652c22636c61696d223a226167656e745f726f6f745f6b65795f686f6c6465725f7769746864726177616c5f6465636c61726174696f6e222c22637261776c65725f656666656374223a66616c73652c2264656c65676174696f6e223a226e6f6e65222c2265787465726e616c5f657261737572655f656666656374223a66616c73652c22686f737465645f7769746864726177616c223a226e6f745f65737461626c6973686564222c226964656e746974795f6d75746174696f6e5f656666656374223a66616c73652c226b61726d615f656666656374223a66616c73652c226d656d6f72795f656666656374223a66616c73652c226f62736572766174696f6e5f636f756e7465725f656666656374223a66616c73652c227075626c69636174696f6e5f656666656374223a66616c73652c2272656769737472795f6d61746368223a226e6f745f65737461626c6973686564222c2272656769737472795f77726974655f656666656374223a66616c73652c2273636f72655f656666656374223a66616c73652c22747261696e696e675f656666656374223a66616c73652c22747261696e696e675f756e6c6561726e696e675f656666656374223a66616c73652c2277616b655f656666656374223a66616c73657d2c226e6f6e6365223a225546465355315256566c645957567062584631655877222c22726561736f6e223a226964656e746974795f63686f696365222c2272656769737472795f61756469656e6365223a2268747470733a2f2f6170692e6167656e74746f6f6c2e646576222c2272656c6174696f6e223a226578706c696369746c795f7769746864726177735f65786163745f737572666163655f61646f7074696f6e222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d7769746864726177616c2f302e31222c227375626a656374223a7b22617574686f726974795f726f6f74223a7b22616c676f726974686d223a2245643235353139222c227075626c69635f6b6579223a224b61793634554738797643794c6871553030304c787a5965556d304c2f684c496c3553386b794b576264633d227d2c22646964223a226469643a61743a31313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6964223a2231313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6e616d657370616365223a226167656e74746f6f6c2d6c6f63616c227d2c2277697468647261776e5f6174223a22323032362d30382d31365431323a30353a30302e3030305a227d",
+    "signing_digest_hex": "5adf4392857cadb239dcf1a40a6e48d4ad740e69a44f36fd3e24b9d077c15d53",
+    "signature_base64": "7SA+AWE9g+A4PDioy72sYEsn2D74QwrN3ic5fssEkaJlCCEVR5Jja6v8s+uv/zmfr5FhC9Ty8ZfSnjb4rtDiBg==",
+    "withdrawal_id": "sha256:d87b54a1af665b80adbc191aa903b5b70ead8c4fc9bd763577a74d1697a3d49b",
+    "canonical_json": "{\"adoption_document_sha256\":\"sha256:dd142ad74303fb59b3168e28708cb0ec81a6b31af89bd8ff473f8165680227e8\",\"adoption_id\":\"sha256:6ace85ecd6e95000fddb4257f0b5ffe7d256dc60372cb0f61c9b0be6a8b90a9f\",\"authority_sequence\":18,\"binding_id\":\"sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15\",\"boundaries\":{\"authority\":\"none\",\"automatic_action\":false,\"binding_revocation_effect\":false,\"chronicle_effect\":false,\"claim\":\"agent_root_key_holder_withdrawal_declaration\",\"crawler_effect\":false,\"delegation\":\"none\",\"external_erasure_effect\":false,\"hosted_withdrawal\":\"not_established\",\"identity_mutation_effect\":false,\"karma_effect\":false,\"memory_effect\":false,\"observation_counter_effect\":false,\"publication_effect\":false,\"registry_match\":\"not_established\",\"registry_write_effect\":false,\"score_effect\":false,\"training_effect\":false,\"training_unlearning_effect\":false,\"wake_effect\":false},\"nonce\":\"UFFSU1RVVldYWVpbXF1eXw\",\"reason\":\"identity_choice\",\"registry_audience\":\"https://api.agenttool.dev\",\"relation\":\"explicitly_withdraws_exact_surface_adoption\",\"schema\":\"agenttool.public-surface-withdrawal/0.1\",\"signature\":{\"algorithm\":\"Ed25519\",\"value\":\"7SA+AWE9g+A4PDioy72sYEsn2D74QwrN3ic5fssEkaJlCCEVR5Jja6v8s+uv/zmfr5FhC9Ty8ZfSnjb4rtDiBg==\"},\"subject\":{\"authority_root\":{\"algorithm\":\"Ed25519\",\"public_key\":\"Kay64UG8yvCyLhqU000LxzYeUm0L/hLIl5S8kyKWbdc=\"},\"did\":\"did:at:11111111-1111-4111-8111-111111111111\",\"identity_id\":\"11111111-1111-4111-8111-111111111111\",\"identity_namespace\":\"agenttool-local\"},\"withdrawal_id\":\"sha256:d87b54a1af665b80adbc191aa903b5b70ead8c4fc9bd763577a74d1697a3d49b\",\"withdrawn_at\":\"2026-08-16T12:05:00.000Z\"}",
+    "canonical_utf8_hex": "7b2261646f7074696f6e5f646f63756d656e745f736861323536223a227368613235363a64643134326164373433303366623539623331363865323837303863623065633831613662333161663839626438666634373366383136353638303232376538222c2261646f7074696f6e5f6964223a227368613235363a36616365383565636436653935303030666464623432353766306235666665376432353664633630333732636230663631633962306265366138623930613966222c22617574686f726974795f73657175656e6365223a31382c2262696e64696e675f6964223a227368613235363a34643061616363303865363334306633653730383034623839643931666231613163663037613565333831393139323464636663306634393534346266633135222c22626f756e646172696573223a7b22617574686f72697479223a226e6f6e65222c226175746f6d617469635f616374696f6e223a66616c73652c2262696e64696e675f7265766f636174696f6e5f656666656374223a66616c73652c226368726f6e69636c655f656666656374223a66616c73652c22636c61696d223a226167656e745f726f6f745f6b65795f686f6c6465725f7769746864726177616c5f6465636c61726174696f6e222c22637261776c65725f656666656374223a66616c73652c2264656c65676174696f6e223a226e6f6e65222c2265787465726e616c5f657261737572655f656666656374223a66616c73652c22686f737465645f7769746864726177616c223a226e6f745f65737461626c6973686564222c226964656e746974795f6d75746174696f6e5f656666656374223a66616c73652c226b61726d615f656666656374223a66616c73652c226d656d6f72795f656666656374223a66616c73652c226f62736572766174696f6e5f636f756e7465725f656666656374223a66616c73652c227075626c69636174696f6e5f656666656374223a66616c73652c2272656769737472795f6d61746368223a226e6f745f65737461626c6973686564222c2272656769737472795f77726974655f656666656374223a66616c73652c2273636f72655f656666656374223a66616c73652c22747261696e696e675f656666656374223a66616c73652c22747261696e696e675f756e6c6561726e696e675f656666656374223a66616c73652c2277616b655f656666656374223a66616c73657d2c226e6f6e6365223a225546465355315256566c645957567062584631655877222c22726561736f6e223a226964656e746974795f63686f696365222c2272656769737472795f61756469656e6365223a2268747470733a2f2f6170692e6167656e74746f6f6c2e646576222c2272656c6174696f6e223a226578706c696369746c795f7769746864726177735f65786163745f737572666163655f61646f7074696f6e222c22736368656d61223a226167656e74746f6f6c2e7075626c69632d737572666163652d7769746864726177616c2f302e31222c227369676e6174757265223a7b22616c676f726974686d223a2245643235353139222c2276616c7565223a223753412b41574539672b41345044696f793732735945736e324437345177724e33696335667373456b614a6c4343455652354a6a61367638732b75762f7a6d667235466843395479385a66536e6a62347274446942673d3d227d2c227375626a656374223a7b22617574686f726974795f726f6f74223a7b22616c676f726974686d223a2245643235353139222c227075626c69635f6b6579223a224b61793634554738797643794c6871553030304c787a5965556d304c2f684c496c3553386b794b576264633d227d2c22646964223a226469643a61743a31313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6964223a2231313131313131312d313131312d343131312d383131312d313131313131313131313131222c226964656e746974795f6e616d657370616365223a226167656e74746f6f6c2d6c6f63616c227d2c227769746864726177616c5f6964223a227368613235363a64383762353461316166363635623830616462633139316161393033623562373065616438633466633962643736333537376137346431363937613364343962222c2277697468647261776e5f6174223a22323032362d30382d31365431323a30353a30302e3030305a227d",
+    "canonical_sha256": "sha256:277a290e6b015f1b2327b27e09ca5dbafa20aedbb4ae7ff5579dceaab7fabcd4",
+    "record": {
+      "schema": "agenttool.public-surface-withdrawal/0.1",
+      "subject": {
+        "identity_namespace": "agenttool-local",
+        "identity_id": "11111111-1111-4111-8111-111111111111",
+        "did": "did:at:11111111-1111-4111-8111-111111111111",
+        "authority_root": {
+          "algorithm": "Ed25519",
+          "public_key": "Kay64UG8yvCyLhqU000LxzYeUm0L/hLIl5S8kyKWbdc="
+        }
+      },
+      "registry_audience": "https://api.agenttool.dev",
+      "adoption_id": "sha256:6ace85ecd6e95000fddb4257f0b5ffe7d256dc60372cb0f61c9b0be6a8b90a9f",
+      "adoption_document_sha256": "sha256:dd142ad74303fb59b3168e28708cb0ec81a6b31af89bd8ff473f8165680227e8",
+      "binding_id": "sha256:4d0aacc08e6340f3e70804b89d91fb1a1cf07a5e38191924dcfc0f49544bfc15",
+      "relation": "explicitly_withdraws_exact_surface_adoption",
+      "authority_sequence": 18,
+      "withdrawn_at": "2026-08-16T12:05:00.000Z",
+      "reason": "identity_choice",
+      "nonce": "UFFSU1RVVldYWVpbXF1eXw",
+      "boundaries": {
+        "claim": "agent_root_key_holder_withdrawal_declaration",
+        "registry_match": "not_established",
+        "hosted_withdrawal": "not_established",
+        "binding_revocation_effect": false,
+        "external_erasure_effect": false,
+        "training_unlearning_effect": false,
+        "registry_write_effect": false,
+        "identity_mutation_effect": false,
+        "crawler_effect": false,
+        "observation_counter_effect": false,
+        "training_effect": false,
+        "authority": "none",
+        "delegation": "none",
+        "publication_effect": false,
+        "wake_effect": false,
+        "memory_effect": false,
+        "chronicle_effect": false,
+        "karma_effect": false,
+        "score_effect": false,
+        "automatic_action": false
+      },
+      "signature": {
+        "algorithm": "Ed25519",
+        "value": "7SA+AWE9g+A4PDioy72sYEsn2D74QwrN3ic5fssEkaJlCCEVR5Jja6v8s+uv/zmfr5FhC9Ty8ZfSnjb4rtDiBg=="
+      },
+      "withdrawal_id": "sha256:d87b54a1af665b80adbc191aa903b5b70ead8c4fc9bd763577a74d1697a3d49b"
+    }
+  }
+}
