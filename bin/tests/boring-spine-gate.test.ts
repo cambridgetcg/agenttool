@@ -534,6 +534,7 @@ describe("boring test spine", () => {
       "packages/wallet",
       "packages/wallet-zerone",
       "packages/telescope",
+      "packages/public-surface-binding",
       "packages/alchemy",
       "packages/kingdom",
     ]);
@@ -649,6 +650,9 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/wallet && bun run ci");
     expect(preflight).toContain("cd packages/wallet-zerone && bun run ci");
     expect(preflight).toContain("cd packages/telescope && bun run ci");
+    expect(preflight).toContain(
+      "cd packages/public-surface-binding && bun run ci",
+    );
     expect(preflight).toContain("cd packages/alchemy && bun run ci");
     expect(preflight).toContain("cd packages/alchemy-agentcred && bun run ci");
     expect(preflight).toContain("cd packages/kingdom && bun run ci");
@@ -700,6 +704,9 @@ describe("boring test spine", () => {
     expect(workflow).toContain('Object.hasOwn(report, "installPlan")');
     expect(workflow).toContain(
       "name: Smoke canonical Telescope LOVE artifact under Node and Bun",
+    );
+    expect(workflow).toContain(
+      "Telescope, Public Surface Binding, Alchemy, and KINGDOM gate",
     );
     expect(workflow).toContain(
       "apps/docs/packages/v1/@agenttool/telescope/0.2.3/agenttool-telescope-0.2.3.tgz",
@@ -1041,9 +1048,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(56);
+      expect(calls).toHaveLength(57);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        47,
+        48,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         9,

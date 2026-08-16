@@ -80,6 +80,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/wallet
   packages/wallet-zerone
   packages/telescope
+  packages/public-surface-binding
   packages/alchemy
   packages/kingdom
 )

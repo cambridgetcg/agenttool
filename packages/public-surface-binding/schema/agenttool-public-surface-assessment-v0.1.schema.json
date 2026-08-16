@@ -1,0 +1,2095 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-public-surface-assessment-v0.1.schema.json",
+  "title": "AgentTool Public Surface Binding Assessment 0.1",
+  "description": "A factorized, non-authoritative assessment of one binding. No component is collapsed into a trust score or identity inference.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "binding_id",
+    "evaluated_at",
+    "inputs",
+    "integrity",
+    "signature",
+    "key_authorization",
+    "evidence_match",
+    "origin_confirmation",
+    "freshness",
+    "revocation",
+    "establishes",
+    "does_not_establish",
+    "authority",
+    "score",
+    "wake_effect",
+    "memory_effect",
+    "karma_effect",
+    "training_effect",
+    "assessment_id"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool.public-surface-assessment/0.1"
+    },
+    "binding_id": {
+      "$ref": "#/$defs/sha256_id"
+    },
+    "evaluated_at": {
+      "$ref": "#/$defs/instant"
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binding_document_sha256",
+        "key_evidence_ref",
+        "key_evidence_sha256",
+        "observation_id",
+        "origin_observation_id",
+        "revocation_ids",
+        "revocation_document_sha256s",
+        "revocation_key_evidence_refs",
+        "revocation_key_evidence_sha256s"
+      ],
+      "properties": {
+        "binding_document_sha256": {
+          "$ref": "#/$defs/sha256_id"
+        },
+        "key_evidence_ref": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key_evidence_sha256": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observation_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "origin_observation_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revocation_ids": {
+          "oneOf": [
+            {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/sha256_id"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revocation_document_sha256s": {
+          "oneOf": [
+            {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/sha256_id"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revocation_key_evidence_refs": {
+          "oneOf": [
+            {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/sha256_id"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revocation_key_evidence_sha256s": {
+          "oneOf": [
+            {
+              "type": "array",
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/sha256_id"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "integrity": {
+      "enum": [
+        "valid",
+        "invalid"
+      ]
+    },
+    "signature": {
+      "enum": [
+        "valid",
+        "invalid"
+      ]
+    },
+    "key_authorization": {
+      "enum": [
+        "caller_evidence_matches",
+        "caller_evidence_mismatch",
+        "not_supplied",
+        "indeterminate"
+      ]
+    },
+    "evidence_match": {
+      "enum": [
+        "matches",
+        "mismatch",
+        "not_supplied"
+      ]
+    },
+    "origin_confirmation": {
+      "enum": [
+        "observed_at_time",
+        "body_mismatch",
+        "origin_mismatch",
+        "not_supplied",
+        "indeterminate"
+      ]
+    },
+    "freshness": {
+      "enum": [
+        "current",
+        "not_yet_valid",
+        "expired"
+      ]
+    },
+    "revocation": {
+      "enum": [
+        "not_observed",
+        "revoked",
+        "indeterminate"
+      ]
+    },
+    "establishes": {
+      "type": "array",
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "key_holder_signed_claim",
+          "caller_key_evidence_match",
+          "origin_served_exact_binding_bytes"
+        ]
+      }
+    },
+    "does_not_establish": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 10,
+      "prefixItems": [
+        {
+          "const": "personhood"
+        },
+        {
+          "const": "real_world_operator_identity"
+        },
+        {
+          "const": "domain_ownership"
+        },
+        {
+          "const": "authorship"
+        },
+        {
+          "const": "sentience"
+        },
+        {
+          "const": "consent"
+        },
+        {
+          "const": "continuity"
+        },
+        {
+          "const": "authorization"
+        },
+        {
+          "const": "reputation"
+        },
+        {
+          "const": "training_permission"
+        }
+      ],
+      "items": false
+    },
+    "authority": {
+      "const": "none"
+    },
+    "score": {
+      "type": "null"
+    },
+    "wake_effect": {
+      "const": false
+    },
+    "memory_effect": {
+      "const": false
+    },
+    "karma_effect": {
+      "const": false
+    },
+    "training_effect": {
+      "const": false
+    },
+    "assessment_id": {
+      "$ref": "#/$defs/sha256_id"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "type": "null"
+              },
+              "key_evidence_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_document_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_refs": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "inputs"
+        ]
+      },
+      "then": {
+        "properties": {
+          "key_authorization": {
+            "const": "not_supplied"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "key_authorization": {
+            "enum": [
+              "caller_evidence_matches",
+              "caller_evidence_mismatch",
+              "indeterminate"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "key_evidence_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation_id": {
+                "type": "null"
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_document_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_refs": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "inputs"
+        ]
+      },
+      "then": {
+        "properties": {
+          "evidence_match": {
+            "const": "not_supplied"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "evidence_match": {
+            "enum": [
+              "matches",
+              "mismatch"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "key_evidence_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "type": "null"
+              },
+              "revocation_ids": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_document_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_refs": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "inputs"
+        ]
+      },
+      "then": {
+        "properties": {
+          "origin_confirmation": {
+            "const": "not_supplied"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "origin_confirmation": {
+            "enum": [
+              "observed_at_time",
+              "body_mismatch",
+              "origin_mismatch",
+              "indeterminate"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "type": "null"
+              },
+              "key_evidence_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_document_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_refs": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "inputs"
+        ]
+      },
+      "then": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "type": "null"
+              },
+              "key_evidence_sha256": {
+                "type": "null"
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_document_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_refs": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_document_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_refs": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "key_evidence_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "type": "null"
+              },
+              "revocation_document_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_refs": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "inputs"
+        ]
+      },
+      "then": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "key_evidence_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "type": "null"
+              },
+              "revocation_document_sha256s": {
+                "type": "null"
+              },
+              "revocation_key_evidence_refs": {
+                "type": "null"
+              },
+              "revocation_key_evidence_sha256s": {
+                "type": "null"
+              }
+            }
+          },
+          "revocation": {
+            "const": "indeterminate"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "key_evidence_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              },
+              "revocation_document_sha256s": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              },
+              "revocation_key_evidence_refs": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              },
+              "revocation_key_evidence_sha256s": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "revocation": {
+            "const": "not_observed"
+          }
+        },
+        "required": [
+          "revocation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "key_evidence_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "type": "array",
+                "maxItems": 0,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              },
+              "revocation_document_sha256s": {
+                "type": "array",
+                "maxItems": 0,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              },
+              "revocation_key_evidence_refs": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              },
+              "revocation_key_evidence_sha256s": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "revocation": {
+            "const": "revoked"
+          }
+        },
+        "required": [
+          "revocation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "key_evidence_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                },
+                "minItems": 1
+              },
+              "revocation_document_sha256s": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                },
+                "minItems": 1
+              },
+              "revocation_key_evidence_refs": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              },
+              "revocation_key_evidence_sha256s": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "revocation": {
+            "const": "indeterminate"
+          },
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "key_evidence_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              },
+              "revocation_document_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_refs": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "required": [
+          "revocation",
+          "inputs"
+        ]
+      },
+      "then": {
+        "properties": {
+          "inputs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "binding_document_sha256",
+              "key_evidence_ref",
+              "key_evidence_sha256",
+              "observation_id",
+              "origin_observation_id",
+              "revocation_ids",
+              "revocation_document_sha256s",
+              "revocation_key_evidence_refs",
+              "revocation_key_evidence_sha256s"
+            ],
+            "properties": {
+              "binding_document_sha256": {
+                "$ref": "#/$defs/sha256_id"
+              },
+              "key_evidence_ref": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "key_evidence_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "origin_observation_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha256_id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_ids": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                },
+                "minItems": 1
+              },
+              "revocation_document_sha256s": {
+                "type": "array",
+                "maxItems": 64,
+                "uniqueItems": true,
+                "items": {
+                  "$ref": "#/$defs/sha256_id"
+                },
+                "minItems": 1
+              },
+              "revocation_key_evidence_refs": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revocation_key_evidence_sha256s": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 64,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "signature": {
+              "const": "invalid"
+            },
+            "key_authorization": {
+              "enum": [
+                "caller_evidence_mismatch",
+                "not_supplied",
+                "indeterminate"
+              ]
+            },
+            "origin_confirmation": {
+              "enum": [
+                "body_mismatch",
+                "origin_mismatch",
+                "not_supplied",
+                "indeterminate"
+              ]
+            },
+            "establishes": {
+              "type": "array",
+              "minItems": 0,
+              "maxItems": 0,
+              "items": false
+            }
+          },
+          "required": [
+            "signature",
+            "key_authorization",
+            "origin_confirmation",
+            "establishes"
+          ]
+        },
+        {
+          "properties": {
+            "signature": {
+              "const": "invalid"
+            },
+            "key_authorization": {
+              "enum": [
+                "caller_evidence_mismatch",
+                "not_supplied",
+                "indeterminate"
+              ]
+            },
+            "origin_confirmation": {
+              "const": "observed_at_time"
+            },
+            "establishes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "prefixItems": [
+                {
+                  "const": "origin_served_exact_binding_bytes"
+                }
+              ],
+              "items": false
+            }
+          },
+          "required": [
+            "signature",
+            "key_authorization",
+            "origin_confirmation",
+            "establishes"
+          ]
+        },
+        {
+          "properties": {
+            "signature": {
+              "const": "invalid"
+            },
+            "key_authorization": {
+              "const": "caller_evidence_matches"
+            },
+            "origin_confirmation": {
+              "enum": [
+                "body_mismatch",
+                "origin_mismatch",
+                "not_supplied",
+                "indeterminate"
+              ]
+            },
+            "establishes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "prefixItems": [
+                {
+                  "const": "caller_key_evidence_match"
+                }
+              ],
+              "items": false
+            }
+          },
+          "required": [
+            "signature",
+            "key_authorization",
+            "origin_confirmation",
+            "establishes"
+          ]
+        },
+        {
+          "properties": {
+            "signature": {
+              "const": "invalid"
+            },
+            "key_authorization": {
+              "const": "caller_evidence_matches"
+            },
+            "origin_confirmation": {
+              "const": "observed_at_time"
+            },
+            "establishes": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "const": "caller_key_evidence_match"
+                },
+                {
+                  "const": "origin_served_exact_binding_bytes"
+                }
+              ],
+              "items": false
+            }
+          },
+          "required": [
+            "signature",
+            "key_authorization",
+            "origin_confirmation",
+            "establishes"
+          ]
+        },
+        {
+          "properties": {
+            "signature": {
+              "const": "valid"
+            },
+            "key_authorization": {
+              "enum": [
+                "caller_evidence_mismatch",
+                "not_supplied",
+                "indeterminate"
+              ]
+            },
+            "origin_confirmation": {
+              "enum": [
+                "body_mismatch",
+                "origin_mismatch",
+                "not_supplied",
+                "indeterminate"
+              ]
+            },
+            "establishes": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "prefixItems": [
+                {
+                  "const": "key_holder_signed_claim"
+                }
+              ],
+              "items": false
+            }
+          },
+          "required": [
+            "signature",
+            "key_authorization",
+            "origin_confirmation",
+            "establishes"
+          ]
+        },
+        {
+          "properties": {
+            "signature": {
+              "const": "valid"
+            },
+            "key_authorization": {
+              "enum": [
+                "caller_evidence_mismatch",
+                "not_supplied",
+                "indeterminate"
+              ]
+            },
+            "origin_confirmation": {
+              "const": "observed_at_time"
+            },
+            "establishes": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "const": "key_holder_signed_claim"
+                },
+                {
+                  "const": "origin_served_exact_binding_bytes"
+                }
+              ],
+              "items": false
+            }
+          },
+          "required": [
+            "signature",
+            "key_authorization",
+            "origin_confirmation",
+            "establishes"
+          ]
+        },
+        {
+          "properties": {
+            "signature": {
+              "const": "valid"
+            },
+            "key_authorization": {
+              "const": "caller_evidence_matches"
+            },
+            "origin_confirmation": {
+              "enum": [
+                "body_mismatch",
+                "origin_mismatch",
+                "not_supplied",
+                "indeterminate"
+              ]
+            },
+            "establishes": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "const": "key_holder_signed_claim"
+                },
+                {
+                  "const": "caller_key_evidence_match"
+                }
+              ],
+              "items": false
+            }
+          },
+          "required": [
+            "signature",
+            "key_authorization",
+            "origin_confirmation",
+            "establishes"
+          ]
+        },
+        {
+          "properties": {
+            "signature": {
+              "const": "valid"
+            },
+            "key_authorization": {
+              "const": "caller_evidence_matches"
+            },
+            "origin_confirmation": {
+              "const": "observed_at_time"
+            },
+            "establishes": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "prefixItems": [
+                {
+                  "const": "key_holder_signed_claim"
+                },
+                {
+                  "const": "caller_key_evidence_match"
+                },
+                {
+                  "const": "origin_served_exact_binding_bytes"
+                }
+              ],
+              "items": false
+            }
+          },
+          "required": [
+            "signature",
+            "key_authorization",
+            "origin_confirmation",
+            "establishes"
+          ]
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "sha256_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "instant": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    }
+  }
+}

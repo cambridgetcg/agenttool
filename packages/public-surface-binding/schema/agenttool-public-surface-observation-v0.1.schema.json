@@ -1,0 +1,727 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schema/agenttool-public-surface-observation-v0.1.schema.json",
+  "title": "AgentTool Public Surface Observation 0.1",
+  "description": "A bounded transport observation about one public HTTPS resource. It is evidence, not identity, authorship, consent, authority, rights, or training permission.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "origin",
+    "request_url",
+    "request",
+    "status_code",
+    "final_url",
+    "redirect_chain",
+    "media_type",
+    "bytes",
+    "body_sha256",
+    "collector",
+    "robots",
+    "usage_preferences",
+    "request_authentication",
+    "boundaries",
+    "evidence_id"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool.public-surface-observation/0.1"
+    },
+    "origin": {
+      "$ref": "#/$defs/https_origin"
+    },
+    "request_url": {
+      "$ref": "#/$defs/https_url"
+    },
+    "request": {
+      "$ref": "#/$defs/request"
+    },
+    "status_code": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "final_url": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/https_url"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "redirect_chain": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status_code",
+          "location"
+        ],
+        "properties": {
+          "status_code": {
+            "enum": [
+              301,
+              302,
+              303,
+              307,
+              308
+            ]
+          },
+          "location": {
+            "$ref": "#/$defs/https_url"
+          }
+        }
+      }
+    },
+    "media_type": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$",
+          "maxLength": 256
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "bytes": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16777216
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "body_sha256": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256_id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "collector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "report_schema",
+        "report_sha256",
+        "source_id"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/bounded_text"
+        },
+        "version": {
+          "$ref": "#/$defs/bounded_text"
+        },
+        "report_schema": {
+          "$ref": "#/$defs/bounded_text"
+        },
+        "report_sha256": {
+          "$ref": "#/$defs/sha256_id"
+        },
+        "source_id": {
+          "$ref": "#/$defs/bounded_text"
+        }
+      }
+    },
+    "robots": {
+      "$ref": "#/$defs/robots"
+    },
+    "usage_preferences": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "namespace",
+          "category",
+          "value",
+          "is_permission"
+        ],
+        "properties": {
+          "namespace": {
+            "$ref": "#/$defs/bounded_text"
+          },
+          "category": {
+            "$ref": "#/$defs/bounded_text"
+          },
+          "value": {
+            "enum": [
+              "allowed",
+              "disallowed",
+              "unknown"
+            ]
+          },
+          "is_permission": {
+            "const": false
+          }
+        }
+      }
+    },
+    "request_authentication": {
+      "$ref": "#/$defs/request_authentication"
+    },
+    "boundaries": {
+      "$ref": "#/$defs/boundaries"
+    },
+    "evidence_id": {
+      "$ref": "#/$defs/sha256_id"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status_code": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "status_code"
+        ]
+      },
+      "then": {
+        "properties": {
+          "final_url": {
+            "type": "null"
+          },
+          "redirect_chain": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "media_type": {
+            "type": "null"
+          },
+          "bytes": {
+            "type": "null"
+          },
+          "body_sha256": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "final_url": {
+            "$ref": "#/$defs/https_url"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "request": {
+                  "$ref": "#/$defs/get_request"
+                }
+              },
+              "required": [
+                "request"
+              ]
+            },
+            "then": {
+              "properties": {
+                "bytes": {
+                  "type": "integer"
+                },
+                "body_sha256": {
+                  "$ref": "#/$defs/sha256_id"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "bytes": {
+                  "const": 0
+                },
+                "body_sha256": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "sha256_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "bounded_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000]*$"
+    },
+    "instant": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "https_url": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048,
+      "pattern": "^https://[a-z0-9.-]+/(?:[A-Za-z0-9._~!$&'()*+,;=:@/-]|%[0-9A-F]{2})*$"
+    },
+    "https_origin": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048,
+      "pattern": "^https://[a-z0-9.-]+$"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "credential_mode",
+        "started_at",
+        "ended_at",
+        "crawler_version"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "GET",
+            "HEAD"
+          ]
+        },
+        "credential_mode": {
+          "const": "omit"
+        },
+        "started_at": {
+          "$ref": "#/$defs/instant"
+        },
+        "ended_at": {
+          "$ref": "#/$defs/instant"
+        },
+        "crawler_version": {
+          "$ref": "#/$defs/bounded_text"
+        }
+      }
+    },
+    "get_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "credential_mode",
+        "started_at",
+        "ended_at",
+        "crawler_version"
+      ],
+      "properties": {
+        "method": {
+          "const": "GET"
+        },
+        "credential_mode": {
+          "const": "omit"
+        },
+        "started_at": {
+          "$ref": "#/$defs/instant"
+        },
+        "ended_at": {
+          "$ref": "#/$defs/instant"
+        },
+        "crawler_version": {
+          "$ref": "#/$defs/bounded_text"
+        }
+      }
+    },
+    "robots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "robots_url",
+        "snapshot_sha256",
+        "matched_group",
+        "directive",
+        "is_access_authorization"
+      ],
+      "properties": {
+        "source": {
+          "enum": [
+            "rfc9309_snapshot",
+            "not_collected"
+          ]
+        },
+        "robots_url": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/https_url"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "snapshot_sha256": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "matched_group": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/bounded_text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "directive": {
+          "enum": [
+            "allow",
+            "disallow",
+            "no_match",
+            "unavailable",
+            "not_observed"
+          ]
+        },
+        "is_access_authorization": {
+          "const": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "source": {
+                "const": "not_collected"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          },
+          "then": {
+            "properties": {
+              "robots_url": {
+                "type": "null"
+              },
+              "snapshot_sha256": {
+                "type": "null"
+              },
+              "matched_group": {
+                "type": "null"
+              },
+              "directive": {
+                "const": "not_observed"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "robots_url": {
+                "$ref": "#/$defs/https_url"
+              },
+              "directive": {
+                "enum": [
+                  "allow",
+                  "disallow",
+                  "no_match",
+                  "unavailable"
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "directive": {
+                      "const": "unavailable"
+                    }
+                  },
+                  "required": [
+                    "directive"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "snapshot_sha256": {
+                      "type": "null"
+                    }
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "snapshot_sha256": {
+                      "$ref": "#/$defs/sha256_id"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "request_authentication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "status",
+        "verifier",
+        "protocol_variant",
+        "claimed_identity_url",
+        "key_thumbprint",
+        "covered_components",
+        "nonce_checked"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "none",
+            "web_bot_auth",
+            "provider_attestation"
+          ]
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "invalid",
+            "unverified"
+          ]
+        },
+        "verifier": {
+          "$ref": "#/$defs/bounded_text"
+        },
+        "protocol_variant": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/bounded_text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "claimed_identity_url": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/https_url"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "key_thumbprint": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256_id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "covered_components": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/bounded_text"
+          }
+        },
+        "nonce_checked": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "none"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "unverified"
+              },
+              "verifier": {
+                "const": "none"
+              },
+              "protocol_variant": {
+                "type": "null"
+              },
+              "claimed_identity_url": {
+                "type": "null"
+              },
+              "key_thumbprint": {
+                "type": "null"
+              },
+              "covered_components": {
+                "type": "array",
+                "maxItems": 0
+              },
+              "nonce_checked": {
+                "const": false
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "verifier": {
+                "not": {
+                  "const": "none"
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "verified"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "protocol_variant": {
+                      "$ref": "#/$defs/bounded_text"
+                    },
+                    "key_thumbprint": {
+                      "$ref": "#/$defs/sha256_id"
+                    },
+                    "covered_components": {
+                      "type": "array",
+                      "minItems": 1
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "web_bot_auth"
+                    },
+                    "status": {
+                      "const": "verified"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "status"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "claimed_identity_url": {
+                      "$ref": "#/$defs/https_url"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "basis",
+        "raw_body",
+        "identity",
+        "authorship",
+        "consent",
+        "authority",
+        "rights",
+        "training_permission",
+        "content_is_instruction",
+        "wake_effect",
+        "memory_effect",
+        "karma_effect",
+        "score_effect"
+      ],
+      "properties": {
+        "basis": {
+          "const": "transport_observation"
+        },
+        "raw_body": {
+          "const": "not_included"
+        },
+        "identity": {
+          "const": "not_inferred"
+        },
+        "authorship": {
+          "const": "not_established"
+        },
+        "consent": {
+          "const": "not_established"
+        },
+        "authority": {
+          "const": "none"
+        },
+        "rights": {
+          "const": "not_established"
+        },
+        "training_permission": {
+          "const": "not_established"
+        },
+        "content_is_instruction": {
+          "const": false
+        },
+        "wake_effect": {
+          "const": false
+        },
+        "memory_effect": {
+          "const": false
+        },
+        "karma_effect": {
+          "const": false
+        },
+        "score_effect": {
+          "const": false
+        }
+      }
+    }
+  }
+}

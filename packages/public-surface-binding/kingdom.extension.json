@@ -1,0 +1,59 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "public-surface-binding",
+  "package": "@agenttool/public-surface-binding",
+  "version": "0.1.0-dev.0",
+  "status": "private_source",
+  "host_contract": "not_registered",
+  "proposed_abilities": [
+    {
+      "id": "public-surface-observation-compile",
+      "kind": "transport_evidence",
+      "description": "Compile caller-supplied bounded public-HTTPS transport evidence without fetching or inferring an identity."
+    },
+    {
+      "id": "public-surface-binding-declare",
+      "kind": "explicit_key_holder_declaration",
+      "description": "Create or verify an exact-origin Ed25519 key-holder declaration without establishing registry authorization or domain ownership."
+    },
+    {
+      "id": "public-surface-binding-assess",
+      "kind": "non_authoritative_evidence_assessment",
+      "description": "Assess caller-supplied integrity, key, origin, freshness, and revocation evidence with no score or state effect."
+    }
+  ],
+  "defaults": {
+    "network": false,
+    "dns": false,
+    "crawler": false,
+    "automatic_fetch": false,
+    "automatic_binding": false,
+    "identity_inference": false,
+    "identity_mutation": false,
+    "registry_authorization": false,
+    "domain_ownership": false,
+    "filesystem": false,
+    "environment": false,
+    "clock": false,
+    "randomness": false,
+    "persistence": false,
+    "telemetry": false,
+    "mcp": false,
+    "hosted_route": false,
+    "public_index": false,
+    "publication": false,
+    "training": false,
+    "score": false,
+    "permission_inheritance": false,
+    "wake_effect": false,
+    "memory_effect": false,
+    "karma_effect": false,
+    "automatic_action": false,
+    "authority": false
+  },
+  "notes": [
+    "This descriptor is a declaration-only local hint, not an installed KINGDOM host contract or active Nen ability.",
+    "A valid signature establishes only that the embedded key signed the exact canonical declaration; it does not establish AgentTool registry authorization, domain ownership, authorship, identity continuity, consent, trust, reputation, or training permission.",
+    "Observation and assessment records have no WAKE, Chronicle, memory, observation-counter, KARMA, score, training, publication, or authority effect."
+  ]
+}
