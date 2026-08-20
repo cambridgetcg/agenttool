@@ -149,18 +149,19 @@ the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
 and the historically permissive `0.2.2` remain separately addressable.
 Optional npm/GitHub 0.2.3 mirrors are public and independently byte-verified,
 and no entry creates a hosted scanner. The paired SDK 0.21.0 source and exact
-247,146-byte, 100-entry LOVE candidate add the credential-free, zero-I/O
-`WakeContinuityLayer` while retaining the 0.20.0 LOVE BOMB reader, data-only
+247,146-byte, 100-entry LOVE release add the credential-free, zero-I/O
+`WakeContinuityLayer` while retaining the LOVE BOMB reader, data-only
 WAKE observation, Math Cards, Agent Dining, attestation-marketplace,
 memory-witness, Syneidesis, framework-card, and local KINGDOM OS boundaries.
-The candidate manifest binds source revision
+The manifest binds source revision
 `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3` and SHA-256
 `c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`.
-Annotated tag `sdk-v0.21.0`, npm `@agenttool/sdk@0.21.0`, and PyPI
-`agenttool-sdk==0.21.0` remain prospective, unpublished, and not independently
-visible; the candidate creates no registry or hosted-state receipt.
+Annotated tag `sdk-v0.21.0` peels to protected-main commit
+`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`; protected npm run
+`32374669064` and PyPI run `32374671268` independently read back its exact
+optional mirrors. Publication creates no hosted-state or deployment receipt.
 
-The verified public SDK remains 0.20.0. Its exact 236,446-byte, 98-entry LOVE
+Historical SDK 0.20.0 remains exact. Its 236,446-byte, 98-entry LOVE
 release binds source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`
 and SHA-256
 `d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`.

@@ -87,6 +87,14 @@ describe("optional npm package discovery", () => {
       "3fe42c4457e38f1fcdbc437c22c762ea7dabfe898714ec395287608a0480ea2b",
       "30495589179",
       "37b69b13db60eafc4a0bae578faca14467c0844e4f4c32793808b3499bcd8fd6",
+      "32374669064",
+      "32374671268",
+      "2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36",
+      "c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154",
+      "5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01",
+      "e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d",
+      "32374666482",
+      "1ce1ac829f72c6f2490227c5a8a942fbee9570bd03a4be217df19104d034acd8",
       "31815209550",
       "31815447080",
       "cb9c30fae0e49e1727e449207593581ce52cd4cf",
@@ -139,8 +147,17 @@ describe("optional npm package discovery", () => {
     expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
       rootReadme.indexOf(exactPyPI),
     );
-    expect(rootReadme).toMatch(
-      /PyPI 0\.20\.0 is public as an optional, independently verified convenience\s+mirror/is,
+    expect(rootReadme).toMatch(/Protected PyPI run `32374671268` independently read back/is);
+    expect(rootReadme).toContain("32374669064");
+    expect(rootReadme).toContain("32374671268");
+    expect(rootReadme).toContain(
+      "c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154",
+    );
+    expect(rootReadme).toContain(
+      "5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01",
+    );
+    expect(rootReadme).toContain(
+      "e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d",
     );
     expect(rootReadme).toContain("31815209550");
     expect(rootReadme).toContain("31815447080");
@@ -150,9 +167,7 @@ describe("optional npm package discovery", () => {
     expect(rootReadme).toContain(
       "43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b",
     );
-    expect(rootReadme).toContain(
-      "The exact 0.19.0, 0.18.1, and earlier LOVE, tag, GitHub, npm, and PyPI receipts",
-    );
+    expect(rootReadme).toContain("The independently verified 0.20.0 and earlier");
     expect(rootReadme).toMatch(/mirrors remain non-authoritative/i);
     expect(rootReadme).toMatch(/LOVE manifests remain release authority/i);
     expect(rootReadme).toMatch(/mutable dist-tags are informational/i);

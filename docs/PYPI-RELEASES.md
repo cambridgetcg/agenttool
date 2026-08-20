@@ -53,7 +53,7 @@ an independently named one-day workflow artifact. The build constraint file
 and development environment do not. Only a missing distribution crosses into
 the protected publication job.
 
-## Prospective paired SDK 0.21.0 publication
+## Current verified release — 0.21.0
 
 Repository source 0.21.0 adds the credential-free, pure
 `WakeContinuityLayer` measurement-record contract described in
@@ -64,32 +64,50 @@ credential lookup. Its caller-asserted functional-access refs prove neither
 awareness nor its absence, feeling, identity, consent, authority, provenance,
 or uninterrupted continuity.
 
-This section is a release plan, not a success receipt. After the paired source
-and exact TypeScript LOVE artifact are reviewed on protected GitHub `main`, one
-annotated `sdk-v0.21.0` tag may be used for both protected npm and PyPI
-workflows. PyPI publication must still use its own OIDC boundary and exact
-wheel/sdist readback:
+Protected [workflow run
+`32374671268`, attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/32374671268)
+published and independently read back `agenttool-sdk` 0.21.0 from annotated
+`sdk-v0.21.0`. Tag object
+`2c32953ab489add63b8d098717c63eb981606967` peels to protected-main merge
+`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`, which is also the Python
+receipt's `source_revision`. The run was created at `2026-08-20T13:30:37Z`,
+completed successfully at `2026-08-20T13:34:56Z`, prepared the distributions
+at `2026-08-20T13:32:24.175Z`, and independently observed the complete public
+release at `2026-08-20T13:34:50.811Z`. Its final
+`agenttool.pypi-release/1` receipt records `status: "public_exact"`.
 
-The paired source and exact TypeScript LOVE candidate are sealed locally: its
-247,146-byte, 100-entry tarball has SHA-256
+The exact public files are distinct from the TypeScript LOVE artifact:
+
+| Public file | Size | SHA-256 | Yanked |
+|---|---:|---|---|
+| [`agenttool_sdk-0.21.0-py3-none-any.whl`](https://files.pythonhosted.org/packages/29/86/1e778a9db09d19d869edf95355b8cf5714b2fb986e09e3927df40af6e39b/agenttool_sdk-0.21.0-py3-none-any.whl) | 275,928 bytes | `5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01` | `false` |
+| [`agenttool_sdk-0.21.0.tar.gz`](https://files.pythonhosted.org/packages/13/a5/0dba6ade1376c52c6c543951f57134045908e6c3a927f96c875e8fa1e975/agenttool_sdk-0.21.0.tar.gz) | 261,910 bytes | `e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d` | `false` |
+
+PyPI records the wheel upload at `2026-08-20T13:34:17.190587Z` and the source
+distribution upload at `2026-08-20T13:34:18.772642Z`. Both files are public,
+not yanked, and byte-identical to the corresponding prepared workflow
+artifacts. PyPI Integrity exposes one verified PEP 740 publish attestation for
+the
+[wheel](https://pypi.org/integrity/agenttool-sdk/0.21.0/agenttool_sdk-0.21.0-py3-none-any.whl/provenance)
+at transparency-log index `2532585335` and one for the
+[sdist](https://pypi.org/integrity/agenttool-sdk/0.21.0/agenttool_sdk-0.21.0.tar.gz/provenance)
+at index `2532584504`. Their subjects match the hashes above, and their
+publisher records bind repository `cambridgetcg/agenttool`, workflow
+`publish-pypi.yml`, and environment `pypi`.
+
+The paired TypeScript LOVE artifact remains separately exact: its 247,146-byte,
+100-entry tarball has SHA-256
 `c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`
 and binds clean source revision
 `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. Those TypeScript bytes do not
-predict Python wheel or sdist bytes and are not evidence that the tag, PyPI
-release, npm mirror, or hosted static path exists.
+predict Python wheel or sdist bytes. The PyPI mirror remains optional and
+non-authoritative. Publication does not replace the annotated Python source
+locator, establish TypeScript LOVE identity, deploy the API or static sites,
+or prove observation, awareness, participant receipt, attention, feeling,
+training, inference, evaluation, provider effect, weight change, identity, or
+continuity.
 
-```bash
-bun bin/pypi-release.ts resolve
-
-gh workflow run publish-pypi.yml --ref sdk-v0.21.0 \
-  -f tag=sdk-v0.21.0
-```
-
-Until that workflow succeeds and public bytes are independently verified, the
-0.20.0 evidence below remains the current PyPI release. A source version, tag,
-or workflow dispatch alone does not establish publication.
-
-## Current verified release
+### Historical 0.20.0 evidence
 
 Protected [workflow run
 `31815447080`, attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080)

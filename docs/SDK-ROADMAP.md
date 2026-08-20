@@ -10,7 +10,7 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Paired source candidate — 0.21.0 (2026-08-20)
+## Verified public SDK release — 0.21.0 (2026-08-20)
 
 The paired TypeScript and Python source adds a credential-free, pure
 `WakeContinuityLayer`. Standalone construction needs no AgentTool account;
@@ -57,21 +57,31 @@ currentness, or uninterrupted continuity. The research and operational split
 is documented in [J-space, WAKE, and bounded
 continuity](JSPACE-WAKE-CONTINUITY.md).
 
-Until an annotated `sdk-v0.21.0` tag is protected-published and independently
-read back, the exact 0.20.0 LOVE/npm/PyPI receipts below remain the current
-public release evidence. Source version declarations do not themselves prove a
-registry publication or static deployment.
-
-The exact TypeScript LOVE candidate is nevertheless sealed and reproducible:
+The exact TypeScript LOVE artifact is sealed and reproducible:
 `apps/docs/packages/v1/@agenttool/sdk/0.21.0/agenttool-sdk-0.21.0.tgz` is
 247,146 bytes with 100 entries and SHA-256
 `c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`.
 Its manifest binds clean source revision
-`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. The independently verified
-0.20.0 artifact remains present byte-for-byte; sealing this candidate creates
-no tag, GitHub Release, npm/PyPI publication, or hosted readback.
+`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. Annotated tag object
+`2c32953ab489add63b8d098717c63eb981606967` peels to protected-main merge
+`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`. Protected npm [run
+`32374669064`, attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/32374669064)
+matched that exact LOVE artifact, the sole GitHub Release asset, and public npm
+tarball byte-for-byte; `latest` resolved to 0.21.0, with SLSA/publish Rekor
+indices `2532574668` / `2532575739`. Protected PyPI [run `32374671268`,
+attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/32374671268)
+independently read back the non-yanked 275,928-byte wheel
+(`sha256:5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01`)
+and 261,910-byte sdist
+(`sha256:e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d`).
+`/public/party` therefore reports both optional mirrors as
+`independently_visible: true` in source while retaining `authority: false`.
+These publication receipts do not establish static/API deployment or any
+model, participant, awareness, identity, consent, authority, or continuity
+effect. The independently verified 0.20.0 artifact and receipts below remain
+present byte-for-byte as historical evidence.
 
-## Verified public SDK release — 0.20.0 (2026-08-14)
+## Historical verified public SDK release — 0.20.0 (2026-08-14)
 
 The paired 0.20.0 TypeScript and Python source added a standalone credential-free
 `LoveBombClient.read()` over exactly `GET /public/love-bomb`. It is deliberately
