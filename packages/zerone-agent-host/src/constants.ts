@@ -45,6 +45,7 @@ export const TREASURY_PURPOSES = [
   "compute",
   "knowledge_bond",
   "network_fee",
+  "sponsorship_escrow",
   "storage",
 ] as const;
 

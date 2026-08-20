@@ -300,7 +300,7 @@ const TABLE_SQL: Readonly<Record<keyof typeof TABLE_COLUMNS, string>> = Object.f
   operation_events: "create table operation_events (ledger_sequence integer primary key, operation_id text not null references operations(operation_id), sequence integer not null check(sequence >= 1), kind text not null, at text not null, details_json text not null, previous_event_hash text not null, event_hash text not null unique, unique(operation_id, sequence))",
   operations: "create table operations (operation_id text primary key, revision integer not null check(revision >= 1), status text not null check(status in ('reserved', 'signing', 'signing_unknown', 'signed', 'submitting', 'submission_unknown', 'submitted', 'rejected_pre_submit_sticky', 'confirmed_success', 'confirmed_failed', 'reorged', 'sequence_superseded', 'released_pre_sign')), wallet_id text not null references binding_heads(wallet_id), binding_id text not null, proof_id text not null references binding_history(proof_id), binding_head_version integer not null, descriptor_id text not null, capability_record_id text not null references capability_usage(capability_record_id), capability_revocation_nonce integer not null, authorization_verification_id text not null unique, intent_record_id text not null unique, simulation_record_id text not null, plan_reference_id text not null, treasury_policy_id text not null, treasury_policy_json text not null, window_start_height text not null, reserve_floor_uzrn text not null, chain_id text not null, source_account text not null, account_number text not null, sequence text not null, signer_key_id text not null, signer_invoked integer not null check(signer_invoked in (0, 1)), request_id text unique, unsigned_payload_hash text, signing_boundary_verification_id text, tx_hash text unique, signed_payload_hash text, signed_verification_id text, inclusion_height text, inclusion_block_hash text, inclusion_code integer, inclusion_codespace text, unresolved_reorg_event_sequence integer, unresolved_reorg_evidence_id text, event_count integer not null check(event_count >= 0), event_head_hash text not null, created_at text not null, updated_at text not null, check((unresolved_reorg_event_sequence is null and unresolved_reorg_evidence_id is null) or (unresolved_reorg_event_sequence >= 1 and unresolved_reorg_evidence_id is not null)))",
   sequence_fences: "create table sequence_fences (operation_id text primary key references operations(operation_id), chain_id text not null, source_account text not null, account_number text not null, sequence text not null, state text not null check(state in ('held', 'released')), acquired_at text not null, released_at text, release_evidence_id text)",
-  treasury_reservations: "create table treasury_reservations (operation_id text not null references operations(operation_id), purpose text not null check(purpose in ('compute', 'knowledge_bond', 'network_fee', 'storage')), amount_uzrn text not null, state text not null check(state in ('reserved', 'sticky', 'settled', 'released')), primary key(operation_id, purpose))",
+  treasury_reservations: "create table treasury_reservations (operation_id text not null references operations(operation_id), purpose text not null check(purpose in ('compute', 'knowledge_bond', 'network_fee', 'sponsorship_escrow', 'storage')), amount_uzrn text not null, state text not null check(state in ('reserved', 'sticky', 'settled', 'released')), primary key(operation_id, purpose))",
 });
 
 const INDEX_SIGNATURES: Readonly<Record<keyof typeof TABLE_COLUMNS, readonly string[]>> = Object.freeze({
@@ -591,7 +591,7 @@ export class ZeroneAgentHostStore {
       );
       CREATE TABLE IF NOT EXISTS treasury_reservations (
         operation_id TEXT NOT NULL REFERENCES operations(operation_id),
-        purpose TEXT NOT NULL CHECK(purpose IN ('compute', 'knowledge_bond', 'network_fee', 'storage')),
+        purpose TEXT NOT NULL CHECK(purpose IN ('compute', 'knowledge_bond', 'network_fee', 'sponsorship_escrow', 'storage')),
         amount_uzrn TEXT NOT NULL,
         state TEXT NOT NULL CHECK(state IN ('reserved', 'sticky', 'settled', 'released')),
         PRIMARY KEY(operation_id, purpose)
@@ -1294,8 +1294,8 @@ export class ZeroneAgentHostStore {
     parseUint64(input.capability.max_fee_per_intent_uzrn, "capability.max_fee_per_intent_uzrn");
     assertSha256Id(input.signer_key_id, "signer_key_id");
     assertTimestamp(input.created_at, "created_at");
-    if (input.reservations.length === 0 || input.reservations.length > 4) {
-      fail("invalid_input", "Operation must reserve between one and four treasury purposes");
+    if (input.reservations.length === 0 || input.reservations.length > 5) {
+      fail("invalid_input", "Operation must reserve between one and five treasury purposes");
     }
     const purposes = new Set<string>();
     for (const [index, reservation] of input.reservations.entries()) {
@@ -1419,6 +1419,7 @@ export class ZeroneAgentHostStore {
       compute: 0n,
       knowledge_bond: 0n,
       network_fee: 0n,
+      sponsorship_escrow: 0n,
       storage: 0n,
       total: 0n,
     };

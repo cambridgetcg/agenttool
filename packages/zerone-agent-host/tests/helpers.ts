@@ -154,9 +154,16 @@ export function fixture() {
       storage: "100000",
       network_fee: "100000",
       knowledge_bond: "200000",
+      sponsorship_escrow: "300000",
       total: "600000",
     },
-    allowed_purposes: ["compute", "knowledge_bond", "network_fee", "storage"],
+    allowed_purposes: [
+      "compute",
+      "knowledge_bond",
+      "network_fee",
+      "sponsorship_escrow",
+      "storage",
+    ],
     issued_at: "2026-08-20T19:45:00.000Z",
   });
   const snapshot: ZeroneAccountSnapshot = Object.freeze({
