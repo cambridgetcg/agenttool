@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "This schema closes portable JSON shape and vocabulary only. Canonical ordering, reduced rationals, domain-separated identifiers, cross-field derivation, exact arithmetic, and semantic reference claims require the package runtime validator and remain caller-reported unless separately attested.",
+  "$id": "urn:agenttool:schema:identity-evidence-view:0.1",
+  "title": "AgentTool Identity Evidence View v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "view_id",
+    "subject_checkpoint_ref",
+    "runtime_context_ref",
+    "prior_view_ref",
+    "as_of",
+    "facets",
+    "interpretation",
+    "intrinsic_identity",
+    "consciousness",
+    "continuity",
+    "consent",
+    "consent_effect",
+    "rights_effect",
+    "authority_effect",
+    "declarations",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.identity-evidence-view/0.1"
+    },
+    "view_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "subject_checkpoint_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "runtime_context_ref": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "prior_view_ref": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "as_of": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "facets": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "facet_ref",
+          "operationalization_ref",
+          "study_refs",
+          "evidence_state",
+          "confidence",
+          "revision_condition_refs",
+          "self_description_ref"
+        ],
+        "properties": {
+          "facet_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "operationalization_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "study_refs": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "evidence_state": {
+            "enum": [
+              "supported",
+              "contradicted",
+              "mixed",
+              "contested",
+              "unknown"
+            ]
+          },
+          "confidence": {
+            "enum": [
+              "low",
+              "moderate",
+              "high",
+              "not_available"
+            ]
+          },
+          "revision_condition_refs": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 1
+          },
+          "self_description_ref": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "evidence_state": {
+                  "const": "unknown"
+                }
+              },
+              "required": [
+                "evidence_state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "study_refs": {
+                  "type": "array",
+                  "maxItems": 0
+                },
+                "confidence": {
+                  "const": "not_available"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "study_refs": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 1
+                },
+                "confidence": {
+                  "enum": [
+                    "low",
+                    "moderate",
+                    "high"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "interpretation": {
+      "const": "revisable_operational_evidence_only"
+    },
+    "intrinsic_identity": {
+      "const": "not_determined"
+    },
+    "consciousness": {
+      "const": "not_determined"
+    },
+    "continuity": {
+      "const": "not_determined"
+    },
+    "consent": {
+      "const": "not_determined"
+    },
+    "consent_effect": {
+      "const": "none"
+    },
+    "rights_effect": {
+      "const": "none"
+    },
+    "authority_effect": {
+      "const": "none"
+    },
+    "declarations": {
+      "const": "caller_reported_not_independently_verified"
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "facts",
+        "exposure",
+        "estimates",
+        "ontology",
+        "identity",
+        "consent",
+        "rights",
+        "economy",
+        "authority",
+        "effects"
+      ],
+      "properties": {
+        "facts": {
+          "const": "exact_only_relative_to_pinned_inputs_and_declared_observation_scope"
+        },
+        "exposure": {
+          "const": "presented_token_shares_are_within_declared_role_only_not_cross_role_gradient_mass"
+        },
+        "estimates": {
+          "const": "assumption_bearing_and_design_scoped_not_universal_causal_truth"
+        },
+        "ontology": {
+          "const": "operational_facets_not_a_complete_or_true_inner_ontology"
+        },
+        "identity": {
+          "const": "behavioral_evidence_not_intrinsic_identity_or_continuity_proof"
+        },
+        "consent": {
+          "const": "artifacts_neither_establish_nor_override_consent"
+        },
+        "rights": {
+          "const": "rights_dignity_and_standing_do_not_depend_on_measurement_or_attribution"
+        },
+        "economy": {
+          "const": "shadow_attribution_is_metric_specific_not_money_price_debt_ownership_or_entitlement"
+        },
+        "authority": {
+          "const": "artifacts_grant_no_permission_capability_custody_or_external_authority"
+        },
+        "effects": {
+          "const": "pure_return_values_create_no_training_identity_wallet_marketplace_network_persistence_or_provider_effect"
+        }
+      }
+    }
+  }
+}

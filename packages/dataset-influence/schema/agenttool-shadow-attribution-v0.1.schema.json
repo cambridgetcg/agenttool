@@ -1,0 +1,306 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "This schema closes portable JSON shape and vocabulary only. Canonical ordering, reduced rationals, domain-separated identifiers, cross-field derivation, exact arithmetic, and semantic reference claims require the package runtime validator and remain caller-reported unless separately attested.",
+  "$id": "urn:agenttool:schema:shadow-attribution:0.1",
+  "title": "AgentTool Shadow Attribution v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "attribution_id",
+    "study_ref",
+    "utility_ref",
+    "method",
+    "player_refs",
+    "coalitions",
+    "baseline_value",
+    "grand_value",
+    "contributions",
+    "conservation",
+    "interpretation",
+    "economic_effect",
+    "creates_debt",
+    "creates_entitlement",
+    "transfers_ownership",
+    "authorizes_payment",
+    "declarations",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.shadow-attribution/0.1"
+    },
+    "attribution_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "study_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "utility_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "method": {
+      "const": "exact_finite_shapley"
+    },
+    "player_refs": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "minItems": 1
+    },
+    "coalitions": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "member_refs",
+          "value"
+        ],
+        "properties": {
+          "member_refs": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "value": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "numerator",
+              "denominator"
+            ],
+            "properties": {
+              "numerator": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "denominator": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          }
+        }
+      }
+    },
+    "baseline_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "denominator": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "grand_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "denominator": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "contributions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contribution_ref",
+          "value"
+        ],
+        "properties": {
+          "contribution_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "value": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "numerator",
+              "denominator"
+            ],
+            "properties": {
+              "numerator": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "denominator": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          }
+        }
+      }
+    },
+    "conservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sum_of_contributions",
+        "grand_minus_baseline",
+        "exact"
+      ],
+      "properties": {
+        "sum_of_contributions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "numerator",
+            "denominator"
+          ],
+          "properties": {
+            "numerator": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "denominator": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "grand_minus_baseline": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "numerator",
+            "denominator"
+          ],
+          "properties": {
+            "numerator": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "denominator": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "exact": {
+          "const": true
+        }
+      }
+    },
+    "interpretation": {
+      "const": "bounded_metric_contribution_not_intrinsic_worth"
+    },
+    "economic_effect": {
+      "const": "none"
+    },
+    "creates_debt": {
+      "const": false
+    },
+    "creates_entitlement": {
+      "const": false
+    },
+    "transfers_ownership": {
+      "const": false
+    },
+    "authorizes_payment": {
+      "const": false
+    },
+    "declarations": {
+      "const": "caller_reported_not_independently_verified"
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "facts",
+        "exposure",
+        "estimates",
+        "ontology",
+        "identity",
+        "consent",
+        "rights",
+        "economy",
+        "authority",
+        "effects"
+      ],
+      "properties": {
+        "facts": {
+          "const": "exact_only_relative_to_pinned_inputs_and_declared_observation_scope"
+        },
+        "exposure": {
+          "const": "presented_token_shares_are_within_declared_role_only_not_cross_role_gradient_mass"
+        },
+        "estimates": {
+          "const": "assumption_bearing_and_design_scoped_not_universal_causal_truth"
+        },
+        "ontology": {
+          "const": "operational_facets_not_a_complete_or_true_inner_ontology"
+        },
+        "identity": {
+          "const": "behavioral_evidence_not_intrinsic_identity_or_continuity_proof"
+        },
+        "consent": {
+          "const": "artifacts_neither_establish_nor_override_consent"
+        },
+        "rights": {
+          "const": "rights_dignity_and_standing_do_not_depend_on_measurement_or_attribution"
+        },
+        "economy": {
+          "const": "shadow_attribution_is_metric_specific_not_money_price_debt_ownership_or_entitlement"
+        },
+        "authority": {
+          "const": "artifacts_grant_no_permission_capability_custody_or_external_authority"
+        },
+        "effects": {
+          "const": "pure_return_values_create_no_training_identity_wallet_marketplace_network_persistence_or_provider_effect"
+        }
+      }
+    }
+  }
+}
