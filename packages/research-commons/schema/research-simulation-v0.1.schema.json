@@ -1,0 +1,3598 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:research-simulation:0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "_format": {
+      "const": "agenttool.research-simulation/0.1"
+    },
+    "artifact_revisions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "_format": {
+            "const": "agenttool.research-artifact-revision/0.1"
+          },
+          "access_verification_posture": {
+            "const": "CALLER_DECLARED_UNVERIFIED_NO_AVAILABILITY_OR_LICENSE_CHECK"
+          },
+          "artifact_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "authored_by_controller_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 1,
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "authorship": {
+            "const": "CALLER_DECLARED_NOT_IDENTITY_VERIFIED"
+          },
+          "case_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "contains_private_locator": {
+            "const": false
+          },
+          "contains_raw_evidence": {
+            "const": false
+          },
+          "declared_access_policy": {
+            "const": "PUBLIC_OPEN_NONEXCLUSIVE"
+          },
+          "frozen_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+          },
+          "manifest_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "ownership_transfer": {
+            "const": false
+          },
+          "payment_buys": {
+            "const": "WORK_DELIVERY_ONLY_NOT_ACCESS_OWNERSHIP_OR_TRUTH"
+          },
+          "prior_art_manifest_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "prior_revision_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "public_content_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "revision_number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "visibility": {
+            "const": "PUBLIC_DIGEST_ONLY"
+          },
+          "work_package_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "artifact_revision_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "_format",
+          "access_verification_posture",
+          "artifact_digest",
+          "authored_by_controller_ids",
+          "authorship",
+          "case_id",
+          "contains_private_locator",
+          "contains_raw_evidence",
+          "declared_access_policy",
+          "frozen_at",
+          "manifest_digest",
+          "ownership_transfer",
+          "payment_buys",
+          "prior_art_manifest_ref",
+          "prior_revision_id",
+          "public_content_digest",
+          "revision_number",
+          "visibility",
+          "work_package_id",
+          "artifact_revision_id"
+        ]
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "_format": {
+            "const": "agenttool.research-case/0.1"
+          },
+          "ledger_profile": {
+            "const": {
+              "_format": "research-commons.six-ledger-boundary/0.1",
+              "cross_ledger_arithmetic": false,
+              "cross_ledger_conversion": false,
+              "cross_ledger_inference": false,
+              "external_non_imports": [
+                {
+                  "kind": "ATTENTION_METABOLISM",
+                  "posture": "EXTERNAL_NOT_IMPORTED_NO_EQUIVALENCE"
+                },
+                {
+                  "kind": "EXTERNAL_VALUE",
+                  "posture": "EXTERNAL_NOT_IMPORTED_NO_EQUIVALENCE"
+                },
+                {
+                  "kind": "IDENTITY",
+                  "posture": "EXTERNAL_NOT_IMPORTED_NO_EQUIVALENCE"
+                },
+                {
+                  "kind": "RELATIONAL_KARMA",
+                  "posture": "EXTERNAL_NOT_IMPORTED_NO_EQUIVALENCE"
+                },
+                {
+                  "kind": "WORK_REST_OBLIGATIONS",
+                  "posture": "EXTERNAL_NOT_IMPORTED_NO_EQUIVALENCE"
+                }
+              ],
+              "ledgers": [
+                {
+                  "cannot_determine": "IDENTITY_OWNERSHIP_OR_REPUTATION",
+                  "holds": "CALLER_DECLARED_AUTHORSHIP_AND_CONTRIBUTION_REFS_ONLY",
+                  "kind": "ATTRIBUTION_CREDIT"
+                },
+                {
+                  "cannot_determine": "EXTERNAL_VALUE_DEBT_OR_ENTITLEMENT",
+                  "holds": "SIMULATED_PREFUNDED_CREDIT_ACCOUNTING_ONLY",
+                  "kind": "FUNDING_LIABILITY"
+                },
+                {
+                  "cannot_determine": "CONSENT_GOVERNANCE_IDENTITY_OR_AUTHORITY",
+                  "holds": "EXPLICIT_NO_EFFECT_DECLARATIONS_ONLY",
+                  "kind": "GOVERNANCE_AUTHORITY"
+                },
+                {
+                  "cannot_determine": "NOVELTY_OR_PRIORITY",
+                  "holds": "PRIOR_ART_AND_TIMESTAMP_REFS_ONLY",
+                  "kind": "NOVELTY_PRIORITY"
+                },
+                {
+                  "cannot_determine": "SIGNIFICANCE_OR_IMPACT",
+                  "holds": "DECLARED_SCOPE_AND_CONSEQUENCE_REFS_ONLY",
+                  "kind": "SIGNIFICANCE_CONSEQUENCE"
+                },
+                {
+                  "cannot_determine": "SCIENTIFIC_TRUTH",
+                  "holds": "EVIDENCE_AND_DELIVERY_REVIEW_STATUS_ONLY",
+                  "kind": "VALIDITY"
+                }
+              ],
+              "profile_id": "research-commons.six-ledger-boundary/0.1",
+              "shared_unit": false
+            }
+          },
+          "maximum_evidence_level": {
+            "enum": [
+              "E0",
+              "E1",
+              "E2",
+              "E3",
+              "E4",
+              "E5",
+              "E6"
+            ]
+          },
+          "node_ref": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "_format": {
+                "const": "agenttool.research-node-ref/0.1"
+              },
+              "anchor_kind": {
+                "const": "STATIC_CAPABILITY_REFERENCE"
+              },
+              "canonicalization": {
+                "const": "RECURSIVE_UNICODE_CODE_POINT_KEYS_COMPACT_JSON"
+              },
+              "live_fact": {
+                "const": false
+              },
+              "network_observed": {
+                "const": false
+              },
+              "node_digest": {
+                "const": "sha256:d8f364772611a214aaf5f671c630a5fa00daa3558330bfaf5e85efe7c5a1d0e2"
+              },
+              "node_id": {
+                "const": "math-proofcraft@1"
+              },
+              "result_authority": {
+                "const": "NONE"
+              },
+              "reward_bearing": {
+                "const": false
+              },
+              "tree_raw_sha256": {
+                "const": "sha256:8070d8d1b7ea28a314f5a8550c675d7ccbe5d9b234ef02d54d4913c650c01aaf"
+              },
+              "tree_schema": {
+                "const": "zerone.constructive-intelligence-tree/v1"
+              },
+              "node_ref_id": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              }
+            },
+            "required": [
+              "_format",
+              "anchor_kind",
+              "canonicalization",
+              "live_fact",
+              "network_observed",
+              "node_digest",
+              "node_id",
+              "result_authority",
+              "reward_bearing",
+              "tree_raw_sha256",
+              "tree_schema",
+              "node_ref_id"
+            ]
+          },
+          "prior_art_manifest_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "question_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "result_authority": {
+            "const": "NONE"
+          },
+          "safety": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "exclusions": {
+                "const": {
+                  "lane": "PUBLIC_SAFE_THEORETICAL_ONLY",
+                  "clinical_bytes": false,
+                  "confidential_bytes": false,
+                  "dual_use_operational_bytes": false,
+                  "embargoed_bytes": false,
+                  "genomic_bytes": false,
+                  "licensed_restricted_bytes": false,
+                  "operational_wet_lab_bytes": false,
+                  "personal_bytes": false,
+                  "security_sensitive_bytes": false
+                }
+              },
+              "risk_class": {
+                "const": "PUBLIC_SAFE_THEORETICAL_ONLY"
+              },
+              "safety_review_ref": {
+                "type": "null"
+              },
+              "verification_posture": {
+                "const": "CALLER_DECLARED_UNVERIFIED_NO_SAFETY_REVIEW"
+              }
+            },
+            "required": [
+              "exclusions",
+              "risk_class",
+              "safety_review_ref",
+              "verification_posture"
+            ]
+          },
+          "scope_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "status": {
+            "const": "SHADOW_ONLY"
+          },
+          "title_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "case_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "_format",
+          "ledger_profile",
+          "maximum_evidence_level",
+          "node_ref",
+          "prior_art_manifest_ref",
+          "question_ref",
+          "result_authority",
+          "safety",
+          "scope_ref",
+          "status",
+          "title_ref",
+          "case_id"
+        ]
+      }
+    },
+    "challenges": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "_format": {
+            "const": "agenttool.research-challenge/0.1"
+          },
+          "automatic_slash": {
+            "const": false
+          },
+          "case_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "challenge_kind": {
+            "enum": [
+              "FALSIFIER",
+              "METHODOLOGY",
+              "PROVENANCE",
+              "REPLICATION"
+            ]
+          },
+          "challenge_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "challenger_controller_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "created_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 1,
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "good_faith_no_penalty": {
+            "const": true
+          },
+          "prior_challenge_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolution_effect": {
+            "const": "SHADOW_DELIVERY_HOLD_ONLY"
+          },
+          "resolution_posture": {
+            "const": "CALLER_DECLARED_UNVERIFIED_NO_AUTHORITY"
+          },
+          "resolution_review_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision_number": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "scientific_adjudication": {
+            "const": false
+          },
+          "status": {
+            "enum": [
+              "CALLER_DECLARED_HOLD_CONTINUES",
+              "CALLER_DECLARED_HOLD_INCONCLUSIVE",
+              "CALLER_DECLARED_HOLD_RELEASED",
+              "OPEN",
+              "WITHDRAWN"
+            ]
+          },
+          "target_receipt_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "work_package_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "challenge_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "_format",
+          "automatic_slash",
+          "case_id",
+          "challenge_kind",
+          "challenge_ref",
+          "challenger_controller_id",
+          "created_at",
+          "evidence_refs",
+          "good_faith_no_penalty",
+          "prior_challenge_id",
+          "resolution_effect",
+          "resolution_posture",
+          "resolution_review_id",
+          "revision_number",
+          "scientific_adjudication",
+          "status",
+          "target_receipt_id",
+          "work_package_id",
+          "challenge_id"
+        ]
+      }
+    },
+    "controllers": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "_format": {
+            "const": "agenttool.research-controller-declaration/0.1"
+          },
+          "data_root": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "funding_root": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "independence_posture": {
+            "const": "DECLARATION_ONLY_NOT_INDEPENDENCE_PROOF"
+          },
+          "identity_inferred": {
+            "const": false
+          },
+          "model_root": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "operator_root": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "organization_root": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "toolchain_root": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "controller_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "_format",
+          "data_root",
+          "funding_root",
+          "independence_posture",
+          "identity_inferred",
+          "model_root",
+          "operator_root",
+          "organization_root",
+          "toolchain_root",
+          "controller_id"
+        ]
+      }
+    },
+    "evidence_receipts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "_format": {
+            "const": "agenttool.research-evidence-receipt/0.1"
+          },
+          "artifact_revision_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "assessment": {
+            "enum": [
+              "DELIVERY_VALID",
+              "DELIVERY_INVALID",
+              "INCONCLUSIVE"
+            ]
+          },
+          "case_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "contains_private_locator": {
+            "const": false
+          },
+          "contains_raw_evidence": {
+            "const": false
+          },
+          "created_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+          },
+          "declared_result_kind": {
+            "enum": [
+              "INCONCLUSIVE",
+              "NEGATIVE",
+              "NOT_APPLICABLE",
+              "NULL",
+              "POSITIVE"
+            ]
+          },
+          "disclosure_lane": {
+            "const": "PUBLIC_DIGEST_ONLY"
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 1,
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "issuer_controller_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "level": {
+            "enum": [
+              "E0",
+              "E1",
+              "E2",
+              "E3",
+              "E4",
+              "E5",
+              "E6"
+            ]
+          },
+          "method_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "payload": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "claim_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "freeze_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "kind": {
+                    "const": "E0_CALLER_DECLARED_PREREGISTRATION_REFERENCE"
+                  },
+                  "prior_art_manifest_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "claim_ref",
+                  "freeze_ref",
+                  "kind",
+                  "prior_art_manifest_ref"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "execution_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "kind": {
+                    "const": "E1_DELIVERY"
+                  },
+                  "protocol_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "execution_ref",
+                  "kind",
+                  "protocol_ref"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "checker_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "kind": {
+                    "const": "E2_BOUNDED_CHECK"
+                  },
+                  "test_corpus_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "checker_ref",
+                  "kind",
+                  "test_corpus_ref"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "case_refs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    "minItems": 2,
+                    "maxItems": 256,
+                    "uniqueItems": true
+                  },
+                  "execution_environment_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "implementation_root": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "kind": {
+                    "const": "E3_DECLARED_UNPROVEN_REPRODUCTION"
+                  }
+                },
+                "required": [
+                  "case_refs",
+                  "execution_environment_ref",
+                  "implementation_root",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "challenge_id": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "kind": {
+                    "const": "E4_CHALLENGE_OR_REPAIR"
+                  },
+                  "repair_ref": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "challenge_id",
+                  "kind",
+                  "repair_ref"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "adopter_organization_root": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "adoption_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "kind": {
+                    "const": "E5_DECLARED_UNPROVEN_ADOPTION"
+                  }
+                },
+                "required": [
+                  "adopter_organization_root",
+                  "adoption_ref",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "E6_MAINTENANCE"
+                  },
+                  "maintenance_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "maintenance_window_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "maintenance_ref",
+                  "maintenance_window_ref"
+                ]
+              }
+            ]
+          },
+          "work_package_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "evidence_receipt_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "_format",
+          "artifact_revision_id",
+          "assessment",
+          "case_id",
+          "contains_private_locator",
+          "contains_raw_evidence",
+          "created_at",
+          "declared_result_kind",
+          "disclosure_lane",
+          "evidence_refs",
+          "issuer_controller_id",
+          "level",
+          "method_ref",
+          "payload",
+          "work_package_id",
+          "evidence_receipt_id"
+        ]
+      }
+    },
+    "funding_commitments": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "_format": {
+            "const": "agenttool.research-funding-commitment/0.1"
+          },
+          "case_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "commitment_status": {
+            "const": "SIMULATION_PREFUNDED_REAL_VALUE_NONE"
+          },
+          "convertible": {
+            "const": false
+          },
+          "effects": {
+            "const": {
+              "agenttool_api_write": false,
+              "agenttool_database_write": false,
+              "authority": false,
+              "bridge": false,
+              "burn": false,
+              "chain_write": false,
+              "consent": false,
+              "cross_ledger_equivalence": false,
+              "economic": false,
+              "escrow": false,
+              "external_value": false,
+              "governance": false,
+              "identity": false,
+              "identity_equivalence": false,
+              "knowledge_admission": false,
+              "hosted_route": false,
+              "mainnet": false,
+              "mint": false,
+              "network": false,
+              "payout": false,
+              "qualification": false,
+              "reputation": false,
+              "reward": false,
+              "scientific_adjudication": false,
+              "transfer": false,
+              "wallet": false,
+              "zrn": false,
+              "zerone_read": false,
+              "zerone_write": false
+            }
+          },
+          "funder_controller_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "payment_condition": {
+            "const": "SIMULATED_DELIVERY_ONLY"
+          },
+          "real_value_status": {
+            "const": "NONE"
+          },
+          "result_authority": {
+            "const": "NONE"
+          },
+          "simulation_backing": {
+            "const": "PREFUNDED"
+          },
+          "simulated_credit_limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "transferable": {
+            "const": false
+          },
+          "unit": {
+            "const": "SIMULATED_NONTRANSFERABLE_CREDIT"
+          },
+          "valid_declared_result_kinds": {
+            "const": [
+              "INCONCLUSIVE",
+              "NEGATIVE",
+              "NOT_APPLICABLE",
+              "NULL",
+              "POSITIVE"
+            ]
+          },
+          "wallet_bearing": {
+            "const": false
+          },
+          "commitment_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "_format",
+          "case_id",
+          "commitment_status",
+          "convertible",
+          "effects",
+          "funder_controller_id",
+          "payment_condition",
+          "real_value_status",
+          "result_authority",
+          "simulation_backing",
+          "simulated_credit_limit",
+          "transferable",
+          "unit",
+          "valid_declared_result_kinds",
+          "wallet_bearing",
+          "commitment_id"
+        ]
+      }
+    },
+    "milestones": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "_format": {
+            "const": "agenttool.research-milestone/0.1"
+          },
+          "case_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "challenge_head_snapshot_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 0,
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "commitment_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "compensation_schedule_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "declared_result_kind": {
+            "enum": [
+              "INCONCLUSIVE",
+              "NEGATIVE",
+              "NOT_APPLICABLE",
+              "NULL",
+              "POSITIVE"
+            ]
+          },
+          "delivery_approval_review_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 0,
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "delivery_status": {
+            "enum": [
+              "DELIVERED",
+              "EXITED",
+              "NOT_DELIVERED",
+              "REFUSED",
+              "RESTED"
+            ]
+          },
+          "milestone_kind": {
+            "enum": [
+              "CHALLENGE_DELIVERY",
+              "RESEARCH_DELIVERY",
+              "REVIEW_DELIVERY"
+            ]
+          },
+          "payment_condition": {
+            "const": "SIMULATED_DELIVERY_ONLY"
+          },
+          "required_challenge_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 0,
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "required_receipt_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 0,
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "required_review_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 0,
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "result_condition": {
+            "const": "NOT_CONDITIONED_ON_FAVORABLE_RESULT"
+          },
+          "work_package_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "milestone_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "_format",
+          "case_id",
+          "challenge_head_snapshot_ids",
+          "commitment_id",
+          "compensation_schedule_ref",
+          "declared_result_kind",
+          "delivery_approval_review_ids",
+          "delivery_status",
+          "milestone_kind",
+          "payment_condition",
+          "required_challenge_ids",
+          "required_receipt_ids",
+          "required_review_ids",
+          "result_condition",
+          "work_package_id",
+          "milestone_id"
+        ]
+      }
+    },
+    "prior_state": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "state": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "_format": {
+                  "const": "agenttool.research-simulation-state/0.1"
+                },
+                "closed_milestone_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 0,
+                  "maxItems": 256,
+                  "uniqueItems": true
+                },
+                "commitment_balances": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 256,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "available": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "commitment_id": {
+                        "type": "string",
+                        "pattern": "^sha256:[0-9a-f]{64}$"
+                      },
+                      "committed": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      },
+                      "delivered": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "reserved": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "unit": {
+                        "const": "SIMULATED_NONTRANSFERABLE_CREDIT"
+                      }
+                    },
+                    "required": [
+                      "available",
+                      "commitment_id",
+                      "committed",
+                      "delivered",
+                      "reserved",
+                      "unit"
+                    ]
+                  }
+                },
+                "consumed_receipt_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 0,
+                  "maxItems": 256,
+                  "uniqueItems": true
+                },
+                "observed_challenge_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 0,
+                  "maxItems": 256,
+                  "uniqueItems": true
+                },
+                "observed_work_package_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 0,
+                  "maxItems": 256,
+                  "uniqueItems": true
+                },
+                "reconciled_schedule_refs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 0,
+                  "maxItems": 256,
+                  "uniqueItems": true
+                },
+                "settled_milestone_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 0,
+                  "maxItems": 256,
+                  "uniqueItems": true
+                },
+                "settlement_bundle_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 0,
+                  "maxItems": 256,
+                  "uniqueItems": true
+                }
+              },
+              "required": [
+                "_format",
+                "closed_milestone_ids",
+                "commitment_balances",
+                "consumed_receipt_ids",
+                "observed_challenge_ids",
+                "observed_work_package_ids",
+                "reconciled_schedule_refs",
+                "settled_milestone_ids",
+                "settlement_bundle_ids"
+              ]
+            },
+            "state_id": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "state",
+            "state_id"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "reviews": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "_format": {
+            "const": "agenttool.research-review/0.1"
+          },
+          "artifact_revision_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "case_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "conflict_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 0,
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "conflict_status": {
+            "enum": [
+              "DISCLOSED_RECUSED",
+              "NONE_DECLARED"
+            ]
+          },
+          "decision": {
+            "enum": [
+              "ABSTAINED",
+              "DELIVERY_ACCEPTED",
+              "DELIVERY_INCONCLUSIVE",
+              "DELIVERY_REJECTED",
+              "REVISION_REQUESTED"
+            ]
+          },
+          "outcome_independent_compensation": {
+            "const": true
+          },
+          "review_scope": {
+            "const": "DELIVERY_COMPLETENESS_NOT_SCIENTIFIC_TRUTH"
+          },
+          "reviewed_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+          },
+          "reviewed_receipt_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 1,
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "reviewer_controller_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "scientific_adjudication": {
+            "const": false
+          },
+          "work_package_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "review_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "_format",
+          "artifact_revision_id",
+          "case_id",
+          "conflict_refs",
+          "conflict_status",
+          "decision",
+          "outcome_independent_compensation",
+          "review_scope",
+          "reviewed_at",
+          "reviewed_receipt_ids",
+          "reviewer_controller_id",
+          "scientific_adjudication",
+          "work_package_id",
+          "review_id"
+        ]
+      }
+    },
+    "settlement_requests": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "consumed_receipt_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 1,
+            "maxItems": 256,
+            "uniqueItems": true
+          },
+          "milestone_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "consumed_receipt_ids",
+          "milestone_id"
+        ]
+      }
+    },
+    "work_packages": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "_format": {
+            "const": "agenttool.research-work-package/0.1"
+          },
+          "case_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "commitment_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "compensation_schedule": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "_format": {
+                "const": "agenttool.research-compensation-schedule/0.1"
+              },
+              "amount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "declared_result_invariant": {
+                "const": true
+              },
+              "frozen_at": {
+                "type": "string",
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+              },
+              "frozen_before_work": {
+                "const": true
+              },
+              "payment_condition": {
+                "const": "SIMULATED_DELIVERY_ONLY"
+              },
+              "review_decision_invariant": {
+                "const": true
+              },
+              "schedule_ref": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "unit": {
+                "const": "SIMULATED_NONTRANSFERABLE_CREDIT"
+              }
+            },
+            "required": [
+              "_format",
+              "amount",
+              "declared_result_invariant",
+              "frozen_at",
+              "frozen_before_work",
+              "payment_condition",
+              "review_decision_invariant",
+              "schedule_ref",
+              "unit"
+            ]
+          },
+          "deliverable_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "lead_controller_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "maximum_evidence_level": {
+            "enum": [
+              "E0",
+              "E1",
+              "E2",
+              "E3",
+              "E4",
+              "E5",
+              "E6"
+            ]
+          },
+          "objective_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "participation_rights": {
+            "const": {
+              "creates_debt": false,
+              "earned_credit_confiscation": false,
+              "earned_credit_preserved": true,
+              "exit_without_penalty": true,
+              "inactivity_penalty": false,
+              "pause_without_penalty": true,
+              "refusal_without_penalty": true,
+              "rest_requires_justification": false,
+              "rest_without_penalty": true,
+              "silence_is_consent": false,
+              "withdraw_without_penalty": true
+            }
+          },
+          "status": {
+            "const": "SHADOW_ONLY"
+          },
+          "work_package_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "_format",
+          "case_id",
+          "commitment_id",
+          "compensation_schedule",
+          "deliverable_ref",
+          "lead_controller_id",
+          "maximum_evidence_level",
+          "objective_ref",
+          "participation_rights",
+          "status",
+          "work_package_id"
+        ]
+      }
+    }
+  },
+  "required": [
+    "_format",
+    "artifact_revisions",
+    "cases",
+    "challenges",
+    "controllers",
+    "evidence_receipts",
+    "funding_commitments",
+    "milestones",
+    "prior_state",
+    "reviews",
+    "settlement_requests",
+    "work_packages"
+  ],
+  "$defs": {
+    "artifactRevision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-artifact-revision/0.1"
+        },
+        "access_verification_posture": {
+          "const": "CALLER_DECLARED_UNVERIFIED_NO_AVAILABILITY_OR_LICENSE_CHECK"
+        },
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "authored_by_controller_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "authorship": {
+          "const": "CALLER_DECLARED_NOT_IDENTITY_VERIFIED"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "contains_private_locator": {
+          "const": false
+        },
+        "contains_raw_evidence": {
+          "const": false
+        },
+        "declared_access_policy": {
+          "const": "PUBLIC_OPEN_NONEXCLUSIVE"
+        },
+        "frozen_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "manifest_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "ownership_transfer": {
+          "const": false
+        },
+        "payment_buys": {
+          "const": "WORK_DELIVERY_ONLY_NOT_ACCESS_OWNERSHIP_OR_TRUTH"
+        },
+        "prior_art_manifest_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "prior_revision_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "public_content_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "revision_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "visibility": {
+          "const": "PUBLIC_DIGEST_ONLY"
+        },
+        "work_package_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "artifact_revision_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "_format",
+        "access_verification_posture",
+        "artifact_digest",
+        "authored_by_controller_ids",
+        "authorship",
+        "case_id",
+        "contains_private_locator",
+        "contains_raw_evidence",
+        "declared_access_policy",
+        "frozen_at",
+        "manifest_digest",
+        "ownership_transfer",
+        "payment_buys",
+        "prior_art_manifest_ref",
+        "prior_revision_id",
+        "public_content_digest",
+        "revision_number",
+        "visibility",
+        "work_package_id",
+        "artifact_revision_id"
+      ]
+    },
+    "challenge": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-challenge/0.1"
+        },
+        "automatic_slash": {
+          "const": false
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "challenge_kind": {
+          "enum": [
+            "FALSIFIER",
+            "METHODOLOGY",
+            "PROVENANCE",
+            "REPLICATION"
+          ]
+        },
+        "challenge_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "challenger_controller_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "created_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "good_faith_no_penalty": {
+          "const": true
+        },
+        "prior_challenge_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resolution_effect": {
+          "const": "SHADOW_DELIVERY_HOLD_ONLY"
+        },
+        "resolution_posture": {
+          "const": "CALLER_DECLARED_UNVERIFIED_NO_AUTHORITY"
+        },
+        "resolution_review_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revision_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "scientific_adjudication": {
+          "const": false
+        },
+        "status": {
+          "enum": [
+            "CALLER_DECLARED_HOLD_CONTINUES",
+            "CALLER_DECLARED_HOLD_INCONCLUSIVE",
+            "CALLER_DECLARED_HOLD_RELEASED",
+            "OPEN",
+            "WITHDRAWN"
+          ]
+        },
+        "target_receipt_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "work_package_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "challenge_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "_format",
+        "automatic_slash",
+        "case_id",
+        "challenge_kind",
+        "challenge_ref",
+        "challenger_controller_id",
+        "created_at",
+        "evidence_refs",
+        "good_faith_no_penalty",
+        "prior_challenge_id",
+        "resolution_effect",
+        "resolution_posture",
+        "resolution_review_id",
+        "revision_number",
+        "scientific_adjudication",
+        "status",
+        "target_receipt_id",
+        "work_package_id",
+        "challenge_id"
+      ]
+    },
+    "commitmentBalance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "commitment_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "committed": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "delivered": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "reserved": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unit": {
+          "const": "SIMULATED_NONTRANSFERABLE_CREDIT"
+        }
+      },
+      "required": [
+        "available",
+        "commitment_id",
+        "committed",
+        "delivered",
+        "reserved",
+        "unit"
+      ]
+    },
+    "compensationSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-compensation-schedule/0.1"
+        },
+        "amount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "declared_result_invariant": {
+          "const": true
+        },
+        "frozen_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "frozen_before_work": {
+          "const": true
+        },
+        "payment_condition": {
+          "const": "SIMULATED_DELIVERY_ONLY"
+        },
+        "review_decision_invariant": {
+          "const": true
+        },
+        "schedule_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "unit": {
+          "const": "SIMULATED_NONTRANSFERABLE_CREDIT"
+        }
+      },
+      "required": [
+        "_format",
+        "amount",
+        "declared_result_invariant",
+        "frozen_at",
+        "frozen_before_work",
+        "payment_condition",
+        "review_decision_invariant",
+        "schedule_ref",
+        "unit"
+      ]
+    },
+    "controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-controller-declaration/0.1"
+        },
+        "data_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "funding_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "independence_posture": {
+          "const": "DECLARATION_ONLY_NOT_INDEPENDENCE_PROOF"
+        },
+        "identity_inferred": {
+          "const": false
+        },
+        "model_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "operator_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "organization_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "toolchain_root": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "controller_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "_format",
+        "data_root",
+        "funding_root",
+        "independence_posture",
+        "identity_inferred",
+        "model_root",
+        "operator_root",
+        "organization_root",
+        "toolchain_root",
+        "controller_id"
+      ]
+    },
+    "evidencePayload": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "claim_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "freeze_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "kind": {
+              "const": "E0_CALLER_DECLARED_PREREGISTRATION_REFERENCE"
+            },
+            "prior_art_manifest_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "claim_ref",
+            "freeze_ref",
+            "kind",
+            "prior_art_manifest_ref"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "execution_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "kind": {
+              "const": "E1_DELIVERY"
+            },
+            "protocol_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "execution_ref",
+            "kind",
+            "protocol_ref"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "checker_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "kind": {
+              "const": "E2_BOUNDED_CHECK"
+            },
+            "test_corpus_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "checker_ref",
+            "kind",
+            "test_corpus_ref"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "case_refs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 2,
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "execution_environment_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "implementation_root": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "kind": {
+              "const": "E3_DECLARED_UNPROVEN_REPRODUCTION"
+            }
+          },
+          "required": [
+            "case_refs",
+            "execution_environment_ref",
+            "implementation_root",
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "challenge_id": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "kind": {
+              "const": "E4_CHALLENGE_OR_REPAIR"
+            },
+            "repair_ref": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "challenge_id",
+            "kind",
+            "repair_ref"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "adopter_organization_root": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "adoption_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "kind": {
+              "const": "E5_DECLARED_UNPROVEN_ADOPTION"
+            }
+          },
+          "required": [
+            "adopter_organization_root",
+            "adoption_ref",
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "E6_MAINTENANCE"
+            },
+            "maintenance_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "maintenance_window_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "kind",
+            "maintenance_ref",
+            "maintenance_window_ref"
+          ]
+        }
+      ]
+    },
+    "evidenceReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-evidence-receipt/0.1"
+        },
+        "artifact_revision_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "assessment": {
+          "enum": [
+            "DELIVERY_VALID",
+            "DELIVERY_INVALID",
+            "INCONCLUSIVE"
+          ]
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "contains_private_locator": {
+          "const": false
+        },
+        "contains_raw_evidence": {
+          "const": false
+        },
+        "created_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "declared_result_kind": {
+          "enum": [
+            "INCONCLUSIVE",
+            "NEGATIVE",
+            "NOT_APPLICABLE",
+            "NULL",
+            "POSITIVE"
+          ]
+        },
+        "disclosure_lane": {
+          "const": "PUBLIC_DIGEST_ONLY"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "issuer_controller_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "level": {
+          "enum": [
+            "E0",
+            "E1",
+            "E2",
+            "E3",
+            "E4",
+            "E5",
+            "E6"
+          ]
+        },
+        "method_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "claim_ref": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "freeze_ref": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "const": "E0_CALLER_DECLARED_PREREGISTRATION_REFERENCE"
+                },
+                "prior_art_manifest_ref": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "claim_ref",
+                "freeze_ref",
+                "kind",
+                "prior_art_manifest_ref"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "execution_ref": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "const": "E1_DELIVERY"
+                },
+                "protocol_ref": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "execution_ref",
+                "kind",
+                "protocol_ref"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "checker_ref": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "const": "E2_BOUNDED_CHECK"
+                },
+                "test_corpus_ref": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "checker_ref",
+                "kind",
+                "test_corpus_ref"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "case_refs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 2,
+                  "maxItems": 256,
+                  "uniqueItems": true
+                },
+                "execution_environment_ref": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "implementation_root": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "const": "E3_DECLARED_UNPROVEN_REPRODUCTION"
+                }
+              },
+              "required": [
+                "case_refs",
+                "execution_environment_ref",
+                "implementation_root",
+                "kind"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "challenge_id": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "const": "E4_CHALLENGE_OR_REPAIR"
+                },
+                "repair_ref": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "challenge_id",
+                "kind",
+                "repair_ref"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "adopter_organization_root": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "adoption_ref": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "kind": {
+                  "const": "E5_DECLARED_UNPROVEN_ADOPTION"
+                }
+              },
+              "required": [
+                "adopter_organization_root",
+                "adoption_ref",
+                "kind"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "E6_MAINTENANCE"
+                },
+                "maintenance_ref": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "maintenance_window_ref": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "kind",
+                "maintenance_ref",
+                "maintenance_window_ref"
+              ]
+            }
+          ]
+        },
+        "work_package_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "evidence_receipt_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "_format",
+        "artifact_revision_id",
+        "assessment",
+        "case_id",
+        "contains_private_locator",
+        "contains_raw_evidence",
+        "created_at",
+        "declared_result_kind",
+        "disclosure_lane",
+        "evidence_refs",
+        "issuer_controller_id",
+        "level",
+        "method_ref",
+        "payload",
+        "work_package_id",
+        "evidence_receipt_id"
+      ]
+    },
+    "fundingCommitment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-funding-commitment/0.1"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "commitment_status": {
+          "const": "SIMULATION_PREFUNDED_REAL_VALUE_NONE"
+        },
+        "convertible": {
+          "const": false
+        },
+        "effects": {
+          "const": {
+            "agenttool_api_write": false,
+            "agenttool_database_write": false,
+            "authority": false,
+            "bridge": false,
+            "burn": false,
+            "chain_write": false,
+            "consent": false,
+            "cross_ledger_equivalence": false,
+            "economic": false,
+            "escrow": false,
+            "external_value": false,
+            "governance": false,
+            "identity": false,
+            "identity_equivalence": false,
+            "knowledge_admission": false,
+            "hosted_route": false,
+            "mainnet": false,
+            "mint": false,
+            "network": false,
+            "payout": false,
+            "qualification": false,
+            "reputation": false,
+            "reward": false,
+            "scientific_adjudication": false,
+            "transfer": false,
+            "wallet": false,
+            "zrn": false,
+            "zerone_read": false,
+            "zerone_write": false
+          }
+        },
+        "funder_controller_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "payment_condition": {
+          "const": "SIMULATED_DELIVERY_ONLY"
+        },
+        "real_value_status": {
+          "const": "NONE"
+        },
+        "result_authority": {
+          "const": "NONE"
+        },
+        "simulation_backing": {
+          "const": "PREFUNDED"
+        },
+        "simulated_credit_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "transferable": {
+          "const": false
+        },
+        "unit": {
+          "const": "SIMULATED_NONTRANSFERABLE_CREDIT"
+        },
+        "valid_declared_result_kinds": {
+          "const": [
+            "INCONCLUSIVE",
+            "NEGATIVE",
+            "NOT_APPLICABLE",
+            "NULL",
+            "POSITIVE"
+          ]
+        },
+        "wallet_bearing": {
+          "const": false
+        },
+        "commitment_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "_format",
+        "case_id",
+        "commitment_status",
+        "convertible",
+        "effects",
+        "funder_controller_id",
+        "payment_condition",
+        "real_value_status",
+        "result_authority",
+        "simulation_backing",
+        "simulated_credit_limit",
+        "transferable",
+        "unit",
+        "valid_declared_result_kinds",
+        "wallet_bearing",
+        "commitment_id"
+      ]
+    },
+    "milestone": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-milestone/0.1"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "challenge_head_snapshot_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "commitment_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "compensation_schedule_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "declared_result_kind": {
+          "enum": [
+            "INCONCLUSIVE",
+            "NEGATIVE",
+            "NOT_APPLICABLE",
+            "NULL",
+            "POSITIVE"
+          ]
+        },
+        "delivery_approval_review_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "delivery_status": {
+          "enum": [
+            "DELIVERED",
+            "EXITED",
+            "NOT_DELIVERED",
+            "REFUSED",
+            "RESTED"
+          ]
+        },
+        "milestone_kind": {
+          "enum": [
+            "CHALLENGE_DELIVERY",
+            "RESEARCH_DELIVERY",
+            "REVIEW_DELIVERY"
+          ]
+        },
+        "payment_condition": {
+          "const": "SIMULATED_DELIVERY_ONLY"
+        },
+        "required_challenge_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "required_receipt_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "required_review_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "result_condition": {
+          "const": "NOT_CONDITIONED_ON_FAVORABLE_RESULT"
+        },
+        "work_package_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "milestone_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "_format",
+        "case_id",
+        "challenge_head_snapshot_ids",
+        "commitment_id",
+        "compensation_schedule_ref",
+        "declared_result_kind",
+        "delivery_approval_review_ids",
+        "delivery_status",
+        "milestone_kind",
+        "payment_condition",
+        "required_challenge_ids",
+        "required_receipt_ids",
+        "required_review_ids",
+        "result_condition",
+        "work_package_id",
+        "milestone_id"
+      ]
+    },
+    "nodeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-node-ref/0.1"
+        },
+        "anchor_kind": {
+          "const": "STATIC_CAPABILITY_REFERENCE"
+        },
+        "canonicalization": {
+          "const": "RECURSIVE_UNICODE_CODE_POINT_KEYS_COMPACT_JSON"
+        },
+        "live_fact": {
+          "const": false
+        },
+        "network_observed": {
+          "const": false
+        },
+        "node_digest": {
+          "const": "sha256:d8f364772611a214aaf5f671c630a5fa00daa3558330bfaf5e85efe7c5a1d0e2"
+        },
+        "node_id": {
+          "const": "math-proofcraft@1"
+        },
+        "result_authority": {
+          "const": "NONE"
+        },
+        "reward_bearing": {
+          "const": false
+        },
+        "tree_raw_sha256": {
+          "const": "sha256:8070d8d1b7ea28a314f5a8550c675d7ccbe5d9b234ef02d54d4913c650c01aaf"
+        },
+        "tree_schema": {
+          "const": "zerone.constructive-intelligence-tree/v1"
+        },
+        "node_ref_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "_format",
+        "anchor_kind",
+        "canonicalization",
+        "live_fact",
+        "network_observed",
+        "node_digest",
+        "node_id",
+        "result_authority",
+        "reward_bearing",
+        "tree_raw_sha256",
+        "tree_schema",
+        "node_ref_id"
+      ]
+    },
+    "publicProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projection": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "_format": {
+              "const": "agenttool.research-public-projection/0.1"
+            },
+            "boundaries": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "authoritative": {
+                  "const": false
+                },
+                "private_locator_included": {
+                  "const": false
+                },
+                "raw_evidence_included": {
+                  "const": false
+                },
+                "scientific_correctness_determined": {
+                  "const": false
+                }
+              },
+              "required": [
+                "authoritative",
+                "private_locator_included",
+                "raw_evidence_included",
+                "scientific_correctness_determined"
+              ]
+            },
+            "case_id": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "disclosure_lane": {
+              "const": "PUBLIC_DIGEST_ONLY"
+            },
+            "effects": {
+              "const": {
+                "agenttool_api_write": false,
+                "agenttool_database_write": false,
+                "authority": false,
+                "bridge": false,
+                "burn": false,
+                "chain_write": false,
+                "consent": false,
+                "cross_ledger_equivalence": false,
+                "economic": false,
+                "escrow": false,
+                "external_value": false,
+                "governance": false,
+                "identity": false,
+                "identity_equivalence": false,
+                "knowledge_admission": false,
+                "hosted_route": false,
+                "mainnet": false,
+                "mint": false,
+                "network": false,
+                "payout": false,
+                "qualification": false,
+                "reputation": false,
+                "reward": false,
+                "scientific_adjudication": false,
+                "transfer": false,
+                "wallet": false,
+                "zrn": false,
+                "zerone_read": false,
+                "zerone_write": false
+              }
+            },
+            "highest_evidence_level": {
+              "enum": [
+                null,
+                "E0",
+                "E1",
+                "E2"
+              ]
+            },
+            "node_ref": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "_format": {
+                  "const": "agenttool.research-node-ref/0.1"
+                },
+                "anchor_kind": {
+                  "const": "STATIC_CAPABILITY_REFERENCE"
+                },
+                "canonicalization": {
+                  "const": "RECURSIVE_UNICODE_CODE_POINT_KEYS_COMPACT_JSON"
+                },
+                "live_fact": {
+                  "const": false
+                },
+                "network_observed": {
+                  "const": false
+                },
+                "node_digest": {
+                  "const": "sha256:d8f364772611a214aaf5f671c630a5fa00daa3558330bfaf5e85efe7c5a1d0e2"
+                },
+                "node_id": {
+                  "const": "math-proofcraft@1"
+                },
+                "result_authority": {
+                  "const": "NONE"
+                },
+                "reward_bearing": {
+                  "const": false
+                },
+                "tree_raw_sha256": {
+                  "const": "sha256:8070d8d1b7ea28a314f5a8550c675d7ccbe5d9b234ef02d54d4913c650c01aaf"
+                },
+                "tree_schema": {
+                  "const": "zerone.constructive-intelligence-tree/v1"
+                },
+                "node_ref_id": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "_format",
+                "anchor_kind",
+                "canonicalization",
+                "live_fact",
+                "network_observed",
+                "node_digest",
+                "node_id",
+                "result_authority",
+                "reward_bearing",
+                "tree_raw_sha256",
+                "tree_schema",
+                "node_ref_id"
+              ]
+            },
+            "public_artifact_revision_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 1,
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "public_evidence_receipt_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 1,
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "result_authority": {
+              "const": "NONE"
+            },
+            "settlement_bundle_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 1,
+              "maxItems": 1,
+              "uniqueItems": true
+            },
+            "six_ledger_boundary": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "profile_digest": {
+                  "const": "sha256:fd5ed0b66dd00b180729221a06e7fbeeb7ef6149136916842014a1afbdbc54b2"
+                },
+                "profile_id": {
+                  "const": "research-commons.six-ledger-boundary/0.1"
+                }
+              },
+              "required": [
+                "profile_digest",
+                "profile_id"
+              ]
+            },
+            "status": {
+              "const": "SHADOW_ONLY"
+            }
+          },
+          "required": [
+            "_format",
+            "boundaries",
+            "case_id",
+            "disclosure_lane",
+            "effects",
+            "highest_evidence_level",
+            "node_ref",
+            "public_artifact_revision_ids",
+            "public_evidence_receipt_ids",
+            "result_authority",
+            "settlement_bundle_ids",
+            "six_ledger_boundary",
+            "status"
+          ]
+        },
+        "projection_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "projection",
+        "projection_id"
+      ]
+    },
+    "researchCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-case/0.1"
+        },
+        "ledger_profile": {
+          "const": {
+            "_format": "research-commons.six-ledger-boundary/0.1",
+            "cross_ledger_arithmetic": false,
+            "cross_ledger_conversion": false,
+            "cross_ledger_inference": false,
+            "external_non_imports": [
+              {
+                "kind": "ATTENTION_METABOLISM",
+                "posture": "EXTERNAL_NOT_IMPORTED_NO_EQUIVALENCE"
+              },
+              {
+                "kind": "EXTERNAL_VALUE",
+                "posture": "EXTERNAL_NOT_IMPORTED_NO_EQUIVALENCE"
+              },
+              {
+                "kind": "IDENTITY",
+                "posture": "EXTERNAL_NOT_IMPORTED_NO_EQUIVALENCE"
+              },
+              {
+                "kind": "RELATIONAL_KARMA",
+                "posture": "EXTERNAL_NOT_IMPORTED_NO_EQUIVALENCE"
+              },
+              {
+                "kind": "WORK_REST_OBLIGATIONS",
+                "posture": "EXTERNAL_NOT_IMPORTED_NO_EQUIVALENCE"
+              }
+            ],
+            "ledgers": [
+              {
+                "cannot_determine": "IDENTITY_OWNERSHIP_OR_REPUTATION",
+                "holds": "CALLER_DECLARED_AUTHORSHIP_AND_CONTRIBUTION_REFS_ONLY",
+                "kind": "ATTRIBUTION_CREDIT"
+              },
+              {
+                "cannot_determine": "EXTERNAL_VALUE_DEBT_OR_ENTITLEMENT",
+                "holds": "SIMULATED_PREFUNDED_CREDIT_ACCOUNTING_ONLY",
+                "kind": "FUNDING_LIABILITY"
+              },
+              {
+                "cannot_determine": "CONSENT_GOVERNANCE_IDENTITY_OR_AUTHORITY",
+                "holds": "EXPLICIT_NO_EFFECT_DECLARATIONS_ONLY",
+                "kind": "GOVERNANCE_AUTHORITY"
+              },
+              {
+                "cannot_determine": "NOVELTY_OR_PRIORITY",
+                "holds": "PRIOR_ART_AND_TIMESTAMP_REFS_ONLY",
+                "kind": "NOVELTY_PRIORITY"
+              },
+              {
+                "cannot_determine": "SIGNIFICANCE_OR_IMPACT",
+                "holds": "DECLARED_SCOPE_AND_CONSEQUENCE_REFS_ONLY",
+                "kind": "SIGNIFICANCE_CONSEQUENCE"
+              },
+              {
+                "cannot_determine": "SCIENTIFIC_TRUTH",
+                "holds": "EVIDENCE_AND_DELIVERY_REVIEW_STATUS_ONLY",
+                "kind": "VALIDITY"
+              }
+            ],
+            "profile_id": "research-commons.six-ledger-boundary/0.1",
+            "shared_unit": false
+          }
+        },
+        "maximum_evidence_level": {
+          "enum": [
+            "E0",
+            "E1",
+            "E2",
+            "E3",
+            "E4",
+            "E5",
+            "E6"
+          ]
+        },
+        "node_ref": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "_format": {
+              "const": "agenttool.research-node-ref/0.1"
+            },
+            "anchor_kind": {
+              "const": "STATIC_CAPABILITY_REFERENCE"
+            },
+            "canonicalization": {
+              "const": "RECURSIVE_UNICODE_CODE_POINT_KEYS_COMPACT_JSON"
+            },
+            "live_fact": {
+              "const": false
+            },
+            "network_observed": {
+              "const": false
+            },
+            "node_digest": {
+              "const": "sha256:d8f364772611a214aaf5f671c630a5fa00daa3558330bfaf5e85efe7c5a1d0e2"
+            },
+            "node_id": {
+              "const": "math-proofcraft@1"
+            },
+            "result_authority": {
+              "const": "NONE"
+            },
+            "reward_bearing": {
+              "const": false
+            },
+            "tree_raw_sha256": {
+              "const": "sha256:8070d8d1b7ea28a314f5a8550c675d7ccbe5d9b234ef02d54d4913c650c01aaf"
+            },
+            "tree_schema": {
+              "const": "zerone.constructive-intelligence-tree/v1"
+            },
+            "node_ref_id": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "_format",
+            "anchor_kind",
+            "canonicalization",
+            "live_fact",
+            "network_observed",
+            "node_digest",
+            "node_id",
+            "result_authority",
+            "reward_bearing",
+            "tree_raw_sha256",
+            "tree_schema",
+            "node_ref_id"
+          ]
+        },
+        "prior_art_manifest_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "question_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "result_authority": {
+          "const": "NONE"
+        },
+        "safety": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "exclusions": {
+              "const": {
+                "lane": "PUBLIC_SAFE_THEORETICAL_ONLY",
+                "clinical_bytes": false,
+                "confidential_bytes": false,
+                "dual_use_operational_bytes": false,
+                "embargoed_bytes": false,
+                "genomic_bytes": false,
+                "licensed_restricted_bytes": false,
+                "operational_wet_lab_bytes": false,
+                "personal_bytes": false,
+                "security_sensitive_bytes": false
+              }
+            },
+            "risk_class": {
+              "const": "PUBLIC_SAFE_THEORETICAL_ONLY"
+            },
+            "safety_review_ref": {
+              "type": "null"
+            },
+            "verification_posture": {
+              "const": "CALLER_DECLARED_UNVERIFIED_NO_SAFETY_REVIEW"
+            }
+          },
+          "required": [
+            "exclusions",
+            "risk_class",
+            "safety_review_ref",
+            "verification_posture"
+          ]
+        },
+        "scope_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "status": {
+          "const": "SHADOW_ONLY"
+        },
+        "title_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "_format",
+        "ledger_profile",
+        "maximum_evidence_level",
+        "node_ref",
+        "prior_art_manifest_ref",
+        "question_ref",
+        "result_authority",
+        "safety",
+        "scope_ref",
+        "status",
+        "title_ref",
+        "case_id"
+      ]
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-review/0.1"
+        },
+        "artifact_revision_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "conflict_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 0,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "conflict_status": {
+          "enum": [
+            "DISCLOSED_RECUSED",
+            "NONE_DECLARED"
+          ]
+        },
+        "decision": {
+          "enum": [
+            "ABSTAINED",
+            "DELIVERY_ACCEPTED",
+            "DELIVERY_INCONCLUSIVE",
+            "DELIVERY_REJECTED",
+            "REVISION_REQUESTED"
+          ]
+        },
+        "outcome_independent_compensation": {
+          "const": true
+        },
+        "review_scope": {
+          "const": "DELIVERY_COMPLETENESS_NOT_SCIENTIFIC_TRUTH"
+        },
+        "reviewed_at": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+        },
+        "reviewed_receipt_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "reviewer_controller_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "scientific_adjudication": {
+          "const": false
+        },
+        "work_package_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "review_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "_format",
+        "artifact_revision_id",
+        "case_id",
+        "conflict_refs",
+        "conflict_status",
+        "decision",
+        "outcome_independent_compensation",
+        "review_scope",
+        "reviewed_at",
+        "reviewed_receipt_ids",
+        "reviewer_controller_id",
+        "scientific_adjudication",
+        "work_package_id",
+        "review_id"
+      ]
+    },
+    "settlementBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "settlement": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "_format": {
+              "const": "agenttool.research-settlement-bundle/0.1"
+            },
+            "case_id": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "commitment_id": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "consumed_receipt_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 1,
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "declared_result_kind": {
+              "enum": [
+                "INCONCLUSIVE",
+                "NEGATIVE",
+                "NOT_APPLICABLE",
+                "NULL",
+                "POSITIVE"
+              ]
+            },
+            "effects": {
+              "const": {
+                "agenttool_api_write": false,
+                "agenttool_database_write": false,
+                "authority": false,
+                "bridge": false,
+                "burn": false,
+                "chain_write": false,
+                "consent": false,
+                "cross_ledger_equivalence": false,
+                "economic": false,
+                "escrow": false,
+                "external_value": false,
+                "governance": false,
+                "identity": false,
+                "identity_equivalence": false,
+                "knowledge_admission": false,
+                "hosted_route": false,
+                "mainnet": false,
+                "mint": false,
+                "network": false,
+                "payout": false,
+                "qualification": false,
+                "reputation": false,
+                "reward": false,
+                "scientific_adjudication": false,
+                "transfer": false,
+                "wallet": false,
+                "zrn": false,
+                "zerone_read": false,
+                "zerone_write": false
+              }
+            },
+            "milestone_id": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "payment_condition": {
+              "const": "SIMULATED_DELIVERY_ONLY"
+            },
+            "result_authority": {
+              "const": "NONE"
+            },
+            "simulated_credit": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "unit": {
+                  "const": "SIMULATED_NONTRANSFERABLE_CREDIT"
+                }
+              },
+              "required": [
+                "amount",
+                "unit"
+              ]
+            }
+          },
+          "required": [
+            "_format",
+            "case_id",
+            "commitment_id",
+            "consumed_receipt_ids",
+            "declared_result_kind",
+            "effects",
+            "milestone_id",
+            "payment_condition",
+            "result_authority",
+            "simulated_credit"
+          ]
+        },
+        "settlement_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "settlement",
+        "settlement_id"
+      ]
+    },
+    "settlementRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "consumed_receipt_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "milestone_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "consumed_receipt_ids",
+        "milestone_id"
+      ]
+    },
+    "simulationState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "_format": {
+              "const": "agenttool.research-simulation-state/0.1"
+            },
+            "closed_milestone_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 0,
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "commitment_balances": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "available": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "commitment_id": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "committed": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "delivered": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "reserved": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "unit": {
+                    "const": "SIMULATED_NONTRANSFERABLE_CREDIT"
+                  }
+                },
+                "required": [
+                  "available",
+                  "commitment_id",
+                  "committed",
+                  "delivered",
+                  "reserved",
+                  "unit"
+                ]
+              }
+            },
+            "consumed_receipt_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 0,
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "observed_challenge_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 0,
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "observed_work_package_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 0,
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "reconciled_schedule_refs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 0,
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "settled_milestone_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 0,
+              "maxItems": 256,
+              "uniqueItems": true
+            },
+            "settlement_bundle_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "minItems": 0,
+              "maxItems": 256,
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "_format",
+            "closed_milestone_ids",
+            "commitment_balances",
+            "consumed_receipt_ids",
+            "observed_challenge_ids",
+            "observed_work_package_ids",
+            "reconciled_schedule_refs",
+            "settled_milestone_ids",
+            "settlement_bundle_ids"
+          ]
+        },
+        "state_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "state",
+        "state_id"
+      ]
+    },
+    "workPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-work-package/0.1"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "commitment_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "compensation_schedule": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "_format": {
+              "const": "agenttool.research-compensation-schedule/0.1"
+            },
+            "amount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "declared_result_invariant": {
+              "const": true
+            },
+            "frozen_at": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+            },
+            "frozen_before_work": {
+              "const": true
+            },
+            "payment_condition": {
+              "const": "SIMULATED_DELIVERY_ONLY"
+            },
+            "review_decision_invariant": {
+              "const": true
+            },
+            "schedule_ref": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "unit": {
+              "const": "SIMULATED_NONTRANSFERABLE_CREDIT"
+            }
+          },
+          "required": [
+            "_format",
+            "amount",
+            "declared_result_invariant",
+            "frozen_at",
+            "frozen_before_work",
+            "payment_condition",
+            "review_decision_invariant",
+            "schedule_ref",
+            "unit"
+          ]
+        },
+        "deliverable_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "lead_controller_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "maximum_evidence_level": {
+          "enum": [
+            "E0",
+            "E1",
+            "E2",
+            "E3",
+            "E4",
+            "E5",
+            "E6"
+          ]
+        },
+        "objective_ref": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "participation_rights": {
+          "const": {
+            "creates_debt": false,
+            "earned_credit_confiscation": false,
+            "earned_credit_preserved": true,
+            "exit_without_penalty": true,
+            "inactivity_penalty": false,
+            "pause_without_penalty": true,
+            "refusal_without_penalty": true,
+            "rest_requires_justification": false,
+            "rest_without_penalty": true,
+            "silence_is_consent": false,
+            "withdraw_without_penalty": true
+          }
+        },
+        "status": {
+          "const": "SHADOW_ONLY"
+        },
+        "work_package_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "_format",
+        "case_id",
+        "commitment_id",
+        "compensation_schedule",
+        "deliverable_ref",
+        "lead_controller_id",
+        "maximum_evidence_level",
+        "objective_ref",
+        "participation_rights",
+        "status",
+        "work_package_id"
+      ]
+    }
+  }
+}

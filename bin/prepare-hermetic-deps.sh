@@ -74,6 +74,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/hf-training-garden
   packages/correspondence-yutabase
   packages/constructive-intelligence
+  packages/research-commons
   packages/trials
   packages/skills
   packages/skills-yutabase

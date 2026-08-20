@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:research-settlement-bundle:0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "settlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-settlement-bundle/0.1"
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "commitment_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "consumed_receipt_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "declared_result_kind": {
+          "enum": [
+            "INCONCLUSIVE",
+            "NEGATIVE",
+            "NOT_APPLICABLE",
+            "NULL",
+            "POSITIVE"
+          ]
+        },
+        "effects": {
+          "const": {
+            "agenttool_api_write": false,
+            "agenttool_database_write": false,
+            "authority": false,
+            "bridge": false,
+            "burn": false,
+            "chain_write": false,
+            "consent": false,
+            "cross_ledger_equivalence": false,
+            "economic": false,
+            "escrow": false,
+            "external_value": false,
+            "governance": false,
+            "identity": false,
+            "identity_equivalence": false,
+            "knowledge_admission": false,
+            "hosted_route": false,
+            "mainnet": false,
+            "mint": false,
+            "network": false,
+            "payout": false,
+            "qualification": false,
+            "reputation": false,
+            "reward": false,
+            "scientific_adjudication": false,
+            "transfer": false,
+            "wallet": false,
+            "zrn": false,
+            "zerone_read": false,
+            "zerone_write": false
+          }
+        },
+        "milestone_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "payment_condition": {
+          "const": "SIMULATED_DELIVERY_ONLY"
+        },
+        "result_authority": {
+          "const": "NONE"
+        },
+        "simulated_credit": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "unit": {
+              "const": "SIMULATED_NONTRANSFERABLE_CREDIT"
+            }
+          },
+          "required": [
+            "amount",
+            "unit"
+          ]
+        }
+      },
+      "required": [
+        "_format",
+        "case_id",
+        "commitment_id",
+        "consumed_receipt_ids",
+        "declared_result_kind",
+        "effects",
+        "milestone_id",
+        "payment_condition",
+        "result_authority",
+        "simulated_credit"
+      ]
+    },
+    "settlement_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "settlement",
+    "settlement_id"
+  ]
+}

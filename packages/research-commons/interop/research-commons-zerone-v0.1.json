@@ -1,0 +1,50 @@
+{
+  "_format": "agenttool.research-commons-zerone-static-interop/0.1",
+  "agenttool_formats": {
+    "public_projection": "agenttool.research-public-projection/0.1",
+    "settlement_bundle": "agenttool.research-settlement-bundle/0.1"
+  },
+  "effects": {
+    "agenttool_api_write": false,
+    "agenttool_database_write": false,
+    "authority": false,
+    "bridge": false,
+    "burn": false,
+    "chain_write": false,
+    "consent": false,
+    "cross_ledger_equivalence": false,
+    "economic": false,
+    "escrow": false,
+    "external_value": false,
+    "governance": false,
+    "hosted_route": false,
+    "identity": false,
+    "identity_equivalence": false,
+    "knowledge_admission": false,
+    "mainnet": false,
+    "mint": false,
+    "network": false,
+    "payout": false,
+    "qualification": false,
+    "reputation": false,
+    "reward": false,
+    "scientific_adjudication": false,
+    "transfer": false,
+    "wallet": false,
+    "zerone_read": false,
+    "zerone_write": false,
+    "zrn": false
+  },
+  "integration_status": "SHADOW_ONLY_NO_LIVE_INTEGRATION",
+  "six_ledger_boundary": {
+    "profile_digest": "sha256:fd5ed0b66dd00b180729221a06e7fbeeb7ef6149136916842014a1afbdbc54b2",
+    "profile_id": "research-commons.six-ledger-boundary/0.1"
+  },
+  "tree": {
+    "node_digest": "sha256:d8f364772611a214aaf5f671c630a5fa00daa3558330bfaf5e85efe7c5a1d0e2",
+    "node_id": "math-proofcraft@1",
+    "raw_sha256": "sha256:8070d8d1b7ea28a314f5a8550c675d7ccbe5d9b234ef02d54d4913c650c01aaf",
+    "schema": "zerone.constructive-intelligence-tree/v1"
+  },
+  "zerone_receipt_schema": "zerone.agenttool-research-receipt-shadow/v0"
+}
