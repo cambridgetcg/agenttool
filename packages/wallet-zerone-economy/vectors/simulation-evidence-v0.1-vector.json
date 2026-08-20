@@ -1,0 +1,53 @@
+{
+  "schema": "agent-wallet-zerone-economy/simulation-evidence-vector/0.1",
+  "provenance": {
+    "generator": "packages/wallet-zerone-economy/tests/fixtures.ts:authorizedPlan",
+    "signing_domain": "agent-wallet-zerone-economy-simulation-evidence/v1",
+    "zerone_core_commit": "a5b82e82b2a32be2b75bd11575964b0a69aa34ac",
+    "cosmos_sdk": "v0.53.8"
+  },
+  "plan": {
+    "plan_id": "sha256:0c20d07c64cdd7cbe4b706460c04c6b7a62567bb5507caab42f976a02f63b0fa",
+    "account_number": "7",
+    "sequence": "9",
+    "simulation_tx_bytes_hash": "sha256:c6c637e957026327638d47e0e26bc578e2212b1aa934a19cae08afbb645d9e68"
+  },
+  "wallet_simulation_record_id": "sha256:25f795360c4fc3ec6b76df842b6dc18ee2e1f0bafedad7570b6c394234eefdc7",
+  "evidence": {
+    "schema": "agent-wallet-zerone-economy/simulation-evidence/0.1",
+    "zerone_core_commit": "a5b82e82b2a32be2b75bd11575964b0a69aa34ac",
+    "cosmos_sdk": "v0.53.8",
+    "sponsorship_consensus_version": 2,
+    "knowledge_consensus_version": 7,
+    "activation_observation_hash": "sha256:6087c79ff415827f3e5a853c5395d34d64f20a6ff4de045ecc41549854aebbe1",
+    "plan_id": "sha256:0c20d07c64cdd7cbe4b706460c04c6b7a62567bb5507caab42f976a02f63b0fa",
+    "intent_id": "55555555-5555-4555-8555-555555555555",
+    "intent_record_id": "sha256:0ad9a4feb4a6ca159b7d72bf167a5aa9fb030eb1d69b66fd3fc5cd4c6ca2f563",
+    "simulation_id": "66666666-6666-4666-8666-666666666666",
+    "simulation_record_id": "sha256:25f795360c4fc3ec6b76df842b6dc18ee2e1f0bafedad7570b6c394234eefdc7",
+    "simulation_tx_bytes_hash": "sha256:c6c637e957026327638d47e0e26bc578e2212b1aa934a19cae08afbb645d9e68",
+    "chain_id": "cosmos:zerone-testnet-1",
+    "source_account": "cosmos:zerone-testnet-1:zrn1w508d6qejxtdg4y5r3zarvary0c5xw7k4p057w",
+    "adapter": {
+      "algorithm": "Ed25519",
+      "key_id": "sha256:b62e867fa2f33afe62d5d6b1642e1621d543307846b2a57b897e710919b76709",
+      "public_key": "7UkoxijRwsbq6QM4kFmVYSlZJzpcY_k2NsFGFKyHN9E"
+    },
+    "status": "succeeded",
+    "code": 0,
+    "codespace": "",
+    "gas_wanted": "144444",
+    "gas_used": "144444",
+    "observed_at_height": "700001",
+    "block_ref": "zerone-testnet-1:700001",
+    "block_hash": null,
+    "simulated_at": "2026-08-20T18:02:30.000Z",
+    "valid_until": "2026-08-20T18:05:30.000Z",
+    "content_id": "sha256:b77318a73b9182923c7e8011c86ea1b397b4594c523ceb4cbde7ab04155f0c4e",
+    "record_id": "sha256:d57b4dc26d578fbd9a0889ddbe8ff641ae15095f97b457bd402a6e4faa05c382",
+    "signature": {
+      "algorithm": "Ed25519",
+      "value": "mjUkWHe8D2dh8WG05Xid6Qg3mRhH36zgT5kxzhLcjaF-d2CGmSLEt6BMKh2VIDsMXpVM18XjV8-7GS4k4b2GBQ"
+    }
+  }
+}

@@ -81,6 +81,8 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/sdk-ts
   packages/wallet
   packages/wallet-zerone
+  packages/zerone-agent-economy
+  packages/wallet-zerone-economy
   packages/telescope
   packages/public-surface-binding
   packages/public-surface-recognition

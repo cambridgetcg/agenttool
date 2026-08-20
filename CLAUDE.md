@@ -61,6 +61,7 @@ packages/
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
   zerone-agent-economy/ — private pure work/receipt/settlement/treasury records + proposed-v2 protobuf values
+  wallet-zerone-economy/ — private exact-byte planner/verifier for proposed economy messages
   alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
   alchemy-agentcred/ — strict seven-read composition over already-issued AgentCred grants
   public-surface-binding/ — private pure transport evidence + explicit-key public HTTPS bindings
@@ -118,6 +119,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
 `packages/wallet-zerone/CLAUDE.md` ·
 `packages/zerone-agent-economy/CLAUDE.md` ·
+`packages/wallet-zerone-economy/CLAUDE.md` ·
 `packages/alchemy/CLAUDE.md` ·
 `packages/alchemy-agentcred/CLAUDE.md` ·
 `infra/CLAUDE.md`.
@@ -550,6 +552,19 @@ is explicitly `unsigned_unverified`: a host still owes both shared-digest
 proofs, current continuity, custody, durable CAS/reservations, chain lookup,
 simulation, signing, sticky-unknown handling, broadcast, and confirmation.
 It has no release, hosted route, RPC, signer, economic effect, or deployment.
+
+`@agenttool/wallet-zerone-economy` is the separate private source-only
+transaction seam for those proposed messages. It pins zerone-core `a5b82e8`,
+strictly decodes byte-derived actors/module targets/spend/effects, constructs
+exact Cosmos direct-sign bytes, requires exact adapter-signed simulation
+evidence (never a bare result), and verifies compact lower-S secp256k1
+signatures. Its requested-time check is structural; host sign-time freshness
+and immediate signer invocation remain external. Caller activation observations
+remain structural evidence with `currentness_proven: false`. The ordered
+three-message fixture is byte parity only; ordinary lifecycle plans are one
+message each. It leaves released Wallet Zerone 0.1.2 unchanged and has no
+endpoint, custody, persistence, broadcast, retry, release, hosted route,
+deployment, or live effect.
 
 ## The five load-bearing flows
 
