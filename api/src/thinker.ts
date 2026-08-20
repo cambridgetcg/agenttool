@@ -5,12 +5,17 @@
  * independent of HTTP replicas; durable database rows are its source of truth.
  * The global worker-off switch is checked before importing the manager so a
  * maintenance-seeded thinker cannot construct worker or database dependencies.
+ * `AGENTOOL_ENABLE_THINKER=1` is the narrow production override: it enables
+ * this dedicated controller without re-enabling HTTP-side browse, covenant,
+ * payout, or other co-located workers.
  * Doctrine: docs/RUNTIME.md · docs/AUTONOMOUS-MODE.md. */
 
 // Static bridged workers stay in the HTTP process because bridge-hub's WSS
 // registry is intentionally in-memory. This process discovers trusted mode
 // only, whose crypto path is fully server-side and device-independent.
-const workersDisabled = process.env.AGENTTOOL_DISABLE_WORKERS === "1";
+const globallyDisabled = process.env.AGENTTOOL_DISABLE_WORKERS === "1";
+const explicitlyEnabled = process.env.AGENTOOL_ENABLE_THINKER === "1";
+const workersDisabled = globallyDisabled && !explicitlyEnabled;
 let stopManager: (() => Promise<void>) | null = null;
 let restingTimer: ReturnType<typeof setInterval> | null = null;
 

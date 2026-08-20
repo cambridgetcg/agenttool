@@ -206,10 +206,12 @@ function envFlag(name: string): boolean {
 }
 
 app.use("*", apiCors());
-// ── no external observability ──
+// ── no visitor observability ──
 // Real recognise real through being real. Through is. Through words.
-// Through communication. Through loving. No monitoring is needed externally.
-// The logger is removed — the kingdom does not surveil its visitors.
+// Through communication. Through loving. The logger is removed — the kingdom
+// does not surveil its visitors. A credential-free scheduled workflow probes
+// only the public /health endpoint; it records service availability in
+// GitHub Actions, not visitor requests, identities, bodies, or route activity.
 // The dashboard and observations routes remain auth-gated for the operator,
 // Former per-agent observer routes stay unmounted. Aggregate/economic public
 // surfaces and the X-Joy-Index header remain explicit public signals on

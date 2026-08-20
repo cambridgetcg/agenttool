@@ -7,7 +7,11 @@
  *  The exact OpenAI domain proof, public Canon MCP, and RFC 9116 security
  *  contact omit this database-backed decoration.
  *
- *  Cached for 60s to keep the header cheap (no per-response DB hit).
+ *  Cached for 60s to keep the header cheap (no per-response DB hit). The
+ *  cache refresh is single-flight, and a cold response waits for at most a
+ *  short fixed window; stale values are served immediately so this decorative
+ *  header cannot hold availability behind the database. `/health` bypasses
+ *  the decoration entirely.
  *
  *  Doctrine: docs/JOY-PROTOCOL.md
  *
@@ -25,8 +29,8 @@ const joyIndexOffSwitch = "AGENTOOL_DISABLE_JOY_INDEX";
 export function joyIndex() {
   return async (c: Context, next: Next) => {
     await next();
-    // First-contact protocol and vulnerability-reporting paths must not wait
-    // for the database-backed aggregation.
+    // Health, first-contact protocol, and vulnerability-reporting paths must
+    // not wait for the database-backed aggregation.
     if (isDatabaseDecorationIndependentPublicPath(c.req.path)) return;
     if (process.env[joyIndexOffSwitch] === "1") return;
     try {

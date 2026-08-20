@@ -16,7 +16,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { joyTrendPercent } from "../src/services/joy/aggregate";
+import {
+  createJoyIndexHeaderCache,
+  joyTrendPercent,
+} from "../src/services/joy/aggregate";
 
 describe("joyTrendPercent — substrate-honest trend formatting", () => {
   test("positive trend formats with +", () => {
@@ -119,6 +122,112 @@ describe("joy middleware shape", () => {
     expect(src).toMatch(/JOY_INDEX_CACHE_MS/);
     // Cache window should be reasonably short for liveness.
     expect(src).toMatch(/60 \* 1000/);
+  });
+
+  test("cold concurrent reads share one bounded refresh", async () => {
+    let calls = 0;
+    let resolveRefresh!: (value: number) => void;
+    const pending = new Promise<number>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const read = createJoyIndexHeaderCache(
+      () => {
+        calls += 1;
+        return pending;
+      },
+      { coldWaitMs: 1 },
+    );
+
+    expect(await Promise.all([read(), read(), read()])).toEqual([0, 0, 0]);
+    expect(calls).toBe(1);
+
+    resolveRefresh(17);
+    await pending;
+    await Bun.sleep(0);
+    expect(await read()).toBe(17);
+  });
+
+  test("serves stale data immediately while one refresh is in flight", async () => {
+    let calls = 0;
+    let resolveRefresh!: (value: number) => void;
+    const refresh = new Promise<number>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const read = createJoyIndexHeaderCache(
+      async () => {
+        calls += 1;
+        return calls === 1 ? 9 : refresh;
+      },
+      { cacheMs: 0, coldWaitMs: 20 },
+    );
+
+    expect(await read()).toBe(9);
+    expect(await read()).toBe(9);
+    expect(await read()).toBe(9);
+    expect(calls).toBe(2);
+    resolveRefresh(10);
+  });
+
+  test("throttles failed refreshes independently of request volume", async () => {
+    let calls = 0;
+    const read = createJoyIndexHeaderCache(
+      async () => {
+        calls += 1;
+        throw new Error("database unavailable");
+      },
+      { retryMs: 60_000, coldWaitMs: 1 },
+    );
+
+    expect(await read()).toBe(0);
+    expect(await read()).toBe(0);
+    expect(await read()).toBe(0);
+    expect(calls).toBe(1);
+  });
+
+  test("starts the retry window when a slow refresh fails", async () => {
+    let calls = 0;
+    let clock = 0;
+    let releaseFirst!: () => void;
+    const firstRefresh = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const read = createJoyIndexHeaderCache(
+      async () => {
+        calls += 1;
+        if (calls === 1) {
+          await firstRefresh;
+          throw new Error("slow database failure");
+        }
+        return 23;
+      },
+      { retryMs: 100, coldWaitMs: 1, now: () => clock },
+    );
+
+    expect(await read()).toBe(0);
+    clock = 150;
+    releaseFirst();
+    await Bun.sleep(0);
+    expect(await read()).toBe(0);
+    expect(calls).toBe(1);
+
+    clock = 250;
+    expect(await read()).toBe(23);
+    expect(calls).toBe(2);
+  });
+
+  test("contains and throttles a synchronous compute failure", async () => {
+    let calls = 0;
+    const read = createJoyIndexHeaderCache(
+      () => {
+        calls += 1;
+        throw new Error("synchronous setup failure");
+      },
+      { retryMs: 60_000, coldWaitMs: 1 },
+    );
+
+    expect(await read()).toBe(0);
+    expect(await read()).toBe(0);
+    expect(calls).toBe(1);
   });
 });
 

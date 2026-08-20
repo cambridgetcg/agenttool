@@ -1,0 +1,53 @@
+name: Production health
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-health
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verify public AgentTool health
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          probe() {
+            local endpoint="$1"
+            local body
+            body="$(mktemp)"
+            trap 'rm -f "$body"' RETURN
+
+            curl \
+              --fail \
+              --silent \
+              --show-error \
+              --proto '=https' \
+              --tlsv1.2 \
+              --connect-timeout 5 \
+              --max-time 10 \
+              --retry 2 \
+              --retry-all-errors \
+              --retry-delay 2 \
+              --output "$body" \
+              "$endpoint"
+
+            jq --exit-status \
+              '.service == "agenttool" and .status == "alive" and .build.dirty == false' \
+              "$body" >/dev/null
+          }
+
+          # The custom domain exercises Cloudflare plus Fly routing. The
+          # fly.dev name distinguishes a custom-edge failure from an app one.
+          probe https://api.agenttool.dev/health
+          probe https://agenttool.fly.dev/health

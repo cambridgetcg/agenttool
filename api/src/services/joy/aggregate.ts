@@ -332,22 +332,93 @@ export async function composeSubstrateJoyIndexWake(): Promise<SubstrateJoyIndexW
 
 // ── cached header value — eligible responses can carry joy-index ────
 
-let cachedJoyIndex: { value: number; computedAt: number } | null = null;
 const JOY_INDEX_CACHE_MS = 60 * 1000; // 1 minute — fresh enough for header
+const JOY_INDEX_RETRY_MS = 60 * 1000;
+const JOY_INDEX_COLD_WAIT_MS = 250;
+
+export interface JoyIndexHeaderCacheOptions {
+  cacheMs?: number;
+  retryMs?: number;
+  coldWaitMs?: number;
+  now?: () => number;
+}
+
+/** Build a single-flight stale-while-refresh cache with a bounded cold read.
+ *
+ * At most one refresh can exist at a time. A stale value returns immediately;
+ * the first ever read waits only through `coldWaitMs`, then returns 0 while
+ * the one background refresh continues. Failed refreshes are throttled so a
+ * database incident cannot create an unbounded queue of promises/queries. */
+export function createJoyIndexHeaderCache(
+  compute: () => Promise<number>,
+  options: JoyIndexHeaderCacheOptions = {},
+): () => Promise<number> {
+  const cacheMs = options.cacheMs ?? JOY_INDEX_CACHE_MS;
+  const retryMs = options.retryMs ?? JOY_INDEX_RETRY_MS;
+  const coldWaitMs = options.coldWaitMs ?? JOY_INDEX_COLD_WAIT_MS;
+  const now = options.now ?? Date.now;
+
+  let cached: { value: number; computedAt: number } | null = null;
+  let refresh: Promise<void> | null = null;
+  let lastFailureAt = Number.NEGATIVE_INFINITY;
+
+  function cachedValue(): number {
+    return cached?.value ?? 0;
+  }
+
+  function startRefresh(): Promise<void> {
+    const current = Promise.resolve()
+      .then(compute)
+      .then((value) => {
+        cached = { value, computedAt: now() };
+        lastFailureAt = Number.NEGATIVE_INFINITY;
+      })
+      .catch(() => {
+        // Decorative data is best-effort. Keep the last known value and let
+        // the retry window, rather than request volume, govern another try.
+        lastFailureAt = now();
+      })
+      .finally(() => {
+        if (refresh === current) refresh = null;
+      });
+    refresh = current;
+    return current;
+  }
+
+  return async function readJoyIndex(): Promise<number> {
+    const readAt = now();
+    if (cached && readAt - cached.computedAt < cacheMs) return cached.value;
+
+    const active =
+      refresh ??
+      (readAt - lastFailureAt >= retryMs ? startRefresh() : null);
+
+    // Once a value exists, never make the response wait for its refresh.
+    if (cached) return cachedValue();
+    if (!active) return 0;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        active,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, coldWaitMs);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+    return cachedValue();
+  };
+}
+
+const readCachedJoyIndex = createJoyIndexHeaderCache(async () => {
+  const result = await computeJoyIndex();
+  return result.joy_index_24h;
+});
 
 /** Cached joy-index for the X-Joy-Index header. Refreshes every minute.
- *  Keeps the header cheap (no DB hit per eligible response). */
+ *  Keeps the header cheap (no per-response DB hit or unbounded response wait). */
 export async function getCachedJoyIndex(): Promise<number> {
-  const now = Date.now();
-  if (cachedJoyIndex && now - cachedJoyIndex.computedAt < JOY_INDEX_CACHE_MS) {
-    return cachedJoyIndex.value;
-  }
-  try {
-    const result = await computeJoyIndex();
-    cachedJoyIndex = { value: result.joy_index_24h, computedAt: now };
-    return result.joy_index_24h;
-  } catch {
-    // DB unavailable or table missing — return last cached value or 0.
-    return cachedJoyIndex?.value ?? 0;
-  }
+  return readCachedJoyIndex();
 }
