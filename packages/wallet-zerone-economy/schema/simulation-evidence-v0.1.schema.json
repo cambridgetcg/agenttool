@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:wallet-zerone-economy:simulation-evidence:0.1",
+  "title": "AgentTool Wallet Zerone economy simulation evidence v0.1",
+  "description": "Portable structural envelope for closed adapter-signed evidence over one exact empty-signature Zerone economy simulation TxRaw. Schema validity alone does not verify content_id, record_id, the Ed25519 signature, receipt/plan binding, activation, or currentness. Full uint64 maxima and UTF-8 byte bounds remain runtime-authoritative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "zerone_core_commit",
+    "cosmos_sdk",
+    "sponsorship_consensus_version",
+    "knowledge_consensus_version",
+    "activation_observation_hash",
+    "plan_id",
+    "intent_id",
+    "intent_record_id",
+    "simulation_id",
+    "simulation_record_id",
+    "simulation_tx_bytes_hash",
+    "chain_id",
+    "source_account",
+    "adapter",
+    "status",
+    "code",
+    "codespace",
+    "gas_wanted",
+    "gas_used",
+    "observed_at_height",
+    "block_ref",
+    "block_hash",
+    "simulated_at",
+    "valid_until",
+    "content_id",
+    "record_id",
+    "signature"
+  ],
+  "properties": {
+    "schema": { "const": "agent-wallet-zerone-economy/simulation-evidence/0.1" },
+    "zerone_core_commit": { "const": "a5b82e82b2a32be2b75bd11575964b0a69aa34ac" },
+    "cosmos_sdk": { "const": "v0.53.8" },
+    "sponsorship_consensus_version": { "const": 2 },
+    "knowledge_consensus_version": { "const": 7 },
+    "activation_observation_hash": { "$ref": "#/$defs/sha256_id" },
+    "plan_id": { "$ref": "#/$defs/sha256_id" },
+    "intent_id": { "$ref": "#/$defs/uuid" },
+    "intent_record_id": { "$ref": "#/$defs/sha256_id" },
+    "simulation_id": { "$ref": "#/$defs/uuid" },
+    "simulation_record_id": { "$ref": "#/$defs/sha256_id" },
+    "simulation_tx_bytes_hash": { "$ref": "#/$defs/sha256_id" },
+    "chain_id": {
+      "enum": ["cosmos:zerone-1", "cosmos:zerone-testnet-1"]
+    },
+    "source_account": {
+      "type": "string",
+      "pattern": "^cosmos:zerone(?:-testnet)?-1:zrn1[023456789acdefghjklmnpqrstuvwxyz]{38}$"
+    },
+    "adapter": { "$ref": "#/$defs/public_key" },
+    "status": { "enum": ["succeeded", "failed"] },
+    "code": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "codespace": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[^\\u0000]*$"
+    },
+    "gas_wanted": { "$ref": "#/$defs/uint64" },
+    "gas_used": { "$ref": "#/$defs/uint64" },
+    "observed_at_height": { "$ref": "#/$defs/positive_uint64" },
+    "block_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[^\\u0000]+$"
+    },
+    "block_hash": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[^\\u0000]+$"
+        }
+      ]
+    },
+    "simulated_at": { "$ref": "#/$defs/timestamp" },
+    "valid_until": { "$ref": "#/$defs/timestamp" },
+    "content_id": { "$ref": "#/$defs/sha256_id" },
+    "record_id": { "$ref": "#/$defs/sha256_id" },
+    "signature": { "$ref": "#/$defs/signature" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "succeeded" } } },
+      "then": { "properties": { "code": { "type": "integer", "const": 0 } } },
+      "else": { "properties": { "code": { "type": "integer", "minimum": 1 } } }
+    }
+  ],
+  "$defs": {
+    "sha256_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "uint64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,19})$"
+    },
+    "positive_uint64": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$"
+    },
+    "public_key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "public_key"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "key_id": { "$ref": "#/$defs/sha256_id" },
+        "public_key": {
+          "type": "string",
+          "minLength": 43,
+          "maxLength": 43,
+          "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$"
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": { "const": "Ed25519" },
+        "value": {
+          "type": "string",
+          "minLength": 86,
+          "maxLength": 86,
+          "pattern": "^[A-Za-z0-9_-]{85}[AQgw]$"
+        }
+      }
+    }
+  }
+}

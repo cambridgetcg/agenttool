@@ -192,6 +192,10 @@ packages_gate() {
     bash -c 'cd packages/wallet && bun run ci'
   run "Agent Wallet Zerone offline adapter and pinned cross-language vectors" \
     bash -c 'cd packages/wallet-zerone && bun run ci'
+  run "private Zerone agent-economy records and proposed message values" \
+    bash -c 'cd packages/zerone-agent-economy && bun run ci'
+  run "private source-only Zerone economy exact-byte transaction planner" \
+    bash -c 'cd packages/wallet-zerone-economy && bun run ci'
   run "Telescope read-only discovery library and CLI" \
     bash -c 'cd packages/telescope && bun run ci'
   run "explicit-key public surface evidence and bindings" \
