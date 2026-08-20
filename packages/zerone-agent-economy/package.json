@@ -29,7 +29,7 @@
   },
   "scripts": {
     "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build:deps": "bun run --cwd ../wallet build && bun run --cwd ../wallet-zerone build && bun install --force",
+    "build:deps": "bun run --cwd ../wallet build && bun run --cwd ../wallet-zerone build && bun install --force --frozen-lockfile",
     "build": "bun run clean && tsc",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
