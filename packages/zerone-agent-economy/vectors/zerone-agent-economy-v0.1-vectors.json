@@ -31,7 +31,7 @@
       "artifact_root": "0808080808080808080808080808080808080808080808080808080808080808",
       "worker_address": "zrn1w508d6qejxtdg4y5r3zarvary0c5xw7k4p057w"
     },
-    "treasury_policy_id": "sha256:5e05f953a457968b64dcfe52135325f6203705214ec324835a0216eff3f1108c"
+    "treasury_policy_id": "sha256:f178dfea585d8934a42ba765123b97ce4bd63dd4c2cc328454b0efbec02c3cae"
   },
   "chain": {
     "work_contract": {

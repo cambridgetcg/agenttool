@@ -260,9 +260,16 @@ export function buildFixture() {
       storage: "100000",
       network_fee: "100000",
       knowledge_bond: "100000",
+      sponsorship_escrow: "200000",
       total: "500000",
     },
-    allowed_purposes: ["compute", "knowledge_bond", "network_fee", "storage"],
+    allowed_purposes: [
+      "compute",
+      "knowledge_bond",
+      "network_fee",
+      "sponsorship_escrow",
+      "storage",
+    ],
     issued_at: "2026-08-20T18:12:00.000Z",
   });
   const createBounty = createBountyOrderMessage(workSpec);

@@ -251,7 +251,8 @@ export type TreasuryPurpose =
   | "compute"
   | "storage"
   | "network_fee"
-  | "knowledge_bond";
+  | "knowledge_bond"
+  | "sponsorship_escrow";
 
 export interface TreasuryPolicyCore {
   readonly format: (typeof FORMATS)["treasury"];
@@ -267,6 +268,7 @@ export interface TreasuryPolicyCore {
     readonly storage: string;
     readonly network_fee: string;
     readonly knowledge_bond: string;
+    readonly sponsorship_escrow: string;
     readonly total: string;
   };
   readonly allowed_purposes: readonly TreasuryPurpose[];

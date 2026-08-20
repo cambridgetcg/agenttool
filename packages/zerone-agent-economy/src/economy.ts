@@ -158,7 +158,13 @@ const TREASURY_CORE_KEYS = [
   "window_caps_uzrn",
 ] as const;
 
-const PURPOSES = ["compute", "knowledge_bond", "network_fee", "storage"] as const;
+const PURPOSES = [
+  "compute",
+  "knowledge_bond",
+  "network_fee",
+  "sponsorship_escrow",
+  "storage",
+] as const;
 
 function network(value: unknown, path: string): ZeroneNetwork {
   if (value !== "mainnet" && value !== "testnet") {
@@ -855,6 +861,7 @@ export function validateTreasuryPolicyCore(value: unknown): TreasuryPolicyCore {
     "compute",
     "knowledge_bond",
     "network_fee",
+    "sponsorship_escrow",
     "storage",
     "total",
   ], "$.window_caps_uzrn");
@@ -878,6 +885,10 @@ export function validateTreasuryPolicyCore(value: unknown): TreasuryPolicyCore {
       storage: amount(caps.storage, "$.window_caps_uzrn.storage"),
       network_fee: amount(caps.network_fee, "$.window_caps_uzrn.network_fee"),
       knowledge_bond: amount(caps.knowledge_bond, "$.window_caps_uzrn.knowledge_bond"),
+      sponsorship_escrow: amount(
+        caps.sponsorship_escrow,
+        "$.window_caps_uzrn.sponsorship_escrow",
+      ),
       total: amount(caps.total, "$.window_caps_uzrn.total"),
     }),
     allowed_purposes: allowed,
@@ -950,9 +961,14 @@ export function evaluateTreasurySpend(
     storage: BigInt(amount(context.spent_in_window_uzrn.storage, "context.spent_in_window_uzrn.storage")),
     network_fee: BigInt(amount(context.spent_in_window_uzrn.network_fee, "context.spent_in_window_uzrn.network_fee")),
     knowledge_bond: BigInt(amount(context.spent_in_window_uzrn.knowledge_bond, "context.spent_in_window_uzrn.knowledge_bond")),
+    sponsorship_escrow: BigInt(amount(
+      context.spent_in_window_uzrn.sponsorship_escrow,
+      "context.spent_in_window_uzrn.sponsorship_escrow",
+    )),
     total: BigInt(amount(context.spent_in_window_uzrn.total, "context.spent_in_window_uzrn.total")),
   };
-  const derivedTotal = used.compute + used.storage + used.network_fee + used.knowledge_bond;
+  const derivedTotal = used.compute + used.storage + used.network_fee
+    + used.knowledge_bond + used.sponsorship_escrow;
   if (used.total !== derivedTotal) {
     invalid(
       "treasury_denied",

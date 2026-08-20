@@ -232,12 +232,14 @@ finalized liquid balance
 - reserve floor
 ```
 
-The four durable purpose counters must sum exactly to the supplied total; a
-mismatch fails closed before evaluating a spend. The policy permits receiving
-income but never auto-stakes, votes, bridges, or spends. A delegated policy may
-narrow purposes or limits and may raise the reserve floor; it cannot widen
-authority or limits. Policy construction requires the exact referenced wallet
-binding and checks its network, binding ID, and treasury account. Work
+The five durable purpose counters must sum exactly to the supplied total;
+`sponsorship_escrow` is distinct from `compute`, `knowledge_bond`, storage, and
+network fees, so prefunded bounty capital cannot be hidden under another
+budget. A mismatch fails closed before evaluating a spend. The policy permits
+receiving income but never auto-stakes, votes, bridges, or spends. A delegated
+policy may narrow purposes or limits and may raise the reserve floor; it cannot
+widen authority or limits. Policy construction requires the exact referenced
+wallet binding and checks its network, binding ID, and treasury account. Work
 admission declines a negotiated prefunded contract
 that cannot reach expected maturity before its end height, costs more than its
 price, or misses the requested margin. `net_uzrn` and runway are measurements,

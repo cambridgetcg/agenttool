@@ -22,6 +22,7 @@ describe("self-sustainability treasury", () => {
         storage: "0",
         network_fee: "0",
         knowledge_bond: "0",
+        sponsorship_escrow: "0",
         total: "0",
       },
     };
@@ -86,6 +87,7 @@ describe("self-sustainability treasury", () => {
         storage: "0",
         network_fee: "50000",
         knowledge_bond: "0",
+        sponsorship_escrow: "0",
         total: "150000",
       },
       allowed_purposes: ["compute", "network_fee"],
@@ -110,6 +112,36 @@ describe("self-sustainability treasury", () => {
       allowed_purposes: treasury.allowed_purposes,
       issued_at: treasury.issued_at,
     })).toThrow();
+  });
+
+  test("accounts for sponsorship escrow separately from compute and knowledge bonds", () => {
+    const { treasury } = buildFixture();
+    const spent = {
+      compute: "0",
+      storage: "0",
+      network_fee: "0",
+      knowledge_bond: "100000",
+      sponsorship_escrow: "0",
+      total: "100000",
+    };
+    expect(evaluateTreasurySpend(treasury, {
+      current_height: "1500",
+      current_balance_uzrn: "1000000",
+      durable_reserved_uzrn: "0",
+      sticky_unknown_exposure_uzrn: "0",
+      purpose: "sponsorship_escrow",
+      amount_uzrn: "200000",
+      spent_in_window_uzrn: spent,
+    }).reason).toBe("within_policy");
+    expect(evaluateTreasurySpend(treasury, {
+      current_height: "1500",
+      current_balance_uzrn: "1000000",
+      durable_reserved_uzrn: "0",
+      sticky_unknown_exposure_uzrn: "0",
+      purpose: "knowledge_bond",
+      amount_uzrn: "1",
+      spent_in_window_uzrn: spent,
+    }).reason).toBe("purpose_window_exceeded");
   });
 
   test("declines work that cannot mature or protect the requested margin", () => {
