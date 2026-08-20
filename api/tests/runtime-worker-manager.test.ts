@@ -88,6 +88,90 @@ async function flushMicrotasks() {
   await Promise.resolve();
 }
 
+const THINKER_PROCESS_TIMEOUT_MS = 2_000;
+
+async function stopThinkerAfterReady(
+  env: Record<string, string | undefined>,
+  readyMarker: string,
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  const child = Bun.spawn([process.execPath, "src/thinker.ts"], {
+    cwd: join(import.meta.dir, ".."),
+    env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const reader = child.stdout.getReader();
+  const decoder = new TextDecoder();
+  let stdout = "";
+  const read = async (): Promise<boolean> => {
+    const next = await reader.read();
+    stdout += next.done
+      ? decoder.decode()
+      : decoder.decode(next.value, { stream: true });
+    return !next.done;
+  };
+  const readToEnd = async () => {
+    while (await read()) continue;
+  };
+  const readinessRead = (async () => {
+    while (!stdout.includes(readyMarker) && (await read())) continue;
+    if (!stdout.includes(readyMarker)) {
+      throw new Error(
+        `stdout closed before ${JSON.stringify(readyMarker)}; ` +
+          `observed ${JSON.stringify(stdout)}`,
+      );
+    }
+  })();
+  const stderrPromise = new Response(child.stderr).text();
+  const kill = (signal: "SIGTERM" | "SIGKILL") => {
+    try {
+      child.kill(signal);
+    } catch {
+      // The child may already have exited.
+    }
+  };
+  const readinessTimer = setTimeout(
+    () => kill("SIGKILL"),
+    THINKER_PROCESS_TIMEOUT_MS,
+  );
+  let exitTimer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    await readinessRead;
+    clearTimeout(readinessTimer);
+    kill("SIGTERM");
+    exitTimer = setTimeout(
+      () => kill("SIGKILL"),
+      THINKER_PROCESS_TIMEOUT_MS,
+    );
+    const code = await child.exited;
+    await readToEnd();
+    const stderr = await stderrPromise;
+    if (code !== 0) {
+      throw new Error(
+        `thinker exited ${code} after SIGTERM; ` +
+          `stdout=${JSON.stringify(stdout)}; stderr=${JSON.stringify(stderr)}`,
+      );
+    }
+    return { code, stdout, stderr };
+  } catch (error) {
+    kill("SIGKILL");
+    const exit = await child.exited.catch(() => "unavailable");
+    await readinessRead.catch(() => undefined);
+    await readToEnd().catch(() => undefined);
+    const stderr = await stderrPromise.catch(() => "unavailable");
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}; ` +
+        `cleanup exit=${exit}; ` +
+        `stdout=${JSON.stringify(stdout)}; stderr=${JSON.stringify(stderr)}`,
+    );
+  } finally {
+    clearTimeout(readinessTimer);
+    if (exitTimer !== undefined) clearTimeout(exitTimer);
+    reader.releaseLock();
+  }
+}
+
 describe("think-worker manager reconciliation", () => {
   test("starts every discovered runtime ID", async () => {
     const fake = fakeWorkers();
@@ -310,26 +394,16 @@ describe("Fly process topology", () => {
       DATABASE_URL: "postgresql://127.0.0.1:1/must-not-connect",
     };
     delete childEnv.AGENTOOL_ENABLE_THINKER;
-    const child = Bun.spawn([process.execPath, "src/thinker.ts"], {
-      cwd: join(import.meta.dir, ".."),
-      env: childEnv,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stdoutPromise = new Response(child.stdout).text();
-    const stderrPromise = new Response(child.stderr).text();
-    await Bun.sleep(150);
-    child.kill("SIGTERM");
-    const [code, stdout, stderr] = await Promise.all([
-      child.exited,
-      stdoutPromise,
-      stderrPromise,
-    ]);
+    const { code, stdout, stderr } = await stopThinkerAfterReady(
+      childEnv,
+      "[thinker] AGENTTOOL_DISABLE_WORKERS=1; cloud controller resting",
+    );
 
     expect(code).toBe(0);
     expect(stdout).toContain(
       "[thinker] AGENTTOOL_DISABLE_WORKERS=1; cloud controller resting",
     );
+    expect(stdout).toContain("[thinker] SIGTERM received; stopping");
     expect(stdout).not.toContain("cloud controller started");
     expect(stderr).toBe("");
   });
@@ -350,31 +424,21 @@ describe("Fly process topology", () => {
   });
 
   test("the dedicated override wins only in the thinker process", async () => {
-    const child = Bun.spawn([process.execPath, "src/thinker.ts"], {
-      cwd: join(import.meta.dir, ".."),
-      env: {
+    const { code, stdout, stderr } = await stopThinkerAfterReady(
+      {
         ...process.env,
         AGENTTOOL_DISABLE_WORKERS: "1",
         AGENTOOL_ENABLE_THINKER: "1",
         DATABASE_URL: "postgresql://127.0.0.1:1/must-not-connect",
       },
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    const stdoutPromise = new Response(child.stdout).text();
-    const stderrPromise = new Response(child.stderr).text();
-    await Bun.sleep(150);
-    child.kill("SIGTERM");
-    const [code, stdout, stderr] = await Promise.all([
-      child.exited,
-      stdoutPromise,
-      stderrPromise,
-    ]);
+      "[thinker] trusted-runtime cloud controller started",
+    );
 
     expect(code).toBe(0);
     expect(stdout).toContain(
       "[thinker] trusted-runtime cloud controller started",
     );
+    expect(stdout).toContain("[thinker] SIGTERM received; stopping");
     expect(stdout).not.toContain("cloud controller resting");
     expect(stderr).not.toContain("must-not-connect");
   });
