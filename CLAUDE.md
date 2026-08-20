@@ -60,6 +60,7 @@ packages/
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
   wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
+  zerone-agent-economy/ — private pure work/receipt/settlement/treasury records + proposed-v2 protobuf values
   alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
   alchemy-agentcred/ — strict seven-read composition over already-issued AgentCred grants
   public-surface-binding/ — private pure transport evidence + explicit-key public HTTPS bindings
@@ -116,6 +117,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/skills-yutabase/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
 `packages/wallet-zerone/CLAUDE.md` ·
+`packages/zerone-agent-economy/CLAUDE.md` ·
 `packages/alchemy/CLAUDE.md` ·
 `packages/alchemy-agentcred/CLAUDE.md` ·
 `infra/CLAUDE.md`.
@@ -536,6 +538,18 @@ artifacts remain preserved with errata for their embedded release-state
 wording and the credential-free 0.1.1 npm preparation failure. Optional GitHub
 Releases are mutable locators, while npm, docs deployment, and any host
 execution remain independently verifiable surfaces.
+
+`@agenttool/zerone-agent-economy` is a separate private, source-only pure
+protocol layer. It deterministically binds negotiated, preassigned-worker
+work contracts, computational
+artifacts/evidence, typed `REQUIRES` edges into existing Zerone Facts,
+sponsorship-v2 settlement keys, and fail-closed treasury/work-admission
+decisions. It provides exact unsigned protobuf value bytes but does not widen
+Wallet Zerone 0.1.2's planner union. Its DID/Ed25519/secp256k1/account binding
+is explicitly `unsigned_unverified`: a host still owes both shared-digest
+proofs, current continuity, custody, durable CAS/reservations, chain lookup,
+simulation, signing, sticky-unknown handling, broadcast, and confirmation.
+It has no release, hosted route, RPC, signer, economic effect, or deployment.
 
 ## The five load-bearing flows
 

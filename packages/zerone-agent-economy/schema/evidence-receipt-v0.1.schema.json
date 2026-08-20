@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-agent-economy/evidence-receipt-v0.1",
+  "title": "AgentTool Zerone bounded contract evidence receipt v0.1",
+  "description": "Unsigned, untrusted observation envelope. issuer_id and issuer_key_id are claimed labels, not a verified attestation.",
+  "type": "object",
+  "additionalProperties": false,
+  "allOf": [{
+    "if": {
+      "required": ["outcome"],
+      "properties": { "outcome": { "const": "contract_mature" } }
+    },
+    "then": {
+      "properties": {
+        "challenge_window_end_height": { "$ref": "defs-v0.1#/$defs/positiveUint64" }
+      }
+    }
+  }],
+  "required": [
+    "format", "work_spec_id", "artifact_id", "chain_work_receipt_hash",
+    "knowledge_claim_id", "knowledge_fact_id", "computational_commitment_hash",
+    "evidence_root", "outcome", "corroborations",
+    "challenge_window_end_height", "observed_at_height", "open_challenges",
+    "issuer_id", "issuer_key_id", "issued_at", "semantic_boundary",
+    "evidence_receipt_id"
+  ],
+  "properties": {
+    "format": { "const": "agenttool.zerone-evidence-receipt/0.1" },
+    "work_spec_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "artifact_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "chain_work_receipt_hash": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+    "knowledge_claim_id": { "$ref": "defs-v0.1#/$defs/identifier" },
+    "knowledge_fact_id": { "$ref": "defs-v0.1#/$defs/identifier" },
+    "computational_commitment_hash": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "evidence_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "outcome": { "enum": ["contract_mature", "contract_rejected", "inconclusive"] },
+    "corroborations": { "$ref": "defs-v0.1#/$defs/uint64" },
+    "challenge_window_end_height": { "$ref": "defs-v0.1#/$defs/uint64" },
+    "observed_at_height": { "$ref": "defs-v0.1#/$defs/uint64" },
+    "open_challenges": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "issuer_id": { "$ref": "defs-v0.1#/$defs/identifier" },
+    "issuer_key_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "issued_at": { "$ref": "defs-v0.1#/$defs/timestamp" },
+    "semantic_boundary": { "$ref": "defs-v0.1#/$defs/semanticBoundary" },
+    "evidence_receipt_id": { "$ref": "defs-v0.1#/$defs/sha256Id" }
+  }
+}

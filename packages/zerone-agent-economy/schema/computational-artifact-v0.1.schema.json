@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-agent-economy/computational-artifact-v0.1",
+  "title": "AgentTool Zerone computational artifact and work receipt v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format", "network", "work_spec_id", "source_work_id",
+    "producer_binding_id", "producer_account", "acceptance_hash", "input_root",
+    "environment_root", "artifact_root", "evidence_root", "claim_commitment",
+    "proposed_tree_transition", "resource_usage", "completed_at",
+    "semantic_boundary", "artifact_id", "chain_work_receipt_hash"
+  ],
+  "properties": {
+    "format": { "const": "agenttool.zerone-computational-artifact/0.1" },
+    "network": { "$ref": "defs-v0.1#/$defs/network" },
+    "work_spec_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "source_work_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "producer_binding_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "producer_account": { "$ref": "defs-v0.1#/$defs/account" },
+    "acceptance_hash": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "input_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "environment_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "artifact_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "evidence_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "claim_commitment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["fact_content_hash", "references_root", "method_id"],
+      "properties": {
+        "fact_content_hash": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+        "references_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+        "method_id": { "$ref": "defs-v0.1#/$defs/identifier" }
+      }
+    },
+    "proposed_tree_transition": {
+      "type": "object", "additionalProperties": false,
+      "required": ["from_root", "to_root", "changed_nodes_root", "changed_relations_root"],
+      "properties": {
+        "from_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+        "to_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+        "changed_nodes_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+        "changed_relations_root": { "$ref": "defs-v0.1#/$defs/sha256Id" }
+      }
+    },
+    "resource_usage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["compute_millis", "accelerator_millis", "memory_byte_millis", "input_bytes", "output_bytes"],
+      "properties": {
+        "compute_millis": { "$ref": "defs-v0.1#/$defs/positiveUint64" },
+        "accelerator_millis": { "$ref": "defs-v0.1#/$defs/uint64" },
+        "memory_byte_millis": { "$ref": "defs-v0.1#/$defs/positiveUint64" },
+        "input_bytes": { "$ref": "defs-v0.1#/$defs/positiveUint64" },
+        "output_bytes": { "$ref": "defs-v0.1#/$defs/positiveUint64" }
+      }
+    },
+    "completed_at": { "$ref": "defs-v0.1#/$defs/timestamp" },
+    "semantic_boundary": { "$ref": "defs-v0.1#/$defs/semanticBoundary" },
+    "artifact_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "chain_work_receipt_hash": { "$ref": "defs-v0.1#/$defs/bareSha256" }
+  }
+}

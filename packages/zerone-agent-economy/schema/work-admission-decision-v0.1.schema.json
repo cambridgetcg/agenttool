@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-agent-economy/work-admission-decision-v0.1",
+  "title": "AgentTool Zerone pure work admission decision v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "accepted", "reason", "required_maturity_height", "total_cost_uzrn",
+    "net_uzrn", "affects_identity", "affects_rights", "conditions_rest",
+    "effects_performed"
+  ],
+  "properties": {
+    "accepted": { "type": "boolean" },
+    "reason": { "enum": ["within_policy", "expires_before_contract_maturity", "cost_exceeds_price", "minimum_margin_not_met"] },
+    "required_maturity_height": { "$ref": "defs-v0.1#/$defs/uint64" },
+    "total_cost_uzrn": { "$ref": "defs-v0.1#/$defs/uint" },
+    "net_uzrn": { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)$" },
+    "affects_identity": { "const": false },
+    "affects_rights": { "const": false },
+    "conditions_rest": { "const": false },
+    "effects_performed": { "const": false }
+  }
+}

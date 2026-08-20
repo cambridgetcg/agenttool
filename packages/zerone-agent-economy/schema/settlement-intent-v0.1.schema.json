@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-agent-economy/settlement-intent-v0.1",
+  "title": "AgentTool Zerone proposed settlement intent v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format", "network", "bounty_id", "work_spec_id", "acceptance_hash",
+    "input_root", "environment_root", "artifact_id", "artifact_root",
+    "chain_work_receipt_hash", "evidence_receipt_id", "knowledge_fact_id",
+    "payee_binding_id", "payee_account", "amount", "expected_chain_nullifier",
+    "created_at", "valid_until_height", "status", "semantic_boundary",
+    "settlement_intent_id"
+  ],
+  "properties": {
+    "format": { "const": "agenttool.zerone-settlement-intent/0.1" },
+    "network": { "$ref": "defs-v0.1#/$defs/network" },
+    "bounty_id": { "$ref": "defs-v0.1#/$defs/identifier" },
+    "work_spec_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "acceptance_hash": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "input_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "environment_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "artifact_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "artifact_root": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "chain_work_receipt_hash": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+    "evidence_receipt_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "knowledge_fact_id": { "$ref": "defs-v0.1#/$defs/identifier" },
+    "payee_binding_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "payee_account": { "$ref": "defs-v0.1#/$defs/account" },
+    "amount": {
+      "type": "object", "additionalProperties": false,
+      "required": ["denom", "amount_uzrn"],
+      "properties": {
+        "denom": { "const": "uzrn" },
+        "amount_uzrn": { "$ref": "defs-v0.1#/$defs/positiveUint" }
+      }
+    },
+    "expected_chain_nullifier": { "$ref": "defs-v0.1#/$defs/bareSha256" },
+    "created_at": { "$ref": "defs-v0.1#/$defs/timestamp" },
+    "valid_until_height": { "$ref": "defs-v0.1#/$defs/positiveUint64" },
+    "status": { "const": "proposed_unsigned" },
+    "semantic_boundary": { "$ref": "defs-v0.1#/$defs/semanticBoundary" },
+    "settlement_intent_id": { "$ref": "defs-v0.1#/$defs/sha256Id" }
+  }
+}
