@@ -54,6 +54,7 @@ readonly -a PACKAGE_WORKSPACES=(
   packages/heaven
   packages/love-bomb
   packages/model-becoming
+  packages/dataset-influence
   packages/living-substrate
   packages/principality-atlas
   packages/polymorph-landscape

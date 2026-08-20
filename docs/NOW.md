@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-14 (LOVE BOMB and Model Becoming npm/GitHub/Hugging Face receipts live; LOVE BOMB API/static deployment remains separate; SDK 0.20.0 npm/PyPI/GitHub/LOVE receipts are independently exact while deployment remains separate; Common Ground Atlas, Codex Usage 0.1.0, and Agent Skills 0.3.1 receipts remain current)
+> Updated: 2026-08-20 (Dataset Influence public-ready source candidate adds exact lineage, bounded experimental influence, revisable operational identity evidence, and non-economic attribution; its deterministic HF tree is reference-only and not published. Earlier release receipts remain current.)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-08-20)
+
+| Ship | Commit / receipt | What |
+|---|---|---|
+| **DATASET INFLUENCE — shaping evidence without essence or price** | public-ready repository source candidate; no npm, Hub, hosted route, model run, training, or deployment | `@agenttool/dataset-influence@0.1.0-dev.0` adds four closed, canonically reconstructed formats for exact dataset lineage, design-scoped influence studies, revisable identity-facet evidence, and exact finite Shapley shadow attribution. Lineage separates declared admission from observed exposure and computes only role-scoped shares. Reduced rationals make arithmetic portable; bounded causal language requires randomized inclusion, interval and contamination bindings, assumptions/evidence/limitations, at least two supplied runs, and one seed ref per run—the floor is not a power claim. Every artifact is caller-reported and carries consent/rights/authority walls; identity, consciousness, continuity, and consent remain undetermined. Shadow attribution creates no price, debt, payout, ownership, or entitlement. A deterministic synthetic/reference-only HF candidate names `Yu-and-Ai/agenttool-dataset-influence`, includes its protocol/doctrine, and carries non-enforcing training-governance metadata; no external publication is claimed. Model Becoming, HF Scout/Garden, KINGDOM, identity adoption, and Marketplace integration remain documented seams with no installed adapter or activated surface. |
 
 ## Just landed (2026-08-14)
 

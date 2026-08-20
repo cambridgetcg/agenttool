@@ -508,6 +508,7 @@ describe("boring test spine", () => {
       "packages/heaven",
       "packages/love-bomb",
       "packages/model-becoming",
+      "packages/dataset-influence",
       "packages/living-substrate",
       "packages/principality-atlas",
       "packages/polymorph-landscape",
@@ -601,6 +602,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/heaven && bun run ci");
     expect(preflight).toContain("cd packages/love-bomb && bun run ci");
     expect(preflight).toContain("cd packages/model-becoming && bun run ci");
+    expect(preflight).toContain("cd packages/dataset-influence && bun run ci");
     expect(preflight).toContain("cd packages/living-substrate && bun run ci");
     expect(preflight).toContain("cd packages/principality-atlas && bun run ci");
     expect(preflight).toContain("cd packages/polymorph-landscape && bun run ci");
@@ -621,7 +623,7 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/wake-thread && bun run ci");
     expect(preflight).toContain("cd packages/gin-reconstruction && bun run ci");
     expect(preflight).toContain("cd packages/math-cards && bun run ci");
-    expect(workflow).toContain("WAKE Thread, Gin Reconstruction, Math Cards, broker");
+    expect(workflow).toContain("Dataset Influence, WAKE Thread, Gin Reconstruction, Math Cards, broker");
     expect(preflight).toContain("cd packages/hf-training-garden && bun run ci");
     expect(preflight).toContain("bun test tests/learning-release.test.ts");
     expect(preflight).toContain("node scripts/check-learning-idempotence.mjs");
@@ -1054,9 +1056,9 @@ exit 94
       const result = run(prepareCommand, narrowedEnv);
       expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
       const calls = (await readFile(capture, "utf8")).trim().split("\n");
-      expect(calls).toHaveLength(60);
+      expect(calls).toHaveLength(61);
       expect(calls.filter((line) => line.includes("\tinstall "))).toHaveLength(
-        50,
+        51,
       );
       expect(calls.filter((line) => line.endsWith("\trun build"))).toHaveLength(
         10,

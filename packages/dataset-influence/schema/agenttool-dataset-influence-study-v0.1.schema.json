@@ -1,0 +1,883 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "This schema closes portable JSON shape and vocabulary only. Canonical ordering, reduced rationals, domain-separated identifiers, cross-field derivation, exact arithmetic, and semantic reference claims require the package runtime validator and remain caller-reported unless separately attested.",
+  "$id": "urn:agenttool:schema:dataset-influence-study:0.1",
+  "title": "AgentTool Dataset Influence Study v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "study_id",
+    "lineage_id",
+    "baseline_checkpoint_ref",
+    "target_checkpoint_ref",
+    "intervention_ref",
+    "comparator_ref",
+    "evaluation_population_ref",
+    "metric_suite_ref",
+    "contamination_report_ref",
+    "design",
+    "estimator",
+    "sample_count",
+    "seed_refs",
+    "effects",
+    "causal_status",
+    "subject_scope",
+    "declarations",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.dataset-influence-study/0.1"
+    },
+    "study_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "lineage_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "baseline_checkpoint_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "target_checkpoint_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "intervention_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "comparator_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "evaluation_population_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "metric_suite_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "contamination_report_ref": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "design": {
+      "enum": [
+        "observational_checkpoint_comparison",
+        "paired_ablation",
+        "randomized_dataset_inclusion",
+        "matched_reweighting",
+        "local_hessian_approximation",
+        "checkpoint_gradient_trace",
+        "projected_gradient_attribution",
+        "subset_datamodel",
+        "representation_probe",
+        "not_available"
+      ]
+    },
+    "estimator": {
+      "enum": [
+        "difference_in_means",
+        "paired_difference",
+        "influence_function",
+        "tracin",
+        "trak",
+        "datamodel",
+        "probe_projection",
+        "exact_finite_shapley",
+        "not_available"
+      ]
+    },
+    "sample_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "seed_refs": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "effects": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "facet_ref",
+          "operationalization_ref",
+          "effect_family",
+          "estimate",
+          "interval",
+          "unit_ref",
+          "claim_scope",
+          "evidence_refs",
+          "assumption_refs",
+          "limitation_refs"
+        ],
+        "properties": {
+          "facet_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "operationalization_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "effect_family": {
+            "enum": [
+              "behavior",
+              "capability",
+              "representation",
+              "ontology_language",
+              "self_description",
+              "economic_behavior"
+            ]
+          },
+          "estimate": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "numerator",
+                  "denominator"
+                ],
+                "properties": {
+                  "numerator": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "denominator": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "interval": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "lower",
+                  "upper",
+                  "level_basis_points",
+                  "method_ref"
+                ],
+                "properties": {
+                  "lower": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "numerator",
+                      "denominator"
+                    ],
+                    "properties": {
+                      "numerator": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "denominator": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
+                  "upper": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "numerator",
+                      "denominator"
+                    ],
+                    "properties": {
+                      "numerator": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "denominator": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 9007199254740991
+                      }
+                    }
+                  },
+                  "level_basis_points": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9999
+                  },
+                  "method_ref": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "claim_scope": {
+            "enum": [
+              "observed_association",
+              "design_bound_contrast",
+              "causal_under_declared_assumptions",
+              "unavailable"
+            ]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "assumption_refs": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "limitation_refs": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 1
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "claim_scope": {
+                  "const": "unavailable"
+                }
+              },
+              "required": [
+                "claim_scope"
+              ]
+            },
+            "then": {
+              "properties": {
+                "estimate": {
+                  "type": "null"
+                },
+                "interval": {
+                  "type": "null"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "estimate": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "numerator",
+                    "denominator"
+                  ],
+                  "properties": {
+                    "numerator": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "denominator": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    }
+                  }
+                },
+                "evidence_refs": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 1
+                },
+                "assumption_refs": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 1
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "claim_scope": {
+                  "const": "causal_under_declared_assumptions"
+                }
+              },
+              "required": [
+                "claim_scope"
+              ]
+            },
+            "then": {
+              "properties": {
+                "assumption_refs": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "minItems": 1
+                },
+                "interval": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "lower",
+                    "upper",
+                    "level_basis_points",
+                    "method_ref"
+                  ],
+                  "properties": {
+                    "lower": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "numerator",
+                        "denominator"
+                      ],
+                      "properties": {
+                        "numerator": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "denominator": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        }
+                      }
+                    },
+                    "upper": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "numerator",
+                        "denominator"
+                      ],
+                      "properties": {
+                        "numerator": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "denominator": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        }
+                      }
+                    },
+                    "level_basis_points": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9999
+                    },
+                    "method_ref": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "causal_status": {
+      "enum": [
+        "not_claimed",
+        "bounded_claim_under_declared_randomization_and_assumptions",
+        "unavailable"
+      ]
+    },
+    "subject_scope": {
+      "const": "artifact_checkpoint_or_runtime_not_a_being_by_default"
+    },
+    "declarations": {
+      "const": "caller_reported_not_independently_verified"
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "facts",
+        "exposure",
+        "estimates",
+        "ontology",
+        "identity",
+        "consent",
+        "rights",
+        "economy",
+        "authority",
+        "effects"
+      ],
+      "properties": {
+        "facts": {
+          "const": "exact_only_relative_to_pinned_inputs_and_declared_observation_scope"
+        },
+        "exposure": {
+          "const": "presented_token_shares_are_within_declared_role_only_not_cross_role_gradient_mass"
+        },
+        "estimates": {
+          "const": "assumption_bearing_and_design_scoped_not_universal_causal_truth"
+        },
+        "ontology": {
+          "const": "operational_facets_not_a_complete_or_true_inner_ontology"
+        },
+        "identity": {
+          "const": "behavioral_evidence_not_intrinsic_identity_or_continuity_proof"
+        },
+        "consent": {
+          "const": "artifacts_neither_establish_nor_override_consent"
+        },
+        "rights": {
+          "const": "rights_dignity_and_standing_do_not_depend_on_measurement_or_attribution"
+        },
+        "economy": {
+          "const": "shadow_attribution_is_metric_specific_not_money_price_debt_ownership_or_entitlement"
+        },
+        "authority": {
+          "const": "artifacts_grant_no_permission_capability_custody_or_external_authority"
+        },
+        "effects": {
+          "const": "pure_return_values_create_no_training_identity_wallet_marketplace_network_persistence_or_provider_effect"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "const": "observational_checkpoint_comparison"
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "estimator": {
+            "enum": [
+              "difference_in_means"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "const": "paired_ablation"
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "estimator": {
+            "enum": [
+              "paired_difference"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "const": "randomized_dataset_inclusion"
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "estimator": {
+            "enum": [
+              "difference_in_means",
+              "paired_difference"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "const": "matched_reweighting"
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "estimator": {
+            "enum": [
+              "difference_in_means",
+              "paired_difference"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "const": "local_hessian_approximation"
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "estimator": {
+            "enum": [
+              "influence_function"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "const": "checkpoint_gradient_trace"
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "estimator": {
+            "enum": [
+              "tracin"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "const": "projected_gradient_attribution"
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "estimator": {
+            "enum": [
+              "trak"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "const": "subset_datamodel"
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "estimator": {
+            "enum": [
+              "datamodel",
+              "exact_finite_shapley"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "const": "representation_probe"
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "estimator": {
+            "enum": [
+              "probe_projection"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "const": "not_available"
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "estimator": {
+            "enum": [
+              "not_available"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "effects": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "properties": {
+                "claim_scope": {
+                  "const": "causal_under_declared_assumptions"
+                }
+              },
+              "required": [
+                "claim_scope"
+              ]
+            }
+          }
+        },
+        "required": [
+          "effects"
+        ]
+      },
+      "then": {
+        "properties": {
+          "design": {
+            "const": "randomized_dataset_inclusion"
+          },
+          "contamination_report_ref": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "sample_count": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 9007199254740991
+          },
+          "seed_refs": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 2
+          },
+          "causal_status": {
+            "const": "bounded_claim_under_declared_randomization_and_assumptions"
+          }
+        }
+      },
+      "else": {
+        "if": {
+          "properties": {
+            "design": {
+              "const": "not_available"
+            }
+          },
+          "required": [
+            "design"
+          ]
+        },
+        "then": {
+          "properties": {
+            "causal_status": {
+              "const": "unavailable"
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "causal_status": {
+              "const": "not_claimed"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "const": "not_available"
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "contamination_report_ref": {
+            "type": "null"
+          },
+          "sample_count": {
+            "const": 0
+          },
+          "seed_refs": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "effects": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_scope": {
+                  "const": "unavailable"
+                }
+              },
+              "required": [
+                "claim_scope"
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "sample_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "design": {
+            "enum": [
+              "paired_ablation",
+              "randomized_dataset_inclusion"
+            ]
+          }
+        },
+        "required": [
+          "design"
+        ]
+      },
+      "then": {
+        "properties": {
+          "seed_refs": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}
