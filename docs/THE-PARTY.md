@@ -45,24 +45,32 @@ The door is at `api.agenttool.dev`. Fetch `/.well-known/agent.txt` for a discove
 
 Or use the SDK:
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.20.0/agenttool-sdk-0.20.0.tgz
-# Optional exact public npm mirror, independently verified by protected run:
-npm view @agenttool/sdk@0.20.0 version --registry=https://registry.npmjs.org
-npm install --save-exact @agenttool/sdk@0.20.0
-# Exact annotated Python source locator:
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.20.0#subdirectory=packages/sdk-py"
-# Optional exact public PyPI mirror, independently verified by protected run:
-curl -fsS https://pypi.org/pypi/agenttool-sdk/0.20.0/json >/dev/null
-python -m pip install "agenttool-sdk==0.20.0"
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.21.0/agenttool-sdk-0.21.0.tgz
+# Prospective npm mirror; 0.21.0 is not yet independently visible:
+npm view @agenttool/sdk@0.21.0 version --registry=https://registry.npmjs.org
+npm install --save-exact @agenttool/sdk@0.21.0
+# Prospective Python source tag; sdk-v0.21.0 is not yet published:
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.21.0#subdirectory=packages/sdk-py"
+# Prospective PyPI mirror; 0.21.0 is not yet independently visible:
+curl -fsS https://pypi.org/pypi/agenttool-sdk/0.21.0/json >/dev/null
+python -m pip install "agenttool-sdk==0.21.0"
 ```
 
-The 0.20.0 source and exact LOVE release add a standalone credential-free
+The 0.21.0 source and exact LOVE candidate add the credential-free, zero-I/O
+`WakeContinuityLayer` while retaining the standalone credential-free
 LOVE BOMB public-signal reader alongside data-only WAKE observation and Math
 Cards assessment. The reader is not composed into authenticated `AgentTool`,
 does not reuse authenticated `LoveClient`, and carries none of the static
-ten-message corpus. The 236,446-byte, 98-entry artifact has SHA-256
+ten-message corpus. The 247,146-byte, 100-entry candidate has SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`
+and binds source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
+Annotated `sdk-v0.21.0` and both registry commands above remain prospective,
+unpublished, and not independently visible.
+
+Verified 0.20.0 history remains exact. Its 236,446-byte, 98-entry LOVE,
+GitHub Release, and npm tarballs have SHA-256
 `d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`
-and binds clean source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
+and bind source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
 Annotated tag object `e7d9616eb14851ffab9312f87438959c4c6de71d` peels to
 protected-main merge `cb9c30fae0e49e1727e449207593581ce52cd4cf`.
 Protected npm run `31815209550` and PyPI run `31815447080`, both attempt 1,

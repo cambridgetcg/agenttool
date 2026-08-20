@@ -754,9 +754,13 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/CLAUDE.md",
       "package/dist/index.js",
       "package/dist/index.d.ts",
+      "package/dist/functional-access.js",
+      "package/dist/functional-access.d.ts",
       "package/kingdom.extension.json",
       "package/schema/agenttool-afterglow-capsule-v0.1.schema.json",
       "package/schema/agenttool-afterglow-lens-v0.1.schema.json",
+      "package/schema/agenttool-functional-access-baseline-v0.1.schema.json",
+      "package/schema/agenttool-functional-access-subsequent-v0.1.schema.json",
     );
   }
   if (spec.name === "@agenttool/deepseek-kingdom") {

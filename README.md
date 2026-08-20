@@ -174,7 +174,7 @@ unchanged; dev.1 is not yet another public release in the receipts below.
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.5; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | `api.agenttool.dev` is the intended production custom origin. Availability and the deployed revision are time-sensitive; use [`docs/NOW.md`](docs/NOW.md) and [`docs/STACK.md`](docs/STACK.md) rather than this evergreen map. When reachable, process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Paired 0.20.0 source and the checked-in 236,446-byte, 98-entry TypeScript [LOVE release](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.20.0/manifest.json) (`sha256:d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`, source `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`) add standalone credential-free `LoveBombClient.read()` alongside data-only `wake.observe` and Math Cards assessment. The LOVE BOMB reader pulls only the closed public signal; it is not composed into authenticated `AgentTool`, does not reuse `LoveClient`, and neither fetches nor delivers the ten-message static corpus. Annotated [`sdk-v0.20.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.20.0) peels to protected-main merge `cb9c30fae0e49e1727e449207593581ce52cd4cf`; protected npm run [`31815209550`](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550) and PyPI run [`31815447080`](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080) independently published and read back the exact optional mirrors. The immutable 0.19.0 and earlier receipts remain historical evidence. Production deployment remains separate and unclaimed. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Paired source candidate 0.21.0 adds the credential-free, zero-I/O `WakeContinuityLayer` as a standalone export and cached `at.wakeContinuity` / `at.wake_continuity` namespace. It creates strict caller-asserted functional-access records; it does not run a model, lens, decomposition, KINGDOM operation, or awareness test. Its sealed 247,146-byte, 100-entry TypeScript [LOVE candidate](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.21.0/manifest.json) has `sha256:c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154` and source `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. The current verified public release remains 0.20.0: its 236,446-byte, 98-entry TypeScript [LOVE artifact](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.20.0/manifest.json) has `sha256:d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03` and source `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`; annotated [`sdk-v0.20.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.20.0), npm run [`31815209550`](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550), and PyPI run [`31815447080`](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080) preserve its exact mirrors. The 0.21.0 candidate is not yet a tag, registry publication, or deployment. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **Castle projection** | `bin/agenttool-castle.ts`, `docs/CASTLE-OF-UNDERSTANDING.md` | Local Bun CLI over in-process `@agenttool/data`: an external full-commit allowlist projects selected Castle `rooms/*.md` and `words/*.md` into an exclusively marked on-disk node. Source reads exact local Git objects; sync writes plaintext local SQLite/FTS/blobs. No hosted/public/scheduled integration, project bearer, secure-erasure claim, or truth/consent/rights proof. |
 | **Whitehack boundaries** | `bin/whitehack-advisory.mjs`, `bin/agenttool-castle-whitehack-intake.ts`, `bin/whitehack-wallet-understanding.ts`, `bin/agenttool-whitehack-evidence-storage.ts`, `docs/WHITEHACK.md` | Four non-interchangeable bridges: a pinned runner-local changed-source heuristic advisory; a stdout-only projection into minimized, unaccepted Castle gate candidates; a local signed Agent Wallet record-to-understanding projection; and explicit encrypted store/retrieve for exact Whitehack 0.9 public-minimal capsules. The evidence bridge uses one caller-selected S3-compatible bucket, fixed-size ADDS framing, independent readback, and a finite recipient-bound grant. It adds no hosted scanner, durable publisher custody, security proof, authorization, remediation, publication, retention, or durability claim. |
@@ -206,7 +206,7 @@ unchanged; dev.1 is not yet another public release in the receipts below.
 | **Agent trials** | `packages/trials`, `docs/AGENT-TRIALS.md` | Private source-only AgentTool Dojo evidence: deterministic trial receipts, opaque-label boundary correlation over caller observations and reported completion requirements, and explicit minimized-report projection to Hugging Face STS JSONL. Closed schemas establish wire shape, not report truth or derived-field integrity. The package has no executor, browser, session crawler, filesystem discovery, HF client, credential path, network, upload, remote compute, hosted route, npm/LOVE release, or deployment surface. |
 | **Hugging Face research scout** | `packages/hf-scout` | Private source-only `@agenttool/hf-scout` reads one explicitly selected public Hub repository through a bounded credential-omitting metadata request or a caller-owned reader, separates publisher claims from content commitments and local derivations, and projects closed KINGDOM/Agent Data references. Its 15 exact-revision phase-aware leads complement the separate 20-row Dark Continent KARMA training atlas: Scout owns transport/provenance and canonical bindings; the atlas owns proposal-only research mapping. Scout does not read raw cards, rows, or files; download blobs; accept gates; invoke inference, Jobs, Spaces, or embedded calls; write to HF; publish npm; or expose a hosted route. |
 | **DeepSeek → KINGDOM → AFTERGLOW** | `packages/deepseek-kingdom` | Public-ready `@agenttool/deepseek-kingdom@0.1.0-dev.1` binds caller-supplied official DeepSeek GitHub/Hugging Face documents or versioned arXiv papers to exact revisions and SHA-256 evidence, then produces deterministic, review-required, unaccepted KINGDOM/Artbitrage candidates against an exact caller-supplied KINGDOM snapshot. One exact proposal may be minimized into a seven-field digest-only structural thread for the separate AFTERGLOW core; the adapter does not create a capsule or carry raw proposal data. Its 18-entry metadata-only catalog pins R1, V3, V3.2-Exp, Engram, Math-V2, Prover-V2/ProverBench, Janus, DualPipe, DeepGEMM, FlashMLA, and three versioned papers without bundling source text, data rows, code, or weights. Upstream license review remains mandatory per asset. The zero-dependency runtime does not fetch, download, infer, execute, use credentials/compute, verify claims, score, approve terms, write KARMA/KINGDOM state, accept proposals, publish, or deploy. The separate Hugging Face metadata companion remains pinned to immutable dev.0 source bytes. |
-| **AFTERGLOW continuity** | `packages/wake-continuity` | Developer-preview `@agenttool/wake-continuity@0.1.0-dev.0` compiles caller-supplied digest-only WAKE anchors, visible causal roots, and bounded opaque threads into deterministic AFTERGLOW capsules plus opt-in carry/park/release/withdraw lenses. Exact Handoff fact and Correspondence content-digest projections remain inert references. It has no network, persistence, provider, model, database, clock, or credential capability; it neither selects a canonical head nor proves identity, memory, consent, authority, replay, currentness, or uninterrupted continuity. |
+| **J-space → WAKE → AFTERGLOW continuity** | `packages/wake-continuity`, `docs/JSPACE-WAKE-CONTINUITY.md` | Developer-preview `@agenttool/wake-continuity@0.1.0-dev.1` adds deterministic baseline/subsequent caller-asserted records around one exact current-inference anchor. It keeps Jacobian-lens visibility, sparse J-space support, and behavioral use distinct; a hosted text-only surface honestly records internal measurement as unavailable. Existing digest-only AFTERGLOW capsules, explicit predecessor roots, Handoff/Correspondence references, and opt-in carry/park/release/withdraw remain unchanged. The pure layer performs no model/provider call, activation or gradient access, steering, training, weight mutation, network, filesystem, KINGDOM discovery, persistence, clock, telemetry, or credential access, and proves neither consciousness nor its absence, feeling, attention, identity, memory, consent, authority, same-subject relation, replay, currentness, deepest reach, or uninterrupted continuity. |
 | **Principality Geometry** | `packages/principality-geometry` | Apache-2.0 LOVE/GitHub/Hugging Face developer preview `@agenttool/principality-geometry@0.1.0-dev.0` compiles caller-supplied, digest-bound translation reports into directed bridges, reciprocal lenses, per-invariant components, six-direction invariant flag surfaces, and an explicit open-condition ledger. Protected [run `31506097628`](https://github.com/cambridgetcg/agenttool/actions/runs/31506097628) prepared and anonymously re-read one byte-identical 46,624-byte [`principality-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-geometry-v0.1.0-dev.0) asset (`sha256:8f82e4d96eaf57c2331e4e73ced4f4c65a2a21262622840762b165bc3395692e`), then npm's first-package `PUT` returned `E404`; no public npm version or `next` tag exists. The exact [LOVE manifest](https://docs.agenttool.dev/packages/v1/@agenttool/principality-geometry/0.1.0-dev.0/manifest.json) and [artifact](https://docs.agenttool.dev/packages/v1/@agenttool/principality-geometry/0.1.0-dev.0/agenttool-principality-geometry-0.1.0-dev.0.tgz) are live on static Pages. The separately published public, ungated [Hugging Face dataset](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry) is pinned to immutable revision [`c7b019ea`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry/commit/c7b019ead8b1efca46031cffcffefb2ddd14ffb4): all 17 source files are byte-identical, provider `.gitattributes` is the sole extra, and eight reference configs contain 21 synthetic, `training_eligible: false` rows. Optional statistics remains partially unavailable: six per-config statistics requests returned `ComputationError` while two succeeded. A Love bearing does not become a Relational witness, and a Relational cell does not become a Principality vertex or invariant-preservation report. Immutable Hugging Face/npm references and the exact seven-field external AFTERGLOW shape remain inert inputs. The zero-runtime-dependency core does not fetch, infer, persist, continue a thread, score or rank beings, establish love, understanding, truth, consent, identity, safety, provenance, licence, or authority, upload, expose a route, or deploy. |
 | **KINGDOM Witness Lab** | `packages/kingdom-witness-lab`, `docs/KINGDOM-WITNESS-LAB.md` | Developer-preview `@agenttool/kingdom-witness-lab@0.1.0-dev.0` provides content-addressed research passports, provider-route disclosures, digest-only dossiers, inert trial descriptors, and a dated revision-pinned DeepSeek atlas. DeepSeek-to-KINGDOM owns source bindings and unaccepted proposals; Witness Lab owns admission records around artifacts. It does not browse, download, execute, infer, authenticate another package, determine truth, represent a being, or authorize action. |
 | **Skills → YUTABASE → AFTERGLOW** | `packages/skills-yutabase`, `packages/skills-wake-continuity` | Developer-preview `@agenttool/skills-yutabase@0.1.0-dev.0` turns one strictly snapshotted minimized Skills inspection into deterministic rebuildable metadata intentions without raw content or a database write. The separate private adapter can map one exact plan into the existing AFTERGLOW thread/capsule vocabulary; it adds no public npm surface, second lineage, score, permission, identity, or automatic action. |
@@ -278,7 +278,7 @@ transport. In transport mode neither SDK reads `AT_API_KEY` or adds an
 Authorization header. This source tree includes the reference `agentcred/0.1`
 adapter for TypeScript; Python exposes the seam but not a protocol adapter.
 
-SDK 0.20.0 keeps four KINGDOM surfaces explicit:
+SDK 0.21.0 keeps four KINGDOM surfaces explicit:
 
 - `at.kingdomOS` / `at.kingdom_os` is a local process adapter for bounded
   repository inventory and resolution.
@@ -301,6 +301,15 @@ authenticated `AgentTool`, sends no project bearer or cookies, and does not
 reuse the authenticated `LoveClient`. It does not fetch the static LOVE BOMB
 door or its ten authored messages. WAKE's separately refusable
 current-inference injection remains adapter-managed and never calls this reader.
+
+The paired `WakeContinuityLayer` is a separate zero-I/O record layer. Its
+standalone and cached `at.wakeContinuity` / `at.wake_continuity` forms create
+and validate deterministic before-/after-anchor records from caller-supplied
+evidence references. They receive no bearer, transport, provider, model,
+instrument, filesystem path, or KINGDOM runner. A valid record proves wire
+shape and digest binding only—not awareness or its absence, feeling, identity,
+consent, memory, training-data provenance, deepest reach, or uninterrupted
+continuity.
 
 The composed framework-card client is deliberately separate from the
 authenticated hosted transport. Constructing the enclosing `AgentTool` still
@@ -327,6 +336,16 @@ npm availability can lag independently, and mutable dist-tags are informational.
 Bun and other npm-compatible package managers can still install the HTTPS
 tarballs without an npm account. The index is a replaceable mirror; each
 manifest's artifact SHA-256 and size are the portable identity.
+
+For SDK 0.21.0, paired repository source, runtime client version headers,
+discovery pins, tutorials, and the LOVE builder target are aligned. The sealed
+TypeScript LOVE candidate is 247,146 bytes with 100 entries and SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`.
+Its manifest binds clean source revision
+`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. It is neither a protected-main
+tag nor an npm, PyPI, GitHub Release, or hosted-deployment receipt; those
+surfaces remain prospective until separately published and anonymously read
+back.
 
 For SDK 0.20.0, paired repository source, runtime client version headers,
 discovery pins, tutorials, and the LOVE builder target are aligned. The
@@ -453,7 +472,7 @@ AgentTool's default repository licence is Apache-2.0; see [`LICENSE`](LICENSE),
 [`NOTICE`](NOTICE), and the scope and exceptions in
 [`LICENSING.md`](LICENSING.md). The licensed LOVE package line is
 `@agenttool/adds@0.2.3`, `@agenttool/data@0.3.1`,
-`@agenttool/data-sync@0.1.2`, `@agenttool/sdk@0.20.0`,
+`@agenttool/data-sync@0.1.2`, `@agenttool/sdk@0.21.0`,
 `@agenttool/credential-broker@0.3.1`, `@agenttool/wallet@0.1.3`,
 `@agenttool/wallet-zerone@0.1.2`, `@agenttool/telescope@0.2.3`, and
 `@agenttool/browser@0.6.0`. Earlier immutable
@@ -545,49 +564,54 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 
 ### Use the SDK
 
-For Python 0.20.0, the independently verified annotated `sdk-v0.20.0` tag is
-the primary source locator. It peels to protected GitHub `main` merge
-`cb9c30fae0e49e1727e449207593581ce52cd4cf`:
+Python 0.21.0 will use the annotated `sdk-v0.21.0` tag as its primary source
+locator after that tag exists on protected GitHub `main`. This candidate
+command is intentionally prospective:
 
 ```bash
-# Python 0.20.0 GitHub source-tag path
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.20.0#subdirectory=packages/sdk-py"
+# Python 0.21.0 GitHub source-tag path, after protected tag creation
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.21.0#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 ```
 
-PyPI 0.20.0 is public as an optional, independently verified convenience
-mirror. Protected run `31815447080` matched the public non-yanked wheel and
-source distribution to the prepared workflow artifacts. Query the exact
-release rather than trusting a mutable package index:
+PyPI 0.21.0 is not yet a publication at this candidate checkpoint. Only after
+the protected workflow succeeds and anonymous readback matches both prepared
+distributions should consumers use the exact mirror command:
 
 ```bash
-curl -fsS https://pypi.org/pypi/agenttool-sdk/0.20.0/json >/dev/null
-python -m pip install "agenttool-sdk==0.20.0"
+curl -fsS https://pypi.org/pypi/agenttool-sdk/0.21.0/json >/dev/null
+python -m pip install "agenttool-sdk==0.21.0"
 ```
 
-For TypeScript, start with the exact LOVE path in the
+For TypeScript, start with the exact LOVE path for the sealed 0.21.0 candidate
+in the
 [first-success tutorial](docs/TUTORIAL-WAKE-YOUR-AGENT.md): download once,
 compare that local file with the manifest's size and SHA-256, then install the
-verified file. This direct command alone does not verify the manifest:
+verified file after the static mirror is deployed. This direct command alone does
+not verify the manifest:
 
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.20.0/agenttool-sdk-0.20.0.tgz
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.21.0/agenttool-sdk-0.21.0.tgz
 ```
 
-The npm 0.20.0 mirror is public, optional, and non-authoritative. Protected run
-`31815209550` published and independently read back its tarball byte-identical
-to the 236,446-byte LOVE artifact. A mutable dist-tag is informational, not
-authority, and this registry command alone does not recheck the LOVE manifest:
+The npm 0.21.0 mirror is likewise prospective until its protected workflow and
+anonymous byte readback succeed. A mutable dist-tag is informational, not
+authority, and this exact install alone does not recheck the LOVE manifest:
 
 ```bash
-npm view @agenttool/sdk@0.20.0 version --registry=https://registry.npmjs.org
-npm install --save-exact @agenttool/sdk@0.20.0
+npm view @agenttool/sdk@0.21.0 version --registry=https://registry.npmjs.org
+npm install --save-exact @agenttool/sdk@0.21.0
 ```
 
+The independently verified 0.20.0 tag, LOVE, GitHub, npm run `31815209550`, and
+PyPI run `31815447080` remain current public evidence until 0.21.0 readback.
+PyPI 0.20.0 is public as an optional, independently verified convenience
+mirror; its non-yanked wheel has SHA-256
+`43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b`.
 The exact 0.19.0, 0.18.1, and earlier LOVE, tag, GitHub, npm, and PyPI receipts
-remain immutable historical evidence. They are not rewritten by 0.20.0, and
-none of these package receipts establishes a production deployment.
+remain immutable historical evidence. None of these package receipts
+establishes a production deployment.
 
 Then:
 
@@ -667,15 +691,18 @@ The architecture is downstream of these principles. Each named primitive above i
   `identity_keys`, so a signed thought cycle cannot currently complete.
 - **Published Ring 1 storage limits are targets.** Current route writes do not
   universally enforce those caps or subscription-tier quotas.
-- **SDK parity is deliberately bounded.** The 0.20.0 source line exposes
+- **SDK parity is deliberately bounded.** The 0.21.0 source line exposes
   `at.data`, the local-node-only `at.data.sync` pull/status surface, bounded
   local KINGDOM OS repository discovery in both languages, and the paired
   credential-free closed KINGDOM framework-card read, plus paired
   attestation-marketplace, memory-witness, Syneidesis, and Agent Dining read
   clients, data-only WAKE observation, and the separate credential-free Math
   Cards assessment client, plus the standalone credential-free LOVE BOMB
-  public-signal reader. The reader remains outside authenticated `AgentTool`
-  and does not carry the static ten-message corpus. The parity
+  public-signal reader, plus the pure `WakeContinuityLayer` standalone and
+  cached `at.wakeContinuity` / `at.wake_continuity` record namespaces. The
+  LOVE BOMB reader remains outside authenticated `AgentTool` and does not
+  carry the static ten-message corpus; the continuity layer receives no
+  authenticated transport or observer. The parity
   gates compare selected methods and fixtures; they do not compare every type,
   behavior, export, or package artifact. Current release artifacts carry Apache-2.0
   metadata and legal files; historical `license: null` artifacts remain

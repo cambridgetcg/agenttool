@@ -14,6 +14,7 @@ const dist = [
   "capsule",
   "constants",
   "errors",
+  "functional-access",
   "index",
   "lens",
   "types",
@@ -34,6 +35,8 @@ const expected = [
   "package.json",
   "schema/agenttool-afterglow-capsule-v0.1.schema.json",
   "schema/agenttool-afterglow-lens-v0.1.schema.json",
+  "schema/agenttool-functional-access-baseline-v0.1.schema.json",
+  "schema/agenttool-functional-access-subsequent-v0.1.schema.json",
 ].sort();
 
 if (JSON.stringify(files) !== JSON.stringify(expected)) {

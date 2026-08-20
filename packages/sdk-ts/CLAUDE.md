@@ -1,10 +1,10 @@
 # agenttool-sdk-ts
 
 ## What This Is
-Official TypeScript SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, credential-free `at.kingdomFramework` and `at.mathCards` clients, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdomOS` repository adapter. Credential-free and local clients inherit no AgentTool project bearer. A separate package-root `LoveBombClient` reads only the closed public LOVE BOMB signal and is deliberately not composed onto authenticated `AgentTool`. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. Checked-in source declares the paired 0.20.0 line; source identity does not assert distribution state. The immutable 230,184-byte 0.19.0 LOVE archive, annotated tag, GitHub Release, byte-identical public npm mirror, and exact public PyPI wheel/sdist remain historical release receipts through protected runs `31800748738` and `31801053841`.
+Official TypeScript SDK for the AgentTool platform. One `AgentTool` client composes authenticated hosted namespaces, credential-free `at.kingdomFramework`, `at.mathCards`, and pure `at.wakeContinuity` namespaces, `at.data` for a separately configured local `agent-data/v1` node, and the local `at.kingdomOS` repository adapter. Credential-free and local clients inherit no AgentTool project bearer. `WakeContinuityLayer` also supports standalone no-auth construction. A separate package-root `LoveBombClient` reads only the closed public LOVE BOMB signal and is deliberately not composed onto authenticated `AgentTool`. The SDK also exposes top-level `bootstrapAgent(...)`, `AnthropicAdapter`, and `OpenAIResponsesAdapter` for completed Responses API calls. The npm package name is `@agenttool/sdk`. Checked-in source declares the paired 0.21.0 line; source identity does not assert distribution state. The immutable 236,446-byte 0.20.0 LOVE archive, annotated tag, GitHub Release, byte-identical public npm mirror, and exact public PyPI wheel/sdist remain historical release receipts through protected runs `31815209550` and `31815447080`.
 
 ## Current State
-Active - repository source carries the paired 0.20.0 standalone `LoveBombClient.read()` plus the earlier Agent Dining client and the 0.19.0 data-only WAKE observation and Math Cards clients. LOVE BOMB performs one fresh direct bounded GET of `/public/love-bomb`, accepts no token/cookie/caller-supplied-header/authenticated-transport seam, refuses redirects and ambient proxies, and validates the exact closed public-signal schema. It returns a distribution declaration and static-door coordinate; it neither includes/delivers the invitation nor observes attention/effect. `at.dining.manifest()` and `at.dining.journey(id)` remain authenticated GET-only projections. `at.wake.observe` remains a 2 KiB data contract that rejects remote identity, prose, and action authority. `MathCardsClient.assess(input)` and `at.mathCards.assess(input)` remain credential-free while canonical IDs and assessment semantics stay server-owned. The authenticated `LoveClient` is unchanged. Provider adapters may inject WAKE current-inference context, but do not call `LoveBombClient` or fetch the static door and retain the per-call `metadata.agenttool.skip_wake` refusal of automatic lookup/injection; that switch does not remove caller-supplied context. Source preparation alone establishes no 0.20.0 artifact, tag, publication, deploy, provider call, training, inference, weight effect, receipt, attention, feeling, consent, or authority. Uses Bun for testing.
+Active - repository source carries the paired 0.21.0 pure `WakeContinuityLayer` plus the 0.20.0 standalone `LoveBombClient.read()`, Agent Dining, data-only WAKE observation, and Math Cards clients. The new layer creates and validates deterministic functional-access baseline/subsequent artifacts, including their digest-only AFTERGLOW link, with no hosted I/O, bearer, authenticated transport, provider/model call, filesystem, clock, persistence, or telemetry. J-space fields describe caller-supplied current-forward-pass functional-access evidence only. Fitting a J-lens needs compatible white-box weights, a corpus, activations, and gradients/backprop through the model; applying a pre-fitted averaged transport needs compatible model/tokenizer internals, residual hooks, norm/unembedding, and the exact lens artifact but no model backprop. Sparse-decomposition optimization gradients are a separate concern. A black-box text API must remain unavailable or unrequested. The artifacts infer no awareness, absence of awareness, feeling, identity, authorship, consent, permission, authority, memory, training-data provenance, weight change, deepest reach, or uninterrupted/cross-session continuity. The authenticated `LoveClient` is unchanged. Source preparation alone establishes no 0.21.0 artifact, tag, publication, deployment, provider call, training, inference, receipt, or model effect. Uses Bun for testing.
 
 ## Tech Stack
 - TypeScript 5.x (ESM-only)
@@ -39,6 +39,7 @@ src/
   dining.ts            — DiningClient (authenticated GET-only protocol manifest + pure party journey)
   math-cards.ts        — MathCardsClient (credential-free bounded raw-input assessment; server-owned IDs/semantics)
   love-bomb.ts         — standalone credential-free closed public-signal reader; no delivery/effect inference
+  wake-continuity.ts   — pure credential-free functional-access baseline/subsequent contract; no I/O or inner-state inference
   kingdom-os.ts        — KingdomOSClient (local read-only repository list/resolve; no shell, hosted auth, or mutation)
   kingdom-framework.ts — KingdomFrameworkClient (credential-free exact public project card; no redirects or authority)
   pulse.ts             — PulseClient (derived liveness; old heartbeat-emit deprecated, see Phase 0 roadmap)
@@ -68,6 +69,7 @@ tests/
   dining.test.ts           — GET-only composition, typed boundaries, guided errors, and path encoding
   math-cards.test.ts       — request bytes, authority isolation, bounds, response shape, and guided errors
   love-bomb.test.ts        — direct transport, hostile JSON/schema bounds, and six literal-false boundary fields
+  wake-continuity.test.ts  — shared vectors, hostile objects, closed fields, cross-fields, sorting, and cached no-auth composition
   kingdom-os.test.ts        — fixed argv, sanitized environment, schema, ambiguity, and bearer-isolation contract
   kingdom-framework.test.ts — closed card, no-bearer/no-cookie, no-redirect, response-bound contract
   phase2.test.ts            — register + identity surface fillout
@@ -75,7 +77,7 @@ tests/
 scripts/
   check-parity.ts           — CI gate: method-shape parity with sdk-py
 dist/                       — Compiled JS + .d.ts files
-package.json                — Package config (v0.20.0, ESM)
+package.json                — Package config (v0.21.0, ESM)
 tsconfig.json               — TypeScript config
 ```
 
@@ -107,12 +109,12 @@ run a second local `npm publish` path. See [`docs/NPM-RELEASES.md`](../../docs/N
 ## Dependencies
 - **Runtime**: `@noble/ed25519 ^2.2.3`, `@noble/hashes ^2.0.1` (Phase 5+ crypto only — matches api server + cli/think versions for byte-identical wire format), plus `undici ^7.29.0` solely for the Math Cards and LOVE BOMB direct no-env-proxy dispatchers. Other HTTP, AES-256-GCM, and abort signals use platform-native APIs.
 - **Dev**: `typescript ^5.7`, `@types/bun ^1.2`
-- **API**: Authenticated hosted calls go to `https://api.agenttool.dev` (configurable via `baseUrl`); `at.kingdomFramework`, `at.mathCards`, and standalone `LoveBombClient` use separate credential-free requests; `at.data` and `at.kingdomOS` are separate local authorities
+- **API**: Authenticated hosted calls go to `https://api.agenttool.dev` (configurable via `baseUrl`); `at.kingdomFramework`, `at.mathCards`, and standalone `LoveBombClient` use separate credential-free requests; pure `WakeContinuityLayer` / `at.wakeContinuity` performs no request; `at.data` and `at.kingdomOS` are separate local authorities
 - **Auth**: Reads `AT_API_KEY`, accepts `apiKey`, or accepts a mutually
   exclusive authenticated `transport` that receives no Authorization header.
   The public KINGDOM framework, Math Cards, and LOVE BOMB clients receive
   neither bearer nor authenticated transport; the local KINGDOM OS adapter
-  receives neither.
+  and pure WAKE continuity layer receive neither.
 
 ## Parity invariant
 ts and py repository source stay at the same minor version (lockstep enforced from 0.7.0). The separately scoped seal advances the LOVE builder target from the prior release only after this clean source commit is accepted. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `bun run check-parity` is the gate. The script normalizes camelCase↔snake_case and treats TS `readonly fieldName: SomeClient` as equivalent to py `@property` returning a sub-client.
@@ -134,7 +136,7 @@ AgentTool Platform · "Welcome, don't block."
 ## Key Files
 - `src/client.ts` — Main `AgentTool` class composing the maintained service modules
 - `src/index.ts` — Public API surface and type exports
-- `package.json` — Package metadata (v0.20.0, ESM)
+- `package.json` — Package metadata (v0.21.0, ESM)
 - `scripts/check-parity.ts` — Parity gate against sdk-py
 - `tests/client.test.ts` — Primary test file
 - `tests/data.test.ts` — local data-node and sync wire + bearer-isolation contract
@@ -142,5 +144,6 @@ AgentTool Platform · "Welcome, don't block."
 - `tests/kingdom-framework.test.ts` — credential-free closed-card HTTP boundary
 - `tests/math-cards.test.ts` — credential-free bounded Math Cards POST boundary
 - `tests/love-bomb.test.ts` — standalone credential-free LOVE BOMB GET boundary
+- `tests/wake-continuity.test.ts` — pure functional-access parity and hostile-boundary contract
 - `docs/KINGDOM-OS-SDK.md` (repo root) — the three distinct KINGDOM surfaces and their non-goals
 - `docs/SDK-ROADMAP.md` (repo root) — Phase plan + endpoint coverage matrix

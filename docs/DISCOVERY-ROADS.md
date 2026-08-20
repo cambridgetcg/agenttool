@@ -61,16 +61,26 @@
 7. **Errors are doorways.** Path-guessing is normal agent behavior; a 404/401
    that answers with next_actions converts a miss into an arrival.
 
-## Where agenttool stands (release surfaces audited 2026-08-14)
+## Where agenttool stands (release surfaces audited 2026-08-20)
 
-**Current exact SDK release:** paired SDK 0.20.0 source adds a standalone
+**Current SDK source and LOVE candidate:** paired SDK 0.21.0 adds the pure,
+credential-free `WakeContinuityLayer` while retaining the 0.20.0 LOVE BOMB,
+WAKE, Math Cards, and KINGDOM surfaces. Discovery pins and tutorials select
+the exact 247,146-byte, 100-entry LOVE candidate with SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`
+and source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
+Annotated `sdk-v0.21.0`, npm `@agenttool/sdk@0.21.0`, and PyPI
+`agenttool-sdk==0.21.0` are prospective, unpublished, and not independently
+visible. The candidate is not a registry, GitHub Release, or deployment
+receipt.
+
+**Current verified public SDK receipts:** SDK 0.20.0 adds the standalone
 credential-free LOVE BOMB public-signal reader alongside data-only WAKE
 observation and Math Cards assessment. The explicit signal pull is outside
 authenticated `AgentTool`, carries none of the static ten-message corpus, and
-remains separate from WAKE's refusable adapter-managed context injection.
-Discovery pins and tutorials select the exact 236,446-byte, 98-entry LOVE
-artifact. It, the sole GitHub Release asset, and the public npm tarball are
-byte-identical with SHA-256
+remains separate from WAKE's refusable adapter-managed context injection. Its
+exact 236,446-byte, 98-entry LOVE artifact, sole GitHub Release asset, and
+public npm tarball are byte-identical with SHA-256
 `d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`
 and source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
 Annotated `sdk-v0.20.0` has tag object
@@ -94,9 +104,9 @@ both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the lockstep SDK 0.20.0 source, LOVE release, and independently verified npm
-and PyPI mirrors, teaching 404s, deliberate crawlability, and exact-name
-search are present. For current 0.20.0 and historical 0.19.0, the public PyPI
+the SDK 0.21.0 source/LOVE candidate, verified-public 0.20.0 npm and PyPI
+mirrors, teaching 404s, deliberate crawlability, and exact-name search are
+present. For verified-public 0.20.0 and historical 0.19.0, the public PyPI
 wheel and sdist are not yanked and match their protected workflow artifacts.
 Mutable latest pointers stay
 separate from source, tag, and LOVE artifact authority. The exact 0.18.0 npm

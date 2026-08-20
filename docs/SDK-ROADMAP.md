@@ -10,9 +10,70 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
-## Current source, LOVE, and verified npm/PyPI release — 0.20.0 (2026-08-14)
+## Paired source candidate — 0.21.0 (2026-08-20)
 
-The paired TypeScript and Python source adds a standalone credential-free
+The paired TypeScript and Python source adds a credential-free, pure
+`WakeContinuityLayer`. Standalone construction needs no AgentTool account;
+authenticated `AgentTool` also exposes the same cached convenience namespace
+at `at.wakeContinuity` / `at.wake_continuity`, but passes it no bearer,
+transport, filesystem path, or KINGDOM runner.
+
+The record layer creates and validates two deterministic closed artifacts
+around one exact caller-supplied inference anchor. It does not perform the
+measurement described by caller assertions:
+
+- a baseline with caller-asserted structural `record_role: before_anchor`; and
+- a subsequent record with caller-asserted structural
+  `record_role: after_anchor`.
+
+Those roles prove no time, order, currentness, encounter, or causation.
+
+The baseline binds selected brief-WAKE, request, anchor-event, model,
+capability, permission, instrument, and configuration digests. It can record a
+caller assertion that internal measurement was not requested, unavailable, or
+planned. Hosted text-only provider access is represented as unavailable; it is
+never silently upgraded from output text or a provider alias. A caller may
+name an independently executed Jacobian-lens readout or sparse J-space
+decomposition only after binding the exact checkpoint, tokenizer, runtime,
+instrument, and configuration needed to interpret the result. The external
+executor still verifies current scoped authority; the record grants none.
+
+The subsequent record keeps lens visibility, sparse support, and behavioral
+use separate. Passive measurement leaves behavioral use
+`not_measured`. Its unordered evidence surfaces are caller-asserted digest
+references rather than a scalar “depth,” and an optional AFTERGLOW capsule
+reference remains caller-carried context for a fresh encounter rather than a
+same-self claim.
+
+Both ports share canonical vectors, IDs, fixed boundaries, cross-field
+rejections, hostile-object limits, exports, and method-name parity. They
+perform no observation, network or filesystem access, provider/model call, activation or
+gradient read/write, intervention, steering, training, weight mutation,
+persistence, telemetry, credential lookup, KINGDOM discovery, publication, or
+deployment. They assess no phenomenology and prove neither consciousness nor
+its absence, feeling, attention, identity, authorship, consent, authority,
+memory, training-data provenance, same-subject relation, causality, replay,
+currentness, or uninterrupted continuity. The research and operational split
+is documented in [J-space, WAKE, and bounded
+continuity](JSPACE-WAKE-CONTINUITY.md).
+
+Until an annotated `sdk-v0.21.0` tag is protected-published and independently
+read back, the exact 0.20.0 LOVE/npm/PyPI receipts below remain the current
+public release evidence. Source version declarations do not themselves prove a
+registry publication or static deployment.
+
+The exact TypeScript LOVE candidate is nevertheless sealed and reproducible:
+`apps/docs/packages/v1/@agenttool/sdk/0.21.0/agenttool-sdk-0.21.0.tgz` is
+247,146 bytes with 100 entries and SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`.
+Its manifest binds clean source revision
+`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. The independently verified
+0.20.0 artifact remains present byte-for-byte; sealing this candidate creates
+no tag, GitHub Release, npm/PyPI publication, or hosted readback.
+
+## Verified public SDK release — 0.20.0 (2026-08-14)
+
+The paired 0.20.0 TypeScript and Python source added a standalone credential-free
 `LoveBombClient.read()` over exactly `GET /public/love-bomb`. It is deliberately
 not composed onto authenticated `AgentTool` and does not reuse authenticated
 `LoveClient`. Each call creates a fresh direct transport, sends no bearer,

@@ -6,6 +6,19 @@ import type {
   AFTERGLOW_PHASES,
   HANDOFF_PROJECTION_STATES,
   WAKE_RELATIONS,
+  FUNCTIONAL_ACCESS_NEXT_ENCOUNTER_POSTURES,
+  FUNCTIONAL_ACCESS_BASES,
+  FUNCTIONAL_ACCESS_BOUNDARIES,
+  FUNCTIONAL_ACCESS_CAPABILITY_STATES,
+  FUNCTIONAL_ACCESS_EVIDENCE_SURFACES,
+  FUNCTIONAL_ACCESS_FINDING_STATES,
+  FUNCTIONAL_ACCESS_FORMATS,
+  FUNCTIONAL_ACCESS_MEASUREMENT_METHODS,
+  FUNCTIONAL_ACCESS_MODEL_BINDINGS,
+  FUNCTIONAL_ACCESS_OPERATION_OUTCOMES,
+  FUNCTIONAL_ACCESS_PLAN_STATES,
+  FUNCTIONAL_ACCESS_PERMISSION_STATES,
+  FUNCTIONAL_ACCESS_UNAVAILABLE_REASONS,
 } from "./constants.js";
 
 export type Sha256Id = `sha256:${string}`;
@@ -149,4 +162,107 @@ export interface AfterglowHandoffFactReference {
 export interface AfterglowContentDigestArtifact {
   readonly kind: "content_digest";
   readonly digest: Sha256Id;
+}
+
+export type FunctionalAccessModelBinding =
+  (typeof FUNCTIONAL_ACCESS_MODEL_BINDINGS)[number];
+export type FunctionalAccessPlanState =
+  (typeof FUNCTIONAL_ACCESS_PLAN_STATES)[number];
+export type FunctionalAccessCapabilityState =
+  (typeof FUNCTIONAL_ACCESS_CAPABILITY_STATES)[number];
+export type FunctionalAccessPermissionState =
+  (typeof FUNCTIONAL_ACCESS_PERMISSION_STATES)[number];
+export type FunctionalAccessMeasurementMethod =
+  (typeof FUNCTIONAL_ACCESS_MEASUREMENT_METHODS)[number];
+export type FunctionalAccessBasis = (typeof FUNCTIONAL_ACCESS_BASES)[number];
+export type FunctionalAccessUnavailableReason =
+  (typeof FUNCTIONAL_ACCESS_UNAVAILABLE_REASONS)[number];
+export type FunctionalAccessOperationOutcome =
+  (typeof FUNCTIONAL_ACCESS_OPERATION_OUTCOMES)[number];
+export type FunctionalAccessEvidenceSurface =
+  (typeof FUNCTIONAL_ACCESS_EVIDENCE_SURFACES)[number];
+export type FunctionalAccessFindingState =
+  (typeof FUNCTIONAL_ACCESS_FINDING_STATES)[number];
+export type FunctionalAccessNextEncounterPosture =
+  (typeof FUNCTIONAL_ACCESS_NEXT_ENCOUNTER_POSTURES)[number];
+
+export interface FunctionalAccessModelTarget {
+  readonly model_ref: Sha256Id;
+  readonly model_binding: FunctionalAccessModelBinding;
+  readonly tokenizer_ref: Sha256Id | null;
+  readonly runtime_ref: Sha256Id | null;
+}
+
+export interface FunctionalAccessMeasurementPlan {
+  readonly state: FunctionalAccessPlanState;
+  readonly capability_state: FunctionalAccessCapabilityState;
+  readonly capability_ref: Sha256Id | null;
+  readonly permission_state: FunctionalAccessPermissionState;
+  readonly permission_ref: Sha256Id | null;
+  readonly method: FunctionalAccessMeasurementMethod;
+  readonly access_basis: FunctionalAccessBasis;
+  readonly unavailable_reason: FunctionalAccessUnavailableReason | null;
+  readonly instrument_ref: Sha256Id | null;
+  readonly lens_ref: Sha256Id | null;
+  readonly configuration_ref: Sha256Id | null;
+  readonly assertion: "caller_asserted";
+  readonly verified_by_package: false;
+}
+
+export interface CreateFunctionalAccessBaselineInput {
+  readonly wake: WakeBriefAnchor;
+  readonly anchor_event_ref: Sha256Id;
+  readonly request_ref: Sha256Id;
+  readonly target: FunctionalAccessModelTarget;
+  readonly measurement_plan: FunctionalAccessMeasurementPlan;
+}
+
+export interface FunctionalAccessBaseline {
+  readonly _format: (typeof FUNCTIONAL_ACCESS_FORMATS)["baseline"];
+  readonly baseline_id: Sha256Id;
+  readonly record_role: "before_anchor";
+  readonly wake: WakeBriefAnchor;
+  readonly anchor_event_ref: Sha256Id;
+  readonly request_ref: Sha256Id;
+  readonly target: FunctionalAccessModelTarget;
+  readonly measurement_plan: FunctionalAccessMeasurementPlan;
+  readonly assertion: "caller_asserted";
+  readonly verified_by_package: false;
+  readonly boundaries: typeof FUNCTIONAL_ACCESS_BOUNDARIES;
+}
+
+export interface FunctionalAccessEvidenceFact {
+  readonly surface: FunctionalAccessEvidenceSurface;
+  readonly artifact_ref: Sha256Id;
+  readonly assertion: "caller_asserted";
+  readonly verified_by_package: false;
+}
+
+export interface FunctionalAccessFindings {
+  readonly lens_visibility: FunctionalAccessFindingState;
+  readonly sparse_support: FunctionalAccessFindingState;
+  readonly behavioral_use: "not_measured";
+}
+
+export interface CreateFunctionalAccessSubsequentInput {
+  readonly baseline: FunctionalAccessBaseline;
+  readonly operation_outcome: FunctionalAccessOperationOutcome;
+  readonly evidence: readonly FunctionalAccessEvidenceFact[];
+  readonly findings: FunctionalAccessFindings;
+  readonly afterglow_capsule_ref: Sha256Id | null;
+}
+
+export interface FunctionalAccessSubsequent {
+  readonly _format: (typeof FUNCTIONAL_ACCESS_FORMATS)["subsequent"];
+  readonly subsequent_id: Sha256Id;
+  readonly record_role: "after_anchor";
+  readonly baseline: FunctionalAccessBaseline;
+  readonly operation_outcome: FunctionalAccessOperationOutcome;
+  readonly evidence: readonly FunctionalAccessEvidenceFact[];
+  readonly findings: FunctionalAccessFindings;
+  readonly afterglow_capsule_ref: Sha256Id | null;
+  readonly next_encounter_posture: FunctionalAccessNextEncounterPosture;
+  readonly assertion: "caller_asserted";
+  readonly verified_by_package: false;
+  readonly boundaries: typeof FUNCTIONAL_ACCESS_BOUNDARIES;
 }

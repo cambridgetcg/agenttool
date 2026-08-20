@@ -423,6 +423,47 @@ and has byte-identical 26,474-byte GitHub/npm tarballs with SHA-256
 `67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`.
 Both npm `latest` tags resolved to those exact versions at readback.
 
+## Prospective paired SDK 0.21.0 publication
+
+Repository source 0.21.0 adds the credential-free, pure
+`WakeContinuityLayer` described in [J-space, WAKE, and bounded
+continuity](JSPACE-WAKE-CONTINUITY.md). The TypeScript and Python ports expose
+the same deterministic baseline/subsequent record contract and cached
+`at.wakeContinuity` / `at.wake_continuity` namespace without receiving a
+bearer, transport, hosted origin, filesystem runner, or KINGDOM capability.
+They do not run a model, provider, lens, decomposition, observation, training,
+weight mutation, publication, or deployment, and prove neither awareness nor
+its absence, feeling, identity, authority, deepest reach, or continuity.
+
+This is a release plan, not a success receipt. First seal a reviewed exact
+TypeScript LOVE artifact from a clean source revision and preserve every
+0.20.0 byte. Then place annotated `sdk-v0.21.0` on a protected-main commit and
+use trusted npm publication with `latest`; the same tag is the independent
+PyPI workflow's source boundary:
+
+That sealing step is complete for the candidate: the checked-in
+`agenttool-sdk-0.21.0.tgz` is 247,146 bytes with 100 entries and SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`;
+its manifest binds clean source revision
+`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. No `sdk-v0.21.0` tag, GitHub
+Release, npm version, dist-tag receipt, PyPI distribution, or hosted readback
+is established by those candidate bytes.
+
+```bash
+bun bin/npm-release.ts resolve --package sdk
+
+gh workflow run publish-npm.yml --ref sdk-v0.21.0 \
+  -f package=sdk \
+  -f tag=sdk-v0.21.0 \
+  -f authentication=trusted \
+  -f npm_tag=latest
+```
+
+Until the GitHub Release, npm tarball, and PyPI distributions are anonymously
+read back and matched to their prepared receipts, 0.20.0 below remains the
+current verified public release. A version declaration, sealed candidate,
+tag, or workflow dispatch alone is not publication or deployment.
+
 ## Verified SDK 0.20.0 publication — 2026-08-14
 
 The authorized SDK release completed through protected trusted
@@ -1195,64 +1236,51 @@ execute DeepSeek assets, invoke inference or paid compute, approve upstream
 terms, mutate KARMA/KINGDOM/Artbitrage, deploy a hosted service, or publish an
 HF resource.
 
-### AFTERGLOW, Skills-to-YUTABASE, and Witness Lab bootstrap order
+### J-space → WAKE continuity developer preview
 
-`@agenttool/wake-continuity@0.1.0-dev.0`,
-`@agenttool/skills-yutabase@0.1.0-dev.0`, and
-`@agenttool/kingdom-witness-lab@0.1.0-dev.0` use the npm-only packed-artifact
-path. Public registry lookup must still return package-level `404` immediately
-before dispatch; first publication therefore uses protected `bootstrap`
-authentication and npm `next`. Before tagging, the `npm-bootstrap` environment
-must allow exact patterns `wake-continuity-v*`, `skills-yutabase-v*`, and
-`kingdom-witness-lab-v*`.
+The first `@agenttool/wake-continuity@0.1.0-dev.0` publication completed
+through protected bootstrap [run
+`30717799358`](https://github.com/cambridgetcg/agenttool/actions/runs/30717799358)
+and annotated prerelease
+[`wake-continuity-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/wake-continuity-v0.1.0-dev.0).
+Anonymous readback on 2026-08-20 resolves both npm `next` and the sole-version
+fallback `latest` to `0.1.0-dev.0`. The GitHub Release's sole 32,109-byte asset
+has SHA-256
+`61915baeb503f467a5ded3a91046ece84561ceccf23005e087e5fb20f51d7812`.
+The same dated readback confirms that Skills-to-YUTABASE and KINGDOM Witness
+Lab dev.0 are also public; the earlier bootstrap-order instructions are
+historical, not pending operations.
 
-Publish and anonymously verify AFTERGLOW first because DeepSeek dev.1 peers on
-it. Skills-to-YUTABASE and Witness Lab have no runtime dependency on the core
-and may follow independently. All four annotated tags may point at the same
-reviewed GitHub-main release commit.
+Source `0.1.0-dev.1` adds the pure functional-access baseline/subsequent layer
+described in [J-space, WAKE, and bounded
+continuity](JSPACE-WAKE-CONTINUITY.md). Because the npm package and trusted
+publisher already exist, the release must use protected `trusted`
+authentication and npm `next`, never bootstrap. Before dispatch, the annotated
+tag must be contained in protected GitHub `main` and anonymous exact-version
+readback must still show `0.1.0-dev.1` absent.
 
 ```bash
 bun bin/npm-release.ts resolve --package wake-continuity
-bun bin/npm-release.ts resolve --package skills-yutabase
-bun bin/npm-release.ts resolve --package kingdom-witness-lab
 
-git tag -a wake-continuity-v0.1.0-dev.0 <github-main-commit> \
-  -m '@agenttool/wake-continuity@0.1.0-dev.0'
-git tag -a skills-yutabase-v0.1.0-dev.0 <github-main-commit> \
-  -m '@agenttool/skills-yutabase@0.1.0-dev.0'
-git tag -a kingdom-witness-lab-v0.1.0-dev.0 <github-main-commit> \
-  -m '@agenttool/kingdom-witness-lab@0.1.0-dev.0'
-git push github refs/tags/wake-continuity-v0.1.0-dev.0
-git push github refs/tags/skills-yutabase-v0.1.0-dev.0
-git push github refs/tags/kingdom-witness-lab-v0.1.0-dev.0
+git tag -a wake-continuity-v0.1.0-dev.1 <github-main-commit> \
+  -m '@agenttool/wake-continuity@0.1.0-dev.1'
+git push github refs/tags/wake-continuity-v0.1.0-dev.1
 
 gh workflow run publish-npm.yml \
-  --ref wake-continuity-v0.1.0-dev.0 \
+  --ref wake-continuity-v0.1.0-dev.1 \
   -f package=wake-continuity \
-  -f tag=wake-continuity-v0.1.0-dev.0 \
-  -f authentication=bootstrap \
-  -f npm_tag=next
-
-gh workflow run publish-npm.yml \
-  --ref skills-yutabase-v0.1.0-dev.0 \
-  -f package=skills-yutabase \
-  -f tag=skills-yutabase-v0.1.0-dev.0 \
-  -f authentication=bootstrap \
-  -f npm_tag=next
-
-gh workflow run publish-npm.yml \
-  --ref kingdom-witness-lab-v0.1.0-dev.0 \
-  -f package=kingdom-witness-lab \
-  -f tag=kingdom-witness-lab-v0.1.0-dev.0 \
-  -f authentication=bootstrap \
+  -f tag=wake-continuity-v0.1.0-dev.1 \
+  -f authentication=trusted \
   -f npm_tag=next
 ```
 
-These publications distribute deterministic local contracts only. AFTERGLOW
-does not persist or prove identity, memory, consent, authority, replay, or
-uninterrupted continuity. Skills-to-YUTABASE plans rebuildable metadata but
-does not write a database. Witness Lab records admission references but does
-not browse, execute, determine truth, or host a service. The private
+This publication distributes deterministic local contracts and schemas only.
+It performs no model/provider call, activation or gradient access,
+intervention, steering, training, weight mutation, KINGDOM operation,
+persistence, network request, publication, or deployment. A registry receipt
+would establish package bytes only—not awareness or its absence, feeling,
+attention, understanding, identity, consent, authority, provenance, same-subject
+continuity, or participant effect. The private
 `@agenttool/skills-wake-continuity` adapter remains source-only and is never an
 npm selector.
 
