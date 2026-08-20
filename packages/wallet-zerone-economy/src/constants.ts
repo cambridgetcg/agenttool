@@ -13,6 +13,8 @@ export const ECONOMY_ACTIVATION_OBSERVATION_PROTOCOL =
   "agent-wallet-zerone-economy.activation-observation/0.1" as const;
 export const ECONOMY_PLAN_HASH_DOMAIN =
   "agent-wallet-zerone-economy-plan/v1\0" as const;
+export const ECONOMY_DURABLE_PLAN_HASH_DOMAIN =
+  "agent-wallet-zerone-economy-durable-plan/v1\0" as const;
 
 /** Exact reviewed source candidate. This is not a deployment assertion. */
 export const ZERONE_ECONOMY_CORE_COMMIT =

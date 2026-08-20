@@ -25,6 +25,7 @@ import {
   type Ed25519PublicKey,
   type RecordSignature,
   type RecordSigner,
+  type Sha256Id,
   type SignedPayload,
   type SimulationEffect,
   type SimulationReceipt,
@@ -44,6 +45,7 @@ import {
   COSMOS_SECP256K1_PUBLIC_KEY_TYPE_URL,
   ECONOMY_ACTIVATION_OBSERVATION_PROTOCOL,
   ECONOMY_ADAPTER_PROTOCOL,
+  ECONOMY_DURABLE_PLAN_HASH_DOMAIN,
   ECONOMY_GAS,
   ECONOMY_LIMITS,
   ECONOMY_PLAN_HASH_DOMAIN,
@@ -67,6 +69,7 @@ import type {
   CreateZeroneEconomySigningRequestInput,
   CreateZeroneEconomySimulationBindingInput,
   CreateZeroneEconomySimulationEvidenceInput,
+  ReconstructZeroneEconomyDirectSignPlanInput,
   VerifiedZeroneEconomySimulationEvidence,
   VerifiedZeroneEconomyTransaction,
   ZeroneEconomyActivationObservation,
@@ -456,6 +459,63 @@ export function assertZeroneEconomyDirectSignPlan(
       "Economy sign plan must be created and retained in this process.",
     );
   }
+}
+
+/**
+ * Commits every canonical field of a process-branded plan. `plan_id` remains
+ * the narrower transaction identity; durable hosts must use this full content
+ * commitment when reconstructing a plan after a process boundary.
+ */
+export function zeroneEconomyDirectSignPlanContentId(
+  plan: ZeroneEconomyDirectSignPlan,
+): Sha256Id {
+  assertZeroneEconomyDirectSignPlan(plan);
+  return sha256BytesId(concatBytes(
+    new TextEncoder().encode(ECONOMY_DURABLE_PLAN_HASH_DOMAIN),
+    canonicalJsonBytes(plan),
+  ));
+}
+
+/**
+ * Recreates the plan through the ordinary verified-input path and restores its
+ * process brand only when every resulting canonical field matches the durable
+ * commitment. Serialized plan JSON is deliberately not an input to this API.
+ */
+export function reconstructZeroneEconomyDirectSignPlan(
+  input: ReconstructZeroneEconomyDirectSignPlanInput,
+): Readonly<ZeroneEconomyDirectSignPlan> {
+  // Snapshot caller-controlled top-level properties exactly once. The ordinary
+  // constructor then rechecks the Wallet runtime brand and all strict source
+  // projections/observations before it creates a new branded object.
+  const expectedPlanContentId = input.expected_plan_content_id;
+  const intent = input.intent;
+  const projections = input.projections;
+  const network = input.network;
+  const signerPublicKey = input.signer_public_key;
+  const accountObservation = input.account_observation;
+  const activationObservation = input.activation_observation;
+  const feeAmountUZRN = input.fee_amount_uzrn;
+  const gasLimit = input.gas_limit;
+  assertSha256Id(expectedPlanContentId, "expected_plan_content_id");
+
+  const plan = createZeroneEconomyDirectSignPlan(Object.freeze({
+    intent,
+    projections,
+    network,
+    signer_public_key: signerPublicKey,
+    account_observation: accountObservation,
+    activation_observation: activationObservation,
+    fee_amount_uzrn: feeAmountUZRN,
+    gas_limit: gasLimit,
+  }));
+  if (zeroneEconomyDirectSignPlanContentId(plan) !== expectedPlanContentId) {
+    fail(
+      "invalid_state",
+      "Reconstructed economy sign plan does not match the expected full durable content commitment.",
+      "expected_plan_content_id",
+    );
+  }
+  return plan;
 }
 
 function sameSimulationEffects(

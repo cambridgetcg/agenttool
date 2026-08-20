@@ -138,6 +138,11 @@ export interface CreateZeroneEconomyDirectSignPlanInput {
   readonly gas_limit: string;
 }
 
+export interface ReconstructZeroneEconomyDirectSignPlanInput
+  extends CreateZeroneEconomyDirectSignPlanInput {
+  readonly expected_plan_content_id: Sha256Id;
+}
+
 export interface ZeroneEconomySimulationBinding {
   readonly protocol: typeof ECONOMY_SIMULATION_BINDING_PROTOCOL;
   readonly plan_id: Sha256Id;

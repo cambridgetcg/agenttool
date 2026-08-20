@@ -57,9 +57,11 @@ root `CLAUDE.md`, `packages/wallet/CLAUDE.md`,
   immediately and reject/replace a request retained past `valid_until`.
 - Preserve in-process brands for plans, simulation bindings, signing requests,
   verified simulation evidence, and verified transactions. Only the signed
-  evidence record has an explicit reload verifier; a host must revalidate it
-  and reconstruct the process-local plan/binding/request steps after a process
-  boundary.
+  evidence record has an explicit reload verifier. A host may restore a plan
+  brand only by revalidating/reusing the original constructor inputs and
+  matching the exact domain-separated full durable plan content ID; never
+  accept serialized plan JSON as a reconstruction input. The host must still
+  reconstruct the process-local binding/request steps after a process boundary.
 - Do not add a key, mnemonic, seed, signer implementation, endpoint, RPC/query
   client, simulation transport, broadcast, retry, custody, persistence,
   reservation, sequence lock, sticky-unknown state, or confirmation loop.

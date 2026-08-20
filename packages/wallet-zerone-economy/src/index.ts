@@ -2,6 +2,7 @@ export {
   COSMOS_SECP256K1_PUBLIC_KEY_TYPE_URL,
   ECONOMY_ACTIVATION_OBSERVATION_PROTOCOL,
   ECONOMY_ADAPTER_PROTOCOL,
+  ECONOMY_DURABLE_PLAN_HASH_DOMAIN,
   ECONOMY_GAS,
   ECONOMY_LIMITS,
   ECONOMY_MESSAGE_ORDER,
@@ -37,8 +38,10 @@ export {
   createZeroneEconomySimulationBinding,
   createZeroneEconomySimulationEvidence,
   createZeroneEconomySimulationReceiptCore,
+  reconstructZeroneEconomyDirectSignPlan,
   verifyZeroneEconomySignedPayload,
   verifyZeroneEconomySimulationEvidence,
+  zeroneEconomyDirectSignPlanContentId,
   zeroneEconomyDirectSignAlgorithm,
 } from "./transactions.js";
 
@@ -62,6 +65,7 @@ export type {
   CreateZeroneEconomySimulationBindingInput,
   CreateZeroneEconomySimulationEvidenceInput,
   EconomyMessageKind,
+  ReconstructZeroneEconomyDirectSignPlanInput,
   VerifiedZeroneEconomyTransaction,
   VerifiedZeroneEconomySimulationEvidence,
   ZeroneEconomyActivationObservation,

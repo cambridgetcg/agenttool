@@ -171,6 +171,33 @@ host must obtain time from its own reviewed boundary and invoke the signer
 immediately; retaining a branded request past `valid_until` is an execution
 error the pure package cannot observe.
 
+## Durable plan reconstruction
+
+`plan_id` is a narrow transaction identity derived from the activation hash,
+account-observation height, exact `SignDoc` hash, and ordered projection
+hashes. It is not a commitment to every field exposed by the plan.
+`zeroneEconomyDirectSignPlanContentId()` therefore hashes the exact bytes
+
+```text
+UTF8("agent-wallet-zerone-economy-durable-plan/v1\0")
+  || canonical_json_bytes(complete branded ZeroneEconomyDirectSignPlan)
+```
+
+and refuses any plan that lacks the constructor's process-local runtime brand.
+A durable host persists that full content ID alongside the original verified
+Wallet intent and strict planner inputs. After restart it must independently
+reload-verify the Wallet record, then call
+`reconstructZeroneEconomyDirectSignPlan()` with those inputs and the expected
+content ID. Reconstruction calls the ordinary constructor again, rechecks all
+projections and observations, and returns a new branded plan only when every
+canonical output field matches. It never accepts, verifies, or blesses saved
+plan JSON; a clone with the right bytes remains unbranded.
+
+The full content ID proves deterministic byte correspondence only. It does not
+prove chain activation/currentness, observation authenticity, custody,
+authorization, simulation freshness, inclusion, finality, effects, earnings,
+or treasury availability.
+
 ## Gas and fee boundary
 
 At the pinned candidate:
@@ -229,8 +256,10 @@ client:
 The in-process object brands prevent accidental substitution while values
 remain in one JavaScript process. JSON serialization, cloning, or restart
 removes that protection. The signed evidence record has an explicit reload
-verifier, but plans, bindings, and signing requests remain process-local.
-Durable hosts must persist and recheck explicit IDs, hashes, observations,
+verifier, and a plan brand can be restored only by verified-input
+reconstruction against its full durable content ID. Simulation bindings and
+signing requests remain process-local. Durable hosts must persist and recheck
+explicit IDs, hashes, original construction inputs, observations,
 reservations, and current heads, then reconstruct the process-local steps.
 
 ## Independent parity and tests
@@ -252,7 +281,8 @@ substitution, unknown/non-canonical protobuf, integer/product overflow,
 under-gas/under-fee, chain/commit/account/sequence drift, simulation/request/
 `TxRaw` substitution, the receipt-A/result-B sequence attack, evidence
 signature/key/field/reload/timestamp tamper, high-S malleability, and prehash
-confusion, plus requested-time/authorization/window mismatch. The portable JSON Schema is
+confusion, requested-time/authorization/window mismatch, and full-plan durable
+commitment/reconstruction substitution. The portable JSON Schema is
 `schema/simulation-evidence-v0.1.schema.json`; the deterministic planner-owned
 Ed25519 vector is `vectors/simulation-evidence-v0.1-vector.json`. These sit
 beside, and do not replace, the independently Go-generated Cosmos byte/gas/
