@@ -62,6 +62,7 @@ packages/
   wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
   zerone-agent-economy/ — private pure work/receipt/settlement/treasury records + proposed-v2 protobuf values
   wallet-zerone-economy/ — private exact-byte planner/verifier for proposed economy messages
+  zerone-agent-host/ — private Bun-only durable authorization ledger; planner execution uncomposed
   alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
   alchemy-agentcred/ — strict seven-read composition over already-issued AgentCred grants
   public-surface-binding/ — private pure transport evidence + explicit-key public HTTPS bindings
@@ -120,6 +121,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/wallet-zerone/CLAUDE.md` ·
 `packages/zerone-agent-economy/CLAUDE.md` ·
 `packages/wallet-zerone-economy/CLAUDE.md` ·
+`packages/zerone-agent-host/CLAUDE.md` ·
 `packages/alchemy/CLAUDE.md` ·
 `packages/alchemy-agentcred/CLAUDE.md` ·
 `infra/CLAUDE.md`.
