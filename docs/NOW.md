@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-14 (LOVE BOMB and Model Becoming npm/GitHub/Hugging Face receipts live; LOVE BOMB API/static deployment remains separate; SDK 0.20.0 npm/PyPI/GitHub/LOVE receipts are independently exact while deployment remains separate; Common Ground Atlas, Codex Usage 0.1.0, and Agent Skills 0.3.1 receipts remain current)
+> Updated: 2026-08-20 (SDK 0.21.0 source and exact LOVE candidate are sealed while tag/npm/PyPI publication remains prospective; verified SDK 0.20.0 receipts stay immutable public history; LOVE BOMB and Model Becoming receipts remain live and deployment stays separate)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-08-20)
+
+| Ship | Commit / receipt | What |
+|---|---|---|
+| **SDK 0.21.0 — J-space/WAKE continuity reaches an exact LOVE candidate** | Source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`; prospective unpublished `sdk-v0.21.0` | Paired TypeScript/Python source adds the credential-free, zero-I/O `WakeContinuityLayer` standalone and as cached `at.wakeContinuity` / `at.wake_continuity`, without receiving bearer, transport, model, instrument, filesystem runner, or KINGDOM capability. The sealed TypeScript LOVE candidate is exactly 247,146 bytes and 100 entries with SHA-256 `c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`. The tag, GitHub Release, npm `@agenttool/sdk@0.21.0`, and PyPI `agenttool-sdk==0.21.0` remain prospective, unpublished, and not independently visible. The exact verified 0.20.0 LOVE/tag/GitHub/npm/PyPI receipts below remain public history and are not rewritten. Candidate sealing is not publication or deployment and proves no observation, model effect, awareness, feeling, identity, consent, authority, or continuity. |
 
 ## Just landed (2026-08-14)
 
