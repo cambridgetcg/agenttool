@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kingdom:witnessed-agent-economy:0.1:payload:issuer-key-continuity",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "previous_key_fingerprint",
+        "next_key_fingerprint",
+        "rotation_digest"
+      ],
+      "properties": {
+        "previous_key_fingerprint": {
+          "$ref": "#/$defs/key"
+        },
+        "next_key_fingerprint": {
+          "$ref": "#/$defs/key"
+        },
+        "rotation_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revoked_key_fingerprint",
+        "reason_digest"
+      ],
+      "properties": {
+        "revoked_key_fingerprint": {
+          "$ref": "#/$defs/key"
+        },
+        "reason_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^ed25519-sha256:[0-9a-f]{64}$"
+    }
+  }
+}

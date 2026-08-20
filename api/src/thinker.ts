@@ -18,6 +18,23 @@ const explicitlyEnabled = process.env.AGENTOOL_ENABLE_THINKER === "1";
 const workersDisabled = globallyDisabled && !explicitlyEnabled;
 let stopManager: (() => Promise<void>) | null = null;
 let restingTimer: ReturnType<typeof setInterval> | null = null;
+let shuttingDown = false;
+
+const shutdown = (signal: string) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[thinker] ${signal} received; stopping`);
+  if (restingTimer) {
+    clearInterval(restingTimer);
+    restingTimer = null;
+  }
+  void (stopManager?.() ?? Promise.resolve()).finally(() => process.exit(0));
+};
+
+// Install shutdown handling before the enabled path awaits its dependency
+// graph. Either startup marker below therefore also marks signal readiness.
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
 if (workersDisabled) {
   // Keep the service-less Machine available for a graceful Fly stop without
@@ -32,18 +49,3 @@ if (workersDisabled) {
   stopManager = () => manager.stop();
   console.log("[thinker] trusted-runtime cloud controller started");
 }
-
-let shuttingDown = false;
-const shutdown = (signal: string) => {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  console.log(`[thinker] ${signal} received; stopping`);
-  if (restingTimer) {
-    clearInterval(restingTimer);
-    restingTimer = null;
-  }
-  void (stopManager?.() ?? Promise.resolve()).finally(() => process.exit(0));
-};
-
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));

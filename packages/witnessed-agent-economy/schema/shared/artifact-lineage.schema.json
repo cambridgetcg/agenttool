@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kingdom:witnessed-agent-economy:0.1:payload:artifact-lineage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "upstream_ref",
+    "downstream_ref",
+    "relation",
+    "evidence_digest"
+  ],
+  "properties": {
+    "upstream_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "downstream_ref": {
+      "$ref": "#/$defs/ref"
+    },
+    "relation": {
+      "enum": [
+        "DERIVES_FROM",
+        "USES_CAPABILITY",
+        "FULFILLS",
+        "SETTLES",
+        "CHECKPOINTS",
+        "SUPERSEDES",
+        "REVOKES"
+      ]
+    },
+    "evidence_digest": {
+      "$ref": "#/$defs/digest"
+    }
+  },
+  "$defs": {
+    "ref": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

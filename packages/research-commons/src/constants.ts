@@ -14,6 +14,7 @@ export const RESEARCH_FORMATS = {
   milestone: "agenttool.research-milestone/0.1",
   settlementBundle: "agenttool.research-settlement-bundle/0.1",
   publicProjection: "agenttool.research-public-projection/0.1",
+  zeroneResearchAdapterReciprocal: "agenttool.zerone-research-adapter-reciprocal/0.1",
   simulation: "agenttool.research-simulation/0.1",
   simulationState: "agenttool.research-simulation-state/0.1",
   simulationReport: "agenttool.research-simulation-report/0.1",
@@ -143,6 +144,37 @@ export const ZERO_EFFECTS = Object.freeze({
 } as const);
 
 export const ZERO_EFFECT_COUNT = 29 as const;
+
+export const RECIPROCAL_PROFILE_CANONICALIZATION =
+  "RECURSIVE_UNICODE_CODE_POINT_KEYS_COMPACT_JSON" as const;
+export const RECIPROCAL_PROFILE_ID_ALGORITHM = "SHA256_FORMAT_NUL_CANONICAL_JSON" as const;
+export const RECIPROCAL_PIN_STAGE = "PHASE_B_AGENTTOOL_PINS_ZERONE_PHASE_A" as const;
+export const RECIPROCAL_INTEGRATION_STATUS = "SHADOW_ONLY_NO_LIVE_INTEGRATION" as const;
+
+export const ORIGINAL_STATIC_INTEROP_PIN = Object.freeze({
+  format: "agenttool.research-commons-zerone-static-interop/0.1",
+  path: "packages/research-commons/interop/research-commons-zerone-v0.1.json",
+  raw_sha256: "8c5b1749447c1587b89b238dadb5113e10230df19fd3f4e7942d9a163aef6a8a",
+} as const);
+
+export const ZERONE_PHASE_A_PIN = Object.freeze({
+  adapter_spec: Object.freeze({
+    adapter_version: "agenttool-research-receipt/v1",
+    path: "docs/specs/adapters/agenttool-research-receipt-v1.md",
+    raw_sha256: "1d67c4649b419d4ff60f2fba5796d42b07d7be5d605997ecafafd37cec5158e8",
+    receipt_schema: "zerone.agenttool-research-receipt-shadow/v0",
+  } as const),
+  fixture_manifest: Object.freeze({
+    format: "zerone.agenttool-research-fixture-set/0.1",
+    path: "docs/examples/agenttool-research-receipt/fixture-manifest.v0.json",
+    raw_sha256: "cf367bb39553567e86c43c0db48501802832396b2a3f681410aaac7c5e2221e8",
+  } as const),
+  main_merge_revision: "fdd40bf9aca4a82b2cdd904d0161016b8c2a8667",
+  pull_request: "https://github.com/cambridgetcg/zerone-core/pull/52",
+  repository: "https://github.com/cambridgetcg/zerone-core",
+  source_revision: "5328b42230fa6945f458a6e60aca92b23eead595",
+  status: "PHASE_A_STATIC_FIXTURE_ONLY",
+} as const);
 
 export const PARTICIPATION_RIGHTS = Object.freeze({
   creates_debt: false,

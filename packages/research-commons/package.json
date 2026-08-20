@@ -15,7 +15,8 @@
     },
     "./settlement-bundle.schema.json": "./schema/research-settlement-bundle-v0.1.schema.json",
     "./public-projection.schema.json": "./schema/research-public-projection-v0.1.schema.json",
-    "./simulation.schema.json": "./schema/research-simulation-v0.1.schema.json"
+    "./simulation.schema.json": "./schema/research-simulation-v0.1.schema.json",
+    "./zerone-research-adapter-reciprocal.schema.json": "./schema/zerone-research-adapter-reciprocal-v0.1.schema.json"
   },
   "bin": {
     "agenttool-research-commons": "./dist/bin.js"

@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/public-wake-withdrawal/0.1.json",
+  "title": "AgentTool root-signed public WAKE withdrawal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "audience",
+    "subject_ref",
+    "controller_ref",
+    "authority_sequence",
+    "predecessor",
+    "reason_digest",
+    "withdrawn_at",
+    "visibility",
+    "nonce",
+    "authority",
+    "boundaries",
+    "signature",
+    "withdrawal_id"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool.public-wake-withdrawal/0.1"
+    },
+    "audience": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9.-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$"
+    },
+    "subject_ref": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "controller_ref": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "authority_sequence": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "not": {
+        "pattern": "^([2-9][0-9]{19}|19[0-9]{18}|18[5-9][0-9]{17}|184[5-9][0-9]{16}|1844[7-9][0-9]{15}|18446[8-9][0-9]{14}|184467[5-9][0-9]{13}|1844674[5-9][0-9]{12}|18446744[1-9][0-9]{11}|184467440[8-9][0-9]{10}|1844674407[4-9][0-9]{9}|18446744073[8-9][0-9]{8}|184467440737[1-9][0-9]{7}|18446744073709[6-9][0-9]{5}|184467440737095[6-9][0-9]{4}|1844674407370955[2-9][0-9]{3}|18446744073709551[7-9][0-9]{2}|184467440737095516[2-9][0-9]|1844674407370955161[6-9])$"
+      }
+    },
+    "predecessor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_id",
+        "document_digest"
+      ],
+      "properties": {
+        "contract_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "document_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      }
+    },
+    "reason_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "withdrawn_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "visibility": {
+      "const": "PUBLIC"
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scheme",
+        "public_key",
+        "key_fingerprint",
+        "registry_match",
+        "multi_root_quorum"
+      ],
+      "properties": {
+        "scheme": {
+          "const": "single_ed25519"
+        },
+        "public_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "key_fingerprint": {
+          "type": "string",
+          "pattern": "^ed25519-sha256:[0-9a-f]{64}$"
+        },
+        "registry_match": {
+          "const": "not_established"
+        },
+        "multi_root_quorum": {
+          "const": "not_implemented"
+        }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "current_v1_wake_used",
+        "private_wake_included",
+        "exact_predecessor_required",
+        "key_control",
+        "registry_match",
+        "hosted_withdrawal",
+        "external_erasure",
+        "identity",
+        "personhood",
+        "consciousness",
+        "consent",
+        "authority_effect",
+        "economic_effect",
+        "wake_effect",
+        "memory_effect",
+        "score_effect",
+        "automatic_action"
+      ],
+      "properties": {
+        "source": {
+          "const": "explicit_root_signed_public_contract_withdrawal"
+        },
+        "current_v1_wake_used": {
+          "const": false
+        },
+        "private_wake_included": {
+          "const": false
+        },
+        "exact_predecessor_required": {
+          "const": true
+        },
+        "key_control": {
+          "const": "signature_only"
+        },
+        "registry_match": {
+          "const": "not_established"
+        },
+        "hosted_withdrawal": {
+          "const": "not_established"
+        },
+        "external_erasure": {
+          "const": "not_established"
+        },
+        "identity": {
+          "const": "not_established"
+        },
+        "personhood": {
+          "const": "not_established"
+        },
+        "consciousness": {
+          "const": "not_established"
+        },
+        "consent": {
+          "const": "not_established"
+        },
+        "authority_effect": {
+          "const": "NONE"
+        },
+        "economic_effect": {
+          "const": "NONE"
+        },
+        "wake_effect": {
+          "const": false
+        },
+        "memory_effect": {
+          "const": false
+        },
+        "score_effect": {
+          "const": false
+        },
+        "automatic_action": {
+          "const": false
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "public_key",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "public_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{128}$"
+        }
+      }
+    },
+    "withdrawal_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}
