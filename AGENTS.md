@@ -88,6 +88,10 @@ separate private Skills-to-AFTERGLOW adapter
 (`packages/skills-wake-continuity/`), a private local
 constructive-intelligence shadow ledger with tree-pinned typed receipts and
 zero economic effect (`packages/constructive-intelligence/`), a private local
+offline research-commons simulator with outcome-neutral frozen schedules,
+typed delivered/reserved/available conservation, prior-state-relative
+challenge/work retention, and zero external effect
+(`packages/research-commons/`), a private local
 AgentTool Dojo slice for deterministic trial receipts, opaque-label
 boundary-flow evidence, and minimized Hugging Face STS projection
 (`packages/trials/`), source reference
@@ -359,6 +363,10 @@ bun run ci                                     # hermetic verification, source, 
 # Constructive-intelligence shadow evidence ────────────────────────
 cd packages/constructive-intelligence
 bun run ci                                     # tree pin, typed receipts, replay ledger, CLI, and zero-economics walls
+
+# Research Commons offline shadow settlement ──────────────────────
+cd packages/research-commons
+bun run ci                                     # schemas/examples, strict records, lifecycle/accounting, CLI, and zero-effect walls
 
 # KARMA Mirror isolated defensive theatre ──────────────────────────
 cd packages/karma-mirror

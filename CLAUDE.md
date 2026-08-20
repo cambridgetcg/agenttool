@@ -55,6 +55,7 @@ packages/
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
   correspondence-yutabase-projector/ — private loopback-only verified local PostgreSQL sidecar
   constructive-intelligence/ — private local tree-pinned typed-receipt shadow ledger
+  research-commons/ — private offline research-work funding simulator with zero external effect
   trials/       — private local Dojo trial receipts, boundary evidence, and minimized STS projection
   telescope/    — @agenttool/telescope · read-only discovery evidence mapper
   wallet/       — @agenttool/wallet · LOVE/npm bounded wallet record/lifecycle primitives
@@ -110,6 +111,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/correspondence-yutabase/CLAUDE.md` ·
 `packages/correspondence-yutabase-projector/CLAUDE.md` ·
 `packages/constructive-intelligence/CLAUDE.md` ·
+`packages/research-commons/CLAUDE.md` ·
 `packages/trials/CLAUDE.md` ·
 `packages/skills-yutabase/CLAUDE.md` ·
 `packages/wallet/CLAUDE.md` ·
@@ -124,6 +126,17 @@ It pins caller-supplied Zerone tree bytes and records closed
 ledger. Its reports are structural shadow projections, not correctness,
 breakthrough, qualification, reward eligibility, permission, or authority.
 It has no hosted route, network client, wallet, escrow, package release, or
+deployment surface.
+
+`@agenttool/research-commons` is a private, source-only, offline RC-0.1
+reference. It validates closed content-addressed research, evidence, review,
+challenge-lineage, milestone, and simulated-settlement records; conserves
+prefunded nontransferable credits as delivered, reserved, and available; and
+emits one minimized digest-only projection per settlement. Continuity is only
+relative to the caller-supplied prior state. It determines no scientific
+truth, novelty, priority, significance, identity, independence, safety,
+access, qualification, reward, governance, or authority, and has no network,
+hosted route, persistence, wallet, escrow, external value, release, or
 deployment surface.
 
 `@agenttool/karma-mirror` is a separate private, source-only defensive-deception

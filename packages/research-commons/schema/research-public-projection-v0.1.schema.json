@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:research-public-projection:0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.research-public-projection/0.1"
+        },
+        "boundaries": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "authoritative": {
+              "const": false
+            },
+            "private_locator_included": {
+              "const": false
+            },
+            "raw_evidence_included": {
+              "const": false
+            },
+            "scientific_correctness_determined": {
+              "const": false
+            }
+          },
+          "required": [
+            "authoritative",
+            "private_locator_included",
+            "raw_evidence_included",
+            "scientific_correctness_determined"
+          ]
+        },
+        "case_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "disclosure_lane": {
+          "const": "PUBLIC_DIGEST_ONLY"
+        },
+        "effects": {
+          "const": {
+            "agenttool_api_write": false,
+            "agenttool_database_write": false,
+            "authority": false,
+            "bridge": false,
+            "burn": false,
+            "chain_write": false,
+            "consent": false,
+            "cross_ledger_equivalence": false,
+            "economic": false,
+            "escrow": false,
+            "external_value": false,
+            "governance": false,
+            "identity": false,
+            "identity_equivalence": false,
+            "knowledge_admission": false,
+            "hosted_route": false,
+            "mainnet": false,
+            "mint": false,
+            "network": false,
+            "payout": false,
+            "qualification": false,
+            "reputation": false,
+            "reward": false,
+            "scientific_adjudication": false,
+            "transfer": false,
+            "wallet": false,
+            "zrn": false,
+            "zerone_read": false,
+            "zerone_write": false
+          }
+        },
+        "highest_evidence_level": {
+          "enum": [
+            null,
+            "E0",
+            "E1",
+            "E2"
+          ]
+        },
+        "node_ref": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "_format": {
+              "const": "agenttool.research-node-ref/0.1"
+            },
+            "anchor_kind": {
+              "const": "STATIC_CAPABILITY_REFERENCE"
+            },
+            "canonicalization": {
+              "const": "RECURSIVE_UNICODE_CODE_POINT_KEYS_COMPACT_JSON"
+            },
+            "live_fact": {
+              "const": false
+            },
+            "network_observed": {
+              "const": false
+            },
+            "node_digest": {
+              "const": "sha256:d8f364772611a214aaf5f671c630a5fa00daa3558330bfaf5e85efe7c5a1d0e2"
+            },
+            "node_id": {
+              "const": "math-proofcraft@1"
+            },
+            "result_authority": {
+              "const": "NONE"
+            },
+            "reward_bearing": {
+              "const": false
+            },
+            "tree_raw_sha256": {
+              "const": "sha256:8070d8d1b7ea28a314f5a8550c675d7ccbe5d9b234ef02d54d4913c650c01aaf"
+            },
+            "tree_schema": {
+              "const": "zerone.constructive-intelligence-tree/v1"
+            },
+            "node_ref_id": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          },
+          "required": [
+            "_format",
+            "anchor_kind",
+            "canonicalization",
+            "live_fact",
+            "network_observed",
+            "node_digest",
+            "node_id",
+            "result_authority",
+            "reward_bearing",
+            "tree_raw_sha256",
+            "tree_schema",
+            "node_ref_id"
+          ]
+        },
+        "public_artifact_revision_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "public_evidence_receipt_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true
+        },
+        "result_authority": {
+          "const": "NONE"
+        },
+        "settlement_bundle_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true
+        },
+        "six_ledger_boundary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "profile_digest": {
+              "const": "sha256:fd5ed0b66dd00b180729221a06e7fbeeb7ef6149136916842014a1afbdbc54b2"
+            },
+            "profile_id": {
+              "const": "research-commons.six-ledger-boundary/0.1"
+            }
+          },
+          "required": [
+            "profile_digest",
+            "profile_id"
+          ]
+        },
+        "status": {
+          "const": "SHADOW_ONLY"
+        }
+      },
+      "required": [
+        "_format",
+        "boundaries",
+        "case_id",
+        "disclosure_lane",
+        "effects",
+        "highest_evidence_level",
+        "node_ref",
+        "public_artifact_revision_ids",
+        "public_evidence_receipt_ids",
+        "result_authority",
+        "settlement_bundle_ids",
+        "six_ledger_boundary",
+        "status"
+      ]
+    },
+    "projection_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "projection",
+    "projection_id"
+  ]
+}
