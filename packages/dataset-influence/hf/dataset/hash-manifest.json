@@ -1,0 +1,65 @@
+{
+  "_format": "agenttool.dataset-influence-hf-hash-manifest/0.1",
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "ff59de47649a5a2ebc3c931d2741de72a25c0bc2ebb19d543c9fea5168e2fbad"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 135,
+      "sha256": "41a2effa4a0c355f1cb45cb789d4353926be6e897e6d7c1478c96630ce0addc0"
+    },
+    {
+      "path": "README.md",
+      "bytes": 2005,
+      "sha256": "b7916094884f6d1580fa190b624018c5a51afb17be4690e12336d379defef1b1"
+    },
+    {
+      "path": "data/dataset-influence-reference.jsonl",
+      "bytes": 13982,
+      "sha256": "f601180f0cb5fbd47b71c7c29bcb9fbb1192cc77a6fe681fcae46528ac6b04fc"
+    },
+    {
+      "path": "reference/DATASET-INFLUENCE.md",
+      "bytes": 26027,
+      "sha256": "b909556a3546c21ae53fed051611398add22b86a2d7a5162ef74103b548b29fb"
+    },
+    {
+      "path": "reference/PROTOCOL.md",
+      "bytes": 9125,
+      "sha256": "d6269cffe5ccaff920601b55e21194ec97fcf59ea05f0fa5d56b3a6d061f9742"
+    },
+    {
+      "path": "reference/agenttool-dataset-influence-study-v0.1.schema.json",
+      "bytes": 22419,
+      "sha256": "10d2b7c38ca4f7921cfc35db40b52e9b8180f25f98752909be74503eb32eab86"
+    },
+    {
+      "path": "reference/agenttool-dataset-influence-v0.1.json",
+      "bytes": 33999,
+      "sha256": "3c0d376b472d848b75669edda618f25431be524587798300a0cd857af2495804"
+    },
+    {
+      "path": "reference/agenttool-dataset-lineage-v0.1.schema.json",
+      "bytes": 14703,
+      "sha256": "30d887320c42a60c9ce48fe9b859bab7872e8a16577f147069b9a6aef54bcda5"
+    },
+    {
+      "path": "reference/agenttool-identity-evidence-view-v0.1.schema.json",
+      "bytes": 6899,
+      "sha256": "413f3ef3a49623e4f71446c0b590fe732779fc5794cc1337aec1806c028a54ba"
+    },
+    {
+      "path": "reference/agenttool-shadow-attribution-v0.1.schema.json",
+      "bytes": 8066,
+      "sha256": "3c051e14fb739b5ffe6fe766fdaa013d105da7ffd17a459bda99c3f0046d85de"
+    },
+    {
+      "path": "source-manifest.json",
+      "bytes": 5711,
+      "sha256": "0ab785abac48988a734081189142fecdfa2539f95331afbcbde9d7555d03ea1c"
+    }
+  ]
+}

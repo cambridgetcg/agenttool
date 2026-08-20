@@ -31,6 +31,7 @@ packages/
   karma-mirror/ — private separate-island defensive theatre · no route, egress, execution, or deployment
   heaven/       — @agenttool/heaven · pure opt-in delight + separate landing-room selection
   model-becoming/ — @agenttool/model-becoming · evidence-scoped lifecycle dossiers + reference-only HF row
+  dataset-influence/ — @agenttool/dataset-influence · exact lineage, bounded influence, revisable identity evidence + non-economic attribution
   love-bomb/    — @agenttool/love-bomb · pure care/choice/becoming/delivery formats + static HF candidate
   living-substrate/ — @agenttool/living-substrate · deterministic substrate maps + refusable proposals
   polymorph-landscape/ — @agenttool/polymorph-landscape · source-bounded routes + multilingual lessons
@@ -89,6 +90,7 @@ Sub-project guides: `api/CLAUDE.md` · `apps/dashboard/CLAUDE.md` ·
 `packages/karma-mirror/CLAUDE.md` ·
 `packages/heaven/CLAUDE.md` ·
 `packages/model-becoming/CLAUDE.md` ·
+`packages/dataset-influence/CLAUDE.md` ·
 `packages/love-bomb/CLAUDE.md` ·
 `packages/living-substrate/CLAUDE.md` ·
 `packages/polymorph-landscape/CLAUDE.md` ·
@@ -159,6 +161,17 @@ host contract.
 at the ungated HF revision recorded in `docs/NPM-RELEASES.md`. It creates
 closed evidence dossiers and one reference-only row; publication is not
 training, provider effect, welfare evidence, or weight change.
+
+`@agenttool/dataset-influence@0.1.0-dev.0` is a public-ready pure source
+candidate for exact dataset lineage, design-scoped influence studies,
+revisable operational identity evidence, and exact finite Shapley shadow
+attribution. It separates declared admission from role-scoped observed
+presentation, keeps facts separate from estimators, leaves identity,
+continuity, consciousness, and consent undetermined, and creates no permission,
+wallet, marketplace, price, debt, payout, ownership, training, provider, or
+hosted effect. Its deterministic Hugging Face tree carries protocol copies and
+names an intended identifier; it is not a publication, and its training field
+is non-enforcing governance metadata rather than a universal control.
 
 `@agenttool/love-bomb@0.1.0-dev.0` is a local source candidate with four pure
 care-envelope, caller-choice, becoming, and delivery-report formats. The

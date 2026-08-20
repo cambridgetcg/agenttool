@@ -1,0 +1,42 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "dataset-influence",
+  "package": "@agenttool/dataset-influence",
+  "version": "0.1.0-dev.0",
+  "status": "public_ready_source",
+  "host_contract": "not_registered",
+  "capabilities": [
+    "dataset-influence:create-lineage",
+    "dataset-influence:create-study",
+    "dataset-influence:create-identity-evidence-view",
+    "dataset-influence:compute-exact-shadow-attribution"
+  ],
+  "defaults": {
+    "network": false,
+    "filesystem": false,
+    "environment": false,
+    "clock": false,
+    "randomness": false,
+    "provider": false,
+    "model_inference": false,
+    "training": false,
+    "persistence": false,
+    "mcp": false,
+    "publication": false,
+    "deployment": false,
+    "identity_mutation": false,
+    "permission_inheritance": false,
+    "authority": false,
+    "marketplace_effect": false,
+    "wallet_effect": false,
+    "economic_effect": false,
+    "automatic_action": false
+  },
+  "notes": [
+    "This file is a declaration-only hint, not an installed or registered host contract.",
+    "Exact facts are exact only relative to pinned inputs; estimates remain method-, population-, metric-, and design-scoped.",
+    "All artifacts are caller-reported and neither establish nor override consent; identity views are revisable operational evidence and shadow attribution is non-economic.",
+    "Dataset Influence protocol IDs are not KINGDOM file digests, and this package installs no KINGDOM, identity, wallet, or Marketplace adapter.",
+    "The package performs no network, filesystem, provider, training, identity, wallet, marketplace, publication, deployment, or automatic action."
+  ]
+}

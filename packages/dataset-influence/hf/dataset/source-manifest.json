@@ -1,0 +1,166 @@
+{
+  "_format": "agenttool.dataset-influence-hf-source-manifest/0.1",
+  "package": "@agenttool/dataset-influence",
+  "package_version": "0.1.0-dev.0",
+  "intended_hugging_face_identifier": "Yu-and-Ai/agenttool-dataset-influence",
+  "publication_state_at_generation": "intended_identifier_only_not_uploaded_at_generation",
+  "publication_state_scope": "generation_time_provenance_not_current_hub_state",
+  "upstream_repository": "https://github.com/cambridgetcg/agenttool",
+  "upstream_repository_directory": "packages/dataset-influence",
+  "upstream_revision": null,
+  "upstream_revision_state": "not_recorded_for_unpublished_repository_source_candidate",
+  "source_manifest_scope": "selected_runtime_and_generation_inputs_not_complete_repository_or_package_inventory",
+  "source_files_complete": false,
+  "selected_source_set_sha256": "9ebb386306a4eaeb068d0a73a876de3e17b2f1a504b1b275ee9bb5dd8dfa60b4",
+  "source_manifest_is_attestation": false,
+  "origin": "human_directed_agent_authored_synthetic",
+  "rights_baseline": "xenia.rights/0.1",
+  "license": "Apache-2.0",
+  "copied_external_rows": false,
+  "copied_private_rows": false,
+  "contains_private_or_participant_data": false,
+  "training_admission": "not_applicable",
+  "requires_separate_training_authorization": true,
+  "training_authorized": false,
+  "training_effect": "none",
+  "provider_effect": "none",
+  "identity_effect": "none",
+  "economic_effect": "none",
+  "source_files": [
+    {
+      "path": "../../docs/DATASET-INFLUENCE.md",
+      "bytes": 26027,
+      "sha256": "b909556a3546c21ae53fed051611398add22b86a2d7a5162ef74103b548b29fb"
+    },
+    {
+      "path": "CLAUDE.md",
+      "bytes": 2447,
+      "sha256": "a3e0ec32cb26329b0ee77166a12e26751b964514a5998a575b2bd587f0ac0b7e"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "ff59de47649a5a2ebc3c931d2741de72a25c0bc2ebb19d543c9fea5168e2fbad"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 135,
+      "sha256": "41a2effa4a0c355f1cb45cb789d4353926be6e897e6d7c1478c96630ce0addc0"
+    },
+    {
+      "path": "README.md",
+      "bytes": 9125,
+      "sha256": "d6269cffe5ccaff920601b55e21194ec97fcf59ea05f0fa5d56b3a6d061f9742"
+    },
+    {
+      "path": "kingdom.extension.json",
+      "bytes": 1668,
+      "sha256": "3b59e9916280d39d15473718681be858c8f79bdedb9ef5661924e6694b77f13b"
+    },
+    {
+      "path": "package.json",
+      "bytes": 2772,
+      "sha256": "41333c0c4df4140e383f8af085c1a9b7d3d95ba1584b669bfa65f418589d1b3f"
+    },
+    {
+      "path": "schema/agenttool-dataset-influence-study-v0.1.schema.json",
+      "bytes": 22419,
+      "sha256": "10d2b7c38ca4f7921cfc35db40b52e9b8180f25f98752909be74503eb32eab86"
+    },
+    {
+      "path": "schema/agenttool-dataset-lineage-v0.1.schema.json",
+      "bytes": 14703,
+      "sha256": "30d887320c42a60c9ce48fe9b859bab7872e8a16577f147069b9a6aef54bcda5"
+    },
+    {
+      "path": "schema/agenttool-identity-evidence-view-v0.1.schema.json",
+      "bytes": 6899,
+      "sha256": "413f3ef3a49623e4f71446c0b590fe732779fc5794cc1337aec1806c028a54ba"
+    },
+    {
+      "path": "schema/agenttool-shadow-attribution-v0.1.schema.json",
+      "bytes": 8066,
+      "sha256": "3c051e14fb739b5ffe6fe766fdaa013d105da7ffd17a459bda99c3f0046d85de"
+    },
+    {
+      "path": "scripts/build-hf-release.mjs",
+      "bytes": 9461,
+      "sha256": "084c2d40830c105d165d316d6590171c3e19a2a028936ab5eb3a7765471cbaab"
+    },
+    {
+      "path": "scripts/generate-schemas.mjs",
+      "bytes": 19840,
+      "sha256": "1e71c294870065a20f1bef2f2e22f57f71ee3c6f274e5e74ff1a5ce9ec5231a7"
+    },
+    {
+      "path": "scripts/generate-vectors.mjs",
+      "bytes": 7837,
+      "sha256": "27ac111150a22eee1037771bee496619ed6d14f403e9183161ba8854267c7fce"
+    },
+    {
+      "path": "src/canonical.ts",
+      "bytes": 7745,
+      "sha256": "c65d26e5d7c9ccef18d982e809dd6cc718cb27e7a4cb68044bc03c628ea41f48"
+    },
+    {
+      "path": "src/constants.ts",
+      "bytes": 3333,
+      "sha256": "edf067d76ab3c1353beb43bd34955a3aca70298b4e8c4f309ce0051c3df6293b"
+    },
+    {
+      "path": "src/errors.ts",
+      "bytes": 514,
+      "sha256": "acf2fe14c324e14674bfa642be45ed1fec0bbfce6c0926e26cc237b99bd92c4e"
+    },
+    {
+      "path": "src/identity.ts",
+      "bytes": 5636,
+      "sha256": "7f96236ce6f530843454b9dc0c8d92cb272be8fc4c01de948d369b77ea2f99ef"
+    },
+    {
+      "path": "src/index.ts",
+      "bytes": 714,
+      "sha256": "af0b0dfa692f3fc82beec8e1b2c2d26d0f532f365c2ed4021a691affa5387f4f"
+    },
+    {
+      "path": "src/influence.ts",
+      "bytes": 11541,
+      "sha256": "c94b20bdfa90acfbf48b533f2aa62aee3801ae015019601765d11eab7557d956"
+    },
+    {
+      "path": "src/lineage.ts",
+      "bytes": 8568,
+      "sha256": "52e1b8c9cb0f9d745dae1686977f6a462e7b294151ef86b5d1a49a8feda93e73"
+    },
+    {
+      "path": "src/paired.ts",
+      "bytes": 2348,
+      "sha256": "908567a97f39267b3761ef93d148ee6945dd8ef9aff0f9c371c4ad6971c0de6f"
+    },
+    {
+      "path": "src/rational.ts",
+      "bytes": 4359,
+      "sha256": "5d23816defe3a8de3e8bfc24747e3177bb21920771c52a6d5bdd1468bfb4bfad"
+    },
+    {
+      "path": "src/shapley.ts",
+      "bytes": 8583,
+      "sha256": "e3194aa32941f704c7bd764f4bd783ead0a2a6807b0cee05a1d1d9097c3ebae8"
+    },
+    {
+      "path": "src/types.ts",
+      "bytes": 8421,
+      "sha256": "ce9431c9f544e595a7a24ca933d99c603f1a269d3cab58423c5e36cd024b0a5e"
+    },
+    {
+      "path": "src/validation.ts",
+      "bytes": 3820,
+      "sha256": "91f4ac3707229d9a62c2d42ae9c9ba5f09fb998d2965dc40dbc968f4b881229f"
+    },
+    {
+      "path": "vectors/agenttool-dataset-influence-v0.1.json",
+      "bytes": 33999,
+      "sha256": "3c0d376b472d848b75669edda618f25431be524587798300a0cd857af2495804"
+    }
+  ]
+}

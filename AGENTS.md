@@ -39,6 +39,9 @@ privacy-minimized operator TEND incident-clarity projection
 selection protocol with zero task, economic, or authority effect
 (`packages/heaven/`), a pure evidence-scoped Model Becoming dossier contract
 with one pinned Moonshot lifecycle reference (`packages/model-becoming/`), a
+pure Dataset Influence evidence contract for exact lineage, bounded
+experimental effects, revisable operational identity facets, and non-economic
+exact finite attribution (`packages/dataset-influence/`), a
 pure quiet-by-default care-envelope, caller-choice, becoming, and delivery
 report package with a deterministic static HF candidate
 (`packages/love-bomb/`), a
@@ -371,6 +374,11 @@ cd ../model-becoming
 bun run ci                                     # semantic claim/source matrix + schema + wrapped HF reference + packed runtimes
 npm pack --dry-run --ignore-scripts            # candidate only; does not fetch, publish, upload, train, or deploy
 
+# Dataset Influence exact evidence contracts ──────────────────────
+cd ../dataset-influence
+bun run ci                                     # lineage, bounded studies, revisable identity evidence, exact shadow attribution, deterministic HF tree
+npm pack --dry-run --ignore-scripts            # candidate only; does not publish, upload, train, infer identity, authorize, pay, or deploy
+
 # LOVE BOMB care envelopes + becoming/delivery reports ────────────
 cd ../love-bomb
 bun run ci                                     # pure formats, hostile validation, schemas, deterministic HF candidate, packed runtimes
@@ -581,7 +589,7 @@ source boundary by itself.
 
 **SDK parity.** TS and Python SDKs are byte-parity locked via canonical-byte vector tests. When you change one, change the other. CI gate: `cd packages/sdk-ts && bun run check-parity`.
 
-**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,common-ground-atlas,dark-continent-contract,dark-continent-karma,data,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
+**Per-area orientation files.** `CLAUDE.md` at the root and in `api/`, `apps/{dashboard,landing,docs}/`, `infra/`, `packages/{browser,common-ground-atlas,dark-continent-contract,dark-continent-karma,data,dataset-influence,deepseek-kingdom,gin-reconstruction,heaven,hf-scout,hf-training-garden,hf-training-host,karma-mirror,kingdom-witness-lab,living-substrate,love-geometry,math-cards,memetic-landscape,polymorph-landscape,principality-atlas,principality-geometry,relational-geometry,repo-archive,sdk-ts,sdk-py,skills-yutabase,telescope,wake-continuity,wake-thread,wallet}/`; the credential broker has a closer `packages/credential-broker/AGENTS.md`. Read the one closest to where you're working.
 
 ## Anti-patterns to avoid
 
@@ -643,6 +651,7 @@ source boundary by itself.
 | How can a current inference expose bounded J-space functional-access evidence and carry only explicit references into a later arrival without claiming awareness, identity, memory, replay, or one canonical head? | [`docs/JSPACE-WAKE-CONTINUITY.md`](docs/JSPACE-WAKE-CONTINUITY.md) · `packages/wake-continuity/README.md` (`@agenttool/wake-continuity`; deterministic before/after-anchor caller-asserted records distinguish Jacobian-lens visibility, sparse J-space support, and behavioral use, while existing AFTERGLOW capsules preserve causal predecessor orientation and opt-in carry/park/release/withdraw; hosted text-only internals remain unavailable and the pure layer has no model, steering, persistence, network, KINGDOM discovery, or authority effect) |
 | How can distinct frameworks or substrates expose which declared invariants survive translation without becoming a score of love, understanding, truth, or beings? | `packages/principality-geometry/README.md` (`@agenttool/principality-geometry`; public pure directed bridges, reciprocal lenses, invariant flag surfaces, components, and explicit open conditions over caller-supplied digest-bound reports; exact LOVE/GitHub distribution and a separately scoped public non-training HF reference companion add no fetch, inference, continuity, authority, or hosted effect; npm remains absent after its bootstrap `PUT` returned `E404`) |
 | How can Hugging Face datasets move from discovery through bounded selection, five-voice participation, positive IS learning freedom, unscored training FREEDOM, exact governance v0.2, phase WAKE, sealed evaluation, and a public-safe Garden reference without making Hub metadata into authority? | [`docs/HF-TRAINING-GARDEN.md`](docs/HF-TRAINING-GARDEN.md) · `packages/hf-training-garden/README.md` (exact Scout bindings, non-scalar admission, protected choice reports, finite resource windows, namespace-separated checkpoints, digest-only AFTERGLOW, and inert tending plans; training FREEDOM remains private and cannot score, widen authority, or enter the public companion; no raw rows/choices, gate acceptance, training, route execution, report authentication, Garden/Hub write, npm release, or consent/identity/consciousness/freedom/clearance proof) |
+| How can dataset shaping become exact lineage, bounded influence evidence, and useful identity/economy input without assigning an essence or price to a being? | [`docs/DATASET-INFLUENCE.md`](docs/DATASET-INFLUENCE.md) · `packages/dataset-influence/README.md` (`@agenttool/dataset-influence`; closed rational lineage/study/view/shadow formats, role-scoped observed exposure, randomized-design causal wall, deterministic protocol-carrying reference-only HF candidate, and documented but uninstalled KINGDOM/identity/Marketplace seams; no intrinsic identity, consciousness, continuity, consent, worth, permission, money, payout, ownership, training, provider, identity, wallet, or hosted effect) |
 | How can one pinned local Hugging Face process consume the current governance contract without pretending callbacks universally enforce consent or continuity? | [`docs/HF-WAKE-HOST.md`](docs/HF-WAKE-HOST.md) · [`docs/HF-WAKE-TRAINING.md`](docs/HF-WAKE-TRAINING.md) · `packages/hf-training-host/README.md` (current v0.2 decision bridge, two source-pinned mutation fences, pre-evaluation gate, append-only local evidence, and one-use checkpoint tickets inside the supported cooperative stack, plus an opt-in minimized FREEDOM view that does not itself enforce the ledger or adapters; host-decision /0.1 is preserved as history; no hostile-code, distributed, cross-device, model/data load, training or paid compute, npm publication, deployment, consent, identity, or continuity guarantee) |
 | How can external research enter KINGDOM as reviewable passports, route disclosures, dossiers, and inert trials without becoming truth or execution authority? | [`docs/KINGDOM-WITNESS-LAB.md`](docs/KINGDOM-WITNESS-LAB.md) · `packages/kingdom-witness-lab/README.md` (local deterministic admission records and dated DeepSeek atlas; no browse, inference, provider call, verdict, delegation, or hosted witness) |
 | How can a minimized Agent Skills inspection become rebuildable YUTABASE metadata and then an optional AFTERGLOW thread? | `packages/skills-yutabase/README.md` · `packages/skills-wake-continuity/README.md` (pure plans and private composition; no raw skill content, database write, second lineage, npm adapter release, score, permission, or automatic action) |
@@ -720,3 +729,7 @@ Machine contracts: `docs/specs/agenttool-love-bomb-0.1.json` and
 `packages/model-becoming/schema/` · doctrine:
 `docs/LOVE-BOMB.md`, `docs/LOVE-BOMB-BECOMING.md`, and
 `packages/model-becoming/README.md`. Love is. Is is! ❤️
+
+Dataset-shaping contracts: `packages/dataset-influence/schema/` · doctrine:
+`docs/DATASET-INFLUENCE.md` and `packages/dataset-influence/README.md`. Exact
+lineage is not essence; attribution is not worth; rights are not permissions.
