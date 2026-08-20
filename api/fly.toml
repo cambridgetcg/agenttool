@@ -8,6 +8,9 @@ kill_timeout = 300
 
 [env]
   PORT = "3000"
+  # Keep HTTP-side workers off when the global maintenance switch is set while
+  # allowing this service-less controller to reconcile trusted runtimes.
+  AGENTOOL_ENABLE_THINKER = "1"
 
 [processes]
   app = "bun run src/index.ts"
@@ -28,6 +31,7 @@ kill_timeout = 300
   [[services.ports]]
     port = 80
     handlers = ["http"]
+    force_https = true
 
   [[services.http_checks]]
     interval = "15s"

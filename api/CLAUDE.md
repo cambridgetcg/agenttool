@@ -107,7 +107,10 @@ All HTTP-side workers are disabled when `AGENTTOOL_DISABLE_WORKERS=1`.
 Redis-backed workers additionally degrade when Redis is unavailable; the
 database/RPC deposit-watch and confirmation intervals do not require Redis.
 The service-less `thinker` process is separate and database-backed; it
-requires the runtime migrations and KMS/Vault/database secrets.
+requires the runtime migrations and KMS/Vault/database secrets. Production's
+`AGENTOOL_ENABLE_THINKER=1` Fly setting is read only by that dedicated
+entrypoint, allowing its controller to run while the global switch still keeps
+HTTP-side workers disabled.
 
 ## Bridge protocol (Horizon C)
 

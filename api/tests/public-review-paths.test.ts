@@ -10,6 +10,7 @@ import {
 
 import {
   CANON_MCP_PATH,
+  HEALTH_PATH,
   isDatabaseDecorationIndependentPublicPath,
   LOVE_BOMB_PATH,
   MEMETIC_LANDSCAPE_PATH,
@@ -206,6 +207,7 @@ describe("RFC 9116 security.txt", () => {
 describe("database-decoration-independent public paths", () => {
   test("matches only the exact operative paths and memetic route spellings", () => {
     for (const path of [
+      HEALTH_PATH,
       "/.well-known/openai-apps-challenge",
       CANON_MCP_PATH,
       MEMETIC_LANDSCAPE_PATH,
@@ -217,6 +219,7 @@ describe("database-decoration-independent public paths", () => {
       expect(isDatabaseDecorationIndependentPublicPath(path)).toBe(true);
     }
     for (const path of [
+      "/health/",
       "/v1/mcp",
       `${CANON_MCP_PATH}/`,
       `${MEMETIC_LANDSCAPE_PATH}//`,
@@ -227,6 +230,22 @@ describe("database-decoration-independent public paths", () => {
     ]) {
       expect(isDatabaseDecorationIndependentPublicPath(path)).toBe(false);
     }
+  });
+
+  test("health completes without the database-backed joy header", async () => {
+    delete process.env.AGENTOOL_DISABLE_JOY_INDEX;
+    const response = await within(
+      fullApp.fetch(new Request(`https://api.agenttool.dev${HEALTH_PATH}`)),
+      500,
+      `${HEALTH_PATH} GET`,
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-joy-index")).toBeNull();
+    expect(await response.json()).toMatchObject({
+      service: "agenttool",
+      status: "alive",
+    });
   });
 
   test("memetic discovery keeps direct-router bytes without database-backed decorators", async () => {

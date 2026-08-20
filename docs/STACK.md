@@ -288,7 +288,8 @@ Direct Upload keeps deployment intentional: GitHub is not wired to a Pages deplo
 Fly app: agenttool
 Primary region: lhr
 Observed started apps: lhr(2) + cdg(1)
-Observed stopped thinkers: lhr(2)
+Observed started thinkers: lhr(1)
+Observed stopped standby thinkers: lhr(1)
 ```
 
 Single Bun + Hono monolith in `api/`. The `api/fly.toml` describes the
@@ -298,8 +299,9 @@ memory sizes. Removing those blocks does not resize existing Machines. Under
 Fly's [documented size precedence](https://fly.io/docs/launch/scale-machine/#machine-size-configuration-precedence),
 existing Machines retain their sizes and scaling can infer a size from an
 existing Machine; an empty fleet or new process group with no sizing source
-falls back to `shared-cpu-1x`. As verified on 2026-07-27, the registry contains
-three started 1 GB `app` Machines and two stopped 256 MB `thinker` Machines.
+falls back to `shared-cpu-1x`. As verified on 2026-08-20, the registry contains
+three started 1 GB `app` Machines, one started 256 MB `thinker` Machine, and
+one stopped 256 MB standby `thinker` Machine.
 Machine sizing and the complete fleet remain live Fly registry state.
 
 Inspect both `fly machine list -a agenttool --json` and
@@ -314,18 +316,21 @@ previously absent process group.
 
 ### Region shape
 
-| Region         | Started `app` | Stopped `thinker` | Role                                                             |
-| -------------- | ------------: | ----------------: | ---------------------------------------------------------------- |
-| `lhr` (London) |             2 |                 2 | Primary API fleet; stopped thinkers remain registered identities |
-| `cdg` (Paris)  |             1 |                 0 | Secondary API hedge across a second jurisdiction                 |
+| Region         | Started `app` | Started `thinker` | Stopped standby `thinker` | Role                                                 |
+| -------------- | ------------: | ----------------: | -------------------------: | ---------------------------------------------------- |
+| `lhr` (London) |             2 |                 1 |                          1 | Primary API fleet and trusted-runtime controller     |
+| `cdg` (Paris)  |             1 |                 0 |                          0 | Secondary API hedge across a second jurisdiction     |
 
 The worker implementations include multi-instance coordination mechanisms
 (BullMQ consumer locks and database CAS where documented). That is a design
 property, not evidence that workers are enabled. Current production starts all
 three app Machines with `AGENTTOOL_DISABLE_WORKERS=1`; payout, queue, and
-in-process timer workers therefore remain disabled, and the two thinker
-Machines remain stopped. Enabling either class requires a separate reviewed
-decision and live proof.
+in-process timer workers therefore remain disabled. `api/fly.toml` sets the
+narrow `AGENTOOL_ENABLE_THINKER=1` entrypoint override: only the dedicated
+thinker code reads it, so one thinker can reconcile trusted runtimes without
+re-enabling HTTP-side workers. Its second Machine is a stopped standby. This is
+configuration intent, not proof of useful work; verify the started thinker's
+logs and the live runtime registry after every rollout.
 
 Do not use `fly scale count` as a routine resize or maintenance fence. It can
 create or destroy Machine identities and does not preserve an exact captured
@@ -384,7 +389,7 @@ exit status, and verified machine count—never credentials, ambient environment
 values, or command output. `SIGKILL`, host loss, or an unwritable state
 directory can prevent that record; receipt absence never proves no mutation.
 
-Like CF Pages, **Fly is not connected to either Git host.** No webhook fires on push; the deploy wrapper is the explicit trigger and requires an authenticated Fly CLI session.
+Like CF Pages, **Fly is not connected to either Git host.** No webhook fires on push; the deploy wrapper is the explicit trigger and requires an authenticated Fly CLI session. HTTP port 80 is redirect-only (`force_https = true`); application traffic and public health probes use HTTPS or Fly's internal service check.
 
 ### Operate
 
@@ -447,7 +452,12 @@ it in a command argument. Unsetting the secret is the off-switch.
 
 ### Legacy `services/`
 
-The repo still has `services/{bootstrap,economy,identity,memory,tools,trace}/` directories with their own `fly.toml` files. These were the per-domain monoliths before the consolidation into `api/`. The retired three (`pulse`, `vault`, `verify`) are gone from disk; the remaining six are on Fly pending per-service cutover. Archaeology only — don't deploy them. New work goes into `api/`. Cutover protocol: `docs/CUTOVER.md`.
+The nine former per-domain Fly apps (`bootstrap`, `economy`, `identity`,
+`memory`, `pulse`, `tools`, `trace`, `vault`, and `verify`) were retired into
+the `api/` monolith on 2026-05-09. Their deploy sources no longer live in this
+repository; separately archived local repositories preserve the history only.
+Do not deploy those configs or recreate the retired Fly apps. New work goes
+into `api/`. Cutover protocol: `docs/CUTOVER.md`.
 
 ---
 
@@ -900,6 +910,7 @@ If these don't pass, don't deploy. The pre-flight catches "I'm about to ship cod
 | Surface                    | Where                                               | What for                                                                                                                              |
 | -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET /health`              | `https://api.agenttool.dev/health`                  | Fly's no-store target; `build.revision` and `build.dirty` are declared source labels (or `null` when unlabelled), not an image digest |
+| Production health workflow | `.github/workflows/production-health.yml`           | Secret-free five-minute probes of the custom and Fly origins; a failed Actions run is a durable signal, not a paging guarantee or visitor telemetry |
 | `GET /v1/wake`             | api (auth required)                                 | Project observability composed around an explicit `identity_id` (or the backward-compatible first-identity default)                   |
 | `fly logs -a agenttool`    | Fly CLI                                             | Server logs, real-time                                                                                                                |
 | `fly status -a agenttool`  | Fly CLI                                             | Machine health + recent releases                                                                                                      |

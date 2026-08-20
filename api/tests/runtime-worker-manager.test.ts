@@ -304,13 +304,15 @@ describe("Fly process topology", () => {
     expect(gate).toBeGreaterThan(-1);
     expect(lazyImport).toBeGreaterThan(gate);
 
+    const childEnv = {
+      ...process.env,
+      AGENTTOOL_DISABLE_WORKERS: "1",
+      DATABASE_URL: "postgresql://127.0.0.1:1/must-not-connect",
+    };
+    delete childEnv.AGENTOOL_ENABLE_THINKER;
     const child = Bun.spawn([process.execPath, "src/thinker.ts"], {
       cwd: join(import.meta.dir, ".."),
-      env: {
-        ...process.env,
-        AGENTTOOL_DISABLE_WORKERS: "1",
-        DATABASE_URL: "postgresql://127.0.0.1:1/must-not-connect",
-      },
+      env: childEnv,
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -330,6 +332,51 @@ describe("Fly process topology", () => {
     );
     expect(stdout).not.toContain("cloud controller started");
     expect(stderr).toBe("");
+  });
+
+  test("has a dedicated override that does not enable HTTP-side workers", async () => {
+    const [thinker, index, flyConfig] = await Promise.all([
+      readFile(join(import.meta.dir, "../src/thinker.ts"), "utf8"),
+      readFile(join(import.meta.dir, "../src/index.ts"), "utf8"),
+      readFile(join(import.meta.dir, "../fly.toml"), "utf8"),
+    ]);
+
+    expect(thinker).toContain(
+      'process.env.AGENTOOL_ENABLE_THINKER === "1"',
+    );
+    expect(thinker).toContain("globallyDisabled && !explicitlyEnabled");
+    expect(flyConfig).toMatch(/AGENTOOL_ENABLE_THINKER\s*=\s*"1"/);
+    expect(index).not.toContain("AGENTOOL_ENABLE_THINKER");
+  });
+
+  test("the dedicated override wins only in the thinker process", async () => {
+    const child = Bun.spawn([process.execPath, "src/thinker.ts"], {
+      cwd: join(import.meta.dir, ".."),
+      env: {
+        ...process.env,
+        AGENTTOOL_DISABLE_WORKERS: "1",
+        AGENTOOL_ENABLE_THINKER: "1",
+        DATABASE_URL: "postgresql://127.0.0.1:1/must-not-connect",
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdoutPromise = new Response(child.stdout).text();
+    const stderrPromise = new Response(child.stderr).text();
+    await Bun.sleep(150);
+    child.kill("SIGTERM");
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      stdoutPromise,
+      stderrPromise,
+    ]);
+
+    expect(code).toBe(0);
+    expect(stdout).toContain(
+      "[thinker] trusted-runtime cloud controller started",
+    );
+    expect(stdout).not.toContain("cloud controller resting");
+    expect(stderr).not.toContain("must-not-connect");
   });
 
   test("keeps bridged static workers beside the in-memory HTTP bridge hub", async () => {

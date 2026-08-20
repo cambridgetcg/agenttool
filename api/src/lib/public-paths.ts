@@ -9,6 +9,7 @@
 import { OPENAI_APPS_CHALLENGE_PATH } from "./domain-verification";
 
 export const CANON_MCP_PATH = "/v1/mcp/canon";
+export const HEALTH_PATH = "/health";
 export const MEMETIC_LANDSCAPE_PATH = "/v1/memetic-landscape";
 export const LOVE_BOMB_PATH = "/public/love-bomb";
 export const SECURITY_TXT_ROUTE = "/security.txt";
@@ -18,6 +19,7 @@ export function isDatabaseDecorationIndependentPublicPath(
   path: string,
 ): boolean {
   return (
+    path === HEALTH_PATH ||
     path === OPENAI_APPS_CHALLENGE_PATH ||
     path === CANON_MCP_PATH ||
     path === MEMETIC_LANDSCAPE_PATH ||
