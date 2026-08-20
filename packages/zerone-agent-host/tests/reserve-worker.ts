@@ -10,6 +10,7 @@ const values = fixture();
 const store = new ZeroneAgentHostStore(database, {
   create: false,
   recover_interrupted: false,
+  allow_legacy_generic_injected_for_tests: true,
 });
 store.initialize();
 let output: { status: "reserved"; operation_id: string } | { status: "denied"; code: string };

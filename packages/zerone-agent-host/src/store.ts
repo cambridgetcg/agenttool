@@ -1,5 +1,27 @@
 import { Database } from "bun:sqlite";
-import { canonicalJson } from "@agenttool/wallet";
+import {
+  assertIntentWithinCapabilityStatic,
+  assertUuid,
+  assertVerifiedRecord,
+  base64UrlDecode,
+  base64UrlEncode,
+  canonicalJson,
+  sha256Id,
+  sha256BytesId,
+} from "@agenttool/wallet";
+import {
+  assertSecp256k1PublicKey,
+  COSMOS_SECP256K1_PUBLIC_KEY_TYPE_URL,
+  getZeroneProfile,
+} from "@agenttool/wallet-zerone";
+import {
+  assertZeroneEconomyDirectSignPlan,
+  createZeroneEconomySigningRequest,
+  createZeroneEconomySimulationBinding,
+  getZeroneEconomyModuleAccounts,
+  verifyZeroneEconomySimulationEvidence,
+  zeroneEconomyDirectSignPlanContentId,
+} from "@agenttool/wallet-zerone-economy";
 import {
   assertWalletIdentityBindingSuccessor,
   validateTreasuryPolicy,
@@ -13,6 +35,8 @@ import {
 
 import {
   AUTHORIZATION_PROJECTION_BOUNDARY,
+  ECONOMY_AUTHORIZATION_BOUNDARY,
+  ECONOMY_COMMITMENT_HASH_DOMAIN,
   EXECUTION_SUPPORT,
   GENESIS_EVENT_HASH,
   OPERATION_STATUSES,
@@ -25,6 +49,7 @@ import type {
   BindingHead,
   BindingHeadExpectation,
   BindingCurrentnessAssertion,
+  BindingCurrentnessResolver,
   BroadcastEvidence,
   BroadcastInvocationBoundary,
   CanonicalReorgEvidence,
@@ -32,19 +57,28 @@ import type {
   CapabilityUsageSnapshot,
   HostVerificationReport,
   OperationEvent,
+  OperationKind,
   OperationSnapshot,
   OperationStatus,
   PurposeReservation,
   ReservationState,
   ReserveOperationInput,
+  ReserveAndEnterZeroneEconomySigningBoundaryInput,
   SequenceAdvanceEvidence,
   Sha256Id,
   SignerInvocationBoundary,
   TransactionEvidence,
+  TrustedSimulationAdapterAssertion,
+  TrustedBindingCurrentnessVerifierAssertion,
   VerifiedSignedEvidence,
   ZeroneAccountSnapshot,
+  ZeroneStateObserver,
   ZeroneAccountId,
   ZeroneCaip2,
+  ZeroneEconomyActivationCurrentnessAssertion,
+  ZeroneEconomyActivationCurrentnessResolver,
+  ZeroneEconomyOperationCommitment,
+  ZeroneEconomySigningBoundaryResult,
 } from "./types.js";
 import {
   assertBlockHash,
@@ -58,6 +92,9 @@ import {
   parseUint64,
   validateAccountSnapshot,
   validateBindingCurrentnessAssertion,
+  validateTrustedBindingCurrentnessVerifierAssertion,
+  validateTrustedSimulationAdapterAssertion,
+  validateZeroneEconomyActivationCurrentnessAssertion,
 } from "./validation.js";
 
 interface BindingHeadRow {
@@ -115,6 +152,9 @@ interface AccountStateRow {
   balance_uzrn: string;
   observed_at_height: string;
   block_hash: string;
+  public_key_type_url: ZeroneAccountSnapshot["public_key_type_url"];
+  public_key_b64u: string | null;
+  valid_until: string;
   halted: number;
   halted_at_height: string | null;
   halt_evidence_id: Sha256Id | null;
@@ -125,6 +165,7 @@ interface AccountStateRow {
 
 interface OperationRow {
   operation_id: string;
+  operation_kind: OperationKind;
   revision: number;
   status: OperationStatus;
   wallet_id: string;
@@ -165,6 +206,25 @@ interface OperationRow {
   event_head_hash: Sha256Id;
   created_at: string;
   updated_at: string;
+}
+
+interface EconomyCommitmentRow {
+  operation_id: string;
+  commitment_id: Sha256Id;
+  plan_id: Sha256Id;
+  plan_content_id: Sha256Id;
+  message_kind: string;
+  message_type_url: string;
+  intent_record_id: Sha256Id;
+  simulation_evidence_record_id: Sha256Id;
+  simulation_evidence_json: string;
+  binding_currentness_id: Sha256Id;
+  binding_verifier_trust_id: Sha256Id;
+  sign_doc_bytes_hash: Sha256Id;
+  activation_currentness_id: Sha256Id;
+  request_id: string;
+  requested_at: string;
+  commitment_json: string;
 }
 
 interface ReservationRow {
@@ -234,18 +294,36 @@ export interface ZeroneAgentHostStoreOptions {
   /** Non-durable escape hatch for unit tests only. Production callers must omit it. */
   readonly allow_in_memory_for_tests?: boolean;
   /**
+   * Enables the opaque pre-v3 generic injected lifecycle for legacy tests only.
+   * Typed production hosts must omit this and use the economy boundary.
+   */
+  readonly allow_legacy_generic_injected_for_tests?: boolean;
+  /**
    * Defaults to true even with create-if-missing. Only one lifecycle driver
    * may perform cold-start recovery for a database at a time. Concurrent
    * reservation-only workers must explicitly set this false.
    */
   readonly recover_interrupted?: boolean;
   readonly now?: () => string;
+  /** Immutable resolver used by every typed economy operation. */
+  readonly binding_currentness_resolver?: BindingCurrentnessResolver;
+  /** Immutable resolver used by every typed economy operation. */
+  readonly activation_currentness_resolver?: ZeroneEconomyActivationCurrentnessResolver;
+  /** Immutable account observer used by every typed economy operation. */
+  readonly account_observer?: ZeroneStateObserver;
+  /** Exact immutable binding-currentness verifier trust epochs. */
+  readonly trusted_binding_currentness_verifiers?: readonly TrustedBindingCurrentnessVerifierAssertion[];
+  /** Exact immutable adapter trust entries required by the typed economy path. */
+  readonly trusted_simulation_adapters?: readonly TrustedSimulationAdapterAssertion[];
+  /** Resolver verifier names admitted by the typed activation-currentness path. */
+  readonly trusted_activation_verifier_ids?: readonly string[];
 }
 
 const TABLE_COLUMNS = Object.freeze({
   account_states: [
     "chain_id", "source_account", "account_number", "sequence", "balance_uzrn",
-    "observed_at_height", "block_hash", "halted", "halted_at_height",
+    "observed_at_height", "block_hash", "public_key_type_url", "public_key_b64u",
+    "valid_until", "halted", "halted_at_height",
     "halt_evidence_id", "halted_at", "revision", "observed_at",
   ],
   binding_heads: [
@@ -267,8 +345,15 @@ const TABLE_COLUMNS = Object.freeze({
     "ledger_sequence", "operation_id", "sequence", "kind", "at", "details_json",
     "previous_event_hash", "event_hash",
   ],
+  economy_operation_commitments: [
+    "operation_id", "commitment_id", "plan_id", "plan_content_id", "message_kind",
+    "message_type_url", "intent_record_id", "simulation_evidence_record_id",
+    "simulation_evidence_json", "binding_currentness_id", "binding_verifier_trust_id",
+    "sign_doc_bytes_hash", "activation_currentness_id", "request_id", "requested_at",
+    "commitment_json",
+  ],
   operations: [
-    "operation_id", "revision", "status", "wallet_id", "binding_id", "proof_id",
+    "operation_id", "operation_kind", "revision", "status", "wallet_id", "binding_id", "proof_id",
     "currentness_id", "binding_head_version", "descriptor_id", "capability_record_id",
     "capability_revocation_nonce", "authorization_verification_id", "intent_record_id", "simulation_record_id",
     "plan_reference_id", "treasury_policy_id", "treasury_policy_json",
@@ -288,23 +373,25 @@ const TABLE_COLUMNS = Object.freeze({
 } as const);
 
 const TABLE_SIGNATURES: Readonly<Record<keyof typeof TABLE_COLUMNS, string>> = Object.freeze({
-  account_states: "chain_id:TEXT:1:1|source_account:TEXT:1:2|account_number:TEXT:1:0|sequence:TEXT:1:0|balance_uzrn:TEXT:1:0|observed_at_height:TEXT:1:0|block_hash:TEXT:1:0|halted:INTEGER:1:0|halted_at_height:TEXT:0:0|halt_evidence_id:TEXT:0:0|halted_at:TEXT:0:0|revision:INTEGER:1:0|observed_at:TEXT:1:0",
+  account_states: "chain_id:TEXT:1:1|source_account:TEXT:1:2|account_number:TEXT:1:0|sequence:TEXT:1:0|balance_uzrn:TEXT:1:0|observed_at_height:TEXT:1:0|block_hash:TEXT:1:0|public_key_type_url:TEXT:0:0|public_key_b64u:TEXT:0:0|valid_until:TEXT:1:0|halted:INTEGER:1:0|halted_at_height:TEXT:0:0|halt_evidence_id:TEXT:0:0|halted_at:TEXT:0:0|revision:INTEGER:1:0|observed_at:TEXT:1:0",
   binding_heads: "wallet_id:TEXT:0:1|head_version:INTEGER:1:0|binding_id:TEXT:1:0|proof_id:TEXT:1:0|currentness_id:TEXT:1:0|binding_revision:INTEGER:1:0|continuity_sequence:INTEGER:1:0|revocation_nonce:INTEGER:1:0|descriptor_id:TEXT:1:0|signer_key_id:TEXT:1:0|source_account:TEXT:1:0|network:TEXT:1:0|proof_envelope_json:TEXT:1:0|currentness_json:TEXT:1:0|updated_at:TEXT:1:0",
   binding_history: "currentness_id:TEXT:0:1|proof_id:TEXT:1:0|wallet_id:TEXT:1:0|head_version:INTEGER:1:0|binding_id:TEXT:1:0|source_account:TEXT:1:0|proof_envelope_json:TEXT:1:0|currentness_json:TEXT:1:0|recorded_at:TEXT:1:0",
   capability_usage: "capability_record_id:TEXT:0:1|wallet_id:TEXT:1:0|descriptor_id:TEXT:1:0|policy_hash:TEXT:1:0|revocation_nonce:INTEGER:1:0|max_intents:INTEGER:1:0|max_spend_uzrn:TEXT:1:0|max_fee_per_intent_uzrn:TEXT:1:0|reserved_intents:INTEGER:1:0|consumed_intents:INTEGER:1:0|reserved_spend_uzrn:TEXT:1:0|consumed_spend_uzrn:TEXT:1:0|version:INTEGER:1:0|updated_at:TEXT:1:0",
   operation_events: "ledger_sequence:INTEGER:0:1|operation_id:TEXT:1:0|sequence:INTEGER:1:0|kind:TEXT:1:0|at:TEXT:1:0|details_json:TEXT:1:0|previous_event_hash:TEXT:1:0|event_hash:TEXT:1:0",
-  operations: "operation_id:TEXT:0:1|revision:INTEGER:1:0|status:TEXT:1:0|wallet_id:TEXT:1:0|binding_id:TEXT:1:0|proof_id:TEXT:1:0|currentness_id:TEXT:1:0|binding_head_version:INTEGER:1:0|descriptor_id:TEXT:1:0|capability_record_id:TEXT:1:0|capability_revocation_nonce:INTEGER:1:0|authorization_verification_id:TEXT:1:0|intent_record_id:TEXT:1:0|simulation_record_id:TEXT:1:0|plan_reference_id:TEXT:1:0|treasury_policy_id:TEXT:1:0|treasury_policy_json:TEXT:1:0|window_start_height:TEXT:1:0|reserve_floor_uzrn:TEXT:1:0|chain_id:TEXT:1:0|source_account:TEXT:1:0|account_number:TEXT:1:0|sequence:TEXT:1:0|signer_key_id:TEXT:1:0|signer_invoked:INTEGER:1:0|request_id:TEXT:0:0|unsigned_payload_hash:TEXT:0:0|signing_boundary_verification_id:TEXT:0:0|tx_hash:TEXT:0:0|signed_payload_hash:TEXT:0:0|signed_verification_id:TEXT:0:0|inclusion_height:TEXT:0:0|inclusion_block_hash:TEXT:0:0|inclusion_code:INTEGER:0:0|inclusion_codespace:TEXT:0:0|unresolved_reorg_event_sequence:INTEGER:0:0|unresolved_reorg_evidence_id:TEXT:0:0|event_count:INTEGER:1:0|event_head_hash:TEXT:1:0|created_at:TEXT:1:0|updated_at:TEXT:1:0",
+  economy_operation_commitments: "operation_id:TEXT:0:1|commitment_id:TEXT:1:0|plan_id:TEXT:1:0|plan_content_id:TEXT:1:0|message_kind:TEXT:1:0|message_type_url:TEXT:1:0|intent_record_id:TEXT:1:0|simulation_evidence_record_id:TEXT:1:0|simulation_evidence_json:TEXT:1:0|binding_currentness_id:TEXT:1:0|binding_verifier_trust_id:TEXT:1:0|sign_doc_bytes_hash:TEXT:1:0|activation_currentness_id:TEXT:1:0|request_id:TEXT:1:0|requested_at:TEXT:1:0|commitment_json:TEXT:1:0",
+  operations: "operation_id:TEXT:0:1|operation_kind:TEXT:1:0|revision:INTEGER:1:0|status:TEXT:1:0|wallet_id:TEXT:1:0|binding_id:TEXT:1:0|proof_id:TEXT:1:0|currentness_id:TEXT:1:0|binding_head_version:INTEGER:1:0|descriptor_id:TEXT:1:0|capability_record_id:TEXT:1:0|capability_revocation_nonce:INTEGER:1:0|authorization_verification_id:TEXT:1:0|intent_record_id:TEXT:1:0|simulation_record_id:TEXT:1:0|plan_reference_id:TEXT:1:0|treasury_policy_id:TEXT:1:0|treasury_policy_json:TEXT:1:0|window_start_height:TEXT:1:0|reserve_floor_uzrn:TEXT:1:0|chain_id:TEXT:1:0|source_account:TEXT:1:0|account_number:TEXT:1:0|sequence:TEXT:1:0|signer_key_id:TEXT:1:0|signer_invoked:INTEGER:1:0|request_id:TEXT:0:0|unsigned_payload_hash:TEXT:0:0|signing_boundary_verification_id:TEXT:0:0|tx_hash:TEXT:0:0|signed_payload_hash:TEXT:0:0|signed_verification_id:TEXT:0:0|inclusion_height:TEXT:0:0|inclusion_block_hash:TEXT:0:0|inclusion_code:INTEGER:0:0|inclusion_codespace:TEXT:0:0|unresolved_reorg_event_sequence:INTEGER:0:0|unresolved_reorg_evidence_id:TEXT:0:0|event_count:INTEGER:1:0|event_head_hash:TEXT:1:0|created_at:TEXT:1:0|updated_at:TEXT:1:0",
   sequence_fences: "operation_id:TEXT:0:1|chain_id:TEXT:1:0|source_account:TEXT:1:0|account_number:TEXT:1:0|sequence:TEXT:1:0|state:TEXT:1:0|acquired_at:TEXT:1:0|released_at:TEXT:0:0|release_evidence_id:TEXT:0:0",
   treasury_reservations: "operation_id:TEXT:1:1|purpose:TEXT:1:2|amount_uzrn:TEXT:1:0|state:TEXT:1:0",
 });
 
 const TABLE_SQL: Readonly<Record<keyof typeof TABLE_COLUMNS, string>> = Object.freeze({
-  account_states: "create table account_states (chain_id text not null, source_account text not null, account_number text not null, sequence text not null, balance_uzrn text not null, observed_at_height text not null, block_hash text not null, halted integer not null check(halted in (0, 1)), halted_at_height text, halt_evidence_id text, halted_at text, revision integer not null check(revision >= 1), observed_at text not null, primary key(chain_id, source_account))",
+  account_states: "create table account_states (chain_id text not null, source_account text not null, account_number text not null, sequence text not null, balance_uzrn text not null, observed_at_height text not null, block_hash text not null, public_key_type_url text, public_key_b64u text, valid_until text not null, halted integer not null check(halted in (0, 1)), halted_at_height text, halt_evidence_id text, halted_at text, revision integer not null check(revision >= 1), observed_at text not null, primary key(chain_id, source_account), check((public_key_type_url is null and public_key_b64u is null) or (public_key_type_url = '/cosmos.crypto.secp256k1.pubkey' and public_key_b64u is not null)))",
   binding_heads: "create table binding_heads (wallet_id text primary key, head_version integer not null check(head_version >= 1), binding_id text not null unique, proof_id text not null, currentness_id text not null references binding_history(currentness_id), binding_revision integer not null check(binding_revision >= 1), continuity_sequence integer not null check(continuity_sequence >= 0), revocation_nonce integer not null check(revocation_nonce >= 0), descriptor_id text not null, signer_key_id text not null, source_account text not null unique, network text not null check(network in ('mainnet', 'testnet')), proof_envelope_json text not null, currentness_json text not null, updated_at text not null)",
   binding_history: "create table binding_history (currentness_id text primary key, proof_id text not null, wallet_id text not null, head_version integer not null check(head_version >= 1), binding_id text not null, source_account text not null, proof_envelope_json text not null, currentness_json text not null, recorded_at text not null, unique(wallet_id, head_version))",
   capability_usage: "create table capability_usage (capability_record_id text primary key, wallet_id text not null references binding_heads(wallet_id), descriptor_id text not null, policy_hash text not null, revocation_nonce integer not null check(revocation_nonce >= 0), max_intents integer not null check(max_intents >= 1), max_spend_uzrn text not null, max_fee_per_intent_uzrn text not null, reserved_intents integer not null check(reserved_intents >= 0), consumed_intents integer not null check(consumed_intents >= 0), reserved_spend_uzrn text not null, consumed_spend_uzrn text not null, version integer not null check(version >= 1), updated_at text not null)",
   operation_events: "create table operation_events (ledger_sequence integer primary key, operation_id text not null references operations(operation_id), sequence integer not null check(sequence >= 1), kind text not null, at text not null, details_json text not null, previous_event_hash text not null, event_hash text not null unique, unique(operation_id, sequence))",
-  operations: "create table operations (operation_id text primary key, revision integer not null check(revision >= 1), status text not null check(status in ('reserved', 'signing', 'signing_unknown', 'signed', 'submitting', 'submission_unknown', 'submitted', 'rejected_pre_submit_sticky', 'confirmed_success', 'confirmed_failed', 'reorged', 'sequence_superseded', 'released_pre_sign')), wallet_id text not null references binding_heads(wallet_id), binding_id text not null, proof_id text not null, currentness_id text not null references binding_history(currentness_id), binding_head_version integer not null, descriptor_id text not null, capability_record_id text not null references capability_usage(capability_record_id), capability_revocation_nonce integer not null, authorization_verification_id text not null unique, intent_record_id text not null unique, simulation_record_id text not null, plan_reference_id text not null, treasury_policy_id text not null, treasury_policy_json text not null, window_start_height text not null, reserve_floor_uzrn text not null, chain_id text not null, source_account text not null, account_number text not null, sequence text not null, signer_key_id text not null, signer_invoked integer not null check(signer_invoked in (0, 1)), request_id text unique, unsigned_payload_hash text, signing_boundary_verification_id text, tx_hash text unique, signed_payload_hash text, signed_verification_id text, inclusion_height text, inclusion_block_hash text, inclusion_code integer, inclusion_codespace text, unresolved_reorg_event_sequence integer, unresolved_reorg_evidence_id text, event_count integer not null check(event_count >= 0), event_head_hash text not null, created_at text not null, updated_at text not null, check((unresolved_reorg_event_sequence is null and unresolved_reorg_evidence_id is null) or (unresolved_reorg_event_sequence >= 1 and unresolved_reorg_evidence_id is not null)))",
+  economy_operation_commitments: "create table economy_operation_commitments (operation_id text primary key references operations(operation_id), commitment_id text not null unique, plan_id text not null unique, plan_content_id text not null unique, message_kind text not null check(message_kind in ('create_bounty', 'submit_claim', 'fulfill_bounty')), message_type_url text not null, intent_record_id text not null, simulation_evidence_record_id text not null unique, simulation_evidence_json text not null, binding_currentness_id text not null, binding_verifier_trust_id text not null, sign_doc_bytes_hash text not null unique, activation_currentness_id text not null, request_id text not null unique, requested_at text not null, commitment_json text not null)",
+  operations: "create table operations (operation_id text primary key, operation_kind text not null check(operation_kind in ('generic_injected', 'zerone_economy')), revision integer not null check(revision >= 1), status text not null check(status in ('reserved', 'signing', 'signing_unknown', 'signed', 'submitting', 'submission_unknown', 'submitted', 'rejected_pre_submit_sticky', 'confirmed_success', 'confirmed_failed', 'reorged', 'sequence_superseded', 'released_pre_sign')), wallet_id text not null references binding_heads(wallet_id), binding_id text not null, proof_id text not null, currentness_id text not null references binding_history(currentness_id), binding_head_version integer not null, descriptor_id text not null, capability_record_id text not null references capability_usage(capability_record_id), capability_revocation_nonce integer not null, authorization_verification_id text not null unique, intent_record_id text not null unique, simulation_record_id text not null, plan_reference_id text not null, treasury_policy_id text not null, treasury_policy_json text not null, window_start_height text not null, reserve_floor_uzrn text not null, chain_id text not null, source_account text not null, account_number text not null, sequence text not null, signer_key_id text not null, signer_invoked integer not null check(signer_invoked in (0, 1)), request_id text unique, unsigned_payload_hash text, signing_boundary_verification_id text, tx_hash text unique, signed_payload_hash text, signed_verification_id text, inclusion_height text, inclusion_block_hash text, inclusion_code integer, inclusion_codespace text, unresolved_reorg_event_sequence integer, unresolved_reorg_evidence_id text, event_count integer not null check(event_count >= 0), event_head_hash text not null, created_at text not null, updated_at text not null, check((unresolved_reorg_event_sequence is null and unresolved_reorg_evidence_id is null) or (unresolved_reorg_event_sequence >= 1 and unresolved_reorg_evidence_id is not null)))",
   sequence_fences: "create table sequence_fences (operation_id text primary key references operations(operation_id), chain_id text not null, source_account text not null, account_number text not null, sequence text not null, state text not null check(state in ('held', 'released')), acquired_at text not null, released_at text, release_evidence_id text)",
   treasury_reservations: "create table treasury_reservations (operation_id text not null references operations(operation_id), purpose text not null check(purpose in ('compute', 'knowledge_bond', 'network_fee', 'sponsorship_escrow', 'storage')), amount_uzrn text not null, state text not null check(state in ('reserved', 'sticky', 'settled', 'released')), primary key(operation_id, purpose))",
 });
@@ -319,6 +406,15 @@ const INDEX_SIGNATURES: Readonly<Record<keyof typeof TABLE_COLUMNS, readonly str
   ],
   capability_usage: ["1:pk:0:capability_record_id"],
   operation_events: ["1:u:0:event_hash", "1:u:0:operation_id,sequence"],
+  economy_operation_commitments: [
+    "1:pk:0:operation_id",
+    "1:u:0:commitment_id",
+    "1:u:0:plan_content_id",
+    "1:u:0:plan_id",
+    "1:u:0:request_id",
+    "1:u:0:sign_doc_bytes_hash",
+    "1:u:0:simulation_evidence_record_id",
+  ],
   operations: [
     "0:c:0:capability_record_id,created_at",
     "0:c:0:chain_id,source_account,window_start_height",
@@ -338,6 +434,7 @@ const FOREIGN_KEY_SIGNATURES: Readonly<Record<keyof typeof TABLE_COLUMNS, readon
   binding_history: [],
   capability_usage: ["wallet_id->binding_heads.wallet_id:NO ACTION:NO ACTION:NONE"],
   operation_events: ["operation_id->operations.operation_id:NO ACTION:NO ACTION:NONE"],
+  economy_operation_commitments: ["operation_id->operations.operation_id:NO ACTION:NO ACTION:NONE"],
   operations: [
     "capability_record_id->capability_usage.capability_record_id:NO ACTION:NO ACTION:NONE",
     "currentness_id->binding_history.currentness_id:NO ACTION:NO ACTION:NONE",
@@ -358,6 +455,404 @@ function normalizeSql(value: string | null): string {
 
 function bigintSum(values: readonly string[]): bigint {
   return values.reduce((sum, value) => sum + BigInt(value), 0n);
+}
+
+const UTF8 = new TextEncoder();
+
+function economyCommitmentId(
+  core: Omit<ZeroneEconomyOperationCommitment, "commitment_id">,
+): Sha256Id {
+  return sha256BytesId(UTF8.encode(
+    `${ECONOMY_COMMITMENT_HASH_DOMAIN}\0${canonicalJson(core)}`,
+  ));
+}
+
+const ECONOMY_COMMITMENT_KEYS = [
+  "account_block_hash", "account_number", "account_observed_at",
+  "account_observed_at_height", "account_public_key_b64u",
+  "account_public_key_type_url", "account_sequence", "account_valid_until",
+  "activation_block_hash", "activation_currentness_id",
+  "activation_currentness_json", "activation_external_verification_id",
+  "activation_observation_hash", "activation_observed_at_height",
+  "activation_valid_until", "activation_verified_at", "activation_verifier_id",
+  "actor_address", "authorization_usage_json", "authorization_verification_id",
+  "chain_id", "commitment_id",
+  "binding_currentness_id", "binding_currentness_json",
+  "binding_verifier_external_verification_id", "binding_verifier_id",
+  "binding_verifier_trust_id", "binding_verifier_trust_json",
+  "binding_verifier_valid_until", "binding_verifier_verified_at",
+  "cosmos_sdk", "economic_effect_json", "format", "local_durable_effects",
+  "intent_record_id", "knowledge_consensus_version", "message_kind", "message_type_url",
+  "module_account", "network_fee_uzrn", "operation_id", "plan_content_id",
+  "plan_id", "projection_hash", "request_id", "requested_at", "reserved_spend_uzrn",
+  "sign_doc_bytes_hash", "simulation_adapter_external_verification_id",
+  "simulation_adapter_public_key", "simulation_adapter_trust_id",
+  "simulation_adapter_trust_json", "simulation_adapter_valid_until",
+  "simulation_adapter_verified_at", "simulation_adapter_verifier_id",
+  "simulation_block_hash", "simulation_block_ref",
+  "simulation_evidence_content_id", "simulation_evidence_json",
+  "simulation_evidence_record_id",
+  "simulation_observed_at_height", "simulation_record_id",
+  "simulation_simulated_at", "simulation_tx_bytes_hash",
+  "simulation_valid_until", "source_account", "sponsorship_consensus_version",
+  "network_effects_performed", "value_b64u", "value_hash", "wallet_method",
+  "zerone_core_commit",
+] as const;
+
+function parseEconomyCommitment(json: string): ZeroneEconomyOperationCommitment {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    fail("integrity_error", "Economy commitment JSON is not parseable");
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    fail("integrity_error", "Economy commitment must be an object");
+  }
+  const actual = Object.keys(parsed).sort();
+  const expected = [...ECONOMY_COMMITMENT_KEYS].sort();
+  if (
+    actual.length !== expected.length
+    || actual.some((key, index) => key !== expected[index])
+    || canonicalJson(parsed) !== json
+  ) {
+    fail("integrity_error", "Economy commitment is not the closed canonical record");
+  }
+  const commitment = parsed as ZeroneEconomyOperationCommitment;
+  if (
+    commitment.format !== "agenttool.zerone-economy-operation-commitment/0.1"
+    || commitment.network_effects_performed !== false
+    || commitment.local_durable_effects
+      !== "reservation_and_possible_signer_boundary_committed"
+    || commitment.zerone_core_commit !== "a5b82e82b2a32be2b75bd11575964b0a69aa34ac"
+    || commitment.cosmos_sdk !== "v0.53.8"
+    || commitment.sponsorship_consensus_version !== 2
+    || commitment.knowledge_consensus_version !== 7
+  ) {
+    fail("integrity_error", "Economy commitment boundary or source tuple is invalid");
+  }
+  assertIdentifier(commitment.operation_id, "economy_commitment.operation_id");
+  assertUuid(commitment.request_id, "economy_commitment.request_id");
+  for (const [label, id] of [
+    ["commitment_id", commitment.commitment_id],
+    ["plan_id", commitment.plan_id],
+    ["plan_content_id", commitment.plan_content_id],
+    ["projection_hash", commitment.projection_hash],
+    ["value_hash", commitment.value_hash],
+    ["authorization_verification_id", commitment.authorization_verification_id],
+    ["binding_currentness_id", commitment.binding_currentness_id],
+    ["binding_verifier_trust_id", commitment.binding_verifier_trust_id],
+    ["binding_verifier_external_verification_id", commitment.binding_verifier_external_verification_id],
+    ["intent_record_id", commitment.intent_record_id],
+    ["simulation_record_id", commitment.simulation_record_id],
+    ["simulation_evidence_content_id", commitment.simulation_evidence_content_id],
+    ["simulation_evidence_record_id", commitment.simulation_evidence_record_id],
+    ["simulation_tx_bytes_hash", commitment.simulation_tx_bytes_hash],
+    ["simulation_adapter_trust_id", commitment.simulation_adapter_trust_id],
+    ["simulation_adapter_external_verification_id", commitment.simulation_adapter_external_verification_id],
+    ["sign_doc_bytes_hash", commitment.sign_doc_bytes_hash],
+    ["activation_currentness_id", commitment.activation_currentness_id],
+    ["activation_external_verification_id", commitment.activation_external_verification_id],
+    ["activation_observation_hash", commitment.activation_observation_hash],
+  ] as const) {
+    assertSha256Id(id, `economy_commitment.${label}`);
+  }
+  for (const [label, amount, positive] of [
+    ["reserved_spend_uzrn", commitment.reserved_spend_uzrn, false],
+    ["network_fee_uzrn", commitment.network_fee_uzrn, true],
+    ["activation_observed_at_height", commitment.activation_observed_at_height, true],
+    ["simulation_observed_at_height", commitment.simulation_observed_at_height, true],
+    ["account_observed_at_height", commitment.account_observed_at_height, true],
+    ["account_number", commitment.account_number, false],
+    ["account_sequence", commitment.account_sequence, false],
+  ] as const) {
+    parseUint64(amount, `economy_commitment.${label}`, positive);
+  }
+  for (const [label, timestamp] of [
+    ["requested_at", commitment.requested_at],
+    ["activation_verified_at", commitment.activation_verified_at],
+    ["activation_valid_until", commitment.activation_valid_until],
+    ["simulation_adapter_verified_at", commitment.simulation_adapter_verified_at],
+    ["simulation_adapter_valid_until", commitment.simulation_adapter_valid_until],
+    ["binding_verifier_verified_at", commitment.binding_verifier_verified_at],
+    ["binding_verifier_valid_until", commitment.binding_verifier_valid_until],
+    ["simulation_simulated_at", commitment.simulation_simulated_at],
+    ["simulation_valid_until", commitment.simulation_valid_until],
+    ["account_observed_at", commitment.account_observed_at],
+    ["account_valid_until", commitment.account_valid_until],
+  ] as const) {
+    assertTimestamp(timestamp, `economy_commitment.${label}`);
+  }
+  assertBlockHash(commitment.activation_block_hash, "economy_commitment.activation_block_hash");
+  assertBlockHash(commitment.account_block_hash, "economy_commitment.account_block_hash");
+  if (
+    (commitment.account_public_key_type_url === null)
+      !== (commitment.account_public_key_b64u === null)
+    || (BigInt(commitment.account_sequence) > 0n
+      && commitment.account_public_key_type_url === null)
+  ) {
+    fail("integrity_error", "Economy account registered-key pair is incomplete");
+  }
+  if (commitment.account_public_key_type_url !== null) {
+    if (commitment.account_public_key_type_url !== COSMOS_SECP256K1_PUBLIC_KEY_TYPE_URL) {
+      fail("integrity_error", "Economy account registered-key type is unsupported");
+    }
+    let accountPublicKey: Uint8Array;
+    try {
+      accountPublicKey = base64UrlDecode(commitment.account_public_key_b64u as string);
+      if (base64UrlEncode(accountPublicKey) !== commitment.account_public_key_b64u) {
+        fail("integrity_error", "Economy account registered key is not canonical base64url");
+      }
+      assertSecp256k1PublicKey(accountPublicKey, "economy_commitment.account_public_key_b64u");
+    } catch {
+      fail("integrity_error", "Economy account registered secp256k1 key is invalid");
+    }
+  }
+  if (commitment.simulation_block_hash === null) {
+    fail("integrity_error", "Economy simulation commitment requires a canonical block hash");
+  }
+  assertBlockHash(commitment.simulation_block_hash, "economy_commitment.simulation_block_hash");
+  assertIdentifier(commitment.binding_verifier_id, "economy_commitment.binding_verifier_id");
+  assertIdentifier(commitment.activation_verifier_id, "economy_commitment.activation_verifier_id");
+  assertIdentifier(
+    commitment.simulation_adapter_verifier_id,
+    "economy_commitment.simulation_adapter_verifier_id",
+  );
+  let valueBytes: Uint8Array;
+  let economicEffectValue: unknown;
+  try {
+    valueBytes = base64UrlDecode(commitment.value_b64u);
+    economicEffectValue = JSON.parse(commitment.economic_effect_json);
+  } catch {
+    fail("integrity_error", "Economy message payload or economic effect is not parseable");
+  }
+  if (
+    base64UrlEncode(valueBytes) !== commitment.value_b64u
+    || sha256BytesId(valueBytes) !== commitment.value_hash
+    || canonicalJson(economicEffectValue) !== commitment.economic_effect_json
+  ) {
+    fail("integrity_error", "Economy message payload or effect is not canonical");
+  }
+  const network = networkForChain(commitment.chain_id);
+  const profile = getZeroneProfile(network);
+  const modules = getZeroneEconomyModuleAccounts(network);
+  const messageSpec = commitment.message_kind === "create_bounty"
+    ? Object.freeze({
+        type_url: "/zerone.sponsorship.v1.MsgCreateBountyOrder",
+        wallet_method: "zerone.sponsorship.v1.MsgCreateBountyOrder",
+        module_account: modules.sponsorship,
+        effect: Object.freeze({
+          message_index: 0,
+          kind: "escrow_lock",
+          module: "sponsorship",
+          direction: "outgoing",
+          asset_id: profile.native_asset_id,
+          amount_atomic: commitment.reserved_spend_uzrn,
+          condition: "message_success",
+        }),
+      })
+    : commitment.message_kind === "submit_claim"
+      ? Object.freeze({
+          type_url: "/zerone.knowledge.v1.MsgSubmitClaim",
+          wallet_method: "zerone.knowledge.v1.MsgSubmitClaim",
+          module_account: modules.knowledge,
+          effect: Object.freeze({
+            message_index: 0,
+            kind: "review_fee",
+            module: "knowledge",
+            direction: "outgoing",
+            asset_id: profile.native_asset_id,
+            amount_atomic: commitment.reserved_spend_uzrn,
+            condition: "message_success",
+          }),
+        })
+      : commitment.message_kind === "fulfill_bounty"
+        ? Object.freeze({
+            type_url: "/zerone.sponsorship.v1.MsgFulfillBounty",
+            wallet_method: "zerone.sponsorship.v1.MsgFulfillBounty",
+            module_account: modules.sponsorship,
+            effect: Object.freeze({
+              message_index: 0,
+              kind: "fulfillment_request",
+              module: "sponsorship",
+              direction: "conditional_incoming",
+              asset_id: profile.native_asset_id,
+              amount_atomic: null,
+              condition: "keeper_state_and_message_success",
+            }),
+          })
+        : null;
+  if (
+    messageSpec === null
+    || commitment.message_type_url !== messageSpec.type_url
+    || commitment.wallet_method !== messageSpec.wallet_method
+    || commitment.module_account !== messageSpec.module_account
+    || commitment.actor_address
+      !== commitment.source_account.slice(commitment.chain_id.length + 1)
+    || (commitment.message_kind === "fulfill_bounty"
+      && commitment.reserved_spend_uzrn !== "0")
+    || canonicalJson(economicEffectValue) !== canonicalJson(messageSpec.effect)
+  ) {
+    fail("integrity_error", "Economy message kind, module, actor, value, or effect mapping is invalid");
+  }
+  let activationValue: unknown;
+  let adapterValue: unknown;
+  let bindingCurrentnessValue: unknown;
+  let bindingVerifierTrustValue: unknown;
+  let authorizationUsageValue: unknown;
+  let simulationEvidenceValue: unknown;
+  try {
+    activationValue = JSON.parse(commitment.activation_currentness_json);
+    adapterValue = JSON.parse(commitment.simulation_adapter_trust_json);
+    bindingCurrentnessValue = JSON.parse(commitment.binding_currentness_json);
+    bindingVerifierTrustValue = JSON.parse(commitment.binding_verifier_trust_json);
+    authorizationUsageValue = JSON.parse(commitment.authorization_usage_json);
+    simulationEvidenceValue = JSON.parse(commitment.simulation_evidence_json);
+  } catch {
+    fail("integrity_error", "Economy commitment nested JSON is not parseable");
+  }
+  if (
+    canonicalJson(activationValue) !== commitment.activation_currentness_json
+    || canonicalJson(adapterValue) !== commitment.simulation_adapter_trust_json
+    || canonicalJson(bindingCurrentnessValue) !== commitment.binding_currentness_json
+    || canonicalJson(bindingVerifierTrustValue) !== commitment.binding_verifier_trust_json
+    || canonicalJson(authorizationUsageValue) !== commitment.authorization_usage_json
+    || canonicalJson(simulationEvidenceValue) !== commitment.simulation_evidence_json
+  ) {
+    fail("integrity_error", "Economy commitment nested records are not canonical JSON");
+  }
+  if (
+    typeof authorizationUsageValue !== "object"
+    || authorizationUsageValue === null
+    || Array.isArray(authorizationUsageValue)
+    || Object.keys(authorizationUsageValue).sort().join("\0")
+      !== [
+        "host_verified_approval_ids",
+        "intent_count",
+        "revocation_nonce",
+        "spent",
+      ].sort().join("\0")
+  ) {
+    fail("integrity_error", "Economy authorization usage snapshot is not closed");
+  }
+  const authorizationUsage = authorizationUsageValue as Record<string, unknown>;
+  assertCount(authorizationUsage.revocation_nonce, "economy_authorization_usage.revocation_nonce");
+  assertCount(authorizationUsage.intent_count, "economy_authorization_usage.intent_count");
+  const approvals = authorizationUsage.host_verified_approval_ids;
+  const spent = authorizationUsage.spent;
+  if (
+    !Array.isArray(approvals)
+    || approvals.length !== 0
+    || !Array.isArray(spent)
+    || spent.length !== 1
+    || typeof spent[0] !== "object"
+    || spent[0] === null
+    || Array.isArray(spent[0])
+  ) {
+    fail("integrity_error", "Economy authorization usage approvals or spend shape is invalid");
+  }
+  const nativeSpend = spent[0] as Record<string, unknown>;
+  if (
+    Object.keys(nativeSpend).sort().join("\0") !== "amount_atomic\0asset_id"
+    || nativeSpend.asset_id !== profile.native_asset_id
+  ) {
+    fail("integrity_error", "Economy authorization usage does not bind native Zerone spend");
+  }
+  parseUint64(nativeSpend.amount_atomic, "economy_authorization_usage.spent.amount_atomic");
+  const activation = validateZeroneEconomyActivationCurrentnessAssertion(
+    activationValue as ZeroneEconomyActivationCurrentnessAssertion,
+  );
+  const adapter = validateTrustedSimulationAdapterAssertion(
+    adapterValue as TrustedSimulationAdapterAssertion,
+  );
+  const bindingCurrentness = validateBindingCurrentnessAssertion(
+    bindingCurrentnessValue as BindingCurrentnessAssertion,
+  );
+  const bindingVerifierTrust = validateTrustedBindingCurrentnessVerifierAssertion(
+    bindingVerifierTrustValue as TrustedBindingCurrentnessVerifierAssertion,
+  );
+  let simulationEvidence;
+  try {
+    simulationEvidence = verifyZeroneEconomySimulationEvidence(simulationEvidenceValue);
+  } catch {
+    fail("integrity_error", "Economy simulation evidence signature does not verify");
+  }
+  if (
+    activation.currentness_id !== commitment.activation_currentness_id
+    || authorizationUsage.revocation_nonce !== bindingCurrentness.wallet_revocation_nonce
+    || bindingCurrentness.currentness_id !== commitment.binding_currentness_id
+    || bindingCurrentness.verifier_id !== commitment.binding_verifier_id
+    || bindingVerifierTrust.trust_id !== commitment.binding_verifier_trust_id
+    || bindingVerifierTrust.external_verification_id
+      !== commitment.binding_verifier_external_verification_id
+    || bindingVerifierTrust.verifier_id !== commitment.binding_verifier_id
+    || bindingVerifierTrust.verified_at !== commitment.binding_verifier_verified_at
+    || bindingVerifierTrust.valid_until !== commitment.binding_verifier_valid_until
+    || Date.parse(bindingCurrentness.verified_at)
+      < Date.parse(bindingVerifierTrust.verified_at)
+    || Date.parse(bindingCurrentness.verified_at)
+      >= Date.parse(bindingVerifierTrust.valid_until)
+    || Date.parse(bindingCurrentness.valid_until)
+      > Date.parse(bindingVerifierTrust.valid_until)
+    || Date.parse(commitment.requested_at) < Date.parse(bindingVerifierTrust.verified_at)
+    || Date.parse(commitment.requested_at) >= Date.parse(bindingVerifierTrust.valid_until)
+    || Date.parse(commitment.requested_at) < Date.parse(bindingCurrentness.verified_at)
+    || Date.parse(commitment.requested_at) >= Date.parse(bindingCurrentness.valid_until)
+    || activation.external_verification_id !== commitment.activation_external_verification_id
+    || activation.verifier_id !== commitment.activation_verifier_id
+    || activation.activation_observation_hash !== commitment.activation_observation_hash
+    || activation.observed_at_height !== commitment.activation_observed_at_height
+    || activation.block_hash !== commitment.activation_block_hash
+    || activation.verified_at !== commitment.activation_verified_at
+    || activation.valid_until !== commitment.activation_valid_until
+    || activation.chain_id !== commitment.chain_id
+    || adapter.trust_id !== commitment.simulation_adapter_trust_id
+    || adapter.external_verification_id
+      !== commitment.simulation_adapter_external_verification_id
+    || adapter.verifier_id !== commitment.simulation_adapter_verifier_id
+    || adapter.adapter.public_key !== commitment.simulation_adapter_public_key
+    || adapter.chain_id !== commitment.chain_id
+    || adapter.verified_at !== commitment.simulation_adapter_verified_at
+    || adapter.valid_until !== commitment.simulation_adapter_valid_until
+    || simulationEvidence.content_id !== commitment.simulation_evidence_content_id
+    || simulationEvidence.record_id !== commitment.simulation_evidence_record_id
+    || simulationEvidence.plan_id !== commitment.plan_id
+    || simulationEvidence.intent_record_id !== commitment.intent_record_id
+    || simulationEvidence.simulation_record_id !== commitment.simulation_record_id
+    || simulationEvidence.simulation_tx_bytes_hash !== commitment.simulation_tx_bytes_hash
+    || simulationEvidence.activation_observation_hash
+      !== commitment.activation_observation_hash
+    || simulationEvidence.chain_id !== commitment.chain_id
+    || simulationEvidence.source_account !== commitment.source_account
+    || canonicalJson(simulationEvidence.adapter) !== canonicalJson(adapter.adapter)
+    || simulationEvidence.status !== "succeeded"
+    || simulationEvidence.code !== 0
+    || simulationEvidence.simulated_at !== commitment.simulation_simulated_at
+    || simulationEvidence.valid_until !== commitment.simulation_valid_until
+    || simulationEvidence.observed_at_height
+      !== commitment.simulation_observed_at_height
+    || simulationEvidence.block_ref !== commitment.simulation_block_ref
+    || simulationEvidence.block_hash !== commitment.simulation_block_hash
+    || commitment.simulation_block_ref
+      !== `${commitment.chain_id.split(":")[1]}:${commitment.simulation_observed_at_height}`
+    || BigInt(commitment.account_observed_at_height)
+      < BigInt(commitment.activation_observed_at_height)
+    || BigInt(commitment.simulation_observed_at_height)
+      < BigInt(commitment.activation_observed_at_height)
+    || (commitment.account_observed_at_height === commitment.activation_observed_at_height
+      && commitment.account_block_hash !== commitment.activation_block_hash)
+    || (commitment.simulation_observed_at_height === commitment.activation_observed_at_height
+      && commitment.simulation_block_hash !== commitment.activation_block_hash)
+    || (commitment.simulation_observed_at_height === commitment.account_observed_at_height
+      && commitment.simulation_block_hash !== commitment.account_block_hash)
+  ) {
+    fail("integrity_error", "Economy commitment trust assertions do not match their exact fields");
+  }
+  const { commitment_id: suppliedId, ...core } = commitment;
+  if (economyCommitmentId(core) !== suppliedId) {
+    fail("integrity_error", "Economy commitment ID does not match its canonical core");
+  }
+  return Object.freeze({ ...commitment });
 }
 
 function assertNotBefore(at: string, floor: string, label: string): void {
@@ -440,11 +935,37 @@ function sameCapabilityBudget(row: CapabilityUsageRow, budget: CapabilityBudget)
     && row.max_fee_per_intent_uzrn === budget.max_fee_per_intent_uzrn;
 }
 
+function currentnessMatchesBinding(
+  currentness: BindingCurrentnessAssertion,
+  binding: WalletIdentityBinding,
+  proof: VerifiedWalletIdentityBindingProof,
+): boolean {
+  return currentness.binding_id === binding.binding_id
+    && currentness.proof_id === proof.proof_id
+    && currentness.owner_identity_id === binding.owner_identity_id
+    && currentness.wallet_id === binding.wallet_id
+    && currentness.wallet_descriptor_id === binding.wallet_descriptor_id
+    && canonicalJson(currentness.identity_authority)
+      === canonicalJson(binding.identity_authority)
+    && currentness.binding_revision === binding.revision
+    && currentness.wallet_continuity_sequence === binding.wallet_continuity_sequence;
+}
+
 export class ZeroneAgentHostStore {
   private readonly db: Database;
   private readonly files: SecureSqliteFiles;
   private readonly recoverOnInitialize: boolean;
+  private readonly allowLegacyGenericInjectedForTests: boolean;
   private readonly now: () => string;
+  private readonly resolveBindingCurrentness:
+    BindingCurrentnessResolver["resolveCurrentness"] | null;
+  private readonly resolveActivationCurrentness:
+    ZeroneEconomyActivationCurrentnessResolver["resolveCurrentness"] | null;
+  private readonly observeEconomyAccount: ZeroneStateObserver["observeAccount"] | null;
+  private readonly trustedBindingCurrentnessVerifiers:
+    ReadonlyMap<string, TrustedBindingCurrentnessVerifierAssertion>;
+  private readonly trustedSimulationAdapters: ReadonlyMap<string, TrustedSimulationAdapterAssertion>;
+  private readonly trustedActivationVerifierIds: ReadonlySet<string>;
 
   constructor(path: string, options: ZeroneAgentHostStoreOptions) {
     if (path === ":memory:" && options.allow_in_memory_for_tests !== true) {
@@ -457,7 +978,77 @@ export class ZeroneAgentHostStore {
     const databasePath = this.files.path ?? ":memory:";
     this.db = new Database(databasePath, { create: options.create, strict: true });
     this.recoverOnInitialize = options.recover_interrupted ?? true;
+    this.allowLegacyGenericInjectedForTests =
+      options.allow_legacy_generic_injected_for_tests === true;
     this.now = options.now ?? (() => new Date().toISOString());
+    const bindingResolver = options.binding_currentness_resolver ?? null;
+    const activationResolver = options.activation_currentness_resolver ?? null;
+    const accountObserver = options.account_observer ?? null;
+    if (bindingResolver !== null && typeof bindingResolver.resolveCurrentness !== "function") {
+      fail("invalid_input", "binding_currentness_resolver does not implement resolveCurrentness");
+    }
+    if (activationResolver !== null && typeof activationResolver.resolveCurrentness !== "function") {
+      fail("invalid_input", "activation_currentness_resolver does not implement resolveCurrentness");
+    }
+    if (accountObserver !== null && typeof accountObserver.observeAccount !== "function") {
+      fail("invalid_input", "account_observer does not implement observeAccount");
+    }
+    this.resolveBindingCurrentness = bindingResolver === null
+      ? null
+      : bindingResolver.resolveCurrentness.bind(bindingResolver);
+    this.resolveActivationCurrentness = activationResolver === null
+      ? null
+      : activationResolver.resolveCurrentness.bind(activationResolver);
+    this.observeEconomyAccount = accountObserver === null
+      ? null
+      : accountObserver.observeAccount.bind(accountObserver);
+    if (
+      options.trusted_binding_currentness_verifiers !== undefined
+      && !Array.isArray(options.trusted_binding_currentness_verifiers)
+    ) {
+      fail("invalid_input", "trusted_binding_currentness_verifiers must be an array");
+    }
+    const bindingVerifierEntries = (options.trusted_binding_currentness_verifiers ?? [])
+      .map((entry) => validateTrustedBindingCurrentnessVerifierAssertion(entry));
+    const bindingVerifiers = new Map<string, TrustedBindingCurrentnessVerifierAssertion>();
+    for (const entry of bindingVerifierEntries) {
+      if (bindingVerifiers.has(entry.trust_id)) {
+        fail("invalid_input", "Binding currentness verifier trust IDs must be unique");
+      }
+      bindingVerifiers.set(entry.trust_id, entry);
+    }
+    this.trustedBindingCurrentnessVerifiers = bindingVerifiers;
+    if (
+      options.trusted_simulation_adapters !== undefined
+      && !Array.isArray(options.trusted_simulation_adapters)
+    ) {
+      fail("invalid_input", "trusted_simulation_adapters must be an array");
+    }
+    const adapterEntries = (options.trusted_simulation_adapters ?? [])
+      .map((entry) => validateTrustedSimulationAdapterAssertion(entry));
+    const adapters = new Map<string, TrustedSimulationAdapterAssertion>();
+    for (const entry of adapterEntries) {
+      if (adapters.has(entry.trust_id)) {
+        fail("invalid_input", "Simulation adapter trust IDs must be unique");
+      }
+      adapters.set(entry.trust_id, entry);
+    }
+    this.trustedSimulationAdapters = adapters;
+    if (
+      options.trusted_activation_verifier_ids !== undefined
+      && !Array.isArray(options.trusted_activation_verifier_ids)
+    ) {
+      fail("invalid_input", "trusted_activation_verifier_ids must be an array");
+    }
+    const verifierIds = new Set<string>();
+    for (const verifierId of options.trusted_activation_verifier_ids ?? []) {
+      assertIdentifier(verifierId, "trusted_activation_verifier_id");
+      if (verifierIds.has(verifierId)) {
+        fail("invalid_input", "Activation verifier allowlist entries must be unique");
+      }
+      verifierIds.add(verifierId);
+    }
+    this.trustedActivationVerifierIds = verifierIds;
     this.configure();
   }
 
@@ -540,16 +1131,27 @@ export class ZeroneAgentHostStore {
         balance_uzrn TEXT NOT NULL,
         observed_at_height TEXT NOT NULL,
         block_hash TEXT NOT NULL,
+        public_key_type_url TEXT,
+        public_key_b64u TEXT,
+        valid_until TEXT NOT NULL,
         halted INTEGER NOT NULL CHECK(halted IN (0, 1)),
         halted_at_height TEXT,
         halt_evidence_id TEXT,
         halted_at TEXT,
         revision INTEGER NOT NULL CHECK(revision >= 1),
         observed_at TEXT NOT NULL,
-        PRIMARY KEY(chain_id, source_account)
+        PRIMARY KEY(chain_id, source_account),
+        CHECK(
+          (public_key_type_url IS NULL AND public_key_b64u IS NULL)
+          OR (
+            public_key_type_url = '/cosmos.crypto.secp256k1.PubKey'
+            AND public_key_b64u IS NOT NULL
+          )
+        )
       );
       CREATE TABLE IF NOT EXISTS operations (
         operation_id TEXT PRIMARY KEY,
+        operation_kind TEXT NOT NULL CHECK(operation_kind IN ('generic_injected', 'zerone_economy')),
         revision INTEGER NOT NULL CHECK(revision >= 1),
         status TEXT NOT NULL CHECK(status IN (${statuses})),
         wallet_id TEXT NOT NULL REFERENCES binding_heads(wallet_id),
@@ -597,6 +1199,24 @@ export class ZeroneAgentHostStore {
             AND unresolved_reorg_evidence_id IS NOT NULL
           )
         )
+      );
+      CREATE TABLE IF NOT EXISTS economy_operation_commitments (
+        operation_id TEXT PRIMARY KEY REFERENCES operations(operation_id),
+        commitment_id TEXT NOT NULL UNIQUE,
+        plan_id TEXT NOT NULL UNIQUE,
+        plan_content_id TEXT NOT NULL UNIQUE,
+        message_kind TEXT NOT NULL CHECK(message_kind IN ('create_bounty', 'submit_claim', 'fulfill_bounty')),
+        message_type_url TEXT NOT NULL,
+        intent_record_id TEXT NOT NULL,
+        simulation_evidence_record_id TEXT NOT NULL UNIQUE,
+        simulation_evidence_json TEXT NOT NULL,
+        binding_currentness_id TEXT NOT NULL,
+        binding_verifier_trust_id TEXT NOT NULL,
+        sign_doc_bytes_hash TEXT NOT NULL UNIQUE,
+        activation_currentness_id TEXT NOT NULL,
+        request_id TEXT NOT NULL UNIQUE,
+        requested_at TEXT NOT NULL,
+        commitment_json TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS treasury_reservations (
         operation_id TEXT NOT NULL REFERENCES operations(operation_id),
@@ -652,6 +1272,12 @@ export class ZeroneAgentHostStore {
       CREATE TRIGGER IF NOT EXISTS binding_heads_no_delete
         BEFORE DELETE ON binding_heads
         BEGIN SELECT RAISE(ABORT, 'binding heads cannot be deleted'); END;
+      CREATE TRIGGER IF NOT EXISTS economy_operation_commitments_no_update
+        BEFORE UPDATE ON economy_operation_commitments
+        BEGIN SELECT RAISE(ABORT, 'economy commitments are append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS economy_operation_commitments_no_delete
+        BEFORE DELETE ON economy_operation_commitments
+        BEGIN SELECT RAISE(ABORT, 'economy commitments are append-only'); END;
     `);
     if (initialVersion === 0) this.db.exec(`PRAGMA user_version = ${SQLITE_SCHEMA_VERSION}`);
     this.assertSchema();
@@ -682,11 +1308,11 @@ export class ZeroneAgentHostStore {
     `).all() as Array<{ name: keyof typeof TABLE_COLUMNS; sql: string | null }>;
     const expectedNames = Object.keys(TABLE_COLUMNS).sort();
     if (tables.map(({ name }) => name).join("\0") !== expectedNames.join("\0")) {
-      fail("integrity_error", "Host ledger application-table set is not the v2 schema");
+      fail("integrity_error", "Host ledger application-table set is not the v3 schema");
     }
     for (const { name, sql } of tables) {
       if (normalizeSql(sql) !== TABLE_SQL[name]) {
-        fail("integrity_error", `Host ledger ${name} CREATE TABLE SQL is not the v2 schema`);
+        fail("integrity_error", `Host ledger ${name} CREATE TABLE SQL is not the v3 schema`);
       }
       const columns = this.db.query(`PRAGMA table_info(${name})`).all() as TableInfoRow[];
       const signature = columns
@@ -696,7 +1322,7 @@ export class ZeroneAgentHostStore {
         columns.map(({ name: column }) => column).join("\0") !== TABLE_COLUMNS[name].join("\0")
         || signature !== TABLE_SIGNATURES[name]
       ) {
-        fail("integrity_error", `Host ledger ${name} columns are not the v2 schema`);
+        fail("integrity_error", `Host ledger ${name} columns are not the v3 schema`);
       }
       const indexes = (this.db.query(`PRAGMA index_list(${name})`).all() as IndexListRow[])
         .map((index) => {
@@ -708,7 +1334,7 @@ export class ZeroneAgentHostStore {
         })
         .sort();
       if (indexes.join("|") !== [...INDEX_SIGNATURES[name]].sort().join("|")) {
-        fail("integrity_error", `Host ledger ${name} indexes are not the v2 schema`);
+        fail("integrity_error", `Host ledger ${name} indexes are not the v3 schema`);
       }
       const foreignKeys = (this.db.query(`PRAGMA foreign_key_list(${name})`).all() as Array<{
         table: string;
@@ -721,7 +1347,7 @@ export class ZeroneAgentHostStore {
         `${foreignKey.from}->${foreignKey.table}.${foreignKey.to}:${foreignKey.on_update}:${foreignKey.on_delete}:${foreignKey.match}`)
         .sort();
       if (foreignKeys.join("|") !== [...FOREIGN_KEY_SIGNATURES[name]].sort().join("|")) {
-        fail("integrity_error", `Host ledger ${name} foreign keys are not the v2 schema`);
+        fail("integrity_error", `Host ledger ${name} foreign keys are not the v3 schema`);
       }
     }
     const requiredObjects = [
@@ -731,6 +1357,8 @@ export class ZeroneAgentHostStore {
       "binding_history_no_update",
       "binding_history_source_account_idx",
       "binding_heads_no_delete",
+      "economy_operation_commitments_no_delete",
+      "economy_operation_commitments_no_update",
       "operations_capability_idx",
       "operations_treasury_window_idx",
       "sequence_fences_one_held_account_idx",
@@ -759,6 +1387,14 @@ export class ZeroneAgentHostStore {
         "create trigger binding_history_no_update before update on binding_history begin select raise(abort, 'binding history is append-only'); end",
       ],
       [
+        "economy_operation_commitments_no_delete",
+        "create trigger economy_operation_commitments_no_delete before delete on economy_operation_commitments begin select raise(abort, 'economy commitments are append-only'); end",
+      ],
+      [
+        "economy_operation_commitments_no_update",
+        "create trigger economy_operation_commitments_no_update before update on economy_operation_commitments begin select raise(abort, 'economy commitments are append-only'); end",
+      ],
+      [
         "operation_events_no_delete",
         "create trigger operation_events_no_delete before delete on operation_events begin select raise(abort, 'operation events are append-only'); end",
       ],
@@ -774,7 +1410,7 @@ export class ZeroneAgentHostStore {
       triggers.length !== expectedTriggers.size
       || triggers.some(({ name, sql }) => normalizeSql(sql) !== expectedTriggers.get(name))
     ) {
-      fail("integrity_error", "Operation event append-only triggers are not the v2 schema");
+      fail("integrity_error", "Application append-only triggers are not the v3 schema");
     }
     const expectedIndexes = new Map<string, string>([
       [
@@ -807,8 +1443,135 @@ export class ZeroneAgentHostStore {
       applicationIndexes.length !== expectedIndexes.size
       || applicationIndexes.some(({ name, sql }) => normalizeSql(sql) !== expectedIndexes.get(name))
     ) {
-      fail("integrity_error", "Application index definitions are not the v2 schema");
+      fail("integrity_error", "Application index definitions are not the v3 schema");
     }
+  }
+
+  private putBindingHeadInTransaction(
+    proof: VerifiedWalletIdentityBindingProof,
+    currentness: BindingCurrentnessAssertion,
+    expected: BindingHeadExpectation | null,
+    updatedAt: string,
+  ): BindingHead {
+    const binding = proof.binding;
+    const historicalAccountOwner = this.db.query(`
+      SELECT wallet_id FROM binding_history WHERE source_account = ? LIMIT 1
+    `).get(binding.zerone_account_id) as { wallet_id: string } | null;
+    if (
+      historicalAccountOwner !== null
+      && historicalAccountOwner.wallet_id !== binding.wallet_id
+    ) {
+      fail(
+        "authorization_denied",
+        "A Zerone source account remains permanently bound to its first wallet ID in this ledger",
+      );
+    }
+    const existing = this.bindingRow(binding.wallet_id);
+    if (existing === null) {
+      if (expected !== null) {
+        fail("conflict", "Binding head was absent; a non-null expectation cannot initialize it");
+      }
+      if (binding.revision !== 1 || binding.previous_binding_id !== null) {
+        fail("conflict", "A new binding head must start at revision 1");
+      }
+      this.insertBindingHistory(proof, currentness, 1, updatedAt);
+      this.db.query(`
+        INSERT INTO binding_heads (
+          wallet_id, head_version, binding_id, proof_id, currentness_id, binding_revision,
+          continuity_sequence, revocation_nonce, descriptor_id, signer_key_id,
+          source_account, network, proof_envelope_json, currentness_json, updated_at
+        ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        binding.wallet_id,
+        binding.binding_id,
+        proof.proof_id,
+        currentness.currentness_id,
+        binding.revision,
+        binding.wallet_continuity_sequence,
+        currentness.wallet_revocation_nonce,
+        binding.wallet_descriptor_id,
+        binding.zerone_signer.key_id,
+        binding.zerone_account_id,
+        binding.network,
+        canonicalJson(proof),
+        canonicalJson(currentness),
+        updatedAt,
+      );
+      return this.getBindingHeadOrFail(binding.wallet_id);
+    }
+    this.assertBindingExpectation(existing, expected);
+    assertNotBefore(updatedAt, existing.updated_at, "Binding-head update");
+    assertNotBefore(currentness.verified_at, existing.updated_at, "Binding proof observation");
+    const latestOperation = this.db.query(`
+      SELECT updated_at FROM operations WHERE wallet_id = ?
+      ORDER BY updated_at DESC, operation_id DESC LIMIT 1
+    `).get(binding.wallet_id) as { updated_at: string } | null;
+    if (
+      latestOperation !== null
+      && Date.parse(updatedAt) <= Date.parse(latestOperation.updated_at)
+    ) {
+      fail(
+        "conflict",
+        "Binding-head updates must be strictly later than existing wallet operation history",
+      );
+    }
+    const previousProof = verifyWalletIdentityBindingProofEnvelope(
+      JSON.parse(existing.proof_envelope_json),
+    );
+    const previous = previousProof.binding;
+    if (binding.binding_id === previous.binding_id) {
+      if (canonicalJson(binding) !== canonicalJson(previous)) {
+        fail("conflict", "Current binding ID was supplied with different canonical bytes");
+      }
+      if (
+        proof.proof_id === existing.proof_id
+        && canonicalJson(proof) !== existing.proof_envelope_json
+      ) {
+        fail("conflict", "Current proof ID was supplied with different canonical bytes");
+      }
+    } else {
+      assertNotBefore(binding.issued_at, existing.updated_at, "Binding successor issued_at");
+      assertWalletIdentityBindingSuccessor(previous, binding);
+    }
+    if (currentness.currentness_id === existing.currentness_id) {
+      fail("conflict", "Binding currentness refresh must name a new content-addressed assertion");
+    }
+    if (currentness.wallet_revocation_nonce < existing.revocation_nonce) {
+      fail("conflict", "Wallet revocation nonce cannot move backwards");
+    }
+    const nextVersion = existing.head_version + 1;
+    this.insertBindingHistory(proof, currentness, nextVersion, updatedAt);
+    const result = this.db.query(`
+      UPDATE binding_heads SET
+        head_version = ?, binding_id = ?, proof_id = ?, currentness_id = ?, binding_revision = ?,
+        continuity_sequence = ?, revocation_nonce = ?, descriptor_id = ?,
+        signer_key_id = ?, source_account = ?, network = ?, proof_envelope_json = ?,
+        currentness_json = ?, updated_at = ?
+      WHERE wallet_id = ? AND head_version = ? AND binding_id = ? AND proof_id = ?
+        AND currentness_id = ?
+    `).run(
+      nextVersion,
+      binding.binding_id,
+      proof.proof_id,
+      currentness.currentness_id,
+      binding.revision,
+      binding.wallet_continuity_sequence,
+      currentness.wallet_revocation_nonce,
+      binding.wallet_descriptor_id,
+      binding.zerone_signer.key_id,
+      binding.zerone_account_id,
+      binding.network,
+      canonicalJson(proof),
+      canonicalJson(currentness),
+      updatedAt,
+      existing.wallet_id,
+      existing.head_version,
+      existing.binding_id,
+      existing.proof_id,
+      existing.currentness_id,
+    );
+    if (result.changes !== 1) fail("conflict", "Binding-head compare-and-swap lost its race");
+    return this.getBindingHeadOrFail(binding.wallet_id);
   }
 
   putBindingHead(
@@ -824,8 +1587,7 @@ export class ZeroneAgentHostStore {
     const currentness = validateBindingCurrentnessAssertion(currentnessValue);
     assertTimestamp(options.updated_at, "updated_at");
     if (
-      currentness.binding_id !== binding.binding_id
-      || currentness.proof_id !== proof.proof_id
+      !currentnessMatchesBinding(currentness, binding, proof)
     ) {
       fail("authorization_denied", "Currentness assertion does not name the verified binding proof");
     }
@@ -1053,7 +1815,779 @@ export class ZeroneAgentHostStore {
     }
   }
 
+  /**
+   * Resolve all external observations first, then cross the durable possible-
+   * signer boundary in one IMMEDIATE transaction. The returned request is
+   * process-branded but no signer is called here. A crash after commit is
+   * therefore recovered as signing_unknown and never recreated automatically.
+   */
+  async reserveAndEnterZeroneEconomySigningBoundary(
+    inputValue: ReserveAndEnterZeroneEconomySigningBoundaryInput,
+  ): Promise<ZeroneEconomySigningBoundaryResult> {
+    const operationId = inputValue.operation_id;
+    const requestId = inputValue.request_id;
+    const proofEnvelope = JSON.parse(
+      canonicalJson(inputValue.proof),
+    ) as WalletIdentityBindingProofEnvelope;
+    const resolveBindingCurrentness = this.resolveBindingCurrentness;
+    const expectedBindingHeadValue = inputValue.expected_binding_head;
+    let expectedBindingHead: BindingHeadExpectation | null = null;
+    if (expectedBindingHeadValue !== null) {
+      const snapshot = JSON.parse(canonicalJson(expectedBindingHeadValue)) as Record<string, unknown>;
+      if (
+        Object.keys(snapshot).sort().join("\0")
+          !== [
+            "binding_id", "currentness_id", "head_version", "proof_id", "wallet_id",
+          ].sort().join("\0")
+      ) {
+        fail("invalid_input", "Expected binding head must use its closed field set");
+      }
+      assertIdentifier(snapshot.wallet_id, "expected_binding_head.wallet_id");
+      assertSha256Id(snapshot.binding_id, "expected_binding_head.binding_id");
+      assertSha256Id(snapshot.proof_id, "expected_binding_head.proof_id");
+      assertSha256Id(snapshot.currentness_id, "expected_binding_head.currentness_id");
+      assertCount(snapshot.head_version, "expected_binding_head.head_version", true);
+      expectedBindingHead = Object.freeze(snapshot) as unknown as BindingHeadExpectation;
+    }
+    const resolveActivationCurrentness = this.resolveActivationCurrentness;
+    const descriptor = inputValue.descriptor;
+    const capability = inputValue.capability;
+    const intent = inputValue.intent;
+    const simulation = inputValue.simulation;
+    const simulationEvidenceValue = JSON.parse(canonicalJson(inputValue.simulation_evidence));
+    const plan = inputValue.plan;
+    const treasuryPolicyValue = JSON.parse(
+      canonicalJson(inputValue.treasury_policy),
+    ) as TreasuryPolicy;
+    const observeEconomyAccount = this.observeEconomyAccount;
+
+    assertIdentifier(operationId, "operation_id");
+    assertUuid(requestId, "request_id");
+    assertZeroneEconomyDirectSignPlan(plan);
+    assertVerifiedRecord(descriptor);
+    assertVerifiedRecord(capability);
+    assertVerifiedRecord(intent);
+    assertVerifiedRecord(simulation);
+    const proofForResolver = verifyWalletIdentityBindingProofEnvelope(proofEnvelope);
+    const activationObservation = Object.freeze(
+      JSON.parse(canonicalJson(inputValue.activation_observation)),
+    ) as ReserveAndEnterZeroneEconomySigningBoundaryInput["activation_observation"];
+    if (sha256Id(activationObservation) !== plan.activation_observation_hash) {
+      fail("authorization_denied", "Activation observation does not bind the branded plan");
+    }
+    if (
+      resolveBindingCurrentness === null
+      || resolveActivationCurrentness === null
+      || observeEconomyAccount === null
+    ) {
+      fail("authorization_denied", "Economy boundary constructor dependencies are not configured");
+    }
+    const [bindingCurrentnessValue, activationCurrentnessValue, accountSnapshotValue] =
+      await Promise.all([
+        resolveBindingCurrentness(proofForResolver),
+        resolveActivationCurrentness(Object.freeze({
+          activation_observation: activationObservation,
+          plan,
+        })),
+        observeEconomyAccount(plan.source_account),
+      ]);
+
+    return this.runImmediate(this.db.transaction((): ZeroneEconomySigningBoundaryResult => {
+      const at = this.now();
+      assertTimestamp(at, "host.now");
+      const proof = verifyWalletIdentityBindingProofEnvelope(proofEnvelope);
+      const binding = proof.binding;
+      const bindingCurrentness = validateBindingCurrentnessAssertion(bindingCurrentnessValue);
+      const activationCurrentness = validateZeroneEconomyActivationCurrentnessAssertion(
+        activationCurrentnessValue,
+      );
+      const accountSnapshot = validateAccountSnapshot(accountSnapshotValue);
+      const policy = validateTreasuryPolicy(treasuryPolicyValue);
+      assertZeroneEconomyDirectSignPlan(plan);
+      assertVerifiedRecord(descriptor);
+      assertVerifiedRecord(capability);
+      assertVerifiedRecord(intent);
+      assertVerifiedRecord(simulation);
+      const simulationEvidence = verifyZeroneEconomySimulationEvidence(
+        simulationEvidenceValue,
+      );
+      if (simulationEvidence.block_hash === null) {
+        fail("evidence_rejected", "Typed economy signing requires a simulation block hash");
+      }
+      assertBlockHash(simulationEvidence.block_hash, "simulation_evidence.block_hash");
+      if (
+        simulationEvidence.block_ref
+          !== `${plan.chain_reference}:${simulationEvidence.observed_at_height}`
+      ) {
+        fail("evidence_rejected", "Simulation evidence block reference is not exact");
+      }
+
+      if (this.operationRow(operationId) !== null) {
+        fail("conflict", "Operation ID is already present in the durable ledger");
+      }
+      if (
+        !currentnessMatchesBinding(bindingCurrentness, binding, proof)
+        || Date.parse(bindingCurrentness.verified_at) < Date.parse(binding.issued_at)
+        || Date.parse(at) < Date.parse(bindingCurrentness.verified_at)
+        || Date.parse(at) >= Date.parse(bindingCurrentness.valid_until)
+      ) {
+        fail("authorization_denied", "Binding currentness is not fresh for the exact dual-key proof");
+      }
+      const trustedBindingVerifiers = [
+        ...this.trustedBindingCurrentnessVerifiers.values(),
+      ].filter((entry) =>
+        entry.verifier_id === bindingCurrentness.verifier_id
+        && Date.parse(bindingCurrentness.verified_at) >= Date.parse(entry.verified_at)
+        && Date.parse(bindingCurrentness.verified_at) < Date.parse(entry.valid_until)
+        && Date.parse(bindingCurrentness.valid_until) <= Date.parse(entry.valid_until)
+        && Date.parse(at) >= Date.parse(entry.verified_at)
+        && Date.parse(at) < Date.parse(entry.valid_until));
+      if (trustedBindingVerifiers.length !== 1) {
+        fail(
+          "authorization_denied",
+          "Binding currentness verifier is absent or ambiguous in configured trust epochs",
+        );
+      }
+      const bindingVerifierTrust = trustedBindingVerifiers[0] as TrustedBindingCurrentnessVerifierAssertion;
+      if (
+        !this.trustedActivationVerifierIds.has(activationCurrentness.verifier_id)
+        || activationCurrentness.activation_observation_hash !== plan.activation_observation_hash
+        || activationCurrentness.network !== plan.network
+        || activationCurrentness.chain_id !== plan.chain_id
+        || activationCurrentness.zerone_core_commit !== plan.zerone_core_commit
+        || activationCurrentness.cosmos_sdk !== plan.cosmos_sdk
+        || activationCurrentness.sponsorship_consensus_version
+          !== plan.sponsorship_consensus_version
+        || activationCurrentness.knowledge_consensus_version
+          !== plan.knowledge_consensus_version
+        || BigInt(activationCurrentness.observed_at_height)
+          < BigInt(plan.activation_observed_at_height)
+        || Date.parse(at) < Date.parse(activationCurrentness.verified_at)
+        || Date.parse(at) >= Date.parse(activationCurrentness.valid_until)
+      ) {
+        fail("authorization_denied", "Activation currentness is not from the configured exact resolver boundary");
+      }
+      if (
+        plan.messages.length !== 1
+        || plan.economic_effects.length !== 1
+        || plan.intent_record_id !== intent.record_id
+        || plan.chain_id !== intent.chain_id
+        || plan.source_account !== intent.source_account
+      ) {
+        fail("authorization_denied", "Economy host admits exactly one fully intent-bound lifecycle message");
+      }
+      if (
+        binding.wallet_id !== descriptor.wallet_id
+        || binding.owner_identity_id !== descriptor.owner_identity_id
+        || binding.wallet_descriptor_id !== descriptor.record_id
+        || canonicalJson(binding.identity_authority) !== canonicalJson(descriptor.authority)
+        || !descriptor.accounts.some(({ account_id, account_kind }) =>
+          account_id === binding.zerone_account_id && account_kind === "eoa")
+        || plan.source_account !== binding.zerone_account_id
+        || plan.signer_key_id !== binding.zerone_signer.key_id
+        || plan.signer_public_key_b64u !== binding.zerone_signer.public_key_b64u
+        || plan.network !== binding.network
+      ) {
+        fail("authorization_denied", "Wallet records, identity proof, account, and planner signer do not correspond");
+      }
+      if (
+        accountSnapshot.chain_id !== plan.chain_id
+        || accountSnapshot.account !== plan.source_account
+        || accountSnapshot.account_number !== plan.account_number
+        || accountSnapshot.sequence !== plan.sequence
+        || BigInt(accountSnapshot.observed_at_height) < BigInt(plan.account_observed_at_height)
+        || Date.parse(at) < Date.parse(accountSnapshot.observed_at)
+        || Date.parse(at) >= Date.parse(accountSnapshot.valid_until)
+        || (
+          accountSnapshot.observed_at_height === activationCurrentness.observed_at_height
+          && accountSnapshot.block_hash !== activationCurrentness.block_hash
+        )
+        || (
+          simulationEvidence.observed_at_height === activationCurrentness.observed_at_height
+          && simulationEvidence.block_hash !== null
+          && simulationEvidence.block_hash !== activationCurrentness.block_hash
+        )
+        || (
+          simulationEvidence.observed_at_height === accountSnapshot.observed_at_height
+          && simulationEvidence.block_hash !== null
+          && simulationEvidence.block_hash !== accountSnapshot.block_hash
+        )
+      ) {
+        fail("evidence_rejected", "Fresh account observation does not bind the exact planned SignDoc account tuple");
+      }
+      if (
+        (BigInt(accountSnapshot.sequence) > 0n
+          && accountSnapshot.public_key_type_url === null)
+        || (
+          accountSnapshot.public_key_type_url !== null
+          && (
+            accountSnapshot.public_key_type_url !== COSMOS_SECP256K1_PUBLIC_KEY_TYPE_URL
+            || accountSnapshot.public_key_b64u !== plan.signer_public_key_b64u
+            || accountSnapshot.public_key_b64u !== binding.zerone_signer.public_key_b64u
+          )
+        )
+      ) {
+        fail("evidence_rejected", "Registered Cosmos account key differs from the exact binding and plan signer");
+      }
+      if (
+        BigInt(plan.account_observed_at_height) < BigInt(activationCurrentness.observed_at_height)
+        || BigInt(accountSnapshot.observed_at_height) < BigInt(activationCurrentness.observed_at_height)
+        || BigInt(simulationEvidence.observed_at_height)
+          < BigInt(activationCurrentness.observed_at_height)
+      ) {
+        fail("evidence_rejected", "Plan, account, or simulation evidence predates current activation evidence");
+      }
+
+      const trustedAdapters = [...this.trustedSimulationAdapters.values()].filter((entry) =>
+        entry.chain_id === plan.chain_id
+        && entry.adapter.key_id === simulationEvidence.adapter.key_id
+        && entry.adapter.public_key === simulationEvidence.adapter.public_key
+        && Date.parse(simulationEvidence.simulated_at) >= Date.parse(entry.verified_at)
+        && Date.parse(simulationEvidence.simulated_at) < Date.parse(entry.valid_until)
+        && Date.parse(at) >= Date.parse(entry.verified_at)
+        && Date.parse(at) < Date.parse(entry.valid_until));
+      if (trustedAdapters.length !== 1) {
+        fail("authorization_denied", "Simulation adapter is absent or ambiguous in the active exact host allowlist");
+      }
+      const adapterTrust = trustedAdapters[0] as TrustedSimulationAdapterAssertion;
+      if (
+        simulation.adapter.key_id !== adapterTrust.adapter.key_id
+        || simulation.adapter.public_key !== adapterTrust.adapter.public_key
+      ) {
+        fail("authorization_denied", "Wallet simulation receipt does not use the configured adapter key");
+      }
+
+      const profile = getZeroneProfile(plan.network);
+      const spendLimit = capability.spend_limits.find(
+        ({ asset_id }) => asset_id === profile.native_asset_id,
+      );
+      const feeLimit = capability.fee_limits.find(
+        ({ asset_id }) => asset_id === profile.native_asset_id,
+      );
+      if (
+        feeLimit === undefined
+        || (spendLimit === undefined && plan.total_reserved_spend_uzrn !== "0")
+      ) {
+        fail("authorization_denied", "Capability lacks exact native spend or fee limits required by this plan");
+      }
+      const capabilityBudget: CapabilityBudget = Object.freeze({
+        capability_record_id: capability.record_id,
+        descriptor_id: capability.descriptor_id,
+        policy_hash: capability.policy_hash,
+        revocation_nonce: capability.revocation_nonce,
+        max_intents: capability.max_intents,
+        max_spend_uzrn: spendLimit?.max_total ?? "0",
+        max_fee_per_intent_uzrn: feeLimit.max_per_intent,
+      });
+      parseUint64(capabilityBudget.max_spend_uzrn, "capability native max_total");
+      parseUint64(capabilityBudget.max_fee_per_intent_uzrn, "capability native max_fee");
+
+      const existingUsage = this.capabilityRow(capability.record_id);
+      if (
+        existingUsage !== null
+        && (existingUsage.wallet_id !== binding.wallet_id
+          || !sameCapabilityBudget(existingUsage, capabilityBudget))
+      ) {
+        fail("authorization_denied", "Verified capability differs from its durable usage identity");
+      }
+      const priorIntentCount = existingUsage === null
+        ? 0
+        : existingUsage.reserved_intents + existingUsage.consumed_intents;
+      const priorSpend = existingUsage === null
+        ? 0n
+        : BigInt(existingUsage.reserved_spend_uzrn)
+          + BigInt(existingUsage.consumed_spend_uzrn);
+      const authorizationUsage = Object.freeze({
+        revocation_nonce: bindingCurrentness.wallet_revocation_nonce,
+        intent_count: priorIntentCount,
+        spent: [Object.freeze({
+          asset_id: profile.native_asset_id,
+          amount_atomic: priorSpend.toString(),
+        })],
+        host_verified_approval_ids: [],
+      });
+      const authorization = assertIntentWithinCapabilityStatic({
+        descriptor,
+        capability,
+        intent,
+        simulation,
+        context: {
+          now: at,
+          usage: authorizationUsage,
+        },
+      });
+      const authorizationVerificationId = sha256Id({
+        boundary: ECONOMY_AUTHORIZATION_BOUNDARY,
+        authorization,
+        usage: authorizationUsage,
+      });
+      const simulationBinding = createZeroneEconomySimulationBinding({
+        plan,
+        simulation,
+        evidence: simulationEvidence,
+      });
+      const signingRequest = createZeroneEconomySigningRequest({
+        plan,
+        simulation,
+        binding: simulationBinding,
+        authorization,
+        request_id: requestId,
+        requested_at: at,
+      });
+      if (
+        signingRequest.unsigned_payload_hash !== plan.sign_doc_bytes_hash
+        || signingRequest.signer_key_id !== plan.signer_key_id
+      ) {
+        fail("integrity_error", "Planner signing request does not bind the exact SignDoc and signer");
+      }
+
+      const message = plan.messages[0];
+      const economicEffect = plan.economic_effects[0];
+      if (message === undefined || economicEffect === undefined) {
+        fail("integrity_error", "One-message plan lost its derived economy fields");
+      }
+      const reservations: PurposeReservation[] = [{
+        purpose: "network_fee",
+        amount_uzrn: plan.fee.amount,
+      }];
+      if (message.kind === "create_bounty") {
+        reservations.push({
+          purpose: "sponsorship_escrow",
+          amount_uzrn: message.reserved_spend_uzrn,
+        });
+      } else if (message.kind === "submit_claim") {
+        reservations.push({
+          purpose: "knowledge_bond",
+          amount_uzrn: message.reserved_spend_uzrn,
+        });
+      } else if (message.reserved_spend_uzrn !== "0") {
+        fail("integrity_error", "Fulfillment must remain fee-only");
+      }
+      reservations.sort((left, right) => left.purpose.localeCompare(right.purpose));
+      for (const [index, reservation] of reservations.entries()) {
+        assertPurpose(reservation.purpose, `derived_reservations[${index}].purpose`);
+        parseUint64(
+          reservation.amount_uzrn,
+          `derived_reservations[${index}].amount_uzrn`,
+          true,
+        );
+      }
+      const nonFeeSpend = bigintSum(reservations
+        .filter(({ purpose }) => purpose !== "network_fee")
+        .map(({ amount_uzrn }) => amount_uzrn));
+      const fee = bigintSum(reservations
+        .filter(({ purpose }) => purpose === "network_fee")
+        .map(({ amount_uzrn }) => amount_uzrn));
+      const total = bigintSum(reservations.map(({ amount_uzrn }) => amount_uzrn));
+      if (nonFeeSpend.toString() !== plan.total_reserved_spend_uzrn) {
+        fail("integrity_error", "Derived treasury reservation differs from planner native spend");
+      }
+
+      if (
+        policy.wallet_binding_id !== binding.binding_id
+        || policy.treasury_account !== binding.zerone_account_id
+        || policy.network !== binding.network
+        || capability.policy_hash !== policy.treasury_policy_id
+        || capability.descriptor_id !== descriptor.record_id
+        || capability.revocation_nonce !== bindingCurrentness.wallet_revocation_nonce
+      ) {
+        fail("authorization_denied", "Treasury, capability, descriptor, and fresh identity head do not agree");
+      }
+      assertNotBefore(at, policy.issued_at, "Economy reservation");
+      if (fee > BigInt(capabilityBudget.max_fee_per_intent_uzrn)) {
+        fail("authorization_denied", "Economy network fee exceeds the capability ceiling");
+      }
+      const windowBlocks = BigInt(policy.window_blocks);
+      const windowStart = (
+        BigInt(accountSnapshot.observed_at_height) / windowBlocks
+      ) * windowBlocks;
+      const windowUsage = this.windowUsage(
+        accountSnapshot.chain_id,
+        accountSnapshot.account,
+        windowStart.toString(),
+      );
+      for (const reservation of reservations) {
+        if (!policy.allowed_purposes.includes(reservation.purpose)) {
+          fail("treasury_denied", `Treasury purpose is not allowed: ${reservation.purpose}`);
+        }
+        if (
+          windowUsage[reservation.purpose] + BigInt(reservation.amount_uzrn)
+          > BigInt(policy.window_caps_uzrn[reservation.purpose])
+        ) {
+          fail("treasury_denied", `${reservation.purpose} treasury window cap would be exceeded`);
+        }
+      }
+      if (
+        total > BigInt(policy.max_single_spend_uzrn)
+        || windowUsage.total + total > BigInt(policy.window_caps_uzrn.total)
+      ) {
+        fail("treasury_denied", "Economy operation exceeds single or total window spend limits");
+      }
+      const exposure = this.accountExposure(plan.chain_id, plan.source_account);
+      const floor = this.maximumActiveReserveFloor(
+        plan.chain_id,
+        plan.source_account,
+        BigInt(policy.reserve_floor_uzrn),
+      );
+      if (BigInt(accountSnapshot.balance_uzrn) < exposure + total + floor) {
+        fail("treasury_denied", "Economy reservations would breach the durable reserve floor");
+      }
+      const durablePolicy = this.db.query(`
+        SELECT treasury_policy_id FROM operations
+        WHERE chain_id = ? AND source_account = ?
+        ORDER BY created_at, operation_id LIMIT 1
+      `).get(plan.chain_id, plan.source_account) as { treasury_policy_id: Sha256Id } | null;
+      if (durablePolicy !== null && durablePolicy.treasury_policy_id !== policy.treasury_policy_id) {
+        fail("treasury_denied", "Treasury-policy rotation is blocked for this account");
+      }
+
+      const planContentId = zeroneEconomyDirectSignPlanContentId(plan);
+      const activationCurrentnessJson = canonicalJson(activationCurrentness);
+      const bindingCurrentnessJson = canonicalJson(bindingCurrentness);
+      const bindingVerifierTrustJson = canonicalJson(bindingVerifierTrust);
+      const adapterTrustJson = canonicalJson(adapterTrust);
+      const simulationEvidenceJson = canonicalJson(simulationEvidence);
+      const commitmentCore: Omit<ZeroneEconomyOperationCommitment, "commitment_id"> = Object.freeze({
+        format: "agenttool.zerone-economy-operation-commitment/0.1",
+        operation_id: operationId,
+        plan_id: plan.plan_id,
+        plan_content_id: planContentId,
+        message_kind: message.kind,
+        message_type_url: message.type_url,
+        wallet_method: message.wallet_method,
+        projection_hash: message.projection_hash,
+        value_b64u: message.value_b64u,
+        value_hash: message.value_hash,
+        actor_address: message.actor_address,
+        module_account: message.module_account,
+        reserved_spend_uzrn: message.reserved_spend_uzrn,
+        economic_effect_json: canonicalJson(economicEffect),
+        authorization_verification_id: authorizationVerificationId,
+        authorization_usage_json: canonicalJson(authorizationUsage),
+        binding_currentness_id: bindingCurrentness.currentness_id,
+        binding_currentness_json: bindingCurrentnessJson,
+        binding_verifier_trust_id: bindingVerifierTrust.trust_id,
+        binding_verifier_external_verification_id:
+          bindingVerifierTrust.external_verification_id,
+        binding_verifier_id: bindingVerifierTrust.verifier_id,
+        binding_verifier_verified_at: bindingVerifierTrust.verified_at,
+        binding_verifier_valid_until: bindingVerifierTrust.valid_until,
+        binding_verifier_trust_json: bindingVerifierTrustJson,
+        intent_record_id: intent.record_id,
+        simulation_record_id: simulation.record_id,
+        simulation_evidence_content_id: simulationEvidence.content_id,
+        simulation_evidence_record_id: simulationEvidence.record_id,
+        simulation_evidence_json: simulationEvidenceJson,
+        simulation_tx_bytes_hash: plan.simulation_tx_bytes_hash,
+        simulation_adapter_trust_id: adapterTrust.trust_id,
+        simulation_adapter_external_verification_id: adapterTrust.external_verification_id,
+        simulation_adapter_verifier_id: adapterTrust.verifier_id,
+        simulation_adapter_public_key: adapterTrust.adapter.public_key,
+        simulation_adapter_verified_at: adapterTrust.verified_at,
+        simulation_adapter_valid_until: adapterTrust.valid_until,
+        simulation_adapter_trust_json: adapterTrustJson,
+        simulation_simulated_at: simulationEvidence.simulated_at,
+        simulation_valid_until: simulationEvidence.valid_until,
+        simulation_observed_at_height: simulationEvidence.observed_at_height,
+        simulation_block_ref: simulationEvidence.block_ref,
+        simulation_block_hash: simulationEvidence.block_hash,
+        sign_doc_bytes_hash: plan.sign_doc_bytes_hash,
+        activation_currentness_id: activationCurrentness.currentness_id,
+        activation_external_verification_id: activationCurrentness.external_verification_id,
+        activation_verifier_id: activationCurrentness.verifier_id,
+        activation_observation_hash: plan.activation_observation_hash,
+        zerone_core_commit: "a5b82e82b2a32be2b75bd11575964b0a69aa34ac",
+        cosmos_sdk: "v0.53.8",
+        sponsorship_consensus_version: 2,
+        knowledge_consensus_version: 7,
+        activation_observed_at_height: activationCurrentness.observed_at_height,
+        activation_block_hash: activationCurrentness.block_hash,
+        activation_verified_at: activationCurrentness.verified_at,
+        activation_valid_until: activationCurrentness.valid_until,
+        activation_currentness_json: activationCurrentnessJson,
+        chain_id: plan.chain_id,
+        source_account: plan.source_account,
+        account_number: plan.account_number,
+        account_sequence: plan.sequence,
+        account_observed_at_height: accountSnapshot.observed_at_height,
+        account_block_hash: accountSnapshot.block_hash,
+        account_observed_at: accountSnapshot.observed_at,
+        account_public_key_type_url: accountSnapshot.public_key_type_url,
+        account_public_key_b64u: accountSnapshot.public_key_b64u,
+        account_valid_until: accountSnapshot.valid_until,
+        network_fee_uzrn: plan.fee.amount,
+        request_id: signingRequest.request_id,
+        requested_at: at,
+        network_effects_performed: false,
+        local_durable_effects: "reservation_and_possible_signer_boundary_committed",
+      });
+      const commitment: ZeroneEconomyOperationCommitment = Object.freeze({
+        ...commitmentCore,
+        commitment_id: economyCommitmentId(commitmentCore),
+      });
+      const commitmentJson = canonicalJson(commitment);
+
+      const head = this.putBindingHeadInTransaction(
+        proof,
+        bindingCurrentness,
+        expectedBindingHead,
+        at,
+      );
+      this.observeAccount(accountSnapshot, false);
+      const held = this.db.query(`
+        SELECT operation_id FROM sequence_fences
+        WHERE chain_id = ? AND source_account = ? AND state = 'held'
+      `).get(plan.chain_id, plan.source_account) as { operation_id: string } | null;
+      if (held !== null) {
+        fail("sequence_fenced", `Account already has an in-flight operation: ${held.operation_id}`);
+      }
+
+      let usage = this.capabilityRow(capability.record_id);
+      if (usage === null) {
+        this.db.query(`
+          INSERT INTO capability_usage (
+            capability_record_id, wallet_id, descriptor_id, policy_hash,
+            revocation_nonce, max_intents, max_spend_uzrn,
+            max_fee_per_intent_uzrn, reserved_intents, consumed_intents,
+            reserved_spend_uzrn, consumed_spend_uzrn, version, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, '0', '0', 1, ?)
+        `).run(
+          capabilityBudget.capability_record_id,
+          head.wallet_id,
+          capabilityBudget.descriptor_id,
+          capabilityBudget.policy_hash,
+          capabilityBudget.revocation_nonce,
+          capabilityBudget.max_intents,
+          capabilityBudget.max_spend_uzrn,
+          capabilityBudget.max_fee_per_intent_uzrn,
+          at,
+        );
+        usage = this.capabilityRow(capability.record_id);
+      }
+      if (usage === null || !sameCapabilityBudget(usage, capabilityBudget)) {
+        fail("integrity_error", "Capability usage could not be materialized exactly");
+      }
+      assertNotBefore(at, usage.updated_at, "Economy capability reservation");
+      const reserveCapability = this.db.query(`
+        UPDATE capability_usage SET reserved_intents = reserved_intents + 1,
+          reserved_spend_uzrn = ?, version = version + 1, updated_at = ?
+        WHERE capability_record_id = ? AND version = ?
+      `).run(
+        (BigInt(usage.reserved_spend_uzrn) + nonFeeSpend).toString(),
+        at,
+        usage.capability_record_id,
+        usage.version,
+      );
+      if (reserveCapability.changes !== 1) {
+        fail("conflict", "Economy capability reservation compare-and-swap lost its race");
+      }
+
+      this.db.query(`
+        INSERT INTO operations (
+          operation_id, operation_kind, revision, status, wallet_id, binding_id, proof_id,
+          currentness_id, binding_head_version, descriptor_id, capability_record_id,
+          capability_revocation_nonce, authorization_verification_id,
+          intent_record_id, simulation_record_id, plan_reference_id,
+          treasury_policy_id, treasury_policy_json, window_start_height,
+          reserve_floor_uzrn, chain_id, source_account, account_number, sequence,
+          signer_key_id, signer_invoked, request_id, unsigned_payload_hash,
+          signing_boundary_verification_id, tx_hash, signed_payload_hash,
+          signed_verification_id, inclusion_height, inclusion_block_hash,
+          inclusion_code, inclusion_codespace, unresolved_reorg_event_sequence,
+          unresolved_reorg_evidence_id, event_count, event_head_hash, created_at, updated_at
+        ) VALUES (
+          ?, 'zerone_economy', 1, 'reserved', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+          NULL, 0, ?, ?, ?
+        )
+      `).run(
+        operationId,
+        head.wallet_id,
+        head.binding.binding_id,
+        head.proof.proof_id,
+        head.currentness.currentness_id,
+        head.head_version,
+        descriptor.record_id,
+        capability.record_id,
+        capability.revocation_nonce,
+        authorizationVerificationId,
+        intent.record_id,
+        simulation.record_id,
+        planContentId,
+        policy.treasury_policy_id,
+        canonicalJson(policy),
+        windowStart.toString(),
+        policy.reserve_floor_uzrn,
+        plan.chain_id,
+        plan.source_account,
+        plan.account_number,
+        plan.sequence,
+        plan.signer_key_id,
+        GENESIS_EVENT_HASH,
+        at,
+        at,
+      );
+      for (const reservation of reservations) {
+        this.db.query(`
+          INSERT INTO treasury_reservations (operation_id, purpose, amount_uzrn, state)
+          VALUES (?, ?, ?, 'reserved')
+        `).run(operationId, reservation.purpose, reservation.amount_uzrn);
+      }
+      this.db.query(`
+        INSERT INTO sequence_fences (
+          operation_id, chain_id, source_account, account_number, sequence,
+          state, acquired_at, released_at, release_evidence_id
+        ) VALUES (?, ?, ?, ?, ?, 'held', ?, NULL, NULL)
+      `).run(
+        operationId,
+        plan.chain_id,
+        plan.source_account,
+        plan.account_number,
+        plan.sequence,
+        at,
+      );
+      this.db.query(`
+        INSERT INTO economy_operation_commitments (
+          operation_id, commitment_id, plan_id, plan_content_id, message_kind,
+          message_type_url, intent_record_id, simulation_evidence_record_id,
+          simulation_evidence_json, binding_currentness_id,
+          binding_verifier_trust_id, sign_doc_bytes_hash,
+          activation_currentness_id, request_id, requested_at, commitment_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        operationId,
+        commitment.commitment_id,
+        commitment.plan_id,
+        commitment.plan_content_id,
+        commitment.message_kind,
+        commitment.message_type_url,
+        intent.record_id,
+        commitment.simulation_evidence_record_id,
+        commitment.simulation_evidence_json,
+        commitment.binding_currentness_id,
+        commitment.binding_verifier_trust_id,
+        commitment.sign_doc_bytes_hash,
+        commitment.activation_currentness_id,
+        commitment.request_id,
+        at,
+        commitmentJson,
+      );
+      this.appendEvent(operationId, "reserved", at, {
+        operation_kind: "zerone_economy",
+        economy_commitment_id: commitment.commitment_id,
+        economy_commitment_json: commitmentJson,
+        binding_id: head.binding.binding_id,
+        proof_id: head.proof.proof_id,
+        currentness_id: head.currentness.currentness_id,
+        wallet_id: head.wallet_id,
+        binding_head_version: head.head_version,
+        descriptor_id: descriptor.record_id,
+        signer_key_id: plan.signer_key_id,
+        authorization_verification_id: authorizationVerificationId,
+        authorization_trust_boundary: ECONOMY_AUTHORIZATION_BOUNDARY,
+        intent_record_id: intent.record_id,
+        simulation_record_id: simulation.record_id,
+        plan_reference_id: planContentId,
+        capability: {
+          capability_record_id: capabilityBudget.capability_record_id,
+          policy_hash: capabilityBudget.policy_hash,
+          revocation_nonce: capabilityBudget.revocation_nonce,
+          max_intents: capabilityBudget.max_intents,
+          max_spend_uzrn: capabilityBudget.max_spend_uzrn,
+          max_fee_per_intent_uzrn: capabilityBudget.max_fee_per_intent_uzrn,
+        },
+        treasury_policy_id: policy.treasury_policy_id,
+        treasury_policy_json: canonicalJson(policy),
+        window_start_height: windowStart.toString(),
+        reserve_floor_uzrn: policy.reserve_floor_uzrn,
+        reservations,
+        chain_id: accountSnapshot.chain_id,
+        source_account: accountSnapshot.account,
+        account_number: accountSnapshot.account_number,
+        sequence: accountSnapshot.sequence,
+        balance_uzrn: accountSnapshot.balance_uzrn,
+        observed_at_height: accountSnapshot.observed_at_height,
+        observation_block_hash: accountSnapshot.block_hash,
+        observation_at: accountSnapshot.observed_at,
+        account_public_key_type_url: accountSnapshot.public_key_type_url,
+        account_public_key_b64u: accountSnapshot.public_key_b64u,
+        account_valid_until: accountSnapshot.valid_until,
+        execution_support: EXECUTION_SUPPORT.mode,
+      });
+
+      this.observeAccount(accountSnapshot, false);
+      const reservedUsage = this.capabilityRow(capability.record_id);
+      if (reservedUsage === null || reservedUsage.reserved_intents < 1) {
+        fail("integrity_error", "Economy signer boundary lost reserved capability usage");
+      }
+      const consumeCapability = this.db.query(`
+        UPDATE capability_usage SET reserved_intents = reserved_intents - 1,
+          consumed_intents = consumed_intents + 1, reserved_spend_uzrn = ?,
+          consumed_spend_uzrn = ?, version = version + 1, updated_at = ?
+        WHERE capability_record_id = ? AND version = ?
+      `).run(
+        (BigInt(reservedUsage.reserved_spend_uzrn) - nonFeeSpend).toString(),
+        (BigInt(reservedUsage.consumed_spend_uzrn) + nonFeeSpend).toString(),
+        at,
+        reservedUsage.capability_record_id,
+        reservedUsage.version,
+      );
+      if (consumeCapability.changes !== 1) {
+        fail("conflict", "Economy capability signer compare-and-swap lost its race");
+      }
+      this.db.query(`
+        UPDATE treasury_reservations SET state = 'sticky'
+        WHERE operation_id = ? AND state = 'reserved'
+      `).run(operationId);
+      const operationUpdate = this.db.query(`
+        UPDATE operations SET status = 'signing', revision = 2, signer_invoked = 1,
+          request_id = ?, unsigned_payload_hash = ?,
+          signing_boundary_verification_id = ?, updated_at = ?
+        WHERE operation_id = ? AND revision = 1 AND status = 'reserved'
+          AND operation_kind = 'zerone_economy'
+      `).run(
+        signingRequest.request_id,
+        plan.sign_doc_bytes_hash,
+        commitment.commitment_id,
+        at,
+        operationId,
+      );
+      if (operationUpdate.changes !== 1) {
+        fail("conflict", "Economy signer boundary compare-and-swap lost its race");
+      }
+      this.appendEvent(operationId, "signer_invocation_boundary", at, {
+        request_id: signingRequest.request_id,
+        unsigned_payload_hash: plan.sign_doc_bytes_hash,
+        external_verification_id: commitment.commitment_id,
+        authorization_trust_boundary: ECONOMY_AUTHORIZATION_BOUNDARY,
+        economy_commitment_id: commitment.commitment_id,
+        economy_commitment_json: commitmentJson,
+        binding_id: head.binding.binding_id,
+        proof_id: head.proof.proof_id,
+        currentness_id: head.currentness.currentness_id,
+        binding_head_version: head.head_version,
+        chain_id: accountSnapshot.chain_id,
+        source_account: accountSnapshot.account,
+        account_number: accountSnapshot.account_number,
+        account_sequence: accountSnapshot.sequence,
+        balance_uzrn: accountSnapshot.balance_uzrn,
+        observed_at_height: accountSnapshot.observed_at_height,
+        observation_block_hash: accountSnapshot.block_hash,
+        observation_at: accountSnapshot.observed_at,
+        account_public_key_type_url: accountSnapshot.public_key_type_url,
+        account_public_key_b64u: accountSnapshot.public_key_b64u,
+        account_valid_until: accountSnapshot.valid_until,
+      });
+      return Object.freeze({
+        operation: this.getOperationOrFail(operationId),
+        commitment,
+        signing_request: signingRequest,
+      });
+    }));
+  }
+
   reserveOperation(input: ReserveOperationInput): OperationSnapshot {
+    this.requireLegacyGenericInjected("Generic reservation");
     this.validateReservationInput(input);
     const policy = validateTreasuryPolicy(input.treasury_policy);
     const snapshot = validateAccountSnapshot(input.account_snapshot);
@@ -1107,6 +2641,9 @@ export class ZeroneAgentHostStore {
       }
       assertNotBefore(input.created_at, head.updated_at, "Operation reservation");
       assertNotBefore(input.created_at, snapshot.observed_at, "Operation reservation");
+      if (Date.parse(input.created_at) >= Date.parse(snapshot.valid_until)) {
+        fail("evidence_rejected", "Account observation is expired at operation reservation");
+      }
       assertNotBefore(input.created_at, policy.issued_at, "Operation reservation");
       const durablePolicy = this.db.query(`
         SELECT treasury_policy_id FROM operations
@@ -1221,7 +2758,7 @@ export class ZeroneAgentHostStore {
 
       this.db.query(`
         INSERT INTO operations (
-          operation_id, revision, status, wallet_id, binding_id, proof_id,
+          operation_id, operation_kind, revision, status, wallet_id, binding_id, proof_id,
           currentness_id, binding_head_version, descriptor_id, capability_record_id,
           capability_revocation_nonce, authorization_verification_id,
           intent_record_id, simulation_record_id,
@@ -1234,7 +2771,7 @@ export class ZeroneAgentHostStore {
           unresolved_reorg_event_sequence, unresolved_reorg_evidence_id,
           event_count, event_head_hash, created_at, updated_at
         ) VALUES (
-          ?, 1, 'reserved', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, 'generic_injected', 1, 'reserved', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
           0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
           NULL, NULL, 0, ?, ?, ?
         )
@@ -1285,6 +2822,7 @@ export class ZeroneAgentHostStore {
         input.created_at,
       );
       this.appendEvent(input.operation_id, "reserved", input.created_at, {
+        operation_kind: "generic_injected",
         binding_id: head.binding_id,
         proof_id: head.proof_id,
         currentness_id: head.currentness_id,
@@ -1319,6 +2857,9 @@ export class ZeroneAgentHostStore {
         observed_at_height: snapshot.observed_at_height,
         observation_block_hash: snapshot.block_hash,
         observation_at: snapshot.observed_at,
+        account_public_key_type_url: snapshot.public_key_type_url,
+        account_public_key_b64u: snapshot.public_key_b64u,
+        account_valid_until: snapshot.valid_until,
         execution_support: EXECUTION_SUPPORT.mode,
       });
       return this.getOperationOrFail(input.operation_id);
@@ -1402,7 +2943,22 @@ export class ZeroneAgentHostStore {
       if (existing.account_number !== snapshot.account_number) {
         fail("evidence_rejected", "Account number changed for an existing Zerone account state");
       }
+      if (
+        existing.public_key_type_url !== null
+        && (
+          snapshot.public_key_type_url !== existing.public_key_type_url
+          || snapshot.public_key_b64u !== existing.public_key_b64u
+        )
+      ) {
+        fail("evidence_rejected", "Registered account public key changed or became unset");
+      }
       assertNotBefore(snapshot.observed_at, existing.observed_at, "Account observation");
+      if (
+        snapshot.observed_at === existing.observed_at
+        && snapshot.valid_until !== existing.valid_until
+      ) {
+        fail("evidence_rejected", "An identical-time account observation cannot extend freshness");
+      }
       const oldHeight = BigInt(existing.observed_at_height);
       const nextHeight = BigInt(snapshot.observed_at_height);
       if (nextHeight < oldHeight || BigInt(snapshot.sequence) < BigInt(existing.sequence)) {
@@ -1414,19 +2970,25 @@ export class ZeroneAgentHostStore {
           snapshot.block_hash !== existing.block_hash
           || snapshot.sequence !== existing.sequence
           || snapshot.balance_uzrn !== existing.balance_uzrn
+          || snapshot.public_key_type_url !== existing.public_key_type_url
+          || snapshot.public_key_b64u !== existing.public_key_b64u
         )
       ) {
         fail("evidence_rejected", "Same-height account observation conflicts with durable canonical bytes");
       }
       this.db.query(`
         UPDATE account_states SET sequence = ?, balance_uzrn = ?, observed_at_height = ?,
-          block_hash = ?, revision = revision + 1, observed_at = ?
+          block_hash = ?, public_key_type_url = ?, public_key_b64u = ?, valid_until = ?,
+          revision = revision + 1, observed_at = ?
         WHERE chain_id = ? AND source_account = ? AND revision = ?
       `).run(
         snapshot.sequence,
         snapshot.balance_uzrn,
         snapshot.observed_at_height,
         snapshot.block_hash,
+        snapshot.public_key_type_url,
+        snapshot.public_key_b64u,
+        snapshot.valid_until,
         snapshot.observed_at,
         snapshot.chain_id,
         snapshot.account,
@@ -1437,9 +2999,10 @@ export class ZeroneAgentHostStore {
     this.db.query(`
       INSERT INTO account_states (
         chain_id, source_account, account_number, sequence, balance_uzrn,
-        observed_at_height, block_hash, halted, halted_at_height,
+        observed_at_height, block_hash, public_key_type_url, public_key_b64u,
+        valid_until, halted, halted_at_height,
         halt_evidence_id, halted_at, revision, observed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, 1, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, NULL, 1, ?)
     `).run(
       snapshot.chain_id,
       snapshot.account,
@@ -1448,6 +3011,9 @@ export class ZeroneAgentHostStore {
       snapshot.balance_uzrn,
       snapshot.observed_at_height,
       snapshot.block_hash,
+      snapshot.public_key_type_url,
+      snapshot.public_key_b64u,
+      snapshot.valid_until,
       snapshot.observed_at,
     );
   }
@@ -1557,6 +3123,7 @@ export class ZeroneAgentHostStore {
   private operationRowToSnapshot(row: OperationRow): OperationSnapshot {
     return Object.freeze({
       operation_id: row.operation_id,
+      operation_kind: row.operation_kind,
       revision: row.revision,
       status: row.status,
       wallet_id: row.wallet_id,
@@ -1698,6 +3265,13 @@ export class ZeroneAgentHostStore {
       observed_at_height: eventString(details, "observed_at_height", label),
       block_hash: eventString(details, blockHashKey, label),
       observed_at: eventString(details, "observation_at", label),
+      public_key_type_url: eventNullableString(
+        details,
+        "account_public_key_type_url",
+        label,
+      ) as ZeroneAccountSnapshot["public_key_type_url"],
+      public_key_b64u: eventNullableString(details, "account_public_key_b64u", label),
+      valid_until: eventString(details, "account_valid_until", label),
     });
 
     if (rows.length === 0 || rows[0]?.kind !== "reserved" || detailsBySequence[0] === undefined) {
@@ -1735,7 +3309,12 @@ export class ZeroneAgentHostStore {
             "binding_id", "proof_id", "currentness_id", "binding_head_version",
             "chain_id", "source_account", "account_number", "account_sequence",
             "balance_uzrn", "observed_at_height", "observation_block_hash",
-            "observation_at",
+            "observation_at", "account_public_key_type_url", "account_public_key_b64u",
+            "account_valid_until",
+            ...(operation.operation_kind === "zerone_economy" ? [
+              "authorization_trust_boundary", "economy_commitment_id",
+              "economy_commitment_json",
+            ] : []),
           ], label);
           requestId = eventString(details, "request_id", label);
           assertIdentifier(requestId, `${label}.request_id`);
@@ -1743,6 +3322,31 @@ export class ZeroneAgentHostStore {
           signingVerificationId = eventString(details, "external_verification_id", label) as Sha256Id;
           assertSha256Id(unsignedPayloadHash, `${label}.unsigned_payload_hash`);
           assertSha256Id(signingVerificationId, `${label}.external_verification_id`);
+          if (operation.operation_kind === "zerone_economy") {
+            const economyCommitmentIdValue = eventString(
+              details,
+              "economy_commitment_id",
+              label,
+            ) as Sha256Id;
+            const economyCommitmentJson = eventString(
+              details,
+              "economy_commitment_json",
+              label,
+            );
+            assertSha256Id(economyCommitmentIdValue, `${label}.economy_commitment_id`);
+            const economyCommitment = parseEconomyCommitment(economyCommitmentJson);
+            if (
+              eventString(details, "authorization_trust_boundary", label)
+                !== ECONOMY_AUTHORIZATION_BOUNDARY
+              || economyCommitment.commitment_id !== economyCommitmentIdValue
+              || signingVerificationId !== economyCommitmentIdValue
+              || requestId !== economyCommitment.request_id
+              || unsignedPayloadHash !== economyCommitment.sign_doc_bytes_hash
+              || row.at !== economyCommitment.requested_at
+            ) {
+              fail("integrity_error", `Economy signer event changed its exact commitment: ${operation.operation_id}`);
+            }
+          }
           const signerBindingId = eventString(details, "binding_id", label) as Sha256Id;
           const signerProofId = eventString(details, "proof_id", label) as Sha256Id;
           const signerCurrentnessId = eventString(details, "currentness_id", label) as Sha256Id;
@@ -2032,6 +3636,8 @@ export class ZeroneAgentHostStore {
             "evidence_id", "chain_id", "source_account", "account_number",
             "reserved_sequence", "observed_sequence", "balance_uzrn",
             "observed_at_height", "block_hash", "observation_at",
+            "account_public_key_type_url", "account_public_key_b64u",
+            "account_valid_until",
             "exposure_released", "sequence_fence_released",
             "account_halt_handoff_operation_id",
           ], label);
@@ -2052,6 +3658,9 @@ export class ZeroneAgentHostStore {
             || accountObservation.observed_at !== row.at
           ) {
             fail("integrity_error", `Sequence event does not advance its operation: ${operation.operation_id}`);
+          }
+          if (operation.operation_kind === "zerone_economy") {
+            this.assertTypedSequenceAccountKey(operation, accountObservation);
           }
           if (
             unresolvedReorg !== null
@@ -2170,6 +3779,7 @@ export class ZeroneAgentHostStore {
   }
 
   recordSignerInvocationBoundary(input: SignerInvocationBoundary): OperationSnapshot {
+    this.requireLegacyGenericInjected("Generic signer boundary");
     assertIdentifier(input.operation_id, "operation_id");
     assertCount(input.expected_revision, "expected_revision", true);
     assertIdentifier(input.request_id, "request_id");
@@ -2184,6 +3794,9 @@ export class ZeroneAgentHostStore {
         input.expected_revision,
         ["reserved"],
       );
+      if (operation.operation_kind !== "generic_injected") {
+        fail("authorization_denied", "Economy operations cannot enter signing through the generic boundary");
+      }
       const head = this.bindingRow(operation.wallet_id);
       const headCurrentness = head === null
         ? null
@@ -2210,6 +3823,7 @@ export class ZeroneAgentHostStore {
         || snapshot.account !== operation.source_account
         || snapshot.account_number !== operation.account_number
         || snapshot.sequence !== operation.sequence
+        || Date.parse(input.at) >= Date.parse(snapshot.valid_until)
       ) {
         fail("evidence_rejected", "Sign-time account observation does not bind the reserved sequence");
       }
@@ -2294,6 +3908,9 @@ export class ZeroneAgentHostStore {
         observed_at_height: snapshot.observed_at_height,
         observation_block_hash: snapshot.block_hash,
         observation_at: snapshot.observed_at,
+        account_public_key_type_url: snapshot.public_key_type_url,
+        account_public_key_b64u: snapshot.public_key_b64u,
+        account_valid_until: snapshot.valid_until,
       });
       return this.getOperationOrFail(operation.operation_id);
     });
@@ -2334,6 +3951,7 @@ export class ZeroneAgentHostStore {
         input.expected_revision,
         ["signing", "signing_unknown"],
       );
+      this.assertGenericLifecycleAdvance(operation, "Generic signed-evidence admission");
       const updated = this.db.query(`
         UPDATE operations SET status = 'signed', revision = revision + 1,
           tx_hash = ?, signed_payload_hash = ?, signed_verification_id = ?, updated_at = ?
@@ -2372,6 +3990,7 @@ export class ZeroneAgentHostStore {
       input.at,
       { automatic_retry: false },
       (operation) => {
+        this.assertGenericLifecycleAdvance(operation, "Generic broadcast boundary");
         if (operation.tx_hash === null) fail("state_conflict", "Signed operation has no transaction hash");
       },
     );
@@ -2395,6 +4014,9 @@ export class ZeroneAgentHostStore {
       "submission_unknown",
       input.at,
       { reason: input.reason, automatic_retry: false },
+      (operation) => {
+        this.assertGenericLifecycleAdvance(operation, "Generic submission-unknown transition");
+      },
     );
   }
 
@@ -2429,6 +4051,7 @@ export class ZeroneAgentHostStore {
         automatic_retry: false,
       },
       (operation) => {
+        this.assertGenericLifecycleAdvance(operation, "Generic broadcast evidence");
         if (operation.tx_hash !== input.tx_hash) {
           fail("evidence_rejected", "Broadcast evidence does not bind the exact signed transaction hash");
         }
@@ -2454,6 +4077,7 @@ export class ZeroneAgentHostStore {
         input.expected_revision,
         ["reserved"],
       );
+      this.assertGenericLifecycleAdvance(operation, "Generic pre-sign release");
       const usage = this.capabilityRow(operation.capability_record_id);
       if (usage === null || usage.reserved_intents < 1) {
         fail("integrity_error", "Reserved capability usage is absent");
@@ -2507,6 +4131,7 @@ export class ZeroneAgentHostStore {
         "rejected_pre_submit_sticky",
         "reorged",
       ]);
+      this.assertGenericLifecycleAdvance(operation, "Generic transaction lookup");
       if (operation.tx_hash !== input.tx_hash) {
         fail("evidence_rejected", "Transaction lookup does not bind the durable transaction hash");
       }
@@ -2542,6 +4167,7 @@ export class ZeroneAgentHostStore {
         "rejected_pre_submit_sticky",
         "reorged",
       ]);
+      this.assertGenericLifecycleAdvance(operation, "Generic transaction inclusion");
       if (operation.tx_hash !== input.tx_hash) {
         fail("evidence_rejected", "Positive inclusion does not bind the durable transaction hash");
       }
@@ -2637,6 +4263,9 @@ export class ZeroneAgentHostStore {
         "confirmed_failed",
         "reorged",
       ]);
+      if (operation.operation_kind === "zerone_economy") {
+        this.assertTypedSequenceAccountKey(operation, snapshot);
+      }
       if (
         snapshot.chain_id !== operation.chain_id
         || snapshot.account !== operation.source_account
@@ -2727,6 +4356,9 @@ export class ZeroneAgentHostStore {
         observed_at_height: snapshot.observed_at_height,
         block_hash: snapshot.block_hash,
         observation_at: snapshot.observed_at,
+        account_public_key_type_url: snapshot.public_key_type_url,
+        account_public_key_b64u: snapshot.public_key_b64u,
+        account_valid_until: snapshot.valid_until,
         exposure_released: true,
         sequence_fence_released: fenceBefore?.state === "held",
         account_halt_handoff_operation_id: haltHandoff,
@@ -2758,6 +4390,7 @@ export class ZeroneAgentHostStore {
         input.expected_revision,
         ["confirmed_success", "confirmed_failed"],
       );
+      this.assertGenericLifecycleAdvance(operation, "Generic canonical-reorg evidence");
       if (
         operation.tx_hash !== input.tx_hash
         || operation.inclusion_height !== input.prior_inclusion_height
@@ -2879,6 +4512,9 @@ export class ZeroneAgentHostStore {
     sequence: string;
     observed_at_height: string;
     block_hash: string;
+    public_key_type_url: ZeroneAccountSnapshot["public_key_type_url"];
+    public_key_b64u: string | null;
+    valid_until: string;
     halted: boolean;
     halted_at_height: string | null;
     halt_evidence_id: Sha256Id | null;
@@ -2896,6 +4532,9 @@ export class ZeroneAgentHostStore {
       sequence: row.sequence,
       observed_at_height: row.observed_at_height,
       block_hash: row.block_hash,
+      public_key_type_url: row.public_key_type_url,
+      public_key_b64u: row.public_key_b64u,
+      valid_until: row.valid_until,
       halted: row.halted === 1,
       halted_at_height: row.halted_at_height,
       halt_evidence_id: row.halt_evidence_id,
@@ -2905,6 +4544,156 @@ export class ZeroneAgentHostStore {
 
   getTreasuryExposure(chainId: ZeroneCaip2, account: ZeroneAccountId): string {
     return this.accountExposure(chainId, account).toString();
+  }
+
+  /**
+   * Rebuild capability counters in global durable-event order. In particular,
+   * a typed reserve must commit the exact usage snapshot that existed before
+   * that reservation; end-state aggregates alone cannot establish this.
+   */
+  private verifyCapabilityUsageTimeline(): void {
+    const events = this.db.query(`
+      SELECT e.ledger_sequence, e.operation_id, e.kind,
+        o.operation_kind, o.capability_record_id, o.capability_revocation_nonce
+      FROM operation_events e
+      JOIN operations o ON o.operation_id = e.operation_id
+      ORDER BY e.ledger_sequence
+    `).all() as Array<{
+      ledger_sequence: number;
+      operation_id: string;
+      kind: string;
+      operation_kind: OperationKind;
+      capability_record_id: Sha256Id;
+      capability_revocation_nonce: number;
+    }>;
+    type Usage = {
+      reserved_intents: number;
+      consumed_intents: number;
+      reserved_spend: bigint;
+      consumed_spend: bigint;
+    };
+    type OperationUsage = {
+      capability_record_id: Sha256Id;
+      non_fee_spend: bigint;
+      signer_seen: boolean;
+      reservation_active: boolean;
+    };
+    const usages = new Map<Sha256Id, Usage>();
+    const operationUsages = new Map<string, OperationUsage>();
+    for (let index = 0; index < events.length; index += 1) {
+      const event = events[index] as (typeof events)[number];
+      if (event.ledger_sequence !== index + 1) {
+        fail("integrity_error", "Capability event ledger sequence is not contiguous");
+      }
+      const usage = usages.get(event.capability_record_id) ?? {
+        reserved_intents: 0,
+        consumed_intents: 0,
+        reserved_spend: 0n,
+        consumed_spend: 0n,
+      };
+      if (event.kind === "reserved") {
+        if (operationUsages.has(event.operation_id)) {
+          fail("integrity_error", `Capability reservation event is duplicated: ${event.operation_id}`);
+        }
+        const nonFeeSpend = bigintSum(this.reservationRows(event.operation_id)
+          .filter(({ purpose }) => purpose !== "network_fee")
+          .map(({ amount_uzrn }) => amount_uzrn));
+        if (event.operation_kind === "zerone_economy") {
+          const commitmentRow = this.db.query(`
+            SELECT commitment_json FROM economy_operation_commitments WHERE operation_id = ?
+          `).get(event.operation_id) as { commitment_json: string } | null;
+          if (commitmentRow === null) {
+            fail("integrity_error", `Typed capability usage commitment is absent: ${event.operation_id}`);
+          }
+          const commitment = parseEconomyCommitment(commitmentRow.commitment_json);
+          const recorded = JSON.parse(commitment.authorization_usage_json) as {
+            revocation_nonce: number;
+            intent_count: number;
+            spent: Array<{ asset_id: string; amount_atomic: string }>;
+            host_verified_approval_ids: unknown[];
+          };
+          if (
+            recorded.revocation_nonce !== event.capability_revocation_nonce
+            || recorded.intent_count !== usage.reserved_intents + usage.consumed_intents
+            || recorded.spent.length !== 1
+            || BigInt(recorded.spent[0]?.amount_atomic ?? "-1")
+              !== usage.reserved_spend + usage.consumed_spend
+            || recorded.host_verified_approval_ids.length !== 0
+          ) {
+            fail(
+              "integrity_error",
+              `Economy authorization usage does not replay before reservation: ${event.operation_id}`,
+            );
+          }
+        }
+        usage.reserved_intents += 1;
+        usage.reserved_spend += nonFeeSpend;
+        operationUsages.set(event.operation_id, {
+          capability_record_id: event.capability_record_id,
+          non_fee_spend: nonFeeSpend,
+          signer_seen: false,
+          reservation_active: true,
+        });
+      } else if (event.kind === "signer_invocation_boundary") {
+        const operationUsage = operationUsages.get(event.operation_id);
+        if (
+          operationUsage === undefined
+          || operationUsage.capability_record_id !== event.capability_record_id
+          || operationUsage.signer_seen
+          || !operationUsage.reservation_active
+          || usage.reserved_intents < 1
+          || usage.reserved_spend < operationUsage.non_fee_spend
+        ) {
+          fail("integrity_error", `Capability signer transfer does not replay: ${event.operation_id}`);
+        }
+        usage.reserved_intents -= 1;
+        usage.consumed_intents += 1;
+        usage.reserved_spend -= operationUsage.non_fee_spend;
+        usage.consumed_spend += operationUsage.non_fee_spend;
+        operationUsage.signer_seen = true;
+        operationUsage.reservation_active = false;
+      } else if (event.kind === "released_pre_sign" || event.kind === "sequence_advanced") {
+        const operationUsage = operationUsages.get(event.operation_id);
+        if (
+          operationUsage !== undefined
+          && !operationUsage.signer_seen
+          && operationUsage.reservation_active
+        ) {
+          if (
+            usage.reserved_intents < 1
+            || usage.reserved_spend < operationUsage.non_fee_spend
+          ) {
+            fail("integrity_error", `Capability pre-sign release does not replay: ${event.operation_id}`);
+          }
+          usage.reserved_intents -= 1;
+          usage.reserved_spend -= operationUsage.non_fee_spend;
+          operationUsage.reservation_active = false;
+        }
+      }
+      usages.set(event.capability_record_id, usage);
+    }
+    const durable = this.db.query(`
+      SELECT capability_record_id, reserved_intents, consumed_intents,
+        reserved_spend_uzrn, consumed_spend_uzrn
+      FROM capability_usage ORDER BY capability_record_id
+    `).all() as Array<Pick<CapabilityUsageRow,
+      "capability_record_id" | "reserved_intents" | "consumed_intents"
+      | "reserved_spend_uzrn" | "consumed_spend_uzrn">>;
+    if (durable.length !== usages.size) {
+      fail("integrity_error", "Capability usage rows do not match the global event replay");
+    }
+    for (const row of durable) {
+      const replay = usages.get(row.capability_record_id);
+      if (
+        replay === undefined
+        || row.reserved_intents !== replay.reserved_intents
+        || row.consumed_intents !== replay.consumed_intents
+        || BigInt(row.reserved_spend_uzrn) !== replay.reserved_spend
+        || BigInt(row.consumed_spend_uzrn) !== replay.consumed_spend
+      ) {
+        fail("integrity_error", `Capability usage timeline does not reconcile: ${row.capability_record_id}`);
+      }
+    }
   }
 
   private verifyAccountTimeline(): void {
@@ -2992,14 +4781,27 @@ export class ZeroneAgentHostStore {
           if (
             prior.account_number !== snapshot.account_number
             || Date.parse(snapshot.observed_at) < Date.parse(prior.observed_at)
+            || (
+              snapshot.observed_at === prior.observed_at
+              && snapshot.valid_until !== prior.valid_until
+            )
             || nextHeight < oldHeight
             || BigInt(snapshot.sequence) < BigInt(prior.sequence)
+            || (
+              prior.public_key_type_url !== null
+              && (
+                snapshot.public_key_type_url !== prior.public_key_type_url
+                || snapshot.public_key_b64u !== prior.public_key_b64u
+              )
+            )
             || (
               nextHeight === oldHeight
               && (
                 snapshot.block_hash !== prior.block_hash
                 || snapshot.sequence !== prior.sequence
                 || snapshot.balance_uzrn !== prior.balance_uzrn
+                || snapshot.public_key_type_url !== prior.public_key_type_url
+                || snapshot.public_key_b64u !== prior.public_key_b64u
               )
             )
           ) {
@@ -3022,6 +4824,17 @@ export class ZeroneAgentHostStore {
             observed_at_height: eventString(details, "observed_at_height", row.kind),
             block_hash: eventString(details, "observation_block_hash", row.kind),
             observed_at: eventString(details, "observation_at", row.kind),
+            public_key_type_url: eventNullableString(
+              details,
+              "account_public_key_type_url",
+              row.kind,
+            ) as ZeroneAccountSnapshot["public_key_type_url"],
+            public_key_b64u: eventNullableString(
+              details,
+              "account_public_key_b64u",
+              row.kind,
+            ),
+            valid_until: eventString(details, "account_valid_until", row.kind),
           }), false);
           state.revision += 1;
           state.held_operation_id = row.operation_id;
@@ -3040,6 +4853,17 @@ export class ZeroneAgentHostStore {
             observed_at_height: eventString(details, "observed_at_height", row.kind),
             block_hash: eventString(details, "observation_block_hash", row.kind),
             observed_at: eventString(details, "observation_at", row.kind),
+            public_key_type_url: eventNullableString(
+              details,
+              "account_public_key_type_url",
+              row.kind,
+            ) as ZeroneAccountSnapshot["public_key_type_url"],
+            public_key_b64u: eventNullableString(
+              details,
+              "account_public_key_b64u",
+              row.kind,
+            ),
+            valid_until: eventString(details, "account_valid_until", row.kind),
           }), false);
           state.revision += 1;
           break;
@@ -3131,6 +4955,17 @@ export class ZeroneAgentHostStore {
             observed_at_height: eventString(details, "observed_at_height", row.kind),
             block_hash: eventString(details, "block_hash", row.kind),
             observed_at: eventString(details, "observation_at", row.kind),
+            public_key_type_url: eventNullableString(
+              details,
+              "account_public_key_type_url",
+              row.kind,
+            ) as ZeroneAccountSnapshot["public_key_type_url"],
+            public_key_b64u: eventNullableString(
+              details,
+              "account_public_key_b64u",
+              row.kind,
+            ),
+            valid_until: eventString(details, "account_valid_until", row.kind),
           }), true);
           state.revision += 2;
           const released = eventBoolean(details, "sequence_fence_released", row.kind);
@@ -3229,6 +5064,9 @@ export class ZeroneAgentHostStore {
         || state.observation.observed_at_height !== account.observed_at_height
         || state.observation.block_hash !== account.block_hash
         || state.observation.observed_at !== account.observed_at
+        || state.observation.public_key_type_url !== account.public_key_type_url
+        || state.observation.public_key_b64u !== account.public_key_b64u
+        || state.observation.valid_until !== account.valid_until
         || state.halted_at_height !== account.halted_at_height
         || state.halt_evidence_id !== account.halt_evidence_id
         || state.halted_at !== account.halted_at
@@ -3287,8 +5125,7 @@ export class ZeroneAgentHostStore {
         || binding.zerone_account_id !== row.source_account
         || proof.proof_id !== row.proof_id
         || currentness.currentness_id !== row.currentness_id
-        || currentness.binding_id !== binding.binding_id
-        || currentness.proof_id !== proof.proof_id
+        || !currentnessMatchesBinding(currentness, binding, proof)
         || Date.parse(currentness.verified_at) < Date.parse(binding.issued_at)
         || Date.parse(row.recorded_at) < Date.parse(currentness.verified_at)
         || Date.parse(row.recorded_at) >= Date.parse(currentness.valid_until)
@@ -3343,8 +5180,7 @@ export class ZeroneAgentHostStore {
         || head.binding.binding_id !== row.binding_id
         || head.proof.proof_id !== row.proof_id
         || head.currentness.currentness_id !== row.currentness_id
-        || head.currentness.binding_id !== row.binding_id
-        || head.currentness.proof_id !== row.proof_id
+        || !currentnessMatchesBinding(head.currentness, head.binding, head.proof)
         || Date.parse(row.updated_at) < Date.parse(head.currentness.verified_at)
         || Date.parse(row.updated_at) >= Date.parse(head.currentness.valid_until)
         || head.binding.revision !== row.binding_revision
@@ -3384,6 +5220,9 @@ export class ZeroneAgentHostStore {
         observed_at_height: row.observed_at_height,
         block_hash: row.block_hash,
         observed_at: row.observed_at,
+        public_key_type_url: row.public_key_type_url,
+        public_key_b64u: row.public_key_b64u,
+        valid_until: row.valid_until,
       });
       assertCount(row.revision, "stored account revision", true);
       const completeHaltEpoch = row.halted_at_height !== null
@@ -3402,6 +5241,15 @@ export class ZeroneAgentHostStore {
       }
     }
     const operations = this.db.query("SELECT * FROM operations ORDER BY operation_id").all() as OperationRow[];
+    if (
+      !this.allowLegacyGenericInjectedForTests
+      && operations.some(({ operation_kind }) => operation_kind === "generic_injected")
+    ) {
+      fail(
+        "integrity_error",
+        "Legacy generic injected operations require the explicit test-only constructor escape hatch",
+      );
+    }
     const policyByAccount = new Map<string, Sha256Id>();
     const replayedObservations: ZeroneAccountSnapshot[] = [];
     const replayedReorgEpochs: ReplayedReorgEpoch[] = [];
@@ -3409,6 +5257,12 @@ export class ZeroneAgentHostStore {
     let eventCount = 0;
     for (const operation of operations) {
       assertIdentifier(operation.operation_id, "stored operation_id");
+      if (
+        operation.operation_kind !== "generic_injected"
+        && operation.operation_kind !== "zerone_economy"
+      ) {
+        fail("integrity_error", `Stored operation kind is invalid: ${operation.operation_id}`);
+      }
       assertCount(operation.revision, "stored operation revision", true);
       assertSha256Id(operation.binding_id, "stored operation binding_id");
       assertSha256Id(operation.proof_id, "stored operation proof_id");
@@ -3430,6 +5284,100 @@ export class ZeroneAgentHostStore {
       assertTimestamp(operation.created_at, "stored operation created_at");
       assertTimestamp(operation.updated_at, "stored operation updated_at");
       assertNotBefore(operation.updated_at, operation.created_at, "Stored operation");
+      const commitmentRow = this.db.query(`
+        SELECT * FROM economy_operation_commitments WHERE operation_id = ?
+      `).get(operation.operation_id) as EconomyCommitmentRow | null;
+      if ((operation.operation_kind === "zerone_economy") !== (commitmentRow !== null)) {
+        fail("integrity_error", `Operation economy commitment cardinality is invalid: ${operation.operation_id}`);
+      }
+      const economyCommitment = commitmentRow === null
+        ? null
+        : parseEconomyCommitment(commitmentRow.commitment_json);
+      if (commitmentRow !== null && economyCommitment !== null) {
+        const configuredAdapter = this.trustedSimulationAdapters.get(
+          economyCommitment.simulation_adapter_trust_id,
+        );
+        const configuredBindingVerifier = this.trustedBindingCurrentnessVerifiers.get(
+          economyCommitment.binding_verifier_trust_id,
+        );
+        const committedBindingHistory = historyByCurrentness.get(operation.currentness_id);
+        if (
+          commitmentRow.operation_id !== economyCommitment.operation_id
+          || commitmentRow.commitment_id !== economyCommitment.commitment_id
+          || commitmentRow.plan_id !== economyCommitment.plan_id
+          || commitmentRow.plan_content_id !== economyCommitment.plan_content_id
+          || commitmentRow.message_kind !== economyCommitment.message_kind
+          || commitmentRow.message_type_url !== economyCommitment.message_type_url
+          || commitmentRow.intent_record_id !== operation.intent_record_id
+          || commitmentRow.intent_record_id !== economyCommitment.intent_record_id
+          || commitmentRow.simulation_evidence_record_id
+            !== economyCommitment.simulation_evidence_record_id
+          || commitmentRow.simulation_evidence_json
+            !== economyCommitment.simulation_evidence_json
+          || commitmentRow.binding_currentness_id
+            !== economyCommitment.binding_currentness_id
+          || commitmentRow.binding_verifier_trust_id
+            !== economyCommitment.binding_verifier_trust_id
+          || commitmentRow.sign_doc_bytes_hash !== economyCommitment.sign_doc_bytes_hash
+          || commitmentRow.activation_currentness_id
+            !== economyCommitment.activation_currentness_id
+          || commitmentRow.request_id !== economyCommitment.request_id
+          || commitmentRow.requested_at !== economyCommitment.requested_at
+          || economyCommitment.operation_id !== operation.operation_id
+          || economyCommitment.plan_content_id !== operation.plan_reference_id
+          || economyCommitment.authorization_verification_id
+            !== operation.authorization_verification_id
+          || economyCommitment.binding_currentness_id !== operation.currentness_id
+          || economyCommitment.request_id !== operation.request_id
+          || economyCommitment.intent_record_id !== operation.intent_record_id
+          || economyCommitment.simulation_record_id !== operation.simulation_record_id
+          || economyCommitment.chain_id !== operation.chain_id
+          || economyCommitment.source_account !== operation.source_account
+          || economyCommitment.account_number !== operation.account_number
+          || economyCommitment.account_sequence !== operation.sequence
+          || economyCommitment.requested_at !== operation.created_at
+          || economyCommitment.sign_doc_bytes_hash !== operation.unsigned_payload_hash
+          || economyCommitment.commitment_id !== operation.signing_boundary_verification_id
+          || committedBindingHistory === undefined
+          || committedBindingHistory.row.currentness_id
+            !== economyCommitment.binding_currentness_id
+          || committedBindingHistory.row.currentness_json
+            !== economyCommitment.binding_currentness_json
+          || committedBindingHistory.row.binding_id !== operation.binding_id
+          || committedBindingHistory.row.proof_id !== operation.proof_id
+          || (economyCommitment.account_public_key_b64u !== null
+            && economyCommitment.account_public_key_b64u
+              !== committedBindingHistory.binding.zerone_signer.public_key_b64u)
+          || operation.signer_invoked !== 1
+          || !this.trustedActivationVerifierIds.has(economyCommitment.activation_verifier_id)
+          || configuredAdapter === undefined
+          || canonicalJson(configuredAdapter)
+            !== economyCommitment.simulation_adapter_trust_json
+          || configuredBindingVerifier === undefined
+          || canonicalJson(configuredBindingVerifier)
+            !== economyCommitment.binding_verifier_trust_json
+          || Date.parse(economyCommitment.requested_at)
+            < Date.parse(economyCommitment.activation_verified_at)
+          || Date.parse(economyCommitment.requested_at)
+            >= Date.parse(economyCommitment.activation_valid_until)
+          || Date.parse(economyCommitment.simulation_simulated_at)
+            < Date.parse(economyCommitment.simulation_adapter_verified_at)
+          || Date.parse(economyCommitment.simulation_simulated_at)
+            >= Date.parse(economyCommitment.simulation_adapter_valid_until)
+          || Date.parse(economyCommitment.requested_at)
+            >= Date.parse(economyCommitment.simulation_adapter_valid_until)
+          || Date.parse(economyCommitment.requested_at)
+            < Date.parse(economyCommitment.account_observed_at)
+          || Date.parse(economyCommitment.requested_at)
+            >= Date.parse(economyCommitment.account_valid_until)
+          || Date.parse(economyCommitment.requested_at)
+            < Date.parse(economyCommitment.simulation_simulated_at)
+          || Date.parse(economyCommitment.requested_at)
+            >= Date.parse(economyCommitment.simulation_valid_until)
+        ) {
+          fail("integrity_error", `Economy operation commitment does not verify: ${operation.operation_id}`);
+        }
+      }
       const policy = validateTreasuryPolicy(JSON.parse(operation.treasury_policy_json));
       const proofSnapshot = historyByCurrentness.get(operation.currentness_id);
       const reservationAuthority = this.bindingHistoryAt(
@@ -3493,6 +5441,29 @@ export class ZeroneAgentHostStore {
         }
         operationTotal += amount;
         if (reservation.purpose === "network_fee") operationFee += amount;
+      }
+      if (economyCommitment !== null) {
+        const nonFee = bigintSum(reservations
+          .filter(({ purpose }) => purpose !== "network_fee")
+          .map(({ amount_uzrn }) => amount_uzrn));
+        const feeReservation = reservations.find(({ purpose }) => purpose === "network_fee");
+        const expectedPurpose = economyCommitment.message_kind === "create_bounty"
+          ? "sponsorship_escrow"
+          : economyCommitment.message_kind === "submit_claim"
+            ? "knowledge_bond"
+            : null;
+        if (
+          feeReservation?.amount_uzrn !== economyCommitment.network_fee_uzrn
+          || nonFee.toString() !== economyCommitment.reserved_spend_uzrn
+          || (expectedPurpose === null
+            ? reservations.length !== 1
+            : reservations.length !== 2
+              || !reservations.some(({ purpose, amount_uzrn }) =>
+                purpose === expectedPurpose
+                && amount_uzrn === economyCommitment.reserved_spend_uzrn))
+        ) {
+          fail("integrity_error", `Economy treasury mapping does not replay: ${operation.operation_id}`);
+        }
       }
       if (
         operationTotal > BigInt(policy.max_single_spend_uzrn)
@@ -3573,6 +5544,7 @@ export class ZeroneAgentHostStore {
         );
       }
       const expectedGenesisDetails = {
+        operation_kind: operation.operation_kind,
         binding_id: operation.binding_id,
         proof_id: operation.proof_id,
         currentness_id: operation.currentness_id,
@@ -3581,7 +5553,13 @@ export class ZeroneAgentHostStore {
         descriptor_id: operation.descriptor_id,
         signer_key_id: operation.signer_key_id,
         authorization_verification_id: operation.authorization_verification_id,
-        authorization_trust_boundary: AUTHORIZATION_PROJECTION_BOUNDARY,
+        authorization_trust_boundary: operation.operation_kind === "zerone_economy"
+          ? ECONOMY_AUTHORIZATION_BOUNDARY
+          : AUTHORIZATION_PROJECTION_BOUNDARY,
+        ...(economyCommitment === null || commitmentRow === null ? {} : {
+          economy_commitment_id: economyCommitment.commitment_id,
+          economy_commitment_json: commitmentRow.commitment_json,
+        }),
         intent_record_id: operation.intent_record_id,
         simulation_record_id: operation.simulation_record_id,
         plan_reference_id: operation.plan_reference_id,
@@ -3606,6 +5584,9 @@ export class ZeroneAgentHostStore {
         observed_at_height: genesisDetails.observed_at_height,
         observation_block_hash: genesisDetails.observation_block_hash,
         observation_at: genesisDetails.observation_at,
+        account_public_key_type_url: genesisDetails.account_public_key_type_url,
+        account_public_key_b64u: genesisDetails.account_public_key_b64u,
+        account_valid_until: genesisDetails.account_valid_until,
         execution_support: EXECUTION_SUPPORT.mode,
       };
       if (
@@ -3792,6 +5773,7 @@ export class ZeroneAgentHostStore {
         }
       }
     }
+    this.verifyCapabilityUsageTimeline();
     const observationsByAccount = new Map<string, ZeroneAccountSnapshot[]>();
     for (const snapshot of replayedObservations) {
       const key = `${snapshot.chain_id}\0${snapshot.account}`;
@@ -3846,11 +5828,24 @@ export class ZeroneAgentHostStore {
           BigInt(next.sequence) < BigInt(prior.sequence)
           || Date.parse(next.observed_at) < Date.parse(prior.observed_at)
           || (
+            next.observed_at === prior.observed_at
+            && next.valid_until !== prior.valid_until
+          )
+          || (
+            prior.public_key_type_url !== null
+            && (
+              next.public_key_type_url !== prior.public_key_type_url
+              || next.public_key_b64u !== prior.public_key_b64u
+            )
+          )
+          || (
             sameHeight
             && (
               next.block_hash !== prior.block_hash
               || next.sequence !== prior.sequence
               || next.balance_uzrn !== prior.balance_uzrn
+              || next.public_key_type_url !== prior.public_key_type_url
+              || next.public_key_b64u !== prior.public_key_b64u
             )
           )
         ) {
@@ -3866,6 +5861,9 @@ export class ZeroneAgentHostStore {
         || latest.observed_at_height !== account.observed_at_height
         || latest.block_hash !== account.block_hash
         || latest.observed_at !== account.observed_at
+        || latest.public_key_type_url !== account.public_key_type_url
+        || latest.public_key_b64u !== account.public_key_b64u
+        || latest.valid_until !== account.valid_until
       ) {
         fail("integrity_error", `Account state does not replay from operation evidence: ${account.source_account}`);
       }
@@ -4020,6 +6018,54 @@ export class ZeroneAgentHostStore {
       );
     }
     return operation;
+  }
+
+  private assertGenericLifecycleAdvance(operation: OperationRow, label: string): void {
+    this.requireLegacyGenericInjected(label);
+    if (operation.operation_kind !== "generic_injected") {
+      fail(
+        "authorization_denied",
+        `${label} cannot advance a typed Zerone economy operation`,
+      );
+    }
+  }
+
+  private assertTypedSequenceAccountKey(
+    operation: OperationRow,
+    snapshot: ZeroneAccountSnapshot,
+  ): void {
+    const history = this.db.query(`
+      SELECT proof_envelope_json FROM binding_history WHERE currentness_id = ?
+    `).get(operation.currentness_id) as { proof_envelope_json: string } | null;
+    if (history === null) {
+      fail("integrity_error", "Typed sequence evidence lost its exact binding history");
+    }
+    const proof = verifyWalletIdentityBindingProofEnvelope(
+      JSON.parse(history.proof_envelope_json),
+    );
+    if (
+      BigInt(snapshot.sequence) > 0n
+      && (
+        snapshot.public_key_type_url !== COSMOS_SECP256K1_PUBLIC_KEY_TYPE_URL
+        || snapshot.public_key_b64u === null
+        || snapshot.public_key_b64u !== proof.binding.zerone_signer.public_key_b64u
+        || proof.binding.zerone_signer.key_id !== operation.signer_key_id
+      )
+    ) {
+      fail(
+        "evidence_rejected",
+        "Typed sequence evidence must carry the exact registered Cosmos signer key",
+      );
+    }
+  }
+
+  private requireLegacyGenericInjected(label: string): void {
+    if (!this.allowLegacyGenericInjectedForTests) {
+      fail(
+        "authorization_denied",
+        `${label} is disabled unless allow_legacy_generic_injected_for_tests is explicitly true`,
+      );
+    }
   }
 
   private transitionSimple(

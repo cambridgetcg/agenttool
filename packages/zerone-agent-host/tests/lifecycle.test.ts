@@ -1,7 +1,38 @@
 import { describe, expect, test } from "bun:test";
 
-import { ZeroneAgentHostStore } from "../src/index.js";
-import { fixture, hash, LATER, TIME } from "./helpers.js";
+import type { ZeroneAgentHostStore as ZeroneAgentHostStoreType } from "../src/index.js";
+import {
+  currentnessForProof,
+  fixture,
+  hash,
+  LATER,
+  LegacyGenericTestHostStore as ZeroneAgentHostStore,
+  TIME,
+} from "./helpers.js";
+
+function refreshBindingForReservation(
+  store: ZeroneAgentHostStoreType,
+  values: ReturnType<typeof fixture>,
+  verifiedAt = "2026-08-20T20:05:01.000Z",
+) {
+  const prior = store.getBindingHead(values.binding.wallet_id);
+  if (prior === null) throw new Error("test binding head is absent");
+  const currentness = currentnessForProof(values.proof, {
+    verifier_id: "lifecycle-currentness-refresh",
+    verified_at: verifiedAt,
+    valid_until: "2026-08-20T20:10:01.000Z",
+  });
+  return store.putBindingHead(values.proof, currentness, {
+    expected: {
+      wallet_id: prior.wallet_id,
+      binding_id: prior.binding.binding_id,
+      proof_id: prior.proof.proof_id,
+      currentness_id: prior.currentness.currentness_id,
+      head_version: prior.head_version,
+    },
+    updated_at: verifiedAt,
+  });
+}
 
 function storeAndValues() {
   const values = fixture();
@@ -14,7 +45,7 @@ function storeAndValues() {
   return { store, values };
 }
 
-function makeSigned(store: ZeroneAgentHostStore, values: ReturnType<typeof fixture>) {
+function makeSigned(store: ZeroneAgentHostStoreType, values: ReturnType<typeof fixture>) {
   const reserved = store.reserveOperation(values.reserve());
   const signing = store.recordSignerInvocationBoundary({
     operation_id: reserved.operation_id,
@@ -88,6 +119,7 @@ describe("sticky post-signer lifecycle", () => {
       observed_at_height: "1502",
       block_hash: "C".repeat(64),
       observed_at: "2026-08-20T20:05:00.000Z",
+      valid_until: "2026-08-20T20:10:00.000Z",
     };
     const stale = store.applySequenceAdvanceEvidence({
       operation_id: rejected.operation_id,
@@ -101,9 +133,17 @@ describe("sticky post-signer lifecycle", () => {
     expect(store.getTreasuryExposure(values.profile.chain_id, values.account)).toBe("0");
     expect(store.getAccountState(values.profile.chain_id, values.account)?.held_operation_id).toBeNull();
 
+    const refreshed = refreshBindingForReservation(store, values);
     const next = store.reserveOperation(values.reserve("operation-2", {
+      binding_head: {
+        wallet_id: refreshed.wallet_id,
+        binding_id: refreshed.binding.binding_id,
+        proof_id: refreshed.proof.proof_id,
+        currentness_id: refreshed.currentness.currentness_id,
+        head_version: refreshed.head_version,
+      },
       account_snapshot: advancedSnapshot,
-      created_at: advancedSnapshot.observed_at,
+      created_at: refreshed.currentness.verified_at,
     }));
     expect(next.sequence).toBe("10");
     expect(store.getCapabilityUsage(hash("9"))).toMatchObject({
@@ -222,6 +262,7 @@ describe("sticky post-signer lifecycle", () => {
       observed_at_height: "1502",
       block_hash: "C".repeat(64),
       observed_at: "2026-08-20T20:05:00.000Z",
+      valid_until: "2026-08-20T20:10:00.000Z",
     };
     store.applySequenceAdvanceEvidence({
       operation_id: signing.operation_id,
@@ -230,10 +271,18 @@ describe("sticky post-signer lifecycle", () => {
       snapshot: advanced,
       observed_at: advanced.observed_at,
     });
+    const refreshed = refreshBindingForReservation(store, values);
     expect(() => store.reserveOperation(values.reserve("operation-2", {
+      binding_head: {
+        wallet_id: refreshed.wallet_id,
+        binding_id: refreshed.binding.binding_id,
+        proof_id: refreshed.proof.proof_id,
+        currentness_id: refreshed.currentness.currentness_id,
+        head_version: refreshed.head_version,
+      },
       account_snapshot: advanced,
       reservations: [{ purpose: "compute", amount_uzrn: "160000" }],
-      created_at: advanced.observed_at,
+      created_at: refreshed.currentness.verified_at,
     }))).toThrow(/compute treasury window cap/);
     store.close();
   });

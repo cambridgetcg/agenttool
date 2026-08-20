@@ -1,8 +1,24 @@
 # Zerone Agent Host (private v0 source slice)
 
-This package supplies the durable half of a future Zerone agent wallet host: a hardened local SQLite ledger, atomic binding/capability/treasury authorization reservations, one in-flight Cosmos sequence per account, sticky unknown states, and positive-evidence reconciliation.
+This package is the private local durability boundary for a Zerone agent wallet
+host. It composes verified Wallet records, the separate exact-byte
+`@agenttool/wallet-zerone-economy` planner, a dual-key wallet/identity binding,
+configured currentness and adapter trust, treasury accounting, and a sole
+Cosmos sequence fence into one possible-signer request.
 
-It does **not** make Zerone agent-economy transactions executable. `@agenttool/wallet-zerone` 0.1 only reviews its released two-message union, while `@agenttool/zerone-agent-economy` currently emits unsupported unsigned message-value projections. This package therefore exposes evidence transitions, not a signer or broadcaster. `EXECUTION_SUPPORT` is machine-readable and always reports that boundary.
+`reserveAndEnterZeroneEconomySigningBoundary()` admits exactly one branded
+`CreateBountyOrder`, `SubmitClaim`, or `FulfillBounty` plan. It resolves external
+observations first, then uses one SQLite `BEGIN IMMEDIATE` transaction and one
+injected host-clock value to recheck all authority, derive reservations, append
+the `reserved` and `signer_invocation_boundary` events, consume capability
+usage, make treasury exposure sticky, persist an append-only economy
+commitment, and commit before returning the branded `SigningRequest`.
+
+That is a local possible-signer boundary, not execution. The package contains
+no key custody, signer, broadcaster, RPC client or default endpoint; performs no
+network/chain effect; and never claims that the signer actually ran. A crash
+after commit is recovered as `signing_unknown`. The request is never recreated,
+returned again, or automatically retried.
 
 The host cryptographically verifies the economy package's full portable
 `WalletIdentityBindingProofEnvelope`: Ed25519 identity-root authorization and
@@ -11,28 +27,59 @@ It persists the canonical envelope and reverifies it after every reload, so a
 reloaded proof receives a fresh runtime verification brand. The binding used
 by the ledger is derived only from that verified envelope.
 
-Currentness is deliberately separate. A caller injects a resolver that receives
-the already verified proof and returns a closed `BindingCurrentnessAssertion`.
-Its `currentness_id` content-addresses the exact binding ID, immutable proof ID,
-verifier name, revocation nonce, and resolver-asserted `[verified_at,
-valid_until)` interval. The host validates that record, chronology, and linkage,
-but does not authenticate the resolver, consult an identity registry, or prove
-freshness with a trusted host clock. The assertion performs no effect and grants
-no signing or economic authority by itself.
+Currentness remains distinct from key control. The typed path accepts its
+binding-currentness resolver, activation-currentness resolver, and account
+observer only as immutable constructor dependencies. A binding assertion is
+content-addressed and attests the exact owner identity, descriptor, identity
+authority key, continuity/revision, active lifecycle, revocation nonce, proof,
+and binding tuple. It must fit inside one exact configured verifier-trust epoch.
+Activation is separately pinned to zerone-core
+`a5b82e82b2a32be2b75bd11575964b0a69aa34ac`, Cosmos SDK `v0.53.8`, sponsorship
+version `2`, and knowledge version `7`. Binding, activation, account, and signed
+simulation observations used at admission are bounded to five minutes, and
+equal-height block hashes must agree. These are configured embedding trust
+boundaries; the package does not contact or authenticate an external registry,
+RPC, endpoint, or canonical chain by itself.
 
-Likewise, v0 does not reconstruct Wallet's process-local verified-record brands
-after restart and does not decode a native economy transaction. The embedding
-host remains responsible for verifying the exact descriptor, capability,
-intent, simulation, approvals, and future reviewed native plan before passing
-their immutable references and ceilings through the explicitly named
-`trusted_injected_wallet_authorization_projection/0.1` boundary. The ledger binds the capability
-`policy_hash` to the exact treasury policy ID and makes the resulting local
-usage/reservation decision atomic; it is not a substitute for those upstream
-cryptographic and chain-native checks.
+Configured binding-verifier and simulation-adapter trust epochs are separate
+host authorization history and may span at most 24 hours. A trust epoch never
+extends the five-minute freshness window of an identity, activation, account,
+or signed simulation observation.
+
+The simulation receipt/evidence is signed by an exact adapter key selected from
+immutable configured trust history. The host requires a non-null canonical
+block hash. The planner receipt-core helper currently emits `block_hash: null`,
+so a trusted adapter must attach the actual observed block hash before sealing
+the Wallet receipt and planner evidence; the host never invents or relaxes it.
+
+Wallet descriptor/capability/intent/simulation records and the branded plan are
+fully rechecked at admission. Durable reopen deliberately supports only their
+record IDs and event/operation commitments; it does not restore Wallet brands
+or independently recompute the full plan. Before a boundary that has not yet
+been crossed, the embedding host must reload the original verified Wallet
+records and strict planner inputs, call
+`reconstructZeroneEconomyDirectSignPlan()`, and match the exact full plan
+content ID. Serialized plan JSON is never authority. After the boundary, no
+reconstruction or retry is allowed.
+
+The older opaque `generic_injected` lifecycle is default-disabled. Tests that
+still exercise it must set
+`allow_legacy_generic_injected_for_tests: true`; a database containing generic
+rows fails closed on reopen without that flag. Generic payload bytes are opaque
+and this path is never an economy authorization route.
+
+ZRN here is gas, prefunded settlement, and bounded treasury accounting only.
+Balance, spend, stake, or payout eligibility never proves identity/currentness,
+truth, quality, KARMA/reputation, governance voice, rights, worth, or any
+obligation to keep working instead of resting.
 
 Safety rules in v0:
 
 - every reserve and transition is one SQLite `BEGIN IMMEDIATE` transaction;
+- the typed operation derives plan identity, payload hash, actor/module/effect, request time, signer key, and reservation purpose/amount internally rather than accepting them from its caller;
+- Create reserves `sponsorship_escrow` plus `network_fee`, Submit reserves `knowledge_bond` plus `network_fee`, and Fulfill is fee-only; conditional incoming value is never credited;
+- durable Wallet usage is replayed in global ledger-sequence order; every typed authorization commits and is checked against the exact pre-reservation intent/spend counters with approvals closed to empty;
+- every typed row has exactly one immutable economy commitment binding the exact message/value/effect, plan IDs, signed simulation evidence, configured trust epochs, currentness/account/activation observations, SignDoc hash, request ID, and common timestamp;
 - file-backed storage is mandatory by default; `:memory:` requires the explicit `allow_in_memory_for_tests: true` non-durable test escape hatch;
 - schema SQL, foreign keys, indexes (including the held-fence predicate), canonical records, authority projections, accounting, fences, and event chains are verified before recovery and before mutation;
 - every operation event receives a persisted monotonic ledger sequence that is included in its event hash; verification replays account observations, halts, and sole-fence handoffs across operations in that durable order rather than inferring order from timestamps;
@@ -61,6 +108,6 @@ and treat that writer as part of the local trusted computing base.
 
 Run `bun run ci` from this directory. No test needs a network, account, credential, or funded wallet.
 
-The package is private and unreleased. Schema version 2 is an intentional
-pre-release rewrite; there is no migration from the earlier opaque-proof
-development schema. Discard development databases created by schema version 1.
+The package is private and unreleased. Schema version 3 is an intentional
+pre-release rewrite with no migration. The host fails closed on schema version
+1 or 2 databases; discard those development databases.

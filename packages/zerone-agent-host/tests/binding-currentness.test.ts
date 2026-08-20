@@ -24,7 +24,6 @@ import { join } from "node:path";
 
 import {
   createBindingCurrentnessAssertion,
-  ZeroneAgentHostStore,
   resolveAndPutBindingHead,
 } from "../src/index.js";
 import {
@@ -33,6 +32,7 @@ import {
   fixture,
   hash,
   LATER,
+  LegacyGenericTestHostStore as ZeroneAgentHostStore,
   proofForBinding,
   rewriteEventChain,
   TIME,
@@ -85,7 +85,7 @@ function walletRotation(values: ReturnType<typeof fixture>, issuedAt: string) {
   const proof = proofForBinding(binding, privateKey);
   const currentness = currentnessForProof(proof, {
     verified_at: "2026-08-20T20:00:20.000Z",
-    valid_until: "2026-08-21T20:00:20.000Z",
+    valid_until: "2026-08-20T20:05:20.000Z",
   });
   return { binding, proof, currentness };
 }
@@ -156,7 +156,7 @@ test("allows same-proof currentness refresh and rejects stale operation and CAS 
   const refreshedCurrentness = currentnessForProof(values.proof, {
     verifier_id: "injected-currentness-verifier-v1",
     verified_at: "2026-08-20T20:00:30.000Z",
-    valid_until: "2026-08-21T20:00:30.000Z",
+    valid_until: "2026-08-20T20:05:30.000Z",
     wallet_revocation_nonce: 1,
   });
   const second = store.putBindingHead(values.proof, refreshedCurrentness, {
@@ -240,6 +240,18 @@ test("rejects tampered Ed25519 and secp256k1 signatures even with recomputed pro
 
 test("rejects forged and mismatched proof/currentness IDs and invalid freshness intervals", () => {
   const values = fixture();
+  const currentnessIdentity = {
+    external_verification_id: values.currentness.external_verification_id,
+    owner_identity_id: values.currentness.owner_identity_id,
+    wallet_id: values.currentness.wallet_id,
+    wallet_descriptor_id: values.currentness.wallet_descriptor_id,
+    identity_authority: values.currentness.identity_authority,
+    binding_revision: values.currentness.binding_revision,
+    wallet_continuity_sequence: values.currentness.wallet_continuity_sequence,
+    identity_root_observation_id: values.currentness.identity_root_observation_id,
+    wallet_descriptor_observation_id: values.currentness.wallet_descriptor_observation_id,
+    wallet_continuity_observation_id: values.currentness.wallet_continuity_observation_id,
+  };
   const newStore = () => {
     const store = new ZeroneAgentHostStore(":memory:", {
       create: true,
@@ -258,6 +270,7 @@ test("rejects forged and mismatched proof/currentness IDs and invalid freshness 
 
   store = newStore();
   const wrongBinding = createBindingCurrentnessAssertion({
+    ...currentnessIdentity,
     binding_id: hash("e"),
     proof_id: values.proof.proof_id,
     verifier_id: "injected-currentness-verifier-v0",
@@ -273,6 +286,7 @@ test("rejects forged and mismatched proof/currentness IDs and invalid freshness 
 
   store = newStore();
   const wrongProof = createBindingCurrentnessAssertion({
+    ...currentnessIdentity,
     binding_id: values.binding.binding_id,
     proof_id: hash("d"),
     verifier_id: "injected-currentness-verifier-v0",
@@ -287,13 +301,14 @@ test("rejects forged and mismatched proof/currentness IDs and invalid freshness 
   store.close();
 
   expect(() => createBindingCurrentnessAssertion({
+    ...currentnessIdentity,
     binding_id: values.binding.binding_id,
     proof_id: values.proof.proof_id,
     verifier_id: "injected-currentness-verifier-v0",
     verified_at: TIME,
     valid_until: TIME,
     wallet_revocation_nonce: 0,
-  })).toThrow(/non-empty/);
+  })).toThrow(/lifetime must be positive/);
 });
 
 test("rejects accessor-backed currentness without invoking hostile getters", () => {
@@ -515,7 +530,7 @@ test("rejects operation and event substitution across currentness coordinates", 
   const refreshed = currentnessForProof(values.proof, {
     verifier_id: "injected-currentness-verifier-v1",
     verified_at: "2026-08-20T20:00:30.000Z",
-    valid_until: "2026-08-21T20:00:30.000Z",
+    valid_until: "2026-08-20T20:05:30.000Z",
   });
   store.putBindingHead(values.proof, refreshed, {
     expected: {
@@ -605,7 +620,7 @@ test("binds signer replay to the exact historical currentness head", () => {
   const refreshed = currentnessForProof(values.proof, {
     verifier_id: "injected-currentness-verifier-v1",
     verified_at: "2026-08-20T20:00:30.000Z",
-    valid_until: "2026-08-21T20:00:30.000Z",
+    valid_until: "2026-08-20T20:05:30.000Z",
   });
   store.putBindingHead(values.proof, refreshed, {
     expected: {

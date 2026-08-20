@@ -5,11 +5,42 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { eventHash } from "../src/events.js";
-import { ZeroneAgentHostStore, type Sha256Id } from "../src/index.js";
-import { fixture, hash, LATER, rewriteEventChain, TIME } from "./helpers.js";
+import type { Sha256Id, ZeroneAgentHostStore as ZeroneAgentHostStoreType } from "../src/index.js";
+import {
+  currentnessForProof,
+  fixture,
+  hash,
+  LATER,
+  LegacyGenericTestHostStore as ZeroneAgentHostStore,
+  rewriteEventChain,
+  TIME,
+} from "./helpers.js";
+
+function refreshBindingForLaterReservation(
+  store: ZeroneAgentHostStoreType,
+  values: ReturnType<typeof fixture>,
+) {
+  const prior = store.getBindingHead(values.binding.wallet_id);
+  if (prior === null) throw new Error("test binding head is absent");
+  const currentness = currentnessForProof(values.proof, {
+    verifier_id: "reorg-currentness-refresh",
+    verified_at: "2026-08-20T20:04:30.000Z",
+    valid_until: "2026-08-20T20:09:30.000Z",
+  });
+  return store.putBindingHead(values.proof, currentness, {
+    expected: {
+      wallet_id: prior.wallet_id,
+      binding_id: prior.binding.binding_id,
+      proof_id: prior.proof.proof_id,
+      currentness_id: prior.currentness.currentness_id,
+      head_version: prior.head_version,
+    },
+    updated_at: "2026-08-20T20:04:30.000Z",
+  });
+}
 
 function lateReorgWithReservedSuccessor(
-  store: ZeroneAgentHostStore,
+  store: ZeroneAgentHostStoreType,
   values: ReturnType<typeof fixture>,
   signSuccessor = false,
 ) {
@@ -54,6 +85,7 @@ function lateReorgWithReservedSuccessor(
     observed_at_height: "1512",
     block_hash: "E".repeat(64),
     observed_at: "2026-08-20T20:04:00.000Z",
+    valid_until: "2026-08-20T20:09:00.000Z",
   };
   const settledA = store.applySequenceAdvanceEvidence({
     operation_id: confirmedA.operation_id,
@@ -62,7 +94,15 @@ function lateReorgWithReservedSuccessor(
     snapshot: sequence10,
     observed_at: sequence10.observed_at,
   });
+  const refreshedHead = refreshBindingForLaterReservation(store, values);
   const reservedB = store.reserveOperation(values.reserve("operation-2", {
+    binding_head: {
+      wallet_id: refreshedHead.wallet_id,
+      binding_id: refreshedHead.binding.binding_id,
+      proof_id: refreshedHead.proof.proof_id,
+      currentness_id: refreshedHead.currentness.currentness_id,
+      head_version: refreshedHead.head_version,
+    },
     account_snapshot: sequence10,
     created_at: "2026-08-20T20:05:00.000Z",
   }));
@@ -92,7 +132,7 @@ function lateReorgWithReservedSuccessor(
 }
 
 function twoConfirmedOperations(
-  store: ZeroneAgentHostStore,
+  store: ZeroneAgentHostStoreType,
   values: ReturnType<typeof fixture>,
 ) {
   store.initialize();
@@ -136,6 +176,7 @@ function twoConfirmedOperations(
     observed_at_height: "1512",
     block_hash: "E".repeat(64),
     observed_at: "2026-08-20T20:04:00.000Z",
+    valid_until: "2026-08-20T20:09:00.000Z",
   };
   const settledA = store.applySequenceAdvanceEvidence({
     operation_id: confirmedA.operation_id,
@@ -144,7 +185,15 @@ function twoConfirmedOperations(
     snapshot: sequence10,
     observed_at: sequence10.observed_at,
   });
+  const refreshedHead = refreshBindingForLaterReservation(store, values);
   const reservedB = store.reserveOperation(values.reserve("operation-2", {
+    binding_head: {
+      wallet_id: refreshedHead.wallet_id,
+      binding_id: refreshedHead.binding.binding_id,
+      proof_id: refreshedHead.proof.proof_id,
+      currentness_id: refreshedHead.currentness.currentness_id,
+      head_version: refreshedHead.head_version,
+    },
     account_snapshot: sequence10,
     created_at: "2026-08-20T20:05:00.000Z",
   }));
@@ -183,7 +232,7 @@ function twoConfirmedOperations(
 }
 
 function twoUnresolvedReorgs(
-  store: ZeroneAgentHostStore,
+  store: ZeroneAgentHostStoreType,
   values: ReturnType<typeof fixture>,
   secondReorg: {
     readonly observed_at_height?: string;
@@ -220,6 +269,7 @@ function twoUnresolvedReorgs(
     observed_at_height: "1517",
     block_hash: "8".repeat(64),
     observed_at: "2026-08-20T20:10:00.000Z",
+    valid_until: "2026-08-20T20:15:00.000Z",
   };
   return {
     reorgedA,
@@ -231,7 +281,7 @@ function twoUnresolvedReorgs(
 }
 
 function twoUnresolvedReorgsWithThirdFence(
-  store: ZeroneAgentHostStore,
+  store: ZeroneAgentHostStoreType,
   values: ReturnType<typeof fixture>,
 ) {
   const { settledA, confirmedB, sequence10 } = twoConfirmedOperations(store, values);
@@ -242,6 +292,7 @@ function twoUnresolvedReorgsWithThirdFence(
     observed_at_height: "1515",
     block_hash: "8".repeat(64),
     observed_at: "2026-08-20T20:08:00.000Z",
+    valid_until: "2026-08-20T20:13:00.000Z",
   };
   const settledB = store.applySequenceAdvanceEvidence({
     operation_id: confirmedB.operation_id,
@@ -259,6 +310,17 @@ function twoUnresolvedReorgsWithThirdFence(
   };
   const reservedC = store.reserveOperation(values.reserve("operation-3", {
     authorization: thirdAuthorization,
+    binding_head: (() => {
+      const head = store.getBindingHead(values.binding.wallet_id);
+      if (head === null) throw new Error("test binding head is absent");
+      return {
+        wallet_id: head.wallet_id,
+        binding_id: head.binding.binding_id,
+        proof_id: head.proof.proof_id,
+        currentness_id: head.currentness.currentness_id,
+        head_version: head.head_version,
+      };
+    })(),
     account_snapshot: sequence11,
     created_at: "2026-08-20T20:09:00.000Z",
   }));
@@ -291,6 +353,7 @@ function twoUnresolvedReorgsWithThirdFence(
     observed_at_height: "1519",
     block_hash: "7".repeat(64),
     observed_at: "2026-08-20T20:12:00.000Z",
+    valid_until: "2026-08-20T20:17:00.000Z",
   };
   const resolvedC = store.applySequenceAdvanceEvidence({
     operation_id: reservedC.operation_id,
@@ -463,6 +526,7 @@ describe("confirmation and positive reorg evidence", () => {
       observed_at_height: "1512",
       block_hash: "E".repeat(64),
       observed_at: "2026-08-20T20:04:00.000Z",
+      valid_until: "2026-08-20T20:09:00.000Z",
     };
     const released = store.applySequenceAdvanceEvidence({
       operation_id: failed.operation_id,
@@ -526,6 +590,7 @@ describe("confirmation and positive reorg evidence", () => {
       observed_at_height: "1512",
       block_hash: "E".repeat(64),
       observed_at: "2026-08-20T20:04:00.000Z",
+      valid_until: "2026-08-20T20:09:00.000Z",
     };
     const settledA = store.applySequenceAdvanceEvidence({
       operation_id: confirmedA.operation_id,
@@ -534,7 +599,15 @@ describe("confirmation and positive reorg evidence", () => {
       snapshot: sequence10,
       observed_at: sequence10.observed_at,
     });
+    const refreshedHead = refreshBindingForLaterReservation(store, values);
     const reservedB = store.reserveOperation(values.reserve("operation-2", {
+      binding_head: {
+        wallet_id: refreshedHead.wallet_id,
+        binding_id: refreshedHead.binding.binding_id,
+        proof_id: refreshedHead.proof.proof_id,
+        currentness_id: refreshedHead.currentness.currentness_id,
+        head_version: refreshedHead.head_version,
+      },
       account_snapshot: sequence10,
       created_at: "2026-08-20T20:05:00.000Z",
     }));
@@ -575,6 +648,7 @@ describe("confirmation and positive reorg evidence", () => {
       observed_at_height: "1514",
       block_hash: "A".repeat(64),
       observed_at: "2026-08-20T20:07:00.000Z",
+      valid_until: "2026-08-20T20:12:00.000Z",
     };
     store.applySequenceAdvanceEvidence({
       operation_id: reservedB.operation_id,
@@ -1088,6 +1162,7 @@ describe("confirmation and positive reorg evidence", () => {
       observed_at_height: "1518",
       block_hash: "7".repeat(64),
       observed_at: "2026-08-20T20:11:00.000Z",
+      valid_until: "2026-08-20T20:16:00.000Z",
     };
     const resolvedB = store.applySequenceAdvanceEvidence({
       operation_id: reorgedB.operation_id,
@@ -1146,6 +1221,7 @@ describe("confirmation and positive reorg evidence", () => {
       observed_at_height: "1515",
       block_hash: "8".repeat(64),
       observed_at: "2026-08-20T20:08:00.000Z",
+      valid_until: "2026-08-20T20:13:00.000Z",
     };
     const settledB = store.applySequenceAdvanceEvidence({
       operation_id: confirmedB.operation_id,
@@ -1217,6 +1293,7 @@ describe("confirmation and positive reorg evidence", () => {
       observed_at_height: "1520",
       block_hash: "6".repeat(64),
       observed_at: "2026-08-20T20:12:00.000Z",
+      valid_until: "2026-08-20T20:17:00.000Z",
     };
     const resolvedA = store.applySequenceAdvanceEvidence({
       operation_id: reorgedA.operation_id,

@@ -3,8 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ZeroneAgentHostStore } from "../src/index.js";
-import { fixture, TIME } from "./helpers.js";
+import { fixture, LegacyGenericTestHostStore as ZeroneAgentHostStore, TIME } from "./helpers.js";
 
 test("concurrent processes can acquire only one account sequence fence", async () => {
   const directory = mkdtempSync(join(tmpdir(), "zerone-host-concurrency-"));

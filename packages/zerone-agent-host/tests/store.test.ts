@@ -4,7 +4,6 @@ import { createTreasuryPolicy } from "@agenttool/zerone-agent-economy";
 
 import {
   EXECUTION_SUPPORT,
-  ZeroneAgentHostStore,
   assertEconomyMessageExecutionSupported,
 } from "../src/index.js";
 import {
@@ -13,6 +12,7 @@ import {
   fixture,
   hash,
   LATER,
+  LegacyGenericTestHostStore as ZeroneAgentHostStore,
   proofForBinding,
   TIME,
 } from "./helpers.js";
@@ -217,9 +217,9 @@ describe("durable authorization ledger", () => {
     store.close();
   });
 
-  test("has an explicit execution blocker", () => {
+  test("keeps generic execution blocked while exposing the typed planner boundary", () => {
     expect(EXECUTION_SUPPORT.economy_message_planning)
-      .toBe("blocked_pending_reviewed_native_planner");
-    expect(() => assertEconomyMessageExecutionSupported()).toThrow(/cannot plan, sign, or broadcast/);
+      .toBe("private_exact_native_planner_composed");
+    expect(() => assertEconomyMessageExecutionSupported()).toThrow(/generic execution is disabled/);
   });
 });

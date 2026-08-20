@@ -28,7 +28,7 @@ import { eventHash } from "../src/events.js";
 import {
   createBindingCurrentnessAssertion,
   GENESIS_EVENT_HASH,
-  ZeroneAgentHostStore,
+  ZeroneAgentHostStore as DurableZeroneAgentHostStore,
 } from "../src/index.js";
 import type {
   BindingCurrentnessAssertion,
@@ -38,6 +38,21 @@ import type {
 
 export const TIME = "2026-08-20T20:00:00.000Z";
 export const LATER = "2026-08-20T20:01:00.000Z";
+
+/** Keeps the pre-v3 opaque generic lifecycle isolated to explicit legacy tests. */
+export class LegacyGenericTestHostStore extends DurableZeroneAgentHostStore {
+  constructor(
+    path: string,
+    options: ConstructorParameters<typeof DurableZeroneAgentHostStore>[1],
+  ) {
+    super(path, {
+      ...options,
+      allow_legacy_generic_injected_for_tests: true,
+    });
+  }
+}
+
+type ZeroneAgentHostStore = DurableZeroneAgentHostStore;
 
 ed25519.etc.sha512Sync = (...messages: Uint8Array[]) => {
   const digest = createHash("sha512");
@@ -151,11 +166,21 @@ export function currentnessForProof(
   }> = {},
 ): BindingCurrentnessAssertion {
   return createBindingCurrentnessAssertion({
+    external_verification_id: hash("c"),
     binding_id: proof.binding.binding_id,
     proof_id: proof.proof_id,
+    owner_identity_id: proof.binding.owner_identity_id,
+    wallet_id: proof.binding.wallet_id,
+    wallet_descriptor_id: proof.binding.wallet_descriptor_id,
+    identity_authority: proof.binding.identity_authority,
+    binding_revision: proof.binding.revision,
+    wallet_continuity_sequence: proof.binding.wallet_continuity_sequence,
+    identity_root_observation_id: hash("d"),
+    wallet_descriptor_observation_id: hash("e"),
+    wallet_continuity_observation_id: hash("f"),
     verifier_id: overrides.verifier_id ?? "injected-currentness-verifier-v0",
-    verified_at: overrides.verified_at ?? "2026-08-20T19:30:00.000Z",
-    valid_until: overrides.valid_until ?? "2026-08-21T19:30:00.000Z",
+    verified_at: overrides.verified_at ?? "2026-08-20T19:59:00.000Z",
+    valid_until: overrides.valid_until ?? "2026-08-20T20:04:00.000Z",
     wallet_revocation_nonce: overrides.wallet_revocation_nonce ?? 0,
   });
 }
@@ -232,6 +257,9 @@ export function fixture() {
     observed_at_height: "1500",
     block_hash: "A".repeat(64),
     observed_at: TIME,
+    public_key_type_url: "/cosmos.crypto.secp256k1.PubKey",
+    public_key_b64u: base64UrlEncode(SECP_PUBLIC_KEY),
+    valid_until: "2026-08-20T20:05:00.000Z",
   });
   const reserve = (operationId = "operation-1", overrides: Partial<ReserveOperationInput> = {}): ReserveOperationInput => ({
     operation_id: operationId,

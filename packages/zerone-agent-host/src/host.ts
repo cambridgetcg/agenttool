@@ -33,10 +33,10 @@ export async function resolveAndPutBindingHead(input: {
   });
 }
 
-/** Always throws in v0 so callers cannot mistake ledger readiness for execution readiness. */
+/** Generic execution stays closed; only the store's typed atomic boundary may prepare signing. */
 export function assertEconomyMessageExecutionSupported(): never {
   fail(
     "execution_unsupported",
-    `${EXECUTION_SUPPORT.economy_message_planning}; this ledger cannot plan, sign, or broadcast Zerone economy messages`,
+    `${EXECUTION_SUPPORT.economy_message_planning}; generic execution is disabled and this host does not invoke a signer or broadcaster`,
   );
 }

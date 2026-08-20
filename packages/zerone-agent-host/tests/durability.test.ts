@@ -4,8 +4,14 @@ import { chmodSync, mkdtempSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ZeroneAgentHostStore } from "../src/index.js";
-import { fixture, hash, LATER, rewriteEventChain, TIME } from "./helpers.js";
+import {
+  fixture,
+  hash,
+  LATER,
+  LegacyGenericTestHostStore as ZeroneAgentHostStore,
+  rewriteEventChain,
+  TIME,
+} from "./helpers.js";
 
 function pathFor(label: string): string {
   return join(mkdtempSync(join(tmpdir(), `zerone-agent-host-${label}-`)), "host.sqlite");

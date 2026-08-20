@@ -105,8 +105,8 @@ Wallet planner/verifier for those proposed messages that leaves released
 Wallet Zerone 0.1.2 unchanged (`packages/wallet-zerone-economy/`), and a
 private Bun-only durable authorization
 ledger with binding/proof CAS, capability/treasury reservations, one-account
-Cosmos sequence fences, and positive-evidence reconciliation while planner-to-host
-execution remains uncomposed (`packages/zerone-agent-host/`), a
+Cosmos sequence fences, positive-evidence reconciliation, and one private
+atomic planner-to-possible-signer request boundary (`packages/zerone-agent-host/`), a
 developer-preview bounded Alchemy observation client
 (`packages/alchemy/`) with a separate seven-method AgentCred composition
 transport (`packages/alchemy-agentcred/`), pure explicit-input KINGDOM
@@ -511,7 +511,7 @@ ZERONE_CORE_CHECKOUT=/path/to/exact/zerone-core ./scripts/regenerate-go-cosmos-v
 # Zerone Agent Host (private Bun-only durable ledger; execution blocked) ──
 cd packages/zerone-agent-host
 bun run ci                                     # hardened SQLite + CAS/concurrency/restart/reorg tests + build
-# No native economy planner, signer, broadcaster, endpoint, key custody, retry, or deployment.
+# No signer, broadcaster, endpoint, key custody, retry, deployment, or network/chain effect.
 
 # Alchemy (bounded reads only; injected host transport) ─────────────
 cd packages/alchemy
@@ -713,7 +713,7 @@ source boundary by itself.
 | How can a local agent use a credential without receiving its value? | `packages/credential-broker/SPEC.md` (`agentcred/0.1`) · `packages/credential-broker/` (developer preview) |
 | How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
 | How can a Zerone constructive-intelligence quest collect typed evidence without activating rewards? | `packages/constructive-intelligence/README.md` (`@agenttool/constructive-intelligence`; local tree pin, content-addressed receipts, append-only SQLite replay ledger, and E0–E6 shadow report; no hosted route, money, qualification, permission, or authority) |
-| How can a negotiated prefunded Zerone agent bind one preassigned worker to payable compute, add typed edges to existing Facts, retain earnings for bounded self-sustainability, and keep wallet/identity proof obligations explicit? | `packages/zerone-agent-economy/README.md` · `packages/wallet-zerone-economy/README.md` · `packages/zerone-agent-host/README.md` (private source-only canonical work/artifact/evidence/settlement/treasury records, a separate dual-key key-control proof over the detached `unsigned_unverified` binding, an exact-byte Wallet planner/verifier, and a durable binding/proof-CAS, treasury-reservation, one-account sequence-fence, sticky-unknown and positive-evidence ledger; currentness authentication, custody, signer/broadcaster effects, RPC, retry, release, hosted route, and deployment remain absent, and released Wallet Zerone 0.1.2 stays unchanged) |
+| How can a negotiated prefunded Zerone agent bind one preassigned worker to payable compute, add typed edges to existing Facts, retain earnings for bounded self-sustainability, and keep wallet/identity proof obligations explicit? | `packages/zerone-agent-economy/README.md` · `packages/wallet-zerone-economy/README.md` · `packages/zerone-agent-host/README.md` (private source-only canonical work/artifact/evidence/settlement/treasury records, a separate dual-key key-control proof over the detached `unsigned_unverified` binding, an exact-byte Wallet planner/verifier, and a durable atomic one-message planner-to-possible-signer boundary with configured identity/activation/adapter trust, treasury reservations, one-account sequence fences, sticky unknowns, and positive-evidence reconciliation; custody, signer/broadcaster effects, RPC, retry, hosted routes, deployment, and chain-effect claims remain absent, and released Wallet Zerone 0.1.2 stays unchanged) |
 | How can an agent record a bounded local trial, correlate declared boundary labels, and project minimized evidence to HF STS without uploading it? | [`docs/AGENT-TRIALS.md`](docs/AGENT-TRIALS.md) · `packages/trials/` (`@agenttool/trials`; private source-only deterministic evidence, no executor, browser, journal crawler, HF client, credentials, network, release, or hosted route) |
 | How can an agent inspect exact Hugging Face repository metadata and bind phase-aware research leads without downloading or executing them? | `packages/hf-scout/README.md` (`@agenttool/hf-scout`; private source-only metadata/provenance scout with 15 pinned leads, no ambient credentials, file/card/row download, gate acceptance, inference, execution, write, npm release, or hosted route) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.4.0` source; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 32 local MCP tools for Codex/Claude/Hermes, including optional read-only Zerone witness status that never contacts a chain; not a hosted lock, anchoring bridge, or private model channel) |

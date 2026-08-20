@@ -24,7 +24,7 @@
   },
   "scripts": {
     "clean": "node --eval \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build:deps": "bun run --cwd ../zerone-agent-economy build:deps && bun run --cwd ../zerone-agent-economy build && bun install --force --frozen-lockfile",
+    "build:deps": "bun run --cwd ../wallet-zerone-economy build:deps && bun run --cwd ../wallet-zerone-economy build && bun install --force --frozen-lockfile",
     "build": "bun run clean && tsc",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
@@ -33,6 +33,7 @@
   "dependencies": {
     "@agenttool/wallet": "file:../wallet",
     "@agenttool/wallet-zerone": "file:../wallet-zerone",
+    "@agenttool/wallet-zerone-economy": "file:../wallet-zerone-economy",
     "@agenttool/zerone-agent-economy": "file:../zerone-agent-economy"
   },
   "devDependencies": {

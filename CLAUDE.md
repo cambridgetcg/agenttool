@@ -62,7 +62,7 @@ packages/
   wallet-zerone/ — @agenttool/wallet-zerone · exact offline Zerone direct-sign profile
   zerone-agent-economy/ — private pure work/receipt/settlement/treasury records + proposed-v2 protobuf values
   wallet-zerone-economy/ — private exact-byte planner/verifier for proposed economy messages
-  zerone-agent-host/ — private Bun-only durable authorization ledger; planner execution uncomposed
+  zerone-agent-host/ — private Bun-only atomic one-message planner-to-possible-signer durability boundary
   alchemy/      — @agenttool/alchemy · bounded reads through an injected credential-owning transport
   alchemy-agentcred/ — strict seven-read composition over already-issued AgentCred grants
   public-surface-binding/ — private pure transport evidence + explicit-key public HTTPS bindings

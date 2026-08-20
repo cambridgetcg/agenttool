@@ -4,8 +4,14 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ZeroneAgentHostStore } from "../src/index.js";
-import { fixture, hash, LATER, rewriteEventChain, TIME } from "./helpers.js";
+import {
+  fixture,
+  hash,
+  LATER,
+  LegacyGenericTestHostStore as ZeroneAgentHostStore,
+  rewriteEventChain,
+  TIME,
+} from "./helpers.js";
 
 function signedOperation(path = ":memory:") {
   const values = fixture();
@@ -94,7 +100,7 @@ describe("event-derived mutable state", () => {
   test("rejects a capability-counter-only substitution", () => {
     const store = signedStore();
     raw(store).exec("UPDATE capability_usage SET consumed_intents = 0");
-    expect(() => store.verify()).toThrow(/Capability usage does not reconcile/);
+    expect(() => store.verify()).toThrow(/Capability usage (?:timeline )?does not reconcile/);
     store.close();
   });
 
@@ -276,6 +282,7 @@ describe("event-derived mutable state", () => {
             observed_at_height: "1499",
             observation_block_hash: "C".repeat(64),
             observation_at: "2026-08-20T19:59:00.000Z",
+            account_valid_until: "2026-08-20T20:04:00.000Z",
           }
         : details);
     expect(() => store.verify()).toThrow(/Account observation regresses in ledger order/);
