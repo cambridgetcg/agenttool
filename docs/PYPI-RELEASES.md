@@ -70,6 +70,14 @@ annotated `sdk-v0.21.0` tag may be used for both protected npm and PyPI
 workflows. PyPI publication must still use its own OIDC boundary and exact
 wheel/sdist readback:
 
+The paired source and exact TypeScript LOVE candidate are sealed locally: its
+247,146-byte, 100-entry tarball has SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`
+and binds clean source revision
+`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. Those TypeScript bytes do not
+predict Python wheel or sdist bytes and are not evidence that the tag, PyPI
+release, npm mirror, or hosted static path exists.
+
 ```bash
 bun bin/pypi-release.ts resolve
 

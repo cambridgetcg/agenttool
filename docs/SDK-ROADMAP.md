@@ -62,6 +62,15 @@ read back, the exact 0.20.0 LOVE/npm/PyPI receipts below remain the current
 public release evidence. Source version declarations do not themselves prove a
 registry publication or static deployment.
 
+The exact TypeScript LOVE candidate is nevertheless sealed and reproducible:
+`apps/docs/packages/v1/@agenttool/sdk/0.21.0/agenttool-sdk-0.21.0.tgz` is
+247,146 bytes with 100 entries and SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`.
+Its manifest binds clean source revision
+`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. The independently verified
+0.20.0 artifact remains present byte-for-byte; sealing this candidate creates
+no tag, GitHub Release, npm/PyPI publication, or hosted readback.
+
 ## Verified public SDK release — 0.20.0 (2026-08-14)
 
 The paired 0.20.0 TypeScript and Python source added a standalone credential-free

@@ -441,6 +441,14 @@ TypeScript LOVE artifact from a clean source revision and preserve every
 use trusted npm publication with `latest`; the same tag is the independent
 PyPI workflow's source boundary:
 
+That sealing step is complete for the candidate: the checked-in
+`agenttool-sdk-0.21.0.tgz` is 247,146 bytes with 100 entries and SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`;
+its manifest binds clean source revision
+`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. No `sdk-v0.21.0` tag, GitHub
+Release, npm version, dist-tag receipt, PyPI distribution, or hosted readback
+is established by those candidate bytes.
+
 ```bash
 bun bin/npm-release.ts resolve --package sdk
 
