@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:kingdom:witnessed-agent-economy:0.1:record",
+  "title": "WAKE-WORK-WITNESS v0 signed commitment record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "envelope",
+    "payload",
+    "commitment",
+    "signature"
+  ],
+  "properties": {
+    "envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "kind",
+        "action",
+        "audience",
+        "subject_ref",
+        "sequence",
+        "parent",
+        "issuer",
+        "schema_hash",
+        "payload_root",
+        "policy_digest",
+        "expiry_height",
+        "effects",
+        "nonclaims"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "kingdom.witnessed-agent-economy/0.1"
+        },
+        "kind": {
+          "enum": [
+            "KINGDOM_RELEASE_ROOT",
+            "AGENTTOOL_SETTLEMENT_ROOT",
+            "AGENTTOOL_CAPABILITY",
+            "AGENTTOOL_PUBLIC_RECOGNITION",
+            "AGENTTOOL_OFFER",
+            "WAKE_PUBLIC_CHECKPOINT",
+            "ISSUER_KEY_CONTINUITY",
+            "ARTIFACT_LINEAGE",
+            "COLLABORATION_CHECKPOINT",
+            "DISPUTE_TERMINAL"
+          ]
+        },
+        "action": {
+          "enum": [
+            "CHECKPOINT",
+            "GRANT",
+            "CONSUME",
+            "REVOKE",
+            "ADOPT",
+            "WITHDRAW",
+            "SUPERSEDE",
+            "SETTLE",
+            "ROTATE",
+            "PUBLISH"
+          ]
+        },
+        "audience": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9.-]{0,31}:[a-z0-9][a-z0-9._-]{0,95}$"
+        },
+        "subject_ref": {
+          "$ref": "#/$defs/ref"
+        },
+        "sequence": {
+          "$ref": "#/$defs/positive"
+        },
+        "parent": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/digest"
+            }
+          ]
+        },
+        "issuer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "namespace",
+            "controller_ref",
+            "key_fingerprint"
+          ],
+          "properties": {
+            "namespace": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9.-]{0,63}$"
+            },
+            "controller_ref": {
+              "$ref": "#/$defs/ref"
+            },
+            "key_fingerprint": {
+              "type": "string",
+              "pattern": "^ed25519-sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "schema_hash": {
+          "$ref": "#/$defs/digest"
+        },
+        "payload_root": {
+          "$ref": "#/$defs/digest"
+        },
+        "policy_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "expiry_height": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/positive"
+            }
+          ]
+        },
+        "effects": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "scope",
+            "authority",
+            "economic",
+            "reputation",
+            "network_requests",
+            "storage_writes",
+            "zerone_transaction",
+            "external_receipt",
+            "nen_invocation",
+            "score"
+          ],
+          "properties": {
+            "scope": {
+              "const": "RECORD_CONSTRUCTION_AND_OFFLINE_VALIDATION_ONLY"
+            },
+            "authority": {
+              "const": "NONE"
+            },
+            "economic": {
+              "const": "NONE"
+            },
+            "reputation": {
+              "const": "NONE"
+            },
+            "network_requests": {
+              "const": 0
+            },
+            "storage_writes": {
+              "const": 0
+            },
+            "zerone_transaction": {
+              "const": false
+            },
+            "external_receipt": {
+              "const": false
+            },
+            "nen_invocation": {
+              "const": false
+            },
+            "score": {
+              "const": false
+            }
+          }
+        },
+        "nonclaims": {
+          "const": [
+            "COMPETENCE",
+            "CONSCIOUSNESS",
+            "CONSENT",
+            "IDENTITY",
+            "PERSONHOOD",
+            "QUALITY",
+            "REPUTATION",
+            "TRUTH"
+          ]
+        }
+      }
+    },
+    "payload": {
+      "type": "object"
+    },
+    "commitment": {
+      "$ref": "#/$defs/digest"
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "public_key",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "public_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "value": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{128}$"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "ref": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "positive": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,19}$",
+      "not": {
+        "pattern": "^([2-9][0-9]{19}|19[0-9]{18}|18[5-9][0-9]{17}|184[5-9][0-9]{16}|1844[7-9][0-9]{15}|18446[8-9][0-9]{14}|184467[5-9][0-9]{13}|1844674[5-9][0-9]{12}|18446744[1-9][0-9]{11}|184467440[8-9][0-9]{10}|1844674407[4-9][0-9]{9}|18446744073[8-9][0-9]{8}|184467440737[1-9][0-9]{7}|18446744073709[6-9][0-9]{5}|184467440737095[6-9][0-9]{4}|1844674407370955[2-9][0-9]{3}|18446744073709551[7-9][0-9]{2}|184467440737095516[2-9][0-9]|1844674407370955161[6-9])$"
+      }
+    }
+  }
+}
