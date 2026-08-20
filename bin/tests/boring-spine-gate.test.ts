@@ -341,7 +341,7 @@ describe("boring test spine", () => {
     }
   });
 
-  test("pins a four-job secret-free workflow and shared reproducible preparation", async () => {
+  test("pins a five-job secret-free workflow and shared reproducible preparation", async () => {
     const [workflow, preparer, preflight, deploy, migrator] = await Promise.all([
       readFile(join(ROOT, ".github", "workflows", "ci.yml"), "utf8"),
       readFile(join(ROOT, "bin", "prepare-hermetic-deps.sh"), "utf8"),
@@ -350,10 +350,12 @@ describe("boring test spine", () => {
       readFile(join(ROOT, "bin", "migrate-pending.sh"), "utf8"),
     ]);
     expect(workflow).toContain("name: API and protocol");
+    expect(workflow).toContain("name: Witnessed agent economy");
     expect(workflow).toContain("name: Data, ADDS, and SDK");
     expect(workflow).toContain("name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})");
-    expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(3);
-    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(4);
+    expect(workflow).toContain("name: Python SDK (${{ matrix.python-version }})");
+    expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(4);
+    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(5);
     expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(2);
     expect(workflow).toContain(
       "name: Prepare API and protocol dependencies from lockfiles",
@@ -379,7 +381,7 @@ describe("boring test spine", () => {
       "name: Install local-dependent package dependencies from lockfiles",
     );
     expect(workflow).toContain("fetch-depth: 0");
-    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(5);
+    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(6);
     expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("name: Set up release-pinned uv 0.9.26");
     expect(workflow).toContain(
@@ -854,7 +856,7 @@ describe("boring test spine", () => {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
-    expect(uses).toHaveLength(13);
+    expect(uses).toHaveLength(16);
     expect(
       uses.every(
         (line) =>
