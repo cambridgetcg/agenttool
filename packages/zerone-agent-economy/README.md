@@ -127,35 +127,68 @@ Consensus also tombstones the exact work receipt separately.
 digest reference, Ed25519 authority descriptor, Zerone CAIP-10 account,
 compressed secp256k1 public key/address, revision, predecessor, and continuity
 sequence. Address/public-key substitution and ambiguous two-axis rotation are
-rejected. Its canonical digest is intended to be signed by both roles through
-`createWalletIdentityBindingSigningRequest`:
+rejected. `createWalletIdentityBindingSigningRequest` derives one exact digest:
+
+```text
+D = SHA256(
+  UTF8("agenttool.zerone-wallet-binding/v1") || 0x00 ||
+  canonical_json(binding_core)
+)
+```
+
+Both roles sign the same raw 32-byte `D` without a second hash:
 
 - Ed25519 `identity_root_authorization`
-- secp256k1 `wallet_key_control`
+- compact low-S ECDSA/secp256k1 `wallet_key_control`
 
-No proof envelope is implemented. Every binding therefore has the closed
-machine-readable status `proof_status: "unsigned_unverified"`. A binding ID is
-only the digest of a candidate statement; it does not prove DID/account
-ownership.
+`createWalletIdentityBindingProofEnvelope` accepts only the detached
+signatures—never keys or a signer—and refuses to construct an envelope unless
+both signatures verify over `D`. `verifyWalletIdentityBindingProofEnvelope`
+re-verifies a reloaded closed envelope using strict RFC 8032 Ed25519 and exact
+64-byte compact, low-S secp256k1. The content-addressed `proof_id` covers the
+binding, both signatures, their roles, the digest/domain declaration, and the
+fixed `effects_performed: false` boundary. `proof_status:
+"unsigned_unverified"` remains a property of the detached binding record: a
+binding without its separately verified proof envelope is still only a
+candidate.
+
+A verified envelope establishes control of the two private keys corresponding
+to the exact public keys declared in that exact binding. Binding validation
+also establishes that the compressed secp256k1 key derives the declared
+canonical lowercase `zrn` address and network-scoped CAIP-10 account. Call this
+**key-control proof**, not legal ownership or identity creation.
 
 Existing boundaries provide only parts of the needed proof:
 
 | Existing artifact | What it establishes | What it does not establish |
 |---|---|---|
-| Authority-signed AgentTool `WalletDescriptor` | The Ed25519 authority signed that descriptor record, when the host verifies it against the current identity root. | That the same identity controls any listed Zerone secp256k1 account. Accounts remain self-asserted descriptor content. |
-| Signed Zerone transaction from `wallet-zerone` | The transaction signer key maps to its `zrn` source address for that exact sign plan. | A durable dual-key signature over this binding digest, or DID ownership of that account. |
+| Verified dual-proof envelope | Both declared key holders signed the same exact binding digest, and the secp256k1 key maps to the declared Zerone account. | That the Ed25519 key is the current root for the DID, that the binding/descriptor/continuity head is current, legal ownership, custody posture, or transaction authority. |
+| Authority-signed AgentTool `WalletDescriptor` | The Ed25519 descriptor authority signed that descriptor record. | Current identity-root status or control of any listed Zerone secp256k1 account. Accounts remain descriptor content until separately proved. |
+| Signed Zerone transaction from `wallet-zerone` | The transaction signer key maps to its `zrn` source address for that exact sign plan. | DID association, durable binding-head currentness, or permission for another transaction. |
 
-A production host remains responsible for current identity-root lookup,
-WalletDescriptor signature and continuity validation, both signatures over the
-shared binding digest (including compact low-S secp256k1 verification), secure
-non-exportable key custody, and durable current-head CAS. This package does not
-fake those checks.
+A production host remains responsible for authenticating the current AgentTool
+identity-root observation, comparing that root byte-for-byte with the binding,
+verifying the exact referenced WalletDescriptor and its owner/wallet/account
+correspondence, loading the current continuity and binding heads, checking
+identity lifecycle status, and committing head changes with durable CAS. It
+must separately establish secure non-exportable custody and repeat currentness
+inside the sign-time reservation. A historical proof remains
+cryptographically valid after rotation; this pure verifier deliberately has no
+clock, registry, network, storage, or current-head oracle.
 
-Rotate one key axis at a time. Identity authority rotation can proceed
-independently, but an address migration cannot rewrite in-flight worker
-assignments, Fact payees, work receipts, or settlement keys. Retain the old
-secp256k1 signer until every claim/order tied to that address has settled or
-expired.
+AgentTool's current `agent_root` v1 root is immutable: ordinary keyring
+revocation cannot rotate it. Do not accept the generic identity-axis successor
+shape as a live AgentTool root rotation unless a future separately reviewed
+root-rotation protocol supplies that authority. Wallet address migration also
+cannot rewrite in-flight worker assignments, Fact payees, work receipts, or
+settlement keys. Retain the old secp256k1 signer until every claim/order tied to
+that address has settled or expired.
+
+The verifier consumes the already released Wallet primitives but does not
+modify them. `@agenttool/wallet@0.1.3` and
+`@agenttool/wallet-zerone@0.1.2` remain byte-distinct released packages; the
+private economy package pins `@noble/curves@2.2.0` directly for this proof
+check rather than widening either released contract.
 
 ## Wire compatibility and host gates
 

@@ -3,6 +3,7 @@ export type AgentEconomyErrorCode =
   | "invalid_hash"
   | "invalid_amount"
   | "invalid_identity_binding"
+  | "invalid_identity_proof"
   | "invalid_rotation"
   | "contract_mismatch"
   | "settlement_ineligible"

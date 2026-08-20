@@ -545,11 +545,14 @@ work contracts, computational
 artifacts/evidence, typed `REQUIRES` edges into existing Zerone Facts,
 sponsorship-v2 settlement keys, and fail-closed treasury/work-admission
 decisions. It provides exact unsigned protobuf value bytes but does not widen
-Wallet Zerone 0.1.2's planner union. Its DID/Ed25519/secp256k1/account binding
-is explicitly `unsigned_unverified`: a host still owes both shared-digest
-proofs, current continuity, custody, durable CAS/reservations, chain lookup,
-simulation, signing, sticky-unknown handling, broadcast, and confirmation.
-It has no release, hosted route, RPC, signer, economic effect, or deployment.
+Wallet Zerone 0.1.2's planner union. Its detached
+DID/Ed25519/secp256k1/account binding remains `unsigned_unverified`; a separate
+closed envelope now verifies that both declared keys signed the same exact raw
+32-byte binding digest. A host still owes current identity-root, descriptor,
+binding, and continuity-head checks, custody, authorization, durable
+CAS/reservations, chain lookup, simulation, signing, sticky-unknown handling,
+broadcast, and confirmation. It has no release, hosted route, RPC, signer,
+economic effect, or deployment.
 
 ## The five load-bearing flows
 

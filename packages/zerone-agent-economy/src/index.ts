@@ -31,12 +31,18 @@ export {
   sha256IdToChainHash,
 } from "./canonical.js";
 export {
+  assertVerifiedWalletIdentityBindingProof,
   assertWalletIdentityBindingSuccessor,
   createWalletIdentityBinding,
+  createWalletIdentityBindingProofEnvelope,
   createWalletIdentityBindingSigningRequest,
   validateWalletIdentityBinding,
   validateWalletIdentityBindingCore,
+  validateWalletIdentityBindingProofCore,
+  validateWalletIdentityBindingProofEnvelope,
+  verifyWalletIdentityBindingProofEnvelope,
   type CreateWalletIdentityBindingInput,
+  type CreateWalletIdentityBindingProofEnvelopeInput,
 } from "./identity.js";
 export {
   assertTreasuryPolicyDoesNotWiden,
@@ -111,7 +117,10 @@ export type {
   UnsignedMessageValue,
   WalletIdentityBinding,
   WalletIdentityBindingCore,
+  WalletIdentityBindingProofCore,
+  WalletIdentityBindingProofEnvelope,
   WalletIdentityBindingSigningRequest,
+  VerifiedWalletIdentityBindingProof,
   WorkSpec,
   WorkSpecCore,
   WorkAdmissionDecision,

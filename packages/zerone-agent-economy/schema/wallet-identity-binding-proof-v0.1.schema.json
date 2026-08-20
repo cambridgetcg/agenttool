@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/zerone-agent-economy/wallet-identity-binding-proof-v0.1",
+  "title": "AgentTool Zerone wallet identity dual-proof envelope v0.1",
+  "$comment": "Structural envelope only. Runtime verification must recompute the binding digest and verify strict Ed25519 plus compact low-S secp256k1 over the same raw 32 bytes. The proof does not establish currentness, registry authority, custody, transaction authorization, or economic effect.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format", "binding", "signing_domain", "shared_signing_digest",
+    "signature_input", "identity_proof", "wallet_proof",
+    "effects_performed", "proof_id"
+  ],
+  "properties": {
+    "format": { "const": "agenttool.zerone-wallet-binding-proof/0.1" },
+    "binding": {
+      "$ref": "https://agenttool.dev/schemas/zerone-agent-economy/wallet-identity-binding-v0.1"
+    },
+    "signing_domain": { "const": "agenttool.zerone-wallet-binding/v1" },
+    "shared_signing_digest": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+    "signature_input": { "const": "shared_signing_digest_raw_32_bytes" },
+    "identity_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "algorithm", "key_id", "signature_b64u"],
+      "properties": {
+        "role": { "const": "identity_root_authorization" },
+        "algorithm": { "const": "Ed25519" },
+        "key_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+        "signature_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{85}[AQgw]$"
+        }
+      }
+    },
+    "wallet_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "algorithm", "encoding", "key_id", "signature_b64u"],
+      "properties": {
+        "role": { "const": "wallet_key_control" },
+        "algorithm": { "const": "secp256k1" },
+        "encoding": { "const": "compact_low_s" },
+        "key_id": { "$ref": "defs-v0.1#/$defs/sha256Id" },
+        "signature_b64u": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{85}[AQgw]$"
+        }
+      }
+    },
+    "effects_performed": { "const": false },
+    "proof_id": { "$ref": "defs-v0.1#/$defs/sha256Id" }
+  }
+}

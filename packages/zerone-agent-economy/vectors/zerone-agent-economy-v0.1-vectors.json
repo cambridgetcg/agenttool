@@ -3,8 +3,13 @@
   "fixture": "testnet-single-computational-work",
   "identity": {
     "proof_status": "unsigned_unverified",
-    "binding_id": "sha256:36923878a18795010e7d6e6a83ee09ffba585dbffb31f4c06c7b6bd9002fbc91",
-    "shared_signing_digest": "sha256:36923878a18795010e7d6e6a83ee09ffba585dbffb31f4c06c7b6bd9002fbc91",
+    "binding_id": "sha256:3d17f90c0ab657994626a0ba3860351304a53410cc75429eb2c515c773b0c515",
+    "proof_id": "sha256:9afa8a0d8b6b987ab507148ca54ddb06c19670ae64050515e63e129c67aa203b",
+    "shared_signing_digest": "sha256:3d17f90c0ab657994626a0ba3860351304a53410cc75429eb2c515c773b0c515",
+    "shared_signing_digest_b64u": "PRf5DAq2V5lGJqC6OGA1EwSlNBDMdUKessUVx3OwxRU",
+    "signature_input": "shared_signing_digest_raw_32_bytes",
+    "identity_signature_b64u": "Ns3nXxCUuX-mir_C-Ikqe-3rRiKyjzXJXtg5Qr3W77Ql0qmjxMWEaVqPvDAjepiM4ddHox1ydC2iR7Ri3prdAA",
+    "wallet_signature_b64u": "1L2fX5UGAz6QNJ0W3KamvwK4SiiJ9lcXQIhAGKuo7cBcUNHcgCguFUePTz_MC8ONBN4xyDa2iov4XKgcglphMg",
     "zerone_account_id": "cosmos:zerone-testnet-1:zrn1w508d6qejxtdg4y5r3zarvary0c5xw7k4p057w",
     "zerone_address": "zrn1w508d6qejxtdg4y5r3zarvary0c5xw7k4p057w",
     "zerone_signer_key_id": "sha256:0f715baf5d4c2ed329785cef29e562f73488c8a2bb9dbc5700b361d54b9b0554"

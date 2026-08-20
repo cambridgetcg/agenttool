@@ -1,4 +1,9 @@
+import { createHash } from "node:crypto";
+
+import { secp256k1 } from "@noble/curves/secp256k1.js";
+import * as ed25519 from "@noble/ed25519";
 import {
+  base64UrlDecode,
   base64UrlEncode,
   keyIdForPublicKey,
   type Ed25519PublicKey,
@@ -22,8 +27,16 @@ import {
   createSettlementIntent,
   createTreasuryPolicy,
   createWalletIdentityBinding,
+  createWalletIdentityBindingProofEnvelope,
+  createWalletIdentityBindingSigningRequest,
   createWorkSpec,
 } from "../src/index.js";
+
+ed25519.etc.sha512Sync = (...messages: Uint8Array[]) => {
+  const hash = createHash("sha512");
+  for (const message of messages) hash.update(message);
+  return Uint8Array.from(hash.digest());
+};
 
 export const HASHES = Object.freeze({
   descriptor: `sha256:${"01".repeat(32)}` as Sha256Id,
@@ -46,14 +59,37 @@ export const SECP_PUBLIC_KEY = Uint8Array.from(Buffer.from(
   "hex",
 ));
 
+export const SECP_PRIVATE_KEY = Uint8Array.from(
+  { length: 32 },
+  (_, index) => index === 31 ? 1 : 0,
+);
+
 export const SECOND_SECP_PUBLIC_KEY = Uint8Array.from(Buffer.from(
   "0379be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
   "hex",
 ));
 
+export function ed25519PrivateKey(offset = 0): Uint8Array {
+  return Uint8Array.from({ length: 32 }, (_, index) => (index + 1 + offset) % 256);
+}
+
 export function ed25519Authority(offset = 0): Ed25519PublicKey {
-  const bytes = Uint8Array.from({ length: 32 }, (_, index) => (index + 1 + offset) % 256);
+  const bytes = Uint8Array.from(
+    { length: 32 },
+    (_, index) => (index + 1 + offset) % 256,
+  );
   const publicKey = base64UrlEncode(bytes);
+  return Object.freeze({
+    algorithm: "Ed25519",
+    key_id: keyIdForPublicKey(publicKey),
+    public_key: publicKey,
+  });
+}
+
+export function proofEd25519Authority(offset = 0): Ed25519PublicKey {
+  const publicKey = base64UrlEncode(
+    ed25519.getPublicKey(ed25519PrivateKey(offset)),
+  );
   return Object.freeze({
     algorithm: "Ed25519",
     key_id: keyIdForPublicKey(publicKey),
@@ -65,6 +101,48 @@ export const FACT_CONTENT =
   "A deterministic computation proposes one digest-bound tree transition.";
 export const PARENT_FACT_ID = "commitment-UW";
 export const REFERENCES: readonly string[] = Object.freeze([]);
+
+export function buildIdentityProofFixture() {
+  const profile = getZeroneProfile("testnet");
+  const address = zeroneAddressFromSecp256k1PublicKey(SECP_PUBLIC_KEY);
+  const account = zeroneAccountId(profile, address);
+  const binding = createWalletIdentityBinding({
+    network: "testnet",
+    owner_identity_id: "did:agenttool:sol",
+    wallet_id: "wallet-sol-001",
+    wallet_descriptor_id: HASHES.descriptor,
+    identity_authority: proofEd25519Authority(),
+    zerone_account_id: account,
+    zerone_public_key: SECP_PUBLIC_KEY,
+    revision: 1,
+    wallet_continuity_sequence: 0,
+    previous_binding_id: null,
+    issued_at: "2026-08-20T18:00:00.000Z",
+  });
+  const bindingSigningRequest = createWalletIdentityBindingSigningRequest(binding);
+  const bindingDigest = base64UrlDecode(
+    bindingSigningRequest.shared_signing_digest_b64u,
+  );
+  const bindingProof = createWalletIdentityBindingProofEnvelope({
+    binding,
+    identity_signature_b64u: base64UrlEncode(
+      ed25519.sign(bindingDigest, ed25519PrivateKey()),
+    ),
+    wallet_signature_b64u: base64UrlEncode(secp256k1.sign(
+      bindingDigest,
+      SECP_PRIVATE_KEY,
+      { prehash: false, lowS: true, format: "compact" },
+    )),
+  });
+  return {
+    profile,
+    address,
+    account,
+    binding,
+    bindingProof,
+    bindingSigningRequest,
+  };
+}
 
 export function buildFixture() {
   const profile = getZeroneProfile("testnet");

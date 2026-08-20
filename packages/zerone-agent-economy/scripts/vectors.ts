@@ -5,7 +5,7 @@ import {
   toChainComputationalCommitment,
   toChainWorkContract,
 } from "../src/index.js";
-import { buildFixture } from "../tests/fixtures.js";
+import { buildFixture, buildIdentityProofFixture } from "../tests/fixtures.js";
 
 function wire(value: { readonly protobuf_value_b64u: string; readonly protobuf_value_hash: string }) {
   return {
@@ -16,19 +16,29 @@ function wire(value: { readonly protobuf_value_b64u: string; readonly protobuf_v
 
 export function buildVector() {
   const fixture = buildFixture();
-  const signing = createWalletIdentityBindingSigningRequest(fixture.binding);
+  const identityProofFixture = buildIdentityProofFixture();
+  const signing = createWalletIdentityBindingSigningRequest(
+    identityProofFixture.binding,
+  );
   const workContract = toChainWorkContract(fixture.workSpec);
   const commitment = toChainComputationalCommitment(fixture.artifact);
   return {
     protocol: "agenttool.zerone-agent-economy-vectors/0.1",
     fixture: "testnet-single-computational-work",
     identity: {
-      proof_status: fixture.binding.proof_status,
-      binding_id: fixture.binding.binding_id,
+      proof_status: identityProofFixture.binding.proof_status,
+      binding_id: identityProofFixture.binding.binding_id,
+      proof_id: identityProofFixture.bindingProof.proof_id,
       shared_signing_digest: signing.shared_signing_digest,
-      zerone_account_id: fixture.binding.zerone_account_id,
-      zerone_address: fixture.binding.zerone_address,
-      zerone_signer_key_id: fixture.binding.zerone_signer.key_id,
+      shared_signing_digest_b64u: signing.shared_signing_digest_b64u,
+      signature_input: signing.signature_input,
+      identity_signature_b64u:
+        identityProofFixture.bindingProof.identity_proof.signature_b64u,
+      wallet_signature_b64u:
+        identityProofFixture.bindingProof.wallet_proof.signature_b64u,
+      zerone_account_id: identityProofFixture.binding.zerone_account_id,
+      zerone_address: identityProofFixture.binding.zerone_address,
+      zerone_signer_key_id: identityProofFixture.binding.zerone_signer.key_id,
     },
     work: {
       work_spec_id: fixture.workSpec.work_spec_id,

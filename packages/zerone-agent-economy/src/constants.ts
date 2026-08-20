@@ -3,6 +3,7 @@ export const PACKAGE_VERSION = "0.1.0-dev.0" as const;
 
 export const FORMATS = Object.freeze({
   wallet_binding: "agenttool.zerone-wallet-binding/0.1",
+  wallet_binding_proof: "agenttool.zerone-wallet-binding-proof/0.1",
   work_spec: "agenttool.zerone-work-spec/0.1",
   artifact: "agenttool.zerone-computational-artifact/0.1",
   evidence: "agenttool.zerone-evidence-receipt/0.1",
@@ -13,6 +14,7 @@ export const FORMATS = Object.freeze({
 
 export const HASH_DOMAINS = Object.freeze({
   wallet_binding: "agenttool.zerone-wallet-binding/v1",
+  wallet_binding_proof: "agenttool.zerone-wallet-binding-proof/v1",
   source_work: "agenttool.zerone-source-work/v1",
   work_spec: "agenttool.zerone-work-spec/v1",
   artifact: "agenttool.zerone-computational-artifact/v1",

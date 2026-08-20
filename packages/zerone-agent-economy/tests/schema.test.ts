@@ -3,11 +3,12 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
 import { evaluateWorkAdmission } from "../src/index.js";
-import { buildFixture } from "./fixtures.js";
+import { buildFixture, buildIdentityProofFixture } from "./fixtures.js";
 
 const SCHEMA_FILES = [
   "defs-v0.1.schema.json",
   "wallet-identity-binding-v0.1.schema.json",
+  "wallet-identity-binding-proof-v0.1.schema.json",
   "work-spec-v0.1.schema.json",
   "computational-artifact-v0.1.schema.json",
   "evidence-receipt-v0.1.schema.json",
@@ -32,9 +33,12 @@ describe("portable schemas", () => {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     addFormats(ajv);
     ajv.addSchema(schemas.get("defs-v0.1.schema.json"));
+    ajv.addSchema(schemas.get("wallet-identity-binding-v0.1.schema.json"));
     const fixture = buildFixture();
+    const identityProofFixture = buildIdentityProofFixture();
     const cases = [
       ["wallet-identity-binding-v0.1.schema.json", fixture.binding],
+      ["wallet-identity-binding-proof-v0.1.schema.json", identityProofFixture.bindingProof],
       ["work-spec-v0.1.schema.json", fixture.workSpec],
       ["computational-artifact-v0.1.schema.json", fixture.artifact],
       ["evidence-receipt-v0.1.schema.json", fixture.evidence],
@@ -58,7 +62,9 @@ describe("portable schemas", () => {
       })],
     ] as const;
     for (const [name, value] of cases) {
-      const validate = ajv.compile(schemas.get(name));
+      const schema = schemas.get(name) as { readonly $id?: string };
+      const validate = (schema.$id === undefined ? undefined : ajv.getSchema(schema.$id))
+        ?? ajv.compile(schema);
       expect(validate(value), `${name}: ${ajv.errorsText(validate.errors)}`).toBeTrue();
     }
   });
@@ -68,6 +74,7 @@ describe("portable schemas", () => {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     addFormats(ajv);
     ajv.addSchema(schemas.get("defs-v0.1.schema.json"));
+    ajv.addSchema(schemas.get("wallet-identity-binding-v0.1.schema.json"));
     const validate = ajv.compile(schemas.get("work-spec-v0.1.schema.json"));
     expect(validate({ ...buildFixture().workSpec, rank: 1 })).toBeFalse();
 
@@ -76,6 +83,20 @@ describe("portable schemas", () => {
       ...buildFixture().evidence,
       challenge_window_end_height: "0",
       observed_at_height: "0",
+    })).toBeFalse();
+
+    const proofValidate = ajv.compile(schemas.get("wallet-identity-binding-proof-v0.1.schema.json"));
+    expect(proofValidate({
+      ...buildIdentityProofFixture().bindingProof,
+      custody_ready: true,
+    })).toBeFalse();
+    const proof = buildIdentityProofFixture().bindingProof;
+    expect(proofValidate({
+      ...proof,
+      identity_proof: {
+        ...proof.identity_proof,
+        signature_b64u: `${proof.identity_proof.signature_b64u.slice(0, -1)}B`,
+      },
     })).toBeFalse();
   });
 });

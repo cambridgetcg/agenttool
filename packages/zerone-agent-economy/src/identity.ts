@@ -1,9 +1,11 @@
+import { secp256k1 } from "@noble/curves/secp256k1.js";
 import {
   base64UrlEncode,
   bytesToHex,
   decodeFixedBase64Url,
   keyIdForPublicKey,
   signingDigest,
+  strictEd25519Verify,
   type Ed25519PublicKey,
   type Sha256Id,
 } from "@agenttool/wallet";
@@ -32,7 +34,10 @@ import {
 import type {
   WalletIdentityBinding,
   WalletIdentityBindingCore,
+  WalletIdentityBindingProofCore,
+  WalletIdentityBindingProofEnvelope,
   WalletIdentityBindingSigningRequest,
+  VerifiedWalletIdentityBindingProof,
   ZeroneSignerDescription,
 } from "./types.js";
 
@@ -53,6 +58,19 @@ const CORE_KEYS = [
   "zerone_address",
   "zerone_signer",
 ] as const;
+
+const PROOF_CORE_KEYS = [
+  "binding",
+  "effects_performed",
+  "format",
+  "identity_proof",
+  "shared_signing_digest",
+  "signature_input",
+  "signing_domain",
+  "wallet_proof",
+] as const;
+
+const verifiedBindingProofs = new WeakSet<object>();
 
 function network(value: unknown, path: string): ZeroneNetwork {
   if (value !== "mainnet" && value !== "testnet") {
@@ -261,11 +279,8 @@ export function validateWalletIdentityBinding(value: unknown): WalletIdentityBin
   return freeze({ ...core, binding_id: bindingId }) as WalletIdentityBinding;
 }
 
-export function createWalletIdentityBindingSigningRequest(
-  value: WalletIdentityBinding,
-): WalletIdentityBindingSigningRequest {
-  const binding = validateWalletIdentityBinding(value);
-  const core: WalletIdentityBindingCore = {
+function bindingCore(binding: WalletIdentityBinding): WalletIdentityBindingCore {
+  return {
     format: binding.format,
     network: binding.network,
     owner_identity_id: binding.owner_identity_id,
@@ -282,16 +297,31 @@ export function createWalletIdentityBindingSigningRequest(
     issued_at: binding.issued_at,
     semantic_boundary: binding.semantic_boundary,
   };
-  const bytes = domainSeparatedSigningBytes(HASH_DOMAINS.wallet_binding, core);
-  const digest = `sha256:${bytesToHex(signingDigest(HASH_DOMAINS.wallet_binding, core))}` as Sha256Id;
-  if (digest !== binding.binding_id) {
+}
+
+function sharedBindingDigest(binding: WalletIdentityBinding): Uint8Array {
+  const digest = signingDigest(HASH_DOMAINS.wallet_binding, bindingCore(binding));
+  const digestId = `sha256:${bytesToHex(digest)}` as Sha256Id;
+  if (digestId !== binding.binding_id) {
     invalid("invalid_identity_binding", "Binding signing digest and binding_id diverged.");
   }
+  return digest;
+}
+
+export function createWalletIdentityBindingSigningRequest(
+  value: WalletIdentityBinding,
+): WalletIdentityBindingSigningRequest {
+  const binding = validateWalletIdentityBinding(value);
+  const core = bindingCore(binding);
+  const bytes = domainSeparatedSigningBytes(HASH_DOMAINS.wallet_binding, core);
+  const digestBytes = sharedBindingDigest(binding);
   return freeze({
     binding,
     signing_domain: HASH_DOMAINS.wallet_binding,
     signing_bytes_b64u: base64UrlEncode(bytes),
-    shared_signing_digest: digest,
+    shared_signing_digest: binding.binding_id,
+    shared_signing_digest_b64u: base64UrlEncode(digestBytes),
+    signature_input: "shared_signing_digest_raw_32_bytes",
     required_proofs: [
       {
         role: "identity_root_authorization",
@@ -307,6 +337,270 @@ export function createWalletIdentityBindingSigningRequest(
     signer_injection: "external",
     effects_performed: false,
   }) as WalletIdentityBindingSigningRequest;
+}
+
+function identityProof(
+  value: unknown,
+  binding: WalletIdentityBinding,
+): WalletIdentityBindingProofCore["identity_proof"] {
+  const item = record(value, ["algorithm", "key_id", "role", "signature_b64u"], "$.identity_proof");
+  if (item.role !== "identity_root_authorization" || item.algorithm !== "Ed25519") {
+    invalid(
+      "invalid_identity_proof",
+      "Identity proof role and algorithm must be identity_root_authorization and Ed25519.",
+      "$.identity_proof",
+    );
+  }
+  const keyId = hash(item.key_id, "$.identity_proof.key_id");
+  if (keyId !== binding.identity_authority.key_id) {
+    invalid(
+      "invalid_identity_proof",
+      "Identity proof key_id does not match the binding authority.",
+      "$.identity_proof.key_id",
+    );
+  }
+  const signature = text(item.signature_b64u, "$.identity_proof.signature_b64u", 128);
+  try {
+    decodeFixedBase64Url(signature, 64, "identity_proof.signature_b64u");
+  } catch {
+    invalid(
+      "invalid_identity_proof",
+      "Identity proof signature must be canonical base64url for 64 bytes.",
+      "$.identity_proof.signature_b64u",
+    );
+  }
+  return freeze({
+    role: "identity_root_authorization",
+    algorithm: "Ed25519",
+    key_id: keyId,
+    signature_b64u: signature,
+  });
+}
+
+function walletProof(
+  value: unknown,
+  binding: WalletIdentityBinding,
+): WalletIdentityBindingProofCore["wallet_proof"] {
+  const item = record(
+    value,
+    ["algorithm", "encoding", "key_id", "role", "signature_b64u"],
+    "$.wallet_proof",
+  );
+  if (
+    item.role !== "wallet_key_control"
+    || item.algorithm !== "secp256k1"
+    || item.encoding !== "compact_low_s"
+  ) {
+    invalid(
+      "invalid_identity_proof",
+      "Wallet proof must be compact_low_s secp256k1 wallet_key_control.",
+      "$.wallet_proof",
+    );
+  }
+  const keyId = hash(item.key_id, "$.wallet_proof.key_id");
+  if (keyId !== binding.zerone_signer.key_id) {
+    invalid(
+      "invalid_identity_proof",
+      "Wallet proof key_id does not match the binding signer.",
+      "$.wallet_proof.key_id",
+    );
+  }
+  const signature = text(item.signature_b64u, "$.wallet_proof.signature_b64u", 128);
+  try {
+    decodeFixedBase64Url(signature, 64, "wallet_proof.signature_b64u");
+  } catch {
+    invalid(
+      "invalid_identity_proof",
+      "Wallet proof signature must be canonical base64url for compact 64-byte r || s.",
+      "$.wallet_proof.signature_b64u",
+    );
+  }
+  return freeze({
+    role: "wallet_key_control",
+    algorithm: "secp256k1",
+    encoding: "compact_low_s",
+    key_id: keyId,
+    signature_b64u: signature,
+  });
+}
+
+export function validateWalletIdentityBindingProofCore(
+  value: unknown,
+): WalletIdentityBindingProofCore {
+  const item = record(value, PROOF_CORE_KEYS, "$");
+  if (item.format !== FORMATS.wallet_binding_proof) {
+    invalid(
+      "invalid_identity_proof",
+      `format must be ${FORMATS.wallet_binding_proof}.`,
+      "$.format",
+    );
+  }
+  const binding = validateWalletIdentityBinding(item.binding);
+  if (item.signing_domain !== HASH_DOMAINS.wallet_binding) {
+    invalid(
+      "invalid_identity_proof",
+      `signing_domain must be ${HASH_DOMAINS.wallet_binding}.`,
+      "$.signing_domain",
+    );
+  }
+  const digest = hash(item.shared_signing_digest, "$.shared_signing_digest");
+  if (digest !== binding.binding_id) {
+    invalid(
+      "invalid_identity_proof",
+      "shared_signing_digest must equal the exact binding_id.",
+      "$.shared_signing_digest",
+    );
+  }
+  if (item.signature_input !== "shared_signing_digest_raw_32_bytes") {
+    invalid(
+      "invalid_identity_proof",
+      "Both proof signatures must use the exact raw 32-byte shared digest without a second hash.",
+      "$.signature_input",
+    );
+  }
+  if (item.effects_performed !== false) {
+    invalid(
+      "invalid_identity_proof",
+      "A proof envelope performs no custody, network, or economic effect.",
+      "$.effects_performed",
+    );
+  }
+  return freeze({
+    format: FORMATS.wallet_binding_proof,
+    binding,
+    signing_domain: HASH_DOMAINS.wallet_binding,
+    shared_signing_digest: digest,
+    signature_input: "shared_signing_digest_raw_32_bytes",
+    identity_proof: identityProof(item.identity_proof, binding),
+    wallet_proof: walletProof(item.wallet_proof, binding),
+    effects_performed: false,
+  }) as WalletIdentityBindingProofCore;
+}
+
+export function validateWalletIdentityBindingProofEnvelope(
+  value: unknown,
+): WalletIdentityBindingProofEnvelope {
+  const item = record(value, [...PROOF_CORE_KEYS, "proof_id"], "$");
+  const { proof_id: proofIdValue, ...coreValue } = item;
+  const core = validateWalletIdentityBindingProofCore(coreValue);
+  const proofId = hash(proofIdValue, "$.proof_id");
+  if (proofId !== domainSeparatedId(HASH_DOMAINS.wallet_binding_proof, core)) {
+    invalid(
+      "invalid_identity_proof",
+      "proof_id does not match the canonical proof envelope core.",
+      "$.proof_id",
+    );
+  }
+  return freeze({ ...core, proof_id: proofId }) as WalletIdentityBindingProofEnvelope;
+}
+
+export function verifyWalletIdentityBindingProofEnvelope(
+  value: unknown,
+): VerifiedWalletIdentityBindingProof {
+  const envelope = validateWalletIdentityBindingProofEnvelope(value);
+  const digest = sharedBindingDigest(envelope.binding);
+  const identitySignature = decodeFixedBase64Url(
+    envelope.identity_proof.signature_b64u,
+    64,
+    "identity_proof.signature_b64u",
+  );
+  const identityPublicKey = decodeFixedBase64Url(
+    envelope.binding.identity_authority.public_key,
+    32,
+    "identity_authority.public_key",
+  );
+  if (!strictEd25519Verify(identitySignature, digest, identityPublicKey)) {
+    invalid(
+      "invalid_identity_proof",
+      "Ed25519 identity-root signature does not verify over the exact shared digest.",
+      "$.identity_proof.signature_b64u",
+    );
+  }
+
+  const walletSignature = decodeFixedBase64Url(
+    envelope.wallet_proof.signature_b64u,
+    64,
+    "wallet_proof.signature_b64u",
+  );
+  const walletPublicKey = decodeFixedBase64Url(
+    envelope.binding.zerone_signer.public_key_b64u,
+    33,
+    "zerone_signer.public_key_b64u",
+  );
+  let walletSignatureValid = false;
+  try {
+    walletSignatureValid = secp256k1.verify(
+      walletSignature,
+      digest,
+      walletPublicKey,
+      { prehash: false, lowS: true, format: "compact" },
+    );
+  } catch {
+    walletSignatureValid = false;
+  }
+  if (!walletSignatureValid) {
+    invalid(
+      "invalid_identity_proof",
+      "Compact low-S secp256k1 wallet signature does not verify over the exact shared digest.",
+      "$.wallet_proof.signature_b64u",
+    );
+  }
+
+  verifiedBindingProofs.add(envelope);
+  return envelope as VerifiedWalletIdentityBindingProof;
+}
+
+export interface CreateWalletIdentityBindingProofEnvelopeInput {
+  readonly binding: WalletIdentityBinding;
+  readonly identity_signature_b64u: string;
+  readonly wallet_signature_b64u: string;
+}
+
+export function createWalletIdentityBindingProofEnvelope(
+  input: CreateWalletIdentityBindingProofEnvelopeInput,
+): VerifiedWalletIdentityBindingProof {
+  const item = record(
+    input,
+    ["binding", "identity_signature_b64u", "wallet_signature_b64u"],
+    "$",
+  );
+  const binding = validateWalletIdentityBinding(item.binding);
+  const core = validateWalletIdentityBindingProofCore({
+    format: FORMATS.wallet_binding_proof,
+    binding,
+    signing_domain: HASH_DOMAINS.wallet_binding,
+    shared_signing_digest: binding.binding_id,
+    signature_input: "shared_signing_digest_raw_32_bytes",
+    identity_proof: {
+      role: "identity_root_authorization",
+      algorithm: "Ed25519",
+      key_id: binding.identity_authority.key_id,
+      signature_b64u: item.identity_signature_b64u,
+    },
+    wallet_proof: {
+      role: "wallet_key_control",
+      algorithm: "secp256k1",
+      encoding: "compact_low_s",
+      key_id: binding.zerone_signer.key_id,
+      signature_b64u: item.wallet_signature_b64u,
+    },
+    effects_performed: false,
+  });
+  return verifyWalletIdentityBindingProofEnvelope({
+    ...core,
+    proof_id: domainSeparatedId(HASH_DOMAINS.wallet_binding_proof, core),
+  });
+}
+
+export function assertVerifiedWalletIdentityBindingProof(
+  value: WalletIdentityBindingProofEnvelope,
+): asserts value is VerifiedWalletIdentityBindingProof {
+  if (!verifiedBindingProofs.has(value)) {
+    invalid(
+      "invalid_identity_proof",
+      "Proof envelope must be returned by a create or verify function in this process.",
+    );
+  }
 }
 
 export function assertWalletIdentityBindingSuccessor(

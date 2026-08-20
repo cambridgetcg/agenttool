@@ -50,6 +50,9 @@ export interface WalletIdentityBindingSigningRequest {
   readonly signing_domain: string;
   readonly signing_bytes_b64u: string;
   readonly shared_signing_digest: Sha256Id;
+  /** Exact raw 32-byte digest both proof signers receive. */
+  readonly shared_signing_digest_b64u: string;
+  readonly signature_input: "shared_signing_digest_raw_32_bytes";
   readonly required_proofs: readonly [
     {
       readonly role: "identity_root_authorization";
@@ -65,6 +68,41 @@ export interface WalletIdentityBindingSigningRequest {
   readonly signer_injection: "external";
   readonly effects_performed: false;
 }
+
+export interface WalletIdentityBindingProofCore {
+  readonly format: (typeof FORMATS)["wallet_binding_proof"];
+  readonly binding: WalletIdentityBinding;
+  readonly signing_domain: string;
+  readonly shared_signing_digest: Sha256Id;
+  readonly signature_input: "shared_signing_digest_raw_32_bytes";
+  readonly identity_proof: {
+    readonly role: "identity_root_authorization";
+    readonly algorithm: "Ed25519";
+    readonly key_id: Sha256Id;
+    /** Canonical unpadded base64url encoding of a 64-byte signature. */
+    readonly signature_b64u: string;
+  };
+  readonly wallet_proof: {
+    readonly role: "wallet_key_control";
+    readonly algorithm: "secp256k1";
+    readonly encoding: "compact_low_s";
+    readonly key_id: Sha256Id;
+    /** Canonical unpadded base64url encoding of compact r || s. */
+    readonly signature_b64u: string;
+  };
+  readonly effects_performed: false;
+}
+
+export interface WalletIdentityBindingProofEnvelope
+  extends WalletIdentityBindingProofCore {
+  readonly proof_id: Sha256Id;
+}
+
+declare const verifiedWalletIdentityBindingProofBrand: unique symbol;
+export type VerifiedWalletIdentityBindingProof =
+  Readonly<WalletIdentityBindingProofEnvelope> & {
+    readonly [verifiedWalletIdentityBindingProofBrand]: true;
+  };
 
 export type TreeTransitionKind = "add_fact";
 

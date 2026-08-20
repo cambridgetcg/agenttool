@@ -26,10 +26,16 @@ This is a private, source-only pure protocol package. Read the root
   caller-controlled payee, receipt, contract, or nullifier field.
 - Claim review-fee stake must remain a positive uint64 decimal string; do not
   admit wider amount strings that consensus cannot convert without truncation.
-- A wallet/identity binding stays `unsigned_unverified` until an external host
-  verifies both Ed25519 identity-root and compact low-S secp256k1 wallet-key
-  proofs over the shared digest. Do not treat a descriptor account assertion
-  or ordinary signed transaction as that dual proof.
+- A detached wallet/identity binding stays `unsigned_unverified`. Its separate
+  closed proof envelope is valid only when strict Ed25519 identity-root and
+  compact low-S secp256k1 wallet-key signatures both verify over the exact same
+  raw 32-byte shared digest without a second hash. Do not treat a descriptor
+  account assertion or ordinary signed transaction as that dual proof.
+- Pure proof verification establishes declared key control only. It does not
+  authenticate the DID's current root, select a current binding/descriptor/
+  continuity head, establish custody or legal ownership, reserve funds or a
+  sequence, or authorize signing/broadcast. Those checks remain a durable host
+  responsibility and must be repeated inside sign-time reservation.
 - ZRN remains settlement/compute only. It does not establish identity, truth,
   KARMA/reputation, governance, worth, rights, or permission to rest.
 - Treasury spendable balance subtracts durable reservations, sticky-unknown

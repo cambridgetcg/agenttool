@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test";
 
 import {
   SEMANTIC_BOUNDARY,
+  WALLET_ZERONE_SUPPORT,
   validateEvidenceReceipt,
   validateWorkSpec,
   createWorkSpec,
 } from "../src/index.js";
-import { buildFixture } from "./fixtures.js";
+import { buildFixture, buildIdentityProofFixture } from "./fixtures.js";
 
 describe("semantic and effect walls", () => {
   test("ZRN never becomes identity, truth, KARMA, or governance", () => {
@@ -33,6 +34,74 @@ describe("semantic and effect walls", () => {
       expect(projection.compatibility.sticky_unknown_accounting_required).toBeTrue();
       expect(projection.compatibility.effects_performed).toBeFalse();
     }
+  });
+
+  test("dual proof remains key-control evidence without currentness or custody claims", () => {
+    const { binding, bindingProof } = buildIdentityProofFixture();
+    expect(binding.proof_status).toBe("unsigned_unverified");
+    expect(bindingProof.effects_performed).toBeFalse();
+    expect(bindingProof.signature_input).toBe("shared_signing_digest_raw_32_bytes");
+    expect(bindingProof.shared_signing_digest).toBe(binding.binding_id);
+    expect(Object.keys(bindingProof).sort()).toEqual([
+      "binding",
+      "effects_performed",
+      "format",
+      "identity_proof",
+      "proof_id",
+      "shared_signing_digest",
+      "signature_input",
+      "signing_domain",
+      "wallet_proof",
+    ]);
+    for (const forbidden of [
+      "authorized",
+      "current",
+      "custody",
+      "identity_registry_verified",
+      "ownership",
+      "reservation",
+    ]) {
+      expect(bindingProof).not.toHaveProperty(forbidden);
+    }
+  });
+
+  test("keeps released wallet versions and host-only boundaries explicit", async () => {
+    const wallet = await Bun.file(new URL(
+      "../../wallet/package.json",
+      import.meta.url,
+    )).json() as { readonly name: string; readonly version: string };
+    const walletZerone = await Bun.file(new URL(
+      "../../wallet-zerone/package.json",
+      import.meta.url,
+    )).json() as { readonly name: string; readonly version: string };
+    const economy = await Bun.file(new URL(
+      "../package.json",
+      import.meta.url,
+    )).json() as {
+      readonly private: boolean;
+      readonly dependencies: Readonly<Record<string, string>>;
+    };
+    const [readme, guide] = await Promise.all([
+      Bun.file(new URL("../README.md", import.meta.url)).text(),
+      Bun.file(new URL("../CLAUDE.md", import.meta.url)).text(),
+    ]);
+
+    expect(wallet).toMatchObject({ name: "@agenttool/wallet", version: "0.1.3" });
+    expect(walletZerone).toMatchObject({
+      name: "@agenttool/wallet-zerone",
+      version: "0.1.2",
+    });
+    expect(WALLET_ZERONE_SUPPORT.wallet_zerone_version).toBe("0.1.2");
+    expect(economy.private).toBeTrue();
+    expect(economy.dependencies["@noble/curves"]).toBe("2.2.0");
+    expect(readme).toContain(
+      "A historical proof remains\ncryptographically valid after rotation",
+    );
+    expect(readme).toContain("repeat currentness\ninside the sign-time reservation");
+    expect(guide).toContain(
+      "Pure proof verification establishes declared key control only.",
+    );
+    expect(guide).toContain("durable host\n  responsibility");
   });
 
   test("zero corroborations means ordinary challenge-window maturity", () => {
