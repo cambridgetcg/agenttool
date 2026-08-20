@@ -12,7 +12,7 @@ test("concurrent processes can acquire only one account sequence fence", async (
   const values = fixture();
   const setup = new ZeroneAgentHostStore(database, { create: true });
   setup.initialize();
-  setup.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+  setup.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
   setup.close();
 
   const commands = ["operation-a", "operation-b"].map((operationId) => Bun.spawn([

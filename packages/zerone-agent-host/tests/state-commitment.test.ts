@@ -14,7 +14,7 @@ function signedOperation(path = ":memory:") {
     ...(path === ":memory:" ? { allow_in_memory_for_tests: true } : {}),
   });
   store.initialize();
-  store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+  store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
   const reserved = store.reserveOperation(values.reserve());
   const signing = store.recordSignerInvocationBoundary({
     operation_id: reserved.operation_id,
@@ -75,7 +75,7 @@ describe("event-derived mutable state", () => {
       allow_in_memory_for_tests: true,
     });
     store.initialize();
-    store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     const reserved = store.reserveOperation(values.reserve());
     const released = store.releasePreSign({
       operation_id: reserved.operation_id,
@@ -105,12 +105,31 @@ describe("event-derived mutable state", () => {
     store.close();
   });
 
+  test("rejects an account-revision-only substitution through restart", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "zerone-host-account-revision-")), "host.sqlite");
+    let { store } = signedOperation(path);
+    raw(store).exec("UPDATE account_states SET revision = revision + 1");
+    expect(() => store.verify()).toThrow(/Account halt or fence state does not replay globally/);
+    store.close();
+
+    store = new ZeroneAgentHostStore(path, { create: true });
+    expect(() => store.initialize()).toThrow(/Account halt or fence state does not replay globally/);
+    store.close();
+  });
+
+  test("rejects partial halt metadata while an account is not halted", () => {
+    const store = signedStore();
+    raw(store).query("UPDATE account_states SET halt_evidence_id = ?").run(hash("f"));
+    expect(() => store.verify()).toThrow(/Account halt epoch is incomplete/);
+    store.close();
+  });
+
   test("binds a rebuilt signer event to the exact reserved account sequence on reopen", () => {
     const values = fixture();
     const path = join(mkdtempSync(join(tmpdir(), "zerone-host-forged-signer-sequence-")), "host.sqlite");
     let store = new ZeroneAgentHostStore(path, { create: true });
     store.initialize();
-    store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     const reserved = store.reserveOperation(values.reserve());
     const signing = store.recordSignerInvocationBoundary({
       operation_id: reserved.operation_id,
@@ -194,7 +213,7 @@ describe("event-derived mutable state", () => {
     const path = join(mkdtempSync(join(tmpdir(), "zerone-host-genesis-floor-")), "host.sqlite");
     let store = new ZeroneAgentHostStore(path, { create: true });
     store.initialize();
-    store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     const reserved = store.reserveOperation(values.reserve());
     rewriteEventChain(store, reserved.operation_id, (kind, details) => kind === "reserved"
       ? { ...details, balance_uzrn: "100000" }
@@ -216,7 +235,7 @@ describe("event-derived mutable state", () => {
     const path = join(mkdtempSync(join(tmpdir(), "zerone-host-signer-floor-")), "host.sqlite");
     let store = new ZeroneAgentHostStore(path, { create: true });
     store.initialize();
-    store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     const reserved = store.reserveOperation(values.reserve());
     const signerSnapshot = {
       ...values.snapshot,

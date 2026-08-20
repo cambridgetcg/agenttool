@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
+import * as ed25519 from "@noble/ed25519";
 import {
+  base64UrlDecode,
   base64UrlEncode,
   canonicalJson,
   keyIdForPublicKey,
@@ -13,19 +17,33 @@ import {
 import {
   createTreasuryPolicy,
   createWalletIdentityBinding,
+  createWalletIdentityBindingProofEnvelope,
+  createWalletIdentityBindingSigningRequest,
+  type WalletIdentityBinding,
+  type VerifiedWalletIdentityBindingProof,
 } from "@agenttool/zerone-agent-economy";
 import { Database } from "bun:sqlite";
 
 import { eventHash } from "../src/events.js";
-import { GENESIS_EVENT_HASH, ZeroneAgentHostStore } from "../src/index.js";
+import {
+  createBindingCurrentnessAssertion,
+  GENESIS_EVENT_HASH,
+  ZeroneAgentHostStore,
+} from "../src/index.js";
 import type {
-  BindingProofReference,
+  BindingCurrentnessAssertion,
   ReserveOperationInput,
   ZeroneAccountSnapshot,
 } from "../src/index.js";
 
 export const TIME = "2026-08-20T20:00:00.000Z";
 export const LATER = "2026-08-20T20:01:00.000Z";
+
+ed25519.etc.sha512Sync = (...messages: Uint8Array[]) => {
+  const digest = createHash("sha512");
+  for (const message of messages) digest.update(message);
+  return Uint8Array.from(digest.digest());
+};
 
 export function rewriteEventChain(
   store: ZeroneAgentHostStore,
@@ -87,12 +105,58 @@ export const SECP_PUBLIC_KEY = Uint8Array.from(Buffer.from(
   "hex",
 ));
 
+export const SECP_PRIVATE_KEY = Uint8Array.from(
+  { length: 32 },
+  (_, index) => index === 31 ? 1 : 0,
+);
+
+export const ED25519_PRIVATE_KEY = Uint8Array.from(
+  { length: 32 },
+  (_, index) => index + 1,
+);
+
 function authority(): Ed25519PublicKey {
-  const publicKey = base64UrlEncode(Uint8Array.from({ length: 32 }, (_, index) => index + 1));
+  const publicKey = base64UrlEncode(ed25519.getPublicKey(ED25519_PRIVATE_KEY));
   return Object.freeze({
     algorithm: "Ed25519",
     key_id: keyIdForPublicKey(publicKey),
     public_key: publicKey,
+  });
+}
+
+export function proofForBinding(
+  binding: WalletIdentityBinding,
+  secpPrivateKey: Uint8Array = SECP_PRIVATE_KEY,
+): VerifiedWalletIdentityBindingProof {
+  const request = createWalletIdentityBindingSigningRequest(binding);
+  const digest = base64UrlDecode(request.shared_signing_digest_b64u);
+  return createWalletIdentityBindingProofEnvelope({
+    binding,
+    identity_signature_b64u: base64UrlEncode(ed25519.sign(digest, ED25519_PRIVATE_KEY)),
+    wallet_signature_b64u: base64UrlEncode(secp256k1.sign(
+      digest,
+      secpPrivateKey,
+      { prehash: false, lowS: true, format: "compact" },
+    )),
+  });
+}
+
+export function currentnessForProof(
+  proof: VerifiedWalletIdentityBindingProof,
+  overrides: Partial<{
+    verifier_id: string;
+    verified_at: string;
+    valid_until: string;
+    wallet_revocation_nonce: number;
+  }> = {},
+): BindingCurrentnessAssertion {
+  return createBindingCurrentnessAssertion({
+    binding_id: proof.binding.binding_id,
+    proof_id: proof.proof_id,
+    verifier_id: overrides.verifier_id ?? "injected-currentness-verifier-v0",
+    verified_at: overrides.verified_at ?? "2026-08-20T19:30:00.000Z",
+    valid_until: overrides.valid_until ?? "2026-08-21T19:30:00.000Z",
+    wallet_revocation_nonce: overrides.wallet_revocation_nonce ?? 0,
   });
 }
 
@@ -131,15 +195,8 @@ export function fixture() {
     previous_binding_id: null,
     issued_at: "2026-08-20T19:00:00.000Z",
   });
-  const proof: BindingProofReference = Object.freeze({
-    format: "agenttool.zerone-binding-proof-reference/0.1",
-    proof_id: hash("2"),
-    verifier_id: "injected-dual-key-verifier-v0",
-    verified_at: "2026-08-20T19:30:00.000Z",
-    wallet_revocation_nonce: 0,
-    currentness: "asserted_by_injected_resolver",
-    effects_performed: false,
-  });
+  const proof = proofForBinding(binding);
+  const currentness = currentnessForProof(proof);
   const treasury = createTreasuryPolicy({
     wallet_binding: binding,
     network: "testnet",
@@ -182,6 +239,7 @@ export function fixture() {
       wallet_id: binding.wallet_id,
       binding_id: binding.binding_id,
       proof_id: proof.proof_id,
+      currentness_id: currentness.currentness_id,
       head_version: 1,
     },
     authorization: {
@@ -210,5 +268,5 @@ export function fixture() {
     created_at: TIME,
     ...overrides,
   });
-  return { profile, account, binding, proof, treasury, snapshot, reserve };
+  return { profile, account, binding, proof, currentness, treasury, snapshot, reserve };
 }

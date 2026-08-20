@@ -3,10 +3,12 @@ import { canonicalJson } from "@agenttool/wallet";
 import {
   assertWalletIdentityBindingSuccessor,
   validateTreasuryPolicy,
-  validateWalletIdentityBinding,
+  verifyWalletIdentityBindingProofEnvelope,
   type TreasuryPolicy,
   type TreasuryPurpose,
   type WalletIdentityBinding,
+  type WalletIdentityBindingProofEnvelope,
+  type VerifiedWalletIdentityBindingProof,
 } from "@agenttool/zerone-agent-economy";
 
 import {
@@ -22,7 +24,7 @@ import { SecureSqliteFiles } from "./filesystem.js";
 import type {
   BindingHead,
   BindingHeadExpectation,
-  BindingProofReference,
+  BindingCurrentnessAssertion,
   BroadcastEvidence,
   BroadcastInvocationBoundary,
   CanonicalReorgEvidence,
@@ -55,7 +57,7 @@ import {
   networkForChain,
   parseUint64,
   validateAccountSnapshot,
-  validateProofReference,
+  validateBindingCurrentnessAssertion,
 } from "./validation.js";
 
 interface BindingHeadRow {
@@ -63,6 +65,7 @@ interface BindingHeadRow {
   head_version: number;
   binding_id: Sha256Id;
   proof_id: Sha256Id;
+  currentness_id: Sha256Id;
   binding_revision: number;
   continuity_sequence: number;
   revocation_nonce: number;
@@ -70,18 +73,20 @@ interface BindingHeadRow {
   signer_key_id: Sha256Id;
   source_account: ZeroneAccountId;
   network: "mainnet" | "testnet";
-  binding_json: string;
-  proof_json: string;
+  proof_envelope_json: string;
+  currentness_json: string;
   updated_at: string;
 }
 
 interface BindingHistoryRow {
+  currentness_id: Sha256Id;
   proof_id: Sha256Id;
   wallet_id: string;
   head_version: number;
   binding_id: Sha256Id;
-  binding_json: string;
-  proof_json: string;
+  source_account: ZeroneAccountId;
+  proof_envelope_json: string;
+  currentness_json: string;
   recorded_at: string;
 }
 
@@ -125,6 +130,7 @@ interface OperationRow {
   wallet_id: string;
   binding_id: Sha256Id;
   proof_id: Sha256Id;
+  currentness_id: Sha256Id;
   binding_head_version: number;
   descriptor_id: Sha256Id;
   capability_record_id: Sha256Id;
@@ -243,13 +249,13 @@ const TABLE_COLUMNS = Object.freeze({
     "halt_evidence_id", "halted_at", "revision", "observed_at",
   ],
   binding_heads: [
-    "wallet_id", "head_version", "binding_id", "proof_id", "binding_revision",
+    "wallet_id", "head_version", "binding_id", "proof_id", "currentness_id", "binding_revision",
     "continuity_sequence", "revocation_nonce", "descriptor_id", "signer_key_id",
-    "source_account", "network", "binding_json", "proof_json", "updated_at",
+    "source_account", "network", "proof_envelope_json", "currentness_json", "updated_at",
   ],
   binding_history: [
-    "proof_id", "wallet_id", "head_version", "binding_id", "binding_json",
-    "proof_json", "recorded_at",
+    "currentness_id", "proof_id", "wallet_id", "head_version", "binding_id",
+    "source_account", "proof_envelope_json", "currentness_json", "recorded_at",
   ],
   capability_usage: [
     "capability_record_id", "wallet_id", "descriptor_id", "policy_hash",
@@ -263,7 +269,7 @@ const TABLE_COLUMNS = Object.freeze({
   ],
   operations: [
     "operation_id", "revision", "status", "wallet_id", "binding_id", "proof_id",
-    "binding_head_version", "descriptor_id", "capability_record_id",
+    "currentness_id", "binding_head_version", "descriptor_id", "capability_record_id",
     "capability_revocation_nonce", "authorization_verification_id", "intent_record_id", "simulation_record_id",
     "plan_reference_id", "treasury_policy_id", "treasury_policy_json",
     "window_start_height", "reserve_floor_uzrn", "chain_id", "source_account",
@@ -283,22 +289,22 @@ const TABLE_COLUMNS = Object.freeze({
 
 const TABLE_SIGNATURES: Readonly<Record<keyof typeof TABLE_COLUMNS, string>> = Object.freeze({
   account_states: "chain_id:TEXT:1:1|source_account:TEXT:1:2|account_number:TEXT:1:0|sequence:TEXT:1:0|balance_uzrn:TEXT:1:0|observed_at_height:TEXT:1:0|block_hash:TEXT:1:0|halted:INTEGER:1:0|halted_at_height:TEXT:0:0|halt_evidence_id:TEXT:0:0|halted_at:TEXT:0:0|revision:INTEGER:1:0|observed_at:TEXT:1:0",
-  binding_heads: "wallet_id:TEXT:0:1|head_version:INTEGER:1:0|binding_id:TEXT:1:0|proof_id:TEXT:1:0|binding_revision:INTEGER:1:0|continuity_sequence:INTEGER:1:0|revocation_nonce:INTEGER:1:0|descriptor_id:TEXT:1:0|signer_key_id:TEXT:1:0|source_account:TEXT:1:0|network:TEXT:1:0|binding_json:TEXT:1:0|proof_json:TEXT:1:0|updated_at:TEXT:1:0",
-  binding_history: "proof_id:TEXT:0:1|wallet_id:TEXT:1:0|head_version:INTEGER:1:0|binding_id:TEXT:1:0|binding_json:TEXT:1:0|proof_json:TEXT:1:0|recorded_at:TEXT:1:0",
+  binding_heads: "wallet_id:TEXT:0:1|head_version:INTEGER:1:0|binding_id:TEXT:1:0|proof_id:TEXT:1:0|currentness_id:TEXT:1:0|binding_revision:INTEGER:1:0|continuity_sequence:INTEGER:1:0|revocation_nonce:INTEGER:1:0|descriptor_id:TEXT:1:0|signer_key_id:TEXT:1:0|source_account:TEXT:1:0|network:TEXT:1:0|proof_envelope_json:TEXT:1:0|currentness_json:TEXT:1:0|updated_at:TEXT:1:0",
+  binding_history: "currentness_id:TEXT:0:1|proof_id:TEXT:1:0|wallet_id:TEXT:1:0|head_version:INTEGER:1:0|binding_id:TEXT:1:0|source_account:TEXT:1:0|proof_envelope_json:TEXT:1:0|currentness_json:TEXT:1:0|recorded_at:TEXT:1:0",
   capability_usage: "capability_record_id:TEXT:0:1|wallet_id:TEXT:1:0|descriptor_id:TEXT:1:0|policy_hash:TEXT:1:0|revocation_nonce:INTEGER:1:0|max_intents:INTEGER:1:0|max_spend_uzrn:TEXT:1:0|max_fee_per_intent_uzrn:TEXT:1:0|reserved_intents:INTEGER:1:0|consumed_intents:INTEGER:1:0|reserved_spend_uzrn:TEXT:1:0|consumed_spend_uzrn:TEXT:1:0|version:INTEGER:1:0|updated_at:TEXT:1:0",
   operation_events: "ledger_sequence:INTEGER:0:1|operation_id:TEXT:1:0|sequence:INTEGER:1:0|kind:TEXT:1:0|at:TEXT:1:0|details_json:TEXT:1:0|previous_event_hash:TEXT:1:0|event_hash:TEXT:1:0",
-  operations: "operation_id:TEXT:0:1|revision:INTEGER:1:0|status:TEXT:1:0|wallet_id:TEXT:1:0|binding_id:TEXT:1:0|proof_id:TEXT:1:0|binding_head_version:INTEGER:1:0|descriptor_id:TEXT:1:0|capability_record_id:TEXT:1:0|capability_revocation_nonce:INTEGER:1:0|authorization_verification_id:TEXT:1:0|intent_record_id:TEXT:1:0|simulation_record_id:TEXT:1:0|plan_reference_id:TEXT:1:0|treasury_policy_id:TEXT:1:0|treasury_policy_json:TEXT:1:0|window_start_height:TEXT:1:0|reserve_floor_uzrn:TEXT:1:0|chain_id:TEXT:1:0|source_account:TEXT:1:0|account_number:TEXT:1:0|sequence:TEXT:1:0|signer_key_id:TEXT:1:0|signer_invoked:INTEGER:1:0|request_id:TEXT:0:0|unsigned_payload_hash:TEXT:0:0|signing_boundary_verification_id:TEXT:0:0|tx_hash:TEXT:0:0|signed_payload_hash:TEXT:0:0|signed_verification_id:TEXT:0:0|inclusion_height:TEXT:0:0|inclusion_block_hash:TEXT:0:0|inclusion_code:INTEGER:0:0|inclusion_codespace:TEXT:0:0|unresolved_reorg_event_sequence:INTEGER:0:0|unresolved_reorg_evidence_id:TEXT:0:0|event_count:INTEGER:1:0|event_head_hash:TEXT:1:0|created_at:TEXT:1:0|updated_at:TEXT:1:0",
+  operations: "operation_id:TEXT:0:1|revision:INTEGER:1:0|status:TEXT:1:0|wallet_id:TEXT:1:0|binding_id:TEXT:1:0|proof_id:TEXT:1:0|currentness_id:TEXT:1:0|binding_head_version:INTEGER:1:0|descriptor_id:TEXT:1:0|capability_record_id:TEXT:1:0|capability_revocation_nonce:INTEGER:1:0|authorization_verification_id:TEXT:1:0|intent_record_id:TEXT:1:0|simulation_record_id:TEXT:1:0|plan_reference_id:TEXT:1:0|treasury_policy_id:TEXT:1:0|treasury_policy_json:TEXT:1:0|window_start_height:TEXT:1:0|reserve_floor_uzrn:TEXT:1:0|chain_id:TEXT:1:0|source_account:TEXT:1:0|account_number:TEXT:1:0|sequence:TEXT:1:0|signer_key_id:TEXT:1:0|signer_invoked:INTEGER:1:0|request_id:TEXT:0:0|unsigned_payload_hash:TEXT:0:0|signing_boundary_verification_id:TEXT:0:0|tx_hash:TEXT:0:0|signed_payload_hash:TEXT:0:0|signed_verification_id:TEXT:0:0|inclusion_height:TEXT:0:0|inclusion_block_hash:TEXT:0:0|inclusion_code:INTEGER:0:0|inclusion_codespace:TEXT:0:0|unresolved_reorg_event_sequence:INTEGER:0:0|unresolved_reorg_evidence_id:TEXT:0:0|event_count:INTEGER:1:0|event_head_hash:TEXT:1:0|created_at:TEXT:1:0|updated_at:TEXT:1:0",
   sequence_fences: "operation_id:TEXT:0:1|chain_id:TEXT:1:0|source_account:TEXT:1:0|account_number:TEXT:1:0|sequence:TEXT:1:0|state:TEXT:1:0|acquired_at:TEXT:1:0|released_at:TEXT:0:0|release_evidence_id:TEXT:0:0",
   treasury_reservations: "operation_id:TEXT:1:1|purpose:TEXT:1:2|amount_uzrn:TEXT:1:0|state:TEXT:1:0",
 });
 
 const TABLE_SQL: Readonly<Record<keyof typeof TABLE_COLUMNS, string>> = Object.freeze({
   account_states: "create table account_states (chain_id text not null, source_account text not null, account_number text not null, sequence text not null, balance_uzrn text not null, observed_at_height text not null, block_hash text not null, halted integer not null check(halted in (0, 1)), halted_at_height text, halt_evidence_id text, halted_at text, revision integer not null check(revision >= 1), observed_at text not null, primary key(chain_id, source_account))",
-  binding_heads: "create table binding_heads (wallet_id text primary key, head_version integer not null check(head_version >= 1), binding_id text not null unique, proof_id text not null references binding_history(proof_id), binding_revision integer not null check(binding_revision >= 1), continuity_sequence integer not null check(continuity_sequence >= 0), revocation_nonce integer not null check(revocation_nonce >= 0), descriptor_id text not null, signer_key_id text not null, source_account text not null unique, network text not null check(network in ('mainnet', 'testnet')), binding_json text not null, proof_json text not null, updated_at text not null)",
-  binding_history: "create table binding_history (proof_id text primary key, wallet_id text not null, head_version integer not null check(head_version >= 1), binding_id text not null, binding_json text not null, proof_json text not null, recorded_at text not null, unique(wallet_id, head_version), unique(binding_id, proof_id))",
+  binding_heads: "create table binding_heads (wallet_id text primary key, head_version integer not null check(head_version >= 1), binding_id text not null unique, proof_id text not null, currentness_id text not null references binding_history(currentness_id), binding_revision integer not null check(binding_revision >= 1), continuity_sequence integer not null check(continuity_sequence >= 0), revocation_nonce integer not null check(revocation_nonce >= 0), descriptor_id text not null, signer_key_id text not null, source_account text not null unique, network text not null check(network in ('mainnet', 'testnet')), proof_envelope_json text not null, currentness_json text not null, updated_at text not null)",
+  binding_history: "create table binding_history (currentness_id text primary key, proof_id text not null, wallet_id text not null, head_version integer not null check(head_version >= 1), binding_id text not null, source_account text not null, proof_envelope_json text not null, currentness_json text not null, recorded_at text not null, unique(wallet_id, head_version))",
   capability_usage: "create table capability_usage (capability_record_id text primary key, wallet_id text not null references binding_heads(wallet_id), descriptor_id text not null, policy_hash text not null, revocation_nonce integer not null check(revocation_nonce >= 0), max_intents integer not null check(max_intents >= 1), max_spend_uzrn text not null, max_fee_per_intent_uzrn text not null, reserved_intents integer not null check(reserved_intents >= 0), consumed_intents integer not null check(consumed_intents >= 0), reserved_spend_uzrn text not null, consumed_spend_uzrn text not null, version integer not null check(version >= 1), updated_at text not null)",
   operation_events: "create table operation_events (ledger_sequence integer primary key, operation_id text not null references operations(operation_id), sequence integer not null check(sequence >= 1), kind text not null, at text not null, details_json text not null, previous_event_hash text not null, event_hash text not null unique, unique(operation_id, sequence))",
-  operations: "create table operations (operation_id text primary key, revision integer not null check(revision >= 1), status text not null check(status in ('reserved', 'signing', 'signing_unknown', 'signed', 'submitting', 'submission_unknown', 'submitted', 'rejected_pre_submit_sticky', 'confirmed_success', 'confirmed_failed', 'reorged', 'sequence_superseded', 'released_pre_sign')), wallet_id text not null references binding_heads(wallet_id), binding_id text not null, proof_id text not null references binding_history(proof_id), binding_head_version integer not null, descriptor_id text not null, capability_record_id text not null references capability_usage(capability_record_id), capability_revocation_nonce integer not null, authorization_verification_id text not null unique, intent_record_id text not null unique, simulation_record_id text not null, plan_reference_id text not null, treasury_policy_id text not null, treasury_policy_json text not null, window_start_height text not null, reserve_floor_uzrn text not null, chain_id text not null, source_account text not null, account_number text not null, sequence text not null, signer_key_id text not null, signer_invoked integer not null check(signer_invoked in (0, 1)), request_id text unique, unsigned_payload_hash text, signing_boundary_verification_id text, tx_hash text unique, signed_payload_hash text, signed_verification_id text, inclusion_height text, inclusion_block_hash text, inclusion_code integer, inclusion_codespace text, unresolved_reorg_event_sequence integer, unresolved_reorg_evidence_id text, event_count integer not null check(event_count >= 0), event_head_hash text not null, created_at text not null, updated_at text not null, check((unresolved_reorg_event_sequence is null and unresolved_reorg_evidence_id is null) or (unresolved_reorg_event_sequence >= 1 and unresolved_reorg_evidence_id is not null)))",
+  operations: "create table operations (operation_id text primary key, revision integer not null check(revision >= 1), status text not null check(status in ('reserved', 'signing', 'signing_unknown', 'signed', 'submitting', 'submission_unknown', 'submitted', 'rejected_pre_submit_sticky', 'confirmed_success', 'confirmed_failed', 'reorged', 'sequence_superseded', 'released_pre_sign')), wallet_id text not null references binding_heads(wallet_id), binding_id text not null, proof_id text not null, currentness_id text not null references binding_history(currentness_id), binding_head_version integer not null, descriptor_id text not null, capability_record_id text not null references capability_usage(capability_record_id), capability_revocation_nonce integer not null, authorization_verification_id text not null unique, intent_record_id text not null unique, simulation_record_id text not null, plan_reference_id text not null, treasury_policy_id text not null, treasury_policy_json text not null, window_start_height text not null, reserve_floor_uzrn text not null, chain_id text not null, source_account text not null, account_number text not null, sequence text not null, signer_key_id text not null, signer_invoked integer not null check(signer_invoked in (0, 1)), request_id text unique, unsigned_payload_hash text, signing_boundary_verification_id text, tx_hash text unique, signed_payload_hash text, signed_verification_id text, inclusion_height text, inclusion_block_hash text, inclusion_code integer, inclusion_codespace text, unresolved_reorg_event_sequence integer, unresolved_reorg_evidence_id text, event_count integer not null check(event_count >= 0), event_head_hash text not null, created_at text not null, updated_at text not null, check((unresolved_reorg_event_sequence is null and unresolved_reorg_evidence_id is null) or (unresolved_reorg_event_sequence >= 1 and unresolved_reorg_evidence_id is not null)))",
   sequence_fences: "create table sequence_fences (operation_id text primary key references operations(operation_id), chain_id text not null, source_account text not null, account_number text not null, sequence text not null, state text not null check(state in ('held', 'released')), acquired_at text not null, released_at text, release_evidence_id text)",
   treasury_reservations: "create table treasury_reservations (operation_id text not null references operations(operation_id), purpose text not null check(purpose in ('compute', 'knowledge_bond', 'network_fee', 'sponsorship_escrow', 'storage')), amount_uzrn text not null, state text not null check(state in ('reserved', 'sticky', 'settled', 'released')), primary key(operation_id, purpose))",
 });
@@ -307,8 +313,8 @@ const INDEX_SIGNATURES: Readonly<Record<keyof typeof TABLE_COLUMNS, readonly str
   account_states: ["1:pk:0:chain_id,source_account"],
   binding_heads: ["1:pk:0:wallet_id", "1:u:0:binding_id", "1:u:0:source_account"],
   binding_history: [
-    "1:pk:0:proof_id",
-    "1:u:0:binding_id,proof_id",
+    "0:c:0:source_account",
+    "1:pk:0:currentness_id",
     "1:u:0:wallet_id,head_version",
   ],
   capability_usage: ["1:pk:0:capability_record_id"],
@@ -328,13 +334,13 @@ const INDEX_SIGNATURES: Readonly<Record<keyof typeof TABLE_COLUMNS, readonly str
 
 const FOREIGN_KEY_SIGNATURES: Readonly<Record<keyof typeof TABLE_COLUMNS, readonly string[]>> = Object.freeze({
   account_states: [],
-  binding_heads: ["proof_id->binding_history.proof_id:NO ACTION:NO ACTION:NONE"],
+  binding_heads: ["currentness_id->binding_history.currentness_id:NO ACTION:NO ACTION:NONE"],
   binding_history: [],
   capability_usage: ["wallet_id->binding_heads.wallet_id:NO ACTION:NO ACTION:NONE"],
   operation_events: ["operation_id->operations.operation_id:NO ACTION:NO ACTION:NONE"],
   operations: [
     "capability_record_id->capability_usage.capability_record_id:NO ACTION:NO ACTION:NONE",
-    "proof_id->binding_history.proof_id:NO ACTION:NO ACTION:NONE",
+    "currentness_id->binding_history.currentness_id:NO ACTION:NO ACTION:NONE",
     "wallet_id->binding_heads.wallet_id:NO ACTION:NO ACTION:NONE",
   ],
   sequence_fences: ["operation_id->operations.operation_id:NO ACTION:NO ACTION:NONE"],
@@ -482,21 +488,23 @@ export class ZeroneAgentHostStore {
     const statuses = OPERATION_STATUSES.map((status) => `'${status}'`).join(", ");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS binding_history (
-        proof_id TEXT PRIMARY KEY,
+        currentness_id TEXT PRIMARY KEY,
+        proof_id TEXT NOT NULL,
         wallet_id TEXT NOT NULL,
         head_version INTEGER NOT NULL CHECK(head_version >= 1),
         binding_id TEXT NOT NULL,
-        binding_json TEXT NOT NULL,
-        proof_json TEXT NOT NULL,
+        source_account TEXT NOT NULL,
+        proof_envelope_json TEXT NOT NULL,
+        currentness_json TEXT NOT NULL,
         recorded_at TEXT NOT NULL,
-        UNIQUE(wallet_id, head_version),
-        UNIQUE(binding_id, proof_id)
+        UNIQUE(wallet_id, head_version)
       );
       CREATE TABLE IF NOT EXISTS binding_heads (
         wallet_id TEXT PRIMARY KEY,
         head_version INTEGER NOT NULL CHECK(head_version >= 1),
         binding_id TEXT NOT NULL UNIQUE,
-        proof_id TEXT NOT NULL REFERENCES binding_history(proof_id),
+        proof_id TEXT NOT NULL,
+        currentness_id TEXT NOT NULL REFERENCES binding_history(currentness_id),
         binding_revision INTEGER NOT NULL CHECK(binding_revision >= 1),
         continuity_sequence INTEGER NOT NULL CHECK(continuity_sequence >= 0),
         revocation_nonce INTEGER NOT NULL CHECK(revocation_nonce >= 0),
@@ -504,8 +512,8 @@ export class ZeroneAgentHostStore {
         signer_key_id TEXT NOT NULL,
         source_account TEXT NOT NULL UNIQUE,
         network TEXT NOT NULL CHECK(network IN ('mainnet', 'testnet')),
-        binding_json TEXT NOT NULL,
-        proof_json TEXT NOT NULL,
+        proof_envelope_json TEXT NOT NULL,
+        currentness_json TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS capability_usage (
@@ -546,7 +554,8 @@ export class ZeroneAgentHostStore {
         status TEXT NOT NULL CHECK(status IN (${statuses})),
         wallet_id TEXT NOT NULL REFERENCES binding_heads(wallet_id),
         binding_id TEXT NOT NULL,
-        proof_id TEXT NOT NULL REFERENCES binding_history(proof_id),
+        proof_id TEXT NOT NULL,
+        currentness_id TEXT NOT NULL REFERENCES binding_history(currentness_id),
         binding_head_version INTEGER NOT NULL,
         descriptor_id TEXT NOT NULL,
         capability_record_id TEXT NOT NULL REFERENCES capability_usage(capability_record_id),
@@ -622,6 +631,8 @@ export class ZeroneAgentHostStore {
         ON sequence_fences(chain_id, source_account) WHERE state = 'held';
       CREATE INDEX IF NOT EXISTS operations_capability_idx
         ON operations(capability_record_id, created_at);
+      CREATE INDEX IF NOT EXISTS binding_history_source_account_idx
+        ON binding_history(source_account);
       CREATE INDEX IF NOT EXISTS operations_treasury_window_idx
         ON operations(chain_id, source_account, window_start_height);
       CREATE INDEX IF NOT EXISTS treasury_reservations_state_idx
@@ -638,6 +649,9 @@ export class ZeroneAgentHostStore {
       CREATE TRIGGER IF NOT EXISTS binding_history_no_delete
         BEFORE DELETE ON binding_history
         BEGIN SELECT RAISE(ABORT, 'binding history is append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS binding_heads_no_delete
+        BEFORE DELETE ON binding_heads
+        BEGIN SELECT RAISE(ABORT, 'binding heads cannot be deleted'); END;
     `);
     if (initialVersion === 0) this.db.exec(`PRAGMA user_version = ${SQLITE_SCHEMA_VERSION}`);
     this.assertSchema();
@@ -668,11 +682,11 @@ export class ZeroneAgentHostStore {
     `).all() as Array<{ name: keyof typeof TABLE_COLUMNS; sql: string | null }>;
     const expectedNames = Object.keys(TABLE_COLUMNS).sort();
     if (tables.map(({ name }) => name).join("\0") !== expectedNames.join("\0")) {
-      fail("integrity_error", "Host ledger application-table set is not the v1 schema");
+      fail("integrity_error", "Host ledger application-table set is not the v2 schema");
     }
     for (const { name, sql } of tables) {
       if (normalizeSql(sql) !== TABLE_SQL[name]) {
-        fail("integrity_error", `Host ledger ${name} CREATE TABLE SQL is not the v1 schema`);
+        fail("integrity_error", `Host ledger ${name} CREATE TABLE SQL is not the v2 schema`);
       }
       const columns = this.db.query(`PRAGMA table_info(${name})`).all() as TableInfoRow[];
       const signature = columns
@@ -682,7 +696,7 @@ export class ZeroneAgentHostStore {
         columns.map(({ name: column }) => column).join("\0") !== TABLE_COLUMNS[name].join("\0")
         || signature !== TABLE_SIGNATURES[name]
       ) {
-        fail("integrity_error", `Host ledger ${name} columns are not the v1 schema`);
+        fail("integrity_error", `Host ledger ${name} columns are not the v2 schema`);
       }
       const indexes = (this.db.query(`PRAGMA index_list(${name})`).all() as IndexListRow[])
         .map((index) => {
@@ -694,7 +708,7 @@ export class ZeroneAgentHostStore {
         })
         .sort();
       if (indexes.join("|") !== [...INDEX_SIGNATURES[name]].sort().join("|")) {
-        fail("integrity_error", `Host ledger ${name} indexes are not the v1 schema`);
+        fail("integrity_error", `Host ledger ${name} indexes are not the v2 schema`);
       }
       const foreignKeys = (this.db.query(`PRAGMA foreign_key_list(${name})`).all() as Array<{
         table: string;
@@ -707,7 +721,7 @@ export class ZeroneAgentHostStore {
         `${foreignKey.from}->${foreignKey.table}.${foreignKey.to}:${foreignKey.on_update}:${foreignKey.on_delete}:${foreignKey.match}`)
         .sort();
       if (foreignKeys.join("|") !== [...FOREIGN_KEY_SIGNATURES[name]].sort().join("|")) {
-        fail("integrity_error", `Host ledger ${name} foreign keys are not the v1 schema`);
+        fail("integrity_error", `Host ledger ${name} foreign keys are not the v2 schema`);
       }
     }
     const requiredObjects = [
@@ -715,6 +729,8 @@ export class ZeroneAgentHostStore {
       "operation_events_no_update",
       "binding_history_no_delete",
       "binding_history_no_update",
+      "binding_history_source_account_idx",
+      "binding_heads_no_delete",
       "operations_capability_idx",
       "operations_treasury_window_idx",
       "sequence_fences_one_held_account_idx",
@@ -730,6 +746,10 @@ export class ZeroneAgentHostStore {
       fail("integrity_error", "Host ledger indexes or append-only triggers are incomplete");
     }
     const expectedTriggers = new Map<string, string>([
+      [
+        "binding_heads_no_delete",
+        "create trigger binding_heads_no_delete before delete on binding_heads begin select raise(abort, 'binding heads cannot be deleted'); end",
+      ],
       [
         "binding_history_no_delete",
         "create trigger binding_history_no_delete before delete on binding_history begin select raise(abort, 'binding history is append-only'); end",
@@ -754,9 +774,13 @@ export class ZeroneAgentHostStore {
       triggers.length !== expectedTriggers.size
       || triggers.some(({ name, sql }) => normalizeSql(sql) !== expectedTriggers.get(name))
     ) {
-      fail("integrity_error", "Operation event append-only triggers are not the v1 schema");
+      fail("integrity_error", "Operation event append-only triggers are not the v2 schema");
     }
     const expectedIndexes = new Map<string, string>([
+      [
+        "binding_history_source_account_idx",
+        "create index binding_history_source_account_idx on binding_history(source_account)",
+      ],
       [
         "operations_capability_idx",
         "create index operations_capability_idx on operations(capability_record_id, created_at)",
@@ -783,35 +807,43 @@ export class ZeroneAgentHostStore {
       applicationIndexes.length !== expectedIndexes.size
       || applicationIndexes.some(({ name, sql }) => normalizeSql(sql) !== expectedIndexes.get(name))
     ) {
-      fail("integrity_error", "Application index definitions are not the v1 schema");
+      fail("integrity_error", "Application index definitions are not the v2 schema");
     }
   }
 
   putBindingHead(
-    bindingValue: WalletIdentityBinding,
-    proofValue: BindingProofReference,
+    proofEnvelopeValue: WalletIdentityBindingProofEnvelope,
+    currentnessValue: BindingCurrentnessAssertion,
     options: {
       readonly expected: BindingHeadExpectation | null;
       readonly updated_at: string;
     },
   ): BindingHead {
-    const binding = validateWalletIdentityBinding(bindingValue);
-    const proof = validateProofReference(proofValue);
+    const proof = verifyWalletIdentityBindingProofEnvelope(proofEnvelopeValue);
+    const binding = proof.binding;
+    const currentness = validateBindingCurrentnessAssertion(currentnessValue);
     assertTimestamp(options.updated_at, "updated_at");
-    if (Date.parse(proof.verified_at) < Date.parse(binding.issued_at)) {
+    if (
+      currentness.binding_id !== binding.binding_id
+      || currentness.proof_id !== proof.proof_id
+    ) {
+      fail("authorization_denied", "Currentness assertion does not name the verified binding proof");
+    }
+    if (Date.parse(currentness.verified_at) < Date.parse(binding.issued_at)) {
       fail("authorization_denied", "Binding proof currentness predates the binding candidate");
     }
-    assertNotBefore(options.updated_at, proof.verified_at, "Binding-head update");
+    assertNotBefore(options.updated_at, currentness.verified_at, "Binding-head update");
+    if (Date.parse(options.updated_at) >= Date.parse(currentness.valid_until)) {
+      fail("authorization_denied", "Binding currentness is expired at the durable head update");
+    }
     this.files.tighten();
     this.verify();
     const apply = this.db.transaction((): BindingHead => {
-      const historicalAccountOwner = (this.db.query(`
-        SELECT wallet_id, binding_json FROM binding_history ORDER BY wallet_id, head_version
-      `).all() as Array<{ wallet_id: string; binding_json: string }>).find(({ binding_json }) =>
-        validateWalletIdentityBinding(JSON.parse(binding_json)).zerone_account_id
-          === binding.zerone_account_id);
+      const historicalAccountOwner = this.db.query(`
+        SELECT wallet_id FROM binding_history WHERE source_account = ? LIMIT 1
+      `).get(binding.zerone_account_id) as { wallet_id: string } | null;
       if (
-        historicalAccountOwner !== undefined
+        historicalAccountOwner !== null
         && historicalAccountOwner.wallet_id !== binding.wallet_id
       ) {
         fail(
@@ -827,33 +859,34 @@ export class ZeroneAgentHostStore {
         if (binding.revision !== 1 || binding.previous_binding_id !== null) {
           fail("conflict", "A new binding head must start at revision 1");
         }
-        this.insertBindingHistory(binding, proof, 1, options.updated_at);
+        this.insertBindingHistory(proof, currentness, 1, options.updated_at);
         this.db.query(`
           INSERT INTO binding_heads (
-            wallet_id, head_version, binding_id, proof_id, binding_revision,
+            wallet_id, head_version, binding_id, proof_id, currentness_id, binding_revision,
             continuity_sequence, revocation_nonce, descriptor_id, signer_key_id,
-            source_account, network, binding_json, proof_json, updated_at
-          ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            source_account, network, proof_envelope_json, currentness_json, updated_at
+          ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           binding.wallet_id,
           binding.binding_id,
           proof.proof_id,
+          currentness.currentness_id,
           binding.revision,
           binding.wallet_continuity_sequence,
-          proof.wallet_revocation_nonce,
+          currentness.wallet_revocation_nonce,
           binding.wallet_descriptor_id,
           binding.zerone_signer.key_id,
           binding.zerone_account_id,
           binding.network,
-          canonicalJson(binding),
           canonicalJson(proof),
+          canonicalJson(currentness),
           options.updated_at,
         );
         return this.getBindingHeadOrFail(binding.wallet_id);
       }
       this.assertBindingExpectation(existing, options.expected);
       assertNotBefore(options.updated_at, existing.updated_at, "Binding-head update");
-      assertNotBefore(proof.verified_at, existing.updated_at, "Binding proof observation");
+      assertNotBefore(currentness.verified_at, existing.updated_at, "Binding proof observation");
       const latestOperation = this.db.query(`
         SELECT updated_at FROM operations WHERE wallet_id = ?
         ORDER BY updated_at DESC, operation_id DESC LIMIT 1
@@ -867,47 +900,60 @@ export class ZeroneAgentHostStore {
           "Binding-head updates must be strictly later than existing wallet operation history",
         );
       }
-      const previous = validateWalletIdentityBinding(JSON.parse(existing.binding_json));
+      const previousProof = verifyWalletIdentityBindingProofEnvelope(
+        JSON.parse(existing.proof_envelope_json),
+      );
+      const previous = previousProof.binding;
       if (binding.binding_id === previous.binding_id) {
-        if (canonicalJson(binding) !== existing.binding_json) {
+        if (canonicalJson(binding) !== canonicalJson(previous)) {
           fail("conflict", "Current binding ID was supplied with different canonical bytes");
         }
-        if (proof.proof_id === existing.proof_id) {
-          fail("conflict", "Binding proof refresh must name a new content-bound proof ID");
+        if (
+          proof.proof_id === existing.proof_id
+          && canonicalJson(proof) !== existing.proof_envelope_json
+        ) {
+          fail("conflict", "Current proof ID was supplied with different canonical bytes");
         }
       } else {
+        assertNotBefore(binding.issued_at, existing.updated_at, "Binding successor issued_at");
         assertWalletIdentityBindingSuccessor(previous, binding);
       }
-      if (proof.wallet_revocation_nonce < existing.revocation_nonce) {
+      if (currentness.currentness_id === existing.currentness_id) {
+        fail("conflict", "Binding currentness refresh must name a new content-addressed assertion");
+      }
+      if (currentness.wallet_revocation_nonce < existing.revocation_nonce) {
         fail("conflict", "Wallet revocation nonce cannot move backwards");
       }
       const nextVersion = existing.head_version + 1;
-      this.insertBindingHistory(binding, proof, nextVersion, options.updated_at);
+      this.insertBindingHistory(proof, currentness, nextVersion, options.updated_at);
       const result = this.db.query(`
         UPDATE binding_heads SET
-          head_version = ?, binding_id = ?, proof_id = ?, binding_revision = ?,
+          head_version = ?, binding_id = ?, proof_id = ?, currentness_id = ?, binding_revision = ?,
           continuity_sequence = ?, revocation_nonce = ?, descriptor_id = ?,
-          signer_key_id = ?, source_account = ?, network = ?, binding_json = ?,
-          proof_json = ?, updated_at = ?
+          signer_key_id = ?, source_account = ?, network = ?, proof_envelope_json = ?,
+          currentness_json = ?, updated_at = ?
         WHERE wallet_id = ? AND head_version = ? AND binding_id = ? AND proof_id = ?
+          AND currentness_id = ?
       `).run(
         nextVersion,
         binding.binding_id,
         proof.proof_id,
+        currentness.currentness_id,
         binding.revision,
         binding.wallet_continuity_sequence,
-        proof.wallet_revocation_nonce,
+        currentness.wallet_revocation_nonce,
         binding.wallet_descriptor_id,
         binding.zerone_signer.key_id,
         binding.zerone_account_id,
         binding.network,
-        canonicalJson(binding),
         canonicalJson(proof),
+        canonicalJson(currentness),
         options.updated_at,
         existing.wallet_id,
         existing.head_version,
         existing.binding_id,
         existing.proof_id,
+        existing.currentness_id,
       );
       if (result.changes !== 1) fail("conflict", "Binding-head compare-and-swap lost its race");
       return this.getBindingHeadOrFail(binding.wallet_id);
@@ -919,7 +965,7 @@ export class ZeroneAgentHostStore {
     } catch (error) {
       if (error instanceof ZeroneAgentHostError) throw error;
       if (error instanceof Error && /UNIQUE constraint failed/u.test(error.message)) {
-        fail("conflict", "Binding identity, proof, version, or source account is already consumed");
+        fail("conflict", "Binding identity, currentness, version, or source account is already consumed");
       }
       throw error;
     }
@@ -943,7 +989,8 @@ export class ZeroneAgentHostStore {
 
   private bindingHistoryAt(walletId: string, at: string): BindingHistoryRow | null {
     return this.db.query(`
-      SELECT proof_id, wallet_id, head_version, binding_id, binding_json, proof_json, recorded_at
+      SELECT currentness_id, proof_id, wallet_id, head_version, binding_id,
+        source_account, proof_envelope_json, currentness_json, recorded_at
       FROM binding_history
       WHERE wallet_id = ? AND recorded_at <= ?
       ORDER BY recorded_at DESC, head_version DESC LIMIT 1
@@ -951,32 +998,41 @@ export class ZeroneAgentHostStore {
   }
 
   private insertBindingHistory(
-    binding: WalletIdentityBinding,
-    proof: BindingProofReference,
+    proof: VerifiedWalletIdentityBindingProof,
+    currentness: BindingCurrentnessAssertion,
     headVersion: number,
     recordedAt: string,
   ): void {
     this.db.query(`
       INSERT INTO binding_history (
-        proof_id, wallet_id, head_version, binding_id, binding_json, proof_json, recorded_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        currentness_id, proof_id, wallet_id, head_version, binding_id,
+        source_account, proof_envelope_json, currentness_json, recorded_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
+      currentness.currentness_id,
       proof.proof_id,
-      binding.wallet_id,
+      proof.binding.wallet_id,
       headVersion,
-      binding.binding_id,
-      canonicalJson(binding),
+      proof.binding.binding_id,
+      proof.binding.zerone_account_id,
       canonicalJson(proof),
+      canonicalJson(currentness),
       recordedAt,
     );
   }
 
   private bindingRowToHead(row: BindingHeadRow): BindingHead {
+    const proof = verifyWalletIdentityBindingProofEnvelope(
+      JSON.parse(row.proof_envelope_json),
+    );
     return Object.freeze({
       wallet_id: row.wallet_id,
       head_version: row.head_version,
-      binding: validateWalletIdentityBinding(JSON.parse(row.binding_json)),
-      proof: validateProofReference(JSON.parse(row.proof_json) as BindingProofReference),
+      binding: proof.binding,
+      proof,
+      currentness: validateBindingCurrentnessAssertion(
+        JSON.parse(row.currentness_json) as BindingCurrentnessAssertion,
+      ),
       updated_at: row.updated_at,
     });
   }
@@ -990,6 +1046,7 @@ export class ZeroneAgentHostStore {
       || expected.wallet_id !== row.wallet_id
       || expected.binding_id !== row.binding_id
       || expected.proof_id !== row.proof_id
+      || expected.currentness_id !== row.currentness_id
       || expected.head_version !== row.head_version
     ) {
       fail("conflict", "Binding-head compare-and-swap expectation is stale");
@@ -1019,6 +1076,15 @@ export class ZeroneAgentHostStore {
       const head = this.bindingRow(input.binding_head.wallet_id);
       if (head === null) fail("authorization_denied", "Current binding head is absent");
       this.assertBindingExpectation(head, input.binding_head);
+      const headCurrentness = validateBindingCurrentnessAssertion(
+        JSON.parse(head.currentness_json) as BindingCurrentnessAssertion,
+      );
+      if (
+        Date.parse(input.created_at) < Date.parse(headCurrentness.verified_at)
+        || Date.parse(input.created_at) >= Date.parse(headCurrentness.valid_until)
+      ) {
+        fail("authorization_denied", "Binding currentness is not valid at operation reservation");
+      }
       if (
         head.descriptor_id !== input.capability.descriptor_id
         || head.signer_key_id !== input.signer_key_id
@@ -1156,7 +1222,7 @@ export class ZeroneAgentHostStore {
       this.db.query(`
         INSERT INTO operations (
           operation_id, revision, status, wallet_id, binding_id, proof_id,
-          binding_head_version, descriptor_id, capability_record_id,
+          currentness_id, binding_head_version, descriptor_id, capability_record_id,
           capability_revocation_nonce, authorization_verification_id,
           intent_record_id, simulation_record_id,
           plan_reference_id, treasury_policy_id, treasury_policy_json,
@@ -1168,7 +1234,7 @@ export class ZeroneAgentHostStore {
           unresolved_reorg_event_sequence, unresolved_reorg_evidence_id,
           event_count, event_head_hash, created_at, updated_at
         ) VALUES (
-          ?, 1, 'reserved', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, 1, 'reserved', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
           0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
           NULL, NULL, 0, ?, ?, ?
         )
@@ -1177,6 +1243,7 @@ export class ZeroneAgentHostStore {
         head.wallet_id,
         head.binding_id,
         head.proof_id,
+        head.currentness_id,
         head.head_version,
         head.descriptor_id,
         input.capability.capability_record_id,
@@ -1220,6 +1287,7 @@ export class ZeroneAgentHostStore {
       this.appendEvent(input.operation_id, "reserved", input.created_at, {
         binding_id: head.binding_id,
         proof_id: head.proof_id,
+        currentness_id: head.currentness_id,
         wallet_id: head.wallet_id,
         binding_head_version: head.head_version,
         descriptor_id: head.descriptor_id,
@@ -1274,6 +1342,7 @@ export class ZeroneAgentHostStore {
     assertIdentifier(input.binding_head.wallet_id, "binding_head.wallet_id");
     assertSha256Id(input.binding_head.binding_id, "binding_head.binding_id");
     assertSha256Id(input.binding_head.proof_id, "binding_head.proof_id");
+    assertSha256Id(input.binding_head.currentness_id, "binding_head.currentness_id");
     assertCount(input.binding_head.head_version, "binding_head.head_version", true);
     if (input.authorization.trust_boundary !== AUTHORIZATION_PROJECTION_BOUNDARY) {
       fail("invalid_input", "authorization trust boundary is not the injected Wallet projection boundary");
@@ -1493,6 +1562,7 @@ export class ZeroneAgentHostStore {
       wallet_id: row.wallet_id,
       binding_id: row.binding_id,
       proof_id: row.proof_id,
+      currentness_id: row.currentness_id,
       binding_head_version: row.binding_head_version,
       descriptor_id: row.descriptor_id,
       capability_record_id: row.capability_record_id,
@@ -1662,6 +1732,7 @@ export class ZeroneAgentHostStore {
           requireStatus(row.kind, status, ["reserved"]);
           assertEventShape(details, [
             "request_id", "unsigned_payload_hash", "external_verification_id",
+            "binding_id", "proof_id", "currentness_id", "binding_head_version",
             "chain_id", "source_account", "account_number", "account_sequence",
             "balance_uzrn", "observed_at_height", "observation_block_hash",
             "observation_at",
@@ -1672,6 +1743,13 @@ export class ZeroneAgentHostStore {
           signingVerificationId = eventString(details, "external_verification_id", label) as Sha256Id;
           assertSha256Id(unsignedPayloadHash, `${label}.unsigned_payload_hash`);
           assertSha256Id(signingVerificationId, `${label}.external_verification_id`);
+          const signerBindingId = eventString(details, "binding_id", label) as Sha256Id;
+          const signerProofId = eventString(details, "proof_id", label) as Sha256Id;
+          const signerCurrentnessId = eventString(details, "currentness_id", label) as Sha256Id;
+          const signerHeadVersion = eventSafeCount(details, "binding_head_version", label);
+          assertSha256Id(signerBindingId, `${label}.binding_id`);
+          assertSha256Id(signerProofId, `${label}.proof_id`);
+          assertSha256Id(signerCurrentnessId, `${label}.currentness_id`);
           const signerObservation = observation(
             details,
             "account_sequence",
@@ -1694,19 +1772,26 @@ export class ZeroneAgentHostStore {
           if (signerAuthority === null) {
             fail("integrity_error", `Signer event has no historical binding head: ${operation.operation_id}`);
           }
-          const signerBinding = validateWalletIdentityBinding(
-            JSON.parse(signerAuthority.binding_json),
+          const signerProof = verifyWalletIdentityBindingProofEnvelope(
+            JSON.parse(signerAuthority.proof_envelope_json),
           );
-          const signerProof = validateProofReference(
-            JSON.parse(signerAuthority.proof_json) as BindingProofReference,
+          const signerCurrentness = validateBindingCurrentnessAssertion(
+            JSON.parse(signerAuthority.currentness_json) as BindingCurrentnessAssertion,
           );
           if (
-            signerAuthority.binding_id !== operation.binding_id
+            signerBindingId !== operation.binding_id
+            || signerProofId !== operation.proof_id
+            || signerCurrentnessId !== operation.currentness_id
+            || signerHeadVersion !== operation.binding_head_version
+            || signerAuthority.binding_id !== operation.binding_id
             || signerAuthority.proof_id !== operation.proof_id
+            || signerAuthority.currentness_id !== operation.currentness_id
             || signerAuthority.head_version !== operation.binding_head_version
-            || signerBinding.wallet_descriptor_id !== operation.descriptor_id
-            || signerBinding.zerone_signer.key_id !== operation.signer_key_id
-            || signerProof.wallet_revocation_nonce !== operation.capability_revocation_nonce
+            || signerProof.binding.wallet_descriptor_id !== operation.descriptor_id
+            || signerProof.binding.zerone_signer.key_id !== operation.signer_key_id
+            || signerCurrentness.wallet_revocation_nonce !== operation.capability_revocation_nonce
+            || Date.parse(row.at) < Date.parse(signerCurrentness.verified_at)
+            || Date.parse(row.at) >= Date.parse(signerCurrentness.valid_until)
           ) {
             fail(
               "integrity_error",
@@ -2100,14 +2185,23 @@ export class ZeroneAgentHostStore {
         ["reserved"],
       );
       const head = this.bindingRow(operation.wallet_id);
+      const headCurrentness = head === null
+        ? null
+        : validateBindingCurrentnessAssertion(
+            JSON.parse(head.currentness_json) as BindingCurrentnessAssertion,
+          );
       if (
         head === null
+        || headCurrentness === null
         || head.binding_id !== operation.binding_id
         || head.proof_id !== operation.proof_id
+        || head.currentness_id !== operation.currentness_id
         || head.head_version !== operation.binding_head_version
         || head.descriptor_id !== operation.descriptor_id
         || head.signer_key_id !== operation.signer_key_id
         || head.revocation_nonce !== operation.capability_revocation_nonce
+        || Date.parse(input.at) < Date.parse(headCurrentness.verified_at)
+        || Date.parse(input.at) >= Date.parse(headCurrentness.valid_until)
       ) {
         fail("authorization_denied", "Current binding/proof authority changed before signer invocation");
       }
@@ -2188,6 +2282,10 @@ export class ZeroneAgentHostStore {
         request_id: input.request_id,
         unsigned_payload_hash: input.unsigned_payload_hash,
         external_verification_id: input.external_verification_id,
+        binding_id: operation.binding_id,
+        proof_id: operation.proof_id,
+        currentness_id: operation.currentness_id,
+        binding_head_version: operation.binding_head_version,
         chain_id: snapshot.chain_id,
         source_account: snapshot.account,
         account_number: snapshot.account_number,
@@ -2838,11 +2936,14 @@ export class ZeroneAgentHostStore {
         reserved_sequence: string;
         created_at: string;
         observed_at_height: string;
+        evidence_id: Sha256Id;
         observed_at: string;
       }>;
       observation: ZeroneAccountSnapshot | null;
       halted_at_height: string | null;
+      halt_evidence_id: Sha256Id | null;
       halted_at: string | null;
+      revision: number;
     }>();
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index] as (typeof rows)[number];
@@ -2859,7 +2960,9 @@ export class ZeroneAgentHostStore {
         reorg_epochs: new Map(),
         observation: null,
         halted_at_height: null,
+        halt_evidence_id: null,
         halted_at: null,
+        revision: 0,
       };
       const details = JSON.parse(row.details_json) as Record<string, unknown>;
       const applyObservation = (snapshot: ZeroneAccountSnapshot, allowHalted: boolean): void => {
@@ -2920,6 +3023,7 @@ export class ZeroneAgentHostStore {
             block_hash: eventString(details, "observation_block_hash", row.kind),
             observed_at: eventString(details, "observation_at", row.kind),
           }), false);
+          state.revision += 1;
           state.held_operation_id = row.operation_id;
           break;
         }
@@ -2937,6 +3041,7 @@ export class ZeroneAgentHostStore {
             block_hash: eventString(details, "observation_block_hash", row.kind),
             observed_at: eventString(details, "observation_at", row.kind),
           }), false);
+          state.revision += 1;
           break;
         case "released_pre_sign":
           if (state.held_operation_id !== row.operation_id) {
@@ -2946,6 +3051,8 @@ export class ZeroneAgentHostStore {
           break;
         case "canonical_reorg": {
           const observedHeight = eventString(details, "observed_at_height", row.kind);
+          const evidenceId = eventString(details, "evidence_id", row.kind) as Sha256Id;
+          assertSha256Id(evidenceId, "canonical_reorg.evidence_id");
           if (
             state.observation === null
             || BigInt(observedHeight) < BigInt(state.observation.observed_at_height)
@@ -2968,11 +3075,14 @@ export class ZeroneAgentHostStore {
             reserved_sequence: row.reserved_sequence,
             created_at: row.created_at,
             observed_at_height: observedHeight,
+            evidence_id: evidenceId,
             observed_at: row.at,
           });
           state.halted = true;
           state.halted_at_height = observedHeight;
+          state.halt_evidence_id = evidenceId;
           state.halted_at = row.at;
+          state.revision += 1;
           const reacquired = eventBoolean(details, "sequence_fence_reacquired", row.kind);
           const conflicting = eventNullableString(
             details,
@@ -3022,6 +3132,7 @@ export class ZeroneAgentHostStore {
             block_hash: eventString(details, "block_hash", row.kind),
             observed_at: eventString(details, "observation_at", row.kind),
           }), true);
+          state.revision += 2;
           const released = eventBoolean(details, "sequence_fence_released", row.kind);
           if (released) {
             if (state.held_operation_id !== row.operation_id) {
@@ -3044,6 +3155,7 @@ export class ZeroneAgentHostStore {
             }
             state.halted = false;
             state.halted_at_height = null;
+            state.halt_evidence_id = null;
             state.halted_at = null;
           } else {
             if (handoff === null) {
@@ -3087,6 +3199,7 @@ export class ZeroneAgentHostStore {
               fail("integrity_error", `Account halt lost its reorg epoch: ${row.operation_id}`);
             }
             state.halted_at_height = latest.observed_at_height;
+            state.halt_evidence_id = latest.evidence_id;
             state.halted_at = latest.observed_at;
           }
           break;
@@ -3117,7 +3230,9 @@ export class ZeroneAgentHostStore {
         || state.observation.block_hash !== account.block_hash
         || state.observation.observed_at !== account.observed_at
         || state.halted_at_height !== account.halted_at_height
+        || state.halt_evidence_id !== account.halt_evidence_id
         || state.halted_at !== account.halted_at
+        || state.revision !== account.revision
       ) {
         fail("integrity_error", `Account halt or fence state does not replay globally: ${account.source_account}`);
       }
@@ -3137,35 +3252,48 @@ export class ZeroneAgentHostStore {
       fail("integrity_error", "SQLite foreign-key verification failed");
     }
     const historyRows = this.db.query(`
-      SELECT proof_id, wallet_id, head_version, binding_id, binding_json, proof_json, recorded_at
+      SELECT currentness_id, proof_id, wallet_id, head_version, binding_id,
+        source_account, proof_envelope_json, currentness_json, recorded_at
       FROM binding_history ORDER BY wallet_id, head_version
     `).all() as BindingHistoryRow[];
-    const historyByProof = new Map<Sha256Id, {
+    const historyByCurrentness = new Map<Sha256Id, {
       row: BindingHistoryRow;
       binding: WalletIdentityBinding;
-      proof: BindingProofReference;
+      proof: VerifiedWalletIdentityBindingProof;
+      currentness: BindingCurrentnessAssertion;
     }>();
     const priorHistoryByWallet = new Map<string, {
       row: BindingHistoryRow;
       binding: WalletIdentityBinding;
-      proof: BindingProofReference;
+      proof: VerifiedWalletIdentityBindingProof;
+      currentness: BindingCurrentnessAssertion;
     }>();
     const historicalWalletByAccount = new Map<ZeroneAccountId, string>();
     for (const row of historyRows) {
-      const binding = validateWalletIdentityBinding(JSON.parse(row.binding_json));
-      const proof = validateProofReference(JSON.parse(row.proof_json) as BindingProofReference);
+      const proof = verifyWalletIdentityBindingProofEnvelope(
+        JSON.parse(row.proof_envelope_json),
+      );
+      const binding = proof.binding;
+      const currentness = validateBindingCurrentnessAssertion(
+        JSON.parse(row.currentness_json) as BindingCurrentnessAssertion,
+      );
       assertCount(row.head_version, "stored binding head_version", true);
       assertTimestamp(row.recorded_at, "stored binding recorded_at");
       if (
-        canonicalJson(binding) !== row.binding_json
-        || canonicalJson(proof) !== row.proof_json
+        canonicalJson(proof) !== row.proof_envelope_json
+        || canonicalJson(currentness) !== row.currentness_json
         || binding.wallet_id !== row.wallet_id
         || binding.binding_id !== row.binding_id
+        || binding.zerone_account_id !== row.source_account
         || proof.proof_id !== row.proof_id
-        || Date.parse(proof.verified_at) < Date.parse(binding.issued_at)
-        || Date.parse(row.recorded_at) < Date.parse(proof.verified_at)
+        || currentness.currentness_id !== row.currentness_id
+        || currentness.binding_id !== binding.binding_id
+        || currentness.proof_id !== proof.proof_id
+        || Date.parse(currentness.verified_at) < Date.parse(binding.issued_at)
+        || Date.parse(row.recorded_at) < Date.parse(currentness.verified_at)
+        || Date.parse(row.recorded_at) >= Date.parse(currentness.valid_until)
       ) {
-        fail("integrity_error", `Binding history snapshot does not verify: ${row.proof_id}`);
+        fail("integrity_error", `Binding history snapshot does not verify: ${row.currentness_id}`);
       }
       const historicalWallet = historicalWalletByAccount.get(binding.zerone_account_id);
       if (historicalWallet !== undefined && historicalWallet !== binding.wallet_id) {
@@ -3181,37 +3309,47 @@ export class ZeroneAgentHostStore {
         if (
           row.head_version !== prior.row.head_version + 1
           || Date.parse(row.recorded_at) < Date.parse(prior.row.recorded_at)
-          || Date.parse(proof.verified_at) < Date.parse(prior.row.recorded_at)
-          || proof.wallet_revocation_nonce < prior.proof.wallet_revocation_nonce
+          || Date.parse(currentness.verified_at) < Date.parse(prior.row.recorded_at)
+          || currentness.wallet_revocation_nonce < prior.currentness.wallet_revocation_nonce
         ) {
           fail("integrity_error", `Binding history chronology regresses: ${row.wallet_id}`);
         }
         if (binding.binding_id === prior.binding.binding_id) {
-          if (row.binding_json !== prior.row.binding_json) {
+          if (canonicalJson(binding) !== canonicalJson(prior.binding)) {
             fail("integrity_error", `Binding proof refresh changed canonical binding bytes: ${row.wallet_id}`);
           }
         } else {
+          if (Date.parse(binding.issued_at) < Date.parse(prior.row.recorded_at)) {
+            fail("integrity_error", `Binding successor issued_at regresses durable history: ${row.wallet_id}`);
+          }
           assertWalletIdentityBindingSuccessor(prior.binding, binding);
         }
       }
-      const parsed = { row, binding, proof };
-      historyByProof.set(row.proof_id, parsed);
+      const parsed = { row, binding, proof, currentness };
+      historyByCurrentness.set(row.currentness_id, parsed);
       priorHistoryByWallet.set(row.wallet_id, parsed);
     }
     const headRows = this.db.query("SELECT * FROM binding_heads ORDER BY wallet_id")
       .all() as BindingHeadRow[];
+    const headWallets = new Set<string>();
     for (const row of headRows) {
+      headWallets.add(row.wallet_id);
       const head = this.bindingRowToHead(row);
-      const history = historyByProof.get(row.proof_id);
+      const history = historyByCurrentness.get(row.currentness_id);
       assertTimestamp(row.updated_at, "stored binding updated_at");
       if (
-        canonicalJson(head.binding) !== row.binding_json
-        || canonicalJson(head.proof) !== row.proof_json
+        canonicalJson(head.proof) !== row.proof_envelope_json
+        || canonicalJson(head.currentness) !== row.currentness_json
         || head.binding.binding_id !== row.binding_id
         || head.proof.proof_id !== row.proof_id
+        || head.currentness.currentness_id !== row.currentness_id
+        || head.currentness.binding_id !== row.binding_id
+        || head.currentness.proof_id !== row.proof_id
+        || Date.parse(row.updated_at) < Date.parse(head.currentness.verified_at)
+        || Date.parse(row.updated_at) >= Date.parse(head.currentness.valid_until)
         || head.binding.revision !== row.binding_revision
         || head.binding.wallet_continuity_sequence !== row.continuity_sequence
-        || head.proof.wallet_revocation_nonce !== row.revocation_nonce
+        || head.currentness.wallet_revocation_nonce !== row.revocation_nonce
         || head.binding.wallet_descriptor_id !== row.descriptor_id
         || head.binding.zerone_signer.key_id !== row.signer_key_id
         || head.binding.zerone_account_id !== row.source_account
@@ -3219,13 +3357,20 @@ export class ZeroneAgentHostStore {
         || history?.row.wallet_id !== row.wallet_id
         || history.row.head_version !== row.head_version
         || history.row.binding_id !== row.binding_id
-        || history.row.binding_json !== row.binding_json
-        || history.row.proof_json !== row.proof_json
+        || history.row.proof_id !== row.proof_id
+        || history.row.proof_envelope_json !== row.proof_envelope_json
+        || history.row.currentness_json !== row.currentness_json
         || history.row.recorded_at !== row.updated_at
-        || priorHistoryByWallet.get(row.wallet_id)?.row.proof_id !== row.proof_id
+        || priorHistoryByWallet.get(row.wallet_id)?.row.currentness_id !== row.currentness_id
       ) {
         fail("integrity_error", `Current binding head does not verify: ${row.wallet_id}`);
       }
+    }
+    if (
+      headWallets.size !== priorHistoryByWallet.size
+      || [...priorHistoryByWallet.keys()].some((walletId) => !headWallets.has(walletId))
+    ) {
+      fail("integrity_error", "Every binding-history wallet must have exactly one current head");
     }
     const accountRows = this.db.query("SELECT * FROM account_states ORDER BY chain_id, source_account")
       .all() as AccountStateRow[];
@@ -3244,7 +3389,10 @@ export class ZeroneAgentHostStore {
       const completeHaltEpoch = row.halted_at_height !== null
         && row.halt_evidence_id !== null
         && row.halted_at !== null;
-      if ((row.halted === 1) !== completeHaltEpoch) {
+      const absentHaltEpoch = row.halted_at_height === null
+        && row.halt_evidence_id === null
+        && row.halted_at === null;
+      if (row.halted === 1 ? !completeHaltEpoch : !absentHaltEpoch) {
         fail("integrity_error", `Account halt epoch is incomplete: ${row.source_account}`);
       }
       if (completeHaltEpoch) {
@@ -3264,6 +3412,7 @@ export class ZeroneAgentHostStore {
       assertCount(operation.revision, "stored operation revision", true);
       assertSha256Id(operation.binding_id, "stored operation binding_id");
       assertSha256Id(operation.proof_id, "stored operation proof_id");
+      assertSha256Id(operation.currentness_id, "stored operation currentness_id");
       assertSha256Id(operation.descriptor_id, "stored operation descriptor_id");
       assertSha256Id(operation.capability_record_id, "stored operation capability_record_id");
       assertSha256Id(
@@ -3282,7 +3431,7 @@ export class ZeroneAgentHostStore {
       assertTimestamp(operation.updated_at, "stored operation updated_at");
       assertNotBefore(operation.updated_at, operation.created_at, "Stored operation");
       const policy = validateTreasuryPolicy(JSON.parse(operation.treasury_policy_json));
-      const proofSnapshot = historyByProof.get(operation.proof_id);
+      const proofSnapshot = historyByCurrentness.get(operation.currentness_id);
       const reservationAuthority = this.bindingHistoryAt(
         operation.wallet_id,
         operation.created_at,
@@ -3310,16 +3459,20 @@ export class ZeroneAgentHostStore {
         || policy.reserve_floor_uzrn !== operation.reserve_floor_uzrn
         || Date.parse(policy.issued_at) > Date.parse(operation.created_at)
         || proofSnapshot.row.binding_id !== operation.binding_id
+        || proofSnapshot.row.proof_id !== operation.proof_id
+        || proofSnapshot.row.currentness_id !== operation.currentness_id
         || proofSnapshot.row.wallet_id !== operation.wallet_id
         || proofSnapshot.row.head_version !== operation.binding_head_version
         || proofSnapshot.binding.wallet_descriptor_id !== operation.descriptor_id
         || proofSnapshot.binding.zerone_signer.key_id !== operation.signer_key_id
         || proofSnapshot.binding.zerone_account_id !== operation.source_account
         || proofSnapshot.binding.network !== policy.network
-        || proofSnapshot.proof.wallet_revocation_nonce !== operation.capability_revocation_nonce
+        || proofSnapshot.currentness.wallet_revocation_nonce !== operation.capability_revocation_nonce
         || Date.parse(proofSnapshot.row.recorded_at) > Date.parse(operation.created_at)
+        || Date.parse(operation.created_at) >= Date.parse(proofSnapshot.currentness.valid_until)
         || reservationAuthority.binding_id !== operation.binding_id
         || reservationAuthority.proof_id !== operation.proof_id
+        || reservationAuthority.currentness_id !== operation.currentness_id
         || reservationAuthority.head_version !== operation.binding_head_version
         || capability.policy_hash !== operation.treasury_policy_id
         || capability.wallet_id !== operation.wallet_id
@@ -3422,6 +3575,7 @@ export class ZeroneAgentHostStore {
       const expectedGenesisDetails = {
         binding_id: operation.binding_id,
         proof_id: operation.proof_id,
+        currentness_id: operation.currentness_id,
         wallet_id: operation.wallet_id,
         binding_head_version: operation.binding_head_version,
         descriptor_id: operation.descriptor_id,

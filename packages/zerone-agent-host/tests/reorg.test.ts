@@ -14,7 +14,7 @@ function lateReorgWithReservedSuccessor(
   signSuccessor = false,
 ) {
   store.initialize();
-  store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+  store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
   const reservedA = store.reserveOperation(values.reserve());
   const signingA = store.recordSignerInvocationBoundary({
     operation_id: reservedA.operation_id,
@@ -96,7 +96,7 @@ function twoConfirmedOperations(
   values: ReturnType<typeof fixture>,
 ) {
   store.initialize();
-  store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+  store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
   const reservedA = store.reserveOperation(values.reserve());
   const signingA = store.recordSignerInvocationBoundary({
     operation_id: reservedA.operation_id,
@@ -310,7 +310,7 @@ describe("confirmation and positive reorg evidence", () => {
       allow_in_memory_for_tests: true,
     });
     store.initialize();
-    store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     const reserved = store.reserveOperation(values.reserve());
     const signing = store.recordSignerInvocationBoundary({
       operation_id: reserved.operation_id,
@@ -415,7 +415,7 @@ describe("confirmation and positive reorg evidence", () => {
       allow_in_memory_for_tests: true,
     });
     store.initialize();
-    store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     const reserved = store.reserveOperation(values.reserve());
     const signing = store.recordSignerInvocationBoundary({
       operation_id: reserved.operation_id,
@@ -486,7 +486,7 @@ describe("confirmation and positive reorg evidence", () => {
     const path = join(mkdtempSync(join(tmpdir(), "zerone-host-reorg-handoff-")), "host.sqlite");
     let store = new ZeroneAgentHostStore(path, { create: true });
     store.initialize();
-    store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     const reservedA = store.reserveOperation(values.reserve());
     const signingA = store.recordSignerInvocationBoundary({
       operation_id: reservedA.operation_id,
@@ -935,7 +935,7 @@ describe("confirmation and positive reorg evidence", () => {
     const path = join(mkdtempSync(join(tmpdir(), "zerone-host-stale-reorg-replay-")), "host.sqlite");
     let store = new ZeroneAgentHostStore(path, { create: true });
     store.initialize();
-    store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     const reserved = store.reserveOperation(values.reserve());
     const signerSnapshot = {
       ...values.snapshot,

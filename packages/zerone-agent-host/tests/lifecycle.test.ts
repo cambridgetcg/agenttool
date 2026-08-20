@@ -10,7 +10,7 @@ function storeAndValues() {
     allow_in_memory_for_tests: true,
   });
   store.initialize();
-  store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+  store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
   return { store, values };
 }
 

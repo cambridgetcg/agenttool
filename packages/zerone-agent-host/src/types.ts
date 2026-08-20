@@ -2,6 +2,7 @@ import type { Sha256Id } from "@agenttool/wallet";
 import type {
   TreasuryPolicy,
   TreasuryPurpose,
+  VerifiedWalletIdentityBindingProof,
   WalletIdentityBinding,
   ZeroneAccountId,
   ZeroneCaip2,
@@ -20,28 +21,50 @@ export type OperationStatus = (typeof OPERATION_STATUSES)[number];
 export type ReservationState = (typeof RESERVATION_STATES)[number];
 
 /**
- * An opaque reference asserted by an injected proof-currentness resolver.
- * This package persists and CAS-compares it; it does not verify either proof.
+ * A closed, content-addressed observation asserted by an injected currentness
+ * resolver. The host verifies its shape, ID, chronology, and exact linkage to
+ * a cryptographically verified dual-key proof. It does not authenticate the
+ * resolver's off-host currentness claim and this record grants no authority.
  */
-export interface BindingProofReference {
-  readonly format: "agenttool.zerone-binding-proof-reference/0.1";
+export interface BindingCurrentnessAssertionCore {
+  readonly format: "agenttool.zerone-binding-currentness-assertion/0.1";
+  readonly binding_id: Sha256Id;
   readonly proof_id: Sha256Id;
   readonly verifier_id: string;
   readonly verified_at: string;
+  /** Resolver-asserted expiry; it is not authenticated by a host clock or registry. */
+  readonly valid_until: string;
   readonly wallet_revocation_nonce: number;
   readonly currentness: "asserted_by_injected_resolver";
   readonly effects_performed: false;
 }
 
-export interface BindingProofCurrentnessResolver {
-  resolveCurrentProof(binding: WalletIdentityBinding): Promise<BindingProofReference>;
+export interface BindingCurrentnessAssertion extends BindingCurrentnessAssertionCore {
+  readonly currentness_id: Sha256Id;
+}
+
+export interface CreateBindingCurrentnessAssertionInput {
+  readonly binding_id: Sha256Id;
+  readonly proof_id: Sha256Id;
+  readonly verifier_id: string;
+  readonly verified_at: string;
+  readonly valid_until: string;
+  readonly wallet_revocation_nonce: number;
+}
+
+export interface BindingCurrentnessResolver {
+  resolveCurrentness(
+    proof: VerifiedWalletIdentityBindingProof,
+  ): Promise<BindingCurrentnessAssertion>;
 }
 
 export interface BindingHead {
   readonly wallet_id: string;
   readonly head_version: number;
   readonly binding: WalletIdentityBinding;
-  readonly proof: BindingProofReference;
+  /** Reverified and runtime-branded every time it is loaded from SQLite. */
+  readonly proof: VerifiedWalletIdentityBindingProof;
+  readonly currentness: BindingCurrentnessAssertion;
   readonly updated_at: string;
 }
 
@@ -49,6 +72,7 @@ export interface BindingHeadExpectation {
   readonly wallet_id: string;
   readonly binding_id: Sha256Id;
   readonly proof_id: Sha256Id;
+  readonly currentness_id: Sha256Id;
   readonly head_version: number;
 }
 
@@ -129,6 +153,7 @@ export interface OperationSnapshot {
   readonly wallet_id: string;
   readonly binding_id: Sha256Id;
   readonly proof_id: Sha256Id;
+  readonly currentness_id: Sha256Id;
   readonly binding_head_version: number;
   readonly descriptor_id: Sha256Id;
   readonly capability_record_id: Sha256Id;

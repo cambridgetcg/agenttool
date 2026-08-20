@@ -7,7 +7,15 @@ import {
   ZeroneAgentHostStore,
   assertEconomyMessageExecutionSupported,
 } from "../src/index.js";
-import { bindingForWallet, fixture, hash, LATER, TIME } from "./helpers.js";
+import {
+  bindingForWallet,
+  currentnessForProof,
+  fixture,
+  hash,
+  LATER,
+  proofForBinding,
+  TIME,
+} from "./helpers.js";
 
 function initializedStore() {
   const values = fixture();
@@ -16,7 +24,7 @@ function initializedStore() {
     allow_in_memory_for_tests: true,
   });
   store.initialize();
-  const head = store.putBindingHead(values.binding, values.proof, {
+  const head = store.putBindingHead(values.proof, values.currentness, {
     expected: null,
     updated_at: TIME,
   });
@@ -151,10 +159,8 @@ describe("durable authorization ledger", () => {
   test("rejects wallet aliases and treasury-policy rotation for one source account", () => {
     const { store, values } = initializedStore();
     const alias = bindingForWallet("wallet-host-alias");
-    expect(() => store.putBindingHead(alias, {
-      ...values.proof,
-      proof_id: hash("c"),
-    }, {
+    const aliasProof = proofForBinding(alias);
+    expect(() => store.putBindingHead(aliasProof, currentnessForProof(aliasProof), {
       expected: null,
       updated_at: TIME,
     })).toThrow(/source account.*(?:bound|consumed)/);

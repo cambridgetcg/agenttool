@@ -17,7 +17,7 @@ describe("restart durability", () => {
     const path = pathFor("signing");
     const first = new ZeroneAgentHostStore(path, { create: true });
     first.initialize();
-    first.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    first.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     const reserved = first.reserveOperation(values.reserve());
     const signing = first.recordSignerInvocationBoundary({
       operation_id: reserved.operation_id,
@@ -60,7 +60,7 @@ describe("restart durability", () => {
     const path = pathFor("submitting");
     const first = new ZeroneAgentHostStore(path, { create: true });
     first.initialize();
-    first.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    first.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     const reserved = first.reserveOperation(values.reserve());
     const signing = first.recordSignerInvocationBoundary({
       operation_id: reserved.operation_id,
@@ -110,7 +110,7 @@ describe("restart durability", () => {
     const path = pathFor("forged-recovery-clamp");
     const first = new ZeroneAgentHostStore(path, { create: true });
     first.initialize();
-    first.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    first.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     const reserved = first.reserveOperation(values.reserve());
     const signing = first.recordSignerInvocationBoundary({
       operation_id: reserved.operation_id,
@@ -143,7 +143,7 @@ describe("restart durability", () => {
     const path = pathFor("modes");
     const store = new ZeroneAgentHostStore(path, { create: true });
     store.initialize();
-    store.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    store.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     chmodSync(path, 0o644);
     store.reserveOperation(values.reserve());
     for (const candidate of [path, `${path}-wal`, `${path}-shm`]) {
@@ -157,7 +157,7 @@ describe("restart durability", () => {
     const path = pathFor("semantic-tamper");
     const first = new ZeroneAgentHostStore(path, { create: true });
     first.initialize();
-    first.putBindingHead(values.binding, values.proof, { expected: null, updated_at: TIME });
+    first.putBindingHead(values.proof, values.currentness, { expected: null, updated_at: TIME });
     first.reserveOperation(values.reserve());
     first.close();
 
