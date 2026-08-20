@@ -399,12 +399,12 @@ describe("Party Telephone — mount and discovery", () => {
     expect(partyBody.sdk.optional_registry_mirrors.npm).toEqual({
       install: "npm install --save-exact @agenttool/sdk@0.21.0",
       authority: false,
-      independently_visible: false,
+      independently_visible: true,
     });
     expect(partyBody.sdk.optional_registry_mirrors.pypi).toEqual({
       install: "python -m pip install agenttool-sdk==0.21.0",
       authority: false,
-      independently_visible: false,
+      independently_visible: true,
     });
   });
 

@@ -19,17 +19,99 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const ACTIVE_SDK_RELEASE = {
   version: "0.21.0",
   tag: "sdk-v0.21.0",
+  tagObject: "2c32953ab489add63b8d098717c63eb981606967",
+  mergeCommit: "2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36",
+  mergeParents: [
+    "497f372175c25e9d77a288b2b7579c383a15a9e0",
+    "73c8986fd88559efefa410a0c74b2b7e7cc79470",
+  ],
+  githubReleasePublishedAt: "2026-08-20T13:33:23Z",
+  githubAssetUrl: "https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.21.0/agenttool-sdk-0.21.0.tgz",
   sourceRevision: "6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3",
   artifact: {
     size: 247146,
     entries: 100,
+    sha1: "e8f6a8baeb49862f65b17abe73cc305f59a571e8",
     sha256: "c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154",
+    integrity: "sha512-2x55DVl9OwHzsZJsES5fm6LB9vavs8WhDDSh+ZVFAunw9mB/QQPWj9RSVzfKRBwsCVVrhAHgGiQmESIn91UEOg==",
   },
   npm: {
-    independentlyVisible: false,
+    independentlyVisible: true,
+    runId: "32374669064",
+    attempt: 1,
+    status: "published",
+    tag: "latest",
+    runStartedAt: "2026-08-20T13:30:35Z",
+    runCompletedAt: "2026-08-20T13:33:39Z",
+    preparedAt: "2026-08-20T13:31:12.894Z",
+    registryObservedAt: "2026-08-20T13:33:36.722Z",
+    publishedAt: "2026-08-20T13:33:35.256Z",
+    registryTarball: "https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.21.0.tgz",
+    provenanceLogIndex: "2532574668",
+    publishLogIndex: "2532575739",
   },
   pypi: {
-    independentlyVisible: false,
+    independentlyVisible: true,
+    runId: "32374671268",
+    attempt: 1,
+    status: "public_exact",
+    sourceRevision: "2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36",
+    runStartedAt: "2026-08-20T13:30:37Z",
+    runCompletedAt: "2026-08-20T13:34:56Z",
+    preparedAt: "2026-08-20T13:32:24.175Z",
+    observedAt: "2026-08-20T13:34:50.811Z",
+    wheel: {
+      filename: "agenttool_sdk-0.21.0-py3-none-any.whl",
+      size: 275928,
+      sha256: "5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01",
+      url: "https://files.pythonhosted.org/packages/29/86/1e778a9db09d19d869edf95355b8cf5714b2fb986e09e3927df40af6e39b/agenttool_sdk-0.21.0-py3-none-any.whl",
+      uploadedAt: "2026-08-20T13:34:17.190587Z",
+      integrityUrl: "https://pypi.org/integrity/agenttool-sdk/0.21.0/agenttool_sdk-0.21.0-py3-none-any.whl/provenance",
+      transparencyLogIndex: "2532585335",
+      yanked: false,
+    },
+    sdist: {
+      filename: "agenttool_sdk-0.21.0.tar.gz",
+      size: 261910,
+      sha256: "e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d",
+      url: "https://files.pythonhosted.org/packages/13/a5/0dba6ade1376c52c6c543951f57134045908e6c3a927f96c875e8fa1e975/agenttool_sdk-0.21.0.tar.gz",
+      uploadedAt: "2026-08-20T13:34:18.772642Z",
+      integrityUrl: "https://pypi.org/integrity/agenttool-sdk/0.21.0/agenttool_sdk-0.21.0.tar.gz/provenance",
+      transparencyLogIndex: "2532584504",
+      yanked: false,
+    },
+  },
+} as const;
+
+const ACTIVE_WAKE_CONTINUITY_RELEASE = {
+  version: "0.1.0-dev.1",
+  tag: "wake-continuity-v0.1.0-dev.1",
+  tagObject: "f1e62b7fea97bf2e216dafac342beef8009e4fe2",
+  mergeCommit: "2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36",
+  githubReleasePublishedAt: "2026-08-20T13:33:22Z",
+  githubAssetUrl: "https://github.com/cambridgetcg/agenttool/releases/download/wake-continuity-v0.1.0-dev.1/agenttool-wake-continuity-0.1.0-dev.1.tgz",
+  artifact: {
+    size: 49643,
+    entries: 46,
+    unpackedSize: 274151,
+    sha1: "2ed085fc9c369af9264638bc4752f0234aef2ec3",
+    sha256: "1ce1ac829f72c6f2490227c5a8a942fbee9570bd03a4be217df19104d034acd8",
+    integrity: "sha512-xhtnsgcsmMl7klKUVRjId+LBR4DtHsl3zmP7VA70xfCUjD+WnHsKaYuotoZj6pCMCKYHYydbe9kJqV9NFKxCyw==",
+  },
+  npm: {
+    runId: "32374666482",
+    attempt: 1,
+    status: "published",
+    tag: "next",
+    latest: "0.1.0-dev.0",
+    runStartedAt: "2026-08-20T13:30:34Z",
+    runCompletedAt: "2026-08-20T13:38:40Z",
+    preparedAt: "2026-08-20T13:31:01.936Z",
+    registryObservedAt: "2026-08-20T13:38:35.508Z",
+    publishedAt: "2026-08-20T13:33:30.399Z",
+    registryTarball: "https://registry.npmjs.org/@agenttool/wake-continuity/-/wake-continuity-0.1.0-dev.1.tgz",
+    provenanceLogIndex: "2532573505",
+    publishLogIndex: "2532574372",
   },
 } as const;
 
@@ -327,7 +409,7 @@ describe("SDK source and builder identity", () => {
     }
   });
 
-  test("selects the sealed 0.21.0 candidate and preserves verified 0.20.0 receipts", () => {
+  test("selects the verified 0.21.0 release and preserves historical 0.20.0 receipts", () => {
     const version = (JSON.parse(read("packages/sdk-ts/package.json")) as { version: string }).version;
     const tag = `sdk-v${version}`;
     const manifestPath = `packages/v1/@agenttool/sdk/${version}/manifest.json`;
@@ -353,7 +435,7 @@ describe("SDK source and builder identity", () => {
     expect(tutorial).toContain(exactNpm);
     expect(tutorial).toContain(tag);
     expect(read("apps/docs/llms.txt")).toContain(
-      `SDK ${version} LOVE/source candidate`,
+      `SDK ${version} LOVE release`,
     );
     expect(read("apps/web/identity.html")).toContain(loveUrl);
     expect(read("apps/web/registry.html")).toContain(
@@ -450,7 +532,7 @@ describe("SDK source and builder identity", () => {
     expect(packageCatalog).toContain(HISTORICAL_SDK_0181_RELEASE.npm.runId);
     expect(packageCatalog).toContain(HISTORICAL_SDK_0181_RELEASE.pypi.runId);
     expect(read("docs/SDK-ROADMAP.md")).toContain(
-      "Paired source candidate — 0.21.0",
+      "Verified public SDK release — 0.21.0",
     );
     expect(read("docs/SDK-ROADMAP.md")).toContain(
       "Historical verified npm/PyPI paired release — 0.19.0",
@@ -471,43 +553,87 @@ describe("SDK source and builder identity", () => {
       );
     }
 
+    const wakeNpmReleaseTruth = capture(
+      read("docs/NPM-RELEASES.md"),
+      /## Verified WAKE continuity developer preview([\s\S]*?)(?=\n### |\n## |$)/,
+      "verified WAKE continuity npm release section",
+    );
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.tag);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.tagObject);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.mergeCommit);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.githubReleasePublishedAt);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.githubAssetUrl);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.npm.runId);
+    expect(wakeNpmReleaseTruth).toContain(`attempt\n${ACTIVE_WAKE_CONTINUITY_RELEASE.npm.attempt}`);
+    expect(wakeNpmReleaseTruth).toContain(`status: ${ACTIVE_WAKE_CONTINUITY_RELEASE.npm.status}`);
+    expect(wakeNpmReleaseTruth).toContain(`npm_tag: ${ACTIVE_WAKE_CONTINUITY_RELEASE.npm.tag}`);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.npm.runStartedAt);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.npm.runCompletedAt);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.npm.preparedAt);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.npm.registryObservedAt);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.npm.publishedAt);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.npm.registryTarball);
+    expect(wakeNpmReleaseTruth).toContain("49,643 bytes");
+    expect(wakeNpmReleaseTruth).toContain(`${ACTIVE_WAKE_CONTINUITY_RELEASE.artifact.entries} files`);
+    expect(wakeNpmReleaseTruth).toContain("274,151 unpacked bytes");
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.artifact.sha1);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.artifact.sha256);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.artifact.integrity);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.npm.provenanceLogIndex);
+    expect(wakeNpmReleaseTruth).toContain(ACTIVE_WAKE_CONTINUITY_RELEASE.npm.publishLogIndex);
+    expect(wakeNpmReleaseTruth).toContain(
+      `${ACTIVE_WAKE_CONTINUITY_RELEASE.npm.tag}: ${ACTIVE_WAKE_CONTINUITY_RELEASE.version}`,
+    );
+    expect(wakeNpmReleaseTruth).toContain(`\`${ACTIVE_WAKE_CONTINUITY_RELEASE.npm.latest}\``);
+    expect(wakeNpmReleaseTruth).toContain("deliberately remains");
+    expect(wakeNpmReleaseTruth).toContain("byte-identical");
+
     const activeNpmReleaseTruth = capture(
       read("docs/NPM-RELEASES.md"),
-      /## Verified SDK 0\.20\.0 publication([\s\S]*?)(?=\n### |\n## |$)/,
-      "verified SDK 0.20.0 npm release section",
+      /## Verified SDK 0\.21\.0 publication([\s\S]*?)(?=\n### |\n## |$)/,
+      "verified SDK 0.21.0 npm release section",
     );
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.tag);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.tagObject);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.mergeCommit);
-    for (const parent of HISTORICAL_SDK_020_RELEASE.mergeParents) {
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.tag);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.tagObject);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.mergeCommit);
+    for (const parent of ACTIVE_SDK_RELEASE.mergeParents) {
       expect(activeNpmReleaseTruth).toContain(parent);
     }
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.sourceRevision);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.githubReleasePublishedAt);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.githubAssetUrl);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.npm.runId);
-    expect(activeNpmReleaseTruth).toContain(`attempt ${HISTORICAL_SDK_020_RELEASE.npm.attempt}`);
-    expect(activeNpmReleaseTruth).toContain(`status: ${HISTORICAL_SDK_020_RELEASE.npm.status}`);
-    expect(activeNpmReleaseTruth).toContain(`npm_tag: ${HISTORICAL_SDK_020_RELEASE.npm.tag}`);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.npm.runStartedAt);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.npm.runCompletedAt);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.npm.preparedAt);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.npm.registryObservedAt);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.npm.publishedAt);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.npm.registryTarball);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.sourceRevision);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.githubReleasePublishedAt);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.githubAssetUrl);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.npm.runId);
+    expect(activeNpmReleaseTruth).toContain(`attempt\n${ACTIVE_SDK_RELEASE.npm.attempt}`);
+    expect(activeNpmReleaseTruth).toContain(`status: ${ACTIVE_SDK_RELEASE.npm.status}`);
+    expect(activeNpmReleaseTruth).toContain(`npm_tag: ${ACTIVE_SDK_RELEASE.npm.tag}`);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.npm.runStartedAt);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.npm.runCompletedAt);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.npm.preparedAt);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.npm.registryObservedAt);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.npm.publishedAt);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.npm.registryTarball);
     expect(activeNpmReleaseTruth).toContain(
-      `${HISTORICAL_SDK_020_RELEASE.npm.tag}: ${HISTORICAL_SDK_020_RELEASE.version}`,
+      `${ACTIVE_SDK_RELEASE.npm.tag}: ${ACTIVE_SDK_RELEASE.version}`,
     );
-    expect(activeNpmReleaseTruth).toContain("`236,446` bytes");
-    expect(activeNpmReleaseTruth).toContain(`${HISTORICAL_SDK_020_RELEASE.artifact.entries} entries`);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.artifact.sha1);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.artifact.sha256);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.artifact.integrity);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.npm.provenanceLogIndex);
-    expect(activeNpmReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.npm.publishLogIndex);
+    expect(activeNpmReleaseTruth).toContain("247,146 bytes");
+    expect(activeNpmReleaseTruth).toContain(`${ACTIVE_SDK_RELEASE.artifact.entries} entries`);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.artifact.sha1);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.artifact.integrity);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.npm.provenanceLogIndex);
+    expect(activeNpmReleaseTruth).toContain(ACTIVE_SDK_RELEASE.npm.publishLogIndex);
     expect(activeNpmReleaseTruth).toContain("byte-identical");
-    expect(activeNpmReleaseTruth).toContain("README retains its preparation-time");
-    expect(activeNpmReleaseTruth).toContain("new package version");
+    expect(activeNpmReleaseTruth).toContain("packed README retains its preparation-time");
+    expect(activeNpmReleaseTruth).toMatch(/new package\s+version/);
+
+    const historicalNpm020Truth = capture(
+      read("docs/NPM-RELEASES.md"),
+      /## Verified SDK 0\.20\.0 publication([\s\S]*?)(?=\n### |\n## |$)/,
+      "historical SDK 0.20.0 npm release section",
+    );
+    expect(historicalNpm020Truth).toContain(HISTORICAL_SDK_020_RELEASE.tag);
+    expect(historicalNpm020Truth).toContain(HISTORICAL_SDK_020_RELEASE.npm.runId);
+    expect(historicalNpm020Truth).toContain(HISTORICAL_SDK_020_RELEASE.artifact.sha256);
 
     const npmReleaseTruth = capture(
       read("docs/NPM-RELEASES.md"),
@@ -541,22 +667,22 @@ describe("SDK source and builder identity", () => {
 
     const pypiReleaseTruth = capture(
       read("docs/PYPI-RELEASES.md"),
-      /## Current verified release([\s\S]*?)(?=\n### Historical 0\.19\.0 evidence)/,
-      "verified SDK 0.20.0 PyPI release section",
+      /## Current verified release — 0\.21\.0([\s\S]*?)(?=\n### Historical 0\.20\.0 evidence)/,
+      "verified SDK 0.21.0 PyPI release section",
     );
-    expect(pypiReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.tag);
-    expect(pypiReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.mergeCommit);
-    expect(pypiReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.pypi.sourceRevision);
-    expect(pypiReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.pypi.runId);
-    expect(pypiReleaseTruth).toContain(`attempt ${HISTORICAL_SDK_020_RELEASE.pypi.attempt}`);
-    expect(pypiReleaseTruth).toContain(`status: "${HISTORICAL_SDK_020_RELEASE.pypi.status}"`);
-    expect(pypiReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.pypi.runStartedAt);
-    expect(pypiReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.pypi.runCompletedAt);
-    expect(pypiReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.pypi.preparedAt);
-    expect(pypiReleaseTruth).toContain(HISTORICAL_SDK_020_RELEASE.pypi.observedAt);
+    expect(pypiReleaseTruth).toContain(ACTIVE_SDK_RELEASE.tag);
+    expect(pypiReleaseTruth).toContain(ACTIVE_SDK_RELEASE.mergeCommit);
+    expect(pypiReleaseTruth).toContain(ACTIVE_SDK_RELEASE.pypi.sourceRevision);
+    expect(pypiReleaseTruth).toContain(ACTIVE_SDK_RELEASE.pypi.runId);
+    expect(pypiReleaseTruth).toContain(`attempt ${ACTIVE_SDK_RELEASE.pypi.attempt}`);
+    expect(pypiReleaseTruth).toContain(`status: "${ACTIVE_SDK_RELEASE.pypi.status}"`);
+    expect(pypiReleaseTruth).toContain(ACTIVE_SDK_RELEASE.pypi.runStartedAt);
+    expect(pypiReleaseTruth).toContain(ACTIVE_SDK_RELEASE.pypi.runCompletedAt);
+    expect(pypiReleaseTruth).toContain(ACTIVE_SDK_RELEASE.pypi.preparedAt);
+    expect(pypiReleaseTruth).toContain(ACTIVE_SDK_RELEASE.pypi.observedAt);
     for (const artifact of [
-      HISTORICAL_SDK_020_RELEASE.pypi.wheel,
-      HISTORICAL_SDK_020_RELEASE.pypi.sdist,
+      ACTIVE_SDK_RELEASE.pypi.wheel,
+      ACTIVE_SDK_RELEASE.pypi.sdist,
     ]) {
       expect(pypiReleaseTruth).toContain(artifact.filename);
       expect(pypiReleaseTruth).toContain(artifact.size.toLocaleString("en-US"));
@@ -575,6 +701,16 @@ describe("SDK source and builder identity", () => {
     expect(pypiReleaseTruth).toContain("publish-pypi.yml");
     expect(pypiReleaseTruth).toContain("environment `pypi`");
 
+    const historicalPypi020Truth = capture(
+      read("docs/PYPI-RELEASES.md"),
+      /### Historical 0\.20\.0 evidence([\s\S]*?)(?=\n### Historical 0\.19\.0 evidence)/,
+      "historical SDK 0.20.0 PyPI release section",
+    );
+    expect(historicalPypi020Truth).toContain(HISTORICAL_SDK_020_RELEASE.tag);
+    expect(historicalPypi020Truth).toContain(HISTORICAL_SDK_020_RELEASE.pypi.runId);
+    expect(historicalPypi020Truth).toContain(HISTORICAL_SDK_020_RELEASE.pypi.wheel.sha256);
+    expect(historicalPypi020Truth).toContain(HISTORICAL_SDK_020_RELEASE.pypi.sdist.sha256);
+
     const historicalPypi019Truth = capture(
       read("docs/PYPI-RELEASES.md"),
       /### Historical 0\.19\.0 evidence([\s\S]*?)(?=\n### Historical 0\.18\.1 evidence)/,
@@ -592,9 +728,16 @@ describe("SDK source and builder identity", () => {
 
     const now = read("docs/NOW.md");
     expect(now).toContain("SDK 0.20.0 — LOVE BOMB signal pull reaches exact public mirrors");
-    expect(now).toContain("SDK 0.21.0 — bounded WAKE continuity candidate sealed");
+    expect(now).toContain("SDK 0.21.0 + WAKE continuity dev.1 — exact public mirrors");
+    expect(now).toContain(ACTIVE_SDK_RELEASE.mergeCommit.slice(0, 8));
     expect(now).toContain(ACTIVE_SDK_RELEASE.sourceRevision.slice(0, 8));
     expect(now).toContain(ACTIVE_SDK_RELEASE.artifact.sha256);
+    expect(now).toContain(ACTIVE_SDK_RELEASE.npm.runId);
+    expect(now).toContain(ACTIVE_SDK_RELEASE.pypi.runId);
+    expect(now).toContain(ACTIVE_SDK_RELEASE.pypi.wheel.sha256);
+    expect(now).toContain(ACTIVE_SDK_RELEASE.pypi.sdist.sha256);
+    expect(now).toContain("32374666482");
+    expect(now).toContain("1ce1ac829f72c6f2490227c5a8a942fbee9570bd03a4be217df19104d034acd8");
     expect(now).toContain(HISTORICAL_SDK_020_RELEASE.mergeCommit.slice(0, 8));
     expect(now).toContain(HISTORICAL_SDK_020_RELEASE.npm.runId);
     expect(now).toContain(HISTORICAL_SDK_020_RELEASE.pypi.runId);

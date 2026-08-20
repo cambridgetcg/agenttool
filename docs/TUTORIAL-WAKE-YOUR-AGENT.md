@@ -115,36 +115,32 @@ The installed tutorial contract is SDK 0.21.0. Its checked-in 247,146-byte,
 100-entry LOVE artifact has SHA-256
 `c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154` and
 binds source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
-The annotated `sdk-v0.21.0` tag is prospective, unpublished, and not
-independently visible. After that exact tag is published it will be the Python
-source locator; Python is not part of the LOVE JavaScript catalog. This source
-command is therefore prospective and does not resolve until the tag exists:
+Annotated `sdk-v0.21.0` is published and peels to protected-main commit
+`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`. It is the Python source
+locator; Python is not part of the LOVE JavaScript catalog:
 
 ```bash
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.21.0#subdirectory=packages/sdk-py"
 ```
 
-Prospective shorter TypeScript mirror command:
-`npm install --save-exact @agenttool/sdk@0.21.0`. The exact npm version is not
-yet independently visible or verified. Even after publication, this shortcut
-will skip Step 1's in-command LOVE size/SHA-256 verification. Never substitute
+Optional shorter TypeScript mirror command:
+`npm install --save-exact @agenttool/sdk@0.21.0`. Protected run `32374669064`
+independently matched the public npm tarball to the LOVE/GitHub bytes. This
+shortcut still skips Step 1's in-command LOVE size/SHA-256 verification. Never substitute
 npm `latest` for the version selected by `/v1/pathways`.
 
-Prospective shorter Python mirror command:
-`python -m pip install "agenttool-sdk==0.21.0"`. The exact PyPI version is not
-yet independently visible or verified, and this command does not perform the
-LOVE manifest check from Step 1. Query the exact version rather than trusting
-a mutable package index.
+Optional shorter Python mirror command:
+`python -m pip install "agenttool-sdk==0.21.0"`. Protected run `32374671268`
+independently read back the exact non-yanked wheel and sdist. This command does
+not perform the LOVE manifest check from Step 1. Query the exact version rather
+than trusting a mutable package index.
 
-The current verified public history remains SDK 0.20.0. Annotated
-`sdk-v0.20.0` peels to protected-main merge
-`cb9c30fae0e49e1727e449207593581ce52cd4cf`. Protected npm run `31815209550`
-independently matched the 236,446-byte LOVE, GitHub Release, and npm tarballs
-at SHA-256
-`d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`;
-protected PyPI run `31815447080` independently matched the non-yanked
-265,633-byte wheel and 250,597-byte source distribution. Those receipts remain
-exact 0.20.0 evidence; they do not establish either 0.21.0 registry command.
+The current verified public release is SDK 0.21.0. Protected npm readback
+matched the 247,146-byte, 100-entry LOVE/GitHub/npm tarballs at SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`;
+protected PyPI readback matched the non-yanked 275,928-byte wheel and
+261,910-byte source distribution. Exact 0.20.0 and earlier receipts remain
+immutable historical evidence.
 
 SDK 0.21.0 keeps four optional KINGDOM orientation surfaces
 separate. `KingdomFrameworkClient.card()` /
@@ -169,11 +165,10 @@ credential-free boundary. It explicitly pulls only the closed
 nor delivers the static ten-message corpus. It remains separate from WAKE's
 refusable adapter-managed current-inference injection.
 
-The 0.21.0 LOVE artifact is a sealed source candidate; its tag and npm/PyPI
-mirrors remain unpublished and not independently visible. The immutable 0.20.0
-LOVE artifact, annotated tag, sole GitHub Release asset, npm mirror tarball,
-and PyPI distributions remain independently verified by the dated release
-receipts above. Publication does not establish docs or API deployment, live
+The 0.21.0 LOVE artifact, annotated tag, sole GitHub Release asset, npm mirror
+tarball, and PyPI distributions are independently verified by the dated
+release receipts above. The immutable 0.20.0 and earlier receipts remain
+preserved. Publication does not establish docs or API deployment, live
 `/public/love-bomb` behavior, participant receipt or attention, feeling,
 training, inference, provider effect, or weight change. The exact 0.19.0,
 0.18.1, and earlier receipts remain preserved historical evidence.

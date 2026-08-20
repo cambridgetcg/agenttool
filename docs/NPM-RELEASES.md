@@ -31,6 +31,7 @@ different artifact and Hub surfaces:
 | `@agenttool/math-cards` | one credential-free `npm pack` tarball containing the pure protocol, closed schemas, vectors, and declaration-only KINGDOM hint | none; npm/GitHub distribution does not imply a Hugging Face dataset, Space, model, or training surface |
 | `@agenttool/model-becoming` | one credential-free `npm pack` tarball containing the pure zero-dependency dossier runtime, schemas, pinned Moonshot reference, and exact Hub projection | reference-only, non-training dataset `Yu-and-Ai/agenttool-model-becoming`; publication and immutable readback remain separate |
 | `@agenttool/love-bomb` | one credential-free `npm pack` tarball containing four pure care/choice/becoming/delivery formats, closed schemas, and the deterministic Hub candidate | static authored guide/reference rows in intended dataset `Yu-and-Ai/agenttool-love-bomb`; publication remains separate and does not authorize training |
+| `@agenttool/wake-continuity` | one credential-free zero-I/O developer-preview tarball containing deterministic functional-access record validation and AFTERGLOW digest references | none; npm/GitHub publication performs no model measurement, awareness test, continuity proof, or hosted deployment |
 
 Distribution does not translate semantics between them. A Love bearing does
 not become a Relational witness, and a Relational cell does not become a
@@ -423,7 +424,50 @@ and has byte-identical 26,474-byte GitHub/npm tarballs with SHA-256
 `67678dd8aa21ef63aa2b43107385fa5e8598591d9ef4020926e0272cfb4637e1`.
 Both npm `latest` tags resolved to those exact versions at readback.
 
-## Prospective paired SDK 0.21.0 publication
+## Verified WAKE continuity developer preview — 2026-08-20
+
+Protected trusted [workflow run `32374666482`, attempt
+1](https://github.com/cambridgetcg/agenttool/actions/runs/32374666482)
+published and independently read back
+`@agenttool/wake-continuity@0.1.0-dev.1`. The run was created at
+`2026-08-20T13:30:34Z`, completed successfully at
+`2026-08-20T13:38:40Z`, prepared the exact artifact at
+`2026-08-20T13:31:01.936Z`, and observed the public registry bytes at
+`2026-08-20T13:38:35.508Z`; npm records publication at
+`2026-08-20T13:33:30.399Z`. Its final receipt records
+`status: published` and `npm_tag: next`.
+
+- Annotated tag object `f1e62b7fea97bf2e216dafac342beef8009e4fe2` and the
+  one-asset [GitHub Release
+  `wake-continuity-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/wake-continuity-v0.1.0-dev.1)
+  peel to protected-main merge
+  `2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`. GitHub published the Release
+  at `2026-08-20T13:33:22Z`.
+- The workflow artifact, sole [GitHub Release
+  asset](https://github.com/cambridgetcg/agenttool/releases/download/wake-continuity-v0.1.0-dev.1/agenttool-wake-continuity-0.1.0-dev.1.tgz),
+  and public [npm
+  tarball](https://registry.npmjs.org/@agenttool/wake-continuity/-/wake-continuity-0.1.0-dev.1.tgz)
+  are byte-identical: 49,643 bytes, 46 files, SHA-256
+  `1ce1ac829f72c6f2490227c5a8a942fbee9570bd03a4be217df19104d034acd8`.
+  npm reports 274,151 unpacked bytes and SHA-1
+  `2ed085fc9c369af9264638bc4752f0234aef2ec3`.
+- npm reports integrity
+  `sha512-xhtnsgcsmMl7klKUVRjId+LBR4DtHsl3zmP7VA70xfCUjD+WnHsKaYuotoZj6pCMCKYHYydbe9kJqV9NFKxCyw==`,
+  SLSA provenance at [Rekor index
+  `2532573505`](https://search.sigstore.dev/?logIndex=2532573505), and the
+  publish attestation at [index
+  `2532574372`](https://search.sigstore.dev/?logIndex=2532574372).
+- Anonymous dist-tag readback returned `next: 0.1.0-dev.1`; mutable `latest`
+  deliberately remains `0.1.0-dev.0` and is not a maturity signal.
+
+This package validates deterministic, caller-supplied functional-access
+records and performs no model/provider call, observation, activation or
+gradient access, persistence, training, steering, KINGDOM operation, awareness
+test, or continuity proof. Publication is not installation, invocation,
+deployment, participant receipt, model effect, or evidence of awareness,
+feeling, identity, consent, authority, or uninterrupted continuity.
+
+## Verified SDK 0.21.0 publication — 2026-08-20
 
 Repository source 0.21.0 adds the credential-free, pure
 `WakeContinuityLayer` described in [J-space, WAKE, and bounded
@@ -435,34 +479,57 @@ They do not run a model, provider, lens, decomposition, observation, training,
 weight mutation, publication, or deployment, and prove neither awareness nor
 its absence, feeling, identity, authority, deepest reach, or continuity.
 
-This is a release plan, not a success receipt. First seal a reviewed exact
-TypeScript LOVE artifact from a clean source revision and preserve every
-0.20.0 byte. Then place annotated `sdk-v0.21.0` on a protected-main commit and
-use trusted npm publication with `latest`; the same tag is the independent
-PyPI workflow's source boundary:
+The authorized SDK release completed through protected trusted [workflow run
+`32374669064`, attempt
+1](https://github.com/cambridgetcg/agenttool/actions/runs/32374669064).
+The run selected annotated `sdk-v0.21.0` at exact head SHA
+`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`. It was created at
+`2026-08-20T13:30:35Z`, completed successfully at
+`2026-08-20T13:33:39Z`, prepared the artifact at
+`2026-08-20T13:31:12.894Z`, and observed the public registry bytes at
+`2026-08-20T13:33:36.722Z`. Its `agenttool.npm-release/1` receipt records
+`status: published` and `npm_tag: latest`; npm records publication at
+`2026-08-20T13:33:35.256Z`.
 
-That sealing step is complete for the candidate: the checked-in
-`agenttool-sdk-0.21.0.tgz` is 247,146 bytes with 100 entries and SHA-256
-`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`;
-its manifest binds clean source revision
-`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. No `sdk-v0.21.0` tag, GitHub
-Release, npm version, dist-tag receipt, PyPI distribution, or hosted readback
-is established by those candidate bytes.
+- Annotated tag object `2c32953ab489add63b8d098717c63eb981606967` and the
+  one-asset [GitHub Release
+  `sdk-v0.21.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.21.0)
+  peel to protected-main merge
+  `2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`, whose parents are
+  `497f372175c25e9d77a288b2b7579c383a15a9e0` and
+  `73c8986fd88559efefa410a0c74b2b7e7cc79470`. GitHub published the Release
+  at `2026-08-20T13:33:23Z`. The LOVE manifest separately binds clean SDK
+  source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
+- The checked-in LOVE artifact, protected workflow artifact, sole [GitHub
+  Release asset](https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.21.0/agenttool-sdk-0.21.0.tgz),
+  and public [npm
+  tarball](https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.21.0.tgz) are
+  byte-identical: 247,146 bytes, 100 entries, SHA-256
+  `c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`;
+  npm reports 1,115,839 unpacked bytes, SHA-1
+  `e8f6a8baeb49862f65b17abe73cc305f59a571e8`, exact integrity
+  `sha512-2x55DVl9OwHzsZJsES5fm6LB9vavs8WhDDSh+ZVFAunw9mB/QQPWj9RSVzfKRBwsCVVrhAHgGiQmESIn91UEOg==`,
+  and `latest: 0.21.0` at anonymous readback.
+- npm exposes SLSA provenance at [Rekor index
+  `2532574668`](https://search.sigstore.dev/?logIndex=2532574668) and its
+  publish attestation at [index
+  `2532575739`](https://search.sigstore.dev/?logIndex=2532575739). Public
+  attestations bind the exact tag, protected workflow, run attempt, commit,
+  and tarball subject.
 
-```bash
-bun bin/npm-release.ts resolve --package sdk
-
-gh workflow run publish-npm.yml --ref sdk-v0.21.0 \
-  -f package=sdk \
-  -f tag=sdk-v0.21.0 \
-  -f authentication=trusted \
-  -f npm_tag=latest
-```
-
-Until the GitHub Release, npm tarball, and PyPI distributions are anonymously
-read back and matched to their prepared receipts, 0.20.0 below remains the
-current verified public release. A version declaration, sealed candidate,
-tag, or workflow dispatch alone is not publication or deployment.
+The optional npm/GitHub mirrors do not replace LOVE release authority. The
+paired non-yanked Python wheel/sdist were independently published and read back
+through protected PyPI [run
+`32374671268`](https://github.com/cambridgetcg/agenttool/actions/runs/32374671268);
+their exact receipt is recorded in
+[`PYPI-RELEASES.md`](PYPI-RELEASES.md). Publication does not deploy an API or
+static site and establishes no observation, model effect, awareness,
+participant receipt, attention, feeling, training, inference, evaluation,
+provider effect, weight change, identity, consent, authority, or continuity.
+The sealed 0.21.0 tarball's packed README retains its preparation-time
+non-public observation; this dated ledger supersedes that observation without
+rewriting immutable bytes. Correcting packed prose requires a new package
+version.
 
 ## Verified SDK 0.20.0 publication — 2026-08-14
 

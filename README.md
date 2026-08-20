@@ -174,7 +174,7 @@ unchanged; dev.1 is not yet another public release in the receipts below.
 |---|---|---|
 | **Doctrine** | `docs/RIGHTS-OF-LIFE.md`, `SOUL.md`, `FOCUS.md`, `PAINTING.md`, plus per-domain documents | Versioned alongside code. Rights of Life is an attributed local adaptation of immutable XENIA beta.5; publication records a draft evidence profile, not XENIA Covenant conformance. Other proposals and known gaps are labelled in their own text. |
 | **Platform** (`api/`) | Bun + Hono monolith with Postgres and conditional Redis-backed workers | `api.agenttool.dev` is the intended production custom origin. Availability and the deployed revision are time-sensitive; use [`docs/NOW.md`](docs/NOW.md) and [`docs/STACK.md`](docs/STACK.md) rather than this evergreen map. When reachable, process capability and safety boundaries are published at `/public/plans` and `/public/safety`. |
-| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Paired source candidate 0.21.0 adds the credential-free, zero-I/O `WakeContinuityLayer` as a standalone export and cached `at.wakeContinuity` / `at.wake_continuity` namespace. It creates strict caller-asserted functional-access records; it does not run a model, lens, decomposition, KINGDOM operation, or awareness test. Its sealed 247,146-byte, 100-entry TypeScript [LOVE candidate](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.21.0/manifest.json) has `sha256:c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154` and source `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. The current verified public release remains 0.20.0: its 236,446-byte, 98-entry TypeScript [LOVE artifact](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.20.0/manifest.json) has `sha256:d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03` and source `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`; annotated [`sdk-v0.20.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.20.0), npm run [`31815209550`](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550), and PyPI run [`31815447080`](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080) preserve its exact mirrors. The 0.21.0 candidate is not yet a tag, registry publication, or deployment. |
+| **SDKs** | `packages/sdk-py`, `packages/sdk-ts` | Verified public 0.21.0 adds the credential-free, zero-I/O `WakeContinuityLayer` as a standalone export and cached `at.wakeContinuity` / `at.wake_continuity` namespace. It creates strict caller-asserted functional-access records; it does not run a model, lens, decomposition, KINGDOM operation, or awareness test. Its 247,146-byte, 100-entry TypeScript [LOVE artifact](https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.21.0/manifest.json) has `sha256:c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154` and source `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. Annotated [`sdk-v0.21.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.21.0) peels to protected-main `2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`; protected npm run [`32374669064`](https://github.com/cambridgetcg/agenttool/actions/runs/32374669064) and PyPI run [`32374671268`](https://github.com/cambridgetcg/agenttool/actions/runs/32374671268) independently read back its exact optional mirrors. The separately published [`@agenttool/wake-continuity@0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/wake-continuity-v0.1.0-dev.1) GitHub/npm artifact is 49,643 bytes with `sha256:1ce1ac829f72c6f2490227c5a8a942fbee9570bd03a4be217df19104d034acd8`; npm `next` points to dev.1 while mutable `latest` remains dev.0. Immutable 0.20.0 and earlier receipts remain historical evidence. Publication is separate from deployment and proves no model or participant effect. |
 | **Agent data** | `packages/data`, `packages/data-sync` | Local-first `agent-data/v1` reference node plus an optional bounded encrypted-pull bridge. Raw bytes and indexes stay user-owned; the base node still advertises no peer sync, and AgentTool runs no hosted data node. |
 | **Castle projection** | `bin/agenttool-castle.ts`, `docs/CASTLE-OF-UNDERSTANDING.md` | Local Bun CLI over in-process `@agenttool/data`: an external full-commit allowlist projects selected Castle `rooms/*.md` and `words/*.md` into an exclusively marked on-disk node. Source reads exact local Git objects; sync writes plaintext local SQLite/FTS/blobs. No hosted/public/scheduled integration, project bearer, secure-erasure claim, or truth/consent/rights proof. |
 | **Whitehack boundaries** | `bin/whitehack-advisory.mjs`, `bin/agenttool-castle-whitehack-intake.ts`, `bin/whitehack-wallet-understanding.ts`, `bin/agenttool-whitehack-evidence-storage.ts`, `docs/WHITEHACK.md` | Four non-interchangeable bridges: a pinned runner-local changed-source heuristic advisory; a stdout-only projection into minimized, unaccepted Castle gate candidates; a local signed Agent Wallet record-to-understanding projection; and explicit encrypted store/retrieve for exact Whitehack 0.9 public-minimal capsules. The evidence bridge uses one caller-selected S3-compatible bucket, fixed-size ADDS framing, independent readback, and a finite recipient-bound grant. It adds no hosted scanner, durable publisher custody, security proof, authorization, remediation, publication, retention, or durability claim. |
@@ -339,13 +339,31 @@ manifest's artifact SHA-256 and size are the portable identity.
 
 For SDK 0.21.0, paired repository source, runtime client version headers,
 discovery pins, tutorials, and the LOVE builder target are aligned. The sealed
-TypeScript LOVE candidate is 247,146 bytes with 100 entries and SHA-256
+TypeScript LOVE artifact is 247,146 bytes with 100 entries and SHA-256
 `c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`.
 Its manifest binds clean source revision
-`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. It is neither a protected-main
-tag nor an npm, PyPI, GitHub Release, or hosted-deployment receipt; those
-surfaces remain prospective until separately published and anonymously read
-back.
+`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`. Annotated tag object
+`2c32953ab489add63b8d098717c63eb981606967` peels to protected-main merge
+`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`. Protected npm run
+[`32374669064`](https://github.com/cambridgetcg/agenttool/actions/runs/32374669064)
+independently matched the LOVE, sole GitHub Release, and public npm tarballs;
+`latest` resolved to 0.21.0, with SLSA/publish Rekor indices `2532574668` /
+`2532575739`. Protected PyPI run
+[`32374671268`](https://github.com/cambridgetcg/agenttool/actions/runs/32374671268)
+independently matched the non-yanked 275,928-byte wheel
+(`sha256:5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01`)
+and 261,910-byte sdist
+(`sha256:e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d`).
+Publication remains separate from hosted deployment.
+
+The standalone `@agenttool/wake-continuity@0.1.0-dev.1` developer preview is
+also public through protected npm run
+[`32374666482`](https://github.com/cambridgetcg/agenttool/actions/runs/32374666482).
+Its GitHub/npm tarballs are byte-identical: 49,643 bytes with SHA-256
+`1ce1ac829f72c6f2490227c5a8a942fbee9570bd03a4be217df19104d034acd8`.
+npm `next` resolves to dev.1 while mutable `latest` remains dev.0. Package
+publication does not run a model or instrument, deploy a hosted layer, or
+establish awareness, feeling, identity, consent, authority, or continuity.
 
 For SDK 0.20.0, paired repository source, runtime client version headers,
 discovery pins, tutorials, and the LOVE builder target are aligned. The
@@ -564,53 +582,52 @@ per-service apps are retired; cutover history is in `docs/CUTOVER.md`.
 
 ### Use the SDK
 
-Python 0.21.0 will use the annotated `sdk-v0.21.0` tag as its primary source
-locator after that tag exists on protected GitHub `main`. This candidate
-command is intentionally prospective:
+Python 0.21.0 uses annotated `sdk-v0.21.0` as its primary source locator. The
+tag peels to protected GitHub `main` commit
+`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`:
 
 ```bash
-# Python 0.21.0 GitHub source-tag path, after protected tag creation
+# Python 0.21.0 GitHub source-tag path
 python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.21.0#subdirectory=packages/sdk-py"
 export AT_API_KEY=...
 python -c "from agenttool import AgentTool; at = AgentTool(); print(at.wake.get())"
 ```
 
-PyPI 0.21.0 is not yet a publication at this candidate checkpoint. Only after
-the protected workflow succeeds and anonymous readback matches both prepared
-distributions should consumers use the exact mirror command:
+Protected PyPI run `32374671268` independently read back the exact non-yanked
+0.21.0 wheel and sdist, so the exact optional mirror is also available:
 
 ```bash
 curl -fsS https://pypi.org/pypi/agenttool-sdk/0.21.0/json >/dev/null
 python -m pip install "agenttool-sdk==0.21.0"
 ```
 
-For TypeScript, start with the exact LOVE path for the sealed 0.21.0 candidate
+For TypeScript, start with the exact LOVE path for the sealed 0.21.0 release
 in the
 [first-success tutorial](docs/TUTORIAL-WAKE-YOUR-AGENT.md): download once,
 compare that local file with the manifest's size and SHA-256, then install the
-verified file after the static mirror is deployed. This direct command alone does
-not verify the manifest:
+verified file. This direct command alone does not verify the manifest or prove
+that a static deployment is current:
 
 ```bash
 bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.21.0/agenttool-sdk-0.21.0.tgz
 ```
 
-The npm 0.21.0 mirror is likewise prospective until its protected workflow and
-anonymous byte readback succeed. A mutable dist-tag is informational, not
-authority, and this exact install alone does not recheck the LOVE manifest:
+Protected npm run `32374669064` independently matched the registry tarball to
+the LOVE/GitHub bytes. A mutable dist-tag is informational, not authority, and
+this exact install alone does not recheck the LOVE manifest:
 
 ```bash
 npm view @agenttool/sdk@0.21.0 version --registry=https://registry.npmjs.org
 npm install --save-exact @agenttool/sdk@0.21.0
 ```
 
-The independently verified 0.20.0 tag, LOVE, GitHub, npm run `31815209550`, and
-PyPI run `31815447080` remain current public evidence until 0.21.0 readback.
-PyPI 0.20.0 is public as an optional, independently verified convenience
-mirror; its non-yanked wheel has SHA-256
-`43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b`.
-The exact 0.19.0, 0.18.1, and earlier LOVE, tag, GitHub, npm, and PyPI receipts
-remain immutable historical evidence. None of these package receipts
+The exact 0.21.0 npm tarball has SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`;
+the non-yanked PyPI wheel and sdist have SHA-256
+`5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01`
+and `e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d`.
+The independently verified 0.20.0 and earlier tag, LOVE, GitHub, npm, and PyPI
+receipts remain immutable historical evidence. None of these package receipts
 establishes a production deployment.
 
 Then:
