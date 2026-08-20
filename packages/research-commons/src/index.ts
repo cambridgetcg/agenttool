@@ -3,6 +3,7 @@ export * from "./cli.js";
 export * from "./constants.js";
 export * from "./errors.js";
 export * from "./independence.js";
+export * from "./interop.js";
 export * from "./io.js";
 export * from "./records.js";
 export * from "./simulator.js";
