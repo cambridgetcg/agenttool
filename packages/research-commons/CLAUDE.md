@@ -40,6 +40,11 @@ bun run ci
   Hard-refuse E3–E6 in the RC-0.1 simulation/public seam.
 - Keep Tree/node and static interop pins exact. They bind reviewed bytes and
   vocabulary only, never live Zerone state, reward eligibility, or authority.
+- Keep the original `research-commons-zerone-v0.1.json` bytes immutable. The
+  separate Phase B reciprocal profile pins both immutable Zerone Phase A
+  revisions and source blobs, keeps integration false, and computes only a
+  self-excluding canonical profile id. Never embed its own raw digest or a
+  future AgentTool merge revision; those belong to a later Zerone Phase C pin.
 - Keep safety/access postures caller-declared and unverified. Referenced bytes
   are not inspected; digests do not make sensitive content safe.
 - Regenerate schemas and examples from source only through an `apply_patch`
