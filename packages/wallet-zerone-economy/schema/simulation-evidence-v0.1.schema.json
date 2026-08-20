@@ -73,13 +73,14 @@
       "pattern": "^[^\\u0000]+$"
     },
     "block_hash": {
+      "description": "Reload-compatible evidence may retain null; every non-null hash, including createZeroneEconomySimulationReceiptCore output, is exactly 64 uppercase hexadecimal characters.",
       "oneOf": [
         { "type": "null" },
         {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 512,
-          "pattern": "^[^\\u0000]+$"
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[0-9A-F]{64}$"
         }
       ]
     },

@@ -248,6 +248,8 @@ export interface ZeroneEconomySimulationReceiptInput {
   readonly intent: Verified<TransactionIntent>;
   readonly adapter: Ed25519PublicKey;
   readonly simulation_id: string;
+  /** Canonical observed block hash: exactly 64 uppercase hexadecimal characters. */
+  readonly block_hash: string;
   readonly simulated_at: string;
   readonly valid_until: string;
 }

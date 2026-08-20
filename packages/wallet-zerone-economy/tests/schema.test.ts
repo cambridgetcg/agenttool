@@ -27,6 +27,14 @@ describe("simulation evidence schema", () => {
     expect(validate({ ...evidence, status: "succeeded", code: 1 })).toBeFalse();
   });
 
+  test("retains nullable signed-evidence compatibility outside the strict receipt helper", async () => {
+    const { evidence } = await authorizedPlan();
+    expect(validate({ ...evidence, block_hash: null }), ajv.errorsText(validate.errors))
+      .toBeTrue();
+    expect(validate({ ...evidence, block_hash: "a".repeat(64) })).toBeFalse();
+    expect(validate({ ...evidence, block_hash: "A".repeat(63) })).toBeFalse();
+  });
+
   test("matches runtime canonical base64url terminal-bit constraints", async () => {
     const { evidence } = await authorizedPlan();
     const invalidPublicKey = {

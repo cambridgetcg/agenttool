@@ -64,6 +64,15 @@ it submitted. Giving untrusted application code access to that signer lets it
 attest false simulation data, as with any signing key. This package supplies no
 signer implementation, endpoint, simulation transport, clock, or block source.
 
+`createZeroneEconomySimulationReceiptCore()` requires that trusted adapter
+boundary to supply the observed block hash as exactly 64 uppercase hexadecimal
+characters. The helper validates and snapshots that value into the Wallet
+receipt before it can be sealed; it never emits `block_hash: null`. The portable
+simulation-evidence v0.1 schema and reload verifier retain null compatibility
+for non-host consumers while requiring the same canonical form for every
+non-null value. Null evidence cannot satisfy the stricter durable host signing
+boundary.
+
 ### The ordered bundle is not one executable lifecycle
 
 The checked-in three-message `Create -> Submit -> Fulfill` transaction is a
@@ -233,10 +242,12 @@ client:
    number, and sequence. Supply only the bounded structural observations to
    `createZeroneEconomyDirectSignPlan()`.
 3. Simulate `plan.simulation_tx_bytes_b64u` through a separately reviewed
-   transport. Seal the exact Wallet simulation receipt, then have that same
-   adapter authority call `createZeroneEconomySimulationEvidence()` over its
-   authenticated result. Call `createZeroneEconomySimulationBinding()` only
-   with the verified evidence; a result object alone is never authorization.
+   transport. Give the authenticated response's canonical observed block hash
+   directly to `createZeroneEconomySimulationReceiptCore()`, seal that exact
+   Wallet receipt, then have the same adapter authority call
+   `createZeroneEconomySimulationEvidence()` over its authenticated result.
+   Call `createZeroneEconomySimulationBinding()` only with the verified
+   evidence; a result object alone is never authorization.
 4. Inside one durable sign-time transaction, re-read capability use, balance,
    chain activation, account key/number/sequence, and relevant module state;
    reserve fee, native spend, and sequence; then repeat Wallet authorization

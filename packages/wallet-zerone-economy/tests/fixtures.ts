@@ -62,6 +62,8 @@ ed25519.etc.sha512Sync = (...messages: Uint8Array[]) => {
   return hash.digest();
 };
 
+export const SIMULATION_BLOCK_HASH = "A".repeat(64);
+
 export interface EconomyDirectSignVector {
   readonly body_bytes_b64u: string;
   readonly auth_info_bytes_b64u: string;
@@ -425,6 +427,7 @@ export async function authorizedPlan(options: {
     intent: bundle.intent,
     adapter: simulationAdapter.key,
     simulation_id: "66666666-6666-4666-8666-666666666666",
+    block_hash: SIMULATION_BLOCK_HASH,
     simulated_at: "2026-08-20T18:02:30.000Z",
     valid_until: "2026-08-20T18:05:30.000Z",
   });

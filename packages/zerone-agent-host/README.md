@@ -48,9 +48,9 @@ or signed simulation observation.
 
 The simulation receipt/evidence is signed by an exact adapter key selected from
 immutable configured trust history. The host requires a non-null canonical
-block hash. The planner receipt-core helper currently emits `block_hash: null`,
-so a trusted adapter must attach the actual observed block hash before sealing
-the Wallet receipt and planner evidence; the host never invents or relaxes it.
+block hash. The trusted adapter supplies that observed 64-character uppercase
+hex hash directly to the planner receipt-core helper before sealing the Wallet
+receipt and planner evidence; the host never invents, patches, or relaxes it.
 
 Wallet descriptor/capability/intent/simulation records and the branded plan are
 fully rechecked at admission. Durable reopen deliberately supports only their

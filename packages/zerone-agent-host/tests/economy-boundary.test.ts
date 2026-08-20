@@ -206,13 +206,11 @@ async function economyFixture(kind: Kind, options: EconomyFixtureOptions = {}) {
     intent,
     adapter: simulationAdapter.key,
     simulation_id: options.simulation_id ?? "76666666-6666-4666-8666-666666666666",
+    block_hash: simulationBlockHash,
     simulated_at: simulatedAt,
     valid_until: new Date(Date.parse(simulatedAt) + 3 * 60 * 1000).toISOString(),
   });
-  const simulation = await sealSimulationReceipt({
-    ...simulationCore,
-    block_hash: simulationBlockHash,
-  }, simulationAdapter.signer);
+  const simulation = await sealSimulationReceipt(simulationCore, simulationAdapter.signer);
   const simulationEvidence = await createZeroneEconomySimulationEvidence({
     plan,
     simulation,

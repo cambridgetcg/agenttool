@@ -22,6 +22,7 @@ import {
   createZeroneEconomySigningRequest,
   createZeroneEconomySimulationBinding,
   decodeEconomyAny,
+  createZeroneEconomySimulationReceiptCore,
   decodeEconomyAuthInfo,
   decodeEconomySignDoc,
   decodeEconomyTxBody,
@@ -40,6 +41,7 @@ import {
   OTHER_ADDRESS,
   SECP_PRIVATE_KEY,
   SECP_PUBLIC_KEY,
+  SIMULATION_BLOCK_HASH,
   SOURCE_ACCOUNT,
   accountObservation,
   authorizedPlan,
@@ -456,6 +458,49 @@ describe("activation, account, gas, simulation, and signature binding", () => {
     })).toThrow(/exact activation-bound plan/i);
   });
 
+  test("requires and snapshots one canonical observed block hash in the receipt core", async () => {
+    const a = await authorizedPlan();
+    const receiptInput = {
+      plan: a.plan,
+      simulation: a.simulationResult,
+      intent: a.bundle.intent,
+      adapter: simulationAdapter.key,
+      simulation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      block_hash: SIMULATION_BLOCK_HASH,
+      simulated_at: "2026-08-20T18:02:30.000Z",
+      valid_until: "2026-08-20T18:05:30.000Z",
+    } as const;
+    expect(createZeroneEconomySimulationReceiptCore(receiptInput).block_hash)
+      .toBe(SIMULATION_BLOCK_HASH);
+
+    for (const blockHash of [
+      null,
+      undefined,
+      "",
+      "A".repeat(63),
+      "A".repeat(65),
+      "a".repeat(64),
+      `0x${"A".repeat(64)}`,
+      `${"A".repeat(63)}G`,
+    ]) {
+      expect(() => createZeroneEconomySimulationReceiptCore({
+        ...receiptInput,
+        block_hash: blockHash,
+      } as never)).toThrow(/64 uppercase hexadecimal characters/i);
+    }
+
+    let reads = 0;
+    const snapshotted = createZeroneEconomySimulationReceiptCore({
+      ...receiptInput,
+      get block_hash() {
+        reads += 1;
+        return reads === 1 ? SIMULATION_BLOCK_HASH : null;
+      },
+    } as never);
+    expect(reads).toBe(1);
+    expect(snapshotted.block_hash).toBe(SIMULATION_BLOCK_HASH);
+  });
+
   test("requires strict adapter-signed evidence and rejects key, field, and timestamp tamper", async () => {
     const a = await authorizedPlan();
     await expect(createZeroneEconomySimulationEvidence({
@@ -464,6 +509,22 @@ describe("activation, account, gas, simulation, and signature binding", () => {
       simulation_result: a.simulationResult,
       signer: owner.signer,
     })).rejects.toThrow(/exact adapter authority/i);
+
+    const noncanonicalBlockHash = await signedEvidenceMutation(a.evidence, {
+      block_hash: "a".repeat(64),
+    });
+    expect(() => verifyZeroneEconomySimulationEvidence(noncanonicalBlockHash))
+      .toThrow(/64 uppercase hexadecimal characters/i);
+
+    const legacyNullBlockHash = verifyZeroneEconomySimulationEvidence(
+      await signedEvidenceMutation(a.evidence, { block_hash: null }),
+    );
+    expect(legacyNullBlockHash.block_hash).toBeNull();
+    expect(() => createZeroneEconomySimulationBinding({
+      plan: a.plan,
+      simulation: a.simulation,
+      evidence: legacyNullBlockHash,
+    })).toThrow(/every exact plan and Wallet receipt field/i);
 
     const {
       record_id: _recordId,

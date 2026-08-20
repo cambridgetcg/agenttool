@@ -83,6 +83,7 @@ import type {
 import {
   assertAtomicAmount,
   assertBoundedText,
+  assertCanonicalBlockHash,
   assertSafeCode,
   assertUint64,
   closedRecord,
@@ -794,7 +795,7 @@ function validateSimulationEvidenceRecord(value: unknown): Readonly<{
   );
   assertBoundedText(item.block_ref, "simulation_evidence.block_ref", 512);
   if (item.block_hash !== null) {
-    assertBoundedText(item.block_hash, "simulation_evidence.block_hash", 512);
+    assertCanonicalBlockHash(item.block_hash, "simulation_evidence.block_hash");
   }
   assertTimestamp(item.simulated_at, "simulation_evidence.simulated_at");
   assertTimestamp(item.valid_until, "simulation_evidence.valid_until");
@@ -1305,6 +1306,8 @@ export function createZeroneEconomySimulationReceiptCore(
 ): Readonly<SimulationReceiptCore> {
   assertZeroneEconomyDirectSignPlan(input.plan);
   assertVerifiedRecord(input.intent);
+  const blockHash = input.block_hash;
+  assertCanonicalBlockHash(blockHash, "simulation_receipt.block_hash");
   const simulation = validateSimulationResult(input.plan, input.simulation, false);
   if (
     input.intent.record_id !== input.plan.intent_record_id
@@ -1322,7 +1325,7 @@ export function createZeroneEconomySimulationReceiptCore(
     source_account: input.plan.source_account,
     adapter: input.adapter,
     block_ref: `${input.plan.chain_reference}:${simulation.observed_at_height}`,
-    block_hash: null,
+    block_hash: blockHash,
     success: simulation.status === "succeeded",
     effects: [...input.plan.simulation_effects],
     estimated_fee: Object.freeze({

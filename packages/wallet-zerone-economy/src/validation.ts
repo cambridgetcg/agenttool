@@ -68,6 +68,19 @@ export function assertSafeCode(value: unknown, path: string): asserts value is n
   }
 }
 
+export function assertCanonicalBlockHash(
+  value: unknown,
+  path: string,
+): asserts value is string {
+  if (typeof value !== "string" || !/^[0-9A-F]{64}$/u.test(value)) {
+    fail(
+      "invalid_input",
+      `${path} must be exactly 64 uppercase hexadecimal characters.`,
+      path,
+    );
+  }
+}
+
 export function assertBoundedText(
   value: unknown,
   path: string,

@@ -50,6 +50,12 @@ root `CLAUDE.md`, `packages/wallet/CLAUDE.md`,
   content/record IDs, exact plan/intent/simulation/empty-`TxRaw` hashes,
   source/chain, result fields, block reference, and receipt timestamps. Reload
   verification must restore its runtime brand before binding.
+- Require `createZeroneEconomySimulationReceiptCore()` to receive the observed
+  block hash as exactly 64 uppercase hexadecimal characters and commit it into
+  the Wallet receipt. The portable v0.1 evidence reloader may retain nullable
+  compatibility for non-host consumers, while every non-null reloaded value
+  remains canonical; that does not let this constructor emit a null or
+  noncanonical block hash.
 - Require `requested_at` to equal the branded Wallet authorization's
   `checked_at` and lie in `[evidence.simulated_at, evidence.valid_until)`. This
   is caller-supplied structural time because the package has no clock. Never
