@@ -4,10 +4,14 @@ import {
   createAfterglowCapsule,
   createAfterglowContentDigestArtifact,
   createAfterglowHandoffFactReference,
+  createFunctionalAccessBaseline,
+  createFunctionalAccessSubsequent,
   projectAfterglowLens,
   sha256Id,
   validateAfterglowCapsule,
   validateAfterglowLensAgainstCapsule,
+  validateFunctionalAccessBaseline,
+  validateFunctionalAccessSubsequent,
 } from "../dist/index.js";
 
 const id = (character) => `sha256:${character.repeat(64)}`;
@@ -56,6 +60,50 @@ const capsule = createAfterglowCapsule({
 const lens = projectAfterglowLens(capsule);
 const fact = createAfterglowHandoffFactReference(capsule, "tool_output");
 const artifact = createAfterglowContentDigestArtifact(capsule);
+const functionalBaseline = createFunctionalAccessBaseline({
+  wake: capsule.wake,
+  anchor_event_ref: id("6"),
+  request_ref: id("7"),
+  target: {
+    model_ref: id("8"),
+    model_binding: "provider_alias",
+    tokenizer_ref: null,
+    runtime_ref: null,
+  },
+  measurement_plan: {
+    state: "unavailable",
+    capability_state: "unavailable_reported",
+    capability_ref: id("9"),
+    permission_state: "not_requested",
+    permission_ref: null,
+    method: "jspace_sparse_decomposition",
+    access_basis: "none",
+    unavailable_reason: "model_internals_unavailable",
+    instrument_ref: null,
+    lens_ref: null,
+    configuration_ref: null,
+    assertion: "caller_asserted",
+    verified_by_package: false,
+  },
+});
+const functionalSubsequent = createFunctionalAccessSubsequent({
+  baseline: functionalBaseline,
+  operation_outcome: "not_attempted",
+  evidence: [
+    {
+      surface: "provider_response_receipt",
+      artifact_ref: id("0"),
+      assertion: "caller_asserted",
+      verified_by_package: false,
+    },
+  ],
+  findings: {
+    lens_visibility: "not_measured",
+    sparse_support: "not_measured",
+    behavioral_use: "not_measured",
+  },
+  afterglow_capsule_ref: capsule.capsule_id,
+});
 const maximumPredecessors = Array.from({ length: 8 }, (_, index) =>
   createAfterglowCapsule({
     phase: "during_task",
@@ -109,6 +157,12 @@ if (
   lens.carry[0]?.thread_ref !== id("2") ||
   artifact.kind !== "content_digest" ||
   artifact.digest !== capsule.capsule_id ||
+  validateFunctionalAccessBaseline(functionalBaseline).record_role !==
+    "before_anchor" ||
+  validateFunctionalAccessSubsequent(functionalSubsequent).record_role !==
+    "after_anchor" ||
+  functionalSubsequent.next_encounter_posture !==
+    "fresh_encounter_with_caller_carried_context" ||
   maximumCapsule.predecessors.length !== 8 ||
   maximumCapsule.threads.length !== 64 ||
   !invalidComparatorInputRejected ||

@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/wake-continuity",
-  "version": "0.1.0-dev.0",
-  "description": "AFTERGLOW digest-only continuity capsules for bounded WAKE orientation",
+  "version": "0.1.0-dev.1",
+  "description": "Digest-only AFTERGLOW continuity and record-only functional-access envelopes for bounded WAKE orientation",
   "license": "Apache-2.0",
   "type": "module",
   "sideEffects": false,
@@ -17,6 +17,12 @@
     },
     "./lens.schema.json": {
       "default": "./schema/agenttool-afterglow-lens-v0.1.schema.json"
+    },
+    "./functional-access-baseline.schema.json": {
+      "default": "./schema/agenttool-functional-access-baseline-v0.1.schema.json"
+    },
+    "./functional-access-subsequent.schema.json": {
+      "default": "./schema/agenttool-functional-access-subsequent-v0.1.schema.json"
     },
     "./kingdom.extension.json": {
       "default": "./kingdom.extension.json"
@@ -61,6 +67,8 @@
     "agents",
     "afterglow",
     "continuity",
+    "functional-access",
+    "j-space",
     "kingdom",
     "wake"
   ],

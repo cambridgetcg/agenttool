@@ -78,6 +78,7 @@ describe("SDK parity checker", () => {
       "traces",
       "vault",
       "wake",
+      "wake_continuity",
       "window",
     ].sort());
 
@@ -90,6 +91,9 @@ describe("SDK parity checker", () => {
     const kingdomOS = report.find((entry) => entry.module === "kingdom_os");
     const mathCards = report.find((entry) => entry.module === "math_cards");
     const loveBomb = report.find((entry) => entry.module === "love_bomb");
+    const wakeContinuity = report.find(
+      (entry) => entry.module === "wake_continuity",
+    );
     const darkContinent = report.find(
       (entry) => entry.module === "dark_continent",
     );
@@ -120,6 +124,20 @@ describe("SDK parity checker", () => {
     expect(loveBomb?.tsMethods).toEqual(["read"]);
     expect(loveBomb?.pyOnly).toEqual([]);
     expect(loveBomb?.tsOnly).toEqual([]);
+    expect(wakeContinuity?.pyMethods).toEqual([
+      "after_anchor",
+      "before_anchor",
+      "validate_baseline",
+      "validate_subsequent",
+    ]);
+    expect(wakeContinuity?.tsMethods).toEqual([
+      "after_anchor",
+      "before_anchor",
+      "validate_baseline",
+      "validate_subsequent",
+    ]);
+    expect(wakeContinuity?.pyOnly).toEqual([]);
+    expect(wakeContinuity?.tsOnly).toEqual([]);
     expect(darkContinent?.pyMethods).toContain("check_logos");
     expect(darkContinent?.tsMethods).toContain("checkLogos");
     expect(darkContinent?.pyOnly).toEqual([]);

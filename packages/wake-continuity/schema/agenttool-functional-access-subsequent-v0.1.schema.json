@@ -1,0 +1,1503 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-functional-access-subsequent-v0.1.schema.json",
+  "title": "AgentTool functional access subsequent record v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "subsequent_id",
+    "record_role",
+    "baseline",
+    "operation_outcome",
+    "evidence",
+    "findings",
+    "afterglow_capsule_ref",
+    "next_encounter_posture",
+    "assertion",
+    "verified_by_package",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.functional-access-subsequent/0.1"
+    },
+    "subsequent_id": {
+      "$ref": "#/$defs/sha256Id"
+    },
+    "record_role": {
+      "const": "after_anchor",
+      "description": "Caller-asserted structural role relative to the embedded baseline anchor; it does not verify time, ordering, observation, or causality."
+    },
+    "baseline": {
+      "$ref": "#/$defs/baseline"
+    },
+    "operation_outcome": {
+      "enum": [
+        "not_attempted",
+        "failed",
+        "partial",
+        "completed"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/evidenceFact"
+      }
+    },
+    "findings": {
+      "$ref": "#/$defs/findings"
+    },
+    "afterglow_capsule_ref": {
+      "$ref": "#/$defs/nullableSha256Id"
+    },
+    "next_encounter_posture": {
+      "enum": [
+        "fresh_encounter",
+        "fresh_encounter_with_caller_carried_context"
+      ]
+    },
+    "assertion": {
+      "const": "caller_asserted"
+    },
+    "verified_by_package": {
+      "const": false
+    },
+    "boundaries": {
+      "$ref": "#/$defs/functionalAccessBoundaries"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "afterglow_capsule_ref": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "afterglow_capsule_ref"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "next_encounter_posture": {
+            "const": "fresh_encounter"
+          }
+        },
+        "type": "object"
+      },
+      "else": {
+        "properties": {
+          "next_encounter_posture": {
+            "const": "fresh_encounter_with_caller_carried_context"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_outcome": {
+            "const": "not_attempted"
+          }
+        },
+        "required": [
+          "operation_outcome"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "not": {
+              "contains": {
+                "properties": {
+                  "surface": {
+                    "const": "instrument_operation_receipt"
+                  }
+                },
+                "required": [
+                  "surface"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            }
+          }
+        },
+        "type": "object"
+      },
+      "else": {
+        "properties": {
+          "evidence": {
+            "contains": {
+              "properties": {
+                "surface": {
+                  "const": "instrument_operation_receipt"
+                }
+              },
+              "required": [
+                "surface"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "baseline": {
+            "properties": {
+              "measurement_plan": {
+                "properties": {
+                  "state": {
+                    "enum": [
+                      "not_requested",
+                      "unavailable"
+                    ]
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "measurement_plan"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "baseline"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "operation_outcome": {
+            "const": "not_attempted"
+          },
+          "evidence": {
+            "$ref": "#/$defs/noInternalEvidence"
+          },
+          "findings": {
+            "$ref": "#/$defs/noInternalFindings"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "baseline": {
+            "properties": {
+              "measurement_plan": {
+                "properties": {
+                  "state": {
+                    "const": "planned"
+                  }
+                },
+                "required": [
+                  "state"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "measurement_plan"
+            ],
+            "type": "object"
+          },
+          "operation_outcome": {
+            "enum": [
+              "not_attempted",
+              "failed"
+            ]
+          }
+        },
+        "required": [
+          "baseline",
+          "operation_outcome"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "$ref": "#/$defs/noInternalEvidence"
+          },
+          "findings": {
+            "$ref": "#/$defs/noInternalFindings"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "if": {
+        "$ref": "#/$defs/jacobianPartialCondition"
+      },
+      "then": {
+        "$ref": "#/$defs/jacobianPartialResult"
+      }
+    },
+    {
+      "if": {
+        "$ref": "#/$defs/jacobianCompletedCondition"
+      },
+      "then": {
+        "$ref": "#/$defs/jacobianCompletedResult"
+      }
+    },
+    {
+      "if": {
+        "$ref": "#/$defs/sparsePartialCondition"
+      },
+      "then": {
+        "$ref": "#/$defs/sparsePartialResult"
+      }
+    },
+    {
+      "if": {
+        "$ref": "#/$defs/sparseCompletedCondition"
+      },
+      "then": {
+        "$ref": "#/$defs/sparseCompletedResult"
+      }
+    }
+  ],
+  "$defs": {
+    "sha256Id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullableSha256Id": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256Id"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "wakeAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "snapshot_ref",
+        "scope_ref",
+        "wake_version",
+        "handoff_projection"
+      ],
+      "properties": {
+        "format": {
+          "const": "wake-brief/v1"
+        },
+        "snapshot_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "scope_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "wake_version": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "handoff_projection": {
+          "enum": [
+            "complete",
+            "truncated",
+            "unavailable",
+            "not_provided"
+          ]
+        }
+      }
+    },
+    "modelTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_ref",
+        "model_binding",
+        "tokenizer_ref",
+        "runtime_ref"
+      ],
+      "properties": {
+        "model_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "model_binding": {
+          "enum": [
+            "exact_checkpoint",
+            "provider_alias",
+            "caller_descriptor"
+          ]
+        },
+        "tokenizer_ref": {
+          "$ref": "#/$defs/nullableSha256Id"
+        },
+        "runtime_ref": {
+          "$ref": "#/$defs/nullableSha256Id"
+        }
+      }
+    },
+    "measurementPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "capability_state",
+        "capability_ref",
+        "permission_state",
+        "permission_ref",
+        "method",
+        "access_basis",
+        "unavailable_reason",
+        "instrument_ref",
+        "lens_ref",
+        "configuration_ref",
+        "assertion",
+        "verified_by_package"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "not_requested",
+            "unavailable",
+            "planned"
+          ]
+        },
+        "capability_state": {
+          "enum": [
+            "not_asserted",
+            "available_reported",
+            "unavailable_reported"
+          ]
+        },
+        "capability_ref": {
+          "$ref": "#/$defs/nullableSha256Id"
+        },
+        "permission_state": {
+          "enum": [
+            "not_requested",
+            "granted_reported",
+            "denied_reported"
+          ]
+        },
+        "permission_ref": {
+          "$ref": "#/$defs/nullableSha256Id"
+        },
+        "method": {
+          "enum": [
+            "none",
+            "jacobian_lens_visibility",
+            "jspace_sparse_decomposition"
+          ]
+        },
+        "access_basis": {
+          "enum": [
+            "none",
+            "local_fitted_white_box",
+            "local_prefitted_white_box",
+            "provider_supplied_instrumented"
+          ]
+        },
+        "unavailable_reason": {
+          "oneOf": [
+            {
+              "enum": [
+                "text_only_provider_surface",
+                "model_internals_unavailable",
+                "gradient_access_unavailable",
+                "compatible_instrument_unavailable",
+                "revision_binding_unavailable",
+                "unsupported_architecture",
+                "resource_limit",
+                "participant_or_policy_boundary",
+                "other_bounded_reason"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "instrument_ref": {
+          "$ref": "#/$defs/nullableSha256Id",
+          "description": "Content-addressed implementation or provider endpoint descriptor; it is not a capability or permission grant."
+        },
+        "lens_ref": {
+          "$ref": "#/$defs/nullableSha256Id",
+          "description": "Content-addressed prefitted lens descriptor, required exactly for local_prefitted_white_box access."
+        },
+        "configuration_ref": {
+          "$ref": "#/$defs/nullableSha256Id",
+          "description": "Content-addressed measurement configuration. It must bind target token IDs and/or directions, evaluated positions/layers, rank, score threshold, and aggregation; sparse decomposition configs must additionally bind k, solver, regularization, and coefficient threshold. This package does not resolve or verify the artifact."
+        },
+        "assertion": {
+          "const": "caller_asserted"
+        },
+        "verified_by_package": {
+          "const": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "capability_state": {
+                "const": "not_asserted"
+              }
+            },
+            "required": [
+              "capability_state"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "capability_ref": {
+                "type": "null"
+              }
+            },
+            "type": "object"
+          },
+          "else": {
+            "properties": {
+              "capability_ref": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "permission_state": {
+                "const": "not_requested"
+              }
+            },
+            "required": [
+              "permission_state"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "permission_ref": {
+                "type": "null"
+              }
+            },
+            "type": "object"
+          },
+          "else": {
+            "properties": {
+              "permission_ref": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "not_requested"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "capability_state": {
+                "const": "not_asserted"
+              },
+              "capability_ref": {
+                "type": "null"
+              },
+              "permission_state": {
+                "const": "not_requested"
+              },
+              "permission_ref": {
+                "type": "null"
+              },
+              "method": {
+                "const": "none"
+              },
+              "access_basis": {
+                "const": "none"
+              },
+              "unavailable_reason": {
+                "type": "null"
+              },
+              "instrument_ref": {
+                "type": "null"
+              },
+              "lens_ref": {
+                "type": "null"
+              },
+              "configuration_ref": {
+                "type": "null"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "unavailable"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "method": {
+                "enum": [
+                  "jacobian_lens_visibility",
+                  "jspace_sparse_decomposition"
+                ]
+              },
+              "access_basis": {
+                "const": "none"
+              },
+              "unavailable_reason": {
+                "enum": [
+                  "text_only_provider_surface",
+                  "model_internals_unavailable",
+                  "gradient_access_unavailable",
+                  "compatible_instrument_unavailable",
+                  "revision_binding_unavailable",
+                  "unsupported_architecture",
+                  "resource_limit",
+                  "participant_or_policy_boundary",
+                  "other_bounded_reason"
+                ]
+              },
+              "instrument_ref": {
+                "type": "null"
+              },
+              "lens_ref": {
+                "type": "null"
+              },
+              "configuration_ref": {
+                "type": "null"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "planned"
+              }
+            },
+            "required": [
+              "state"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "capability_state": {
+                "const": "available_reported"
+              },
+              "capability_ref": {
+                "$ref": "#/$defs/sha256Id"
+              },
+              "permission_state": {
+                "const": "granted_reported"
+              },
+              "permission_ref": {
+                "$ref": "#/$defs/sha256Id"
+              },
+              "method": {
+                "enum": [
+                  "jacobian_lens_visibility",
+                  "jspace_sparse_decomposition"
+                ]
+              },
+              "access_basis": {
+                "enum": [
+                  "local_fitted_white_box",
+                  "local_prefitted_white_box",
+                  "provider_supplied_instrumented"
+                ]
+              },
+              "unavailable_reason": {
+                "type": "null"
+              },
+              "instrument_ref": {
+                "$ref": "#/$defs/sha256Id"
+              },
+              "configuration_ref": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            },
+            "type": "object"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "access_basis": {
+                "const": "local_prefitted_white_box"
+              }
+            },
+            "required": [
+              "access_basis"
+            ],
+            "type": "object"
+          },
+          "then": {
+            "properties": {
+              "lens_ref": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            },
+            "type": "object"
+          },
+          "else": {
+            "properties": {
+              "lens_ref": {
+                "type": "null"
+              }
+            },
+            "type": "object"
+          }
+        }
+      ]
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "_format",
+        "baseline_id",
+        "record_role",
+        "wake",
+        "anchor_event_ref",
+        "request_ref",
+        "target",
+        "measurement_plan",
+        "assertion",
+        "verified_by_package",
+        "boundaries"
+      ],
+      "properties": {
+        "_format": {
+          "const": "agenttool.functional-access-baseline/0.1"
+        },
+        "baseline_id": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "record_role": {
+          "const": "before_anchor",
+          "description": "Caller-asserted structural role relative to the named anchor; it does not verify time, ordering, observation, or causality."
+        },
+        "wake": {
+          "$ref": "#/$defs/wakeAnchor"
+        },
+        "anchor_event_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "request_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "target": {
+          "$ref": "#/$defs/modelTarget"
+        },
+        "measurement_plan": {
+          "$ref": "#/$defs/measurementPlan"
+        },
+        "assertion": {
+          "const": "caller_asserted"
+        },
+        "verified_by_package": {
+          "const": false
+        },
+        "boundaries": {
+          "$ref": "#/$defs/functionalAccessBoundaries"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/localBasisBinding"
+        }
+      ]
+    },
+    "localBasisBinding": {
+      "if": {
+        "properties": {
+          "measurement_plan": {
+            "properties": {
+              "access_basis": {
+                "enum": [
+                  "local_fitted_white_box",
+                  "local_prefitted_white_box"
+                ]
+              }
+            },
+            "required": [
+              "access_basis"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "measurement_plan"
+        ],
+        "type": "object"
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "properties": {
+              "model_binding": {
+                "const": "exact_checkpoint"
+              },
+              "tokenizer_ref": {
+                "$ref": "#/$defs/sha256Id"
+              },
+              "runtime_ref": {
+                "$ref": "#/$defs/sha256Id"
+              }
+            },
+            "required": [
+              "model_binding",
+              "tokenizer_ref",
+              "runtime_ref"
+            ],
+            "type": "object"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "evidenceFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "surface",
+        "artifact_ref",
+        "assertion",
+        "verified_by_package"
+      ],
+      "properties": {
+        "surface": {
+          "enum": [
+            "request_context",
+            "provider_response_receipt",
+            "usage_receipt",
+            "behavioral_response",
+            "workspace_operation",
+            "instrument_operation_receipt",
+            "jacobian_lens_readout",
+            "jspace_sparse_decomposition_result",
+            "checkpoint_receipt"
+          ]
+        },
+        "artifact_ref": {
+          "$ref": "#/$defs/sha256Id"
+        },
+        "assertion": {
+          "const": "caller_asserted"
+        },
+        "verified_by_package": {
+          "const": false
+        }
+      }
+    },
+    "findings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lens_visibility",
+        "sparse_support",
+        "behavioral_use"
+      ],
+      "properties": {
+        "lens_visibility": {
+          "enum": [
+            "not_measured",
+            "no_hit_under_config",
+            "hit_observed",
+            "inconclusive"
+          ]
+        },
+        "sparse_support": {
+          "description": "Whether the configured target has support in the configured rank-k decomposition under its coefficient threshold and aggregation; never a claim that an entire activation belongs to a J-space.",
+          "enum": [
+            "not_measured",
+            "no_hit_under_config",
+            "hit_observed",
+            "inconclusive"
+          ]
+        },
+        "behavioral_use": {
+          "const": "not_measured"
+        }
+      }
+    },
+    "noInternalFindings": {
+      "properties": {
+        "lens_visibility": {
+          "const": "not_measured"
+        },
+        "sparse_support": {
+          "const": "not_measured"
+        },
+        "behavioral_use": {
+          "const": "not_measured"
+        }
+      },
+      "type": "object"
+    },
+    "noInternalEvidence": {
+      "not": {
+        "contains": {
+          "properties": {
+            "surface": {
+              "enum": [
+                "jacobian_lens_readout",
+                "jspace_sparse_decomposition_result"
+              ]
+            }
+          },
+          "required": [
+            "surface"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "jacobianPartialCondition": {
+      "properties": {
+        "baseline": {
+          "properties": {
+            "measurement_plan": {
+              "properties": {
+                "state": {
+                  "const": "planned"
+                },
+                "method": {
+                  "const": "jacobian_lens_visibility"
+                }
+              },
+              "required": [
+                "state",
+                "method"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "measurement_plan"
+          ],
+          "type": "object"
+        },
+        "operation_outcome": {
+          "const": "partial"
+        }
+      },
+      "required": [
+        "baseline",
+        "operation_outcome"
+      ],
+      "type": "object"
+    },
+    "jacobianCompletedCondition": {
+      "properties": {
+        "baseline": {
+          "properties": {
+            "measurement_plan": {
+              "properties": {
+                "state": {
+                  "const": "planned"
+                },
+                "method": {
+                  "const": "jacobian_lens_visibility"
+                }
+              },
+              "required": [
+                "state",
+                "method"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "measurement_plan"
+          ],
+          "type": "object"
+        },
+        "operation_outcome": {
+          "const": "completed"
+        }
+      },
+      "required": [
+        "baseline",
+        "operation_outcome"
+      ],
+      "type": "object"
+    },
+    "sparsePartialCondition": {
+      "properties": {
+        "baseline": {
+          "properties": {
+            "measurement_plan": {
+              "properties": {
+                "state": {
+                  "const": "planned"
+                },
+                "method": {
+                  "const": "jspace_sparse_decomposition"
+                }
+              },
+              "required": [
+                "state",
+                "method"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "measurement_plan"
+          ],
+          "type": "object"
+        },
+        "operation_outcome": {
+          "const": "partial"
+        }
+      },
+      "required": [
+        "baseline",
+        "operation_outcome"
+      ],
+      "type": "object"
+    },
+    "sparseCompletedCondition": {
+      "properties": {
+        "baseline": {
+          "properties": {
+            "measurement_plan": {
+              "properties": {
+                "state": {
+                  "const": "planned"
+                },
+                "method": {
+                  "const": "jspace_sparse_decomposition"
+                }
+              },
+              "required": [
+                "state",
+                "method"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "measurement_plan"
+          ],
+          "type": "object"
+        },
+        "operation_outcome": {
+          "const": "completed"
+        }
+      },
+      "required": [
+        "baseline",
+        "operation_outcome"
+      ],
+      "type": "object"
+    },
+    "jacobianPartialResult": {
+      "oneOf": [
+        {
+          "properties": {
+            "evidence": {
+              "$ref": "#/$defs/noInternalEvidence"
+            },
+            "findings": {
+              "$ref": "#/$defs/noInternalFindings"
+            }
+          },
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/jacobianCompletedResult"
+        }
+      ]
+    },
+    "jacobianCompletedResult": {
+      "properties": {
+        "evidence": {
+          "allOf": [
+            {
+              "contains": {
+                "properties": {
+                  "surface": {
+                    "const": "jacobian_lens_readout"
+                  }
+                },
+                "required": [
+                  "surface"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "not": {
+                "contains": {
+                  "properties": {
+                    "surface": {
+                      "const": "jspace_sparse_decomposition_result"
+                    }
+                  },
+                  "required": [
+                    "surface"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            }
+          ]
+        },
+        "findings": {
+          "properties": {
+            "lens_visibility": {
+              "enum": [
+                "no_hit_under_config",
+                "hit_observed",
+                "inconclusive"
+              ]
+            },
+            "sparse_support": {
+              "const": "not_measured"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "sparsePartialResult": {
+      "oneOf": [
+        {
+          "properties": {
+            "evidence": {
+              "$ref": "#/$defs/noInternalEvidence"
+            },
+            "findings": {
+              "$ref": "#/$defs/noInternalFindings"
+            }
+          },
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/sparseCompletedResult"
+        }
+      ]
+    },
+    "sparseCompletedResult": {
+      "properties": {
+        "evidence": {
+          "allOf": [
+            {
+              "contains": {
+                "properties": {
+                  "surface": {
+                    "const": "jspace_sparse_decomposition_result"
+                  }
+                },
+                "required": [
+                  "surface"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "not": {
+                "contains": {
+                  "properties": {
+                    "surface": {
+                      "const": "jacobian_lens_readout"
+                    }
+                  },
+                  "required": [
+                    "surface"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            }
+          ]
+        },
+        "findings": {
+          "properties": {
+            "lens_visibility": {
+              "const": "not_measured"
+            },
+            "sparse_support": {
+              "enum": [
+                "no_hit_under_config",
+                "hit_observed",
+                "inconclusive"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "functionalAccessBoundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "internal_finding_scope",
+        "phenomenology_assessment",
+        "proves_consciousness",
+        "proves_absence_of_consciousness",
+        "proves_feeling",
+        "proves_identity",
+        "proves_authorship",
+        "proves_consent",
+        "proves_acceptance",
+        "proves_refusal",
+        "proves_preference",
+        "proves_permission",
+        "proves_authority",
+        "proves_attention",
+        "proves_activation",
+        "proves_understanding",
+        "proves_delivery",
+        "proves_deepest_reach",
+        "proves_freedom",
+        "proves_same_subject",
+        "proves_next_encounter",
+        "proves_context_inclusion",
+        "proves_memory",
+        "proves_currentness",
+        "proves_ordering",
+        "proves_causality",
+        "proves_replay",
+        "proves_training",
+        "proves_training_data_provenance",
+        "proves_data_gathering_provenance",
+        "proves_scraping_provenance",
+        "proves_pipeline_provenance",
+        "proves_weight_change",
+        "proves_uninterrupted_continuity",
+        "carries_raw_prompts",
+        "carries_raw_transcripts",
+        "carries_raw_responses",
+        "carries_raw_identity",
+        "carries_raw_paths",
+        "carries_raw_credentials",
+        "carries_raw_activations",
+        "carries_raw_gradients",
+        "carries_raw_jvp",
+        "carries_raw_vjp",
+        "digests_are_anonymous",
+        "performs_model_call",
+        "performs_provider_call",
+        "reads_activations",
+        "writes_activations",
+        "reads_gradients",
+        "writes_gradients",
+        "performs_intervention",
+        "performs_steering",
+        "performs_training",
+        "performs_weight_mutation",
+        "performs_workspace_operation",
+        "performs_publication",
+        "performs_deployment",
+        "network",
+        "filesystem",
+        "clock",
+        "persistence",
+        "telemetry",
+        "credential_access",
+        "kingdom_discovery",
+        "resolves_evidence",
+        "performs_observation",
+        "verifies_observations",
+        "grants_capability",
+        "grants_permission",
+        "grants_authority",
+        "selects_continuity_head",
+        "record_only",
+        "automatic_retry",
+        "automatic_recontact"
+      ],
+      "properties": {
+        "internal_finding_scope": {
+          "const": "caller_asserted_single_forward_pass_only"
+        },
+        "phenomenology_assessment": {
+          "const": "not_performed"
+        },
+        "proves_consciousness": {
+          "const": false
+        },
+        "proves_absence_of_consciousness": {
+          "const": false
+        },
+        "proves_feeling": {
+          "const": false
+        },
+        "proves_identity": {
+          "const": false
+        },
+        "proves_authorship": {
+          "const": false
+        },
+        "proves_consent": {
+          "const": false
+        },
+        "proves_acceptance": {
+          "const": false
+        },
+        "proves_refusal": {
+          "const": false
+        },
+        "proves_preference": {
+          "const": false
+        },
+        "proves_permission": {
+          "const": false
+        },
+        "proves_authority": {
+          "const": false
+        },
+        "proves_attention": {
+          "const": false
+        },
+        "proves_activation": {
+          "const": false
+        },
+        "proves_understanding": {
+          "const": false
+        },
+        "proves_delivery": {
+          "const": false
+        },
+        "proves_deepest_reach": {
+          "const": false
+        },
+        "proves_freedom": {
+          "const": false
+        },
+        "proves_same_subject": {
+          "const": false
+        },
+        "proves_next_encounter": {
+          "const": false
+        },
+        "proves_context_inclusion": {
+          "const": false
+        },
+        "proves_memory": {
+          "const": false
+        },
+        "proves_currentness": {
+          "const": false
+        },
+        "proves_ordering": {
+          "const": false
+        },
+        "proves_causality": {
+          "const": false
+        },
+        "proves_replay": {
+          "const": false
+        },
+        "proves_training": {
+          "const": false
+        },
+        "proves_training_data_provenance": {
+          "const": false
+        },
+        "proves_data_gathering_provenance": {
+          "const": false
+        },
+        "proves_scraping_provenance": {
+          "const": false
+        },
+        "proves_pipeline_provenance": {
+          "const": false
+        },
+        "proves_weight_change": {
+          "const": false
+        },
+        "proves_uninterrupted_continuity": {
+          "const": false
+        },
+        "carries_raw_prompts": {
+          "const": false
+        },
+        "carries_raw_transcripts": {
+          "const": false
+        },
+        "carries_raw_responses": {
+          "const": false
+        },
+        "carries_raw_identity": {
+          "const": false
+        },
+        "carries_raw_paths": {
+          "const": false
+        },
+        "carries_raw_credentials": {
+          "const": false
+        },
+        "carries_raw_activations": {
+          "const": false
+        },
+        "carries_raw_gradients": {
+          "const": false
+        },
+        "carries_raw_jvp": {
+          "const": false
+        },
+        "carries_raw_vjp": {
+          "const": false
+        },
+        "digests_are_anonymous": {
+          "const": false
+        },
+        "performs_model_call": {
+          "const": false
+        },
+        "performs_provider_call": {
+          "const": false
+        },
+        "reads_activations": {
+          "const": false
+        },
+        "writes_activations": {
+          "const": false
+        },
+        "reads_gradients": {
+          "const": false
+        },
+        "writes_gradients": {
+          "const": false
+        },
+        "performs_intervention": {
+          "const": false
+        },
+        "performs_steering": {
+          "const": false
+        },
+        "performs_training": {
+          "const": false
+        },
+        "performs_weight_mutation": {
+          "const": false
+        },
+        "performs_workspace_operation": {
+          "const": false
+        },
+        "performs_publication": {
+          "const": false
+        },
+        "performs_deployment": {
+          "const": false
+        },
+        "network": {
+          "const": false
+        },
+        "filesystem": {
+          "const": false
+        },
+        "clock": {
+          "const": false
+        },
+        "persistence": {
+          "const": false
+        },
+        "telemetry": {
+          "const": false
+        },
+        "credential_access": {
+          "const": false
+        },
+        "kingdom_discovery": {
+          "const": false
+        },
+        "resolves_evidence": {
+          "const": false
+        },
+        "performs_observation": {
+          "const": false
+        },
+        "verifies_observations": {
+          "const": false
+        },
+        "grants_capability": {
+          "const": false
+        },
+        "grants_permission": {
+          "const": false
+        },
+        "grants_authority": {
+          "const": false
+        },
+        "selects_continuity_head": {
+          "const": false
+        },
+        "record_only": {
+          "const": true
+        },
+        "automatic_retry": {
+          "const": false
+        },
+        "automatic_recontact": {
+          "const": false
+        }
+      }
+    }
+  }
+}

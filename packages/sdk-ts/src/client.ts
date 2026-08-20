@@ -45,11 +45,12 @@ import {
   type KingdomFrameworkOptions,
 } from "./kingdom-framework.js";
 import { KingdomOSClient, type KingdomOSOptions } from "./kingdom-os.js";
+import { WakeContinuityLayer } from "./wake-continuity.js";
 
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
  *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
  *  with package.json (parity invariant: ts + py ship the same version). */
-export const SDK_VERSION = "0.20.0";
+export const SDK_VERSION = "0.21.0";
 
 /** Connection settings for the hosted AgentTool API and optional local adapters. */
 export interface AgentToolOptions {
@@ -150,6 +151,7 @@ export class AgentTool {
   private _data: DataClient | undefined;
   private _kingdomFramework: KingdomFrameworkClient | undefined;
   private _kingdomOS: KingdomOSClient | undefined;
+  private _wakeContinuity: WakeContinuityLayer | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -468,6 +470,14 @@ export class AgentTool {
   get kingdomOS(): KingdomOSClient {
     this._kingdomOS ??= new KingdomOSClient(this.kingdomOSOptions);
     return this._kingdomOS;
+  }
+
+  /** Create and validate digest-only caller-asserted functional-access records.
+   * This pure namespace receives no bearer, transport, hosted origin, or I/O
+   * capability from the authenticated AgentTool client. */
+  get wakeContinuity(): WakeContinuityLayer {
+    this._wakeContinuity ??= new WakeContinuityLayer();
+    return this._wakeContinuity;
   }
 
   /**

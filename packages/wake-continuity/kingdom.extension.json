@@ -2,14 +2,17 @@
   "schema": "kingdom-extension-local/v0.1",
   "id": "wake-continuity",
   "package": "@agenttool/wake-continuity",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-dev.1",
   "status": "public_ready_source",
   "capabilities": [
     "afterglow:capsule-create",
     "afterglow:capsule-validate",
     "afterglow:lens-project",
     "afterglow:handoff-fact-reference",
-    "afterglow:correspondence-content-digest-artifact"
+    "afterglow:correspondence-content-digest-artifact",
+    "functional-access:baseline-record-create",
+    "functional-access:subsequent-record-create",
+    "functional-access:record-validate"
   ],
   "defaults": {
     "automatic_delivery": false,
@@ -19,6 +22,9 @@
     "linkability_eliminated": false,
     "raw_wake_input": false,
     "task_text_input": false,
+    "functional_access_record_only": true,
+    "performs_observation": false,
+    "performs_instrument_operation": false,
     "network": false,
     "filesystem": false,
     "persistence": false,
@@ -38,6 +44,8 @@
     "AFTERGLOW carries caller-supplied digest references for orientation; it is not identity, memory, consent, authorship, currentness, replay, truth, permission, or uninterrupted-continuity proof.",
     "Digest shape excludes raw identity or task prose from the wire shape but does not prove reference minimization or eliminate linkability; callers must not derive reusable refs directly from private identifiers.",
     "DeepSeek stays proposed_unaccepted, Dark Continent stays not_checked or hold, KARMA stays receipt-only, and Artbitrage stays review_required or hold.",
-    "A generated Handoff fact is only a three-field reference object. A generated Correspondence artifact is only a two-field content digest. The package never performs POST /v1/handoff, constructs a Correspondence event, or performs any persistence action."
+    "A generated Handoff fact is only a three-field reference object. A generated Correspondence artifact is only a two-field content digest. The package never performs POST /v1/handoff, constructs a Correspondence event, or performs any persistence action.",
+    "Functional-access helpers only construct, validate, freeze, and encode caller-asserted digest envelopes. They do not call a model or provider, inspect internals, run an instrument, resolve evidence, perform workspace operations, publish, deploy, or grant capability, permission, or authority.",
+    "Functional-access record_role is a structural projection relative to a named WAKE anchor, not verified time or ordering. Findings are bounded to a caller-asserted single forward pass and do not establish phenomenology, delivery, understanding, training or data provenance, weight change, identity, or continuity."
   ]
 }

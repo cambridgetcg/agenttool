@@ -56,10 +56,11 @@ from .wake import WakeClient
 from .window import WindowClient
 from .kingdom_framework import KingdomFrameworkClient
 from .kingdom_os import KingdomOSClient, KingdomOSRunner
+from .wake_continuity import WakeContinuityLayer
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.20.0"
+SDK_VERSION = "0.21.0"
 
 
 class AgentTool:
@@ -262,6 +263,7 @@ class AgentTool:
         self._math_cards: Optional[MathCardsClient] = None
         self._kingdom_framework: Optional[KingdomFrameworkClient] = None
         self._kingdom_os: Optional[KingdomOSClient] = None
+        self._wake_continuity: Optional[WakeContinuityLayer] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -587,6 +589,17 @@ class AgentTool:
                 ),
             )
         return self._kingdom_framework
+
+    @property
+    def wake_continuity(self) -> WakeContinuityLayer:
+        """Pure, digest-only caller-asserted functional-access records.
+
+        This namespace receives no bearer, transport, hosted origin, or I/O
+        capability from the authenticated AgentTool client.
+        """
+        if self._wake_continuity is None:
+            self._wake_continuity = WakeContinuityLayer()
+        return self._wake_continuity
 
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 

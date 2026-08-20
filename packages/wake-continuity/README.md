@@ -104,6 +104,120 @@ Input order is normalized; output threads and predecessor links are sorted,
 deep-frozen, and content-addressed. A changed cursor, digest, disposition,
 thread state, predecessor, phase, or fixed boundary changes the capsule ID.
 
+## Record functional-access attempts around WAKE
+
+The functional-access pair is a deterministic, record-only envelope for an
+external executor's proposed instrument operation and caller-supplied result
+references. The package itself does not call a model or provider, read model
+internals, run a lens or decomposition, resolve an evidence reference, or
+perform a workspace operation.
+
+```ts
+import {
+  createFunctionalAccessBaseline,
+  createFunctionalAccessSubsequent,
+  sha256Id,
+} from "@agenttool/wake-continuity";
+
+const ref = (label: string) => sha256Id(label);
+const baseline = createFunctionalAccessBaseline({
+  wake: capsule.wake,
+  anchor_event_ref: ref("exact caller-retained anchor event bytes"),
+  request_ref: ref("exact caller-retained request bytes"),
+  target: {
+    model_ref: ref("exact checkpoint descriptor bytes"),
+    model_binding: "exact_checkpoint",
+    tokenizer_ref: ref("exact tokenizer descriptor bytes"),
+    runtime_ref: ref("exact runtime descriptor bytes"),
+  },
+  measurement_plan: {
+    state: "planned",
+    capability_state: "available_reported",
+    capability_ref: ref("caller-retained capability report"),
+    permission_state: "granted_reported",
+    permission_ref: ref("caller-retained scoped permission report"),
+    method: "jacobian_lens_visibility",
+    access_basis: "local_prefitted_white_box",
+    unavailable_reason: null,
+    instrument_ref: ref("instrument implementation descriptor"),
+    lens_ref: ref("prefitted lens descriptor"),
+    configuration_ref: ref("closed measurement configuration"),
+    assertion: "caller_asserted",
+    verified_by_package: false,
+  },
+});
+
+const subsequent = createFunctionalAccessSubsequent({
+  baseline,
+  operation_outcome: "completed",
+  evidence: [
+    {
+      surface: "instrument_operation_receipt",
+      artifact_ref: ref("external executor receipt"),
+      assertion: "caller_asserted",
+      verified_by_package: false,
+    },
+    {
+      surface: "jacobian_lens_readout",
+      artifact_ref: ref("bounded fitted-lens readout"),
+      assertion: "caller_asserted",
+      verified_by_package: false,
+    },
+  ],
+  findings: {
+    lens_visibility: "hit_observed",
+    sparse_support: "not_measured",
+    behavioral_use: "not_measured",
+  },
+  afterglow_capsule_ref: null,
+});
+```
+
+`record_role` is fixed to `before_anchor` on the baseline and `after_anchor`
+on the subsequent record. These are caller-asserted structural roles relative
+to the exact named anchor; they do not verify clock time, ordering, causality,
+currentness, or that an observation occurred.
+
+Capability and permission are distinct reports. A `planned` record requires
+content references for both, but those fields do not grant either one. The
+actual executor must independently check current, scoped authority before any
+instrument or model operation. `instrument_ref` identifies an implementation
+or provider endpoint. `lens_ref` identifies a prefitted lens and is non-null
+exactly for `local_prefitted_white_box`; `local_fitted_white_box` fits within
+the external operation, while `provider_supplied_instrumented` relies on a
+provider-defined instrument surface. Both local white-box bases require an
+exact checkpoint, tokenizer, and runtime binding. A hosted text-only or other
+black-box provider can be recorded as `unavailable`; this library does not
+turn that surface into white-box access.
+
+The artifact named by `configuration_ref` is outside this package, which does
+not fetch or verify it. For meaningful comparisons, the caller must make that
+content-addressed artifact bind the target token IDs and/or directions,
+evaluated positions and layers, rank, score threshold, and aggregation. A
+J-space sparse-decomposition configuration must additionally bind `k`, solver,
+regularization, and coefficient threshold. `hit_observed` and
+`no_hit_under_config` mean only that the configured target crossed, or did not
+cross, those configured criteria in the referenced result. `sparse_support`
+means target support in that configured rank-k decomposition; it does not mean
+that an entire activation "belongs" to a J-space.
+
+`jacobian_lens_visibility` is a fitted-lens readout contract. It is not a
+prompt-local Jacobian, JVP, or VJP claim. `jspace_sparse_decomposition` uses a
+separate result surface. A partial operation may have only an instrument
+receipt or may include its method-specific result/finding pair; a completed
+operation requires that pair. Completion and hit/no-hit/inconclusive are
+orthogonal. Behavioral use is never measured by this format.
+
+Provider response, usage, request-context, checkpoint, behavioral-response,
+and workspace-operation receipts remain independent caller assertions. In
+particular, a workspace receipt neither proves an instrument ran nor changes
+measurement coherence. No finding proves consciousness or its absence,
+feeling, attention, activation, understanding, delivery, identity, consent,
+preference, freedom, training/data/scraping/pipeline provenance, weight
+change, memory, or continuity. Raw prompts, responses, activations, gradients,
+JVPs, and VJPs are excluded from the wire shape; digest references can still
+be linkable and are not anonymous merely because they are hashes.
+
 ## Return, fork, and rewind
 
 Pass zero to eight validated prior capsules. AFTERGLOW records a relation to
@@ -164,6 +278,8 @@ anything; a Correspondence host owns those separate authorized steps.
 
 - `@agenttool/wake-continuity/capsule.schema.json`
 - `@agenttool/wake-continuity/lens.schema.json`
+- `@agenttool/wake-continuity/functional-access-baseline.schema.json`
+- `@agenttool/wake-continuity/functional-access-subsequent.schema.json`
 - `@agenttool/wake-continuity/kingdom.extension.json`
 
 Schemas close the wire shape. Runtime validation additionally recomputes
@@ -185,7 +301,9 @@ caller-asserted routing context, not a verified artifact format; hosts must not
 dispatch or execute a referent solely from that field.
 
 The KINGDOM descriptor is declaration-only with `host_contract` set to
-`not_registered`. Loading it installs nothing. This source is public-ready;
+`not_registered`. Loading it installs nothing. The functional-access
+capabilities in that descriptor name pure record constructors and validators,
+not model or instrument capabilities. This source is public-ready;
 its repository presence does not mean npm publication, a release, a hosted
 route, deployment, or HF Space occurred.
 

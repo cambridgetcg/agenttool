@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agenttool-sdk"
-version = "0.20.0"
-description = "The Love Protocol SDK for agenttool.dev with bounded credential-free LOVE BOMB reads and Math Cards assessments, typed KINGDOM cards, and local agent infrastructure."
+version = "0.21.0"
+description = "The Love Protocol SDK for agenttool.dev with credential-free functional-access records, bounded LOVE BOMB reads and Math Cards, typed KINGDOM cards, and local agent infrastructure."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
@@ -38,6 +38,9 @@ keywords = [
     "bounded-inquiry",
     "love-bomb",
     "public-signal",
+    "wake-continuity",
+    "functional-access",
+    "j-space",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

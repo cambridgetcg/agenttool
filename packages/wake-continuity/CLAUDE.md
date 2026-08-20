@@ -41,6 +41,25 @@ npm pack --dry-run --ignore-scripts
 - The fixed inspect-first GET is declarative. The package does not perform it.
   `createAfterglowHandoffFactReference` returns a fact-shaped reference only;
   it does not construct or POST a Handoff.
+- Functional-access baseline/subsequent helpers are record constructors,
+  validators, and encoders only. `record_role` is a caller-asserted structural
+  role, never verified time, ordering, causality, or an operation performed by
+  the package.
+- Keep capability, permission, and execution separate. Report refs never grant
+  authority; a real executor must recheck current scoped authority. Keep
+  `instrument_ref` as the implementation/endpoint descriptor and require
+  `lens_ref` exactly for `local_prefitted_white_box`.
+- A functional-access `configuration_ref` must refer to content binding target
+  token IDs and/or directions, positions/layers, rank, score threshold, and
+  aggregation. Sparse configuration additionally binds k, solver,
+  regularization, and coefficient threshold. This package does not resolve or
+  verify that artifact.
+- `sparse_support` is configured target support in the referenced rank-k
+  result, not whole-activation membership. Fitted-lens visibility is not a
+  prompt-local Jacobian/JVP/VJP result. Keep their evidence surfaces separate.
+- `workspace_operation` is independent evidence and never substitutes for an
+  instrument receipt. Preserve the not-attempted/failed/partial/completed
+  result matrix and keep `behavioral_use` fixed to `not_measured`.
 - Content IDs bind canonical bytes. They do not prove provenance, secrecy,
   safety, identity, licence, consent, authority, or truth. Use high-entropy
   context-local digests; reused or published references are linkable.

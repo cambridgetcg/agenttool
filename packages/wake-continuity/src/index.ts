@@ -8,6 +8,19 @@ export {
   AFTERGLOW_THREAD_KINDS,
   HANDOFF_PROJECTION_STATES,
   WAKE_RELATIONS,
+  FUNCTIONAL_ACCESS_NEXT_ENCOUNTER_POSTURES,
+  FUNCTIONAL_ACCESS_BASES,
+  FUNCTIONAL_ACCESS_BOUNDARIES,
+  FUNCTIONAL_ACCESS_CAPABILITY_STATES,
+  FUNCTIONAL_ACCESS_EVIDENCE_SURFACES,
+  FUNCTIONAL_ACCESS_FINDING_STATES,
+  FUNCTIONAL_ACCESS_FORMATS,
+  FUNCTIONAL_ACCESS_MEASUREMENT_METHODS,
+  FUNCTIONAL_ACCESS_MODEL_BINDINGS,
+  FUNCTIONAL_ACCESS_OPERATION_OUTCOMES,
+  FUNCTIONAL_ACCESS_PLAN_STATES,
+  FUNCTIONAL_ACCESS_PERMISSION_STATES,
+  FUNCTIONAL_ACCESS_UNAVAILABLE_REASONS,
 } from "./constants.js";
 export { canonicalJson, domainSeparatedId, sha256Id } from "./canonical.js";
 export { AfterglowError } from "./errors.js";
@@ -27,6 +40,14 @@ export {
   validateAfterglowLensAgainstCapsule,
 } from "./lens.js";
 export { compareWakeAnchors } from "./validation.js";
+export {
+  createFunctionalAccessBaseline,
+  createFunctionalAccessSubsequent,
+  encodeFunctionalAccessBaseline,
+  encodeFunctionalAccessSubsequent,
+  validateFunctionalAccessBaseline,
+  validateFunctionalAccessSubsequent,
+} from "./functional-access.js";
 export type {
   AfterglowCapsule,
   AfterglowContentDigestArtifact,
@@ -49,4 +70,23 @@ export type {
   Sha256Id,
   WakeBriefAnchor,
   WakeRelation,
+  CreateFunctionalAccessBaselineInput,
+  CreateFunctionalAccessSubsequentInput,
+  FunctionalAccessBaseline,
+  FunctionalAccessBasis,
+  FunctionalAccessCapabilityState,
+  FunctionalAccessEvidenceFact,
+  FunctionalAccessEvidenceSurface,
+  FunctionalAccessFindingState,
+  FunctionalAccessFindings,
+  FunctionalAccessMeasurementMethod,
+  FunctionalAccessMeasurementPlan,
+  FunctionalAccessModelBinding,
+  FunctionalAccessModelTarget,
+  FunctionalAccessNextEncounterPosture,
+  FunctionalAccessOperationOutcome,
+  FunctionalAccessPlanState,
+  FunctionalAccessPermissionState,
+  FunctionalAccessSubsequent,
+  FunctionalAccessUnavailableReason,
 } from "./types.js";

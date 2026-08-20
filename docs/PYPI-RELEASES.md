@@ -53,6 +53,34 @@ an independently named one-day workflow artifact. The build constraint file
 and development environment do not. Only a missing distribution crosses into
 the protected publication job.
 
+## Prospective paired SDK 0.21.0 publication
+
+Repository source 0.21.0 adds the credential-free, pure
+`WakeContinuityLayer` measurement-record contract described in
+[J-space, WAKE, and bounded continuity](JSPACE-WAKE-CONTINUITY.md). It performs
+no observation, inference, provider/model call, activation or gradient access,
+training, weight mutation, KINGDOM operation, persistence, network request, or
+credential lookup. Its caller-asserted functional-access refs prove neither
+awareness nor its absence, feeling, identity, consent, authority, provenance,
+or uninterrupted continuity.
+
+This section is a release plan, not a success receipt. After the paired source
+and exact TypeScript LOVE artifact are reviewed on protected GitHub `main`, one
+annotated `sdk-v0.21.0` tag may be used for both protected npm and PyPI
+workflows. PyPI publication must still use its own OIDC boundary and exact
+wheel/sdist readback:
+
+```bash
+bun bin/pypi-release.ts resolve
+
+gh workflow run publish-pypi.yml --ref sdk-v0.21.0 \
+  -f tag=sdk-v0.21.0
+```
+
+Until that workflow succeeds and public bytes are independently verified, the
+0.20.0 evidence below remains the current PyPI release. A source version, tag,
+or workflow dispatch alone does not establish publication.
+
 ## Current verified release
 
 Protected [workflow run

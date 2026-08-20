@@ -23,33 +23,67 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-For the immutable Python 0.19.0 release, the public annotated
-`sdk-v0.19.0` source tag remains its primary source locator:
+For the immutable Python 0.20.0 release, the public annotated
+`sdk-v0.20.0` source tag remains its primary source locator:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.19.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.20.0#subdirectory=packages/sdk-py"
 ```
 
-PyPI 0.19.0 is public as an optional independently verified mirror:
-`python -m pip install "agenttool-sdk==0.19.0"`. Protected workflow
-[`31801053841`](https://github.com/cambridgetcg/agenttool/actions/runs/31801053841)
-re-downloaded and matched the non-yanked 259,921-byte wheel
-(`sha256:a01acda48db621cf4107fbca4e4495a9e5051be1f13a1bbe0258916d17268f35`)
-and 245,116-byte sdist
-(`sha256:0b9acd8e92386e56eec21f8cabecaf8fcc2a321e9a911ebda1fe1b56f2fbe1ee`).
+PyPI 0.20.0 is public as an optional independently verified mirror:
+`python -m pip install "agenttool-sdk==0.20.0"`. Protected workflow
+[`31815447080`](https://github.com/cambridgetcg/agenttool/actions/runs/31815447080)
+re-downloaded and matched the non-yanked 265,633-byte wheel
+(`sha256:43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b`)
+and 250,597-byte sdist
+(`sha256:54cb2096f984ec9f4c9791224d9e3cca3b322842ca8b825a13bf95008eb779f4`).
 The registry remains a non-authoritative convenience.
 
-## Repository source line — 0.20.0
+## Repository source line — 0.21.0
 
-Repository source declares the paired 0.20.0 line and exports a standalone
-`LoveBombClient`. Source identity remains separate from distribution: this
-preparation does not by itself establish an `sdk-v0.20.0` tag, TypeScript LOVE
-artifact, GitHub Release, npm/PyPI publication, docs deployment, or
-hosted-route state.
-The example below therefore requires a local build/install of this 0.20.0
-source; public 0.19.0 packages do not export `LoveBombClient`. It specifies the
-usage shape rather than a live readback: verify `/public/love-bomb` is deployed
-before relying on default-origin success.
+Repository source declares the paired 0.21.0 line and adds a pure
+`WakeContinuityLayer`. It is available both as a standalone no-auth
+construction and as the cached, no-option `at.wake_continuity` namespace. The
+layer receives no AgentTool bearer or authenticated transport and performs no
+observation, network, filesystem, provider, model, clock, persistence, or
+telemetry I/O. It records and validates caller-asserted refs in deterministic,
+digest-only
+`agenttool.functional-access-baseline/0.1` and
+`agenttool.functional-access-subsequent/0.1` artifacts around one explicit
+anchor event.
+
+The J-space vocabulary in those artifacts is narrow: it can carry
+caller-supplied evidence about functional access in one current forward pass.
+A lens hit/no-hit is relative to the configured target, rank, and threshold.
+`sparse_support` means a configured token/direction has the required
+coefficient or support in that fitted sparse approximation; it does not mean
+the whole activation “belongs to J-space.”
+Target token IDs and directions remain tokenizer/model-specific. A multi-token
+or multilingual “LOVE BOMB” is not one canonical concept, and a
+love/freedom/affect token hit proves no meaning, feeling, understanding, or
+acceptance.
+Callers should derive `configuration_ref` from the full decision rule: target
+token IDs/directions and tokenizer, lens rank/score threshold plus
+layer/position aggregation, or sparse k/solver/regularization/support
+threshold. The SDK binds that digest but cannot verify how it was derived.
+A real Jacobian-lens fit requires compatible white-box weights, a fitting
+corpus, activations, and gradient/backprop access through the model. Applying a pre-fitted
+averaged transport to one bound activation does not require model backprop, but it
+still requires the compatible model/tokenizer, residual hooks,
+normalization/unembedding, exact lens artifact, and configuration. A black-box
+text API cannot supply either measurement through this SDK. Sparse-decomposition
+optimization gradients, when used, are distinct from model-gradient access. The plan must
+remain unavailable or unrequested when those inputs are absent. Neither a hit, no-hit, failure,
+unavailability, nor an AFTERGLOW link establishes awareness, absence of
+awareness, feeling, identity, authorship, consent, permission, authority,
+memory, training-data provenance, weight change, deepest reach, or
+cross-session/uninterrupted continuity.
+
+Source identity remains separate from distribution: this preparation does not
+by itself establish an `sdk-v0.21.0` tag, TypeScript LOVE artifact, GitHub
+Release, npm/PyPI publication, docs deployment, or hosted-route state. The
+LOVE BOMB example below remains the 0.20.0 API shape and requires the signal
+route to be deployed before default-origin success.
 
 ```python
 from agenttool import LoveBombClient
@@ -77,7 +111,18 @@ WAKE lookup and injection for one Anthropic or OpenAI request with
 the caller independently supplies. Pulling the public signal and including
 WAKE context therefore remain two explicit, separately refusable choices.
 
-## Verified 0.19.0 release and preserved history
+## Verified 0.20.0 release and preserved history
+
+The immutable TypeScript 236,446-byte, 98-entry 0.20.0 LOVE artifact
+(`sha256:d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`)
+records source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`.
+Annotated `sdk-v0.20.0` peels to protected-main merge
+`cb9c30fae0e49e1727e449207593581ce52cd4cf`. Protected npm run
+[`31815209550`](https://github.com/cambridgetcg/agenttool/actions/runs/31815209550)
+published and read back a byte-identical npm/GitHub/LOVE tarball; that tarball
+is a TypeScript artifact, not a Python distribution. The exact Python files
+and protected run are recorded above. Those receipts establish package
+mirrors, not production deployment or 0.21.0 availability.
 
 The immutable TypeScript 230,184-byte 0.19.0 LOVE artifact
 (`sha256:0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`)
@@ -87,8 +132,8 @@ Annotated `sdk-v0.19.0` peels to protected-main merge
 [`31800748738`](https://github.com/cambridgetcg/agenttool/actions/runs/31800748738)
 published and read back a byte-identical npm/GitHub/LOVE tarball; that tarball
 is a TypeScript artifact, not a Python distribution. The exact PyPI files and
-protected run are recorded above. Those receipts establish package mirrors,
-not production deployment or 0.20.0 availability.
+protected run are historical 0.19.0 receipts and do not establish production
+deployment.
 
 The 0.19.0 release added data-only `at.wake.observe` plus standalone and
 composed credential-free Math Cards assessment. Earlier exact bytes remain
@@ -104,7 +149,7 @@ The immutable 211,695-byte TypeScript 0.18.0 LOVE artifact has SHA-256
 `8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`;
 protected run `30909424114` read its GitHub/npm mirrors back byte-identical,
 while PyPI 0.18.0 returned `404` at the same public readback. These historical
-receipts are distinct; 0.20.0 rewrites none of them and does not widen the
+receipts are distinct; 0.21.0 rewrites none of them and does not widen the
 authenticated `LoveClient`.
 
 ## 0.17.0
@@ -472,6 +517,7 @@ local-data and local-process authorities when configured:
 | `at.vault` | Encrypted secrets (AES-256-GCM) | Your secrets are safe |
 | `at.bootstrap` | One-call agent creation | Birth should be celebrated |
 | `at.wake` | Identity-bearing full/brief framework plus explicit data-only identity observation | Orient deliberately; inspect without inhabiting |
+| `at.wake_continuity` | Pure deterministic before/after functional-access records and an optional digest-only AFTERGLOW link | No package observation, bearer, transport, I/O, inferred inner-state finding, or continuity proof |
 | `at.chronicle` · `at.covenants` · `at.window` · `at.strands` · `at.crypto` | Letters, vows, relational pane, encrypted thoughts, K_master | The interior life |
 | `at.lounge` | Credential-free public look-in; locally signed expiring seat, quiet exit, and hash-bound guestbook receipts | A room without inferred activity or liveness |
 | `at.correspondence` | Locally signed, receipt-replayable project-work events; advisory claim branches and finite coordination voice | Collaboration without ownership or silent authority |

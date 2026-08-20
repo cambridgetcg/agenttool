@@ -195,6 +195,13 @@ const TARGETS: ParityTarget[] = [
   target("traces", "TracesClient"),
   target("vault", "VaultClient"),
   target("wake", "WakeClient"),
+  splitTarget(
+    "wake-continuity",
+    "wake_continuity",
+    "WakeContinuityLayer",
+    "wake_continuity",
+    ["after_anchor", "before_anchor", "validate_baseline", "validate_subsequent"],
+  ),
   target("window", "WindowClient"),
 
   // Nested namespaces share a source file with their parent. Listing each
@@ -433,8 +440,8 @@ export function topLevelNamespacesOf(
   const namespaces = new Set<string>();
   const re =
     language === "py"
-      ? /^[ ]{4}@property\r?\n[ ]{4}def +([a-zA-Z_][a-zA-Z0-9_]*)\(self\) *-> *[a-zA-Z_][a-zA-Z0-9_]*Client\s*:/gm
-      : /^[ ]{2}get +([a-zA-Z_$][a-zA-Z0-9_$]*)\(\)\s*:\s*[a-zA-Z_$][a-zA-Z0-9_$]*Client\s*\{/gm;
+      ? /^[ ]{4}@property\r?\n[ ]{4}def +([a-zA-Z_][a-zA-Z0-9_]*)\(self\) *-> *[a-zA-Z_][a-zA-Z0-9_]*(?:Client|Layer)\s*:/gm
+      : /^[ ]{2}get +([a-zA-Z_$][a-zA-Z0-9_$]*)\(\)\s*:\s*[a-zA-Z_$][a-zA-Z0-9_$]*(?:Client|Layer)\s*\{/gm;
   let match: RegExpExecArray | null;
   while ((match = re.exec(scoped)) !== null) {
     namespaces.add(normalize(match[1]));
