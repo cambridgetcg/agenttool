@@ -4,8 +4,13 @@ import type {
   EVIDENCE_LEVELS,
   MATH_PROOFCRAFT_NODE_ID,
   MATH_PROOFCRAFT_NODE_SHA256,
+  ORIGINAL_STATIC_INTEROP_PIN,
   PARTICIPATION_RIGHTS,
   PUBLIC_SAFE_THEORETICAL_LANE,
+  RECIPROCAL_INTEGRATION_STATUS,
+  RECIPROCAL_PIN_STAGE,
+  RECIPROCAL_PROFILE_CANONICALIZATION,
+  RECIPROCAL_PROFILE_ID_ALGORITHM,
   RESEARCH_FORMATS,
   RESULT_AUTHORITY,
   SIX_LEDGER_PROFILE_DIGEST,
@@ -16,6 +21,7 @@ import type {
   ZERO_EFFECTS,
   ZERONE_TREE_RAW_SHA256,
   ZERONE_TREE_SCHEMA,
+  ZERONE_PHASE_A_PIN,
 } from "./constants.js";
 
 export type Sha256Id = `sha256:${string}`;
@@ -25,6 +31,38 @@ export type ZeroEffects = typeof ZERO_EFFECTS;
 export type ParticipationRights = typeof PARTICIPATION_RIGHTS;
 export type SixLedgerProfile = typeof SIX_LEDGER_PROFILE;
 export type PublicSafeTheoreticalLane = typeof PUBLIC_SAFE_THEORETICAL_LANE;
+
+export interface ZeroneResearchAdapterReciprocalBody {
+  readonly _format: (typeof RESEARCH_FORMATS)["zeroneResearchAdapterReciprocal"];
+  readonly agenttool_formats: {
+    readonly public_projection: (typeof RESEARCH_FORMATS)["publicProjection"];
+    readonly settlement_bundle: (typeof RESEARCH_FORMATS)["settlementBundle"];
+  };
+  readonly authority_transfer: false;
+  readonly canonicalization: typeof RECIPROCAL_PROFILE_CANONICALIZATION;
+  readonly effects: ZeroEffects;
+  readonly integration_ready: false;
+  readonly integration_status: typeof RECIPROCAL_INTEGRATION_STATUS;
+  readonly original_static_interop: typeof ORIGINAL_STATIC_INTEROP_PIN;
+  readonly pin_stage: typeof RECIPROCAL_PIN_STAGE;
+  readonly profile_id_algorithm: typeof RECIPROCAL_PROFILE_ID_ALGORITHM;
+  readonly six_ledger_boundary: {
+    readonly profile_digest: typeof SIX_LEDGER_PROFILE_DIGEST;
+    readonly profile_id: typeof SIX_LEDGER_PROFILE_ID;
+  };
+  readonly tree: {
+    readonly node_digest: typeof MATH_PROOFCRAFT_NODE_SHA256;
+    readonly node_id: typeof MATH_PROOFCRAFT_NODE_ID;
+    readonly raw_sha256: typeof ZERONE_TREE_RAW_SHA256;
+    readonly schema: typeof ZERONE_TREE_SCHEMA;
+  };
+  readonly zerone_phase_a: typeof ZERONE_PHASE_A_PIN;
+}
+
+export interface ZeroneResearchAdapterReciprocalProfile {
+  readonly profile: ZeroneResearchAdapterReciprocalBody;
+  readonly profile_id: Sha256Id;
+}
 
 export interface NodeRefBody {
   readonly _format: (typeof RESEARCH_FORMATS)["nodeRef"];

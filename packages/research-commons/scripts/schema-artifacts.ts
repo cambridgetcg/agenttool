@@ -6,6 +6,7 @@ import {
   SIX_LEDGER_PROFILE,
   ZERO_EFFECTS,
 } from "../src/constants.js";
+import { ZERONE_RESEARCH_ADAPTER_RECIPROCAL_PROFILE } from "../src/interop.js";
 
 type Schema = Record<string, unknown>;
 
@@ -27,6 +28,14 @@ const closed = (properties: Record<string, Schema>, required = Object.keys(prope
   properties,
   required,
 });
+const closedLiteralSchema = (value: unknown): Schema => {
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    return closed(Object.fromEntries(
+      Object.entries(value).map(([key, member]) => [key, closedLiteralSchema(member)]),
+    ));
+  }
+  return { const: value };
+};
 const identified = (
   body: Record<string, Schema>,
   idKey: string,
@@ -365,6 +374,9 @@ const simulation = closed({
   settlement_requests: { type: "array", maxItems: 256, items: settlementRequest },
   work_packages: { type: "array", minItems: 1, maxItems: 256, items: workPackage },
 });
+const zeroneResearchAdapterReciprocal = closedLiteralSchema(
+  ZERONE_RESEARCH_ADAPTER_RECIPROCAL_PROFILE,
+);
 
 function document(id: string, root: Schema, definitions: Record<string, Schema> = {}): Schema {
   return {
@@ -407,6 +419,10 @@ export function generatedSchemas(): Readonly<Record<string, Schema>> {
         simulationState,
         workPackage,
       },
+    ),
+    "zerone-research-adapter-reciprocal-v0.1.schema.json": document(
+      "urn:agenttool:zerone-research-adapter-reciprocal:0.1",
+      zeroneResearchAdapterReciprocal,
     ),
   };
 }

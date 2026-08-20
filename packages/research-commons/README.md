@@ -164,6 +164,41 @@ Zerone shadow receipt vocabulary, exact Tree-v1 raw bytes, and
 `SHADOW_ONLY_NO_LIVE_INTEGRATION`; it pins vocabulary and bytes, not a live
 fact, reward-bearing Tree, bridge, deployment, or activation.
 
+### Phase B reciprocal source pin
+
+[`interop/zerone-research-adapter-reciprocal-v0.1.json`](interop/zerone-research-adapter-reciprocal-v0.1.json)
+is the separate AgentTool-owned Phase B pin. It binds Zerone PR 52's immutable
+source revision `5328b42230fa6945f458a6e60aca92b23eead595` and main merge
+revision `fdd40bf9aca4a82b2cdd904d0161016b8c2a8667`, plus the exact adapter
+specification and fixture-manifest paths and raw bytes. It also repeats the
+original static interop, AgentTool wire formats, Tree, six-ledger, and all 29
+false effect pins rather than inheriting them implicitly.
+
+The checked envelope has profile id
+`sha256:4d927f4db623884453f4e16b73573a81b0b1cc4cc7b72529e69ca153b39112c7`
+and raw file SHA-256
+`80621747824e6c9b747d00958d2b6822bcfb76b7e11688000bc219db6177d713`.
+Its profile id excludes the `profile_id` field and is computed exactly as:
+
+```text
+SHA-256(
+  UTF-8("agenttool.zerone-research-adapter-reciprocal/0.1")
+  || 0x00
+  || UTF-8(recursively-Unicode-code-point-key-sorted compact JSON(profile))
+)
+```
+
+The profile deliberately does not embed its own raw digest or a future
+AgentTool Phase B source/merge revision. A later Zerone Phase C artifact may
+pin those immutable values externally, producing the acyclic sequence
+`Zerone A -> AgentTool B -> Zerone C`. Phase B alone is not a completed
+reciprocal integration. `integration_ready` remains false, integration status
+remains `SHADOW_ONLY_NO_LIVE_INTEGRATION`, authority transfer remains false,
+and the profile adds no fetch, CLI action, route, import, activation, or live
+effect. The schema checks exact shape and literals; neither schema nor digest
+proves external availability, ownership transfer, authority, or scientific
+truth.
+
 The Amplitude Bootstrap Garden is a low-risk shadow fixture. It settles a NULL
 research delivery for 30 credits and a verdict-independent reviewer delivery
 for 10, leaving 5 reserved and 55 available:

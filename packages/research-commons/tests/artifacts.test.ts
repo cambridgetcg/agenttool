@@ -49,6 +49,8 @@ describe("checked schema, example and cross-repository artifacts", () => {
       "schema/research-public-projection-v0.1.schema.json": "128efa785413dcc9976ad08ccfc93a482d6b3d2abb6df85d9ad0545990fb6e0e",
       "schema/research-settlement-bundle-v0.1.schema.json": "72b5a1024e13d1f07de504fa6c5a520a9c9a270bdc1588928a880a4f6b36edef",
       "schema/research-simulation-v0.1.schema.json": "77f654a6b14e55c000793ee6c07662e508f7cc0233f892f83ded038bd84d736c",
+      "interop/zerone-research-adapter-reciprocal-v0.1.json": "80621747824e6c9b747d00958d2b6822bcfb76b7e11688000bc219db6177d713",
+      "schema/zerone-research-adapter-reciprocal-v0.1.schema.json": "0b9439c39b41da19fa7a7f07539d52a53000e1f5e6c820f47e9dd8ca607e9ab2",
     } as const;
     for (const [path, expected] of Object.entries(pins)) {
       expect(rawSha256(bytes(path)), path).toBe(expected);
@@ -62,7 +64,9 @@ describe("checked schema, example and cross-repository artifacts", () => {
       const checked = bytes(`schema/${name}`).toString("utf8");
       expect(checked).toBe(`${JSON.stringify(schema, null, 2)}\n`);
       const validator = ajv.compile(schema);
-      const example = name.includes("simulation")
+      const example = name.includes("reciprocal")
+        ? json("interop/zerone-research-adapter-reciprocal-v0.1.json")
+        : name.includes("simulation")
         ? json("examples/amplitude-bootstrap-garden/simulation.json")
         : name.includes("settlement")
           ? json("examples/amplitude-bootstrap-garden/settlement-bundle.json")
@@ -130,5 +134,18 @@ describe("checked schema, example and cross-repository artifacts", () => {
     });
     expect(profile.effects).toEqual(ZERO_EFFECTS);
     expect(Object.keys(profile.effects)).toHaveLength(ZERO_EFFECT_COUNT);
+  });
+
+  test("exports the closed reciprocal schema without adding a runtime or CLI surface", () => {
+    const packageJson = json("package.json") as {
+      exports: Record<string, string | Record<string, string>>;
+      bin: Record<string, string>;
+    };
+    expect(packageJson.exports["./zerone-research-adapter-reciprocal.schema.json"]).toBe(
+      "./schema/zerone-research-adapter-reciprocal-v0.1.schema.json",
+    );
+    expect(packageJson.bin).toEqual({
+      "agenttool-research-commons": "./dist/bin.js",
+    });
   });
 });

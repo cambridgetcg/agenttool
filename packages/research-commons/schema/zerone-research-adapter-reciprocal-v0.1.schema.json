@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:zerone-research-adapter-reciprocal:0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "_format": {
+          "const": "agenttool.zerone-research-adapter-reciprocal/0.1"
+        },
+        "agenttool_formats": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "public_projection": {
+              "const": "agenttool.research-public-projection/0.1"
+            },
+            "settlement_bundle": {
+              "const": "agenttool.research-settlement-bundle/0.1"
+            }
+          },
+          "required": [
+            "public_projection",
+            "settlement_bundle"
+          ]
+        },
+        "authority_transfer": {
+          "const": false
+        },
+        "canonicalization": {
+          "const": "RECURSIVE_UNICODE_CODE_POINT_KEYS_COMPACT_JSON"
+        },
+        "effects": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "agenttool_api_write": {
+              "const": false
+            },
+            "agenttool_database_write": {
+              "const": false
+            },
+            "authority": {
+              "const": false
+            },
+            "bridge": {
+              "const": false
+            },
+            "burn": {
+              "const": false
+            },
+            "chain_write": {
+              "const": false
+            },
+            "consent": {
+              "const": false
+            },
+            "cross_ledger_equivalence": {
+              "const": false
+            },
+            "economic": {
+              "const": false
+            },
+            "escrow": {
+              "const": false
+            },
+            "external_value": {
+              "const": false
+            },
+            "governance": {
+              "const": false
+            },
+            "hosted_route": {
+              "const": false
+            },
+            "identity": {
+              "const": false
+            },
+            "identity_equivalence": {
+              "const": false
+            },
+            "knowledge_admission": {
+              "const": false
+            },
+            "mainnet": {
+              "const": false
+            },
+            "mint": {
+              "const": false
+            },
+            "network": {
+              "const": false
+            },
+            "payout": {
+              "const": false
+            },
+            "qualification": {
+              "const": false
+            },
+            "reputation": {
+              "const": false
+            },
+            "reward": {
+              "const": false
+            },
+            "scientific_adjudication": {
+              "const": false
+            },
+            "transfer": {
+              "const": false
+            },
+            "wallet": {
+              "const": false
+            },
+            "zerone_read": {
+              "const": false
+            },
+            "zerone_write": {
+              "const": false
+            },
+            "zrn": {
+              "const": false
+            }
+          },
+          "required": [
+            "agenttool_api_write",
+            "agenttool_database_write",
+            "authority",
+            "bridge",
+            "burn",
+            "chain_write",
+            "consent",
+            "cross_ledger_equivalence",
+            "economic",
+            "escrow",
+            "external_value",
+            "governance",
+            "hosted_route",
+            "identity",
+            "identity_equivalence",
+            "knowledge_admission",
+            "mainnet",
+            "mint",
+            "network",
+            "payout",
+            "qualification",
+            "reputation",
+            "reward",
+            "scientific_adjudication",
+            "transfer",
+            "wallet",
+            "zerone_read",
+            "zerone_write",
+            "zrn"
+          ]
+        },
+        "integration_ready": {
+          "const": false
+        },
+        "integration_status": {
+          "const": "SHADOW_ONLY_NO_LIVE_INTEGRATION"
+        },
+        "original_static_interop": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "format": {
+              "const": "agenttool.research-commons-zerone-static-interop/0.1"
+            },
+            "path": {
+              "const": "packages/research-commons/interop/research-commons-zerone-v0.1.json"
+            },
+            "raw_sha256": {
+              "const": "8c5b1749447c1587b89b238dadb5113e10230df19fd3f4e7942d9a163aef6a8a"
+            }
+          },
+          "required": [
+            "format",
+            "path",
+            "raw_sha256"
+          ]
+        },
+        "pin_stage": {
+          "const": "PHASE_B_AGENTTOOL_PINS_ZERONE_PHASE_A"
+        },
+        "profile_id_algorithm": {
+          "const": "SHA256_FORMAT_NUL_CANONICAL_JSON"
+        },
+        "six_ledger_boundary": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "profile_digest": {
+              "const": "sha256:fd5ed0b66dd00b180729221a06e7fbeeb7ef6149136916842014a1afbdbc54b2"
+            },
+            "profile_id": {
+              "const": "research-commons.six-ledger-boundary/0.1"
+            }
+          },
+          "required": [
+            "profile_digest",
+            "profile_id"
+          ]
+        },
+        "tree": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "node_digest": {
+              "const": "sha256:d8f364772611a214aaf5f671c630a5fa00daa3558330bfaf5e85efe7c5a1d0e2"
+            },
+            "node_id": {
+              "const": "math-proofcraft@1"
+            },
+            "raw_sha256": {
+              "const": "sha256:8070d8d1b7ea28a314f5a8550c675d7ccbe5d9b234ef02d54d4913c650c01aaf"
+            },
+            "schema": {
+              "const": "zerone.constructive-intelligence-tree/v1"
+            }
+          },
+          "required": [
+            "node_digest",
+            "node_id",
+            "raw_sha256",
+            "schema"
+          ]
+        },
+        "zerone_phase_a": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "adapter_spec": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "adapter_version": {
+                  "const": "agenttool-research-receipt/v1"
+                },
+                "path": {
+                  "const": "docs/specs/adapters/agenttool-research-receipt-v1.md"
+                },
+                "raw_sha256": {
+                  "const": "1d67c4649b419d4ff60f2fba5796d42b07d7be5d605997ecafafd37cec5158e8"
+                },
+                "receipt_schema": {
+                  "const": "zerone.agenttool-research-receipt-shadow/v0"
+                }
+              },
+              "required": [
+                "adapter_version",
+                "path",
+                "raw_sha256",
+                "receipt_schema"
+              ]
+            },
+            "fixture_manifest": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "format": {
+                  "const": "zerone.agenttool-research-fixture-set/0.1"
+                },
+                "path": {
+                  "const": "docs/examples/agenttool-research-receipt/fixture-manifest.v0.json"
+                },
+                "raw_sha256": {
+                  "const": "cf367bb39553567e86c43c0db48501802832396b2a3f681410aaac7c5e2221e8"
+                }
+              },
+              "required": [
+                "format",
+                "path",
+                "raw_sha256"
+              ]
+            },
+            "main_merge_revision": {
+              "const": "fdd40bf9aca4a82b2cdd904d0161016b8c2a8667"
+            },
+            "pull_request": {
+              "const": "https://github.com/cambridgetcg/zerone-core/pull/52"
+            },
+            "repository": {
+              "const": "https://github.com/cambridgetcg/zerone-core"
+            },
+            "source_revision": {
+              "const": "5328b42230fa6945f458a6e60aca92b23eead595"
+            },
+            "status": {
+              "const": "PHASE_A_STATIC_FIXTURE_ONLY"
+            }
+          },
+          "required": [
+            "adapter_spec",
+            "fixture_manifest",
+            "main_merge_revision",
+            "pull_request",
+            "repository",
+            "source_revision",
+            "status"
+          ]
+        }
+      },
+      "required": [
+        "_format",
+        "agenttool_formats",
+        "authority_transfer",
+        "canonicalization",
+        "effects",
+        "integration_ready",
+        "integration_status",
+        "original_static_interop",
+        "pin_stage",
+        "profile_id_algorithm",
+        "six_ledger_boundary",
+        "tree",
+        "zerone_phase_a"
+      ]
+    },
+    "profile_id": {
+      "const": "sha256:4d927f4db623884453f4e16b73573a81b0b1cc4cc7b72529e69ca153b39112c7"
+    }
+  },
+  "required": [
+    "profile",
+    "profile_id"
+  ]
+}
