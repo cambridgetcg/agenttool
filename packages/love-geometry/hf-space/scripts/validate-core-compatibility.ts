@@ -16,6 +16,11 @@ import {
   LOVE_GEOMETRY_FORMAT as COMPANION_SOURCE_FORMAT,
   createPresentation,
 } from "../assets/app.js";
+import {
+  RETURN_GEOMETRY_FORMAT,
+  RETURN_SCENARIOS,
+  createReturnGeometry,
+} from "../assets/return-geometry.js";
 
 assert.equal(COMPANION_SOURCE_FORMAT, LOVE_GEOMETRY_FORMAT);
 assert.deepEqual(
@@ -56,12 +61,38 @@ assert.deepEqual(
   Object.keys(expectedGeometryIds).sort(),
 );
 
+assert.equal(
+  RETURN_GEOMETRY_FORMAT,
+  "agenttool.love-geometry-return-space-export/0.1",
+);
+assert.equal(RETURN_SCENARIOS.length, 6);
+for (const fixture of RETURN_SCENARIOS) {
+  const trace = createReturnGeometry(fixture.id);
+  assert.equal(trace.source_binding, "checked_in_synthetic_companion_only");
+  assert.equal(trace.signed, false);
+  assert.equal(trace.verified_by_karma, false);
+  assert.equal(trace.writes_karma, false);
+  assert.equal(trace.automatic_or_karma_effect, "none");
+  assert.equal(trace.explicit_browser_download_available, true);
+  assert.equal(trace.choice_gate.next_action_chosen, false);
+  assert.equal(trace.choice_gate.next_action_scheduled, false);
+  assert.equal(trace.choice_gate.authority_inferred, false);
+  assert.equal(trace.choice_gate.continuation_requested, false);
+  assert.equal(
+    trace.display.spacing_or_branch_placement_has_relational_meaning,
+    false,
+  );
+}
+
 const empty = createLoveGeometry(createPresentation("empty-valid").input);
 assert.deepEqual(empty.subject_refs, []);
 assert.deepEqual(empty.vantages, []);
 
 console.log(
   `Validated ${DEMO_SCENARIOS.length} companion fixtures against the current ${LOVE_GEOMETRY_FORMAT} TypeScript source.`,
+);
+console.log(
+  `Validated ${RETURN_SCENARIOS.length} presentation-only Return Geometry fixtures without widening the core package.`,
 );
 console.log(
   "This source-compatibility result is not an exact browser-artifact, package-release, provenance, or deployment claim.",
