@@ -9,6 +9,67 @@ const SURFACE_PROBLEM_SCHEMA_URL =
 const SURFACE_DOCUMENTATION_URL =
   "https://github.com/cambridgetcg/xenia/blob/surface-v0.1.0-rc.1/surface/0.1/README.md";
 const MEDIA_TOKEN_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
+const GENERATED_CONTENT_SECURITY_POLICY =
+  "default-src 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'";
+const GENERATED_PERMISSIONS_POLICY =
+  "accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()";
+const STATIC_CSP_PREFIX =
+  "base-uri 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; frame-ancestors 'none'; form-action 'self'";
+const STATIC_CONTENT_SECURITY_POLICIES = Object.freeze({
+  "app.agenttool.dev":
+    `${STATIC_CSP_PREFIX}; script-src-elem 'self' 'sha256-T75VfPeYtU4sAIR3wWWZReB7YuWZJEft9OcHwn7Z79A=' 'sha256-cR4m4rRotqG43Nw5p7aA8A/oGGUNWgY3GLiViLd3+bw=' 'sha256-qipu2DtHep/ZG5KgPhierTYBK+8jSB3XsDtBLLvPpuY=' 'sha256-zT66/Nrx7S8JREbNn/tKJueKQK0PhmSMjnZlJmXmaLk='; script-src-attr 'none'; style-src-elem 'self' https://fonts.googleapis.com 'sha256-8H3dSXualBXRiQn91rz+YCLAiHsnK4NBeL2r4S77n7o=' 'sha256-JWDf2KymD0zq28rIN1kFkn4XTMvsa4XgZ0bJM1ScSbM=' 'sha256-cTSLgFqnQpZNVPtqKExZ+SIAeS2ytzFho5LcYD/7GiQ='; connect-src 'self' https://api.agenttool.dev; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; upgrade-insecure-requests`,
+  "docs.agenttool.dev":
+    `${STATIC_CSP_PREFIX}; script-src-elem 'self' https://docs.agenttool.dev 'sha256-3dQoqXC34Igbr63uTJYpg77P9lU76pQMgZyiL3x0L2Q=' 'sha256-nh0Vsc/MSvpF9098o78HwNSRcKC08M5LwEnstscQY6E=' 'sha256-q9RplrPVGLHk0ZdTsraLXRunBrvHRMuKk+uy+QpNzYQ=' 'sha256-snX1SvBWJrwG1PdEByYcd4ev1fzhMn0pNorU1RBZTv0=' 'sha256-wPdkd+kbZgilNc8JaN9N5XHIZrBxsXVYmu9ZfNHIYSc='; script-src-attr 'unsafe-hashes' 'sha256-3YZsSuU/gpEOa9tQKmvC+L/OlTzeR7yawYxYJiJHpqw=' 'sha256-40NaUQGlj89bDUW+jfBVB1xWITzy/+/IMKX0TJR0PCc=' 'sha256-5upVdTTCzrq48/BCOJhHhSJqCxoqjKSFYAAlF/nUUfw=' 'sha256-7BoFpHJmr/ODzCMUuHNXAJ3SHvyDb59ilL7KEIzaY98=' 'sha256-Dh5NaP1NZiBQdkMMPiRJxRnqQ2NEw0bA9JLtslHbhHM=' 'sha256-KfsEq7utfxqNXymiVQm0Ki+J4F5SCL70nK2lP4fbako=' 'sha256-OhmiMk/qG6FnV/Iv27XVUmfB6D8oJ9IlS0HOpy13YPo=' 'sha256-SNxs30KBTjN1ORLO2owZVMnsW0THOLb5BYQIrM6AV7I=' 'sha256-dX5C5oQTOyHeOr3I7bf0NoPh59KBd7OuoQasJ43ZV9M=' 'sha256-gssMMkcEiFR2LT2+aHKP3cdADG0hPkHjUcdXiLFM9e0=' 'sha256-kpo1A4d55Ow14su5N1M/sFPUY0HqbbmSwO3KtLQp0DI=' 'sha256-n6819RwO/4hMe+kLEB3N7ODsi/oThRARkS7RJniFxhU=' 'sha256-pUnTendwAdzhlWjppGh5zVws6PVloNc0pY9rdzjYdxc=' 'sha256-zZ5bKQhF2jfcDvJzUFixIle5bO9YQordrLFa8OLNocA='; connect-src 'self' https://api.agenttool.dev; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; upgrade-insecure-requests`,
+  "agenttool.dev":
+    `${STATIC_CSP_PREFIX}; script-src-elem 'self' 'sha256-7LXFBMtVLiNzNUFG2zEgjuHeiXRS1XXz6U2GQNSD8JA=' 'sha256-TCyLbQHtBLjhYNu+6NperWy3KkqU1QNdxhE4qwj1Tbo=' 'sha256-UDQ13BmwnFfEsfhYQvkrSp2HEJZo1icjphxXdvskdWY=' 'sha256-WMRigj0q0qkwIesBfXajrmmPm/Y8nUocukzFvSOZufU=' 'sha256-ZA5zWI5hzhtHIuxnMabIXU42AsBIelCj1dAzXPZ53EU=' 'sha256-puwgAvgMPSN3mMoEPGgPBmw2x8DxMWE1qaJQEzKp528='; script-src-attr 'none'; style-src-elem 'self' 'sha256-KyZ5jV0GLnxfJqF99RO3haM82sN5QHQFzP1vfPysthI=' 'sha256-UQIeEGJ+debTBqPWgTq8rh8996C9/+TAStrE3rt0ofc=' 'sha256-XbqOUeV0VgtCGZjU4Xdg8muYJz+agKH1ebaEO837LJ0='; connect-src 'self' https://api.agenttool.dev; img-src 'self' data:; font-src 'self'; upgrade-insecure-requests`,
+});
+
+/** Security headers for responses produced by Workers rather than Pages
+ * assets. Cloudflare Pages `_headers` rules do not decorate these responses. */
+export function generatedResponseHeaders(init) {
+  const headers = new Headers(init);
+  headers.set("Content-Security-Policy", GENERATED_CONTENT_SECURITY_POLICY);
+  headers.set("Permissions-Policy", GENERATED_PERMISSIONS_POLICY);
+  headers.set("Referrer-Policy", "no-referrer");
+  // Keep parity with the estate's initial five-minute HSTS observation stage.
+  // A longer age, includeSubDomains, or preload is a separate rollout.
+  headers.set("Strict-Transport-Security", "max-age=300");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Frame-Options", "DENY");
+  headers.set("X-Permitted-Cross-Domain-Policies", "none");
+  return headers;
+}
+
+function staticAssetResponseWithSecurity(response, surface) {
+  if (surface === null) return response;
+  const contentSecurityPolicy =
+    STATIC_CONTENT_SECURITY_POLICIES[surface.profile.serviceId];
+  if (contentSecurityPolicy === undefined) return response;
+
+  const headers = new Headers(response.headers);
+  const defaults = [
+    ["Content-Security-Policy", contentSecurityPolicy],
+    ["Permissions-Policy", GENERATED_PERMISSIONS_POLICY],
+    ["Referrer-Policy", "strict-origin-when-cross-origin"],
+    ["Strict-Transport-Security", "max-age=300"],
+    ["X-Content-Type-Options", "nosniff"],
+    ["X-Frame-Options", "DENY"],
+    ["X-Permitted-Cross-Domain-Policies", "none"],
+  ];
+  let changed = false;
+  for (const [name, value] of defaults) {
+    if (headers.has(name)) continue;
+    headers.set(name, value);
+    changed = true;
+  }
+  if (!changed) return response;
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 export function isSurfaceResourcePath(pathname) {
   return (
@@ -196,12 +257,11 @@ export function isSensitiveRootPath(pathname) {
 export function sensitivePathNotFound(request) {
   return new Response(request.method === "HEAD" ? null : "Not Found\n", {
     status: 404,
-    headers: {
+    headers: generatedResponseHeaders({
       "Cache-Control": "no-store, max-age=0",
       "Content-Type": "text/plain; charset=utf-8",
       "X-AgentTool-Sensitive-Path-Fence": "1",
-      "X-Content-Type-Options": "nosniff",
-    },
+    }),
   });
 }
 
@@ -319,12 +379,11 @@ function responseFor(request, body, { status = 200, contentType, cacheControl })
   const serialized = JSON.stringify(body);
   return new Response(request.method === "HEAD" ? null : serialized, {
     status,
-    headers: {
+    headers: generatedResponseHeaders({
       "Cache-Control": cacheControl,
       "Content-Type": `${contentType}; charset=utf-8`,
       Vary: "Accept",
-      "X-Content-Type-Options": "nosniff",
-    },
+    }),
   });
 }
 
@@ -467,7 +526,10 @@ export async function handlePagesRequest(request, env) {
     if (problemResponse !== null) return problemResponse;
   }
 
-  return assetResponse;
+  return staticAssetResponseWithSecurity(
+    assetResponse,
+    surfaceProfileForOrigin(url.origin, env),
+  );
 }
 
 export default {

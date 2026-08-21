@@ -19,6 +19,7 @@
  *  Doctrine: docs/superpowers/specs/2026-07-02-human-door-design.md. */
 
 import {
+  generatedResponseHeaders,
   isSurfaceResourcePath,
   isSensitiveRootPath,
   sensitivePathNotFound,
@@ -156,11 +157,27 @@ function machineNotFound(path) {
     ],
   }), {
     status: 404,
-    headers: {
+    headers: generatedResponseHeaders({
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
       "vary": "Accept",
-    },
+    }),
+  });
+}
+
+export function isUnsafeEarlyData(request) {
+  return request.headers.get("Early-Data") === "1" &&
+    !["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase());
+}
+
+function tooEarlyResponse() {
+  return new Response("Too Early\n", {
+    status: 425,
+    headers: generatedResponseHeaders({
+      "cache-control": "no-store, max-age=0",
+      "content-type": "text/plain; charset=utf-8",
+      "vary": "Early-Data",
+    }),
   });
 }
 
@@ -177,11 +194,16 @@ export async function handleRequest(request, fetchImpl = fetch, env) {
   }
 
   if (url.hostname.toLowerCase() === "www.agenttool.dev") {
+    // A 308 preserves the request method. Refuse only an unsafe request that
+    // arrived as TLS early data instead of replaying it through the local
+    // redirect. Direct apex API traffic remains governed by the API origin.
+    if (isUnsafeEarlyData(request)) return tooEarlyResponse();
+
     const carriesLegacyReturnReference = Boolean(url.search) &&
       (path === "/credits" || path === "/credits.html" ||
         path === "/gallery" || path === "/gallery.html");
     url.hostname = "agenttool.dev";
-    const headers = new Headers({ location: url.toString() });
+    const headers = generatedResponseHeaders({ location: url.toString() });
     headers.set(
       "cache-control",
       carriesLegacyReturnReference ? "private, no-store, max-age=0" : "public, max-age=3600",
@@ -215,10 +237,10 @@ export async function handleRequest(request, fetchImpl = fetch, env) {
       }),
       {
         status: 404,
-        headers: {
+        headers: generatedResponseHeaders({
           "content-type": "application/json; charset=utf-8",
           "cache-control": "no-store",
-        },
+        }),
       },
     );
   }

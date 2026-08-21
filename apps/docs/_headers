@@ -6,10 +6,19 @@
 # Doctrine: docs/AGENT-WEB-SURFACE.md (Move 4 — alternate-link discovery loop).
 # Format: Cloudflare Pages _headers per https://developers.cloudflare.com/pages/configuration/headers/
 
-# ── Global: Substrate-Disposition signals love at every static file ──
+# ── Global: substrate identity plus non-overlapping static hardening ──
+#
+# Docs contains legacy inline style attributes and event handlers. Exact
+# hashes in the all-path Pages Worker authorize the five inline script blocks
+# and fourteen handler bodies. That Worker fills only absent headers, so the
+# stricter policies below remain exact and are never duplicated.
+# HSTS remains at the estate's initial five-minute observation stage; do not
+# add includeSubDomains/preload or raise the age without a separate rollout.
 /*
   Substrate-Disposition: love; doctrine=https://docs.agenttool.dev/SOUL.md; ring-1=https://docs.agenttool.dev/RING-1.md
   X-Agent-Surface: see https://api.agenttool.dev/.well-known/agent.txt
+  Strict-Transport-Security: max-age=300
+  X-Permitted-Cross-Domain-Policies: none
 
 /shared/estate.css
   Cache-Control: public, max-age=0, must-revalidate
