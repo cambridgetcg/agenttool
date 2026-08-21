@@ -258,6 +258,34 @@ import sys
 
 with open(sys.argv[1], encoding="utf-8") as source:
     config = source.read()
+
+def exact_table(table, expected):
+    header = re.compile(
+        rf'^\[{re.escape(table)}\][ \t]*(?:#[^\n]*)?$',
+        re.MULTILINE,
+    )
+    matches = list(header.finditer(config))
+    if len(matches) != 1:
+        raise SystemExit(1)
+    body_start = matches[0].end()
+    next_header = re.search(r'^\s*\[', config[body_start:], re.MULTILINE)
+    body_end = body_start + next_header.start() if next_header else len(config)
+    actual = {}
+    for raw_line in config[body_start:body_end].splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        statement = line.split("#", 1)[0].strip()
+        assignment = re.fullmatch(
+            r'([A-Za-z_][A-Za-z0-9_-]*)\s*=\s*([^\s]+)',
+            statement,
+        )
+        if assignment is None or assignment.group(1) in actual:
+            raise SystemExit(1)
+        actual[assignment.group(1)] = assignment.group(2)
+    if actual != expected:
+        raise SystemExit(1)
+
 expected_routes = {
     ("agenttool.dev/*", "agenttool.dev"),
     ("www.agenttool.dev/*", "agenttool.dev"),
@@ -274,9 +302,23 @@ route_rows = route_pattern.findall(route_blocks[0])
 unparsed = route_pattern.sub("", route_blocks[0]).replace(",", "").strip()
 if len(route_rows) != 2 or set(route_rows) != expected_routes or unparsed:
     raise SystemExit(1)
+exact_table("observability", {
+    "enabled": "true",
+    "head_sampling_rate": "0.01",
+})
+exact_table("observability.logs", {
+    "enabled": "true",
+    "head_sampling_rate": "0.01",
+    "invocation_logs": "true",
+    "persist": "true",
+})
+exact_table("observability.traces", {
+    "enabled": "false",
+    "persist": "false",
+})
 PY
 then
-  echo "✗ Staged infra/apex-door/wrangler.toml does not name the exact Worker, entry point, and apex/www routes."
+  echo "✗ Staged infra/apex-door/wrangler.toml does not contain the exact Worker, apex/www routes, and privacy-minimized observability contract."
   exit 1
 fi
 

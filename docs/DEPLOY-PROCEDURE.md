@@ -787,6 +787,16 @@ subcommand arguments. Wrangler therefore cannot silently load a repository
 `.env` or `.env.local` as credentials; explicit process credentials, Keychain
 fallback, and the deliberately selected OAuth session remain separate inputs.
 
+`infra/apex-door/wrangler.toml` is also the source of truth for the apex
+Worker's privacy-minimized observability contract: 1% incoming and persisted
+invocation-log sampling, with traces disabled and not persisted. Pinned
+Wrangler 4.110.0 treats an omitted observability block as an instruction to
+disable the script-level setting after it creates the Worker version and
+deployment. The uploader therefore rejects a missing or drifted staged block
+before the first Pages upload. Wrangler applies the setting after the version
+deployment, however, so deploy success is not sufficient readback proof; run
+the GET-only audit in Phase 5.
+
 Cloudflare does not make the target list or the `web` target transactional.
 Each requested target is attempted in argument order; the first failure returns
 non-zero immediately and stops later targets. Earlier successful targets remain
@@ -889,6 +899,24 @@ probe must return the fence's exact 404 marker and `Cache-Control: no-store`;
 this proves the all-route edge ran instead of accepting an incidental static
 miss. Any 2xx/3xx, missing marker, or cacheable response prevents a success
 receipt.
+
+### Cloudflare control parity
+
+Run the bounded live audit with the Keychain token scoped to that child only:
+
+```bash
+CLOUDFLARE_API_TOKEN="$(
+  security find-generic-password -s agenttool-cloudflare-token -a macair -w
+)" bun bin/cloudflare-zone-audit.ts --live
+```
+
+The command performs GET requests only and suppresses provider identifiers,
+record content, and credential values. Require its `worker_observability`
+finding to be `ok`; the exact live projection is 1% incoming and persisted
+invocation-log sampling with traces disabled and not persisted. Other
+permission-blocked controls remain explicit and may keep the aggregate audit
+non-zero until the token receives the named read grants. Do not infer the
+observability result from a successful Wrangler deploy.
 
 ### Repo migration files and journal
 

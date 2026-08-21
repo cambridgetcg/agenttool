@@ -680,6 +680,17 @@ preserved; the WAKE cache-bypass rule must be
 the final enabled Cache Rule because Cloudflare resolves conflicting cache
 settings by last match.
 
+`infra/apex-door/wrangler.toml` is the source of truth for
+`agenttool-proxy` observability: incoming requests and persisted invocation
+logs are sampled at 1%, while traces are disabled and not persisted. The
+pinned Wrangler treats an omitted observability block as an instruction to
+disable this script-level, non-versioned setting after a Worker deploy. Every
+`web` deploy therefore validates and reapplies the committed contract. A
+successful version deployment alone does not prove the later settings update
+succeeded; the GET-only live audit must report `worker_observability: ok`
+afterward. This sampling contract does not make request bodies or
+`Authorization` safe to log; Worker source must continue not to emit them.
+
 The legacy `infra/_archive/phase3-load-balancer/deploy.sh` references the
 historical Hetzner-LB DNS update and is not used today.
 

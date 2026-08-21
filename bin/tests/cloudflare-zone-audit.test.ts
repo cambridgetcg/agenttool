@@ -435,6 +435,18 @@ describe("live audit transport", () => {
       authorization: string | null;
     }> = [];
     let appendUnexpectedPageDomain = false;
+    const desiredWorkerObservability = {
+      enabled: true,
+      head_sampling_rate: 0.01,
+      logs: {
+        enabled: true,
+        head_sampling_rate: 0.01,
+        persist: true,
+        invocation_logs: true,
+      },
+      traces: { enabled: false, persist: false, head_sampling_rate: 0 },
+    };
+    let providerWorkerObservability: unknown = desiredWorkerObservability;
     const phaseRules = new Map<string, unknown>([
       [
         "http_request_cache_settings",
@@ -596,17 +608,7 @@ describe("live audit transport", () => {
           `/client/v4/accounts/${accountId}/workers/scripts/agenttool-proxy/settings`
       ) {
         return cloudflare({
-          observability: {
-            enabled: true,
-            head_sampling_rate: 0.01,
-            logs: {
-              enabled: true,
-              head_sampling_rate: 0.01,
-              persist: true,
-              invocation_logs: true,
-            },
-            traces: { enabled: false, persist: false, head_sampling_rate: 0 },
-          },
+          observability: providerWorkerObservability,
         });
       }
       throw new Error(`unexpected fake Cloudflare path: ${url.pathname}`);
@@ -640,6 +642,28 @@ describe("live audit transport", () => {
     expect(serialized).not.toContain("provider-request-id-never-serialize");
     expect(serialized).not.toContain("origin-request-id-never-serialize");
     expect(serialized).not.toContain("dns-proof-content-never-serialize");
+
+    providerWorkerObservability = null;
+    const missingObservabilityResult = await runLiveAudit({
+      manifest,
+      token,
+      fetchImpl: fakeFetch,
+    });
+    expect(missingObservabilityResult.provider_writes).toBe(0);
+    expect(missingObservabilityResult.exit_code).toBe(1);
+    expect(missingObservabilityResult.summary.drift).toBe(1);
+    expect(missingObservabilityResult.findings.find((finding) =>
+      finding.control === "worker_observability"
+    )).toMatchObject({
+      status: "drift",
+      actual: {
+        enabled_matches: false,
+        head_sampling_rate_matches: false,
+        logs_match: false,
+        traces_match: false,
+      },
+    });
+    providerWorkerObservability = desiredWorkerObservability;
 
     appendUnexpectedPageDomain = true;
     const extraDomainResult = await runLiveAudit({
