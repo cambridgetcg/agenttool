@@ -1,12 +1,12 @@
 {
   "_format": "agenttool.love-geometry-hf-space-source-manifest/0.2",
-  "status": "space_successor_source_pending",
+  "status": "space_successor_source_bound",
   "presentation_revision": "0.2.0",
   "space_repository": "https://huggingface.co/spaces/Yu-and-Ai/love-geometry",
   "app_kind": "static-browser-local-companion",
   "source": {
     "git_repository": "https://github.com/cambridgetcg/agenttool",
-    "git_commit": null,
+    "git_commit": "af64cf491a25759b3fffc8f2628547f32d1fc74d",
     "git_subdirectory": "packages/love-geometry/hf-space",
     "relationship": "presentation-only successor; the pure Love Geometry package is unchanged",
     "package": "@agenttool/love-geometry",
@@ -35,7 +35,7 @@
       "reason": "The two unchanged helpers retain the original exact Git source. The predecessor index digest records the replaced entry page without claiming that the successor came from the older commit."
     },
     "runtime_binding": {
-      "status": "exact_runtime_bytes_source_commit_pending",
+      "status": "exact_space_successor_runtime_source",
       "runtime": "checked-in synthetic Equal Seats and Return Geometry presentation fixtures only",
       "paths": [
         "assets/app.js",
@@ -51,16 +51,16 @@
         "assets/style.css": "915e0c65278693563ef1502c6ecab346526933100f193148ab990301a1829a77",
         "index.html": "81284445a5e8f0739b94b20359fc8885d84bb73a54fa4ea5b57760b0e55e4724"
       },
-      "reason": "The runtime bytes are exact and locally verified. Their own AgentTool source commit cannot be known until the first source commit exists; a follow-up provenance commit must bind it before release."
+      "reason": "All five runtime paths are exact to AgentTool source commit af64cf491a25759b3fffc8f2628547f32d1fc74d. The separate source validator reads each path back from that Git object and compares its SHA-256 before release."
     }
   },
   "validation": {
     "command": "node scripts/validate-space.mjs --release",
     "source_command": "node scripts/validate-space.mjs --release --source",
     "core_compatibility_command": "bun scripts/validate-core-compatibility.ts",
-    "verified_at": "2026-08-21T20:35:01Z",
+    "verified_at": "2026-08-21T20:59:44Z",
     "validator_sha256": "2891fa7091af00d0540f5c63926e1c46aea39ea618e06a3c88b64ee5ccf27d56",
-    "result": "runtime_verified_source_commit_pending"
+    "result": "space_successor_runtime_verified_package_artifact_unbound"
   },
   "capabilities": {
     "executes_exact_package_artifact": false,
@@ -83,5 +83,5 @@
     "claims_xenia_conformance": false
   },
   "platform_boundary": "Hugging Face hosts the separately published public Space; provider request processing, injected or derived HTML, client-visible Static Space variables or secrets, logs, retention, moderation, availability, and platform UI remain outside the app boundary. This manifest does not self-attest the current Space revision or deployed-byte identity.",
-  "release_instruction": "Do not publish while status is space_successor_source_pending. First commit the exact runtime source, then bind that known AgentTool commit in a follow-up provenance commit, rerun both validators with --release for the self-contained gate, exact-copy the source directory to the Space clone, and record the immutable Space revision through anonymous readback outside the Space."
+  "release_instruction": "The runtime source is bound. Before publication, rerun the self-contained release gate and the upstream Git-source/core checks, exact-copy this directory to the Space clone without replacing provider-owned .gitattributes, and record the immutable Space revision through anonymous readback outside the Space."
 }
