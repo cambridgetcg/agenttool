@@ -26,7 +26,7 @@
 #     --maintenance-fenced-api \
 #     --maintenance-app-machines=<id,id,id> \
 #     --maintenance-thinker-primary=<id> \
-#     --maintenance-thinker-standby=<id>   # exact stopped five-Machine rollout
+#     --maintenance-thinker-standby=<id>   # exact app-cordoned, stopped five-Machine rollout
 #
 # Retired: --mirror-codeberg. Codeberg is no longer a mirror of this repo;
 # GitHub main is the only head. The flag still parses so it can refuse with
@@ -326,18 +326,25 @@ MAINTENANCE_STATE_PATH=""
 MAINTENANCE_STATE_ACTIVE=0
 MAINTENANCE_BASELINE_SNAPSHOT_JSON=""
 MAINTENANCE_RECOVERY_SNAPSHOT_JSON=""
+MAINTENANCE_CORDONED_RUNTIME_SNAPSHOT_JSON=""
 MAINTENANCE_CONFIG_FINGERPRINT=""
 MAINTENANCE_ATTEMPTED_MACHINE_IDS_CSV=""
 MAINTENANCE_IMAGE_VERIFIED_MACHINE_IDS_CSV=""
 MAINTENANCE_STARTED_APP_IDS_CSV=""
 MAINTENANCE_RESTORED_APP_IDS_CSV=""
 MAINTENANCE_AUTOSTART_RESTORED_APP_IDS_CSV=""
+MAINTENANCE_UNCORDON_ATTEMPTED_APP_IDS_CSV=""
+MAINTENANCE_UNCORDON_VERIFIED_APP_IDS_CSV=""
+MAINTENANCE_RECOVERY_CORDON_ATTEMPTED_APP_IDS_CSV=""
+MAINTENANCE_RECOVERY_CORDONED_APP_IDS_CSV=""
 MAINTENANCE_RECOVERY_REFENCED_MACHINE_IDS_CSV=""
 MAINTENANCE_PRIMARY_RESTORED=0
 MAINTENANCE_STANDBY_RESTORED=0
 MAINTENANCE_INITIAL_FENCE_VERIFIED=0
 MAINTENANCE_PREBUILD_FENCE_VERIFIED=0
 MAINTENANCE_ALL_IMAGES_VERIFIED=0
+MAINTENANCE_CORDONED_RUNTIME_VERIFIED=0
+MAINTENANCE_FINAL_UNCORDON_VERIFIED=0
 MAINTENANCE_FINAL_SHAPE_VERIFIED=0
 MAINTENANCE_WORKERS_DISABLED_VERIFIED=0
 MAINTENANCE_RECOVERY_FENCE_VERIFIED=0
@@ -495,7 +502,14 @@ write_maintenance_state() {
     MAINTENANCE_STATE_VERIFIED_IDS="$MAINTENANCE_IMAGE_VERIFIED_MACHINE_IDS_CSV" \
     MAINTENANCE_STATE_STARTED_APP_IDS="$MAINTENANCE_STARTED_APP_IDS_CSV" \
     MAINTENANCE_STATE_AUTOSTART_IDS="$MAINTENANCE_AUTOSTART_RESTORED_APP_IDS_CSV" \
+    MAINTENANCE_STATE_UNCORDON_ATTEMPTED_IDS="$MAINTENANCE_UNCORDON_ATTEMPTED_APP_IDS_CSV" \
+    MAINTENANCE_STATE_UNCORDON_VERIFIED_IDS="$MAINTENANCE_UNCORDON_VERIFIED_APP_IDS_CSV" \
+    MAINTENANCE_STATE_RECOVERY_CORDON_ATTEMPTED_IDS="$MAINTENANCE_RECOVERY_CORDON_ATTEMPTED_APP_IDS_CSV" \
+    MAINTENANCE_STATE_RECOVERY_CORDONED_IDS="$MAINTENANCE_RECOVERY_CORDONED_APP_IDS_CSV" \
     MAINTENANCE_STATE_RECOVERY_IDS="$MAINTENANCE_RECOVERY_REFENCED_MACHINE_IDS_CSV" \
+    MAINTENANCE_STATE_INITIAL_CORDON="$MAINTENANCE_INITIAL_FENCE_VERIFIED" \
+    MAINTENANCE_STATE_CORDONED_RUNTIME="$MAINTENANCE_CORDONED_RUNTIME_VERIFIED" \
+    MAINTENANCE_STATE_FINAL_UNCORDON="$MAINTENANCE_FINAL_UNCORDON_VERIFIED" \
       bun -e '
         import { createHash } from "node:crypto";
         const csv = (name) => {
@@ -505,7 +519,7 @@ write_maintenance_state() {
         const expectedIds = csv("MAINTENANCE_STATE_MACHINE_IDS");
         const digest = process.env.MAINTENANCE_STATE_IMAGE_DIGEST || null;
         const document = {
-          schema: "agenttool-maintenance-run/v1",
+          schema: "agenttool-maintenance-run/v2",
           rollout_id: process.env.MAINTENANCE_STATE_ROLLOUT_ID,
           source_revision: process.env.MAINTENANCE_STATE_SOURCE_REVISION,
           started_at: process.env.MAINTENANCE_STATE_STARTED_AT,
@@ -513,6 +527,14 @@ write_maintenance_state() {
           checkpoint: process.env.MAINTENANCE_STATE_CHECKPOINT,
           recovery_required:
             process.env.MAINTENANCE_STATE_RECOVERY_REQUIRED === "true",
+          initial_app_cordon_snapshot_verified:
+            process.env.MAINTENANCE_STATE_INITIAL_CORDON === "1",
+          initial_cordoned_app_machine_count:
+            process.env.MAINTENANCE_STATE_INITIAL_CORDON === "1" ? 3 : 0,
+          cordoned_runtime_verified:
+            process.env.MAINTENANCE_STATE_CORDONED_RUNTIME === "1",
+          final_app_uncordon_verified:
+            process.env.MAINTENANCE_STATE_FINAL_UNCORDON === "1",
           image_tag: process.env.MAINTENANCE_STATE_IMAGE_TAG,
           image_digest: digest,
           expected_machine_ids: expectedIds,
@@ -533,6 +555,14 @@ write_maintenance_state() {
           started_app_machine_ids: csv("MAINTENANCE_STATE_STARTED_APP_IDS"),
           autostart_restored_app_machine_ids:
             csv("MAINTENANCE_STATE_AUTOSTART_IDS"),
+          uncordon_attempted_app_machine_ids:
+            csv("MAINTENANCE_STATE_UNCORDON_ATTEMPTED_IDS"),
+          uncordon_verified_app_machine_ids:
+            csv("MAINTENANCE_STATE_UNCORDON_VERIFIED_IDS"),
+          recovery_cordon_attempted_app_machine_ids:
+            csv("MAINTENANCE_STATE_RECOVERY_CORDON_ATTEMPTED_IDS"),
+          recovery_cordoned_app_machine_ids:
+            csv("MAINTENANCE_STATE_RECOVERY_CORDONED_IDS"),
           recovery_refenced_machine_ids:
             csv("MAINTENANCE_STATE_RECOVERY_IDS"),
         };
@@ -633,6 +663,7 @@ verify_maintenance_flyctl_version() {
 verify_maintenance_machine_snapshot() {
   local shape="$1"
   local updated_ids="${2:-}"
+  local transition_id="${3:-}"
   local snapshot validation_output
   snapshot="$(list_fly_machines_json)" || {
     echo "$(red '✗') Could not list Fly Machines for maintenance $shape verification." >&2
@@ -642,6 +673,7 @@ verify_maintenance_machine_snapshot() {
     {
       printf '%s\0' "$MAINTENANCE_BASELINE_SNAPSHOT_JSON"
       printf '%s\0' "$MAINTENANCE_RECOVERY_SNAPSHOT_JSON"
+      printf '%s\0' "$MAINTENANCE_CORDONED_RUNTIME_SNAPSHOT_JSON"
       printf '%s' "$snapshot"
     } |
       MAINTENANCE_VERIFY_SHAPE="$shape" \
@@ -649,6 +681,7 @@ verify_maintenance_machine_snapshot() {
       MAINTENANCE_VERIFY_THINKER_PRIMARY="$MAINTENANCE_THINKER_PRIMARY" \
       MAINTENANCE_VERIFY_THINKER_STANDBY="$MAINTENANCE_THINKER_STANDBY" \
       MAINTENANCE_VERIFY_UPDATED_IDS="$updated_ids" \
+      MAINTENANCE_VERIFY_TRANSITION_ID="$transition_id" \
       MAINTENANCE_VERIFY_RESTORED_APP_IDS="$MAINTENANCE_RESTORED_APP_IDS_CSV" \
       MAINTENANCE_VERIFY_AUTOSTART_IDS="$MAINTENANCE_AUTOSTART_RESTORED_APP_IDS_CSV" \
       MAINTENANCE_VERIFY_STARTED_APP_IDS="$MAINTENANCE_STARTED_APP_IDS_CSV" \
@@ -856,6 +889,7 @@ verify_maintenance_machine_snapshot() {
 
         let baselineText;
         let recoveryText;
+        let runtimeReadyText;
         let machines;
         try {
           const input = Buffer.from(
@@ -863,15 +897,23 @@ verify_maintenance_machine_snapshot() {
           );
           const firstSeparator = input.indexOf(0);
           const secondSeparator = input.indexOf(0, firstSeparator + 1);
-          if (firstSeparator < 0 || secondSeparator < 0) {
+          const thirdSeparator = input.indexOf(0, secondSeparator + 1);
+          if (
+            firstSeparator < 0 ||
+            secondSeparator < 0 ||
+            thirdSeparator < 0
+          ) {
             throw new Error("missing snapshot separator");
           }
           baselineText = input.subarray(0, firstSeparator).toString("utf8");
           recoveryText = input
             .subarray(firstSeparator + 1, secondSeparator)
             .toString("utf8");
+          runtimeReadyText = input
+            .subarray(secondSeparator + 1, thirdSeparator)
+            .toString("utf8");
           machines = JSON.parse(
-            input.subarray(secondSeparator + 1).toString("utf8"),
+            input.subarray(thirdSeparator + 1).toString("utf8"),
           );
         } catch {
           fail("fly machine list did not return JSON");
@@ -887,8 +929,13 @@ verify_maintenance_machine_snapshot() {
           "starting",
           "started",
           "activating",
+          "cordoned_ready",
+          "cordoned_stable",
+          "uncordoning",
           "final",
+          "recovery_admission",
           "recovery_initial",
+          "recovery_cordoning",
           "recovery",
           "safe",
         ].includes(shape)) {
@@ -919,6 +966,19 @@ verify_maintenance_machine_snapshot() {
         }
         for (const id of expectedIds) {
           if (!byId.has(id)) fail(`expected Machine ${id} is absent`);
+          const machine = byId.get(id);
+          const instanceId = machine?.instance_id;
+          if (typeof instanceId !== "string" || instanceId.length === 0) {
+            fail(`Machine ${id} does not expose a stable instance ID`);
+          }
+          const updatedAt = machine?.updated_at;
+          if (
+            typeof updatedAt !== "string" ||
+            !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z$/.test(updatedAt) ||
+            !Number.isFinite(Date.parse(updatedAt))
+          ) {
+            fail(`Machine ${id} does not expose an RFC3339 updated-at value`);
+          }
         }
         for (const id of byId.keys()) {
           if (!expectedIds.includes(id)) fail(`unexpected Machine ${id} is present`);
@@ -956,8 +1016,51 @@ verify_maintenance_machine_snapshot() {
             fail("recovery baseline is incomplete");
           }
         }
+        let runtimeReadyById = new Map();
+        if (["cordoned_stable", "uncordoning", "final"].includes(shape)) {
+          if (!runtimeReadyText) {
+            fail("cordoned runtime baseline is unavailable");
+          }
+          let runtimeReady;
+          try {
+            runtimeReady = JSON.parse(runtimeReadyText);
+          } catch {
+            fail("cordoned runtime baseline is unreadable");
+          }
+          if (!Array.isArray(runtimeReady)) {
+            fail("cordoned runtime baseline is not an array");
+          }
+          runtimeReadyById = new Map(
+            runtimeReady.map((machine) => [machine.id, machine]),
+          );
+          if (runtimeReadyById.size !== 5) {
+            fail("cordoned runtime baseline is incomplete");
+          }
+        }
 
         const updated = new Set(csv("MAINTENANCE_VERIFY_UPDATED_IDS"));
+        const transitionId = process.env.MAINTENANCE_VERIFY_TRANSITION_ID ?? "";
+        if (["uncordoning", "final"].includes(shape)) {
+          const expectedPrefix = apps.slice(0, updated.size);
+          if (
+            updated.size > apps.length ||
+            !equal([...updated].sort(), [...expectedPrefix].sort()) ||
+            (shape === "final" && updated.size !== apps.length)
+          ) {
+            fail("app uncordon prefix is not exact");
+          }
+          if (
+            (shape === "uncordoning" &&
+              transitionId !== expectedPrefix.at(-1)) ||
+            (shape === "final" && transitionId !== "")
+          ) {
+            fail("app uncordon transition identity is not exact");
+          }
+        } else if (shape === "cordoned_stable" && updated.size !== 0) {
+          fail("cordoned runtime stability proof cannot carry an uncordon set");
+        } else if (transitionId !== "") {
+          fail("unexpected maintenance transition identity");
+        }
         const restoredApps = new Set(csv("MAINTENANCE_VERIFY_RESTORED_APP_IDS"));
         const autostartApps = new Set(csv("MAINTENANCE_VERIFY_AUTOSTART_IDS"));
         const startedApps = new Set(csv("MAINTENANCE_VERIFY_STARTED_APP_IDS"));
@@ -965,16 +1068,83 @@ verify_maintenance_machine_snapshot() {
           process.env.MAINTENANCE_VERIFY_PRIMARY_RESTORED === "1";
         const standbyRestored =
           process.env.MAINTENANCE_VERIFY_STANDBY_RESTORED === "1";
-        const allAppsAreStarted = ["started", "activating", "final"].includes(shape);
+        if (["recovery_admission", "recovery_cordoning"].includes(shape)) {
+          if (shape === "recovery_cordoning") {
+            const expectedPrefix = apps.slice(0, updated.size);
+            if (
+              updated.size > apps.length ||
+              !equal([...updated].sort(), [...expectedPrefix].sort())
+            ) {
+              fail("recovery cordon prefix is not exact");
+            }
+          } else if (updated.size !== 0) {
+            fail("recovery admission inventory cannot carry a mutation set");
+          }
+          for (const id of apps) {
+            const machine = byId.get(id);
+            if (
+              machine?.config?.metadata?.fly_process_group !== "app" ||
+              typeof machine?.cordoned !== "boolean"
+            ) {
+              fail(`recovery app identity ${id} is not exact`);
+            }
+            if (
+              shape === "recovery_cordoning" &&
+              updated.has(id) &&
+              machine.cordoned !== true
+            ) {
+              fail(`app Machine ${id} recovery cordon set is not exact`);
+            }
+          }
+          for (const id of [primary, standby]) {
+            const machine = byId.get(id);
+            if (
+              machine?.config?.metadata?.fly_process_group !== "thinker" ||
+              typeof machine?.cordoned !== "boolean"
+            ) {
+              fail(`recovery thinker identity ${id} is not exact`);
+            }
+          }
+          process.exit(0);
+        }
+        const allAppsAreStarted = [
+          "started",
+          "activating",
+          "cordoned_ready",
+          "cordoned_stable",
+          "uncordoning",
+          "final",
+        ].includes(shape);
         const appShouldBeStarted = (id) => allAppsAreStarted ||
           (shape === "starting" && startedApps.has(id));
         const appRestartIsRestored = (id) =>
-          ["starting", "started", "activating", "final"].includes(shape) ||
+          [
+            "starting",
+            "started",
+            "activating",
+            "cordoned_ready",
+            "cordoned_stable",
+            "uncordoning",
+            "final",
+          ].includes(shape) ||
           (shape === "restoring" && restoredApps.has(id));
-        const appAutostartIsRestored = (id) => shape === "final" ||
+        const appAutostartIsRestored = (id) => [
+          "cordoned_ready",
+          "cordoned_stable",
+          "uncordoning",
+          "final",
+        ].includes(shape) ||
           (shape === "activating" && autostartApps.has(id));
         const thinkerIsRestored = (id) =>
-          ["starting", "started", "activating", "final"].includes(shape) ||
+          [
+            "starting",
+            "started",
+            "activating",
+            "cordoned_ready",
+            "cordoned_stable",
+            "uncordoning",
+            "final",
+          ].includes(shape) ||
           (shape === "restoring" &&
             ((id === primary && primaryRestored) ||
               (id === standby && standbyRestored)));
@@ -1066,6 +1236,35 @@ verify_maintenance_machine_snapshot() {
           if (typeof machine.cordoned !== "boolean") {
             fail(`app Machine ${id} does not expose a boolean cordoned state`);
           }
+          if (
+            [
+              "initial",
+              "capture",
+              "fenced",
+              "restoring",
+              "starting",
+              "started",
+              "activating",
+              "cordoned_ready",
+              "cordoned_stable",
+              "recovery_initial",
+              "safe",
+            ].includes(shape)
+          ) {
+            if (!machine.cordoned) {
+              fail(`app Machine ${id} is not held behind the routing cordon`);
+            }
+          } else if (shape === "uncordoning") {
+            if (machine.cordoned === updated.has(id)) {
+              fail(`app Machine ${id} cordon release set is not exact`);
+            }
+          } else if (shape === "final") {
+            if (machine.cordoned) {
+              fail(`app Machine ${id} remains cordoned after verified release`);
+            }
+          } else if (shape === "recovery" && !machine.cordoned) {
+            fail(`app Machine ${id} is not cordoned during recovery`);
+          }
           if (config?.metadata?.fly_process_group !== "app") {
             fail(`Machine ${id} is not in process group app`);
           }
@@ -1132,6 +1331,12 @@ verify_maintenance_machine_snapshot() {
             requireAppService(machine, false);
           }
         }
+        const orderedAppRegions = apps.map((id) => byId.get(id).region);
+        if (orderedAppRegions.join(",") !== "lhr,lhr,cdg") {
+          fail(
+            `app selector order is ${orderedAppRegions.join(",")}, expected lhr,lhr,cdg`,
+          );
+        }
         appRegions.sort();
         if (appRegions.join(",") !== "cdg,lhr,lhr") {
           fail(`app region multiset is ${appRegions.join(",")}, expected cdg,lhr,lhr`);
@@ -1145,6 +1350,9 @@ verify_maintenance_machine_snapshot() {
           }
           if (typeof machine.cordoned !== "boolean") {
             fail(`thinker Machine ${id} does not expose a boolean cordoned state`);
+          }
+          if (machine.cordoned) {
+            fail(`thinker Machine ${id} must never be cordoned`);
           }
           if (config?.metadata?.fly_process_group !== "thinker") {
             fail(`Machine ${id} is not in process group thinker`);
@@ -1204,9 +1412,6 @@ verify_maintenance_machine_snapshot() {
             if (machine.region !== baselineMachine.region) {
               fail(`Machine ${id} region drifted from its per-ID baseline`);
             }
-            if (machine.cordoned !== baselineMachine.cordoned) {
-              fail(`Machine ${id} cordoned state drifted`);
-            }
             const observedConfig = nonImageConfig(machine);
             let configMatches;
             if (shape === "recovery") {
@@ -1220,7 +1425,8 @@ verify_maintenance_machine_snapshot() {
               if (
                 !recoveryIds.has(id) &&
                 (machine.state !== recoveryMachine.state ||
-                  machine.version !== recoveryMachine.version)
+                  machine.updated_at !== recoveryMachine.updated_at ||
+                  machine.instance_id !== recoveryMachine.instance_id)
               ) {
                 fail(`untouched Machine ${id} recovery lifecycle drifted`);
               }
@@ -1235,6 +1441,19 @@ verify_maintenance_machine_snapshot() {
             if (!configMatches) {
               fail(`Machine ${id} full non-image configuration drifted`);
             }
+            if (["cordoned_stable", "uncordoning", "final"].includes(shape)) {
+              const runtimeReadyMachine = runtimeReadyById.get(id);
+              if (!runtimeReadyMachine) {
+                fail(`cordoned runtime Machine ${id} is absent`);
+              }
+              if (
+                machine.instance_id !== runtimeReadyMachine.instance_id ||
+                (id !== transitionId &&
+                  machine.updated_at !== runtimeReadyMachine.updated_at)
+              ) {
+                fail(`Machine ${id} lifecycle changed while admission reopened`);
+              }
+            }
           }
         }
 
@@ -1244,12 +1463,29 @@ verify_maintenance_machine_snapshot() {
             const baselineMachine = baselineById.get(id);
             if (updated.has(id)) {
               requireTargetImage(machine, targetDigest);
-            } else if (!equal(machine.image_ref, baselineMachine.image_ref)) {
-              fail(`unattempted Machine ${id} image changed`);
+            } else {
+              if (!equal(machine.image_ref, baselineMachine.image_ref)) {
+                fail(`unattempted Machine ${id} image changed`);
+              }
+              if (machine.instance_id !== baselineMachine.instance_id) {
+                fail(`unattempted Machine ${id} instance changed`);
+              }
+              if (machine.updated_at !== baselineMachine.updated_at) {
+                fail(`unattempted Machine ${id} updated-at value changed`);
+              }
             }
           }
         } else if (
-          ["restoring", "starting", "started", "activating", "final"].includes(shape)
+          [
+            "restoring",
+            "starting",
+            "started",
+            "activating",
+            "cordoned_ready",
+            "cordoned_stable",
+            "uncordoning",
+            "final",
+          ].includes(shape)
         ) {
           for (const id of expectedIds) requireTargetImage(byId.get(id), targetDigest);
         } else if (shape === "recovery") {
@@ -1295,7 +1531,16 @@ verify_maintenance_machine_snapshot() {
       MAINTENANCE_IMAGE_DIGEST="$validation_output"
       MAINTENANCE_IMAGE_REFERENCE="registry.fly.io/$FLY_APP:$MAINTENANCE_IMAGE_LABEL@$MAINTENANCE_IMAGE_DIGEST"
       ;;
+    cordoned_ready)
+      MAINTENANCE_CORDONED_RUNTIME_SNAPSHOT_JSON="$snapshot"
+      ;;
+    uncordoning)
+      MAINTENANCE_CORDONED_RUNTIME_SNAPSHOT_JSON="$snapshot"
+      ;;
     recovery_initial)
+      MAINTENANCE_RECOVERY_SNAPSHOT_JSON="$snapshot"
+      ;;
+    recovery_admission)
       MAINTENANCE_RECOVERY_SNAPSHOT_JSON="$snapshot"
       ;;
   esac
@@ -1370,6 +1615,22 @@ maintenance_restore_thinker() {
   )
 }
 
+maintenance_cordon_app() {
+  local machine_id="$1"
+  (
+    cd api || exit 1
+    fly machine cordon "$machine_id" -a "$FLY_APP"
+  )
+}
+
+maintenance_uncordon_app() {
+  local machine_id="$1"
+  (
+    cd api || exit 1
+    fly machine uncordon "$machine_id" -a "$FLY_APP"
+  )
+}
+
 maintenance_refence_machine() {
   local machine_id="$1"
   local role="$2"
@@ -1398,14 +1659,37 @@ maintenance_refence_machine() {
 
 best_effort_maintenance_refence() {
   local machine_id recovery_ids="" candidate_ids recovery_count=0
-  echo "$(yellow '⚠ fail-closed maintenance recovery: re-inventorying, then re-fencing the exact five Machines without rolling images back')"
+  local recovery_cordoned_ids="" recovery_cordon_count=0
+  echo "$(yellow '⚠ fail-closed maintenance recovery: re-inventorying, re-cordoning every app, then re-fencing the exact five Machines without rolling images back')"
   if verify_maintenance_machine_snapshot safe; then
     MAINTENANCE_RECOVERY_FENCE_VERIFIED=1
     echo "  ✓ maintenance fleet was already safely fenced; no recovery mutation was needed"
     return 0
   fi
+  if ! verify_maintenance_machine_snapshot recovery_admission ""; then
+    echo "$(red '✗') Recovery inventory does not preserve the exact five role identities; no re-cordon mutation is authorized." >&2
+    return 1
+  fi
+  for machine_id in "${MAINTENANCE_APP_MACHINE_IDS[@]}"; do
+    recovery_cordon_count=$((recovery_cordon_count + 1))
+    candidate_ids="$(append_csv_value "$recovery_cordoned_ids" "$machine_id")"
+    MAINTENANCE_RECOVERY_CORDON_ATTEMPTED_APP_IDS_CSV="$candidate_ids"
+    write_maintenance_state \
+      "recovery_attempting_app_cordon_${recovery_cordon_count}_of_3" true || return 1
+    maintenance_cordon_app "$machine_id" ||
+      echo "$(yellow '⚠ an app re-cordon command returned nonzero; resolving by full read-back')" >&2
+    if verify_maintenance_machine_snapshot recovery_cordoning "$candidate_ids"; then
+      recovery_cordoned_ids="$candidate_ids"
+      MAINTENANCE_RECOVERY_CORDONED_APP_IDS_CSV="$recovery_cordoned_ids"
+      write_maintenance_state \
+        "recovery_verified_app_cordon_${recovery_cordon_count}_of_3" true || return 1
+    else
+      echo "$(red '✗') App re-cordon read-back failed; no re-fence update is authorized." >&2
+      return 1
+    fi
+  done
   if ! verify_maintenance_machine_snapshot recovery_initial ""; then
-    echo "$(red '✗') Recovery inventory is outside the recognized rollout states; no re-fence mutation is authorized." >&2
+    echo "$(red '✗') Apps are re-cordoned, but the fleet is outside the recognized rollout states; no re-fence update is authorized." >&2
     return 1
   fi
   for machine_id in "${MAINTENANCE_APP_MACHINE_IDS[@]}"; do
@@ -1467,7 +1751,7 @@ best_effort_maintenance_refence() {
 
 verify_maintenance_runtime_environment() {
   local machine_id remote_command
-  remote_command="test \"\${AGENTTOOL_GIT_REVISION:-}\" = \"$HEAD_REVISION\" && test \"\${AGENTTOOL_SOURCE_DIRTY:-}\" = \"false\" && test \"\${AGENTTOOL_DISABLE_WORKERS:-}\" = \"1\" && $DEPLOYED_DATABASE_PROBE_COMMAND"
+  remote_command="test \"\${AGENTTOOL_GIT_REVISION:-}\" = \"$HEAD_REVISION\" && test \"\${AGENTTOOL_SOURCE_DIRTY:-}\" = \"false\" && test \"\${AGENTTOOL_DISABLE_WORKERS:-}\" = \"1\" && $DEPLOYED_DATABASE_PROBE_COMMAND && bun --no-install --no-env-file -e \"const response=await fetch(\\\"http://127.0.0.1:3000/health\\\");const body=await response.json();if(!response.ok||body?.build?.revision!==process.env.AGENTTOOL_GIT_REVISION||body?.build?.dirty!==false||body?.covenant_v2_authority!==\\\"absent_fail_closed\\\")process.exit(1)\""
   for machine_id in "${MAINTENANCE_APP_MACHINE_IDS[@]}"; do
     run_fly_ssh_probe_silently "$machine_id" "$remote_command" || {
       echo "$(red '✗') A started app Machine failed silent revision/dirty/worker/database verification." >&2
@@ -1478,7 +1762,30 @@ verify_maintenance_runtime_environment() {
   DATABASE_PROOF_STARTED_MACHINE_COUNT="${#MAINTENANCE_APP_MACHINE_IDS[@]}"
   DATABASE_PROOF_TRANSACTION_SELECT_ONE=1
   DATABASE_PROOF_SESSION_SELECT_ONE=1
-  echo "  ✓ three started app Machines silently proved revision, dirty=false, workers disabled, and both database paths"
+  echo "  ✓ three started app Machines silently proved revision, dirty=false, workers disabled, both database paths, and fail-closed loopback health"
+}
+
+verify_maintenance_public_health() {
+  local health
+  health="$(release_curl -fsS --retry 5 --retry-delay 2 --retry-connrefused \
+    --max-time 15 "$HEALTH_URL?revision=$HEAD_REVISION&dirty=false")" || {
+    echo "$(red '✗') Maintenance canary did not return public HTTP 200." >&2
+    return 1
+  }
+  if ! printf '%s' "$health" | \
+    MAINTENANCE_HEALTH_REVISION="$HEAD_REVISION" \
+    bun --no-install --no-env-file -e '
+      const body = await new Response(Bun.stdin.stream()).json();
+      if (
+        body?.build?.revision !== process.env.MAINTENANCE_HEALTH_REVISION ||
+        body?.build?.dirty !== false ||
+        body?.covenant_v2_authority !== "absent_fail_closed"
+      ) process.exit(1);
+    '; then
+    echo "$(red '✗') Maintenance canary health is not the exact fail-closed target release." >&2
+    return 1
+  fi
+  echo "  ✓ public maintenance canary is the exact fail-closed target release"
 }
 
 verify_required_frontend_inputs() {
@@ -2008,6 +2315,7 @@ cleanup_frontend_release_stage() {
 clear_maintenance_snapshots() {
   MAINTENANCE_BASELINE_SNAPSHOT_JSON=""
   MAINTENANCE_RECOVERY_SNAPSHOT_JSON=""
+  MAINTENANCE_CORDONED_RUNTIME_SNAPSHOT_JSON=""
 }
 
 list_fly_machines_json() {
@@ -3153,9 +3461,14 @@ write_deploy_receipt() {
     DEPLOY_RECEIPT_MAINTENANCE_CONFIG_HASH="$MAINTENANCE_CONFIG_FINGERPRINT" \
     DEPLOY_RECEIPT_MAINTENANCE_IMAGE_IDS="$MAINTENANCE_IMAGE_VERIFIED_MACHINE_IDS_CSV" \
     DEPLOY_RECEIPT_MAINTENANCE_STARTED_IDS="$MAINTENANCE_STARTED_APP_IDS_CSV" \
+    DEPLOY_RECEIPT_MAINTENANCE_UNCORDONED_IDS="$MAINTENANCE_UNCORDON_VERIFIED_APP_IDS_CSV" \
+    DEPLOY_RECEIPT_MAINTENANCE_RECOVERY_CORDON_ATTEMPTED_IDS="$MAINTENANCE_RECOVERY_CORDON_ATTEMPTED_APP_IDS_CSV" \
+    DEPLOY_RECEIPT_MAINTENANCE_RECOVERY_CORDONED_IDS="$MAINTENANCE_RECOVERY_CORDONED_APP_IDS_CSV" \
     DEPLOY_RECEIPT_MAINTENANCE_INITIAL="$MAINTENANCE_INITIAL_FENCE_VERIFIED" \
     DEPLOY_RECEIPT_MAINTENANCE_PREBUILD="$MAINTENANCE_PREBUILD_FENCE_VERIFIED" \
     DEPLOY_RECEIPT_MAINTENANCE_ALL_IMAGES="$MAINTENANCE_ALL_IMAGES_VERIFIED" \
+    DEPLOY_RECEIPT_MAINTENANCE_CORDONED_RUNTIME="$MAINTENANCE_CORDONED_RUNTIME_VERIFIED" \
+    DEPLOY_RECEIPT_MAINTENANCE_FINAL_UNCORDON="$MAINTENANCE_FINAL_UNCORDON_VERIFIED" \
     DEPLOY_RECEIPT_MAINTENANCE_FINAL="$MAINTENANCE_FINAL_SHAPE_VERIFIED" \
     DEPLOY_RECEIPT_MAINTENANCE_WORKERS="$MAINTENANCE_WORKERS_DISABLED_VERIFIED" \
     DEPLOY_RECEIPT_MAINTENANCE_RECOVERY_FENCE="$MAINTENANCE_RECOVERY_FENCE_VERIFIED" \
@@ -3176,6 +3489,15 @@ write_deploy_receipt() {
           process.env.DEPLOY_RECEIPT_OUTCOME === "succeeded";
         const imageIds = new Set(csv("DEPLOY_RECEIPT_MAINTENANCE_IMAGE_IDS"));
         const startedIds = new Set(csv("DEPLOY_RECEIPT_MAINTENANCE_STARTED_IDS"));
+        const uncordonedIds = new Set(
+          csv("DEPLOY_RECEIPT_MAINTENANCE_UNCORDONED_IDS"),
+        );
+        const recoveryCordonedIds = new Set(
+          csv("DEPLOY_RECEIPT_MAINTENANCE_RECOVERY_CORDONED_IDS"),
+        );
+        const recoveryCordonAttemptedIds = new Set(
+          csv("DEPLOY_RECEIPT_MAINTENANCE_RECOVERY_CORDON_ATTEMPTED_IDS"),
+        );
         const machineIds = csv("DEPLOY_RECEIPT_MAINTENANCE_IDS").sort();
         const imageDigest =
           process.env.DEPLOY_RECEIPT_MAINTENANCE_DIGEST || null;
@@ -3205,8 +3527,21 @@ write_deploy_receipt() {
         ) {
           process.exit(1);
         }
+        if (maintenanceSucceeded && (
+          machineIds.length !== 5 ||
+          imageIds.size !== 5 ||
+          startedIds.size !== 3 ||
+          uncordonedIds.size !== 3 ||
+          !bool("DEPLOY_RECEIPT_MAINTENANCE_INITIAL") ||
+          !bool("DEPLOY_RECEIPT_MAINTENANCE_PREBUILD") ||
+          !bool("DEPLOY_RECEIPT_MAINTENANCE_ALL_IMAGES") ||
+          !bool("DEPLOY_RECEIPT_MAINTENANCE_CORDONED_RUNTIME") ||
+          !bool("DEPLOY_RECEIPT_MAINTENANCE_FINAL_UNCORDON") ||
+          !bool("DEPLOY_RECEIPT_MAINTENANCE_FINAL") ||
+          !bool("DEPLOY_RECEIPT_MAINTENANCE_WORKERS")
+        )) process.exit(1);
         const receipt = {
-          schema: "agenttool-deploy-receipt/v5",
+          schema: "agenttool-deploy-receipt/v6",
           run_id: process.env.DEPLOY_RECEIPT_RUN_ID,
           mode: process.env.DEPLOY_RECEIPT_MODE,
           outcome: process.env.DEPLOY_RECEIPT_OUTCOME,
@@ -3255,7 +3590,7 @@ write_deploy_receipt() {
         };
         if (maintenanceMode) {
           receipt.maintenance = {
-            proof_schema: "agenttool-fly-maintenance-proof/v1",
+            proof_schema: "agenttool-fly-maintenance-proof/v2",
             checkpoint:
               process.env.DEPLOY_RECEIPT_MAINTENANCE_CHECKPOINT || null,
             machine_set_sha256: createHash("sha256")
@@ -3265,14 +3600,24 @@ write_deploy_receipt() {
               process.env.DEPLOY_RECEIPT_MAINTENANCE_CONFIG_HASH || null,
             image_verified_machine_count: imageIds.size,
             started_app_machine_count: startedIds.size,
+            uncordoned_app_machine_count: uncordonedIds.size,
+            recovery_cordon_attempted_app_machine_count:
+              recoveryCordonAttemptedIds.size,
+            recovery_cordoned_app_machine_count: recoveryCordonedIds.size,
             stopped_thinker_machine_count:
               bool("DEPLOY_RECEIPT_MAINTENANCE_FINAL") ? 2 : 0,
-            initial_fence_verified:
+            initial_app_cordon_snapshot_verified:
               bool("DEPLOY_RECEIPT_MAINTENANCE_INITIAL"),
+            initial_cordoned_app_machine_count:
+              bool("DEPLOY_RECEIPT_MAINTENANCE_INITIAL") ? 3 : 0,
             prebuild_fence_verified:
               bool("DEPLOY_RECEIPT_MAINTENANCE_PREBUILD"),
             fleet_image_verified:
               bool("DEPLOY_RECEIPT_MAINTENANCE_ALL_IMAGES"),
+            cordoned_runtime_verified:
+              bool("DEPLOY_RECEIPT_MAINTENANCE_CORDONED_RUNTIME"),
+            final_app_uncordon_verified:
+              bool("DEPLOY_RECEIPT_MAINTENANCE_FINAL_UNCORDON"),
             final_topology_verified:
               bool("DEPLOY_RECEIPT_MAINTENANCE_FINAL"),
             workers_disabled_started_apps_verified:
@@ -3289,7 +3634,11 @@ write_deploy_receipt() {
             proof_scope: {
               machine_identity: "same_provider_reported_id_set_only",
               fleet_wide_provider_lock: "not_established",
-              external_provider_admission: "not_verified_by_deploy_sh",
+              provider_routing_admission:
+                "three_named_app_cordons_held_until_target_runtime_verified",
+              pre_wrapper_uncordoned_baseline:
+                "external_operator_evidence_required",
+              external_drain: "operator_evidence_required",
             },
           };
         }
@@ -3382,13 +3731,30 @@ trap 'exit 143' TERM
 
 if [ "$MAINTENANCE_FENCED_API" = 1 ]; then
   echo ""
-  echo "→ Proving the exact stopped five-Machine maintenance fence before preflight…"
+  echo "→ Proving the exact stopped, app-cordoned five-Machine maintenance fence before preflight…"
   verify_maintenance_flyctl_version || exit 1
   if ! verify_maintenance_machine_snapshot initial; then
     echo "$(red '✗ Release blocked:') the operator-presented five-Machine fence is not exact."
     exit 1
   fi
   MAINTENANCE_INITIAL_FENCE_VERIFIED=1
+  local_timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  maintenance_nonce="$(
+    bun -e 'process.stdout.write(crypto.randomUUID().replaceAll("-", "").slice(0, 16))'
+  )" || {
+    echo "$(red '✗ Release blocked:') could not create a unique maintenance rollout ID."
+    exit 1
+  }
+  MAINTENANCE_STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  MAINTENANCE_ROLLOUT_ID="maintenance-${HEAD_REVISION:0:12}-${local_timestamp}-${maintenance_nonce}"
+  MAINTENANCE_IMAGE_LABEL="$MAINTENANCE_ROLLOUT_ID"
+  MAINTENANCE_IMAGE_TAG="registry.fly.io/$FLY_APP:$MAINTENANCE_IMAGE_LABEL"
+  write_maintenance_state "initial_app_cordon_snapshot_verified" true || {
+    echo "$(red '✗ Release blocked:') the durable maintenance hold could not be installed."
+    exit 1
+  }
+  EXTERNAL_MUTATION_STARTED=1
+  API_RESULT="maintenance_fence_held"
 fi
 
 # Materialize the pinned frontend commit once. Every local hash below reads
@@ -3558,17 +3924,6 @@ if [ "$SKIP_API" = 0 ]; then
     exit 1
   }
   if [ "$MAINTENANCE_FENCED_API" = 1 ]; then
-    local_timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-    maintenance_nonce="$(
-      bun -e 'process.stdout.write(crypto.randomUUID().replaceAll("-", "").slice(0, 16))'
-    )" || {
-      echo "$(red '✗ Phase 3 blocked:') could not create a unique maintenance rollout ID."
-      exit 1
-    }
-    MAINTENANCE_STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    MAINTENANCE_ROLLOUT_ID="maintenance-${HEAD_REVISION:0:12}-${local_timestamp}-${maintenance_nonce}"
-    MAINTENANCE_IMAGE_LABEL="$MAINTENANCE_ROLLOUT_ID"
-    MAINTENANCE_IMAGE_TAG="registry.fly.io/$FLY_APP:$MAINTENANCE_IMAGE_LABEL"
     if [ "$API_SOURCE_DIRTY" != "false" ]; then
       echo "$(red '✗ Phase 3 blocked:') maintenance images require dirty=false."
       exit 1
@@ -3786,11 +4141,65 @@ if [ "$SKIP_API" = 0 ]; then
       write_maintenance_state \
         "verified_app_autostart_${MAINTENANCE_AUTOSTART_RESTORE_COUNT}_of_3" true || exit 1
     done
-    if ! verify_maintenance_machine_snapshot final; then
+    if ! verify_maintenance_machine_snapshot cordoned_ready; then
+      API_RESULT="failed_or_uncertain"
+      echo "$(red '✗ Phase 3 failed:') the complete target app runtime is not still held behind the cordon."
+      exit 1
+    fi
+    if ! verify_maintenance_runtime_environment; then
+      API_RESULT="failed_or_uncertain"
+      echo "$(red '✗ Phase 3 failed:') cordoned target runtime proof did not pass."
+      exit 1
+    fi
+    if ! verify_maintenance_machine_snapshot cordoned_stable; then
+      API_RESULT="failed_or_uncertain"
+      echo "$(red '✗ Phase 3 failed:') the app cordon or target fleet changed during runtime verification."
+      exit 1
+    fi
+    MAINTENANCE_CORDONED_RUNTIME_VERIFIED=1
+    write_maintenance_state "cordoned_runtime_verified" true || exit 1
+
+    MAINTENANCE_UNCORDON_COUNT=0
+    for MAINTENANCE_MACHINE_ID in "${MAINTENANCE_APP_MACHINE_IDS[@]}"; do
+      MAINTENANCE_UNCORDON_COUNT=$((MAINTENANCE_UNCORDON_COUNT + 1))
+      MAINTENANCE_UNCORDON_ATTEMPTED_APP_IDS_CSV="$(
+        append_csv_value \
+          "$MAINTENANCE_UNCORDON_ATTEMPTED_APP_IDS_CSV" "$MAINTENANCE_MACHINE_ID"
+      )"
+      write_maintenance_state \
+        "attempting_app_uncordon_${MAINTENANCE_UNCORDON_COUNT}_of_3" true || exit 1
+      maintenance_uncordon_app "$MAINTENANCE_MACHINE_ID" ||
+        echo "$(yellow '⚠ an app uncordon command returned nonzero; resolving by full read-back')" >&2
+      MAINTENANCE_UNCORDON_CANDIDATE_IDS="$(
+        append_csv_value \
+          "$MAINTENANCE_UNCORDON_VERIFIED_APP_IDS_CSV" "$MAINTENANCE_MACHINE_ID"
+      )"
+      if ! verify_maintenance_machine_snapshot \
+        uncordoning "$MAINTENANCE_UNCORDON_CANDIDATE_IDS" \
+        "$MAINTENANCE_MACHINE_ID"; then
+        API_RESULT="failed_or_uncertain"
+        echo "$(red '✗ Phase 3 failed:') app uncordon read-back did not preserve the exact target fleet."
+        exit 1
+      fi
+      MAINTENANCE_UNCORDON_VERIFIED_APP_IDS_CSV="$MAINTENANCE_UNCORDON_CANDIDATE_IDS"
+      write_maintenance_state \
+        "verified_app_uncordon_${MAINTENANCE_UNCORDON_COUNT}_of_3" true || exit 1
+      if [ "$MAINTENANCE_UNCORDON_COUNT" = 1 ]; then
+        if ! verify_maintenance_public_health; then
+          API_RESULT="failed_or_uncertain"
+          echo "$(red '✗ Phase 3 failed:') the first uncordoned LHR canary was not exact."
+          exit 1
+        fi
+        write_maintenance_state "canary_public_health_verified" true || exit 1
+      fi
+    done
+    if ! verify_maintenance_machine_snapshot \
+      final "$MAINTENANCE_UNCORDON_VERIFIED_APP_IDS_CSV"; then
       API_RESULT="failed_or_uncertain"
       echo "$(red '✗ Phase 3 failed:') final five-Machine topology/image proof did not pass."
       exit 1
     fi
+    MAINTENANCE_FINAL_UNCORDON_VERIFIED=1
     MAINTENANCE_FINAL_SHAPE_VERIFIED=1
     write_maintenance_state "final_topology_verified" true || exit 1
     API_RESULT="deployed_unverified"
@@ -3895,11 +4304,20 @@ if [ "$SKIP_API" = 0 ]; then
   echo "  ✓ /health 200 at revision $LIVE_REVISION (dirty=$LIVE_DIRTY)"
 
   if [ "$MAINTENANCE_FENCED_API" = 1 ]; then
-    if ! verify_maintenance_machine_snapshot final; then
+    if ! verify_maintenance_public_health; then
+      exit 1
+    fi
+  if ! verify_maintenance_machine_snapshot \
+    final "$MAINTENANCE_UNCORDON_VERIFIED_APP_IDS_CSV"; then
       echo "  $(red '✗') final maintenance fleet changed during health verification"
       exit 1
     fi
     if ! verify_maintenance_runtime_environment; then
+      exit 1
+    fi
+    if ! verify_maintenance_machine_snapshot \
+      final "$MAINTENANCE_UNCORDON_VERIFIED_APP_IDS_CSV"; then
+      echo "  $(red '✗') final maintenance fleet changed during runtime verification"
       exit 1
     fi
     MAINTENANCE_FINAL_SHAPE_VERIFIED=1
