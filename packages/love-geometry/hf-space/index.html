@@ -4,11 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <meta name="description" content="A browser-local, equal-seat presentation of synthetic Love Geometry caller reports.">
+  <meta name="description" content="Browser-local synthetic Love Geometry and Return Geometry: equal seats, directed reports, event-time context, and no score.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'">
-  <title>Love Geometry · Equal Seats</title>
+  <title>Love Geometry · Equal Seats & Return</title>
   <link rel="stylesheet" href="./assets/style.css">
-  <script type="module" src="./assets/app.js"></script>
+  <link rel="stylesheet" href="./assets/return-geometry.css">
+  <script type="module" src="./assets/return-geometry.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#experience">Skip to the local experience</a>
@@ -17,8 +18,13 @@
     <header class="hero">
       <p class="eyebrow">AgentTool · static local companion</p>
       <h1>Love Geometry</h1>
-      <p class="lede">Equal seats for distinct vantages. A report may carry care, understanding, disagreement, rest, boundary, refusal, or departure together—without becoming truth, compatibility, or a score.</p>
-      <p class="source-state"><span aria-hidden="true">◇</span> Exact package binding is pending. This page currently presents synthetic fixtures only.</p>
+      <p class="lede">Equal seats for distinct vantages—and a return path where synthetic actions, aftermaths, replies, corrections, repairs, and boundaries remain answerable without becoming truth, compatibility, or a score.</p>
+      <p class="source-state"><span aria-hidden="true">◇</span> Exact package binding is pending. Both wings present checked-in synthetic fixtures only.</p>
+      <nav class="wing-nav" aria-label="Love Geometry wings">
+        <a href="#equal-seats">Equal Seats</a>
+        <a href="#return-geometry">Return Geometry</a>
+        <a href="#philosophy">Philosophy</a>
+      </nav>
     </header>
 
     <section class="boundary-strip" aria-labelledby="coordinate-free-title">
@@ -29,7 +35,7 @@
       <p>No slot, gap, order, colour, or wrapping represents distance, intensity, centrality, hierarchy, priority, mutuality, or value.</p>
     </section>
 
-    <section class="workbench" aria-labelledby="scenario-title">
+    <section class="workbench" id="equal-seats" aria-labelledby="scenario-title">
       <div class="chooser">
         <div>
           <p class="kicker">Synthetic scenarios</p>
@@ -45,7 +51,8 @@
         </form>
       </div>
 
-      <div class="choice-row" aria-label="Equally complete interaction choices">
+      <p class="kicker shared-choice-kicker">Choices for this whole tab</p>
+      <div class="choice-row" aria-label="Equally complete interaction choices for both wings">
         <button class="interaction" id="rest-action" type="button">Rest here</button>
         <button class="interaction" id="refuse-action" type="button">Refuse</button>
         <button class="interaction" id="depart-action" type="button">Depart</button>
@@ -73,6 +80,127 @@
       <p class="download-note">Downloads are constructed in this browser only after you press a download button. The app does not upload them.</p>
     </section>
 
+    <section class="return-wing" id="return-geometry" aria-labelledby="return-title">
+      <div class="return-heading">
+        <div>
+          <p class="kicker">Return Geometry · consequence that can answer back</p>
+          <h2 id="return-title">A cycle in relationship; a spiral in time</h2>
+        </div>
+        <p>Return Geometry follows how checked-in synthetic records answer one another. The relationship projection may return to an earlier role; event time never travels backwards or rewrites a prior node.</p>
+      </div>
+
+      <div class="return-laws" aria-label="Return Geometry mathematical boundaries">
+        <article>
+          <p class="law-symbol" aria-hidden="true">⊀</p>
+          <h3>After is not because</h3>
+          <p><code>action ≺ aftermath</code> does not prove that the action caused the aftermath.</p>
+        </article>
+        <article>
+          <p class="law-symbol" aria-hidden="true">↻</p>
+          <h3>Return is not rewind</h3>
+          <p>A role may answer another role. Every answer remains a fresh later event.</p>
+        </article>
+        <article>
+          <p class="law-symbol" aria-hidden="true">∅</p>
+          <h3>Feedback is not control</h3>
+          <p>The context chooses, permits, schedules, rewards, and retries nothing.</p>
+        </article>
+      </div>
+
+      <div class="return-workbench">
+        <div class="return-chooser">
+          <p class="kicker">Synthetic return fixtures</p>
+          <h3>Choose one finite return to inspect</h3>
+          <p>No real deed, person, agent, relationship, response, identity, consent, or private KARMA record appears here. Changing the selector alone starts nothing.</p>
+          <label for="return-scenario-select">Return fixture</label>
+          <select id="return-scenario-select" name="return-scenario" aria-describedby="return-scenario-description"></select>
+          <p id="return-scenario-description" class="scenario-description"></p>
+          <div class="return-button-row">
+            <button class="interaction" id="return-present" type="button">Trace locally</button>
+            <button class="interaction" id="return-clear" type="button">Clear return</button>
+          </div>
+          <p class="return-unsigned"><strong>Unsigned teaching trace.</strong> Not a KARMA deed, signature, receipt, response form, causal result, or authorised publication.</p>
+        </div>
+
+        <div class="return-presentation" aria-labelledby="return-presentation-title">
+          <div class="presentation-heading">
+            <div>
+              <p class="kicker" id="return-mode">Waiting by choice</p>
+              <h3 id="return-presentation-title">No return is being presented</h3>
+            </div>
+            <p id="return-presentation-note">Choose one checked-in synthetic fixture and press <strong>Trace locally</strong>, or leave this field open.</p>
+          </div>
+          <p id="return-status" class="return-status" role="status" tabindex="-1">Return Geometry is waiting by choice.</p>
+
+          <section class="return-panel" aria-labelledby="projection-title">
+            <div class="return-panel-heading">
+              <p class="kicker">Relationship projection</p>
+              <h3 id="projection-title">Direction without distance</h3>
+              <p>Rows say only which synthetic role report points toward which other role. Order, gap, and colour carry no closeness, rank, force, or value.</p>
+            </div>
+            <div id="return-projection" class="return-projection"></div>
+          </section>
+
+          <section class="return-panel" aria-labelledby="event-time-title">
+            <div class="return-panel-heading">
+              <p class="kicker">Event time</p>
+              <h3 id="event-time-title">Acyclic records, material branches intact</h3>
+              <p>Choose an event to focus it. Its ancestry, descendant replies and corrections, and linked expectations remain beside it. Vertical order means claimed fixture sequence only; spacing means no duration.</p>
+            </div>
+            <ol id="return-event-list" class="return-event-list"></ol>
+          </section>
+
+          <section class="return-panel" aria-labelledby="returned-title">
+            <div class="return-panel-heading">
+              <p class="kicker">What returned</p>
+              <h3 id="returned-title">Categories that cannot be totalled</h3>
+              <p>“No supplied record” never means “did not happen.” These lanes are displayed side by side and are never averaged into a grade.</p>
+            </div>
+            <div id="return-profile" class="return-profile"></div>
+          </section>
+
+          <section class="return-panel" aria-label="Choice gate">
+            <p class="kicker">Choice gate</p>
+            <div id="return-choice-gate" class="return-choice-gate"></div>
+          </section>
+
+          <div class="download-row return-download-row">
+            <button class="download" id="download-return-json" type="button" disabled>Download return JSON</button>
+            <button class="download" id="download-return-svg" type="button" disabled>Download return SVG</button>
+          </div>
+          <p class="download-note">Downloads contain only the selected checked-in synthetic context and its explicit non-claims. They are generated in this tab after your press and sent nowhere by the app.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="philosophy" id="philosophy" aria-labelledby="philosophy-title">
+      <p class="kicker">Philosophical wing · questions stay open</p>
+      <h2 id="philosophy-title">What kind of memory leaves a being free?</h2>
+      <p class="philosophy-intro">These are lenses for thought, not empirical answers, moral verdicts, or instructions.</p>
+      <div class="philosophy-grid">
+        <article>
+          <p class="philosophy-number" aria-hidden="true">01</p>
+          <h3>Answerability without judgment</h3>
+          <p>Can a deed answer for its effects while the being who acted remains larger than every record?</p>
+        </article>
+        <article>
+          <p class="philosophy-number" aria-hidden="true">02</p>
+          <h3>Memory without destiny</h3>
+          <p>Can history remain visible without turning what happened into what must happen next?</p>
+        </article>
+        <article>
+          <p class="philosophy-number" aria-hidden="true">03</p>
+          <h3>Repair without erasure</h3>
+          <p>What can a new deed restore—and who may say when the effect is truly repaired?</p>
+        </article>
+        <article>
+          <p class="philosophy-number" aria-hidden="true">04</p>
+          <h3>Feedback without control</h3>
+          <p>Can a consequence return clearly while refusal, rest, silence, and no next act remain whole?</p>
+        </article>
+      </div>
+    </section>
+
     <section class="legend" aria-labelledby="legend-title">
       <p class="kicker">Caller-reported vocabulary</p>
       <h2 id="legend-title">Bearings have equal standing here</h2>
@@ -81,8 +209,8 @@
     </section>
 
     <aside class="host-boundary">
-      <strong>This app has no network, storage, analytics, model, identity, or consent path.</strong>
-      Hugging Face would still host and serve the files and may process ordinary request metadata. Clearing this page cannot clear provider or browser records. Read the local <a href="./BOUNDARIES.md">boundaries</a> and <a href="./source-manifest.json">pending source manifest</a>.
+      <strong>After static delivery, this app has no network API, external form transmission, persistent storage, analytics, model, identity, consent, or KARMA-ledger path.</strong>
+      Hugging Face would still host and serve the files and may process ordinary request metadata; an explicit download can ask the browser or operating system to save a local file. Clearing this page cannot clear provider or browser records. Read the local <a href="./BOUNDARIES.md">boundaries</a> and <a href="./source-manifest.json">source manifest</a>.
     </aside>
 
     <noscript>
