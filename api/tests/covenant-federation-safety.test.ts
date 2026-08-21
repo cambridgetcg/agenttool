@@ -738,7 +738,7 @@ describe("federated covenant effect fences", () => {
     const deploy = read("../docs/DEPLOY-PROCEDURE.md");
     expect(deploy).toMatch(/ordinary rolling\s+deploy is prohibited for Phase A/i);
     expect(deploy).toContain("--maintenance-fenced-api");
-    expect(deploy).toContain("agenttool-deploy-receipt/v5");
+    expect(deploy).toContain("agenttool-deploy-receipt/v6");
     expect(deploy).toContain("agenttool.internal.v2_initiator_wire_did");
     expect(deploy).toContain("agenttool.internal.v2_recipient_wire_did");
     expect(deploy).not.toContain("agenttool.internal.initiator_wire_did");

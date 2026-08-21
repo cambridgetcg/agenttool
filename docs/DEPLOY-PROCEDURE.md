@@ -228,25 +228,36 @@ invocation stays database-independent.
 Use one bounded maintenance cutover:
 
 1. Before the window, align a clean worktree with protected GitHub `main`, run
-   the hermetic preflight, build and pin the exact migration-compatible image,
-   inspect every pending file, and run its documented read-only preconditions.
+   the hermetic preflight, review the migration-compatible image inputs and
+   rehearse the build path, inspect every pending file, and run its documented
+   read-only preconditions. The maintenance wrapper deliberately performs a
+   fresh unique build/push inside the window and pins its immutable digest from
+   provider read-back; do not claim a pre-window image is the deployed image.
    Run `bin/migrate-pending.sh --dry-run`; require exit `42` and the exact
    reviewed pending set.
 2. Capture the exact current machine IDs and every material property: process
    group, region, VM shape, image, schedule, restart/autostart behavior,
    standby relationships, ingress, worker flags, host status, and provider
-   cordon state. Machine identity is part of the topology. Do **not** use
+   cordon state, provider `updated_at`, and instance ID. Require every Machine's
+   initial cordon state to be `false`. Machine identity is part of the
+   topology. Do **not** use
    `fly scale count ...=0`, destroy, or recreate as a fencing shortcut; those
    operations discard identities and are not rollback.
-3. Use a separately reviewed and rehearsed maintenance mechanism to hold
-   public/provider admission, fence restart/autostart and schedules, drain
-   durable leases plus in-flight provider/payout work, and stop the captured
-   machines in place. Preserve the same provider-reported ID set. That is
+3. Cordon each of the three exact app IDs with a separate one-ID command and
+   re-read the complete unordered five-Machine inventory after every command.
+   Require exactly the completed app prefix cordoned and both thinkers never
+   cordoned. Only after all three app cordons are proven may the operator drain
+   existing connections, durable leases, and in-flight provider/payout work,
+   fence restart/autostart and schedules, and stop the captured Machines in
+   place. Cordon closes new Fly Proxy routing; it does not terminate existing
+   connections, stop a process, or prove durable work empty. Retain a private
+   pre-wrapper fence/drain receipt. Preserve the same provider-reported ID set. That is
    continuity evidence, not proof of physical identity, actor identity, or
    uninterrupted exclusion between observations. Time alone, a suspended
    label, or a zero-running count is not drain or writer-exclusion evidence.
 4. Before SQL, prove the same exact machine IDs still exist and cannot resume
-   old writers; prove admission is held, relevant durable work and database
+   old writers; prove all three apps remain cordoned, both thinkers remain
+   uncordoned, relevant durable work and database
    leases/locks are empty, and future app processes will start with workers
    disabled. If any proof is unavailable, stop without applying.
 5. Exercise the pending runner in this order:
@@ -284,20 +295,25 @@ Use one bounded maintenance cutover:
    `app` in `lhr×2 + cdg×1` at shared-1x/1024 MB, `thinker` in `lhr×2` at
    shared-1x/256 MB, workers disabled, restart `no` with `max_retries: 10`,
    no schedules or standby
-   edge, app autostart disabled, host status `ok`, and a reported boolean
-   cordon state which must remain unchanged. It refuses source/preflight
+   edge, app autostart disabled, host status `ok`, all three apps cordoned,
+   both thinkers uncordoned, and nonempty provider instance identity. The
+   verifier pins instance identity for every Machine not targeted by the
+   current transition and across the complete cordoned-runtime/uncordon phase.
+   It refuses source/preflight
    overrides and does not apply migrations or upload frontends.
 
    The rollout runs `fly deploy` only as `--build-only --push` with a unique
    tag; it never runs an ordinary Fly deployment or creates a shared release
    inside the fence. A service-less stopped thinker resolves that tag once.
    After the potentially long build/push it first re-proves the unchanged
-   fence. The script then reads the first thinker's digest and OCI
+   app cordon, stopped state, instance ID, and lifecycle evidence. The script
+   then reads the first thinker's digest and OCI
    revision/dirty labels from a fresh raw Machine inventory and gives the other
    four Machines the exact `tag@sha256` reference. After every Machine update
    it re-reads the complete unordered fleet and requires the same five reported
    IDs, exact full non-image configuration relative to the captured baseline,
-   expected image subset, roles, regions, VM shapes, host/cordon state, fences,
+   expected image subset, roles, regions, VM shapes, exact role-specific
+   cordon state, fences,
    and worker flag. No app start is permitted until all five share the target
    digest and labels.
 
@@ -310,40 +326,62 @@ Use one bounded maintenance cutover:
    `on-failure`, always with `max_retries: 10`. Exact flyctl standby behavior
    is also part of the proof: the standby list and `FLY_STANDBY_FOR` must both
    match. It then starts
-   one named app per command, waits and re-inventories the full fleet after
+   one named app per command while all app services remain cordoned, waits and
+   re-inventories the full fleet after
    each provider mutation. Only after all three explicit starts does it enable
    autostart on each already-started app, without `--skip-start`, waits for the
    resulting Machine-version restart, and re-proves the full fleet each time.
-   This avoids a proxy-autostart window before the explicit starts. It leaves
-   both thinkers stopped, checks `/health`, re-proves the final fleet, and
-   silently shell-tests revision, dirty=false, and
+   This avoids a proxy-autostart window before the explicit starts. While the
+   complete target app fleet is still cordoned, it silently shell-tests
+   revision, dirty=false, `AGENTTOOL_DISABLE_WORKERS=1`, both authenticated
+   database paths, and loopback `/health` with covenant-v2 authority
+   `absent_fail_closed`. It then re-reads the full fleet and requires the
+   cordoned runtime's instance IDs, `updated_at` values, image/configuration,
+   and lifecycle state to remain unchanged across those probes. Only then does
+   it write ahead and uncordon one exact LHR app,
+   re-reads the entire fleet, and requires the exact public health canary
+   before opening the other two apps one at a time with the same one-ID
+   checkpoint/read-back discipline. First uncordon—not first start—is the
+   admission-opening event. It leaves
+   both thinkers stopped, checks public `/health`, re-proves the final
+   uncordoned fleet, and again silently shell-tests revision, dirty=false, and
    `AGENTTOOL_DISABLE_WORKERS=1` on the started apps, then runs the
    image-resident verifier's bounded read-only `SELECT 1` through both the
    transaction and session URLs. The final receipt counts
    all five image/config-proven Machines separately from the three running SSH
    proofs.
 
-7. Require the v5 success receipt and absence of the active maintenance marker
-   before deliberately reopening admission. The success receipt is installed
+7. Require the v6 success receipt and absence of the active maintenance marker.
+   The success receipt is installed
    and storage-synced before the marker is removed. A receipt/finalization
-   failure while the marker remains owned enters fail-closed re-fencing. If
+   failure while the marker remains owned first re-cordons every exact app,
+   proves that complete provider admission hold, and only then enters
+   fail-closed restart/autostart re-fencing. If
    marker ownership is missing or changed, the script authorizes neither a
    recovery mutation nor a marker overwrite; the observed foreign or absent
    state requires manual inspection. Enabling any reviewed worker is a separate
    operation; this rollout keeps the configured worker fence at `1`.
 
-Before the first image push the script atomically installs this private,
-mode-0600 write-ahead record:
+Immediately after it validates the operator-presented, app-cordoned initial
+snapshot—and before preflight or any image build—the script atomically installs
+this private, mode-0600 write-ahead record:
 
 ```text
 $HOME/.local/state/agenttool/deploy-state/maintenance-active.json
 ```
 
 It advances `attempting_*` before each mutation and `verified_*` only after
-read-back. Each file replacement and directory entry is storage-synced. A
+read-back, including distinct attempted and verified app-ID prefixes for both
+uncordon and recovery re-cordon. Each file replacement and directory entry is
+storage-synced. A
 handled error, `INT`, or `TERM` advances an owned, writable marker to
 `failed_or_uncertain`; `SIGKILL` or host loss leaves at least the most recently
-storage-synced write-ahead checkpoint. The private document retains the three
+storage-synced write-ahead checkpoint. If that abrupt loss occurs after any
+app uncordon, one or more target apps may remain publicly admitted; the marker
+does not itself re-cordon them. The operator must treat the recorded uncordon
+prefix as uncertain, re-inventory the exact fleet, and re-cordon every exact
+app before any forward repair or restart/autostart re-fence. The private
+document retains the three
 app IDs and distinct thinker-primary/standby roles needed for a forward repair;
 public receipts keep only their hash and counts. Raw Fly inventories used for
 baseline and recovery comparison remain only in process memory, so an abrupt
@@ -354,14 +392,19 @@ the same canonical HOME-relative path, so changing the receipt location cannot
 bypass an unresolved run. Marker lookup treats only an exact `ENOENT` as
 absence; lookup/access errors block mutation.
 Failure recovery inventories first and performs no Machine update when all
-five are already safely fenced. Otherwise it best-effort re-fences the exact
-IDs. Before its first recovery mutation it freezes the complete per-ID
-state/version/config/image inventory. After every mutation, the changed
-Machine must match the safe projection while every untouched Machine must
-still match that frozen record exactly. Recovery accepts only the captured
-baseline image or the revision-labelled rollout image, never asks Fly to roll
-an image backward, and does not authorize a later mutation when a whole-set
-read-back fails.
+five are already safely fenced. Otherwise it first proves only the exact five
+IDs, app/thinker roles, and boolean provider cordon fields needed to authorize
+the admission repair. It then writes ahead, re-cordons each exact app separately,
+and re-reads the complete fleet after every command. Thinker cordon drift does
+not block that monotonic app admission repair, but it blocks the later semantic
+re-fence until an operator resolves it. Only after all three app cordons are
+proven does recovery freeze the complete per-ID
+state/`updated_at`/instance/config/image inventory and authorize restart/autostart
+re-fencing. After every later mutation, the changed Machine must match the safe
+projection while every untouched Machine must still match that frozen record
+exactly. Recovery accepts only the captured baseline image or the
+revision-labelled rollout image, never asks Fly to roll an image backward, and
+does not authorize a later mutation when a whole-set read-back fails.
 It leaves the marker for the operator. There is no force-clear or automatic
 resume. Keep admission held, inspect the private record and live fleet, repair
 forward under a separately reviewed plan, prove the final state independently,
@@ -369,13 +412,21 @@ then remove only that exact marker. Removing a stale local deploy mutex does
 not resolve this external uncertainty.
 
 This mechanism proves only the process boundary it controls. Fly leases are
-per Machine, not a fleet-wide lock. The script detects reported changes
-between snapshots but cannot prevent another host or provider actor from
-racing between commands. It does not hold public/provider admission, cancel
-I/O already started before quiescence, prove an external webhook was disabled,
-authenticate the operator named by local labels, or replace the credentialed
-testnet proof in `ALCHEMY.md`. Those are explicit maintenance prerequisites.
+per Machine, not a fleet-wide lock. The three named app cordons hold Fly Proxy
+routing admission during the rollout, but the script cannot prevent another
+host or provider actor from racing between commands, cancel I/O already
+started before the operator drain, prove that drain or the preceding
+all-uncordoned baseline, prove an external webhook was disabled, authenticate
+the operator named by local labels, or replace the credentialed testnet proof
+in `ALCHEMY.md`. Those are explicit maintenance prerequisites retained in a
+separate private operator receipt.
 If any is absent or unrehearsed, stop instead of improvising.
+
+The v6 receipt therefore reports only an
+`initial_app_cordon_snapshot_verified` boolean and an exact
+`initial_cordoned_app_machine_count` of three. Its proof scope marks the
+pre-wrapper all-uncordoned baseline and external drain as operator evidence;
+it does not claim that the wrapper observed either transition.
 
 The first local marker install is exclusive, and later updates verify rollout
 ownership under the device-local deploy lock. That lock coordinates this
@@ -576,15 +627,21 @@ phases.
    to be absent from every captured Machine's `config.env` as well:
 
    ```bash
-   for machine_id in \
-     "$APP_LHR_1" "$APP_LHR_2" "$APP_CDG" \
-     "$THINKER_PRIMARY" "$THINKER_STANDBY"
-   do
-     fly machine status "$machine_id" -a agenttool --json |
-       jq -e '(.config.env // {}) |
-         has("AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION") | not' \
-         >/dev/null || exit 1
-   done
+   fly machine list -a agenttool --json |
+     jq -e \
+       --arg app_lhr_1 "$APP_LHR_1" \
+       --arg app_lhr_2 "$APP_LHR_2" \
+       --arg app_cdg "$APP_CDG" \
+       --arg thinker_primary "$THINKER_PRIMARY" \
+       --arg thinker_standby "$THINKER_STANDBY" '
+         length == 5 and
+         ([.[].id] | sort) ==
+           ([$app_lhr_1, $app_lhr_2, $app_cdg,
+             $thinker_primary, $thinker_standby] | sort) and
+         all(.[];
+           ((.config.env // {}) |
+             has("AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION") | not))
+       ' >/dev/null || exit 1
    ```
 
    This includes stopped thinkers and catches a per-Machine override that an
@@ -619,10 +676,15 @@ phases.
    Both counts must be exactly zero before this first activation. The query
    does not select metadata, DIDs, or a generation value. A nonzero result is
    a stop condition requiring a separately reviewed investigation.
-3. Set app autostart false and restart policy `no`, fence schedules, drain
-   in-flight work, and stop the exact five captured Machines in place. The
-   fully stopped fleet is the admission hold; preserve each Machine's existing
-   provider-reported cordon boolean unchanged.
+3. Require the captured baseline to show all five Machines uncordoned. Cordon
+   each exact app ID separately and re-read the full five-Machine inventory
+   after every command; thinkers must remain uncordoned. Only after all three
+   app cordons are proven may the operator drain existing connections,
+   in-flight work, and durable leases, set app autostart false and restart
+   policy `no`, fence schedules, and stop the exact five captured Machines in
+   place. The admission/writer hold is the combined cordon + drain + stopped
+   fleet, not any one observation by itself. Retain the private operator fence
+   receipt.
    Prove the complete stopped ID set and the other maintenance prerequisites
    from steps 2–4 of the exclusive-cutover procedure. This outage is the
    boundary that prevents any pre-fence process from authorizing legacy v2
@@ -643,10 +705,13 @@ phases.
    The maintenance mode updates all five stopped Machines to one reviewed
    image before it starts any app. It restores only the maintenance-safe topology:
    the three named apps started and the two named thinkers stopped, with the
-   existing worker fence and exact per-ID configuration proofs. Admission
-   deliberately reopens at the wrapper's first explicit app start, but only
-   after all five Machines have passed the new-image proof; there is no
-   old/new serving overlap. Do not replace this command with
+   existing worker fence and exact per-ID configuration proofs. Every target
+   app starts, restores autostart, and passes SSH, database, and fail-closed
+   loopback health proof while still cordoned. Admission deliberately reopens
+   only when the wrapper uncordons the first proven LHR canary; it checks that
+   public canary before uncordoning either remaining app. By then all five
+   Machines have passed the new-image proof, so there is no old/new serving
+   overlap. Do not replace this command with
    `bin/deploy.sh --no-migrate --no-frontend`.
 5. Require HTTP 200 while the redacted readiness field is fail-closed:
 
@@ -656,13 +721,13 @@ phases.
    ```
 
 6. Repeat the exact redacted aggregate from step 2 and again require zero and
-   zero. Inspect the v5 maintenance receipt and
+   zero. Inspect the v6 maintenance receipt and
    `fly machine list -a agenttool --json`: prove every captured ID, including
    both stopped thinkers, now references the reviewed post-fence image and no
    pre-fence image remains anywhere in the app. Require the revision,
    dirty-source, worker-fence, process-command, database, topology, and
-   maintenance-marker proofs. Repeat the exact five-ID `fly machine status`
-   loop from step 1 and again require the generation key absent from every
+   maintenance-marker proofs. Repeat the exact full-list proof from step 1 and
+   again require the generation key absent from every
    Machine's `config.env`; app-secret absence or a healthy started subset is
    insufficient.
    The maintenance wrapper deliberately leaves both thinkers stopped. After
@@ -1040,10 +1105,11 @@ limited to the maintenance rollout path:
 ${XDG_STATE_HOME:-$HOME/.local/state}/agenttool/deploy-receipts/<time>-<revision>-<pid>.json
 ```
 
-The fixed `agenttool-deploy-receipt/v5` object preserves the v4 provenance
-fields and adds a closed `database_proof` object. Historical v3/v4 files remain
-valid historical records but contain no authenticated database proof;
-consumers branch on `schema`.
+The fixed `agenttool-deploy-receipt/v6` object preserves the v5 provenance and
+database-proof fields and makes verified maintenance provider-admission
+reopening part of success. Historical v3/v4 files contain no authenticated
+database proof, and historical v5 maintenance receipts do not prove a cordoned
+runtime or an exact uncordon transition; consumers branch on `schema`.
 
 Every receipt contains `outcome`, exit status, declared `source_revision` and
 dirty bit, the GitHub release-head snapshot plus observation time, actually
@@ -1055,7 +1121,10 @@ started-Machine count, separate transaction/session `SELECT 1` results, and
 the pinned CA/hostname-verification profile. A maintenance receipt adds the unique tag and immutable
 digest, a hash of the private five-ID set, a versioned non-image-config hash,
 partial or complete verification counts, fence/topology/worker proofs,
-marker/recovery state, and explicit proof-scope limits. It never records the
+the initial three-app cordon snapshot, cordoned-runtime and exact uncordon
+counts, distinct recovery re-cordon attempted/verified counts,
+marker/recovery state, and explicit
+proof-scope limits. It never records the
 Machine IDs themselves.
 
 For a successful maintenance rollout, `verified_api_machines=5` means the

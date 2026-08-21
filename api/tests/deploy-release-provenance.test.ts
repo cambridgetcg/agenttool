@@ -637,7 +637,29 @@ else
       ;;
     */health*)
       [ "\${DEPLOY_TEST_HEALTH_OK:-0}" = 1 ] || exit 22
-      printf '{"build":{"revision":"%s","dirty":false}}\n' "\${DEPLOY_TEST_HEALTH_REVISION}"
+      [ "\${DEPLOY_TEST_FAIL_CANARY_HEALTH:-0}" != 1 ] || exit 23
+      if [ -n "\${DEPLOY_TEST_FLY_STATE:-}" ]; then
+        bun --no-install --no-env-file -e '
+          const state = await Bun.file(process.env.DEPLOY_TEST_FLY_STATE).json();
+          const apps = state.machines.filter(
+            (machine) => machine.config?.metadata?.fly_process_group === "app",
+          );
+          if (!apps.some((machine) =>
+            machine.state === "started" && machine.cordoned === false
+          )) process.exit(1);
+        ' || exit 24
+      fi
+      case "\${DEPLOY_TEST_HEALTH_AUTHORITY:-absent_fail_closed}" in
+        missing)
+          printf '{"build":{"revision":"%s","dirty":false}}\n' \
+            "\${DEPLOY_TEST_HEALTH_REVISION}"
+          ;;
+        *)
+          printf '{"build":{"revision":"%s","dirty":false},"covenant_v2_authority":"%s"}\n' \
+            "\${DEPLOY_TEST_HEALTH_REVISION}" \
+            "\${DEPLOY_TEST_HEALTH_AUTHORITY:-absent_fail_closed}"
+          ;;
+      esac
       ;;
     *) exit 2 ;;
   esac
@@ -1182,11 +1204,12 @@ function maintenanceFleet(revision: string): Array<Record<string, any>> {
     region: "lhr" | "cdg",
   ) => ({
     id,
+    instance_id: `instance-${id}`,
+    updated_at: "2026-08-21T00:00:00.000Z",
     state: "stopped",
     region,
     host_status: "ok",
     cordoned: role === "app",
-    version: "1",
     image_ref: image(),
     config: baseConfig(role, role === "app" ? 1024 : 256),
   });
@@ -1217,6 +1240,10 @@ async function installStatefulFakeFly(
       updateCount: 0,
       imageUpdateCount: 0,
       startCount: 0,
+      sshCount: 0,
+      uncordonCount: 0,
+      recoveryCordonCount: 0,
+      updatedAtCount: 0,
       snapshotRequired: false,
     })}\n`,
   );
@@ -1246,6 +1273,41 @@ const option = (flag) => {
 const fail = (message, code = 92) => {
   process.stderr.write(message + "\\n");
   process.exit(code);
+};
+const touch = (machine) => {
+  state.updatedAtCount += 1;
+  machine.updated_at = new Date(
+    Date.parse("2026-08-21T00:00:00.000Z") + state.updatedAtCount * 1_000,
+  ).toISOString();
+};
+const markerPath =
+  (process.env.HOME ?? "") +
+  "/.local/state/agenttool/deploy-state/maintenance-active.json";
+const requireMarkerWriteAhead = async (
+  checkpoint,
+  attemptedKey,
+  attemptedIds,
+  verifiedKey,
+  verifiedIds,
+) => {
+  const markerFile = Bun.file(markerPath);
+  if (!(await markerFile.exists())) fail("maintenance marker is absent", 101);
+  let marker;
+  try {
+    marker = await markerFile.json();
+  } catch {
+    fail("maintenance marker is unreadable", 101);
+  }
+  if (
+    marker?.schema !== "agenttool-maintenance-run/v2" ||
+    marker?.checkpoint !== checkpoint ||
+    JSON.stringify(marker?.[attemptedKey] ?? []) !==
+      JSON.stringify([...attemptedIds].sort()) ||
+    JSON.stringify(marker?.[verifiedKey] ?? []) !==
+      JSON.stringify([...verifiedIds].sort())
+  ) {
+    fail("maintenance marker write-ahead state is not exact", 101);
+  }
 };
 const machineById = (id) => state.machines.find((machine) => machine.id === id);
 
@@ -1277,6 +1339,12 @@ if (args[0] === "deploy") {
   if (process.env.DEPLOY_TEST_DRIFT_DURING_BUILD === "1") {
     state.machines[0].cordoned = !state.machines[0].cordoned;
   }
+  if (process.env.DEPLOY_TEST_DRIFT_INSTANCE_DURING_BUILD === "1") {
+    state.machines[0].instance_id += "-drift";
+  }
+  if (process.env.DEPLOY_TEST_DRIFT_UPDATED_AT_DURING_BUILD === "1") {
+    touch(state.machines[0]);
+  }
   state.snapshotRequired = true;
   await save();
   const blockMarker = process.env.DEPLOY_TEST_BLOCK_BUILD_MARKER;
@@ -1292,7 +1360,7 @@ if (args[0] === "deploy") {
     await Bun.write(
       replacementMarker,
       JSON.stringify({
-        schema: "agenttool-maintenance-run/v1",
+        schema: "agenttool-maintenance-run/v2",
         rollout_id: "foreign-rollout",
       }) + "\\n",
     );
@@ -1313,12 +1381,40 @@ if (args[0] === "ssh" && args[1] === "console") {
     !command.includes("AGENTTOOL_SOURCE_DIRTY") ||
     !command.includes("AGENTTOOL_DISABLE_WORKERS") ||
     !command.includes("/app/src/db/verify-connections.ts") ||
+    !command.includes("http://127.0.0.1:3000/health") ||
+    !command.includes("absent_fail_closed") ||
     command.includes("DATABASE_URL=") ||
     command.includes("DATABASE_SESSION_URL=") ||
     command.includes("printenv")
   ) {
     fail("SSH proof is not silent and exact", 98);
   }
+  const apps = state.machines.filter(
+    (candidate) => candidate.config?.metadata?.fly_process_group === "app",
+  );
+  const expectedCordon = state.sshCount < 3;
+  if (
+    apps.length !== 3 ||
+    apps.some((candidate) => candidate.cordoned !== expectedCordon)
+  ) {
+    fail("SSH proof occurred outside the exact cordon phase", 98);
+  }
+  state.sshCount += 1;
+  if (
+    process.env.DEPLOY_TEST_DRIFT_CORDON_AFTER_CORDONED_SSH === "1" &&
+    state.sshCount === 3
+  ) {
+    apps[1].cordoned = false;
+    touch(apps[1]);
+  }
+  if (
+    process.env.DEPLOY_TEST_DRIFT_CORDON_AFTER_FINAL_SSH === "1" &&
+    state.sshCount === 6
+  ) {
+    apps[0].cordoned = true;
+    touch(apps[0]);
+  }
+  await save();
   if (
     process.env.DEPLOY_TEST_FAIL_SSH_ID &&
     option("--machine") === process.env.DEPLOY_TEST_FAIL_SSH_ID
@@ -1348,6 +1444,27 @@ if (action === "list") {
   ) {
     fail("machine list flags are not exact");
   }
+  if (await Bun.file(markerPath).exists()) {
+    const marker = await Bun.file(markerPath).json();
+    if (
+      process.env.DEPLOY_TEST_DRIFT_BEFORE_FINAL_READBACK === "1" &&
+      marker?.checkpoint === "verified_app_uncordon_3_of_3" &&
+      !state.finalReadbackDriftApplied
+    ) {
+      touch(machineById("${maintenanceIds.apps[0]}"));
+      state.finalReadbackDriftApplied = true;
+    }
+    if (
+      process.env.DEPLOY_TEST_DRIFT_APP_BEFORE_RECOVERY_INITIAL === "1" &&
+      marker?.checkpoint === "recovery_verified_app_cordon_3_of_3" &&
+      !state.recoveryInitialDriftApplied
+    ) {
+      const app = machineById("${maintenanceIds.apps[0]}");
+      app.cordoned = false;
+      touch(app);
+      state.recoveryInitialDriftApplied = true;
+    }
+  }
   state.snapshotRequired = false;
   const offset = state.listCount % state.machines.length;
   state.listCount += 1;
@@ -1357,6 +1474,142 @@ if (action === "list") {
   ];
   await save();
   process.stdout.write(JSON.stringify(rotated));
+  process.exit(0);
+}
+
+if (action === "uncordon") {
+  if (state.snapshotRequired) {
+    fail("uncordon attempted without a fresh full inventory", 99);
+  }
+  const id = args[2];
+  const expected = ${JSON.stringify([...maintenanceIds.apps])};
+  if (
+    JSON.stringify(args) !==
+      JSON.stringify(["machine", "uncordon", id, "-a", "agenttool"]) ||
+    state.uncordonCount >= expected.length ||
+    id !== expected[state.uncordonCount]
+  ) {
+    fail("uncordon did not name the next exact app ID", 99);
+  }
+  const machine = machineById(id);
+  const apps = state.machines.filter(
+    (candidate) => candidate.config?.metadata?.fly_process_group === "app",
+  );
+  if (
+    !machine ||
+    machine.cordoned !== true ||
+    state.imageUpdateCount !== 5 ||
+    state.sshCount < 3 ||
+    apps.length !== 3 ||
+    apps.some((candidate) =>
+      candidate.state !== "started" ||
+      candidate.config?.restart?.policy !== "on-failure" ||
+      candidate.config?.services?.[0]?.autostart !== true ||
+      candidate.image_ref?.digest !== state.targetDigest
+    )
+  ) {
+    fail("uncordon occurred before the exact target runtime proof", 99);
+  }
+  const nextCount = state.uncordonCount + 1;
+  await requireMarkerWriteAhead(
+    "attempting_app_uncordon_" + nextCount + "_of_3",
+    "uncordon_attempted_app_machine_ids",
+    expected.slice(0, nextCount),
+    "uncordon_verified_app_machine_ids",
+    expected.slice(0, nextCount - 1),
+  );
+  if (
+    Number(process.env.DEPLOY_TEST_FAIL_UNCORDON_BEFORE ?? "0") === nextCount
+  ) process.exit(26);
+  machine.cordoned = false;
+  touch(machine);
+  state.uncordonCount = nextCount;
+  if (
+    Number(process.env.DEPLOY_TEST_DRIFT_PRIOR_UNCORDON_AT ?? "0") ===
+      nextCount &&
+    nextCount > 1
+  ) {
+    touch(machineById(expected[nextCount - 2]));
+  }
+  if (
+    process.env.DEPLOY_TEST_CORDON_THINKER_ON_FIRST_UNCORDON === "1" &&
+    nextCount === 1
+  ) {
+    const thinker = machineById("${maintenanceIds.thinkerPrimary}");
+    thinker.cordoned = true;
+    touch(thinker);
+  }
+  if (
+    Number(process.env.DEPLOY_TEST_DRIFT_INSTANCE_ON_UNCORDON ?? "0") ===
+      nextCount
+  ) {
+    machine.instance_id += "-drift";
+  }
+  state.snapshotRequired = true;
+  await save();
+  const blockUncordonPosition = Number(
+    process.env.DEPLOY_TEST_BLOCK_UNCORDON_AFTER_APPLY_POSITION ?? "0",
+  );
+  if (blockUncordonPosition === nextCount) {
+    const blockMarker = process.env.DEPLOY_TEST_BLOCK_UNCORDON_MARKER;
+    const blockRelease = process.env.DEPLOY_TEST_BLOCK_UNCORDON_RELEASE;
+    if (!blockMarker || !blockRelease) {
+      fail("incomplete uncordon-block fixture", 102);
+    }
+    await Bun.write(blockMarker, "applied\\n");
+    while (!(await Bun.file(blockRelease).exists())) await Bun.sleep(20);
+  }
+  if (
+    Number(process.env.DEPLOY_TEST_FAIL_UNCORDON_AFTER ?? "0") === nextCount
+  ) process.exit(27);
+  process.exit(0);
+}
+
+if (action === "cordon") {
+  if (state.snapshotRequired) {
+    fail("recovery cordon attempted without a fresh full inventory", 100);
+  }
+  const id = args[2];
+  const expected = ${JSON.stringify([...maintenanceIds.apps])};
+  if (
+    JSON.stringify(args) !==
+      JSON.stringify(["machine", "cordon", id, "-a", "agenttool"]) ||
+    state.recoveryCordonCount >= expected.length ||
+    id !== expected[state.recoveryCordonCount]
+  ) {
+    fail("recovery cordon did not name the next exact app ID", 100);
+  }
+  const machine = machineById(id);
+  if (!machine) fail("unknown recovery cordon Machine", 100);
+  const nextCount = state.recoveryCordonCount + 1;
+  await requireMarkerWriteAhead(
+    "recovery_attempting_app_cordon_" + nextCount + "_of_3",
+    "recovery_cordon_attempted_app_machine_ids",
+    expected.slice(0, nextCount),
+    "recovery_cordoned_app_machine_ids",
+    expected.slice(0, nextCount - 1),
+  );
+  if (
+    Number(process.env.DEPLOY_TEST_FAIL_RECOVERY_CORDON_BEFORE ?? "0") ===
+      nextCount
+  ) process.exit(28);
+  machine.cordoned = true;
+  touch(machine);
+  state.recoveryCordonCount = nextCount;
+  if (
+    process.env.DEPLOY_TEST_DRIFT_CONFIG_AFTER_FIRST_RECOVERY_CORDON === "1" &&
+    nextCount === 1
+  ) {
+    const standby = machineById("${maintenanceIds.thinkerStandby}");
+    standby.config.metadata.unexpected_recovery_drift = "present";
+    touch(standby);
+  }
+  state.snapshotRequired = true;
+  await save();
+  if (
+    Number(process.env.DEPLOY_TEST_FAIL_RECOVERY_CORDON_AFTER ?? "0") ===
+      nextCount
+  ) process.exit(29);
   process.exit(0);
 }
 
@@ -1455,8 +1708,9 @@ if (action === "update") {
     machine.config.env.FLY_STANDBY_FOR = standbyValue ?? "";
   }
   machine.state = enablingAutostart ? "started" : "stopped";
-  machine.version = String(Number(machine.version) + 1);
   state.updateCount += 1;
+  machine.instance_id = "instance-" + machine.id + "-update-" + state.updateCount;
+  touch(machine);
   const driftAfter = Number(process.env.DEPLOY_TEST_DRIFT_CONFIG_AFTER_UPDATE ?? "0");
   if (driftAfter > 0 && state.updateCount === driftAfter) {
     machine.config.metadata.unexpected_provider_drift = "present";
@@ -1498,7 +1752,7 @@ if (action === "update") {
     for (const service of untouched.config.services ?? []) {
       service.autostart = false;
     }
-    untouched.version = String(Number(untouched.version) + 1);
+    touch(untouched);
   }
   state.snapshotRequired = true;
   const replaceAfter = Number(process.env.DEPLOY_TEST_REPLACE_AFTER_UPDATE ?? "0");
@@ -1533,6 +1787,7 @@ if (action === "start") {
   }
   const machine = machineById(ids[0]);
   if (
+    machine.cordoned !== true ||
     machine.config.restart?.policy !== "on-failure" ||
     machine.config.restart?.max_retries !== 10 ||
     machine.config.services?.[0]?.autostart !== false
@@ -1540,6 +1795,7 @@ if (action === "start") {
     fail("app start occurred before exact restart/autostart restoration");
   }
   machine.state = "started";
+  touch(machine);
   state.startCount += 1;
   state.snapshotRequired = true;
   await save();
@@ -1961,7 +2217,7 @@ describe("deploy release provenance spine", () => {
         "utf8",
       ),
     );
-    expect(receipt.schema).toBe("agenttool-deploy-receipt/v5");
+    expect(receipt.schema).toBe("agenttool-deploy-receipt/v6");
     expect(receipt.api_build).toEqual({ cache: "bypassed", image: null });
 
     for (const contradictoryArgs of [
@@ -2056,7 +2312,7 @@ describe("deploy release provenance spine", () => {
 
     const marker = maintenanceMarkerPath(setup.home);
     await mkdir(resolve(marker, ".."), { recursive: true });
-    await writeFile(marker, '{"schema":"agenttool-maintenance-run/v1"}\n');
+    await writeFile(marker, '{"schema":"agenttool-maintenance-run/v2"}\n');
     await chmod(marker, 0o600);
     const blocked = await run(
       maintenanceCommand(),
@@ -2172,7 +2428,7 @@ describe("deploy release provenance spine", () => {
     expect(await exists(preflightMarker)).toBe(false);
   }, 15_000);
 
-  test("refuses a late marker and an observed foreign owner before the next checkpoint", async () => {
+  test("installs the marker before preflight and refuses a later foreign owner", async () => {
     {
       const setup = await fixture();
       const fakeBin = join(setup.root, "maintenance-late-marker-bin");
@@ -2191,15 +2447,17 @@ describe("deploy release provenance spine", () => {
           XDG_STATE_HOME: setup.state,
           PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
           PREFLIGHT_MARKER: marker,
+          FAIL_PREFLIGHT: "1",
           DEPLOY_TEST_FLY_STATE: flyState,
           DEPLOY_TEST_FLY_LOG: flyLog,
         }),
       );
       expect(result.code).not.toBe(0);
-      expect(result.stderr).toContain(
-        "Refusing to overwrite an unresolved maintenance rollout marker",
-      );
-      expect(await readFile(marker, "utf8")).toBe("");
+      expect(result.stdout).toContain("Pre-flight failed");
+      const earlyMarker = JSON.parse(await readFile(marker, "utf8"));
+      expect(earlyMarker.schema).toBe("agenttool-maintenance-run/v2");
+      expect(earlyMarker.checkpoint).toBe("failed_or_uncertain");
+      expect(earlyMarker.recovery_required).toBe(true);
       const mutations = (await readFlyLog(flyLog)).filter(
         (args) =>
           args[0] === "deploy" || (args[0] === "machine" && args[1] !== "list"),
@@ -2305,6 +2563,44 @@ describe("deploy release provenance spine", () => {
             (machine) => machine.id === maintenanceIds.thinkerStandby,
           ) as Record<string, any>;
           standby.config.init.cmd = ["bun", "run", "src/index.ts"];
+        },
+      },
+      {
+        name: "uncordoned-app",
+        expected: "is not held behind the routing cordon",
+        mutate(fleet: Array<Record<string, any>>) {
+          fleet[0].cordoned = false;
+        },
+      },
+      {
+        name: "cordoned-thinker",
+        expected: "thinker Machine 44444444444444 must never be cordoned",
+        mutate(fleet: Array<Record<string, any>>) {
+          const primary = fleet.find(
+            (machine) => machine.id === maintenanceIds.thinkerPrimary,
+          ) as Record<string, any>;
+          primary.cordoned = true;
+        },
+      },
+      {
+        name: "missing-instance-id",
+        expected: "does not expose a stable instance ID",
+        mutate(fleet: Array<Record<string, any>>) {
+          delete fleet[0].instance_id;
+        },
+      },
+      {
+        name: "missing-updated-at",
+        expected: "does not expose an RFC3339 updated-at value",
+        mutate(fleet: Array<Record<string, any>>) {
+          delete fleet[0].updated_at;
+        },
+      },
+      {
+        name: "malformed-updated-at",
+        expected: "does not expose an RFC3339 updated-at value",
+        mutate(fleet: Array<Record<string, any>>) {
+          fleet[0].updated_at = "2026-99-99T99:99:99Z";
         },
       },
     ]) {
@@ -2457,16 +2753,51 @@ describe("deploy release provenance spine", () => {
     const ssh = log.filter(
       (args) => args[0] === "ssh" && args[1] === "console",
     );
-    expect(ssh).toHaveLength(3);
+    expect(ssh).toHaveLength(6);
     expect(
       ssh.every((args) =>
         args[args.indexOf("-C") + 1].startsWith("sh -c 'test ") &&
         args[args.indexOf("-C") + 1].includes(
           "/app/src/db/verify-connections.ts",
         ) &&
+        args[args.indexOf("-C") + 1].includes(
+          "http://127.0.0.1:3000/health",
+        ) &&
+        args[args.indexOf("-C") + 1].includes("absent_fail_closed") &&
         !args[args.indexOf("-C") + 1].includes("DATABASE_URL="),
       ),
     ).toBe(true);
+    const uncordons = log.filter(
+      (args) => args[0] === "machine" && args[1] === "uncordon",
+    );
+    expect(uncordons).toEqual(
+      maintenanceIds.apps.map((id) => [
+        "machine",
+        "uncordon",
+        id,
+        "-a",
+        "agenttool",
+      ]),
+    );
+    const firstUncordonIndex = log.findIndex(
+      (args) => args[0] === "machine" && args[1] === "uncordon",
+    );
+    const thirdCordonedSshIndex = log
+      .map((args, index) => ({ args, index }))
+      .filter(({ args }) => args[0] === "ssh" && args[1] === "console")[2]
+      .index;
+    expect(firstUncordonIndex).toBeGreaterThan(thirdCordonedSshIndex);
+    for (let index = 0; index < uncordons.length - 1; index += 1) {
+      const currentIndex = log.findIndex(
+        (args) => args === uncordons[index],
+      );
+      const nextIndex = log.findIndex((args) => args === uncordons[index + 1]);
+      expect(
+        log
+          .slice(currentIndex + 1, nextIndex)
+          .some((args) => args[0] === "machine" && args[1] === "list"),
+      ).toBe(true);
+    }
 
     const finalState = JSON.parse(await readFile(flyState, "utf8"));
     const byId = new Map(
@@ -2479,6 +2810,7 @@ describe("deploy release provenance spine", () => {
       expect((byId.get(id) as any).state).toBe("started");
       expect((byId.get(id) as any).image_ref.digest).toBe(maintenanceDigest);
       expect((byId.get(id) as any).config.services[0].autostart).toBe(true);
+      expect((byId.get(id) as any).cordoned).toBe(false);
     }
     expect((byId.get(maintenanceIds.thinkerPrimary) as any).state).toBe(
       "stopped",
@@ -2498,7 +2830,7 @@ describe("deploy release provenance spine", () => {
     const [receiptName] = await readdir(receiptDir);
     const receiptText = await readFile(join(receiptDir, receiptName), "utf8");
     const receipt = JSON.parse(receiptText);
-    expect(receipt.schema).toBe("agenttool-deploy-receipt/v5");
+    expect(receipt.schema).toBe("agenttool-deploy-receipt/v6");
     expect(receipt.mode).toBe("maintenance_rollout");
     expect(receipt.outcome).toBe("succeeded");
     expect(receipt.verified_api_machines).toBe(5);
@@ -2511,16 +2843,60 @@ describe("deploy release provenance spine", () => {
       tls_profile: expect.stringContaining("hostname-verified"),
     });
     expect(receipt.maintenance).toMatchObject({
+      proof_schema: "agenttool-fly-maintenance-proof/v2",
       image_verified_machine_count: 5,
       started_app_machine_count: 3,
+      uncordoned_app_machine_count: 3,
+      recovery_cordon_attempted_app_machine_count: 0,
+      recovery_cordoned_app_machine_count: 0,
       stopped_thinker_machine_count: 2,
+      initial_app_cordon_snapshot_verified: true,
+      initial_cordoned_app_machine_count: 3,
       fleet_image_verified: true,
+      cordoned_runtime_verified: true,
+      final_app_uncordon_verified: true,
       final_topology_verified: true,
       workers_disabled_started_apps_verified: true,
       recovery_required: null,
       active_marker_cleared: null,
       marker_absence_required_for_success: true,
+      proof_scope: {
+        machine_identity: "same_provider_reported_id_set_only",
+        fleet_wide_provider_lock: "not_established",
+        provider_routing_admission:
+          "three_named_app_cordons_held_until_target_runtime_verified",
+        pre_wrapper_uncordoned_baseline:
+          "external_operator_evidence_required",
+        external_drain: "operator_evidence_required",
+      },
     });
+    expect(Object.keys(receipt.maintenance).sort()).toEqual(
+      [
+        "active_marker_cleared",
+        "checkpoint",
+        "cordoned_runtime_verified",
+        "final_app_uncordon_verified",
+        "final_topology_verified",
+        "fleet_image_verified",
+        "image_verified_machine_count",
+        "initial_app_cordon_snapshot_verified",
+        "initial_cordoned_app_machine_count",
+        "machine_set_sha256",
+        "marker_absence_required_for_success",
+        "non_image_config_sha256",
+        "prebuild_fence_verified",
+        "proof_schema",
+        "proof_scope",
+        "recovery_cordon_attempted_app_machine_count",
+        "recovery_cordoned_app_machine_count",
+        "recovery_fence_verified",
+        "recovery_required",
+        "started_app_machine_count",
+        "stopped_thinker_machine_count",
+        "uncordoned_app_machine_count",
+        "workers_disabled_started_apps_verified",
+      ].sort(),
+    );
     for (const id of [
       ...maintenanceIds.apps,
       maintenanceIds.thinkerPrimary,
@@ -2530,6 +2906,408 @@ describe("deploy release provenance spine", () => {
     }
     expect(await exists(maintenanceMarkerPath(setup.home))).toBe(false);
   }, 20_000);
+
+  test("resolves an after-apply uncordon error only through exact fleet read-back", async () => {
+    for (const position of [1, 2, 3]) {
+      const setup = await fixture();
+      const fakeBin = join(
+        setup.root,
+        `maintenance-uncordon-resolve-${position}-bin`,
+      );
+      const flyState = join(
+        setup.root,
+        `maintenance-uncordon-resolve-${position}-state.json`,
+      );
+      const flyLog = join(
+        setup.root,
+        `maintenance-uncordon-resolve-${position}-log.jsonl`,
+      );
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+
+      const result = await run(
+        maintenanceCommand(),
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_STATE: flyState,
+          DEPLOY_TEST_FLY_LOG: flyLog,
+          DEPLOY_TEST_HEALTH_OK: "1",
+          DEPLOY_TEST_HEALTH_REVISION: setup.release,
+          DEPLOY_TEST_FAIL_UNCORDON_AFTER: String(position),
+        }),
+      );
+      expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect(result.stderr).toContain(
+        "an app uncordon command returned nonzero; resolving by full read-back",
+      );
+      const log = await readFlyLog(flyLog);
+      expect(
+        log.filter(
+          (args) => args[0] === "machine" && args[1] === "uncordon",
+        ),
+      ).toHaveLength(3);
+      expect(
+        log.filter((args) => args[0] === "machine" && args[1] === "cordon"),
+      ).toHaveLength(0);
+    }
+  }, 60_000);
+
+  test("re-cordons every app before re-fencing uncertain admission failures", async () => {
+    for (const scenario of [
+      {
+        name: "before-first-uncordon",
+        env: { DEPLOY_TEST_FAIL_UNCORDON_BEFORE: "1" },
+        attempted: 1,
+        verified: 0,
+      },
+      {
+        name: "before-second-uncordon",
+        env: { DEPLOY_TEST_FAIL_UNCORDON_BEFORE: "2" },
+        attempted: 2,
+        verified: 1,
+      },
+      {
+        name: "before-third-uncordon",
+        env: { DEPLOY_TEST_FAIL_UNCORDON_BEFORE: "3" },
+        attempted: 3,
+        verified: 2,
+      },
+      {
+        name: "instance-drift-after-first-uncordon",
+        env: { DEPLOY_TEST_DRIFT_INSTANCE_ON_UNCORDON: "1" },
+        attempted: 1,
+        verified: 0,
+      },
+      {
+        name: "failed-canary-public-health",
+        env: { DEPLOY_TEST_FAIL_CANARY_HEALTH: "1" },
+        attempted: 1,
+        verified: 1,
+      },
+      {
+        name: "wrong-canary-authority-state",
+        env: { DEPLOY_TEST_HEALTH_AUTHORITY: "configured" },
+        attempted: 1,
+        verified: 1,
+      },
+      {
+        name: "missing-canary-authority-state",
+        env: { DEPLOY_TEST_HEALTH_AUTHORITY: "missing" },
+        attempted: 1,
+        verified: 1,
+      },
+      {
+        name: "cordon-drift-during-runtime-ssh",
+        env: { DEPLOY_TEST_DRIFT_CORDON_AFTER_CORDONED_SSH: "1" },
+        attempted: 0,
+        verified: 0,
+      },
+      {
+        name: "prior-prefix-drift-during-second-uncordon",
+        env: { DEPLOY_TEST_DRIFT_PRIOR_UNCORDON_AT: "2" },
+        attempted: 2,
+        verified: 1,
+      },
+      {
+        name: "prior-prefix-drift-during-third-uncordon",
+        env: { DEPLOY_TEST_DRIFT_PRIOR_UNCORDON_AT: "3" },
+        attempted: 3,
+        verified: 2,
+      },
+      {
+        name: "updated-at-drift-before-final-readback",
+        env: { DEPLOY_TEST_DRIFT_BEFORE_FINAL_READBACK: "1" },
+        attempted: 3,
+        verified: 3,
+      },
+      {
+        name: "cordon-drift-during-final-runtime-ssh",
+        env: { DEPLOY_TEST_DRIFT_CORDON_AFTER_FINAL_SSH: "1" },
+        attempted: 3,
+        verified: 3,
+      },
+    ]) {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, `${scenario.name}-bin`);
+      const flyState = join(setup.root, `${scenario.name}-state.json`);
+      const flyLog = join(setup.root, `${scenario.name}-log.jsonl`);
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+
+      const result = await run(
+        maintenanceCommand(),
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_STATE: flyState,
+          DEPLOY_TEST_FLY_LOG: flyLog,
+          DEPLOY_TEST_HEALTH_OK: "1",
+          DEPLOY_TEST_HEALTH_REVISION: setup.release,
+          ...scenario.env,
+        }),
+      );
+      expect(result.code).not.toBe(0);
+      const log = await readFlyLog(flyLog);
+      const cordonIndexes = log
+        .map((args, index) => ({ args, index }))
+        .filter(
+          ({ args }) => args[0] === "machine" && args[1] === "cordon",
+        );
+      expect(cordonIndexes.map(({ args }) => args)).toEqual(
+        maintenanceIds.apps.map((id) => [
+          "machine",
+          "cordon",
+          id,
+          "-a",
+          "agenttool",
+        ]),
+      );
+      const firstRefenceIndex = log.findIndex(
+        (args) =>
+          args[0] === "machine" &&
+          args[1] === "update" &&
+          !args.includes("--image") &&
+          args[args.indexOf("--machine-config") + 1] ===
+            '{"restart":{"policy":"no","max_retries":10}}',
+      );
+      expect(firstRefenceIndex).toBeGreaterThan(cordonIndexes[2].index);
+      expect(
+        cordonIndexes.some(({ args }) =>
+          args.includes(maintenanceIds.thinkerPrimary) ||
+          args.includes(maintenanceIds.thinkerStandby)
+        ),
+      ).toBe(false);
+      const state = JSON.parse(await readFile(flyState, "utf8"));
+      for (const machine of state.machines) {
+        expect(machine.state).toBe("stopped");
+        expect(machine.cordoned).toBe(
+          machine.config.metadata.fly_process_group === "app",
+        );
+        expect(machine.image_ref.digest).toBe(maintenanceDigest);
+      }
+      const marker = JSON.parse(
+        await readFile(maintenanceMarkerPath(setup.home), "utf8"),
+      );
+      expect(marker.schema).toBe("agenttool-maintenance-run/v2");
+      expect(marker.checkpoint).toBe("failed_or_uncertain");
+      expect(marker.uncordon_attempted_app_machine_ids).toHaveLength(
+        scenario.attempted,
+      );
+      expect(marker.uncordon_verified_app_machine_ids).toHaveLength(
+        scenario.verified,
+      );
+      expect(marker.recovery_cordoned_app_machine_ids).toEqual(
+        [...maintenanceIds.apps].sort(),
+      );
+      expect(marker.recovery_cordon_attempted_app_machine_ids).toEqual(
+        [...maintenanceIds.apps].sort(),
+      );
+    }
+  }, 240_000);
+
+  test("resolves recovery-cordon uncertainty only through exact read-back", async () => {
+    for (const phase of ["before", "after"] as const) {
+      for (const position of [1, 2, 3]) {
+        const setup = await fixture();
+        const fakeBin = join(
+          setup.root,
+          `maintenance-recovery-cordon-${phase}-${position}-bin`,
+        );
+        const flyState = join(
+          setup.root,
+          `maintenance-recovery-cordon-${phase}-${position}-state.json`,
+        );
+        const flyLog = join(
+          setup.root,
+          `maintenance-recovery-cordon-${phase}-${position}-log.jsonl`,
+        );
+        await mkdir(fakeBin, { recursive: true });
+        await installFakeRightsCurl(fakeBin);
+        await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+
+        const result = await run(
+          maintenanceCommand(),
+          setup.repo,
+          cleanEnv(setup.home, {
+            XDG_STATE_HOME: setup.state,
+            PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+            DEPLOY_TEST_FLY_STATE: flyState,
+            DEPLOY_TEST_FLY_LOG: flyLog,
+            DEPLOY_TEST_HEALTH_OK: "1",
+            DEPLOY_TEST_HEALTH_REVISION: setup.release,
+            DEPLOY_TEST_DRIFT_INSTANCE_ON_UNCORDON: "3",
+            [phase === "before"
+              ? "DEPLOY_TEST_FAIL_RECOVERY_CORDON_BEFORE"
+              : "DEPLOY_TEST_FAIL_RECOVERY_CORDON_AFTER"]: String(position),
+          }),
+        );
+        expect(result.code).not.toBe(0);
+        const log = await readFlyLog(flyLog);
+        const recoveryCordons = log.filter(
+          (args) => args[0] === "machine" && args[1] === "cordon",
+        );
+        expect(recoveryCordons).toHaveLength(
+          phase === "before" ? position : 3,
+        );
+        const lastCordonIndex = log.findLastIndex(
+          (args) => args[0] === "machine" && args[1] === "cordon",
+        );
+        const recoveryUpdates = log
+          .slice(lastCordonIndex + 1)
+          .filter((args) => args[0] === "machine" && args[1] === "update");
+        expect(recoveryUpdates).toHaveLength(phase === "before" ? 0 : 5);
+        const marker = JSON.parse(
+          await readFile(maintenanceMarkerPath(setup.home), "utf8"),
+        );
+        expect(marker.recovery_cordon_attempted_app_machine_ids).toHaveLength(
+          phase === "before" ? position : 3,
+        );
+        expect(marker.recovery_cordoned_app_machine_ids).toHaveLength(
+          phase === "before" ? position - 1 : 3,
+        );
+      }
+    }
+  }, 150_000);
+
+  test("re-cordons all apps before refusing a drifted thinker recovery", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "maintenance-thinker-cordon-drift-bin");
+    const flyState = join(
+      setup.root,
+      "maintenance-thinker-cordon-drift-state.json",
+    );
+    const flyLog = join(
+      setup.root,
+      "maintenance-thinker-cordon-drift-log.jsonl",
+    );
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+
+    const result = await run(
+      maintenanceCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_STATE: flyState,
+        DEPLOY_TEST_FLY_LOG: flyLog,
+        DEPLOY_TEST_HEALTH_OK: "1",
+        DEPLOY_TEST_HEALTH_REVISION: setup.release,
+        DEPLOY_TEST_CORDON_THINKER_ON_FIRST_UNCORDON: "1",
+      }),
+    );
+    expect(result.code).not.toBe(0);
+    const log = await readFlyLog(flyLog);
+    const recoveryCordons = log
+      .map((args, index) => ({ args, index }))
+      .filter(({ args }) => args[0] === "machine" && args[1] === "cordon");
+    expect(recoveryCordons.map(({ args }) => args)).toEqual(
+      maintenanceIds.apps.map((id) => [
+        "machine",
+        "cordon",
+        id,
+        "-a",
+        "agenttool",
+      ]),
+    );
+    expect(
+      log
+        .slice(recoveryCordons[2].index + 1)
+        .filter((args) => args[0] === "machine" && args[1] === "update"),
+    ).toHaveLength(0);
+    const state = JSON.parse(await readFile(flyState, "utf8"));
+    const byId = new Map(
+      state.machines.map((machine: Record<string, any>) => [
+        machine.id,
+        machine,
+      ]),
+    );
+    for (const id of maintenanceIds.apps) {
+      expect((byId.get(id) as any).cordoned).toBe(true);
+    }
+    expect((byId.get(maintenanceIds.thinkerPrimary) as any).cordoned).toBe(
+      true,
+    );
+    const marker = JSON.parse(
+      await readFile(maintenanceMarkerPath(setup.home), "utf8"),
+    );
+    expect(marker.recovery_cordon_attempted_app_machine_ids).toEqual(
+      [...maintenanceIds.apps].sort(),
+    );
+    expect(marker.recovery_cordoned_app_machine_ids).toEqual(
+      [...maintenanceIds.apps].sort(),
+    );
+    expect(marker.checkpoint).toBe("failed_or_uncertain");
+  }, 30_000);
+
+  test("finishes the app cordon before rejecting later recovery drift", async () => {
+    for (const scenario of [
+      {
+        name: "config-drift-after-first-recovery-cordon",
+        env: { DEPLOY_TEST_DRIFT_CONFIG_AFTER_FIRST_RECOVERY_CORDON: "1" },
+      },
+      {
+        name: "app-drift-before-recovery-initial",
+        env: { DEPLOY_TEST_DRIFT_APP_BEFORE_RECOVERY_INITIAL: "1" },
+      },
+    ]) {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, `${scenario.name}-bin`);
+      const flyState = join(setup.root, `${scenario.name}-state.json`);
+      const flyLog = join(setup.root, `${scenario.name}-log.jsonl`);
+      await mkdir(fakeBin, { recursive: true });
+      await installFakeRightsCurl(fakeBin);
+      await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+      const result = await run(
+        maintenanceCommand(),
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_STATE: flyState,
+          DEPLOY_TEST_FLY_LOG: flyLog,
+          DEPLOY_TEST_HEALTH_OK: "1",
+          DEPLOY_TEST_HEALTH_REVISION: setup.release,
+          DEPLOY_TEST_DRIFT_INSTANCE_ON_UNCORDON: "3",
+          ...scenario.env,
+        }),
+      );
+      expect(result.code).not.toBe(0);
+      const log = await readFlyLog(flyLog);
+      const recoveryCordons = log
+        .map((args, index) => ({ args, index }))
+        .filter(({ args }) => args[0] === "machine" && args[1] === "cordon");
+      expect(recoveryCordons.map(({ args }) => args)).toEqual(
+        maintenanceIds.apps.map((id) => [
+          "machine",
+          "cordon",
+          id,
+          "-a",
+          "agenttool",
+        ]),
+      );
+      expect(
+        log
+          .slice(recoveryCordons[2].index + 1)
+          .filter((args) => args[0] === "machine" && args[1] === "update"),
+      ).toHaveLength(0);
+      const marker = JSON.parse(
+        await readFile(maintenanceMarkerPath(setup.home), "utf8"),
+      );
+      expect(marker.recovery_cordon_attempted_app_machine_ids).toEqual(
+        [...maintenanceIds.apps].sort(),
+      );
+      expect(marker.recovery_cordoned_app_machine_ids).toEqual(
+        [...maintenanceIds.apps].sort(),
+      );
+    }
+  }, 45_000);
 
   test("times out, kills, and reaps a hanging deployed database probe", async () => {
     const setup = await fixture();
@@ -2577,6 +3355,11 @@ describe("deploy release provenance spine", () => {
       reaped = (error as NodeJS.ErrnoException).code === "ESRCH";
     }
     expect(reaped).toBe(true);
+    expect(
+      (await readFlyLog(flyLog)).some(
+        (args) => args[0] === "machine" && args[1] === "uncordon",
+      ),
+    ).toBe(false);
     expect(await exists(maintenanceMarkerPath(setup.home))).toBe(true);
   }, 30_000);
 
@@ -2608,7 +3391,11 @@ describe("deploy release provenance spine", () => {
     const markerDocument = JSON.parse(await readFile(marker, "utf8"));
     expect(markerDocument.checkpoint).toBe("failed_or_uncertain");
     expect(markerDocument.recovery_required).toBe(true);
-    const recoveryUpdates = (await readFlyLog(flyLog)).filter(
+    const recoveryLog = await readFlyLog(flyLog);
+    const recoveryCordons = recoveryLog.filter(
+      (args) => args[0] === "machine" && args[1] === "cordon",
+    );
+    const recoveryUpdates = recoveryLog.filter(
       (args) =>
         args[0] === "machine" &&
         args[1] === "update" &&
@@ -2616,7 +3403,11 @@ describe("deploy release provenance spine", () => {
         args[args.indexOf("--machine-config") + 1] ===
           '{"restart":{"policy":"no","max_retries":10}}',
     );
+    expect(recoveryCordons).toHaveLength(3);
     expect(recoveryUpdates).toHaveLength(5);
+    expect(recoveryLog.indexOf(recoveryUpdates[0])).toBeGreaterThan(
+      recoveryLog.indexOf(recoveryCordons[2]),
+    );
     expect(
       recoveryUpdates.every((args) => !args.includes(maintenanceOldDigest)),
     ).toBe(true);
@@ -2871,6 +3662,86 @@ exec /bin/rm "$@"
     }
   }, 120_000);
 
+  test("retains the exact uncordon write-ahead prefix across SIGKILL", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "maintenance-uncordon-sigkill-bin");
+    const flyState = join(
+      setup.root,
+      "maintenance-uncordon-sigkill-state.json",
+    );
+    const flyLog = join(setup.root, "maintenance-uncordon-sigkill-log.jsonl");
+    const blockMarker = join(setup.root, "maintenance-uncordon-applied");
+    const blockRelease = join(setup.root, "maintenance-uncordon-release");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+    const env = cleanEnv(setup.home, {
+      XDG_STATE_HOME: setup.state,
+      PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+      DEPLOY_TEST_FLY_STATE: flyState,
+      DEPLOY_TEST_FLY_LOG: flyLog,
+      DEPLOY_TEST_HEALTH_OK: "1",
+      DEPLOY_TEST_HEALTH_REVISION: setup.release,
+      DEPLOY_TEST_BLOCK_UNCORDON_AFTER_APPLY_POSITION: "2",
+      DEPLOY_TEST_BLOCK_UNCORDON_MARKER: blockMarker,
+      DEPLOY_TEST_BLOCK_UNCORDON_RELEASE: blockRelease,
+    });
+    const child = Bun.spawn(maintenanceCommand(), {
+      cwd: setup.repo,
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const stdoutPromise = new Response(child.stdout).text();
+    const stderrPromise = new Response(child.stderr).text();
+    expect(await waitForPath(blockMarker, 20_000)).toBe(true);
+    const markerPath = maintenanceMarkerPath(setup.home);
+    const beforeKill = JSON.parse(await readFile(markerPath, "utf8"));
+    expect(beforeKill.checkpoint).toBe("attempting_app_uncordon_2_of_3");
+    expect(beforeKill.uncordon_attempted_app_machine_ids).toEqual(
+      maintenanceIds.apps.slice(0, 2),
+    );
+    expect(beforeKill.uncordon_verified_app_machine_ids).toEqual(
+      maintenanceIds.apps.slice(0, 1),
+    );
+
+    child.kill("SIGKILL");
+    await writeFile(blockRelease, "continue\n");
+    const [code] = await Promise.all([
+      child.exited,
+      stdoutPromise,
+      stderrPromise,
+    ]);
+    expect(code).not.toBe(0);
+    const afterKill = JSON.parse(await readFile(markerPath, "utf8"));
+    expect(afterKill.checkpoint).toBe("attempting_app_uncordon_2_of_3");
+    expect(afterKill.uncordon_attempted_app_machine_ids).toEqual(
+      maintenanceIds.apps.slice(0, 2),
+    );
+    expect(afterKill.uncordon_verified_app_machine_ids).toEqual(
+      maintenanceIds.apps.slice(0, 1),
+    );
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
+    const state = JSON.parse(await readFile(flyState, "utf8"));
+    const byId = new Map(
+      state.machines.map((machine: Record<string, any>) => [
+        machine.id,
+        machine,
+      ]),
+    );
+    expect((byId.get(maintenanceIds.apps[0]) as any).cordoned).toBe(false);
+    expect((byId.get(maintenanceIds.apps[1]) as any).cordoned).toBe(false);
+    expect((byId.get(maintenanceIds.apps[2]) as any).cordoned).toBe(true);
+
+    const lockPath = deployLockPath(setup.home);
+    const lockText = await readFile(lockPath, "utf8");
+    const ownerRecord = lockText.match(/^owner_record=(.+)$/m)?.[1];
+    await unlink(lockPath);
+    await unlink(ownerRecord as string);
+  }, 30_000);
+
   test("keeps uncertainty durable and never starts or rolls back after update failure or ID drift", async () => {
     for (const scenario of [
       {
@@ -2892,7 +3763,7 @@ exec /bin/rm "$@"
       {
         name: "per-id-region-swap",
         env: { DEPLOY_TEST_SWAP_REGIONS_AFTER_UPDATE: "2" },
-        expectedError: "region drifted from its per-ID baseline",
+        expectedError: "app selector order is cdg,lhr,lhr",
         expectedImageUpdates: 2,
       },
       {
@@ -2904,7 +3775,21 @@ exec /bin/rm "$@"
       {
         name: "fence-drift-during-image-build",
         env: { DEPLOY_TEST_DRIFT_DURING_BUILD: "1" },
-        expectedError: "cordoned state drifted",
+        expectedError: "is not held behind the routing cordon",
+        expectedImageUpdates: 0,
+        expectedRefenceUpdates: 5,
+      },
+      {
+        name: "instance-drift-during-image-build",
+        env: { DEPLOY_TEST_DRIFT_INSTANCE_DURING_BUILD: "1" },
+        expectedError: "unattempted Machine 11111111111111 instance changed",
+        expectedImageUpdates: 0,
+      },
+      {
+        name: "updated-at-drift-during-image-build",
+        env: { DEPLOY_TEST_DRIFT_UPDATED_AT_DURING_BUILD: "1" },
+        expectedError:
+          "unattempted Machine 11111111111111 updated-at value changed",
         expectedImageUpdates: 0,
       },
     ]) {
@@ -2960,7 +3845,9 @@ exec /bin/rm "$@"
           args[1] === "update" &&
           !args.includes("--image"),
       );
-      expect(refenceUpdates).toHaveLength(0);
+      expect(refenceUpdates).toHaveLength(
+        scenario.expectedRefenceUpdates ?? 0,
+      );
       expect(
         log
           .filter((args) => args[0] === "machine" && args[1] === "update")
@@ -2973,7 +3860,7 @@ exec /bin/rm "$@"
       expect(await exists(marker)).toBe(true);
       expect((await stat(marker)).mode & 0o777).toBe(0o600);
       const markerDocument = JSON.parse(await readFile(marker, "utf8"));
-      expect(markerDocument.schema).toBe("agenttool-maintenance-run/v1");
+      expect(markerDocument.schema).toBe("agenttool-maintenance-run/v2");
       expect(markerDocument.checkpoint).toBe("failed_or_uncertain");
       expect(markerDocument.recovery_required).toBe(true);
       expect(markerDocument.role_mapping).toEqual({
@@ -2991,7 +3878,7 @@ exec /bin/rm "$@"
           "utf8",
         ),
       );
-      expect(receipt.schema).toBe("agenttool-deploy-receipt/v5");
+      expect(receipt.schema).toBe("agenttool-deploy-receipt/v6");
       expect(receipt.outcome).toBe("failed_or_uncertain");
       expect(receipt.maintenance.recovery_required).toBe(true);
       expect(receipt.maintenance.active_marker_cleared).toBe(false);
@@ -4902,7 +5789,7 @@ exec /bin/rm "$@"
     const text = await readFile(path, "utf8");
     const receipt = JSON.parse(text);
     expect(receipt).toEqual({
-      schema: "agenttool-deploy-receipt/v5",
+      schema: "agenttool-deploy-receipt/v6",
       run_id: expect.any(String),
       mode: "routine",
       outcome: "succeeded",
