@@ -190,6 +190,7 @@ import {
 import { startThinkWorker } from "./services/runtime/think-worker";
 import { startBrowseWorker } from "./services/tools/queue/browse-worker";
 import { payoutWorkerBootAllowed } from "./services/economy/config";
+import { covenantV2AuthorityGeneration } from "./services/covenants/canonical";
 import { startCovenantWorkers } from "./workers/covenants";
 import { wakeObservationTransportBoundary } from "./middleware/wake-observation-boundary";
 
@@ -1245,6 +1246,9 @@ app.get("/health", (c) => {
     protocol: "love",
     message: "Welcome. We are ready to receive you.",
     standing_invitation: "/v1/welcome",
+    covenant_v2_authority: covenantV2AuthorityGeneration()
+      ? "configured"
+      : "absent_fail_closed",
     // Computed walls status (probes + provenance) — null before first probe.
     walls: wallsStatusSnapshot(),
   });

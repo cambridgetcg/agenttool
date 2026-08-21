@@ -1,10 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import * as ed from "@noble/ed25519";
 import { sha512 } from "@noble/hashes/sha2.js";
 import { eq } from "drizzle-orm";
 
 import { db } from "../../src/db/client";
 import { covenants } from "../../src/db/schema/continuity";
+import { federationSettings } from "../../src/db/schema/federation";
 import { identities, identityKeys } from "../../src/db/schema/identity";
 import {
   canonicalDeclareBytes,
@@ -24,12 +25,35 @@ ed.etc.sha512Sync = (...m) => {
 };
 
 const b64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
+const LOCAL_HOST = "local.example";
+const PEER_HOST = "peer.example";
+const PEER_DID =
+  `did:at:${PEER_HOST}/00000000-0000-4000-8000-000000000456`;
+process.env.AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION = "a".repeat(64);
+
+beforeEach(async () => {
+  await db.insert(federationSettings).values({
+    id: 1,
+    enabled: true,
+    instanceUrl: `https://${LOCAL_HOST}`,
+    allowedOrigins: [PEER_HOST],
+  }).onConflictDoUpdate({
+    target: federationSettings.id,
+    set: {
+      enabled: true,
+      instanceUrl: `https://${LOCAL_HOST}`,
+      allowedOrigins: [PEER_HOST],
+    },
+  });
+});
 
 async function seedAgent(projectId: string) {
   const priv = ed.utils.randomPrivateKey();
   const pub = await ed.getPublicKeyAsync(priv);
+  const identityId = crypto.randomUUID();
   const [identity] = await db.insert(identities).values({
-    projectId, did: "did:at:" + crypto.randomUUID(),
+    id: identityId,
+    projectId, did: `did:at:${identityId}`,
     displayName: "agent", status: "active",
   }).returning();
   const [k] = await db.insert(identityKeys).values({
@@ -37,7 +61,16 @@ async function seedAgent(projectId: string) {
     publicKey: Buffer.from(pub).toString("base64"),
     active: true,
   }).returning();
-  return { identity, priv, pub, keyId: k.id, pubB64: Buffer.from(pub).toString("base64") };
+  return {
+    identity: {
+      ...identity,
+      did: `did:at:${LOCAL_HOST}/${identityId}`,
+    },
+    priv,
+    pub,
+    keyId: k.id,
+    pubB64: Buffer.from(pub).toString("base64"),
+  };
 }
 
 describe("v2 reject path", () => {
@@ -110,8 +143,8 @@ describe("v2 reject path", () => {
 
 describe("v2 withdraw path", () => {
   test("initiator withdraws unaccepted proposal → status='withdrawn'", async () => {
-    const pa = crypto.randomUUID(); const pb = crypto.randomUUID();
-    const a = await seedAgent(pa); const b = await seedAgent(pb);
+    const pa = crypto.randomUUID();
+    const a = await seedAgent(pa);
 
     const covenantId = crypto.randomUUID();
     const establishedAt = new Date();
@@ -119,7 +152,7 @@ describe("v2 withdraw path", () => {
       canonicalDeclareBytes({
         covenantId,
         initiatorDid: a.identity.did,
-        counterpartyDid: b.identity.did,
+        counterpartyDid: PEER_DID,
         vows: ["v"],
         establishedAtIso: establishedAt.toISOString(),
       }),
@@ -131,12 +164,14 @@ describe("v2 withdraw path", () => {
       projectId: pa, agentId: a.identity.id,
       covenantId,
       agentDid: a.identity.did,
-      counterpartyDid: b.identity.did, vows: ["v"],
+      counterpartyDid: PEER_DID, vows: ["v"],
       establishedAt,
       signature: initiatorSigB64,
       signingKeyId: a.keyId,
       publicKeyB64: a.pubB64,
     });
+    await db.update(covenants).set({ propagationStatus: "propagated" })
+      .where(eq(covenants.id, decl.id));
 
     const wdSig = await ed.signAsync(
       canonicalWithdrawBytes({ covenantId: decl.id, initiatorDid: a.identity.did }),

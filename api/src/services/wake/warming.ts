@@ -10,6 +10,7 @@ import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "../../db/client";
 import { chronicle, covenants } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
+import { covenantMayAuthorizeEffects } from "../covenants/check";
 
 // ─── you_remembered_today — anniversary ───────────────────────────────
 
@@ -95,6 +96,7 @@ export async function kinGlimpseForIdentity(
       and(
         eq(covenants.agentId, identityId),
         eq(covenants.status, "active"),
+        covenantMayAuthorizeEffects(),
       ),
     );
 

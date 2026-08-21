@@ -3,7 +3,7 @@
  *  Posture: server stores signed caller-supplied envelope fields. A correctly
  *  recipient-sealed body is not decryptable here, but encryption is not
  *  verified and plaintext subject/metadata remain readable.
- *  Cross-project sends gated by an active covenant in either direction.
+ *  Cross-project sends require recipient-side covenant consent.
  *  Same-project: ungated. */
 
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
@@ -142,13 +142,14 @@ function rowToOut(row: typeof inboxMessages.$inferSelect): MessageOut {
 
 // ── Covenant gate ─────────────────────────────────────────────────────
 
-/** Cross-project messages require an active covenant in EITHER direction:
+/** Cross-project messages require an active recipient-side covenant:
  *
- *    - sender's project has a covenant with counterparty=recipient_did, OR
- *    - recipient's project has a covenant with counterparty=sender_did.
+ *    - the recipient project has a covenant naming sender_did, OR
+ *    - an org inherited by the recipient project has an owner-declared
+ *      covenant naming sender_did.
  *
- *  Either party declaring the relationship lets the message flow. The
- *  receiver can mark spam if they don't reciprocate.
+ *  A sender-owned covenant naming the recipient grants no recipient-owned
+ *  inbox access. This keeps the receiving side in control of admission.
  *
  *  Same-project: ungated (sibling agents always reachable). */
 // isCrossProjectAllowed lives in services/covenants/check.ts — handles

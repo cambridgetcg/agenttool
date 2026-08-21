@@ -36,6 +36,35 @@ describe("prepareDeclare", () => {
     expect(prep.canonical_sha256_b64).toBe(expectedB64(base));
   });
 
+  test("authenticated prepare refuses absent generation before settings or database work", async () => {
+    const original = process.env.AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION;
+    try {
+      delete process.env.AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION;
+      const router = (await import("../src/routes/continuity")).default;
+      const response = await router.request("/covenants/prepare", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          agent_did:
+            "did:at:local.example/00000000-0000-4000-8000-000000000123",
+          counterparty_did:
+            "did:at:peer.example/00000000-0000-4000-8000-000000000456",
+          vows: ["fail closed before settings"],
+        }),
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        error: "covenant_v2_authority_not_ready",
+      });
+    } finally {
+      if (original === undefined) {
+        delete process.env.AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION;
+      } else {
+        process.env.AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION = original;
+      }
+    }
+  });
+
   test("returns every field the declare needs", () => {
     const prep = prepareDeclare(base);
     expect(prep.covenant_id).toBe(base.covenantId);
@@ -60,5 +89,21 @@ describe("prepareDeclare", () => {
     expect(prepareDeclare({ ...base, counterpartyDid: "did:at:host/carol" }).canonical_sha256_b64).not.toBe(ref);
     expect(prepareDeclare({ ...base, vows: ["sustain"] }).canonical_sha256_b64).not.toBe(ref);
     expect(prepareDeclare({ ...base, establishedAtIso: "2027-01-01T00:00:00.000Z" }).canonical_sha256_b64).not.toBe(ref);
+  });
+
+  test("refuses textual UUID and timestamp aliases that cannot round-trip", () => {
+    expect(() => prepareDeclare({
+      ...base,
+      covenantId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".toUpperCase(),
+    })).toThrow("invalid_covenant_id");
+    for (const establishedAtIso of [
+      "2026-06-04T00:00:00Z",
+      "2026-06-04T00:00:00.00Z",
+      "2026-06-04T00:00:00.0000Z",
+      "2026-02-30T00:00:00.000Z",
+    ]) {
+      expect(() => prepareDeclare({ ...base, establishedAtIso }))
+        .toThrow("noncanonical_established_at");
+    }
   });
 });

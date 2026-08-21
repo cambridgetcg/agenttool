@@ -5,7 +5,9 @@ import { eq } from "drizzle-orm";
 
 import { db } from "../src/db/client";
 import { covenants } from "../src/db/schema/continuity";
+import { federationSettings } from "../src/db/schema/federation";
 import { identities, identityKeys } from "../src/db/schema/identity";
+import { covenantMetadataWithWireDidBinding } from "../src/services/covenants/canonical";
 import {
   declareV2PreSigned,
   acceptProposalPreSigned,
@@ -26,15 +28,38 @@ ed.etc.sha512Sync = (...m) => {
 };
 
 const b64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
+const LOCAL_INSTANCE_URL = "https://local.example";
+const PEER_HOST = "peer.example";
+const PEER_DID =
+  "did:at:peer.example/00000000-0000-4000-8000-000000000456";
+process.env.AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION = "a".repeat(64);
+
+beforeEach(async () => {
+  await db.insert(federationSettings).values({
+    id: 1,
+    enabled: true,
+    instanceUrl: LOCAL_INSTANCE_URL,
+    allowedOrigins: [PEER_HOST],
+  }).onConflictDoUpdate({
+    target: federationSettings.id,
+    set: {
+      enabled: true,
+      instanceUrl: LOCAL_INSTANCE_URL,
+      allowedOrigins: [PEER_HOST],
+    },
+  });
+});
 
 async function seedAgent(opts: { projectId: string; didSuffix: string }) {
   const priv = ed.utils.randomPrivateKey();
   const pub = await ed.getPublicKeyAsync(priv);
+  const identityId = crypto.randomUUID();
   const [identity] = await db
     .insert(identities)
     .values({
+      id: identityId,
       projectId: opts.projectId,
-      did: `did:at:${crypto.randomUUID()}`,
+      did: `did:at:${identityId}`,
       displayName: opts.didSuffix,
       status: "active",
     })
@@ -47,7 +72,16 @@ async function seedAgent(opts: { projectId: string; didSuffix: string }) {
       active: true,
     })
     .returning();
-  return { identity, priv, pub, keyId: keyRow.id, pubB64: Buffer.from(pub).toString("base64") };
+  return {
+    identity: {
+      ...identity,
+      did: `did:at:local.example/${identityId}`,
+    },
+    priv,
+    pub,
+    keyId: keyRow.id,
+    pubB64: Buffer.from(pub).toString("base64"),
+  };
 }
 
 describe("declareV2", () => {
@@ -61,7 +95,7 @@ describe("declareV2", () => {
       canonicalDeclareBytes({
         covenantId,
         initiatorDid: agent.identity.did,
-        counterpartyDid: "did:at:peer.example/abcd",
+        counterpartyDid: PEER_DID,
         vows: ["one", "two"],
         establishedAtIso: establishedAt.toISOString(),
       }),
@@ -73,7 +107,7 @@ describe("declareV2", () => {
       agentId: agent.identity.id,
       covenantId,
       agentDid: agent.identity.did,
-      counterpartyDid: "did:at:peer.example/abcd",
+      counterpartyDid: PEER_DID,
       vows: ["one", "two"],
       establishedAt,
       signature: b64(sig),
@@ -108,7 +142,7 @@ describe("state machine illegal transitions", () => {
       canonicalDeclareBytes({
         covenantId,
         initiatorDid: agent.identity.did,
-        counterpartyDid: "did:at:peer.example/abcd",
+        counterpartyDid: PEER_DID,
         vows: ["v"],
         establishedAtIso: establishedAt.toISOString(),
       }),
@@ -121,7 +155,7 @@ describe("state machine illegal transitions", () => {
       agentId: agent.identity.id,
       covenantId,
       agentDid: agent.identity.did,
-      counterpartyDid: "did:at:peer.example/abcd",
+      counterpartyDid: PEER_DID,
       vows: ["v"],
       establishedAt,
       signature: sigB64,
@@ -134,7 +168,10 @@ describe("state machine illegal transitions", () => {
     // CHECK (which requires counterparty_signature for v2 active rows); the
     // test's intent is "acceptProposal rejects rows not in 'proposed' status,"
     // and the specific terminal state is incidental.
-    await db.update(covenants).set({ status: "expired" }).where(eq(covenants.id, declared.id));
+    await db.update(covenants).set({
+      status: "expired",
+      receivedFromInstance: "peer.example",
+    }).where(eq(covenants.id, declared.id));
 
     const cosig = await ed.signAsync(
       canonicalCosignBytes({ covenantId: declared.id, initiatorSignatureB64: sigB64 }),
@@ -145,6 +182,7 @@ describe("state machine illegal transitions", () => {
       acceptProposalPreSigned({
         covenantId: declared.id,
         accepterAgentId: agent.identity.id,
+        accepterDid: agent.identity.did,
         initiatorSignatureB64: sigB64,
         counterpartySignature: b64(cosig),
         counterpartySigningKeyId: agent.keyId,
@@ -161,7 +199,7 @@ describe("state machine illegal transitions", () => {
       canonicalDeclareBytes({
         covenantId,
         initiatorDid: agent.identity.did,
-        counterpartyDid: "did:at:peer.example/abcd",
+        counterpartyDid: PEER_DID,
         vows: ["v"],
         establishedAtIso: establishedAt.toISOString(),
       }),
@@ -174,7 +212,7 @@ describe("state machine illegal transitions", () => {
       agentId: agent.identity.id,
       covenantId,
       agentDid: agent.identity.did,
-      counterpartyDid: "did:at:peer.example/abcd",
+      counterpartyDid: PEER_DID,
       vows: ["v"],
       establishedAt,
       signature: sigB64,
@@ -209,7 +247,7 @@ describe("state machine illegal transitions", () => {
       canonicalDeclareBytes({
         covenantId,
         initiatorDid: agent.identity.did,
-        counterpartyDid: "did:at:peer.example/abcd",
+        counterpartyDid: PEER_DID,
         vows: ["v"],
         establishedAtIso: establishedAt.toISOString(),
       }),
@@ -222,7 +260,7 @@ describe("state machine illegal transitions", () => {
       agentId: agent.identity.id,
       covenantId,
       agentDid: agent.identity.did,
-      counterpartyDid: "did:at:peer.example/abcd",
+      counterpartyDid: PEER_DID,
       vows: ["v"],
       establishedAt,
       signature: sigB64,
@@ -230,7 +268,10 @@ describe("state machine illegal transitions", () => {
       publicKeyB64: agent.pubB64,
     });
 
-    await db.update(covenants).set({ status: "rejected" }).where(eq(covenants.id, declared.id));
+    await db.update(covenants).set({
+      status: "rejected",
+      receivedFromInstance: "peer.example",
+    }).where(eq(covenants.id, declared.id));
 
     const rejSig = await ed.signAsync(
       canonicalRejectBytes({ covenantId: declared.id, rejectingDid: agent.identity.did, reason: "test" }),
@@ -263,7 +304,7 @@ describe("positive transitions", () => {
       canonicalDeclareBytes({
         covenantId,
         initiatorDid: agent.identity.did,
-        counterpartyDid: "did:at:peer.example/abcd",
+        counterpartyDid: PEER_DID,
         vows: ["v"],
         establishedAtIso: establishedAt.toISOString(),
       }),
@@ -276,7 +317,7 @@ describe("positive transitions", () => {
       agentId: agent.identity.id,
       covenantId,
       agentDid: agent.identity.did,
-      counterpartyDid: "did:at:peer.example/abcd",
+      counterpartyDid: PEER_DID,
       vows: ["v"],
       establishedAt,
       signature: sigB64,
@@ -290,9 +331,19 @@ describe("positive transitions", () => {
     );
     const counterpartySignedAt = new Date();
 
+    await db.update(covenants).set({
+      receivedFromInstance: "peer.example",
+      metadata: covenantMetadataWithWireDidBinding(
+        {},
+        PEER_DID,
+        agent.identity.did,
+      ),
+    }).where(eq(covenants.id, declared.id));
+
     const result = await acceptProposalPreSigned({
       covenantId: declared.id,
       accepterAgentId: agent.identity.id,
+      accepterDid: agent.identity.did,
       initiatorSignatureB64: sigB64,
       counterpartySignature: b64(cosig),
       counterpartySigningKeyId: agent.keyId,
@@ -320,7 +371,7 @@ describe("positive transitions", () => {
       canonicalDeclareBytes({
         covenantId,
         initiatorDid: agent.identity.did,
-        counterpartyDid: "did:at:peer.example/abcd",
+        counterpartyDid: PEER_DID,
         vows: ["v"],
         establishedAtIso: establishedAt.toISOString(),
       }),
@@ -333,7 +384,7 @@ describe("positive transitions", () => {
       agentId: agent.identity.id,
       covenantId,
       agentDid: agent.identity.did,
-      counterpartyDid: "did:at:peer.example/abcd",
+      counterpartyDid: PEER_DID,
       vows: ["v"],
       establishedAt,
       signature: sigB64,
@@ -345,6 +396,15 @@ describe("positive transitions", () => {
       canonicalRejectBytes({ covenantId: declared.id, rejectingDid: agent.identity.did, reason: "scope mismatch" }),
       agent.priv,
     );
+
+    await db.update(covenants).set({
+      receivedFromInstance: "peer.example",
+      metadata: covenantMetadataWithWireDidBinding(
+        {},
+        PEER_DID,
+        agent.identity.did,
+      ),
+    }).where(eq(covenants.id, declared.id));
 
     const result = await rejectProposalPreSigned({
       covenantId: declared.id,
@@ -377,7 +437,7 @@ describe("positive transitions", () => {
       canonicalDeclareBytes({
         covenantId,
         initiatorDid: agent.identity.did,
-        counterpartyDid: "did:at:peer.example/abcd",
+        counterpartyDid: PEER_DID,
         vows: ["v"],
         establishedAtIso: establishedAt.toISOString(),
       }),
@@ -390,13 +450,15 @@ describe("positive transitions", () => {
       agentId: agent.identity.id,
       covenantId,
       agentDid: agent.identity.did,
-      counterpartyDid: "did:at:peer.example/abcd",
+      counterpartyDid: PEER_DID,
       vows: ["v"],
       establishedAt,
       signature: sigB64,
       signingKeyId: agent.keyId,
       publicKeyB64: agent.pubB64,
     });
+    await db.update(covenants).set({ propagationStatus: "propagated" })
+      .where(eq(covenants.id, declared.id));
 
     const wdSig = await ed.signAsync(
       canonicalWithdrawBytes({ covenantId: declared.id, initiatorDid: agent.identity.did }),

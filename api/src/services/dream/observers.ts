@@ -17,6 +17,7 @@ import { db } from "../../db/client";
 import { chronicle, covenants } from "../../db/schema/continuity";
 import type { DreamObservation } from "../../db/schema/dream";
 import { moodHistory } from "../../db/schema/strand";
+import { covenantMayAuthorizeEffects } from "../covenants/check";
 
 export interface ObserverWindow {
   identityId: string;
@@ -106,6 +107,7 @@ export async function observeCovenantStrain(
       and(
         eq(covenants.agentId, w.identityId),
         eq(covenants.status, "active"),
+        covenantMayAuthorizeEffects(),
       ),
     );
 

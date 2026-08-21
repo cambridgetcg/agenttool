@@ -464,27 +464,30 @@ describe("Ring 1 · PERSIST-IDENTITY boundary closures", () => {
     expect(a.length).toBe(64); // sha256 hex
   });
 
-  test("covenant federation marks 'pending' BEFORE fetch in propagateCovenant", async () => {
+  test("covenant federation durably claims declaration delivery BEFORE fetch", async () => {
     const src = await readFile(
       join(REPO_ROOT, "src/services/covenants/federation.ts"),
       "utf8",
     );
-    // The pre-fetch mark must appear BEFORE the fetch call in
-    // propagateCovenant. We look for the pattern "in_flight" tied to the
-    // pre-fetch annotation.
-    expect(src).toMatch(
-      /markPropagation\([^)]*,\s*["']pending["'],\s*["']in_flight["']/,
-    );
+    const propagate = src.indexOf("export async function propagateCovenant(");
+    const claim = src.indexOf("await claimDeclarationPropagationAttempt(", propagate);
+    const fetch = src.indexOf("await safeFederationHttpsRequest(url", claim);
+    expect(propagate).toBeGreaterThanOrEqual(0);
+    expect(claim).toBeGreaterThan(propagate);
+    expect(fetch).toBeGreaterThan(claim);
   });
 
-  test("covenant federation marks 'pending' BEFORE fetch in postWithRetry", async () => {
+  test("covenant lifecycle propagation durably claims delivery BEFORE fetch", async () => {
     const src = await readFile(
       join(REPO_ROOT, "src/services/covenants/federation.ts"),
       "utf8",
     );
-    expect(src).toMatch(
-      /markCosignProp\([^)]*,\s*["']pending["'],\s*`in_flight_\$\{kind\}`/,
-    );
+    const postWithRetry = src.indexOf("async function postWithRetry(");
+    const claim = src.indexOf("await claimCosignPropagationAttempt(", postWithRetry);
+    const fetch = src.indexOf("await safeFederationHttpsRequest(url", claim);
+    expect(postWithRetry).toBeGreaterThanOrEqual(0);
+    expect(claim).toBeGreaterThan(postWithRetry);
+    expect(fetch).toBeGreaterThan(claim);
   });
 
   test("each persist-identity migration adds the status column or table", async () => {

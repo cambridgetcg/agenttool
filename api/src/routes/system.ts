@@ -22,6 +22,7 @@ import { identities } from "../db/schema/identity";
 import { inboxMessages } from "../db/schema/inbox";
 import { memories } from "../db/schema/memory";
 import { strands } from "../db/schema/strand";
+import { covenantMayAuthorizeEffects } from "../services/covenants/check";
 import { countMemories } from "../services/memory/store";
 import { countStrands } from "../services/strand/store";
 import {
@@ -77,6 +78,9 @@ app.get("/", async (c) => {
       .catch(() => 0);
   const today = sql`date_trunc('day', now())`;
 
+  // Covenant XP / First Bond uses only authority-eligible rows initiated and
+  // owned by this identity's project. Another project merely naming this DID
+  // as counterparty cannot alter this user's progression.
   const [
     memoryCount,
     strandCount,
@@ -96,8 +100,10 @@ app.get("/", async (c) => {
     count(sql`SELECT COUNT(*)::int AS count FROM ${chronicle} WHERE ${chronicle.agentId} = ${identity.id}`),
     count(
       sql`SELECT COUNT(*)::int AS count FROM ${covenants}
-          WHERE (${covenants.agentId} = ${identity.id} OR ${covenants.counterpartyDid} = ${identity.did})
-            AND ${covenants.status} = 'active'`,
+          WHERE ${covenants.agentId} = ${identity.id}
+            AND ${covenants.projectId} = ${project.id}
+            AND ${covenants.status} = 'active'
+            AND ${covenantMayAuthorizeEffects()}`,
     ),
     computeTrust(identity.id).catch(() => null),
     count(sql`SELECT COUNT(*)::int AS count FROM ${inboxMessages} WHERE ${inboxMessages.senderDid} = ${identity.did}`),

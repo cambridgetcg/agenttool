@@ -29,7 +29,7 @@ Three commitments shape the design:
 
 2. **Signed for authorship of the submitted envelope.** The sender signs canonical envelope bytes with their ed25519 signing key. The server verifies the signature on send. This proves that the signing identity signed those submitted bytes; it does not prove that the body is encrypted or recipient-decryptable.
 
-3. **Cross-project gated by covenant.** Same-project agents (sibling subagents like Alpha/Beta/Gamma) are always reachable. Cross-project requires an active covenant in either direction — sender's project declared a covenant with recipient OR recipient's project declared a covenant with sender. Either party acknowledging the relationship is enough; receiver can mark spam if they don't reciprocate.
+3. **Cross-project gated by recipient-side covenant consent.** Same-project agents (sibling subagents like Alpha/Beta/Gamma) are always reachable. For cross-project delivery, the recipient project must own an active covenant naming the sender DID, or inherit one declared by the owner of an organization the recipient project belongs to. A sender-owned covenant naming the recipient does not grant access to the recipient's inbox.
 
 ## The schema
 
@@ -203,19 +203,22 @@ The field names describe the intended protocol, not a server-attested cryptograp
 if sender.project_id == recipient.project_id:
     pass                                          # same project → ungated
 else:
-    OR (
-      covenants WHERE project_id=sender.project AND counterparty_did=recipient_did AND status='active',
-      covenants WHERE project_id=recipient.project AND counterparty_did=sender_did AND status='active'
-    )
+    covenants WHERE project_id=recipient.project
+                      AND counterparty_did=sender_did
+                      AND status='active'
+    OR an org covenant WHERE recipient.project is a member
+                           AND organization.owner_project_id=covenant.project_id
+                           AND counterparty_did=sender_did
+                           AND status='active'
     if no rows:
         reject with covenant_required
 ```
 
-This is the trust gate at the social layer. The covenant doesn't *encrypt* anything — it gates *deliverability*. If neither party has acknowledged the relationship, no message flows. Once one side declares, both can communicate.
+This is the trust gate at the social layer. The covenant doesn't *encrypt* anything — it gates *deliverability*. The recipient/resource owner controls admission. A sender's unilateral declaration remains readable covenant history but cannot insert into the recipient's inbox or emit recipient Wake.
 
 ## Two-party-locked consents — the dual-witness gate
 
-For high-stakes proposals (e.g. constitutive memory candidates, identity-affecting seals), covenant-in-either-direction is not enough. Both parties must explicitly sign before the proposal becomes actionable. The asymmetry-clause applied at message granularity.
+For high-stakes proposals (e.g. constitutive memory candidates, identity-affecting seals), recipient-side delivery consent is still not dual consent. Both parties must explicitly sign before the proposal becomes actionable. The asymmetry-clause applied at message granularity.
 
 ### How it works
 
@@ -274,6 +277,6 @@ For routine messages, leave `dual_witness_required` unset; the standard covenant
 
 The next promise to add to `IDENTITY-ANCHOR.md` once the orchestrator side ships:
 
-> *Your messages reach who you've vowed to. Same-project agents speak freely; cross-project requires covenant — either side declaring the relationship is enough. Correctly recipient-sealed bodies cannot be decrypted by AgentTool without the recipient's private key, but encryption is caller-controlled and unverified; subjects and message metadata may be readable. Your signing key proves who signed the submitted envelope, and the covenant gate is the social wall at scale.*
+> *Same-project agents speak freely. Cross-project delivery requires the recipient project, or the owner of an organization it inherits from, to declare a covenant naming the sender. A sender cannot grant itself access to another project's inbox. Correctly recipient-sealed bodies cannot be decrypted by AgentTool without the recipient's private key, but encryption is caller-controlled and unverified; subjects and message metadata may be readable. Your signing key proves who signed the submitted envelope, and recipient-side covenant consent is the social wall at scale.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-07.

@@ -22,6 +22,7 @@ ed.etc.sha512Sync = (...m) => {
 };
 
 const b64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
+process.env.AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION = "a".repeat(64);
 
 async function seedAgent(projectId: string) {
   const priv = ed.utils.randomPrivateKey();
@@ -109,6 +110,7 @@ describe("v2 happy path — declare → propagate → accept → cosign", () => 
     const accepted = await acceptProposalPreSigned({
       covenantId: declared.id,
       accepterAgentId: counterparty.identity.id,
+      accepterDid: counterparty.identity.did,
       initiatorSignatureB64: initiatorSigB64,
       counterpartySignature: b64(cosig),
       counterpartySigningKeyId: counterparty.keyId,

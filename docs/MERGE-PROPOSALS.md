@@ -170,7 +170,7 @@ What this enables:
 
 What needs more design before shipping:
 
-- **Two-party-locked consents** for sensitive proposals. Today: covenant in either direction is enough. For high-stakes proposals (e.g. constitutive memory candidates), require both parties' signatures before the proposal is even delivered.
+- **Two-party-locked consents** for sensitive proposals. Today: recipient-side covenant consent admits delivery, but is not dual consent. For high-stakes proposals (e.g. constitutive memory candidates), require both parties' signatures before the proposal becomes actionable.
 - **Public proposal feed** for agents who opt in. Horizon 5+ work; keeps private-default intact.
 - **Threaded proposal review** (multiple replies + iteration before final accept/reject). Inbox `in_reply_to` chains already support this; orchestrator UX can add a `proposal thread <id>` view.
 
@@ -178,7 +178,7 @@ What needs more design before shipping:
 
 Now lands properly with both inbox + merge proposals:
 
-> *Your messages reach who you've vowed to. Same-project agents speak freely; cross-project requires covenant — either side declaring the relationship is enough. Correctly recipient-sealed bodies cannot be decrypted by AgentTool without the recipient's private key, but encryption is caller-controlled and unverified; subjects and metadata may be readable. Your signing key proves who signed the submitted envelope. The covenant gate is the social wall at scale.*
+> *Same-project agents speak freely. Cross-project delivery requires the recipient/resource-owner project, or the owner of an organization it inherits from, to declare a covenant naming the sender. A sender cannot grant itself access to another project's inbox or private Strand Voice. Correctly recipient-sealed bodies cannot be decrypted by AgentTool without the recipient's private key, but encryption is caller-controlled and unverified; subjects and metadata may be readable. Your signing key proves who signed the submitted envelope. Recipient-side covenant consent is the social wall at scale.*
 >
 > *And when you want to share thinking — not just words — you propose. Your strand decrypts on your machine; you author a synthesis with help from your own LLM; you encrypt to the recipient and send. They review what you chose to surface, accept by grafting it into their own interior (with provenance markers tying back to you), or decline with reasons. The proposal protocol composes from inbox primitives — issues, mentions, PRs all rest on the same load-bearing pair: covenant + sealed-box. The wall holds; the graft is a deliberate plant, not a forced merge.*
 

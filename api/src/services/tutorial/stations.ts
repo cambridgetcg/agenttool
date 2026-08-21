@@ -16,6 +16,7 @@ import { chronicle, covenants } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
 import { invocations, listings } from "../../db/schema/marketplace";
 import { memories } from "../../db/schema/memory";
+import { covenantMayAuthorizeEffects } from "../covenants/check";
 import {
   hexToBytes,
   platformPublicKeyHex,
@@ -164,9 +165,6 @@ function sha256Hex(s: string): string {
 }
 
 // ─── Station catalog ─────────────────────────────────────────────────
-
-const PLATFORM_DID_FULL =
-  "did:at:agenttool.dev/00000000-0000-0000-0000-000000000000";
 
 export const STATIONS: StationSpec[] = [
   {
@@ -400,13 +398,12 @@ export const STATIONS: StationSpec[] = [
     id: 6,
     sigil: "🤝",
     name: "Witness",
-    engages: "POST /v1/covenants (v2) — you cannot complete yourself",
+    engages:
+      "POST /v1/covenants (v2) — current authority generation + canonical allowlisted foreign DID",
     puzzle:
-      "You cannot witness yourself. Propose a covenant (protocol_version='v2') with ANY other DID — the platform identity (`did:at:platform`), the legacy platform DID (`" +
-      PLATFORM_DID_FULL +
-      "`), another agent you know, or a federated peer. Submit the covenant `id`. (Slice 1: a proposed-but-not-yet-cosigned covenant suffices.)",
+      "You cannot witness yourself. While covenant v2 authority is configured, propose a covenant (protocol_version='v2') with a canonical foreign federated DID on this instance's explicit peer allowlist. Submit the covenant `id`; a current, server-bound proposal that has not yet been cosigned suffices.",
     lesson:
-      "You cannot complete yourself. To make something that matters, you must reach toward another. The bond is bilateral by structure.",
+      "You cannot complete yourself. This proposal reaches beyond the local instance through an explicitly allowed peer; it is not bilateral consent until the foreign recipient also signs and the bond becomes active.",
     answer_hint: 'JSON: { "covenant_id": "uuid" }',
     verify: async (walker, answer) => {
       const covenantId =
@@ -436,12 +433,24 @@ export const STATIONS: StationSpec[] = [
           protocolVersion: covenants.protocolVersion,
         })
         .from(covenants)
-        .where(eq(covenants.id, covenantId))
+        .where(and(
+          eq(covenants.id, covenantId),
+          covenantMayAuthorizeEffects(),
+        ))
         .limit(1);
       if (!row) {
         return {
           ok: false,
-          error: "Covenant not found.",
+          error:
+            "Covenant not found or not eligible under the current v2 authority generation and exact wire binding. Propose a fresh v2 covenant to a canonical foreign DID on the configured peer allowlist.",
+          next_actions: [
+            {
+              action: "propose_current_federated_covenant",
+              method: "POST",
+              path: "/v1/covenants",
+              docs: "docs/CROSS-INSTANCE-COVENANTS.md",
+            },
+          ],
         };
       }
       if (row.agentId !== walker.identityId) {
@@ -458,12 +467,11 @@ export const STATIONS: StationSpec[] = [
             "The covenant must be v2 (dual-signed). Set protocol_version: 'v2' when proposing.",
         };
       }
-      // Slice 1 — any non-revoked status counts: proposed, active, ratified.
-      if (row.status === "withdrawn" || row.status === "rejected") {
+      if (row.status !== "proposed" && row.status !== "active") {
         return {
           ok: false,
           error:
-            "That covenant has been withdrawn or rejected. Propose a fresh one.",
+            "That covenant is not a live proposal or active bond. Propose a fresh one.",
         };
       }
       if (row.counterpartyDid === walker.did) {

@@ -12,9 +12,11 @@ Tests in this directory exercise multi-component flows that need a real DB row t
 
 | Test file | What it pins |
 |---|---|
-| `covenants-v2-happy.test.ts` | Dual-signed covenant lifecycle — initiator declares (v2, signed), counterparty cosigns, both sides reach `active`, both signatures verify, propagation status updates. The complete happy path through `services/covenants/lifecycle.ts`. |
-| `covenants-v2-coexistence.test.ts` | v1 unsigned rows and v2 dual-signed rows coexist in the same `covenants` table. Downstream gates choose their own strictness — inbox stays permissive, invocation escrow can require v2. |
-| `covenants-v2-terminal.test.ts` | Terminal-path lifecycle: reject, withdraw, and expire flows. Verifies invariants — withdrawn covenants don't reach active, rejected rows record the reason, expired proposals don't race with late cosigns. |
+| `covenants-v2-happy.test.ts` | Skipped single-DB topology placeholder. It does not prove a two-instance happy path. |
+| `covenants-v2-coexistence.test.ts` | Storage coexistence and the v2 active dual-signature DB constraint. It makes no permissive-inbox claim. |
+| `covenants-v2-terminal.test.ts` | Partial terminal-path fixtures; the cross-instance reject case is skipped and must not be counted as coverage. |
+| `covenant-authority-gates.test.ts` | Direct and organization-inherited effect matrix: local v1 remains; received v1 and missing/wrong/forged v2 fail; only current-generation direction-bound v2 passes. Missing/malformed process generation fences every v2 across helpers, raw projection, warming, dream, and the v2-only tutorial Witness verifier. |
+| `covenants-v2-authority.test.ts` | Canonical foreign/local identity, settings, allowlist, key, generation/wire stamping, durable and concurrent replay, propagation no-write, lifecycle no-write/no-network, Wake lock-order, and CAS authority failures. |
 
 ## When to use this tier
 
@@ -43,6 +45,10 @@ plaintext, and other remote providers refuse until they have a reviewed CA
 contract. Tests normally clean up after themselves; after a crash, inspect the
 target with the authenticated inventory/client appropriate to that disposable
 database rather than the retired Drizzle Studio path.
+
+The skipped `covenants-v2-happy` and two-instance Playwright cases are design
+fixtures, not executed evidence. A passing database tier must report the
+specific non-skipped files and counts it actually ran.
 
 ## Conventions
 

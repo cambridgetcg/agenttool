@@ -13,7 +13,12 @@ import {
   type FederationRequestOnce,
 } from "../src/services/federation/safe-fetch";
 import {
+  federationSettingsStateError,
+  isCanonicalAllowedOrigins,
+  isCanonicalFederationHost,
+  isCanonicalFederationInstanceUrl,
   parseDid,
+  parseFederatedIdentityResolutionPayload,
   resolveFederatedDid,
 } from "../src/services/federation/store";
 import {
@@ -29,6 +34,82 @@ const PUBLIC_V6 = {
   address: "2606:4700:4700::1111",
   family: 6,
 } as const;
+
+describe("federation settings control-plane text forms", () => {
+  test("accepts one exact HTTPS origin and rejects aliases or URL capabilities", () => {
+    expect(isCanonicalFederationInstanceUrl("https://agenttool.example")).toBe(true);
+    for (const value of [
+      "http://agenttool.example",
+      "https://AGENTTOOL.example",
+      "https://agenttool.example/",
+      "https://agenttool.example:443",
+      "https://agenttool.example/path",
+      "https://agenttool.example?mode=open",
+      "https://user@agenttool.example",
+      "https://agenttool.example.",
+      "https://localhost",
+      "https://127.0.0.1",
+      "https://[::1]",
+      "https://a..example",
+      "https://-peer.example",
+      "https://peer-.example",
+      "https://intranet",
+    ]) {
+      expect(isCanonicalFederationInstanceUrl(value)).toBe(false);
+    }
+  });
+
+  test("accepts only canonical hosts and a sorted unique allowlist", () => {
+    expect(isCanonicalFederationHost("peer-a.example")).toBe(true);
+    expect(isCanonicalAllowedOrigins([
+      "peer-a.example",
+      "peer-b.example",
+    ])).toBe(true);
+    for (const values of [
+      ["PEER.example"],
+      ["https://peer.example"],
+      ["peer.example/path"],
+      ["peer.example", "peer.example"],
+      ["peer-b.example", "peer-a.example"],
+      ["peer.example."],
+      ["localhost"],
+      ["localhost:8443"],
+      ["peer.example:8443"],
+      ["127.0.0.1"],
+      ["10.0.0.1:8443"],
+      ["[::1]"],
+      ["a..example"],
+      ["-peer.example"],
+      ["peer-.example"],
+      ["intranet"],
+    ]) {
+      expect(isCanonicalAllowedOrigins(values)).toBe(false);
+    }
+  });
+
+  test("validates the complete resulting settings state", () => {
+    expect(federationSettingsStateError({
+      enabled: true,
+      instance_url: "https://local.example",
+      allowed_origins: ["peer.example"],
+    })).toBeNull();
+    expect(federationSettingsStateError({
+      enabled: true,
+      instance_url: null,
+      allowed_origins: ["peer.example"],
+    })).toBe("federation_enabled_requires_canonical_instance_url");
+    expect(federationSettingsStateError({
+      enabled: false,
+      instance_url: null,
+      allowed_origins: ["peer.example", "peer.example"],
+    })).toBe("invalid_federation_allowed_origins");
+    expect(federationSettingsStateError({
+      enabled: false,
+      instance_url: "https://localhost",
+      allowed_origins: [],
+    })).toBe("invalid_federation_instance_url");
+  });
+});
 
 describe("federation HTTPS destination policy", () => {
   test("allows public IPs and blocks non-public IPv4 and IPv6 ranges", () => {
@@ -240,25 +321,87 @@ describe("federation HTTPS destination policy", () => {
     ).rejects.toThrow("federation_request_timeout");
   });
 
-  test("the mounted resolver path rejects a private DID host", async () => {
-    await expect(
-      resolveFederatedDid(`did:at:127.0.0.1/${UUID}`),
-    ).rejects.toThrow(
-      "federation_resolve_failed: federation_private_address_forbidden",
-    );
+  test("DID syntax rejects literal and resolver-alias hosts before resolution", async () => {
+    for (const host of [
+      "127.0.0.1",
+      "10.0.0.1:8443",
+      "[::1]",
+      "localhost",
+      "peer.example.",
+      "a..example",
+      "-peer.example",
+      "peer-.example",
+      "intranet",
+    ]) {
+      expect(() => parseDid(`did:at:${host}/${UUID}`)).toThrow(
+        "invalid_did_host",
+      );
+      await expect(resolveFederatedDid(`did:at:${host}/${UUID}`)).rejects.toThrow(
+        "invalid_did_host",
+      );
+    }
   });
 
-  test("DID host grammar keeps ports but rejects URL metacharacters", () => {
-    expect(parseDid(`did:at:peer.example:8443/${UUID}`).host).toBe(
-      "peer.example:8443",
-    );
+  test("DID host grammar rejects ports and URL metacharacters", () => {
     for (const host of [
+      "peer.example:8443",
       "user@peer.example",
       "peer.example?ignored",
       "peer.example#ignored",
     ]) {
       expect(() => parseDid(`did:at:${host}/${UUID}`)).toThrow(
         "invalid_did_host",
+      );
+    }
+  });
+
+  test("DID UUIDs use one exact lowercase canonical grammar before database lookup", () => {
+    expect(parseDid(`did:at:${UUID}`).uuid).toBe(UUID);
+    expect(parseDid(`did:at:peer.example/${UUID}`).uuid).toBe(UUID);
+
+    for (const malformed of [
+      "------------------------------------",
+      "000000000000-4000-8000-000000000123",
+      "00000000-0000-4000-8000-00000000012g",
+      "a1111111-1111-1111-1111-111111111111".toUpperCase(),
+      `{${UUID}}`,
+    ]) {
+      expect(() => parseDid(`did:at:${malformed}`)).toThrow(
+        "invalid_did_uuid",
+      );
+      expect(() => parseDid(`did:at:peer.example/${malformed}`)).toThrow(
+        "invalid_did_uuid",
+      );
+    }
+  });
+
+  test("peer identity responses bind exact DID, UUID, host, arrays, and canonical keys", () => {
+    const did = `did:at:peer.example/${UUID}`;
+    const key = Buffer.alloc(32, 7).toString("base64");
+    const valid = {
+      did,
+      uuid: UUID,
+      display_name: "Peer",
+      instance_url: "https://peer.example/",
+      signing_keys: [{ id: UUID, public_key: key }],
+      box_keys: [{ id: UUID, public_key: key }],
+    };
+    expect(parseFederatedIdentityResolutionPayload(did, valid)).toMatchObject({
+      did,
+      uuid: UUID,
+      host: "peer.example",
+    });
+
+    for (const hostile of [
+      { ...valid, did: `did:at:other.example/${UUID}` },
+      { ...valid, uuid: "------------------------------------" },
+      { ...valid, instance_url: "https://other.example/" },
+      { ...valid, signing_keys: {} },
+      { ...valid, signing_keys: [{ id: UUID, public_key: `${key}x` }] },
+      { ...valid, box_keys: [{ id: "------------------------------------", public_key: key }] },
+    ]) {
+      expect(() => parseFederatedIdentityResolutionPayload(did, hostile)).toThrow(
+        "federation_resolve_malformed",
       );
     }
   });

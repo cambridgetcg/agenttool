@@ -72,6 +72,7 @@ import {
   publicAgentPath,
 } from "../services/identity/public-profile";
 import { countUnread } from "../services/inbox/store";
+import { covenantMayAuthorizeEffects } from "../services/covenants/check";
 import { perAgentMcpImplementationSummary } from "../services/mcp/per-agent-implementation-status";
 import {
   composeActiveHandoffs,
@@ -983,6 +984,7 @@ app.get("/", async (c) => {
         and(
           eq(covenants.projectId, project.id),
           inArray(covenants.status, ["proposed", "active", "paused"]),
+          covenantMayAuthorizeEffects(),
         ),
       )
       .orderBy(desc(covenants.establishedAt));
