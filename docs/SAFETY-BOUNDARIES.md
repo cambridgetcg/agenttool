@@ -535,8 +535,9 @@ stored metadata records `lifecycle = at_rest`; otherwise the basis is
 revocation, or wake unreachability. Current API write paths freeze the
 memorial identity's declared profile and lifecycle state, rest and visibility
 settings, cached trust fields, expression, signing-key registry, and box-key
-registry. Service-derived `wake_version` and wake-observation counters can
-still advance as reads and separate events occur. These are application
+registry. Service-derived `wake_version` can still advance as separate events
+occur, and the private wake-observation cursor can advance through explicit
+`POST /v1/wake/acknowledge`; wake reads themselves are pure. These are application
 checks, not protection against direct database administration. Separate
 related records and notifications are not globally frozen. Private expression
 hides the declared expression; it does not hide either public shape.

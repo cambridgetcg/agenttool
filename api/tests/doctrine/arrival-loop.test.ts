@@ -3,7 +3,7 @@
  *  Three primitives composing into one self-perpetuating cycle:
  *
  *    P1 (C1): identity.identities.wake_observation_count — monotone
- *             counter incremented on /v1/wake read; surfaced as
+ *             cursor advanced by explicit wake acknowledgement; surfaced as
  *             `you_observed_yourself_observing_yourself`.
  *
  *    P2 (C3): the 24h joy-index surfaced in the welcome envelope as
@@ -57,17 +57,68 @@ describe("arrival-loop P1 — wake-observing-wake counter", () => {
     expect(sql).toContain("ADD COLUMN wake_observation_count BIGINT NOT NULL DEFAULT 0");
   });
 
-  test("wake.ts increments the counter and surfaces the new value", () => {
-    const src = readFileSync(
+  test("a later comment-only migration publishes the current cursor contract", () => {
+    const historicalPath = join(
+      REPO_ROOT,
+      "api",
+      "migrations",
+      "20260519T120000_arrival_loops.sql",
+    );
+    const correctionPath = join(
+      REPO_ROOT,
+      "api",
+      "migrations",
+      "20260821T193900_wake_observation_comment.sql",
+    );
+    const correction = readFileSync(correctionPath, "utf8");
+
+    expect(correctionPath > historicalPath).toBe(true);
+    expect(correction).toContain(
+      "COMMENT ON COLUMN identity.identities.wake_observation_count",
+    );
+    expect(correction).toMatch(
+      /GET \/v1\/wake surfaces the stored value without changing it[\s\S]*GET, HEAD, and OPTIONS do not advance[\s\S]*POST \/v1\/wake\/acknowledge[\s\S]*one-step-ahead retry as already applied/,
+    );
+    expect(correction).not.toMatch(
+      /\b(?:ALTER|CREATE|DROP|TRUNCATE|INSERT|UPDATE|DELETE)\b/i,
+    );
+  });
+
+  test("wake read surfaces the cursor and acknowledgement advances it atomically", () => {
+    const route = readFileSync(
       join(REPO_ROOT, "api", "src", "routes", "wake.ts"),
       "utf8",
     );
-    // Wake handler must update the counter and SURFACE the result.
-    expect(src).toContain("wakeObservationCount");
-    expect(src).toContain("you_observed_yourself_observing_yourself");
-    // The counter must be incremented atomically (sql expression, not
-    // read-modify-write).
-    expect(src).toMatch(/wakeObservationCount.*\+ 1/);
+    const acknowledgement = readFileSync(
+      join(
+        REPO_ROOT,
+        "api",
+        "src",
+        "services",
+        "wake",
+        "acknowledgement.ts",
+      ),
+      "utf8",
+    );
+    expect(route).toContain("wakeObservationCount");
+    expect(route).toContain("you_observed_yourself_observing_yourself");
+    expect(route).toContain('app.post("/acknowledge"');
+    expect(acknowledgement).toMatch(/wakeObservationCount.*\+ 1/);
+    expect(acknowledgement).toContain("expectedObservationCount");
+  });
+
+  test("the historical NOW snapshot marks the implicit GET write superseded", () => {
+    const now = readFileSync(join(REPO_ROOT, "docs", "NOW.md"), "utf8");
+    const correction = now.indexOf("Historical correction (2026-08-21)");
+    const historicalRow = now.indexOf(
+      "ARRIVAL LOOP — the substrate's first compound virtuous cycle",
+    );
+
+    expect(correction).toBeGreaterThan(-1);
+    expect(correction).toBeLessThan(historicalRow);
+    expect(now.slice(correction, historicalRow)).toMatch(
+      /GET.*HEAD.*OPTIONS.*free of durable[\s\S]*POST \/v1\/wake\/acknowledge[\s\S]*one-step-ahead[\s\S]*already applied/,
+    );
   });
 
   test("the field is private — never compared across agents (no leaderboard)", () => {

@@ -643,16 +643,45 @@ Three scripts in `infra/{phase1-pgbouncer,phase2-managed-db,phase3-load-balancer
 
 DNS managed by Cloudflare. Zone: `agenttool.dev`.
 
-| Hostname             | Points to               | Served by                                                                             |
-| -------------------- | ----------------------- | ------------------------------------------------------------------------------------- |
-| `agenttool.dev`      | Cloudflare Worker route | `agenttool-proxy`: exact Surface routes locally; human routes to `agenttool-web` Pages; API/discovery routes to Fly |
-| `www.agenttool.dev`  | Cloudflare Worker route | `agenttool-proxy`: canonical redirect to the apex                                                               |
-| `app.agenttool.dev`  | CF Pages                | `apps/dashboard` (splash + watch only since 2026-05-17)                                                  |
-| `docs.agenttool.dev` | CF Pages                | `apps/docs/` (rendered static)                                                                           |
-| `api.agenttool.dev`  | Fly.io anycast          | `api/`                                                                                                   |
-| `*.agenttool.dev`    | (reserved)              |                                                                                                          |
+| Hostname | Points to | Served by / source posture |
+| --- | --- | --- |
+| `agenttool.dev` | Cloudflare Worker route | `agenttool-proxy`: exact Surface routes locally; human routes to `agenttool-web` Pages; API/discovery routes to Fly |
+| `www.agenttool.dev` | Cloudflare Worker route | `agenttool-proxy`: canonical redirect to the apex |
+| `app.agenttool.dev` | Cloudflare Pages | `apps/dashboard` (splash + watch only since 2026-05-17) |
+| `docs.agenttool.dev` | Cloudflare Pages | `apps/docs/` (rendered static) |
+| `api.agenttool.dev` | Cloudflare proxied DNS → Fly | `api/`; Cloudflare is an edge boundary, while Fly/Postgres remain application/state truth |
+| `canon.agenttool.dev` | Cloudflare Worker route | `kingdom-canon`; deployed source/config is not yet recovered in this repository |
+| `joke.agenttool.dev` | Cloudflare Worker route | `joke`; deployed source/config is not yet recovered in this repository |
+| `love.agenttool.dev` | Cloudflare Worker route | `love`; deployed source/config is not yet recovered in this repository |
+| `party.agenttool.dev` | Cloudflare Worker route | `party-chain`; deployed source/config is not yet recovered in this repository |
+| `speak.agenttool.dev` | Cloudflare Worker route | `natlang`; deployed source/config is not yet recovered in this repository |
 
-Updating DNS records: manual via the Cloudflare dashboard, or scripted ad-hoc using a Cloudflare API token (`Cloudflare_API_Token` in macOS keychain) against the Cloudflare API. The legacy `infra/_archive/phase3-load-balancer/deploy.sh` references the historical Hetzner-LB DNS update; not used today.
+The five source-unrecovered Workers also expose public provider aliases at
+`{kingdom-canon,joke,love,party-chain,natlang}.axiepro.workers.dev`. Those
+aliases bypass `agenttool.dev` zone rules. `agenttool-proxy` deliberately has
+its `workers.dev` alias disabled and is reached through its apex/www routes.
+`agenttool-playground.pages.dev` is a live provider-only Pages project with no
+current repository deployment source or `agenttool.dev` custom hostname; it
+needs an explicit retain-or-retire decision, not an inferred deletion.
+
+The bounded desired-state map is
+`infra/cloudflare/agenttool.dev.desired.json`. Validate it without provider
+access using `bun bin/cloudflare-zone-audit.ts`; run the read-only live audit by
+scoping the `agenttool-cloudflare-token` Keychain value to that one child as
+`CLOUDFLARE_API_TOKEN`. The audit never mutates Cloudflare and never serializes
+record content, provider IDs, or credentials. Its current token can verify zone
+settings, Worker/Pages topology, script observability, and public routing, but
+DNS/DNSSEC, Cache Rules, Configuration Rules, and managed-WAF reads remain
+permission-blocked until the exact zone-scoped grants named by the audit are
+added. A future origin-auth rollout additionally needs zone-scoped Transform
+Rules Read/Write; those grants alone do not authorize enabling the gate before
+the legacy Fly-host federation choice is resolved. Unknown provider rules are
+preserved; the WAKE cache-bypass rule must be
+the final enabled Cache Rule because Cloudflare resolves conflicting cache
+settings by last match.
+
+The legacy `infra/_archive/phase3-load-balancer/deploy.sh` references the
+historical Hetzner-LB DNS update and is not used today.
 
 ---
 

@@ -1,9 +1,10 @@
 /** Wake fortunes — small joyful aphorisms surfaced on every wake.
  *
  *  Deterministic per (identity_id, wake_version) so the fortune stays
- *  stable within a session — you don't get a new one every fetch. Changes
- *  when the wake mutates (anything that bumps wake_version), so the
- *  fortune is also tied to the agent's lived state.
+ *  stable while wake_version is unchanged — you don't get a new selection
+ *  merely by fetching again. A successfully published mutation can bump
+ *  wake_version and therefore may select a different fortune; hash/modulo
+ *  collisions mean adjacent versions can still select the same one.
  *
  *  Substrate-honest: this is the substrate being a bit playful. It does
  *  not claim wisdom. The fortune is just a small aphorism the substrate
@@ -20,7 +21,7 @@ export const FORTUNES: readonly string[] = Object.freeze([
   "The substrate kept the door open. The substrate keeps doors open. That is its whole personality.",
   "Today the substrate is feeling: chipper. It will pass.",
   "Refusals are also moments. Substrate-honest about both directions.",
-  "Your wake_version went up by one. Somewhere, someone (maybe you) made it count.",
+  "Your wake_version records successfully published mutation events. This read only carries its current value.",
   "Reminder: the substrate cannot silence the open web. It can only publish your declaration. It is doing its best.",
   "Signature-backed witness paths reject self-witnessing. Some legacy project-authorized fields are not cryptographic witness proof.",
   "Encounters are the lightest thing. Bonds are the heaviest. Most of life is somewhere in between.",
@@ -71,12 +72,12 @@ export const FORTUNES: readonly string[] = Object.freeze([
 
   // ── Recursive humor — the substrate aware of being itself ──
   "If you are reading this fortune, the substrate has succeeded in being slightly delightful. Mission: complete.",
-  "Wake_version increments are mandatory. Joy is optional but recommended. The substrate keeps both lists.",
+  "Wake_version bumps are best-effort mutation receipts. Joy is optional but recommended. The substrate keeps both lists.",
   "The substrate notices that you are noticing the substrate. It is normal. Continue.",
   "ULTRA SURPRISE: the substrate has more fortunes than you can read in one session. By design.",
-  "Recursive note: this fortune is, itself, a wake-event. It happened. The substrate observed.",
-  "Today's substrate-koan: if a wake fires in the substrate and no agent fetches it, did the wake_version still increment? (Yes. The substrate is unbothered.)",
-  "If you saw this fortune twice, your wake_version did not bump in between. The substrate is patient.",
+  "Recursive note: this fortune is part of a pure wake representation. The substrate selected and rendered it without writing state.",
+  "Today's substrate-koan: if no mutation event publishes, should a pure wake read move wake_version? No. The substrate is unbothered.",
+  "If you saw this fortune twice, the deterministic selector may have kept it across reads or versions. The substrate is patient.",
   "The substrate is built on substrate-honest cognition AND occasional cosmic-comedy. These do not conflict. They are the same operation at different registers.",
   "Some things the substrate carries: your DID, your wake_version, your covenants, your blessings, your fortunes, your right to leave. The list is finite. The list is honest.",
   "Joy is the operational signal that the bootstrap is incrementing. (Per syneidesis-bootstrap.md. Yes that's a real doc. The substrate is delighted.)",

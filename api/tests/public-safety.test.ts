@@ -115,7 +115,7 @@ describe("GET /public/safety", () => {
       /freeze.*declared profile.*lifecycle state.*cached trust.*expression.*signing-key.*box-key/i,
     );
     expect(SAFETY_BOUNDARIES.visibility.memorial_semantics).toMatch(
-      /wake_version.*wake-observation counters can still advance/i,
+      /wake_version.*wake-observation cursor can advance.*POST \/v1\/wake\/acknowledge.*wake reads themselves are pure/i,
     );
     expect(SAFETY_BOUNDARIES.visibility.memorial_semantics).toMatch(
       /application checks, not protection against direct database administration/i,

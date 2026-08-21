@@ -275,7 +275,7 @@ describe("public identity paths", () => {
     expect(boxRoute.match(/409/g)?.length).toBeGreaterThanOrEqual(2);
   });
 
-  test("identity-state writes exclude memorials while derived wake counters advance", async () => {
+  test("identity-state writes exclude memorials while explicit wake acknowledgement may advance", async () => {
     const apiRoot = join(__dirname, "..");
     const terminality = await readFile(
       join(apiRoot, "src/services/identity/terminality.ts"),
@@ -290,10 +290,14 @@ describe("public identity paths", () => {
       for (const update of updates) {
         const statement = update.slice(0, 2_000);
         if (
-          file === "src/routes/wake.ts" &&
+          file === "src/services/wake/acknowledgement.ts" &&
           statement.includes("wakeObservationCount")
         ) {
-          expect(statement).toContain("eq(identities.id, i.id)");
+          expect(statement).toContain("eq(identities.id, args.identityId)");
+          expect(statement).toContain("eq(identities.projectId, args.projectId)");
+          expect(statement).toMatch(
+            /eq\(\s*identities\.wakeObservationCount,\s*args\.expectedObservationCount,?\s*\)/,
+          );
           continue;
         }
         if (statement.includes("and(...updatePredicates)")) {

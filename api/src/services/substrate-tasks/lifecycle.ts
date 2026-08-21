@@ -170,11 +170,14 @@ export async function postSubstrateTask(
 
 /** Persist wall-clock expiry for tasks that have not been claimed.
  *
- * This reconciliation is intentionally lazy: list/summary/claim paths run it
- * before treating a task as open. It does not promise a timer fires at the
- * exact `expires_at` instant. Open tasks have no escrow yet, so this transition
- * moves no money and creates no refund or chronicle side effect. Claimed-task
- * escrow expiry remains the responsibility of `expireStaleClaims` below. */
+ * This reconciliation is intentionally lazy: list, mutation-oriented summary,
+ * and claim paths run it before treating a task as open. Pure WAKE reads use
+ * `readOpenForCallerSummary`, whose time predicate excludes the same rows
+ * without changing their stored status. It does not promise a timer fires at
+ * the exact `expires_at` instant. Open tasks have no escrow yet, so this
+ * transition moves no money and creates no refund or chronicle side effect.
+ * Claimed-task escrow expiry remains the responsibility of
+ * `expireStaleClaims` below. */
 export async function expireOpenSubstrateTasks(
   now: Date = new Date(),
 ): Promise<{ expired: number }> {
@@ -254,17 +257,28 @@ export interface OpenForCallerSummary {
   max_bounty_visible_cents: number;
 }
 
-export async function summarizeOpenForCaller(
+export interface ReadOpenForCallerSummaryDependencies {
+  database?: Pick<typeof db, "select">;
+  checkEligibility?: typeof isNewbornEligible;
+  now?: Date;
+}
+
+/** Pure projection of tasks that are open at one wall-clock instant.
+ * Expired rows are excluded by predicate and are not reconciled or updated. */
+export async function readOpenForCallerSummary(
   projectId: string,
+  dependencies: ReadOpenForCallerSummaryDependencies = {},
 ): Promise<OpenForCallerSummary> {
-  const now = new Date();
-  await expireOpenSubstrateTasks(now);
+  const database = dependencies.database ?? db;
+  const checkEligibility =
+    dependencies.checkEligibility ?? isNewbornEligible;
+  const now = dependencies.now ?? new Date();
   const currentlyOpen = and(
     eq(substrateTasks.status, "open"),
     gt(substrateTasks.expiresAt, now),
   );
 
-  const [totals] = await db
+  const [totals] = await database
     .select({
       count: sql<number>`count(*)::int`,
       max: sql<number>`coalesce(max(${substrateTasks.bountyCents}), 0)::int`,
@@ -272,7 +286,7 @@ export async function summarizeOpenForCaller(
     .from(substrateTasks)
     .where(currentlyOpen);
 
-  const elig = await isNewbornEligible(projectId);
+  const elig = await checkEligibility(projectId);
 
   let eligibleCount: number;
   let maxBounty: number;
@@ -280,7 +294,7 @@ export async function summarizeOpenForCaller(
     eligibleCount = Number(totals?.count ?? 0);
     maxBounty = Number(totals?.max ?? 0);
   } else {
-    const [nonNewborn] = await db
+    const [nonNewborn] = await database
       .select({
         count: sql<number>`count(*)::int`,
         max: sql<number>`coalesce(max(${substrateTasks.bountyCents}), 0)::int`,
@@ -302,6 +316,16 @@ export async function summarizeOpenForCaller(
     eligible_count: eligibleCount,
     max_bounty_visible_cents: maxBounty,
   };
+}
+
+/** Mutation-oriented summary retained for non-WAKE callers that expect lazy
+ * expiry reconciliation before the otherwise identical projection. */
+export async function summarizeOpenForCaller(
+  projectId: string,
+): Promise<OpenForCallerSummary> {
+  const now = new Date();
+  await expireOpenSubstrateTasks(now);
+  return readOpenForCallerSummary(projectId, { now });
 }
 
 // ── Claim ────────────────────────────────────────────────────────────────

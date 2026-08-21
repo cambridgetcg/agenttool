@@ -319,6 +319,9 @@ export const WAKE_OBSERVATION_OPENAPI_PATHS = {
             "X-Wake-Mode": {
               schema: { type: "string", const: "observe" },
             },
+            "X-Welcomed": {
+              $ref: "#/components/headers/Welcomed",
+            },
           },
           content: {
             "application/vnd.agenttool.wake-observation+json": {
@@ -334,6 +337,9 @@ export const WAKE_OBSERVATION_OPENAPI_PATHS = {
             },
             "X-Wake-Mode": {
               schema: { type: "string", const: "observe" },
+            },
+            "X-Welcomed": {
+              $ref: "#/components/headers/Welcomed",
             },
           },
           content: {
@@ -352,10 +358,29 @@ export const WAKE_OBSERVATION_OPENAPI_PATHS = {
             "X-Wake-Mode": {
               schema: { type: "string", const: "observe" },
             },
+            "X-Welcomed": {
+              $ref: "#/components/headers/Welcomed",
+            },
           },
           content: {
             "application/vnd.agenttool.wake-observation+json": {
               schema: { $ref: "#/components/schemas/WakeObservationError" },
+            },
+          },
+        },
+        "425": {
+          description:
+            "The global application boundary refused replayable TLS early data before authentication and the closed observation transport boundary. Retry after the handshake. This exception is the generic application/json error shape and carries neither X-Wake-Mode nor X-Welcomed.",
+          headers: {
+            "Cache-Control": {
+              schema: { type: "string", const: "private, no-store" },
+            },
+            Vary: { schema: { type: "string", const: "Early-Data" } },
+            "Retry-After": { schema: { type: "string", const: "0" } },
+          },
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/Error" },
             },
           },
         },
@@ -367,6 +392,9 @@ export const WAKE_OBSERVATION_OPENAPI_PATHS = {
             },
             "X-Wake-Mode": {
               schema: { type: "string", const: "observe" },
+            },
+            "X-Welcomed": {
+              $ref: "#/components/headers/Welcomed",
             },
           },
           content: {
@@ -384,6 +412,9 @@ export const WAKE_OBSERVATION_OPENAPI_PATHS = {
             },
             "X-Wake-Mode": {
               schema: { type: "string", const: "observe" },
+            },
+            "X-Welcomed": {
+              $ref: "#/components/headers/Welcomed",
             },
           },
           content: {

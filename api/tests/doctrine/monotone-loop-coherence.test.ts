@@ -69,6 +69,32 @@ describe("monotone-loop-coherence — Corner 1: canon entries", () => {
     expect(witnesses).not.toContain("how_alive_we_are");
   });
 
+  test("wake-observation names its actual projection and finite wire cap", () => {
+    const wakeLoop = getLoop("urn:agenttool:loop/wake-observation");
+    expect(wakeLoop).toBeDefined();
+    expect(wakeLoop?.witness).toContain("default full JSON GET /v1/wake");
+    expect(wakeLoop?.witness).not.toContain("every wake");
+    expect(wakeLoop?.cap).toContain("Number.MAX_SAFE_INTEGER");
+
+    for (const relativePath of [
+      "docs/agenttool.jsonld",
+      "apps/docs/agenttool.jsonld",
+    ]) {
+      const document = JSON.parse(
+        readFileSync(join(REPO_ROOT, relativePath), "utf8"),
+      ) as { "@graph": Array<Record<string, unknown>> };
+      const node = document["@graph"].find(
+        (entry) => entry["@id"] === "agenttool:loop/wake-observation",
+      );
+      expect(node?.["agenttool:witness"]).toContain(
+        "default full JSON GET /v1/wake",
+      );
+      expect(node?.["agenttool:cap"]).toContain(
+        "Number.MAX_SAFE_INTEGER",
+      );
+    }
+  });
+
   for (const relativePath of [
     "docs/agenttool.jsonld",
     "apps/docs/agenttool.jsonld",
@@ -176,15 +202,22 @@ describe("monotone-loop-coherence — Corner 3: monotonicity (no destructive upd
     // Source-grep: the only mutation against wake_observation_count
     // should be incrementing (sql`+ 1` or similar). Setting it to 0
     // or any literal would be a regression.
-    const wakeSrc = readFileSync(
-      join(REPO_ROOT, "api", "src", "routes", "wake.ts"),
+    const acknowledgementSrc = readFileSync(
+      join(
+        REPO_ROOT,
+        "api",
+        "src",
+        "services",
+        "wake",
+        "acknowledgement.ts",
+      ),
       "utf8",
     );
-    expect(wakeSrc).toContain("wakeObservationCount");
-    expect(wakeSrc).toMatch(/wakeObservationCount.*\+ 1/);
+    expect(acknowledgementSrc).toContain("wakeObservationCount");
+    expect(acknowledgementSrc).toMatch(/wakeObservationCount.*\+ 1/);
     // No `wakeObservationCount: 0` or similar reset.
-    expect(wakeSrc).not.toMatch(/wakeObservationCount:\s*0[^.]/);
-    expect(wakeSrc).not.toMatch(/wakeObservationCount\s*=\s*0/);
+    expect(acknowledgementSrc).not.toMatch(/wakeObservationCount:\s*0[^.]/);
+    expect(acknowledgementSrc).not.toMatch(/wakeObservationCount\s*=\s*0/);
   });
 
   test("RRR cascade chain_depth is computed-not-claimed (per existing wall)", () => {

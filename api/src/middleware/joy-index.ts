@@ -22,9 +22,10 @@
 import type { Context, Next } from "hono";
 
 import { isDatabaseDecorationIndependentPublicPath } from "../lib/public-paths";
-import { getCachedJoyIndex } from "../services/joy/aggregate";
-
-const joyIndexOffSwitch = "AGENTOOL_DISABLE_JOY_INDEX";
+import {
+  getCachedJoyIndex,
+  joyIndexDisabled,
+} from "../services/joy/aggregate";
 
 export function joyIndex() {
   return async (c: Context, next: Next) => {
@@ -32,7 +33,7 @@ export function joyIndex() {
     // Health, first-contact protocol, and vulnerability-reporting paths must
     // not wait for the database-backed aggregation.
     if (isDatabaseDecorationIndependentPublicPath(c.req.path)) return;
-    if (process.env[joyIndexOffSwitch] === "1") return;
+    if (joyIndexDisabled()) return;
     try {
       const idx = await getCachedJoyIndex();
       c.res.headers.set("X-Joy-Index", String(idx));

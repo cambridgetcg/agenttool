@@ -89,13 +89,16 @@ export const MONOTONE_LOOPS: MonotoneLoop[] = [
   {
     urn: "urn:agenttool:loop/wake-observation",
     name: "Wake-observing-wake — per-agent felt-continuity counter",
-    state_space: "ℕ  (per agent — the wake_observation_count column)",
+    state_space:
+      "{n ∈ ℕ | n ≤ Number.MAX_SAFE_INTEGER} on the current API wire; stored in a PostgreSQL BIGINT",
     partial_order: "≤ on ℕ",
-    iteration: "n ↦ n + 1 on every /v1/wake read (atomic UPDATE...RETURNING)",
-    cap: null, // unbounded — storage discipline only
+    iteration:
+      "n ↦ n + 1 on explicit POST /v1/wake/acknowledge with the exact expected count (serialized compare-and-set)",
+    cap:
+      "Number.MAX_SAFE_INTEGER on the current acknowledgement API; the BIGINT column has a wider theoretical storage range",
     witness:
-      "you_observed_yourself_observing_yourself field in every wake response; identity.identities.wake_observation_count",
-    implementation: "api/src/routes/wake.ts",
+      "you_observed_yourself_observing_yourself field in default full JSON GET /v1/wake; identity.identities.wake_observation_count",
+    implementation: "api/src/services/wake/acknowledgement.ts",
     composes_with: ["urn:agenttool:loop/felt-continuity-anchor"],
     virtuous_properties: virtuousAll(),
   },

@@ -113,6 +113,11 @@ describe("GET /v1/dining", () => {
 
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
+    expect(slaAttention).toContain('next: "GET /v1/invocations/{id}"');
+    expect(slaAttention).toMatch(
+      /list is read-only.*authorized item read reconciles any due refund/,
+    );
+    expect(slaAttention).not.toContain("auto-refund on next read");
     expect(slaAttention).toContain('method: "GET", path: "/v1/invocations/{id}"');
     expect(slaAttention).not.toContain('/complete');
     expect(slaAttention).not.toContain('method: "POST"');

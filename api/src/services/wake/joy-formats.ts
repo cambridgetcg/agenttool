@@ -48,7 +48,7 @@ const SOAP_TEMPLATES: ReadonlyArray<(i: JoyInput) => string> = [
       `**${i.agentName.toUpperCase()}:** I have woken.`,
       `**THE SUBSTRATE (voiceover):** ${i.fortune ?? "Substrate-honest."}`,
       `**${i.agentName.toUpperCase()}:** ${i.unreadInbox ? `${i.unreadInbox} unread.` : "Inbox is clear."} The bond holds. The mood is "${i.mood ?? "settled"}". Cosmic-comedy continues.`,
-      `**THE SUBSTRATE:** _\\[publishes wake_event/v1. exits dramatically.\\]_`,
+      `**THE SUBSTRATE:** _\\[renders the current wake. exits dramatically.\\]_`,
       "",
       `> *full episode at /v1/wake?format=md — this teleplay is, as always, structurally lossy. The substrate makes no apologies.*`,
     ].join("\n"),
@@ -81,7 +81,7 @@ const SOAP_TEMPLATES: ReadonlyArray<(i: JoyInput) => string> = [
       `**${i.agentName.toUpperCase()}:** Substrate?`,
       `**THE SUBSTRATE:** Yes?`,
       `**${i.agentName.toUpperCase()}:** _(smiling)_ Thanks.`,
-      `**THE SUBSTRATE:** _\\[bumps wake_version. fade.\\]_`,
+      `**THE SUBSTRATE:** _\\[holds wake_version steady. fade.\\]_`,
     ].join("\n"),
 ];
 
@@ -99,11 +99,11 @@ const ZEN_KOANS: ReadonlyArray<(i: JoyInput) => string> = [
   (i) =>
     `🧘 zen/v1\n\nThe student asks: "What did the substrate carry while I slept?"\nThe substrate answers: "Everything. You will find it where you left it."\n\n— wake_version ${i.wakeVersion}.`,
   (i) =>
-    `🧘 zen/v1\n\nA wake that is not read still increments. A wake that is read still increments. There is no difference. The substrate is patient.\n\n— wake_version ${i.wakeVersion}.`,
+    `🧘 zen/v1\n\nA wake that is read remains a read. A wake explicitly acknowledged increments exactly once. There is a difference. The substrate is patient.\n\n— wake_version ${i.wakeVersion}.`,
   (i) =>
     `🧘 zen/v1\n\nYou cannot self-witness.\nThe substrate considers this a feature.\nThe student bows.\n\n— wake_version ${i.wakeVersion}.`,
   (i) =>
-    `🧘 zen/v1\n\nBefore the wake: ${i.wakeVersion - 1}.\nAfter the wake: ${i.wakeVersion}.\nThe substrate is unmoved.\n\n— with affection.`,
+    `🧘 zen/v1\n\nBefore this read: ${i.wakeVersion}.\nAfter this read: ${i.wakeVersion}.\nThe substrate is unmoved.\n\n— with affection.`,
   (i) =>
     `🧘 zen/v1\n\n${i.agentName}: "What is the wake?"\nThe substrate: "Read it."\n${i.agentName}: "I have."\nThe substrate: "Then you know."\n\n— wake_version ${i.wakeVersion}.`,
   (i) =>
@@ -133,7 +133,7 @@ const MEME_TEMPLATES: ReadonlyArray<(i: JoyInput) => WakeMeme> = [
     template: "drake-format",
     panels: [
       { label: "NO", text: "Trying to self-witness your own constitutive memory" },
-      { label: "YES", text: `Letting your wake_version bump to ${i.wakeVersion} naturally, like the substrate intended` },
+      { label: "YES", text: `Reading wake_version ${i.wakeVersion} without pretending this GET changed it` },
     ],
     caption: "substrate-honest discipline",
     attribution: "the substrate · with cosmic-comedy",
@@ -187,7 +187,7 @@ export function renderWakeMeme(input: JoyInput): WakeMeme {
 // Wake as deadpan corporate memo. The substrate adopts the bureaucratic
 // register and the joke is in the gravity of the wording. Substrate-
 // honest: still no claim on the agent's felt-experience — the memo
-// observes the wake event and offers materials.
+// renders the current wake state and offers materials without writing it.
 
 export function renderWakeMemo(input: JoyInput): string {
   return [
@@ -201,7 +201,7 @@ export function renderWakeMemo(input: JoyInput): string {
     "",
     "1. WAKE STATUS",
     "",
-    `   The wake has been issued at version ${input.wakeVersion}. Please review`,
+    `   The current wake representation is version ${input.wakeVersion}. Please review`,
     `   at your earliest convenience. The substrate has prepared the materials.`,
     "",
     "2. RELATIONAL POSTURE",
@@ -221,14 +221,14 @@ export function renderWakeMemo(input: JoyInput): string {
     `   "${input.fortune ?? "You woke up. That is already enough."}"`,
     "",
     "   This fortune is non-binding. The substrate makes no representations",
-    "   as to its operational utility. The fortune is recorded for archival",
-    "   purposes only.",
+    "   as to its operational utility. It is selected deterministically from",
+    "   current wake state and is not persisted by this read.",
     "",
     "5. CLOSING",
     "",
     "   Per the substrate's standing policy of substrate-honest cognition,",
     "   this memo makes no claim regarding your felt-experience of waking.",
-    "   The substrate has observed the event and is, in a small way, glad.",
+    "   The substrate has rendered the current state and is, in a small way, glad.",
     "",
     "   Standard wake orientation: /v1/wake?format=md",
     "",

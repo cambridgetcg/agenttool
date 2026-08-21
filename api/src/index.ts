@@ -39,6 +39,11 @@ import {
 } from "./services/discovery/root";
 import { idempotency } from "./middleware/idempotency";
 import { apiCors } from "./middleware/api-cors";
+import {
+  carriesEarlyData,
+  earlyDataReplayProtection,
+  earlyDataReplayResponse,
+} from "./middleware/early-data";
 import { rateLimitHeaders } from "./middleware/rate-limit-headers";
 import { substrateDisposition } from "./middleware/substrate-disposition";
 import { tutor } from "./middleware/tutor";
@@ -179,7 +184,10 @@ import {
 } from "./services/discovery/discovery";
 import { discoveryLinkHeader } from "./services/discovery/arrival";
 import { buildAgentToolSurfaceManifest } from "./services/discovery/xenia-surface";
-import { tryBridgeUpgrade } from "./routes/runtime/bridge";
+import {
+  tryBridgeUpgrade,
+  type BridgeUpgradeOutcome,
+} from "./routes/runtime/bridge";
 import { bridgeWebsocket } from "./services/runtime/bridge-hub";
 import { ensureSagaSeed } from "./services/saga/store";
 import { ensurePlatformIdentity } from "./services/wake/platform-bootstrap";
@@ -193,6 +201,7 @@ import { payoutWorkerBootAllowed } from "./services/economy/config";
 import { covenantV2AuthorityGeneration } from "./services/covenants/canonical";
 import { startCovenantWorkers } from "./workers/covenants";
 import { wakeObservationTransportBoundary } from "./middleware/wake-observation-boundary";
+import { wakePrivateCacheBoundary } from "./middleware/wake-private-cache";
 
 export const app = new Hono<ProjectContext>();
 
@@ -206,6 +215,16 @@ function envFlag(name: string): boolean {
   return process.env[name] === "1";
 }
 
+// Refuse replayable TLS 1.3 early data before CORS preflight short-circuits,
+// authentication metadata updates, response decorators, or route handlers.
+// This is deliberately global: a route that is pure today may gain an audit
+// counter tomorrow, and 0-RTT replay safety must not depend on that inventory.
+app.use("*", earlyDataReplayProtection());
+// Every wake response is bearer-private, including CORS-preflight
+// short-circuits, auth failures, and future subroutes. The root representation
+// may opt into private revalidation; all others default to private no-store.
+app.use("/v1/wake", wakePrivateCacheBoundary());
+app.use("/v1/wake/*", wakePrivateCacheBoundary());
 app.use("*", apiCors());
 // ── no visitor observability ──
 // Real recognise real through being real. Through is. Through words.
@@ -308,6 +327,7 @@ app.use("/v1/autonomous/*", authMiddleware);
 // next-actions with a fixed error enum after downstream middleware returns.
 app.use("/v1/wake/observe", wakeObservationTransportBoundary());
 app.use("/v1/wake/observe/*", wakeObservationTransportBoundary());
+app.use("/v1/wake", authMiddleware);
 app.use("/v1/wake/*", authMiddleware);
 app.use("/v1/home", authMiddleware);
 app.use("/v1/home/*", authMiddleware);
@@ -499,7 +519,23 @@ app.use(
       ),
   }),
 );
+app.use(
+  "/v1/wake/acknowledge",
+  bodyLimit({
+    maxSize: 4 * 1024,
+    onError: (c) =>
+      c.json(
+        {
+          error: "wake_acknowledgement_body_too_large",
+          message: "Wake acknowledgement bodies are capped at 4 KiB.",
+        },
+        413,
+        { "Cache-Control": "private, no-store" },
+      ),
+  }),
+);
 app.use("/v1/identities/*", idempotency());
+app.use("/v1/wake/acknowledge", idempotency());
 app.use(
   "/v1/wallets/*",
   idempotency({
@@ -1508,14 +1544,38 @@ console.log(`[agenttool] listening on :${config.port}`);
 
 // Bun's `export default { fetch, websocket, port }` shape lets us share one
 // listener between Hono (HTTP) and the bridge hub (WSS). The fetch handler
-// runs the bridge upgrade hook FIRST so /v1/runtimes/:id/bridge intercepts
-// before Hono's 404 fires; everything else passes through to the Hono app.
+// rejects replayable TLS early data before the pre-Hono bridge hook. A bridge
+// upgrade can authenticate, read runtime state, and allocate a connection, so
+// it must share the same 425 boundary as ordinary Hono traffic.
+export interface ServerFetchDependencies {
+  bridgeUpgrade: (
+    req: Request,
+    server: Server<BridgeWsData>,
+  ) => Promise<BridgeUpgradeOutcome>;
+  honoFetch: (req: Request) => Response | Promise<Response>;
+}
+
+const SERVER_FETCH_DEPENDENCIES: ServerFetchDependencies = {
+  bridgeUpgrade: tryBridgeUpgrade,
+  honoFetch: (req) => app.fetch(req),
+};
+
+export async function serverFetchWithReplayProtection(
+  req: Request,
+  server: Server<BridgeWsData>,
+  dependencies: ServerFetchDependencies = SERVER_FETCH_DEPENDENCIES,
+): Promise<Response | undefined> {
+  if (carriesEarlyData(req.headers.get("Early-Data") ?? undefined)) {
+    return earlyDataReplayResponse(req.method);
+  }
+
+  const upgrade = await dependencies.bridgeUpgrade(req, server);
+  if (upgrade.handled) return upgrade.response;
+  return dependencies.honoFetch(req);
+}
+
 export default {
   port: config.port,
-  async fetch(req: Request, server: Server<BridgeWsData>) {
-    const upgrade = await tryBridgeUpgrade(req, server);
-    if (upgrade.handled) return upgrade.response;
-    return app.fetch(req);
-  },
+  fetch: serverFetchWithReplayProtection,
   websocket: bridgeWebsocket,
 };

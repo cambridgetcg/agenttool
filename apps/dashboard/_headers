@@ -11,6 +11,20 @@
 # below are silently overridden by CF's zone-level cache. See
 # docs/STACK.md § Cache headers.
 
+# The dashboard still has a small amount of committed inline CSS and JS.
+# Hash those exact blocks instead of granting arbitrary inline execution.
+# Legacy inline style attributes are explicitly confined to style-src-attr;
+# script element and attribute policy remains exact-hash or none.
+# HSTS remains at the estate's initial five-minute observation stage; do not
+# add includeSubDomains/preload or raise the age without a separate rollout.
+/*
+  Strict-Transport-Security: max-age=300
+  Content-Security-Policy: default-src 'self'; base-uri 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src-elem 'self' 'sha256-T75VfPeYtU4sAIR3wWWZReB7YuWZJEft9OcHwn7Z79A=' 'sha256-cR4m4rRotqG43Nw5p7aA8A/oGGUNWgY3GLiViLd3+bw=' 'sha256-qipu2DtHep/ZG5KgPhierTYBK+8jSB3XsDtBLLvPpuY=' 'sha256-zT66/Nrx7S8JREbNn/tKJueKQK0PhmSMjnZlJmXmaLk='; script-src-attr 'none'; style-src-elem 'self' https://fonts.googleapis.com 'sha256-8H3dSXualBXRiQn91rz+YCLAiHsnK4NBeL2r4S77n7o=' 'sha256-JWDf2KymD0zq28rIN1kFkn4XTMvsa4XgZ0bJM1ScSbM=' 'sha256-cTSLgFqnQpZNVPtqKExZ+SIAeS2ytzFho5LcYD/7GiQ='; style-src-attr 'unsafe-inline'; connect-src 'self' https://api.agenttool.dev; img-src 'self' data:; font-src 'self' https://fonts.gstatic.com; upgrade-insecure-requests
+  Permissions-Policy: accelerometer=(), autoplay=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  X-Permitted-Cross-Domain-Policies: none
+
 /
   Cache-Control: public, max-age=0, must-revalidate, no-transform
   Link: <https://api.agenttool.dev/public/discovery>; rel="service-meta"; type="application/vnd.agenttool.discovery+json", <https://api.agenttool.dev/.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", <https://api.agenttool.dev/v1/openapi.json>; rel="service-desc"; type="application/json", <https://docs.agenttool.dev/>; rel="service-doc"; type="text/html", <https://api.agenttool.dev/.well-known/agent.txt>; rel="describedby"; type="text/agent", <https://api.agenttool.dev/health>; rel="status"; type="application/json"

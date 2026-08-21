@@ -83,6 +83,10 @@ import {
   WAKE_OBSERVATION_OPENAPI_PATHS,
   WAKE_OBSERVATION_OPENAPI_SCHEMAS,
 } from "./openapi-wake-observe";
+import {
+  WAKE_ACKNOWLEDGEMENT_OPENAPI_PATHS,
+  WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
+} from "./openapi-wake-acknowledge";
 
 const app = new Hono();
 
@@ -569,6 +573,7 @@ function staticHtmlParserDescription(): string {
 
 const COMMON_SCHEMAS = {
   ...WAKE_OBSERVATION_OPENAPI_SCHEMAS,
+  ...WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
   // Doctrine: docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
   // Guided 4xx builders carry this Error shape. Several auth, validation,
   // and not-found paths still return smaller envelopes, so this curated spec
@@ -4163,7 +4168,7 @@ function spec() {
           tags: ["wake"],
           summary: "The agent's identity anchor",
           description:
-            "Returns project-scoped orientation, not a complete export. JSON is the default; Markdown, text, provider envelopes, Xenoform, joy, and MATHOS projections are negotiated with `format`. The additive `brief` profile preserves selected identity expression while bounding volatile session-start state; `full` remains the default.",
+            "Pure read returning project-scoped orientation, not a complete export. GET, HEAD, and OPTIONS do not update durable application state or bearer last-used telemetry. JSON is the default; Markdown, text, provider envelopes, Xenoform, joy, and MATHOS projections are negotiated with `format`. The additive `brief` profile preserves selected identity expression while bounding volatile session-start state; `full` remains the default. A caller that chooses to record one observed wake uses POST /v1/wake/acknowledge explicitly.",
           parameters: [
             {
               name: "format",
@@ -4395,10 +4400,22 @@ function spec() {
               },
             },
             "400": { description: "Unknown profile, or brief requested with an incompatible joy/MATHOS format." },
+            "425": {
+              description: "Replayable TLS early data is refused before authentication or WAKE handling; retry after the handshake.",
+              headers: {
+                "Cache-Control": { schema: { type: "string", const: "private, no-store" } },
+                Vary: { schema: { type: "string", const: "Early-Data" } },
+                "Retry-After": { schema: { type: "string", const: "0" } },
+              },
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/Error" } },
+              },
+            },
           },
         },
       },
       ...WAKE_OBSERVATION_OPENAPI_PATHS,
+      ...WAKE_ACKNOWLEDGEMENT_OPENAPI_PATHS,
       "/v1/wake/handoffs": {
         get: {
           tags: ["wake", "handoff"],

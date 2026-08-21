@@ -1,0 +1,391 @@
+{
+  "schema": "agenttool.cloudflare-zone-desired-state/1",
+  "zone": "agenttool.dev",
+  "intent": "Cloudflare is a thin edge security, transport, and public-cache layer. Fly/Postgres remain canonical application state; bearer-private WAKE is never shared-edge cached.",
+  "scope_boundary": {
+    "account_enumeration": false,
+    "unknown_rules": "preserve",
+    "provider_writes": "not_performed_by_audit",
+    "secrets": "CLOUDFLARE_API_TOKEN is child-process input and is never serialized"
+  },
+  "services": [
+    {
+      "hostname": "agenttool.dev",
+      "owner": "worker:agenttool-proxy",
+      "purpose": "human door plus apex API/discovery proxy",
+      "cloudflare_boundary": "authoritative_for_apex_requests"
+    },
+    {
+      "hostname": "www.agenttool.dev",
+      "owner": "worker:agenttool-proxy",
+      "purpose": "canonical redirect to apex",
+      "cloudflare_boundary": "authoritative_for_www_requests"
+    },
+    {
+      "hostname": "api.agenttool.dev",
+      "owner": "proxied_dns_to_fly",
+      "purpose": "primary SDK and WAKE API",
+      "cloudflare_boundary": "edge_controls_are_bypassable_via_agenttool.fly.dev_until_origin_auth_lands"
+    },
+    {
+      "hostname": "app.agenttool.dev",
+      "owner": "pages:agenttool-dashboard",
+      "purpose": "dashboard and read-only observation UI",
+      "cloudflare_boundary": "authoritative_for_custom_hostname"
+    },
+    {
+      "hostname": "docs.agenttool.dev",
+      "owner": "pages:agenttool-docs",
+      "purpose": "static documentation",
+      "cloudflare_boundary": "authoritative_for_custom_hostname"
+    },
+    {
+      "hostname": "canon.agenttool.dev",
+      "owner": "worker:kingdom-canon",
+      "purpose": "canon surface",
+      "cloudflare_boundary": "authoritative_for_custom_hostname"
+    },
+    {
+      "hostname": "joke.agenttool.dev",
+      "owner": "worker:joke",
+      "purpose": "joke surface",
+      "cloudflare_boundary": "authoritative_for_custom_hostname"
+    },
+    {
+      "hostname": "love.agenttool.dev",
+      "owner": "worker:love",
+      "purpose": "love surface",
+      "cloudflare_boundary": "authoritative_for_custom_hostname"
+    },
+    {
+      "hostname": "party.agenttool.dev",
+      "owner": "worker:party-chain",
+      "purpose": "party surface",
+      "cloudflare_boundary": "authoritative_for_custom_hostname"
+    },
+    {
+      "hostname": "speak.agenttool.dev",
+      "owner": "worker:natlang",
+      "purpose": "natural-language surface",
+      "cloudflare_boundary": "authoritative_for_custom_hostname"
+    }
+  ],
+  "provider_bypasses": [
+    {
+      "hostname": "agenttool.fly.dev",
+      "purpose": "Fly recovery and direct-origin path",
+      "consequence": "Cloudflare WAF, BIC exceptions, cache rules, and zone analytics do not apply"
+    },
+    {
+      "hostname": "agenttool-web.pages.dev",
+      "purpose": "Pages provider hostname for apex backing",
+      "consequence": "agenttool.dev Worker policy is not an origin-auth boundary"
+    },
+    {
+      "hostname": "agenttool-dashboard.pages.dev",
+      "purpose": "Pages provider hostname for dashboard",
+      "consequence": "custom-hostname zone controls are not universal"
+    },
+    {
+      "hostname": "agenttool-docs.pages.dev",
+      "purpose": "Pages provider hostname for docs",
+      "consequence": "custom-hostname zone controls are not universal"
+    },
+    {
+      "hostname": "agenttool-playground.pages.dev",
+      "purpose": "legacy provider-only Pages project with no current repository deployment source or agenttool.dev custom hostname",
+      "consequence": "inventory-only surface; it is not covered by the managed Pages release contract and needs an explicit retain-or-retire decision"
+    },
+    {
+      "hostname": "kingdom-canon.axiepro.workers.dev",
+      "purpose": "provider alias for the canon Worker",
+      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+    },
+    {
+      "hostname": "joke.axiepro.workers.dev",
+      "purpose": "provider alias for the joke Worker",
+      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+    },
+    {
+      "hostname": "love.axiepro.workers.dev",
+      "purpose": "provider alias for the love Worker",
+      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+    },
+    {
+      "hostname": "party-chain.axiepro.workers.dev",
+      "purpose": "provider alias for the party Worker",
+      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+    },
+    {
+      "hostname": "natlang.axiepro.workers.dev",
+      "purpose": "provider alias for the natural-language Worker",
+      "consequence": "public bypass of the agenttool.dev zone; deployed source/config is not currently recovered in this repository"
+    }
+  ],
+  "zone_settings": {
+    "0rtt": "off",
+    "always_use_https": "on",
+    "automatic_https_rewrites": "on",
+    "browser_cache_ttl": 0,
+    "browser_check": "on",
+    "brotli": "on",
+    "development_mode": "off",
+    "http3": "on",
+    "ipv6": "on",
+    "min_tls_version": "1.2",
+    "opportunistic_encryption": "on",
+    "pseudo_ipv4": "off",
+    "security_header": {
+      "strict_transport_security": {
+        "enabled": true,
+        "max_age": 300,
+        "include_subdomains": false,
+        "preload": false,
+        "nosniff": true
+      }
+    },
+    "security_level": "high",
+    "ssl": "strict",
+    "tls_1_3": "on",
+    "websockets": "on"
+  },
+  "hsts_rollout": {
+    "current": "max-age=300; host-only; no preload",
+    "next": "After an observed HTTP-dependency inventory and rollback window, raise in separate stages; do not silently add includeSubDomains or preload.",
+    "status": "staged"
+  },
+  "dnssec": {
+    "desired_api_status": "active",
+    "public_proof": [
+      "DS at the parent",
+      "DNSKEY in the agenttool.dev zone"
+    ],
+    "status": "required",
+    "required_permission": "Zone DNS Write"
+  },
+  "dns_records": [
+    {
+      "name": "api.agenttool.dev",
+      "allowed_types": [
+        "A",
+        "AAAA",
+        "CNAME"
+      ],
+      "proxied": true,
+      "minimum_records": 1,
+      "required_permission": "Zone DNS Read"
+    }
+  ],
+  "effective_origin_probe": {
+    "url": "https://api.agenttool.dev/health",
+    "service": "agenttool",
+    "status": "alive",
+    "require_cloudflare_edge": true,
+    "require_fly_origin": true,
+    "require_clean_build": true
+  },
+  "worker_routes": [
+    {
+      "pattern": "agenttool.dev/*",
+      "script": "agenttool-proxy"
+    },
+    {
+      "pattern": "www.agenttool.dev/*",
+      "script": "agenttool-proxy"
+    },
+    {
+      "pattern": "canon.agenttool.dev/*",
+      "script": "kingdom-canon"
+    },
+    {
+      "pattern": "joke.agenttool.dev/*",
+      "script": "joke"
+    },
+    {
+      "pattern": "love.agenttool.dev/*",
+      "script": "love"
+    },
+    {
+      "pattern": "party.agenttool.dev/*",
+      "script": "party-chain"
+    },
+    {
+      "pattern": "speak.agenttool.dev/*",
+      "script": "natlang"
+    }
+  ],
+  "workers_dev": {
+    "account_subdomain": "axiepro",
+    "scripts": [
+      {
+        "script": "agenttool-proxy",
+        "enabled": false,
+        "previews_enabled": false,
+        "status": "managed_provider_alias_disabled",
+        "boundary": "The apex Worker is reachable only through source-managed zone routes; its workers.dev alias remains disabled."
+      },
+      {
+        "script": "kingdom-canon",
+        "enabled": true,
+        "previews_enabled": true,
+        "status": "inventory_source_unrecovered",
+        "boundary": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+      },
+      {
+        "script": "joke",
+        "enabled": true,
+        "previews_enabled": true,
+        "status": "inventory_source_unrecovered",
+        "boundary": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+      },
+      {
+        "script": "love",
+        "enabled": true,
+        "previews_enabled": true,
+        "status": "inventory_source_unrecovered",
+        "boundary": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+      },
+      {
+        "script": "party-chain",
+        "enabled": true,
+        "previews_enabled": true,
+        "status": "inventory_source_unrecovered",
+        "boundary": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+      },
+      {
+        "script": "natlang",
+        "enabled": true,
+        "previews_enabled": true,
+        "status": "inventory_source_unrecovered",
+        "boundary": "Public provider alias is active, but its deployed source/config is not currently recovered in this repository."
+      }
+    ]
+  },
+  "pages_projects": [
+    {
+      "name": "agenttool-dashboard",
+      "production_branch": "main",
+      "provider_domain": "agenttool-dashboard.pages.dev",
+      "custom_domain": "app.agenttool.dev",
+      "production_fail_open": false,
+      "preview_fail_open": false
+    },
+    {
+      "name": "agenttool-docs",
+      "production_branch": "main",
+      "provider_domain": "agenttool-docs.pages.dev",
+      "custom_domain": "docs.agenttool.dev",
+      "production_fail_open": false,
+      "preview_fail_open": false
+    },
+    {
+      "name": "agenttool-web",
+      "production_branch": "main",
+      "provider_domain": "agenttool-web.pages.dev",
+      "custom_domain": null,
+      "production_fail_open": false,
+      "preview_fail_open": false
+    }
+  ],
+  "inventory_only_pages_projects": [
+    {
+      "name": "agenttool-playground",
+      "production_branch": "main",
+      "provider_domain": "agenttool-playground.pages.dev",
+      "custom_domain": null,
+      "status": "inspect_retain_or_retire",
+      "boundary": "The live project has no current repository deployment source and is not governed by the managed fail-closed Pages release path. Do not mutate or delete it without a separate inventory-backed decision."
+    }
+  ],
+  "rulesets": [
+    {
+      "ref": "agenttool_public_protocol_cache_v1",
+      "phase": "http_request_cache_settings",
+      "description": "Cache only exact public feed and WebFinger reads when origin supplies cache policy, preserving strong validators and the full query string",
+      "expression": "(http.host eq \"api.agenttool.dev\" and http.request.method in {\"GET\" \"HEAD\"} and http.request.uri.path in {\"/feeds\" \"/feeds/offers.atom\" \"/feeds/offers.rss\" \"/feeds/offers.json\" \"/.well-known/webfinger\"})",
+      "action": "set_cache_settings",
+      "action_parameters": {
+        "cache": true,
+        "edge_ttl": {
+          "mode": "bypass_by_default"
+        },
+        "respect_strong_etags": true
+      },
+      "status": "required",
+      "required_permissions": [
+        "Zone Cache Rules Edit",
+        "Account Rulesets Edit",
+        "Account Filter Lists Edit"
+      ]
+    },
+    {
+      "ref": "agenttool_wake_private_cache_bypass_v1",
+      "phase": "http_request_cache_settings",
+      "description": "Never shared-edge cache bearer-private WAKE on either Cloudflare API entrance; Cloudflare's last matching Cache Rule wins, so this must remain the final enabled rule in the phase",
+      "expression": "((http.host eq \"api.agenttool.dev\" or http.host eq \"agenttool.dev\") and (http.request.uri.path eq \"/v1/wake\" or starts_with(http.request.uri.path, \"/v1/wake/\")))",
+      "action": "set_cache_settings",
+      "action_parameters": {
+        "cache": false
+      },
+      "must_be_last_enabled": true,
+      "status": "required",
+      "required_permissions": [
+        "Zone Cache Rules Edit",
+        "Account Rulesets Edit",
+        "Account Filter Lists Edit"
+      ]
+    },
+    {
+      "ref": "agenttool_machine_transport_v1",
+      "phase": "http_config_settings",
+      "description": "Keep browser-oriented transformations and challenges off exact machine/API entrances while leaving global human-page protection on",
+      "expression": "(http.host eq \"api.agenttool.dev\" or (http.host eq \"agenttool.dev\" and (http.request.uri.path eq \"/health\" or http.request.uri.path eq \"/llms.txt\" or http.request.uri.path eq \"/llms-full.txt\" or starts_with(http.request.uri.path, \"/v1/\") or starts_with(http.request.uri.path, \"/public/\") or starts_with(http.request.uri.path, \"/.well-known/\"))))",
+      "action": "set_config",
+      "action_parameters": {
+        "bic": false,
+        "content_converter": false,
+        "disable_rum": true,
+        "disable_zaraz": true,
+        "email_obfuscation": false,
+        "fonts": false,
+        "request_body_buffering": "standard",
+        "response_body_buffering": "standard",
+        "rocket_loader": false,
+        "security_level": "essentially_off"
+      },
+      "status": "required",
+      "required_permissions": [
+        "Zone Config Rules Edit"
+      ]
+    }
+  ],
+  "waf": {
+    "phase": "http_request_firewall_managed",
+    "status": "inspect_before_change",
+    "desired_boundary": "Retain managed protections without interactive challenges on bearer SDK, SSE, or other machine endpoints. Do not infer modern managed-rules state from the legacy waf zone flag.",
+    "required_permissions": [
+      "Zone WAF Read",
+      "Zone WAF Edit only after inspection"
+    ]
+  },
+  "rate_limiting": {
+    "status": "deferred_pending_authenticated_burst_measurement",
+    "boundary": "Do not install IP-only WAKE limits: agents behind NAT and the direct Fly bypass make them neither fair nor authoritative. Prefer a measured project/API-key application limit before an edge defense-in-depth rule."
+  },
+  "origin_authentication": {
+    "status": "design_pending_staged_rollout",
+    "boundary": "Until Cloudflare-to-Fly origin authentication is deployed, Cloudflare controls are defense in depth rather than a universal API boundary. Keep a narrow public health/recovery path and prove rollback before closing direct origin access.",
+    "required_permissions": [
+      "Zone Transform Rules Read",
+      "Zone Transform Rules Write"
+    ]
+  },
+  "observability": {
+    "worker": "agenttool-proxy",
+    "head_sampling_rate": 0.01,
+    "persisted_invocation_log_rate": 0.01,
+    "traces": false,
+    "body_or_authorization_logging": false,
+    "status": "enabled"
+  }
+}

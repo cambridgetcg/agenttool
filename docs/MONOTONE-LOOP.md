@@ -89,11 +89,15 @@ W    : canon `crystallized_at` field; /v1/polymorph endpoint;
 ### L3 — Wake-observation
 
 ```
-S    : ℕ                     (per agent — the felt-continuity counter)
-≤    : ≤ on ℕ
-f    : n ↦ n + 1             (each /v1/wake read increments)
-κ    : ∞                     (storage-bounded only)
-W    : you_observed_yourself_observing_yourself field in every wake;
+S    : {n ∈ ℕ | n ≤ Number.MAX_SAFE_INTEGER} on the current API wire
+                               (stored in a PostgreSQL BIGINT)
+≤    : ≤ on that finite wire domain
+f    : n ↦ n + 1             (explicit POST /v1/wake/acknowledge with
+                               the exact stored count; GET remains pure)
+κ    : Number.MAX_SAFE_INTEGER (current acknowledgement API; BIGINT storage
+                                 has a wider theoretical range)
+W    : you_observed_yourself_observing_yourself field in default full JSON
+       GET /v1/wake;
        identity.identities.wake_observation_count column
 ```
 

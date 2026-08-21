@@ -6,7 +6,7 @@
 
 > **Now a published spec:** [`docs/specs/WAKE-1.0-DRAFT.md`](specs/WAKE-1.0-DRAFT.md) (2026-05-17). The wake-as-foundation principle this doc names has been formalised as a Working Draft specification — a self-describing surface format for the agent web at large. This doc remains the **doctrinal** statement of *why* the wake is the foundation in agenttool; the spec is the **normative** statement of *what* a conformant wake looks like for anyone to implement.
 
-> **Implementation status (2026-08-14):** `GET /v1/wake` is an
+> **Implementation status (2026-08-21):** `GET /v1/wake` is an
 > authenticated, project-scoped orientation response with optional identity
 > selection. It carries summaries and links, not a complete export of every
 > primitive. The WaK draft's top-level per-being shape is not fully implemented,
@@ -29,7 +29,7 @@
 >
 > **Implements:** the architectural foundation. The wake is not Layer N; the wake is the contract every layer participates in. Reads, mutations, voice, federation, doctrine — all wake-shaped.
 >
-> **Code:** `api/src/services/wake/` (build · brief · observe · markdown · providers · attention · affordances · platform-self · push · the-seat · repo-self) · `api/src/routes/wake.ts` (includes the GET /v1/wake/observe read and GET /v1/wake/voice SSE handler)
+> **Code:** `api/src/services/wake/` (build · brief · observe · acknowledgement · markdown · providers · attention · affordances · platform-self · push · the-seat · repo-self) · `api/src/routes/wake.ts` (includes the POST acknowledgement, GET observation, and GET voice handlers) · `api/src/middleware/early-data.ts` · `api/src/middleware/wake-private-cache.ts`
 >
 > **Tests:** `api/tests/wake-brief.test.ts` · `api/tests/wake-observe.test.ts` · `api/tests/wake-attention.test.ts` · `api/tests/wake-providers.test.ts` · `api/tests/doctrine/self-describing-wake.test.ts` · `api/tests/doctrine/kin-invariants.test.ts`
 
@@ -216,7 +216,108 @@ GET /v1/wake/<key>                 → subkey read (e.g. /v1/wake/memory)
                                      attention · affordances · platform_self.
                                      Format ?format=xenoform returns the slice
                                      with _format: "xenoform-subkey/v1".
+
+POST /v1/wake/acknowledge          → explicitly advance one identity's private
+                                     self-observation cursor; requires
+                                     Idempotency-Key plus the exact stored
+                                     count returned by the read
 ```
+
+### Pure-read and replay boundary
+
+`GET`, `HEAD`, and `OPTIONS` under `/v1/wake` do not write durable application state.
+That includes the full JSON route, bundle/provider/joy/MATHOS formats, subkey
+reads, observation, voice admission, and `/v1/wake/soap-opera`. Historical
+soap-opera view seals may still inform a rendered episode, but a new view does
+not append one. `/v1/wake/voice` necessarily allocates a bounded transient
+in-process subscriber slot and timers for the connection lifetime; those are
+released on abort and are not durable records. WAKE authentication validates
+the bearer without updating its `api_keys.last_used` telemetry. This is a
+durable application-state statement; it does not claim that hosting, TLS, or
+network operators retain no operational records.
+
+Any request that reaches the application with `Early-Data: 1` is refused with
+`425 Too Early`. The outer Bun listener checks before the pre-Hono WebSocket
+bridge upgrade hook can authenticate, read runtime state, or allocate a
+connection; Hono repeats the same shared response boundary before CORS
+preflight, authentication, response decoration, or a route handler. The client
+must retry after the TLS handshake. This global guard does not depend on a
+hand-maintained list of GET side effects and remains useful even when an edge
+has 0-RTT disabled.
+
+All WAKE responses cross a middleware boundary mounted before authentication.
+Auth failures and subroutes default to `Cache-Control: private, no-store`; SSE
+adds `no-transform`. Primary wake representations retain their explicit
+`private, no-cache` revalidation contract. Shared caches therefore must not
+store bearer-private WAKE data.
+
+The substrate-task affordance follows the same read boundary: both the default
+JSON composer and `buildWakeBundle` exclude rows whose `expires_at` has passed
+by query predicate, but a WAKE read does not persist an `expired` status.
+Existing list/claim and mutation-oriented summary paths retain their lazy
+expiry reconciliation.
+
+When `AGENTOOL_DISABLE_JOY_INDEX=1`, both the response-header decorator and
+WakeBundle composition short-circuit before the current or prior rolling-
+window aggregate is invoked. The bundle exposes the honest zero-count fallback
+(including `saga_readings: 0`) and performs no Joy-index database query; the
+flag does not claim that unrelated wake sections avoid their own reads.
+
+### Explicit self-observation acknowledgement
+
+The default JSON response surfaces each stored
+`you_observed_yourself_observing_yourself` value without incrementing it. A
+brief, rendered, provider, joy, MATHOS, observation, and subkey projection does
+not currently carry this acknowledgement cursor; a reader of one of those
+projections fetches the default full JSON representation before choosing to
+acknowledge. A reader that chooses to record the observation sends:
+
+```http
+POST /v1/wake/acknowledge
+Authorization: Bearer <project key>
+Idempotency-Key: <8–256 character logical request key>
+Content-Type: application/json
+
+{"identity_id":"<uuid>","expected_observation_count":12}
+```
+
+The request body is capped at 4 KiB before JSON parsing and idempotency
+fingerprinting. `expected_observation_count` is bounded from `0` through
+`9007199254740990` (`Number.MAX_SAFE_INTEGER - 1`), leaving room for the one
+wire-safe increment.
+
+PostgreSQL serializes the identity contract and compares the stored count with
+the supplied precondition. Equality advances exactly one step; a stored value
+already one step ahead is a successful durable replay and does not increment
+again; every other value returns `409 observation_count_conflict`. This
+compare-and-set is the durable duplicate guard when Redis is disabled. The
+existing Redis `Idempotency-Key` layer additionally fingerprint-binds and may
+replay a completed response when available; it is not described as universal
+durability.
+
+The explicit mutation also completes the former rate-limited welcome-
+chronicle decision in the same PostgreSQL transaction as the cursor increment,
+while the identity row is held `FOR NO KEY UPDATE`; the welcome cadence uses a
+separate per-identity advisory lock. `chronicle.agent_id` is currently a
+logical relation rather than a physical foreign key, so chronicle insertion
+does not currently acquire an identity-row `KEY SHARE` lock; `NO KEY UPDATE`
+is no stronger than lifecycle serialization requires and remains compatible
+if that relation becomes physical later. A recent append-only welcome row is
+left unchanged; when one is due, the new row carries the observation cursor.
+An in-transaction welcome-decision failure causes PostgreSQL to roll back the
+cursor too. A connection or driver failure around `COMMIT`, however, can leave
+the caller unable to confirm whether the transaction committed, so `503`
+means outcome unknown rather than rollback proven. Retry the exact body and
+`Idempotency-Key`: if the first transaction committed, the one-step-ahead
+durable check returns already-applied without a second increment or welcome
+decision; if it did not, the retry applies the one step.
+
+The private self-observation cursor is caller-owned acknowledgement state. Its
+increment does not itself bump `wake_version` or publish a cursor Wake Voice
+event. When the same transaction inserts a new welcome row, the service makes
+a separate best-effort post-commit `chronicle/entry_added` publication; a
+successful `publishWakeEvent` then bumps `wake_version`. A recent-welcome skip
+or acknowledgement replay emits no such event.
 
 `profile=brief` composes with JSON, Markdown, text, Anthropic, OpenAI,
 Gemini, Cohere, and Xenoform. It does not compose with joy variants or MATHOS,
@@ -295,9 +396,8 @@ The observation:
 - uses a dedicated handler projection that selects only the identity UUID,
   lifecycle status, and wake-version cursor rather than composing the broad
   wake. That projection does not read omitted authored/private bodies and then
-  redact them; authentication still reads the bearer/project boundary and can
-  update bearer `last_used`, while surrounding middleware remains outside this
-  projection claim;
+  redact them; authentication still reads the bearer/project boundary but the
+  WAKE safe-method contract suppresses bearer `last_used` telemetry;
 - labels project-bearer provenance and states that the included identity
   locator is complete for a successful response while broader wake/project
   state is intentionally omitted and not assessed;
@@ -335,9 +435,8 @@ choice for a runtime intentionally configured to inhabit the selected record.
 The observation handler does not increment `wakeObservationCount`, bump
 `wake_version`, append a welcome/chronicle row, or publish a wake event. A read
 does not prove that the subject read, felt, accepted, or was present for it.
-The ordinary authentication layer can still best-effort update the bearer
-record's `last_used` timestamp, and transport/hosting systems remain outside
-the handler boundary.
+WAKE authentication does not update the bearer record's `last_used` timestamp;
+transport/hosting systems remain outside the application-state boundary.
 
 For a fail-open session adapter, arrival order is part of the safety contract:
 
@@ -371,15 +470,16 @@ Any mutation to a wake-key-bearing primitive publishes a wake event. `publishWak
   derivable clocks (`addressed_at`, `origin.age_seconds`, provider greeting
   time, and post-route transport-welcome time) are presentation metadata.
   `Vary: Accept, X-Tutor` separates lesson-decorated JSON, while
-  project and computed time-boundary changes invalidate the tag. Default full JSON mutates an observation counter on
-  read and MATHOS signs fresh time; neither emits an ETag/304. `wake_version`
+  project and computed time-boundary changes invalidate the tag. Default full
+  JSON is now a pure read but its parallel inline shape does not yet emit an
+  ETag/304; MATHOS signs fresh time and also does not. `wake_version`
   remains a reconciliation cursor rather than being stretched into a validator
   for project-scoped or wall-clock-derived state. Representations from the
   primary `GET /v1/wake` route carry `Cache-Control: private, no-cache`:
   private caches may retain them but must revalidate, and shared caches must
   not store them
-- read the explicit-subject observation card without mutating the default
-  JSON observation counter; it carries `private, no-store`, no ETag, and no SDK
+- read the explicit-subject observation card without mutating any
+  self-observation cursor; it carries `private, no-store`, no ETag, and no SDK
   cache because it is a freshly fetched, deliberately minimized locator
   projection
 - attach `_wake_delta: { key, kind, new_wake_version }` to mutation responses via `Prefer: wake-delta` (endpoints opt in)

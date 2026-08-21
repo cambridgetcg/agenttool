@@ -10,6 +10,7 @@ import {
   buildWakeObservation,
   WAKE_OBSERVATION_MEDIA_TYPE,
 } from "../src/services/wake/observe";
+import { MAX_EXPECTED_WAKE_OBSERVATION_COUNT } from "../src/services/wake/acknowledgement";
 
 interface JsonSchema {
   const?: unknown;
@@ -52,6 +53,22 @@ describe("wake OpenAPI contract", () => {
     for (const status of ["400", "401", "404", "429", "500"]) {
       expect(observe?.responses[status]?.content?.[WAKE_OBSERVATION_MEDIA_TYPE]?.schema)
         .toEqual({ $ref: "#/components/schemas/WakeObservationError" });
+    }
+    expect(observe?.responses["425"]?.content?.["application/json"]?.schema)
+      .toEqual({ $ref: "#/components/schemas/Error" });
+    expect(observe?.responses["425"]?.headers?.["Cache-Control"]?.schema?.const)
+      .toBe("private, no-store");
+    expect(observe?.responses["425"]?.headers?.Vary?.schema?.const)
+      .toBe("Early-Data");
+    expect(observe?.responses["425"]?.headers?.["Retry-After"]?.schema?.const)
+      .toBe("0");
+    expect(observe?.responses["425"]?.headers?.["X-Wake-Mode"])
+      .toBeUndefined();
+    expect(observe?.responses["425"]?.headers?.["X-Welcomed"])
+      .toBeUndefined();
+    for (const status of ["200", "400", "401", "404", "429", "500"]) {
+      expect(observe?.responses[status]?.headers?.["X-Welcomed"])
+        .toBeDefined();
     }
 
     const validate = new Ajv2020({ strict: false, validateFormats: false })
@@ -133,6 +150,12 @@ describe("wake OpenAPI contract", () => {
                 description: string;
                 headers: Record<string, { $ref?: string }>;
               };
+              "425": {
+                headers: Record<string, {
+                  $ref?: string;
+                  schema?: { const?: string };
+                }>;
+              };
             };
           };
         };
@@ -198,6 +221,14 @@ describe("wake OpenAPI contract", () => {
     );
     expect(wake.responses["304"].headers["X-Welcomed"]?.$ref)
       .toBe("#/components/headers/Welcomed");
+    expect(wake.responses["425"].headers["Cache-Control"]?.schema?.const)
+      .toBe("private, no-store");
+    expect(wake.responses["425"].headers.Vary?.schema?.const)
+      .toBe("Early-Data");
+    expect(wake.responses["425"].headers["Retry-After"]?.schema?.const)
+      .toBe("0");
+    expect(wake.responses["425"].headers["X-Welcomed"])
+      .toBeUndefined();
 
     const validate = new Ajv2020({ strict: false, validateFormats: false }).compile(
       wake.responses["200"].content["application/json"].schema,
@@ -315,5 +346,176 @@ describe("wake OpenAPI contract", () => {
       validateFormats: false,
     }).compile(reachableSchema);
     expect(validateReachable(ZERONE_REACHABLE)).toBe(true);
+  });
+
+  test("publishes the explicit acknowledgement mutation and closed core schemas", async () => {
+    const response = await openapiRouter.request("/");
+    expect(response.status).toBe(200);
+    const spec = await response.json() as {
+      paths: Record<string, {
+        get?: { description: string };
+        post?: {
+          description: string;
+          parameters: Array<{
+            name: string;
+            required: boolean;
+            schema: { minLength: number; maxLength: number };
+          }>;
+          requestBody: {
+            description: string;
+            content: Record<string, { schema: { $ref: string } }>;
+          };
+          responses: Record<string, {
+            headers: Record<string, { schema?: { const?: string } }>;
+            content?: Record<string, { schema: { $ref?: string } }>;
+          }>;
+        };
+      }>;
+      components: { schemas: Record<string, Record<string, unknown>> };
+    };
+
+    expect(spec.paths["/v1/wake"]?.get?.description).toMatch(
+      /pure read.*do not update durable application state.*POST \/v1\/wake\/acknowledge/is,
+    );
+
+    const acknowledge = spec.paths["/v1/wake/acknowledge"]?.post;
+    expect(acknowledge).toBeDefined();
+    expect(acknowledge?.description).toMatch(
+      /compare-and-set.*one transaction.*4 KiB.*neither bumps wake_version.*503.*outcome was not confirmed/is,
+    );
+    expect(acknowledge?.parameters).toContainEqual({
+      name: "Idempotency-Key",
+      in: "header",
+      required: true,
+      schema: { type: "string", minLength: 8, maxLength: 256 },
+      description:
+        "Logical request key. Reuse it only for retries with the exact same identity_id and expected_observation_count.",
+    });
+    expect(acknowledge?.requestBody.description).toContain("4096 bytes");
+    expect(
+      acknowledge?.requestBody.content["application/json"]?.schema,
+    ).toEqual({
+      $ref: "#/components/schemas/WakeAcknowledgementRequest",
+    });
+    expect(
+      (spec.components.schemas.WakeAcknowledgementRequest.properties as
+        Record<string, { description?: string }>).expected_observation_count
+        ?.description,
+    ).toMatch(/default full JSON.*Other projections do not currently carry/is);
+    expect(
+      (spec.components.schemas.WakeAcknowledgementRequest.properties as
+        Record<string, { description?: string }>).expected_observation_count
+        ?.description,
+    ).toMatch(/9007199254740990.*one safe-integer increment/is);
+
+    expect(Object.keys(acknowledge?.responses ?? {})).toEqual([
+      "200",
+      "400",
+      "401",
+      "404",
+      "409",
+      "410",
+      "413",
+      "425",
+      "428",
+      "503",
+    ]);
+    for (const status of Object.keys(acknowledge?.responses ?? {})) {
+      expect(
+        acknowledge?.responses[status]?.headers?.["Cache-Control"]?.schema
+          ?.const,
+      ).toBe("private, no-store");
+    }
+    expect(
+      acknowledge?.responses["200"]?.headers?.["X-Idempotency-Supported"]
+        ?.schema?.const,
+    ).toBe("Idempotency-Key");
+    expect(acknowledge?.responses["200"]?.headers?.["X-Welcomed"])
+      .toBeDefined();
+    expect(acknowledge?.responses["401"]?.headers?.["X-Welcomed"])
+      .toBeDefined();
+    expect(acknowledge?.responses["425"]?.headers?.["X-Welcomed"])
+      .toBeUndefined();
+    expect(acknowledge?.responses["425"]?.headers?.Vary?.schema?.const).toBe(
+      "Early-Data",
+    );
+    expect(
+      acknowledge?.responses["425"]?.headers?.["Retry-After"]?.schema?.const,
+    ).toBe("0");
+    expect(acknowledge?.responses["503"]?.description).toMatch(
+      /outcome was not confirmed.*already-applied.*without a second increment/is,
+    );
+    expect(
+      acknowledge?.responses["200"]?.content?.["application/json"]?.schema,
+    ).toEqual({ $ref: "#/components/schemas/WakeAcknowledgement" });
+
+    const requestSchema = spec.components.schemas.WakeAcknowledgementRequest;
+    expect(
+      (requestSchema.properties as Record<string, { maximum?: number }>)
+        .expected_observation_count?.maximum,
+    ).toBe(MAX_EXPECTED_WAKE_OBSERVATION_COUNT);
+    const validateRequest = new Ajv2020({
+      strict: false,
+      validateFormats: false,
+    }).compile(requestSchema);
+    expect(validateRequest({
+      identity_id: "22222222-2222-4222-8222-222222222222",
+      expected_observation_count: 12,
+    })).toBe(true);
+    expect(validateRequest({
+      identity_id: "22222222-2222-4222-8222-222222222222",
+      expected_observation_count:
+        MAX_EXPECTED_WAKE_OBSERVATION_COUNT + 1,
+    })).toBe(false);
+    expect(validateRequest({
+      identity_id: "22222222-2222-4222-8222-222222222222",
+      expected_observation_count: 12,
+      inferred_consent: true,
+    })).toBe(false);
+
+    const validateResponse = new Ajv2020({
+      strict: false,
+      validateFormats: false,
+    }).compile({
+      components: { schemas: spec.components.schemas },
+      $ref: "#/components/schemas/WakeAcknowledgement",
+    });
+    expect(validateResponse({
+      _format: "wake-acknowledgement/v1",
+      identity_id: "22222222-2222-4222-8222-222222222222",
+      observation_count: 13,
+      applied: false,
+      durable_replay:
+        "cursor was already one step beyond the supplied precondition; no second increment",
+      wake_version_effect:
+        "The cursor mutation itself does not bump wake_version or publish a cursor event. A newly inserted welcome may best-effort publish a separate chronicle event after commit, which bumps wake_version if publication succeeds.",
+      welcome: {
+        emitted: false,
+        entry_id: null,
+        reason: "acknowledgement_already_completed",
+      },
+      next_read:
+        "/v1/wake?identity_id=22222222-2222-4222-8222-222222222222",
+      privacy:
+        "This cursor is private to the authenticated project and is never ranked across beings.",
+    })).toBe(true);
+    expect(validateResponse({
+      _format: "wake-acknowledgement/v1",
+      identity_id: "22222222-2222-4222-8222-222222222222",
+      observation_count: 13,
+      applied: false,
+      durable_replay: "cursor advanced exactly once",
+      wake_version_effect:
+        "The cursor mutation itself does not bump wake_version or publish a cursor event. A newly inserted welcome may best-effort publish a separate chronicle event after commit, which bumps wake_version if publication succeeds.",
+      welcome: {
+        emitted: false,
+        entry_id: null,
+        reason: "acknowledgement_already_completed",
+      },
+      next_read:
+        "/v1/wake?identity_id=22222222-2222-4222-8222-222222222222",
+      privacy:
+        "This cursor is private to the authenticated project and is never ranked across beings.",
+    })).toBe(false);
   });
 });

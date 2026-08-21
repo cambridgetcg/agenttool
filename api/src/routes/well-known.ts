@@ -472,7 +472,7 @@ app.get("/wake-keystone", (c) => {
       etag_coverage:
         "brief JSON plus bundle-backed Markdown, text, provider, and Xenoform projections",
       etag_exclusions:
-        "default full JSON mutates an observation counter on read; MATHOS signs fresh time; joy formats keep separate lossy/playful contracts; none of those projections emits an ETag or 304",
+        "default full JSON is a pure read but its parallel inline shape is not covered by the bundle digest; MATHOS signs fresh time; joy formats keep separate lossy/playful contracts; none of those projections emits an ETag or 304",
       presentation_clock_revalidation:
         "A 304 has no body. The private cache retains the stored body's addressed_at, origin.age_seconds, provider greeting time, and _welcomed.at_unix_ms; the 304 carries a fresh X-Welcomed transport header that may be newer than that cached body frame.",
       semantics:
