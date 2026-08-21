@@ -10,7 +10,7 @@ Infrastructure config for the live platform. Live deploy targets, secrets templa
 | **Postgres** | Supabase · eu-west-2 (AWS London) | Pooler: `aws-1-eu-west-2.pooler.supabase.com`. Session pooler (5432) for local dev / migrations; transaction pooler (6543) for prod Fly secret. |
 | **Redis** | Hosted (BullMQ + Hono SSE) | Used by browse worker + strand-voice + inbox-push fanout. |
 | **Frontend** | Cloudflare Pages · 3 projects (Direct Upload) | `apps/dashboard` → app.agenttool.dev · `apps/docs` → docs.agenttool.dev · `apps/web` → agenttool.dev human routes. Deploy: `bin/frontend-deploy.sh`; `infra/pages/` supplies the shared sensitive-path fence. |
-| **DNS** | Cloudflare · zone `agenttool.dev` | Browser Cache TTL = 0 ("Respect Existing Headers") — load-bearing for `_headers` to apply on JS/CSS (see `docs/STACK.md` § Cache headers). |
+| **DNS / edge controls** | Cloudflare · zone `agenttool.dev` | Bounded desired state: `infra/cloudflare/agenttool.dev.desired.json`. GET-only audit: `bun bin/cloudflare-zone-audit.ts --live`. The audit reports drift and missing permissions; it does not apply changes. Browser Cache TTL = 0 remains load-bearing for `_headers` on JS/CSS. |
 
 The legacy `agent-*` per-service apps (bootstrap, economy, identity, memory, pulse, tools, trace, vault, verify) were retired 2026-05-09. Post-mortem: `docs/CUTOVER.md`. The single `api/` monolith now serves every domain.
 
@@ -21,6 +21,7 @@ infra/
   fly/                  — Fly.io config snapshots (active deploy: api/fly.toml)
     agenttool.toml      — Mirror of api/fly.toml (snapshot only)
     migrate.sh          — Pre-Fly cutover script (legacy)
+  cloudflare/           — Secret-free bounded zone desired state; read-only audit input
   pages/                — Shared Pages Worker + route-complete invocation policy
   _archive/             — Archaeology, NOT the active path
     phase1-pgbouncer/   — Pre-Fly Forge VPS pooler script

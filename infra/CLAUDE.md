@@ -19,6 +19,7 @@ fly/                    — Fly.io config snapshots (active deploy: api/fly.toml
   agenttool.toml        — Snapshot mirror of api/fly.toml
   migrate.sh            — Pre-Fly cutover script (legacy, not run today)
   .env.fly.template     — Required env vars template
+cloudflare/             — Bounded agenttool.dev desired state (audit input; not an apply engine)
 pages/                  — Canonical Pages Worker + invocation-route policy
 _archive/               — Archaeology only, NOT the active path
   phase1-pgbouncer/     — Pre-Fly Forge VPS pooler script
@@ -42,6 +43,7 @@ Full deploy semantics + ordering: `docs/STACK.md` § 8.
 
 ## Dependencies
 - **Current infra**: Fly.io (`agenttool` app), Supabase Postgres (eu-west-2), Cloudflare Pages, Cloudflare DNS
+- **Cloudflare control truth**: `cloudflare/agenttool.dev.desired.json` is consumed by the GET-only `bin/cloudflare-zone-audit.ts`; it records desired state and exact permission boundaries but does not deploy or mutate the zone
 - **Pages fence**: `pages/` is staged into all three frontend roots by `bin/frontend-deploy.sh`; every path traverses the canonical sensitive-root fence, and allowed requests are forwarded intact to the Pages asset binding
 - **Legacy `agent-*` services**: all retired 2026-05-09 (`docs/CUTOVER.md`)
 - **`_archive/` scripts**: Hetzner Forge / Cloudflare API / PgBouncer — DO NOT run against current setup
@@ -59,4 +61,5 @@ AgentTool Platform
 ## Key Files
 - `README.md` — Current state, deploy verbs, secrets reference
 - `fly/agenttool.toml` — Snapshot mirror (active deploy: `api/fly.toml`)
+- `cloudflare/agenttool.dev.desired.json` — Secret-free bounded desired state for the read-only zone audit
 - `_archive/` — Pre-Fly scaling scripts; archaeology only
