@@ -361,6 +361,32 @@ not npm recovery: its source manifest reports
 `exact_git_runtime_source_only`, and `executes_exact_package_artifact` remains
 false.
 
+That equal-seat revision remains immutable history. The additive Return
+Geometry successor was source-first at
+[`af64cf491a25759b3fffc8f2628547f32d1fc74d`](https://github.com/cambridgetcg/agenttool/commit/af64cf491a25759b3fffc8f2628547f32d1fc74d),
+then bound without changing a runtime byte at
+[`2e21181b7372799163412e9a43979c49c1e5d3ce`](https://github.com/cambridgetcg/agenttool/commit/2e21181b7372799163412e9a43979c49c1e5d3ce),
+and fast-forward published from `f8d4c299` to immutable Space revision
+[`09a84e1b73d754723528bd6bc0ff50058e267a2d`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/09a84e1b73d754723528bd6bc0ff50058e267a2d).
+Anonymous readback matched all 12 repo-owned files and 189,612 bytes; the
+SHA-256 of the sorted `sha256  path` manifest is
+`c673910b6c578d4d4107a900cbd06d917a13c1d718020c05848ab04408626d3e`,
+and provider `.gitattributes` is the sole extra. Public metadata reported
+public, ungated, enabled, `RUNNING` 1/1 state. Two cache-busted HEAD rounds over
+all five runtime paths returned HTTP 200 and exact `x-repo-commit`, and served
+JS/CSS bytes matched source. Provider-transformed GET HTML was separately
+observed at 12,849 bytes
+(`sha256:31773eeb94d974648792c20c339e17a3c08d57b0fa2128e94ebb11eb15775fca`)
+versus the 12,748-byte Hub source
+(`sha256:81284445a5e8f0739b94b20359fc8885d84bb73a54fa4ea5b57760b0e55e4724`).
+Desktop and 320px live WebKit checks exercised the focused correction context,
+five uniquely named proof disclosures, local download availability, no
+horizontal overflow, and Rest clearing both wings. The manifest binds five
+runtime paths to `af64cf49` while keeping package artifact fields null and
+`executes_exact_package_artifact: false`. The teaching traces are synthetic,
+deterministic, unsigned, non-summable, write no KARMA, and choose or schedule
+no next action.
+
 `@agenttool/kingdom@0.1.1` is public through annotated tag
 [`kingdom-v0.1.1`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.1)
 at the same `9efbc4b3` merge and protected trusted-publishing
@@ -1171,6 +1197,23 @@ path, bytes, digest, integrity, build command, and toolchain remain null, and
 `executes_exact_package_artifact` remains false. The revision adds no package-
 artifact execution, networked core, inference, consent, truth, score, or
 authority.
+
+The later Return Geometry release does not rewrite that receipt. Exact source
+`af64cf49`, binding `2e21181b`, and immutable Space revision
+[`09a84e1b`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry/commit/09a84e1b73d754723528bd6bc0ff50058e267a2d)
+add six checked-in synthetic event-time teaching fixtures beside Equal Seats.
+All 12 repo-owned files (189,612 bytes) matched anonymous immutable readback;
+their sorted SHA-256-manifest digest is
+`c673910b6c578d4d4107a900cbd06d917a13c1d718020c05848ab04408626d3e`.
+Provider `.gitattributes` remains the sole extra. Ten cache-busted HEAD reads
+over two rounds bound all five runtime paths to the release commit; live JS and
+CSS were byte-exact, while provider-transformed HTML remained separately
+observed and non-identical. The Space stayed public, ungated, enabled and
+`RUNNING` 1/1. Live desktop and 320px WebKit checks found no horizontal
+overflow and verified branch-preserving focus, eight categorical lanes, five
+unique disclosure controls, download enablement, and shared Rest cleanup. No
+package byte, npm state, model, private ledger, score, identity/consent claim,
+KARMA write, or automatic next action was added.
 
 ### Relational Geometry GitHub/Hugging Face developer-preview receipt
 
