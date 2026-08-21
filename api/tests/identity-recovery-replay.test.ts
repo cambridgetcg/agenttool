@@ -121,10 +121,9 @@ describe("recovery route ordering and failure shape", () => {
     expect(migration).toContain("REFERENCES identity.identities(id) ON DELETE CASCADE");
     expect(schema).toContain('"recovery_proofs"');
     expect(schema).toContain('proofHash: text("proof_hash").primaryKey()');
-    expect(runner).toContain(
-      'const { default: postgres } = await import("postgres");',
-    );
+    expect(runner).toContain('"/app/src/db/verified-postgres.ts"');
+    expect(runner).toContain("validateFlyDatabaseTargets(");
     expect(runner).toContain("new AsyncFunction(");
-    expect(runner).not.toContain('import postgres from "postgres";');
+    expect(runner).not.toContain('await import("postgres")');
   });
 });

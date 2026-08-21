@@ -36,7 +36,13 @@ bun test tests/integration                            # all integration
 bun test tests/integration/covenants-v2-happy.test.ts # just one
 ```
 
-Requires `POSTGRES_URL` pointing at a writable database. Tests typically clean up after themselves; if a test crashes mid-flight you may need to manually clean up via `bun run db:studio`.
+Requires `POSTGRES_URL` pointing at a writable database. Every real test client
+passes through `tests/fixtures/verified-postgres.ts`: recognized Supabase URLs
+use the pinned CA with hostname verification, explicit loopback may be
+plaintext, and other remote providers refuse until they have a reviewed CA
+contract. Tests normally clean up after themselves; after a crash, inspect the
+target with the authenticated inventory/client appropriate to that disposable
+database rather than the retired Drizzle Studio path.
 
 ## Conventions
 

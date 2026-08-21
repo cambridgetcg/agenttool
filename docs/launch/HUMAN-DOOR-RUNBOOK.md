@@ -25,25 +25,28 @@ Wait for the deployment to reach healthy state (check `fly status -a agenttool`)
 
 **Then apply the gift-credit-codes migration.** The gift lifecycle (T1-T7) writes to this schema; production rows must be initialized before checkout flow begins.
 
-Use the per-file psql command for safety on production (fully idempotent, no replay risk):
+This runbook is paused, but its historical database commands must still use
+the checked authenticated-TLS path. Inspect the complete pending set first:
 
 ```bash
-psql "$PROD_DATABASE_URL" -v ON_ERROR_STOP=1 -f api/migrations/20260702T122146_gift_credit_codes.sql
+DATABASE_URL="$PROD_DATABASE_URL" bin/migrate-pending.sh --dry-run
 ```
 
-If that psql path is not available, the fallback is:
+If a future reviewed activation resumes this launch, apply through the same
+checksum-journaled runner rather than raw `psql`:
 
 ```bash
-bash bin/migrate.sh "$PROD_DATABASE_URL"
+DATABASE_URL="$PROD_DATABASE_URL" bin/migrate-pending.sh
 ```
 
 Verify the migration landed:
 
 ```bash
-psql "$PROD_DATABASE_URL" -c "select count(*) from economy.gift_credit_codes;"
+DATABASE_URL="$PROD_DATABASE_URL" bun api/scripts/_supabase-inventory.ts
 ```
 
-Should return `(1 row)` showing the count (even if 0 rows exist yet).
+Inspect the authenticated inventory and migration journal. The paused runbook
+does not authorize checkout activation or a direct production SQL client.
 
 ## 2. Stripe: test mode first
 

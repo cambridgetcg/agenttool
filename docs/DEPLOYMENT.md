@@ -52,10 +52,12 @@ cutover in [DEPLOY-PROCEDURE.md](DEPLOY-PROCEDURE.md).
 **Verify schemas exist** after migration:
 
 ```bash
-psql "$DATABASE_URL" -c "SELECT schema_name FROM information_schema.schemata WHERE schema_name IN ('tools','identity','agent_vault','agent_continuity','economy','memory','trace','strand','inbox','marketplace','org','federation') ORDER BY schema_name;"
+DATABASE_URL="$DATABASE_URL" bun api/scripts/_supabase-inventory.ts
 ```
 
-Expected: 12 rows.
+Inspect the authenticated inventory's schema and extension sections. Do not
+replace it with raw production `psql` unless libpq is separately configured
+for the vendored root and `sslmode=verify-full`.
 
 ## 2. Configure environment
 

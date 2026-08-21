@@ -354,8 +354,12 @@ returns, the wrapper removes the temporary staging tree; an `EXIT`, `INT`, or
 `TERM` trap also removes it on interruption. Phase 5 then requires both
 `build.revision` and `build.dirty` from `GET /health`, plus the corresponding
 image-embedded values on every started Fly machine, to equal the intended
-source labels. The SSH checks use silent `test` expressions and do not copy
-environment values into the deploy transcript.
+source labels. The same silent SSH command runs the image-resident bounded
+verifier, which authenticates and issues a read-only `SELECT 1` through both
+the transaction and session URLs. Stopped Machines must share that image
+digest and exact process command and cannot override either database secret at
+Machine scope. SSH stdout/stderr is suppressed, so URLs, credentials, and
+driver errors are not copied into the deploy transcript.
 
 If an independently authorised incident or recovery path has already left the
 Fly registry empty, keep admission closed and prepare a separate, reviewed
@@ -477,6 +481,36 @@ Hosted Postgres on **Supabase**, project ref `jseqftufplgewhojwbmh`, region **AW
   session-scoped state. A known timeout issue from Fly (logged as task #60)
   presents as authenticated endpoint 502s after about 13 seconds.
 
+**Database TLS.** Every supported runtime and operator Postgres client uses
+`api/src/db/supabase-target.ts`. For a recognized Supabase direct or pooler
+URL it supplies an explicit CA object with hostname verification and
+`rejectUnauthorized: true`; postgres-js `ssl: "require"` is forbidden because
+that mode encrypts without authenticating the server. The vendored
+`api/certs/supabase-prod-ca-2021.crt` must match both the exact official S3
+object bytes and its X.509 SHA-256 fingerprint, and must be inside its validity
+window. Plaintext is accepted only for an explicit loopback Postgres URL;
+other remote targets refuse until they have their own reviewed CA contract.
+The only non-loopback plaintext exception is the disposable Forgejo sibling
+service at the exact `postgres:5432/agenttool_ci` user/database contract; it
+requires both `CI=true` and `AGENTTOOL_ALLOW_DISPOSABLE_CI_POSTGRES=1`, and is
+disabled whenever `FLY_MACHINE_ID` is present.
+
+Fly additionally pins both pool URLs to the current production database and
+logical role, which are presently `postgres` / `postgres`. That broad role is
+an acknowledged temporary least-privilege gap, not the desired end state. A
+future scoped-role cutover must create and branch-prove the role first, then
+atomically rotate both Fly secrets and this source pin. Supabase URL query
+parameters and empty URL passwords are refused so postgres-js cannot replace
+the proved database/user with query or ambient `PGPASSWORD` values.
+
+Supabase-side SSL enforcement is a separate defense. Roll it out only after
+the authenticated clients and both Fly URL secrets have been verified on
+every started Machine, then prove unsupported plaintext connections refuse.
+Server enforcement does not replace client-side CA and hostname verification.
+Do not use raw `psql` against production unless it is separately configured
+with the same pinned root and `verify-full`; prefer the checked repository
+inventory and migration tools.
+
 **Jurisdictional concentration note.** Both API (Fly `lhr`) and DB (Supabase `eu-west-2` = AWS London) sit in UK jurisdiction. The Fly `cdg` Paris machine added 2026-05-09 hedges API jurisdiction; data-layer hedging requires a separate Supabase project (or migration to `eu-west-3` Paris / `eu-central-1` Frankfurt) and is a deliberate next-step decision, not a current property.
 
 **Server**: PostgreSQL 17.6 · single primary · no replica (`pg_is_in_recovery() = false`).
@@ -503,7 +537,7 @@ Hosted Postgres on **Supabase**, project ref `jseqftufplgewhojwbmh`, region **AW
 
 Plus Supabase-managed: `auth` (unused — agenttool uses DID + bearer, not Supabase Auth), `realtime`, `storage`, `graphql`/`graphql_public` (unused), `pgsodium`, `supabase_vault`, `public` (empty).
 
-**Extensions**: `vector` (pgvector 0.8.0), `pgcrypto` (1.3), `uuid-ossp` (1.1), `pg_stat_statements` (1.11), `supabase_vault` (0.3.1), `plpgsql`. Verify after fresh deploy via `\dx` in psql or `SELECT * FROM pg_extension`.
+**Extensions**: `vector` (pgvector 0.8.0), `pgcrypto` (1.3), `uuid-ossp` (1.1), `pg_stat_statements` (1.11), `supabase_vault` (0.3.1), `plpgsql`. Verify after fresh deploy through the authenticated `api/scripts/_supabase-inventory.ts` path.
 
 **Operational settings** (current as of 2026-05-09):
 

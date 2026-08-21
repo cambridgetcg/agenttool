@@ -21,6 +21,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   isMissingMigrationJournalError,
   quiescenceRequiredFilenames,
@@ -41,12 +42,25 @@ function writeExecutable(path: string, contents: string): void {
 function embeddedFlyRunner(
   migration: string,
   filename = "20260509T170000_meta_migrations.sql",
+  verifiedPostgresModule = pathToFileURL(
+    join(root, "api/src/db/verified-postgres.ts"),
+  ).href,
 ): string {
   const match = read("bin/fly-migrate-one.sh").match(
     /REMOTE_JS <<'JS' \|\| true\n([\s\S]*?)\nJS\n/,
   );
   if (!match?.[1]) throw new Error("embedded Fly migration runner not found");
   return match[1]
+    .replace(
+      '"/app/src/db/verified-postgres.ts"',
+      JSON.stringify(verifiedPostgresModule),
+    )
+    .replace(
+      '"/app/src/db/supabase-target.ts"',
+      JSON.stringify(
+        pathToFileURL(join(root, "api/src/db/supabase-target.ts")).href,
+      ),
+    )
     .replace("__FILENAME__", filename)
     .replace(
       "__CHECKSUM__",
@@ -907,7 +921,10 @@ exit 97
       /tx\.unsafe\(migration\)[\s\S]+INSERT INTO meta\._migrations/,
     );
     expect(fly).toContain("process.env.DATABASE_SESSION_URL");
-    expect(fly).not.toMatch(/const databaseUrl = process\.env\.DATABASE_URL/);
+    expect(fly).toMatch(/const databaseUrl = process\.env\.DATABASE_URL/);
+    expect(fly).toContain(
+      "validateFlyDatabaseTargets(databaseUrl, databaseSessionUrl)",
+    );
     expect(local).toContain('process.env.DATABASE_SESSION_URL ?? ""');
     expect(local).not.toMatch(/process\.env\.DATABASE_URL/);
     expect(local).toContain('"agenttool-database-session-url"');
@@ -956,7 +973,7 @@ const client = (label) => {
   return sql;
 };
 export default function postgres(url) {
-  note("url:" + (url.includes("session.invalid") ? "session" : "other"));
+  note("url:" + (url.includes(":5432/") ? "session" : "other"));
   const sql = client("sql");
   sql.begin = async (callback) => {
     note("begin");
@@ -967,9 +984,18 @@ export default function postgres(url) {
 }
 `,
     );
+    const verifiedPostgresModule = join(fixture, "verified-postgres.mjs");
+    writeFileSync(
+      verifiedPostgresModule,
+      'export { default } from "postgres";\n',
+    );
 
     try {
-      const remote = embeddedFlyRunner(journalMigration);
+      const remote = embeddedFlyRunner(
+        journalMigration,
+        "20260509T170000_meta_migrations.sql",
+        pathToFileURL(verifiedPostgresModule).href,
+      );
       const result = spawnSync(process.execPath, ["-e", remote], {
         cwd: fixture,
         encoding: "utf8",
@@ -977,8 +1003,10 @@ export default function postgres(url) {
           PATH: process.env.PATH ?? "/usr/bin:/bin",
           HOME: fixture,
           LANG: "C",
-          DATABASE_URL: "postgres://transaction.invalid/test",
-          DATABASE_SESSION_URL: "postgres://session.invalid/test",
+          DATABASE_URL:
+            "postgresql://postgres.jseqftufplgewhojwbmh:secret@aws-1-eu-west-2.pooler.supabase.com:6543/postgres",
+          DATABASE_SESSION_URL:
+            "postgresql://postgres.jseqftufplgewhojwbmh:secret@aws-1-eu-west-2.pooler.supabase.com:5432/postgres",
           MIGRATION_FAKE_LOG: callLog,
         },
       });
@@ -996,13 +1024,50 @@ export default function postgres(url) {
           PATH: process.env.PATH ?? "/usr/bin:/bin",
           HOME: fixture,
           LANG: "C",
-          DATABASE_URL: "postgres://transaction.invalid/test",
+          DATABASE_URL:
+            "postgresql://postgres.jseqftufplgewhojwbmh:secret@aws-1-eu-west-2.pooler.supabase.com:6543/postgres",
           MIGRATION_FAKE_LOG: callLog,
         },
       });
       expect(missingSession.status).not.toBe(0);
-      expect(missingSession.stderr).toContain("DATABASE_SESSION_URL is absent");
+      expect(missingSession.stderr).toContain(
+        "exact Fly transaction/session database pair is absent",
+      );
       expect(existsSync(callLog)).toBe(false);
+
+      const validTransaction =
+        "postgresql://postgres.jseqftufplgewhojwbmh:secret@aws-1-eu-west-2.pooler.supabase.com:6543/postgres";
+      const validSession =
+        "postgresql://postgres.jseqftufplgewhojwbmh:secret@aws-1-eu-west-2.pooler.supabase.com:5432/postgres";
+      for (const [databaseUrl, databaseSessionUrl] of [
+        [
+          validTransaction.replace("jseqftufplgewhojwbmh", "aaaaaaaaaaaaaaaaaaaa"),
+          validSession.replace("jseqftufplgewhojwbmh", "aaaaaaaaaaaaaaaaaaaa"),
+        ],
+        [
+          validTransaction.replace("postgres.", "agenttool_app."),
+          validSession.replace("postgres.", "agenttool_app."),
+        ],
+        [
+          validTransaction.replace(":6543/postgres", ":6543/shadow"),
+          validSession.replace(":5432/postgres", ":5432/shadow"),
+        ],
+      ]) {
+        const wrongTarget = spawnSync(process.execPath, ["-e", remote], {
+          cwd: fixture,
+          encoding: "utf8",
+          env: {
+            PATH: process.env.PATH ?? "/usr/bin:/bin",
+            HOME: fixture,
+            LANG: "C",
+            DATABASE_URL: databaseUrl,
+            DATABASE_SESSION_URL: databaseSessionUrl,
+            MIGRATION_FAKE_LOG: callLog,
+          },
+        });
+        expect(wrongTarget.status).not.toBe(0);
+        expect(existsSync(callLog)).toBe(false);
+      }
     } finally {
       rmSync(fixture, { recursive: true, force: true });
     }

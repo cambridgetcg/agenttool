@@ -8,7 +8,7 @@
  *  Migration: api/migrations/20260520T010000_beta_arrives_at_depth.sql */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import postgres from "postgres";
+import postgres from "../fixtures/verified-postgres";
 
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
 const PLATFORM_PROJECT = "00000000-0000-0000-0000-000000000000";

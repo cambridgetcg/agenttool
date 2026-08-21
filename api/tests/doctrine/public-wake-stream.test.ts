@@ -14,7 +14,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import postgres from "postgres";
+import postgres from "../fixtures/verified-postgres";
 
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");

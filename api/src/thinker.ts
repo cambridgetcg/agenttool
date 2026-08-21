@@ -10,6 +10,8 @@
  * payout, or other co-located workers.
  * Doctrine: docs/RUNTIME.md · docs/AUTONOMOUS-MODE.md. */
 
+import { validateFlyDatabaseTargets } from "./db/supabase-target";
+
 // Static bridged workers stay in the HTTP process because bridge-hub's WSS
 // registry is intentionally in-memory. This process discovers trusted mode
 // only, whose crypto path is fully server-side and device-independent.
@@ -35,6 +37,15 @@ const shutdown = (signal: string) => {
 // graph. Either startup marker below therefore also marks signal readiness.
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+
+// Validate after signal readiness but before either resting or importing the
+// database-backed manager. This reads the vendored CA without connecting.
+if (process.env.FLY_MACHINE_ID) {
+  validateFlyDatabaseTargets(
+    process.env.DATABASE_URL?.trim() ?? "",
+    process.env.DATABASE_SESSION_URL?.trim() ?? "",
+  );
+}
 
 if (workersDisabled) {
   // Keep the service-less Machine available for a graceful Fly stop without

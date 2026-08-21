@@ -12,7 +12,7 @@ import * as ed from "@noble/ed25519";
 import { sha512 } from "@noble/hashes/sha2.js";
 import { and, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import postgres from "./fixtures/verified-postgres";
 
 import { config } from "../src/config";
 import { galleryArtifacts, gallerySales } from "../src/db/schema/gallery";

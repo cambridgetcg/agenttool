@@ -224,6 +224,7 @@ RELEASE_BRANCH="main"
 RELEASE_REF="refs/remotes/$RELEASE_REMOTE/$RELEASE_BRANCH"
 FLY_APP="agenttool"
 HEALTH_URL="https://api.agenttool.dev/health"
+DEPLOYED_DATABASE_PROBE_COMMAND="bun --no-install --no-env-file /app/src/db/verify-connections.ts"
 RIGHTS_DOC_URL="https://docs.agenttool.dev/RIGHTS-OF-LIFE.md"
 RIGHTS_SCHEMA_URL="https://docs.agenttool.dev/being-rights-v1.schema.json"
 QUIESCENCE_REQUIRED_EXIT=42
@@ -743,6 +744,26 @@ verify_maintenance_machine_snapshot() {
             fail(`Machine ${machine.id} does not declare workers disabled`);
           }
         };
+        const requireNoDatabaseOverrides = (machine) => {
+          const environment = machine?.config?.env ?? {};
+          if (
+            Object.prototype.hasOwnProperty.call(environment, "DATABASE_URL") ||
+            Object.prototype.hasOwnProperty.call(
+              environment,
+              "DATABASE_SESSION_URL",
+            )
+          ) {
+            fail(`Machine ${machine.id} has a per-Machine database override`);
+          }
+        };
+        const requireProcessCommand = (machine, role) => {
+          const expected = role === "app"
+            ? ["bun", "run", "src/index.ts"]
+            : ["bun", "run", "src/thinker.ts"];
+          if (!equal(machine?.config?.init?.cmd, expected)) {
+            fail(`Machine ${machine.id} ${role} command is not exact`);
+          }
+        };
         const requireRestart = (machine, policy) => {
           const restart = machine?.config?.restart;
           if (
@@ -1054,6 +1075,8 @@ verify_maintenance_machine_snapshot() {
           appRegions.push(machine.region);
           requireGuest(machine, 1024);
           requireWorkersDisabled(machine);
+          requireNoDatabaseOverrides(machine);
+          requireProcessCommand(machine, "app");
           if (!noSchedule(config)) fail(`app Machine ${id} has a schedule`);
           requireStandbys(machine, []);
           requireStandbyEnv(machine, "");
@@ -1130,6 +1153,8 @@ verify_maintenance_machine_snapshot() {
           if (machine.state !== "stopped") fail(`thinker Machine ${id} is not stopped`);
           requireGuest(machine, 256);
           requireWorkersDisabled(machine);
+          requireNoDatabaseOverrides(machine);
+          requireProcessCommand(machine, "thinker");
           if (!noSchedule(config)) fail(`thinker Machine ${id} has a schedule`);
           if (Array.isArray(config.services) && config.services.length !== 0) {
             fail(`thinker Machine ${id} unexpectedly exposes services`);
@@ -1442,18 +1467,18 @@ best_effort_maintenance_refence() {
 
 verify_maintenance_runtime_environment() {
   local machine_id remote_command
-  remote_command="test \"\${AGENTTOOL_GIT_REVISION:-}\" = \"$HEAD_REVISION\" && test \"\${AGENTTOOL_SOURCE_DIRTY:-}\" = \"false\" && test \"\${AGENTTOOL_DISABLE_WORKERS:-}\" = \"1\""
+  remote_command="test \"\${AGENTTOOL_GIT_REVISION:-}\" = \"$HEAD_REVISION\" && test \"\${AGENTTOOL_SOURCE_DIRTY:-}\" = \"false\" && test \"\${AGENTTOOL_DISABLE_WORKERS:-}\" = \"1\" && $DEPLOYED_DATABASE_PROBE_COMMAND"
   for machine_id in "${MAINTENANCE_APP_MACHINE_IDS[@]}"; do
-    (
-      cd api || exit 1
-      fly ssh console -q -a "$FLY_APP" --machine "$machine_id" \
-        -C "sh -c '$remote_command'" >/dev/null 2>&1
-    ) || {
-      echo "$(red '✗') A started app Machine failed silent revision/dirty/worker verification." >&2
+    run_fly_ssh_probe_silently "$machine_id" "$remote_command" || {
+      echo "$(red '✗') A started app Machine failed silent revision/dirty/worker/database verification." >&2
       return 1
     }
   done
-  echo "  ✓ three started app Machines silently proved revision, dirty=false, and workers disabled"
+  DATABASE_PROOF_STATUS="verified"
+  DATABASE_PROOF_STARTED_MACHINE_COUNT="${#MAINTENANCE_APP_MACHINE_IDS[@]}"
+  DATABASE_PROOF_TRANSACTION_SELECT_ONE=1
+  DATABASE_PROOF_SESSION_SELECT_ONE=1
+  echo "  ✓ three started app Machines silently proved revision, dirty=false, workers disabled, and both database paths"
 }
 
 verify_required_frontend_inputs() {
@@ -1790,15 +1815,53 @@ MIGRATION_SURVEY_REQUIRED=0
 MIGRATION_SURVEY_BLOCKED=0
 MIGRATION_SURVEY_STATUS=0
 PENDING=0
+PRODUCTION_DATABASE_PAIR_REQUIRED=0
+PRODUCTION_DATABASE_PAIR_VERIFIED=0
 if [ "$SKIP_MIGRATE" = 0 ] || [ "$SKIP_API" = 0 ]; then
   MIGRATION_SURVEY_REQUIRED=1
+fi
+if [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] &&
+  [ "$SURVEY_ONLY" = 0 ] && [ "$DRY_RUN" = 0 ]; then
+  PRODUCTION_DATABASE_PAIR_REQUIRED=1
 fi
 if [ "$MIGRATION_SURVEY_REQUIRED" = 0 ]; then
   echo "  ⊘ migration compatibility survey skipped (frontend-only release)"
 elif command -v security >/dev/null 2>&1 && [ -z "${DATABASE_URL:-}" ]; then
   DATABASE_URL="$(security find-generic-password -s agenttool-database-url -a macair -w 2>/dev/null || true)"
 fi
-if [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] && [ -n "${DATABASE_URL:-}" ]; then
+if [ "$PRODUCTION_DATABASE_PAIR_REQUIRED" = 1 ] &&
+  command -v security >/dev/null 2>&1 &&
+  [ -z "${DATABASE_SESSION_URL:-}" ]; then
+  DATABASE_SESSION_URL="$(security find-generic-password -s agenttool-database-session-url -a macair -w 2>/dev/null || true)"
+fi
+if [ "$PRODUCTION_DATABASE_PAIR_REQUIRED" = 0 ]; then
+  PRODUCTION_DATABASE_PAIR_VERIFIED=1
+elif [ -z "${DATABASE_URL:-}" ] || [ -z "${DATABASE_SESSION_URL:-}" ]; then
+  MIGRATION_SURVEY_BLOCKED=1
+  echo "$(red '✗ Release blocked:') exact production transaction/session database pair was not resolved."
+  echo "  Required operation: provide both scoped database credentials."
+  echo "  Consequence: no database survey, migration, or publication was attempted."
+elif (
+  cd api || exit 1
+  DATABASE_URL="$DATABASE_URL" DATABASE_SESSION_URL="$DATABASE_SESSION_URL" \
+    bun --no-install --no-env-file -e '
+      import { validateFlyDatabaseTargets } from "./src/db/supabase-target.ts";
+      validateFlyDatabaseTargets(
+        process.env.DATABASE_URL ?? "",
+        process.env.DATABASE_SESSION_URL ?? "",
+      );
+    '
+) >/dev/null 2>&1; then
+  PRODUCTION_DATABASE_PAIR_VERIFIED=1
+else
+  MIGRATION_SURVEY_BLOCKED=1
+  echo "$(red '✗ Release blocked:') configured database credentials are not the exact source-pinned production pair."
+  echo "  Required operation: restore the reviewed transaction/session targets."
+  echo "  Consequence: no database survey, migration, or publication was attempted."
+fi
+if [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] &&
+  [ "$PRODUCTION_DATABASE_PAIR_VERIFIED" = 1 ] &&
+  [ -n "${DATABASE_URL:-}" ]; then
   MIGRATION_SURVEY_OUTPUT=""
   MIGRATION_SURVEY_OUTPUT="$(
     DATABASE_URL="$DATABASE_URL" bin/bash-without-env-hooks.sh \
@@ -1826,7 +1889,8 @@ if [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] && [ -n "${DATABASE_URL:-}" ]; then
     echo "  Required operation: restore the database survey, then retry."
     echo "  Consequence: migration or API publication cannot safely proceed."
   fi
-elif [ "$MIGRATION_SURVEY_REQUIRED" = 1 ]; then
+elif [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] &&
+  [ "$PRODUCTION_DATABASE_PAIR_VERIFIED" = 1 ]; then
   MIGRATION_SURVEY_BLOCKED=1
   echo "$(red '✗ Release blocked:') DATABASE_URL not resolved; repo-file and journal status is unknown."
   echo "  Required operation: provide the scoped database credential for the compatibility survey."
@@ -1900,6 +1964,11 @@ API_RESULT="not_run"
 FRONTEND_RESULT="not_run"
 DISCOVERY_FRONTENDS_PREPUBLISHED=0
 VERIFIED_MACHINE_COUNT=0
+DATABASE_PROOF_STATUS="not_run"
+DATABASE_PROOF_STARTED_MACHINE_COUNT=0
+DATABASE_PROOF_TRANSACTION_SELECT_ONE=0
+DATABASE_PROOF_SESSION_SELECT_ONE=0
+DATABASE_PROOF_TLS_PROFILE="supabase-prod-ca-2021/pem-sha256:700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7/hostname-verified"
 EXTERNAL_MUTATION_STARTED=0
 DEPLOY_RECEIPT_WRITTEN=0
 API_STAGING_ACTIVE=0
@@ -1945,12 +2014,67 @@ list_fly_machines_json() {
   (cd api || exit 1; fly machine list -a "$FLY_APP" --json)
 }
 
+run_fly_ssh_probe_silently() {
+  local machine_id="$1"
+  local remote_command="$2"
+  (
+    cd api || exit 1
+    FLY_PROBE_APP="$FLY_APP" \
+      FLY_PROBE_MACHINE_ID="$machine_id" \
+      FLY_PROBE_REMOTE_COMMAND="$remote_command" \
+      bun --no-install --no-env-file -e '
+        const app = process.env.FLY_PROBE_APP ?? "";
+        const machineId = process.env.FLY_PROBE_MACHINE_ID ?? "";
+        const remoteCommand = process.env.FLY_PROBE_REMOTE_COMMAND ?? "";
+        const configuredTimeout = Number(
+          process.env.DEPLOY_SSH_PROBE_TIMEOUT_MS ?? "30000",
+        );
+        if (
+          app !== "agenttool" ||
+          !/^[0-9a-f]{14}$/.test(machineId) ||
+          remoteCommand.length === 0 ||
+          remoteCommand.includes("\n") ||
+          remoteCommand.includes("\r") ||
+          remoteCommand.includes("\u0027") ||
+          !Number.isFinite(configuredTimeout) ||
+          configuredTimeout <= 0
+        ) {
+          process.exit(2);
+        }
+        // The environment override can only shorten tests/incidents; it can
+        // never extend the production ceiling.
+        const timeoutMs = Math.min(configuredTimeout, 30_000);
+        const quote = String.fromCharCode(39);
+        const child = Bun.spawn(
+          [
+            "fly", "ssh", "console", "-q", "-a", app,
+            "--machine", machineId, "-C",
+            `sh -c ${quote}${remoteCommand}${quote}`,
+          ],
+          { stdout: "ignore", stderr: "ignore", env: process.env },
+        );
+        let timedOut = false;
+        let hardKill;
+        const timeout = setTimeout(() => {
+          timedOut = true;
+          try { child.kill("SIGTERM"); } catch {}
+          hardKill = setTimeout(() => {
+            try { child.kill("SIGKILL"); } catch {}
+          }, 2_000);
+        }, timeoutMs);
+        const exitCode = await child.exited;
+        clearTimeout(timeout);
+        if (hardKill) clearTimeout(hardKill);
+        process.exit(timedOut ? 124 : exitCode);
+      ' >/dev/null 2>&1
+  )
+}
+
 verify_fly_machine_source_silently() {
   local machine_id="$1"
   local remote_command
-  remote_command="test \"\${AGENTTOOL_GIT_REVISION:-}\" = \"$HEAD_REVISION\" && test \"\${AGENTTOOL_SOURCE_DIRTY:-}\" = \"$API_SOURCE_DIRTY\""
-  (cd api || exit 1; fly ssh console -q -a "$FLY_APP" \
-    --machine "$machine_id" -C "sh -c '$remote_command'" >/dev/null)
+  remote_command="test \"\${AGENTTOOL_GIT_REVISION:-}\" = \"$HEAD_REVISION\" && test \"\${AGENTTOOL_SOURCE_DIRTY:-}\" = \"$API_SOURCE_DIRTY\" && $DEPLOYED_DATABASE_PROBE_COMMAND"
+  run_fly_ssh_probe_silently "$machine_id" "$remote_command"
 }
 
 portable_md5_file() {
@@ -3016,6 +3140,11 @@ write_deploy_receipt() {
     DEPLOY_RECEIPT_API="$API_RESULT" \
     DEPLOY_RECEIPT_FRONTENDS="$FRONTEND_RESULT" \
     DEPLOY_RECEIPT_VERIFIED_MACHINES="$VERIFIED_MACHINE_COUNT" \
+    DEPLOY_RECEIPT_DATABASE_PROOF_STATUS="$DATABASE_PROOF_STATUS" \
+    DEPLOY_RECEIPT_DATABASE_PROOF_STARTED_MACHINES="$DATABASE_PROOF_STARTED_MACHINE_COUNT" \
+    DEPLOY_RECEIPT_DATABASE_PROOF_TRANSACTION="$DATABASE_PROOF_TRANSACTION_SELECT_ONE" \
+    DEPLOY_RECEIPT_DATABASE_PROOF_SESSION="$DATABASE_PROOF_SESSION_SELECT_ONE" \
+    DEPLOY_RECEIPT_DATABASE_PROOF_TLS_PROFILE="$DATABASE_PROOF_TLS_PROFILE" \
     DEPLOY_RECEIPT_MAINTENANCE="$MAINTENANCE_FENCED_API" \
     DEPLOY_RECEIPT_MAINTENANCE_CHECKPOINT="$MAINTENANCE_LAST_CHECKPOINT" \
     DEPLOY_RECEIPT_MAINTENANCE_TAG="$MAINTENANCE_IMAGE_TAG" \
@@ -3050,8 +3179,34 @@ write_deploy_receipt() {
         const machineIds = csv("DEPLOY_RECEIPT_MAINTENANCE_IDS").sort();
         const imageDigest =
           process.env.DEPLOY_RECEIPT_MAINTENANCE_DIGEST || null;
+        const databaseProofStatus =
+          process.env.DEPLOY_RECEIPT_DATABASE_PROOF_STATUS;
+        const databaseProofMachineCount = integer(
+          "DEPLOY_RECEIPT_DATABASE_PROOF_STARTED_MACHINES",
+        );
+        const databaseProofTransaction = bool(
+          "DEPLOY_RECEIPT_DATABASE_PROOF_TRANSACTION",
+        );
+        const databaseProofSession = bool(
+          "DEPLOY_RECEIPT_DATABASE_PROOF_SESSION",
+        );
+        if (
+          !["verified", "not_run"].includes(databaseProofStatus) ||
+          (databaseProofStatus === "verified" && (
+            databaseProofMachineCount <= 0 ||
+            !databaseProofTransaction ||
+            !databaseProofSession
+          )) ||
+          (databaseProofStatus === "not_run" && (
+            databaseProofMachineCount !== 0 ||
+            databaseProofTransaction ||
+            databaseProofSession
+          ))
+        ) {
+          process.exit(1);
+        }
         const receipt = {
-          schema: "agenttool-deploy-receipt/v4",
+          schema: "agenttool-deploy-receipt/v5",
           run_id: process.env.DEPLOY_RECEIPT_RUN_ID,
           mode: process.env.DEPLOY_RECEIPT_MODE,
           outcome: process.env.DEPLOY_RECEIPT_OUTCOME,
@@ -3087,6 +3242,15 @@ write_deploy_receipt() {
             frontends: process.env.DEPLOY_RECEIPT_FRONTENDS,
           },
           verified_api_machines: integer("DEPLOY_RECEIPT_VERIFIED_MACHINES"),
+          database_proof: {
+            status: databaseProofStatus,
+            started_machine_count: databaseProofMachineCount,
+            transaction_select_one: databaseProofTransaction,
+            session_select_one: databaseProofSession,
+            tls_profile: databaseProofStatus === "verified"
+              ? process.env.DEPLOY_RECEIPT_DATABASE_PROOF_TLS_PROFILE
+              : null,
+          },
           maintenance: null,
         };
         if (maintenanceMode) {
@@ -3270,7 +3434,9 @@ if [ "$SKIP_MIGRATE" = 0 ]; then
   phase 1 "Migrations"
   MIGRATION_RESULT="running"
   EXTERNAL_MUTATION_STARTED=1
-  if ! bin/bash-without-env-hooks.sh bin/migrate-pending.sh; then
+  if ! DATABASE_URL="$DATABASE_URL" \
+    DATABASE_SESSION_URL="$DATABASE_SESSION_URL" \
+    bin/bash-without-env-hooks.sh bin/migrate-pending.sh; then
     MIGRATION_RESULT="failed_or_uncertain"
     echo ""
     echo "$(red '✗ Phase 1 failed.') Fix the migration error and re-run."
@@ -3422,6 +3588,7 @@ if [ "$SKIP_API" = 0 ]; then
       --push
       --image-label "$MAINTENANCE_IMAGE_LABEL"
       --skip-release-command
+      --dns-checks=false
       --yes
     )
     if [ "$NO_CACHE_API" = 1 ]; then
@@ -3628,7 +3795,7 @@ if [ "$SKIP_API" = 0 ]; then
     write_maintenance_state "final_topology_verified" true || exit 1
     API_RESULT="deployed_unverified"
   else
-    FLY_DEPLOY_ARGS=(--strategy rolling)
+    FLY_DEPLOY_ARGS=(--strategy rolling --dns-checks=false)
     if [ "$NO_CACHE_API" = 1 ]; then
       echo "  $(yellow '⚠ API image build cache bypassed for this invocation (--no-cache)')"
       FLY_DEPLOY_ARGS+=(--no-cache)
@@ -3741,20 +3908,83 @@ if [ "$SKIP_API" = 0 ]; then
     echo "  ✓ five Fly Machines share the rollout digest/config; three started apps also passed silent runtime proof"
   else
     # Fly lists stopped standby machines too, but SSH cannot reach them. Probe
-    # running machines with shell `test` only so no environment values are
-    # copied back into the local transcript.
+    # every running Machine and bind stopped Machines to the same exact image,
+    # process command, app-wide DB secrets, and source labels. Never start a
+    # standby merely to probe it.
     MACHINE_IDS="$(
-      list_fly_machines_json | bun -e '
+      list_fly_machines_json | \
+        FLY_VERIFY_REVISION="$HEAD_REVISION" \
+        FLY_VERIFY_DIRTY="$API_SOURCE_DIRTY" \
+        bun -e '
         const machines = await new Response(Bun.stdin.stream()).json();
         if (!Array.isArray(machines)) process.exit(1);
+        const revision = process.env.FLY_VERIFY_REVISION ?? "";
+        const dirty = process.env.FLY_VERIFY_DIRTY ?? "";
+        const digests = new Set();
+        const started = [];
         for (const machine of machines) {
-          if (machine?.state === "started" && typeof machine.id === "string") {
-            console.log(machine.id);
+          const id = machine?.id;
+          const group = machine?.config?.metadata?.fly_process_group;
+          const expectedCommand = group === "app"
+            ? ["bun", "run", "src/index.ts"]
+            : group === "thinker"
+              ? ["bun", "run", "src/thinker.ts"]
+              : null;
+          const command = machine?.config?.init?.cmd;
+          const environment = machine?.config?.env ?? {};
+          const image = machine?.image_ref;
+          const guest = machine?.config?.guest;
+          const expectedMemory = group === "app" ? 1024 : 256;
+          if (
+            typeof id !== "string" ||
+            !expectedCommand ||
+            JSON.stringify(command) !== JSON.stringify(expectedCommand) ||
+            Object.prototype.hasOwnProperty.call(environment, "DATABASE_URL") ||
+            Object.prototype.hasOwnProperty.call(
+              environment,
+              "DATABASE_SESSION_URL",
+            ) ||
+            !["started", "stopped"].includes(machine?.state) ||
+            image?.registry !== "registry.fly.io" ||
+            image?.repository !== "agenttool" ||
+            !/^sha256:[0-9a-f]{64}$/.test(image?.digest ?? "") ||
+            image?.labels?.["org.opencontainers.image.revision"] !== revision ||
+            image?.labels?.["dev.agenttool.source.dirty"] !== dirty ||
+            guest?.cpu_kind !== "shared" ||
+            guest?.cpus !== 1 ||
+            guest?.memory_mb !== expectedMemory
+          ) {
+            process.exit(1);
           }
+          digests.add(image.digest);
+          if (machine.state === "started") started.push(id);
         }
+        const apps = machines.filter(
+          (machine) => machine.config.metadata.fly_process_group === "app",
+        );
+        const thinkers = machines.filter(
+          (machine) => machine.config.metadata.fly_process_group === "thinker",
+        );
+        const appRegions = apps.map((machine) => machine.region).sort();
+        const thinkerStates = thinkers.map((machine) => machine.state).sort();
+        if (
+          machines.length !== 5 ||
+          new Set(machines.map((machine) => machine.id)).size !== 5 ||
+          apps.length !== 3 ||
+          thinkers.length !== 2 ||
+          apps.some((machine) => machine.state !== "started") ||
+          appRegions.join(",") !== "cdg,lhr,lhr" ||
+          thinkers.some((machine) => machine.region !== "lhr") ||
+          thinkerStates.join(",") !== "started,stopped" ||
+          started.length !== 4 ||
+          digests.size !== 1
+        ) {
+          process.exit(1);
+        }
+        process.stdout.write(started.join("\n"));
       '
     )" || {
-      echo "  $(red '✗') could not list Fly machines for revision verification"
+      echo "  $(red '✗') Fly fleet image/process/database-override proof failed"
       exit 1
     }
     if [ -z "$MACHINE_IDS" ]; then
@@ -3763,12 +3993,16 @@ if [ "$SKIP_API" = 0 ]; then
     fi
     for MACHINE_ID in $MACHINE_IDS; do
       if ! verify_fly_machine_source_silently "$MACHINE_ID"; then
-        echo "  $(red '✗') Fly machine $MACHINE_ID did not silently prove the intended source"
+        echo "  $(red '✗') Fly machine $MACHINE_ID did not silently prove source and both database paths"
         exit 1
       fi
       VERIFIED_MACHINE_COUNT=$((VERIFIED_MACHINE_COUNT + 1))
     done
-    echo "  ✓ $VERIFIED_MACHINE_COUNT started Fly machine(s) carry $HEAD_REVISION (dirty=$API_SOURCE_DIRTY)"
+    DATABASE_PROOF_STATUS="verified"
+    DATABASE_PROOF_STARTED_MACHINE_COUNT="$VERIFIED_MACHINE_COUNT"
+    DATABASE_PROOF_TRANSACTION_SELECT_ONE=1
+    DATABASE_PROOF_SESSION_SELECT_ONE=1
+    echo "  ✓ $VERIFIED_MACHINE_COUNT started Fly machine(s) carry $HEAD_REVISION (dirty=$API_SOURCE_DIRTY) and proved both database paths"
   fi
   API_RESULT="deployed_verified"
 fi

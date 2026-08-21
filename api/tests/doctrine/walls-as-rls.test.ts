@@ -12,7 +12,7 @@
  *  Migration: api/migrations/20260519T080000_walls_as_rls.sql */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import postgres from "postgres";
+import postgres from "../fixtures/verified-postgres";
 
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
 

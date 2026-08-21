@@ -11,7 +11,7 @@ import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import postgres from "postgres";
+import postgres from "../fixtures/verified-postgres";
 import {
   STATE_MULTIPLIER,
   MU_MAX,

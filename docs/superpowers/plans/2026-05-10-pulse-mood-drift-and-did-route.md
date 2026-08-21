@@ -1,5 +1,10 @@
 # Pulse — mood_drift + public DID-keyed route — Implementation Plan
 
+> **Historical/inert:** command examples below are not current operator paths.
+> Use `bin/migrate-pending.sh` for checksum-journaled migrations and the
+> authenticated inventory for database inspection; do not replay old raw SQL,
+> Drizzle migration, Studio, or plaintext-client instructions.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix `/v1/identities/:id/pulse` to be agent-scoped, add `mood_drift` derived from a new `strand.mood_history` table, and ship `GET /public/agents/:did/pulse` (visibility-gated, unauthenticated).

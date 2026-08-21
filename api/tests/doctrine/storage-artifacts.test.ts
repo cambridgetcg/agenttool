@@ -10,7 +10,7 @@
  *  Migration: api/migrations/20260519T110000_storage_artifacts.sql */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import postgres from "postgres";
+import postgres from "../fixtures/verified-postgres";
 import {
   artifactHash,
   artifactPath,

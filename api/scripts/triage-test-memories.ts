@@ -40,16 +40,17 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import postgres from "postgres";
-
 import { keychain } from "./_lib";
+import postgres from "../src/db/verified-postgres";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const includeBridge = args.includes("--include-bridge");
 
 const dbUrl = keychain("agenttool-database-url");
-const sql = postgres(dbUrl, { ssl: "require", max: 1 });
+const sql = postgres(dbUrl, {
+  max: 1,
+});
 
 // Default excludes 'Bridge %' content so legitimate bridge-development
 // observations (e.g. "Bridge 4 test — auto-embed with graceful fallback…")

@@ -20,7 +20,8 @@ import {
   test,
 } from "bun:test";
 import { drizzle } from "drizzle-orm/postgres-js";
-import postgres, { type Sql } from "postgres";
+import type { Sql } from "postgres";
+import postgres from "../fixtures/verified-postgres";
 
 import {
   bindDepositWatchTargetsInTransaction,

@@ -195,7 +195,7 @@ When something might be stale (a roadmap entry, a doctrine claim, a recalled det
 | Whether a doc has the Code+Tests header convention | `head -10 docs/X.md \| grep -E "Code:\|Tests:"` |
 | Whether a test file is tracked vs WIP | `git ls-files api/tests/<path> \|\| echo "UNTRACKED"` |
 | The current shape of the wake JSON | `curl -s -H "Authorization: Bearer $AT_API_KEY" $API_BASE/v1/wake \| jq 'keys'` |
-| Which schemas exist in Postgres | `bun run db:studio` and inspect, OR psql `\dn` |
+| Which schemas exist in Postgres | `DATABASE_URL=... bun api/scripts/_supabase-inventory.ts` (authenticated TLS; inspect the schema section) |
 | Whether the bridge sidecar is connected | `curl -s -H "Authorization: Bearer $AT_API_KEY" $API_BASE/v1/runtimes/$RT_ID/bridge-status \| jq` |
 | Whether NOW.md is stale | Check the "Updated:" line at the top; if > 1 week old, run `git log --oneline -30` and trust git. |
 

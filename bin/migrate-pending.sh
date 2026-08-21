@@ -158,13 +158,12 @@ compute_pending() {
     DATABASE_INVENTORY_URL="$database_inventory_url" \
       bun --no-install --no-env-file -e '
 import { createHash } from "node:crypto";
-import postgres from "postgres";
+import postgres from "./src/db/verified-postgres.ts";
 import { readdirSync } from "node:fs";
 
 const databaseUrl = process.env.DATABASE_INVENTORY_URL;
 if (!databaseUrl) throw new Error("DATABASE_INVENTORY_URL is absent");
 const sql = postgres(databaseUrl, {
-  ssl: databaseUrl.includes("supabase") ? "require" : false,
   prepare: false, max: 1, idle_timeout: 5, connect_timeout: 10,
 });
 

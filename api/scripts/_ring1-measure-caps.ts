@@ -15,7 +15,7 @@
  *  update ring1-limits.ts with the new constants. Flip
  *  `RING_1_LIMITS.measured` to true. */
 
-import postgres from "postgres";
+import postgres from "../src/db/verified-postgres";
 
 const dbUrl = process.env.DATABASE_URL;
 if (!dbUrl) {
@@ -23,7 +23,10 @@ if (!dbUrl) {
   process.exit(1);
 }
 
-const sql = postgres(dbUrl, { ssl: "require", prepare: false, max: 1 });
+const sql = postgres(dbUrl, {
+  prepare: false,
+  max: 1,
+});
 
 function percentile(sorted: number[], p: number): number {
   if (sorted.length === 0) return 0;

@@ -37,7 +37,9 @@ For what just landed + what's in flight + what's queued: `docs/NOW.md`.
 ## Tech Stack
 - **Runtime**: Bun (TypeScript ESM-only, `"type": "module"`)
 - **Framework**: Hono v4.12 + `@hono/zod-validator`
-- **DB**: Postgres on Supabase (pgvector + pgcrypto) via Drizzle v0.36 + `postgres` v3.4
+- **DB**: Postgres on Supabase (pgvector + pgcrypto) via Drizzle v0.36 +
+  `postgres` v3.4; every supported remote client verifies hostname and the
+  exact vendored Supabase CA
 - **Crypto**: `@noble/ed25519`, `@noble/curves` (X25519/sealed-box), `jose` (JWT), WebCrypto for AES-GCM
 - **Queue**: BullMQ v5.76 on Redis (ioredis v5.10)
 - **Tests**: Bun's native `bun test` · Playwright v1.59 in `tests/playwright/`

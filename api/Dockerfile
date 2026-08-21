@@ -22,6 +22,7 @@ LABEL org.opencontainers.image.source="https://github.com/cambridgetcg/agenttool
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY src ./src
+COPY certs ./certs
 COPY package.json ./
 COPY tsconfig.json ./
 
@@ -30,6 +31,7 @@ COPY tsconfig.json ./
 # revision makes this gate run for each release commit even with normal cache.
 RUN test -n "$AGENTTOOL_GIT_REVISION" \
     && test -s src/index.ts \
+    && test -s certs/supabase-prod-ca-2021.crt \
     && test -s tsconfig.json \
     && test -z "$(find src -type f -name '*.ts' -size 0 -print -quit)"
 
