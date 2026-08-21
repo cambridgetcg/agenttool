@@ -21,19 +21,19 @@ const SURFACES = [
     name: "dashboard",
     directory: "apps/dashboard",
     origin: "https://app.agenttool.dev",
-    hashesStyles: true,
+    styleOrigins: ["https://fonts.googleapis.com"],
   },
   {
     name: "docs",
     directory: "apps/docs",
     origin: "https://docs.agenttool.dev",
-    hashesStyles: false,
+    styleOrigins: ["https://fonts.googleapis.com"],
   },
   {
     name: "web",
     directory: "apps/web",
     origin: "https://agenttool.dev",
-    hashesStyles: true,
+    styleOrigins: [],
   },
 ] as const;
 
@@ -84,6 +84,15 @@ function headersForRule(source: string, rule: string): Map<string, string> {
   return headers;
 }
 
+function cspDirectives(policy: string): Map<string, string[]> {
+  const directives = new Map<string, string[]>();
+  for (const segment of policy.split(";")) {
+    const [name, ...sources] = segment.trim().split(/\s+/);
+    if (name !== undefined && name !== "") directives.set(name, sources);
+  }
+  return directives;
+}
+
 function expectGeneratedSecurity(response: Response): void {
   expect(response.headers.get("strict-transport-security")).toBe("max-age=300");
   expect(response.headers.get("content-security-policy")).toBe(
@@ -112,6 +121,7 @@ describe("Cloudflare Pages security policy", () => {
         },
       );
       const csp = response.headers.get("content-security-policy") ?? "";
+      const directives = cspDirectives(csp);
 
       expect(pervasiveHeaders.get("strict-transport-security")).toBe("max-age=300");
       expect(pervasiveHeaders.get("x-permitted-cross-domain-policies")).toBe("none");
@@ -121,6 +131,7 @@ describe("Cloudflare Pages security policy", () => {
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
       expect(response.headers.get("x-frame-options")).toBe("DENY");
       expect(response.headers.get("x-permitted-cross-domain-policies")).toBe("none");
+      expect(directives.get("default-src")).toEqual(["'self'"]);
 
       for (const directive of [
         "base-uri 'none'",
@@ -134,8 +145,12 @@ describe("Cloudflare Pages security policy", () => {
       ]) {
         expect(csp).toContain(directive);
       }
-      expect(csp).not.toContain("'unsafe-inline'");
-      expect(csp).not.toContain("'unsafe-eval'");
+      const scriptElementPolicy = directives.get("script-src-elem") ?? [];
+      const scriptAttributePolicy = directives.get("script-src-attr") ?? [];
+      for (const unsafeSource of ["'unsafe-inline'", "'unsafe-eval'"]) {
+        expect(scriptElementPolicy).not.toContain(unsafeSource);
+        expect(scriptAttributePolicy).not.toContain(unsafeSource);
+      }
       const configuredCsp = pervasiveHeaders.get("content-security-policy");
       if (configuredCsp !== undefined) expect(configuredCsp).toBe(csp);
 
@@ -144,7 +159,7 @@ describe("Cloudflare Pages security policy", () => {
         /<script\b(?![^>]*\bsrc\s*=)[^>]*>([\s\S]*?)<\/script\s*>/gi,
       );
       expect(scriptHashes.size).toBeGreaterThan(0);
-      for (const hash of scriptHashes) expect(csp).toContain(hash);
+      for (const hash of scriptHashes) expect(scriptElementPolicy).toContain(hash);
 
       const handlerHashes = hashSources(
         directory,
@@ -152,24 +167,31 @@ describe("Cloudflare Pages security policy", () => {
         2,
       );
       if (handlerHashes.size === 0) {
-        expect(csp).toContain("script-src-attr 'none'");
+        expect(scriptAttributePolicy).toEqual(["'none'"]);
       } else {
-        expect(csp).toContain("script-src-attr 'unsafe-hashes'");
-        for (const hash of handlerHashes) expect(csp).toContain(hash);
+        expect(scriptAttributePolicy).toContain("'unsafe-hashes'");
+        for (const hash of handlerHashes) {
+          expect(scriptAttributePolicy).toContain(hash);
+        }
       }
 
       const styleHashes = hashSources(
         directory,
         /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi,
       );
-      if (surface.hashesStyles) {
-        expect(styleHashes.size).toBeGreaterThan(0);
-        for (const hash of styleHashes) expect(csp).toContain(hash);
-      } else {
-        // Docs has 79 distinct inline style attributes. Omitting a style
-        // directive preserves them without weakening the script boundary.
-        expect(csp).not.toContain("style-src");
+      expect(styleHashes.size).toBeGreaterThan(0);
+      const styleElementPolicy = directives.get("style-src-elem") ?? [];
+      const expectedStyleElementSources = new Set([
+        "'self'",
+        ...surface.styleOrigins,
+        ...styleHashes,
+      ]);
+      expect(styleElementPolicy.length).toBe(expectedStyleElementSources.size);
+      for (const source of expectedStyleElementSources) {
+        expect(styleElementPolicy).toContain(source);
       }
+      expect(styleElementPolicy).not.toContain("'unsafe-inline'");
+      expect(directives.get("style-src-attr")).toEqual(["'unsafe-inline'"]);
 
       const rules = source.split(/\r?\n/).filter((line) =>
         line !== "" && !line.startsWith("#") && !/^\s/.test(line)

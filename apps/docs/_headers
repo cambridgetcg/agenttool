@@ -9,9 +9,10 @@
 # ── Global: substrate identity plus non-overlapping static hardening ──
 #
 # Docs contains legacy inline style attributes and event handlers. Exact
-# hashes in the all-path Pages Worker authorize the five inline script blocks
-# and fourteen handler bodies. That Worker fills only absent headers, so the
-# stricter policies below remain exact and are never duplicated.
+# hashes in the all-path Pages Worker authorize five inline script blocks,
+# fourteen handler bodies, and forty-six style blocks. Its style-src-attr
+# allowance is explicit and limited to legacy attributes. That Worker fills
+# only absent headers, so stricter policies below remain exact and unduplicated.
 # HSTS remains at the estate's initial five-minute observation stage; do not
 # add includeSubDomains/preload or raise the age without a separate rollout.
 /*
