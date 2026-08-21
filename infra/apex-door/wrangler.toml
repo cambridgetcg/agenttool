@@ -12,3 +12,20 @@ routes = [
   { pattern = "agenttool.dev/*", zone_name = "agenttool.dev" },
   { pattern = "www.agenttool.dev/*", zone_name = "agenttool.dev" }
 ]
+
+# Workers Logs is a script-level, non-versioned setting. Wrangler treats an
+# omitted observability block as an instruction to disable it after deploy, so
+# keep this privacy-minimized contract in the same source as the Worker.
+[observability]
+enabled = true
+head_sampling_rate = 0.01
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 0.01
+invocation_logs = true
+persist = true
+
+[observability.traces]
+enabled = false
+persist = false

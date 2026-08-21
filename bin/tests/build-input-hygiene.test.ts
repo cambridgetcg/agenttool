@@ -74,10 +74,12 @@ describe("frontend deploy input discipline", () => {
     const scriptPath = join(repoRoot, "bin/frontend-deploy.sh");
     const stagePath = join(repoRoot, "bin/stage-frontend-release.sh");
     const manifestPath = join(repoRoot, "bin/frontend-release-paths.txt");
-    const [script, stageScript, manifest] = await Promise.all([
+    const apexConfigPath = join(repoRoot, "infra/apex-door/wrangler.toml");
+    const [script, stageScript, manifest, apexConfig] = await Promise.all([
       readFile(scriptPath, "utf8"),
       readFile(stagePath, "utf8"),
       readFile(manifestPath, "utf8"),
+      readFile(apexConfigPath, "utf8"),
     ]);
     const syntaxResults = await Promise.all(
       [scriptPath, stagePath].map((path) => run(["bash", "-n", path])),
@@ -94,6 +96,27 @@ describe("frontend deploy input discipline", () => {
     );
     expect(script.match(/npx --yes "wrangler@\$\{WRANGLER_VERSION\}"/g)).toHaveLength(1);
     expect(script).not.toContain("wrangler@latest");
+    expect(apexConfig).toContain(
+      [
+        "[observability]",
+        "enabled = true",
+        "head_sampling_rate = 0.01",
+        "",
+        "[observability.logs]",
+        "enabled = true",
+        "head_sampling_rate = 0.01",
+        "invocation_logs = true",
+        "persist = true",
+        "",
+        "[observability.traces]",
+        "enabled = false",
+        "persist = false",
+      ].join("\n"),
+    );
+    expect(script).toContain('exact_table("observability"');
+    expect(script).toContain('exact_table("observability.logs"');
+    expect(script).toContain('exact_table("observability.traces"');
+    expect(script).toContain("privacy-minimized observability contract");
     expect(script).toContain('command curl -q "$@"');
     expect(script.match(/frontend_curl -fsS/g)).toHaveLength(4);
     expect(
@@ -242,6 +265,10 @@ describe("frontend deploy input discipline", () => {
         join(repoRoot, "bin/frontend-release-paths.txt"),
         join(fixtureRepo, "bin/frontend-release-paths.txt"),
       ),
+      copyFile(
+        join(repoRoot, "infra/apex-door/wrangler.toml"),
+        join(fixtureRepo, "infra/apex-door/wrangler.toml"),
+      ),
     ]);
     await Promise.all([
       chmod(join(fixtureRepo, "bin/frontend-deploy.sh"), 0o755),
@@ -264,6 +291,7 @@ describe("frontend deploy input discipline", () => {
         "bin/frontend-deploy.sh",
         "bin/stage-frontend-release.sh",
         "bin/frontend-release-paths.txt",
+        "infra/apex-door/wrangler.toml",
       ],
       fixtureRepo,
     );
@@ -534,6 +562,62 @@ esac
     expect(afterFirstTargetFailure).not.toContain(
       "--message=agenttool frontend release",
     );
+
+    result = await run(["git", "revert", "--no-edit", "HEAD"], fixtureRepo);
+    expect(result.code, result.stderr).toBe(0);
+    const fixtureApexConfigPath = join(
+      fixtureRepo,
+      "infra/apex-door/wrangler.toml",
+    );
+    const validApexConfig = await readFile(fixtureApexConfigPath, "utf8");
+    const observabilityStart = validApexConfig.indexOf(
+      "\n# Workers Logs is a script-level, non-versioned setting.",
+    );
+    expect(observabilityStart).toBeGreaterThan(0);
+
+    const invalidObservabilityConfigs = [
+      {
+        name: "missing",
+        config: `${validApexConfig.slice(0, observabilityStart).trimEnd()}\n`,
+      },
+      {
+        name: "drifted",
+        config: validApexConfig.replace(
+          "[observability.logs]\nenabled = true\nhead_sampling_rate = 0.01",
+          "[observability.logs]\nenabled = true\nhead_sampling_rate = 1",
+        ),
+      },
+    ];
+    for (const scenario of invalidObservabilityConfigs) {
+      await writeFile(fixtureApexConfigPath, scenario.config);
+      result = await run(
+        ["git", "add", "infra/apex-door/wrangler.toml"],
+        fixtureRepo,
+      );
+      expect(result.code, result.stderr).toBe(0);
+      result = await run(
+        ["git", "commit", "-qm", `${scenario.name} apex observability`],
+        fixtureRepo,
+      );
+      expect(result.code, result.stderr).toBe(0);
+      result = await run(["git", "rev-parse", "HEAD"], fixtureRepo);
+      expect(result.code, result.stderr).toBe(0);
+
+      await writeFile(wranglerLog, "");
+      const invalidDeploy = await run(
+        ["bash", "bin/frontend-deploy.sh", "web"],
+        fixtureRepo,
+        {
+          ...deployEnvironment,
+          AGENTTOOL_FRONTEND_RELEASE_REVISION: result.stdout.trim(),
+        },
+      );
+      expect(invalidDeploy.code).not.toBe(0);
+      expect(invalidDeploy.stdout).toContain(
+        "privacy-minimized observability contract",
+      );
+      expect(await readFile(wranglerLog, "utf8")).toBe("");
+    }
   }, 30_000);
 
   test("rejects unsafe committed frontend archive manifests before extraction", async () => {
