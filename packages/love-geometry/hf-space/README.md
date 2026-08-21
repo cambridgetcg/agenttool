@@ -80,11 +80,11 @@ The original `assets/app.js` and `assets/style.css` remain byte-identical to
 exact AgentTool Git commit
 [`19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5`](https://github.com/cambridgetcg/agenttool/commit/19cc1721b5f1c32d21edbd3962a67ce3dc8b1aa5).
 The Return Geometry successor adds `assets/return-geometry.js`,
-`assets/return-geometry.css`, and a new `index.html`. The first source commit
-deliberately leaves its own commit coordinate pending; a follow-up provenance
-commit binds these exact runtime hashes to that now-known source commit before
-release. [`source-manifest.json`](source-manifest.json) names both layers
-without pretending the new bytes came from the older commit.
+`assets/return-geometry.css`, and a new `index.html`. Those five current
+runtime paths are bound to exact AgentTool source commit
+[`af64cf491a25759b3fffc8f2628547f32d1fc74d`](https://github.com/cambridgetcg/agenttool/commit/af64cf491a25759b3fffc8f2628547f32d1fc74d).
+[`source-manifest.json`](source-manifest.json) names both layers without
+pretending the successor bytes came from the older base commit.
 
 All JavaScript remains checked-in companion code. It does not import or
 execute an npm or LOVE package artifact. The Return module's only import is the
