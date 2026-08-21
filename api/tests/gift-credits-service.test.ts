@@ -5,7 +5,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { HTTPException } from "hono/http-exception";
-import postgres from "postgres";
+import postgres from "./fixtures/verified-postgres";
 
 import { config } from "../src/config";
 import { giftCreditCodes } from "../src/db/schema/economy";

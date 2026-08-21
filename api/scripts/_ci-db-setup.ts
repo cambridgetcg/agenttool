@@ -6,7 +6,7 @@
  *  enable it. Usage: DATABASE_URL=... bun run scripts/_ci-db-setup.ts
  */
 
-import postgres from "postgres";
+import postgres from "../src/db/verified-postgres";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -17,7 +17,11 @@ if (!url) {
 // The service container may still be in its initdb/restart cycle when
 // this runs (Forgejo runners don't gate on service readiness and the
 // postgres image has no HEALTHCHECK) — retry with backoff, up to ~60s.
-const sql = postgres(url, { max: 1, prepare: false, connect_timeout: 5 });
+const sql = postgres(url, {
+  max: 1,
+  prepare: false,
+  connect_timeout: 5,
+});
 try {
   for (let attempt = 1; ; attempt++) {
     try {

@@ -31,8 +31,12 @@ cd "$REPO/api"
 # If any existing row has a different value, the migration will fail.
 echo "==> Pre-flight: identity.identities.status distinct values"
 bun -e '
-import postgres from "postgres";
-const sql = postgres(process.env.DATABASE_URL, { ssl: "require", prepare: false, max: 1 });
+import postgres from "./src/db/verified-postgres.ts";
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("DATABASE_URL is absent");
+const sql = postgres(databaseUrl, {
+  prepare: false, max: 1,
+});
 try {
   const rows = await sql`SELECT status, COUNT(*)::int AS n FROM identity.identities GROUP BY status ORDER BY n DESC`;
   for (const r of rows) console.log(`  ${r.status}: ${r.n}`);
@@ -70,8 +74,12 @@ done
 # ── Verify ───────────────────────────────────────────────────────────────
 echo "==> Verifying new schema is reachable"
 bun -e '
-import postgres from "postgres";
-const sql = postgres(process.env.DATABASE_URL, { ssl: "require", prepare: false, max: 1 });
+import postgres from "./src/db/verified-postgres.ts";
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("DATABASE_URL is absent");
+const sql = postgres(databaseUrl, {
+  prepare: false, max: 1,
+});
 try {
   // 1. identity_universals enum extensions visible
   const checks = await sql`

@@ -29,7 +29,9 @@
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
-import postgres from "postgres";
+import postgres, {
+  type VerifiedPostgresTransactionSql,
+} from "../src/db/verified-postgres";
 
 const JOURNAL_TABLE = "meta._migrations";
 const JOURNAL_MIGRATION = "20260509T170000_meta_migrations.sql";
@@ -42,7 +44,7 @@ const PENDING_RUNNER_ASSERTION =
   "AGENTTOOL_PENDING_RUNNER_MAINTENANCE_QUIESCED";
 const PENDING_RUNNER_SENTINEL = "--pending-runner-maintenance-quiesced";
 const MIGRATIONS_DIR = join(import.meta.dir, "../migrations");
-type MigrationSql = ReturnType<typeof postgres> | postgres.TransactionSql;
+type MigrationSql = ReturnType<typeof postgres> | VerifiedPostgresTransactionSql;
 
 function isRegularFile(path: string): boolean {
   try {
@@ -240,7 +242,10 @@ async function main() {
   const checksum = createHash("sha256").update(text).digest("hex");
   const url = await loadDatabaseUrl();
 
-  const sql = postgres(url, { max: 1, prepare: false });
+  const sql = postgres(url, {
+    max: 1,
+    prepare: false,
+  });
   let migrationLockHeld = false;
 
   console.log(`▸ ${filename}`);

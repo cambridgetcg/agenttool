@@ -21,6 +21,12 @@ import { tmpdir } from "node:os";
 
 const projectRoot = resolve(import.meta.dir, "../..");
 const cleanup: string[] = [];
+const productionRef = "jseqftufplgewhojwbmh";
+const productionPooler = "aws-1-eu-west-2.pooler.supabase.com";
+const fixtureTransactionUrl =
+  `postgresql://postgres.${productionRef}:fixture@${productionPooler}:6543/postgres`;
+const fixtureSessionUrl =
+  `postgresql://postgres.${productionRef}:fixture@${productionPooler}:5432/postgres`;
 
 setDefaultTimeout(30_000);
 
@@ -39,7 +45,8 @@ function cleanEnv(
     HOME: home,
     LANG: "C",
     NO_COLOR: "1",
-    DATABASE_URL: "postgres://fixture.invalid/release_test",
+    DATABASE_URL: fixtureTransactionUrl,
+    DATABASE_SESSION_URL: fixtureSessionUrl,
     ...extra,
   };
 }
@@ -104,7 +111,8 @@ async function fixture() {
   const state = join(root, "state");
   const home = join(root, "home");
   await Promise.all([
-    mkdir(join(repo, "api"), { recursive: true }),
+    mkdir(join(repo, "api", "src", "db"), { recursive: true }),
+    mkdir(join(repo, "api", "certs"), { recursive: true }),
     mkdir(join(repo, "apps", "docs"), { recursive: true }),
     mkdir(join(repo, "apps", "docs", "specs"), { recursive: true }),
     mkdir(join(repo, "docs", "specs"), { recursive: true }),
@@ -152,6 +160,16 @@ async function fixture() {
   );
   await Promise.all([
     copyFile(
+      join(projectRoot, "api/src/db/supabase-target.ts"),
+      join(repo, "api/src/db/supabase-target.ts"),
+    ),
+    copyFile(
+      join(projectRoot, "api/certs/supabase-prod-ca-2021.crt"),
+      join(repo, "api/certs/supabase-prod-ca-2021.crt"),
+    ),
+  ]);
+  await Promise.all([
+    copyFile(
       join(projectRoot, "bin/bash-without-env-hooks.sh"),
       join(repo, "bin/bash-without-env-hooks.sh"),
     ),
@@ -187,7 +205,7 @@ async function fixture() {
   );
   await writeFile(
     join(repo, "bin/frontend-deploy.sh"),
-    '#!/usr/bin/env bash\nset -eu\nif [ -n "${DEPLOY_TEST_FRONTEND_MARKER:-}" ]; then touch "$DEPLOY_TEST_FRONTEND_MARKER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_COUNTER:-}" ]; then count=0; [ ! -f "$DEPLOY_TEST_FRONTEND_COUNTER" ] || count="$(cat "$DEPLOY_TEST_FRONTEND_COUNTER")"; printf \'%s\\n\' "$((count + 1))" > "$DEPLOY_TEST_FRONTEND_COUNTER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_ARGS:-}" ]; then { printf \'call\'; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_FRONTEND_ARGS"; fi\nif [ -n "${DEPLOY_TEST_RELEASE_ORDER:-}" ]; then { printf \'frontend\'; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_RELEASE_ORDER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_REVISION_LOG:-}" ]; then { printf \'%s\' "${AGENTTOOL_FRONTEND_RELEASE_REVISION:-<unset>}"; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_FRONTEND_REVISION_LOG"; fi\nfor arg in "$@"; do if [ -n "${DEPLOY_TEST_FRONTEND_FAIL_TARGET:-}" ] && [ "$arg" = "$DEPLOY_TEST_FRONTEND_FAIL_TARGET" ]; then exit 17; fi; done\nfor arg in "$@"; do if [ "$arg" = web ] && [ -n "${DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO:-}" ]; then git update-ref refs/heads/main "$DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO"; fi; if [ "$arg" = docs ] && [ -n "${DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO:-}" ]; then git update-ref refs/heads/main "$DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO"; fi; done\n',
+    '#!/usr/bin/env bash\nset -eu\nif [ "${DEPLOY_TEST_REFUSE_DATABASE_ENV:-0}" = 1 ] && { [ "${DATABASE_URL+x}" = x ] || [ "${DATABASE_SESSION_URL+x}" = x ]; }; then\n  if [ -n "${DEPLOY_TEST_DATABASE_ENV_LEAK_MARKER:-}" ]; then touch "$DEPLOY_TEST_DATABASE_ENV_LEAK_MARKER"; fi\n  exit 91\nfi\nif [ -n "${DEPLOY_TEST_FRONTEND_MARKER:-}" ]; then touch "$DEPLOY_TEST_FRONTEND_MARKER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_COUNTER:-}" ]; then count=0; [ ! -f "$DEPLOY_TEST_FRONTEND_COUNTER" ] || count="$(cat "$DEPLOY_TEST_FRONTEND_COUNTER")"; printf \'%s\\n\' "$((count + 1))" > "$DEPLOY_TEST_FRONTEND_COUNTER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_ARGS:-}" ]; then { printf \'call\'; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_FRONTEND_ARGS"; fi\nif [ -n "${DEPLOY_TEST_RELEASE_ORDER:-}" ]; then { printf \'frontend\'; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_RELEASE_ORDER"; fi\nif [ -n "${DEPLOY_TEST_FRONTEND_REVISION_LOG:-}" ]; then { printf \'%s\' "${AGENTTOOL_FRONTEND_RELEASE_REVISION:-<unset>}"; for arg in "$@"; do printf \'\\t%s\' "$arg"; done; printf \'\\n\'; } >> "$DEPLOY_TEST_FRONTEND_REVISION_LOG"; fi\nfor arg in "$@"; do if [ -n "${DEPLOY_TEST_FRONTEND_FAIL_TARGET:-}" ] && [ "$arg" = "$DEPLOY_TEST_FRONTEND_FAIL_TARGET" ]; then exit 17; fi; done\nfor arg in "$@"; do if [ "$arg" = web ] && [ -n "${DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO:-}" ]; then git update-ref refs/heads/main "$DEPLOY_TEST_FRONTEND_HEAD_MOVE_TO"; fi; if [ "$arg" = docs ] && [ -n "${DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO:-}" ]; then git update-ref refs/heads/main "$DEPLOY_TEST_FRONTEND_HEAD_RESTORE_TO"; fi; done\n',
   );
   await chmod(join(repo, "bin/frontend-deploy.sh"), 0o755);
   await chmod(join(repo, "bin/prepare-hermetic-deps.sh"), 0o755);
@@ -1132,6 +1150,11 @@ function maintenanceFleet(revision: string): Array<Record<string, any>> {
   ): Record<string, any> => ({
     image: `registry.fly.io/agenttool@${maintenanceOldDigest}`,
     metadata: { fly_process_group: role },
+    init: {
+      cmd: role === "app"
+        ? ["bun", "run", "src/index.ts"]
+        : ["bun", "run", "src/thinker.ts"],
+    },
     guest: { cpu_kind: "shared", cpus: 1, memory_mb: memory },
     env: { AGENTTOOL_DISABLE_WORKERS: "1", PORT: "3000" },
     restart: { policy: "no", max_retries: 10 },
@@ -1289,6 +1312,9 @@ if (args[0] === "ssh" && args[1] === "console") {
     !command.includes("AGENTTOOL_GIT_REVISION") ||
     !command.includes("AGENTTOOL_SOURCE_DIRTY") ||
     !command.includes("AGENTTOOL_DISABLE_WORKERS") ||
+    !command.includes("/app/src/db/verify-connections.ts") ||
+    command.includes("DATABASE_URL=") ||
+    command.includes("DATABASE_SESSION_URL=") ||
     command.includes("printenv")
   ) {
     fail("SSH proof is not silent and exact", 98);
@@ -1298,6 +1324,16 @@ if (args[0] === "ssh" && args[1] === "console") {
     option("--machine") === process.env.DEPLOY_TEST_FAIL_SSH_ID
   ) {
     process.exit(25);
+  }
+  if (
+    process.env.DEPLOY_TEST_HANG_SSH_ID &&
+    option("--machine") === process.env.DEPLOY_TEST_HANG_SSH_ID
+  ) {
+    const pidPath = process.env.DEPLOY_TEST_HANG_SSH_PID;
+    if (!pidPath) fail("missing hanging SSH PID path");
+    await Bun.write(pidPath, String(process.pid));
+    process.on("SIGTERM", () => undefined);
+    while (true) await Bun.sleep(1_000);
   }
   process.exit(0);
 }
@@ -1635,7 +1671,7 @@ describe("deploy release provenance spine", () => {
     expect(deploy).toContain("FLY_DEPLOY_ARGS+=(--no-cache)");
     expect(deploy).toContain("fly machine list");
     expect(deploy).toContain('test \\"\\${AGENTTOOL_GIT_REVISION:-}\\"');
-    expect(deploy).toContain("sh -c '$remote_command'");
+    expect(deploy).toContain("`sh -c ${quote}${remoteCommand}${quote}`");
     expect(deploy).not.toContain("printenv AGENTTOOL_GIT_REVISION");
     expect(deploy).not.toContain("--maintenance-from-zero");
     expect(deploy).not.toContain("fly scale count");
@@ -1658,6 +1694,112 @@ describe("deploy release provenance spine", () => {
       '[ "$DEPLOY_LOCK_OWNER_RECORD" -ef "$DEPLOY_LOCK_PATH" ]',
     );
   });
+
+  test("refuses a wrong production database pair before survey or mutation", async () => {
+    const cases: Array<[string, string]> = [
+      [
+        fixtureTransactionUrl.replace(productionRef, "aaaaaaaaaaaaaaaaaaaa"),
+        fixtureSessionUrl.replace(productionRef, "aaaaaaaaaaaaaaaaaaaa"),
+      ],
+      [
+        fixtureTransactionUrl.replace("postgres.", "agenttool_app."),
+        fixtureSessionUrl.replace("postgres.", "agenttool_app."),
+      ],
+      [
+        fixtureTransactionUrl.replace(":6543/postgres", ":6543/shadow"),
+        fixtureSessionUrl.replace(":5432/postgres", ":5432/shadow"),
+      ],
+      [
+        fixtureTransactionUrl.replace(
+          productionPooler,
+          "aws-0-eu-central-1.pooler.supabase.com",
+        ),
+        fixtureSessionUrl.replace(
+          productionPooler,
+          "aws-0-eu-central-1.pooler.supabase.com",
+        ),
+      ],
+      [
+        fixtureTransactionUrl,
+        fixtureSessionUrl.replace(productionRef, "aaaaaaaaaaaaaaaaaaaa"),
+      ],
+    ];
+
+    for (const [databaseUrl, databaseSessionUrl] of cases) {
+      const setup = await fixture();
+      const order = join(setup.root, "wrong-target-order");
+      const migrationMarker = join(setup.root, "wrong-target-migration");
+      const result = await run(
+        ["bash", "bin/deploy.sh", "--skip-preflight", "--no-frontend"],
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          DATABASE_URL: databaseUrl,
+          DATABASE_SESSION_URL: databaseSessionUrl,
+          DEPLOY_TEST_RELEASE_ORDER: order,
+          MIGRATION_MARKER: migrationMarker,
+        }),
+      );
+      expect(result.code).toBe(1);
+      expect(`${result.stdout}\n${result.stderr}`).toContain(
+        "not the exact source-pinned production pair",
+      );
+      expect(`${result.stdout}\n${result.stderr}`).not.toContain("fixture@");
+      expect(await exists(migrationMarker)).toBe(false);
+      const observedOrder = await exists(order) ? await readFile(order, "utf8") : "";
+      expect(observedOrder).not.toContain("survey");
+      expect(observedOrder).not.toContain("migration");
+    }
+  }, 30_000);
+
+  test("keeps Keychain-resolved database credentials out of publication children", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "keychain-scope-bin");
+    const frontendMarker = join(setup.root, "keychain-frontend-ran");
+    const leakMarker = join(setup.root, "keychain-database-env-leaked");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await writeFile(
+      join(fakeBin, "security"),
+      '#!/usr/bin/env bash\nset -eu\ncase " $* " in\n  *" agenttool-database-session-url "*) printf \'%s\' "$DEPLOY_TEST_KEYCHAIN_SESSION_URL" ;;\n  *" agenttool-database-url "*) printf \'%s\' "$DEPLOY_TEST_KEYCHAIN_TRANSACTION_URL" ;;\n  *) exit 44 ;;\nesac\n',
+    );
+    await writeFile(
+      join(fakeBin, "fly"),
+      '#!/usr/bin/env bash\nset -eu\n[ "${1:-}" = deploy ] || exit 2\n',
+    );
+    await Promise.all([
+      chmod(join(fakeBin, "security"), 0o755),
+      chmod(join(fakeBin, "fly"), 0o755),
+    ]);
+
+    const env = cleanEnv(setup.home, {
+      XDG_STATE_HOME: setup.state,
+      PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+      DEPLOY_TEST_KEYCHAIN_TRANSACTION_URL: fixtureTransactionUrl,
+      DEPLOY_TEST_KEYCHAIN_SESSION_URL: fixtureSessionUrl,
+      DEPLOY_TEST_REFUSE_DATABASE_ENV: "1",
+      DEPLOY_TEST_DATABASE_ENV_LEAK_MARKER: leakMarker,
+      DEPLOY_TEST_FRONTEND_MARKER: frontendMarker,
+      DEPLOY_TEST_RIGHTS_DOC: join(setup.repo, "apps/docs/RIGHTS-OF-LIFE.md"),
+      DEPLOY_TEST_RIGHTS_SCHEMA: join(
+        setup.repo,
+        "apps/docs/being-rights-v1.schema.json",
+      ),
+    });
+    delete env.DATABASE_URL;
+    delete env.DATABASE_SESSION_URL;
+
+    const result = await run(
+      ["bash", "bin/deploy.sh", "--no-migrate", "--skip-preflight"],
+      setup.repo,
+      env,
+    );
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("/health did not return 200");
+    expect(await exists(frontendMarker)).toBe(true);
+    expect(await exists(leakMarker)).toBe(false);
+  }, 15_000);
 
   test("accepts the explicit OAuth fallback and forwards it to both frontend deploy passes", async () => {
     const prerequisite = await fixture();
@@ -1794,6 +1936,7 @@ describe("deploy release provenance spine", () => {
       "deploy",
       "--strategy",
       "rolling",
+      "--dns-checks=false",
       "--no-cache",
       "--build-arg",
       `AGENTTOOL_GIT_REVISION=${setup.release}`,
@@ -1818,7 +1961,7 @@ describe("deploy release provenance spine", () => {
         "utf8",
       ),
     );
-    expect(receipt.schema).toBe("agenttool-deploy-receipt/v4");
+    expect(receipt.schema).toBe("agenttool-deploy-receipt/v5");
     expect(receipt.api_build).toEqual({ cache: "bypassed", image: null });
 
     for (const contradictoryArgs of [
@@ -2144,6 +2287,68 @@ describe("deploy release provenance spine", () => {
     ).toHaveLength(0);
   }, 15_000);
 
+  test("rejects Machine-local database overrides and wrong stopped commands", async () => {
+    for (const scenario of [
+      {
+        name: "database-override",
+        expected: "per-Machine database override",
+        mutate(fleet: Array<Record<string, any>>) {
+          fleet[0].config.env.DATABASE_URL =
+            "postgres://operator:do-not-print@database.invalid/private";
+        },
+      },
+      {
+        name: "standby-command",
+        expected: "thinker command is not exact",
+        mutate(fleet: Array<Record<string, any>>) {
+          const standby = fleet.find(
+            (machine) => machine.id === maintenanceIds.thinkerStandby,
+          ) as Record<string, any>;
+          standby.config.init.cmd = ["bun", "run", "src/index.ts"];
+        },
+      },
+    ]) {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, `maintenance-${scenario.name}-bin`);
+      const flyState = join(
+        setup.root,
+        `maintenance-${scenario.name}-state.json`,
+      );
+      const flyLog = join(setup.root, `maintenance-${scenario.name}-log.jsonl`);
+      const fleet = maintenanceFleet(setup.release);
+      scenario.mutate(fleet);
+      await mkdir(fakeBin, { recursive: true });
+      await installStatefulFakeFly(
+        fakeBin,
+        flyState,
+        flyLog,
+        setup.release,
+        fleet,
+      );
+
+      const result = await run(
+        maintenanceCommand(),
+        setup.repo,
+        cleanEnv(setup.home, {
+          XDG_STATE_HOME: setup.state,
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPLOY_TEST_FLY_STATE: flyState,
+          DEPLOY_TEST_FLY_LOG: flyLog,
+        }),
+      );
+      expect(result.code).toBe(1);
+      expect(result.stderr).toContain(scenario.expected);
+      expect(result.stderr).not.toContain("do-not-print");
+      expect(await exists(maintenanceMarkerPath(setup.home))).toBe(false);
+      expect(
+        (await readFlyLog(flyLog)).filter(
+          (args) => args[0] === "deploy" ||
+            (args[0] === "machine" && args[1] !== "list"),
+        ),
+      ).toHaveLength(0);
+    }
+  }, 30_000);
+
   test("rolls the exact five Machines from one tag read-back to one immutable digest", async () => {
     const setup = await fixture();
     const fakeBin = join(setup.root, "maintenance-success-bin");
@@ -2255,7 +2460,11 @@ describe("deploy release provenance spine", () => {
     expect(ssh).toHaveLength(3);
     expect(
       ssh.every((args) =>
-        args[args.indexOf("-C") + 1].startsWith("sh -c 'test "),
+        args[args.indexOf("-C") + 1].startsWith("sh -c 'test ") &&
+        args[args.indexOf("-C") + 1].includes(
+          "/app/src/db/verify-connections.ts",
+        ) &&
+        !args[args.indexOf("-C") + 1].includes("DATABASE_URL="),
       ),
     ).toBe(true);
 
@@ -2289,11 +2498,18 @@ describe("deploy release provenance spine", () => {
     const [receiptName] = await readdir(receiptDir);
     const receiptText = await readFile(join(receiptDir, receiptName), "utf8");
     const receipt = JSON.parse(receiptText);
-    expect(receipt.schema).toBe("agenttool-deploy-receipt/v4");
+    expect(receipt.schema).toBe("agenttool-deploy-receipt/v5");
     expect(receipt.mode).toBe("maintenance_rollout");
     expect(receipt.outcome).toBe("succeeded");
     expect(receipt.verified_api_machines).toBe(5);
     expect(receipt.api_build.image.digest).toBe(maintenanceDigest);
+    expect(receipt.database_proof).toEqual({
+      status: "verified",
+      started_machine_count: 3,
+      transaction_select_one: true,
+      session_select_one: true,
+      tls_profile: expect.stringContaining("hostname-verified"),
+    });
     expect(receipt.maintenance).toMatchObject({
       image_verified_machine_count: 5,
       started_app_machine_count: 3,
@@ -2314,6 +2530,55 @@ describe("deploy release provenance spine", () => {
     }
     expect(await exists(maintenanceMarkerPath(setup.home))).toBe(false);
   }, 20_000);
+
+  test("times out, kills, and reaps a hanging deployed database probe", async () => {
+    const setup = await fixture();
+    const fakeBin = join(setup.root, "maintenance-database-probe-timeout-bin");
+    const flyState = join(
+      setup.root,
+      "maintenance-database-probe-timeout-state.json",
+    );
+    const flyLog = join(
+      setup.root,
+      "maintenance-database-probe-timeout-log.jsonl",
+    );
+    const hangingPid = join(setup.root, "maintenance-database-probe.pid");
+    await mkdir(fakeBin, { recursive: true });
+    await installFakeRightsCurl(fakeBin);
+    await installStatefulFakeFly(fakeBin, flyState, flyLog, setup.release);
+
+    const result = await run(
+      maintenanceCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_STATE: flyState,
+        DEPLOY_TEST_FLY_LOG: flyLog,
+        DEPLOY_TEST_HEALTH_OK: "1",
+        DEPLOY_TEST_HEALTH_REVISION: setup.release,
+        DEPLOY_TEST_HANG_SSH_ID: maintenanceIds.apps[0],
+        DEPLOY_TEST_HANG_SSH_PID: hangingPid,
+        DEPLOY_SSH_PROBE_TIMEOUT_MS: "25",
+      }),
+    );
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain(
+      "failed silent revision/dirty/worker/database verification",
+    );
+    expect(result.stdout).not.toContain("DATABASE_URL");
+    expect(result.stderr).not.toContain("DATABASE_URL");
+    const pid = Number(await readFile(hangingPid, "utf8"));
+    expect(Number.isSafeInteger(pid) && pid > 0).toBe(true);
+    let reaped = false;
+    try {
+      process.kill(pid, 0);
+    } catch (error) {
+      reaped = (error as NodeJS.ErrnoException).code === "ESRCH";
+    }
+    expect(reaped).toBe(true);
+    expect(await exists(maintenanceMarkerPath(setup.home))).toBe(true);
+  }, 30_000);
 
   test("keeps the durable fence when the final success receipt cannot be installed", async () => {
     const setup = await fixture();
@@ -2726,7 +2991,7 @@ exec /bin/rm "$@"
           "utf8",
         ),
       );
-      expect(receipt.schema).toBe("agenttool-deploy-receipt/v4");
+      expect(receipt.schema).toBe("agenttool-deploy-receipt/v5");
       expect(receipt.outcome).toBe("failed_or_uncertain");
       expect(receipt.maintenance.recovery_required).toBe(true);
       expect(receipt.maintenance.active_marker_cleared).toBe(false);
@@ -4624,7 +4889,7 @@ exec /bin/rm "$@"
     const text = await readFile(path, "utf8");
     const receipt = JSON.parse(text);
     expect(receipt).toEqual({
-      schema: "agenttool-deploy-receipt/v4",
+      schema: "agenttool-deploy-receipt/v5",
       run_id: expect.any(String),
       mode: "routine",
       outcome: "succeeded",
@@ -4649,6 +4914,13 @@ exec /bin/rm "$@"
         frontends: "skipped",
       },
       verified_api_machines: 0,
+      database_proof: {
+        status: "not_run",
+        started_machine_count: 0,
+        transaction_select_one: false,
+        session_select_one: false,
+        tls_profile: null,
+      },
       maintenance: null,
     });
     expect(text).not.toContain("TEST_CREDENTIAL_SHOULD_NEVER_APPEAR");
@@ -4766,7 +5038,6 @@ exec /bin/rm "$@"
       setup.repo,
       cleanEnv(setup.home, {
         XDG_STATE_HOME: setup.state,
-        DATABASE_URL: "postgres://unreachable.invalid/test",
         FAIL_MIGRATE: "1",
         MIGRATION_MARKER: migrationMarker,
         PREFLIGHT_MARKER: preflightMarker,
@@ -4879,9 +5150,11 @@ exec /bin/rm "$@"
       }),
     );
     expect(result.code).toBe(1);
-    expect(result.stdout).toContain("DATABASE_URL not resolved");
     expect(result.stdout).toContain(
-      "migration or API publication cannot safely proceed",
+      "exact production transaction/session database pair was not resolved",
+    );
+    expect(result.stdout).toContain(
+      "no database survey, migration, or publication was attempted",
     );
     expect(
       await exists(join(setup.state, "agenttool", "deploy-receipts")),

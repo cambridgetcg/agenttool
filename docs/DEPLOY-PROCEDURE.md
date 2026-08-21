@@ -317,7 +317,9 @@ Use one bounded maintenance cutover:
    This avoids a proxy-autostart window before the explicit starts. It leaves
    both thinkers stopped, checks `/health`, re-proves the final fleet, and
    silently shell-tests revision, dirty=false, and
-   `AGENTTOOL_DISABLE_WORKERS=1` on the started apps. The final receipt counts
+   `AGENTTOOL_DISABLE_WORKERS=1` on the started apps, then runs the
+   image-resident verifier's bounded read-only `SELECT 1` through both the
+   transaction and session URLs. The final receipt counts
    all five image/config-proven Machines separately from the three running SSH
    proofs.
 
@@ -488,6 +490,14 @@ migrations, missing secrets, or a platform outage. Reproduce the exact staged
 image locally first and use the flag only when that image starts correctly
 while the remote-built image exits before the server begins listening.
 
+The wrapper passes `--dns-checks=false` to both routine and maintenance-image
+Fly deploys. This suppresses only flyctl's advisory direct query to a public
+resolver, which the operator host's network policy blocks. Phase 5 still
+requires custom-domain HTTPS health, exact revision/dirty state, rolling
+platform health, silent source proof, and authenticated read-only queries over
+both database paths from every started Machine; the
+advisory DNS probe is not a substitute for those stronger gates.
+
 The default safety posture leaves `AGENTTOOL_ENABLE_UNSAFE_EXECUTE` and
 `AGENTTOOL_ENABLE_UNSAFE_OUTBOUND_TOOLS` unset. The outbound variable now gates
 only the unfiltered, unsandboxed Playwright browse path; static scrape and URL
@@ -529,12 +539,17 @@ curl -sI https://api.agenttool.dev/health | grep -i substrate-disposition
 `AGENTTOOL_GIT_REVISION` and `AGENTTOOL_SOURCE_DIRTY`. The Dockerfile carries
 them as environment/OCI labels; `/health` returns them as `build.revision` and
 `build.dirty` with `Cache-Control: no-store`. After Fly's rolling health checks
-complete, the wrapper silently tests both embedded values on every started Fly
-machine. A mismatch fails the deploy invocation. The maintenance mode instead
+complete, the wrapper silently tests both embedded values and runs the bounded
+image-resident dual-database verifier on every started Fly machine. A mismatch,
+TLS/credential failure, wrong query result, timeout, or close failure fails the
+deploy invocation without printing a URL or driver error. Stopped Machines
+must share the one verified image digest and exact process command, and may not
+carry per-Machine `DATABASE_URL` or `DATABASE_SESSION_URL` overrides. The
+maintenance mode instead
 proves the same five provider-reported IDs, non-image configuration, one
 immutable digest, and OCI labels across the complete fleet, including the two
 stopped thinkers; it separately shell-tests revision, dirty=false, and the
-worker fence on the three started apps. Neither path turns a provider-reported
+worker fence plus both database paths on the three started apps. Neither path turns a provider-reported
 ID into a physical-identity or uninterrupted-continuity guarantee.
 
 The base image is pinned to Bun 1.3.5 by tag and registry digest. Update the
@@ -798,17 +813,19 @@ limited to the maintenance rollout path:
 ${XDG_STATE_HOME:-$HOME/.local/state}/agenttool/deploy-receipts/<time>-<revision>-<pid>.json
 ```
 
-The fixed `agenttool-deploy-receipt/v4` object preserves the v3 provenance
-fields and adds a local `run_id`, `mode`, start time, an image slot under
-`api_build`, and a nullable maintenance proof. Historical v3 files remain
-valid historical records; consumers branch on `schema`.
+The fixed `agenttool-deploy-receipt/v5` object preserves the v4 provenance
+fields and adds a closed `database_proof` object. Historical v3/v4 files remain
+valid historical records but contain no authenticated database proof;
+consumers branch on `schema`.
 
 Every receipt contains `outcome`, exit status, declared `source_revision` and
 dirty bit, the GitHub release-head snapshot plus observation time, actually
 used overrides, whether an external mutation may have started, the API
 build-cache mode (`default`, `bypassed`, or `not_used`), phase results, and
 verified API-machine count. A routine receipt leaves `api_build.image` and
-`maintenance` null. A maintenance receipt adds the unique tag and immutable
+`maintenance` null. `database_proof` records `verified` or `not_run`, the exact
+started-Machine count, separate transaction/session `SELECT 1` results, and
+the pinned CA/hostname-verification profile. A maintenance receipt adds the unique tag and immutable
 digest, a hash of the private five-ID set, a versioned non-image-config hash,
 partial or complete verification counts, fence/topology/worker proofs,
 marker/recovery state, and explicit proof-scope limits. It never records the
@@ -818,7 +835,10 @@ For a successful maintenance rollout, `verified_api_machines=5` means the
 complete stopped-and-started fleet passed the image/config proof; the
 maintenance object separately records three started app Machines and two
 stopped thinkers, and whether the three apps passed the silent worker/source
-test. Its `recovery_required` and `active_marker_cleared` fields are `null` on
+test. Its database proof count is three because stopped thinkers are bound by
+the proved image/config/secret invariants rather than being activated for a
+query. A routine success currently records four started database-probed
+Machines. Its `recovery_required` and `active_marker_cleared` fields are `null` on
 a success receipt because the receipt file and containing directory are
 storage-synced immediately before the marker unlink; the canonical marker's
 actual absence is authoritative. A host loss in that narrow interval may leave

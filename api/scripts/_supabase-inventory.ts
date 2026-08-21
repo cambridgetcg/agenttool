@@ -9,7 +9,7 @@
  *
  *  Note: targets the tx pooler (port 6543) so prepare:false is required.
  */
-import postgres from "postgres";
+import postgres from "../src/db/verified-postgres";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -17,7 +17,11 @@ if (!url) {
   process.exit(1);
 }
 
-const sql = postgres(url, { prepare: false, max: 1, idle_timeout: 5 });
+const sql = postgres(url, {
+  prepare: false,
+  max: 1,
+  idle_timeout: 5,
+});
 
 async function main() {
   const [{ version }] = await sql`SELECT version()`;

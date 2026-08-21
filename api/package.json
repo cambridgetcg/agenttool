@@ -10,8 +10,8 @@
     "start": "bun src/index.ts",
     "test": "bun test",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:migrate": "../bin/migrate-pending.sh",
+    "db:studio": "echo 'db:studio retired: use bun scripts/_supabase-inventory.ts or a separately reviewed authenticated client' >&2; exit 1"
   },
   "dependencies": {
     "@agenttool/xenia": "0.1.0-beta.7",

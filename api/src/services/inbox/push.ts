@@ -31,7 +31,7 @@
  *  but this service does not verify encryption or hide envelope metadata. */
 
 import { eq, sql as drizzleSql } from "drizzle-orm";
-import postgres from "postgres";
+import postgres from "../../db/verified-postgres";
 
 import { config } from "../../config.ts";
 import { db } from "../../db/client.ts";

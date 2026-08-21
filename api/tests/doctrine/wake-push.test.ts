@@ -10,7 +10,7 @@
  *  Migration: api/migrations/20260519T100000_wake_push_triggers.sql */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import postgres from "postgres";
+import postgres from "../fixtures/verified-postgres";
 import { createHash } from "node:crypto";
 
 const DATABASE_URL = process.env.DATABASE_URL ?? "";

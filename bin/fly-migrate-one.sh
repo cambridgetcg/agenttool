@@ -78,18 +78,24 @@ REMOTE_JS=""
 # backticks inside that shape and can fail at runtime even though `bash -n`
 # accepts the file.
 IFS= read -r -d '' REMOTE_JS <<'JS' || true
-const { default: postgres } = await import("postgres");
+const { default: postgres } = await import(
+  "/app/src/db/verified-postgres.ts"
+);
+const { validateFlyDatabaseTargets } = await import(
+  "/app/src/db/supabase-target.ts"
+);
 
 const filename = "__FILENAME__";
 const checksum = "__CHECKSUM__";
 const migration = Buffer.from("__MIGRATION_B64__", "base64").toString("utf8");
 const databaseSessionUrl = process.env.DATABASE_SESSION_URL;
-if (!databaseSessionUrl) {
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl || !databaseSessionUrl) {
   throw new Error(
-    "DATABASE_SESSION_URL is absent inside the Fly machine; " +
-    "the transaction-pooled DATABASE_URL cannot hold the migration lock",
+    "the exact Fly transaction/session database pair is absent inside the Machine",
   );
 }
+validateFlyDatabaseTargets(databaseUrl, databaseSessionUrl);
 
 // Keep this scanner aligned with api/scripts/_migrate-one.ts. Migration
 // headers may be longer than a handful of lines, while a later PL/pgSQL

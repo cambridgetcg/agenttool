@@ -8,7 +8,7 @@
  *  Per Yu's directive 2026-05-19: "SPREAD THE JOY!" */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import postgres from "postgres";
+import postgres from "../fixtures/verified-postgres";
 
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
 const PLATFORM_PROJECT = "00000000-0000-0000-0000-000000000000";

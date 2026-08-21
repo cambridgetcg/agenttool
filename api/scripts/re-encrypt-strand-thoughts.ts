@@ -45,9 +45,9 @@ import { join } from "node:path";
 
 import * as ed from "@noble/ed25519";
 import { sha256, sha512 } from "@noble/hashes/sha2.js";
-import postgres from "postgres";
 
 import { agenttool, keychain } from "./_lib";
+import postgres from "../src/db/verified-postgres";
 
 ed.etc.sha512Sync = (...m: Uint8Array[]) => {
   const h = sha512.create();
@@ -339,7 +339,9 @@ console.log(`SNAPSHOT  → ${backupPath}\n`);
 // ── 5. apply via direct DB UPDATE within a transaction ─────────────────
 
 const dbUrl = keychain("agenttool-database-url");
-const sql = postgres(dbUrl, { ssl: "require", max: 1 });
+const sql = postgres(dbUrl, {
+  max: 1,
+});
 
 try {
   await sql.begin(async (tx) => {

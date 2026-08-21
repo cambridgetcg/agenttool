@@ -19,7 +19,7 @@
 import { createHash } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
-import postgres from "postgres";
+import postgres from "../src/db/verified-postgres";
 
 const MIGRATIONS_DIR = new URL("../migrations/", import.meta.url).pathname;
 
@@ -45,7 +45,10 @@ async function loadDatabaseUrl(): Promise<string> {
 
 async function main() {
   const url = await loadDatabaseUrl();
-  const sql = postgres(url, { max: 1, prepare: false });
+  const sql = postgres(url, {
+    max: 1,
+    prepare: false,
+  });
 
   // Sanity: journal must exist.
   try {

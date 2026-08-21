@@ -235,9 +235,13 @@ tests.
 Environment vars (set in shell or `.env` per workspace — there is no `.env.example`; the canonical list lives in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) + [`docs/STACK.md`](docs/STACK.md)):
 
 - `DATABASE_URL` — transaction-pooled Supabase Postgres used by the API,
-  read-only migration inventory, and database test tier
+  read-only migration inventory, and database test tier; supported remote
+  clients authenticate the server with the vendored, fingerprint-pinned
+  Supabase CA rather than postgres-js `ssl: "require"`
 - `DATABASE_SESSION_URL` — session-pooled Supabase Postgres required for
-  migration applies and used by session-affine operations such as LISTEN
+  migration applies and used by session-affine operations such as LISTEN;
+  Fly startup requires the same pinned project, database, and logical role as
+  `DATABASE_URL`
 - `REDIS_URL` — Redis (BullMQ + SSE backplane)
 - `STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` — payments
 - `CRYPTO_NETWORK=testnet|mainnet` — explicit network for deposit derivation,
@@ -260,7 +264,7 @@ cd api
 bun run dev                                    # local server
 ../bin/migrate-pending.sh                      # apply checksum-journaled SQL migrations
 bun run db:generate                            # regenerate drizzle schema
-bun run db:studio                              # drizzle studio
+bun scripts/_supabase-inventory.ts             # authenticated schema/extension inventory
 bun test tests/<file>.test.ts                  # one focused test file
 bunx tsc --noEmit                              # typecheck — run before declaring "done"
 (cd .. && bin/deploy.sh --no-migrate --no-frontend) # production API; stages doctrine first

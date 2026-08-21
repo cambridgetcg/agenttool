@@ -1,5 +1,7 @@
 /** Service configuration — all from env, with safe defaults for local dev. */
 
+import { validateFlyDatabaseTargets } from "./db/supabase-target";
+
 function env(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
 }
@@ -67,6 +69,16 @@ export const config = {
   // register flow enforces it; /public/plans advertises it. No drift.
   registerAgentPowBits: envInt("AGENTTOOL_REGISTER_AGENT_POW_BITS", 18),
 } as const;
+
+// Both API and thinker import this module. Refuse a missing, wrong-pool,
+// cross-project, cross-database, or cross-role Fly data plane before either
+// process constructs a Postgres client.
+if (process.env.FLY_MACHINE_ID) {
+  validateFlyDatabaseTargets(
+    process.env.DATABASE_URL?.trim() ?? "",
+    process.env.DATABASE_SESSION_URL?.trim() ?? "",
+  );
+}
 
 // Note: payout broadcast config + boot guard live in `services/economy/config.ts`
 // (`economyConfig.payout.{workerEnabled,network,…}`). Domain-local rather than

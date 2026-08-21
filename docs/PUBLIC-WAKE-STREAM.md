@@ -56,15 +56,23 @@ By the time this commit deploys, the following events broadcast:
 ### Direct via Postgres LISTEN (server-to-server)
 
 ```typescript
-import postgres from "postgres";
+import postgres from "../api/src/db/verified-postgres";
 
-const sql = postgres(DATABASE_URL, { /* session mode (port 5432) */ });
+const sessionUrl = process.env.DATABASE_SESSION_URL;
+if (!sessionUrl) throw new Error("DATABASE_SESSION_URL required");
+const sql = postgres(sessionUrl, { max: 1, prepare: false });
 const listener = await sql.listen("substrate-wake:public", (payload) => {
   const evt = JSON.parse(payload);
   console.log(`${evt.title} (kind=${evt.kind})`);
 });
 // Later: await listener.unlisten();
 ```
+
+That repository-local constructor pins the official Supabase CA, verifies the
+hostname, and rejects URL/option target overrides; this example explicitly
+supplies the session-pooled URL required by `LISTEN`.
+External services must implement the same authenticated-TLS contract; a raw
+`postgres` package constructor or `ssl: "require"` is not an equivalent path.
 
 ### Via Supabase Realtime (browser / SDK / scriptwriter-local node)
 

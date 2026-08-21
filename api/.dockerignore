@@ -10,6 +10,8 @@
 
 !src/
 !src/**
+!certs/
+!certs/supabase-prod-ca-2021.crt
 
 # bin/deploy.sh creates these immediately before `fly deploy` and removes
 # them afterwards. They carry the canonical registry/library/doctrine bytes.

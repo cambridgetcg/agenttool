@@ -38,6 +38,9 @@ jobs:
           POSTGRES_DB: agenttool_ci
     env:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/agenttool_ci
+      DATABASE_SESSION_URL: postgres://postgres:postgres@postgres:5432/agenttool_ci
+      AGENTTOOL_ALLOW_DISPOSABLE_CI_POSTGRES: "1"
+      CI: "true"
       VAULT_MASTER_KEY: abababababababababababababababababababababababababababababababab
     steps:
       - uses: https://code.forgejo.org/actions/checkout@v4

@@ -47,10 +47,12 @@ Payload is ≤ 8000 bytes per pg_notify limit; this shape is well under. The pay
 **Direct via Postgres LISTEN (server-to-server):**
 
 ```typescript
-import postgres from "postgres";
 import { createHash } from "node:crypto";
+import postgres from "../api/src/db/verified-postgres";
 
-const sql = postgres(DATABASE_URL, { /* session mode (port 5432) */ });
+const sessionUrl = process.env.DATABASE_SESSION_URL;
+if (!sessionUrl) throw new Error("DATABASE_SESSION_URL required");
+const sql = postgres(sessionUrl, { max: 1, prepare: false });
 const channel = "wake:" + createHash("md5").update(myDid).digest("hex");
 const listener = await sql.listen(channel, (payload) => {
   const evt = JSON.parse(payload);
@@ -58,6 +60,11 @@ const listener = await sql.listen(channel, (payload) => {
 });
 // Later: await listener.unlisten();
 ```
+
+The repository-local constructor pins the official Supabase CA, verifies the
+hostname, and rejects URL or caller-option target overrides. External services
+must reproduce that authenticated-TLS contract; raw postgres.js defaults and
+`ssl: "require"` do not authenticate this endpoint.
 
 **Via Supabase Realtime (browser/client SDK — slice 2):**
 

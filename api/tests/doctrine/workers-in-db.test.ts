@@ -8,7 +8,7 @@
  *  Migration: api/migrations/20260519T090000_workers_in_db.sql */
 
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import postgres from "postgres";
+import postgres from "../fixtures/verified-postgres";
 
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
 let sql: ReturnType<typeof postgres> | null = null;

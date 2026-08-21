@@ -28,7 +28,7 @@ Requires:
     - Local API running on http://localhost:3000 with proper VAULT_MASTER_KEY
     - Sophia bearer in keychain at agenttool-sophia-key
     - Python venv at packages/sdk-py/.venv with the SDK installed in dev mode
-    - psycopg2 OR psql on PATH for the at-rest checks (we shell out to psql)
+    - psycopg2 for the at-rest checks
 """
 
 from __future__ import annotations
@@ -90,12 +90,13 @@ def check(label: str, cond: bool, detail: str = "") -> None:
 
 import psycopg2  # noqa: E402
 from psycopg2.extras import RealDictCursor  # noqa: E402
+from _postgres_tls import postgres_tls_kwargs  # noqa: E402
 
 
 def psql_one(query: str, *params: object) -> Optional[Dict[str, Any]]:
     """Run a single-row parameterised query against the live DB."""
     sql = query.replace("?", "%s")
-    with psycopg2.connect(DATABASE_URL) as conn:
+    with psycopg2.connect(DATABASE_URL, **postgres_tls_kwargs(DATABASE_URL)) as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(sql, params)
             row = cur.fetchone()

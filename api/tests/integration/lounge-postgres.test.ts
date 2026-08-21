@@ -13,7 +13,8 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import * as ed from "@noble/ed25519";
-import postgres, { type Sql } from "postgres";
+import type { Sql } from "postgres";
+import postgres from "../fixtures/verified-postgres";
 
 import {
   canonicalLoungeGuestbookConsentBytes,

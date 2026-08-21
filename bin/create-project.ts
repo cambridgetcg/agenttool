@@ -7,7 +7,7 @@
  *  Prints the project_id and the at_* API key (returned ONCE). */
 
 import { generateApiKey } from "../api/src/auth/keys";
-import postgres from "postgres";
+import postgres from "../api/src/db/verified-postgres";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const projectName = process.argv[2] ?? "agenttool-smoke";
@@ -20,7 +20,6 @@ const sql = postgres(DATABASE_URL, {
   max: 1,
   idle_timeout: 5,
   connect_timeout: 15,
-  ssl: DATABASE_URL.includes("supabase") ? "require" : false,
 });
 
 try {

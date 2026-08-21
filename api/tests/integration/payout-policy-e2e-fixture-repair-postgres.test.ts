@@ -18,7 +18,8 @@ import {
   expect,
   test,
 } from "bun:test";
-import postgres, { type Sql } from "postgres";
+import type { Sql } from "postgres";
+import postgres from "../fixtures/verified-postgres";
 
 const TEST_DATABASE_URL =
   process.env.PAYOUT_FIXTURE_REPAIR_TEST_DATABASE_URL ?? "";

@@ -16,8 +16,8 @@
  */
 
 import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
 import { config } from "../config.ts";
+import postgres from "./verified-postgres.ts";
 
 const sql = postgres(config.databaseUrl, {
   max: 10,
