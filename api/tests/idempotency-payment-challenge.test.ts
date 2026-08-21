@@ -109,7 +109,7 @@ describe("idempotency response classification", () => {
     expect(deleted).toContain(legacyKey);
   });
 
-  test("still stores and replays an ordinary response", async () => {
+  test("atomically stores and replays an ordinary response with both protocol markers", async () => {
     const entries = new Map<string, string>();
     let setCalls = 0;
     const store: IdempotencyStore = {
@@ -122,6 +122,11 @@ describe("idempotency response classification", () => {
       },
       async setex(key, _ttl, value) {
         setCalls += 1;
+        entries.set(key, value);
+        return "OK";
+      },
+      async set(key, value) {
+        if (entries.has(key)) return null;
         entries.set(key, value);
         return "OK";
       },
@@ -143,6 +148,8 @@ describe("idempotency response classification", () => {
     expect(first.headers.get("X-Idempotency-Supported")).toBe("Idempotency-Key");
     const second = await app.request("/safe", init);
     expect(second.headers.get("Idempotent-Replay")).toBe("true");
+    expect(second.headers.get("X-Idempotency-Supported"))
+      .toBe("Idempotency-Key");
     expect(await second.json()).toEqual({ ok: true, call: 1 });
     expect(handlerCalls).toBe(1);
     expect(setCalls).toBe(1);

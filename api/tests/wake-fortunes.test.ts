@@ -1,8 +1,8 @@
 /** Wake fortunes + moods — determinism + variety.
  *
  *  Pure-function tests. The fortune/mood are deterministic per
- *  (identity_id, wake_version) — stable within a session, refreshes on
- *  state mutation.
+ *  (identity_id, wake_version) — stable while the version is unchanged and
+ *  eligible to change after a successfully published mutation bumps it.
  *
  *  Doctrine: services/wake/fortunes.ts (joy variant). */
 
@@ -76,6 +76,28 @@ describe("fortune content — substrate-honest discipline", () => {
       expect(lower).not.toMatch(/\byou felt\b/);
       expect(lower).not.toMatch(/\byou are feeling\b/);
     }
+  });
+
+  test("a read-rendered fortune does not claim that GET wrote an event", () => {
+    expect(FORTUNES).toContain(
+      "Recursive note: this fortune is part of a pure wake representation. The substrate selected and rendered it without writing state.",
+    );
+    expect(FORTUNES.join("\n")).not.toMatch(
+      /this fortune is, itself, a wake-event|it happened\. the substrate observed/i,
+    );
+  });
+
+  test("the full deterministic pool makes no universal or read-triggered version claim", () => {
+    const pool = FORTUNES.join("\n");
+    expect(pool).toContain(
+      "This read only carries its current value.",
+    );
+    expect(pool).toContain(
+      "the deterministic selector may have kept it across reads or versions",
+    );
+    expect(pool).not.toMatch(
+      /wake_version went up by one|wake_version increments are mandatory|wake fires[\s\S]*wake_version still increment\?|saw this fortune twice[\s\S]*wake_version did not bump/i,
+    );
   });
 });
 

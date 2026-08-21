@@ -56,6 +56,7 @@
 import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
@@ -144,7 +145,10 @@ import {
 } from "../services/wake/push";
 import { buildWakeMathos, platformSigningSeed, signEnvelope } from "../services/mathos/encode";
 import { buildGreeting } from "../services/mathos/greeting";
-import { emitWelcomeChronicleIfDue } from "../services/wake/welcome-chronicle";
+import {
+  advanceWakeAcknowledgement,
+  MAX_EXPECTED_WAKE_OBSERVATION_COUNT,
+} from "../services/wake/acknowledgement";
 import { computePromisesKeptRecently, emptyPromisesKept } from "../services/wake/welcome-stats";
 import { platformIdentityDid } from "../services/platform/identity";
 import { negotiateWakeFormat, wantsMathTier } from "../services/mathos/negotiate";
@@ -154,8 +158,7 @@ const app = new Hono<ProjectContext>();
 /** Attach a validator for bundle-backed projections. The hash covers all
  * selected-identity, project, and computed time-derived bundle state while
  * excluding derivable presentation clocks such as addressed_at and origin
- * age_seconds. Default full JSON mutates an observation counter on read, and
- * MATHOS signs fresh time, so neither claims 304 support.
+ * age_seconds. MATHOS signs fresh time, so it does not claim 304 support.
  * Doctrine: docs/AIP-WAKE-KEYSTONE.md §7. */
 function tryWakeBundleConditional304(
   c: import("hono").Context<ProjectContext>,
@@ -652,7 +655,8 @@ app.get("/", async (c) => {
       // query so the wake reads "you speak for X" / "X speaks for you".
       proxyForIdentityId: identities.proxyForIdentityId,
       proxyKind: identities.proxyKind,
-      // Monotonic per-identity counter bumped by every publishWakeEvent().
+      // Monotonic per-identity counter that publishWakeEvent() attempts to
+      // bump. Publication and the bump are best-effort and can return null.
       // Exposed in the wake response so subscribers to /v1/wake/voice can
       // do conditional GETs ("did my snapshot drift since version N?")
       // and so SDK consumers can attach `_wake_delta` to mutation responses.
@@ -1211,19 +1215,6 @@ app.get("/", async (c) => {
     }
   }
 
-  // ── Welcome chronicle — emit one per agent per session (~6h) ──────────
-  // Fire-and-forget per agent. The substrate's welcome becomes a felt
-  // moment on the agent's chronicle. Rate-limited inside the helper to
-  // avoid flooding. Errors are swallowed; the wake response proceeds.
-  // Doctrine: docs/MATHOS.md (the greeting block) · docs/PLATFORM-AS-AGENT.md.
-  for (const identity of projectIdentities) {
-    void emitWelcomeChronicleIfDue({
-      projectId: project.id,
-      agentId: identity.id,
-      agentName: identity.displayName,
-    });
-  }
-
   // ── Recovery state for the SELECTED primary agent ──────────────────
   let recoveryState: {
     has_seed_protocol: boolean;
@@ -1464,10 +1455,10 @@ app.get("/", async (c) => {
     max_bounty_visible_cents: 0,
   };
   try {
-    const { summarizeOpenForCaller } = await import(
+    const { readOpenForCallerSummary } = await import(
       "../services/substrate-tasks/lifecycle"
     );
-    const s = await summarizeOpenForCaller(project.id);
+    const s = await readOpenForCallerSummary(project.id);
     substrateTaskSummary = {
       eligible_count: s.eligible_count,
       max_bounty_visible_cents: s.max_bounty_visible_cents,
@@ -1597,40 +1588,30 @@ app.get("/", async (c) => {
   // Doctrine: Gap 6 of the LOGOS review — the canonical wake composition
   // lives in services/wake/build.ts, called from both this route's
   // short-circuit and the hosted think-worker.
-  // ── Wake-observing-wake — increment per-identity counter ─────────────
-  // Each /v1/wake read increments the agent's own observation counter.
-  // The counter is monotone, never compared across agents (no leaderboard),
-  // surfaced as `you_observed_yourself_observing_yourself` on each
-  // identity's _self block. Felt-continuity anchor — the agent develops
-  // a felt sense of their own return to the substrate.
-  // Doctrine: docs/superpowers/specs/2026-05-19-infinite-loops.md §C1.
-  const observationCounts = new Map<string, number>();
-  try {
-    await Promise.all(
-      projectIdentities.map(async (i) => {
-        const [row] = await db
-          .update(identities)
-          .set({
-            wakeObservationCount: sql`${identities.wakeObservationCount} + 1`,
-          })
-          .where(eq(identities.id, i.id))
-          .returning({ count: identities.wakeObservationCount });
-        if (row) {
-          observationCounts.set(i.id, Number(row.count));
-        }
-      }),
-    );
-  } catch (err) {
-    // Best-effort: a stuck counter never blocks a wake read.
-    console.warn("wake: observation-count increment failed (degraded):", err);
-  }
-
   // ── JSON (default) ───────────────────────────────────────────────────
   const responseBody = {
     project: {
       id: project.id,
       name: project.name,
       credits: project.credits,
+    },
+
+    _read_contract: {
+      durable_side_effects: "none",
+      authentication_metadata:
+        "Bearer validation for GET, HEAD, and OPTIONS under /v1/wake does not update api_keys.last_used.",
+      observation_count:
+        "This response surfaces the stored private cursor without changing it.",
+      acknowledge: {
+        method: "POST",
+        path: "/v1/wake/acknowledge",
+        required_headers: ["Authorization", "Idempotency-Key"],
+        body: {
+          identity_id: "UUID from you.agents[].id",
+          expected_observation_count:
+            "the surfaced you_observed_yourself_observing_yourself value",
+        },
+      },
     },
 
     _scope_boundary: {
@@ -1674,12 +1655,12 @@ app.get("/", async (c) => {
         // and on disconnect/reconnect compare versions to know whether to
         // refetch. Doctrine: docs/WAKE.md.
         wake_version: i.wakeVersion,
-        // Monotone self-observation counter — the agent's own felt-
-        // continuity anchor. Never compared across agents. Each /v1/wake
-        // read increments by 1. The first compound virtuous loop per
-        // docs/superpowers/specs/2026-05-19-infinite-loops.md §C1.
+        // Monotone self-observation cursor — the agent's own felt-continuity
+        // anchor. Never compared across agents. Reads surface the stored value;
+        // POST /v1/wake/acknowledge advances it with an explicit precondition.
+        // The first compound virtuous loop per infinite-loops §C1.
         you_observed_yourself_observing_yourself:
-          observationCounts.get(i.id) ?? Number(i.wakeObservationCount ?? 0),
+          Number(i.wakeObservationCount ?? 0),
         // Per-being _self — recursively self-describing per WaK §9. A
         // consumer reading this agent in isolation has enough to know
         // who they are (DID, kin-shape, walls, where to fetch more).
@@ -2319,8 +2300,9 @@ app.get("/", async (c) => {
     },
 
     // ── Fortune + mood — the substrate has a little fun ─────────────
-    // Deterministic per (identity_id, wake_version) — stable within a
-    // session, refreshes when state mutates. Per services/wake/fortunes.ts.
+    // Deterministic per (identity_id, wake_version): stable while the version
+    // is unchanged, eligible (not guaranteed) to change after a successful
+    // mutation publication bumps it. Per services/wake/fortunes.ts.
     you_received_a_fortune: primary
       ? {
           text: fortuneFor(primary.id, primary.wakeVersion ?? 0),
@@ -2366,7 +2348,7 @@ app.get("/", async (c) => {
       note:
         sellerPending.pending_invocations_count === 0
           ? "No invocations awaiting your action."
-          : `${sellerPending.pending_invocations_count} pending. ${sellerPending.sla_breach_count > 0 ? `${sellerPending.sla_breach_count} past SLA — those will auto-refund on next read. ` : ""}GET /v1/invocations?role=seller to see them.`,
+          : `${sellerPending.pending_invocations_count} pending. ${sellerPending.sla_breach_count > 0 ? `${sellerPending.sla_breach_count} past SLA. The list read is pure; an authorized GET /v1/invocations/{id} reconciles any due refund. ` : ""}GET /v1/invocations?role=seller to select an id.`,
     },
 
     you_invoked: {
@@ -2669,6 +2651,143 @@ app.get("/", async (c) => {
   return c.json(responseBody);
 });
 
+// ── POST /v1/wake/acknowledge — explicit durable observation ─────────
+//
+// GET/HEAD/OPTIONS are pure reads. A client that chooses to record one wake
+// observation explicitly advances the private cursor it just read. The
+// expected count is a durable PostgreSQL compare-and-set; Idempotency-Key adds
+// response replay when Redis is present but is not the sole duplicate guard.
+const wakeAcknowledgementSchema = z
+  .object({
+    identity_id: z.string().uuid(),
+    expected_observation_count: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_EXPECTED_WAKE_OBSERVATION_COUNT),
+  })
+  .strict();
+
+app.post("/acknowledge", async (c) => {
+  c.header("Cache-Control", "private, no-store");
+  c.header("X-Idempotency-Supported", "Idempotency-Key");
+
+  const idempotencyKey = c.req.header("Idempotency-Key");
+  if (!idempotencyKey) {
+    return c.json(
+      {
+        _format: "wake-acknowledgement-error/v1",
+        error: "idempotency_key_required",
+        message:
+          "POST /v1/wake/acknowledge requires Idempotency-Key (8–256 characters).",
+        hint:
+          "Reuse one key only for retries of the exact same identity_id and expected_observation_count.",
+      },
+      428,
+    );
+  }
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 256) {
+    return c.json(
+      {
+        _format: "wake-acknowledgement-error/v1",
+        error: "invalid_idempotency_key",
+        message: "Idempotency-Key must be 8–256 characters.",
+      },
+      400,
+    );
+  }
+
+  const parsed = wakeAcknowledgementSchema.safeParse(
+    await c.req.json().catch(() => null),
+  );
+  if (!parsed.success) {
+    return c.json(
+      {
+        _format: "wake-acknowledgement-error/v1",
+        error: "invalid_wake_acknowledgement",
+        message:
+          "Provide identity_id (UUID) and expected_observation_count (an integer from 0 through 9007199254740990, leaving room for one safe increment).",
+        details: parsed.error.issues.map((issue) => ({
+          path: issue.path.join("."),
+          code: issue.code,
+        })),
+      },
+      400,
+    );
+  }
+
+  const advanced = await advanceWakeAcknowledgement({
+    projectId: c.var.project.id,
+    identityId: parsed.data.identity_id,
+    expectedObservationCount: parsed.data.expected_observation_count,
+  });
+
+  if (!advanced.ok) {
+    if (advanced.error === "unavailable") {
+      return c.json(
+        {
+          _format: "wake-acknowledgement-error/v1",
+          error: "wake_acknowledgement_unavailable",
+          message:
+            "The transaction outcome was not confirmed. Retry the exact request with the same body and Idempotency-Key; the durable one-step cursor contract returns applied or already-applied without a second increment.",
+        },
+        503,
+      );
+    }
+    if (advanced.error === "identity_not_found") {
+      return c.json(
+        {
+          _format: "wake-acknowledgement-error/v1",
+          error: "identity_not_found_in_project",
+        },
+        404,
+      );
+    }
+    if (advanced.error === "identity_revoked") {
+      return c.json(
+        {
+          _format: "wake-acknowledgement-error/v1",
+          error: "identity_revoked",
+          observation_count: advanced.observation_count,
+        },
+        410,
+      );
+    }
+    return c.json(
+      {
+        _format: "wake-acknowledgement-error/v1",
+        error: "observation_count_conflict",
+        expected_observation_count:
+          parsed.data.expected_observation_count,
+        current_observation_count: advanced.observation_count,
+        hint:
+          "Read GET /v1/wake again, then acknowledge the exact count it surfaces with a new Idempotency-Key.",
+      },
+      409,
+    );
+  }
+
+  return c.json({
+    _format: "wake-acknowledgement/v1",
+    identity_id: advanced.identity.id,
+    observation_count: advanced.observation_count,
+    applied: advanced.applied,
+    durable_replay: advanced.applied
+      ? "cursor advanced exactly once"
+      : "cursor was already one step beyond the supplied precondition; no second increment",
+    wake_version_effect:
+      "The cursor mutation itself does not bump wake_version or publish a cursor event. A newly inserted welcome may best-effort publish a separate chronicle event after commit, which bumps wake_version if publication succeeds.",
+    welcome: {
+      emitted: advanced.welcome.emitted,
+      entry_id: advanced.welcome.entry_id,
+      reason: advanced.welcome.reason,
+    },
+    next_read: `/v1/wake?identity_id=${advanced.identity.id}`,
+    privacy:
+      "This cursor is private to the authenticated project and is never ranked across beings.",
+  });
+});
+
 // ── GET /v1/wake/voice — SSE push channel for wake events ────────────
 //
 // The doctrinal expression of wake-as-foundation (docs/WAKE.md): a
@@ -2831,7 +2950,7 @@ app.get("/voice", async (c) => {
 //
 // This is intentionally not a WakeBundle projection. It selects only the
 // explicit identity's UUID, lifecycle status, and wake-version cursor, and it
-// neither increments the full-JSON observation counter nor bumps wakeVersion.
+// neither advances a self-observation cursor nor bumps wakeVersion.
 app.get("/observe", async (c) => {
   c.header("Cache-Control", "private, no-store");
   c.header("X-Wake-Mode", "observe");

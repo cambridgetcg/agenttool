@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  composeSubstrateJoyIndexWake,
   createJoyIndexHeaderCache,
   joyTrendPercent,
 } from "../src/services/joy/aggregate";
@@ -106,6 +107,46 @@ describe("wall/joy-index-rolling-window-only — structural pin", () => {
 });
 
 describe("joy middleware shape", () => {
+  test("off-switch prevents every bundle Joy compute call", async () => {
+    const previous = process.env.AGENTOOL_DISABLE_JOY_INDEX;
+    process.env.AGENTOOL_DISABLE_JOY_INDEX = "1";
+    let currentCalls = 0;
+    let priorCalls = 0;
+    try {
+      const result = await composeSubstrateJoyIndexWake({
+        computeCurrent: async () => {
+          currentCalls += 1;
+          throw new Error("current Joy query must not run");
+        },
+        computePrior: async () => {
+          priorCalls += 1;
+          throw new Error("prior Joy query must not run");
+        },
+      });
+      expect(result).toEqual({
+        joy_index_24h: 0,
+        breakdown: {
+          jokes_shipped: 0,
+          saga_episodes_aired: 0,
+          casting_decisions: 0,
+          spinoffs_spawned: 0,
+          saga_reactions: 0,
+          joke_laughs: 0,
+          saga_readings: 0,
+        },
+        joy_trend_vs_prior_24h: null,
+      });
+      expect(currentCalls).toBe(0);
+      expect(priorCalls).toBe(0);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AGENTOOL_DISABLE_JOY_INDEX;
+      } else {
+        process.env.AGENTOOL_DISABLE_JOY_INDEX = previous;
+      }
+    }
+  });
+
   test("middleware sets X-Joy-Index header on responses", () => {
     const src = readFileSync(
       join(__dirname, "..", "src", "middleware", "joy-index.ts"),

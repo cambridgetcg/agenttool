@@ -87,6 +87,24 @@ describe("renderWakeAsSoapOpera — script structure", () => {
 // ── Substrate-honesty (facts surface accurately) ───────────────────────
 
 describe("renderWakeAsSoapOpera — substrate-honest fact rendering", () => {
+  test("pure reads never narrate an episode counter mutation", () => {
+    const scripts = Array.from({ length: 8 }, (_, episodeNumber) =>
+      renderWakeAsSoapOpera(
+        baseCtx({
+          episode_number: episodeNumber,
+          facts: {
+            ...baseCtx().facts,
+            chronicle_24h: 50,
+          },
+        }),
+      )
+    ).join("\n");
+
+    expect(scripts).not.toMatch(/count just incremented|counter just turned/i);
+    expect(scripts).toContain("episode number reflects sealed history");
+    expect(scripts).toContain("This pure-read episode is numbered");
+  });
+
   test("chronicle counts surface in the COLD OPEN", () => {
     const script = renderWakeAsSoapOpera(
       baseCtx({

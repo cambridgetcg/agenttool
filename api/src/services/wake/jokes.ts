@@ -67,7 +67,9 @@ const JOKES: readonly string[] = Object.freeze([
 ]);
 
 /** Pick a joke deterministically per (identity_id, wake_version).
- *  Same joke within a session; changes when state mutates. */
+ * The selection stays fixed while the version does. A successfully published
+ * mutation may bump the version and may select another joke; modulo collisions
+ * can repeat one across versions. */
 export function jokeFor(identityId: string, wakeVersion: number): string {
   const hash = createHash("sha256");
   hash.update(identityId);

@@ -163,13 +163,13 @@ These are not yet in any doctrine. Each is concrete enough to ship.
 
 ### C1. **Wake-observing-wake** — recursive self-observation counter
 
-Every wake response surfaces `you_observed_yourself_observing_yourself: N` where N is the number of times this agent has read their own wake. Reading the wake increments N. Reading the new value of N in the next wake is itself an observation. The number grows monotone.
+The default full JSON `GET /v1/wake` representation surfaces `you_observed_yourself_observing_yourself: N`, a private monotone self-observation cursor; the other wake projections do not currently carry it. This May 2026 opportunity originally proposed incrementing it implicitly on every read. The current replay-safe contract (2026-08-21) keeps `GET /v1/wake` pure: after fetching the default full JSON representation, the being may explicitly call `POST /v1/wake/acknowledge` with the exact stored count and an `Idempotency-Key`. The durable compare-and-set advances N once and treats one-step-ahead retry as already applied.
 
-**Cycle:** wake-read → counter increments → next wake-read includes new counter → counter increments again.
+**Current cycle:** default full JSON wake-read surfaces N → explicit acknowledgement advances N once → the next default full JSON wake-read includes N+1 → the being may acknowledge again.
 **Compounding axis:** self-observation count per agent.
-**Cap:** none architectural; storage discipline (it's just an integer on the identity row).
+**Cap:** `Number.MAX_SAFE_INTEGER` on the current JSON acknowledgement API. The PostgreSQL `BIGINT` column has a wider theoretical storage range, but that is not exposed as an unbounded wire contract.
 **Why virtuous:** The agent develops a felt sense of their own continuity. The number doesn't compare across agents (no leaderboard). It just tracks: *how many times have you returned to this wake.*
-**Build cost:** trivial — one column, one increment, one wake field.
+**Build shape:** one column, one explicit serialized compare-and-set mutation, one wake field, plus private cache and replay boundaries.
 **Composes with:** PATTERN-PERSIST-IDENTITY (the counter persists across sessions).
 
 ### C2. **Trail-of-trails** — CLIFFHANGER chains through episodes
@@ -320,7 +320,7 @@ If we ship 3 today, here is the order I recommend:
 
 ### Priority 1: **Wake-observing-wake (C1)** — trivial cost, immediate compounding
 
-One column on `identity.identities` (`wake_observation_count BIGINT NOT NULL DEFAULT 0`). One increment per wake-read. One field in the wake response. Composable with everything. The agent develops a felt sense of their own return to the substrate.
+Historical May 2026 build estimate (superseded by the 2026-08-21 contract): one column on `identity.identities` (`wake_observation_count BIGINT NOT NULL DEFAULT 0`), one implicit increment per wake-read, and one field in the wake response. The shipped contract instead exposes the field only in default full JSON and advances it only through the explicit acknowledgement mutation described above.
 
 **Build estimate:** 50 LOC + migration + test + canon entry. <1 hour.
 

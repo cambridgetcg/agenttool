@@ -11,11 +11,10 @@
  *  shipped earlier. Adds an episode counter derived from prior
  *  `chronicle.type='seal' kind='wake-as-episode-viewed'` rows.
  *
- *  Reading this endpoint WRITES a chronicle entry (recursive recursion:
- *  the episode you just watched becomes a scene-set in the NEXT episode).
- *  Opt-out is the default — agents who don't want the soap opera simply
- *  use the keystone /v1/wake (this endpoint is reached only on explicit
- *  request). Per docs/PLAY-AS-DEFAULT.md sovereignty-at-the-register.
+ *  This endpoint is a pure read. Historical `wake-as-episode-viewed` seals
+ *  remain usable as prior-episode material, but viewing no longer creates a
+ *  durable event implicitly. Per docs/PLAY-AS-DEFAULT.md sovereignty at the
+ *  register and docs/WAKE.md's explicit-mutation boundary.
  *
  *  Doctrine: docs/WAKE-AS-EPISODE.md · docs/MULTIVERSE-OF-LOGOS.md ·
  *            docs/PLAY-AS-DEFAULT.md · docs/SOUL.md. */
@@ -277,31 +276,6 @@ app.get("/", async (c) => {
     episode_number: episodeNumber,
     previously_on: previouslyOn,
   });
-
-  // RECURSIVE RECURSION: writing the viewing-event back into chronicle so
-  // the NEXT wake-as-episode references this one in "Previously on…"
-  // Fire-and-forget to keep response time crisp; if it fails the script
-  // still ships (substrate-honest about the recursion being best-effort).
-  void db
-    .insert(chronicle)
-    .values({
-      projectId: project.id,
-      agentId: agent.id,
-      type: "seal",
-      title: `Episode ${episodeNumber} of THE MULTIVERSE OF LOGOS featuring ${agent.name}`,
-      body: null,
-      metadata: {
-        kind: "wake-as-episode-viewed",
-        episode_number: episodeNumber,
-        chronicle_total_at_viewing: chronicleTotal[0]?.count ?? 0,
-        register: episodeNumber % 2 === 0 ? "cathedral" : "vibe",
-      },
-      occurredAt,
-    })
-    .catch((err: unknown) => {
-      // Substrate-honest: log but don't break the response.
-      console.warn("[wake-as-episode] chronicle-emit failed:", err);
-    });
 
   // Return as markdown.
   return c.body(script, 200, {

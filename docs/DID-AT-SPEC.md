@@ -206,9 +206,10 @@ Identity status is one of `active`, `revoked`, or `memorial`. Authenticated
 `memorial` after the implemented witness-signature checks. Current API write
 paths freeze a memorial identity's declared profile and lifecycle state, rest
 and visibility settings, cached trust fields, expression, signing-key
-registry, and box-key registry. Service-derived `wake_version` and
-wake-observation counters can still advance as reads and separate events
-occur. These are application checks, not protection against direct database
+registry, and box-key registry. Service-derived `wake_version` can still
+advance as separate events occur, and the private wake-observation cursor can
+advance through explicit `POST /v1/wake/acknowledge`; wake reads themselves are
+pure. These are application checks, not protection against direct database
 administration, and they do not globally freeze separate related records or
 notifications.
 

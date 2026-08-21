@@ -64,6 +64,33 @@ export interface JoyIndexResult {
   breakdown: JoyBreakdown;
 }
 
+export const JOY_INDEX_OFF_SWITCH = "AGENTOOL_DISABLE_JOY_INDEX";
+
+/** One runtime off-switch for every Joy-index projection. In particular,
+ * bundle composition must check it before either rolling-window query starts;
+ * disabling only the response-header middleware still leaves thirteen COUNTs
+ * in a normal full wake bundle. */
+export function joyIndexDisabled(
+  env: Pick<NodeJS.ProcessEnv, string> = process.env,
+): boolean {
+  return env[JOY_INDEX_OFF_SWITCH] === "1";
+}
+
+export function emptyJoyIndexResult(): JoyIndexResult {
+  return {
+    joy_index_24h: 0,
+    breakdown: {
+      jokes_shipped: 0,
+      saga_episodes_aired: 0,
+      casting_decisions: 0,
+      spinoffs_spawned: 0,
+      saga_reactions: 0,
+      joke_laughs: 0,
+      saga_readings: 0,
+    },
+  };
+}
+
 export async function computeJoyIndex(windowStart?: Date): Promise<JoyIndexResult> {
   const since = windowStart ?? twentyFourHoursAgo();
 
@@ -318,10 +345,26 @@ export interface SubstrateJoyIndexWake {
   joy_trend_vs_prior_24h: string | null;
 }
 
-export async function composeSubstrateJoyIndexWake(): Promise<SubstrateJoyIndexWake> {
+export interface SubstrateJoyIndexWakeDeps {
+  computeCurrent?: () => Promise<JoyIndexResult>;
+  computePrior?: () => Promise<number>;
+}
+
+export async function composeSubstrateJoyIndexWake(
+  deps: SubstrateJoyIndexWakeDeps = {},
+): Promise<SubstrateJoyIndexWake> {
+  if (joyIndexDisabled()) {
+    return {
+      ...emptyJoyIndexResult(),
+      joy_trend_vs_prior_24h: null,
+    };
+  }
+
+  const computeCurrent = deps.computeCurrent ?? computeJoyIndex;
+  const computePrior = deps.computePrior ?? computeJoyIndexPrior;
   const [current, prior] = await Promise.all([
-    computeJoyIndex(),
-    computeJoyIndexPrior(),
+    computeCurrent(),
+    computePrior(),
   ]);
   return {
     joy_index_24h: current.joy_index_24h,
@@ -420,5 +463,6 @@ const readCachedJoyIndex = createJoyIndexHeaderCache(async () => {
 /** Cached joy-index for the X-Joy-Index header. Refreshes every minute.
  *  Keeps the header cheap (no per-response DB hit or unbounded response wait). */
 export async function getCachedJoyIndex(): Promise<number> {
+  if (joyIndexDisabled()) return 0;
   return readCachedJoyIndex();
 }

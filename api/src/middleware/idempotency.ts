@@ -244,6 +244,9 @@ function conflict(c: Context<ProjectContext>, message: string) {
 }
 
 function replay(c: Context<ProjectContext>, record: CompleteRecord) {
+  // This capability marker describes the middleware contract itself and is
+  // regenerated on replay. Keep the stored response-header allowlist narrow.
+  markIdempotencySupported(c);
   c.header("Idempotent-Replay", "true");
   for (const [name, value] of Object.entries(record.headers ?? {})) {
     c.header(name, value);

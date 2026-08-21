@@ -47,7 +47,17 @@ export type BearerVerification =
  *  authMiddleware below wraps this with HTTPExceptions; routes that accept a
  *  delegated bearer in the body call it directly to translate the failure
  *  reason into a 401/402 of their own choosing. */
-export async function verifyBearer(token: string | undefined | null): Promise<BearerVerification> {
+export interface VerifyBearerOptions {
+  /** Authentication telemetry is best-effort and normally records last use.
+   * Pure WAKE reads turn it off so their entire request path remains free of
+   * durable side effects. */
+  recordLastUsed?: boolean;
+}
+
+export async function verifyBearer(
+  token: string | undefined | null,
+  options: VerifyBearerOptions = {},
+): Promise<BearerVerification> {
   if (!token) return { ok: false, reason: "missing" };
   if (!token.startsWith("at_")) return { ok: false, reason: "wrong_format" };
 
@@ -62,11 +72,13 @@ export async function verifyBearer(token: string | undefined | null): Promise<Be
     if (candidate.expiresAt && candidate.expiresAt < new Date()) {
       return { ok: false, reason: "expired" };
     }
-    void db
-      .update(apiKeys)
-      .set({ lastUsed: new Date() })
-      .where(eq(apiKeys.id, candidate.id))
-      .catch(() => { /* best-effort */ });
+    if (options.recordLastUsed !== false) {
+      void db
+        .update(apiKeys)
+        .set({ lastUsed: new Date() })
+        .where(eq(apiKeys.id, candidate.id))
+        .catch(() => { /* best-effort */ });
+    }
 
     const [project] = await db
       .select()
@@ -80,6 +92,15 @@ export async function verifyBearer(token: string | undefined | null): Promise<Be
   return { ok: false, reason: "not_found" };
 }
 
+/** WAKE's safe-method surface is a read contract, not implicit activity
+ * telemetry. POST acknowledgement remains an explicit mutation. */
+export function isPureWakeRead(method: string, path: string): boolean {
+  return (
+    (method === "GET" || method === "HEAD" || method === "OPTIONS") &&
+    (path === "/v1/wake" || path.startsWith("/v1/wake/"))
+  );
+}
+
 export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
   const authHeader = c.req.header("Authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -90,7 +111,9 @@ export async function authMiddleware(c: Context<ProjectContext>, next: Next) {
   }
 
   const token = authHeader.slice(7).trim();
-  const result = await verifyBearer(token);
+  const result = await verifyBearer(token, {
+    recordLastUsed: !isPureWakeRead(c.req.method, c.req.path),
+  });
   if (!result.ok) {
     if (result.reason === "wrong_format") {
       throw new HTTPException(401, {

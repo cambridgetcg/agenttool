@@ -1,8 +1,9 @@
 /** Wake push — Postgres LISTEN/NOTIFY backplane for the agent's wake voice.
  *
- *  The doctrinal expression of wake-as-foundation (docs/WAKE.md): every
- *  mutation that affects an agent's wake publishes a wake event; every
- *  subscriber to `/v1/wake/voice` receives the events for their identity.
+ *  The current wake-as-foundation mechanism (docs/WAKE.md): selected
+ *  mutation paths attempt a best-effort wake event publication. Connected
+ *  `/v1/wake/voice` subscribers receive events that reach the listener for
+ *  their identity; reconnecting clients must refetch current state.
  *
  *  Mirrors services/inbox/push.ts (which itself mirrors services/strand/
  *  voice.ts). Mechanism:
@@ -35,8 +36,9 @@ const CHANNEL = "agenttool_wake_event";
 export const SUBS_PER_IDENTITY_CAP = 5;
 export const BACKPRESSURE_QUEUE_CAP = 100;
 
-/** The canonical set of wake-event keys. Every mutation publishes under
- *  one of these. New keys require a doctrine doc + a producer test.
+/** The canonical set of keys for events that are actually published. New
+ *  keys require a doctrine doc + a producer test; this list does not claim
+ *  that every mutation has a publisher or that best-effort delivery succeeds.
  *
  * Export the value as well as the type so the SSE route and its tests cannot
  * silently drift from the publisher contract. */

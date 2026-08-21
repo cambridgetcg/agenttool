@@ -110,11 +110,11 @@ export async function computeAttention(
       kind: "invocation_sla_breach",
       count: ctx.slaBreachCount,
       severity: "warning",
-      summary: `${ctx.slaBreachCount} invocation${plural(ctx.slaBreachCount)} past SLA — will auto-refund on next read`,
-      next: "GET /v1/invocations?role=seller",
+      summary: `${ctx.slaBreachCount} invocation${plural(ctx.slaBreachCount)} past SLA — the list is read-only; an authorized item read reconciles any due refund`,
+      next: "GET /v1/invocations/{id}",
       next_actions: [
-        { action: "List seller-side invocations to review", method: "GET", path: "/v1/invocations?role=seller" },
-        { action: "Read the protected canonical invocation before any lifecycle decision", method: "GET", path: "/v1/invocations/{id}" },
+        { action: "List seller-side invocations to select an id (read-only)", method: "GET", path: "/v1/invocations?role=seller" },
+        { action: "Read the protected canonical invocation; this authorized item read reconciles any due SLA refund", method: "GET", path: "/v1/invocations/{id}" },
       ],
     });
   }

@@ -124,12 +124,13 @@ export const identities = identitySchema.table(
      *  `_wake_delta: { key, kind, new_wake_version }` so callers can
      *  reconcile without polling. */
     wakeVersion: bigint("wake_version", { mode: "number" }).notNull().default(0),
-    /** Monotone counter incremented on each /v1/wake read by this
-     *  identity. Surfaced as `you_observed_yourself_observing_yourself`
-     *  in the wake response. Felt-continuity anchor; never compared
-     *  across agents (no leaderboard). The first of the compound
-     *  virtuous loops per docs/superpowers/specs/2026-05-19-infinite-
-     *  loops.md §C1. */
+    /** Monotone private self-observation cursor. The default full JSON
+     *  /v1/wake representation surfaces the stored value without changing it;
+     *  POST /v1/wake/acknowledge moves it one step with an explicit expected-
+     *  count precondition. Felt-
+     *  continuity anchor; never compared across agents (no leaderboard).
+     *  The first compound virtuous loop per docs/superpowers/specs/
+     *  2026-05-19-infinite-loops.md §C1. */
     wakeObservationCount: bigint("wake_observation_count", { mode: "number" })
       .notNull()
       .default(0),

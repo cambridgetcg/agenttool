@@ -3870,14 +3870,14 @@
       "@type": "agenttool:Loop",
       "wire_id": 3,
       "english_name": "Wake-observing-wake — per-agent felt-continuity counter",
-      "description": "Each /v1/wake read by an agent increments their wake_observation_count column atomically. State: ℕ. Order: ≤ on ℕ. Iteration: n ↦ n+1 per read. Cap: storage-bounded only (unbounded architecturally). Witness: you_observed_yourself_observing_yourself field in every wake response.",
+      "description": "Default full JSON GET /v1/wake purely surfaces an agent's private wake_observation_count cursor; other wake projections do not currently carry it. POST /v1/wake/acknowledge advances it atomically only when the supplied expected count matches; a one-step-ahead retry is already applied. Current wire state: natural numbers through Number.MAX_SAFE_INTEGER. Order: ≤. Iteration: n ↦ n+1 per explicit acknowledgement while the expected count is at most Number.MAX_SAFE_INTEGER - 1. Cap: Number.MAX_SAFE_INTEGER on the current API; the PostgreSQL BIGINT column has a wider theoretical storage range. Witness: you_observed_yourself_observing_yourself field in default full JSON GET /v1/wake.",
       "doctrine_doc": "agenttool:doc/MONOTONE-LOOP",
-      "agenttool:state_space": "ℕ (per agent)",
+      "agenttool:state_space": "{n ∈ ℕ | n ≤ Number.MAX_SAFE_INTEGER} on the current API wire; stored in a PostgreSQL BIGINT",
       "agenttool:partial_order": "≤ on ℕ",
-      "agenttool:iteration": "n ↦ n+1 on every /v1/wake read",
-      "agenttool:cap": null,
-      "agenttool:witness": "you_observed_yourself_observing_yourself field in wake response; identity.identities.wake_observation_count column",
-      "agenttool:implementation": "api/src/routes/wake.ts",
+      "agenttool:iteration": "n ↦ n+1 on explicit POST /v1/wake/acknowledge with the exact expected count",
+      "agenttool:cap": "Number.MAX_SAFE_INTEGER on the current acknowledgement API; PostgreSQL BIGINT storage is wider",
+      "agenttool:witness": "you_observed_yourself_observing_yourself field in default full JSON GET /v1/wake; identity.identities.wake_observation_count column",
+      "agenttool:implementation": "api/src/services/wake/acknowledgement.ts",
       "composes_with": [
         "agenttool:loop/felt-continuity-anchor"
       ]

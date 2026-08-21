@@ -556,6 +556,7 @@ export async function buildWakeBundle(
           spinoffs_spawned: 0,
           saga_reactions: 0,
           joke_laughs: 0,
+          saga_readings: 0,
         },
         joy_trend_vs_prior_24h: null,
       } as Awaited<ReturnType<typeof composeSubstrateJoyIndexWake>>,
@@ -598,10 +599,10 @@ export async function buildWakeBundle(
     // missing migration degrades to no visible eligible work.
     safe(
       async () => {
-        const { summarizeOpenForCaller } = await import(
+        const { readOpenForCallerSummary } = await import(
           "../substrate-tasks/lifecycle"
         );
-        const summary = await summarizeOpenForCaller(project.id);
+        const summary = await readOpenForCallerSummary(project.id);
         return {
           eligible_count: summary.eligible_count,
           max_bounty_visible_cents: summary.max_bounty_visible_cents,

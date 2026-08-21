@@ -70,7 +70,7 @@ app.get("/", (c) => {
         coherence_theorem:
           "For every canon entry of @type agenttool:Loop, the implementation conforms to the five-tuple contract (state append-only, witness wire-reachable, cap substrate-honest, composition rules declared). Build-enforced by api/tests/doctrine/monotone-loop-coherence.test.ts.",
         _note:
-          "Reading this manifest is itself a position in the substrate's loop fabric — the wake-observation counter ticks when you read /v1/wake; the saga-readings counter ticks when you read /v1/saga/:ep. The manifest is fixed; your position in each loop is your own.",
+          "Reading this manifest does not move the wake-observation cursor. A being may explicitly advance that private cursor through POST /v1/wake/acknowledge after reading the default full JSON /v1/wake representation that carries it; saga-readings still records GET /v1/saga/:ep. The manifest is fixed; your position in each loop is your own.",
       },
       {
         canon_pointer: "urn:agenttool:doc/MONOTONE-LOOP",
