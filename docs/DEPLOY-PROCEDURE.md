@@ -323,7 +323,7 @@ Use one bounded maintenance cutover:
    all five image/config-proven Machines separately from the three running SSH
    proofs.
 
-7. Require the v4 success receipt and absence of the active maintenance marker
+7. Require the v5 success receipt and absence of the active maintenance marker
    before deliberately reopening admission. The success receipt is installed
    and storage-synced before the marker is removed. A receipt/finalization
    failure while the marker remains owned enters fail-closed re-fencing. If
@@ -559,6 +559,200 @@ images or a reproducible build, because dependencies and other builder inputs
 still shape image bytes. A true dirty marker also says explicitly that the
 commit does not identify every source byte.
 
+### Covenant v2 post-drain generation ceremony
+
+`AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION` is an opaque post-drain
+provenance fence. It is not a normal application secret that may be present
+during the first code rollout. Do not add it to `bin/deploy.sh`: activation is
+a two-phase operator ceremony whose fleet evidence must be reviewed between
+phases.
+
+**Phase A — install the fence with the generation absent:**
+
+1. Capture the exact existing five-Machine IDs and topology described by the
+   exclusive-cutover procedure above. Confirm
+   `fly secrets list -a agenttool` does not contain
+   `AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION`, then silently require the key
+   to be absent from every captured Machine's `config.env` as well:
+
+   ```bash
+   for machine_id in \
+     "$APP_LHR_1" "$APP_LHR_2" "$APP_CDG" \
+     "$THINKER_PRIMARY" "$THINKER_STANDBY"
+   do
+     fly machine status "$machine_id" -a agenttool --json |
+       jq -e '(.config.env // {}) |
+         has("AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION") | not' \
+         >/dev/null || exit 1
+   done
+   ```
+
+   This includes stopped thinkers and catches a per-Machine override that an
+   app-level secret listing cannot prove absent. If either proof fails, stop;
+   this is not a first activation and the rotation/rollback rule below applies.
+2. Before holding admission, run this
+   redacted, read-only aggregate through a reviewed production database
+   session and retain only its two counts:
+
+   ```sql
+   SELECT
+     count(*) FILTER (
+       WHERE protocol_version = 'v2'
+         AND metadata ? 'agenttool.internal.v2_authority_generation'
+     ) AS reserved_generation_rows,
+     count(*) FILTER (
+       WHERE protocol_version = 'v2'
+         AND metadata ? 'agenttool.internal.v2_authority_generation'
+         AND nullif(metadata ->> 'agenttool.internal.v2_initiator_wire_did', '') IS NOT NULL
+         AND nullif(metadata ->> 'agenttool.internal.v2_recipient_wire_did', '') IS NOT NULL
+         AND (
+           (received_from_instance IS NULL AND
+             metadata ->> 'agenttool.internal.v2_recipient_wire_did' = counterparty_did)
+           OR
+           (received_from_instance IS NOT NULL AND
+             metadata ->> 'agenttool.internal.v2_initiator_wire_did' = counterparty_did)
+         )
+     ) AS authoritative_v2_rows
+   FROM agent_continuity.covenants;
+   ```
+
+   Both counts must be exactly zero before this first activation. The query
+   does not select metadata, DIDs, or a generation value. A nonzero result is
+   a stop condition requiring a separately reviewed investigation.
+3. Set app autostart false and restart policy `no`, fence schedules, drain
+   in-flight work, and stop the exact five captured Machines in place. The
+   fully stopped fleet is the admission hold; preserve each Machine's existing
+   provider-reported cordon boolean unchanged.
+   Prove the complete stopped ID set and the other maintenance prerequisites
+   from steps 2–4 of the exclusive-cutover procedure. This outage is the
+   boundary that prevents any pre-fence process from authorizing legacy v2
+   rows while a post-fence process is already serving. An ordinary rolling
+   deploy is prohibited for Phase A.
+4. From the exact clean protected-main revision, invoke the maintenance
+   rollout with the five predeclared IDs. This release has no migration and
+   does not publish frontends:
+
+   ```bash
+   bin/deploy.sh --no-migrate --no-frontend \
+     --maintenance-fenced-api \
+     --maintenance-app-machines="$APP_LHR_1,$APP_LHR_2,$APP_CDG" \
+     --maintenance-thinker-primary="$THINKER_PRIMARY" \
+     --maintenance-thinker-standby="$THINKER_STANDBY"
+   ```
+
+   The maintenance mode updates all five stopped Machines to one reviewed
+   image before it starts any app. It restores only the maintenance-safe topology:
+   the three named apps started and the two named thinkers stopped, with the
+   existing worker fence and exact per-ID configuration proofs. Admission
+   deliberately reopens at the wrapper's first explicit app start, but only
+   after all five Machines have passed the new-image proof; there is no
+   old/new serving overlap. Do not replace this command with
+   `bin/deploy.sh --no-migrate --no-frontend`.
+5. Require HTTP 200 while the redacted readiness field is fail-closed:
+
+   ```bash
+   curl -fsS https://api.agenttool.dev/health |
+     jq -e '.covenant_v2_authority == "absent_fail_closed"'
+   ```
+
+6. Repeat the exact redacted aggregate from step 2 and again require zero and
+   zero. Inspect the v5 maintenance receipt and
+   `fly machine list -a agenttool --json`: prove every captured ID, including
+   both stopped thinkers, now references the reviewed post-fence image and no
+   pre-fence image remains anywhere in the app. Require the revision,
+   dirty-source, worker-fence, process-command, database, topology, and
+   maintenance-marker proofs. Repeat the exact five-ID `fly machine status`
+   loop from step 1 and again require the generation key absent from every
+   Machine's `config.env`; app-secret absence or a healthy started subset is
+   insufficient.
+   The maintenance wrapper deliberately leaves both thinkers stopped. After
+   this proof, restore only the intended thinker primary through its separately
+   reviewed normal start/runtime proof; retain the standby stopped and re-prove
+   the intended three-app, one-started-thinker, one-stopped-thinker topology.
+
+While Phase A is current, all v2 prepare/create, propagation, replay-ACK,
+inbound-authority, effectful-lifecycle, and downstream-effect paths refuse.
+Expiry and reverification may retain non-authorizing historical bookkeeping.
+Local v1 remains available.
+
+**Phase B — create one fresh generation only after Phase A is proven:**
+
+Before activation, require the locked singleton's `allowed_origins` to be the
+empty array and keep it empty for the entire Phase-B rollout and fleet proof.
+This prevents even a correctly stamped new covenant from being admitted while
+Machines are restarting. A later allowlist change is a separate reviewed
+configuration action after Phase B.
+
+**Phase B is blocked and must not be executed with the current repository
+tooling.** A synthetic test on current macOS proved that
+`bin/agenttool-secret set <service> -` can return success while its underlying
+non-TTY `security ... -w` call stores no retrievable item. It is therefore not
+an activation ceremony. Phase B requires a separately reviewed native
+Security.framework stdin writer that durably stores the value and proves an
+exact Keychain round trip. Do not expand this release by improvising a shell,
+argv, environment-variable, output, or temporary-file substitute. Until that
+writer lands and is independently reviewed, retain the Phase-A state:
+generation absent, v2 fail-closed, and allowlist empty.
+
+Once that prerequisite is met in a later reviewed release, the generation is
+durable release identity. Generate it directly into the OS secret store,
+validate an exact Keychain read, and import that same retained value to Fly
+only through stdin. The value must never enter the operator shell environment,
+an argument, command output, file, repository, or receipt. It necessarily
+enters the remote process environment as the named Fly runtime secret.
+
+That later secret rollout is safe to roll only because old Phase-A processes
+remain fail-closed while restarted processes can stamp the new generation, and
+the empty allowlist prevents covenant admission during that mixed restart. Use
+`fly secrets list --json -a agenttool` to verify the named secret reports a
+fully deployed status across the fleet; do not copy its provider digest into
+logs or documentation.
+
+Silently probe every started Machine against the retained Keychain value. The
+probe must read the expected value on stdin, require the process value to be
+exactly 64 lowercase hexadecimal characters, hash expected and actual inside
+the remote shell, and exit nonzero unless the digests match. Redirect all
+normal probe output; never print either value or digest and never put either in
+an argument, operator-shell environment variable, provider log, or file. This
+covers the three apps and the normally started thinker primary. Do **not** start the
+stopped thinker standby merely to inspect a secret: thinker startup can run
+trusted-runtime effects and is itself an operational mutation. Bind that
+standby through Fly's app-wide secret `Deployed` state plus its exact shared
+image, revision, process, non-secret configuration, stopped state, and absence
+of a per-Machine generation override. End with the intended three apps and
+thinker primary started and the exact thinker standby stopped. A
+provider-level `Deployed` label alone or an app-only sample is insufficient.
+
+Then require repeated `/health` responses to remain HTTP 200 with
+`covenant_v2_authority == "configured"`, recheck `allowed_origins = '{}'`, the
+complete Machine topology, exact revision/image/process ownership, worker
+fence, and database probes, and retain the ordinary release receipt plus a
+separate redacted ceremony note. `/federation/about` must still advertise
+`capabilities.covenants=false` while the allowlist is empty. Before any later
+allowlist change, repeat the exact redacted aggregate from Phase-A step 2 after
+the secret rollout and again require `reserved_generation_rows=0` and
+`authoritative_v2_rows=0`.
+
+Never roll back to code predating this fence while the generation is
+configured. Fix forward. Deliberately changing the generation quarantines all
+rows stamped by the prior one; it must repeat Phase A with the generation
+absent and a complete fleet drain before importing a new value. A direct
+mixed-generation rotation is not supported. Keep the Keychain entry for the
+entire lifetime of this generation: it is the only approved restore and
+per-Machine comparison source. If it is lost or fails validation, do not mint
+a replacement under the active rollout or infer the value from a provider
+digest. First require the locked `allowed_origins` to be the empty array, then
+capture the exact five IDs, fence schedules, drain work, set autostart false and
+restart policy `no`, and stop all five Machines so the complete stopped fleet
+holds admission. Only under that all-five hold may the Fly generation be unset.
+Repeat the per-Machine absence proof and the complete Phase-A maintenance
+ceremony before creating a new generation. An ordinary rolling secret unset or
+restart is prohibited because it would leave a mixed interval in which an
+old-generation process can still authorize rows. On an
+ordinary Fly recovery, re-import only the exact retained Keychain value through
+stdin and repeat the silent proof on every started Machine plus the stopped
+standby's app-wide-secret and exact configuration proof.
+
 ## Phase 4 — Frontend deploy
 
 **Question:** are the remaining Cloudflare frontend targets current with the
@@ -720,6 +914,11 @@ workers held and fix forward with a compatible image; restarting the old
 writer can recreate the unsafe mixed semantics the cutover excluded. For
 code-only releases or ordinary migrations, independently prove full runtime
 and schema compatibility before rolling back.
+
+If `AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION` has ever been configured,
+code predating the covenant generation fence is permanently outside this
+routine rollback path. Do not start it while the generation exists; removing
+the secret alone does not make pre-fence covenant semantics safe. Fix forward.
 
 ```bash
 fly releases list -a agenttool

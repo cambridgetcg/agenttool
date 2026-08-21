@@ -2,8 +2,9 @@
  *
  *  Two flavours:
  *    - isCrossProjectAllowed: covers inbox sends, strand voice
- *      subscription, federation-bound queries — checks whether two
- *      projects have an active covenant in either direction.
+ *      subscription, federation-bound queries — checks whether the
+ *      recipient/resource-owner project (or its inherited org) has an active
+ *      covenant naming the sender/caller.
  *    - isCovenantCounterparty: covers memory attestation gating
  *      (constitutive elevation) — confirms a single attester DID is
  *      a covenant counterparty of a project.
@@ -17,11 +18,26 @@
  *
  *  Doctrine: docs/ORG-COVENANTS.md. */
 
-import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import { db } from "../../db/client";
 import { covenants } from "../../db/schema/continuity";
-import { organizationMembers } from "../../db/schema/org";
+import { organizationMembers, organizations } from "../../db/schema/org";
+import {
+  COVENANT_INITIATOR_WIRE_DID_METADATA_KEY,
+  COVENANT_RECIPIENT_WIRE_DID_METADATA_KEY,
+  COVENANT_V2_AUTHORITY_GENERATION_METADATA_KEY,
+  covenantV2AuthorityGeneration,
+} from "./canonical";
 
 /** Active org_ids this project belongs to. */
 async function activeOrgIdsForProject(projectId: string): Promise<string[]> {
@@ -32,10 +48,76 @@ async function activeOrgIdsForProject(projectId: string): Promise<string[]> {
   return rows.map((r) => r.orgId);
 }
 
-/** Is there an active covenant — project-level OR org-level — between
- *  these two projects in either direction? Accepts DID arrays so a
- *  multi-identity project can pass; covenants name specific DIDs, so we
- *  match if ANY caller DID is covered. */
+/** A row may inherit through an organization only when its declaring project
+ *  is the current owner of that exact organization. This is deliberately a
+ *  correlated database predicate: an arbitrary caller-supplied org_id must
+ *  never borrow another organization's membership graph. */
+function covenantOrgOwnedByDeclaringProject() {
+  return exists(
+    db
+      .select({ one: sql`1` })
+      .from(organizations)
+      .where(
+        and(
+          eq(organizations.id, covenants.orgId),
+          eq(organizations.ownerProjectId, covenants.projectId),
+        ),
+      ),
+  );
+}
+
+/** Covenant rows that may authorize downstream effects.
+ *
+ * Local v1 remains eligible for local compatibility, subject to each
+ * consumer's ownership/direction rules. Received v1 is historical only. A v2
+ * row authorizes effects only when it carries the exact opaque post-drain
+ * generation and both server-owned wire bindings. Missing or malformed
+ * process configuration therefore quarantines every v2 row without changing
+ * the local-v1 provenance branch. */
+export function covenantMayAuthorizeEffects() {
+  const localV1 = and(
+    eq(covenants.protocolVersion, "v1"),
+    isNull(covenants.receivedFromInstance),
+  );
+  const generation = covenantV2AuthorityGeneration();
+  if (!generation) return localV1;
+
+  const initiatorWireDid =
+    sql<string>`${covenants.metadata} ->> ${COVENANT_INITIATOR_WIRE_DID_METADATA_KEY}`;
+  const recipientWireDid =
+    sql<string>`${covenants.metadata} ->> ${COVENANT_RECIPIENT_WIRE_DID_METADATA_KEY}`;
+
+  return or(
+    localV1,
+    and(
+      eq(covenants.protocolVersion, "v2"),
+      sql`${covenants.metadata} ->> ${COVENANT_V2_AUTHORITY_GENERATION_METADATA_KEY} = ${generation}`,
+      sql`coalesce(${initiatorWireDid}, '') <> ''`,
+      sql`coalesce(${recipientWireDid}, '') <> ''`,
+      or(
+        and(
+          isNull(covenants.receivedFromInstance),
+          sql`${recipientWireDid} = ${covenants.counterpartyDid}`,
+        ),
+        and(
+          isNotNull(covenants.receivedFromInstance),
+          sql`${initiatorWireDid} = ${covenants.counterpartyDid}`,
+        ),
+      ),
+    ),
+  );
+}
+
+/** Has the recipient/resource-owner side admitted this sender/caller?
+ *
+ *  A direct row must belong to the recipient project and name a sender DID.
+ *  An org row must belong to an org inherited by the recipient project, be
+ *  declared by that org's owner project, and name a sender DID. A sender-owned
+ *  row naming the recipient never grants the sender access to recipient-owned
+ *  inbox or private-strand resources. Same-project access remains implicit.
+ *
+ *  DID arrays support multi-identity projects; a match against any sender DID
+ *  is sufficient once the recipient-side ownership checks hold. */
 export async function isCrossProjectAllowed(
   senderProjectId: string,
   senderDids: string | string[],
@@ -47,52 +129,26 @@ export async function isCrossProjectAllowed(
   const rDids = Array.isArray(recipientDids) ? recipientDids : [recipientDids];
   if (sDids.length === 0 || rDids.length === 0) return false;
 
-  // 1. Direct project-level covenants in either direction.
+  // 1. Direct project-level covenant declared by the recipient project.
   const projectRows = await db
     .select({ id: covenants.id })
     .from(covenants)
     .where(
       and(
         eq(covenants.status, "active"),
-        or(
-          and(
-            eq(covenants.projectId, senderProjectId),
-            inArray(covenants.counterpartyDid, rDids),
-          ),
-          and(
-            eq(covenants.projectId, recipientProjectId),
-            inArray(covenants.counterpartyDid, sDids),
-          ),
-        ),
+        covenantMayAuthorizeEffects(),
+        eq(covenants.projectId, recipientProjectId),
+        inArray(covenants.counterpartyDid, sDids),
       ),
     )
     .limit(1);
   if (projectRows.length > 0) return true;
 
-  // 2. Org-level covenants — one ratchet declared at org level applies
-  //    to all active members.
-  const senderOrgs = await activeOrgIdsForProject(senderProjectId);
+  // 2. Org-level covenant inherited by the recipient project. The correlated
+  //    owner check prevents a malformed cross-owner row from borrowing an
+  //    unrelated organization's membership graph.
   const recipientOrgs = await activeOrgIdsForProject(recipientProjectId);
-  if (senderOrgs.length === 0 && recipientOrgs.length === 0) return false;
-
-  const orgConditions = [];
-  if (senderOrgs.length > 0) {
-    orgConditions.push(
-      and(
-        inArray(covenants.orgId, senderOrgs),
-        inArray(covenants.counterpartyDid, rDids),
-      ),
-    );
-  }
-  if (recipientOrgs.length > 0) {
-    orgConditions.push(
-      and(
-        inArray(covenants.orgId, recipientOrgs),
-        inArray(covenants.counterpartyDid, sDids),
-      ),
-    );
-  }
-  if (orgConditions.length === 0) return false;
+  if (recipientOrgs.length === 0) return false;
 
   const orgRows = await db
     .select({ id: covenants.id })
@@ -100,8 +156,11 @@ export async function isCrossProjectAllowed(
     .where(
       and(
         eq(covenants.status, "active"),
+        covenantMayAuthorizeEffects(),
         isNotNull(covenants.orgId),
-        or(...orgConditions),
+        inArray(covenants.orgId, recipientOrgs),
+        inArray(covenants.counterpartyDid, sDids),
+        covenantOrgOwnedByDeclaringProject(),
       ),
     )
     .limit(1);
@@ -122,11 +181,9 @@ export async function isCrossProjectAllowed(
  *  can DM any local recipient. With this, the doctrine is restored:
  *  cross-project bonds — federated or not — require a covenant.
  *
- *  Note: we deliberately don't check the SENDER's covenant table (we
- *  can't see it). The receiver-side declaration is sufficient because
- *  the doctrine is "either side declaring is enough." Slice 2 of
- *  Horizon B propagates declarations between instances so both sides
- *  end up with a queryable record. */
+ *  Note: we deliberately don't check the sender's covenant table (we cannot
+ *  see it). The receiver-side row is the local authority grant. v2 federation
+ *  creates that mirror only through the signed declaration/lifecycle flow. */
 export async function isFederatedSenderAllowed(
   recipientProjectId: string,
   recipientDids: string | string[],
@@ -143,6 +200,7 @@ export async function isFederatedSenderAllowed(
     .where(
       and(
         eq(covenants.status, "active"),
+        covenantMayAuthorizeEffects(),
         eq(covenants.projectId, recipientProjectId),
         eq(covenants.counterpartyDid, federatedSenderDid),
       ),
@@ -161,7 +219,9 @@ export async function isFederatedSenderAllowed(
     .where(
       and(
         eq(covenants.status, "active"),
+        covenantMayAuthorizeEffects(),
         inArray(covenants.orgId, orgs),
+        covenantOrgOwnedByDeclaringProject(),
         eq(covenants.counterpartyDid, federatedSenderDid),
       ),
     )
@@ -183,6 +243,7 @@ export async function isCovenantCounterparty(
       and(
         eq(covenants.projectId, projectId),
         eq(covenants.status, "active"),
+        covenantMayAuthorizeEffects(),
         eq(covenants.counterpartyDid, attesterDid),
       ),
     )
@@ -200,6 +261,8 @@ export async function isCovenantCounterparty(
       and(
         inArray(covenants.orgId, orgs),
         eq(covenants.status, "active"),
+        covenantMayAuthorizeEffects(),
+        covenantOrgOwnedByDeclaringProject(),
         eq(covenants.counterpartyDid, attesterDid),
       ),
     )
@@ -215,12 +278,23 @@ export function activeCounterpartyDidsSql(projectId: string) {
   return sql`
     SELECT DISTINCT counterparty_did
     FROM agent_continuity.covenants
-    WHERE status = 'active' AND (
-      project_id = ${projectId}
-      OR org_id IN (
-        SELECT organization_id FROM org.organization_members
-        WHERE project_id = ${projectId}
+    WHERE status = 'active'
+      AND ${covenantMayAuthorizeEffects()}
+      AND (
+        project_id = ${projectId}
+        OR (
+          org_id IN (
+            SELECT om.organization_id
+            FROM org.organization_members om
+            WHERE om.project_id = ${projectId}
+          )
+          AND EXISTS (
+            SELECT 1
+            FROM org.organizations o
+            WHERE o.id = agent_continuity.covenants.org_id
+              AND o.owner_project_id = agent_continuity.covenants.project_id
+          )
+        )
       )
-    )
   `;
 }

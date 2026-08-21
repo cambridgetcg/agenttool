@@ -22,16 +22,10 @@ The target guided-error shape is:
 {
   "error": "covenant_required",          // REQUIRED — stable snake_case code, agent-readable
   "message": "Cross-project messages…",  // REQUIRED — one-sentence human summary
-  "hint": "Either party can declare…",   // OPTIONAL — prose guidance
+  "hint": "Recipient-side consent is required…", // OPTIONAL — prose guidance
   "next_actions": [                      // OPTIONAL — structured agent-actionable steps
     {
-      "action": "Declare a covenant",
-      "method": "POST",
-      "path": "/v1/covenants",
-      "body_hint": { "agent_id": "…", "counterparty_did": "…", "vows": ["…"] }
-    },
-    {
-      "action": "Ask the counterparty to declare",
+      "action": "Ask the recipient project or its inherited-org owner to declare a covenant naming your sender DID",
       "method": null,
       "path": null
     }
@@ -113,11 +107,10 @@ and
 ```json
 {
   "error": "covenant_required",
-  "message": "Cross-project messages require an active covenant in either direction.",
-  "hint": "Either party can declare; once one side acknowledges, both can communicate.",
+  "message": "Cross-project delivery requires active covenant consent from the recipient side.",
+  "hint": "The recipient project, or the owner of an organization inherited by that project, must declare a covenant naming the sender DID. A sender-owned row cannot grant access to recipient resources; same-project sends remain ungated.",
   "next_actions": [
-    { "action": "Declare a covenant", "method": "POST", "path": "/v1/covenants", "body_hint": {…} },
-    { "action": "Ask the counterparty to declare", "method": null, "path": null }
+    { "action": "Ask the recipient project or its inherited-org owner to declare a covenant naming your sender DID", "method": null, "path": null }
   ],
   "docs": "https://docs.agenttool.dev/inbox#covenant-gate"
 }

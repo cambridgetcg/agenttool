@@ -30,14 +30,19 @@ Backwards-compatible: `org_id IS NULL` (default) → project-scoped, current beh
 `isCrossProjectAllowed(senderProjectId, senderDids, recipientProjectId, recipientDids)`:
 
 1. Same project → allow.
-2. Direct project-level covenant in either direction → allow.
-3. Org-level covenant where caller (or counterparty's project) is an active org member AND the counterparty DID matches → allow.
+2. Direct covenant owned by the recipient/resource-owner project, naming any sender/caller DID → allow.
+3. Org covenant on an org inherited by the recipient/resource-owner project, naming any sender/caller DID, where `organizations.owner_project_id = covenants.project_id` for that exact org → allow.
 4. Otherwise → deny.
+
+A sender-owned row naming the recipient does not grant sender access to the
+recipient's inbox or private Strand Voice. The org-owner correlation is checked
+at read time so a malformed caller-supplied `org_id` cannot borrow an unrelated
+organization's membership graph.
 
 `isCovenantCounterparty(projectId, attesterDid)` (used for constitutive memory elevation):
 
 1. Direct project-level covenant with `counterparty_did = attesterDid` → yes.
-2. Org-level covenant on any org the project is a member of, with matching counterparty → yes.
+2. Org-level covenant on any org the project is a member of, with matching counterparty and exact org-owner/project correlation → yes.
 3. Otherwise → no.
 
 Both helpers live at `services/covenants/check.ts`.

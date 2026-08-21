@@ -20,6 +20,7 @@ import { apiKeys, projects } from "../../db/schema/tools";
 import { vaultSecrets } from "../../db/schema/vault";
 import { composeExpression } from "../identity/composition";
 import type { ExpressionData } from "../identity/expression";
+import { covenantMayAuthorizeEffects } from "../covenants/check";
 import { countUnread } from "../inbox/store";
 import { arbiterSummary, disputerSummary } from "../marketplace/disputes";
 import {
@@ -289,6 +290,7 @@ export async function buildWakeBundle(
             and(
               eq(covenants.projectId, project.id),
               inArray(covenants.status, ["proposed", "active", "paused"]),
+              covenantMayAuthorizeEffects(),
             ),
           )
           .orderBy(desc(covenants.establishedAt)),

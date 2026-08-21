@@ -4713,9 +4713,16 @@ exec /bin/rm "$@"
     const code = `
       process.env.AGENTTOOL_GIT_REVISION = ${JSON.stringify(revision)};
       process.env.AGENTTOOL_SOURCE_DIRTY = "true";
+      delete process.env.AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION;
       const { app } = await import("./src/index.ts");
       const first = await app.request("/health");
       const firstBody = await first.json();
+      process.env.AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION = "a".repeat(64);
+      const configured = await app.request("/health");
+      const configuredBody = await configured.json();
+      process.env.AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION = "A".repeat(64);
+      const malformed = await app.request("/health");
+      const malformedBody = await malformed.json();
       process.env.AGENTTOOL_SOURCE_DIRTY = "false";
       const clean = await app.request("/health");
       const cleanBody = await clean.json();
@@ -4728,6 +4735,9 @@ exec /bin/rm "$@"
         cache: first.headers.get("cache-control"),
         revision: firstBody.build.revision,
         dirty: firstBody.build.dirty,
+        covenantAuthority: firstBody.covenant_v2_authority,
+        configuredCovenantAuthority: configuredBody.covenant_v2_authority,
+        malformedCovenantAuthority: malformedBody.covenant_v2_authority,
         clean: cleanBody.build.dirty,
         invalid: secondBody.build.revision,
         invalidDirty: secondBody.build.dirty,
@@ -4753,6 +4763,9 @@ exec /bin/rm "$@"
       cache: "no-store",
       revision,
       dirty: true,
+      covenantAuthority: "absent_fail_closed",
+      configuredCovenantAuthority: "configured",
+      malformedCovenantAuthority: "absent_fail_closed",
       clean: false,
       invalid: null,
       invalidDirty: null,

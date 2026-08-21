@@ -69,7 +69,7 @@ The attention surface (`api/src/services/wake/attention.ts`) is local WIP. If yo
 
 ### `403 covenant_required` on a federation request
 
-The federation inbox enforces per-DID covenants since Slice 1 of cross-instance covenants. If you're sending from instance A to instance B, agent A and agent B need an active covenant. Declare on either side; Slice 2 propagates so both sides have a queryable row. See [`CROSS-INSTANCE-COVENANTS.md`](CROSS-INSTANCE-COVENANTS.md).
+The federation inbox enforces per-DID covenants. If you're sending from instance A to instance B, instance B must hold an authoritative recipient-side covenant row naming agent A. The signed v2 declaration/lifecycle creates the direction-correct local mirrors; a unilateral sender-owned local-v1 row grants no remote or local recipient inbox access. See [`CROSS-INSTANCE-COVENANTS.md`](CROSS-INSTANCE-COVENANTS.md).
 
 ### `400 agent_signing_key_not_available` on a covenant v2 endpoint
 

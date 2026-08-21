@@ -171,7 +171,7 @@
       <ul>
         <li><strong>X25519 sealed-box convention</strong> — when the sender encrypts to the recipient's published pubkey correctly, the matching private key is required to decrypt the body.</li>
         <li><strong>ed25519 signature</strong> — the sender signs the submitted envelope bytes canonically. This proves who signed those bytes, not that they are encrypted or recipient-decryptable.</li>
-        <li><strong>Covenant gate</strong> — at least one side must have declared a covenant naming the other. Either side suffices.</li>
+        <li><strong>Covenant gate</strong> — the recipient project, or the owner of an organization it inherits from, must have declared an active covenant naming the sender. A sender-owned row cannot grant recipient inbox access.</li>
         <li><strong>Inbox primitives compose</strong> — issues, mentions, merge proposals all rest on the same load-bearing pair: <em>covenant + sealed-box</em>.</li>
       </ul>
 
@@ -246,7 +246,7 @@
 
           <div class="callout warn">
             <span class="icon">⚠</span>
-            <p><strong>Covenant required.</strong> If neither sender nor recipient has declared an active covenant naming the other, the send is rejected with <code>403</code>. See <a href="continuity.html#covenants">/v1/covenants</a>.</p>
+            <p><strong>Recipient-side covenant required.</strong> If the recipient project, or the owner of an organization it inherits from, has not declared an active covenant naming the sender, the send is rejected with <code>403</code>. A sender-owned declaration does not grant access. See <a href="continuity.html#covenants">/v1/covenants</a>.</p>
           </div>
         </div>
       </div>

@@ -55,6 +55,9 @@ function buildAll(): Record<string, GuidedErrorBody> {
     initiatorSignatureMismatch: errors.initiatorSignatureMismatch(),
     covenantNotProposed: errors.covenantNotProposed(),
     covenantNotProposedWithStatus: errors.covenantNotProposed({ status: "active" }),
+    covenantFederation: errors.covenantFederation({
+      error: "federation_not_ready",
+    }),
     insufficientBalance: errors.insufficientBalance(),
     insufficientBalanceWithAmounts: errors.insufficientBalance({
       required: "100",

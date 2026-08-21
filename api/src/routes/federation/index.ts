@@ -7,7 +7,12 @@
 
 import { Hono } from "hono";
 
-import { getSettings } from "../../services/federation/store";
+import { covenantV2AuthorityGeneration } from "../../services/covenants/canonical";
+import {
+  getSettings,
+  isCanonicalAllowedOrigins,
+  isCanonicalFederationInstanceUrl,
+} from "../../services/federation/store";
 import covenantsInbound from "./covenants";
 import identitiesRouter from "./identities";
 import inboxInbound from "./inbox";
@@ -24,7 +29,18 @@ interface FederationAboutSettings {
 
 /** The legacy `did_method` key is retained for federation/v1 consumers. The
  * adjacent fields state its actual standards status without ambiguity. */
-export function buildFederationAbout(settings: FederationAboutSettings) {
+export function buildFederationAbout(
+  settings: FederationAboutSettings,
+  covenantV2AuthorityConfigured = covenantV2AuthorityGeneration() !== null,
+) {
+  const covenantV2Ready = Boolean(
+    settings.enabled &&
+      covenantV2AuthorityConfigured &&
+      settings.instance_url &&
+      isCanonicalFederationInstanceUrl(settings.instance_url) &&
+      settings.allowed_origins.length > 0 &&
+      isCanonicalAllowedOrigins(settings.allowed_origins),
+  );
   return {
     federation: {
       enabled: settings.enabled,
@@ -32,15 +48,18 @@ export function buildFederationAbout(settings: FederationAboutSettings) {
       open: settings.enabled && settings.allowed_origins.length === 0,
       allowed_origins: settings.allowed_origins,
       setting_scope:
-        "enabled gates identity lookup, inbox delivery, covenant propagation, and wake fragments. allowed_origins is additionally checked by inbox delivery.",
+        "enabled gates identity lookup, inbox delivery, covenant propagation, and wake fragments. inbox checks allowed_origins; fresh/effectful v2 covenants additionally require a configured authority generation, canonical instance_url, and nonempty canonical allowed_origins.",
     },
     protocol: "agenttool/federation/v1",
     capabilities: {
       inbox: settings.enabled,
       identity_resolution: settings.enabled,
-      covenants: settings.enabled,
+      covenants: covenantV2Ready,
       wake_fragments: settings.enabled,
     },
+    covenant_v2_authority: covenantV2AuthorityConfigured
+      ? "configured"
+      : "absent_fail_closed",
     pyramid_peer_surface: {
       route_prefix: "/federation/pyramid",
       gated_by_federation_enabled: false,

@@ -55,7 +55,10 @@ Function-level. `wake-providers.test.ts` proves the provider-shape renderer is c
 
 ### Integration
 
-`integration/covenants-v2-happy.test.ts` proves: initiator declares → counterparty accepts → both rows reach `'active'` with valid dual signatures. **Real DB**, no LLM, no real federation peer. Self-loop topology used where the test needs cross-instance behavior.
+`integration/covenants-v2-happy.test.ts` is currently skipped because one
+database cannot represent both instances' same-ID rows. It is a topology
+placeholder, not proof. Executed covenant DB coverage is named in
+`integration/README.md`, including authority-gate and lifecycle tests.
 
 ### Doctrine
 

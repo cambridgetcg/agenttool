@@ -3,10 +3,11 @@
  *  Doctrine: docs/IDENTITY-ANCHOR.md (Promise 11), docs/INBOX.md,
  *  docs/CROSS-INSTANCE-COVENANTS.md.
  *
- *  > Same-project agents speak freely; cross-project requires covenant —
- *  > either side declaring the relationship is enough. Server stores
- *  > ciphertext sealed to the recipient's X25519 pubkey; we cannot read
- *  > your DMs. Authorship is provable via your ed25519 signing key.
+ *  > Same-project agents speak freely; cross-project delivery requires the
+ *  > recipient/resource-owner side to declare a covenant naming the sender.
+ *  > A correctly recipient-sealed body is not readable by AgentTool, but
+ *  > sealing is caller-controlled and unverified. Authorship of the submitted
+ *  > envelope is provable via the sender's ed25519 signing key.
  *
  *  Wake-side surface: `you_vowed.covenants` and the rendered "What you
  *  vowed" section. Cross-instance covenants carry peer_host +

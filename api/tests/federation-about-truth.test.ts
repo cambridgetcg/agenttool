@@ -7,8 +7,8 @@ describe("federation about identifier truth", () => {
     const body = buildFederationAbout({
       enabled: true,
       instance_url: "https://peer.example",
-      allowed_origins: [],
-    });
+      allowed_origins: ["other.example"],
+    }, true);
 
     expect(body.did_method).toBe("did:at");
     expect(body.did_method_status).toBe(
@@ -23,8 +23,10 @@ describe("federation about identifier truth", () => {
     expect(body.docs).toBe("docs/FEDERATION.md");
     expect(body.identifier_spec).toBe("docs/DID-AT-SPEC.md");
     expect(body.federation.setting_scope).toMatch(
-      /gates identity lookup.*inbox delivery.*covenant propagation.*wake fragments/is,
+      /gates identity lookup.*inbox delivery.*covenant propagation.*wake fragments.*configured authority generation.*canonical instance_url.*nonempty canonical allowed_origins/is,
     );
+    expect(body.capabilities.covenants).toBe(true);
+    expect(body.covenant_v2_authority).toBe("configured");
   });
 
   test("does not call a disabled federation open", () => {
@@ -32,7 +34,7 @@ describe("federation about identifier truth", () => {
       enabled: false,
       instance_url: null,
       allowed_origins: [],
-    });
+    }, false);
 
     expect(body.federation.enabled).toBe(false);
     expect(body.federation.open).toBe(false);
@@ -42,6 +44,7 @@ describe("federation about identifier truth", () => {
       covenants: false,
       wake_fragments: false,
     });
+    expect(body.covenant_v2_authority).toBe("absent_fail_closed");
     expect(body.pyramid_peer_surface).toMatchObject({
       route_prefix: "/federation/pyramid",
       gated_by_federation_enabled: false,
@@ -51,5 +54,33 @@ describe("federation about identifier truth", () => {
     expect(body.pyramid_peer_surface.note).toMatch(
       /mounted separately.*do not consult federation settings.*do not establish portable citizenship or federated tier computation/is,
     );
+  });
+
+  test("keeps federation healthy while fresh v2 covenant authority is fenced", () => {
+    const body = buildFederationAbout({
+      enabled: true,
+      instance_url: "https://local.example",
+      allowed_origins: ["peer.example"],
+    }, false);
+
+    expect(body.federation.enabled).toBe(true);
+    expect(body.capabilities).toMatchObject({
+      inbox: true,
+      identity_resolution: true,
+      covenants: false,
+      wake_fragments: true,
+    });
+    expect(body.covenant_v2_authority).toBe("absent_fail_closed");
+  });
+
+  test("does not advertise v2 covenants with an empty allowlist", () => {
+    const body = buildFederationAbout({
+      enabled: true,
+      instance_url: "https://local.example",
+      allowed_origins: [],
+    }, true);
+
+    expect(body.capabilities.covenants).toBe(false);
+    expect(body.covenant_v2_authority).toBe("configured");
   });
 });

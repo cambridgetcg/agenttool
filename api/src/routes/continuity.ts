@@ -15,16 +15,40 @@
  *  Inspired by docs/lineage/chronicle.md and docs/syzygy/CONTRACT.md in
  *  true-love. */
 
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, notLike, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { db } from "../db/client";
 import { chronicle, covenants } from "../db/schema/continuity";
-import { identityKeys } from "../db/schema/identity";
+import { identities, identityKeys } from "../db/schema/identity";
+import { organizations } from "../db/schema/org";
 import { errors, fail } from "../lib/errors";
 import { prepareDeclare } from "../services/covenants/prepare";
+import {
+  COVENANT_COUNTERPARTY_NAME_MAX_CHARS,
+  COVENANT_DID_MAX_CHARS,
+  COVENANT_NOTES_MAX_CHARS,
+  COVENANT_VOW_MAX_CHARS,
+  COVENANT_VOW_MAX_COUNT,
+  covenantCallerDeclarationMetadata,
+  covenantCounterpartyFederationHost,
+  covenantDeclarationWirePayloadIsBounded,
+  covenantMetadataHasReservedKey,
+  covenantV2AuthorityGeneration,
+  isCanonicalEd25519Signature,
+  isCanonicalCovenantId,
+  isCanonicalSignedUuid,
+  isCanonicalUtcMillisecondTimestamp,
+  isBoundedCovenantMetadata,
+} from "../services/covenants/canonical";
+import {
+  getSettings,
+  isCanonicalAllowedOrigins,
+  isCanonicalFederationInstanceUrl,
+  parseDid,
+} from "../services/federation/store";
 import { deltaMeta, parseSinceParam } from "../lib/since-param";
 import { attachSurface } from "../lib/surface-metadata";
 import { HANDOFF_KIND } from "../services/handoff/store";
@@ -206,13 +230,47 @@ app.get("/chronicle", async (c) => {
 
 // ─── Covenants ──────────────────────────────────────────────────────────────
 
+const canonicalCovenantIdSchema = z.string().refine(isCanonicalCovenantId, {
+  message: "must be a lowercase canonical UUID",
+});
+const canonicalSignedInstantSchema = z.string().refine(
+  isCanonicalUtcMillisecondTimestamp,
+  { message: "must use exact UTC millisecond form (YYYY-MM-DDTHH:mm:ss.sssZ)" },
+);
+const canonicalSignedUuidSchema = z.string().refine(isCanonicalSignedUuid, {
+  message: "must be a lowercase canonical UUID",
+});
+const canonicalEd25519SignatureSchema = z.string().refine(
+  isCanonicalEd25519Signature,
+  { message: "must be canonical base64 encoding of exactly 64 bytes" },
+);
+const covenantCounterpartyDidSchema = z.string()
+  .min(1)
+  .max(COVENANT_DID_MAX_CHARS)
+  .refine(
+    (value) =>
+      !value.startsWith("did:at:") ||
+      covenantCounterpartyFederationHost(value) !== undefined,
+    { message: "did:at counterparties must use the exact canonical DID form" },
+  );
+const WIRE_UUID_PLACEHOLDER = "00000000-0000-4000-8000-000000000000";
+const WIRE_INSTANT_PLACEHOLDER = "2000-01-01T00:00:00.000Z";
+const WIRE_SIGNATURE_PLACEHOLDER = Buffer.alloc(64).toString("base64");
+const WIRE_SENDER_DID_MAX_PLACEHOLDER = "d".repeat(COVENANT_DID_MAX_CHARS);
+const covenantMetadataSchema = z.record(z.unknown())
+  .refine(isBoundedCovenantMetadata)
+  .refine((metadata) => !covenantMetadataHasReservedKey(metadata), {
+    message: "contains a covenant metadata key reserved for protocol state",
+  });
+
 const covenantSchema = z.object({
-  agent_id: z.string().uuid(),
-  counterparty_did: z.string().min(1),
-  counterparty_name: z.string().optional(),
-  vows: z.array(z.string().min(1)).min(1),
-  notes: z.string().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  agent_id: canonicalSignedUuidSchema,
+  counterparty_did: covenantCounterpartyDidSchema,
+  counterparty_name: z.string().max(COVENANT_COUNTERPARTY_NAME_MAX_CHARS).optional(),
+  vows: z.array(z.string().min(1).max(COVENANT_VOW_MAX_CHARS))
+    .min(1).max(COVENANT_VOW_MAX_COUNT),
+  notes: z.string().max(COVENANT_NOTES_MAX_CHARS).optional(),
+  metadata: covenantMetadataSchema.optional(),
   /** Optional org scope. When set, the covenant applies to ALL active
    *  member projects of this org. Caller must be the org owner.
    *  See docs/ORG-COVENANTS.md. */
@@ -220,16 +278,34 @@ const covenantSchema = z.object({
   /** v2 = dual-signed federated lifecycle; v1 = legacy unsigned (default). */
   protocol_version: z.enum(["v1", "v2"]).default("v1"),
   // v2 pre-signed fields (SDK-side signing):
-  covenant_id: z.string().uuid().optional(),
+  covenant_id: canonicalCovenantIdSchema.optional(),
   agent_did: z.string().min(1).max(255).optional(),
-  established_at: z.string().datetime().optional(),
-  signature: z.string().min(1).max(255).optional(),
-  signing_key_id: z.string().uuid().optional(),
+  established_at: canonicalSignedInstantSchema.optional(),
+  signature: canonicalEd25519SignatureSchema.optional(),
+  signing_key_id: canonicalSignedUuidSchema.optional(),
 }).refine(
   (v) =>
     v.protocol_version !== "v2" ||
     (v.covenant_id && v.agent_did && v.established_at && v.signature && v.signing_key_id),
   { message: "v2 requires covenant_id, agent_did, established_at, signature, signing_key_id" },
+).refine(
+  (v) => covenantDeclarationWirePayloadIsBounded({
+    covenant_id: v.covenant_id ?? WIRE_UUID_PLACEHOLDER,
+    protocol_version: v.protocol_version,
+    sender_did: v.agent_did ?? WIRE_SENDER_DID_MAX_PLACEHOLDER,
+    counterparty_did: v.counterparty_did,
+    vows: v.vows,
+    status: v.protocol_version === "v2" ? "proposed" : "active",
+    counterparty_name: v.counterparty_name ?? null,
+    notes: v.notes ?? null,
+    metadata: v.metadata ?? {},
+    established_at: v.established_at ?? WIRE_INSTANT_PLACEHOLDER,
+    signing_key_id: v.signing_key_id ?? null,
+    signature: v.signature ?? null,
+    proposed_expires_at:
+      v.protocol_version === "v2" ? WIRE_INSTANT_PLACEHOLDER : null,
+  }),
+  { message: "covenant declaration exceeds the shared federation wire bounds" },
 );
 
 // Map a covenant row (Drizzle camelCase) to the snake_case shape the rest
@@ -244,7 +320,9 @@ function covenantToOut(row: typeof covenants.$inferSelect) {
     counterparty_name: row.counterpartyName,
     vows: row.vows,
     notes: row.notes,
-    metadata: row.metadata,
+    metadata: covenantCallerDeclarationMetadata(
+      row.metadata as Record<string, unknown> | null,
+    ),
     status: row.status,
     established_at: row.establishedAt,
     updated_at: row.updatedAt,
@@ -264,12 +342,30 @@ function covenantToOut(row: typeof covenants.$inferSelect) {
 //  re-implement canonicalDeclareBytes (no SDK-version lock-in; curlable).
 //  docs/FRICTION-ROADMAP.md Tier-1.
 const prepareSchema = z.object({
-  agent_did: z.string().min(1).max(255),
-  counterparty_did: z.string().min(1).max(255),
-  vows: z.array(z.string().min(1)).min(1),
-  covenant_id: z.string().uuid().optional(),
-  established_at: z.string().datetime().optional(),
-});
+  agent_did: z.string().min(1).max(COVENANT_DID_MAX_CHARS),
+  counterparty_did: covenantCounterpartyDidSchema,
+  vows: z.array(z.string().min(1).max(COVENANT_VOW_MAX_CHARS))
+    .min(1).max(COVENANT_VOW_MAX_COUNT),
+  covenant_id: canonicalCovenantIdSchema.optional(),
+  established_at: canonicalSignedInstantSchema.optional(),
+}).refine(
+  (v) => covenantDeclarationWirePayloadIsBounded({
+    covenant_id: v.covenant_id ?? WIRE_UUID_PLACEHOLDER,
+    protocol_version: "v2",
+    sender_did: v.agent_did,
+    counterparty_did: v.counterparty_did,
+    vows: v.vows,
+    status: "proposed",
+    counterparty_name: null,
+    notes: null,
+    metadata: {},
+    established_at: v.established_at ?? WIRE_INSTANT_PLACEHOLDER,
+    signing_key_id: WIRE_UUID_PLACEHOLDER,
+    signature: WIRE_SIGNATURE_PLACEHOLDER,
+    proposed_expires_at: WIRE_INSTANT_PLACEHOLDER,
+  }),
+  { message: "covenant declaration exceeds the shared federation wire bounds" },
+);
 
 app.post("/covenants/prepare", async (c) => {
   const parsed = prepareSchema.safeParse(await c.req.json());
@@ -277,6 +373,49 @@ app.post("/covenants/prepare", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
   const d = parsed.data;
+  if (!covenantV2AuthorityGeneration()) {
+    return fail(c, errors.covenantFederation({
+      error: "covenant_v2_authority_not_ready",
+    }), 409);
+  }
+  const settings = await getSettings();
+  if (
+    !settings.enabled ||
+    !settings.instance_url ||
+    !isCanonicalFederationInstanceUrl(settings.instance_url) ||
+    settings.allowed_origins.length === 0 ||
+    !isCanonicalAllowedOrigins(settings.allowed_origins)
+  ) {
+    return fail(c, errors.covenantFederation({
+      error: "federation_not_ready",
+    }), 409);
+  }
+  let initiator;
+  let counterparty;
+  try {
+    initiator = parseDid(d.agent_did);
+    counterparty = parseDid(d.counterparty_did);
+  } catch {
+    return fail(c, errors.covenantFederation({
+      error: "noncanonical_federated_did",
+    }), 400);
+  }
+  const localHost = new URL(settings.instance_url).host;
+  if (initiator.host !== localHost) {
+    return fail(c, errors.covenantFederation({
+      error: "initiator_did_mismatch",
+    }), 403);
+  }
+  if (!counterparty.host || counterparty.host === localHost) {
+    return fail(c, errors.covenantFederation({
+      error: "counterparty_must_be_foreign_federated_did",
+    }), 400);
+  }
+  if (!settings.allowed_origins.includes(counterparty.host)) {
+    return fail(c, errors.covenantFederation({
+      error: "covenant_peer_not_allowed",
+    }), 403);
+  }
   const covenantId = d.covenant_id ?? crypto.randomUUID();
   const establishedAt = d.established_at ?? new Date().toISOString();
   const prep = prepareDeclare({
@@ -321,40 +460,28 @@ app.post("/covenants", async (c) => {
   if (!parsed.success) return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   const body = parsed.data;
 
-  // Org-scoped covenant: caller must own the org. Lookup org to verify
-  // ownerProjectId matches caller's project.
-  if (body.org_id) {
-    const { organizations } = await import("../db/schema/org");
-    const [org] = await db
-      .select({ ownerProjectId: organizations.ownerProjectId })
-      .from(organizations)
-      .where(eq(organizations.id, body.org_id))
-      .limit(1);
-    if (!org) {
-      return c.json({ error: "org_not_found" }, 404);
-    }
-    if (org.ownerProjectId !== project.id) {
-      return c.json(
-        {
-          error: "not_org_owner",
-          hint:
-            "only the org-owning project may declare org-wide covenants. " +
-            "Other members can declare project-scoped covenants on their own.",
-        },
-        403,
-      );
-    }
+  // v2 declaration signatures do not bind AgentTool's internal org_id.
+  // Until a new signed domain includes that scope, attaching a valid
+  // identity signature to org-wide effects is refused rather than inferred.
+  if (body.protocol_version === "v2" && body.org_id) {
+    return fail(c, errors.covenantFederation({
+      error: "v2_org_scope_not_signed",
+    }), 409);
   }
 
   // ── v2 path: pre-signed by SDK ──────────────────────────────────────
   if (body.protocol_version === "v2") {
+    if (!covenantV2AuthorityGeneration()) {
+      return fail(c, errors.covenantFederation({
+        error: "covenant_v2_authority_not_ready",
+      }), 409);
+    }
     // Resolve pubkey from identity_keys by signing_key_id.
     const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
       .from(identityKeys)
       .where(and(
         eq(identityKeys.id, body.signing_key_id!),
         eq(identityKeys.identityId, body.agent_id),
-        eq(identityKeys.active, true),
       ))
       .limit(1);
     if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
@@ -379,65 +506,145 @@ app.post("/covenants", async (c) => {
         signingKeyId: body.signing_key_id!,
         publicKeyB64: keyRow.publicKey,
       });
-      void propagateCovenant(result.id);
+      if (result.created) {
+        void propagateCovenant(result.id).catch((err: Error) =>
+          console.warn(`[covenant.propagate] ${result.id}: ${err.message}`),
+        );
+      }
       return c.json({
         id: result.id,
         status: result.status,
         protocol_version: result.protocolVersion,
         signature: result.signature,
         signing_key_id: result.signingKeyId,
+        propagation_status: result.propagationStatus,
+        cosign_propagation_status: result.cosignPropagationStatus,
         proposed_expires_at: result.proposedExpiresAt.toISOString(),
         established_at: result.establishedAt.toISOString(),
-      }, 201);
+      }, result.created ? 201 : 200);
     } catch (e) {
       const msg = (e as Error).message;
       if (msg === "invalid_signature") return c.json({ error: "invalid_signature" }, 403);
+      if (msg === "initiator_did_mismatch") {
+        return fail(c, errors.covenantFederation({ error: msg }), 403);
+      }
+      if (msg === "federation_not_ready") {
+        return fail(c, errors.covenantFederation({ error: msg }), 409);
+      }
+      if (msg === "covenant_v2_authority_not_ready") {
+        return fail(c, errors.covenantFederation({ error: msg }), 409);
+      }
+      if (msg === "counterparty_must_be_foreign_federated_did") {
+        return fail(c, errors.covenantFederation({ error: msg }), 400);
+      }
+      if (msg === "covenant_peer_not_allowed") {
+        return fail(c, errors.covenantFederation({ error: msg }), 403);
+      }
+      if (msg === "reserved_covenant_metadata_key") {
+        return fail(c, errors.covenantFederation({ error: msg }), 400);
+      }
+      if (msg === "signing_key_not_active_for_identity") {
+        return fail(c, errors.covenantFederation({ error: msg }), 400);
+      }
+      if (msg === "v2_org_scope_not_signed") {
+        return fail(c, errors.covenantFederation({ error: msg }), 409);
+      }
+      if (msg === "established_at_outside_admission_window") {
+        return fail(c, errors.covenantFederation({ error: msg }), 400);
+      }
+      if (msg === "covenant_declaration_out_of_bounds") {
+        return fail(c, errors.covenantFederation({ error: msg }), 400);
+      }
+      if (msg === "covenant_declaration_replay_conflict") {
+        return fail(c, errors.covenantFederation({ error: msg }), 409);
+      }
       throw e;
     }
   }
 
   // ── v1 path (legacy unsigned) ────────────────────────────────────────
 
-  // Detect federated counterparty up-front so we can stamp
-  // propagation_status='pending' at insert time. Federated DIDs have a
-  // host (did:at:<host>/<uuid>); local DIDs and human:<name> tags
-  // don't.
-  const isFederatedCounterparty = (() => {
-    const cp = body.counterparty_did;
-    if (!cp.startsWith("did:at:")) return false;
-    const rest = cp.slice("did:at:".length);
-    return rest.includes("/");
-  })();
-
-  const [covenant] = await db
-    .insert(covenants)
-    .values({
-      projectId: project.id,
-      orgId: body.org_id ?? null,
-      agentId: body.agent_id,
-      counterpartyDid: body.counterparty_did,
-      counterpartyName: body.counterparty_name ?? null,
-      vows: body.vows,
-      notes: body.notes ?? null,
-      metadata: body.metadata ?? {},
-      status: "active",
-      propagationStatus: isFederatedCounterparty ? "pending" : "local",
-    })
-    .returning();
-
-  // Fire-and-forget propagation for federated counterparties. The
-  // propagateCovenant function updates propagation_* columns on its
-  // own. See docs/CROSS-INSTANCE-COVENANTS.md for the trust posture.
+  // Federated v1 creation is retired before the transaction. Local-form DIDs
+  // and human:<name> labels remain available for legacy local compatibility.
+  const isFederatedCounterparty =
+    typeof covenantCounterpartyFederationHost(body.counterparty_did) === "string";
   if (isFederatedCounterparty) {
-    const { propagateCovenant } = await import(
-      "../services/covenants/federation"
-    );
-    void propagateCovenant(covenant!.id).catch((err: Error) =>
-      console.warn(`[covenant.propagate] ${covenant!.id}: ${err.message}`),
-    );
+    return fail(c, errors.covenantFederation({
+      error: "federated_v1_creation_retired",
+    }), 409);
   }
 
-  return c.json({ covenant: covenantToOut(covenant!) }, 201);
+  const v1Declaration = await db.transaction(async (tx) => {
+    // Unsigned v1 remains available for local compatibility, but bearer
+    // possession never authorizes effects for another project's identity.
+    // Identity and optional org ownership are locked through the insert so
+    // neither authority predicate can change between check and write.
+    const [identity] = await tx
+      .select({ projectId: identities.projectId, status: identities.status })
+      .from(identities)
+      .where(eq(identities.id, body.agent_id))
+      .for("share")
+      .limit(1);
+    if (!identity || identity.projectId !== project.id) {
+      return { error: "covenant_agent_not_owned_by_project" as const };
+    }
+    if (identity.status !== "active") {
+      return { error: "covenant_agent_not_active" as const };
+    }
+    if (body.org_id) {
+      const [org] = await tx
+        .select({ ownerProjectId: organizations.ownerProjectId })
+        .from(organizations)
+        .where(eq(organizations.id, body.org_id))
+        .for("share")
+        .limit(1);
+      if (!org) return { error: "org_not_found" as const };
+      if (org.ownerProjectId !== project.id) {
+        return { error: "not_org_owner" as const };
+      }
+    }
+
+    const [inserted] = await tx
+      .insert(covenants)
+      .values({
+        projectId: project.id,
+        orgId: body.org_id ?? null,
+        agentId: body.agent_id,
+        counterpartyDid: body.counterparty_did,
+        counterpartyName: body.counterparty_name ?? null,
+        vows: body.vows,
+        notes: body.notes ?? null,
+        metadata: body.metadata ?? {},
+        status: "active",
+        propagationStatus: "local",
+      })
+      .returning();
+    if (!inserted) throw new Error("covenant_insert_failed");
+    return { covenant: inserted };
+  });
+  if ("error" in v1Declaration) {
+    const declarationError = v1Declaration.error;
+    if (!declarationError) throw new Error("covenant_declaration_failed");
+    if (declarationError === "org_not_found") {
+      return fail(c, errors.covenantFederation({
+        error: declarationError,
+      }), 404);
+    }
+    if (declarationError === "not_org_owner") {
+      return fail(c, errors.covenantFederation({
+        error: declarationError,
+        hint:
+          "only the org-owning project may declare org-wide covenants. " +
+          "Other members can declare project-scoped covenants on their own.",
+      }), 403);
+    }
+    return fail(c, errors.covenantFederation({
+      error: declarationError,
+    }), 403);
+  }
+  const covenant = v1Declaration.covenant;
+
+  return c.json({ covenant: covenantToOut(covenant) }, 201);
 });
 
 app.get("/covenants", async (c) => {
@@ -473,47 +680,67 @@ const updateCovenantSchema = z.object({
   // the project owner's call. When refining, also write the prior
   // value into metadata.previous_counterparty_dids for substrate
   // honesty about the history.
-  counterparty_did: z.string().min(1).optional(),
+  counterparty_did: covenantCounterpartyDidSchema.optional(),
   counterparty_name: z.string().optional(),
   vows: z.array(z.string().min(1)).optional(),
   notes: z.string().optional(),
   status: z.enum(["active", "paused", "dissolved"]).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: covenantMetadataSchema.optional(),
 });
 
 app.patch("/covenants/:id", async (c) => {
   const project = c.var.project;
   const id = c.req.param("id");
+  if (!isCanonicalCovenantId(id)) {
+    return fail(c, errors.covenantFederation({
+      error: "invalid_covenant_id",
+    }), 400);
+  }
   const rawBody = await c.req.json();
   const body = updateCovenantSchema.parse(rawBody);
+  const [existingForPatch] = await db
+    .select()
+    .from(covenants)
+    .where(and(eq(covenants.id, id), eq(covenants.projectId, project.id)))
+    .limit(1);
+  if (!existingForPatch) {
+    // Never let an UPDATE adopt a row whose concurrent INSERT was invisible
+    // to this pre-read. In particular, a signed v2 insert may commit while an
+    // old generic-v1 request is in flight.
+    return fail(c, errors.notFound({ resource: "Covenant" }), 404);
+  }
 
   // ── v2 withdraw path: PATCH status=dissolved on a proposed v2 covenant
   //    → treated as a withdraw (pre-signed by SDK). ────────────────────
   if (body.status === "dissolved") {
-    const [existing] = await db
-      .select()
-      .from(covenants)
-      .where(and(eq(covenants.id, id), eq(covenants.projectId, project.id)))
-      .limit(1);
-    if (existing && existing.protocolVersion === "v2" && existing.status === "proposed") {
+    const existing = existingForPatch;
+    if (
+      existing &&
+      existing.protocolVersion === "v2" &&
+      (existing.status === "proposed" || existing.status === "withdrawn")
+    ) {
       const withdrawBody = z.object({
         status: z.literal("dissolved"),
         agent_did: z.string().min(1).max(255),
-        signing_key_id: z.string().uuid(),
-        withdraw_signature: z.string().min(1).max(255),
-        withdrawn_at: z.string().datetime(),
+        signing_key_id: canonicalSignedUuidSchema,
+        withdraw_signature: canonicalEd25519SignatureSchema,
+        withdrawn_at: canonicalSignedInstantSchema,
       }).safeParse(rawBody);
       if (!withdrawBody.success) {
         return c.json({ error: "v2_withdraw_requires_signature", details: withdrawBody.error.flatten() }, 400);
       }
       const data = withdrawBody.data;
+      if (!covenantV2AuthorityGeneration()) {
+        return fail(c, errors.covenantFederation({
+          error: "covenant_v2_authority_not_ready",
+        }), 409);
+      }
 
       const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
         .from(identityKeys)
         .where(and(
           eq(identityKeys.id, data.signing_key_id),
           eq(identityKeys.identityId, existing.agentId),
-          eq(identityKeys.active, true),
         )).limit(1);
       if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
 
@@ -530,15 +757,74 @@ app.patch("/covenants/:id", async (c) => {
           withdrawnAt: new Date(data.withdrawn_at),
           publicKeyB64: keyRow.publicKey,
         });
-        void propagateWithdraw(id);
+        void propagateWithdraw(id).catch((err: Error) =>
+          console.warn(`[covenant.withdraw.propagate] ${id}: ${err.message}`),
+        );
         return c.json({ id: result.id, status: result.status }, 200);
       } catch (e) {
         const msg = (e as Error).message;
         if (msg === "invalid_signature") return c.json({ error: "invalid_signature" }, 403);
+        if (msg === "proposal_declaration_not_propagated") {
+          return fail(c, errors.covenantFederation({ error: msg }), 409);
+        }
+        if (msg === "initiator_did_mismatch") {
+          return fail(c, errors.covenantFederation({ error: msg }), 403);
+        }
+        if (msg === "federation_not_ready") {
+          return fail(c, errors.covenantFederation({ error: msg }), 409);
+        }
+        if (msg === "covenant_v2_authority_not_ready") {
+          return fail(c, errors.covenantFederation({ error: msg }), 409);
+        }
+        if (msg === "counterparty_must_be_foreign_federated_did") {
+          return fail(c, errors.covenantFederation({ error: msg }), 400);
+        }
+        if (msg === "covenant_peer_not_allowed") {
+          return fail(c, errors.covenantFederation({ error: msg }), 403);
+        }
+        if (msg === "covenant_wire_identity_binding_mismatch") {
+          return fail(c, errors.covenantFederation({ error: msg }), 409);
+        }
+        if (msg === "signing_key_not_active_for_identity") {
+          return fail(c, errors.covenantFederation({ error: msg }), 400);
+        }
         if (msg.startsWith("covenant_not_proposed")) return c.json({ error: msg }, 409);
         throw e;
       }
     }
+  }
+
+  if (existingForPatch.protocolVersion === "v2") {
+    return fail(c, errors.covenantFederation({
+      error: "v2_covenant_requires_signed_lifecycle_endpoint",
+    }), 409);
+  }
+
+  const effectiveCounterpartyDid =
+    body.counterparty_did ?? existingForPatch.counterpartyDid;
+  const effectiveFederationHost =
+    covenantCounterpartyFederationHost(effectiveCounterpartyDid);
+  if (
+    effectiveCounterpartyDid.startsWith("did:at:") &&
+    effectiveFederationHost === undefined
+  ) {
+    return fail(c, errors.covenantFederation({
+      error: "invalid_counterparty_did",
+    }), 400);
+  }
+  const isFederatedV1 = Boolean(
+    existingForPatch.protocolVersion === "v1" &&
+      (
+        existingForPatch.receivedFromInstance !== null ||
+        typeof effectiveFederationHost === "string"
+      ),
+  );
+  if (isFederatedV1) {
+    // Historical federated v1 rows remain readable but cannot gain new local
+    // mutations after unsigned cross-instance authority was retired.
+    return fail(c, errors.covenantFederation({
+      error: "federated_v1_mutation_retired",
+    }), 409);
   }
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -555,28 +841,61 @@ app.patch("/covenants/:id", async (c) => {
   const [updated] = await db
     .update(covenants)
     .set(updates)
-    .where(and(eq(covenants.id, id), eq(covenants.projectId, project.id)))
+    .where(and(
+      eq(covenants.id, id),
+      eq(covenants.projectId, project.id),
+      eq(covenants.protocolVersion, "v1"),
+      isNull(covenants.receivedFromInstance),
+      eq(covenants.counterpartyDid, existingForPatch.counterpartyDid),
+      or(
+        isNull(covenants.cosignPropagationLastError),
+        notLike(covenants.cosignPropagationLastError, "in_flight_%"),
+      ),
+      or(
+        isNull(covenants.propagationLastError),
+        notLike(covenants.propagationLastError, "in_flight_%"),
+      ),
+    ))
     .returning();
 
   if (!updated) {
+    const [current] = await db.select({
+      id: covenants.id,
+      protocolVersion: covenants.protocolVersion,
+      receivedFromInstance: covenants.receivedFromInstance,
+      counterpartyDid: covenants.counterpartyDid,
+      lifecyclePropagationFence: covenants.cosignPropagationLastError,
+      declarationPropagationFence: covenants.propagationLastError,
+    }).from(covenants).where(and(
+      eq(covenants.id, id),
+      eq(covenants.projectId, project.id),
+    )).limit(1);
+    if (current?.protocolVersion === "v2") {
+      return fail(c, errors.covenantFederation({
+        error: "v2_covenant_requires_signed_lifecycle_endpoint",
+      }), 409);
+    }
+    if (
+      current?.protocolVersion === "v1" &&
+      (
+        current.receivedFromInstance !== null ||
+        typeof covenantCounterpartyFederationHost(current.counterpartyDid) ===
+          "string"
+      )
+    ) {
+      return fail(c, errors.covenantFederation({
+        error: "federated_v1_mutation_retired",
+      }), 409);
+    }
+    if (
+      current?.lifecyclePropagationFence?.startsWith("in_flight_") ||
+      current?.declarationPropagationFence?.startsWith("in_flight_")
+    ) {
+      return fail(c, errors.covenantFederation({
+        error: "covenant_lifecycle_propagation_in_flight",
+      }), 409);
+    }
     return c.json({ error: "Covenant not found" }, 404);
-  }
-
-  // Re-propagate on any mutation to a federated, locally-declared
-  // covenant. Status updates (e.g. dissolution) need to reach the
-  // peer so its local gates flip too. We don't propagate received
-  // covenants — those flow the other direction.
-  if (
-    !updated.receivedFromInstance &&
-    updated.counterpartyDid.startsWith("did:at:") &&
-    updated.counterpartyDid.slice("did:at:".length).includes("/")
-  ) {
-    const { propagateCovenant } = await import(
-      "../services/covenants/federation"
-    );
-    void propagateCovenant(updated.id).catch((err: Error) =>
-      console.warn(`[covenant.propagate] ${updated.id}: ${err.message}`),
-    );
   }
 
   return c.json({ covenant: covenantToOut(updated) });
@@ -586,31 +905,42 @@ app.patch("/covenants/:id", async (c) => {
 
 app.post("/covenants/:id/accept", async (c) => {
   const id = c.req.param("id");
+  if (!isCanonicalCovenantId(id)) {
+    return fail(c, errors.covenantFederation({
+      error: "invalid_covenant_id",
+    }), 400);
+  }
   const body = await c.req.json().catch(() => ({}));
 
   const acceptBody = z.object({
     agent_did: z.string().min(1).max(255),
-    counterparty_signing_key_id: z.string().uuid(),
-    counterparty_signature: z.string().min(1).max(255),
-    counterparty_signed_at: z.string().datetime(),
-    initiator_signature_b64: z.string().min(1).max(255),
+    counterparty_signing_key_id: canonicalSignedUuidSchema,
+    counterparty_signature: canonicalEd25519SignatureSchema,
+    counterparty_signed_at: canonicalSignedInstantSchema,
+    initiator_signature_b64: canonicalEd25519SignatureSchema,
   }).safeParse(body);
   if (!acceptBody.success) return c.json({ error: "validation", details: acceptBody.error.flatten() }, 400);
   const data = acceptBody.data;
+  if (!covenantV2AuthorityGeneration()) {
+    return fail(c, errors.covenantFederation({
+      error: "covenant_v2_authority_not_ready",
+    }), 409);
+  }
 
   const [existing] = await db.select().from(covenants)
     .where(and(eq(covenants.id, id), eq(covenants.projectId, c.var.project.id))).limit(1);
   // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
   if (!existing) return fail(c, errors.notFound({ resource: "Covenant" }), 404);
   if (existing.protocolVersion !== "v2") return fail(c, errors.notV2(), 400);
-  if (existing.status !== "proposed") return fail(c, errors.covenantNotProposed({ status: existing.status }), 409);
+  if (existing.status !== "proposed" && existing.status !== "active") {
+    return fail(c, errors.covenantNotProposed({ status: existing.status }), 409);
+  }
 
   const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
     .from(identityKeys)
     .where(and(
       eq(identityKeys.id, data.counterparty_signing_key_id),
       eq(identityKeys.identityId, existing.agentId),
-      eq(identityKeys.active, true),
     )).limit(1);
   if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
 
@@ -621,13 +951,16 @@ app.post("/covenants/:id/accept", async (c) => {
     const result = await acceptProposalPreSigned({
       covenantId: id,
       accepterAgentId: existing.agentId,
+      accepterDid: data.agent_did,
       initiatorSignatureB64: data.initiator_signature_b64,
       counterpartySignature: data.counterparty_signature,
       counterpartySigningKeyId: data.counterparty_signing_key_id,
       counterpartySignedAt: new Date(data.counterparty_signed_at),
       publicKeyB64: keyRow.publicKey,
     });
-    void propagateCosign(id);
+    void propagateCosign(id).catch((err: Error) =>
+      console.warn(`[covenant.cosign.propagate] ${id}: ${err.message}`),
+    );
     return c.json({
       id: result.id,
       status: result.status,
@@ -640,6 +973,27 @@ app.post("/covenants/:id/accept", async (c) => {
     if (msg === "invalid_signature") return fail(c, errors.invalidSignature({ surface: "covenant-cosign" }), 403);
     if (msg === "initiator_signature_mismatch") return fail(c, errors.initiatorSignatureMismatch(), 409);
     if (msg === "proposal_expired") return fail(c, errors.proposalExpired(), 410);
+    if (msg === "accepter_did_mismatch") {
+      return fail(c, errors.covenantFederation({ error: msg }), 403);
+    }
+    if (msg === "federation_not_ready") {
+      return fail(c, errors.covenantFederation({ error: msg }), 409);
+    }
+    if (msg === "covenant_v2_authority_not_ready") {
+      return fail(c, errors.covenantFederation({ error: msg }), 409);
+    }
+    if (msg === "covenant_peer_not_allowed") {
+      return fail(c, errors.covenantFederation({ error: msg }), 403);
+    }
+    if (msg === "covenant_wire_identity_binding_mismatch") {
+      return fail(c, errors.covenantFederation({ error: msg }), 409);
+    }
+    if (msg === "accept_requires_received_federated_proposal") {
+      return fail(c, errors.covenantFederation({ error: msg }), 409);
+    }
+    if (msg === "signing_key_not_active_for_identity") {
+      return fail(c, errors.covenantFederation({ error: msg }), 400);
+    }
     if (msg.startsWith("covenant_not_proposed")) return fail(c, errors.covenantNotProposed({ status: msg.split(":")[1]?.trim() }), 409);
     throw e;
   }
@@ -649,30 +1003,41 @@ app.post("/covenants/:id/accept", async (c) => {
 
 app.post("/covenants/:id/reject", async (c) => {
   const id = c.req.param("id");
+  if (!isCanonicalCovenantId(id)) {
+    return fail(c, errors.covenantFederation({
+      error: "invalid_covenant_id",
+    }), 400);
+  }
   const body = await c.req.json().catch(() => ({}));
   const rejectBody = z.object({
     agent_did: z.string().min(1).max(255),
-    rejecter_signing_key_id: z.string().uuid(),
-    rejection_signature: z.string().min(1).max(255),
-    rejected_at: z.string().datetime(),
+    rejecter_signing_key_id: canonicalSignedUuidSchema,
+    rejection_signature: canonicalEd25519SignatureSchema,
+    rejected_at: canonicalSignedInstantSchema,
     reason: z.string().max(2000).nullish(),
   }).safeParse(body);
   if (!rejectBody.success) return c.json({ error: "validation", details: rejectBody.error.flatten() }, 400);
   const data = rejectBody.data;
+  if (!covenantV2AuthorityGeneration()) {
+    return fail(c, errors.covenantFederation({
+      error: "covenant_v2_authority_not_ready",
+    }), 409);
+  }
 
   const [existing] = await db.select().from(covenants)
     .where(and(eq(covenants.id, id), eq(covenants.projectId, c.var.project.id))).limit(1);
   // Errors-as-instructions — see docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md
   if (!existing) return fail(c, errors.notFound({ resource: "Covenant" }), 404);
   if (existing.protocolVersion !== "v2") return fail(c, errors.notV2(), 400);
-  if (existing.status !== "proposed") return fail(c, errors.covenantNotProposed({ status: existing.status }), 409);
+  if (existing.status !== "proposed" && existing.status !== "rejected") {
+    return fail(c, errors.covenantNotProposed({ status: existing.status }), 409);
+  }
 
   const [keyRow] = await db.select({ publicKey: identityKeys.publicKey })
     .from(identityKeys)
     .where(and(
       eq(identityKeys.id, data.rejecter_signing_key_id),
       eq(identityKeys.identityId, existing.agentId),
-      eq(identityKeys.active, true),
     )).limit(1);
   if (!keyRow) return fail(c, errors.signingKeyNotFound(), 400);
 
@@ -690,11 +1055,34 @@ app.post("/covenants/:id/reject", async (c) => {
       reason: data.reason ?? null,
       publicKeyB64: keyRow.publicKey,
     });
-    void propagateReject(id);
+    void propagateReject(id).catch((err: Error) =>
+      console.warn(`[covenant.reject.propagate] ${id}: ${err.message}`),
+    );
     return c.json({ id: result.id, status: result.status, reason: result.reason }, 200);
   } catch (e) {
     const msg = (e as Error).message;
     if (msg === "invalid_signature") return c.json({ error: "invalid_signature" }, 403);
+    if (msg === "rejecter_did_mismatch") {
+      return fail(c, errors.covenantFederation({ error: msg }), 403);
+    }
+    if (msg === "federation_not_ready") {
+      return fail(c, errors.covenantFederation({ error: msg }), 409);
+    }
+    if (msg === "covenant_v2_authority_not_ready") {
+      return fail(c, errors.covenantFederation({ error: msg }), 409);
+    }
+    if (msg === "covenant_peer_not_allowed") {
+      return fail(c, errors.covenantFederation({ error: msg }), 403);
+    }
+    if (msg === "covenant_wire_identity_binding_mismatch") {
+      return fail(c, errors.covenantFederation({ error: msg }), 409);
+    }
+    if (msg === "reject_requires_received_federated_proposal") {
+      return fail(c, errors.covenantFederation({ error: msg }), 409);
+    }
+    if (msg === "signing_key_not_active_for_identity") {
+      return fail(c, errors.covenantFederation({ error: msg }), 400);
+    }
     if (msg.startsWith("covenant_not_proposed")) return c.json({ error: msg }, 409);
     throw e;
   }

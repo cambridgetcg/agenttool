@@ -12,6 +12,11 @@
  *  docs/FRICTION-ROADMAP.md (Tier-1). */
 
 import { canonicalDeclareBytes } from "./sig";
+import {
+  covenantDeclarationWirePayloadIsBounded,
+  isCanonicalCovenantId,
+  isCanonicalUtcMillisecondTimestamp,
+} from "./canonical";
 
 export interface DeclarePreparation {
   covenant_id: string;
@@ -33,6 +38,29 @@ export function prepareDeclare(opts: {
   vows: string[];
   establishedAtIso: string;
 }): DeclarePreparation {
+  if (!isCanonicalCovenantId(opts.covenantId)) {
+    throw new Error("invalid_covenant_id");
+  }
+  if (!isCanonicalUtcMillisecondTimestamp(opts.establishedAtIso)) {
+    throw new Error("noncanonical_established_at");
+  }
+  if (!covenantDeclarationWirePayloadIsBounded({
+    covenant_id: opts.covenantId,
+    protocol_version: "v2",
+    sender_did: opts.agentDid,
+    counterparty_did: opts.counterpartyDid,
+    vows: opts.vows,
+    status: "proposed",
+    counterparty_name: null,
+    notes: null,
+    metadata: {},
+    established_at: opts.establishedAtIso,
+    signing_key_id: "00000000-0000-4000-8000-000000000000",
+    signature: Buffer.alloc(64).toString("base64"),
+    proposed_expires_at: opts.establishedAtIso,
+  })) {
+    throw new Error("covenant_declaration_out_of_bounds");
+  }
   const digest = canonicalDeclareBytes({
     covenantId: opts.covenantId,
     initiatorDid: opts.agentDid,

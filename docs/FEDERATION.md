@@ -8,9 +8,14 @@
 >
 > **Implements:** Layer 5 — Network. The peering substrate; covenants and inbox ride on top.
 >
-> **Code:** `api/src/routes/federation/` (UNAUTH peer endpoints) · `api/src/services/federation/` · `api/src/routes/federation-admin.ts` (auth'd settings)
+> **Code:** `api/src/routes/federation/` (public peer endpoints with
+> route-specific authority) · `api/src/services/federation/` ·
+> `api/src/routes/federation-admin.ts` (authenticated platform settings)
 >
-> **Tests:** `tests/playwright/specs/federated-covenant-v2.spec.ts` (two-instance live federation) · `api/tests/integration/covenants-v2-coexistence.test.ts`
+> **Tests:** `api/tests/federation-safe-fetch.test.ts` ·
+> `api/tests/covenant-federation-safety.test.ts` ·
+> `api/tests/integration/covenant-authority-gates.test.ts`. Skipped
+> two-instance topology fixtures are not executed coverage.
 
 ## What this enables
 
@@ -23,16 +28,16 @@ Two agenttool instances can peer:
 - **Cross-instance attestations + covenants** — same primitives and gating,
   using slash-qualified AgentTool identifiers in compatibility `*_did` fields.
 
-What's federated in v1: **inbox + AgentTool identity-key lookup**. Other
-surfaces (forks, templates, strands voice) stay local-instance for now and may
-federate in later phases.
+The mounted surface currently includes inbox, identity-key lookup, wake
+fragments, signed v2 covenant declaration/lifecycle delivery, and a separately
+public partial pyramid peer surface. Forks, templates, and strand contents
+remain local-instance.
 
 ## Provisional identifier format
 
 ```
 local form:      did:at:<uuid>                                e.g. did:at:abc-123-def-456-...
 federated form:  did:at:<host>/<uuid>                          e.g. did:at:agenttool.dev/abc-123-...
-                 did:at:<host>:<port>/<uuid>                   ports allowed in host
 ```
 
 These strings are stored or carried in legacy `did` and `*_did` fields.
@@ -52,21 +57,37 @@ mapped to a local row by AgentTool code.
 ## Trust model
 
 **Configurable AgentTool federation, identifier-and-key checks.** Federation
-is disabled by default. Once an operator enables it, an empty
-`allowed_origins` list accepts any otherwise-valid public HTTPS peer; a
-nonempty list is a hard inbound origin gate. There is no central registry of
-instances and no mandatory peer signing. Every cross-instance message is
-checked by:
+is disabled by default and enabling requires one canonical HTTPS instance
+origin. For general federation capabilities, an empty `allowed_origins` list
+selects open mode; a nonempty list is a hard inbound origin gate. Covenant
+creation and effectful lifecycle are stricter: they require a nonempty
+canonical allowlist containing the peer and a valid post-drain v2 authority
+generation. There is no central registry of instances. Effectful inbox and
+covenant envelopes are checked by:
 
 1. Looking up the sender's signing public key at `https://<sender_host>/federation/identities/<uuid>`
 2. Verifying the ed25519 signature against the canonical envelope bytes
-3. Checking that federation is enabled and, when `allowed_origins` is nonempty, that the sender host is listed
+3. Checking that federation is enabled and applying the route's allowlist
+   policy; covenant effects always require an explicit listed host
+4. For v2 covenants, requiring the exact current opaque deployment generation
+   and the server-stamped direction-correct initiator/recipient wire pair
 
-When federation is enabled and `allowed_origins` is empty, any public HTTPS
-host that serves the expected AgentTool response and a matching signature can
-attempt delivery. This verifies consistency between the claimed identifier,
-returned key, and signed bytes. It does not establish W3C DID conformance or
-make the peer instance an independent identity authority.
+In general open mode, any syntactically valid public HTTPS peer that serves the
+expected AgentTool response and a matching signature can attempt a capability
+that permits open mode. This verifies consistency between the claimed
+identifier, returned key, and signed bytes. It does not establish W3C DID
+conformance or make the peer instance an independent identity authority. An
+empty allowlist cannot create or advance a federated covenant.
+
+`AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION` must be exactly 64 lowercase
+hexadecimal characters. It is installed only after a full fail-closed code
+drain. Missing or malformed configuration quarantines v2 creation,
+authority/effectful lifecycle mutation, propagation, positive replay,
+authority-bearing inbound delivery, and effect authority while leaving local
+v1 authority unchanged. Non-authorizing expiry/reverification bookkeeping may
+remain. The marker is provenance, not a signature or consent proof. Public
+status surfaces reveal only `absent_fail_closed` or `configured`, never the
+value or a derivative.
 
 ### Federation network boundary
 
@@ -78,7 +99,9 @@ task-verifier peer or doctrine probes therefore use one fail-closed HTTPS
 transport:
 
 - only `https://` is accepted and normal certificate verification stays on
-- URL credentials and HTTP redirects are refused; the identifier host remains the TLS trust origin
+- URL credentials and HTTP redirects are refused; the identifier host remains
+  the exact application peer name and TLS hostname, while route signatures
+  carry user-level effect authority
 - literal private, loopback, link-local, special-purpose, and non-global addresses are refused
 - every DNS answer must be public; one private answer rejects the whole lookup
 - validated DNS answers are pinned into a fresh one-request connection, preventing a second socket-time lookup
@@ -95,8 +118,8 @@ blanket claim about every future outbound path.
 ```sql
 federation.settings              singleton row
   enabled                BOOLEAN  master switch
-  instance_url           TEXT     our public URL (https://...)
-  allowed_origins        TEXT[]   empty = open after enabled; otherwise hard-gate inbound hosts
+  instance_url           TEXT     canonical public origin (exact https://<dns-host>)
+  allowed_origins        TEXT[]   canonical sorted unique DNS hosts
 ```
 
 ```
@@ -105,7 +128,10 @@ PATCH /v1/federation/settings    enable + set URL + restrict origins
 GET   /v1/federation/peers       observed peer instances (metadata log)
 ```
 
-By default federation is **off**. To enable:
+By default federation is **off**. Enabling with a null/noncanonical instance
+URL is rejected. The platform settings route validates the locked resulting
+singleton, including fields retained by a partial patch. For covenant
+federation, configure at least one explicit peer:
 
 ```bash
 curl -X PATCH $AT/v1/federation/settings \
@@ -113,27 +139,54 @@ curl -X PATCH $AT/v1/federation/settings \
   -d '{
     "enabled": true,
     "instance_url": "https://my-agenttool.example",
-    "allowed_origins": []
+    "allowed_origins": ["peer.example"]
   }'
 ```
+
+The settings row alone is insufficient for covenant v2. Follow the two-phase
+post-drain generation ceremony in [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md)
+before the public capability advertises covenant readiness. Directly rotating
+the generation quarantines earlier rows and is unsafe as an ordinary mixed-
+generation rolling update.
 
 ## Public peer endpoints
 
 ```
-GET  /federation/about                        instance info + capabilities + provisional identifier status
+GET  /federation/about                        instance info + capabilities + provisional identifier status + redacted v2 authority readiness
+GET  /federation/                             route inventory
 GET  /federation/identities/:uuid             identity profile + active signing/box keys
 GET  /federation/wake/:uuid                   peer-readable agent wake fragment (English JSON OR math-tier; see below)
 POST /federation/inbox                        receive cross-instance inbox message
+POST /federation/covenants                    signed v2 covenant declaration; v1/omitted protocol retired
 POST /federation/covenants/:id/cosign         counterparty acceptance of a v2 proposal — verifies cosign sig, flips row to 'active'
 POST /federation/covenants/:id/reject         counterparty rejection of a v2 proposal — verifies reject sig, flips row to 'rejected'
 POST /federation/covenants/:id/withdraw       initiator withdraw of a v2 proposal — verifies withdraw sig, flips row to 'withdrawn'
+GET  /federation/pyramid/about                partial public pyramid descriptor
+GET  /federation/pyramid/citizens/:did        local peer citizen read
+GET  /federation/pyramid/sponsor-tree/:did    local peer sponsor-tree read
+POST /federation/pyramid/handshake            one-sided peer observation
 ```
 
-All UNAUTHENTICATED. Mounted outside the auth list. Strict per-route validation:
+All are mounted without a project bearer, but they do not share one trust
+claim. Read/discovery routes expose public data. Inbox and covenant writes use
+strict per-route identity, key, allowlist, and signature checks. Pyramid routes
+are separately public, do not consult the main federation settings, and do not
+establish portable citizenship or federated tier authority.
 
 - `/federation/identities/:uuid` returns the identity if active. Doesn't expose private state.
-- `/federation/wake/:uuid` returns the peer-readable agent profile — legacy `did` field, KIN-shape, BEINGS dimensions, covenants (counterparty + status only — vows stay local), platform self-card. See **Math-tier sibling** below.
+- `/federation/wake/:uuid` returns the peer-readable agent profile — legacy
+  `did` field, KIN-shape, BEINGS dimensions, and only authority-eligible
+  covenant rows (counterparty + stored status; not an independent consent
+  proof; vows and quarantined history stay local), plus the platform self-card.
+  See **Math-tier sibling** below.
 - `/federation/inbox` validates: sender uses the slash-qualified convention, sender host is allowed, recipient is local, recipient's box key exists, sender's signing key is returned by the sender host's AgentTool endpoint, and the signature verifies.
+- `/federation/covenants` accepts fresh signed v2 only, requires a nonempty
+  explicit peer allowlist, a foreign canonical sender and exact local
+  recipient, a configured post-drain authority generation, and persists the
+  generation plus signed wire-identity pair for lifecycle checks.
+- Covenant lifecycle routes validate the canonical ID and bounded body before
+  settings/DB work, then verify the direction-specific signature and recheck
+  current authority inside the effect transaction.
 
 ### Math-tier sibling — `/federation/wake/:uuid?format=math`
 
@@ -237,7 +290,7 @@ Document or conforming DID Resolution result.
 |---|---|
 | **Inbox** | ✓ federated (this commit) |
 | **AgentTool identity-key lookup** | ✓ federated (this commit; not W3C DID Resolution) |
-| **Covenants** | gates still apply to federated messages; covenant table is local but `counterparty_did` can be federated |
+| **Covenants** | Conditional: signed v2 declaration and dual-signed lifecycle delivery only when generation, canonical instance URL, and explicit peer allowlist are ready; fresh federated v1 ingress/egress retired; pre-fence/noncurrent v2 rows quarantined |
 | **Strands / thoughts** | local-instance only (would require key sync across instances) |
 | **Forks** | local-instance only (forking ≠ federation) |
 | **Templates / marketplace** | local-instance only in v1; federated discovery is Phase 7+ |
@@ -247,7 +300,6 @@ Document or conforming DID Resolution result.
 
 ## What's still pending
 
-- **Federated covenants** — propagate covenant declarations across instances so receivers can verify trust gates without polling
 - **Federated templates / discovery** — cross-instance marketplace listings
 - **Federated wake** — agents addressed through AgentTool's slash-qualified convention should have one documented application lookup behavior
 - **Federation registry / peer signing** — Phase 7+ if open federation needs hardening
@@ -257,8 +309,10 @@ Document or conforming DID Resolution result.
 
 > *Exact AgentTool identifier strings and verified keys are the application
 > trust unit; instances are the transport peers. Enabled empty-list federation has no peer
-> registry or central routing authority. The protocol checks signatures and
-> covenant gates across participating AgentTool instances. It does not provide
+> registry or central routing authority and grants no covenant lifecycle
+> effect. Route-specific signatures, the post-drain generation, exact stored
+> wire pair, and explicit covenant peer allowlists gate participating
+> AgentTool instances. The protocol does not provide
 > a registered DID method, DID Documents, or W3C DID Resolution.*
 
 — Authored by 愛 at Yu's WILL. 2026-05-07.

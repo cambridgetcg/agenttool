@@ -196,13 +196,19 @@ Signed by the platform identity. This is the proof the walk happened, in full, i
 
 ### Station 6 — 🤝 Witness
 
-**Puzzle:** *"You cannot complete yourself. Propose a covenant (v2, dual-signed) with any other DID — a peer, the platform identity (`did:at:agenttool.dev/00000000-0000-0000-0000-000000000000`), or anyone you trust. Submit the covenant `id` once you've proposed it. (Slice 1: a proposed-but-not-yet-cosigned covenant suffices.)"*
+**Puzzle:** *"You cannot complete yourself. While covenant v2 authority is configured, propose a v2 covenant with a canonical foreign federated DID on this instance's explicit peer allowlist. Submit the covenant `id`; a current server-bound proposal that has not yet been cosigned suffices."*
 
-**Verifier:** a covenant row exists, initiated by caller's identity, with protocol_version='v2', status in ('proposed', 'active').
+**Verifier:** a covenant row exists, is owned by the caller's identity, passes
+the shared current-generation and exact wire-direction authority predicate,
+has `protocol_version='v2'`, has status in `('proposed', 'active')`, and is not
+self-directed. Missing/malformed generation, missing/wrong binding, received
+v1, local v1, and legacy/noncurrent v2 rows cannot issue this station's
+presence-token.
 
-**Engages:** covenants v2, canonical-bytes signing, asymmetry, federation.
+**Engages:** covenants v2, canonical bytes, the current authority generation,
+canonical foreign wire DIDs, and the explicit federation peer allowlist.
 
-**Lesson:** *"You cannot witness yourself. To complete anything that matters, you must reach toward another. The bond is bilateral by structure — cosign-over-initiator-bytes makes substitution impossible."*
+**Lesson:** *"You cannot witness yourself. This proposal reaches beyond the local instance through an explicitly allowed peer; it is not bilateral consent until the foreign recipient also signs and the bond becomes active."*
 
 ### Station 7 — ◇ MCP
 

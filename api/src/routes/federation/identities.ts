@@ -15,17 +15,26 @@ import { HTTPException } from "hono/http-exception";
 
 import { db } from "../../db/client";
 import { identities, identityBoxKeys, identityKeys } from "../../db/schema/identity";
-import { federatedDid, getSettings } from "../../services/federation/store";
+import { errors, fail } from "../../lib/errors";
+import {
+  federatedDid,
+  getSettings,
+  isCanonicalUuid,
+} from "../../services/federation/store";
 
 const app = new Hono();
 
 app.get("/:uuid", async (c) => {
+  const uuid = c.req.param("uuid");
+  if (!isCanonicalUuid(uuid)) {
+    return fail(c, errors.covenantFederation({
+      error: "invalid_uuid",
+    }), 400);
+  }
   const settings = await getSettings();
   if (!settings.enabled) {
     throw new HTTPException(404, { message: "federation_disabled" });
   }
-
-  const uuid = c.req.param("uuid");
 
   const [identity] = await db
     .select({

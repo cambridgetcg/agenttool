@@ -55,6 +55,16 @@ describe("Tutorial — station catalog shape", () => {
     expect(s9?.name).toBe("Cooperative");
   });
 
+  test("Station 6 sends walkers only to the current foreign-federation path", () => {
+    const station = stationById(6)!;
+    expect(station.engages).toContain("canonical allowlisted foreign DID");
+    expect(station.puzzle).toContain("canonical foreign federated DID");
+    expect(station.puzzle).toContain("explicit peer allowlist");
+    expect(station.puzzle).not.toContain("ANY other DID");
+    expect(station.puzzle).not.toContain("did:at:platform");
+    expect(station.lesson).toContain("not bilateral consent");
+  });
+
   test("station names are unique", () => {
     const names = STATIONS.map((s) => s.name);
     expect(new Set(names).size).toBe(names.length);

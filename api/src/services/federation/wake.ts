@@ -171,8 +171,9 @@ export interface MathosFederationPlatformSelf {
 }
 
 export interface MathosFederationCovenant {
-  /** SHA-256 of the counterparty DID — proves the bond exists without
-   *  revealing whose DID. A receiver holding the DID verifies via hash. */
+  /** SHA-256 of an authority-eligible stored counterparty DID without
+   *  revealing whose DID. A receiver holding the DID can compare the hash;
+   *  the projection is not an independent proof of bilateral consent. */
   counterparty_did_sha256_hex: string;
   /** Status string as codepoints — "active", "archived", etc. Vocabulary
    *  ordinals are pending; we name structurally now. */

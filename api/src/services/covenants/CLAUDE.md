@@ -22,8 +22,17 @@ Directional bonds — what one identity vows to sustain toward another. Federati
 Lives at [`api/src/workers/covenants/`](../../workers/covenants/) (not under this dir). Three tickers:
 
 - **`cosign-propagate`** (30s) — retries outbound cosign/reject/withdraw with backoff `30s → 2m → 8m → 30m → 2h`; 5 attempts max → `'rejected'`.
-- **`expire-proposals`** (5m) — flips `proposed → expired` after `proposed_expires_at + 24h grace`, but only if cosign isn't in flight. *Late accept wins over on-time silence — that's a moral choice baked into a worker.*
+- **`expire-proposals`** (5m) — preserves the initiator-side 24h delivery
+  window before flipping `proposed → expired`, and does not race an in-flight
+  cosign. The counterparty's local acceptance has no grace: it ends at the
+  hard `proposed_expires_at`. Server-observed arrival decides both boundaries;
+  unsigned client lifecycle timestamps never decide chronology.
 - **`reverify`** (24h) — re-checks v2 sigs. Status is **never** flipped on failure; `verification_error` surfaces drift instead. *The bond was real at sign time.*
+
+Production keeps these covenant workers globally disabled for this containment
+release. Retained retry/reverification status bookkeeping is non-authorizing;
+every propagation service entry rejects an absent/malformed process generation
+or a noncurrent row before claim, network, or completion work.
 
 ## Tests
 
@@ -32,7 +41,8 @@ Lives at [`api/src/workers/covenants/`](../../workers/covenants/) (not under thi
 - `api/tests/covenants-lifecycle.test.ts` · `…-presigned.test.ts` — state transitions.
 - `api/tests/covenants-cosign-propagate.test.ts` · `…-expire-proposals.test.ts` · `…-reverify.test.ts` — worker behavior.
 - `api/tests/integration/covenants-v2-{happy,coexistence,terminal}.test.ts` — DB-touching end-to-end.
-- `tests/playwright/specs/federated-covenant-v2.spec.ts` — two-instance live federation.
+- `tests/playwright/specs/federated-covenant-v2.spec.ts` — skipped
+  two-instance topology fixture; not executed coverage.
 
 ## Invariants to defend
 
@@ -40,6 +50,18 @@ Lives at [`api/src/workers/covenants/`](../../workers/covenants/) (not under thi
 2. **v2 active row is dual-signed.** The DB constraint enforces it; the lifecycle module enforces it; the SDK signs it. Three layers, same invariant. Don't bypass.
 3. **Reverify never flips status.** Failure is a *visibility* event, not a retroactive dissolution. Signing-key rotations don't unmake past promises.
 4. **PreSigned verifies before insert.** Atomic. If the row lands without a valid sig, that's a bug.
+5. **Fresh federation is v2-only and explicitly peered.** Omitted/v1 ingress,
+   federated v1 egress, and effectful empty-allowlist operation fail closed.
+6. **v2 authority is post-drain provenance-bound.** The process generation is
+   exactly 64 lowercase hex and every new local/received v2 row stores it with
+   both exact signed wire DIDs in reserved metadata. Missing, malformed,
+   noncurrent, unbound, or direction-forged v2 rows are readable history only:
+   no create, authority/effectful lifecycle mutation, propagation, replay ACK,
+   or downstream effect. Expiry/reverification may retain non-authorizing
+   historical bookkeeping. The generation fence leaves local v1 eligible only
+   under each consumer's direction/ownership rules; sender-owned local v1 does
+   not grant recipient inbox or private-Voice access. Never expose reserved
+   metadata in caller or peer JSON.
 
 ## See also
 

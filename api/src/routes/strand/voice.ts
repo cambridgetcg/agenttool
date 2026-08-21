@@ -120,7 +120,8 @@ app.get("/", async (c) => {
             error: "strand_not_accessible",
             hint:
               "private strand owned by another project; need an active " +
-              "covenant (project- or org-level) in either direction or " +
+              "owner-side covenant (project- or org-level) naming a caller " +
+              "DID, or " +
               "visibility='public' on the strand.",
           },
           403,

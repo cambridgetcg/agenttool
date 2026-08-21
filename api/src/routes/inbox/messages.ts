@@ -3,7 +3,7 @@
  *  Server stores caller-supplied body-envelope fields + an ed25519 signature.
  *  Correct recipient sealing is confidential, but the server does not verify
  *  encryption; subject and routing/thread metadata can be readable.
- *  Cross-project sends gated by active covenant in either direction. */
+ *  Cross-project sends require recipient-side covenant consent. */
 
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";

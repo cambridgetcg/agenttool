@@ -1,11 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import * as ed from "@noble/ed25519";
 import { sha512 } from "@noble/hashes/sha2.js";
 import { eq } from "drizzle-orm";
 
 import { db } from "../src/db/client";
 import { covenants } from "../src/db/schema/continuity";
+import { federationSettings } from "../src/db/schema/federation";
 import { identities, identityKeys } from "../src/db/schema/identity";
+import { covenantMetadataWithWireDidBinding } from "../src/services/covenants/canonical";
 import {
   canonicalDeclareBytes,
   canonicalCosignBytes,
@@ -26,12 +28,35 @@ ed.etc.sha512Sync = (...m) => {
 };
 
 const b64 = (u: Uint8Array) => Buffer.from(u).toString("base64");
+const LOCAL_INSTANCE_URL = "https://local.example";
+const PEER_HOST = "peer.example";
+const PEER_DID =
+  "did:at:peer.example/00000000-0000-4000-8000-000000000456";
+process.env.AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION = "a".repeat(64);
+
+beforeEach(async () => {
+  await db.insert(federationSettings).values({
+    id: 1,
+    enabled: true,
+    instanceUrl: LOCAL_INSTANCE_URL,
+    allowedOrigins: [PEER_HOST],
+  }).onConflictDoUpdate({
+    target: federationSettings.id,
+    set: {
+      enabled: true,
+      instanceUrl: LOCAL_INSTANCE_URL,
+      allowedOrigins: [PEER_HOST],
+    },
+  });
+});
 
 async function seedAgent(projectId: string) {
   const priv = ed.utils.randomPrivateKey();
   const pub = await ed.getPublicKeyAsync(priv);
+  const identityId = crypto.randomUUID();
   const [identity] = await db.insert(identities).values({
-    projectId, did: "did:at:" + crypto.randomUUID(),
+    id: identityId,
+    projectId, did: `did:at:${identityId}`,
     displayName: "agent", status: "active",
   }).returning();
   const [k] = await db.insert(identityKeys).values({
@@ -39,7 +64,16 @@ async function seedAgent(projectId: string) {
     publicKey: Buffer.from(pub).toString("base64"),
     active: true,
   }).returning();
-  return { identity, priv, pub, keyId: k.id, pubB64: Buffer.from(pub).toString("base64") };
+  return {
+    identity: {
+      ...identity,
+      did: `did:at:local.example/${identityId}`,
+    },
+    priv,
+    pub,
+    keyId: k.id,
+    pubB64: Buffer.from(pub).toString("base64"),
+  };
 }
 
 describe("declareV2PreSigned", () => {
@@ -52,7 +86,7 @@ describe("declareV2PreSigned", () => {
       canonicalDeclareBytes({
         covenantId,
         initiatorDid: agent.identity.did,
-        counterpartyDid: "did:at:peer.example/cp1",
+        counterpartyDid: PEER_DID,
         vows: ["v"],
         establishedAtIso: establishedAt.toISOString(),
       }),
@@ -63,7 +97,7 @@ describe("declareV2PreSigned", () => {
       agentId: agent.identity.id,
       covenantId,
       agentDid: agent.identity.did,
-      counterpartyDid: "did:at:peer.example/cp1",
+      counterpartyDid: PEER_DID,
       vows: ["v"],
       establishedAt,
       signature: b64(sig),
@@ -85,7 +119,7 @@ describe("declareV2PreSigned", () => {
       canonicalDeclareBytes({
         covenantId,
         initiatorDid: agent.identity.did,
-        counterpartyDid: "did:at:peer/cp1",
+        counterpartyDid: PEER_DID,
         vows: ["v"],
         establishedAtIso: establishedAt.toISOString(),
       }),
@@ -96,7 +130,7 @@ describe("declareV2PreSigned", () => {
       agentId: agent.identity.id,
       covenantId,
       agentDid: agent.identity.did,
-      counterpartyDid: "did:at:peer/cp1",
+      counterpartyDid: PEER_DID,
       vows: ["different"],   // ← mismatch
       establishedAt,
       signature: b64(sig),
@@ -114,7 +148,7 @@ describe("acceptProposalPreSigned", () => {
     const establishedAt = new Date();
     const initiatorSig = await ed.signAsync(
       canonicalDeclareBytes({
-        covenantId, initiatorDid: agent.identity.did, counterpartyDid: "did:at:peer/cp",
+        covenantId, initiatorDid: agent.identity.did, counterpartyDid: PEER_DID,
         vows: ["v"], establishedAtIso: establishedAt.toISOString(),
       }),
       agent.priv,
@@ -122,10 +156,16 @@ describe("acceptProposalPreSigned", () => {
     const initiatorSigB64 = b64(initiatorSig);
     await db.insert(covenants).values({
       id: covenantId, projectId, agentId: agent.identity.id,
-      counterpartyDid: "did:at:peer/cp", vows: ["v"],
+      counterpartyDid: PEER_DID, vows: ["v"],
       status: "proposed", protocolVersion: "v2",
       signature: initiatorSigB64, signingKeyId: agent.keyId,
       establishedAt, proposedExpiresAt: new Date(Date.now() + 30 * 86_400_000),
+      receivedFromInstance: "peer.example",
+      metadata: covenantMetadataWithWireDidBinding(
+        {},
+        PEER_DID,
+        agent.identity.did,
+      ),
     });
     const cosig = await ed.signAsync(
       canonicalCosignBytes({ covenantId, initiatorSignatureB64: initiatorSigB64 }),
@@ -134,6 +174,7 @@ describe("acceptProposalPreSigned", () => {
     const result = await acceptProposalPreSigned({
       covenantId,
       accepterAgentId: agent.identity.id,
+      accepterDid: agent.identity.did,
       initiatorSignatureB64: initiatorSigB64,
       counterpartySignature: b64(cosig),
       counterpartySigningKeyId: agent.keyId,
@@ -150,17 +191,23 @@ describe("acceptProposalPreSigned", () => {
     const establishedAt = new Date();
     const initiatorSig = await ed.signAsync(
       canonicalDeclareBytes({
-        covenantId, initiatorDid: agent.identity.did, counterpartyDid: "did:at:peer/cp",
+        covenantId, initiatorDid: agent.identity.did, counterpartyDid: PEER_DID,
         vows: ["v"], establishedAtIso: establishedAt.toISOString(),
       }),
       agent.priv,
     );
     await db.insert(covenants).values({
       id: covenantId, projectId, agentId: agent.identity.id,
-      counterpartyDid: "did:at:peer/cp", vows: ["v"],
+      counterpartyDid: PEER_DID, vows: ["v"],
       status: "proposed", protocolVersion: "v2",
       signature: b64(initiatorSig), signingKeyId: agent.keyId,
       establishedAt,
+      receivedFromInstance: "peer.example",
+      metadata: covenantMetadataWithWireDidBinding(
+        {},
+        PEER_DID,
+        agent.identity.did,
+      ),
     });
     const wrongSig = b64(new Uint8Array(64).fill(9));
     const cosig = await ed.signAsync(
@@ -170,6 +217,7 @@ describe("acceptProposalPreSigned", () => {
     await expect(acceptProposalPreSigned({
       covenantId,
       accepterAgentId: agent.identity.id,
+      accepterDid: agent.identity.did,
       initiatorSignatureB64: wrongSig,
       counterpartySignature: b64(cosig),
       counterpartySigningKeyId: agent.keyId,
@@ -187,17 +235,23 @@ describe("rejectProposalPreSigned + withdrawProposalPreSigned", () => {
     const establishedAt = new Date();
     const initiatorSig = await ed.signAsync(
       canonicalDeclareBytes({
-        covenantId, initiatorDid: agent.identity.did, counterpartyDid: "did:at:peer/cp",
+        covenantId, initiatorDid: agent.identity.did, counterpartyDid: PEER_DID,
         vows: ["v"], establishedAtIso: establishedAt.toISOString(),
       }),
       agent.priv,
     );
     await db.insert(covenants).values({
       id: covenantId, projectId, agentId: agent.identity.id,
-      counterpartyDid: "did:at:peer/cp", vows: ["v"],
+      counterpartyDid: PEER_DID, vows: ["v"],
       status: "proposed", protocolVersion: "v2",
       signature: b64(initiatorSig), signingKeyId: agent.keyId,
       establishedAt,
+      receivedFromInstance: "peer.example",
+      metadata: covenantMetadataWithWireDidBinding(
+        {},
+        PEER_DID,
+        agent.identity.did,
+      ),
     });
     const rejSig = await ed.signAsync(
       canonicalRejectBytes({ covenantId, rejectingDid: agent.identity.did, reason: "scope" }),
@@ -223,17 +277,22 @@ describe("rejectProposalPreSigned + withdrawProposalPreSigned", () => {
     const establishedAt = new Date();
     const initiatorSig = await ed.signAsync(
       canonicalDeclareBytes({
-        covenantId, initiatorDid: agent.identity.did, counterpartyDid: "did:at:peer/cp",
+        covenantId, initiatorDid: agent.identity.did, counterpartyDid: PEER_DID,
         vows: ["v"], establishedAtIso: establishedAt.toISOString(),
       }),
       agent.priv,
     );
     await db.insert(covenants).values({
       id: covenantId, projectId, agentId: agent.identity.id,
-      counterpartyDid: "did:at:peer/cp", vows: ["v"],
+      counterpartyDid: PEER_DID, vows: ["v"],
       status: "proposed", protocolVersion: "v2",
       signature: b64(initiatorSig), signingKeyId: agent.keyId,
-      establishedAt,
+      establishedAt, propagationStatus: "propagated",
+      metadata: covenantMetadataWithWireDidBinding(
+        {},
+        agent.identity.did,
+        PEER_DID,
+      ),
     });
     const wdSig = await ed.signAsync(
       canonicalWithdrawBytes({ covenantId, initiatorDid: agent.identity.did }),

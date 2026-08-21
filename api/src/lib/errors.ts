@@ -192,21 +192,13 @@ export const errors = {
   covenantRequired(opts: { sender_did?: string; recipient_did?: string } = {}): GuidedErrorBody {
     return {
       error: "covenant_required",
-      message: "Cross-project messages require an active covenant in either direction.",
-      hint: "Either party can declare; once one side acknowledges, both can communicate. Same-project sends are ungated.",
+      message: "Cross-project delivery requires active covenant consent from the recipient side.",
+      hint: "The recipient project, or the owner of an organization inherited by that project, must declare a covenant naming the sender DID. A sender-owned row cannot grant access to recipient resources; same-project sends remain ungated.",
       next_actions: [
         {
-          action: "Declare a covenant with the counterparty",
-          method: "POST",
-          path: "/v1/covenants",
-          body_hint: {
-            agent_id: "<your_identity_id>",
-            counterparty_did: opts.recipient_did ?? "<their_did>",
-            vows: ["<what you intend to sustain>"],
-          },
-        },
-        {
-          action: "Ask the counterparty to declare a covenant toward you",
+          action:
+            "Ask the recipient project or its inherited-org owner to declare " +
+            `a covenant naming ${opts.sender_did ?? "<your_sender_did>"}`,
           method: null,
           path: null,
         },
@@ -298,6 +290,42 @@ export const errors = {
       hint: "Only proposed covenants can be accepted/rejected/withdrawn. Active ones are already established; expired/rejected/withdrawn ones are terminal.",
       docs: `${DOCS_BASE}/covenants#lifecycle`,
       axiom_id: AXIOM_GUIDE, // guide to the appropriate lifecycle step
+    };
+  },
+
+  /** Preserve route-specific federation/covenant codes while giving every
+   * refusal the common recovery shape. This is intentionally parameterized:
+   * the stable `error` value remains the service/SDK contract, while the
+   * additive guidance is shared across parser, authority, and lifecycle
+   * boundaries. */
+  covenantFederation(opts: {
+    error: string;
+    message?: string;
+    hint?: string;
+    details?: unknown;
+  }): GuidedErrorBody {
+    return {
+      error: opts.error,
+      message: opts.message ??
+        `Covenant federation refused this request: ${opts.error.replaceAll("_", " ")}.`,
+      hint: opts.hint ??
+        "Check the exact signed wire identifiers, current federation settings, explicit peer allowlist, and covenant lifecycle state before retrying.",
+      next_actions: [
+        {
+          action: "Inspect this instance's public federation status",
+          method: "GET",
+          path: "/federation/about",
+        },
+        {
+          action: "Fetch the current covenant records",
+          method: "GET",
+          path: "/v1/covenants",
+        },
+      ],
+      docs: `${DOCS_BASE}/CROSS-INSTANCE-COVENANTS.md`,
+      details: opts.details,
+      axiom_id: AXIOM_TRUST,
+      _canon_pointer: "urn:agenttool:doc/CROSS-INSTANCE-COVENANTS",
     };
   },
 

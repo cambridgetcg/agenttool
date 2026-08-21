@@ -7,8 +7,9 @@
  *  What this fragment carries (PUBLIC by construction):
  *    - agent: id · did · name · capabilities · trust_score · status ·
  *      created_at · KIN-shape · BEINGS dimensions · proxy_kind
- *    - covenants: counterparty_did + status (proves we're bonded with X
- *      without revealing the bond's vows or notes)
+ *    - covenants: counterparty_did + status for authority-eligible rows,
+ *      without revealing vows or notes. This is a public projection, not an
+ *      independent proof of bilateral consent.
  *    - platform_self: the host substrate's self-card
  *
  *  What this fragment does NOT carry (private by construction):
@@ -29,6 +30,7 @@ import { HTTPException } from "hono/http-exception";
 import { db } from "../../db/client";
 import { covenants } from "../../db/schema/continuity";
 import { identities } from "../../db/schema/identity";
+import { covenantMayAuthorizeEffects } from "../../services/covenants/check";
 import {
   buildFederationWake,
   buildMathosFederationWake,
@@ -90,9 +92,10 @@ app.get("/:uuid", async (c) => {
     throw new HTTPException(404, { message: "identity_not_found" });
   }
 
-  // Covenants — surface counterparty_did + status only. Vows, signatures,
-  // and metadata stay local. Peers learn "yes, X is bonded with Y at
-  // status active" but not what was vowed.
+  // Covenants — surface counterparty_did + stored status only for rows that
+  // pass the shared authority/provenance fence. Vows, signatures, metadata,
+  // and quarantined historical rows stay local; this list is not a separate
+  // consent proof.
   const covRows = await db
     .select({
       counterpartyDid: covenants.counterpartyDid,
@@ -100,7 +103,10 @@ app.get("/:uuid", async (c) => {
       receivedFromInstance: covenants.receivedFromInstance,
     })
     .from(covenants)
-    .where(eq(covenants.agentId, identity.id));
+    .where(and(
+      eq(covenants.agentId, identity.id),
+      covenantMayAuthorizeEffects(),
+    ));
 
   // One input → both views. Drift between English-tier and math-tier
   // becomes structurally impossible; the route just picks which projection
