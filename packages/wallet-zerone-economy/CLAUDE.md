@@ -62,12 +62,21 @@ root `CLAUDE.md`, `packages/wallet/CLAUDE.md`,
   imply it proves freshness: the durable host must invoke its signer
   immediately and reject/replace a request retained past `valid_until`.
 - Preserve in-process brands for plans, simulation bindings, signing requests,
-  verified simulation evidence, and verified transactions. Only the signed
-  evidence record has an explicit reload verifier. A host may restore a plan
+  verified simulation evidence, and verified transactions. Signed simulation
+  evidence and the portable signed-transaction record have explicit reload
+  verifiers. A host may restore a plan
   brand only by revalidating/reusing the original constructor inputs and
   matching the exact domain-separated full durable plan content ID; never
   accept serialized plan JSON as a reconstruction input. The host must still
   reconstruct the process-local binding/request steps after a process boundary.
+- Keep the portable signed-transaction record closed, canonical, and
+  content-addressed. Its brand-free reloader must independently decode exact
+  one-message `TxRaw`/`TxBody`/`AuthInfo`/`SignDoc`, derive source, key, message,
+  effect, fee, gas, and transaction hash, and enforce the compact low-S
+  SHA-256-prehash signature. The Cosmos signature does not authenticate plan,
+  request, intent, simulation/evidence, requested-time, or signer-provider
+  correspondence fields; only a host's prior immutable commitment can
+  authorize those coordinates.
 - Do not add a key, mnemonic, seed, signer implementation, endpoint, RPC/query
   client, simulation transport, broadcast, retry, custody, persistence,
   reservation, sequence lock, sticky-unknown state, or confirmation loop.

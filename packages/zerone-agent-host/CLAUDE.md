@@ -18,10 +18,32 @@ This private Bun-only package is a local durability and concurrency boundary for
 - Persist the signer-invocation boundary before any possible signer call. Every post-signer state is sticky and holds its sequence fence until positive chain evidence shows the account sequence advanced beyond the reserved sequence.
 - The typed method must derive the plan content ID, actor/module/effect, SignDoc hash, request time, and treasury reservations internally; Wallet authorization uses the durable pre-reservation counters and empty approval IDs inside the same immediate transaction.
 - Persist one append-only economy commitment and both boundary events in that transaction. A post-commit crash is `signing_unknown`; never reconstruct, return, or retry the signing request after the boundary.
+- Admit returned signed bytes only through the planner's portable record.
+  Reload and cryptographically verify exact one-message protobuf/signature/hash
+  bytes inside an immediate transaction, match all correspondence fields to
+  the prior immutable economy commitment, and persist exactly one append-only
+  record plus a distinct typed event. Admission may recover exact bytes after
+  the original sign-time windows expire because it creates no new authority,
+  exposure release, or network effect; any future broadcast seam must freshly
+  reauthorize first.
+- Treat plan/request/intent/simulation/evidence/time and opaque signer-provider
+  IDs in the portable record as correspondence rather than Cosmos-signed
+  authority. Never use the provider operation ID for admission, retry, or
+  reconciliation.
 - Reopen reverifies the signed simulation evidence and exact configured trust entries, but Wallet records and the full branded plan are IDs/event-commitments only. Before a not-yet-crossed boundary, reload and verify the original Wallet records and reconstruct only through the planner constructor with an exact content-ID match; never bless plan JSON.
 - Treat crashes left in `signing` or `submitting` as unknown during explicit cold-start recovery. Absence, timeout, and unavailable lookups never release state.
 - Reorg transitions require positive canonical-block replacement evidence. Never infer a reorg from transaction absence.
-- Keep all lifecycle transition inputs injected and evidence-shaped. This v0 ledger does not invoke a signer or broadcaster.
+- Keep caller-shaped sequence evidence legacy-generic/test-only. Typed sequence
+  release calls the immutable constructor account observer outside SQLite,
+  then derives an evidence ID over the full snapshot, operation, expected
+  revision, and reserved sequence and applies it with one host-clock time in an
+  immediate CAS transaction. The configured observer is a local embedding TCB,
+  not portable proof of canonical-chain truth. Observer failure, wrong
+  account/number/key, stale/expired/retrograde data, and no advance leave no
+  mutation.
+- Generic signed, broadcast, inclusion, reorg, and sequence APIs cannot advance
+  typed economy rows. This v0 ledger invokes no signer or broadcaster and
+  exposes no broadcast handoff.
 - ZRN is gas, prefunded settlement, and treasury accounting only. Never infer identity/currentness, truth, quality, KARMA/reputation, governance voice, rights, worth, or a duty to work instead of rest from balance, spend, stake, or payout eligibility.
 - Use immediate SQLite writer transactions for every authorization, reservation, lifecycle, and reconciliation mutation.
 - Preserve 0600 regular-file semantics for the database and all SQLite sidecars; reject symlinks, hardlinks, unowned or group/other-writable parents.

@@ -40,6 +40,14 @@ import {
   getZeroneProfile,
   type ZeroneSimulationResult,
 } from "@agenttool/wallet-zerone";
+import {
+  MESSAGE_TYPE_URLS,
+  WALLET_METHODS,
+  decodeCreateBountyOrderValue,
+  decodeFulfillBountyValue,
+  decodeSubmitComputationalClaimValue,
+  describeCanonicalProjection,
+} from "@agenttool/zerone-agent-economy";
 
 import {
   COSMOS_SECP256K1_PUBLIC_KEY_TYPE_URL,
@@ -52,6 +60,8 @@ import {
   ECONOMY_SIMULATION_BINDING_PROTOCOL,
   ECONOMY_SIMULATION_EVIDENCE_SCHEMA,
   ECONOMY_SIMULATION_EVIDENCE_SIGNING_DOMAIN,
+  ECONOMY_SIGNED_TRANSACTION_CONTENT_DOMAIN,
+  ECONOMY_SIGNED_TRANSACTION_SCHEMA,
   EXECUTION_SUPPORT,
   ZERONE_DENOM,
   ZERONE_DIRECT_SIGN_ALGORITHM,
@@ -66,11 +76,13 @@ import { bindEconomyIntentMessages } from "./projections.js";
 import type {
   CreateZeroneEconomyDirectSignPlanInput,
   CreateZeroneEconomySignedPayloadInput,
+  CreateZeroneEconomySignedTransactionRecordInput,
   CreateZeroneEconomySigningRequestInput,
   CreateZeroneEconomySimulationBindingInput,
   CreateZeroneEconomySimulationEvidenceInput,
   ReconstructZeroneEconomyDirectSignPlanInput,
   VerifiedZeroneEconomySimulationEvidence,
+  VerifiedZeroneEconomySignedTransactionRecord,
   VerifiedZeroneEconomyTransaction,
   ZeroneEconomyActivationObservation,
   ZeroneEconomyDirectSignPlan,
@@ -79,6 +91,8 @@ import type {
   ZeroneEconomySimulationEvidenceContent,
   ZeroneEconomySimulationEvidenceCore,
   ZeroneEconomySimulationReceiptInput,
+  ZeroneEconomySignedTransactionContent,
+  ZeroneEconomySignedTransactionRecord,
 } from "./types.js";
 import {
   assertAtomicAmount,
@@ -88,6 +102,7 @@ import {
   assertUint64,
   closedRecord,
 } from "./validation.js";
+import { getZeroneEconomyModuleAccounts } from "./profiles.js";
 import {
   decodeEconomyAuthInfo,
   decodeEconomySignDoc,
@@ -101,6 +116,7 @@ import {
 
 const directSignPlans = new WeakSet<object>();
 const verifiedTransactions = new WeakSet<object>();
+const verifiedSignedTransactionRecords = new WeakSet<object>();
 const verifiedSimulationEvidence = new WeakSet<object>();
 const simulationBindings = new WeakMap<
   object,
@@ -1299,6 +1315,612 @@ export function assertVerifiedZeroneEconomyTransaction(
       "Transaction must be returned by the economy chain-native verifier.",
     );
   }
+}
+
+const SIGNED_TRANSACTION_KEYS = Object.freeze([
+  "account_number",
+  "account_observed_at_height",
+  "activation_observation_hash",
+  "activation_observed_at_height",
+  "auth_info_bytes_b64u",
+  "auth_info_bytes_hash",
+  "body_bytes_b64u",
+  "body_bytes_hash",
+  "chain_id",
+  "chain_reference",
+  "content_id",
+  "cosmos_sdk",
+  "economic_effect",
+  "fee",
+  "gas_limit",
+  "intent_record_id",
+  "knowledge_consensus_version",
+  "message",
+  "plan_content_id",
+  "plan_id",
+  "request_id",
+  "requested_at",
+  "required_gas_limit",
+  "schema",
+  "sequence",
+  "sign_doc_bytes_b64u",
+  "sign_doc_bytes_hash",
+  "signer_key_id",
+  "signer_operation_id",
+  "signer_public_key_b64u",
+  "signer_public_key_type_url",
+  "signing_algorithm",
+  "simulation_evidence_content_id",
+  "simulation_evidence_record_id",
+  "simulation_record_id",
+  "simulation_tx_bytes_hash",
+  "source_account",
+  "sponsorship_consensus_version",
+  "total_reserved_spend_uzrn",
+  "tx_bytes_b64u",
+  "tx_bytes_hash",
+  "tx_hash",
+  "zerone_core_commit",
+] as const);
+
+const SIGNED_TRANSACTION_MESSAGE_KEYS = Object.freeze([
+  "actor_address",
+  "kind",
+  "module_account",
+  "projection_hash",
+  "required_gas",
+  "reserved_spend_uzrn",
+  "type_url",
+  "value_b64u",
+  "value_hash",
+  "wallet_method",
+] as const);
+
+const SIGNED_TRANSACTION_EFFECT_KEYS = Object.freeze([
+  "amount_atomic",
+  "asset_id",
+  "condition",
+  "direction",
+  "kind",
+  "message_index",
+  "module",
+] as const);
+
+function signedTransactionContentId(
+  content: ZeroneEconomySignedTransactionContent,
+): Sha256Id {
+  return sha256BytesId(concatBytes(
+    new TextEncoder().encode(ECONOMY_SIGNED_TRANSACTION_CONTENT_DOMAIN),
+    canonicalJsonBytes(content),
+  ));
+}
+
+function decodeSignedTransactionBytes(
+  value: unknown,
+  path: string,
+): Uint8Array {
+  if (typeof value !== "string") {
+    fail("invalid_input", `${path} must be canonical base64url bytes.`, path);
+  }
+  const bytes = base64UrlDecode(value, path);
+  if (bytes.byteLength === 0 || bytes.byteLength > ECONOMY_LIMITS.max_transaction_bytes) {
+    fail(
+      "invalid_input",
+      `${path} must contain 1..${ECONOMY_LIMITS.max_transaction_bytes} bytes.`,
+      path,
+    );
+  }
+  return bytes;
+}
+
+function deriveSignedTransactionMessage(input: {
+  readonly network: "mainnet" | "testnet";
+  readonly sourceAccount: string;
+  readonly typeUrl: unknown;
+  readonly valueB64u: unknown;
+}): Readonly<{
+  readonly message: ZeroneEconomySignedTransactionContent["message"];
+  readonly economicEffect: ZeroneEconomySignedTransactionContent["economic_effect"];
+  readonly valueBytes: Uint8Array;
+}> {
+  if (typeof input.valueB64u !== "string") {
+    fail("invalid_input", "signed_transaction.message.value_b64u must be canonical base64url.");
+  }
+  const valueBytes = base64UrlDecode(
+    input.valueB64u,
+    "signed_transaction.message.value_b64u",
+  );
+  if (valueBytes.byteLength === 0 || valueBytes.byteLength > ECONOMY_LIMITS.max_message_bytes) {
+    fail(
+      "invalid_input",
+      "signed_transaction.message.value_b64u is empty or oversized.",
+    );
+  }
+  const profile = getZeroneProfile(input.network);
+  const modules = getZeroneEconomyModuleAccounts(input.network);
+  const sourceAddress = addressFromZeroneAccountId(input.sourceAccount as never, profile);
+  let kind: ZeroneEconomySignedTransactionContent["message"]["kind"];
+  let method: ZeroneEconomySignedTransactionContent["message"]["wallet_method"];
+  let actor: string;
+  let module: ZeroneEconomySignedTransactionContent["economic_effect"]["module"];
+  let reservedSpend: bigint;
+  let requiredGas: bigint;
+  let decodedValue: unknown;
+  if (input.typeUrl === MESSAGE_TYPE_URLS.create_bounty) {
+    const value = decodeCreateBountyOrderValue(valueBytes);
+    kind = "create_bounty";
+    method = WALLET_METHODS.create_bounty;
+    actor = value.sponsor;
+    module = "sponsorship";
+    reservedSpend = BigInt(value.price_per_artifact) * BigInt(value.target_count);
+    if (reservedSpend <= 0n || reservedSpend > ECONOMY_LIMITS.max_uint256) {
+      fail("invalid_input", "Signed Create bounty escrow is outside uint256.");
+    }
+    requiredGas = ECONOMY_GAS.create_bounty;
+    decodedValue = value;
+  } else if (input.typeUrl === MESSAGE_TYPE_URLS.submit_claim) {
+    const value = decodeSubmitComputationalClaimValue(valueBytes);
+    kind = "submit_claim";
+    method = WALLET_METHODS.submit_claim;
+    actor = value.submitter;
+    module = "knowledge";
+    reservedSpend = BigInt(value.stake);
+    if (reservedSpend <= 0n || reservedSpend > ECONOMY_LIMITS.max_uint256) {
+      fail("invalid_input", "Signed Submit claim stake is outside uint256.");
+    }
+    requiredGas = ECONOMY_GAS.submit_claim;
+    decodedValue = value;
+  } else if (input.typeUrl === MESSAGE_TYPE_URLS.fulfill_bounty) {
+    const value = decodeFulfillBountyValue(valueBytes);
+    kind = "fulfill_bounty";
+    method = WALLET_METHODS.fulfill_bounty;
+    actor = value.caller;
+    module = "sponsorship";
+    reservedSpend = 0n;
+    requiredGas = ECONOMY_GAS.fulfill_bounty;
+    decodedValue = value;
+  } else {
+    fail(
+      "unsupported_message",
+      "Signed transaction message is outside the economy allowlist.",
+      "signed_transaction.message.type_url",
+    );
+  }
+  if (actor !== sourceAddress) {
+    fail(
+      "signer_mismatch",
+      "Signed transaction message actor differs from the source account.",
+      "signed_transaction.message.actor_address",
+    );
+  }
+  const typeUrl = input.typeUrl;
+  const projection = describeCanonicalProjection({
+    type_url: typeUrl,
+    value: decodedValue,
+  });
+  const moduleAccount = modules[module];
+  const message = Object.freeze({
+    kind,
+    type_url: typeUrl,
+    wallet_method: method,
+    projection_hash: projection.projection_hash,
+    value_b64u: base64UrlEncode(valueBytes),
+    value_hash: sha256BytesId(valueBytes),
+    actor_address: actor,
+    module_account: moduleAccount,
+    reserved_spend_uzrn: reservedSpend.toString(),
+    required_gas: requiredGas.toString(),
+  }) as ZeroneEconomySignedTransactionContent["message"];
+  const economicEffect = Object.freeze({
+    message_index: 0,
+    kind: kind === "create_bounty"
+      ? "escrow_lock"
+      : kind === "submit_claim"
+        ? "review_fee"
+        : "fulfillment_request",
+    module,
+    direction: kind === "fulfill_bounty" ? "conditional_incoming" : "outgoing",
+    asset_id: profile.native_asset_id,
+    amount_atomic: kind === "fulfill_bounty" ? null : reservedSpend.toString(),
+    condition: kind === "fulfill_bounty"
+      ? "keeper_state_and_message_success"
+      : "message_success",
+  }) as ZeroneEconomySignedTransactionContent["economic_effect"];
+  return Object.freeze({ message, economicEffect, valueBytes });
+}
+
+export function verifyZeroneEconomySignedTransactionRecord(
+  value: unknown,
+): VerifiedZeroneEconomySignedTransactionRecord {
+  const item = closedRecord(
+    value,
+    SIGNED_TRANSACTION_KEYS,
+    "signed_transaction",
+  );
+  if (
+    item.schema !== ECONOMY_SIGNED_TRANSACTION_SCHEMA
+    || item.zerone_core_commit !== ZERONE_ECONOMY_CORE_COMMIT
+    || item.cosmos_sdk !== ZERONE_ECONOMY_COSMOS_SDK
+    || item.sponsorship_consensus_version !== ZERONE_SPONSORSHIP_CONSENSUS_VERSION
+    || item.knowledge_consensus_version !== ZERONE_KNOWLEDGE_CONSENSUS_VERSION
+    || item.signing_algorithm !== ZERONE_DIRECT_SIGN_ALGORITHM
+    || item.signer_public_key_type_url !== COSMOS_SECP256K1_PUBLIC_KEY_TYPE_URL
+  ) {
+    fail(
+      "signature_invalid",
+      "Signed transaction must pin the exact planner schema, source tuple, and direct-sign algorithm.",
+      "signed_transaction",
+    );
+  }
+  for (const [field, fieldValue] of [
+    ["activation_observation_hash", item.activation_observation_hash],
+    ["auth_info_bytes_hash", item.auth_info_bytes_hash],
+    ["body_bytes_hash", item.body_bytes_hash],
+    ["content_id", item.content_id],
+    ["intent_record_id", item.intent_record_id],
+    ["plan_content_id", item.plan_content_id],
+    ["plan_id", item.plan_id],
+    ["sign_doc_bytes_hash", item.sign_doc_bytes_hash],
+    ["signer_key_id", item.signer_key_id],
+    ["simulation_evidence_content_id", item.simulation_evidence_content_id],
+    ["simulation_evidence_record_id", item.simulation_evidence_record_id],
+    ["simulation_record_id", item.simulation_record_id],
+    ["simulation_tx_bytes_hash", item.simulation_tx_bytes_hash],
+    ["tx_bytes_hash", item.tx_bytes_hash],
+  ] as const) {
+    assertSha256Id(fieldValue, `signed_transaction.${field}`);
+  }
+  assertUuid(item.request_id, "signed_transaction.request_id");
+  assertTimestamp(item.requested_at, "signed_transaction.requested_at");
+  if (item.signer_operation_id !== null) {
+    assertBoundedText(
+      item.signer_operation_id,
+      "signed_transaction.signer_operation_id",
+      512,
+    );
+  }
+  assertUint64(item.account_number, "signed_transaction.account_number");
+  assertUint64(item.sequence, "signed_transaction.sequence");
+  assertUint64(
+    item.activation_observed_at_height,
+    "signed_transaction.activation_observed_at_height",
+    { positive: true },
+  );
+  assertUint64(
+    item.account_observed_at_height,
+    "signed_transaction.account_observed_at_height",
+    { positive: true },
+  );
+  if (BigInt(item.account_observed_at_height) < BigInt(item.activation_observed_at_height)) {
+    fail(
+      "activation_mismatch",
+      "Signed transaction account observation predates activation.",
+      "signed_transaction.account_observed_at_height",
+    );
+  }
+
+  const network = (["mainnet", "testnet"] as const).find((candidate) => (
+    getZeroneProfile(candidate).chain_id === item.chain_id
+  ));
+  if (network === undefined || typeof item.source_account !== "string") {
+    fail("invalid_input", "Signed transaction chain or source account is not Zerone.");
+  }
+  const profile = getZeroneProfile(network);
+  assertBoundedText(item.chain_reference, "signed_transaction.chain_reference", 128);
+  if (item.chain_reference !== profile.chain_reference) {
+    fail(
+      "signature_invalid",
+      "Signed transaction chain reference differs from its CAIP-2 chain.",
+      "signed_transaction.chain_reference",
+    );
+  }
+  try {
+    assertZeroneAccountId(
+      item.source_account,
+      profile,
+      "signed_transaction.source_account",
+    );
+  } catch {
+    fail("invalid_input", "Signed transaction source account is invalid for its chain.");
+  }
+  if (typeof item.signer_public_key_b64u !== "string") {
+    fail("signature_invalid", "Signed transaction signer key must be canonical base64url.");
+  }
+  const publicKey = base64UrlDecode(
+    item.signer_public_key_b64u,
+    "signed_transaction.signer_public_key_b64u",
+  );
+  try {
+    assertSecp256k1PublicKey(publicKey);
+  } catch {
+    fail("signature_invalid", "Signed transaction signer key is not secp256k1.");
+  }
+  const signer = describeZeronePublicKey(publicKey);
+  const sourceAddress = addressFromZeroneAccountId(item.source_account as never, profile);
+  if (
+    item.signer_key_id !== signer.signer_key_id
+    || item.signer_public_key_b64u !== signer.public_key_b64u
+    || signer.address !== sourceAddress
+  ) {
+    fail(
+      "signer_mismatch",
+      "Signed transaction key ID, public key, and source account do not correspond.",
+      "signed_transaction.signer_key_id",
+    );
+  }
+
+  const feeItem = closedRecord(item.fee, ["amount", "denom"], "signed_transaction.fee");
+  if (feeItem.denom !== ZERONE_DENOM) {
+    fail("invalid_input", "Signed transaction fee must use uzrn.", "signed_transaction.fee.denom");
+  }
+  assertAtomicAmount(feeItem.amount, "signed_transaction.fee.amount", { positive: true });
+  assertUint64(item.gas_limit, "signed_transaction.gas_limit", { positive: true });
+  assertUint64(item.required_gas_limit, "signed_transaction.required_gas_limit", {
+    positive: true,
+  });
+  assertAtomicAmount(
+    item.total_reserved_spend_uzrn,
+    "signed_transaction.total_reserved_spend_uzrn",
+  );
+  if (
+    BigInt(item.gas_limit) > ECONOMY_GAS.max_gas_limit
+    || BigInt(item.gas_limit) < BigInt(item.required_gas_limit)
+    || BigInt(feeItem.amount) < BigInt(item.gas_limit) * ZERONE_MIN_GAS_PRICE_UZRN
+  ) {
+    fail("gas_policy_mismatch", "Signed transaction fee or gas violates the pinned policy.");
+  }
+
+  const messageItem = closedRecord(
+    item.message,
+    SIGNED_TRANSACTION_MESSAGE_KEYS,
+    "signed_transaction.message",
+  );
+  const effectItem = closedRecord(
+    item.economic_effect,
+    SIGNED_TRANSACTION_EFFECT_KEYS,
+    "signed_transaction.economic_effect",
+  );
+  const derived = deriveSignedTransactionMessage({
+    network,
+    sourceAccount: item.source_account,
+    typeUrl: messageItem.type_url,
+    valueB64u: messageItem.value_b64u,
+  });
+  if (
+    !equalBytes(canonicalJsonBytes(messageItem), canonicalJsonBytes(derived.message))
+    || !equalBytes(canonicalJsonBytes(effectItem), canonicalJsonBytes(derived.economicEffect))
+    || item.required_gas_limit !== derived.message.required_gas
+    || item.total_reserved_spend_uzrn !== derived.message.reserved_spend_uzrn
+  ) {
+    fail(
+      "signature_invalid",
+      "Signed transaction message/effect metadata differs from strict canonical decoding.",
+      "signed_transaction.message",
+    );
+  }
+
+  const bodyBytes = decodeSignedTransactionBytes(
+    item.body_bytes_b64u,
+    "signed_transaction.body_bytes_b64u",
+  );
+  const authInfoBytes = decodeSignedTransactionBytes(
+    item.auth_info_bytes_b64u,
+    "signed_transaction.auth_info_bytes_b64u",
+  );
+  const signDocBytes = decodeSignedTransactionBytes(
+    item.sign_doc_bytes_b64u,
+    "signed_transaction.sign_doc_bytes_b64u",
+  );
+  const txBytes = decodeSignedTransactionBytes(
+    item.tx_bytes_b64u,
+    "signed_transaction.tx_bytes_b64u",
+  );
+  if (
+    sha256BytesId(bodyBytes) !== item.body_bytes_hash
+    || sha256BytesId(authInfoBytes) !== item.auth_info_bytes_hash
+    || sha256BytesId(signDocBytes) !== item.sign_doc_bytes_hash
+    || sha256BytesId(txBytes) !== item.tx_bytes_hash
+    || transactionHash(txBytes) !== item.tx_hash
+    || typeof item.tx_hash !== "string"
+    || !/^[0-9A-F]{64}$/u.test(item.tx_hash)
+  ) {
+    fail("signature_invalid", "Signed transaction byte hashes or transaction hash disagree.");
+  }
+
+  const decodedTx = decodeEconomyTxRaw(txBytes);
+  const decodedBody = decodeEconomyTxBody(bodyBytes);
+  const decodedAuth = decodeEconomyAuthInfo(authInfoBytes);
+  const decodedSignDoc = decodeEconomySignDoc(signDocBytes);
+  if (
+    decodedBody.length !== 1
+    || decodedBody[0]?.typeUrl !== derived.message.type_url
+    || !equalBytes(decodedBody[0].value, derived.valueBytes)
+    || !equalBytes(decodedTx.bodyBytes, bodyBytes)
+    || !equalBytes(decodedTx.authInfoBytes, authInfoBytes)
+    || !equalBytes(decodedSignDoc.bodyBytes, bodyBytes)
+    || !equalBytes(decodedSignDoc.authInfoBytes, authInfoBytes)
+    || decodedSignDoc.chainId !== item.chain_reference
+    || decodedSignDoc.accountNumber !== item.account_number
+    || !equalBytes(
+      signDocBytes,
+      encodeEconomySignDoc(
+        bodyBytes,
+        authInfoBytes,
+        item.chain_reference,
+        BigInt(item.account_number),
+      ),
+    )
+    || !equalBytes(decodedAuth.publicKey, publicKey)
+    || decodedAuth.sequence !== item.sequence
+    || decodedAuth.feeAmount !== feeItem.amount
+    || decodedAuth.gasLimit !== item.gas_limit
+  ) {
+    fail(
+      "signature_invalid",
+      "Signed TxRaw, TxBody, AuthInfo, and SignDoc do not share the exact canonical coordinates.",
+    );
+  }
+  if (decodedTx.signature.byteLength !== 64) {
+    fail("signature_invalid", "Signed TxRaw must contain one compact 64-byte signature.");
+  }
+  let signatureValid = false;
+  try {
+    signatureValid = secp256k1.verify(
+      decodedTx.signature,
+      signDocBytes,
+      publicKey,
+      { prehash: true, lowS: true, format: "compact" },
+    );
+  } catch {
+    signatureValid = false;
+  }
+  if (!signatureValid) {
+    fail(
+      "signature_invalid",
+      "Portable signed transaction signature is invalid, high-S, or uses the wrong prehash semantics.",
+    );
+  }
+
+  const content: ZeroneEconomySignedTransactionContent = Object.freeze({
+    schema: ECONOMY_SIGNED_TRANSACTION_SCHEMA,
+    zerone_core_commit: ZERONE_ECONOMY_CORE_COMMIT,
+    cosmos_sdk: ZERONE_ECONOMY_COSMOS_SDK,
+    sponsorship_consensus_version: ZERONE_SPONSORSHIP_CONSENSUS_VERSION,
+    knowledge_consensus_version: ZERONE_KNOWLEDGE_CONSENSUS_VERSION,
+    signing_algorithm: ZERONE_DIRECT_SIGN_ALGORITHM,
+    signer_public_key_type_url: COSMOS_SECP256K1_PUBLIC_KEY_TYPE_URL,
+    plan_id: item.plan_id as Sha256Id,
+    plan_content_id: item.plan_content_id as Sha256Id,
+    activation_observation_hash: item.activation_observation_hash as Sha256Id,
+    activation_observed_at_height: item.activation_observed_at_height,
+    intent_record_id: item.intent_record_id as Sha256Id,
+    simulation_record_id: item.simulation_record_id as Sha256Id,
+    simulation_evidence_content_id: item.simulation_evidence_content_id as Sha256Id,
+    simulation_evidence_record_id: item.simulation_evidence_record_id as Sha256Id,
+    simulation_tx_bytes_hash: item.simulation_tx_bytes_hash as Sha256Id,
+    request_id: item.request_id,
+    requested_at: item.requested_at,
+    signer_operation_id: item.signer_operation_id,
+    chain_id: profile.chain_id,
+    chain_reference: item.chain_reference,
+    source_account: item.source_account,
+    account_number: item.account_number,
+    sequence: item.sequence,
+    account_observed_at_height: item.account_observed_at_height,
+    signer_key_id: item.signer_key_id as Sha256Id,
+    signer_public_key_b64u: item.signer_public_key_b64u,
+    fee: Object.freeze({ denom: ZERONE_DENOM, amount: feeItem.amount }),
+    gas_limit: item.gas_limit,
+    required_gas_limit: item.required_gas_limit,
+    total_reserved_spend_uzrn: item.total_reserved_spend_uzrn,
+    message: derived.message,
+    economic_effect: derived.economicEffect,
+    body_bytes_b64u: base64UrlEncode(bodyBytes),
+    body_bytes_hash: item.body_bytes_hash as Sha256Id,
+    auth_info_bytes_b64u: base64UrlEncode(authInfoBytes),
+    auth_info_bytes_hash: item.auth_info_bytes_hash as Sha256Id,
+    sign_doc_bytes_b64u: base64UrlEncode(signDocBytes),
+    sign_doc_bytes_hash: item.sign_doc_bytes_hash as Sha256Id,
+    tx_bytes_b64u: base64UrlEncode(txBytes),
+    tx_bytes_hash: item.tx_bytes_hash as Sha256Id,
+    tx_hash: item.tx_hash as VerifiedZeroneEconomyTransaction["tx_hash"],
+  });
+  if (signedTransactionContentId(content) !== item.content_id) {
+    fail(
+      "signature_invalid",
+      "Signed transaction content_id does not match its complete canonical content.",
+      "signed_transaction.content_id",
+    );
+  }
+  const record = Object.freeze({
+    ...content,
+    content_id: item.content_id as Sha256Id,
+  }) as ZeroneEconomySignedTransactionRecord;
+  verifiedSignedTransactionRecords.add(record);
+  return record as VerifiedZeroneEconomySignedTransactionRecord;
+}
+
+export function createZeroneEconomySignedTransactionRecord(
+  input: CreateZeroneEconomySignedTransactionRecordInput,
+): VerifiedZeroneEconomySignedTransactionRecord {
+  const plan = input.plan;
+  const request = input.request;
+  const transaction = input.transaction;
+  assertZeroneEconomyDirectSignPlan(plan);
+  assertEconomySigningRequest(plan, request);
+  assertVerifiedZeroneEconomyTransaction(transaction);
+  const requestBinding = economySigningRequests.get(request);
+  const message = plan.messages[0];
+  const economicEffect = plan.economic_effects[0];
+  if (
+    requestBinding === undefined
+    || plan.messages.length !== 1
+    || plan.economic_effects.length !== 1
+    || message === undefined
+    || economicEffect === undefined
+    || transaction.plan_id !== plan.plan_id
+    || transaction.intent_record_id !== plan.intent_record_id
+    || transaction.chain_id !== plan.chain_id
+    || transaction.tx_bytes_b64u !== transaction.signed_payload.signed_payload_b64u
+    || transaction.tx_bytes_hash !== transaction.signed_payload.signed_payload_hash
+    || transaction.signed_payload.request_id !== request.request_id
+    || transaction.signed_payload.signer_key_id !== plan.signer_key_id
+    || transaction.signed_payload.unsigned_payload_hash !== plan.sign_doc_bytes_hash
+    || request.authorization.checked_at === undefined
+  ) {
+    fail(
+      "invalid_state",
+      "Portable signed transaction creation requires the exact one-message plan, request, and verified transaction.",
+    );
+  }
+  const content: ZeroneEconomySignedTransactionContent = Object.freeze({
+    schema: ECONOMY_SIGNED_TRANSACTION_SCHEMA,
+    zerone_core_commit: ZERONE_ECONOMY_CORE_COMMIT,
+    cosmos_sdk: ZERONE_ECONOMY_COSMOS_SDK,
+    sponsorship_consensus_version: ZERONE_SPONSORSHIP_CONSENSUS_VERSION,
+    knowledge_consensus_version: ZERONE_KNOWLEDGE_CONSENSUS_VERSION,
+    signing_algorithm: ZERONE_DIRECT_SIGN_ALGORITHM,
+    signer_public_key_type_url: COSMOS_SECP256K1_PUBLIC_KEY_TYPE_URL,
+    plan_id: plan.plan_id,
+    plan_content_id: zeroneEconomyDirectSignPlanContentId(plan),
+    activation_observation_hash: plan.activation_observation_hash,
+    activation_observed_at_height: plan.activation_observed_at_height,
+    intent_record_id: plan.intent_record_id,
+    simulation_record_id: requestBinding.simulation.record_id,
+    simulation_evidence_content_id: requestBinding.binding.simulation_evidence_content_id,
+    simulation_evidence_record_id: requestBinding.binding.simulation_evidence_record_id,
+    simulation_tx_bytes_hash: plan.simulation_tx_bytes_hash,
+    request_id: request.request_id,
+    requested_at: request.authorization.checked_at,
+    signer_operation_id: transaction.signed_payload.operation_id,
+    chain_id: plan.chain_id,
+    chain_reference: plan.chain_reference,
+    source_account: plan.source_account,
+    account_number: plan.account_number,
+    sequence: plan.sequence,
+    account_observed_at_height: plan.account_observed_at_height,
+    signer_key_id: plan.signer_key_id,
+    signer_public_key_b64u: plan.signer_public_key_b64u,
+    fee: Object.freeze({ ...plan.fee }),
+    gas_limit: plan.gas_limit,
+    required_gas_limit: plan.required_gas_limit,
+    total_reserved_spend_uzrn: plan.total_reserved_spend_uzrn,
+    message: Object.freeze({ ...message }),
+    economic_effect: Object.freeze({ ...economicEffect }),
+    body_bytes_b64u: plan.body_bytes_b64u,
+    body_bytes_hash: plan.body_bytes_hash,
+    auth_info_bytes_b64u: plan.auth_info_bytes_b64u,
+    auth_info_bytes_hash: plan.auth_info_bytes_hash,
+    sign_doc_bytes_b64u: plan.sign_doc_bytes_b64u,
+    sign_doc_bytes_hash: plan.sign_doc_bytes_hash,
+    tx_bytes_b64u: transaction.tx_bytes_b64u,
+    tx_bytes_hash: transaction.tx_bytes_hash,
+    tx_hash: transaction.tx_hash,
+  });
+  return verifyZeroneEconomySignedTransactionRecord(Object.freeze({
+    ...content,
+    content_id: signedTransactionContentId(content),
+  }));
 }
 
 export function createZeroneEconomySimulationReceiptCore(

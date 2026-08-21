@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
-import { verifyZeroneEconomySimulationEvidence } from "../src/index.js";
-import { authorizedPlan } from "./fixtures.js";
+import {
+  verifyZeroneEconomySignedTransactionRecord,
+  verifyZeroneEconomySimulationEvidence,
+} from "../src/index.js";
+import { authorizedPlan, signedTransactionRecordFixture } from "./fixtures.js";
 
 const schema = await Bun.file(new URL(
   "../schema/simulation-evidence-v0.1.schema.json",
@@ -12,6 +15,11 @@ const schema = await Bun.file(new URL(
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 addFormats(ajv);
 const validate = ajv.compile(schema);
+const signedTransactionSchema = await Bun.file(new URL(
+  "../schema/signed-transaction-v0.1.schema.json",
+  import.meta.url,
+)).json() as object;
+const validateSignedTransaction = ajv.compile(signedTransactionSchema);
 
 describe("simulation evidence schema", () => {
   test("accepts the canonical planner-created signed evidence record", async () => {
@@ -57,5 +65,32 @@ describe("simulation evidence schema", () => {
       .toThrow(/canonical unpadded base64url/i);
     expect(() => verifyZeroneEconomySimulationEvidence(invalidSignature))
       .toThrow(/canonical unpadded base64url/i);
+  });
+});
+
+describe("signed transaction schema", () => {
+  test("accepts the canonical portable record and matches runtime reload", async () => {
+    const { record } = await signedTransactionRecordFixture();
+    expect(
+      validateSignedTransaction(record),
+      ajv.errorsText(validateSignedTransaction.errors),
+    ).toBeTrue();
+    expect(verifyZeroneEconomySignedTransactionRecord(record)).toEqual(record);
+  });
+
+  test("is closed and preserves exact hash, key, and timestamp forms", async () => {
+    const { record } = await signedTransactionRecordFixture();
+    expect(validateSignedTransaction({ ...record, endpoint: "https://example.invalid" }))
+      .toBeFalse();
+    expect(validateSignedTransaction({ ...record, tx_hash: record.tx_hash.toLowerCase() }))
+      .toBeFalse();
+    expect(validateSignedTransaction({
+      ...record,
+      signer_public_key_b64u: record.signer_public_key_b64u.slice(1),
+    })).toBeFalse();
+    expect(validateSignedTransaction({
+      ...record,
+      requested_at: "2026-08-20T18:03:00Z",
+    })).toBeFalse();
   });
 });

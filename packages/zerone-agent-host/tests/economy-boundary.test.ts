@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
+import {
+  zeroneAccountId,
+  zeroneAddressFromSecp256k1PublicKey,
+} from "@agenttool/wallet-zerone";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +13,8 @@ import {
   base64UrlEncode,
   base64UrlDecode,
   canonicalJson,
+  canonicalJsonBytes,
+  concatBytes,
   sealSimulationReceipt,
   sealTransactionIntent,
   sealWalletCapability,
@@ -21,15 +27,23 @@ import {
   createWalletIdentityBindingSigningRequest,
 } from "@agenttool/zerone-agent-economy";
 import {
+  ECONOMY_SIGNED_TRANSACTION_CONTENT_DOMAIN,
   createZeroneEconomyDirectSignPlan,
+  createZeroneEconomySignedPayload,
+  createZeroneEconomySignedTransactionRecord,
   createZeroneEconomySimulationEvidence,
   createZeroneEconomySimulationReceiptCore,
+  decodeEconomyTxRaw,
+  encodeEconomyTxRaw,
   reconstructZeroneEconomyDirectSignPlan,
+  verifyZeroneEconomySignedPayload,
   zeroneEconomyDirectSignPlanContentId,
+  type ZeroneEconomySignedTransactionRecord,
 } from "@agenttool/wallet-zerone-economy";
 
 import {
   ECONOMY_COMMITMENT_HASH_DOMAIN,
+  ECONOMY_SEQUENCE_ADVANCE_EVIDENCE_HASH_DOMAIN,
   EXECUTION_SUPPORT,
   ZeroneAgentHostStore,
   createTrustedBindingCurrentnessVerifierAssertion,
@@ -60,6 +74,7 @@ import {
   currentnessForProof,
   fixture as genericFixture,
   hash,
+  LATER,
   rewriteEventChain,
 } from "./helpers.js";
 
@@ -296,6 +311,7 @@ interface AuthorityController {
   currentness: BindingCurrentnessAssertion;
   activation: ZeroneEconomyActivationCurrentnessAssertion;
   snapshot: ZeroneAccountSnapshot;
+  observation_error: Error | null;
 }
 
 function controllerFor(value: EconomyFixture): AuthorityController {
@@ -304,6 +320,7 @@ function controllerFor(value: EconomyFixture): AuthorityController {
     currentness: value.currentness,
     activation: value.activationCurrentness,
     snapshot: value.snapshot,
+    observation_error: null,
   };
 }
 
@@ -323,7 +340,10 @@ function configuredOptions(
       resolveCurrentness: async () => controller.activation,
     },
     account_observer: {
-      observeAccount: async () => controller.snapshot,
+      observeAccount: async () => {
+        if (controller.observation_error !== null) throw controller.observation_error;
+        return controller.snapshot;
+      },
     },
     trusted_binding_currentness_verifiers: [value.bindingTrust],
     trusted_simulation_adapters: [value.adapterTrust],
@@ -356,6 +376,75 @@ function expectNoEconomyMutation(store: ZeroneAgentHostStore, value: EconomyFixt
   expect(store.getCapabilityUsage(value.capability.record_id)).toBeNull();
   expect(store.getTreasuryExposure(profile.chain_id, SOURCE_ACCOUNT)).toBe("0");
   expect(store.verify().operation_count).toBe(0);
+}
+
+function signedTransactionFor(
+  value: EconomyFixture,
+  signingRequest: Awaited<ReturnType<
+    ZeroneAgentHostStore["reserveAndEnterZeroneEconomySigningBoundary"]
+  >>["signing_request"],
+  signerOperationId: string | null = null,
+): ZeroneEconomySignedTransactionRecord {
+  const signature = secp256k1.sign(
+    base64UrlDecode(value.plan.sign_doc_bytes_b64u),
+    SECP_PRIVATE_KEY,
+    { prehash: true, lowS: true, format: "compact" },
+  );
+  const payload = createZeroneEconomySignedPayload({
+    plan: value.plan,
+    request: signingRequest,
+    signature,
+    ...(signerOperationId === null ? {} : { signer_operation_id: signerOperationId }),
+  });
+  const transaction = verifyZeroneEconomySignedPayload({
+    plan: value.plan,
+    request: signingRequest,
+    payload,
+  });
+  return createZeroneEconomySignedTransactionRecord({
+    plan: value.plan,
+    request: signingRequest,
+    transaction,
+  });
+}
+
+function recontentSignedTransaction(
+  record: ZeroneEconomySignedTransactionRecord,
+  changes: Readonly<Record<string, unknown>>,
+): ZeroneEconomySignedTransactionRecord {
+  const { content_id: _priorContentId, ...priorContent } = record;
+  const content = { ...priorContent, ...changes };
+  return {
+    ...content,
+    content_id: sha256BytesId(concatBytes(
+      new TextEncoder().encode(ECONOMY_SIGNED_TRANSACTION_CONTENT_DOMAIN),
+      canonicalJsonBytes(content),
+    )),
+  } as ZeroneEconomySignedTransactionRecord;
+}
+
+function highSSignature(signature: Uint8Array): Uint8Array {
+  const output = Uint8Array.from(signature);
+  let lowS = 0n;
+  for (const octet of output.subarray(32)) lowS = (lowS << 8n) | BigInt(octet);
+  let highS = secp256k1.Point.Fn.ORDER - lowS;
+  for (let index = 63; index >= 32; index -= 1) {
+    output[index] = Number(highS & 0xffn);
+    highS >>= 8n;
+  }
+  return output;
+}
+
+function withSignedTxBytes(
+  record: ZeroneEconomySignedTransactionRecord,
+  bytes: Uint8Array,
+): ZeroneEconomySignedTransactionRecord {
+  const hashId = sha256BytesId(bytes);
+  return recontentSignedTransaction(record, {
+    tx_bytes_b64u: base64UrlEncode(bytes),
+    tx_bytes_hash: hashId,
+    tx_hash: hashId.slice("sha256:".length).toUpperCase(),
+  });
 }
 
 describe("typed Zerone economy signing boundary", () => {
@@ -531,6 +620,351 @@ describe("typed Zerone economy signing boundary", () => {
     store.close();
   });
 
+  test("recovers a late portable signed transaction, preserves it through observer sequence release, and reopens", async () => {
+    const value = await economyFixture("create_bounty", {
+      operation_id: "economy-portable-signed-recovery",
+      request_id: "77777777-7777-4777-8777-777777777790",
+    });
+    const controller = controllerFor(value);
+    const path = join(
+      mkdtempSync(join(tmpdir(), "zerone-economy-portable-signed-")),
+      "host.sqlite",
+    );
+    let store = new ZeroneAgentHostStore(path, configuredOptions(value, controller, {
+      allow_in_memory_for_tests: false,
+    }));
+    store.initialize();
+    const boundary = await store.reserveAndEnterZeroneEconomySigningBoundary(inputFor(value));
+    const signedTransaction = signedTransactionFor(value, boundary.signing_request);
+    expect(signedTransaction.signer_operation_id).toBeNull();
+    store.close();
+
+    controller.now = "2026-08-21T18:03:00.000Z";
+    store = new ZeroneAgentHostStore(path, configuredOptions(value, controller, {
+      create: false,
+      allow_in_memory_for_tests: false,
+    }));
+    store.initialize();
+    const unknown = store.getOperation(value.operationId);
+    expect(unknown).toMatchObject({ status: "signing_unknown", revision: 3 });
+    if (unknown === null) throw new Error("recovered economy operation is absent");
+    const signed = store.recordVerifiedZeroneEconomySignedTransaction({
+      operation_id: value.operationId,
+      expected_revision: unknown.revision,
+      signed_transaction: signedTransaction,
+    });
+    expect(signed).toMatchObject({
+      status: "signed",
+      revision: 4,
+      tx_hash: signedTransaction.tx_hash,
+      signed_payload_hash: signedTransaction.tx_bytes_hash,
+      signed_verification_id: signedTransaction.content_id,
+    });
+    expect(store.listEvents(value.operationId).at(-1)).toMatchObject({
+      kind: "verified_zerone_economy_signed_transaction",
+      at: controller.now,
+      details: {
+        signed_transaction_content_id: signedTransaction.content_id,
+        recovered_from_unknown: true,
+        network_effects_performed: false,
+      },
+    });
+    const database = Reflect.get(store, "db") as Database;
+    expect((database.query(`
+      SELECT COUNT(*) AS count FROM economy_signed_transactions WHERE operation_id = ?
+    `).get(value.operationId) as { count: number }).count).toBe(1);
+    const beforeDuplicate = store.listEvents(value.operationId);
+    expect(() => store.recordVerifiedZeroneEconomySignedTransaction({
+      operation_id: value.operationId,
+      expected_revision: signed.revision,
+      signed_transaction: signedTransaction,
+    })).toThrow(/compare-and-swap|signed|state/i);
+    expect(store.listEvents(value.operationId)).toEqual(beforeDuplicate);
+    expect(() => store.recordVerifiedSignedEvidence({
+      operation_id: value.operationId,
+      expected_revision: signed.revision,
+      tx_hash: signedTransaction.tx_hash,
+      signed_payload_hash: signedTransaction.tx_bytes_hash,
+      external_verification_id: signedTransaction.content_id,
+      at: controller.now,
+    })).toThrow(/compare-and-swap|generic|typed/i);
+
+    controller.snapshot = Object.freeze({
+      ...value.snapshot,
+      sequence: "10",
+      observed_at_height: "700010",
+      block_hash: "C".repeat(64),
+      observed_at: "2026-08-21T18:03:30.000Z",
+      valid_until: "2026-08-21T18:08:30.000Z",
+      ...ACCOUNT_KEY,
+    });
+    controller.now = "2026-08-21T18:04:00.000Z";
+    const resolved = await store.observeAndApplyZeroneEconomySequenceAdvance({
+      operation_id: value.operationId,
+      expected_revision: signed.revision,
+    });
+    expect(resolved).toMatchObject({
+      status: "sequence_superseded",
+      tx_hash: signedTransaction.tx_hash,
+      signed_verification_id: signedTransaction.content_id,
+    });
+    expect(store.listEvents(value.operationId).at(-1)).toMatchObject({
+      kind: "observed_zerone_economy_sequence_advance",
+      at: controller.now,
+      details: {
+        authentication_boundary: "immutable_constructor_account_observer/0.1",
+        expected_revision: signed.revision,
+      },
+    });
+    expect(store.verify().ok).toBeTrue();
+    store.close();
+
+    store = new ZeroneAgentHostStore(path, configuredOptions(value, controller, {
+      create: false,
+      allow_in_memory_for_tests: false,
+    }));
+    store.initialize();
+    expect(store.getOperation(value.operationId)).toMatchObject({
+      status: "sequence_superseded",
+      tx_hash: signedTransaction.tx_hash,
+      signed_verification_id: signedTransaction.content_id,
+    });
+    expect(store.verify().ok).toBeTrue();
+    store.close();
+  });
+
+  test("atomically rejects signed-record substitutions and detects a rehashed durable correspondence rewrite", async () => {
+    const value = await economyFixture("create_bounty", {
+      operation_id: "economy-signed-hostile",
+      request_id: "77777777-7777-4777-8777-777777777791",
+    });
+    const controller = controllerFor(value);
+    const path = join(
+      mkdtempSync(join(tmpdir(), "zerone-economy-signed-hostile-")),
+      "host.sqlite",
+    );
+    let store = new ZeroneAgentHostStore(path, configuredOptions(value, controller, {
+      allow_in_memory_for_tests: false,
+      allow_legacy_generic_injected_for_tests: true,
+    }));
+    store.initialize();
+    const boundary = await store.reserveAndEnterZeroneEconomySigningBoundary(inputFor(value));
+    const record = signedTransactionFor(value, boundary.signing_request, "provider-job-opaque");
+    const decoded = decodeEconomyTxRaw(base64UrlDecode(record.tx_bytes_b64u));
+    const flippedSignature = Uint8Array.from(decoded.signature);
+    flippedSignature[0] = (flippedSignature[0] ?? 0) ^ 1;
+    const hostileRecords = [
+      recontentSignedTransaction(record, {
+        request_id: "88888888-8888-4888-8888-888888888888",
+      }),
+      recontentSignedTransaction(record, { plan_id: hash("8") }),
+      recontentSignedTransaction(record, { plan_content_id: hash("9") }),
+      recontentSignedTransaction(record, { simulation_evidence_record_id: hash("a") }),
+      recontentSignedTransaction(record, {
+        message: { ...record.message, actor_address: `zrn1${"q".repeat(38)}` },
+      }),
+      recontentSignedTransaction(record, { tx_hash: "A".repeat(64) }),
+      withSignedTxBytes(
+        record,
+        encodeEconomyTxRaw(
+          decoded.bodyBytes,
+          decoded.authInfoBytes,
+          flippedSignature,
+        ),
+      ),
+      withSignedTxBytes(
+        record,
+        encodeEconomyTxRaw(
+          decoded.bodyBytes,
+          decoded.authInfoBytes,
+          highSSignature(decoded.signature),
+        ),
+      ),
+    ];
+    const beforeOperation = store.getOperation(value.operationId);
+    const beforeEvents = store.listEvents(value.operationId);
+    const database = Reflect.get(store, "db") as Database;
+    for (const hostile of hostileRecords) {
+      expect(() => store.recordVerifiedZeroneEconomySignedTransaction({
+        operation_id: value.operationId,
+        expected_revision: boundary.operation.revision,
+        signed_transaction: hostile,
+      })).toThrow();
+      expect(store.getOperation(value.operationId)).toEqual(beforeOperation);
+      expect(store.listEvents(value.operationId)).toEqual(beforeEvents);
+      expect((database.query(`
+        SELECT COUNT(*) AS count FROM economy_signed_transactions
+      `).get() as { count: number }).count).toBe(0);
+    }
+
+    const signed = store.recordVerifiedZeroneEconomySignedTransaction({
+      operation_id: value.operationId,
+      expected_revision: boundary.operation.revision,
+      signed_transaction: record,
+    });
+    expect(signed.status).toBe("signed");
+    expect(store.listEvents(value.operationId).at(-1)).toMatchObject({
+      kind: "verified_zerone_economy_signed_transaction",
+      details: {
+        recovered_from_unknown: false,
+        signed_transaction_content_id: record.content_id,
+      },
+    });
+    const beforeGenericBypass = store.listEvents(value.operationId);
+    expect(() => store.recordBroadcastInvocationBoundary({
+      operation_id: value.operationId,
+      expected_revision: signed.revision,
+      at: "2026-08-20T18:04:00.000Z",
+    })).toThrow(/Generic broadcast boundary|typed/i);
+    expect(() => store.applySequenceAdvanceEvidence({
+      operation_id: value.operationId,
+      expected_revision: signed.revision,
+      evidence_id: hash("c"),
+      snapshot: {
+        ...value.snapshot,
+        sequence: "10",
+        observed_at_height: "700002",
+        block_hash: "C".repeat(64),
+        observed_at: "2026-08-20T18:03:30.000Z",
+        valid_until: "2026-08-20T18:08:30.000Z",
+      },
+      observed_at: "2026-08-20T18:03:30.000Z",
+    })).toThrow(/Generic sequence-advance evidence|typed/i);
+    expect(store.listEvents(value.operationId)).toEqual(beforeGenericBypass);
+    expect(store.verify().ok).toBeTrue();
+
+    const rewrittenRecord = recontentSignedTransaction(record, { plan_id: hash("b") });
+    database.exec("DROP TRIGGER economy_signed_transactions_no_update");
+    database.query(`
+      UPDATE economy_signed_transactions SET content_id = ?, plan_id = ?, record_json = ?
+      WHERE operation_id = ?
+    `).run(
+      rewrittenRecord.content_id,
+      rewrittenRecord.plan_id,
+      canonicalJson(rewrittenRecord),
+      value.operationId,
+    );
+    database.exec(`
+      CREATE TRIGGER economy_signed_transactions_no_update
+      BEFORE UPDATE ON economy_signed_transactions
+      BEGIN SELECT RAISE(ABORT, 'economy signed transactions are append-only'); END
+    `);
+    database.query(`
+      UPDATE operations SET signed_verification_id = ? WHERE operation_id = ?
+    `).run(rewrittenRecord.content_id, value.operationId);
+    rewriteEventChain(store, value.operationId, (eventKind, details) =>
+      eventKind === "verified_zerone_economy_signed_transaction"
+        ? {
+            ...details,
+            signed_transaction_content_id: rewrittenRecord.content_id,
+            signed_transaction_json: canonicalJson(rewrittenRecord),
+          }
+        : details);
+    expect(() => store.verify()).toThrow(/commitment|committed transaction/i);
+    store.close();
+
+    store = new ZeroneAgentHostStore(path, configuredOptions(value, controller, {
+      create: false,
+      allow_in_memory_for_tests: false,
+      allow_legacy_generic_injected_for_tests: true,
+    }));
+    expect(() => store.initialize()).toThrow(/commitment|committed transaction/i);
+    store.close();
+  });
+
+  test("accepts only fresh observer-owned sequence evidence and resolves one concurrent CAS", async () => {
+    const value = await economyFixture("create_bounty", {
+      operation_id: "economy-observer-sequence-hostile",
+      request_id: "77777777-7777-4777-8777-777777777792",
+    });
+    const controller = controllerFor(value);
+    const store = new ZeroneAgentHostStore(":memory:", configuredOptions(value, controller));
+    store.initialize();
+    const boundary = await store.reserveAndEnterZeroneEconomySigningBoundary(inputFor(value));
+    controller.now = "2026-08-20T18:04:00.000Z";
+    const alternatePrivateKey = Uint8Array.from(
+      { length: 32 },
+      (_, index) => index === 31 ? 2 : 0,
+    );
+    const alternatePublicKey = secp256k1.getPublicKey(alternatePrivateKey, true);
+    const alternateAccount = zeroneAccountId(
+      profile,
+      zeroneAddressFromSecp256k1PublicKey(alternatePublicKey),
+    );
+    const nextSnapshot: ZeroneAccountSnapshot = Object.freeze({
+      ...value.snapshot,
+      sequence: "10",
+      observed_at_height: "700002",
+      block_hash: "C".repeat(64),
+      observed_at: "2026-08-20T18:03:30.000Z",
+      valid_until: "2026-08-20T18:08:30.000Z",
+      ...ACCOUNT_KEY,
+    });
+    const hostileSnapshots: readonly ZeroneAccountSnapshot[] = [
+      { ...nextSnapshot, account: alternateAccount },
+      { ...nextSnapshot, account_number: "8" },
+      {
+        ...nextSnapshot,
+        public_key_b64u: base64UrlEncode(alternatePublicKey),
+      },
+      {
+        ...nextSnapshot,
+        observed_at: "2026-08-20T18:02:59.000Z",
+        valid_until: "2026-08-20T18:07:59.000Z",
+      },
+      {
+        ...nextSnapshot,
+        observed_at: "2026-08-20T18:03:00.000Z",
+        valid_until: "2026-08-20T18:04:00.000Z",
+      },
+      { ...nextSnapshot, observed_at_height: "699999" },
+      { ...nextSnapshot, sequence: value.snapshot.sequence },
+    ];
+    const beforeOperation = store.getOperation(value.operationId);
+    const beforeEvents = store.listEvents(value.operationId);
+    const beforeAccount = store.getAccountState(profile.chain_id, SOURCE_ACCOUNT);
+    for (const hostile of hostileSnapshots) {
+      controller.snapshot = hostile;
+      await expect(store.observeAndApplyZeroneEconomySequenceAdvance({
+        operation_id: value.operationId,
+        expected_revision: boundary.operation.revision,
+      })).rejects.toThrow();
+      expect(store.getOperation(value.operationId)).toEqual(beforeOperation);
+      expect(store.listEvents(value.operationId)).toEqual(beforeEvents);
+      expect(store.getAccountState(profile.chain_id, SOURCE_ACCOUNT)).toEqual(beforeAccount);
+    }
+    controller.observation_error = new Error("observer unavailable");
+    await expect(store.observeAndApplyZeroneEconomySequenceAdvance({
+      operation_id: value.operationId,
+      expected_revision: boundary.operation.revision,
+    })).rejects.toThrow(/observer unavailable/);
+    controller.observation_error = null;
+    expect(store.getOperation(value.operationId)).toEqual(beforeOperation);
+    expect(store.listEvents(value.operationId)).toEqual(beforeEvents);
+
+    controller.snapshot = nextSnapshot;
+    const concurrent = await Promise.allSettled([
+      store.observeAndApplyZeroneEconomySequenceAdvance({
+        operation_id: value.operationId,
+        expected_revision: boundary.operation.revision,
+      }),
+      store.observeAndApplyZeroneEconomySequenceAdvance({
+        operation_id: value.operationId,
+        expected_revision: boundary.operation.revision,
+      }),
+    ]);
+    expect(concurrent.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(concurrent.filter(({ status }) => status === "rejected")).toHaveLength(1);
+    expect(store.listEvents(value.operationId).filter(({ kind }) =>
+      kind === "observed_zerone_economy_sequence_advance")).toHaveLength(1);
+    expect(store.getOperation(value.operationId)).toMatchObject({
+      status: "sequence_superseded",
+      revision: boundary.operation.revision + 1,
+    });
+    expect(store.verify().ok).toBeTrue();
+    store.close();
+  });
+
   test("allows sequence zero, rejects null-key release, and rejects a rehashed wrong-key reopen", async () => {
     const value = await economyFixture("create_bounty", {
       sequence: "0",
@@ -563,16 +997,22 @@ describe("typed Zerone economy signing boundary", () => {
       evidence_id: hash("6"),
       snapshot: missingKey,
       observed_at: missingKey.observed_at,
-    })).toThrow(/exact registered Cosmos signer key/);
+    })).toThrow(/Generic sequence-advance evidence|legacy/i);
+    expect(store.listEvents(value.operationId)).toEqual(beforeEvents);
+    expect(store.getAccountState(profile.chain_id, SOURCE_ACCOUNT)).toEqual(beforeAccount);
+    controller.snapshot = missingKey;
+    controller.now = "2026-08-20T18:04:00.000Z";
+    await expect(store.observeAndApplyZeroneEconomySequenceAdvance({
+      operation_id: value.operationId,
+      expected_revision: result.operation.revision,
+    })).rejects.toThrow(/exact registered Cosmos signer key/);
     expect(store.listEvents(value.operationId)).toEqual(beforeEvents);
     expect(store.getAccountState(profile.chain_id, SOURCE_ACCOUNT)).toEqual(beforeAccount);
     const exactKey = { ...missingKey, ...ACCOUNT_KEY };
-    expect(store.applySequenceAdvanceEvidence({
+    controller.snapshot = exactKey;
+    expect(await store.observeAndApplyZeroneEconomySequenceAdvance({
       operation_id: value.operationId,
       expected_revision: result.operation.revision,
-      evidence_id: hash("7"),
-      snapshot: exactKey,
-      observed_at: exactKey.observed_at,
     })).toMatchObject({ status: "sequence_superseded" });
     expect(store.verify().ok).toBeTrue();
 
@@ -580,10 +1020,34 @@ describe("typed Zerone economy signing boundary", () => {
       Uint8Array.from({ length: 32 }, (_, index) => index === 31 ? 2 : 0),
       true,
     ));
-    rewriteEventChain(store, value.operationId, (eventKind, details) =>
-      eventKind === "sequence_advanced"
-        ? { ...details, account_public_key_b64u: wrongPublicKey }
-        : details);
+    rewriteEventChain(store, value.operationId, (eventKind, details) => {
+      if (eventKind !== "observed_zerone_economy_sequence_advance") return details;
+      const rewritten = { ...details, account_public_key_b64u: wrongPublicKey };
+      const snapshot = {
+        chain_id: rewritten.chain_id,
+        account: rewritten.source_account,
+        account_number: rewritten.account_number,
+        sequence: rewritten.observed_sequence,
+        balance_uzrn: rewritten.balance_uzrn,
+        observed_at_height: rewritten.observed_at_height,
+        block_hash: rewritten.block_hash,
+        observed_at: rewritten.observation_at,
+        public_key_type_url: rewritten.account_public_key_type_url,
+        public_key_b64u: rewritten.account_public_key_b64u,
+        valid_until: rewritten.account_valid_until,
+      };
+      return {
+        ...rewritten,
+        evidence_id: sha256BytesId(new TextEncoder().encode(
+          `${ECONOMY_SEQUENCE_ADVANCE_EVIDENCE_HASH_DOMAIN}\0${canonicalJson({
+            operation_id: value.operationId,
+            expected_revision: rewritten.expected_revision,
+            reserved_sequence: rewritten.reserved_sequence,
+            snapshot,
+          })}`,
+        )),
+      };
+    });
     const database = Reflect.get(store, "db") as Database;
     database.query(`
       UPDATE account_states SET public_key_b64u = ? WHERE chain_id = ? AND source_account = ?
@@ -689,12 +1153,11 @@ describe("typed Zerone economy signing boundary", () => {
     const store = new ZeroneAgentHostStore(":memory:", configuredOptions(first, controller));
     store.initialize();
     const firstResult = await store.reserveAndEnterZeroneEconomySigningBoundary(inputFor(first));
-    store.applySequenceAdvanceEvidence({
+    controller.now = "2026-08-20T18:03:45.000Z";
+    controller.snapshot = second.snapshot;
+    await store.observeAndApplyZeroneEconomySequenceAdvance({
       operation_id: first.operationId,
       expected_revision: firstResult.operation.revision,
-      evidence_id: hash("8"),
-      snapshot: second.snapshot,
-      observed_at: second.snapshot.observed_at,
     });
     const firstHead = store.getBindingHead(first.binding.wallet_id);
     if (firstHead === null) throw new Error("first typed binding head is absent");
@@ -724,12 +1187,11 @@ describe("typed Zerone economy signing boundary", () => {
     });
     expect(store.verify().ok).toBeTrue();
 
-    store.applySequenceAdvanceEvidence({
+    controller.now = "2026-08-20T18:04:45.000Z";
+    controller.snapshot = third.snapshot;
+    await store.observeAndApplyZeroneEconomySequenceAdvance({
       operation_id: second.operationId,
       expected_revision: secondResult.operation.revision,
-      evidence_id: hash("9"),
-      snapshot: third.snapshot,
-      observed_at: third.snapshot.observed_at,
     });
     const secondHead = store.getBindingHead(first.binding.wallet_id);
     if (secondHead === null) throw new Error("second typed binding head is absent");
@@ -789,7 +1251,22 @@ describe("legacy generic injected gate", () => {
       expected: null,
       updated_at: "2026-08-20T20:00:00.000Z",
     });
-    legacy.reserveOperation(values.reserve());
+    const genericReserved = legacy.reserveOperation(values.reserve());
+    const genericSigning = legacy.recordSignerInvocationBoundary({
+      operation_id: genericReserved.operation_id,
+      expected_revision: genericReserved.revision,
+      account_snapshot: values.snapshot,
+      request_id: "legacy-generic-request",
+      unsigned_payload_hash: hash("d"),
+      external_verification_id: hash("e"),
+      at: LATER,
+    });
+    expect(() => legacy.recordVerifiedZeroneEconomySignedTransaction({
+      operation_id: genericSigning.operation_id,
+      expected_revision: genericSigning.revision,
+      signed_transaction: {} as ZeroneEconomySignedTransactionRecord,
+    })).toThrow(/requires a Zerone economy operation/);
+    expect(legacy.getOperation(genericSigning.operation_id)?.status).toBe("signing");
     legacy.close();
 
     const denied = new ZeroneAgentHostStore(path, { create: false });

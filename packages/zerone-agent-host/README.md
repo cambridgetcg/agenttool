@@ -20,6 +20,33 @@ network/chain effect; and never claims that the signer actually ran. A crash
 after commit is recovered as `signing_unknown`. The request is never recreated,
 returned again, or automatically retried.
 
+If exact signed bytes later return, including after cold recovery to
+`signing_unknown`, `recordVerifiedZeroneEconomySignedTransaction()` accepts
+only the planner's closed portable signed-transaction record. Inside one
+`BEGIN IMMEDIATE` transaction it reload-decodes the canonical one-message
+`TxRaw`/`SignDoc`, cryptographically verifies the compact low-S secp256k1
+signature, derives every hash, matches every relevant coordinate to the prior
+append-only economy commitment and binding, stores the full canonical record
+in a one-to-one append-only table, and appends a distinct typed event. It
+accepts no caller transaction hash, verification ID, or timestamp.
+
+Signed-record admission is local observation, not fresh permission or a
+network effect. It may occur after the original five-minute signing evidence
+windows have expired because it creates no new exposure and permits no
+broadcast. It establishes only that these exact signed bytes match the
+precommitted possible-signer request; it does not establish when the signer
+acted. Any future typed broadcast boundary must independently recheck fresh
+currentness, account state, policy, and sequence before invocation. This v0
+implements no broadcast handoff or invocation at all.
+
+The Cosmos signature authenticates the exact `SignDoc`, body/auth bytes, and
+derived `TxRaw` hash. Request/plan/content/intent/simulation/evidence IDs,
+`requested_at`, and any opaque signer-provider operation ID are correspondence,
+not signature authority. Their authority here comes only from exact equality
+to the immutable operation commitment created before the possible signer
+boundary. A provider operation ID is persisted as part of the portable record
+but is never used for admission, retry, or reconciliation.
+
 The host cryptographically verifies the economy package's full portable
 `WalletIdentityBindingProofEnvelope`: Ed25519 identity-root authorization and
 compact low-S secp256k1 wallet-key control over the same raw binding digest.
@@ -68,6 +95,18 @@ still exercise it must set
 rows fails closed on reopen without that flag. Generic payload bytes are opaque
 and this path is never an economy authorization route.
 
+Caller-shaped `applySequenceAdvanceEvidence()` is likewise legacy-generic
+only. A typed economy row can release its sticky exposure/fence only through
+`observeAndApplyZeroneEconomySequenceAdvance({operation_id,
+expected_revision})`. That async method calls the immutable constructor-owned
+account observer once before SQLite, then uses one host-clock timestamp inside
+an immediate transaction to recheck the CAS, exact chain/account/account
+number/registered key, a fresh non-retrograde observation, and
+`sequence > reserved_sequence`. It derives a domain-separated evidence ID and
+persists the full observer snapshot, its source time, host application time,
+expected revision, and authentication boundary in a distinct typed event.
+Observer failure or nonauthorizing data performs no mutation.
+
 ZRN here is gas, prefunded settlement, and bounded treasury accounting only.
 Balance, spend, stake, or payout eligibility never proves identity/currentness,
 truth, quality, KARMA/reputation, governance voice, rights, worth, or any
@@ -80,6 +119,7 @@ Safety rules in v0:
 - Create reserves `sponsorship_escrow` plus `network_fee`, Submit reserves `knowledge_bond` plus `network_fee`, and Fulfill is fee-only; conditional incoming value is never credited;
 - durable Wallet usage is replayed in global ledger-sequence order; every typed authorization commits and is checked against the exact pre-reservation intent/spend counters with approvals closed to empty;
 - every typed row has exactly one immutable economy commitment binding the exact message/value/effect, plan IDs, signed simulation evidence, configured trust epochs, currentness/account/activation observations, SignDoc hash, request ID, and common timestamp;
+- a typed row has exactly one append-only portable signed-transaction record iff signed bytes have been admitted; reopen independently reverifies its protobuf, signature, transaction hash, table scalars, typed event, operation fields, and prior economy commitment;
 - file-backed storage is mandatory by default; `:memory:` requires the explicit `allow_in_memory_for_tests: true` non-durable test escape hatch;
 - schema SQL, foreign keys, indexes (including the held-fence predicate), canonical records, authority projections, accounting, fences, and event chains are verified before recovery and before mutation;
 - every operation event receives a persisted monotonic ledger sequence that is included in its event hash; verification replays account observations, halts, and sole-fence handoffs across operations in that durable order rather than inferring order from timestamps;
@@ -94,20 +134,22 @@ Safety rules in v0:
 - a cold-start recovery converts unfinished `signing` and `submitting` rows to their unknown variants;
 - recovery defaults on even with create-if-missing; concurrent reservation-only workers must explicitly opt out and must never drive lifecycle effects;
 - even a reported pre-submit rejection remains sticky because the signed bytes could surface elsewhere;
-- only a positive account observation with `sequence > reserved_sequence` releases a post-signer fence;
+- only a positive account observation with `sequence > reserved_sequence` releases a post-signer fence; typed rows obtain it solely from the immutable constructor observer, while caller-shaped evidence remains legacy-generic/test-only;
 - transaction absence/unavailability does nothing, a reorg requires positive replacement-block evidence, and every later halt epoch must be strictly newer in both observation height and time (equal-height epochs are rejected); post-reorg sequence or re-inclusion evidence must likewise be causally newer than the persisted halt epoch;
 - each unresolved canonical reorg is an explicit operation-to-event pointer that survives positive re-inclusion and clears only on qualifying sequence-advance evidence; if a fence must move, the earliest numeric reserved Cosmos sequence wins, with creation time and operation ID as deterministic ties;
 - each operation's events, account observations, binding history, and capability mutations reject retrograde clocks; cross-operation evidence arrival is ordered by `ledger_sequence`, and cold-start recovery clamps a regressed wall clock to the operation's last persisted time;
 - one SQLite database coordinates one device/process domain, not distributed exactly-once execution.
 
 The hashes and semantic replay detect torn writes, accidental substitution, and
-state/event disagreement. They are unkeyed and do not make the local database
-tamper-proof against a privileged writer that replaces the entire ledger with a
-different, fully self-consistent history. Protect the database with the host OS
-and treat that writer as part of the local trusted computing base.
+state/event disagreement. The portable transaction's Cosmos signature remains
+cryptographic evidence for its exact `SignDoc`; local event, commitment, and
+correspondence hashes are unkeyed and do not make the database tamper-proof
+against a privileged writer that replaces the entire ledger with a different,
+fully self-consistent history. Protect the database with the host OS and treat
+that writer as part of the local trusted computing base.
 
 Run `bun run ci` from this directory. No test needs a network, account, credential, or funded wallet.
 
-The package is private and unreleased. Schema version 3 is an intentional
+The package is private and unreleased. Schema version 4 is an intentional
 pre-release rewrite with no migration. The host fails closed on schema version
-1 or 2 databases; discard those development databases.
+1, 2, or 3 databases; discard those development databases.

@@ -9,6 +9,10 @@ export const ECONOMY_SIMULATION_EVIDENCE_SCHEMA =
   "agent-wallet-zerone-economy/simulation-evidence/0.1" as const;
 export const ECONOMY_SIMULATION_EVIDENCE_SIGNING_DOMAIN =
   "agent-wallet-zerone-economy-simulation-evidence/v1" as const;
+export const ECONOMY_SIGNED_TRANSACTION_SCHEMA =
+  "agent-wallet-zerone-economy/signed-transaction/0.1" as const;
+export const ECONOMY_SIGNED_TRANSACTION_CONTENT_DOMAIN =
+  "agent-wallet-zerone-economy-signed-transaction/v1\0" as const;
 export const ECONOMY_ACTIVATION_OBSERVATION_PROTOCOL =
   "agent-wallet-zerone-economy.activation-observation/0.1" as const;
 export const ECONOMY_PLAN_HASH_DOMAIN =

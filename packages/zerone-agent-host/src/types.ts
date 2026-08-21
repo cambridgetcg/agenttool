@@ -23,6 +23,7 @@ import type {
   ZeroneEconomyDirectSignPlan,
   ZeroneEconomyPlannedMessage,
   ZeroneEconomySimulationEvidence,
+  ZeroneEconomySignedTransactionRecord,
 } from "@agenttool/wallet-zerone-economy";
 
 import type {
@@ -430,6 +431,17 @@ export interface ZeroneEconomySigningBoundaryResult {
   readonly operation: OperationSnapshot;
   readonly commitment: ZeroneEconomyOperationCommitment;
   readonly signing_request: Readonly<SigningRequest>;
+}
+
+export interface RecordVerifiedZeroneEconomySignedTransactionInput {
+  readonly operation_id: string;
+  readonly expected_revision: number;
+  readonly signed_transaction: ZeroneEconomySignedTransactionRecord;
+}
+
+export interface ObserveAndApplyZeroneEconomySequenceAdvanceInput {
+  readonly operation_id: string;
+  readonly expected_revision: number;
 }
 
 export interface SignerInvocationBoundary {

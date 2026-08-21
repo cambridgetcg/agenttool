@@ -43,6 +43,24 @@ semantics and derives the uppercase transaction hash from the exact verified
 digest with the wrong API semantics, altered `TxBody`/`AuthInfo`/`SignDoc`, and
 unbranded plan, simulation-binding, or signing-request substitutions.
 
+After in-process verification,
+`createZeroneEconomySignedTransactionRecord()` produces a closed portable
+record containing the exact `TxRaw`, `TxBody`, `AuthInfo`, `SignDoc`, signature,
+source/key/account/sequence/fee/gas/message/effect tuple, and derived hashes.
+`verifyZeroneEconomySignedTransactionRecord()` reloads it without any
+process-local plan, request, or transaction brand; it independently decodes
+the canonical protobuf, derives the one allowed economy message and effect,
+checks the low-S SHA-256-prehash signature, and derives the uppercase
+transaction hash. The record has its own JSON Schema and deterministic vector.
+
+The Cosmos signature authenticates the exact `SignDoc`, not `request_id`,
+`plan_id`, full plan content ID, intent/simulation/evidence IDs,
+`requested_at`, or an opaque signer-provider operation ID. Those are closed,
+content-addressed correspondence fields. A durable host authorizes them only
+by matching the portable record to an immutable commitment created before the
+possible signer boundary. This package does not turn correspondence metadata
+or an unkeyed record ID into signer authority.
+
 Simulation authorization has a separate signed boundary. A verified Agent
 Wallet `SimulationReceipt` is necessary but cannot by itself prove which
 account sequence and empty-signature `TxRaw` was simulated. The private planner
@@ -178,7 +196,11 @@ at or after `simulated_at` and strictly before `valid_until`. This is a
 structural consistency check, not proof of wall-clock freshness. The durable
 host must obtain time from its own reviewed boundary and invoke the signer
 immediately; retaining a branded request past `valid_until` is an execution
-error the pure package cannot observe.
+error the pure package cannot observe. A durable host may later receive and
+cryptographically admit an already-signed portable transaction after that
+window closes, including after crash recovery; that admission does not prove
+when signing happened and must not be mistaken for fresh authority to
+broadcast. Any future broadcast seam must obtain fresh authority again.
 
 ## Durable plan reconstruction
 
@@ -258,20 +280,23 @@ client:
    using Cosmos secp256k1 direct-sign semantics. Do not queue or retain it past
    `valid_until`.
 6. Call `createZeroneEconomySignedPayload()` or
-   `verifyZeroneEconomySignedPayload()`. Persist the verified bytes and
-   precomputed hash before any separately implemented one-shot broadcast.
+   `verifyZeroneEconomySignedPayload()`, then create and reload-check the closed
+   `ZeroneEconomySignedTransactionRecord`. Persist that exact portable record
+   and precomputed hash before any separately implemented one-shot broadcast.
 7. Treat every post-invocation error as ambiguous, never blind-rebroadcast,
    and reconcile the exact hash plus module state. Fulfillment requires
    positive keeper evidence before earnings become spendable treasury.
 
 The in-process object brands prevent accidental substitution while values
 remain in one JavaScript process. JSON serialization, cloning, or restart
-removes that protection. The signed evidence record has an explicit reload
-verifier, and a plan brand can be restored only by verified-input
-reconstruction against its full durable content ID. Simulation bindings and
-signing requests remain process-local. Durable hosts must persist and recheck
-explicit IDs, hashes, original construction inputs, observations,
-reservations, and current heads, then reconstruct the process-local steps.
+removes that protection. Both signed simulation evidence and the portable
+signed-transaction record have explicit reload verifiers. A plan brand can be
+restored only by verified-input reconstruction against its full durable
+content ID. Simulation bindings and signing requests remain process-local;
+reloading a signed transaction does not restore either brand. Durable hosts
+must persist and recheck explicit IDs, hashes, original construction inputs,
+observations, reservations, and current heads, then reconstruct only
+process-local steps that have not crossed their one-shot boundary.
 
 ## Independent parity and tests
 

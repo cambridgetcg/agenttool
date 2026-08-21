@@ -48,11 +48,14 @@ import {
   ZERONE_KNOWLEDGE_CONSENSUS_VERSION,
   ZERONE_SPONSORSHIP_CONSENSUS_VERSION,
   createZeroneEconomyDirectSignPlan,
+  createZeroneEconomySignedPayload,
+  createZeroneEconomySignedTransactionRecord,
   createZeroneEconomySigningRequest,
   createZeroneEconomySimulationBinding,
   createZeroneEconomySimulationEvidence,
   createZeroneEconomySimulationReceiptCore,
   getZeroneEconomyModuleAccounts,
+  verifyZeroneEconomySignedPayload,
   type ZeroneEconomyActivationObservation,
 } from "../src/index.js";
 
@@ -485,3 +488,47 @@ export const MATCHING_ACCOUNT_KEY = Object.freeze({
   public_key_type_url: COSMOS_SECP256K1_PUBLIC_KEY_TYPE_URL,
   public_key_b64u: base64UrlEncode(SECP_PUBLIC_KEY),
 });
+
+export async function signedTransactionRecordFixture(options: {
+  readonly signer_operation_id?: string | null;
+} = {}) {
+  const projection = defaultProjections()[0];
+  const expected = vector.single_message_plans.create_bounty;
+  if (projection === undefined) throw new Error("Create projection fixture is absent");
+  const bundle = await walletBundle({
+    projections: [projection],
+    declared_spends: [{
+      asset_id: profile.native_asset_id,
+      amount_atomic: expected.reserved_spend_uzrn,
+    }],
+  });
+  const fixture = await authorizedPlan({
+    bundle,
+    plan_overrides: {
+      gas_limit: expected.required_gas,
+      fee_amount_uzrn: expected.required_gas,
+    },
+  });
+  const signature = secp256k1.sign(
+    base64UrlDecode(fixture.plan.sign_doc_bytes_b64u),
+    SECP_PRIVATE_KEY,
+    { prehash: true, lowS: true, format: "compact" },
+  );
+  const payload = createZeroneEconomySignedPayload({
+    plan: fixture.plan,
+    request: fixture.request,
+    signature,
+    signer_operation_id: options.signer_operation_id ?? "economy-create-signed-vector",
+  });
+  const transaction = verifyZeroneEconomySignedPayload({
+    plan: fixture.plan,
+    request: fixture.request,
+    payload,
+  });
+  const record = createZeroneEconomySignedTransactionRecord({
+    plan: fixture.plan,
+    request: fixture.request,
+    transaction,
+  });
+  return Object.freeze({ ...fixture, payload, transaction, record });
+}

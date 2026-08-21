@@ -1,7 +1,7 @@
 export const PACKAGE_NAME = "@agenttool/zerone-agent-host" as const;
 export const PACKAGE_VERSION = "0.1.0-dev.0" as const;
 export const HOST_PROTOCOL = "agenttool.zerone-agent-host/0.1" as const;
-export const SQLITE_SCHEMA_VERSION = 3 as const;
+export const SQLITE_SCHEMA_VERSION = 4 as const;
 
 export const EXECUTION_SUPPORT = Object.freeze({
   mode: "durable_one_message_economy_signing_boundary",
@@ -9,10 +9,14 @@ export const EXECUTION_SUPPORT = Object.freeze({
   wallet_record_verification: "verified_records_rechecked_atomically",
   reopen_wallet_record_verification: "record_ids_and_event_commitments_only",
   reopen_economy_plan_verification: "plan_ids_and_operation_commitment_only",
+  portable_signed_transaction_verification:
+    "cryptographic_reload_and_exact_operation_commitment_match",
+  signed_transaction_storage: "append_only_full_portable_record",
   identity_binding_proof_verification: "portable_dual_key_envelope_reverified",
   binding_currentness_authentication: "immutable_constructor_resolver_and_configured_trust_epoch_only",
   activation_currentness_authentication: "immutable_constructor_resolver_and_verifier_allowlist_only",
   account_observation_authentication: "immutable_constructor_observer_only",
+  typed_sequence_advance_authentication: "immutable_constructor_account_observer_only",
   simulation_adapter_authentication: "explicit_host_configuration_allowlist_only",
   signer_invocation: "external_not_implemented",
   broadcast_invocation: "external_not_implemented",
@@ -35,6 +39,10 @@ export const SIMULATION_ADAPTER_TRUST_HASH_DOMAIN =
   "agenttool.zerone-agent-host-simulation-adapter-trust/v1" as const;
 export const ECONOMY_COMMITMENT_HASH_DOMAIN =
   "agenttool.zerone-agent-host-economy-commitment/v1" as const;
+export const ECONOMY_SEQUENCE_ADVANCE_EVIDENCE_HASH_DOMAIN =
+  "agenttool.zerone-agent-host-economy-sequence-advance-evidence/v1" as const;
+export const ECONOMY_SEQUENCE_ADVANCE_EVIDENCE_BOUNDARY =
+  "immutable_constructor_account_observer/0.1" as const;
 export const GENESIS_EVENT_HASH = `sha256:${"0".repeat(64)}` as const;
 
 export const OPERATION_STATUSES = [

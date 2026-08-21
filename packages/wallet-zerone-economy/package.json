@@ -15,7 +15,9 @@
     },
     "./vectors.json": "./vectors/wallet-zerone-economy-v0.1-vectors.json",
     "./simulation-evidence-schema.json": "./schema/simulation-evidence-v0.1.schema.json",
-    "./simulation-evidence-vector.json": "./vectors/simulation-evidence-v0.1-vector.json"
+    "./simulation-evidence-vector.json": "./vectors/simulation-evidence-v0.1-vector.json",
+    "./signed-transaction-schema.json": "./schema/signed-transaction-v0.1.schema.json",
+    "./signed-transaction-vector.json": "./vectors/signed-transaction-v0.1-vector.json"
   },
   "files": [
     "dist",
@@ -37,8 +39,9 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
     "check:schemas": "bun test tests/schema.test.ts",
-    "check:vectors": "bun scripts/regenerate-simulation-evidence-vector.ts --check && bun test tests/go-cosmos-vectors.test.ts tests/simulation-evidence-vector.test.ts",
+    "check:vectors": "bun scripts/regenerate-simulation-evidence-vector.ts --check && bun scripts/regenerate-signed-transaction-vector.ts --check && bun test tests/go-cosmos-vectors.test.ts tests/simulation-evidence-vector.test.ts tests/signed-transaction-vector.test.ts",
     "generate:evidence-vector": "bun scripts/regenerate-simulation-evidence-vector.ts",
+    "generate:signed-transaction-vector": "bun scripts/regenerate-signed-transaction-vector.ts",
     "ci": "bun run build:deps && bun run typecheck && bun run check:schemas && bun run check:vectors && bun run test && bun run build"
   },
   "dependencies": {

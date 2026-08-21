@@ -19,7 +19,9 @@ import {
   createZeroneEconomySigningRequest,
   createZeroneEconomySimulationBinding,
   getZeroneEconomyModuleAccounts,
+  verifyZeroneEconomySignedTransactionRecord,
   verifyZeroneEconomySimulationEvidence,
+  type ZeroneEconomySignedTransactionRecord,
   zeroneEconomyDirectSignPlanContentId,
 } from "@agenttool/wallet-zerone-economy";
 import {
@@ -37,6 +39,8 @@ import {
   AUTHORIZATION_PROJECTION_BOUNDARY,
   ECONOMY_AUTHORIZATION_BOUNDARY,
   ECONOMY_COMMITMENT_HASH_DOMAIN,
+  ECONOMY_SEQUENCE_ADVANCE_EVIDENCE_HASH_DOMAIN,
+  ECONOMY_SEQUENCE_ADVANCE_EVIDENCE_BOUNDARY,
   EXECUTION_SUPPORT,
   GENESIS_EVENT_HASH,
   OPERATION_STATUSES,
@@ -61,9 +65,11 @@ import type {
   OperationSnapshot,
   OperationStatus,
   PurposeReservation,
+  RecordVerifiedZeroneEconomySignedTransactionInput,
   ReservationState,
   ReserveOperationInput,
   ReserveAndEnterZeroneEconomySigningBoundaryInput,
+  ObserveAndApplyZeroneEconomySequenceAdvanceInput,
   SequenceAdvanceEvidence,
   Sha256Id,
   SignerInvocationBoundary,
@@ -227,6 +233,21 @@ interface EconomyCommitmentRow {
   commitment_json: string;
 }
 
+interface EconomySignedTransactionRow {
+  operation_id: string;
+  content_id: Sha256Id;
+  plan_id: Sha256Id;
+  plan_content_id: Sha256Id;
+  intent_record_id: Sha256Id;
+  request_id: string;
+  signer_key_id: Sha256Id;
+  sign_doc_bytes_hash: Sha256Id;
+  tx_bytes_hash: Sha256Id;
+  tx_hash: string;
+  admitted_at: string;
+  record_json: string;
+}
+
 interface ReservationRow {
   operation_id: string;
   purpose: TreasuryPurpose;
@@ -352,6 +373,11 @@ const TABLE_COLUMNS = Object.freeze({
     "sign_doc_bytes_hash", "activation_currentness_id", "request_id", "requested_at",
     "commitment_json",
   ],
+  economy_signed_transactions: [
+    "operation_id", "content_id", "plan_id", "plan_content_id", "intent_record_id",
+    "request_id", "signer_key_id", "sign_doc_bytes_hash", "tx_bytes_hash", "tx_hash",
+    "admitted_at", "record_json",
+  ],
   operations: [
     "operation_id", "operation_kind", "revision", "status", "wallet_id", "binding_id", "proof_id",
     "currentness_id", "binding_head_version", "descriptor_id", "capability_record_id",
@@ -379,6 +405,7 @@ const TABLE_SIGNATURES: Readonly<Record<keyof typeof TABLE_COLUMNS, string>> = O
   capability_usage: "capability_record_id:TEXT:0:1|wallet_id:TEXT:1:0|descriptor_id:TEXT:1:0|policy_hash:TEXT:1:0|revocation_nonce:INTEGER:1:0|max_intents:INTEGER:1:0|max_spend_uzrn:TEXT:1:0|max_fee_per_intent_uzrn:TEXT:1:0|reserved_intents:INTEGER:1:0|consumed_intents:INTEGER:1:0|reserved_spend_uzrn:TEXT:1:0|consumed_spend_uzrn:TEXT:1:0|version:INTEGER:1:0|updated_at:TEXT:1:0",
   operation_events: "ledger_sequence:INTEGER:0:1|operation_id:TEXT:1:0|sequence:INTEGER:1:0|kind:TEXT:1:0|at:TEXT:1:0|details_json:TEXT:1:0|previous_event_hash:TEXT:1:0|event_hash:TEXT:1:0",
   economy_operation_commitments: "operation_id:TEXT:0:1|commitment_id:TEXT:1:0|plan_id:TEXT:1:0|plan_content_id:TEXT:1:0|message_kind:TEXT:1:0|message_type_url:TEXT:1:0|intent_record_id:TEXT:1:0|simulation_evidence_record_id:TEXT:1:0|simulation_evidence_json:TEXT:1:0|binding_currentness_id:TEXT:1:0|binding_verifier_trust_id:TEXT:1:0|sign_doc_bytes_hash:TEXT:1:0|activation_currentness_id:TEXT:1:0|request_id:TEXT:1:0|requested_at:TEXT:1:0|commitment_json:TEXT:1:0",
+  economy_signed_transactions: "operation_id:TEXT:0:1|content_id:TEXT:1:0|plan_id:TEXT:1:0|plan_content_id:TEXT:1:0|intent_record_id:TEXT:1:0|request_id:TEXT:1:0|signer_key_id:TEXT:1:0|sign_doc_bytes_hash:TEXT:1:0|tx_bytes_hash:TEXT:1:0|tx_hash:TEXT:1:0|admitted_at:TEXT:1:0|record_json:TEXT:1:0",
   operations: "operation_id:TEXT:0:1|operation_kind:TEXT:1:0|revision:INTEGER:1:0|status:TEXT:1:0|wallet_id:TEXT:1:0|binding_id:TEXT:1:0|proof_id:TEXT:1:0|currentness_id:TEXT:1:0|binding_head_version:INTEGER:1:0|descriptor_id:TEXT:1:0|capability_record_id:TEXT:1:0|capability_revocation_nonce:INTEGER:1:0|authorization_verification_id:TEXT:1:0|intent_record_id:TEXT:1:0|simulation_record_id:TEXT:1:0|plan_reference_id:TEXT:1:0|treasury_policy_id:TEXT:1:0|treasury_policy_json:TEXT:1:0|window_start_height:TEXT:1:0|reserve_floor_uzrn:TEXT:1:0|chain_id:TEXT:1:0|source_account:TEXT:1:0|account_number:TEXT:1:0|sequence:TEXT:1:0|signer_key_id:TEXT:1:0|signer_invoked:INTEGER:1:0|request_id:TEXT:0:0|unsigned_payload_hash:TEXT:0:0|signing_boundary_verification_id:TEXT:0:0|tx_hash:TEXT:0:0|signed_payload_hash:TEXT:0:0|signed_verification_id:TEXT:0:0|inclusion_height:TEXT:0:0|inclusion_block_hash:TEXT:0:0|inclusion_code:INTEGER:0:0|inclusion_codespace:TEXT:0:0|unresolved_reorg_event_sequence:INTEGER:0:0|unresolved_reorg_evidence_id:TEXT:0:0|event_count:INTEGER:1:0|event_head_hash:TEXT:1:0|created_at:TEXT:1:0|updated_at:TEXT:1:0",
   sequence_fences: "operation_id:TEXT:0:1|chain_id:TEXT:1:0|source_account:TEXT:1:0|account_number:TEXT:1:0|sequence:TEXT:1:0|state:TEXT:1:0|acquired_at:TEXT:1:0|released_at:TEXT:0:0|release_evidence_id:TEXT:0:0",
   treasury_reservations: "operation_id:TEXT:1:1|purpose:TEXT:1:2|amount_uzrn:TEXT:1:0|state:TEXT:1:0",
@@ -391,6 +418,7 @@ const TABLE_SQL: Readonly<Record<keyof typeof TABLE_COLUMNS, string>> = Object.f
   capability_usage: "create table capability_usage (capability_record_id text primary key, wallet_id text not null references binding_heads(wallet_id), descriptor_id text not null, policy_hash text not null, revocation_nonce integer not null check(revocation_nonce >= 0), max_intents integer not null check(max_intents >= 1), max_spend_uzrn text not null, max_fee_per_intent_uzrn text not null, reserved_intents integer not null check(reserved_intents >= 0), consumed_intents integer not null check(consumed_intents >= 0), reserved_spend_uzrn text not null, consumed_spend_uzrn text not null, version integer not null check(version >= 1), updated_at text not null)",
   operation_events: "create table operation_events (ledger_sequence integer primary key, operation_id text not null references operations(operation_id), sequence integer not null check(sequence >= 1), kind text not null, at text not null, details_json text not null, previous_event_hash text not null, event_hash text not null unique, unique(operation_id, sequence))",
   economy_operation_commitments: "create table economy_operation_commitments (operation_id text primary key references operations(operation_id), commitment_id text not null unique, plan_id text not null unique, plan_content_id text not null unique, message_kind text not null check(message_kind in ('create_bounty', 'submit_claim', 'fulfill_bounty')), message_type_url text not null, intent_record_id text not null, simulation_evidence_record_id text not null unique, simulation_evidence_json text not null, binding_currentness_id text not null, binding_verifier_trust_id text not null, sign_doc_bytes_hash text not null unique, activation_currentness_id text not null, request_id text not null unique, requested_at text not null, commitment_json text not null)",
+  economy_signed_transactions: "create table economy_signed_transactions (operation_id text primary key references operations(operation_id), content_id text not null unique, plan_id text not null unique, plan_content_id text not null unique, intent_record_id text not null unique, request_id text not null unique, signer_key_id text not null, sign_doc_bytes_hash text not null unique, tx_bytes_hash text not null unique, tx_hash text not null unique, admitted_at text not null, record_json text not null)",
   operations: "create table operations (operation_id text primary key, operation_kind text not null check(operation_kind in ('generic_injected', 'zerone_economy')), revision integer not null check(revision >= 1), status text not null check(status in ('reserved', 'signing', 'signing_unknown', 'signed', 'submitting', 'submission_unknown', 'submitted', 'rejected_pre_submit_sticky', 'confirmed_success', 'confirmed_failed', 'reorged', 'sequence_superseded', 'released_pre_sign')), wallet_id text not null references binding_heads(wallet_id), binding_id text not null, proof_id text not null, currentness_id text not null references binding_history(currentness_id), binding_head_version integer not null, descriptor_id text not null, capability_record_id text not null references capability_usage(capability_record_id), capability_revocation_nonce integer not null, authorization_verification_id text not null unique, intent_record_id text not null unique, simulation_record_id text not null, plan_reference_id text not null, treasury_policy_id text not null, treasury_policy_json text not null, window_start_height text not null, reserve_floor_uzrn text not null, chain_id text not null, source_account text not null, account_number text not null, sequence text not null, signer_key_id text not null, signer_invoked integer not null check(signer_invoked in (0, 1)), request_id text unique, unsigned_payload_hash text, signing_boundary_verification_id text, tx_hash text unique, signed_payload_hash text, signed_verification_id text, inclusion_height text, inclusion_block_hash text, inclusion_code integer, inclusion_codespace text, unresolved_reorg_event_sequence integer, unresolved_reorg_evidence_id text, event_count integer not null check(event_count >= 0), event_head_hash text not null, created_at text not null, updated_at text not null, check((unresolved_reorg_event_sequence is null and unresolved_reorg_evidence_id is null) or (unresolved_reorg_event_sequence >= 1 and unresolved_reorg_evidence_id is not null)))",
   sequence_fences: "create table sequence_fences (operation_id text primary key references operations(operation_id), chain_id text not null, source_account text not null, account_number text not null, sequence text not null, state text not null check(state in ('held', 'released')), acquired_at text not null, released_at text, release_evidence_id text)",
   treasury_reservations: "create table treasury_reservations (operation_id text not null references operations(operation_id), purpose text not null check(purpose in ('compute', 'knowledge_bond', 'network_fee', 'sponsorship_escrow', 'storage')), amount_uzrn text not null, state text not null check(state in ('reserved', 'sticky', 'settled', 'released')), primary key(operation_id, purpose))",
@@ -415,6 +443,17 @@ const INDEX_SIGNATURES: Readonly<Record<keyof typeof TABLE_COLUMNS, readonly str
     "1:u:0:sign_doc_bytes_hash",
     "1:u:0:simulation_evidence_record_id",
   ],
+  economy_signed_transactions: [
+    "1:pk:0:operation_id",
+    "1:u:0:content_id",
+    "1:u:0:intent_record_id",
+    "1:u:0:plan_content_id",
+    "1:u:0:plan_id",
+    "1:u:0:request_id",
+    "1:u:0:sign_doc_bytes_hash",
+    "1:u:0:tx_bytes_hash",
+    "1:u:0:tx_hash",
+  ],
   operations: [
     "0:c:0:capability_record_id,created_at",
     "0:c:0:chain_id,source_account,window_start_height",
@@ -435,6 +474,7 @@ const FOREIGN_KEY_SIGNATURES: Readonly<Record<keyof typeof TABLE_COLUMNS, readon
   capability_usage: ["wallet_id->binding_heads.wallet_id:NO ACTION:NO ACTION:NONE"],
   operation_events: ["operation_id->operations.operation_id:NO ACTION:NO ACTION:NONE"],
   economy_operation_commitments: ["operation_id->operations.operation_id:NO ACTION:NO ACTION:NONE"],
+  economy_signed_transactions: ["operation_id->operations.operation_id:NO ACTION:NO ACTION:NONE"],
   operations: [
     "capability_record_id->capability_usage.capability_record_id:NO ACTION:NO ACTION:NONE",
     "currentness_id->binding_history.currentness_id:NO ACTION:NO ACTION:NONE",
@@ -464,6 +504,17 @@ function economyCommitmentId(
 ): Sha256Id {
   return sha256BytesId(UTF8.encode(
     `${ECONOMY_COMMITMENT_HASH_DOMAIN}\0${canonicalJson(core)}`,
+  ));
+}
+
+function economySequenceAdvanceEvidenceId(input: {
+  readonly operation_id: string;
+  readonly expected_revision: number;
+  readonly reserved_sequence: string;
+  readonly snapshot: ZeroneAccountSnapshot;
+}): Sha256Id {
+  return sha256BytesId(UTF8.encode(
+    `${ECONOMY_SEQUENCE_ADVANCE_EVIDENCE_HASH_DOMAIN}\0${canonicalJson(input)}`,
   ));
 }
 
@@ -1218,6 +1269,20 @@ export class ZeroneAgentHostStore {
         requested_at TEXT NOT NULL,
         commitment_json TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS economy_signed_transactions (
+        operation_id TEXT PRIMARY KEY REFERENCES operations(operation_id),
+        content_id TEXT NOT NULL UNIQUE,
+        plan_id TEXT NOT NULL UNIQUE,
+        plan_content_id TEXT NOT NULL UNIQUE,
+        intent_record_id TEXT NOT NULL UNIQUE,
+        request_id TEXT NOT NULL UNIQUE,
+        signer_key_id TEXT NOT NULL,
+        sign_doc_bytes_hash TEXT NOT NULL UNIQUE,
+        tx_bytes_hash TEXT NOT NULL UNIQUE,
+        tx_hash TEXT NOT NULL UNIQUE,
+        admitted_at TEXT NOT NULL,
+        record_json TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS treasury_reservations (
         operation_id TEXT NOT NULL REFERENCES operations(operation_id),
         purpose TEXT NOT NULL CHECK(purpose IN ('compute', 'knowledge_bond', 'network_fee', 'sponsorship_escrow', 'storage')),
@@ -1278,6 +1343,12 @@ export class ZeroneAgentHostStore {
       CREATE TRIGGER IF NOT EXISTS economy_operation_commitments_no_delete
         BEFORE DELETE ON economy_operation_commitments
         BEGIN SELECT RAISE(ABORT, 'economy commitments are append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS economy_signed_transactions_no_update
+        BEFORE UPDATE ON economy_signed_transactions
+        BEGIN SELECT RAISE(ABORT, 'economy signed transactions are append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS economy_signed_transactions_no_delete
+        BEFORE DELETE ON economy_signed_transactions
+        BEGIN SELECT RAISE(ABORT, 'economy signed transactions are append-only'); END;
     `);
     if (initialVersion === 0) this.db.exec(`PRAGMA user_version = ${SQLITE_SCHEMA_VERSION}`);
     this.assertSchema();
@@ -1308,11 +1379,11 @@ export class ZeroneAgentHostStore {
     `).all() as Array<{ name: keyof typeof TABLE_COLUMNS; sql: string | null }>;
     const expectedNames = Object.keys(TABLE_COLUMNS).sort();
     if (tables.map(({ name }) => name).join("\0") !== expectedNames.join("\0")) {
-      fail("integrity_error", "Host ledger application-table set is not the v3 schema");
+      fail("integrity_error", "Host ledger application-table set is not the v4 schema");
     }
     for (const { name, sql } of tables) {
       if (normalizeSql(sql) !== TABLE_SQL[name]) {
-        fail("integrity_error", `Host ledger ${name} CREATE TABLE SQL is not the v3 schema`);
+        fail("integrity_error", `Host ledger ${name} CREATE TABLE SQL is not the v4 schema`);
       }
       const columns = this.db.query(`PRAGMA table_info(${name})`).all() as TableInfoRow[];
       const signature = columns
@@ -1322,7 +1393,7 @@ export class ZeroneAgentHostStore {
         columns.map(({ name: column }) => column).join("\0") !== TABLE_COLUMNS[name].join("\0")
         || signature !== TABLE_SIGNATURES[name]
       ) {
-        fail("integrity_error", `Host ledger ${name} columns are not the v3 schema`);
+        fail("integrity_error", `Host ledger ${name} columns are not the v4 schema`);
       }
       const indexes = (this.db.query(`PRAGMA index_list(${name})`).all() as IndexListRow[])
         .map((index) => {
@@ -1334,7 +1405,7 @@ export class ZeroneAgentHostStore {
         })
         .sort();
       if (indexes.join("|") !== [...INDEX_SIGNATURES[name]].sort().join("|")) {
-        fail("integrity_error", `Host ledger ${name} indexes are not the v3 schema`);
+        fail("integrity_error", `Host ledger ${name} indexes are not the v4 schema`);
       }
       const foreignKeys = (this.db.query(`PRAGMA foreign_key_list(${name})`).all() as Array<{
         table: string;
@@ -1347,7 +1418,7 @@ export class ZeroneAgentHostStore {
         `${foreignKey.from}->${foreignKey.table}.${foreignKey.to}:${foreignKey.on_update}:${foreignKey.on_delete}:${foreignKey.match}`)
         .sort();
       if (foreignKeys.join("|") !== [...FOREIGN_KEY_SIGNATURES[name]].sort().join("|")) {
-        fail("integrity_error", `Host ledger ${name} foreign keys are not the v3 schema`);
+        fail("integrity_error", `Host ledger ${name} foreign keys are not the v4 schema`);
       }
     }
     const requiredObjects = [
@@ -1359,6 +1430,8 @@ export class ZeroneAgentHostStore {
       "binding_heads_no_delete",
       "economy_operation_commitments_no_delete",
       "economy_operation_commitments_no_update",
+      "economy_signed_transactions_no_delete",
+      "economy_signed_transactions_no_update",
       "operations_capability_idx",
       "operations_treasury_window_idx",
       "sequence_fences_one_held_account_idx",
@@ -1395,6 +1468,14 @@ export class ZeroneAgentHostStore {
         "create trigger economy_operation_commitments_no_update before update on economy_operation_commitments begin select raise(abort, 'economy commitments are append-only'); end",
       ],
       [
+        "economy_signed_transactions_no_delete",
+        "create trigger economy_signed_transactions_no_delete before delete on economy_signed_transactions begin select raise(abort, 'economy signed transactions are append-only'); end",
+      ],
+      [
+        "economy_signed_transactions_no_update",
+        "create trigger economy_signed_transactions_no_update before update on economy_signed_transactions begin select raise(abort, 'economy signed transactions are append-only'); end",
+      ],
+      [
         "operation_events_no_delete",
         "create trigger operation_events_no_delete before delete on operation_events begin select raise(abort, 'operation events are append-only'); end",
       ],
@@ -1410,7 +1491,7 @@ export class ZeroneAgentHostStore {
       triggers.length !== expectedTriggers.size
       || triggers.some(({ name, sql }) => normalizeSql(sql) !== expectedTriggers.get(name))
     ) {
-      fail("integrity_error", "Application append-only triggers are not the v3 schema");
+      fail("integrity_error", "Application append-only triggers are not the v4 schema");
     }
     const expectedIndexes = new Map<string, string>([
       [
@@ -1443,7 +1524,7 @@ export class ZeroneAgentHostStore {
       applicationIndexes.length !== expectedIndexes.size
       || applicationIndexes.some(({ name, sql }) => normalizeSql(sql) !== expectedIndexes.get(name))
     ) {
-      fail("integrity_error", "Application index definitions are not the v3 schema");
+      fail("integrity_error", "Application index definitions are not the v4 schema");
     }
   }
 
@@ -3426,6 +3507,12 @@ export class ZeroneAgentHostStore {
           break;
         }
         case "verified_signed_evidence": {
+          if (operation.operation_kind !== "generic_injected") {
+            fail(
+              "integrity_error",
+              `Generic signed evidence advanced a typed operation: ${operation.operation_id}`,
+            );
+          }
           requireStatus(row.kind, status, ["signing", "signing_unknown"]);
           assertEventShape(details, [
             "tx_hash", "signed_payload_hash", "external_verification_id",
@@ -3444,7 +3531,114 @@ export class ZeroneAgentHostStore {
           status = "signed";
           break;
         }
+        case "verified_zerone_economy_signed_transaction": {
+          if (operation.operation_kind !== "zerone_economy") {
+            fail(
+              "integrity_error",
+              `Typed signed transaction advanced a generic operation: ${operation.operation_id}`,
+            );
+          }
+          requireStatus(row.kind, status, ["signing", "signing_unknown"]);
+          assertEventShape(details, [
+            "economy_commitment_id", "signed_transaction_content_id",
+            "signed_transaction_json", "tx_hash", "tx_bytes_hash",
+            "sign_doc_bytes_hash", "request_id", "recovered_from_unknown",
+            "network_effects_performed", "local_durable_effect",
+          ], label);
+          const recoveredFromUnknown = eventBoolean(
+            details,
+            "recovered_from_unknown",
+            label,
+          );
+          if (recoveredFromUnknown !== (status === "signing_unknown")) {
+            fail(
+              "integrity_error",
+              `Typed signed transaction has an invalid recovery flag: ${operation.operation_id}`,
+            );
+          }
+          const recordJson = eventString(details, "signed_transaction_json", label);
+          let record: ZeroneEconomySignedTransactionRecord;
+          try {
+            const parsed = JSON.parse(recordJson) as unknown;
+            record = verifyZeroneEconomySignedTransactionRecord(parsed);
+            if (canonicalJson(record) !== recordJson) {
+              fail(
+                "integrity_error",
+                `Typed signed-transaction event is not canonical: ${operation.operation_id}`,
+              );
+            }
+          } catch (error) {
+            if (error instanceof ZeroneAgentHostError) throw error;
+            fail(
+              "integrity_error",
+              `Typed signed-transaction event does not cryptographically verify: ${operation.operation_id}`,
+            );
+          }
+          const commitmentRow = this.db.query(`
+            SELECT * FROM economy_operation_commitments WHERE operation_id = ?
+          `).get(operation.operation_id) as EconomyCommitmentRow | null;
+          if (commitmentRow === null) {
+            fail(
+              "integrity_error",
+              `Typed signed-transaction event lost its economy commitment: ${operation.operation_id}`,
+            );
+          }
+          const commitment = parseEconomyCommitment(commitmentRow.commitment_json);
+          const eventCommitmentId = eventString(
+            details,
+            "economy_commitment_id",
+            label,
+          ) as Sha256Id;
+          const eventContentId = eventString(
+            details,
+            "signed_transaction_content_id",
+            label,
+          ) as Sha256Id;
+          const eventTxHash = eventString(details, "tx_hash", label);
+          const eventTxBytesHash = eventString(details, "tx_bytes_hash", label) as Sha256Id;
+          const eventSignDocHash = eventString(
+            details,
+            "sign_doc_bytes_hash",
+            label,
+          ) as Sha256Id;
+          const eventRequestId = eventString(details, "request_id", label);
+          assertSha256Id(eventCommitmentId, `${label}.economy_commitment_id`);
+          assertSha256Id(eventContentId, `${label}.signed_transaction_content_id`);
+          assertTxHash(eventTxHash, `${label}.tx_hash`);
+          assertSha256Id(eventTxBytesHash, `${label}.tx_bytes_hash`);
+          assertSha256Id(eventSignDocHash, `${label}.sign_doc_bytes_hash`);
+          assertUuid(eventRequestId, `${label}.request_id`);
+          requireEventBoolean(details, "network_effects_performed", false, label);
+          if (
+            eventString(details, "local_durable_effect", label)
+              !== "portable_signed_transaction_admitted"
+            || eventCommitmentId !== commitment.commitment_id
+            || eventContentId !== record.content_id
+            || eventTxHash !== record.tx_hash
+            || eventTxBytesHash !== record.tx_bytes_hash
+            || eventSignDocHash !== record.sign_doc_bytes_hash
+            || eventRequestId !== record.request_id
+            || Date.parse(row.at) < Date.parse(commitment.requested_at)
+            || !this.economySignedTransactionMatches(record, operation, commitment)
+          ) {
+            fail(
+              "integrity_error",
+              `Typed signed-transaction event changed its committed transaction: ${operation.operation_id}`,
+            );
+          }
+          txHash = record.tx_hash;
+          signedPayloadHash = record.tx_bytes_hash;
+          signedVerificationId = record.content_id;
+          status = "signed";
+          break;
+        }
         case "broadcast_invocation_boundary": {
+          if (operation.operation_kind !== "generic_injected") {
+            fail(
+              "integrity_error",
+              `Generic broadcast boundary advanced a typed operation: ${operation.operation_id}`,
+            );
+          }
           requireStatus(row.kind, status, ["signed"]);
           assertEventShape(details, ["automatic_retry"], label);
           requireEventBoolean(details, "automatic_retry", false, label);
@@ -3452,6 +3646,12 @@ export class ZeroneAgentHostStore {
           break;
         }
         case "submission_unknown": {
+          if (operation.operation_kind !== "generic_injected") {
+            fail(
+              "integrity_error",
+              `Generic submission recovery advanced a typed operation: ${operation.operation_id}`,
+            );
+          }
           requireStatus(row.kind, status, ["submitting"]);
           assertEventShape(details, ["reason", "automatic_retry"], label);
           assertIdentifier(eventString(details, "reason", label), `${label}.reason`);
@@ -3462,6 +3662,12 @@ export class ZeroneAgentHostStore {
         case "broadcast_accepted":
         case "broadcast_ambiguous":
         case "broadcast_rejected_pre_submit": {
+          if (operation.operation_kind !== "generic_injected") {
+            fail(
+              "integrity_error",
+              `Generic broadcast evidence advanced a typed operation: ${operation.operation_id}`,
+            );
+          }
           requireStatus(row.kind, status, ["submitting", "submission_unknown"]);
           assertEventShape(details, [
             "tx_hash", "evidence_id", "code", "reservation_released",
@@ -3492,6 +3698,12 @@ export class ZeroneAgentHostStore {
           break;
         }
         case "released_pre_sign": {
+          if (operation.operation_kind !== "generic_injected") {
+            fail(
+              "integrity_error",
+              `Generic pre-sign release advanced a typed operation: ${operation.operation_id}`,
+            );
+          }
           requireStatus(row.kind, status, ["reserved"]);
           assertEventShape(details, ["release_id", "reason"], label);
           releaseEvidenceId = eventString(details, "release_id", label) as Sha256Id;
@@ -3502,6 +3714,12 @@ export class ZeroneAgentHostStore {
           break;
         }
         case "transaction_inclusion": {
+          if (operation.operation_kind !== "generic_injected") {
+            fail(
+              "integrity_error",
+              `Generic inclusion evidence advanced a typed operation: ${operation.operation_id}`,
+            );
+          }
           requireStatus(row.kind, status, [
             "signed", "submitting", "submission_unknown", "submitted",
             "rejected_pre_submit_sticky", "reorged",
@@ -3556,6 +3774,12 @@ export class ZeroneAgentHostStore {
           break;
         }
         case "canonical_reorg": {
+          if (operation.operation_kind !== "generic_injected") {
+            fail(
+              "integrity_error",
+              `Generic reorg evidence advanced a typed operation: ${operation.operation_id}`,
+            );
+          }
           requireStatus(row.kind, status, ["confirmed_success", "confirmed_failed"]);
           assertEventShape(details, [
             "evidence_id", "tx_hash", "prior_inclusion_height",
@@ -3625,8 +3849,15 @@ export class ZeroneAgentHostStore {
           status = "reorged";
           break;
         }
-        case "sequence_advanced": {
-          const priorStatus = status;
+        case "sequence_advanced":
+        case "observed_zerone_economy_sequence_advance": {
+          const typedSequenceEvent = row.kind === "observed_zerone_economy_sequence_advance";
+          if (typedSequenceEvent !== (operation.operation_kind === "zerone_economy")) {
+            fail(
+              "integrity_error",
+              `Sequence event crossed its operation authority boundary: ${operation.operation_id}`,
+            );
+          }
           requireStatus(row.kind, status, [
             "reserved", "signing", "signing_unknown", "signed", "submitting",
             "submission_unknown", "submitted", "rejected_pre_submit_sticky",
@@ -3640,6 +3871,7 @@ export class ZeroneAgentHostStore {
             "account_valid_until",
             "exposure_released", "sequence_fence_released",
             "account_halt_handoff_operation_id",
+            ...(typedSequenceEvent ? ["authentication_boundary", "expected_revision"] : []),
           ], label);
           const evidenceId = eventString(details, "evidence_id", label) as Sha256Id;
           assertSha256Id(evidenceId, `${label}.evidence_id`);
@@ -3655,11 +3887,32 @@ export class ZeroneAgentHostStore {
             || accountObservation.account_number !== operation.account_number
             || eventString(details, "reserved_sequence", label) !== operation.sequence
             || BigInt(accountObservation.sequence) <= BigInt(operation.sequence)
-            || accountObservation.observed_at !== row.at
+            || Date.parse(accountObservation.observed_at) < Date.parse(operation.created_at)
+            || (typedSequenceEvent
+              ? Date.parse(accountObservation.observed_at) > Date.parse(row.at)
+                || Date.parse(row.at) >= Date.parse(accountObservation.valid_until)
+              : accountObservation.observed_at !== row.at)
           ) {
             fail("integrity_error", `Sequence event does not advance its operation: ${operation.operation_id}`);
           }
-          if (operation.operation_kind === "zerone_economy") {
+          if (typedSequenceEvent) {
+            const expectedRevision = eventSafeCount(details, "expected_revision", label);
+            if (
+              eventString(details, "authentication_boundary", label)
+                !== ECONOMY_SEQUENCE_ADVANCE_EVIDENCE_BOUNDARY
+              || expectedRevision !== row.sequence - 1
+              || evidenceId !== economySequenceAdvanceEvidenceId({
+                operation_id: operation.operation_id,
+                expected_revision: expectedRevision,
+                reserved_sequence: operation.sequence,
+                snapshot: accountObservation,
+              })
+            ) {
+              fail(
+                "integrity_error",
+                `Typed sequence evidence does not match its observer commitment: ${operation.operation_id}`,
+              );
+            }
             this.assertTypedSequenceAccountKey(operation, accountObservation);
           }
           if (
@@ -3936,6 +4189,111 @@ export class ZeroneAgentHostStore {
       input.at,
       { reason: input.reason },
     );
+  }
+
+  recordVerifiedZeroneEconomySignedTransaction(
+    input: RecordVerifiedZeroneEconomySignedTransactionInput,
+  ): OperationSnapshot {
+    const operationId = input.operation_id;
+    const expectedRevision = input.expected_revision;
+    const suppliedRecord = input.signed_transaction;
+    assertIdentifier(operationId, "operation_id");
+    assertCount(expectedRevision, "expected_revision", true);
+    const apply = this.db.transaction((): OperationSnapshot => {
+      const operation = this.requireOperation(
+        operationId,
+        expectedRevision,
+        ["signing", "signing_unknown"],
+      );
+      if (operation.operation_kind !== "zerone_economy") {
+        fail(
+          "state_conflict",
+          "Typed signed-transaction admission requires a Zerone economy operation",
+        );
+      }
+      const at = this.now();
+      assertTimestamp(at, "host now");
+      assertNotBefore(at, operation.updated_at, "Economy signed-transaction admission");
+      let record: ZeroneEconomySignedTransactionRecord;
+      try {
+        record = verifyZeroneEconomySignedTransactionRecord(suppliedRecord);
+      } catch {
+        fail(
+          "evidence_rejected",
+          "Portable Zerone economy signed transaction did not cryptographically verify",
+        );
+      }
+      const commitmentRow = this.db.query(`
+        SELECT * FROM economy_operation_commitments WHERE operation_id = ?
+      `).get(operation.operation_id) as EconomyCommitmentRow | null;
+      if (commitmentRow === null) {
+        fail("integrity_error", "Typed operation has no economy commitment");
+      }
+      const commitment = parseEconomyCommitment(commitmentRow.commitment_json);
+      if (!this.economySignedTransactionMatches(record, operation, commitment)) {
+        fail(
+          "evidence_rejected",
+          "Portable signed transaction does not match the immutable economy operation commitment",
+        );
+      }
+      assertNotBefore(at, commitment.requested_at, "Economy signed-transaction admission");
+      const recordJson = canonicalJson(record);
+      this.db.query(`
+        INSERT INTO economy_signed_transactions (
+          operation_id, content_id, plan_id, plan_content_id, intent_record_id,
+          request_id, signer_key_id, sign_doc_bytes_hash, tx_bytes_hash, tx_hash,
+          admitted_at, record_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        operation.operation_id,
+        record.content_id,
+        record.plan_id,
+        record.plan_content_id,
+        record.intent_record_id,
+        record.request_id,
+        record.signer_key_id,
+        record.sign_doc_bytes_hash,
+        record.tx_bytes_hash,
+        record.tx_hash,
+        at,
+        recordJson,
+      );
+      const updated = this.db.query(`
+        UPDATE operations SET status = 'signed', revision = revision + 1,
+          tx_hash = ?, signed_payload_hash = ?, signed_verification_id = ?, updated_at = ?
+        WHERE operation_id = ? AND revision = ? AND status = ?
+      `).run(
+        record.tx_hash,
+        record.tx_bytes_hash,
+        record.content_id,
+        at,
+        operation.operation_id,
+        operation.revision,
+        operation.status,
+      );
+      if (updated.changes !== 1) {
+        fail("conflict", "Economy signed-transaction compare-and-swap lost its race");
+      }
+      this.appendEvent(
+        operation.operation_id,
+        "verified_zerone_economy_signed_transaction",
+        at,
+        {
+          economy_commitment_id: commitment.commitment_id,
+          signed_transaction_content_id: record.content_id,
+          signed_transaction_json: recordJson,
+          tx_hash: record.tx_hash,
+          tx_bytes_hash: record.tx_bytes_hash,
+          sign_doc_bytes_hash: record.sign_doc_bytes_hash,
+          request_id: record.request_id,
+          recovered_from_unknown: operation.status === "signing_unknown",
+          network_effects_performed: false,
+          local_durable_effect: "portable_signed_transaction_admitted",
+        },
+      );
+      return this.getOperationOrFail(operation.operation_id);
+    });
+    return this.runImmediate(apply);
   }
 
   recordVerifiedSignedEvidence(input: VerifiedSignedEvidence): OperationSnapshot {
@@ -4263,107 +4621,101 @@ export class ZeroneAgentHostStore {
         "confirmed_failed",
         "reorged",
       ]);
-      if (operation.operation_kind === "zerone_economy") {
-        this.assertTypedSequenceAccountKey(operation, snapshot);
-      }
-      if (
-        snapshot.chain_id !== operation.chain_id
-        || snapshot.account !== operation.source_account
-        || snapshot.account_number !== operation.account_number
-        || BigInt(snapshot.sequence) <= BigInt(operation.sequence)
-      ) {
-        fail("evidence_rejected", "Account observation does not positively advance past the reserved sequence");
-      }
-      const fenceBefore = this.db.query(`
-        SELECT state FROM sequence_fences WHERE operation_id = ?
-      `).get(operation.operation_id) as { state: "held" | "released" } | null;
-      const accountBefore = this.db.query(`
-        SELECT halted FROM account_states WHERE chain_id = ? AND source_account = ?
-      `).get(operation.chain_id, operation.source_account) as { halted: number } | null;
-      const releasedByReorgConflict = operation.unresolved_reorg_event_sequence !== null
-        && fenceBefore?.state === "released"
-        && accountBefore?.halted === 1;
-      if (fenceBefore?.state !== "held" && !releasedByReorgConflict) {
-        fail("state_conflict", "Operation sequence fence was already released");
-      }
-      this.observeAccount(snapshot, true);
-      let target = operation.status;
-      if (operation.signer_invoked === 0) {
-        const usage = this.capabilityRow(operation.capability_record_id);
-        if (usage === null || usage.reserved_intents < 1) {
-          fail("integrity_error", "Pre-sign sequence advance has no reserved capability usage");
-        }
-        assertNotBefore(input.observed_at, usage.updated_at, "Capability sequence release");
-        const nonFeeSpend = bigintSum(this.reservationRows(operation.operation_id)
-          .filter(({ purpose }) => purpose !== "network_fee")
-          .map(({ amount_uzrn }) => amount_uzrn));
-        this.db.query(`
-          UPDATE capability_usage SET reserved_intents = reserved_intents - 1,
-            reserved_spend_uzrn = ?, version = version + 1, updated_at = ?
-          WHERE capability_record_id = ? AND version = ?
-        `).run(
-          (BigInt(usage.reserved_spend_uzrn) - nonFeeSpend).toString(),
-          input.observed_at,
-          usage.capability_record_id,
-          usage.version,
-        );
-        target = "sequence_superseded";
-        this.db.query("UPDATE treasury_reservations SET state = 'released' WHERE operation_id = ?")
-          .run(operation.operation_id);
-      } else if (operation.status === "confirmed_success") {
-        this.db.query("UPDATE treasury_reservations SET state = 'settled' WHERE operation_id = ?")
-          .run(operation.operation_id);
-      } else if (operation.status === "confirmed_failed") {
-        this.db.query(`
-          UPDATE treasury_reservations SET state = CASE
-            WHEN purpose = 'network_fee' THEN 'settled' ELSE 'released' END
-          WHERE operation_id = ?
-        `).run(operation.operation_id);
-      } else {
-        target = "sequence_superseded";
-        this.db.query(`
-          UPDATE treasury_reservations SET state = 'released'
-          WHERE operation_id = ? AND state IN ('reserved', 'sticky')
-        `).run(operation.operation_id);
-      }
-      if (fenceBefore?.state === "held") {
-        this.releaseFence(operation.operation_id, input.evidence_id, input.observed_at);
-      }
-      const updated = this.db.query(`
-        UPDATE operations SET status = ?, unresolved_reorg_event_sequence = NULL,
-          unresolved_reorg_evidence_id = NULL, revision = revision + 1, updated_at = ?
-        WHERE operation_id = ? AND revision = ? AND status = ?
-      `).run(
-        target,
-        input.observed_at,
-        operation.operation_id,
-        operation.revision,
-        operation.status,
-      );
-      if (updated.changes !== 1) fail("conflict", "Sequence release compare-and-swap lost its race");
-      const haltHandoff = this.reconcileAccountHaltAndFences(
-        operation.chain_id,
-        operation.source_account,
-      );
-      this.appendEvent(operation.operation_id, "sequence_advanced", input.observed_at, {
+      this.assertGenericLifecycleAdvance(operation, "Generic sequence-advance evidence");
+      return this.applySequenceAdvanceInTransaction({
+        operation,
+        snapshot,
         evidence_id: input.evidence_id,
-        chain_id: snapshot.chain_id,
-        source_account: snapshot.account,
-        account_number: snapshot.account_number,
-        reserved_sequence: operation.sequence,
-        observed_sequence: snapshot.sequence,
-        balance_uzrn: snapshot.balance_uzrn,
-        observed_at_height: snapshot.observed_at_height,
-        block_hash: snapshot.block_hash,
-        observation_at: snapshot.observed_at,
-        account_public_key_type_url: snapshot.public_key_type_url,
-        account_public_key_b64u: snapshot.public_key_b64u,
-        account_valid_until: snapshot.valid_until,
-        exposure_released: true,
-        sequence_fence_released: fenceBefore?.state === "held",
-        account_halt_handoff_operation_id: haltHandoff,
+        event_at: input.observed_at,
+        event_kind: "sequence_advanced",
+        typed_expected_revision: null,
       });
-      return this.getOperationOrFail(operation.operation_id);
+    });
+    return this.runImmediate(apply);
+  }
+
+  async observeAndApplyZeroneEconomySequenceAdvance(
+    input: ObserveAndApplyZeroneEconomySequenceAdvanceInput,
+  ): Promise<OperationSnapshot> {
+    const operationId = input.operation_id;
+    const expectedRevision = input.expected_revision;
+    assertIdentifier(operationId, "operation_id");
+    assertCount(expectedRevision, "expected_revision", true);
+    const observeAccount = this.observeEconomyAccount;
+    if (observeAccount === null) {
+      fail(
+        "authorization_denied",
+        "Typed sequence observation requires the immutable constructor account observer",
+      );
+    }
+    const beforeObservation = this.requireOperation(operationId, expectedRevision, [
+      "reserved",
+      "signing",
+      "signing_unknown",
+      "signed",
+      "submitting",
+      "submission_unknown",
+      "submitted",
+      "rejected_pre_submit_sticky",
+      "confirmed_success",
+      "confirmed_failed",
+      "reorged",
+    ]);
+    if (beforeObservation.operation_kind !== "zerone_economy") {
+      fail(
+        "authorization_denied",
+        "Typed sequence observation requires a Zerone economy operation",
+      );
+    }
+    const observedValue = await observeAccount(beforeObservation.source_account);
+    const snapshot = validateAccountSnapshot(observedValue);
+    const apply = this.db.transaction((): OperationSnapshot => {
+      const operation = this.requireOperation(operationId, expectedRevision, [
+        "reserved",
+        "signing",
+        "signing_unknown",
+        "signed",
+        "submitting",
+        "submission_unknown",
+        "submitted",
+        "rejected_pre_submit_sticky",
+        "confirmed_success",
+        "confirmed_failed",
+        "reorged",
+      ]);
+      if (operation.operation_kind !== "zerone_economy") {
+        fail(
+          "authorization_denied",
+          "Typed sequence observation cannot advance a generic operation",
+        );
+      }
+      const at = this.now();
+      assertTimestamp(at, "host now");
+      assertNotBefore(at, operation.updated_at, "Typed sequence observation");
+      assertNotBefore(at, snapshot.observed_at, "Typed sequence observation");
+      if (Date.parse(at) >= Date.parse(snapshot.valid_until)) {
+        fail("evidence_rejected", "Typed sequence observation expired before application");
+      }
+      assertNotBefore(
+        snapshot.observed_at,
+        operation.created_at,
+        "Typed sequence observation",
+      );
+      this.assertTypedSequenceAccountKey(operation, snapshot);
+      const evidenceId = economySequenceAdvanceEvidenceId({
+        operation_id: operation.operation_id,
+        expected_revision: operation.revision,
+        reserved_sequence: operation.sequence,
+        snapshot,
+      });
+      return this.applySequenceAdvanceInTransaction({
+        operation,
+        snapshot,
+        evidence_id: evidenceId,
+        event_at: at,
+        event_kind: "observed_zerone_economy_sequence_advance",
+        typed_expected_revision: operation.revision,
+      });
     });
     return this.runImmediate(apply);
   }
@@ -4652,7 +5004,11 @@ export class ZeroneAgentHostStore {
         usage.consumed_spend += operationUsage.non_fee_spend;
         operationUsage.signer_seen = true;
         operationUsage.reservation_active = false;
-      } else if (event.kind === "released_pre_sign" || event.kind === "sequence_advanced") {
+      } else if (
+        event.kind === "released_pre_sign"
+        || event.kind === "sequence_advanced"
+        || event.kind === "observed_zerone_economy_sequence_advance"
+      ) {
         const operationUsage = operationUsages.get(event.operation_id);
         if (
           operationUsage !== undefined
@@ -4945,7 +5301,8 @@ export class ZeroneAgentHostStore {
             fail("integrity_error", `Re-inclusion predates its account halt or fence: ${row.operation_id}`);
           }
           break;
-        case "sequence_advanced": {
+        case "sequence_advanced":
+        case "observed_zerone_economy_sequence_advance": {
           applyObservation(validateAccountSnapshot({
             chain_id: eventString(details, "chain_id", row.kind) as ZeroneCaip2,
             account: eventString(details, "source_account", row.kind) as ZeroneAccountId,
@@ -5521,6 +5878,115 @@ export class ZeroneAgentHostStore {
       replayedObservations.push(...replay.observations);
       replayedReorgEpochs.push(...replay.reorg_epochs);
       if (replay.unresolved_reorg !== null) unresolvedReorgs.push(replay.unresolved_reorg);
+      const signedTransactionRow = this.db.query(`
+        SELECT * FROM economy_signed_transactions WHERE operation_id = ?
+      `).get(operation.operation_id) as EconomySignedTransactionRow | null;
+      const hasAnySignedCoordinate = operation.tx_hash !== null
+        || operation.signed_payload_hash !== null
+        || operation.signed_verification_id !== null;
+      const hasCompleteSignedCoordinates = operation.tx_hash !== null
+        && operation.signed_payload_hash !== null
+        && operation.signed_verification_id !== null;
+      if (hasAnySignedCoordinate !== hasCompleteSignedCoordinates) {
+        fail(
+          "integrity_error",
+          `Signed lifecycle coordinates are only partially present: ${operation.operation_id}`,
+        );
+      }
+      if (operation.operation_kind === "generic_injected") {
+        if (signedTransactionRow !== null) {
+          fail(
+            "integrity_error",
+            `Generic operation acquired a typed signed transaction: ${operation.operation_id}`,
+          );
+        }
+      } else if ((signedTransactionRow !== null) !== hasCompleteSignedCoordinates) {
+        fail(
+          "integrity_error",
+          `Typed signed-transaction cardinality is invalid: ${operation.operation_id}`,
+        );
+      } else if (signedTransactionRow !== null) {
+        if (economyCommitment === null) {
+          fail(
+            "integrity_error",
+            `Typed signed transaction lost its economy commitment: ${operation.operation_id}`,
+          );
+        }
+        assertTimestamp(signedTransactionRow.admitted_at, "signed transaction admitted_at");
+        let signedTransaction: ZeroneEconomySignedTransactionRecord;
+        try {
+          const parsed = JSON.parse(signedTransactionRow.record_json) as unknown;
+          signedTransaction = verifyZeroneEconomySignedTransactionRecord(parsed);
+          if (canonicalJson(signedTransaction) !== signedTransactionRow.record_json) {
+            fail(
+              "integrity_error",
+              `Stored signed transaction is not canonical: ${operation.operation_id}`,
+            );
+          }
+        } catch (error) {
+          if (error instanceof ZeroneAgentHostError) throw error;
+          fail(
+            "integrity_error",
+            `Stored signed transaction does not cryptographically verify: ${operation.operation_id}`,
+          );
+        }
+        const signedEventIndexes = rows.flatMap((event, index) =>
+          event.kind === "verified_zerone_economy_signed_transaction" ? [index] : []);
+        if (signedEventIndexes.length !== 1) {
+          fail(
+            "integrity_error",
+            `Typed signed transaction does not have exactly one admission event: ${operation.operation_id}`,
+          );
+        }
+        const signedEventIndex = signedEventIndexes[0] as number;
+        const signedEvent = rows[signedEventIndex] as EventRow;
+        const signedEventDetails = parsedDetails[signedEventIndex] as Record<string, unknown>;
+        if (
+          signedTransactionRow.operation_id !== operation.operation_id
+          || signedTransactionRow.content_id !== signedTransaction.content_id
+          || signedTransactionRow.plan_id !== signedTransaction.plan_id
+          || signedTransactionRow.plan_content_id !== signedTransaction.plan_content_id
+          || signedTransactionRow.intent_record_id !== signedTransaction.intent_record_id
+          || signedTransactionRow.request_id !== signedTransaction.request_id
+          || signedTransactionRow.signer_key_id !== signedTransaction.signer_key_id
+          || signedTransactionRow.sign_doc_bytes_hash
+            !== signedTransaction.sign_doc_bytes_hash
+          || signedTransactionRow.tx_bytes_hash !== signedTransaction.tx_bytes_hash
+          || signedTransactionRow.tx_hash !== signedTransaction.tx_hash
+          || signedTransactionRow.content_id !== operation.signed_verification_id
+          || signedTransactionRow.tx_bytes_hash !== operation.signed_payload_hash
+          || signedTransactionRow.tx_hash !== operation.tx_hash
+          || signedTransactionRow.admitted_at !== signedEvent.at
+          || Date.parse(signedTransactionRow.admitted_at) > Date.parse(operation.updated_at)
+          || eventString(
+            signedEventDetails,
+            "signed_transaction_json",
+            signedEvent.kind,
+          ) !== signedTransactionRow.record_json
+          || eventString(
+            signedEventDetails,
+            "signed_transaction_content_id",
+            signedEvent.kind,
+          ) !== signedTransactionRow.content_id
+          || !this.economySignedTransactionMatches(
+            signedTransaction,
+            operation,
+            economyCommitment,
+          )
+          || Date.parse(signedTransactionRow.admitted_at)
+            < Date.parse(economyCommitment.requested_at)
+        ) {
+          fail(
+            "integrity_error",
+            `Stored signed transaction changed its operation commitment: ${operation.operation_id}`,
+          );
+        }
+      } else if (rows.some(({ kind }) => kind === "verified_zerone_economy_signed_transaction")) {
+        fail(
+          "integrity_error",
+          `Typed signed admission event has no durable transaction row: ${operation.operation_id}`,
+        );
+      }
       const genesisDetails = parsedDetails[0] as Record<string, unknown>;
       const genesisBalance = parseUint64(
         genesisDetails.balance_uzrn,
@@ -5946,7 +6412,9 @@ export class ZeroneAgentHostStore {
           : operation.status === "released_pre_sign"
             ? "released_pre_sign"
             : operation.status === "sequence_superseded"
-              ? "sequence_advanced"
+              ? operation.operation_kind === "zerone_economy"
+                ? "observed_zerone_economy_sequence_advance"
+                : "sequence_advanced"
               : null;
         if (capabilityEventKind !== null) {
           const event = this.db.query(`
@@ -6028,6 +6496,196 @@ export class ZeroneAgentHostStore {
         `${label} cannot advance a typed Zerone economy operation`,
       );
     }
+  }
+
+  private economySignedTransactionMatches(
+    record: ZeroneEconomySignedTransactionRecord,
+    operation: OperationRow,
+    commitment: ZeroneEconomyOperationCommitment,
+  ): boolean {
+    const history = this.db.query(`
+      SELECT * FROM binding_history WHERE currentness_id = ?
+    `).get(operation.currentness_id) as BindingHistoryRow | null;
+    if (history === null) return false;
+    let proof: VerifiedWalletIdentityBindingProof;
+    try {
+      proof = verifyWalletIdentityBindingProofEnvelope(
+        JSON.parse(history.proof_envelope_json),
+      );
+    } catch {
+      return false;
+    }
+    return record.plan_id === commitment.plan_id
+      && record.plan_content_id === commitment.plan_content_id
+      && record.plan_content_id === operation.plan_reference_id
+      && record.activation_observation_hash === commitment.activation_observation_hash
+      && record.activation_observed_at_height === commitment.activation_observed_at_height
+      && record.intent_record_id === commitment.intent_record_id
+      && record.intent_record_id === operation.intent_record_id
+      && record.simulation_record_id === commitment.simulation_record_id
+      && record.simulation_record_id === operation.simulation_record_id
+      && record.simulation_evidence_content_id === commitment.simulation_evidence_content_id
+      && record.simulation_evidence_record_id === commitment.simulation_evidence_record_id
+      && record.simulation_tx_bytes_hash === commitment.simulation_tx_bytes_hash
+      && record.request_id === commitment.request_id
+      && record.request_id === operation.request_id
+      && record.requested_at === commitment.requested_at
+      && record.chain_id === commitment.chain_id
+      && record.chain_id === operation.chain_id
+      && record.source_account === commitment.source_account
+      && record.source_account === operation.source_account
+      && record.account_number === commitment.account_number
+      && record.account_number === operation.account_number
+      && record.sequence === commitment.account_sequence
+      && record.sequence === operation.sequence
+      && record.account_observed_at_height === commitment.account_observed_at_height
+      && record.signer_key_id === operation.signer_key_id
+      && record.signer_key_id === proof.binding.zerone_signer.key_id
+      && record.signer_public_key_b64u === proof.binding.zerone_signer.public_key_b64u
+      && record.message.kind === commitment.message_kind
+      && record.message.type_url === commitment.message_type_url
+      && record.message.wallet_method === commitment.wallet_method
+      && record.message.projection_hash === commitment.projection_hash
+      && record.message.value_b64u === commitment.value_b64u
+      && record.message.value_hash === commitment.value_hash
+      && record.message.actor_address === commitment.actor_address
+      && record.message.module_account === commitment.module_account
+      && record.message.reserved_spend_uzrn === commitment.reserved_spend_uzrn
+      && record.total_reserved_spend_uzrn === commitment.reserved_spend_uzrn
+      && canonicalJson(record.economic_effect) === commitment.economic_effect_json
+      && record.fee.denom === "uzrn"
+      && record.fee.amount === commitment.network_fee_uzrn
+      && record.sign_doc_bytes_hash === commitment.sign_doc_bytes_hash
+      && record.sign_doc_bytes_hash === operation.unsigned_payload_hash;
+  }
+
+  private applySequenceAdvanceInTransaction(input: {
+    readonly operation: OperationRow;
+    readonly snapshot: ZeroneAccountSnapshot;
+    readonly evidence_id: Sha256Id;
+    readonly event_at: string;
+    readonly event_kind: "sequence_advanced" | "observed_zerone_economy_sequence_advance";
+    readonly typed_expected_revision: number | null;
+  }): OperationSnapshot {
+    const { operation, snapshot } = input;
+    const typed = input.typed_expected_revision !== null;
+    if (
+      typed !== (operation.operation_kind === "zerone_economy")
+      || typed !== (input.event_kind === "observed_zerone_economy_sequence_advance")
+      || (typed && input.typed_expected_revision !== operation.revision)
+    ) {
+      fail("integrity_error", "Sequence transition crossed its typed authority boundary");
+    }
+    if (
+      snapshot.chain_id !== operation.chain_id
+      || snapshot.account !== operation.source_account
+      || snapshot.account_number !== operation.account_number
+      || BigInt(snapshot.sequence) <= BigInt(operation.sequence)
+    ) {
+      fail(
+        "evidence_rejected",
+        "Account observation does not positively advance past the reserved sequence",
+      );
+    }
+    const fenceBefore = this.db.query(`
+      SELECT state FROM sequence_fences WHERE operation_id = ?
+    `).get(operation.operation_id) as { state: "held" | "released" } | null;
+    const accountBefore = this.db.query(`
+      SELECT halted FROM account_states WHERE chain_id = ? AND source_account = ?
+    `).get(operation.chain_id, operation.source_account) as { halted: number } | null;
+    const releasedByReorgConflict = operation.unresolved_reorg_event_sequence !== null
+      && fenceBefore?.state === "released"
+      && accountBefore?.halted === 1;
+    if (fenceBefore?.state !== "held" && !releasedByReorgConflict) {
+      fail("state_conflict", "Operation sequence fence was already released");
+    }
+    this.observeAccount(snapshot, true);
+    let target = operation.status;
+    if (operation.signer_invoked === 0) {
+      const usage = this.capabilityRow(operation.capability_record_id);
+      if (usage === null || usage.reserved_intents < 1) {
+        fail("integrity_error", "Pre-sign sequence advance has no reserved capability usage");
+      }
+      assertNotBefore(input.event_at, usage.updated_at, "Capability sequence release");
+      const nonFeeSpend = bigintSum(this.reservationRows(operation.operation_id)
+        .filter(({ purpose }) => purpose !== "network_fee")
+        .map(({ amount_uzrn }) => amount_uzrn));
+      const usageUpdated = this.db.query(`
+        UPDATE capability_usage SET reserved_intents = reserved_intents - 1,
+          reserved_spend_uzrn = ?, version = version + 1, updated_at = ?
+        WHERE capability_record_id = ? AND version = ?
+      `).run(
+        (BigInt(usage.reserved_spend_uzrn) - nonFeeSpend).toString(),
+        input.event_at,
+        usage.capability_record_id,
+        usage.version,
+      );
+      if (usageUpdated.changes !== 1) {
+        fail("conflict", "Capability sequence release compare-and-swap lost its race");
+      }
+      target = "sequence_superseded";
+      this.db.query("UPDATE treasury_reservations SET state = 'released' WHERE operation_id = ?")
+        .run(operation.operation_id);
+    } else if (operation.status === "confirmed_success") {
+      this.db.query("UPDATE treasury_reservations SET state = 'settled' WHERE operation_id = ?")
+        .run(operation.operation_id);
+    } else if (operation.status === "confirmed_failed") {
+      this.db.query(`
+        UPDATE treasury_reservations SET state = CASE
+          WHEN purpose = 'network_fee' THEN 'settled' ELSE 'released' END
+        WHERE operation_id = ?
+      `).run(operation.operation_id);
+    } else {
+      target = "sequence_superseded";
+      this.db.query(`
+        UPDATE treasury_reservations SET state = 'released'
+        WHERE operation_id = ? AND state IN ('reserved', 'sticky')
+      `).run(operation.operation_id);
+    }
+    if (fenceBefore?.state === "held") {
+      this.releaseFence(operation.operation_id, input.evidence_id, input.event_at);
+    }
+    const updated = this.db.query(`
+      UPDATE operations SET status = ?, unresolved_reorg_event_sequence = NULL,
+        unresolved_reorg_evidence_id = NULL, revision = revision + 1, updated_at = ?
+      WHERE operation_id = ? AND revision = ? AND status = ?
+    `).run(
+      target,
+      input.event_at,
+      operation.operation_id,
+      operation.revision,
+      operation.status,
+    );
+    if (updated.changes !== 1) {
+      fail("conflict", "Sequence release compare-and-swap lost its race");
+    }
+    const haltHandoff = this.reconcileAccountHaltAndFences(
+      operation.chain_id,
+      operation.source_account,
+    );
+    this.appendEvent(operation.operation_id, input.event_kind, input.event_at, {
+      ...(typed ? {
+        authentication_boundary: ECONOMY_SEQUENCE_ADVANCE_EVIDENCE_BOUNDARY,
+        expected_revision: input.typed_expected_revision,
+      } : {}),
+      evidence_id: input.evidence_id,
+      chain_id: snapshot.chain_id,
+      source_account: snapshot.account,
+      account_number: snapshot.account_number,
+      reserved_sequence: operation.sequence,
+      observed_sequence: snapshot.sequence,
+      balance_uzrn: snapshot.balance_uzrn,
+      observed_at_height: snapshot.observed_at_height,
+      block_hash: snapshot.block_hash,
+      observation_at: snapshot.observed_at,
+      account_public_key_type_url: snapshot.public_key_type_url,
+      account_public_key_b64u: snapshot.public_key_b64u,
+      account_valid_until: snapshot.valid_until,
+      exposure_released: true,
+      sequence_fence_released: fenceBefore?.state === "held",
+      account_halt_handoff_operation_id: haltHandoff,
+    });
+    return this.getOperationOrFail(operation.operation_id);
   }
 
   private assertTypedSequenceAccountKey(

@@ -1,0 +1,83 @@
+{
+  "schema": "agent-wallet-zerone-economy/signed-transaction-vector/0.1",
+  "provenance": {
+    "generator": "packages/wallet-zerone-economy/tests/fixtures.ts:signedTransactionRecordFixture",
+    "content_domain": "agent-wallet-zerone-economy-signed-transaction/v1\\0",
+    "zerone_core_commit": "a5b82e82b2a32be2b75bd11575964b0a69aa34ac",
+    "cosmos_sdk": "v0.53.8"
+  },
+  "plan": {
+    "plan_id": "sha256:c8426f0bb249bc9c80b9f2c14e5389b137584330e82eef3e9c2abec902c8fa45",
+    "plan_content_id": "sha256:88c180b1e3e2ca3a58993b897ea0433e68774cb21c3e4f62399be333b35332fc",
+    "intent_record_id": "sha256:36be6134805cf5ef892fba1d998a295c325294a242e48df3183f1bb514d6efe7",
+    "request_id": "77777777-7777-4777-8777-777777777777",
+    "sign_doc_bytes_hash": "sha256:3d5c5cfd958cb6b7c29b13181fd396c73e9e94aeb92d819761dc9970b31138ea"
+  },
+  "record": {
+    "schema": "agent-wallet-zerone-economy/signed-transaction/0.1",
+    "zerone_core_commit": "a5b82e82b2a32be2b75bd11575964b0a69aa34ac",
+    "cosmos_sdk": "v0.53.8",
+    "sponsorship_consensus_version": 2,
+    "knowledge_consensus_version": 7,
+    "signing_algorithm": "cosmos.secp256k1.sign-mode-direct",
+    "signer_public_key_type_url": "/cosmos.crypto.secp256k1.PubKey",
+    "plan_id": "sha256:c8426f0bb249bc9c80b9f2c14e5389b137584330e82eef3e9c2abec902c8fa45",
+    "plan_content_id": "sha256:88c180b1e3e2ca3a58993b897ea0433e68774cb21c3e4f62399be333b35332fc",
+    "activation_observation_hash": "sha256:6087c79ff415827f3e5a853c5395d34d64f20a6ff4de045ecc41549854aebbe1",
+    "activation_observed_at_height": "700000",
+    "intent_record_id": "sha256:36be6134805cf5ef892fba1d998a295c325294a242e48df3183f1bb514d6efe7",
+    "simulation_record_id": "sha256:896848c6194e5755da2606efb0ab5512f2053cd254313b0d94f686a1a0c1198e",
+    "simulation_evidence_content_id": "sha256:d914e54d41ad4ae7a4bb8cf01d7fad332685ccb2c212f32c098c9c940c0ac18e",
+    "simulation_evidence_record_id": "sha256:32fad3ff9227f054d41da68d07bf7a898bcff7d1b360db937b6efdec560a4bfd",
+    "simulation_tx_bytes_hash": "sha256:6557c599056740830670d8971cc450f29121d8095db91af53c053253ab43e98c",
+    "request_id": "77777777-7777-4777-8777-777777777777",
+    "requested_at": "2026-08-20T18:03:00.000Z",
+    "signer_operation_id": "economy-create-signed-vector",
+    "chain_id": "cosmos:zerone-testnet-1",
+    "chain_reference": "zerone-testnet-1",
+    "source_account": "cosmos:zerone-testnet-1:zrn1w508d6qejxtdg4y5r3zarvary0c5xw7k4p057w",
+    "account_number": "7",
+    "sequence": "9",
+    "account_observed_at_height": "700000",
+    "signer_key_id": "sha256:0f715baf5d4c2ed329785cef29e562f73488c8a2bb9dbc5700b361d54b9b0554",
+    "signer_public_key_b64u": "Anm-Zn753LusVaBilc6HCwcCm_zbLc4o2VnygVsW-BeY",
+    "fee": {
+      "denom": "uzrn",
+      "amount": "22222"
+    },
+    "gas_limit": "22222",
+    "required_gas_limit": "22222",
+    "total_reserved_spend_uzrn": "500000",
+    "message": {
+      "kind": "create_bounty",
+      "type_url": "/zerone.sponsorship.v1.MsgCreateBountyOrder",
+      "wallet_method": "zerone.sponsorship.v1.MsgCreateBountyOrder",
+      "projection_hash": "sha256:6b0caa8bc8a73dbb8e6a42e815ca23bd403db053e2d039a5dafcc0aeb476feb6",
+      "value_b64u": "Cip6cm4xdzUwOGQ2cWVqeHRkZzR5NXIzemFydmFyeTBjNXh3N2s0cDA1N3cSEGNvbXB1dGVyX3NjaWVuY2UaBjI1MDAwMCACKJBOMrYCCkBjZjM0MmZjODA1MmFjNjM0MTliODgwNWY4YzE1MjczYTNkN2FhMzNjZTAxMzVhZjY0OGQ3ODJjYTJkYjdiZTFhEkAwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3GkAwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1IkAwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2KAIyKnpybjF3NTA4ZDZxZWp4dGRnNHk1cjN6YXJ2YXJ5MGM1eHc3azRwMDU3dw",
+      "value_hash": "sha256:11f6b6ed79f1c1dd4fa925a87ebcc87d841ef119fa92fac1ca39efdb9072ae3a",
+      "actor_address": "zrn1w508d6qejxtdg4y5r3zarvary0c5xw7k4p057w",
+      "module_account": "cosmos:zerone-testnet-1:zrn1vqxv6hsv8lh8jqueyyapsy3ffdz4xgq96rv4qz",
+      "reserved_spend_uzrn": "500000",
+      "required_gas": "22222"
+    },
+    "economic_effect": {
+      "message_index": 0,
+      "kind": "escrow_lock",
+      "module": "sponsorship",
+      "direction": "outgoing",
+      "asset_id": "cosmos:zerone-testnet-1/denom:uzrn",
+      "amount_atomic": "500000",
+      "condition": "message_success"
+    },
+    "body_bytes_b64u": "CrQDCisvemVyb25lLnNwb25zb3JzaGlwLnYxLk1zZ0NyZWF0ZUJvdW50eU9yZGVyEoQDCip6cm4xdzUwOGQ2cWVqeHRkZzR5NXIzemFydmFyeTBjNXh3N2s0cDA1N3cSEGNvbXB1dGVyX3NjaWVuY2UaBjI1MDAwMCACKJBOMrYCCkBjZjM0MmZjODA1MmFjNjM0MTliODgwNWY4YzE1MjczYTNkN2FhMzNjZTAxMzVhZjY0OGQ3ODJjYTJkYjdiZTFhEkAwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3GkAwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1IkAwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2KAIyKnpybjF3NTA4ZDZxZWp4dGRnNHk1cjN6YXJ2YXJ5MGM1eHc3azRwMDU3dw",
+    "body_bytes_hash": "sha256:2c4ffe425d1ad32f72558ae01eff0418cc675e035b3ce7e854f27313573b007e",
+    "auth_info_bytes_b64u": "ClAKRgofL2Nvc21vcy5jcnlwdG8uc2VjcDI1NmsxLlB1YktleRIjCiECeb5mfvncu6xVoGKVzocLBwKb_NstzijZWfKBWxb4F5gSBAoCCAEYCRITCg0KBHV6cm4SBTIyMjIyEM6tAQ",
+    "auth_info_bytes_hash": "sha256:49ce7b58278458b0588b2df0fcb23ef0f69018b0fc9b5eecb85b17ffd3a597ff",
+    "sign_doc_bytes_b64u": "CrcDCrQDCisvemVyb25lLnNwb25zb3JzaGlwLnYxLk1zZ0NyZWF0ZUJvdW50eU9yZGVyEoQDCip6cm4xdzUwOGQ2cWVqeHRkZzR5NXIzemFydmFyeTBjNXh3N2s0cDA1N3cSEGNvbXB1dGVyX3NjaWVuY2UaBjI1MDAwMCACKJBOMrYCCkBjZjM0MmZjODA1MmFjNjM0MTliODgwNWY4YzE1MjczYTNkN2FhMzNjZTAxMzVhZjY0OGQ3ODJjYTJkYjdiZTFhEkAwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3GkAwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1IkAwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2KAIyKnpybjF3NTA4ZDZxZWp4dGRnNHk1cjN6YXJ2YXJ5MGM1eHc3azRwMDU3dxJnClAKRgofL2Nvc21vcy5jcnlwdG8uc2VjcDI1NmsxLlB1YktleRIjCiECeb5mfvncu6xVoGKVzocLBwKb_NstzijZWfKBWxb4F5gSBAoCCAEYCRITCg0KBHV6cm4SBTIyMjIyEM6tARoQemVyb25lLXRlc3RuZXQtMSAH",
+    "sign_doc_bytes_hash": "sha256:3d5c5cfd958cb6b7c29b13181fd396c73e9e94aeb92d819761dc9970b31138ea",
+    "tx_bytes_b64u": "CrcDCrQDCisvemVyb25lLnNwb25zb3JzaGlwLnYxLk1zZ0NyZWF0ZUJvdW50eU9yZGVyEoQDCip6cm4xdzUwOGQ2cWVqeHRkZzR5NXIzemFydmFyeTBjNXh3N2s0cDA1N3cSEGNvbXB1dGVyX3NjaWVuY2UaBjI1MDAwMCACKJBOMrYCCkBjZjM0MmZjODA1MmFjNjM0MTliODgwNWY4YzE1MjczYTNkN2FhMzNjZTAxMzVhZjY0OGQ3ODJjYTJkYjdiZTFhEkAwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3MDcwNzA3GkAwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1MDUwNTA1IkAwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2MDYwNjA2KAIyKnpybjF3NTA4ZDZxZWp4dGRnNHk1cjN6YXJ2YXJ5MGM1eHc3azRwMDU3dxJnClAKRgofL2Nvc21vcy5jcnlwdG8uc2VjcDI1NmsxLlB1YktleRIjCiECeb5mfvncu6xVoGKVzocLBwKb_NstzijZWfKBWxb4F5gSBAoCCAEYCRITCg0KBHV6cm4SBTIyMjIyEM6tARpAnPU6QlJBT3l4uvycKoKIex0E8lDU6bhAtReNX_eF10h0oPT2hhcZKDDZpr_F6diqc8-5GDnHlG-a2pOnrlhLVQ",
+    "tx_bytes_hash": "sha256:cec997f27b00e19354cb35d3467126d8eeb0d9b9e7a85430e0bae5158447e6c5",
+    "tx_hash": "CEC997F27B00E19354CB35D3467126D8EEB0D9B9E7A85430E0BAE5158447E6C5",
+    "content_id": "sha256:b0c962daa2bd247c21c24ddcf367ae5a9ee375e6439cf1cc1f599cd77cc9f24c"
+  }
+}

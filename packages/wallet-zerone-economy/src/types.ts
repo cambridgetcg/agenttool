@@ -29,6 +29,7 @@ import type {
   ECONOMY_ADAPTER_PROTOCOL,
   ECONOMY_SIMULATION_BINDING_PROTOCOL,
   ECONOMY_SIMULATION_EVIDENCE_SCHEMA,
+  ECONOMY_SIGNED_TRANSACTION_SCHEMA,
   EXECUTION_SUPPORT,
   ZERONE_DENOM,
   ZERONE_ECONOMY_CORE_COMMIT,
@@ -240,6 +241,71 @@ export interface VerifiedZeroneEconomyTransaction {
   readonly tx_bytes_b64u: string;
   readonly tx_bytes_hash: Sha256Id;
   readonly signed_payload: Readonly<SignedPayload>;
+}
+
+export interface ZeroneEconomySignedTransactionContent {
+  readonly schema: typeof ECONOMY_SIGNED_TRANSACTION_SCHEMA;
+  readonly zerone_core_commit: typeof ZERONE_ECONOMY_CORE_COMMIT;
+  readonly cosmos_sdk: typeof ZERONE_ECONOMY_COSMOS_SDK;
+  readonly sponsorship_consensus_version:
+    typeof ZERONE_SPONSORSHIP_CONSENSUS_VERSION;
+  readonly knowledge_consensus_version:
+    typeof ZERONE_KNOWLEDGE_CONSENSUS_VERSION;
+  readonly signing_algorithm: "cosmos.secp256k1.sign-mode-direct";
+  readonly signer_public_key_type_url: "/cosmos.crypto.secp256k1.PubKey";
+  readonly plan_id: Sha256Id;
+  readonly plan_content_id: Sha256Id;
+  readonly activation_observation_hash: Sha256Id;
+  readonly activation_observed_at_height: string;
+  readonly intent_record_id: Sha256Id;
+  readonly simulation_record_id: Sha256Id;
+  readonly simulation_evidence_content_id: Sha256Id;
+  readonly simulation_evidence_record_id: Sha256Id;
+  readonly simulation_tx_bytes_hash: Sha256Id;
+  readonly request_id: string;
+  readonly requested_at: string;
+  /** Signer-provider correspondence only; it is not part of the Cosmos signature. */
+  readonly signer_operation_id: string | null;
+  readonly chain_id: ZeroneCaip2;
+  readonly chain_reference: string;
+  readonly source_account: ZeroneAccountId;
+  readonly account_number: string;
+  readonly sequence: string;
+  readonly account_observed_at_height: string;
+  readonly signer_key_id: Sha256Id;
+  readonly signer_public_key_b64u: string;
+  readonly fee: ZeroneEconomyCoin;
+  readonly gas_limit: string;
+  readonly required_gas_limit: string;
+  readonly total_reserved_spend_uzrn: string;
+  readonly message: ZeroneEconomyPlannedMessage;
+  readonly economic_effect: ZeroneEconomyEffect;
+  readonly body_bytes_b64u: string;
+  readonly body_bytes_hash: Sha256Id;
+  readonly auth_info_bytes_b64u: string;
+  readonly auth_info_bytes_hash: Sha256Id;
+  readonly sign_doc_bytes_b64u: string;
+  readonly sign_doc_bytes_hash: Sha256Id;
+  readonly tx_bytes_b64u: string;
+  readonly tx_bytes_hash: Sha256Id;
+  readonly tx_hash: ZeroneTxHash;
+}
+
+export interface ZeroneEconomySignedTransactionRecord
+  extends ZeroneEconomySignedTransactionContent {
+  readonly content_id: Sha256Id;
+}
+
+declare const verifiedZeroneEconomySignedTransactionRecordBrand: unique symbol;
+export type VerifiedZeroneEconomySignedTransactionRecord =
+  Readonly<ZeroneEconomySignedTransactionRecord> & {
+    readonly [verifiedZeroneEconomySignedTransactionRecordBrand]: true;
+  };
+
+export interface CreateZeroneEconomySignedTransactionRecordInput {
+  readonly plan: ZeroneEconomyDirectSignPlan;
+  readonly request: SigningRequest;
+  readonly transaction: VerifiedZeroneEconomyTransaction;
 }
 
 export interface ZeroneEconomySimulationReceiptInput {
