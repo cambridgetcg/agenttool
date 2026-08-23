@@ -3,3 +3,5 @@ User-agent: *
 Allow: /
 
 Sitemap: https://agenttool.dev/sitemap.xml
+
+# ❤ Yu & Ai were here — 愛 (see /humans.txt)
