@@ -747,6 +747,12 @@ describe("federated covenant effect fences", () => {
     const nativeStore = read(
       "../native/agenttool-secret-macos/Sources/AgentToolSecretMacOSCore/SecretStore.swift",
     );
+    const nativeBinding = read(
+      "../native/agenttool-secret-macos/Sources/AgentToolSecretMacOSCore/CeremonyBinding.swift",
+    );
+    const nativeFly = read(
+      "../native/agenttool-secret-macos/Sources/AgentToolSecretMacOSCore/FlyBridge.swift",
+    );
     expect(deploy).toMatch(/ordinary rolling\s+deploy is prohibited for Phase A/i);
     expect(deploy).toContain("--maintenance-fenced-api");
     expect(deploy).toContain("agenttool-deploy-receipt/v6");
@@ -757,35 +763,61 @@ describe("federated covenant effect fences", () => {
     expect(deploy).not.toContain(
       "bin/agenttool-secret set agenttool-covenant-v2-authority-generation -",
     );
-    expect(deploy).toMatch(/Phase B is blocked and must not be executed/i);
-    expect(deploy).toMatch(/native\s+Security\.framework\s+create-once generator/);
+    expect(deploy).toMatch(/Phase B remains blocked until the exact B1 operator/i);
+    expect(deploy).toMatch(/native Security\.framework\s+create-once generator/);
     expect(deploy).toContain("native/agenttool-secret-macos/");
     expect(deploy).toMatch(
-      /unsigned\s+CI or local\s+build is not an\s+installed/i,
+      /does not contact Fly,\s+publish an executable, or authorize an unsigned/i,
     );
-    expect(deploy).toMatch(/empty-allowlist interlock/);
-    expect(deploy).toMatch(/write-ahead receipt/);
+    expect(deploy).toMatch(/private database-only\s+`covenant_v2_generation_hold` interlock/);
+    expect(deploy).toMatch(/canonical 0600 write-ahead marker and\s+final receipt/);
     expect(deploy).toMatch(/generates 32 random bytes internally/);
-    expect(deploy).toMatch(/stores exactly 64\s+lowercase hexadecimal bytes/);
-    expect(deploy).toMatch(/exposes only create-once storage/);
+    expect(deploy).toMatch(/stores exactly\s+64 lowercase hexadecimal bytes/);
     expect(deploy).toMatch(/compile-time bound to the one authority/);
-    expect(deploy).toMatch(/accepts no\s+runtime selector, secret stdin, or raw-value read/);
-    expect(deploy).toMatch(/no caller-supplied\s+create, overwrite, upsert, or delete verb/);
-    expect(deploy).toMatch(/Keychain read and Fly\s+child-process stdin transfer/);
+    expect(deploy).toMatch(/no raw-value read, caller-supplied value,\s+overwrite/);
+    expect(deploy).toContain("secrets import --stage --app agenttool");
+    expect(deploy).toContain("secrets deploy --app agenttool --dns-checks=false");
+    expect(deploy).toMatch(/durable hold\s+plus a live row lock/);
     expect(nativeReadme).toMatch(/requests 32 random bytes\s+from `SecRandomCopyBytes`/);
     expect(nativeReadme).toMatch(/exactly 64 lowercase hexadecimal\s+bytes/);
-    expect(nativeReadme).toMatch(/accepts no secret stdin/);
-    expect(nativeReadme).toMatch(/no raw-value read, caller-supplied create,\s+overwrite, upsert, or delete verb/);
+    expect(nativeReadme).toMatch(/has no raw-value read, caller-supplied value,\s+overwrite/);
     expect(nativeReadme).toMatch(/accepts no selector bytes from argv/);
-    expect(nativeReadme).toMatch(/intentionally exposes no raw\s+secret output/);
-    expect(nativeCommand).toContain("case create");
-    expect(nativeCommand).toContain("case verify");
+    expect(nativeReadme).toMatch(/exposes no raw secret output/);
+    expect(nativeCommand).toContain("case create(SecretToolCeremonyNonce)");
+    expect(nativeCommand).toContain("case verify(SecretToolCeremonyNonce)");
+    expect(nativeCommand).toContain("case stageFly(SecretToolCeremonyNonce)");
+    expect(nativeCommand).toContain("case probeFly(SecretToolCeremonyNonce, SecretToolMachineID)");
     expect(nativeCommand).not.toMatch(/case\s+(?:get|put|overwrite|delete)\b/);
     expect(nativeStore).toContain("SecRandomCopyBytes");
+    expect(nativeStore).toContain("attributes[kSecAttrGeneric] = ceremonyNonce.data");
     expect(nativeStore).not.toContain("SecItemUpdate");
     expect(nativeStore).not.toContain("SecItemDelete");
+    expect(nativeBinding).toContain("phase-b-authority-generation-active.json");
+    expect(nativeBinding).toContain('attempt.checkpoint == "stage_attempting"');
+    expect(nativeBinding).toContain('attempt.checkpoint == "runtime_probe_attempting"');
+    expect(nativeBinding).toContain("_NSGetExecutablePath");
+    expect(nativeBinding).toContain("executableIdentityMatches(");
+    expect(nativeBinding).toContain("SecCodeCopySelf");
+    expect(nativeFly).toContain("POSIX_SPAWN_CLOEXEC_DEFAULT");
+    expect(nativeFly).toContain("F_SETNOSIGPIPE");
+    expect(nativeFly).toContain("processGroupIsEmpty(processID)");
+    expect(nativeFly).toContain("parts.length===3");
+    expect(nativeFly).toContain('parts.pop()!==\\"\\"');
+    expect(nativeFly).not.toContain(".filter(Boolean)");
+    expect(nativeFly).toContain("processEnvironment=await fs.readFile");
+    expect(nativeFly).toContain("candidates[0]");
+    expect(nativeFly).toContain("target.FLY_MACHINE_ID");
+    expect(nativeFly).toContain("target.FLY_PROCESS_GROUP");
+    expect(nativeFly).toContain("src/thinker.ts");
+    expect(nativeFly).toContain('"secrets", "import", "--stage", "--app"');
+    expect(nativeFly).toContain('"--pty=false"');
+    expect(nativeFly).not.toContain("FLY_ACCESS_TOKEN");
     expect(deploy).toContain("operator shell environment");
     expect(deploy).toContain("remote process environment");
+    expect(deploy).toContain(
+      "$HOME/.local/state/agenttool/deploy-state/phase-b-authority-generation-active.json",
+    );
+    expect(deploy).toContain("Every mutating `bin/deploy.sh` invocation");
     expect(deploy).toContain("reserved_generation_rows=0");
     expect(deploy).toContain("authoritative_v2_rows=0");
     expect(deploy).toMatch(/Do \*\*not\*\* start the\s+stopped thinker standby/);

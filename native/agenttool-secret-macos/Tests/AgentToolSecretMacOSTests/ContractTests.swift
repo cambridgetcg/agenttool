@@ -9,16 +9,41 @@ final class ContractTests: XCTestCase {
   private let service = "agenttool-covenant-v2-authority-generation"
   private let account = "macair"
   private let rawGeneration = Data((0..<32).map { UInt8($0) })
+  private let receiptNonce = "000102030405060708090a0b0c0d0e0f"
+  private let receiptNonceData = Data((0..<16).map { UInt8($0) })
+  private let machineID = "1234567890abcd"
   private let serializedGeneration = Data(
     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f".utf8
   )
 
-  func testParsesOnlyCreateAndNonExportingVerifyGrammar() throws {
-    XCTAssertEqual(try SecretToolCommand.parse(["create"]), .create)
-    XCTAssertEqual(try SecretToolCommand.parse(["verify"]), .verify)
+  func testParsesOnlyNonceBoundNonExportingGrammar() throws {
+    let nonce = try SecretToolCeremonyNonce(receiptNonce)
+    let machine = try SecretToolMachineID(machineID)
+    XCTAssertEqual(
+      try SecretToolCommand.parse(["create", "--receipt-nonce", receiptNonce]),
+      .create(nonce)
+    )
+    XCTAssertEqual(
+      try SecretToolCommand.parse(["verify", "--receipt-nonce", receiptNonce]),
+      .verify(nonce)
+    )
+    XCTAssertEqual(
+      try SecretToolCommand.parse(["stage-fly", "--receipt-nonce", receiptNonce]),
+      .stageFly(nonce)
+    )
+    XCTAssertEqual(
+      try SecretToolCommand.parse([
+        "probe-fly", "--receipt-nonce", receiptNonce, "--machine", machineID,
+      ]),
+      .probeFly(nonce, machine)
+    )
 
     for invalid in [
       [] as [String],
+      ["create"],
+      ["verify"],
+      ["stage-fly"],
+      ["probe-fly"],
       ["create", "extra"],
       ["verify", "extra"],
       ["put"],
@@ -29,6 +54,8 @@ final class ContractTests: XCTestCase {
       ["fixture-attest"],
       ["fixture-clean"],
       ["create", "--service", service, "--account", account],
+      ["probe-fly", "--machine", machineID, "--receipt-nonce", receiptNonce],
+      ["probe-fly", "--receipt-nonce", receiptNonce, "--machine", machineID, "extra"],
     ] {
       XCTAssertThrowsError(try SecretToolCommand.parse(invalid)) { error in
         XCTAssertEqual(error as? SecretToolFailure, .invalidInvocation)
@@ -58,6 +85,62 @@ final class ContractTests: XCTestCase {
     }
   }
 
+  func testReceiptNonceIsExactlyDecodedAndRejectsNonCanonicalForms() throws {
+    XCTAssertEqual(try SecretToolCeremonyNonce(receiptNonce).data, receiptNonceData)
+    for invalid in [
+      "", "000102030405060708090a0b0c0d0e", "000102030405060708090a0b0c0d0e0f00",
+      "000102030405060708090A0B0C0D0E0F", "000102030405060708090a0b0c0d0e0g",
+    ] {
+      XCTAssertThrowsError(try SecretToolCeremonyNonce(invalid)) { error in
+        XCTAssertEqual(error as? SecretToolFailure, .invalidCeremonyNonce)
+      }
+    }
+  }
+
+  func testMarkerTimestampsAndRunningExecutableBindingAreExact() {
+    XCTAssertTrue(isCanonicalTimestamp("2026-08-24T12:34:56.789Z"))
+    for invalid in [
+      "2026-08-24T12:34:56Z",
+      "2026-08-24T12:34:56.78Z",
+      "2026-08-24T12:34:56.789+00:00",
+      "2026-02-30T12:34:56.789Z",
+      "2026-13-24T12:34:56.789Z",
+    ] {
+      XCTAssertFalse(isCanonicalTimestamp(invalid), invalid)
+    }
+
+    XCTAssertTrue(
+      executableIdentityMatches(
+        installedPath: "/usr/local/libexec/agenttool/phase-b-v1/agenttool-secret-macos",
+        runningPath: "/usr/local/libexec/agenttool/phase-b-v1/agenttool-secret-macos",
+        installedDevice: 4,
+        installedInode: 9,
+        runningDevice: 4,
+        runningInode: 9
+      )
+    )
+    XCTAssertFalse(
+      executableIdentityMatches(
+        installedPath: "/usr/local/libexec/agenttool/phase-b-v1/agenttool-secret-macos",
+        runningPath: "/tmp/agenttool-secret-macos",
+        installedDevice: 4,
+        installedInode: 9,
+        runningDevice: 4,
+        runningInode: 9
+      )
+    )
+    XCTAssertFalse(
+      executableIdentityMatches(
+        installedPath: "/usr/local/libexec/agenttool/phase-b-v1/agenttool-secret-macos",
+        runningPath: "/usr/local/libexec/agenttool/phase-b-v1/agenttool-secret-macos",
+        installedDevice: 4,
+        installedInode: 9,
+        runningDevice: 4,
+        runningInode: 10
+      )
+    )
+  }
+
   func testCreateGeneratesCanonicalValueAndRequiresIndependentExactReadback() {
     let security = FakeSecurity(
       copies: [
@@ -67,7 +150,11 @@ final class ContractTests: XCTestCase {
       addStatuses: [errSecSuccess]
     )
     let random = FakeRandom(.bytes(rawGeneration))
-    let result = invokeSecretCommand(arguments: ["create"], security: security, random: random)
+    let result = invokeSecretCommand(
+      arguments: ["create", "--receipt-nonce", receiptNonce],
+      security: security,
+      random: random
+    )
 
     XCTAssertEqual(result.status, 0)
     XCTAssertEqual(result.stderr, Data())
@@ -96,6 +183,9 @@ final class ContractTests: XCTestCase {
       security.addAttributes[0][kSecValueData] as? Data,
       serializedGeneration
     )
+    XCTAssertEqual(security.addAttributes[0][kSecAttrGeneric] as? Data, receiptNonceData)
+    XCTAssertNil(security.copyQueries[0][kSecAttrGeneric])
+    XCTAssertNil(security.copyQueries[1][kSecAttrGeneric])
     XCTAssertEqual(serializedGeneration.count, SecretToolContract.serializedByteCount)
   }
 
@@ -103,7 +193,11 @@ final class ContractTests: XCTestCase {
     let security = FakeSecurity(copies: [(errSecSuccess, presenceResult())])
     let random = FakeRandom(.bytes(rawGeneration))
     assertFailure(
-      invokeSecretCommand(arguments: ["create"], security: security, random: random),
+      invokeSecretCommand(
+        arguments: ["create", "--receipt-nonce", receiptNonce],
+        security: security,
+        random: random
+      ),
       .itemExists,
       excluding: [rawGeneration, serializedGeneration]
     )
@@ -115,7 +209,11 @@ final class ContractTests: XCTestCase {
     ])
     let ambiguousRandom = FakeRandom(.bytes(rawGeneration))
     assertFailure(
-      invokeSecretCommand(arguments: ["create"], security: ambiguous, random: ambiguousRandom),
+      invokeSecretCommand(
+        arguments: ["create", "--receipt-nonce", receiptNonce],
+        security: ambiguous,
+        random: ambiguousRandom
+      ),
       .itemAmbiguous,
       excluding: [rawGeneration, serializedGeneration]
     )
@@ -130,7 +228,7 @@ final class ContractTests: XCTestCase {
     )
     assertFailure(
       invokeSecretCommand(
-        arguments: ["create"],
+        arguments: ["create", "--receipt-nonce", receiptNonce],
         security: security,
         random: FakeRandom(.bytes(rawGeneration))
       ),
@@ -152,7 +250,11 @@ final class ContractTests: XCTestCase {
     ] {
       let security = FakeSecurity(copies: [(errSecItemNotFound, nil)])
       assertFailure(
-        invokeSecretCommand(arguments: ["create"], security: security, random: random),
+        invokeSecretCommand(
+          arguments: ["create", "--receipt-nonce", receiptNonce],
+          security: security,
+          random: random
+        ),
         .generationFailed,
         excluding: [rawGeneration, serializedGeneration]
       )
@@ -172,7 +274,7 @@ final class ContractTests: XCTestCase {
     )
     assertFailure(
       invokeSecretCommand(
-        arguments: ["create"],
+        arguments: ["create", "--receipt-nonce", receiptNonce],
         security: mismatch,
         random: FakeRandom(.bytes(rawGeneration))
       ),
@@ -189,7 +291,7 @@ final class ContractTests: XCTestCase {
     )
     assertFailure(
       invokeSecretCommand(
-        arguments: ["create"],
+        arguments: ["create", "--receipt-nonce", receiptNonce],
         security: malformed,
         random: FakeRandom(.bytes(rawGeneration))
       ),
@@ -203,7 +305,11 @@ final class ContractTests: XCTestCase {
       (errSecSuccess, exactResult(value: serializedGeneration))
     ])
     let random = FakeRandom(.failure)
-    let result = invokeSecretCommand(arguments: ["verify"], security: security, random: random)
+    let result = invokeSecretCommand(
+      arguments: ["verify", "--receipt-nonce", receiptNonce],
+      security: security,
+      random: random
+    )
 
     XCTAssertEqual(result.status, 0)
     XCTAssertEqual(result.stderr, Data())
@@ -214,6 +320,77 @@ final class ContractTests: XCTestCase {
     assertNoUI(security.copyQueries[0])
     XCTAssertEqual(security.copyQueries[0][kSecReturnData] as? Bool, true)
     assertBoundedDataRead(security.copyQueries[0])
+  }
+
+  func testStageAndOneRuntimeProbeAttestBeforeReadingAndKeepValueInsideFlySink() {
+    let events = EventRecorder()
+    let stageSecurity = FakeSecurity(
+      copies: [(errSecSuccess, exactResult(value: serializedGeneration))],
+      events: events
+    )
+    let stageFly = FakeFly(events: events)
+    let stage = invokeSecretCommand(
+      arguments: ["stage-fly", "--receipt-nonce", receiptNonce],
+      security: stageSecurity,
+      random: FakeRandom(.failure),
+      ceremony: FakeCeremony(events: events),
+      fly: stageFly
+    )
+    XCTAssertEqual(stage.status, 0)
+    XCTAssertEqual(stage.stderr, Data())
+    XCTAssertEqual(stageFly.staged, [serializedGeneration])
+    XCTAssertEqual(events.values, ["authorize", "fly_factory", "keychain_lookup", "fly_stage"])
+
+    let probeEvents = EventRecorder()
+    let probeFly = FakeFly(events: probeEvents)
+    let probe = invokeSecretCommand(
+      arguments: [
+        "probe-fly", "--receipt-nonce", receiptNonce, "--machine", machineID,
+      ],
+      security: FakeSecurity(
+        copies: [(errSecSuccess, exactResult(value: serializedGeneration))],
+        events: probeEvents
+      ),
+      random: FakeRandom(.failure),
+      ceremony: FakeCeremony(events: probeEvents),
+      fly: probeFly
+    )
+    XCTAssertEqual(probe.status, 0)
+    XCTAssertEqual(probe.stderr, Data())
+    XCTAssertEqual(probeFly.probes.count, 1)
+    XCTAssertEqual(probeFly.probes[0].generation, serializedGeneration)
+    XCTAssertEqual(probeFly.probes[0].machineID, machineID)
+    XCTAssertEqual(probeFly.probes[0].revision, String(repeating: "a", count: 40))
+    XCTAssertEqual(probeFly.probes[0].role, .app)
+    XCTAssertEqual(events.values, ["authorize", "fly_factory", "keychain_lookup", "fly_stage"])
+    XCTAssertEqual(
+      probeEvents.values, ["authorize", "fly_factory", "keychain_lookup", "fly_probe"])
+  }
+
+  func testBindingMismatchStopsBeforeRandomOrFly() {
+    let foreignNonce = Data(repeating: 0xFF, count: 16)
+    let returned: NSDictionary = [
+      kSecAttrService: service,
+      kSecAttrAccount: account,
+      kSecAttrSynchronizable: false,
+      kSecAttrGeneric: foreignNonce,
+      kSecValueData: serializedGeneration,
+    ]
+    let random = FakeRandom(.bytes(rawGeneration))
+    let fly = FakeFly()
+    assertFailure(
+      invokeSecretCommand(
+        arguments: ["create", "--receipt-nonce", receiptNonce],
+        security: FakeSecurity(copies: [(errSecSuccess, [returned] as [Any])]),
+        random: random,
+        fly: fly
+      ),
+      .receiptBindingMismatch,
+      excluding: [rawGeneration, serializedGeneration, foreignNonce]
+    )
+    XCTAssertTrue(random.requestedCounts.isEmpty)
+    XCTAssertTrue(fly.staged.isEmpty)
+    XCTAssertTrue(fly.probes.isEmpty)
   }
 
   func testVerifyRefusesAbsentNonCanonicalMalformedAndAmbiguousItems() {
@@ -256,7 +433,7 @@ final class ContractTests: XCTestCase {
     for (security, failure) in cases {
       assertFailure(
         invokeSecretCommand(
-          arguments: ["verify"],
+          arguments: ["verify", "--receipt-nonce", receiptNonce],
           security: security,
           random: FakeRandom(.failure)
         ),
@@ -271,18 +448,20 @@ final class ContractTests: XCTestCase {
       kSecAttrService: service,
       kSecAttrAccount: "other-account",
       kSecAttrSynchronizable: false,
+      kSecAttrGeneric: receiptNonceData,
       kSecValueData: serializedGeneration,
     ]
     let synchronizable: NSDictionary = [
       kSecAttrService: service,
       kSecAttrAccount: account,
       kSecAttrSynchronizable: true,
+      kSecAttrGeneric: receiptNonceData,
       kSecValueData: serializedGeneration,
     ]
     for returned in [[wrongAccount] as [Any], [synchronizable] as [Any]] {
       assertFailure(
         invokeSecretCommand(
-          arguments: ["verify"],
+          arguments: ["verify", "--receipt-nonce", receiptNonce],
           security: FakeSecurity(copies: [(errSecSuccess, returned)]),
           random: FakeRandom(.failure)
         ),
@@ -333,7 +512,7 @@ final class ContractTests: XCTestCase {
     for (security, failure) in cases {
       assertFailure(
         invokeSecretCommand(
-          arguments: ["create"],
+          arguments: ["create", "--receipt-nonce", receiptNonce],
           security: security,
           random: FakeRandom(.bytes(rawGeneration))
         ),
@@ -347,6 +526,9 @@ final class ContractTests: XCTestCase {
     let failures: [SecretToolFailure] = [
       .invalidInvocation,
       .invalidSelector,
+      .invalidCeremonyNonce,
+      .invalidMachineID,
+      .ceremonyStateInvalid,
       .itemAbsent,
       .itemExists,
       .interactionForbidden,
@@ -355,6 +537,11 @@ final class ContractTests: XCTestCase {
       .storeFailed,
       .readbackFailed,
       .readbackMismatch,
+      .receiptBindingMismatch,
+      .flyContractInvalid,
+      .flyChildFailed,
+      .flyChildTimedOut,
+      .flyRuntimeProofFailed,
       .internalFailure,
     ]
     XCTAssertEqual(Set(failures.map(\.safeCode)).count, failures.count)
@@ -367,6 +554,7 @@ final class ContractTests: XCTestCase {
       kSecAttrService: service,
       kSecAttrAccount: account,
       kSecAttrSynchronizable: false,
+      kSecAttrGeneric: receiptNonceData,
     ]
     if let value {
       attributes[kSecValueData] = value
@@ -447,14 +635,22 @@ private struct RunResult {
 private func invokeSecretCommand(
   arguments: [String],
   security: FakeSecurity,
-  random: FakeRandom
+  random: FakeRandom,
+  ceremony: FakeCeremony = FakeCeremony(),
+  fly: FakeFly = FakeFly()
 ) -> RunResult {
   let errorPipe = Pipe()
-  let status = AgentToolSecretMacOSCommand.run(
+  let status = AgentToolSecretMacOSCommand.invoke(
     arguments: arguments,
     errorOutput: errorPipe.fileHandleForWriting,
+    selectors: .phaseBAuthority,
     security: security,
-    random: random
+    random: random,
+    ceremony: ceremony,
+    flyFactory: {
+      ceremony.events?.record("fly_factory")
+      return fly
+    }
   )
   try? errorPipe.fileHandleForWriting.close()
   return RunResult(
@@ -492,16 +688,20 @@ private final class FakeSecurity: SecurityItemCalling {
   var addStatuses: [OSStatus]
   private(set) var copyQueries: [[CFString: Any]] = []
   private(set) var addAttributes: [[CFString: Any]] = []
+  let events: EventRecorder?
 
   init(
     copies: [(OSStatus, Any?)] = [],
-    addStatuses: [OSStatus] = []
+    addStatuses: [OSStatus] = [],
+    events: EventRecorder? = nil
   ) {
     self.copies = copies
     self.addStatuses = addStatuses
+    self.events = events
   }
 
   func copyMatching(_ query: [CFString: Any]) -> (status: OSStatus, result: Any?) {
+    events?.record("keychain_lookup")
     copyQueries.append(query)
     guard !copies.isEmpty else {
       return (errSecItemNotFound, nil)
@@ -516,5 +716,75 @@ private final class FakeSecurity: SecurityItemCalling {
       return errSecSuccess
     }
     return addStatuses.removeFirst()
+  }
+}
+
+private final class EventRecorder {
+  private(set) var values: [String] = []
+
+  func record(_ value: String) {
+    values.append(value)
+  }
+}
+
+private final class FakeCeremony: CeremonyBindingAuthorizing {
+  let events: EventRecorder?
+
+  init(events: EventRecorder? = nil) {
+    self.events = events
+  }
+
+  func authorize(_ command: SecretToolCommand) throws -> CeremonyAuthorization {
+    events?.record("authorize")
+    let target: String?
+    if case .probeFly(_, let machineID) = command {
+      target = machineID.value
+    } else {
+      target = nil
+    }
+    return CeremonyAuthorization(
+      deployedRevision: String(repeating: "a", count: 40),
+      targetMachineID: target,
+      runtimeRole: target == nil ? nil : .app
+    )
+  }
+}
+
+private final class FakeFly: FlyGenerationOperating {
+  struct Probe: Equatable {
+    let generation: Data
+    let machineID: String
+    let revision: String
+    let role: CeremonyRuntimeRole
+  }
+
+  let events: EventRecorder?
+  private(set) var staged: [Data] = []
+  private(set) var probes: [Probe] = []
+
+  init(events: EventRecorder? = nil) {
+    self.events = events
+  }
+
+  func stage(generation: Data) throws {
+    events?.record("fly_stage")
+    staged.append(generation)
+  }
+
+  func verifyRuntime(
+    generation: Data,
+    machineID: SecretToolMachineID,
+    expectedRevision: String,
+    role: CeremonyRuntimeRole
+  ) throws {
+    events?.record("fly_probe")
+    probes.append(
+      Probe(
+        generation: generation,
+        machineID: machineID.value,
+        revision: expectedRevision,
+        role: role
+      )
+    )
   }
 }

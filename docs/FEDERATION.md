@@ -120,6 +120,7 @@ federation.settings              singleton row
   enabled                BOOLEAN  master switch
   instance_url           TEXT     canonical public origin (exact https://<dns-host>)
   allowed_origins        TEXT[]   canonical sorted unique DNS hosts
+  covenant_v2_generation_hold BOOLEAN  private DB-only empty-allowlist interlock
 ```
 
 ```
@@ -127,6 +128,14 @@ GET   /v1/federation/settings    fetch
 PATCH /v1/federation/settings    enable + set URL + restrict origins
 GET   /v1/federation/peers       observed peer instances (metadata log)
 ```
+
+`covenant_v2_generation_hold` is deliberately absent from both settings API
+input and output. It defaults to false. While an operator has set it true, a
+database constraint requires `allowed_origins` to remain empty and a normal
+platform-authorized settings write that would add an origin fails with
+`409 covenant_v2_generation_hold_requires_empty_allowed_origins`. The Phase-B
+generation ceremony leaves the hold set; a later reviewed allowlist ceremony
+owns its removal.
 
 By default federation is **off**. Enabling with a null/noncanonical instance
 URL is rejected. The platform settings route validates the locked resulting

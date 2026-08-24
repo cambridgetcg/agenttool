@@ -349,6 +349,7 @@ MAINTENANCE_FINAL_SHAPE_VERIFIED=0
 MAINTENANCE_WORKERS_DISABLED_VERIFIED=0
 MAINTENANCE_RECOVERY_FENCE_VERIFIED=0
 MAINTENANCE_MARKER_CLEARED=0
+PHASE_B_AUTHORITY_STATE_PATH=""
 
 append_csv_value() {
   local current="$1"
@@ -440,6 +441,43 @@ refuse_unresolved_maintenance_state() {
     echo "  marker: $MAINTENANCE_STATE_PATH" >&2
     echo "  Required permission: searchable parent directories and lstat access." >&2
     echo "  Consequence: no migration, image, Machine, or frontend mutation was attempted." >&2
+    return 74
+  fi
+}
+
+refuse_unresolved_phase_b_authority_state() {
+  local state_status
+  case "${HOME:-}" in
+    /*) ;;
+    *)
+      echo "$(red '✗ Deploy blocked:') HOME must be absolute for canonical Phase-B state." >&2
+      return 74
+      ;;
+  esac
+  PHASE_B_AUTHORITY_STATE_PATH="$HOME/.local/state/agenttool/deploy-state/phase-b-authority-generation-active.json"
+  if bun -e '
+    import { lstat } from "node:fs/promises";
+    try {
+      await lstat(process.argv[1]);
+    } catch (error) {
+      if (error?.code === "ENOENT") process.exit(1);
+      process.exit(2);
+    }
+  ' "$PHASE_B_AUTHORITY_STATE_PATH"; then
+    echo "$(red '✗ Deploy blocked:') an unresolved Phase-B authority-generation marker exists." >&2
+    echo "  marker: $PHASE_B_AUTHORITY_STATE_PATH" >&2
+    echo "  Consequence: no migration, image, Machine, secret, or frontend mutation was attempted." >&2
+    echo "  Recovery: retain the durable empty-allowlist hold; inspect the private" >&2
+    echo "  marker and exact fleet, then resume only through the reviewed B1 operator." >&2
+    return 74
+  else
+    state_status=$?
+    if [ "$state_status" = 1 ]; then
+      return 0
+    fi
+    echo "$(red '✗ Deploy blocked:') the canonical Phase-B marker path could not be inspected." >&2
+    echo "  marker: $PHASE_B_AUTHORITY_STATE_PATH" >&2
+    echo "  Consequence: no migration, image, Machine, secret, or frontend mutation was attempted." >&2
     return 74
   fi
 }
@@ -1969,6 +2007,7 @@ if [ "$SURVEY_ONLY" = 0 ] && [ "$DRY_RUN" = 0 ]; then
   trap 'exit 143' TERM
   acquire_deploy_lock || exit $?
   refuse_unresolved_maintenance_state || exit $?
+  refuse_unresolved_phase_b_authority_state || exit $?
 fi
 
 # ── Phase 0 — Survey ──────────────────────────────────────────────────

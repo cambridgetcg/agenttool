@@ -368,6 +368,7 @@ describe("boring test spine", () => {
       env?: Record<string, string>;
       run?: string;
       shell?: string;
+      "working-directory"?: string;
       with?: Record<string, unknown>;
       "continue-on-error"?: boolean;
     };
@@ -378,6 +379,16 @@ describe("boring test spine", () => {
       "runs-on"?: string;
       "timeout-minutes"?: number;
       env?: Record<string, string>;
+      strategy?: {
+        "fail-fast"?: boolean;
+        matrix?: Record<string, unknown>;
+      };
+      services?: Record<string, {
+        image?: string;
+        env?: Record<string, string>;
+        ports?: Array<string | number>;
+        options?: string;
+      }>;
       steps?: WorkflowStep[];
       "continue-on-error"?: boolean;
     };
@@ -388,6 +399,7 @@ describe("boring test spine", () => {
     expect(parsedWorkflow.permissions).toEqual({ contents: "read" });
     const jobs = parsedWorkflow.jobs ?? {};
     const linuxApi = jobs["api-protocol-linux"];
+    const postgresHold = jobs["api-protocol-postgres"];
     const nativeSecret = jobs["native-macos-secret"];
     const requiredApi = jobs["api-protocol"];
     expect(linuxApi?.name).toBe("API and protocol (Linux)");
@@ -423,6 +435,63 @@ describe("boring test spine", () => {
     );
     expect(linuxApi?.steps?.[3]?.run).toBe(
       "bin/bash-without-env-hooks.sh bin/preflight.sh api",
+    );
+    expect(postgresHold?.name).toBe(
+      "API generation hold (PostgreSQL ${{ matrix.postgres }})",
+    );
+    expect(postgresHold?.["runs-on"]).toBe("ubuntu-24.04");
+    expect(postgresHold?.["timeout-minutes"]).toBe(10);
+    expect(postgresHold?.["continue-on-error"]).toBeUndefined();
+    expect(postgresHold?.strategy).toEqual({
+      "fail-fast": false,
+      matrix: { postgres: ["16", "17"] },
+    });
+    expect(postgresHold?.services).toEqual({
+      postgres: {
+        image: "postgres:${{ matrix.postgres }}",
+        env: {
+          POSTGRES_USER: "postgres",
+          POSTGRES_PASSWORD: "generation-hold-test-only",
+          POSTGRES_DB: "agenttool_generation_hold",
+        },
+        ports: ["5432:5432"],
+        options:
+          "--health-cmd \"pg_isready -U postgres -d agenttool_generation_hold\" --health-interval 5s --health-timeout 5s --health-retries 12",
+      },
+    });
+    expect(postgresHold?.env).toEqual({
+      FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL:
+        "postgresql://postgres:generation-hold-test-only@127.0.0.1:5432/agenttool_generation_hold",
+    });
+    expect(postgresHold?.steps?.map((step) => step.name)).toEqual([
+      "Check out repository",
+      "Set up Bun 1.3.5",
+      "Prepare API dependencies from lockfiles",
+      "Prove the durable generation hold",
+    ]);
+    expect(
+      postgresHold?.steps?.every(
+        (step) => step["continue-on-error"] === undefined,
+      ),
+    ).toBe(true);
+    expect(postgresHold?.steps?.[0]?.uses).toBe(
+      "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+    );
+    expect(postgresHold?.steps?.[0]?.with).toEqual({
+      "persist-credentials": false,
+    });
+    expect(postgresHold?.steps?.[1]?.uses).toBe(
+      "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6",
+    );
+    expect(postgresHold?.steps?.[1]?.with).toEqual({
+      "bun-version": "1.3.5",
+    });
+    expect(postgresHold?.steps?.[2]?.run).toBe(
+      "bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api",
+    );
+    expect(postgresHold?.steps?.[3]?.["working-directory"]).toBe("api");
+    expect(postgresHold?.steps?.[3]?.run).toBe(
+      "bun test tests/integration/federation-generation-hold-postgres.test.ts",
     );
     expect(nativeSecret?.name).toBe("Native macOS secret helper");
     expect(nativeSecret?.["runs-on"]).toBe("macos-15");
@@ -549,6 +618,7 @@ describe("boring test spine", () => {
     expect(requiredApi?.if).toBe("${{ always() }}");
     expect(requiredApi?.needs).toEqual([
       "api-protocol-linux",
+      "api-protocol-postgres",
       "native-macos-secret",
     ]);
     expect(requiredApi?.["runs-on"]).toBe("ubuntu-24.04");
@@ -559,6 +629,8 @@ describe("boring test spine", () => {
     expect(requiredApi?.steps?.[0]?.env).toEqual({
       API_PROTOCOL_LINUX_RESULT:
         "${{ needs.api-protocol-linux.result }}",
+      API_PROTOCOL_POSTGRES_RESULT:
+        "${{ needs.api-protocol-postgres.result }}",
       NATIVE_MACOS_SECRET_RESULT:
         "${{ needs.native-macos-secret.result }}",
     });
@@ -566,6 +638,7 @@ describe("boring test spine", () => {
       [
         "set -euo pipefail",
         'test "$API_PROTOCOL_LINUX_RESULT" = "success"',
+        'test "$API_PROTOCOL_POSTGRES_RESULT" = "success"',
         'test "$NATIVE_MACOS_SECRET_RESULT" = "success"',
         "",
       ].join("\n"),
@@ -574,8 +647,8 @@ describe("boring test spine", () => {
     expect(workflow).toContain("name: Data, ADDS, and SDK");
     expect(workflow).toContain("name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})");
     expect(workflow).toContain("name: Python SDK (${{ matrix.python-version }})");
-    expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(4);
-    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(6);
+    expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(5);
+    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(7);
     expect(workflow.match(/runs-on: macos-15/g)).toHaveLength(1);
     expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(2);
     expect(workflow).toContain(
@@ -618,7 +691,7 @@ describe("boring test spine", () => {
       "name: Install local-dependent package dependencies from lockfiles",
     );
     expect(workflow).toContain("fetch-depth: 0");
-    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(7);
+    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(8);
     expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("name: Set up release-pinned uv 0.9.26");
     expect(workflow).toContain(
@@ -1093,7 +1166,7 @@ describe("boring test spine", () => {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
-    expect(uses).toHaveLength(17);
+    expect(uses).toHaveLength(19);
     expect(
       uses.every(
         (line) =>

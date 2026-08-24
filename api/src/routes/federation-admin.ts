@@ -12,6 +12,9 @@ import { z } from "zod";
 import type { ProjectContext } from "../auth/middleware";
 import { errors, fail } from "../lib/errors";
 import {
+  COVENANT_V2_GENERATION_HOLD_ERROR,
+} from "../services/federation/generation-hold";
+import {
   getSettings,
   isCanonicalAllowedOrigins,
   isCanonicalFederationInstanceUrl,
@@ -51,6 +54,15 @@ app.patch("/settings", async (c) => {
     );
   } catch (error) {
     const message = (error as Error).message;
+    if (message === COVENANT_V2_GENERATION_HOLD_ERROR) {
+      return fail(c, errors.covenantFederation({
+        error: message,
+        message:
+          "The covenant-v2 authority-generation hold requires allowed_origins to remain empty.",
+        hint:
+          "Wait for the generation rollout and its separate allowlist ceremony to complete before adding covenant peers.",
+      }), 409);
+    }
     if (
       message === "invalid_federation_instance_url" ||
       message === "invalid_federation_allowed_origins" ||

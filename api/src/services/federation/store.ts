@@ -21,6 +21,7 @@ import { db } from "../../db/client";
 import { federationSettings, peerInstances } from "../../db/schema/federation";
 import { identities } from "../../db/schema/identity";
 import { PLATFORM_IDENTITY_ID } from "../wake/platform-bootstrap";
+import { covenantV2GenerationHoldStateError } from "./generation-hold";
 import { safeFederationHttpsGet } from "./safe-fetch";
 
 // ── DID parsing ─────────────────────────────────────────────────────────
@@ -241,6 +242,11 @@ export async function updateSettingsForPlatformProject(
       ? current.instanceUrl
       : patch.instance_url;
     const nextAllowedOrigins = patch.allowed_origins ?? current.allowedOrigins;
+    const generationHoldError = covenantV2GenerationHoldStateError(
+      current.covenantV2GenerationHold,
+      nextAllowedOrigins,
+    );
+    if (generationHoldError) throw new Error(generationHoldError);
     const stateError = federationSettingsStateError({
       enabled: nextEnabled,
       instance_url: nextInstanceUrl,

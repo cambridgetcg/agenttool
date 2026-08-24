@@ -1856,6 +1856,17 @@ function maintenanceMarkerPath(home: string): string {
   );
 }
 
+function phaseBAuthorityMarkerPath(home: string): string {
+  return join(
+    home,
+    ".local",
+    "state",
+    "agenttool",
+    "deploy-state",
+    "phase-b-authority-generation-active.json",
+  );
+}
+
 async function readFlyLog(path: string): Promise<string[][]> {
   const text = await readFile(path, "utf8");
   return text
@@ -2347,6 +2358,84 @@ describe("deploy release provenance spine", () => {
     expect(blockedWithDifferentXdg.code).toBe(74);
     expect(await exists(preflightMarker)).toBe(false);
     expect(await exists(flyMarker)).toBe(false);
+  }, 15_000);
+
+  test("refuses an unresolved Phase-B ceremony before preparation, preflight, or Fly", async () => {
+    const setup = await fixture();
+    const preparationMarker = join(setup.root, "phase-b-preparation");
+    const preflightMarker = join(setup.root, "phase-b-preflight");
+    const fakeBin = join(setup.root, "phase-b-guard-bin");
+    const flyMarker = join(setup.root, "phase-b-fly");
+    const marker = phaseBAuthorityMarkerPath(setup.home);
+    await mkdir(fakeBin, { recursive: true });
+    await mkdir(resolve(marker, ".."), { recursive: true });
+    await writeFile(
+      join(fakeBin, "fly"),
+      '#!/usr/bin/env bash\ntouch "$DEPLOY_TEST_FLY_MARKER"\nexit 99\n',
+    );
+    await chmod(join(fakeBin, "fly"), 0o755);
+    await writeFile(
+      marker,
+      '{"schema":"agenttool.covenant-v2-generation-ceremony/1"}\n',
+    );
+    await chmod(marker, 0o600);
+
+    const blocked = await run(
+      deployWithPreparationCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPENDENCY_PREP_MARKER: preparationMarker,
+        PREFLIGHT_MARKER: preflightMarker,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+      }),
+    );
+
+    expect(blocked.code).toBe(74);
+    expect(blocked.stderr).toContain(
+      "an unresolved Phase-B authority-generation marker exists",
+    );
+    expect(blocked.stderr).toContain(
+      "no migration, image, Machine, secret, or frontend mutation was attempted",
+    );
+    expect(await exists(preparationMarker)).toBe(false);
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(await exists(flyMarker)).toBe(false);
+    expect(
+      await exists(join(setup.state, "agenttool", "deploy-receipts")),
+    ).toBe(false);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+
+    const mutatingShapeBlocked = await run(
+      maintenanceCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: setup.state,
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+      }),
+    );
+    expect(mutatingShapeBlocked.code).toBe(74);
+    expect(await exists(flyMarker)).toBe(false);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
+
+    const blockedWithDifferentXdg = await run(
+      deployWithPreparationCommand(),
+      setup.repo,
+      cleanEnv(setup.home, {
+        XDG_STATE_HOME: join(setup.root, "different-xdg-state"),
+        PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+        DEPENDENCY_PREP_MARKER: preparationMarker,
+        PREFLIGHT_MARKER: preflightMarker,
+        DEPLOY_TEST_FLY_MARKER: flyMarker,
+      }),
+    );
+    expect(blockedWithDifferentXdg.code).toBe(74);
+    expect(await exists(preparationMarker)).toBe(false);
+    expect(await exists(preflightMarker)).toBe(false);
+    expect(await exists(flyMarker)).toBe(false);
+    expect(await exists(deployLockPath(setup.home))).toBe(false);
   }, 15_000);
 
   test("requires the exact stopped fenced five-Machine topology before creating durable state", async () => {
