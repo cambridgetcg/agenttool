@@ -6,7 +6,7 @@
 >
 > **Implements:** A bounded runner-local, crypto-aware advisory bridge from the Whitehack honesty linter into AgentTool CI; a local check-only verifier for exact canonical Whitehack mathematical-evidence bytes; a separate local Agent Wallet record-to-understanding projection; an offer-only local projection from one closed advisory into unaccepted Castle gate candidates; an explicit encrypted storage/retrieval bridge for Whitehack 0.9.0 public-minimal evidence capsules; and the future evidence boundary for explicitly authorized security research.
 >
-> **Code:** `bin/whitehack-advisory.mjs` · `bin/whitehack-math-evidence-check.ts` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/_castle-whitehack-intake.ts` · `bin/agenttool-whitehack-evidence-storage.ts` · `bin/_whitehack-evidence-storage.ts` · `bin/_whitehack-evidence-storage-service.ts` · `.github/workflows/whitehack.yml` · `specs/agenttool-whitehack-advisory-v0.1.schema.json` · `specs/agenttool-castle-whitehack-intake-v1.schema.json` · `specs/agenttool-whitehack-evidence-storage-input-v1.schema.json` · `specs/agenttool-whitehack-evidence-storage-receipt-v1.schema.json` · `bin/whitehack.py` · `bin/whitehack2.py`
+> **Code:** `bin/whitehack-advisory.mjs` · `bin/vendor/es-module-lexer-2.3.2.js` · `bin/whitehack-math-evidence-check.ts` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/_castle-whitehack-intake.ts` · `bin/agenttool-whitehack-evidence-storage.ts` · `bin/_whitehack-evidence-storage.ts` · `bin/_whitehack-evidence-storage-service.ts` · `.github/workflows/whitehack.yml` · `specs/agenttool-whitehack-advisory-v0.1.schema.json` · `specs/agenttool-castle-whitehack-intake-v1.schema.json` · `specs/agenttool-whitehack-evidence-storage-input-v1.schema.json` · `specs/agenttool-whitehack-evidence-storage-receipt-v1.schema.json` · `bin/whitehack.py` · `bin/whitehack2.py`
 >
 > **Tests:** `bin/tests/whitehack-advisory.test.ts` · `bin/tests/whitehack-math-evidence-check.test.ts` · `bin/tests/agenttool-castle-whitehack-intake.test.ts` · `bin/tests/agenttool-whitehack-evidence-storage.test.ts` · `packages/wallet/tests/whitehack-understanding.test.ts` · `bin/tests/whitehack-legacy-privacy.test.ts` · `api/tests/whitehack-advisory-schema.test.ts` · `api/tests/agenttool-castle-whitehack-intake-schema.test.ts`
 
@@ -64,10 +64,13 @@ selected module. Before import it also hashes the 58-module union of the reviewe
 `tools/whitehack-advisory/whitehack-runtime-closure-v0.10.0.json`; the manifest's
 own exact bytes are pinned at SHA-256
 `60351ae4b58436f3a8ce2f22b9223a3a3718f88fced2e032352978f0857cc9e2`.
-The loader independently traverses relative static imports from all three
-roots and requires exact equality with the manifest file set; a missing,
-surplus, bare, dynamic, query-bearing, fragment-bearing, or package-escaping
-runtime edge fails before import. The mathematical root adds exactly four files
+The loader uses the repository-pinned JavaScript build of
+`es-module-lexer@2.3.2` to traverse relative static imports and export-from
+edges from all three roots, then requires exact equality with the manifest file
+set. Comment-separated, multiline, and non-line-leading valid ESM are parsed as
+edges rather than approximated by regular expressions; a missing, surplus,
+bare, dynamic, query-bearing, fragment-bearing, or package-escaping runtime
+edge fails before import. The mathematical root adds exactly four files
 to the earlier 54-file union: `src/math-evidence.js`,
 `src/evidence-capsule.js`, `src/evidence-capsule-profiles.js`, and
 `src/result.js`.

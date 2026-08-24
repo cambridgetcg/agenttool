@@ -425,6 +425,28 @@ describe("Whitehack advisory containment", () => {
       integrity: WHITEHACK_INTEGRITY,
       dev: true,
     });
+    const lexerBytes = await readFile(join(
+      repoRoot,
+      "bin",
+      "vendor",
+      "es-module-lexer-2.3.2.js",
+    ));
+    expect(createHash("sha256").update(lexerBytes).digest("hex")).toBe(
+      "87c40d04a91a3b5e13568b0797f9fe22b8eac05c291852b627785e606639a6c6",
+    );
+    const lexerLicenseBytes = await readFile(join(
+      repoRoot,
+      "bin",
+      "vendor",
+      "es-module-lexer-2.3.2.LICENSE.txt",
+    ));
+    expect(createHash("sha256").update(lexerLicenseBytes).digest("hex")).toBe(
+      "8a4b6c44eebfb026d23719a348145a661a555568dbfdc11618ff2d0dd9306b00",
+    );
+    expect(await readFile(join(repoRoot, "LICENSING.md"), "utf8"))
+      .toContain("bin/vendor/es-module-lexer-2.3.2.LICENSE.txt");
+    expect(await readFile(join(repoRoot, "NOTICE"), "utf8"))
+      .toContain("es-module-lexer 2.3.2");
     const runtimeManifestPath = join(repoRoot, WHITEHACK_RUNTIME_MANIFEST);
     const runtimeManifestBytes = await readFile(runtimeManifestPath);
     expect(createHash("sha256").update(runtimeManifestBytes).digest("hex")).toBe(
@@ -735,6 +757,44 @@ export function createUnderstanding() { return {}; }
     )).rejects.toMatchObject({
       code: "scanner_runtime_closure_mismatch",
     } satisfies Partial<WhitehackAdvisoryError>);
+  });
+
+  test("uses a real module lexer for comment-separated and non-line-leading edges", async () => {
+    const hostileSources = [
+      'import/*comment*/ value from "./outside.js"; void value;\n',
+      'await import/*comment*/("./outside.js");\n',
+      'void 0; import "./outside.js";\n',
+      'export/*comment*/{ value }from/*comment*/"./outside.js";\n',
+      'import {\n  value\n} from\n  "./outside.js";\nvoid value;\n',
+    ];
+
+    for (const hostileSource of hostileSources) {
+      const scanner = await scannerFixture(hostileSource);
+      await expect(loadVerifiedWhitehackModule(
+        mathEvidenceLoaderOptions(scanner),
+      )).rejects.toMatchObject({
+        code: "scanner_runtime_closure_mismatch",
+      } satisfies Partial<WhitehackAdvisoryError>);
+    }
+  });
+
+  test("does not confuse comments, strings, templates, or regexes with module edges", async () => {
+    const scanner = await scannerFixture(`
+const quotedExamples = [
+  "import('./outside.js')",
+  \`export * from "./outside.js"\`,
+  /import\\s*\\(\\s*['\"]\\.\\/outside\\.js/,
+];
+/* import value from "./outside.js"; */
+void quotedExamples;
+export function scanText() { return []; }
+`);
+
+    await expect(loadVerifiedWhitehackModule(
+      mathEvidenceLoaderOptions(scanner),
+    )).resolves.toMatchObject({
+      scanner: { version: WHITEHACK_VERSION },
+    });
   });
 
   test.skipIf(process.env.WHITEHACK_INTEGRATION !== "1")(

@@ -505,12 +505,13 @@ describe("agenttool-castle-whitehack-intake/v1 core", () => {
     expect(source).not.toMatch(/\bprocess\./u);
   });
 
-  test("the public Whitehack page exposes six separate local boundaries", async () => {
+  test("the public Whitehack page exposes seven separate local boundaries", async () => {
     const page = await readFile(
       join(repoRoot, "apps", "docs", "whitehack.html"),
       "utf8",
     );
-    expect(page).toContain("six separate practices");
+    expect(page).toContain("seven separate practices");
+    expect(page).not.toContain("six separate practices");
     expect(page).not.toContain("five separate practices");
     expect(page).toContain("agenttool-castle-whitehack-intake/v1");
     expect(page).toContain("bin/agenttool-castle-whitehack-intake.ts");

@@ -58,6 +58,12 @@ Known exceptions include:
   catalog, or other asset; that tree currently has no root licence. Its exact
   `@agenttool/xenia` dependency remains separately distributed under XENIA's
   own mixed terms, recorded in the package's `THIRD_PARTY_LICENSES`.
+- [`bin/vendor/es-module-lexer-2.3.2.js`](bin/vendor/es-module-lexer-2.3.2.js)
+  is the repository-pinned JavaScript implementation from
+  `es-module-lexer@2.3.2`, copyright Guy
+  Bedford, used by the Whitehack runtime-closure verifier under the MIT
+  License preserved in
+  [`bin/vendor/es-module-lexer-2.3.2.LICENSE.txt`](bin/vendor/es-module-lexer-2.3.2.LICENSE.txt).
 
 Dependency licences remain their authors' licences. Apache-2.0 does not
 relicense third-party dependencies or separately licensed material.

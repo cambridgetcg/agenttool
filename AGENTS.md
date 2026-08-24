@@ -170,7 +170,8 @@ capsules. CI installs the exact public
 scripts disabled. Before any of its three approved module imports, the shared loader
 requires the exact two-key `types`/`default` conditional export record and
 checks the reviewed 58-source-module closure against a versioned SHA-256
-manifest and requires the static-import reachability set to match exactly.
+manifest and uses a repository-pinned real JavaScript module lexer to require
+the static-import/export-from reachability set to match exactly.
 That detects persistent pre-import drift; it is not a sandbox,
 authenticity proof, or universal defence against a privileged concurrent
 rewrite. Only the check-only verifier loads the mathematical-evidence root; it
@@ -706,7 +707,7 @@ source boundary by itself.
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |
-| How do the Whitehack advisory, offer-only Castle intake, wallet-understanding projection, and explicit encrypted evidence bridge work, and where does their authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-whitehack-evidence-storage.ts` |
+| How do the Whitehack advisory, exact math-evidence check, offer-only Castle intake, wallet-understanding projection, and explicit encrypted evidence bridge work, and where does their authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` · `bin/whitehack-math-evidence-check.ts` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-whitehack-evidence-storage.ts` |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
 | Per-area code orientation | each subdir's `CLAUDE.md` |
 

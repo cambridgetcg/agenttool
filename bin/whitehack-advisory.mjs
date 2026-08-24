@@ -30,6 +30,8 @@ import {
 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { parse as parseModuleSyntax } from "./vendor/es-module-lexer-2.3.2.js";
+
 export const WHITEHACK_REPOSITORY = "https://github.com/cambridgetcg/whitehack";
 export const WHITEHACK_PACKAGE = "@agenttool/whitehack-scan";
 export const WHITEHACK_REVISION = "566f83678f998a12b716f55599071a2af0495ca8";
@@ -804,15 +806,26 @@ function runtimeImportSpecifiers(bytes) {
   } catch {
     fail("scanner_runtime_closure_mismatch");
   }
-  if (/(?:^|[^a-z0-9_$])import\s*\(/iu.test(source)) {
+
+  let imports;
+  try {
+    [imports] = parseModuleSyntax(source, "whitehack-runtime-source");
+  } catch {
     fail("scanner_runtime_closure_mismatch");
   }
 
   const specifiers = [];
-  const fromPattern = /(?:^|\n)[\t ]*(?:import|export)\s+[\s\S]*?\sfrom\s*(['"])([^'"\r\n]+)\1/gu;
-  const sideEffectPattern = /(?:^|\n)[\t ]*import\s*(['"])([^'"\r\n]+)\1/gu;
-  for (const match of source.matchAll(fromPattern)) specifiers.push(match[2]);
-  for (const match of source.matchAll(sideEffectPattern)) specifiers.push(match[2]);
+  for (const entry of imports) {
+    // es-module-lexer uses -2 for import.meta, which does not load a module.
+    if (entry.d === -2) continue;
+    // Only a statically named import/export-from edge is admitted. Dynamic
+    // import() and future unrecognised record shapes fail before any package
+    // module is imported.
+    if (entry.d !== -1 || typeof entry.n !== "string" || entry.n.length === 0) {
+      fail("scanner_runtime_closure_mismatch");
+    }
+    specifiers.push(entry.n);
+  }
   return specifiers;
 }
 
