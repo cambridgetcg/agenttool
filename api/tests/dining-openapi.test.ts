@@ -23,7 +23,7 @@ describe("Agent Dining OpenAPI contract", () => {
       "utf8",
     );
 
-    // @agenttool/whitehack-scan 0.9.0 fails closed above 10,000 lines.
+    // @agenttool/whitehack-scan 0.10.0 fails closed above 10,000 lines.
     expect(main.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(marketplaceDining.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(wakeObserve.split("\n").length).toBeLessThanOrEqual(10_000);

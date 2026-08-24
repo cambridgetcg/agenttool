@@ -59,7 +59,7 @@ function advisory(): Record<string, any> {
     scanner: {
       repository: "https://github.com/cambridgetcg/whitehack",
       revision: "a".repeat(40),
-      version: "0.9.0",
+      version: "0.10.0",
     },
     scope: {
       mode: "changed_supported_regular_files",
@@ -484,7 +484,7 @@ describe("agenttool-castle-whitehack-intake/v1 core", () => {
     expect(output.candidates.some(
       (candidate) => candidate.location.file === "src/mutated.ts",
     )).toBe(false);
-    expect(output.source.scanner.version).toBe("0.9.0");
+    expect(output.source.scanner.version).toBe("0.10.0");
     expect(JSON.parse(JSON.stringify(output))).toEqual(output);
     assertDeepFrozen(output);
   });

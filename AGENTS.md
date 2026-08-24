@@ -165,12 +165,15 @@ projection from that closed advisory into unaccepted Castle gate candidates;
 and a separate local Agent Wallet understanding CLI; plus an explicit local
 encrypted store/retrieve CLI for exact Whitehack 0.9.0 public-minimal evidence
 capsules. CI installs the exact public
-`@agenttool/whitehack-scan@0.9.0` artifact from an isolated npm lock with
+`@agenttool/whitehack-scan@0.10.0` artifact from an isolated npm lock with
 scripts disabled. Before either approved module import, the shared loader
+requires the exact two-key `types`/`default` conditional export record and
 checks the reviewed 54-source-module closure against a versioned SHA-256
 manifest. That detects persistent pre-import drift; it is not a sandbox,
 authenticity proof, or universal defence against a privileged concurrent
-rewrite. The advisory emits redacted metadata, groups same-location
+rewrite. The 0.10 package also publishes mathematical-evidence APIs, but these
+two AgentTool bridges neither load them nor convert KINGDOM geometry or
+training signals. The advisory emits redacted metadata, groups same-location
 signals into bounded attention cards with explicit Git-hunk relevance and
 stable review questions, and remains non-blocking on findings; those cards do
 not establish vulnerability or causation. The Castle intake writes only a
@@ -547,7 +550,7 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, a re-downloaded GitHub Release mirror before the optional registry mutation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, and a public registry receipt. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
 | `pypi-release.ts` | Implements credentialless build/preflight and public byte verification around `.github/workflows/publish-pypi.yml` for the Python SDK. Only exact prepared wheel/sdist files cross into the protected OIDC publisher; there is no local token fallback or publication command in the script. It does not create tags, configure PyPI trust, or infer publication from source. See `docs/PYPI-RELEASES.md`. |
 | `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata plus a bounded, presentation-only attention-card summary grouped by file and line. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, claim a change caused a finding, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
-| `whitehack-wallet-understanding.ts` | Local stdin/stdout adapter: verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then passes only closed enum assertions and redacted finding metadata to Whitehack 0.9.0. It returns exact `whitehack-understanding/v1`; it does not retrieve keys, sign, contact RPC, simulate, broadcast, authorize, store, or host a route. See `docs/WHITEHACK.md`. |
+| `whitehack-wallet-understanding.ts` | Local stdin/stdout adapter: verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then passes only closed enum assertions and redacted finding metadata to Whitehack 0.10.0. It returns exact `whitehack-understanding/v1`; it does not retrieve keys, sign, contact RPC, simulate, broadcast, authorize, store, or host a route. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
 | `migrate-pending.sh` · `migrate.sh` · `api/scripts/_migrate-one.ts` | Checksum-journaled pending runner, compatibility/new-file entrypoint, and transaction-aware single-file worker. |
