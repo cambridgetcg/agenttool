@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-24 (Dataset Influence now has an exact public, ungated Hugging Face reference receipt; Whitehack and deployment receipts remain separate operations)
+> Updated: 2026-08-24 (Whitehack 0.10.0 is publicly released and exactly pinned for AgentTool advisory/wallet use; Dataset Influence has an exact public, ungated Hugging Face reference receipt; static deployment remains a separate operation)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
