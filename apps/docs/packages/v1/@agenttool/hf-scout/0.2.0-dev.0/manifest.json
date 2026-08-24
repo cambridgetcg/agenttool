@@ -1,0 +1,43 @@
+{
+  "protocol": "love-package/v1",
+  "document_type": "package-manifest",
+  "name": "@agenttool/hf-scout",
+  "version": "0.2.0-dev.0",
+  "description": "Read-only Hugging Face metadata, exact-revision provenance, and release reconciliation for AgentTool and KINGDOM",
+  "license": "Apache-2.0",
+  "artifact": {
+    "format": "npm-tarball",
+    "filename": "agenttool-hf-scout-0.2.0-dev.0.tgz",
+    "sha256": "cab60220a16b518704f114adf7c0f19fb65769532bce8e73bbc457dc1f3ad145",
+    "size": 85694,
+    "media_type": "application/gzip",
+    "mirrors": [
+      {
+        "url": "https://docs.agenttool.dev/packages/v1/@agenttool/hf-scout/0.2.0-dev.0/agenttool-hf-scout-0.2.0-dev.0.tgz"
+      },
+      {
+        "url": "https://github.com/cambridgetcg/agenttool/releases/download/hf-scout-v0.2.0-dev.0/agenttool-hf-scout-0.2.0-dev.0.tgz"
+      }
+    ]
+  },
+  "runtime": {
+    "kind": "javascript",
+    "engines": {
+      "bun": ">=1.3.5",
+      "node": ">=20.19.0"
+    }
+  },
+  "install": {
+    "format": "npm-tarball",
+    "specifier": "https://docs.agenttool.dev/packages/v1/@agenttool/hf-scout/0.2.0-dev.0/agenttool-hf-scout-0.2.0-dev.0.tgz"
+  },
+  "source": {
+    "repository": "https://github.com/cambridgetcg/agenttool.git",
+    "revision": "5aa6c04aa5bfd500c3de2be920e57b4bf0d30906",
+    "path": "packages/hf-scout"
+  },
+  "dependency_resolution": {
+    "mode": "package_manifest",
+    "self_contained": true
+  }
+}

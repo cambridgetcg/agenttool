@@ -1188,7 +1188,12 @@ export function bindHfResearchLead(
   const snapshot = JSON.parse(request.input.text) as HfArtifactSnapshot;
   invariant(snapshot.subject.kind === lead.match.kind, "research_kind_mismatch", "research lead kind does not match the report");
   invariant(snapshot.subject.id === lead.match.id, "research_id_mismatch", "research lead id does not match the report");
-  invariant(snapshot.revision.full_sha === lead.match.revision, "research_revision_mismatch", "research lead revision does not match the report");
+  invariant(
+    snapshot.revision.requested_full_sha === lead.match.revision
+      && snapshot.revision.resolved_full_sha === lead.match.revision,
+    "research_revision_mismatch",
+    "research lead revision does not match the exact report",
+  );
   invariant(snapshot.declared.license === lead.match.declared.license, "research_license_mismatch", "research lead license declaration does not match the report");
   invariant(snapshot.declared.gated === lead.match.declared.gated, "research_gate_mismatch", "research lead gate declaration does not match the report");
   invariant(snapshot.declared.private === false, "research_private_mismatch", "research lead report is not explicitly non-private");
@@ -1227,7 +1232,9 @@ export function bindHfResearchLead(
     observation: {
       transport: snapshot.observation.transport,
       repository_association: snapshot.observation.repository_association,
-      provenance_grade: snapshot.provenance_grade,
+      provenance_grade: snapshot.observation.transport === "public_hub_api"
+        ? "provider_observed_commit_metadata"
+        : "caller_supplied_commit_metadata",
     },
     matched_declared: {
       basis: "publisher_assertion",

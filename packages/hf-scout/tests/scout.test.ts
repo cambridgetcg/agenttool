@@ -33,9 +33,11 @@ function reader(overrides: Partial<HubReader> = {}): HubReader {
           {
             rfilename: "weights.safetensors",
             size: 12,
+            blobId: "d".repeat(40),
             lfs: {
-              oid: `sha256:${"b".repeat(64)}`,
+              sha256: "b".repeat(64),
               size: 12,
+              pointerSize: 132,
             },
           },
           {
@@ -54,12 +56,22 @@ function reader(overrides: Partial<HubReader> = {}): HubReader {
 }
 
 describe("inspectHfRepository", () => {
-  test("projects immutable metadata without claiming local verification", async () => {
+  test("projects an exact matched revision without claiming local verification", async () => {
+    let inspectedRevision: string | undefined;
     const report = await inspectHfRepository(
-      { kind: "model", id: "org/model" },
-      { reader: reader(), observed_at: OBSERVED_AT },
+      { kind: "model", id: "org/model", revision: REVISION },
+      {
+        reader: reader({
+          async inspect(input) {
+            inspectedRevision = input.revision;
+            return await reader().inspect(input);
+          },
+        }),
+        observed_at: OBSERVED_AT,
+      },
     );
 
+    expect(inspectedRevision).toBe(REVISION);
     expect(report.status).toBe("observed");
     expect(report.transport).toEqual({
       kind: "injected",
@@ -69,13 +81,15 @@ describe("inspectHfRepository", () => {
       response_body: "caller_owned",
     });
     expect(report.snapshot.revision).toEqual({
-      full_sha: REVISION,
-      state: "immutable_commit",
+      requested_full_sha: REVISION,
+      resolved_full_sha: REVISION,
+      state: "exact_revision_match",
     });
-    expect(report.snapshot.provenance_grade).toBe("caller_supplied_commit_metadata");
+    expect(report.snapshot.provenance_grade).toBe("caller_supplied_exact_revision_metadata");
     expect(report.snapshot.observation).toEqual({
       transport: "injected",
       repository_association: "caller_owned",
+      reference: "requested_exact_revision",
     });
     expect(report.snapshot.declared).toMatchObject({
       basis: "publisher_assertion",
@@ -91,6 +105,11 @@ describe("inspectHfRepository", () => {
       "config.json",
       "weights.safetensors",
     ]);
+    expect(report.snapshot.files[1]).toMatchObject({
+      sha256: "b".repeat(64),
+      git_blob_sha1: "d".repeat(40),
+      xet_hash: null,
+    });
     expect(report.snapshot.files.every((entry) => entry.verified_locally === false)).toBe(true);
     expect(report.snapshot.boundary_codes).toContain("publisher_metadata_unverified");
     expect(report.snapshot.boundary_codes).toContain("caller_owned_reader");
@@ -122,11 +141,16 @@ describe("inspectHfRepository", () => {
     );
 
     expect(report.status).toBe("partial");
-    expect(report.snapshot.revision).toEqual({ full_sha: null, state: "unresolved" });
+    expect(report.snapshot.revision).toEqual({
+      requested_full_sha: null,
+      resolved_full_sha: null,
+      state: "unresolved",
+    });
     expect(report.snapshot.provenance_grade).toBe("mutable_observation");
     expect(report.snapshot.declared.license).toBeNull();
     expect(report.snapshot.declared.tags).toEqual(["tag-ok"]);
     expect(report.snapshot.file_inventory).toBe("truncated");
+    expect(report.snapshot.boundary_codes).toContain("mutable_head_observation");
     expect(report.diagnostics.map((entry) => entry.code)).toEqual([
       "content_commitments_partial",
       "file_inventory_truncated",
@@ -150,6 +174,51 @@ describe("inspectHfRepository", () => {
         },
       ),
     ).rejects.toMatchObject({ code: "hub_subject_mismatch" });
+  });
+
+  test("fails closed when an exact revision response omits or changes identity", async () => {
+    await expect(
+      inspectHfRepository(
+        { kind: "model", id: "org/model", revision: REVISION },
+        {
+          reader: reader({ async inspect() { return { sha: REVISION }; } }),
+          observed_at: OBSERVED_AT,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "hub_subject_unresolved" });
+
+    await expect(
+      inspectHfRepository(
+        { kind: "model", id: "org/model", revision: REVISION },
+        {
+          reader: reader({
+            async inspect() {
+              return { id: "org/model", sha: "b".repeat(40) };
+            },
+          }),
+          observed_at: OBSERVED_AT,
+        },
+      ),
+    ).rejects.toMatchObject({ code: "hub_revision_mismatch" });
+  });
+
+  test("rejects mutable or uppercase revision selectors before reading", async () => {
+    let calls = 0;
+    const rejectingReader = reader({
+      async inspect() {
+        calls += 1;
+        return {};
+      },
+    });
+    for (const revision of ["main", REVISION.toUpperCase()]) {
+      await expect(
+        inspectHfRepository(
+          { kind: "model", id: "org/model", revision },
+          { reader: rejectingReader, observed_at: OBSERVED_AT },
+        ),
+      ).rejects.toMatchObject({ code: "invalid_revision" });
+    }
+    expect(calls).toBe(0);
   });
 
   test("bounds publisher relationship arrays", async () => {

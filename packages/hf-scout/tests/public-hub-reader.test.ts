@@ -21,7 +21,7 @@ describe("PublicHubReader", () => {
 
     expect(result).toMatchObject({ id: "org/model" });
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe("https://huggingface.co/api/models/org/model");
+    expect(calls[0]?.url).toBe("https://huggingface.co/api/models/org/model?blobs=true");
     expect(calls[0]?.init).toMatchObject({
       method: "GET",
       redirect: "manual",
@@ -31,6 +31,58 @@ describe("PublicHubReader", () => {
     const headers = calls[0]?.init?.headers as Record<string, string>;
     expect(headers.authorization).toBeUndefined();
     expect(headers.cookie).toBeUndefined();
+  });
+
+  test("routes exact model, dataset, and Space revisions with blob metadata", async () => {
+    const revision = "a".repeat(40);
+    const urls: string[] = [];
+    const reader = new PublicHubReader({
+      fetch: async (input) => {
+        urls.push(String(input));
+        return Response.json({ id: "ignored/by-reader", sha: revision });
+      },
+    });
+    await reader.inspect({ kind: "model", id: "org/model", revision });
+    await reader.inspect({ kind: "dataset", id: "org/data", revision });
+    await reader.inspect({ kind: "space", id: "org/app", revision });
+    expect(urls).toEqual([
+      `https://huggingface.co/api/models/org/model/revision/${revision}?blobs=true`,
+      `https://huggingface.co/api/datasets/org/data/revision/${revision}?blobs=true`,
+      `https://huggingface.co/api/spaces/org/app/revision/${revision}?blobs=true`,
+    ]);
+  });
+
+  test("rejects non-exact revisions before transport and sanitizes exact 404s", async () => {
+    let calls = 0;
+    const invalid = new PublicHubReader({
+      fetch: async () => {
+        calls += 1;
+        return Response.json({});
+      },
+    });
+    await expect(
+      invalid.inspect({ kind: "model", id: "org/model", revision: "refs/pr/1" }),
+    ).rejects.toMatchObject({ code: "invalid_revision" });
+    expect(calls).toBe(0);
+
+    const missing = new PublicHubReader({
+      fetch: async () => Response.json(
+        { error: "provider-secret-body" },
+        { status: 404 },
+      ),
+    });
+    const operation = missing.inspect({
+      kind: "model",
+      id: "org/model",
+      revision: "a".repeat(40),
+    });
+    await expect(operation).rejects.toMatchObject({
+      code: "hub_revision_not_found_or_not_associated",
+      message: "Hub revision was not found or is not associated with the requested repository",
+    });
+    await operation.catch((error: unknown) => {
+      expect(String(error)).not.toContain("provider-secret-body");
+    });
   });
 
   test("brands only the default transport as built in", () => {

@@ -107,6 +107,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "heaven",
     artifactKind: "pack",
   },
+  "hf-scout": {
+    key: "hf-scout",
+    name: "@agenttool/hf-scout",
+    packagePath: "packages/hf-scout",
+    tagPrefix: "hf-scout",
+    artifactKind: "love",
+  },
   "living-substrate": {
     key: "living-substrate",
     name: "@agenttool/living-substrate",
@@ -795,6 +802,27 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/kingdom.extension.json",
       "package/schema/agenttool-heaven-invitation-v0.1.schema.json",
       "package/schema/agenttool-heaven-receipt-v0.1.schema.json",
+    );
+  }
+  if (spec.name === "@agenttool/hf-scout") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/cli.js",
+      "package/dist/kingdom-hf.js",
+      "package/dist/facilities.js",
+      "package/dist/facilities.d.ts",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-hf-release-reconciliation-v0.2.schema.json",
+      "package/schema/agenttool-hf-research-binding-v0.1.schema.json",
+      "package/schema/agenttool-hf-research-catalog-v0.1.schema.json",
+      "package/schema/agenttool-hf-scout-report-v0.1.schema.json",
+      "package/schema/agenttool-hf-scout-report-v0.2.schema.json",
+      "package/schema/agenttool-hf-scout-search-v0.1.schema.json",
+      "package/schema/agenttool-hf-scout-search-v0.2.schema.json",
+      "package/schema/kingdom-hf-sidecar-v0.1.schema.json",
+      "package/schema/kingdom-hf-sidecar-v0.2.schema.json",
     );
   }
   if (spec.name === "@agenttool/living-substrate") {

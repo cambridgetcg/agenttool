@@ -16,6 +16,7 @@ on:
           - wake-continuity
           - deepseek-kingdom
           - heaven
+          - hf-scout
           - living-substrate
           - principality-geometry
           - love-bomb

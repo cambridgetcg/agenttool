@@ -55,8 +55,18 @@ export class PublicHubReader implements HubReader {
       );
     }
     const id = normalizeRepoId(input.kind, input.id);
-    const path = `/api/${apiPlural(input.kind)}/${encodeRepoId(id)}`;
-    return await this.#getJson(new URL(path, HF_ORIGIN), input.signal);
+    const revision = input.revision === undefined
+      ? null
+      : normalizeExactRevision(input.revision);
+    const path = `/api/${apiPlural(input.kind)}/${encodeRepoId(id)}`
+      + (revision ? `/revision/${encodeURIComponent(revision)}` : "");
+    const url = new URL(path, HF_ORIGIN);
+    url.searchParams.set("blobs", "true");
+    return await this.#getJson(
+      url,
+      input.signal,
+      revision ? "hub_revision_not_found_or_not_associated" : "hub_not_found",
+    );
   }
 
   async search(input: HubSearchInput): Promise<unknown> {
@@ -79,7 +89,11 @@ export class PublicHubReader implements HubReader {
     return await this.#getJson(url, input.signal);
   }
 
-  async #getJson(url: URL, externalSignal?: AbortSignal): Promise<unknown> {
+  async #getJson(
+    url: URL,
+    externalSignal?: AbortSignal,
+    notFoundCode = "hub_not_found",
+  ): Promise<unknown> {
     invariant(url.origin === HF_ORIGIN, "network_policy", "only the Hugging Face origin is allowed");
     if (externalSignal?.aborted) {
       throw new HfScoutError("operation_cancelled", "Hub read was cancelled");
@@ -122,7 +136,7 @@ export class PublicHubReader implements HubReader {
       if (response.status >= 300 && response.status < 400) {
         throw new HfScoutError("hub_redirect_rejected", "Hub response redirected unexpectedly");
       }
-      if (!response.ok) throw httpStatusError(response.status);
+      if (!response.ok) throw httpStatusError(response.status, notFoundCode);
 
       const mediaType = (response.headers.get("content-type") ?? "")
         .split(";", 1)[0]!
@@ -182,11 +196,27 @@ function encodeRepoId(id: string): string {
   return id.split("/").map((segment) => encodeURIComponent(segment)).join("/");
 }
 
-function httpStatusError(status: number): HfScoutError {
+function normalizeExactRevision(value: string): string {
+  invariant(
+    /^[0-9a-f]{40}$/u.test(value),
+    "invalid_revision",
+    "revision must be a full lowercase commit SHA",
+  );
+  return value;
+}
+
+function httpStatusError(status: number, notFoundCode: string): HfScoutError {
   if (status === 401 || status === 403) {
     return new HfScoutError("hub_restricted", "Hub resource is not publicly accessible");
   }
-  if (status === 404) return new HfScoutError("hub_not_found", "Hub resource was not found");
+  if (status === 404) {
+    return new HfScoutError(
+      notFoundCode,
+      notFoundCode === "hub_revision_not_found_or_not_associated"
+        ? "Hub revision was not found or is not associated with the requested repository"
+        : "Hub resource was not found",
+    );
+  }
   if (status === 429) return new HfScoutError("hub_rate_limited", "Hub read was rate limited");
   return new HfScoutError("hub_http_error", "Hub returned an unsuccessful response");
 }

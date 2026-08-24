@@ -1,7 +1,8 @@
 # @agenttool/hf-scout
 
-Private, local-only Hugging Face discovery/provenance prototype. This package
-owns only `packages/hf-scout`.
+Public developer-preview Hugging Face discovery, exact-revision provenance,
+and release-reconciliation package. This package owns only
+`packages/hf-scout`.
 
 ## Commands
 
@@ -13,12 +14,14 @@ npm pack --dry-run --ignore-scripts
 
 ## Invariants
 
-- Keep `private: true`, no `publishConfig`, no release inventory, workflow,
-  wake, hosted API, deployment, or KINGDOM-OS schema changes.
+- Keep the npm surface ready for a public prerelease under Apache-2.0, while
+  leaving publication, hosted APIs, deployment, and KINGDOM host registration
+  to separately authorized release operations. Preserve the exported v0.1
+  schemas as historical contracts when v0.2 becomes the default.
 - Keep the core at zero runtime dependencies and compatible with Node 20.19+
   and Bun 1.3.5+.
-- The built-in network path is a bounded `GET` that requests credential
-  omission to the fixed
+- Each built-in network operation is a bounded anonymous `GET` that requests
+  credential omission to the fixed
   `https://huggingface.co` origin. No arbitrary base URL, token/header option,
   redirects, retry, download, upload, inference, Space invocation, Job, or
   Sandbox operation. Structural readers cannot claim built-in transport
@@ -36,10 +39,25 @@ npm pack --dry-run --ignore-scripts
 - Research leads are inert metadata. Do not download rows/files, accept gates,
   extract archives, load weights, or execute embedded calls while curating or
   binding them.
-- A full 40-character value is an immutable revision shape, not proof of
-  existence or repository association. Preserve public-provider observation
-  versus caller-owned assertion in durable snapshots. Mutable observations may
-  be inspected but cannot be projected into Agent Data.
+- Exact inspection accepts only a full lowercase 40-hex commit SHA. The public
+  path must percent-encode the complete revision segment, retain
+  `?blobs=true`, and fail closed unless the response `sha` exactly matches the
+  request. A revision 404 means only “not found or not associated with this
+  repository”; do not disclose provider bodies or claim whether it existed.
+- Keep requested revision, resolved revision, and a separate current-head
+  observation distinct. A full SHA returned from an unpinned current-head read
+  remains mutable provenance and cannot be projected into Agent Data.
+- `blobId` is a Git blob commitment; for LFS files `lfs.sha256` is the payload
+  commitment. Never conflate algorithms, and never infer Xet hashes when the
+  repository-info response did not provide one.
+- Release reconciliation performs one exact-revision read and one separate
+  current-head read. It keeps publisher assertions, provider observations,
+  caller source declarations, and caller-reported local verification separate;
+  none establishes license truth, consent, training authority, safety, or
+  compatibility.
+- Dataset Viewer is outside the v0.2 runtime. If later integrated, treat
+  `X-Revision` as a possibly stale cached processing revision: its revision
+  query is ignored and it is not immutable provenance or a universal head.
 - Keep observation time outside canonical artifact snapshot bytes. Bind Agent
   Data identity/version to both revision and exact snapshot SHA-256.
 - The Love Python model-lock tool remains the creator/verifier. This package
@@ -58,7 +76,8 @@ npm pack --dry-run --ignore-scripts
 ## Verification
 
 Tests are hermetic and inject readers/fetch/time/files. Cover fixed endpoints,
-credential-omission requests, redirect/size/deadline/cancellation limits, deterministic
-projection, schema closure, terminal controls, lock digest compatibility,
-CLI exits, Node/Bun import and help, and package contents. Live public dogfood
+exact revision routing and mismatch failure, credential-omission requests,
+redirect/size/deadline/cancellation limits, deterministic reconciliation and
+projection, schema closure, terminal controls, lock digest compatibility, CLI
+exits, Node/Bun import and help, and exact package contents. Live public dogfood
 is a separate point-in-time check and never replaces fixtures.

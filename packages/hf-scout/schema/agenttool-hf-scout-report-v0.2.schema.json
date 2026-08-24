@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:hf-scout:report:v0.2",
+  "title": "AgentTool Hugging Face Scout inspection report v0.2",
+  "$comment": "A resolved SHA observed through current_head remains a mutable-head observation. Runtime validation additionally enforces sorted unique paths and requested/resolved equality.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "tool", "operation", "observed_at", "status", "transport", "snapshot", "diagnostics"],
+  "properties": {
+    "schema": { "const": "agenttool-hf-scout-report/v0.2" },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "@agenttool/hf-scout" },
+        "version": { "const": "0.2.0-dev.0" }
+      }
+    },
+    "operation": { "const": "inspect" },
+    "observed_at": { "type": "string", "format": "date-time", "maxLength": 64 },
+    "status": { "enum": ["observed", "partial"] },
+    "transport": { "$ref": "#/$defs/transport" },
+    "snapshot": { "$ref": "#/$defs/artifact" },
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "$ref": "#/$defs/diagnostic" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "observed" } } },
+      "then": { "properties": { "diagnostics": { "type": "array", "maxItems": 0 } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "partial" } } },
+      "then": { "properties": { "diagnostics": { "type": "array", "minItems": 1 } } }
+    },
+    {
+      "if": { "properties": { "transport": { "type": "object", "properties": { "kind": { "const": "public_hub_api" } } } } },
+      "then": { "properties": { "snapshot": { "type": "object", "properties": { "observation": { "type": "object", "properties": { "transport": { "const": "public_hub_api" } } } } } } }
+    },
+    {
+      "if": { "properties": { "transport": { "type": "object", "properties": { "kind": { "const": "injected" } } } } },
+      "then": { "properties": { "snapshot": { "type": "object", "properties": { "observation": { "type": "object", "properties": { "transport": { "const": "injected" } } } } } } }
+    }
+  ],
+  "$defs": {
+    "sha40": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "repoKind": { "enum": ["model", "dataset", "space", "paper"] },
+    "transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "requested_effect", "credentials", "retries", "response_body"],
+      "properties": {
+        "kind": { "enum": ["public_hub_api", "injected"] },
+        "requested_effect": { "const": "read_only" },
+        "credentials": { "enum": ["omit_requested", "caller_owned"] },
+        "retries": { "enum": [0, "caller_owned"] },
+        "response_body": { "enum": ["bounded", "caller_owned"] }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "public_hub_api" },
+            "credentials": { "const": "omit_requested" },
+            "retries": { "const": 0 },
+            "response_body": { "const": "bounded" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "injected" },
+            "credentials": { "const": "caller_owned" },
+            "retries": { "const": "caller_owned" },
+            "response_body": { "const": "caller_owned" }
+          }
+        }
+      ]
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transport", "repository_association", "reference"],
+      "properties": {
+        "transport": { "enum": ["public_hub_api", "injected"] },
+        "repository_association": { "enum": ["provider_response", "caller_owned"] },
+        "reference": { "enum": ["requested_exact_revision", "current_head"] }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "transport": { "const": "public_hub_api" },
+            "repository_association": { "const": "provider_response" }
+          }
+        },
+        {
+          "properties": {
+            "transport": { "const": "injected" },
+            "repository_association": { "const": "caller_owned" }
+          }
+        }
+      ]
+    },
+    "declared": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["basis", "license", "task", "library", "gated", "private", "tags", "base_models", "papers"],
+      "properties": {
+        "basis": { "const": "publisher_assertion" },
+        "license": { "type": ["string", "null"], "maxLength": 128 },
+        "task": { "type": ["string", "null"], "maxLength": 128 },
+        "library": { "type": ["string", "null"], "maxLength": 128 },
+        "gated": { "oneOf": [{ "type": "boolean" }, { "enum": ["auto", "manual"] }, { "type": "null" }] },
+        "private": { "type": ["boolean", "null"] },
+        "tags": { "$ref": "#/$defs/claimList" },
+        "base_models": { "$ref": "#/$defs/claimList" },
+        "papers": { "$ref": "#/$defs/claimList" }
+      }
+    },
+    "claimList": {
+      "type": "array",
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": { "type": "string", "maxLength": 256 }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size", "sha256", "git_blob_sha1", "xet_hash", "basis", "verified_locally"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$)).+$" },
+        "size": { "type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991 },
+        "sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "git_blob_sha1": { "oneOf": [{ "$ref": "#/$defs/sha40" }, { "type": "null" }] },
+        "xet_hash": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "basis": { "const": "provider_metadata" },
+        "verified_locally": { "const": false }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "level", "message"],
+      "properties": {
+        "code": {
+          "enum": [
+            "content_commitments_partial",
+            "declared_relations_truncated",
+            "file_inventory_truncated",
+            "file_inventory_unavailable",
+            "license_unknown",
+            "revision_unresolved",
+            "search_entries_omitted",
+            "search_metadata_truncated",
+            "search_truncated",
+            "tags_omitted",
+            "tags_truncated"
+          ]
+        },
+        "level": { "const": "warning" },
+        "message": { "type": "string", "maxLength": 256 }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "subject", "revision", "observation", "declared", "file_inventory", "files", "provenance_grade", "boundary_codes"],
+      "properties": {
+        "schema": { "const": "agenttool-hf-artifact/v0.2" },
+        "subject": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "kind", "id"],
+          "properties": {
+            "provider": { "const": "huggingface" },
+            "kind": { "$ref": "#/$defs/repoKind" },
+            "id": { "type": "string", "minLength": 1, "maxLength": 193 }
+          }
+        },
+        "revision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["requested_full_sha", "resolved_full_sha", "state"],
+          "properties": {
+            "requested_full_sha": { "oneOf": [{ "$ref": "#/$defs/sha40" }, { "type": "null" }] },
+            "resolved_full_sha": { "oneOf": [{ "$ref": "#/$defs/sha40" }, { "type": "null" }] },
+            "state": { "enum": ["exact_revision_match", "mutable_head_observation", "unresolved"] }
+          },
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "requested_full_sha": { "$ref": "#/$defs/sha40" },
+                "resolved_full_sha": { "$ref": "#/$defs/sha40" },
+                "state": { "const": "exact_revision_match" }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "requested_full_sha": { "type": "null" },
+                "resolved_full_sha": { "$ref": "#/$defs/sha40" },
+                "state": { "const": "mutable_head_observation" }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "requested_full_sha": { "type": "null" },
+                "resolved_full_sha": { "type": "null" },
+                "state": { "const": "unresolved" }
+              }
+            }
+          ]
+        },
+        "observation": { "$ref": "#/$defs/observation" },
+        "declared": { "$ref": "#/$defs/declared" },
+        "file_inventory": { "enum": ["not_provided", "complete", "truncated"] },
+        "files": { "type": "array", "maxItems": 10000, "uniqueItems": true, "items": { "$ref": "#/$defs/file" } },
+        "provenance_grade": {
+          "enum": [
+            "provider_observed_exact_revision_metadata",
+            "provider_observed_mutable_head_metadata",
+            "caller_supplied_exact_revision_metadata",
+            "caller_supplied_mutable_head_metadata",
+            "mutable_observation"
+          ]
+        },
+        "boundary_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 32,
+          "items": {
+            "enum": [
+              "caller_owned_reader",
+              "file_inventory_incomplete",
+              "license_unknown",
+              "mutable_head_observation",
+              "publisher_metadata_unverified",
+              "revision_unresolved",
+              "scout_files_not_downloaded",
+              "scout_model_code_not_executed"
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "file_inventory": { "const": "not_provided" } } },
+          "then": { "properties": { "files": { "type": "array", "maxItems": 0 } } }
+        },
+        {
+          "if": { "properties": { "revision": { "type": "object", "properties": { "state": { "const": "exact_revision_match" } } } } },
+          "then": { "properties": { "observation": { "type": "object", "properties": { "reference": { "const": "requested_exact_revision" } } } } }
+        },
+        {
+          "if": { "properties": { "revision": { "type": "object", "properties": { "state": { "enum": ["mutable_head_observation", "unresolved"] } } } } },
+          "then": { "properties": { "observation": { "type": "object", "properties": { "reference": { "const": "current_head" } } } } }
+        }
+      ],
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "revision": { "type": "object", "properties": { "state": { "const": "exact_revision_match" } } },
+            "observation": { "type": "object", "properties": { "transport": { "const": "public_hub_api" } } },
+            "provenance_grade": { "const": "provider_observed_exact_revision_metadata" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "revision": { "type": "object", "properties": { "state": { "const": "exact_revision_match" } } },
+            "observation": { "type": "object", "properties": { "transport": { "const": "injected" } } },
+            "provenance_grade": { "const": "caller_supplied_exact_revision_metadata" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "revision": { "type": "object", "properties": { "state": { "const": "mutable_head_observation" } } },
+            "observation": { "type": "object", "properties": { "transport": { "const": "public_hub_api" } } },
+            "provenance_grade": { "const": "provider_observed_mutable_head_metadata" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "revision": { "type": "object", "properties": { "state": { "const": "mutable_head_observation" } } },
+            "observation": { "type": "object", "properties": { "transport": { "const": "injected" } } },
+            "provenance_grade": { "const": "caller_supplied_mutable_head_metadata" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "revision": { "type": "object", "properties": { "state": { "const": "unresolved" } } },
+            "provenance_grade": { "const": "mutable_observation" }
+          }
+        }
+      ]
+    }
+  }
+}

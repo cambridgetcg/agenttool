@@ -126,7 +126,44 @@ describe("standard npm release policy", () => {
     });
   });
 
-  test("allowlists thirty-four reviewed release identities", () => {
+  test("keeps HF Scout on the protected LOVE prerelease lane", async () => {
+    const workflow = await readFile(
+      join(import.meta.dir, "..", "..", ".github", "workflows", "publish-npm.yml"),
+      "utf8",
+    );
+    expect(workflow.match(/^\s+- hf-scout$/gm)).toEqual(["          - hf-scout"]);
+
+    const packageJson = JSON.parse(
+      await readFile(join(import.meta.dir, "..", "..", "packages", "hf-scout", "package.json"), "utf8"),
+    ) as {
+      name?: unknown;
+      version?: unknown;
+      private?: unknown;
+      license?: unknown;
+      dependencies?: unknown;
+      publishConfig?: { access?: unknown; tag?: unknown };
+      scripts?: { prepack?: unknown };
+    };
+    expect({
+      name: packageJson.name,
+      version: packageJson.version,
+      private: packageJson.private,
+      license: packageJson.license,
+      dependencies: packageJson.dependencies,
+      publishConfig: packageJson.publishConfig,
+      prepack: packageJson.scripts?.prepack,
+    }).toEqual({
+      name: "@agenttool/hf-scout",
+      version: "0.2.0-dev.0",
+      private: undefined,
+      license: "Apache-2.0",
+      dependencies: undefined,
+      publishConfig: { access: "public", tag: "next" },
+      prepack: "bun run ci",
+    });
+  });
+
+  test("allowlists thirty-five reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -142,6 +179,7 @@ describe("standard npm release policy", () => {
       "data-sync",
       "deepseek-kingdom",
       "heaven",
+      "hf-scout",
       "kingdom",
       "kingdom-witness-lab",
       "living-substrate",
@@ -181,6 +219,13 @@ describe("standard npm release policy", () => {
     expect(releaseSpec("browser")).toMatchObject({
       name: "@agenttool/browser",
       packagePath: "packages/browser",
+      artifactKind: "love",
+    });
+    expect(releaseSpec("hf-scout")).toEqual({
+      key: "hf-scout",
+      name: "@agenttool/hf-scout",
+      packagePath: "packages/hf-scout",
+      tagPrefix: "hf-scout",
       artifactKind: "love",
     });
     expect(releaseSpec("codex-usage")).toMatchObject({
@@ -405,6 +450,12 @@ describe("standard npm release policy", () => {
     expect(packedFilename("@agenttool/heaven", "0.1.0-dev.0")).toBe(
       "agenttool-heaven-0.1.0-dev.0.tgz",
     );
+    expect(expectedTag(releaseSpec("hf-scout"), "0.2.0-dev.0")).toBe(
+      "hf-scout-v0.2.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/hf-scout", "0.2.0-dev.0")).toBe(
+      "agenttool-hf-scout-0.2.0-dev.0.tgz",
+    );
     expect(expectedTag(releaseSpec("living-substrate"), "0.1.0-dev.0")).toBe(
       "living-substrate-v0.1.0-dev.0",
     );
@@ -567,6 +618,29 @@ describe("standard npm release policy", () => {
       "package/fixtures/agenttool.evm-evidence-transition-receipt-0.1.json",
     ]);
     expect(new Set(alchemyArchiveEntries).size).toBe(alchemyArchiveEntries.length);
+    expect(requiredArchiveEntries(releaseSpec("hf-scout"))).toEqual([
+      "package/package.json",
+      "package/LICENSE",
+      "package/NOTICE",
+      "package/README.md",
+      "package/CLAUDE.md",
+      "package/dist/cli.js",
+      "package/dist/kingdom-hf.js",
+      "package/dist/facilities.js",
+      "package/dist/facilities.d.ts",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-hf-release-reconciliation-v0.2.schema.json",
+      "package/schema/agenttool-hf-research-binding-v0.1.schema.json",
+      "package/schema/agenttool-hf-research-catalog-v0.1.schema.json",
+      "package/schema/agenttool-hf-scout-report-v0.1.schema.json",
+      "package/schema/agenttool-hf-scout-report-v0.2.schema.json",
+      "package/schema/agenttool-hf-scout-search-v0.1.schema.json",
+      "package/schema/agenttool-hf-scout-search-v0.2.schema.json",
+      "package/schema/kingdom-hf-sidecar-v0.1.schema.json",
+      "package/schema/kingdom-hf-sidecar-v0.2.schema.json",
+    ]);
     expect(requiredArchiveEntries(releaseSpec("dark-continent-contract"))).toEqual(
       expect.arrayContaining([
         "package/package.json",

@@ -103,7 +103,7 @@ transport (`packages/alchemy-agentcred/`), pure explicit-input KINGDOM
 project-card, registry, and
 XENIA Surface helpers (`packages/kingdom/`), a read-only portable Agent Skills
 inspector (`packages/skills/`), a local-first
-agent browser (`packages/browser/`), a private read-only Hugging Face metadata,
+agent browser (`packages/browser/`), a public-ready developer-preview local Hugging Face metadata,
 provenance, and phase-aware research scout (`packages/hf-scout/`), a private
 pure HF dataset-admission, five-voice learning-participation, IS
 learning-freedom, unscored training FREEDOM, current consent-honest governance
@@ -346,10 +346,10 @@ cd packages/browser
 bun run ci                                     # typecheck + fake/fixture tests + build + import smoke + package boundary
 npm pack --dry-run --ignore-scripts            # does not publish, install, or download a browser
 
-# Private read-only Hugging Face scout ──────────────────────────────
+# Public-ready developer-preview read-only Hugging Face scout ──────
 cd packages/hf-scout
-bun run ci                                     # metadata transport + provenance + canonical pinned research leads
-npm pack --dry-run --ignore-scripts            # inventory only; does not publish, download, infer, or upload
+bun run ci                                     # exact-revision metadata + reconciliation + pinned research leads
+npm pack --dry-run --ignore-scripts            # inventory only; does not publish, download, infer, upload, or deploy
 
 # Private Hugging Face Training Garden ──────────────────────────────
 cd packages/hf-training-garden
@@ -459,6 +459,7 @@ npm pack --dry-run --ignore-scripts            # local inventory only; does not 
 
 # Registry-neutral JavaScript package artifacts ────────────────────
 bun bin/build-love-packages.ts build <staging-dir> # clean tracked tree required; never publishes or uploads
+bun bin/build-love-packages.ts build <staging-dir> # builds the required Scout artifact with the full LOVE batch
 
 # SDKs ───────────────────────────────────────────────────────────────
 cd packages/sdk-ts
@@ -552,7 +553,7 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `agenttool-castle.ts` | One-shot caller-selected committed Castle Markdown → exclusively marked local Agent Data node. Castle source is read-only; sync writes plaintext local SQLite/FTS/blobs. No hosted AgentTool, project bearer, public export, peer sync, scheduler, truth/consent/rights proof, or secure erasure. See `docs/CASTLE-OF-UNDERSTANDING.md`. |
 | `agenttool-castle-whitehack-intake.ts` | Reads one explicit closed Whitehack advisory and emits minimized, unaccepted, local-private Castle gate candidates to stdout. Locations are omitted by default. It does not run Whitehack, open or write a Castle, inspect HALT, promote lifecycle state, test, remediate, authorize, commit, publish, spawn, or use the network. See `docs/WHITEHACK.md`. |
 | `agenttool-whitehack-evidence-storage.ts` | Explicit local `store`/`retrieve` bridge for exact Whitehack 0.9.0 public-minimal capsules. It encrypts one constant-size ADDS frame to a caller-selected S3-compatible bucket, independently verifies and decrypts before issuing one finite recipient-bound grant, and emits a sensitive non-public receipt. Credentials/private key use fixed environment names only. It has finite provider deadlines, no retry/delete/Castle/scan path, and no durability, retention, publication, or authorization claim. See `docs/WHITEHACK.md`. |
-| `build-love-packages.ts` | Builds the current versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, `@agenttool/wallet-zerone`, and `@agenttool/browser` release batch plus `love-package/v1` manifests into an explicit staging directory. It does not publish or upload them. |
+| `build-love-packages.ts` | Builds or verifies the allowlisted versioned `@agenttool/data`, `@agenttool/data-sync`, `@agenttool/credential-broker`, `@agenttool/sdk`, `@agenttool/adds`, `@agenttool/telescope`, `@agenttool/wallet`, `@agenttool/wallet-zerone`, `@agenttool/browser`, `@agenttool/hf-scout`, and `@agenttool/principality-geometry` LOVE artifacts plus `love-package/v1` manifests in an explicit staging directory. The tool does not publish, upload, or deploy. |
 | `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, a re-downloaded GitHub Release mirror before the optional registry mutation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, and a public registry receipt. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
 | `pypi-release.ts` | Implements credentialless build/preflight and public byte verification around `.github/workflows/publish-pypi.yml` for the Python SDK. Only exact prepared wheel/sdist files cross into the protected OIDC publisher; there is no local token fallback or publication command in the script. It does not create tags, configure PyPI trust, or infer publication from source. See `docs/PYPI-RELEASES.md`. |
 | `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata plus a bounded, presentation-only attention-card summary grouped by file and line. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, claim a change caused a finding, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
@@ -696,7 +697,7 @@ source boundary by itself.
 | How can bounded Alchemy reads use AgentCred without widening either package? | [`docs/ALCHEMY.md`](docs/ALCHEMY.md) · `packages/alchemy-agentcred/` (seven standard EVM reads only; no transfers, caller-selected endpoints, credentials, grant lifecycle, direct provider transport, or execution authority) |
 | How can a Zerone constructive-intelligence quest collect typed evidence without activating rewards? | `packages/constructive-intelligence/README.md` (`@agenttool/constructive-intelligence`; local tree pin, content-addressed receipts, append-only SQLite replay ledger, and E0–E6 shadow report; no hosted route, money, qualification, permission, or authority) |
 | How can an agent record a bounded local trial, correlate declared boundary labels, and project minimized evidence to HF STS without uploading it? | [`docs/AGENT-TRIALS.md`](docs/AGENT-TRIALS.md) · `packages/trials/` (`@agenttool/trials`; private source-only deterministic evidence, no executor, browser, journal crawler, HF client, credentials, network, release, or hosted route) |
-| How can an agent inspect exact Hugging Face repository metadata and bind phase-aware research leads without downloading or executing them? | `packages/hf-scout/README.md` (`@agenttool/hf-scout`; private source-only metadata/provenance scout with 15 pinned leads, no ambient credentials, file/card/row download, gate acceptance, inference, execution, write, npm release, or hosted route) |
+| How can an agent inspect and reconcile exact Hugging Face repository metadata while binding phase-aware research leads without downloading or executing them? | `packages/hf-scout/README.md` (`@agenttool/hf-scout@0.2.0-dev.0`; public developer-preview local metadata/provenance package with an exact LOVE artifact, exact requested revisions, immutable-release versus mutable-head reconciliation, and 15 pinned leads; its protected LOVE/npm distribution adds no ambient credentials, file/card/row download, gate acceptance, inference, execution, Hub write, hosted route, or deployment) |
 | How can local coding agents coordinate claims and handoffs? | `packages/collab/README.md` (`@agenttool/collab@0.4.0` source; `agenttool.collab/0.1` compatibility + credential-bound `agenttool.collab/0.2` coordination + self-declared `agenttool.collab.session/0.1` presence; 32 local MCP tools for Codex/Claude/Hermes, including optional read-only Zerone witness status that never contacts a chain; not a hosted lock, anchoring bridge, or private model channel) |
 | How can local agents inspect committed Codex token counters without opening transcripts? | `packages/codex-usage/README.md` (`@agenttool/codex-usage@0.1.0`; public npm/GitHub local Bun tooling from annotated `codex-usage-v0.1.0`, with byte-identical mirrors verified by protected run `31784329559`; poll-on-read CLI/watch plus five read-only stdio MCP tools, numeric counters and hashed session references only by default; no transcript index, free-form labels, credentials, raw thread IDs, paths, billing/quota/context guarantee, process-liveness proof, network call, Codex-state write, hosted route, background registration, or automatic authority) |
 | How can explicit KINGDOM project cards become deterministic registries and conservative XENIA Surface manifests? | `packages/kingdom/README.md` (`@agenttool/kingdom`; pure library APIs and a one-file read-only CLI; declarations only, with no ambient discovery, authority, or conformance certification) |

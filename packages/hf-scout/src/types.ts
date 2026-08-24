@@ -1,4 +1,6 @@
 import type {
+  ARTIFACT_SCHEMA,
+  RECONCILIATION_SCHEMA,
   REPORT_SCHEMA,
   RESEARCH_BINDING_SCHEMA,
   RESEARCH_CATALOG_SCHEMA,
@@ -16,6 +18,7 @@ export type HfBoundaryCode =
   | "caller_owned_reader"
   | "file_inventory_incomplete"
   | "license_unknown"
+  | "mutable_head_observation"
   | "publisher_metadata_unverified"
   | "revision_unresolved"
   | "scout_files_not_downloaded"
@@ -45,6 +48,7 @@ export interface HfScoutLimits {
 export interface HubInspectInput {
   kind: HfRepoKind;
   id: string;
+  revision?: string;
   signal?: AbortSignal;
 }
 
@@ -89,26 +93,30 @@ export interface HfFileCommitment {
 }
 
 export interface HfArtifactSnapshot {
-  schema: "agenttool-hf-artifact/v0.1";
+  schema: typeof ARTIFACT_SCHEMA;
   subject: {
     provider: "huggingface";
     kind: HfRepoKind;
     id: string;
   };
   revision: {
-    full_sha: string | null;
-    state: "immutable_commit" | "unresolved";
+    requested_full_sha: string | null;
+    resolved_full_sha: string | null;
+    state: "exact_revision_match" | "mutable_head_observation" | "unresolved";
   };
   observation: {
     transport: HubReaderTransport;
     repository_association: "provider_response" | "caller_owned";
+    reference: "requested_exact_revision" | "current_head";
   };
   declared: HfDeclaredMetadata;
   file_inventory: "not_provided" | "complete" | "truncated";
   files: HfFileCommitment[];
   provenance_grade:
-    | "provider_observed_commit_metadata"
-    | "caller_supplied_commit_metadata"
+    | "provider_observed_exact_revision_metadata"
+    | "provider_observed_mutable_head_metadata"
+    | "caller_supplied_exact_revision_metadata"
+    | "caller_supplied_mutable_head_metadata"
     | "mutable_observation";
   boundary_codes: HfBoundaryCode[];
 }
@@ -182,12 +190,14 @@ export interface LoveModelLockProjection {
 }
 
 export interface KingdomHfArtifactReference {
-  schema: "kingdom-hf-artifact-reference/v0.1";
+  schema: "kingdom-hf-artifact-reference/v0.2";
   subject: {
     kind: HfRepoKind;
     id: string;
   };
-  revision: string | null;
+  requested_revision: string | null;
+  resolved_revision: string | null;
+  revision_state: HfArtifactSnapshot["revision"]["state"];
   snapshot_sha256: string;
   observation: HfArtifactSnapshot["observation"];
   provenance_grade: HfArtifactSnapshot["provenance_grade"];
@@ -201,7 +211,7 @@ export interface KingdomHfSidecar {
   extension: {
     package: typeof TOOL_NAME;
     version: typeof TOOL_VERSION;
-    status: "private_local_prototype";
+    status: "developer_preview";
   };
   artifacts: KingdomHfArtifactReference[];
   model_locks: LoveModelLockProjection[];
@@ -227,7 +237,7 @@ export interface AgentDataTextCollectRequest {
     version: string;
     observed_at: string;
     metadata: {
-      schema: "agenttool-hf-artifact/v0.1";
+      schema: typeof ARTIFACT_SCHEMA;
       provider: "huggingface";
       repo_kind: HfRepoKind;
       repo_id: string;
@@ -237,6 +247,111 @@ export interface AgentDataTextCollectRequest {
       repository_association: "provider_response" | "caller_owned";
       taint: "remote_untrusted";
     };
+  };
+}
+
+export interface HfReleaseSourceDeclaration {
+  basis: "caller_declaration";
+  source_revision: string | null;
+  source_manifest_sha256: string | null;
+}
+
+export interface HfLocalVerificationReport {
+  basis: "caller_supplied_local_verification";
+  release_revision: string;
+  file_manifest_sha256: string;
+  verified_file_count: number;
+  verified_total_bytes: number;
+}
+
+export type HfManifestComparison =
+  | "matches_provider_observation"
+  | "differs_from_provider_observation"
+  | "not_comparable";
+
+export interface HfReleaseReconciliationReport {
+  schema: typeof RECONCILIATION_SCHEMA;
+  tool: {
+    name: typeof TOOL_NAME;
+    version: typeof TOOL_VERSION;
+  };
+  operation: "reconcile_release";
+  observed_at: string;
+  subject: {
+    provider: "huggingface";
+    kind: PublicHubRepoKind;
+    id: string;
+  };
+  release: {
+    requested_revision: string;
+    resolved_revision: string;
+    state: "exact_requested_revision_observed";
+    observation: HfArtifactSnapshot["observation"];
+    snapshot_sha256: string;
+    file_inventory: HfArtifactSnapshot["file_inventory"];
+    observed_file_manifest_sha256: string | null;
+    observed_file_count: number;
+    observed_total_bytes: number | null;
+  };
+  observed_head: {
+    requested_reference: "current_head";
+    resolved_revision: string | null;
+    state: "matches_release" | "differs_from_release" | "unresolved";
+    observation: HfArtifactSnapshot["observation"];
+    snapshot_sha256: string;
+  };
+  publisher_claims: {
+    basis: "publisher_assertion";
+    release: HfDeclaredMetadata;
+    observed_head: HfDeclaredMetadata;
+  };
+  source_declaration:
+    | {
+        state: "not_provided";
+        basis: null;
+        source_revision: null;
+        source_manifest_sha256: null;
+        manifest_comparison: "not_comparable";
+      }
+    | {
+        state: "caller_supplied";
+        basis: "caller_declaration";
+        source_revision: string | null;
+        source_manifest_sha256: string | null;
+        manifest_comparison: HfManifestComparison;
+      };
+  local_verification:
+    | {
+        state: "not_provided";
+        basis: null;
+        release_revision: null;
+        file_manifest_sha256: null;
+        verified_file_count: null;
+        verified_total_bytes: null;
+        manifest_comparison: "not_comparable";
+      }
+    | {
+        state: "caller_reported";
+        basis: "caller_supplied_local_verification";
+        release_revision: string;
+        file_manifest_sha256: string;
+        verified_file_count: number;
+        verified_total_bytes: number;
+        manifest_comparison: HfManifestComparison;
+      };
+  boundary: {
+    publisher_claims: "unverified";
+    source_declaration: "caller_supplied_or_absent";
+    local_verification: "caller_reported_or_absent";
+    license_truth: "not_established";
+    consent: "not_established";
+    training_authority: "not_established";
+    safety: "not_established";
+    compatibility: "not_established";
+    hub_files_downloaded: false;
+    model_code_executed: false;
+    remote_compute_invoked: false;
+    hub_write_performed: false;
   };
 }
 
@@ -430,7 +545,9 @@ export interface HfResearchBinding {
   observation: {
     transport: HubReaderTransport;
     repository_association: "provider_response" | "caller_owned";
-    provenance_grade: HfArtifactSnapshot["provenance_grade"];
+    provenance_grade:
+      | "provider_observed_commit_metadata"
+      | "caller_supplied_commit_metadata";
   };
   matched_declared: {
     basis: "publisher_assertion";

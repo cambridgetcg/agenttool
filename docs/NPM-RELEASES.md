@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, and Principality Geometry. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, Math Cards, Model Becoming, LOVE BOMB, the KINGDOM integration package, the local Codex Usage reader, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Memetic Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, Principality Geometry, and the local Hugging Face Scout. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, Math Cards, Model Becoming, LOVE BOMB, the KINGDOM integration package, the local Codex Usage reader, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Memetic Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -32,6 +32,7 @@ different artifact and Hub surfaces:
 | `@agenttool/model-becoming` | one credential-free `npm pack` tarball containing the pure zero-dependency dossier runtime, schemas, pinned Moonshot reference, and exact Hub projection | reference-only, non-training dataset `Yu-and-Ai/agenttool-model-becoming`; publication and immutable readback remain separate |
 | `@agenttool/love-bomb` | one credential-free `npm pack` tarball containing four pure care/choice/becoming/delivery formats, closed schemas, and the deterministic Hub candidate | static authored guide/reference rows in intended dataset `Yu-and-Ai/agenttool-love-bomb`; publication remains separate and does not authorize training |
 | `@agenttool/wake-continuity` | one credential-free zero-I/O developer-preview tarball containing deterministic functional-access record validation and AFTERGLOW digest references | none; npm/GitHub publication performs no model measurement, awareness test, continuity proof, or hosted deployment |
+| `@agenttool/hf-scout` | one exact checked-in LOVE tarball reused by the docs mirror, GitHub Release, and optional npm `next` mirror | none; the package is a local read-only Hub metadata client, not a Hub dataset, Space, model, hosted proxy, or deployment |
 
 Distribution does not translate semantics between them. A Love bearing does
 not become a Relational witness, and a Relational cell does not become a
@@ -82,6 +83,47 @@ not every registry fallback: npm can expose the sole version of a brand-new
 package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
+
+## HF Scout developer-preview release boundary
+
+`@agenttool/hf-scout@0.2.0-dev.0` uses the checked-in LOVE-artifact lane so the
+static docs mirror, one-asset GitHub Release, and optional npm mirror reuse one
+reviewed tarball. Before tagging, build it from a clean reviewed commit, commit
+its generated LOVE manifest/archive/index, rerun the complete
+LOVE verifier, and require `bun bin/npm-release.ts resolve --package hf-scout`
+to select the same version, tag, source path, and artifact. Absence of those
+checked-in bytes is a release blocker, not permission to fall back to an
+independent `npm pack` artifact.
+
+The first npm publication must use the protected bootstrap path and the
+prerelease-only `next` tag. Later versions use the exact trusted publisher
+configured for this repository and workflow.
+
+```bash
+bun bin/build-love-packages.ts build apps/docs
+bun bin/build-love-packages.ts verify apps/docs
+bun bin/npm-release.ts resolve --package hf-scout
+
+git tag -a hf-scout-v0.2.0-dev.0 <github-main-commit> \
+  -m '@agenttool/hf-scout@0.2.0-dev.0'
+git push github refs/tags/hf-scout-v0.2.0-dev.0
+
+gh workflow run publish-npm.yml \
+  --ref hf-scout-v0.2.0-dev.0 \
+  -f package=hf-scout \
+  -f tag=hf-scout-v0.2.0-dev.0 \
+  -f authentication=bootstrap \
+  -f npm_tag=next
+```
+
+The package remains local, fixed-origin, credential-omitting, GET-only metadata
+tooling. LOVE, GitHub, and npm distribute bytes; they do not deploy a hosted
+Scout, register its declaration-only KINGDOM descriptor, supply Hugging Face
+credentials, accept gates, read raw cards/rows/files, download artifacts, run
+models, invoke inference/Jobs/Spaces/MCP, train, write to the Hub, or establish
+licence truth, consent, training authority, safety, compatibility, identity, or
+ownership. Any future authenticated or effectful adapter requires a separate
+release and authority review.
 
 ## Model Becoming developer-preview publication boundary
 

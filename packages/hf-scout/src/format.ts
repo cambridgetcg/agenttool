@@ -3,6 +3,7 @@ import type {
 } from "./facilities.js";
 import type {
   HfScoutReport,
+  HfReleaseReconciliationReport,
   HfSearchReport,
   LoveModelLockProjection,
 } from "./types.js";
@@ -10,11 +11,14 @@ import { escapeTerminalText } from "./terminal.js";
 
 export function formatScoutReport(report: HfScoutReport): string {
   const snapshot = report.snapshot;
-  const revision = snapshot.revision.full_sha ?? "unresolved";
+  const revision = snapshot.revision.resolved_full_sha ?? "unresolved";
+  const requested = snapshot.revision.requested_full_sha ?? "current head";
   const license = snapshot.declared.license ?? "unknown";
   return [
     `${escapeTerminalText(snapshot.subject.kind)} ${escapeTerminalText(snapshot.subject.id)}`,
-    `  revision: ${escapeTerminalText(revision)}`,
+    `  requested: ${escapeTerminalText(requested)}`,
+    `  resolved revision: ${escapeTerminalText(revision)}`,
+    `  revision state: ${snapshot.revision.state}`,
     `  provenance: ${snapshot.provenance_grade}`,
     `  license (declared): ${escapeTerminalText(license)}`,
     `  files observed: ${snapshot.files.length} (${snapshot.file_inventory})`,
@@ -22,6 +26,21 @@ export function formatScoutReport(report: HfScoutReport): string {
     ...report.diagnostics.map(
       (entry) => `  warning: ${escapeTerminalText(entry.code)} — ${escapeTerminalText(entry.message)}`,
     ),
+  ].join("\n");
+}
+
+export function formatReleaseReconciliation(
+  report: HfReleaseReconciliationReport,
+): string {
+  return [
+    `${escapeTerminalText(report.subject.kind)} ${escapeTerminalText(report.subject.id)}`,
+    `  release revision: ${report.release.resolved_revision}`,
+    `  observed head: ${report.observed_head.resolved_revision ?? "unresolved"}`,
+    `  reconciliation: ${report.observed_head.state}`,
+    `  release files observed: ${report.release.observed_file_count} (${report.release.file_inventory})`,
+    `  source declaration: ${report.source_declaration.state}`,
+    `  local verification: ${report.local_verification.state}`,
+    "  authority: license, consent, training, safety, and compatibility not established",
   ].join("\n");
 }
 

@@ -5,6 +5,7 @@ import { HfScoutError, invariant } from "./errors.js";
 import {
   formatFacilities,
   formatModelLockProjection,
+  formatReleaseReconciliation,
   formatScoutReport,
   formatSearchReport,
 } from "./format.js";
@@ -17,9 +18,23 @@ import {
   getCuratedHfResearchCatalog,
   selectHfResearchLeads,
 } from "./research-leads.js";
-import { inspectHfRepository, searchHfRepositories } from "./scout.js";
-import type { HfRepoKind, HfResearchPhase, HubReader } from "./types.js";
-import { assertRepoKind, normalizeObservedAt } from "./validation.js";
+import {
+  inspectHfRepository,
+  reconcileHfRelease,
+  searchHfRepositories,
+} from "./scout.js";
+import type {
+  HfRepoKind,
+  HfResearchPhase,
+  HubReader,
+  PublicHubRepoKind,
+} from "./types.js";
+import {
+  assertRepoKind,
+  normalizeFullSha,
+  normalizeObservedAt,
+  normalizeSha256,
+} from "./validation.js";
 import { escapeTerminalText } from "./terminal.js";
 
 const MAX_LOCK_BYTES = 4_194_304;
@@ -68,16 +83,20 @@ export async function runHfScoutCli(
       const flags = parseFlags(
         argv.slice(1),
         new Set(["json", "sidecar", "agent-data"]),
-        new Set(["observed-at"]),
+        new Set(["observed-at", "revision"]),
       );
       invariant(flags.positionals.length === 2, "invalid_cli", "inspect requires KIND and REPO_ID");
       const kind = parseKind(flags.positionals[0]!);
       const id = flags.positionals[1]!;
+      const revisionText = flags.values.get("revision");
+      const revision = revisionText === undefined
+        ? undefined
+        : parseFullRevision(revisionText);
       const observedAt = resolveCliTime(flags.values.get("observed-at"), dependencies.clock);
       const outputModes = ["json", "sidecar", "agent-data"].filter((name) => flags.boolean.has(name));
       invariant(outputModes.length <= 1, "invalid_cli", "choose only one inspect output mode");
       const report = await inspectHfRepository(
-        { kind, id },
+        { kind, id, ...(revision ? { revision } : {}) },
         {
           reader: dependencies.reader ?? createPublicHubReader(),
           observed_at: observedAt,
@@ -94,6 +113,90 @@ export async function runHfScoutCli(
         output = formatScoutReport(report);
       }
       stdout(`${output}\n`);
+      return 0;
+    }
+    if (command === "reconcile") {
+      const flags = parseFlags(
+        argv.slice(1),
+        new Set(["json"]),
+        new Set([
+          "observed-at",
+          "source-revision",
+          "source-manifest-sha256",
+          "local-manifest-sha256",
+          "local-file-count",
+          "local-total-bytes",
+        ]),
+      );
+      invariant(
+        flags.positionals.length === 3,
+        "invalid_cli",
+        "reconcile requires KIND, REPO_ID, and RELEASE_REVISION",
+      );
+      const kind = parsePublicKind(flags.positionals[0]!, "reconcile");
+      const id = flags.positionals[1]!;
+      const releaseRevision = parseFullRevision(flags.positionals[2]!);
+      const observedAt = resolveCliTime(flags.values.get("observed-at"), dependencies.clock);
+
+      const sourceRevisionText = flags.values.get("source-revision");
+      const sourceManifestText = flags.values.get("source-manifest-sha256");
+      const sourceDeclaration = sourceRevisionText === undefined
+          && sourceManifestText === undefined
+        ? undefined
+        : {
+            basis: "caller_declaration" as const,
+            source_revision: sourceRevisionText === undefined
+              ? null
+              : parseFullRevision(sourceRevisionText),
+            source_manifest_sha256: sourceManifestText === undefined
+              ? null
+              : parseSha256(sourceManifestText, "source manifest SHA-256"),
+          };
+
+      const localManifestText = flags.values.get("local-manifest-sha256");
+      const localFileCountText = flags.values.get("local-file-count");
+      const localTotalBytesText = flags.values.get("local-total-bytes");
+      const localCount = [localManifestText, localFileCountText, localTotalBytesText]
+        .filter((value) => value !== undefined).length;
+      invariant(
+        localCount === 0 || localCount === 3,
+        "invalid_cli",
+        "local verification requires manifest SHA-256, file count, and total bytes together",
+      );
+      const localVerification = localCount === 0
+        ? undefined
+        : {
+            basis: "caller_supplied_local_verification" as const,
+            release_revision: releaseRevision,
+            file_manifest_sha256: parseSha256(
+              localManifestText!,
+              "local manifest SHA-256",
+            ),
+            verified_file_count: parseNonnegativeInteger(
+              localFileCountText!,
+              "local file count",
+            ),
+            verified_total_bytes: parseNonnegativeInteger(
+              localTotalBytesText!,
+              "local total bytes",
+            ),
+          };
+      const report = await reconcileHfRelease(
+        {
+          kind,
+          id,
+          release_revision: releaseRevision,
+          ...(sourceDeclaration ? { source_declaration: sourceDeclaration } : {}),
+          ...(localVerification ? { local_verification: localVerification } : {}),
+        },
+        {
+          reader: dependencies.reader ?? createPublicHubReader(),
+          observed_at: observedAt,
+        },
+      );
+      stdout(`${flags.boolean.has("json")
+        ? safeJson(report)
+        : formatReleaseReconciliation(report)}\n`);
       return 0;
     }
     if (command === "search") {
@@ -198,6 +301,16 @@ function parseKind(value: string): HfRepoKind {
   return value;
 }
 
+function parsePublicKind(value: string, operation: string): PublicHubRepoKind {
+  const kind = parseKind(value);
+  invariant(
+    kind !== "paper",
+    "invalid_cli",
+    `${operation} supports model, dataset, or space`,
+  );
+  return kind;
+}
+
 function parseResearchPhase(value: string): HfResearchPhase {
   const phase = selectHfResearchLeads()
     .find((lead) => lead.research.phase === value)?.research.phase;
@@ -210,6 +323,25 @@ function parsePositiveInteger(value: string, label: string): number {
   const parsed = Number(value);
   invariant(Number.isSafeInteger(parsed), "invalid_cli", `${label} must be a positive integer`);
   return parsed;
+}
+
+function parseNonnegativeInteger(value: string, label: string): number {
+  invariant(/^\d+$/u.test(value), "invalid_cli", `${label} must be a nonnegative integer`);
+  const parsed = Number(value);
+  invariant(Number.isSafeInteger(parsed), "invalid_cli", `${label} must be a nonnegative integer`);
+  return parsed;
+}
+
+function parseFullRevision(value: string): string {
+  const revision = normalizeFullSha(value);
+  invariant(revision, "invalid_cli", "revision must be a full lowercase commit SHA");
+  return revision;
+}
+
+function parseSha256(value: string, label: string): string {
+  const digest = normalizeSha256(value);
+  invariant(digest, "invalid_cli", `${label} must be a lowercase SHA-256 digest`);
+  return digest;
 }
 
 function resolveCliTime(value: string | undefined, clock?: () => Date): string {
@@ -239,17 +371,21 @@ async function readBoundedTextFile(path: string): Promise<string> {
   }
 }
 
-const HELP = `agenttool-hf-scout — private read-only HF metadata/provenance prototype
+const HELP = `agenttool-hf-scout — local read-only HF metadata/provenance scout
 
 Usage:
   agenttool-hf-scout facilities [--json]
   agenttool-hf-scout research-leads [--phase PHASE] [--json]
   agenttool-hf-scout search KIND QUERY [--limit N] [--observed-at ISO] [--json]
-  agenttool-hf-scout inspect KIND REPO_ID [--observed-at ISO] [--json|--sidecar|--agent-data]
+  agenttool-hf-scout inspect KIND REPO_ID [--revision FULL_SHA] [--observed-at ISO] [--json|--sidecar|--agent-data]
+  agenttool-hf-scout reconcile KIND REPO_ID RELEASE_REVISION [--observed-at ISO] [--json]
+    [--source-revision FULL_SHA] [--source-manifest-sha256 SHA256]
+    [--local-manifest-sha256 SHA256 --local-file-count N --local-total-bytes N]
   agenttool-hf-scout lock-status FILE [--json]
 
 KIND is model, dataset, space, or paper. The built-in public HTTP reader supports
-model, dataset, and space. It sends fixed unauthenticated GET requests only.
+model, dataset, and space; reconciliation excludes paper. It sends fixed
+unauthenticated GET requests only.
 
 This CLI does not upload, download repository files, run models, invoke Spaces,
 start Jobs/Sandboxes, publish npm packages, or inherit MCP OAuth.`;

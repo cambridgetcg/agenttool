@@ -1,4 +1,5 @@
 import {
+  ARTIFACT_SCHEMA,
   DEFAULT_LIMITS,
   REPORT_SCHEMA,
   SEARCH_SCHEMA,
@@ -6,6 +7,7 @@ import {
   TOOL_VERSION,
 } from "./constants.js";
 import { HfScoutError, invariant } from "./errors.js";
+import { createHfReleaseReconciliation } from "./projection.js";
 import { classifyHubReaderTransport } from "./public-hub-reader.js";
 import type {
   HfArtifactSnapshot,
@@ -15,9 +17,13 @@ import type {
   HfDiagnosticCode,
   HfFileCommitment,
   HfRepoKind,
+  HfLocalVerificationReport,
+  HfReleaseReconciliationReport,
+  HfReleaseSourceDeclaration,
   HfScoutLimits,
   HfScoutReport,
   HfSearchHit,
+  PublicHubRepoKind,
   HfSearchReport,
   HubReader,
   HubReaderTransport,
@@ -41,6 +47,15 @@ import {
 export interface InspectHfRepositoryInput {
   kind: HfRepoKind;
   id: string;
+  revision?: string;
+}
+
+export interface ReconcileHfReleaseInput {
+  kind: PublicHubRepoKind;
+  id: string;
+  release_revision: string;
+  source_declaration?: HfReleaseSourceDeclaration;
+  local_verification?: HfLocalVerificationReport;
 }
 
 export interface SearchHfRepositoriesInput {
@@ -62,6 +77,9 @@ export async function inspectHfRepository(
   options: HfScoutOptions,
 ): Promise<HfScoutReport> {
   const id = normalizeRepoId(input.kind, input.id);
+  const requestedRevision = input.revision === undefined
+    ? null
+    : requireFullRevision(input.revision);
   const observedAt = resolveObservedAt(options);
   const limits = effectiveLimits(DEFAULT_LIMITS, options.limits);
   validateReader(options.reader);
@@ -71,6 +89,7 @@ export async function inspectHfRepository(
     () => options.reader.inspect({
       kind: input.kind,
       id,
+      ...(requestedRevision ? { revision: requestedRevision } : {}),
       ...(options.signal ? { signal: options.signal } : {}),
     }),
   );
@@ -80,6 +99,7 @@ export async function inspectHfRepository(
     raw,
     limits,
     transport,
+    requestedRevision,
   );
   return {
     schema: REPORT_SCHEMA,
@@ -105,6 +125,40 @@ export async function inspectHfRepository(
     snapshot,
     diagnostics,
   };
+}
+
+export async function reconcileHfRelease(
+  input: ReconcileHfReleaseInput,
+  options: HfScoutOptions,
+): Promise<HfReleaseReconciliationReport> {
+  const kind = input.kind;
+  invariant(
+    kind === "model" || kind === "dataset" || kind === "space",
+    "unsupported_reconciliation_kind",
+    "release reconciliation supports model, dataset, or space repositories",
+  );
+  const id = normalizeRepoId(kind, input.id);
+  const releaseRevision = requireFullRevision(input.release_revision);
+  const observedAt = resolveObservedAt(options);
+  const sharedOptions: HfScoutOptions = {
+    ...options,
+    observed_at: observedAt,
+  };
+  const releaseReport = await inspectHfRepository(
+    { kind, id, revision: releaseRevision },
+    sharedOptions,
+  );
+  const headReport = await inspectHfRepository({ kind, id }, sharedOptions);
+  return createHfReleaseReconciliation({
+    release_report: releaseReport,
+    head_report: headReport,
+    ...(input.source_declaration !== undefined
+      ? { source_declaration: input.source_declaration }
+      : {}),
+    ...(input.local_verification !== undefined
+      ? { local_verification: input.local_verification }
+      : {}),
+  });
 }
 
 export async function searchHfRepositories(
@@ -195,9 +249,15 @@ function normalizeSnapshot(
   raw: unknown,
   limits: HfScoutLimits,
   transport: HubReaderTransport,
+  requestedRevision: string | null,
 ): { snapshot: HfArtifactSnapshot; diagnostics: HfDiagnostic[] } {
   const object = asPlainObject(raw);
   const remoteId = readRemoteId(object);
+  invariant(
+    requestedRevision === null || remoteId !== null,
+    "hub_subject_unresolved",
+    "Hub response did not identify the requested repository",
+  );
   if (remoteId) {
     const normalizedRemote = normalizeRepoId(kind, remoteId);
     invariant(
@@ -208,8 +268,16 @@ function normalizeSnapshot(
   }
 
   const diagnostics: HfDiagnostic[] = [];
-  const fullSha = normalizeFullSha(object.sha);
-  if (!fullSha) diagnostics.push(diagnostic("revision_unresolved", "No full immutable commit SHA was observed."));
+  const resolvedRevision = normalizeFullSha(object.sha);
+  if (requestedRevision) {
+    invariant(
+      resolvedRevision === requestedRevision,
+      "hub_revision_mismatch",
+      "Hub response revision did not match the requested commit",
+    );
+  } else if (!resolvedRevision) {
+    diagnostics.push(diagnostic("revision_unresolved", "No full commit SHA was observed for the current head."));
+  }
 
   const tagsResult = normalizeTags(object.tags, limits.max_tags);
   if (tagsResult.truncated) diagnostics.push(diagnostic("tags_truncated", "Publisher tags were truncated."));
@@ -241,39 +309,60 @@ function normalizeSnapshot(
     "scout_model_code_not_executed",
   ]);
   if (transport === "injected") boundaryCodes.add("caller_owned_reader");
-  if (!fullSha) boundaryCodes.add("revision_unresolved");
+  if (!requestedRevision) boundaryCodes.add("mutable_head_observation");
+  if (!resolvedRevision) boundaryCodes.add("revision_unresolved");
   if (!declared.license) boundaryCodes.add("license_unknown");
   if (filesResult.state !== "complete") boundaryCodes.add("file_inventory_incomplete");
 
   diagnostics.sort((left, right) => compareUnicode(left.code, right.code));
   const snapshot: HfArtifactSnapshot = {
-    schema: "agenttool-hf-artifact/v0.1",
+    schema: ARTIFACT_SCHEMA,
     subject: {
       provider: "huggingface",
       kind,
       id: requestedId,
     },
     revision: {
-      full_sha: fullSha,
-      state: fullSha ? "immutable_commit" : "unresolved",
+      requested_full_sha: requestedRevision,
+      resolved_full_sha: resolvedRevision,
+      state: requestedRevision
+        ? "exact_revision_match"
+        : resolvedRevision
+          ? "mutable_head_observation"
+          : "unresolved",
     },
     observation: {
       transport,
       repository_association: transport === "public_hub_api"
         ? "provider_response"
         : "caller_owned",
+      reference: requestedRevision ? "requested_exact_revision" : "current_head",
     },
     declared,
     file_inventory: filesResult.state,
     files: filesResult.files,
-    provenance_grade: fullSha
-      ? transport === "public_hub_api"
-        ? "provider_observed_commit_metadata"
-        : "caller_supplied_commit_metadata"
+    provenance_grade: resolvedRevision
+      ? requestedRevision
+        ? transport === "public_hub_api"
+          ? "provider_observed_exact_revision_metadata"
+          : "caller_supplied_exact_revision_metadata"
+        : transport === "public_hub_api"
+          ? "provider_observed_mutable_head_metadata"
+          : "caller_supplied_mutable_head_metadata"
       : "mutable_observation",
     boundary_codes: [...boundaryCodes].sort(),
   };
   return { snapshot, diagnostics };
+}
+
+function requireFullRevision(value: string): string {
+  const revision = normalizeFullSha(value);
+  invariant(
+    revision,
+    "invalid_revision",
+    "revision must be a full lowercase commit SHA",
+  );
+  return revision;
 }
 
 function normalizeFiles(

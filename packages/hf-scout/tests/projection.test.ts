@@ -129,11 +129,11 @@ describe("Love model lock projection", () => {
 describe("KINGDOM and Agent Data projections", () => {
   test("keeps observation time outside stable artifact bytes", async () => {
     const first = await inspectHfRepository(
-      { kind: "model", id: "org/model" },
+      { kind: "model", id: "org/model", revision: REVISION },
       { reader: fixtureReader(), observed_at: "2026-07-30T12:00:00.000Z" },
     );
     const second = await inspectHfRepository(
-      { kind: "model", id: "org/model" },
+      { kind: "model", id: "org/model", revision: REVISION },
       { reader: fixtureReader(), observed_at: "2026-07-30T13:00:00.000Z" },
     );
     const firstRequest = projectAgentDataTextRequest(first);
@@ -161,7 +161,7 @@ describe("KINGDOM and Agent Data projections", () => {
 
   test("binds Agent Data identity to exact snapshot bytes at one revision", async () => {
     const first = await inspectHfRepository(
-      { kind: "model", id: "org/model" },
+      { kind: "model", id: "org/model", revision: REVISION },
       { reader: fixtureReader(), observed_at: "2026-07-30T12:00:00.000Z" },
     );
     const changedReader: HubReader = {
@@ -177,7 +177,7 @@ describe("KINGDOM and Agent Data projections", () => {
       },
     };
     const changed = await inspectHfRepository(
-      { kind: "model", id: "org/model" },
+      { kind: "model", id: "org/model", revision: REVISION },
       { reader: changedReader, observed_at: "2026-07-30T13:00:00.000Z" },
     );
     const firstRequest = projectAgentDataTextRequest(first);
@@ -209,6 +209,19 @@ describe("KINGDOM and Agent Data projections", () => {
       projector_remote_compute_invoked: false,
       projector_hub_write_performed: false,
     });
+    expect(sidecar).toMatchObject({
+      schema: "kingdom-hf-sidecar/v0.2",
+      extension: {
+        package: "@agenttool/hf-scout",
+        version: "0.2.0-dev.0",
+        status: "developer_preview",
+      },
+      artifacts: [{
+        requested_revision: null,
+        resolved_revision: REVISION,
+        revision_state: "mutable_head_observation",
+      }],
+    });
     expect(Object.isFrozen(sidecar)).toBe(true);
     expect(() => createKingdomHfSidecar({
       generated_at: "2026-07-30T12:00:00.000Z",
@@ -220,27 +233,17 @@ describe("KINGDOM and Agent Data projections", () => {
     })).toThrow("at most 1000 artifacts");
   });
 
-  test("refuses durable projection without an immutable commit", async () => {
-    const mutableReader: HubReader = {
-      ...fixtureReader(),
-      async inspect() {
-        return {
-          id: "org/model",
-          tags: ["license:mit"],
-          siblings: [],
-        };
-      },
-    };
+  test("refuses durable projection without an exact requested commit", async () => {
     const report = await inspectHfRepository(
       { kind: "model", id: "org/model" },
-      { reader: mutableReader, observed_at: "2026-07-30T12:00:00.000Z" },
+      { reader: fixtureReader(), observed_at: "2026-07-30T12:00:00.000Z" },
     );
     expect(() => projectAgentDataTextRequest(report)).toThrow("full immutable commit SHA");
   });
 
   test("revalidates runtime inputs instead of trusting TypeScript casts", async () => {
     const report = await inspectHfRepository(
-      { kind: "model", id: "org/model" },
+      { kind: "model", id: "org/model", revision: REVISION },
       { reader: fixtureReader(), observed_at: "2026-07-30T12:00:00.000Z" },
     );
     const forgedUrl = {
@@ -288,8 +291,11 @@ describe("KINGDOM and Agent Data projections", () => {
         observation: {
           transport: "public_hub_api" as const,
           repository_association: "provider_response" as const,
+          reference: "requested_exact_revision" as const,
         },
-        provenance_grade: "provider_observed_commit_metadata" as const,
+        provenance_grade: "provider_observed_exact_revision_metadata" as const,
+        boundary_codes: report.snapshot.boundary_codes
+          .filter((code) => code !== "caller_owned_reader"),
       },
     };
     expect(() => createKingdomHfSidecar({

@@ -904,6 +904,12 @@ describe("boring test spine", () => {
     expect(preflight).toContain("cd packages/codex-usage && bun run ci");
     expect(workflow).toContain("broker, collab, Codex usage, collab-zerone");
     expect(preflight).toContain("cd packages/browser && bun run ci");
+    expect(preflight).toContain(
+      "local read-only Hugging Face metadata and provenance scout",
+    );
+    expect(preflight).not.toContain(
+      "private read-only Hugging Face metadata and research scout",
+    );
     expect(preflight).toContain("cd packages/repo-archive && bun run ci");
     expect(preflight).toContain("cd packages/dark-continent-contract && bun run ci");
     expect(preflight).toContain("cd packages/dark-continent-karma && bun run ci");
@@ -1538,6 +1544,7 @@ exit 94
     expect(workflow).toContain("          - skills-yutabase");
     expect(workflow).not.toContain("          - skills-wake-continuity");
     expect(workflow).toContain("          - heaven");
+    expect(workflow).toContain("          - hf-scout");
     expect(workflow).toContain("          - living-substrate");
     expect(workflow).toContain("          - principality-atlas");
     expect(workflow).toContain("          - polymorph-landscape");

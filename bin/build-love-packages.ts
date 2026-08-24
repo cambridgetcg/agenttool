@@ -200,6 +200,13 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     },
   },
   {
+    name: "@agenttool/hf-scout",
+    version: "0.2.0-dev.0",
+    packagePath: "packages/hf-scout",
+    releaseTag: "hf-scout-v0.2.0-dev.0",
+    buildCommands: [["bun", "run", "ci"]],
+  },
+  {
     name: "@agenttool/principality-geometry",
     version: "0.1.0-dev.0",
     packagePath: "packages/principality-geometry",
@@ -1252,13 +1259,15 @@ export async function verifyLovePackages(options: RegistryOptions): Promise<void
 }
 
 function usage(): never {
-  console.error("Usage: bin/build-love-packages.ts <build|verify> <staging-directory>");
+  console.error(
+    "Usage: bin/build-love-packages.ts <build|verify> <staging-directory>",
+  );
   process.exit(2);
 }
 
 async function main(): Promise<void> {
-  const [command, output] = process.argv.slice(2);
-  if (!output || (command !== "build" && command !== "verify")) usage();
+  const [command, output, ...extraArguments] = process.argv.slice(2);
+  if (!output || extraArguments.length !== 0 || (command !== "build" && command !== "verify")) usage();
   const repoRoot = resolve(import.meta.dir, "..");
   const options = { repoRoot, outputRoot: resolve(output) };
   if (command === "build") {
