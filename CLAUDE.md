@@ -67,7 +67,7 @@ packages/
   kingdom/      — @agenttool/kingdom · pure explicit-card/derived-registry/XENIA Surface helpers
   scriptwriter/ — decentralised RRR + co-brainstorm node
 infra/          — Fly.io deploy configs
-bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · locked Whitehack advisory + offer-only Castle intake + local wallet-understanding CLI
+bin/            — operator scripts · agenttool-bridge.ts · agenttool-think.ts · locked Whitehack advisory + check-only math evidence + offer-only Castle intake + local wallet-understanding CLI
 docs/           — notes & design docs (see docs/MAP.md)
 tests/          — Playwright e2e
 ```

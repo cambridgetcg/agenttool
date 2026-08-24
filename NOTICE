@@ -2,3 +2,7 @@ AgentTool
 Copyright 2026 AgentTool contributors
 
 This product includes software developed by AgentTool contributors.
+
+This product includes es-module-lexer 2.3.2, copyright Guy Bedford,
+distributed under the MIT License. See
+bin/vendor/es-module-lexer-2.3.2.LICENSE.txt.
