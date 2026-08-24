@@ -31,19 +31,25 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const WHITEHACK_REPOSITORY = "https://github.com/cambridgetcg/whitehack";
 export const WHITEHACK_PACKAGE = "@agenttool/whitehack-scan";
-export const WHITEHACK_REVISION = "424c6e85601cd0ac031d1b28940c3f88b99b0a1d";
-export const WHITEHACK_VERSION = "0.9.0";
-export const WHITEHACK_INTEGRITY = "sha512-egZU36Eg0DqV7sBhc1hbNR7DJNUMAa7t8S4iiV4RMA/0fpUsyRuFVUEvuol2Ngu28MoQfDoL2+xS/9Z3Ytx4sw==";
-export const WHITEHACK_TARBALL_URL = "https://registry.npmjs.org/@agenttool/whitehack-scan/-/whitehack-scan-0.9.0.tgz";
+export const WHITEHACK_REVISION = "566f83678f998a12b716f55599071a2af0495ca8";
+export const WHITEHACK_VERSION = "0.10.0";
+export const WHITEHACK_INTEGRITY = "sha512-D1Y+XzG4Iy+lQxepEoDJew8YVATE78Om1O/uQYGow1hrwDegs7YN+u4wn03l2aDk14w2t43txgadZilIUkXjTg==";
+export const WHITEHACK_TARBALL_URL = "https://registry.npmjs.org/@agenttool/whitehack-scan/-/whitehack-scan-0.10.0.tgz";
 export const WHITEHACK_RUNTIME_MANIFEST =
-  "tools/whitehack-advisory/whitehack-runtime-closure-v0.9.0.json";
+  "tools/whitehack-advisory/whitehack-runtime-closure-v0.10.0.json";
 export const WHITEHACK_RUNTIME_MANIFEST_SHA256 =
-  "7d275fee36d6b899b5092574289509032355dad2bff5a5b0f9e76f317ad31575";
+  "17fe720ccb14d20d573704b6ca6e55c9dec8c8a14260dfac89a9e19352a46958";
 export const ADVISORY_SCHEMA = "agenttool-whitehack-advisory/v0.1";
 
 const WHITEHACK_EXPORTS = Object.freeze({
-  core: "./src/core.js",
-  understanding: "./src/understanding.js",
+  core: Object.freeze({
+    types: "./src/core.d.ts",
+    default: "./src/core.js",
+  }),
+  understanding: Object.freeze({
+    types: "./src/understanding.d.ts",
+    default: "./src/understanding.js",
+  }),
 });
 const WHITEHACK_CHECK_COUNT = 47;
 const WHITEHACK_RUNTIME_MANIFEST_DOCUMENT =
@@ -753,8 +759,8 @@ function validateRuntimeManifest(manifest, expected) {
     ) {
       fail("scanner_runtime_manifest_invalid");
     }
-    for (const [name, exportPath] of Object.entries(WHITEHACK_EXPORTS)) {
-      if (manifest.roots[name] !== exportPath.slice(2)) {
+    for (const [name, exportRecord] of Object.entries(WHITEHACK_EXPORTS)) {
+      if (manifest.roots[name] !== exportRecord.default.slice(2)) {
         fail("scanner_runtime_manifest_invalid");
       }
     }
@@ -941,11 +947,17 @@ async function verifyScannerModule(
   if (Object.keys(packageJson.scripts ?? {}).some((name) => INSTALL_LIFECYCLE_SCRIPTS.has(name))) {
     fail("scanner_lifecycle_script");
   }
-  const exportPath = WHITEHACK_EXPORTS[exportName];
-  if (!exportPath) fail("scanner_export_name_invalid");
-  if (packageJson.exports?.[`./${exportName}`] !== exportPath) {
+  const expectedExport = WHITEHACK_EXPORTS[exportName];
+  if (!expectedExport) fail("scanner_export_name_invalid");
+  const declaredExport = packageJson.exports?.[`./${exportName}`];
+  if (
+    !hasExactKeys(declaredExport, ["default", "types"])
+    || declaredExport.default !== expectedExport.default
+    || declaredExport.types !== expectedExport.types
+  ) {
     fail(`scanner_${exportName}_export_mismatch`);
   }
+  const exportPath = expectedExport.default;
 
   const requestedModulePath = resolve(scannerRoot, exportPath);
   let moduleInfo;

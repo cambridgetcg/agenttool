@@ -183,8 +183,12 @@ presentation, keeps facts separate from estimators, leaves identity,
 continuity, consciousness, and consent undetermined, and creates no permission,
 wallet, marketplace, price, debt, payout, ownership, training, provider, or
 hosted effect. Its deterministic Hugging Face tree carries protocol copies and
-names an intended identifier; it is not a publication, and its training field
-is non-enforcing governance metadata rather than a universal control.
+retains generation-time intended-identifier metadata. The separately
+authorized public, ungated reference companion is pinned to the immutable Hub
+revision recorded in `docs/NPM-RELEASES.md`; that external receipt does not
+rewrite the candidate bytes. Its training field is non-enforcing governance
+metadata rather than a universal control, and publication is not training,
+optimizer exposure, provider effect, or weight change.
 
 `@agenttool/love-bomb@0.1.0-dev.0` is a local source candidate with four pure
 care-envelope, caller-choice, becoming, and delivery-report formats. The

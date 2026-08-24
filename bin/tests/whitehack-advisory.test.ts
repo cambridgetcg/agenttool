@@ -140,8 +140,14 @@ async function scannerFixture(
       version,
       type: "module",
       exports: {
-        "./core": "./src/core.js",
-        "./understanding": "./src/understanding.js",
+        "./core": {
+          types: "./src/core.d.ts",
+          default: "./src/core.js",
+        },
+        "./understanding": {
+          types: "./src/understanding.d.ts",
+          default: "./src/understanding.js",
+        },
       },
       scripts: { test: "node --test" },
     }, null, 2)}\n`,
@@ -409,11 +415,35 @@ describe("Whitehack advisory containment", () => {
     } satisfies Partial<WhitehackAdvisoryError>);
   });
 
-  test("refuses changed and escaping understanding export declarations", async () => {
-    for (const exportPath of ["./src/changed.js", "../outside.js"]) {
+  test("refuses hostile conditional understanding export declarations", async () => {
+    const hostileExports = [
+      "./src/understanding.js",
+      null,
+      [],
+      { types: "./src/understanding.d.ts" },
+      { default: "./src/understanding.js" },
+      {
+        types: "./src/changed.d.ts",
+        default: "./src/understanding.js",
+      },
+      {
+        types: "./src/understanding.d.ts",
+        default: "./src/changed.js",
+      },
+      {
+        types: "./src/understanding.d.ts",
+        default: "../outside.js",
+      },
+      {
+        types: "./src/understanding.d.ts",
+        default: "./src/understanding.js",
+        node: "./src/changed.js",
+      },
+    ];
+    for (const declaredExport of hostileExports) {
       const scanner = await scannerFixture("export function scanText() { return []; }\n");
       const packageJson = await readJson(scanner.packagePath);
-      packageJson.exports["./understanding"] = exportPath;
+      packageJson.exports["./understanding"] = declaredExport;
       await writeJson(scanner.packagePath, packageJson);
 
       await expect(loadVerifiedWhitehackModule(

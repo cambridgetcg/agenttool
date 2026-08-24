@@ -21,7 +21,7 @@ function advisory() {
     scanner: {
       repository: "https://github.com/cambridgetcg/whitehack",
       revision: "a".repeat(40),
-      version: "0.9.0",
+      version: "0.10.0",
     },
     scope: {
       mode: "changed_supported_regular_files",
