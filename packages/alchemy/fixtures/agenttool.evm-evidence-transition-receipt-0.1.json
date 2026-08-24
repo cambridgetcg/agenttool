@@ -1,0 +1,47 @@
+{
+  "_format": "agenttool.evm-evidence-transition-receipt/0.1",
+  "from_digest": null,
+  "to_digest": "sha256:9ddba2f0894da2bb0d17aee7ec529efd01b907cb28227d3d3aa800514d822da0",
+  "relation": "initial_observation",
+  "preserved": [
+    "chain_id",
+    "block_generation",
+    "transaction_identity",
+    "transfer_parties",
+    "atomic_quantity",
+    "observation_state",
+    "finality_axes",
+    "basis"
+  ],
+  "discarded": [],
+  "assumptions": [
+    "chain_mapping_accepted",
+    "current_generation_selected",
+    "logical_event_equivalent",
+    "observation_channel_authentic",
+    "policy_supplied"
+  ],
+  "counterexample": null,
+  "stop_condition": "continue_observing",
+  "effect_boundary": "semantic_only_no_state_change",
+  "privacy": {
+    "classification": "private_linkable",
+    "digest_disclosure": "reveals_record_equality",
+    "direct_identifiers": "present",
+    "public_safe": false
+  },
+  "non_grants": [
+    "action",
+    "authority",
+    "consent",
+    "custody",
+    "finality",
+    "identity",
+    "permission",
+    "privacy",
+    "provider_independence",
+    "rights_status",
+    "truth"
+  ],
+  "content_digest": "sha256:d6290b966b9123411dffb5216a74954dcd42a7bc24f825fd9cfe35021bc15df2"
+}

@@ -1,0 +1,50 @@
+{
+  "schema": "kingdom-extension-local/v0.1",
+  "id": "alchemy-evidence",
+  "package": "@agenttool/alchemy",
+  "version": "0.1.0-dev.1",
+  "status": "unpublished_source_candidate",
+  "host_contract": "not_registered",
+  "proposed_abilities": [
+    {
+      "id": "evm-evidence-normalize",
+      "kind": "semantic_projection",
+      "description": "Construct or validate one bounded provider-neutral EVM observation-evidence record without observing a provider or changing state."
+    },
+    {
+      "id": "evm-evidence-transition-receipt",
+      "kind": "semantic_projection",
+      "description": "Describe one explicit semantic relation between exact evidence digests without applying the transition."
+    },
+    {
+      "id": "evm-evidence-measurement-project",
+      "kind": "measurement_projection",
+      "description": "Project one exact atomic quantity into unregistered Math Cards-shaped measurement vocabulary without operating an instrument or asserting truth."
+    }
+  ],
+  "defaults": {
+    "network": false,
+    "credentials": false,
+    "provider": false,
+    "mcp": false,
+    "filesystem": false,
+    "environment": false,
+    "clock": false,
+    "randomness": false,
+    "persistence": false,
+    "publication": false,
+    "deployment": false,
+    "automatic_action": false,
+    "permission_inheritance": false,
+    "economic_effect": false,
+    "wallet_effect": false,
+    "task_state_effect": false,
+    "authority": false
+  },
+  "notes": [
+    "This descriptor is a declaration-only KINGDOM hint and is not an installed or registered host contract.",
+    "It proposes only the package's pure evidence, receipt, and measurement projections. It does not register or grant access to the separate injected-transport Alchemy read client.",
+    "A host-injected read transport may perform a separately authorized provider read, but package or descriptor presence grants no network, credential, provider, wallet, database, publication, or action authority.",
+    "Evidence digests are private linkable metadata and prove neither privacy nor truth. Provider assertions do not become chain consensus, finality, identity, consent, custody, rights status, permission, or authority."
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "_format": "agenttool.evm-observation-evidence/0.1",
+  "chain_id": "eip155:1",
+  "generation": {
+    "block_number": "21000000",
+    "block_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "transaction_hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "log_index": "7"
+  },
+  "observation_state": "live",
+  "transfer": {
+    "kind": "erc20_transfer",
+    "contract_address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "from_address": "0x1111111111111111111111111111111111111111",
+    "to_address": "0x2222222222222222222222222222222222222222",
+    "quantity": {
+      "atomic_value": "2500000",
+      "atomic_unit": "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48/base-unit"
+    }
+  },
+  "finality": {
+    "canonicality": "canonical",
+    "confirmations": {
+      "status": "exact",
+      "count": "12"
+    },
+    "settlement": "unsettled"
+  },
+  "basis": {
+    "observation_channel": "combined",
+    "observed_at": "2026-08-24T12:00:00.000Z",
+    "source_receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "privacy": {
+    "classification": "private_linkable",
+    "digest_disclosure": "reveals_record_equality",
+    "direct_identifiers": "present",
+    "public_safe": false
+  },
+  "non_grants": [
+    "action",
+    "authority",
+    "consent",
+    "custody",
+    "finality",
+    "identity",
+    "permission",
+    "privacy",
+    "provider_independence",
+    "rights_status",
+    "truth"
+  ],
+  "content_digest": "sha256:9ddba2f0894da2bb0d17aee7ec529efd01b907cb28227d3d3aa800514d822da0"
+}

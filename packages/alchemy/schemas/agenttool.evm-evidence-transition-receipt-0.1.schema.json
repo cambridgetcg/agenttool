@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:evm-evidence-transition-receipt:0.1",
+  "title": "AgentTool EVM evidence semantic transition receipt 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "from_digest",
+    "to_digest",
+    "relation",
+    "preserved",
+    "discarded",
+    "assumptions",
+    "counterexample",
+    "stop_condition",
+    "effect_boundary",
+    "privacy",
+    "non_grants",
+    "content_digest"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.evm-evidence-transition-receipt/0.1"
+    },
+    "from_digest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/digest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "to_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "relation": {
+      "enum": [
+        "initial_observation",
+        "same_generation",
+        "replacement_generation",
+        "removed_generation",
+        "conflicting_evidence",
+        "no_observation"
+      ]
+    },
+    "preserved": {
+      "$ref": "#/$defs/facets_nonempty"
+    },
+    "discarded": {
+      "$ref": "#/$defs/facets"
+    },
+    "assumptions": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 5,
+      "items": {
+        "enum": [
+          "chain_mapping_accepted",
+          "current_generation_selected",
+          "logical_event_equivalent",
+          "observation_channel_authentic",
+          "policy_supplied"
+        ]
+      }
+    },
+    "counterexample": {
+      "oneOf": [
+        {
+          "enum": [
+            "unavailable_evidence",
+            "stale_generation",
+            "conflicting_block_hash",
+            "logical_identity_mismatch",
+            "removed_current_generation"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stop_condition": {
+      "enum": [
+        "continue_observing",
+        "hold_unavailable",
+        "hold_conflict",
+        "reject_exact_mismatch",
+        "credit_current_generation_once",
+        "reverse_current_generation_once",
+        "no_effect"
+      ]
+    },
+    "effect_boundary": {
+      "const": "semantic_only_no_state_change"
+    },
+    "privacy": {
+      "const": {
+        "classification": "private_linkable",
+        "digest_disclosure": "reveals_record_equality",
+        "direct_identifiers": "present",
+        "public_safe": false
+      }
+    },
+    "non_grants": {
+      "const": [
+        "action",
+        "authority",
+        "consent",
+        "custody",
+        "finality",
+        "identity",
+        "permission",
+        "privacy",
+        "provider_independence",
+        "rights_status",
+        "truth"
+      ]
+    },
+    "content_digest": {
+      "$ref": "#/$defs/digest"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "relation": {
+            "const": "initial_observation"
+          }
+        },
+        "required": [
+          "relation"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "from_digest": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "type": "object",
+        "properties": {
+          "from_digest": {
+            "$ref": "#/$defs/digest"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "facet": {
+      "enum": [
+        "chain_id",
+        "block_generation",
+        "transaction_identity",
+        "transfer_parties",
+        "atomic_quantity",
+        "observation_state",
+        "finality_axes",
+        "basis"
+      ]
+    },
+    "facets": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/facet"
+      }
+    },
+    "facets_nonempty": {
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/facet"
+      }
+    }
+  }
+}

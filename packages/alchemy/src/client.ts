@@ -93,6 +93,7 @@ const TRANSFER_ID_PATTERN = /^[A-Za-z0-9:._~-]+$/;
 const TRANSPORT_AUDIT_ID_PATTERN = /^[A-Za-z0-9:._~-]+$/;
 const INTERNAL_TRANSFER_NETWORKS: ReadonlySet<AlchemyNetwork> = new Set([
   "ethereum-mainnet",
+  "base-mainnet",
   "polygon-mainnet",
 ]);
 const CONTRACT_FILTER_CATEGORIES: ReadonlySet<AlchemyTransferCategory> =

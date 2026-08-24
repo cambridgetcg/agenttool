@@ -275,7 +275,7 @@ jobs:
           install_dir="$(mktemp -d)"
           trap 'rm -rf "$install_dir" "$tarball"' EXIT
           npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$PWD/$tarball"
-          smoke='import("@agenttool/alchemy").then(m=>{if(m.PACKAGE_VERSION!=="0.1.0-dev.0"||Object.keys(m.ALCHEMY_NETWORKS).length!==10||typeof m.createAlchemyReadClient!=="function"||"rawRpc"in m||"request"in m)process.exit(1)})'
+          smoke='import("@agenttool/alchemy").then(m=>{if(m.PACKAGE_VERSION!=="0.1.0-dev.1"||Object.keys(m.ALCHEMY_NETWORKS).length!==10||typeof m.createAlchemyReadClient!=="function"||typeof m.createEvmObservationEvidence!=="function"||typeof m.parseEvmObservationEvidence!=="function"||typeof m.canonicalEvmObservationEvidenceBytes!=="function"||typeof m.compareEvmFinality!=="function"||typeof m.createEvmEvidenceTransitionReceipt!=="function"||typeof m.parseEvmEvidenceTransitionReceipt!=="function"||typeof m.canonicalEvmEvidenceTransitionReceiptBytes!=="function"||typeof m.projectEvmEvidenceMeasurement!=="function"||typeof m.EVM_OBSERVATION_EVIDENCE_FORMAT!=="string"||typeof m.EVM_EVIDENCE_TRANSITION_RECEIPT_FORMAT!=="string"||typeof m.EVM_MEASUREMENT_PROJECTION_FORMAT!=="string"||typeof m.EVM_EVIDENCE_NON_GRANTS!=="object"||m.EVM_EVIDENCE_NON_GRANTS===null||"rawRpc"in m||"request"in m)process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
       - name: Smoke the packed TypeScript SDK under Node and Bun
@@ -324,7 +324,7 @@ jobs:
           install_dir="$(mktemp -d)"
           trap 'rm -rf "$install_dir" "$alchemy_tarball" "$broker_tarball" "$adapter_tarball"' EXIT
           npm install --ignore-scripts --no-audit --no-fund --prefix "$install_dir" "$alchemy_tarball" "$broker_tarball" "$adapter_tarball"
-          smoke='Promise.all([import("@agenttool/alchemy"),import("@agenttool/credential-broker"),import("@agenttool/alchemy-agentcred")]).then(([a,c,x])=>{if(a.PACKAGE_VERSION!=="0.1.0-dev.0"||typeof a.createAlchemyReadClient!=="function"||c.AGENTCRED_PROTOCOL!=="agentcred/0.1"||typeof c.AgentCredClient!=="function"||x.PACKAGE_VERSION!=="0.1.0-dev.0"||x.ADAPTER_PROTOCOL!=="agenttool.alchemy-agentcred/0.1"||typeof x.createAlchemyAgentCredTransport!=="function"||"rawRpc"in x||"request"in x)process.exit(1)})'
+          smoke='Promise.all([import("@agenttool/alchemy"),import("@agenttool/credential-broker"),import("@agenttool/alchemy-agentcred")]).then(([a,c,x])=>{if(a.PACKAGE_VERSION!=="0.1.0-dev.1"||typeof a.createAlchemyReadClient!=="function"||typeof a.createEvmObservationEvidence!=="function"||typeof a.createEvmEvidenceTransitionReceipt!=="function"||typeof a.projectEvmEvidenceMeasurement!=="function"||c.AGENTCRED_PROTOCOL!=="agentcred/0.1"||typeof c.AgentCredClient!=="function"||x.PACKAGE_VERSION!=="0.1.0-dev.1"||x.ADAPTER_PROTOCOL!=="agenttool.alchemy-agentcred/0.1"||typeof x.createAlchemyAgentCredTransport!=="function"||"rawRpc"in x||"request"in x)process.exit(1)})'
           (cd "$install_dir" && node -e "$smoke")
           (cd "$install_dir" && bun -e "$smoke")
           node --input-type=module --eval '
@@ -333,7 +333,7 @@ jobs:
             if (
               Object.hasOwn(pkg, "dependencies")
               || JSON.stringify(pkg.peerDependencies) !== JSON.stringify({
-                "@agenttool/alchemy": "^0.1.0-dev.0",
+                "@agenttool/alchemy": "^0.1.0-dev.1",
                 "@agenttool/credential-broker": "^0.3.0",
               })
             ) process.exit(1);

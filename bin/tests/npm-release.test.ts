@@ -551,6 +551,22 @@ describe("standard npm release policy", () => {
       "package/schema/agent-repo-archive-v0.1.schema.json",
       "package/vectors/agent-repo-archive-v0.1-vectors.json",
     ]));
+    const alchemyArchiveEntries = requiredArchiveEntries(releaseSpec("alchemy"));
+    expect(alchemyArchiveEntries).toEqual([
+      "package/package.json",
+      "package/LICENSE",
+      "package/NOTICE",
+      "package/README.md",
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schemas/agenttool.evm-observation-evidence-0.1.schema.json",
+      "package/schemas/agenttool.evm-evidence-transition-receipt-0.1.schema.json",
+      "package/fixtures/agenttool.evm-observation-evidence-0.1.json",
+      "package/fixtures/agenttool.evm-evidence-transition-receipt-0.1.json",
+    ]);
+    expect(new Set(alchemyArchiveEntries).size).toBe(alchemyArchiveEntries.length);
     expect(requiredArchiveEntries(releaseSpec("dark-continent-contract"))).toEqual(
       expect.arrayContaining([
         "package/package.json",
@@ -854,10 +870,6 @@ describe("standard npm release policy", () => {
         "package/hf/dataset/hash-manifest.json",
       ]),
     );
-    expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([
-      "package/dist/index.js",
-      "package/dist/index.d.ts",
-    ]));
     expect(requiredArchiveEntries(releaseSpec("alchemy-agentcred"))).toEqual(
       expect.arrayContaining([
         "package/package.json",
@@ -883,6 +895,37 @@ describe("standard npm release policy", () => {
         "package/dist/index.d.ts",
         "package/vectors/agent-wallet-zerone-v0.1-vectors.json",
       ]),
+    );
+  });
+
+  test("keeps Alchemy dev.0 as history and dev.1 behind a trusted release gate", async () => {
+    const releases = await readFile(
+      join(import.meta.dir, "..", "..", "docs", "NPM-RELEASES.md"),
+      "utf8",
+    );
+    const alchemyDocs = await readFile(
+      join(import.meta.dir, "..", "..", "docs", "ALCHEMY.md"),
+      "utf8",
+    );
+    const rootReadme = await readFile(join(import.meta.dir, "..", "..", "README.md"), "utf8");
+    const alchemySection = releases.match(
+      /### Alchemy developer-preview history and dev\.1 gate([\s\S]*?)### Alchemy AgentCred developer-preview history and dev\.1 gate/,
+    )?.[1];
+    const agentcredSection = releases.match(
+      /### Alchemy AgentCred developer-preview history and dev\.1 gate([\s\S]*?)\n### /,
+    )?.[1];
+
+    expect(alchemySection).toBeDefined();
+    expect(agentcredSection).toBeDefined();
+    expect(alchemySection).not.toContain("git tag -a alchemy-v0.1.0-dev.0");
+    expect(agentcredSection).not.toContain("git tag -a alchemy-agentcred-v0.1.0-dev.0");
+    expect(alchemySection).toContain("`alchemy-v0.1.0-dev.1`");
+    expect(agentcredSection).toContain("`alchemy-agentcred-v0.1.0-dev.1`");
+    expect(alchemySection).toContain("`authentication=trusted`");
+    expect(agentcredSection).toContain("`authentication=trusted`");
+    expect(alchemyDocs).toContain("`20260824T132712_crypto_deposit_remainder_accounting.sql`");
+    expect(rootReadme).toContain(
+      "these source bytes do not establish that it has been applied to any database",
     );
   });
 

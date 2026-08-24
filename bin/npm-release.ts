@@ -727,6 +727,18 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/vectors/agent-repo-archive-v0.1-vectors.json",
     );
   }
+  if (spec.name === "@agenttool/alchemy") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schemas/agenttool.evm-observation-evidence-0.1.schema.json",
+      "package/schemas/agenttool.evm-evidence-transition-receipt-0.1.schema.json",
+      "package/fixtures/agenttool.evm-observation-evidence-0.1.json",
+      "package/fixtures/agenttool.evm-evidence-transition-receipt-0.1.json",
+    );
+  }
   if (spec.name === "@agenttool/dark-continent-contract") {
     entries.push(
       "package/CLAUDE.md",
@@ -944,12 +956,6 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/hf/dataset/provenance/source-manifest.json",
       "package/hf/dataset/provenance/example-manifest.json",
       "package/hf/dataset/hash-manifest.json",
-    );
-  }
-  if (spec.name === "@agenttool/alchemy") {
-    entries.push(
-      "package/dist/index.js",
-      "package/dist/index.d.ts",
     );
   }
   if (spec.name === "@agenttool/alchemy-agentcred") {
