@@ -263,7 +263,10 @@ public struct SecretStore {
 
   private func readQuery(service: String, account: String) -> [CFString: Any] {
     var query = identityQuery(service: service, account: account)
-    query[kSecMatchLimit] = kSecMatchLimitAll
+    // The legacy macOS Keychain rejects password data with the special
+    // kSecMatchLimitAll value. A numeric bound of two still distinguishes the
+    // only accepted cardinality (exactly one) from an ambiguous result.
+    query[kSecMatchLimit] = 2
     query[kSecReturnAttributes] = true
     query[kSecReturnData] = true
     return query

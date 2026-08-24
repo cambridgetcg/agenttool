@@ -79,11 +79,16 @@ final class ContractTests: XCTestCase {
     assertNoUI(security.copyQueries[0])
     XCTAssertEqual(security.copyQueries[0][kSecReturnAttributes] as? Bool, true)
     XCTAssertNil(security.copyQueries[0][kSecReturnData])
+    XCTAssertEqual(
+      security.copyQueries[0][kSecMatchLimit] as? String,
+      kSecMatchLimitAll as String
+    )
 
     assertExactIdentity(security.copyQueries[1])
     assertNoUI(security.copyQueries[1])
     XCTAssertEqual(security.copyQueries[1][kSecReturnAttributes] as? Bool, true)
     XCTAssertEqual(security.copyQueries[1][kSecReturnData] as? Bool, true)
+    assertBoundedDataRead(security.copyQueries[1])
 
     assertExactIdentity(security.addAttributes[0])
     assertNoUI(security.addAttributes[0])
@@ -208,6 +213,7 @@ final class ContractTests: XCTestCase {
     assertExactIdentity(security.copyQueries[0])
     assertNoUI(security.copyQueries[0])
     XCTAssertEqual(security.copyQueries[0][kSecReturnData] as? Bool, true)
+    assertBoundedDataRead(security.copyQueries[0])
   }
 
   func testVerifyRefusesAbsentNonCanonicalMalformedAndAmbiguousItems() {
@@ -402,6 +408,15 @@ final class ContractTests: XCTestCase {
     let context = query[kSecUseAuthenticationContext] as? LAContext
     XCTAssertNotNil(context, file: file, line: line)
     XCTAssertEqual(context?.interactionNotAllowed, true, file: file, line: line)
+  }
+
+  private func assertBoundedDataRead(
+    _ query: [CFString: Any],
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    XCTAssertEqual(query[kSecMatchLimit] as? Int, 2, file: file, line: line)
+    XCTAssertNil(query[kSecMatchLimit] as? String, file: file, line: line)
   }
 
   private func assertFailure(
