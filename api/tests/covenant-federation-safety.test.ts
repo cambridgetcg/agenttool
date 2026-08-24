@@ -736,6 +736,17 @@ describe("federated covenant effect fences", () => {
 
   test("the first authority-generation rollout is an all-five post-drain ceremony", () => {
     const deploy = read("../docs/DEPLOY-PROCEDURE.md");
+    const playwrightReadme = read("../tests/playwright/README.md");
+    const playwrightSpec = read(
+      "../tests/playwright/specs/federated-covenant-v2.spec.ts",
+    );
+    const nativeReadme = read("../native/agenttool-secret-macos/README.md");
+    const nativeCommand = read(
+      "../native/agenttool-secret-macos/Sources/AgentToolSecretMacOSCore/Command.swift",
+    );
+    const nativeStore = read(
+      "../native/agenttool-secret-macos/Sources/AgentToolSecretMacOSCore/SecretStore.swift",
+    );
     expect(deploy).toMatch(/ordinary rolling\s+deploy is prohibited for Phase A/i);
     expect(deploy).toContain("--maintenance-fenced-api");
     expect(deploy).toContain("agenttool-deploy-receipt/v6");
@@ -747,12 +758,45 @@ describe("federated covenant effect fences", () => {
       "bin/agenttool-secret set agenttool-covenant-v2-authority-generation -",
     );
     expect(deploy).toMatch(/Phase B is blocked and must not be executed/i);
-    expect(deploy).toMatch(/native\s+Security\.framework stdin writer/);
+    expect(deploy).toMatch(/native\s+Security\.framework\s+create-once generator/);
+    expect(deploy).toContain("native/agenttool-secret-macos/");
+    expect(deploy).toMatch(
+      /unsigned\s+CI or local\s+build is not an\s+installed/i,
+    );
+    expect(deploy).toMatch(/empty-allowlist interlock/);
+    expect(deploy).toMatch(/write-ahead receipt/);
+    expect(deploy).toMatch(/generates 32 random bytes internally/);
+    expect(deploy).toMatch(/stores exactly 64\s+lowercase hexadecimal bytes/);
+    expect(deploy).toMatch(/exposes only create-once storage/);
+    expect(deploy).toMatch(/compile-time bound to the one authority/);
+    expect(deploy).toMatch(/accepts no\s+runtime selector, secret stdin, or raw-value read/);
+    expect(deploy).toMatch(/no caller-supplied\s+create, overwrite, upsert, or delete verb/);
+    expect(deploy).toMatch(/Keychain read and Fly\s+child-process stdin transfer/);
+    expect(nativeReadme).toMatch(/requests 32 random bytes\s+from `SecRandomCopyBytes`/);
+    expect(nativeReadme).toMatch(/exactly 64 lowercase hexadecimal\s+bytes/);
+    expect(nativeReadme).toMatch(/accepts no secret stdin/);
+    expect(nativeReadme).toMatch(/no raw-value read, caller-supplied create,\s+overwrite, upsert, or delete verb/);
+    expect(nativeReadme).toMatch(/accepts no selector bytes from argv/);
+    expect(nativeReadme).toMatch(/intentionally exposes no raw\s+secret output/);
+    expect(nativeCommand).toContain("case create");
+    expect(nativeCommand).toContain("case verify");
+    expect(nativeCommand).not.toMatch(/case\s+(?:get|put|overwrite|delete)\b/);
+    expect(nativeStore).toContain("SecRandomCopyBytes");
+    expect(nativeStore).not.toContain("SecItemUpdate");
+    expect(nativeStore).not.toContain("SecItemDelete");
     expect(deploy).toContain("operator shell environment");
     expect(deploy).toContain("remote process environment");
     expect(deploy).toContain("reserved_generation_rows=0");
     expect(deploy).toContain("authoritative_v2_rows=0");
     expect(deploy).toMatch(/Do \*\*not\*\* start the\s+stopped thinker standby/);
     expect(deploy).toMatch(/absence\s+of a per-Machine generation override/);
+    expect(playwrightReadme).toContain("Skipped topology placeholder");
+    expect(playwrightReadme).toContain("distinct authority generations");
+    expect(playwrightReadme).not.toContain(
+      "point both instances at the same host with different project keys",
+    );
+    expect(playwrightSpec).toContain("test.skip(");
+    expect(playwrightSpec).toMatch(/No current CI job executes the HTTP federation hop/);
+    expect(playwrightSpec).not.toMatch(/HTTP \+ federation hop is covered/);
   });
 });

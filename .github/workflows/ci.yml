@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  api-protocol:
-    name: API and protocol
+  api-protocol-linux:
+    name: API and protocol (Linux)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -32,6 +32,114 @@ jobs:
         run: bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api
       - name: Run hermetic API and protocol gate
         run: bin/bash-without-env-hooks.sh bin/preflight.sh api
+
+  native-macos-secret:
+    name: Native macOS secret helper
+    runs-on: macos-15
+    timeout-minutes: 8
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the native toolchain
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+        run: |
+          set -euo pipefail
+          test "$(/usr/bin/xcodebuild -version | /usr/bin/sed -n '1p')" = "Xcode 16.4"
+          test "$(/usr/bin/xcodebuild -version | /usr/bin/sed -n '2p')" = "Build version 16F6"
+          /usr/bin/xcrun swift --version | /usr/bin/grep -F "Apple Swift version 6.1.2" >/dev/null
+      - name: Build the fixed disposable integration executable
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+        run: >-
+          /usr/bin/xcrun swift build
+          --package-path native/agenttool-secret-macos
+          --scratch-path "$RUNNER_TEMP/agenttool-secret-macos-integration"
+          --disable-keychain
+          --disable-netrc
+          --disable-prefetching
+          -Xswiftc -DAGENTTOOL_KEYCHAIN_INTEGRATION_BUILD
+      - name: Build the unsigned review artifact without publishing it
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+        run: |
+          set -euo pipefail
+          /usr/bin/xcrun swift build \
+            --package-path native/agenttool-secret-macos \
+            --disable-keychain \
+            --disable-netrc \
+            --disable-prefetching \
+            --configuration release
+          native_release_bin_dir="$(/usr/bin/xcrun swift build \
+            --package-path native/agenttool-secret-macos \
+            --disable-keychain \
+            --disable-netrc \
+            --disable-prefetching \
+            --configuration release \
+            --show-bin-path)"
+          test -x "$native_release_bin_dir/agenttool-secret-macos"
+          if native_release_output="$(
+            "$native_release_bin_dir/agenttool-secret-macos" fixture-attest 2>&1
+          )"; then
+            exit 1
+          else
+            native_release_status=$?
+          fi
+          test "$native_release_status" -eq 2
+          test "$native_release_output" = 'agenttool-secret-macos:invalid_invocation'
+      - name: Run native contract and disposable Keychain integration tests
+        env:
+          AGENTTOOL_KEYCHAIN_INTEGRATION: "1"
+        shell: /bin/bash --noprofile --norc -eo pipefail {0}
+        run: |
+          set -euo pipefail
+          native_bin_dir="$(/usr/bin/xcrun swift build \
+            --package-path native/agenttool-secret-macos \
+            --scratch-path "$RUNNER_TEMP/agenttool-secret-macos-integration" \
+            --disable-keychain \
+            --disable-netrc \
+            --disable-prefetching \
+            -Xswiftc -DAGENTTOOL_KEYCHAIN_INTEGRATION_BUILD \
+            --show-bin-path)"
+          test -x "$native_bin_dir/agenttool-secret-macos"
+          export AGENTTOOL_SECRET_MACOS_BINARY="$native_bin_dir/agenttool-secret-macos"
+          native_production_bin_dir="$(/usr/bin/xcrun swift build \
+            --package-path native/agenttool-secret-macos \
+            --disable-keychain \
+            --disable-netrc \
+            --disable-prefetching \
+            --configuration release \
+            --show-bin-path)"
+          test -x "$native_production_bin_dir/agenttool-secret-macos"
+          export AGENTTOOL_SECRET_MACOS_PRODUCTION_BINARY="$native_production_bin_dir/agenttool-secret-macos"
+          /usr/bin/xcrun swift test \
+            --package-path native/agenttool-secret-macos \
+            --disable-keychain \
+            --disable-netrc \
+            --disable-prefetching \
+            --no-parallel
+
+  api-protocol:
+    # Keep this display name stable for the protected-branch status context.
+    # The required result fails unless both independent prerequisite jobs pass.
+    name: API and protocol
+    if: ${{ always() }}
+    needs:
+      - api-protocol-linux
+      - native-macos-secret
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require Linux API and native macOS results
+        env:
+          API_PROTOCOL_LINUX_RESULT: ${{ needs.api-protocol-linux.result }}
+          NATIVE_MACOS_SECRET_RESULT: ${{ needs.native-macos-secret.result }}
+        run: |
+          set -euo pipefail
+          test "$API_PROTOCOL_LINUX_RESULT" = "success"
+          test "$NATIVE_MACOS_SECRET_RESULT" = "success"
 
   witnessed-agent-economy:
     # Keep this display name stable for the protected-branch status context.

@@ -16,8 +16,8 @@ import { test } from "@playwright/test";
 //   - covenants-v2-coexistence.test.ts (v1 ↔ v2 coexistence invariants)
 //
 // These exercise the lifecycle service, the DB invariant, and the worker layer
-// directly. The HTTP + federation hop is covered when CI runs against a peer
-// configuration; this spec will be unskipped once cross-instance fixtures land.
+// directly. No current CI job executes the HTTP federation hop between two
+// authority domains; this spec will be unskipped once cross-instance fixtures land.
 //
 // TODO: unskip and implement once a two-instance fixture helper exists that can:
 //   1. Spawn two instances against two postgres schemas/DBs.

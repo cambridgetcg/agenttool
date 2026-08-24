@@ -6,7 +6,11 @@ Browser-driven end-to-end tier. Separate package (own `package.json`, own `playw
 
 - **Sister tier:** [`api/tests/README.md`](../../api/tests/README.md) — for unit / integration / doctrine / contract / adapter tiers.
 - **Up one level:** [`api/CLAUDE.md`](../../api/CLAUDE.md) §Tests · root [`CLAUDE.md`](../../CLAUDE.md).
-- **What this tier proves:** the *delivered surface* (browser DOM, network calls, multi-instance federation) actually works. Tests below this tier prove components; this tier proves the whole stack lights up.
+- **What this tier proves:** the *delivered surface* exercised by an enabled
+  spec (browser DOM and network calls) actually works. The current suite has no
+  executed two-instance federation fixture; its covenant spec is an explicit
+  skipped placeholder rather than proof that the whole federation stack
+  lights up.
 
 ## When to add here vs. elsewhere
 
@@ -29,7 +33,7 @@ If a scenario can be proven without a browser, use a lower tier. The browser tie
 | `keys.spec.ts` | Key display, rotation, copy-once semantics. |
 | `restore.spec.ts` | Restore from BIP39 mnemonic. |
 | `storage-migration.spec.ts` | Browser-local storage upgrade paths. |
-| `federated-covenant-v2.spec.ts` | **Two-instance live federation.** Covenant declared on instance A, propagates to instance B, counterparty accepts on B, cosign propagates back, both rows reach `'active'`. Pins [`FOCUS.md`](../../docs/FOCUS.md) §2 end-to-end through the browser. |
+| `federated-covenant-v2.spec.ts` | **Skipped topology placeholder.** It documents the intended A → B → A covenant path but executes no setup or assertions until two distinct processes and databases exist. |
 
 ## How to run
 
@@ -37,7 +41,7 @@ If a scenario can be proven without a browser, use a lower tier. The browser tie
 cd tests/playwright
 npx playwright install               # one-time browser setup
 npx playwright test                  # all specs
-npx playwright test federated-covenant-v2
+npx playwright test federated-covenant-v2  # reports the intentional skip
 npx playwright test --debug          # headed + step-by-step
 npx playwright show-report           # last run's HTML report
 ```
@@ -50,7 +54,10 @@ npx playwright show-report           # last run's HTML report
 
 1. **Tests are independent.** Each spec sets up its own state and cleans up; no spec depends on order. Parallelism is a property of the suite, not a hazard.
 2. **No real-money side effects.** Browser tests against testnet only. Mainnet flows are operator-led ([`docs/PAYOUT-BROADCAST-OPS.md`](../../docs/PAYOUT-BROADCAST-OPS.md)).
-3. **Multi-instance specs use live fed loopback.** When a test needs cross-instance behavior, point both instances at the same host with different project keys — not mocked federation.
+3. **Multi-instance means distinct authority domains.** A future federation
+   spec must use two processes, two databases, distinct instance URLs and
+   deliberately distinct authority generations. Two project keys on one host
+   are not a multi-instance proof.
 
 ## See also
 
