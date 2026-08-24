@@ -11,9 +11,12 @@
  * Doctrine: docs/WHITEHACK.md
  */
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { constants as fsConstants } from "node:fs";
 import {
   appendFile,
   lstat,
+  open,
   readFile,
   realpath,
 } from "node:fs/promises";
@@ -24,14 +27,18 @@ import {
   resolve,
   sep,
 } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const WHITEHACK_REPOSITORY = "https://github.com/cambridgetcg/whitehack";
 export const WHITEHACK_PACKAGE = "@agenttool/whitehack-scan";
-export const WHITEHACK_REVISION = "fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a";
-export const WHITEHACK_VERSION = "0.8.1";
-export const WHITEHACK_INTEGRITY = "sha512-6FUlV1rOLZqPxLHcHE+x3f2XHCOwSsWSqEi+TDxi4pRJEe/CGoIN4Lw8mghsRvmUrtbHtFBrxLyRSk/5iMazPw==";
-export const WHITEHACK_TARBALL_URL = "https://registry.npmjs.org/@agenttool/whitehack-scan/-/whitehack-scan-0.8.1.tgz";
+export const WHITEHACK_REVISION = "424c6e85601cd0ac031d1b28940c3f88b99b0a1d";
+export const WHITEHACK_VERSION = "0.9.0";
+export const WHITEHACK_INTEGRITY = "sha512-egZU36Eg0DqV7sBhc1hbNR7DJNUMAa7t8S4iiV4RMA/0fpUsyRuFVUEvuol2Ngu28MoQfDoL2+xS/9Z3Ytx4sw==";
+export const WHITEHACK_TARBALL_URL = "https://registry.npmjs.org/@agenttool/whitehack-scan/-/whitehack-scan-0.9.0.tgz";
+export const WHITEHACK_RUNTIME_MANIFEST =
+  "tools/whitehack-advisory/whitehack-runtime-closure-v0.9.0.json";
+export const WHITEHACK_RUNTIME_MANIFEST_SHA256 =
+  "7d275fee36d6b899b5092574289509032355dad2bff5a5b0f9e76f317ad31575";
 export const ADVISORY_SCHEMA = "agenttool-whitehack-advisory/v0.1";
 
 const WHITEHACK_EXPORTS = Object.freeze({
@@ -39,6 +46,18 @@ const WHITEHACK_EXPORTS = Object.freeze({
   understanding: "./src/understanding.js",
 });
 const WHITEHACK_CHECK_COUNT = 47;
+const WHITEHACK_RUNTIME_MANIFEST_DOCUMENT =
+  "agenttool-whitehack-runtime-closure/v1";
+const WHITEHACK_RUNTIME_MANIFEST_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  WHITEHACK_RUNTIME_MANIFEST,
+);
+const RUNTIME_SHA256 = /^[0-9a-f]{64}$/u;
+const RUNTIME_SOURCE_PATH = /^[a-z0-9][a-z0-9./-]{0,254}\.js$/u;
+const MAX_RUNTIME_FILES = 128;
+const MAX_RUNTIME_FILE_BYTES = 1024 * 1024;
+const MAX_RUNTIME_TOTAL_BYTES = 8 * 1024 * 1024;
 const INSTALL_LIFECYCLE_SCRIPTS = new Set([
   "dependencies",
   "install",
@@ -648,6 +667,175 @@ async function readRegularJson(path, code) {
   }
 }
 
+function hasExactKeys(value, keys) {
+  return value
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && JSON.stringify(Object.keys(value).sort())
+      === JSON.stringify([...keys].sort());
+}
+
+async function readStableRuntimeBytes(path, invalidCode) {
+  let handle;
+  try {
+    handle = await open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  } catch {
+    fail(invalidCode);
+  }
+  try {
+    const before = await handle.stat();
+    if (!before.isFile() || before.size > MAX_RUNTIME_FILE_BYTES) fail(invalidCode);
+    let bytes;
+    try {
+      bytes = await handle.readFile();
+    } catch {
+      fail(invalidCode);
+    }
+    const after = await handle.stat();
+    if (
+      bytes.length !== before.size
+      || after.size !== before.size
+      || after.dev !== before.dev
+      || after.ino !== before.ino
+      || after.mtimeMs !== before.mtimeMs
+      || after.ctimeMs !== before.ctimeMs
+    ) {
+      fail(invalidCode);
+    }
+    return bytes;
+  } catch (error) {
+    if (error instanceof WhitehackAdvisoryError) throw error;
+    fail(invalidCode);
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+}
+
+async function defaultRuntimeManifest() {
+  const bytes = await readStableRuntimeBytes(
+    WHITEHACK_RUNTIME_MANIFEST_PATH,
+    "scanner_runtime_manifest_invalid",
+  );
+  if (
+    createHash("sha256").update(bytes).digest("hex")
+    !== WHITEHACK_RUNTIME_MANIFEST_SHA256
+  ) {
+    fail("scanner_runtime_manifest_invalid");
+  }
+  try {
+    return JSON.parse(bytes.toString("utf8"));
+  } catch {
+    fail("scanner_runtime_manifest_invalid");
+  }
+}
+
+function validateRuntimeManifest(manifest, expected) {
+  try {
+    if (!hasExactKeys(manifest, [
+      "algorithm",
+      "document_type",
+      "files",
+      "package",
+      "roots",
+      "source_revision",
+      "version",
+    ])) fail("scanner_runtime_manifest_invalid");
+    if (
+      manifest.document_type !== WHITEHACK_RUNTIME_MANIFEST_DOCUMENT
+      || manifest.package !== expected.packageName
+      || manifest.version !== expected.version
+      || manifest.source_revision !== expected.revision
+      || manifest.algorithm !== "sha256"
+      || !hasExactKeys(manifest.roots, Object.keys(WHITEHACK_EXPORTS))
+      || !Array.isArray(manifest.files)
+      || manifest.files.length < 1
+      || manifest.files.length > MAX_RUNTIME_FILES
+    ) {
+      fail("scanner_runtime_manifest_invalid");
+    }
+    for (const [name, exportPath] of Object.entries(WHITEHACK_EXPORTS)) {
+      if (manifest.roots[name] !== exportPath.slice(2)) {
+        fail("scanner_runtime_manifest_invalid");
+      }
+    }
+
+    let previous = "";
+    const paths = new Set();
+    for (const entry of manifest.files) {
+      if (
+        !hasExactKeys(entry, ["path", "sha256"])
+        || typeof entry.path !== "string"
+        || !RUNTIME_SOURCE_PATH.test(entry.path)
+        || entry.path.includes("//")
+        || entry.path.split("/").some((segment) => segment === "." || segment === "..")
+        || !RUNTIME_SHA256.test(entry.sha256)
+        || entry.path <= previous
+      ) {
+        fail("scanner_runtime_manifest_invalid");
+      }
+      previous = entry.path;
+      paths.add(entry.path);
+    }
+    if (Object.values(manifest.roots).some((path) => !paths.has(path))) {
+      fail("scanner_runtime_manifest_invalid");
+    }
+    return manifest;
+  } catch (error) {
+    if (error instanceof WhitehackAdvisoryError) throw error;
+    fail("scanner_runtime_manifest_invalid");
+  }
+}
+
+async function verifyRuntimeSourceClosure(
+  scanner,
+  exportName,
+  expected,
+  suppliedManifest,
+) {
+  const manifest = validateRuntimeManifest(
+    suppliedManifest ?? await defaultRuntimeManifest(),
+    expected,
+  );
+  const manifestModulePath = resolve(scanner.scannerRoot, manifest.roots[exportName]);
+  if (manifestModulePath !== resolve(scanner.modulePath)) {
+    fail("scanner_runtime_manifest_invalid");
+  }
+
+  let totalBytes = 0;
+  for (const entry of manifest.files) {
+    const requestedPath = resolve(scanner.scannerRoot, entry.path);
+    if (!isWithin(scanner.scannerRoot, requestedPath)) {
+      fail("scanner_runtime_source_invalid");
+    }
+    let info;
+    let canonicalPath;
+    try {
+      info = await lstat(requestedPath);
+      canonicalPath = await realpath(requestedPath);
+    } catch {
+      fail("scanner_runtime_source_invalid");
+    }
+    if (
+      !info.isFile()
+      || info.isSymbolicLink()
+      || !isWithin(scanner.scannerRoot, canonicalPath)
+    ) {
+      fail("scanner_runtime_source_invalid");
+    }
+    const bytes = await readStableRuntimeBytes(
+      requestedPath,
+      "scanner_runtime_source_invalid",
+    );
+    totalBytes += bytes.length;
+    if (totalBytes > MAX_RUNTIME_TOTAL_BYTES) {
+      fail("scanner_runtime_source_invalid");
+    }
+    if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256) {
+      fail("scanner_runtime_integrity_mismatch");
+    }
+  }
+}
+
 function dependencyFieldIsNonEmpty(value) {
   if (value === undefined) return false;
   if (Array.isArray(value)) return value.length > 0;
@@ -801,8 +989,12 @@ async function captureScannerOutput(operation) {
 
 /**
  * Verify and silently import one reviewed public module from the exact locked
- * Whitehack package. This proves the local package identity and containment;
- * it does not sandbox or authorize the imported code.
+ * Whitehack package. Before import, this rejects persistent byte drift in the
+ * reviewed core + understanding source closure. It is not a sandbox,
+ * signature/authenticity proof, authorization mechanism, or universal defence
+ * against a privileged concurrent rewrite between verification and import.
+ * The shipped one-shot CLIs reach this loader before any Whitehack import; the
+ * helper does not attest a module instance cached earlier in the same process.
  */
 export async function loadVerifiedWhitehackModule(options) {
   if (!options || typeof options !== "object" || Array.isArray(options)) {
@@ -823,6 +1015,16 @@ export async function loadVerifiedWhitehackModule(options) {
       integrity: options.expected_integrity ?? WHITEHACK_INTEGRITY,
       tarballUrl: options.expected_tarball_url ?? WHITEHACK_TARBALL_URL,
     },
+  );
+  await verifyRuntimeSourceClosure(
+    scanner,
+    exportName,
+    {
+      revision: options.expected_revision ?? WHITEHACK_REVISION,
+      version: options.expected_version ?? WHITEHACK_VERSION,
+      packageName: options.expected_package ?? WHITEHACK_PACKAGE,
+    },
+    options.expected_runtime_manifest,
   );
   const imported = await captureScannerOutput(
     () => import(pathToFileURL(scanner.modulePath).href),
@@ -883,6 +1085,7 @@ export async function runAdvisory(options) {
     expected_package: options.expected_package,
     expected_integrity: options.expected_integrity,
     expected_tarball_url: options.expected_tarball_url,
+    expected_runtime_manifest: options.expected_runtime_manifest,
   });
   const candidates = await selectCandidateFiles(options.root, options.paths, limits);
 
