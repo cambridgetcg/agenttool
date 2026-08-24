@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   appendFile,
   mkdir,
@@ -18,6 +19,8 @@ import {
   WHITEHACK_PACKAGE,
   WHITEHACK_REPOSITORY,
   WHITEHACK_REVISION,
+  WHITEHACK_RUNTIME_MANIFEST,
+  WHITEHACK_RUNTIME_MANIFEST_SHA256,
   WHITEHACK_TARBALL_URL,
   WHITEHACK_VERSION,
   buildAttentionCards,
@@ -43,6 +46,7 @@ export const CHECK_MANIFEST = Object.freeze(Array.from(
 `;
 
 type ScannerFixture = {
+  checkPath: string;
   corePath: string;
   understandingPath: string;
   lockPath: string;
@@ -50,6 +54,7 @@ type ScannerFixture = {
   root: string;
   toolPackagePath: string;
   toolRoot: string;
+  runtimeManifest: Record<string, any>;
 };
 
 function git(cwd: string, args: string[]): string {
@@ -88,12 +93,13 @@ async function scannerFixture(
 ): Promise<ScannerFixture> {
   const toolRoot = await temporaryRoot("whitehack-tool-");
   const root = join(toolRoot, "node_modules", "@agenttool", "whitehack-scan");
+  const checkPath = join(root, "src", "checks", "fixture-check.js");
   const corePath = join(root, "src", "core.js");
   const understandingPath = join(root, "src", "understanding.js");
   const packagePath = join(root, "package.json");
   const lockPath = join(toolRoot, "package-lock.json");
   const toolPackagePath = join(toolRoot, "package.json");
-  await mkdir(join(root, "src"), { recursive: true });
+  await mkdir(join(root, "src", "checks"), { recursive: true });
   await writeFile(
     toolPackagePath,
     `${JSON.stringify({
@@ -140,10 +146,19 @@ async function scannerFixture(
       scripts: { test: "node --test" },
     }, null, 2)}\n`,
   );
-  await writeFile(corePath, `${checkManifestSource}\n${source}`);
+  await writeFile(
+    checkPath,
+    "export const fixtureCheckLoaded = true;\n",
+  );
+  await writeFile(
+    corePath,
+    `import { fixtureCheckLoaded } from "./checks/fixture-check.js";\n${checkManifestSource}\nvoid fixtureCheckLoaded;\n${source}`,
+  );
   await writeFile(
     understandingPath,
-    `export const UNDERSTANDING_DOCUMENT_TYPE = "whitehack-understanding/v1";
+    `import { CHECK_MANIFEST } from "./core.js";
+void CHECK_MANIFEST;
+export const UNDERSTANDING_DOCUMENT_TYPE = "whitehack-understanding/v1";
 export const UNDERSTANDING_CONTEXT_PROFILE = "whitehack-agent-wallet-projection/v1";
 export const UNDERSTANDING_SOURCE_PROTOCOL = "agent-wallet/0.1";
 export function createUnderstanding(options) {
@@ -154,7 +169,8 @@ export function createUnderstanding(options) {
 }
 `,
   );
-  return {
+  const scanner = {
+    checkPath,
     corePath,
     understandingPath,
     lockPath,
@@ -162,7 +178,39 @@ export function createUnderstanding(options) {
     root,
     toolPackagePath,
     toolRoot,
+    runtimeManifest: {},
   };
+  scanner.runtimeManifest = await fixtureRuntimeManifest(scanner);
+  return scanner;
+}
+
+async function fixtureRuntimeManifest(scanner: ScannerFixture) {
+  const files = [
+    ["src/checks/fixture-check.js", scanner.checkPath],
+    ["src/core.js", scanner.corePath],
+    ["src/understanding.js", scanner.understandingPath],
+  ] as const;
+  return {
+    document_type: "agenttool-whitehack-runtime-closure/v1",
+    package: WHITEHACK_PACKAGE,
+    version: WHITEHACK_VERSION,
+    source_revision: fixtureRevision,
+    algorithm: "sha256",
+    roots: {
+      core: "src/core.js",
+      understanding: "src/understanding.js",
+    },
+    files: await Promise.all(files.map(async ([path, absolute]) => ({
+      path,
+      sha256: createHash("sha256")
+        .update(await readFile(absolute))
+        .digest("hex"),
+    }))),
+  };
+}
+
+async function refreshRuntimeManifest(scanner: ScannerFixture): Promise<void> {
+  scanner.runtimeManifest = await fixtureRuntimeManifest(scanner);
 }
 
 async function readJson(path: string): Promise<Record<string, any>> {
@@ -178,6 +226,7 @@ function scannerOptions(scanner: ScannerFixture) {
     scanner_lock: scanner.lockPath,
     scanner_root: scanner.root,
     expected_revision: fixtureRevision,
+    expected_runtime_manifest: scanner.runtimeManifest,
   };
 }
 
@@ -187,6 +236,7 @@ function understandingLoaderOptions(scanner: ScannerFixture) {
     scanner_root: scanner.root,
     export_name: "understanding",
     expected_revision: fixtureRevision,
+    expected_runtime_manifest: scanner.runtimeManifest,
   };
 }
 
@@ -299,6 +349,31 @@ describe("Whitehack advisory containment", () => {
       integrity: WHITEHACK_INTEGRITY,
       dev: true,
     });
+    const runtimeManifestPath = join(repoRoot, WHITEHACK_RUNTIME_MANIFEST);
+    const runtimeManifestBytes = await readFile(runtimeManifestPath);
+    expect(createHash("sha256").update(runtimeManifestBytes).digest("hex")).toBe(
+      WHITEHACK_RUNTIME_MANIFEST_SHA256,
+    );
+    const runtimeManifest = JSON.parse(runtimeManifestBytes.toString("utf8"));
+    expect(runtimeManifest).toMatchObject({
+      document_type: "agenttool-whitehack-runtime-closure/v1",
+      package: WHITEHACK_PACKAGE,
+      version: WHITEHACK_VERSION,
+      source_revision: WHITEHACK_REVISION,
+      algorithm: "sha256",
+      roots: {
+        core: "src/core.js",
+        understanding: "src/understanding.js",
+      },
+    });
+    expect(runtimeManifest.files).toHaveLength(54);
+    const runtimePaths = runtimeManifest.files.map(({ path }) => path);
+    expect(runtimePaths).toEqual([...runtimePaths].sort());
+    expect(new Set(runtimePaths).size).toBe(runtimePaths.length);
+    expect(runtimePaths.filter((path) => path.startsWith("src/checks/")))
+      .toHaveLength(48);
+    expect(runtimePaths).toContain("src/core.js");
+    expect(runtimePaths).toContain("src/understanding.js");
 
     const publicHtml = await readFile(
       join(repoRoot, "apps", "docs", "whitehack.html"),
@@ -375,12 +450,36 @@ describe("Whitehack advisory containment", () => {
 export function createUnderstanding() { return {}; }
 `,
     );
+    await refreshRuntimeManifest(scanner);
 
     await expect(loadVerifiedWhitehackModule(
       understandingLoaderOptions(scanner),
     )).rejects.toMatchObject({
       code: "scanner_import_failed",
     } satisfies Partial<WhitehackAdvisoryError>);
+  });
+
+  test("refuses persistent byte drift across core, understanding, and a transitive check", async () => {
+    const cases: Array<{
+      path: (scanner: ScannerFixture) => string;
+      export_name: "core" | "understanding";
+    }> = [
+      { path: (scanner) => scanner.corePath, export_name: "core" },
+      { path: (scanner) => scanner.understandingPath, export_name: "understanding" },
+      { path: (scanner) => scanner.checkPath, export_name: "core" },
+    ];
+    for (const testCase of cases) {
+      const scanner = await scannerFixture(
+        "export function scanText() { return []; }\n",
+      );
+      await appendFile(testCase.path(scanner), "// persistent byte drift\n");
+      await expect(loadVerifiedWhitehackModule({
+        ...scannerOptions(scanner),
+        export_name: testCase.export_name,
+      })).rejects.toMatchObject({
+        code: "scanner_runtime_integrity_mismatch",
+      } satisfies Partial<WhitehackAdvisoryError>);
+    }
   });
 
   test.skipIf(process.env.WHITEHACK_INTEGRATION !== "1")(
@@ -765,6 +864,7 @@ export function scanText() {
       shortManifest.corePath,
       "export const CHECK_MANIFEST = Array.from({ length: 46 });\nexport function scanText() { return []; }\n",
     );
+    await refreshRuntimeManifest(shortManifest);
     await expectScannerFailure(shortManifest, "scanner_import_failed");
   });
 

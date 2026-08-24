@@ -33,8 +33,13 @@ broadcast state, and continuity-head transitions.
 `bin/whitehack-wallet-understanding.ts` is a separate private, local adapter.
 It re-verifies caller-presented signed descriptor, capability, intent,
 simulation, and optional continuity records with this package, then projects
-only closed enum assertions into Whitehack 0.8.1's `createUnderstanding()`. Its
+only closed enum assertions into Whitehack 0.9.0's `createUnderstanding()`. Its
 exact output is `whitehack-understanding/v1`.
+
+The shared loader verifies the reviewed core + understanding source closure
+against the pinned digest manifest before import. It detects persistent byte
+drift, but is not a sandbox, package authenticity proof, or universal defence
+against a privileged concurrent rewrite between verification and import.
 
 The adapter is not part of `@agenttool/wallet` and is not a new npm package. It
 does not use `assertIntentWithinCapabilityStatic()` as authorization, retrieve

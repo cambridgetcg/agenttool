@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -26,11 +27,15 @@ async function temporaryRoot(prefix: string): Promise<string> {
   return root;
 }
 
-async function scannerFixture(): Promise<{ root: string; lockPath: string }> {
+async function scannerFixture(): Promise<{
+  root: string;
+  lockPath: string;
+  runtimeManifest: Record<string, unknown>;
+}> {
   const toolRoot = await temporaryRoot("whitehack-schema-tool-");
   const root = join(toolRoot, "node_modules", "@agenttool", "whitehack-scan");
   const lockPath = join(toolRoot, "package-lock.json");
-  await mkdir(join(root, "src"), { recursive: true });
+  await mkdir(join(root, "src", "checks"), { recursive: true });
   await writeFile(join(toolRoot, "package.json"), `${JSON.stringify({
     name: "@agenttool/whitehack-advisory-schema-fixture",
     version: "0.0.0",
@@ -63,10 +68,16 @@ async function scannerFixture(): Promise<{ root: string; lockPath: string }> {
       name: WHITEHACK_PACKAGE,
       version: WHITEHACK_VERSION,
       type: "module",
-      exports: { "./core": "./src/core.js" },
+      exports: {
+        "./core": "./src/core.js",
+        "./understanding": "./src/understanding.js",
+      },
     })}\n`,
   );
-  await writeFile(join(root, "src", "core.js"), `
+  const checkSource = "export const fixtureCheckLoaded = true;\n";
+  const coreSource = `
+import { fixtureCheckLoaded } from "./checks/fixture-check.js";
+void fixtureCheckLoaded;
 export const CHECK_MANIFEST = Object.freeze(Array.from(
   { length: 47 },
   (_, index) => Object.freeze({ id: \`fixture-\${index + 1}\` }),
@@ -84,8 +95,39 @@ export function scanText() {
     snippet: "private_schema_snippet",
   }];
 }
-`);
-  return { root, lockPath };
+`;
+  const understandingSource = `
+import { CHECK_MANIFEST } from "./core.js";
+void CHECK_MANIFEST;
+export const UNDERSTANDING_DOCUMENT_TYPE = "whitehack-understanding/v1";
+`;
+  await writeFile(join(root, "src", "checks", "fixture-check.js"), checkSource);
+  await writeFile(join(root, "src", "core.js"), coreSource);
+  await writeFile(join(root, "src", "understanding.js"), understandingSource);
+  const sources = [
+    ["src/checks/fixture-check.js", checkSource],
+    ["src/core.js", coreSource],
+    ["src/understanding.js", understandingSource],
+  ] as const;
+  return {
+    root,
+    lockPath,
+    runtimeManifest: {
+      document_type: "agenttool-whitehack-runtime-closure/v1",
+      package: WHITEHACK_PACKAGE,
+      version: WHITEHACK_VERSION,
+      source_revision: "c".repeat(40),
+      algorithm: "sha256",
+      roots: {
+        core: "src/core.js",
+        understanding: "src/understanding.js",
+      },
+      files: sources.map(([path, source]) => ({
+        path,
+        sha256: createHash("sha256").update(source).digest("hex"),
+      })),
+    },
+  };
 }
 
 afterAll(async () => {
@@ -106,6 +148,8 @@ describe("agenttool-whitehack-advisory/v0.1 JSON Schema", () => {
       scanner_root: scanner.root,
       base: "a".repeat(40),
       head: "b".repeat(40),
+      expected_revision: "c".repeat(40),
+      expected_runtime_manifest: scanner.runtimeManifest,
     });
 
     expect(ajv.validateSchema(schema)).toBe(true);

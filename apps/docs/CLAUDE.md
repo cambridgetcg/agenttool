@@ -173,14 +173,17 @@ behavior. The verified 0.19.0, 0.18.1, 0.18.0, and 0.17.0 receipts, plus
 immutable 0.16.5 records, remain historical bytes.
 The Whitehack page documents a
 runner-local crypto-aware heuristic advisory using the exact public
-`@agenttool/whitehack-scan@0.8.1` package, a bounded attention-card view of
+`@agenttool/whitehack-scan@0.9.0` package, a bounded attention-card view of
 redacted changed-source findings, an offer-only local projection into
 unaccepted Castle gate candidates, a separate local Agent Wallet
 record-to-understanding projection, an explicit local encrypted-storage bridge
 for exact Whitehack 0.9 public-minimal capsules, separately scoped security
 research, and the privacy-sensitive legacy device inventory. The CI lock,
 registry signature, and provenance checks bind the advisory's one scanner
-input. Attention cards group locations and describe Git-hunk relevance without
+input. The shared loader also verifies the reviewed core + understanding
+source closure against the pinned digest manifest before import; this detects
+persistent drift but is not a sandbox, authenticity proof, or universal
+privileged-race defence. Attention cards group locations and describe Git-hunk relevance without
 proving vulnerability, causation, or completeness. The Castle intake omits
 locations by default and does not open or write a Castle or promote an
 observation. The evidence bridge uses a caller-supplied recipient key only for

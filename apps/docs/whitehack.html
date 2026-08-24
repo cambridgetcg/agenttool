@@ -102,11 +102,11 @@
           <h3>1. Honesty linter</h3>
           <p>
             AgentTool installs the public
-            <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.8.1"><code><!--email_off-->@agenttool/whitehack-scan@0.8.1<!--/email_off--></code></a>
+            <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.9.0"><code><!--email_off-->@agenttool/whitehack-scan@0.9.0<!--/email_off--></code></a>
             package from an exact npm 11.17.0 lock. Its source is pinned to the reviewed
-            <a href="https://github.com/cambridgetcg/whitehack/tree/fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a"><code>fdd2260efd7a…</code></a>
+            <a href="https://github.com/cambridgetcg/whitehack/tree/424c6e85601cd0ac031d1b28940c3f88b99b0a1d"><code>424c6e85601c…</code></a>
             revision and the versioned exact
-            <a href="https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.8.1"><code>whitehack-v0.8.1</code></a>
+            <a href="https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.9.0"><code>whitehack-v0.9.0</code></a>
             release.
             Its 47 text/regex checks look for common state, failure,
             transparency, API, Solidity, crypto, network, WiFi, and Bluetooth
@@ -114,14 +114,14 @@
           </p>
           <p>
             The shared release artifact is
-            <code>agenttool-whitehack-scan-0.8.1.tgz</code>, 79,779 bytes, with
+            <code>agenttool-whitehack-scan-0.9.0.tgz</code>, 87,196 bytes, with
             SHA-256
-            <code>f02079aa5ee38cca3522141da012f1fbe2c3f3399c29710c0692a8f78fc24df8</code>.
+            <code>b7d004947bc3c7619daa38f002d9ddde731e2865644af0d0e609c8dd86528d3c</code>.
           </p>
           <p>
             The AgentTool bridge observes bounded changed production files and
             emits only file, line, check, confidence, doctrine, and principle.
-            Whitehack 0.8.1 cross-redacts recognized sensitive hits and
+            Whitehack 0.9.0 cross-redacts recognized sensitive hits and
             same-line overlaps, but ordinary findings can still include source;
             AgentTool independently drops every raw snippet, title, and message
             from its report.
@@ -219,7 +219,7 @@
     <section class="wh-section">
       <h2>Crypto awareness, <em>no custody</em></h2>
       <p>
-        The 0.8.1 rule pack can point reviewers toward possible embedded key or
+        The 0.9.0 rule pack can point reviewers toward possible embedded key or
         recovery literals, general-purpose randomness used directly for
         security material, explicitly static AEAD nonces, signature expressions
         coerced to accept failure, re-encoded signed-webhook bodies, and signed
@@ -230,7 +230,8 @@
         and maximum fungible-token approvals.
       </p>
       <p>
-        Version 0.8.1 narrows one noisy <code>silent-failure</code> case:
+        Version 0.9.0 retains the previously narrowed
+        <code>silent-failure</code> case:
         numeric identity defaults used in arithmetic or comparison through a
         non-reassigned binding to a locally constructed in-memory
         <code>Map</code>. Awaited reads, unknown <code>.get()</code> providers,
@@ -310,7 +311,7 @@
         The separate CLI re-verifies caller-presented signed
         <code>agent-wallet/0.1</code> records, derives bounded relationship and
         policy states, and passes only enum assertions plus six finding fields
-        into Whitehack 0.8.1's <code>createUnderstanding()</code>. Its stdout is
+        into Whitehack 0.9.0's <code>createUnderstanding()</code>. Its stdout is
         the exact deterministic <code>whitehack-understanding/v1</code>
         document, not an AgentTool envelope.
       </p>
@@ -448,8 +449,9 @@ bun bin/agenttool-whitehack-evidence-storage.ts retrieve \
         registry, verify the registry signature and SLSA attestation, and
         require the exact package URL and SHA-512 integrity.
         The bridge then checks the lock topology, package identity, zero runtime
-        dependencies, no install/publish/version lifecycle hooks, contained real paths, pure
-        <code>scanText()</code> export, and 47-check manifest. It refuses a
+        dependencies, no install/publish/version lifecycle hooks, contained real paths,
+        the SHA-256 manifest for the 54-module reviewed core + understanding
+        source closure, pure <code>scanText()</code> export, and 47-check manifest. It refuses a
         mismatched scanner or tracked-dirty AgentTool checkout. It considers
         only supported changed regular files and excludes hidden paths, tests,
         fixtures, examples, reports, generated output, dependencies, and symlinks.
@@ -468,10 +470,13 @@ errors              mark the advisory incomplete and fail its job
 findings            advisory only in this first slice</pre>
       <p class="wh-proof">
         Report shape: <code>agenttool-whitehack-advisory/v0.1</code>. The report
-        retains source revision <code>fdd2260efd7a11e5d52c12c53d8016d1f5e7d23a</code>
+        retains source revision <code>424c6e85601cd0ac031d1b28940c3f88b99b0a1d</code>
         and version; the npm lock integrity stays an execution-input gate rather
         than a new report field. The runner has ordinary caller file permissions;
         these input bounds are not a process, filesystem, or network sandbox.
+        Source hashing detects persistent pre-import drift; it is not a package
+        signature or authenticity proof and cannot universally prevent a
+        privileged concurrent rewrite between verification and import.
       </p>
       <p>
         The GitHub job summary adds a separate bounded Attention view without
@@ -519,7 +524,8 @@ const findings = scanText(source, { file: 'src/example.ts' })</pre>
       <p class="wh-proof">
         npm is a convenient public mirror. Whitehack 0.9 retains the scanner
         and adds the evidence-capsule parser and CLI; AgentTool's CI advisory
-        remains independently locked to reviewed 0.8.1 bytes. The exact 0.9
+        and wallet projection are independently locked to the same reviewed
+        0.9.0 bytes. The exact 0.9
         <a href="https://cambridgetcg.github.io/whitehack/packages/v1/@agenttool/whitehack-scan/0.9.0/manifest.json">LOVE manifest</a>
         records the 87,196-byte artifact, SHA-256
         <code>b7d004947bc3c7619daa38f002d9ddde731e2865644af0d0e609c8dd86528d3c</code>,
