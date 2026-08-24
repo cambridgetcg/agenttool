@@ -202,6 +202,53 @@ model call, perform training or inference, change weights, establish attention
 or runtime-context retention for an agent, prove feeling or inner state, create
 continuity or consent, or grant permission or authority.
 
+## Verified Dataset Influence Hugging Face reference — 2026-08-24
+
+The separately authorized public, ungated reference companion is available as
+[`Yu-and-Ai/agenttool-dataset-influence`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-dataset-influence)
+at immutable Hub revision
+[`ecdc67f94af092e711e76c74a877355fa66dc82c`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-dataset-influence/commit/ecdc67f94af092e711e76c74a877355fa66dc82c).
+
+- The package source was introduced at
+  `2bb8a3578e03fd3411acb21f4f4443dfa8995937`. Publication staged only the
+  allowlisted `packages/dataset-influence/hf/dataset/` directory from clean
+  AgentTool revision `c6b7f800953636f9a469a911249a968657c51876`; that
+  directory's Git tree is `5986232a86b7735f66dfd3e3eb6136817f3e9bb1`.
+- The scoped account check found no existing dataset at that identifier before
+  creation. Anonymous immutable metadata after publication reported the exact
+  full revision above with `private: false`, `gated: false`, and
+  `disabled: false` at `2026-08-24T16:45:16Z`.
+- Anonymous downloads matched all 13 repository-owned files and 156,537 bytes
+  byte-for-byte. Provider-managed `.gitattributes` was the sole extra. The
+  self-excluding `hash-manifest.json` has SHA-256
+  `6e8b7e4993dfebc021bb63a5e5beb8e946e9f131a4187ab052a32635206c4e64`;
+  it binds the other 12 owned files and 154,423 bytes.
+- The checked-in `source-manifest.json` deliberately retains its generation-time
+  `upstream_revision: null`, `source_files_complete: false`, and
+  `source_manifest_is_attestation: false` values. It does not claim knowledge
+  of its own future publication. This external receipt binds the immutable
+  source checkout, Git tree, Hub revision, and anonymous byte readback instead
+  of rewriting published candidate bytes.
+- The one 13,982-byte row is synthetic and `reference_only`, with
+  `training_admission: not_applicable`,
+  `requires_separate_training_authorization: true`, and
+  `training_authorized: false`. It contains no copied rows, model outputs,
+  weights, private records, or participant identities.
+- With all Hugging Face credential variables explicitly unset, `datasets`
+  5.0.1 loaded config `dataset_influence_reference`, split `reference`, at the
+  full immutable revision and reconstructed exactly one row with those same
+  four governance values plus `contains_private_or_participant_data: false`.
+  Dataset Server's mutable current-head `splits`, `first-rows`, and `parquet`
+  responses carried the same full `x-revision`, one row, and one Parquet file.
+  Its later converged observation reported all five validity capabilities true,
+  seven per-config statistics entries, and empty pending/failed work with
+  `partial: false`.
+
+This Hub receipt is not an npm release, training admission, download receipt,
+model run, optimizer exposure, gradient measurement, causal-influence result,
+weight change, identity or consciousness claim, consent, authority, ownership,
+price, payout, hosted API, database migration, or production deployment.
+
 ## Verified Codex Usage 0.1.0 publication — 2026-08-14
 
 `@agenttool/codex-usage@0.1.0` is public through protected bootstrap
