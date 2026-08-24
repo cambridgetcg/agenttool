@@ -226,9 +226,11 @@ at immutable Hub revision
 - The checked-in `source-manifest.json` deliberately retains its generation-time
   `upstream_revision: null`, `source_files_complete: false`, and
   `source_manifest_is_attestation: false` values. It does not claim knowledge
-  of its own future publication. This external receipt binds the immutable
-  source checkout, Git tree, Hub revision, and anonymous byte readback instead
-  of rewriting published candidate bytes.
+  of its own future publication. The hash-bound source doctrine and its copied
+  HF reference therefore also retain their preparation-time candidate status.
+  This external receipt binds the immutable source checkout, Git tree, Hub
+  revision, and anonymous byte readback instead of rewriting those published
+  candidate bytes.
 - The one 13,982-byte row is synthetic and `reference_only`, with
   `training_admission: not_applicable`,
   `requires_separate_training_authorization: true`, and
