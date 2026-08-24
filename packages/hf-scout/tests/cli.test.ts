@@ -72,12 +72,22 @@ describe("CLI", () => {
   });
 
   test("emits an immutable Agent Data request", async () => {
-    const run = harness();
+    let requestedRevision: string | undefined;
+    const run = harness({
+      reader: {
+        ...reader(),
+        async inspect(input) {
+          requestedRevision = input.revision;
+          return await reader().inspect(input);
+        },
+      },
+    });
     const code = await runHfScoutCli(
-      ["inspect", "model", "org/model", "--agent-data"],
+      ["inspect", "model", "org/model", "--revision", REVISION, "--agent-data"],
       run.dependencies,
     );
     expect(code).toBe(0);
+    expect(requestedRevision).toBe(REVISION);
     const parsed = JSON.parse(run.stdout()) as {
       input: {
         version: string;
@@ -89,6 +99,65 @@ describe("CLI", () => {
       .toBe(`${REVISION}:sha256:${parsed.input.metadata.snapshot_sha256}`);
     expect(parsed.input.source_uri).toEndWith(`/tree/${REVISION}`);
     expect(run.stderr()).toBe("");
+  });
+
+  test("reconciles exact release and current head with explicit caller evidence", async () => {
+    const head = "b".repeat(40);
+    const calls: Array<string | undefined> = [];
+    const run = harness({
+      reader: {
+        ...reader(),
+        async inspect(input) {
+          calls.push(input.revision);
+          return {
+            id: "org/model",
+            sha: input.revision ?? head,
+            tags: ["license:mit"],
+            siblings: [],
+          };
+        },
+      },
+    });
+    expect(await runHfScoutCli([
+      "reconcile",
+      "model",
+      "org/model",
+      REVISION,
+      "--source-revision",
+      REVISION,
+      "--source-manifest-sha256",
+      "c".repeat(64),
+      "--local-manifest-sha256",
+      "d".repeat(64),
+      "--local-file-count",
+      "0",
+      "--local-total-bytes",
+      "0",
+      "--json",
+    ], run.dependencies)).toBe(0);
+    expect(calls).toEqual([REVISION, undefined]);
+    const parsed = JSON.parse(run.stdout()) as {
+      release: { resolved_revision: string };
+      observed_head: { resolved_revision: string; state: string };
+      source_declaration: { state: string; manifest_comparison: string };
+      local_verification: { state: string; manifest_comparison: string };
+    };
+    expect(parsed.release.resolved_revision).toBe(REVISION);
+    expect(parsed.observed_head).toMatchObject({
+      resolved_revision: head,
+      state: "differs_from_release",
+    });
+    expect(parsed.source_declaration.state).toBe("caller_supplied");
+    expect(parsed.local_verification.state).toBe("caller_reported");
+
+    const invalid = harness();
+    expect(await runHfScoutCli([
+      "reconcile",
+      "paper",
+      "2608.12345",
+      REVISION,
+    ], invalid.dependencies)).toBe(2);
+    expect(invalid.stderr()).toContain("reconcile supports model, dataset, or space");
   });
 
   test("filters the inert research catalog without starting a Hub read", async () => {

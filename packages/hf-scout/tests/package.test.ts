@@ -9,8 +9,8 @@ import {
 
 const ROOT = join(import.meta.dir, "..");
 
-describe("private package boundary", () => {
-  test("keeps package identity, exports, and private status aligned", async () => {
+describe("public developer-preview package boundary", () => {
+  test("keeps package identity, exports, and release metadata aligned", async () => {
     const packageJson = JSON.parse(
       await readFile(join(ROOT, "package.json"), "utf8"),
     ) as {
@@ -18,28 +18,44 @@ describe("private package boundary", () => {
       version: string;
       private?: boolean;
       license?: string;
+      sideEffects?: boolean;
       dependencies?: Record<string, string>;
-      publishConfig?: unknown;
+      publishConfig?: { access?: string; tag?: string };
       exports?: Record<string, unknown>;
       files?: string[];
+      scripts?: Record<string, string>;
     };
     expect(packageJson).toMatchObject({
       name: TOOL_NAME,
       version: TOOL_VERSION,
-      private: true,
-      license: "UNLICENSED",
+      license: "Apache-2.0",
+      sideEffects: false,
+      publishConfig: { access: "public", tag: "next" },
     });
+    expect(packageJson.private).toBeUndefined();
     expect(packageJson.dependencies).toBeUndefined();
-    expect(packageJson.publishConfig).toBeUndefined();
     expect(Object.hasOwn(packageJson.exports ?? {}, "./facilities")).toBe(true);
     expect(Object.hasOwn(packageJson.exports ?? {}, "./report.schema.json")).toBe(true);
     expect(Object.hasOwn(packageJson.exports ?? {}, "./search.schema.json")).toBe(true);
     expect(Object.hasOwn(packageJson.exports ?? {}, "./sidecar.schema.json")).toBe(true);
+    expect(Object.hasOwn(packageJson.exports ?? {}, "./reconciliation.schema.json")).toBe(true);
+    for (const name of [
+      "./report-v0.1.schema.json",
+      "./report-v0.2.schema.json",
+      "./search-v0.1.schema.json",
+      "./search-v0.2.schema.json",
+      "./sidecar-v0.1.schema.json",
+      "./sidecar-v0.2.schema.json",
+      "./release-reconciliation-v0.2.schema.json",
+    ]) expect(Object.hasOwn(packageJson.exports ?? {}, name)).toBe(true);
     expect(Object.hasOwn(packageJson.exports ?? {}, "./research-catalog.schema.json")).toBe(true);
     expect(Object.hasOwn(packageJson.exports ?? {}, "./research-binding.schema.json")).toBe(true);
     expect(Object.hasOwn(packageJson.exports ?? {}, "./kingdom.extension.json")).toBe(true);
     expect(packageJson.files).not.toContain("tests");
     expect(packageJson.files).not.toContain("node_modules");
+    expect(packageJson.files).toContain("LICENSE");
+    expect(packageJson.files).toContain("NOTICE");
+    expect(packageJson.scripts?.prepack).toBe("bun run ci");
   });
 
   test("keeps runtime source free of ambient credentials and write/compute SDK calls", async () => {
@@ -61,10 +77,12 @@ describe("private package boundary", () => {
       id: "hf-scout",
       package: TOOL_NAME,
       version: TOOL_VERSION,
-      status: "private_local_prototype",
+      status: "developer_preview",
       capabilities: [
         "huggingface:public-metadata-read",
+        "huggingface:exact-revision-read",
         "huggingface:provenance-project",
+        "huggingface:release-reconcile",
         "huggingface:research-lead-curation",
         "love:model-lock-project",
       ],
@@ -78,10 +96,13 @@ describe("private package boundary", () => {
       },
       host_contract: "not_registered",
       notes: [
-        "This manifest is a local prototype descriptor, not an installed KINGDOM host contract.",
+        "This public developer-preview package descriptor is not an installed KINGDOM host contract.",
+        "The default network remains off until an explicit inspect, search, or reconcile command.",
         "MCP OAuth is not inherited by this npm package.",
       ],
     });
+    expect(await readFile(join(ROOT, "LICENSE"), "utf8")).toContain("Apache License");
+    expect(await readFile(join(ROOT, "NOTICE"), "utf8")).toContain("AgentTool HF Scout");
     expect(await readFile(join(ROOT, "src", "cli.ts"), "utf8"))
       .toStartWith("#!/usr/bin/env node\n");
   });

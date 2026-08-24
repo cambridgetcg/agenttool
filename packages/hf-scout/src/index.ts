@@ -1,8 +1,10 @@
 export {
+  ARTIFACT_SCHEMA,
   DEFAULT_LIMITS,
   HF_ORIGIN,
   LOVE_MODEL_LOCK_SCHEMA,
   REPORT_SCHEMA,
+  RECONCILIATION_SCHEMA,
   RESEARCH_BINDING_SCHEMA,
   RESEARCH_CATALOG_SCHEMA,
   RESEARCH_LEAD_SCHEMA,
@@ -25,6 +27,7 @@ export type {
 export {
   formatFacilities,
   formatModelLockProjection,
+  formatReleaseReconciliation,
   formatScoutReport,
   formatSearchReport,
 } from "./format.js";
@@ -42,6 +45,7 @@ export {
 } from "./research-leads.js";
 export { projectLoveModelLock } from "./lock.js";
 export {
+  createHfReleaseReconciliation,
   createKingdomHfSidecar,
   projectAgentDataTextRequest,
 } from "./projection.js";
@@ -54,14 +58,19 @@ export type {
 } from "./public-hub-reader.js";
 export {
   inspectHfRepository,
+  reconcileHfRelease,
   searchHfRepositories,
 } from "./scout.js";
 export type {
   HfScoutOptions,
   InspectHfRepositoryInput,
+  ReconcileHfReleaseInput,
   SearchHfRepositoriesInput,
 } from "./scout.js";
-export type { KingdomHfSidecarInput } from "./projection.js";
+export type {
+  HfReleaseReconciliationInput,
+  KingdomHfSidecarInput,
+} from "./projection.js";
 export type {
   AgentDataTextCollectRequest,
   FetchLike,
@@ -71,6 +80,10 @@ export type {
   HfDiagnostic,
   HfDiagnosticCode,
   HfFileCommitment,
+  HfLocalVerificationReport,
+  HfManifestComparison,
+  HfReleaseReconciliationReport,
+  HfReleaseSourceDeclaration,
   HfCuratedLicense,
   HfResearchBinding,
   HfResearchBoundary,

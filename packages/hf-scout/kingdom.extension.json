@@ -2,11 +2,13 @@
   "schema": "kingdom-extension-local/v0.1",
   "id": "hf-scout",
   "package": "@agenttool/hf-scout",
-  "version": "0.1.0-dev.0",
-  "status": "private_local_prototype",
+  "version": "0.2.0-dev.0",
+  "status": "developer_preview",
   "capabilities": [
     "huggingface:public-metadata-read",
+    "huggingface:exact-revision-read",
     "huggingface:provenance-project",
+    "huggingface:release-reconcile",
     "huggingface:research-lead-curation",
     "love:model-lock-project"
   ],
@@ -20,7 +22,8 @@
   },
   "host_contract": "not_registered",
   "notes": [
-    "This manifest is a local prototype descriptor, not an installed KINGDOM host contract.",
+    "This public developer-preview package descriptor is not an installed KINGDOM host contract.",
+    "The default network remains off until an explicit inspect, search, or reconcile command.",
     "MCP OAuth is not inherited by this npm package."
   ]
 }

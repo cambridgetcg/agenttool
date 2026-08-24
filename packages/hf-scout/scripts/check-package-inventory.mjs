@@ -21,14 +21,20 @@ const sourceStems = [
 
 const expected = [
   "CLAUDE.md",
+  "LICENSE",
+  "NOTICE",
   "README.md",
   "kingdom.extension.json",
   "package.json",
   "schema/agenttool-hf-research-binding-v0.1.schema.json",
   "schema/agenttool-hf-research-catalog-v0.1.schema.json",
+  "schema/agenttool-hf-release-reconciliation-v0.2.schema.json",
   "schema/agenttool-hf-scout-report-v0.1.schema.json",
+  "schema/agenttool-hf-scout-report-v0.2.schema.json",
   "schema/agenttool-hf-scout-search-v0.1.schema.json",
+  "schema/agenttool-hf-scout-search-v0.2.schema.json",
   "schema/kingdom-hf-sidecar-v0.1.schema.json",
+  "schema/kingdom-hf-sidecar-v0.2.schema.json",
   ...sourceStems.flatMap((stem) => [
     `dist/${stem}.d.ts`,
     `dist/${stem}.d.ts.map`,

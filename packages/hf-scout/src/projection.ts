@@ -1,5 +1,7 @@
 import {
+  ARTIFACT_SCHEMA,
   HF_ORIGIN,
+  RECONCILIATION_SCHEMA,
   REPORT_SCHEMA,
   SIDECAR_SCHEMA,
   TOOL_NAME,
@@ -10,6 +12,10 @@ import { invariant } from "./errors.js";
 import type {
   AgentDataTextCollectRequest,
   HfArtifactSnapshot,
+  HfLocalVerificationReport,
+  HfManifestComparison,
+  HfReleaseReconciliationReport,
+  HfReleaseSourceDeclaration,
   HfScoutReport,
   KingdomHfArtifactReference,
   KingdomHfSidecar,
@@ -35,6 +41,13 @@ export interface KingdomHfSidecarInput {
   generated_at: string;
   reports?: readonly HfScoutReport[];
   model_locks?: readonly LoveModelLockProjection[];
+}
+
+export interface HfReleaseReconciliationInput {
+  release_report: HfScoutReport;
+  head_report: HfScoutReport;
+  source_declaration?: HfReleaseSourceDeclaration;
+  local_verification?: HfLocalVerificationReport;
 }
 
 export function createKingdomHfSidecar(
@@ -69,7 +82,7 @@ export function createKingdomHfSidecar(
     extension: {
       package: TOOL_NAME,
       version: TOOL_VERSION,
-      status: "private_local_prototype",
+      status: "developer_preview",
     },
     artifacts,
     model_locks: locks,
@@ -94,9 +107,11 @@ export function projectAgentDataTextRequest(
     "Agent Data collection id is invalid",
   );
   const snapshot = cloneReportSnapshot(report);
-  const revision = snapshot.revision.full_sha;
+  const revision = snapshot.revision.resolved_full_sha;
   invariant(
-    revision && snapshot.revision.state === "immutable_commit",
+    revision
+      && snapshot.revision.requested_full_sha === revision
+      && snapshot.revision.state === "exact_revision_match",
     "mutable_artifact",
     "Agent Data projection requires a full immutable commit SHA",
   );
@@ -121,7 +136,7 @@ export function projectAgentDataTextRequest(
       version,
       observed_at: normalizeObservedAt(report.observed_at),
       metadata: {
-        schema: "agenttool-hf-artifact/v0.1",
+        schema: ARTIFACT_SCHEMA,
         provider: "huggingface",
         repo_kind: snapshot.subject.kind,
         repo_id: snapshot.subject.id,
@@ -135,9 +150,326 @@ export function projectAgentDataTextRequest(
   };
 }
 
+export function createHfReleaseReconciliation(
+  input: HfReleaseReconciliationInput,
+): HfReleaseReconciliationReport {
+  const release = cloneReportSnapshot(input.release_report);
+  const head = cloneReportSnapshot(input.head_report);
+  const observedAt = normalizeObservedAt(input.release_report.observed_at);
+  invariant(
+    normalizeObservedAt(input.head_report.observed_at) === observedAt,
+    "reconciliation_time_mismatch",
+    "release and head observations must use the same observation time",
+  );
+  invariant(
+    release.subject.kind === head.subject.kind
+      && release.subject.id === head.subject.id,
+    "reconciliation_subject_mismatch",
+    "release and head observations must describe the same repository",
+  );
+  const releaseKind = release.subject.kind;
+  invariant(
+    releaseKind === "model" || releaseKind === "dataset" || releaseKind === "space",
+    "unsupported_reconciliation_kind",
+    "release reconciliation supports model, dataset, or space repositories",
+  );
+  const requestedRevision = release.revision.requested_full_sha;
+  const resolvedRevision = release.revision.resolved_full_sha;
+  invariant(
+    requestedRevision
+      && resolvedRevision === requestedRevision
+      && release.revision.state === "exact_revision_match"
+      && release.observation.reference === "requested_exact_revision",
+    "reconciliation_release_not_exact",
+    "release reconciliation requires an exact matched revision observation",
+  );
+  invariant(
+    head.revision.requested_full_sha === null
+      && head.observation.reference === "current_head",
+    "reconciliation_head_not_mutable",
+    "release reconciliation requires a separate current-head observation",
+  );
+
+  const observedFileManifestSha256 = release.file_inventory === "complete"
+    ? sha256Hex(canonicalJson(release.files))
+    : null;
+  const sourceDeclaration = normalizeSourceDeclaration(
+    input.source_declaration,
+    observedFileManifestSha256,
+  );
+  const localVerification = normalizeLocalVerification(
+    input.local_verification,
+    requestedRevision,
+    observedFileManifestSha256,
+  );
+  const headRevision = head.revision.resolved_full_sha;
+
+  return deepFreeze({
+    schema: RECONCILIATION_SCHEMA,
+    tool: { name: TOOL_NAME, version: TOOL_VERSION },
+    operation: "reconcile_release",
+    observed_at: observedAt,
+    subject: {
+      provider: "huggingface",
+      kind: releaseKind,
+      id: release.subject.id,
+    },
+    release: {
+      requested_revision: requestedRevision,
+      resolved_revision: resolvedRevision,
+      state: "exact_requested_revision_observed",
+      observation: { ...release.observation },
+      snapshot_sha256: sha256Hex(canonicalJson(release)),
+      file_inventory: release.file_inventory,
+      observed_file_manifest_sha256: observedFileManifestSha256,
+      observed_file_count: release.files.length,
+      observed_total_bytes: totalObservedBytes(release),
+    },
+    observed_head: {
+      requested_reference: "current_head",
+      resolved_revision: headRevision,
+      state: headRevision === null
+        ? "unresolved"
+        : headRevision === requestedRevision
+          ? "matches_release"
+          : "differs_from_release",
+      observation: { ...head.observation },
+      snapshot_sha256: sha256Hex(canonicalJson(head)),
+    },
+    publisher_claims: {
+      basis: "publisher_assertion",
+      release: release.declared,
+      observed_head: head.declared,
+    },
+    source_declaration: sourceDeclaration,
+    local_verification: localVerification,
+    boundary: {
+      publisher_claims: "unverified",
+      source_declaration: "caller_supplied_or_absent",
+      local_verification: "caller_reported_or_absent",
+      license_truth: "not_established",
+      consent: "not_established",
+      training_authority: "not_established",
+      safety: "not_established",
+      compatibility: "not_established",
+      hub_files_downloaded: false,
+      model_code_executed: false,
+      remote_compute_invoked: false,
+      hub_write_performed: false,
+    },
+  });
+}
+
+function normalizeSourceDeclaration(
+  value: HfReleaseSourceDeclaration | undefined,
+  observedManifest: string | null,
+): HfReleaseReconciliationReport["source_declaration"] {
+  if (value === undefined) {
+    return {
+      state: "not_provided",
+      basis: null,
+      source_revision: null,
+      source_manifest_sha256: null,
+      manifest_comparison: "not_comparable",
+    };
+  }
+  const source = asPlainObject(value, "invalid_source_declaration");
+  assertExactKeys(
+    source,
+    ["basis", "source_revision", "source_manifest_sha256"],
+    "invalid_source_declaration",
+  );
+  invariant(
+    source.basis === "caller_declaration",
+    "invalid_source_declaration",
+    "source declaration basis is invalid",
+  );
+  const sourceRevision = normalizeNullableFullSha(
+    source.source_revision,
+    "invalid_source_declaration",
+    "source declaration revision is invalid",
+  );
+  const sourceManifest = normalizeNullableSha256(
+    source.source_manifest_sha256,
+    "invalid_source_declaration",
+    "source declaration manifest digest is invalid",
+  );
+  invariant(
+    sourceRevision !== null || sourceManifest !== null,
+    "invalid_source_declaration",
+    "source declaration must contain a revision or manifest digest",
+  );
+  return {
+    state: "caller_supplied",
+    basis: "caller_declaration",
+    source_revision: sourceRevision,
+    source_manifest_sha256: sourceManifest,
+    manifest_comparison: compareManifest(sourceManifest, observedManifest),
+  };
+}
+
+function normalizeLocalVerification(
+  value: HfLocalVerificationReport | undefined,
+  releaseRevision: string,
+  observedManifest: string | null,
+): HfReleaseReconciliationReport["local_verification"] {
+  if (value === undefined) {
+    return {
+      state: "not_provided",
+      basis: null,
+      release_revision: null,
+      file_manifest_sha256: null,
+      verified_file_count: null,
+      verified_total_bytes: null,
+      manifest_comparison: "not_comparable",
+    };
+  }
+  const local = asPlainObject(value, "invalid_local_verification");
+  assertExactKeys(
+    local,
+    [
+      "basis",
+      "release_revision",
+      "file_manifest_sha256",
+      "verified_file_count",
+      "verified_total_bytes",
+    ],
+    "invalid_local_verification",
+  );
+  invariant(
+    local.basis === "caller_supplied_local_verification",
+    "invalid_local_verification",
+    "local verification basis is invalid",
+  );
+  const localRevision = normalizeFullSha(local.release_revision);
+  invariant(
+    localRevision === releaseRevision,
+    "local_verification_revision_mismatch",
+    "local verification revision does not match the release",
+  );
+  const localManifest = normalizeSha256(local.file_manifest_sha256);
+  invariant(
+    localManifest,
+    "invalid_local_verification",
+    "local verification manifest digest is invalid",
+  );
+  const verifiedFileCount = safeInteger(local.verified_file_count);
+  const verifiedTotalBytes = safeInteger(local.verified_total_bytes);
+  invariant(
+    verifiedFileCount !== null && verifiedFileCount <= 10_000,
+    "invalid_local_verification",
+    "local verification file count is invalid",
+  );
+  invariant(
+    verifiedTotalBytes !== null,
+    "invalid_local_verification",
+    "local verification byte count is invalid",
+  );
+  return {
+    state: "caller_reported",
+    basis: "caller_supplied_local_verification",
+    release_revision: localRevision,
+    file_manifest_sha256: localManifest,
+    verified_file_count: verifiedFileCount,
+    verified_total_bytes: verifiedTotalBytes,
+    manifest_comparison: compareManifest(localManifest, observedManifest),
+  };
+}
+
+function compareManifest(
+  declared: string | null,
+  observed: string | null,
+): HfManifestComparison {
+  if (declared === null || observed === null) return "not_comparable";
+  return declared === observed
+    ? "matches_provider_observation"
+    : "differs_from_provider_observation";
+}
+
+function totalObservedBytes(snapshot: HfArtifactSnapshot): number | null {
+  let total = 0;
+  for (const file of snapshot.files) {
+    if (file.size === null || total > Number.MAX_SAFE_INTEGER - file.size) return null;
+    total += file.size;
+  }
+  return total;
+}
+
+function normalizeNullableFullSha(
+  value: unknown,
+  code: string,
+  message: string,
+): string | null {
+  if (value === null) return null;
+  const normalized = normalizeFullSha(value);
+  invariant(normalized, code, message);
+  return normalized;
+}
+
+function normalizeNullableSha256(
+  value: unknown,
+  code: string,
+  message: string,
+): string | null {
+  if (value === null) return null;
+  const normalized = normalizeSha256(value);
+  invariant(normalized, code, message);
+  return normalized;
+}
+
 function cloneReportSnapshot(report: HfScoutReport): HfArtifactSnapshot {
-  invariant(report.schema === REPORT_SCHEMA, "invalid_report", "HF Scout report schema is invalid");
-  const transport = asPlainObject(report.transport, "invalid_report");
+  const object = asPlainObject(report, "invalid_report");
+  assertExactKeys(
+    object,
+    [
+      "schema",
+      "tool",
+      "operation",
+      "observed_at",
+      "status",
+      "transport",
+      "snapshot",
+      "diagnostics",
+    ],
+    "invalid_report",
+  );
+  invariant(object.schema === REPORT_SCHEMA, "invalid_report", "HF Scout report schema is invalid");
+  const tool = asPlainObject(object.tool, "invalid_report");
+  assertExactKeys(tool, ["name", "version"], "invalid_report");
+  invariant(
+    tool.name === TOOL_NAME && tool.version === TOOL_VERSION,
+    "invalid_report",
+    "HF Scout report tool identity is invalid",
+  );
+  invariant(
+    object.operation === "inspect",
+    "invalid_report",
+    "HF Scout report operation is invalid",
+  );
+  invariant(
+    typeof object.observed_at === "string",
+    "invalid_report",
+    "HF Scout report observation time is invalid",
+  );
+  normalizeObservedAt(object.observed_at);
+  invariant(
+    object.status === "observed" || object.status === "partial",
+    "invalid_report",
+    "HF Scout report status is invalid",
+  );
+  invariant(
+    Array.isArray(object.diagnostics) && object.diagnostics.length <= 32,
+    "invalid_report",
+    "HF Scout report diagnostics are invalid",
+  );
+  for (const value of object.diagnostics) validateDiagnostic(value);
+  invariant(
+    object.status === (object.diagnostics.length === 0 ? "observed" : "partial"),
+    "invalid_report",
+    "HF Scout report status is inconsistent",
+  );
+
+  const transport = asPlainObject(object.transport, "invalid_report");
   assertExactKeys(
     transport,
     ["kind", "requested_effect", "credentials", "retries", "response_body"],
@@ -162,13 +494,38 @@ function cloneReportSnapshot(report: HfScoutReport): HfArtifactSnapshot {
       "HF Scout report transport is inconsistent",
     );
   }
-  const snapshot = cloneSnapshot(report.snapshot);
+  const snapshot = cloneSnapshot(object.snapshot as HfArtifactSnapshot);
   invariant(
     snapshot.observation.transport === transport.kind,
     "invalid_report",
     "HF Scout report and snapshot transports do not match",
   );
   return snapshot;
+}
+
+function validateDiagnostic(value: unknown): void {
+  const diagnostic = asPlainObject(value, "invalid_report");
+  assertExactKeys(diagnostic, ["code", "level", "message"], "invalid_report");
+  const codes = new Set([
+    "content_commitments_partial",
+    "declared_relations_truncated",
+    "file_inventory_truncated",
+    "file_inventory_unavailable",
+    "license_unknown",
+    "revision_unresolved",
+    "search_entries_omitted",
+    "search_metadata_truncated",
+    "search_truncated",
+    "tags_omitted",
+    "tags_truncated",
+  ]);
+  invariant(
+    codes.has(String(diagnostic.code))
+      && diagnostic.level === "warning"
+      && safeRemoteString(diagnostic.message, 256) !== null,
+    "invalid_report",
+    "HF Scout report diagnostic is invalid",
+  );
 }
 
 function cloneSnapshot(value: HfArtifactSnapshot): HfArtifactSnapshot {
@@ -188,7 +545,7 @@ function cloneSnapshot(value: HfArtifactSnapshot): HfArtifactSnapshot {
     ],
     "invalid_artifact",
   );
-  invariant(artifact.schema === "agenttool-hf-artifact/v0.1", "invalid_artifact", "artifact schema is invalid");
+  invariant(artifact.schema === ARTIFACT_SCHEMA, "invalid_artifact", "artifact schema is invalid");
 
   const subject = asPlainObject(artifact.subject, "invalid_artifact");
   assertExactKeys(subject, ["provider", "kind", "id"], "invalid_artifact");
@@ -201,20 +558,39 @@ function cloneSnapshot(value: HfArtifactSnapshot): HfArtifactSnapshot {
   const id = normalizeRepoId(kind, rawId);
 
   const revision = asPlainObject(artifact.revision, "invalid_artifact");
-  assertExactKeys(revision, ["full_sha", "state"], "invalid_artifact");
-  const fullSha = normalizeFullSha(revision.full_sha);
-  invariant(
-    revision.full_sha === null || fullSha !== null,
+  assertExactKeys(
+    revision,
+    ["requested_full_sha", "resolved_full_sha", "state"],
     "invalid_artifact",
-    "artifact revision is invalid",
   );
-  const expectedRevisionState = fullSha ? "immutable_commit" : "unresolved";
+  const requestedFullSha = normalizeFullSha(revision.requested_full_sha);
+  const resolvedFullSha = normalizeFullSha(revision.resolved_full_sha);
+  invariant(
+    revision.requested_full_sha === null || requestedFullSha !== null,
+    "invalid_artifact",
+    "artifact requested revision is invalid",
+  );
+  invariant(
+    revision.resolved_full_sha === null || resolvedFullSha !== null,
+    "invalid_artifact",
+    "artifact resolved revision is invalid",
+  );
+  invariant(
+    requestedFullSha === null || requestedFullSha === resolvedFullSha,
+    "invalid_artifact",
+    "artifact requested and resolved revisions differ",
+  );
+  const expectedRevisionState = requestedFullSha
+    ? "exact_revision_match"
+    : resolvedFullSha
+      ? "mutable_head_observation"
+      : "unresolved";
   invariant(revision.state === expectedRevisionState, "invalid_artifact", "artifact revision state is inconsistent");
 
   const observation = asPlainObject(artifact.observation, "invalid_artifact");
   assertExactKeys(
     observation,
-    ["transport", "repository_association"],
+    ["transport", "repository_association", "reference"],
     "invalid_artifact",
   );
   invariant(
@@ -229,6 +605,14 @@ function cloneSnapshot(value: HfArtifactSnapshot): HfArtifactSnapshot {
     observation.repository_association === expectedAssociation,
     "invalid_artifact",
     "artifact repository association is inconsistent",
+  );
+  const expectedReference = requestedFullSha
+    ? "requested_exact_revision"
+    : "current_head";
+  invariant(
+    observation.reference === expectedReference,
+    "invalid_artifact",
+    "artifact observation reference is inconsistent",
   );
 
   const declared = asPlainObject(artifact.declared, "invalid_artifact");
@@ -289,10 +673,14 @@ function cloneSnapshot(value: HfArtifactSnapshot): HfArtifactSnapshot {
     "invalid_artifact",
     "artifact file inventory state is inconsistent",
   );
-  const expectedGrade = fullSha
-    ? observation.transport === "public_hub_api"
-      ? "provider_observed_commit_metadata"
-      : "caller_supplied_commit_metadata"
+  const expectedGrade = resolvedFullSha
+    ? requestedFullSha
+      ? observation.transport === "public_hub_api"
+        ? "provider_observed_exact_revision_metadata"
+        : "caller_supplied_exact_revision_metadata"
+      : observation.transport === "public_hub_api"
+        ? "provider_observed_mutable_head_metadata"
+        : "caller_supplied_mutable_head_metadata"
     : "mutable_observation";
   invariant(
     artifact.provenance_grade === expectedGrade,
@@ -300,14 +688,35 @@ function cloneSnapshot(value: HfArtifactSnapshot): HfArtifactSnapshot {
     "artifact provenance grade is inconsistent",
   );
   const boundaryCodes = validatedBoundaryCodes(artifact.boundary_codes);
+  const expectedBoundaries = new Set<HfBoundaryCode>([
+    "publisher_metadata_unverified",
+    "scout_files_not_downloaded",
+    "scout_model_code_not_executed",
+  ]);
+  if (observation.transport === "injected") expectedBoundaries.add("caller_owned_reader");
+  if (requestedFullSha === null) expectedBoundaries.add("mutable_head_observation");
+  if (resolvedFullSha === null) expectedBoundaries.add("revision_unresolved");
+  if (license === null) expectedBoundaries.add("license_unknown");
+  if (artifact.file_inventory !== "complete") expectedBoundaries.add("file_inventory_incomplete");
+  invariant(
+    boundaryCodes.length === expectedBoundaries.size
+      && boundaryCodes.every((code) => expectedBoundaries.has(code)),
+    "invalid_artifact",
+    "artifact boundary codes are inconsistent",
+  );
 
   return {
-    schema: "agenttool-hf-artifact/v0.1",
+    schema: ARTIFACT_SCHEMA,
     subject: { provider: "huggingface", kind, id },
-    revision: { full_sha: fullSha, state: expectedRevisionState },
+    revision: {
+      requested_full_sha: requestedFullSha,
+      resolved_full_sha: resolvedFullSha,
+      state: expectedRevisionState,
+    },
     observation: {
       transport: observation.transport,
       repository_association: expectedAssociation,
+      reference: expectedReference,
     },
     declared: {
       basis: "publisher_assertion",
@@ -404,12 +813,14 @@ function projectKingdomArtifactReference(
   snapshot: HfArtifactSnapshot,
 ): KingdomHfArtifactReference {
   return {
-    schema: "kingdom-hf-artifact-reference/v0.1",
+    schema: "kingdom-hf-artifact-reference/v0.2",
     subject: {
       kind: snapshot.subject.kind,
       id: snapshot.subject.id,
     },
-    revision: snapshot.revision.full_sha,
+    requested_revision: snapshot.revision.requested_full_sha,
+    resolved_revision: snapshot.revision.resolved_full_sha,
+    revision_state: snapshot.revision.state,
     snapshot_sha256: sha256Hex(canonicalJson(snapshot)),
     observation: { ...snapshot.observation },
     provenance_grade: snapshot.provenance_grade,
@@ -517,6 +928,7 @@ function validatedBoundaryCodes(value: unknown): HfBoundaryCode[] {
     "caller_owned_reader",
     "file_inventory_incomplete",
     "license_unknown",
+    "mutable_head_observation",
     "publisher_metadata_unverified",
     "revision_unresolved",
     "scout_files_not_downloaded",

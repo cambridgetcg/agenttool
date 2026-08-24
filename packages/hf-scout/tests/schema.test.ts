@@ -10,6 +10,7 @@ import {
   getCuratedHfResearchCatalog,
   inspectHfRepository,
   projectLoveModelLock,
+  reconcileHfRelease,
   searchHfRepositories,
   type HubReader,
 } from "../src/index.js";
@@ -19,13 +20,16 @@ const REVISION = "a".repeat(40);
 
 async function schemas() {
   const report = JSON.parse(
-    await readFile(join(ROOT, "schema", "agenttool-hf-scout-report-v0.1.schema.json"), "utf8"),
+    await readFile(join(ROOT, "schema", "agenttool-hf-scout-report-v0.2.schema.json"), "utf8"),
   ) as object;
   const search = JSON.parse(
-    await readFile(join(ROOT, "schema", "agenttool-hf-scout-search-v0.1.schema.json"), "utf8"),
+    await readFile(join(ROOT, "schema", "agenttool-hf-scout-search-v0.2.schema.json"), "utf8"),
   ) as object;
   const sidecar = JSON.parse(
-    await readFile(join(ROOT, "schema", "kingdom-hf-sidecar-v0.1.schema.json"), "utf8"),
+    await readFile(join(ROOT, "schema", "kingdom-hf-sidecar-v0.2.schema.json"), "utf8"),
+  ) as object;
+  const reconciliation = JSON.parse(
+    await readFile(join(ROOT, "schema", "agenttool-hf-release-reconciliation-v0.2.schema.json"), "utf8"),
   ) as object;
   const researchCatalog = JSON.parse(
     await readFile(join(ROOT, "schema", "agenttool-hf-research-catalog-v0.1.schema.json"), "utf8"),
@@ -33,7 +37,22 @@ async function schemas() {
   const researchBinding = JSON.parse(
     await readFile(join(ROOT, "schema", "agenttool-hf-research-binding-v0.1.schema.json"), "utf8"),
   ) as object;
-  return { report, search, sidecar, researchCatalog, researchBinding };
+  const historical = await Promise.all([
+    "agenttool-hf-scout-report-v0.1.schema.json",
+    "agenttool-hf-scout-search-v0.1.schema.json",
+    "kingdom-hf-sidecar-v0.1.schema.json",
+  ].map(async (name) => JSON.parse(
+    await readFile(join(ROOT, "schema", name), "utf8"),
+  ) as object));
+  return {
+    report,
+    search,
+    sidecar,
+    reconciliation,
+    researchCatalog,
+    researchBinding,
+    historical,
+  };
 }
 
 function fixtureReader(): HubReader {
@@ -58,9 +77,9 @@ describe("JSON Schemas", () => {
     const ajv = new Ajv2020({ strict: true, allErrors: true });
     addFormats(ajv);
     ajv.addSchema(documents.report);
-    const validate = ajv.getSchema("urn:agenttool:hf-scout:report:v0.1")!;
+    const validate = ajv.getSchema("urn:agenttool:hf-scout:report:v0.2")!;
     const report = await inspectHfRepository(
-      { kind: "model", id: "org/model" },
+      { kind: "model", id: "org/model", revision: REVISION },
       { reader: fixtureReader(), observed_at: "2026-07-30T12:00:00.000Z" },
     );
     expect(validate(report), JSON.stringify(validate.errors)).toBe(true);
@@ -92,8 +111,9 @@ describe("JSON Schemas", () => {
       snapshot: {
         ...report.snapshot,
         revision: {
-          full_sha: null,
-          state: "immutable_commit",
+          requested_full_sha: null,
+          resolved_full_sha: REVISION,
+          state: "exact_revision_match",
         },
       },
     })).toBe(false);
@@ -111,10 +131,22 @@ describe("JSON Schemas", () => {
         observation: {
           transport: "public_hub_api",
           repository_association: "provider_response",
+          reference: "requested_exact_revision",
         },
-        provenance_grade: "provider_observed_commit_metadata",
+        provenance_grade: "provider_observed_exact_revision_metadata",
+        boundary_codes: report.snapshot.boundary_codes
+          .filter((code) => code !== "caller_owned_reader"),
       },
     })).toBe(false);
+  });
+
+  test("compiles the preserved v0.1 schemas as historical contracts", async () => {
+    const documents = await schemas();
+    for (const schema of documents.historical) {
+      const ajv = new Ajv2020({ strict: true, allErrors: true });
+      addFormats(ajv);
+      expect(() => ajv.compile(schema)).not.toThrow();
+    }
   });
 
   test("validates a sidecar as a standalone exported schema", async () => {
@@ -173,6 +205,35 @@ describe("JSON Schemas", () => {
     );
     expect(validate(report), JSON.stringify(validate.errors)).toBe(true);
     expect(validate({ ...report, trusted: true })).toBe(false);
+  });
+
+  test("validates an exact release/current-head reconciliation", async () => {
+    const documents = await schemas();
+    const ajv = new Ajv2020({ strict: true, allErrors: true });
+    addFormats(ajv);
+    const validate = ajv.compile(documents.reconciliation);
+    const report = await reconcileHfRelease(
+      {
+        kind: "model",
+        id: "org/model",
+        release_revision: REVISION,
+        source_declaration: {
+          basis: "caller_declaration",
+          source_revision: REVISION,
+          source_manifest_sha256: null,
+        },
+      },
+      { reader: fixtureReader(), observed_at: "2026-07-30T12:00:00.000Z" },
+    );
+    expect(validate(report), JSON.stringify(validate.errors)).toBe(true);
+    expect(validate({ ...report, trusted: true })).toBe(false);
+    expect(validate({
+      ...report,
+      observed_head: {
+        ...report.observed_head,
+        requested_reference: "requested_exact_revision",
+      },
+    })).toBe(false);
   });
 
   test("validates the curated research catalog and an exact report binding", async () => {
@@ -254,7 +315,7 @@ describe("JSON Schemas", () => {
       },
     };
     const report = await inspectHfRepository(
-      { kind: lead.match.kind, id: lead.match.id },
+      { kind: lead.match.kind, id: lead.match.id, revision: lead.match.revision },
       { reader, observed_at: "2026-07-31T12:00:00.000Z" },
     );
     const binding = bindHfResearchLead(report, lead);

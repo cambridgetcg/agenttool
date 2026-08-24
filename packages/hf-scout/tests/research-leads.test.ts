@@ -38,7 +38,7 @@ async function reportFor(
     },
   };
   return inspectHfRepository(
-    { kind: lead.match.kind, id: lead.match.id },
+    { kind: lead.match.kind, id: lead.match.id, revision: lead.match.revision },
     { reader, observed_at: options.observed_at ?? OBSERVED_AT },
   );
 }

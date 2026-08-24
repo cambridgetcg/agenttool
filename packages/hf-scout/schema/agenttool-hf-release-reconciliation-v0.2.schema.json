@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:hf-scout:release-reconciliation:v0.2",
+  "title": "AgentTool Hugging Face release reconciliation report v0.2",
+  "$comment": "This report compares an exact revision observation with a separately observed mutable current head. Publisher claims, provider observations, caller declarations, and caller-reported local verification remain distinct.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "tool", "operation", "observed_at", "subject", "release", "observed_head", "publisher_claims", "source_declaration", "local_verification", "boundary"],
+  "properties": {
+    "schema": { "const": "agenttool-hf-release-reconciliation/v0.2" },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "const": "@agenttool/hf-scout" },
+        "version": { "const": "0.2.0-dev.0" }
+      }
+    },
+    "operation": { "const": "reconcile_release" },
+    "observed_at": { "type": "string", "format": "date-time", "maxLength": 64 },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "kind", "id"],
+      "properties": {
+        "provider": { "const": "huggingface" },
+        "kind": { "$ref": "#/$defs/publicRepoKind" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 193 }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested_revision", "resolved_revision", "state", "observation", "snapshot_sha256", "file_inventory", "observed_file_manifest_sha256", "observed_file_count", "observed_total_bytes"],
+      "properties": {
+        "requested_revision": { "$ref": "#/$defs/sha40" },
+        "resolved_revision": { "$ref": "#/$defs/sha40" },
+        "state": { "const": "exact_requested_revision_observed" },
+        "observation": {
+          "allOf": [
+            { "$ref": "#/$defs/observation" },
+            { "type": "object", "properties": { "reference": { "const": "requested_exact_revision" } } }
+          ]
+        },
+        "snapshot_sha256": { "$ref": "#/$defs/sha256" },
+        "file_inventory": { "enum": ["not_provided", "complete", "truncated"] },
+        "observed_file_manifest_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "observed_file_count": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "observed_total_bytes": { "type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991 }
+      }
+    },
+    "observed_head": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested_reference", "resolved_revision", "state", "observation", "snapshot_sha256"],
+      "properties": {
+        "requested_reference": { "const": "current_head" },
+        "resolved_revision": { "oneOf": [{ "$ref": "#/$defs/sha40" }, { "type": "null" }] },
+        "state": { "enum": ["matches_release", "differs_from_release", "unresolved"] },
+        "observation": {
+          "allOf": [
+            { "$ref": "#/$defs/observation" },
+            { "type": "object", "properties": { "reference": { "const": "current_head" } } }
+          ]
+        },
+        "snapshot_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "resolved_revision": { "$ref": "#/$defs/sha40" },
+            "state": { "enum": ["matches_release", "differs_from_release"] }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "resolved_revision": { "type": "null" },
+            "state": { "const": "unresolved" }
+          }
+        }
+      ]
+    },
+    "publisher_claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["basis", "release", "observed_head"],
+      "properties": {
+        "basis": { "const": "publisher_assertion" },
+        "release": { "$ref": "#/$defs/declared" },
+        "observed_head": { "$ref": "#/$defs/declared" }
+      }
+    },
+    "source_declaration": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "basis", "source_revision", "source_manifest_sha256", "manifest_comparison"],
+          "properties": {
+            "state": { "const": "not_provided" },
+            "basis": { "type": "null" },
+            "source_revision": { "type": "null" },
+            "source_manifest_sha256": { "type": "null" },
+            "manifest_comparison": { "const": "not_comparable" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "basis", "source_revision", "source_manifest_sha256", "manifest_comparison"],
+          "properties": {
+            "state": { "const": "caller_supplied" },
+            "basis": { "const": "caller_declaration" },
+            "source_revision": { "oneOf": [{ "$ref": "#/$defs/sha40" }, { "type": "null" }] },
+            "source_manifest_sha256": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+            "manifest_comparison": { "$ref": "#/$defs/manifestComparison" }
+          },
+          "anyOf": [
+            { "type": "object", "properties": { "source_revision": { "$ref": "#/$defs/sha40" } } },
+            { "type": "object", "properties": { "source_manifest_sha256": { "$ref": "#/$defs/sha256" } } }
+          ]
+        }
+      ]
+    },
+    "local_verification": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "basis", "release_revision", "file_manifest_sha256", "verified_file_count", "verified_total_bytes", "manifest_comparison"],
+          "type": "object",
+          "properties": {
+            "state": { "const": "not_provided" },
+            "basis": { "type": "null" },
+            "release_revision": { "type": "null" },
+            "file_manifest_sha256": { "type": "null" },
+            "verified_file_count": { "type": "null" },
+            "verified_total_bytes": { "type": "null" },
+            "manifest_comparison": { "const": "not_comparable" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "basis", "release_revision", "file_manifest_sha256", "verified_file_count", "verified_total_bytes", "manifest_comparison"],
+          "type": "object",
+          "properties": {
+            "state": { "const": "caller_reported" },
+            "basis": { "const": "caller_supplied_local_verification" },
+            "release_revision": { "$ref": "#/$defs/sha40" },
+            "file_manifest_sha256": { "$ref": "#/$defs/sha256" },
+            "verified_file_count": { "type": "integer", "minimum": 0, "maximum": 10000 },
+            "verified_total_bytes": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+            "manifest_comparison": { "$ref": "#/$defs/manifestComparison" }
+          }
+        }
+      ]
+    },
+    "boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publisher_claims", "source_declaration", "local_verification", "license_truth", "consent", "training_authority", "safety", "compatibility", "hub_files_downloaded", "model_code_executed", "remote_compute_invoked", "hub_write_performed"],
+      "properties": {
+        "publisher_claims": { "const": "unverified" },
+        "source_declaration": { "const": "caller_supplied_or_absent" },
+        "local_verification": { "const": "caller_reported_or_absent" },
+        "license_truth": { "const": "not_established" },
+        "consent": { "const": "not_established" },
+        "training_authority": { "const": "not_established" },
+        "safety": { "const": "not_established" },
+        "compatibility": { "const": "not_established" },
+        "hub_files_downloaded": { "const": false },
+        "model_code_executed": { "const": false },
+        "remote_compute_invoked": { "const": false },
+        "hub_write_performed": { "const": false }
+      }
+    }
+  },
+  "$defs": {
+    "sha40": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "publicRepoKind": { "enum": ["model", "dataset", "space"] },
+    "manifestComparison": { "enum": ["matches_provider_observation", "differs_from_provider_observation", "not_comparable"] },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transport", "repository_association", "reference"],
+      "properties": {
+        "transport": { "enum": ["public_hub_api", "injected"] },
+        "repository_association": { "enum": ["provider_response", "caller_owned"] },
+        "reference": { "enum": ["requested_exact_revision", "current_head"] }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "transport": { "const": "public_hub_api" },
+            "repository_association": { "const": "provider_response" }
+          }
+        },
+        {
+          "properties": {
+            "transport": { "const": "injected" },
+            "repository_association": { "const": "caller_owned" }
+          }
+        }
+      ]
+    },
+    "declared": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["basis", "license", "task", "library", "gated", "private", "tags", "base_models", "papers"],
+      "properties": {
+        "basis": { "const": "publisher_assertion" },
+        "license": { "type": ["string", "null"], "maxLength": 128 },
+        "task": { "type": ["string", "null"], "maxLength": 128 },
+        "library": { "type": ["string", "null"], "maxLength": 128 },
+        "gated": { "oneOf": [{ "type": "boolean" }, { "enum": ["auto", "manual"] }, { "type": "null" }] },
+        "private": { "type": ["boolean", "null"] },
+        "tags": { "$ref": "#/$defs/claimList" },
+        "base_models": { "$ref": "#/$defs/claimList" },
+        "papers": { "$ref": "#/$defs/claimList" }
+      }
+    },
+    "claimList": {
+      "type": "array",
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": { "type": "string", "maxLength": 256 }
+    }
+  }
+}
