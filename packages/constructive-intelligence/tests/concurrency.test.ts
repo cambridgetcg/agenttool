@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -28,13 +28,38 @@ test("concurrent exact CLI retries create one chain event", async () => {
     "--receipt",
     receiptPath,
   ];
-  const processes = [Bun.spawn(command, { cwd: root, stdout: "pipe", stderr: "pipe" }),
-    Bun.spawn(command, { cwd: root, stdout: "pipe", stderr: "pipe" })];
-  const results = await Promise.all(processes.map(async (process) => ({
-    exit: await process.exited,
-    stdout: await new Response(process.stdout).text(),
-    stderr: await new Response(process.stderr).text(),
-  })));
+  // Regular files avoid Bun test-runner pipe lifecycle stalls while preserving
+  // two genuinely concurrent CLI processes and their exact output bytes.
+  const processes = [0, 1].map((index) => {
+    const stdoutPath = join(directory, `process-${index}.stdout`);
+    const stderrPath = join(directory, `process-${index}.stderr`);
+    const stdoutFd = openSync(stdoutPath, "wx", 0o600);
+    const stderrFd = openSync(stderrPath, "wx", 0o600);
+    return {
+      process: Bun.spawn(command, {
+        cwd: root,
+        stdin: "ignore",
+        stdout: stdoutFd,
+        stderr: stderrFd,
+      }),
+      stderrFd,
+      stderrPath,
+      stdoutFd,
+      stdoutPath,
+    };
+  });
+  const exits = await Promise.all(processes.map(({ process }) => process.exited))
+    .finally(() => {
+      for (const { stderrFd, stdoutFd } of processes) {
+        closeSync(stdoutFd);
+        closeSync(stderrFd);
+      }
+    });
+  const results = processes.map(({ stderrPath, stdoutPath }, index) => ({
+    exit: exits[index],
+    stdout: readFileSync(stdoutPath, "utf8"),
+    stderr: readFileSync(stderrPath, "utf8"),
+  }));
   expect(results.map(({ exit }) => exit)).toEqual([0, 0]);
   expect(results.map(({ stdout }) =>
     JSON.parse(stdout) as { status: string }).map(({ status }) => status).sort())
