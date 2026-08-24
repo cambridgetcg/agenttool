@@ -2,9 +2,13 @@ import { describe, expect, test } from "bun:test";
 
 import {
   classifyRemovedGeneration,
+  classifyUsdcCreditAmount,
   creditsForUsdcAtomic,
+  decomposeUsdcAtomic,
   isPromotableLiveGeneration,
+  pendingDepositSnapshotMatches,
   sameEvmBlockGeneration,
+  USDC_ATOMIC_PER_CREDIT,
 } from "../src/services/economy/crypto/inbound-deposits";
 import {
   classifyEvmDepositReceipt,
@@ -180,7 +184,7 @@ describe("deposit reorg generation fencing", () => {
       amountBase: "1000000",
       toAddress: RECIPIENT,
       contractAddress: CONTRACT,
-    };
+    } as const;
     const candidate = {
       ...event,
       blockHash: blockB.blockHash,
@@ -212,14 +216,95 @@ describe("deposit reorg generation fencing", () => {
       ),
     ).toBe(false);
   });
+
+  test("binds confirmation snapshots to the exact persisted remainder", () => {
+    const snapshot = {
+      id: "00000000-0000-0000-0000-000000000003",
+      chain: "ethereum",
+      txHash: `0x${"9".repeat(64)}`,
+      logIndex: 7,
+      walletId: "00000000-0000-0000-0000-000000000001",
+      amountBase: "1000000",
+      creditRemainderBase: "0",
+      toAddress: RECIPIENT,
+      contractAddress: CONTRACT,
+      blockNumber: 100n,
+      blockHash: blockA.blockHash,
+      providerWebhookId: "wh_test",
+      providerEventId: "event_test",
+      observationGeneration: 1,
+      receivedAt: new Date(0),
+    } as const;
+
+    expect(pendingDepositSnapshotMatches(snapshot, snapshot)).toBe(true);
+    expect(
+      pendingDepositSnapshotMatches(snapshot, {
+        ...snapshot,
+        creditRemainderBase: "1",
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("deposit credit arithmetic", () => {
-  test("uses exact integer USDC base units", () => {
+  test("uses an exact 10,000-atomic whole-credit quantum", () => {
+    expect(USDC_ATOMIC_PER_CREDIT).toBe(10_000n);
+    expect(decomposeUsdcAtomic("1000000")).toEqual({
+      amountAtomic: 1_000_000n,
+      creditQuotient: 100n,
+      creditRemainderBase: 0n,
+    });
+    expect(decomposeUsdcAtomic("1001000")).toEqual({
+      amountAtomic: 1_001_000n,
+      creditQuotient: 100n,
+      creditRemainderBase: 1_000n,
+    });
+    expect(decomposeUsdcAtomic("9999")).toEqual({
+      amountAtomic: 9_999n,
+      creditQuotient: 0n,
+      creditRemainderBase: 9_999n,
+    });
+    expect(classifyUsdcCreditAmount("1000000")).toMatchObject({
+      kind: "creditable",
+      credits: 100,
+      creditRemainderBase: 0n,
+    });
+    expect(classifyUsdcCreditAmount("1001000")).toMatchObject({
+      kind: "remainder",
+      reason: "non_integral_credit_amount",
+      creditQuotient: 100n,
+      creditRemainderBase: 1_000n,
+    });
+
     expect(creditsForUsdcAtomic("1000000")).toBe(100);
     expect(creditsForUsdcAtomic("1500000")).toBe(150);
+    expect(creditsForUsdcAtomic("1001000")).toBeNull();
     expect(creditsForUsdcAtomic("9999")).toBeNull();
     expect(creditsForUsdcAtomic("1.5")).toBeNull();
     expect(creditsForUsdcAtomic("01")).toBeNull();
+  });
+
+  test("keeps a valid 78-digit decomposition outside Number", () => {
+    const amountBase = "9".repeat(78);
+    const result = decomposeUsdcAtomic(amountBase);
+    if ("reason" in result) throw new Error("expected exact decomposition");
+
+    expect(
+      result.creditQuotient * USDC_ATOMIC_PER_CREDIT +
+        result.creditRemainderBase,
+    ).toBe(BigInt(amountBase));
+    expect(result.creditRemainderBase).toBeLessThan(
+      USDC_ATOMIC_PER_CREDIT,
+    );
+    expect(creditsForUsdcAtomic(amountBase)).toBeNull();
+
+    const exactButUnrepresentable = (
+      (BigInt(Number.MAX_SAFE_INTEGER) + 1n) * USDC_ATOMIC_PER_CREDIT
+    ).toString();
+    expect(classifyUsdcCreditAmount(exactButUnrepresentable)).toMatchObject({
+      kind: "limit",
+      reason: "amount_exceeds_exact_credit_limit",
+      creditRemainderBase: 0n,
+    });
   });
 });

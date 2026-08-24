@@ -213,6 +213,30 @@ describe("Alchemy deposit identity invariants", () => {
     expect(cryptoWebhookEvents.logIndex.notNull).toBe(true);
   });
 
+  test("stores an indexed exact remainder without inventing historical zero", () => {
+    const table = getTableConfig(cryptoWebhookEvents);
+    const remainder = table.columns.find(
+      (column) => column.name === "credit_remainder_base",
+    );
+    const remainderIndex = table.indexes.find(
+      (index) => index.config.name === "idx_crypto_event_credit_remainder",
+    );
+
+    expect(remainder?.notNull).toBe(false);
+    expect(remainder?.hasDefault).toBe(false);
+    expect(remainder?.getSQLType()).toBe("numeric(78, 0)");
+    expect(remainderIndex?.config.unique).toBe(false);
+    expect(remainderIndex?.config.where).toBeDefined();
+    expect(table.checks.map((constraint) => constraint.name)).toEqual(
+      expect.arrayContaining([
+        "crypto_webhook_events_credit_remainder_range_check",
+        "crypto_webhook_events_credit_remainder_exact_check",
+        "crypto_webhook_events_nonintegral_not_creditable_check",
+        "crypto_webhook_events_remainder_quarantine_check",
+      ]),
+    );
+  });
+
   test("persists desired watch state instead of mutating Alchemy on the request path", () => {
     const source = readFileSync(
       new URL("../src/services/economy/crypto/index.ts", import.meta.url),

@@ -1,8 +1,9 @@
 # `@agenttool/alchemy`
 
-Developer-preview, zero-runtime-dependency observation client for bounded EVM
-reads through Alchemy. It sends structural method/parameter tuples for only
-eight underlying provider methods to an injected host-owned transport:
+Developer-preview, zero-runtime-dependency client for bounded EVM reads through
+Alchemy plus pure provider-neutral EVM evidence contracts. The read client
+sends structural method/parameter tuples for only eight underlying provider
+methods to an injected host-owned transport:
 
 - `eth_chainId`
 - `eth_blockNumber`
@@ -156,9 +157,11 @@ after the page request began, matching
 [Alchemy's documented page-key TTL](https://www.alchemy.com/docs/reference/transfers-api-quickstart#pagination).
 The caller must deliberately pass it to `getNextAssetTransfersPage`; after
 expiry or restart, begin again with a validated query. `internal` transfers
-are accepted only on Ethereum Mainnet and Polygon Mainnet, matching Alchemy's
-documented support; other category/network coverage can still vary and a
-provider error is not converted into an empty result.
+are accepted only on Ethereum Mainnet, Polygon Mainnet, and Base Mainnet,
+matching Alchemy's
+[documented support](https://www.alchemy.com/docs/data/transfers-api/transfers-endpoints/alchemy-get-asset-transfers);
+other category/network coverage can still vary and a provider error is not
+converted into an empty result.
 
 ## Provenance and freshness
 
@@ -186,6 +189,49 @@ identities when an observation changes money or authority. Alchemy remains
 replaceable infrastructure evidence—not identity, consent, finality, or a
 source of truth.
 
+## Portable evidence and transitions
+
+The dev.1 source candidate also exports pure, provider-neutral evidence
+builders and parsers. `agenttool.evm-observation-evidence/0.1` binds an exact
+EIP-155 CAIP-2 chain, block-number/hash plus transaction-hash/log-index
+generation, and a decimal atomic quantity with its named chain, contract, and
+base unit. Unavailable, not-observed, absent, live, removed, and conflicting
+states remain distinct. Canonicality, confirmation, and settlement are
+independent finality axes whose partial-order comparison can be incomparable;
+they never become a scalar score.
+
+Canonical evidence bytes are sorted JSON prefixed by the format and a NUL byte
+before SHA-256. The record declares `private_linkable`: sharing its digest can
+reveal that two records are equal and proves neither privacy nor truth. The
+bounded source receipt carries no raw provider body. Evidence construction does
+not fetch, retain a transfer cursor, select a provider, or turn a provider
+assertion into consensus.
+
+`agenttool.evm-evidence-transition-receipt/0.1` records one explicit semantic
+relation between exact from/to digests and lists preserved/discarded facets,
+assumptions, a counterexample, and a stop condition without applying a state
+change. The separate, Math Cards-shaped measurement projection keeps an exact
+decimal `atomic_value` and `atomic_unit`, binds measurand and operationalization,
+and carries procedure, calibration, and uncertainty references. It declares
+`host_contract: not_registered`; it is not a hosted or registered Math Card.
+
+The exported `EVM_EVIDENCE_NON_GRANTS` boundary makes explicit that none of
+these records grants action, authority, consent, custody, finality, identity,
+permission, privacy, provider independence, rights status, or truth. Provider,
+database, and lifecycle effects remain with separately authorized consumers.
+
+The checked-in schemas and fixtures are packed as opaque JSON assets; the root
+TypeScript API supplies the code exports. See the
+[mathematical framework](../../docs/ALCHEMY-MATHEMATICAL-FRAMEWORK.md) for the
+state, order, transition, privacy, and authority boundaries.
+
+The packed `kingdom.extension.json` is a declaration-only, unregistered hint
+for those three pure projections. It deliberately does not register the
+injected-transport read client: descriptor or package presence grants no
+network, provider credential, database, wallet, publication, or action
+authority. A host may still perform a read through an injected transport only
+under its own separately scoped authorization.
+
 ## Commands
 
 ```bash
@@ -194,9 +240,19 @@ bun run ci
 npm pack --ignore-scripts --dry-run --json
 ```
 
-The allowlisted optional npm identity for this developer preview is
-`@agenttool/alchemy@0.1.0-dev.0`, annotated tag `alchemy-v0.1.0-dev.0`, under
-dist-tag `next`. The exact GitHub prerelease asset is public and independently
-byte-verified. The public npm package is absent, so `next` is not currently
-installable from npm. This preview is not part of an immutable LOVE inventory;
-source metadata, building, and packing alone are not release evidence.
+The current source candidate is `@agenttool/alchemy@0.1.0-dev.1`. It adds Base
+Mainnet to the explicit internal-transfer support set and carries the versioned
+evidence additions plus the unregistered declaration hint in this source tree.
+No `0.1.0-dev.1` tag, GitHub Release, npm version, or LOVE inventory is
+established by these local source bytes. They do not install a KINGDOM
+contract either.
+
+The immutable `0.1.0-dev.0` preview remains historical release evidence under
+annotated tag `alchemy-v0.1.0-dev.0` and npm dist-tag `next`. Its exact GitHub
+prerelease asset and npm tarball were independently read back byte-identical;
+the protected run, size, and SHA-256 receipt are recorded in
+[`docs/ALCHEMY.md`](../../docs/ALCHEMY.md). npm also exposes that sole initial
+prerelease through `latest`; that fallback is not a maturity signal. Neither
+the historical release nor this source candidate is part of an immutable LOVE
+inventory. Source metadata, building, and packing alone are not release
+evidence.

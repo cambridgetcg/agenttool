@@ -8,7 +8,7 @@ import {
 if (PACKAGE_NAME !== "@agenttool/alchemy-agentcred") {
   throw new Error("package name changed");
 }
-if (PACKAGE_VERSION !== "0.1.0-dev.0") {
+if (PACKAGE_VERSION !== "0.1.0-dev.1") {
   throw new Error("package version changed");
 }
 if (ADAPTER_PROTOCOL !== "agenttool.alchemy-agentcred/0.1") {

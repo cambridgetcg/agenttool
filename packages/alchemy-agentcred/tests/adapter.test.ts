@@ -135,7 +135,7 @@ function fakeClient(
 describe("closed adapter boundary", () => {
   test("exports only a transport constructor, fixed metadata, and safe errors", () => {
     expect(PACKAGE_NAME).toBe("@agenttool/alchemy-agentcred");
-    expect(PACKAGE_VERSION).toBe("0.1.0-dev.0");
+    expect(PACKAGE_VERSION).toBe("0.1.0-dev.1");
     expect(ADAPTER_PROTOCOL).toBe("agenttool.alchemy-agentcred/0.1");
     const error = new AlchemyAgentCredError("broker_failed");
     expect(error.message).toBe("Credential broker read failed.");

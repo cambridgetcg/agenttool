@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/alchemy-agentcred",
-  "version": "0.1.0-dev.0",
+  "version": "0.1.0-dev.1",
   "description": "Strict AgentCred transport for AgentTool's seven bounded Alchemy EVM reads",
   "license": "Apache-2.0",
   "type": "module",
@@ -37,7 +37,7 @@
     "prepack": "bun run ci"
   },
   "peerDependencies": {
-    "@agenttool/alchemy": "^0.1.0-dev.0",
+    "@agenttool/alchemy": "^0.1.0-dev.1",
     "@agenttool/credential-broker": "^0.3.0"
   },
   "devDependencies": {

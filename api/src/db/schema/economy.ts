@@ -878,6 +878,13 @@ export const cryptoWebhookEvents = economySchema.table(
       // immediate credit cannot leave a balance effect mislabeled pending.
       .default("credited"),
     amountBase: numeric("amount_base", { precision: 78, scale: 0 }),
+    /** Exact USDC atomic units left after dividing amount_base into whole
+     * credits. Null means a historical row whose amount evidence is absent,
+     * never an inferred zero. */
+    creditRemainderBase: numeric("credit_remainder_base", {
+      precision: 78,
+      scale: 0,
+    }),
     toAddress: text("to_address"),
     contractAddress: text("contract_address"),
     blockNumber: bigint("block_number", { mode: "bigint" }),
@@ -885,7 +892,8 @@ export const cryptoWebhookEvents = economySchema.table(
     providerWebhookId: text("provider_webhook_id"),
     providerEventId: text("provider_event_id"),
     /** Monotonic incarnation token for the current mutable projection. The
-     * immutable observation table remains the full delivery history. */
+     * immutable observation table retains one admitted snapshot per
+     * live/removed block generation, not every raw provider delivery. */
     observationGeneration: integer("observation_generation").notNull().default(1),
     /** Generation whose evidence authorized the current credited state.
      * Database constraints make generation-unaware confirmers fail closed. */
@@ -905,6 +913,9 @@ export const cryptoWebhookEvents = economySchema.table(
       t.lastCheckedAt,
       t.receivedAt,
     ),
+    index("idx_crypto_event_credit_remainder")
+      .on(t.status, t.receivedAt)
+      .where(sql`${t.creditRemainderBase} > 0`),
     check(
       "crypto_webhook_events_status_check",
       sql`${t.status} IN ('pending', 'credited', 'removed', 'rejected', 'quarantined')`,
@@ -916,6 +927,43 @@ export const cryptoWebhookEvents = economySchema.table(
         AND (${t.blockHash} IS NULL OR ${t.blockHash} ~ '^0x[0-9a-f]{64}$')
         AND (${t.providerWebhookId} IS NULL OR ${t.providerWebhookId} ~ '^[A-Za-z0-9_-]{1,128}$')
         AND (${t.providerEventId} IS NULL OR ${t.providerEventId} ~ '^[A-Za-z0-9_-]{1,128}$')`,
+    ),
+    check(
+      "crypto_webhook_events_credit_remainder_range_check",
+      sql`${t.creditRemainderBase} IS NULL
+        OR (
+          ${t.creditRemainderBase} >= 0
+          AND ${t.creditRemainderBase} < 10000
+        )`,
+    ),
+    check(
+      "crypto_webhook_events_credit_remainder_exact_check",
+      sql`(
+          ${t.amountBase} IS NULL
+          AND ${t.creditRemainderBase} IS NULL
+        )
+        OR (
+          ${t.amountBase} IS NOT NULL
+          AND ${t.creditRemainderBase} IS NOT NULL
+          AND ${t.creditRemainderBase} = MOD(${t.amountBase}, 10000)
+        )`,
+    ),
+    check(
+      "crypto_webhook_events_nonintegral_not_creditable_check",
+      sql`${t.creditRemainderBase} IS NULL
+        OR ${t.creditRemainderBase} = 0
+        OR ${t.status} IN ('removed', 'rejected', 'quarantined')`,
+    ),
+    check(
+      "crypto_webhook_events_remainder_quarantine_check",
+      sql`NOT (
+        ${t.status} = 'quarantined'
+        AND ${t.error} = 'non_integral_credit_amount'
+      )
+      OR (
+        ${t.creditRemainderBase} IS NOT NULL
+        AND ${t.creditRemainderBase} > 0
+      )`,
     ),
     check(
       "crypto_webhook_events_pending_evm_evidence_check",

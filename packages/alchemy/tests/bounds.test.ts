@@ -144,12 +144,44 @@ describe("input and response bounds", () => {
     expect(transport.requests).toHaveLength(0);
   });
 
-  test("rejects internal-transfer queries on networks where Alchemy does not support them", async () => {
+  test("accepts internal-transfer queries on Base Mainnet", async () => {
     const transport = new FakeTransport((request) =>
       transportResponse(request, { transfers: [] }),
     );
     const client = createAlchemyReadClient({
       network: "base-mainnet",
+      transport,
+      now: () => NOW,
+    });
+    const page = await client.getAssetTransfersPage({
+      fromBlock: "0x1",
+      toBlock: "indexed",
+      categories: ["internal"],
+      toAddress: ADDRESS_A,
+    });
+
+    expect(page.transfers).toEqual([]);
+    expect(transport.requests).toHaveLength(1);
+    expect(transport.requests[0]?.network).toBe("base-mainnet");
+    expect(transport.requests[0]?.call.params).toEqual([
+      {
+        fromBlock: "0x1",
+        toBlock: "indexed",
+        category: ["internal"],
+        excludeZeroValue: true,
+        withMetadata: false,
+        maxCount: "0x64",
+        toAddress: ADDRESS_A,
+      },
+    ]);
+  });
+
+  test("rejects internal-transfer queries on unsupported networks", async () => {
+    const transport = new FakeTransport((request) =>
+      transportResponse(request, { transfers: [] }),
+    );
+    const client = createAlchemyReadClient({
+      network: "arbitrum-mainnet",
       transport,
       now: () => NOW,
     });

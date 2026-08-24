@@ -111,4 +111,26 @@ describe("crypto migration history convergence", () => {
       "uq_crypto_event_observation_generation",
     );
   });
+
+  test("adds remainder truth after the frozen finality convergence history", () => {
+    const remainderName =
+      "20260824T132712_crypto_deposit_remainder_accounting.sql";
+    const names = readdirSync(migrationRoot)
+      .filter((name) => name.endsWith(".sql"))
+      .sort();
+    const source = migration(remainderName);
+
+    expect(names.indexOf(remainderName)).toBeGreaterThan(
+      names.indexOf("20260726T220000_crypto_finality_convergence.sql"),
+    );
+    expect(source).toContain("MOD(amount_base, 10000)");
+    expect(source).toContain("status IN ('pending', 'credited')");
+    expect(source).toContain(
+      "a distinct remainder incarnation must advance observation_generation exactly once",
+    );
+    expect(source).toContain(
+      "a remainder replacement must name a distinct block generation",
+    );
+    expect(source).not.toMatch(/^\s*(?:DELETE|TRUNCATE)\b/im);
+  });
 });

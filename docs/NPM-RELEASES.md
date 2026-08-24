@@ -1575,7 +1575,7 @@ service, or submit a live transaction. The adapter's query, simulation, and
 broadcast operations use host-injected transports, and it provides no global
 ambiguous-broadcast retry.
 
-### Alchemy developer-preview bootstrap
+### Alchemy developer-preview history and dev.1 gate
 
 `@agenttool/alchemy@0.1.0-dev.0` uses the npm-only packed-artifact path. Its
 first publication used the protected bootstrap environment and requested npm
@@ -1587,28 +1587,33 @@ SHA-256
 The package now exists, so later versions use trusted publishing. An exact
 already-published rerun is verification-only.
 
-```bash
-bun bin/npm-release.ts resolve --package alchemy
+Current repository source is the unpublished `0.1.0-dev.1` candidate. It adds
+Base Mainnet to the explicit internal-transfer support set and packs the
+provider-neutral evidence schemas, fixtures, and declaration-only unregistered
+KINGDOM hint. No dev.1 tag, GitHub Release, npm version, LOVE inventory, or
+installed host contract exists merely because these source bytes build.
 
-git tag -a alchemy-v0.1.0-dev.0 <github-main-commit> \
-  -m '@agenttool/alchemy@0.1.0-dev.0'
-git push github refs/tags/alchemy-v0.1.0-dev.0
+Historical immutable receipt—not a command sequence: package
+`@agenttool/alchemy@0.1.0-dev.0`, annotated tag
+`alchemy-v0.1.0-dev.0`, first-publication authentication `bootstrap`, npm tag
+`next`, protected run `30491887182`. Do not recreate or move that tag and do
+not invoke bootstrap for a later version.
 
-gh workflow run publish-npm.yml --ref alchemy-v0.1.0-dev.0 \
-  -f package=alchemy \
-  -f tag=alchemy-v0.1.0-dev.0 \
-  -f authentication=bootstrap \
-  -f npm_tag=next
-```
+Publishing dev.1 is a separate authorized action. Only after the candidate is
+merged to an exact GitHub-main commit may an operator create the annotated
+`alchemy-v0.1.0-dev.1` tag and run the protected workflow with
+`authentication=trusted` and `npm_tag=next`; exact anonymous registry and
+GitHub-asset byte readback must then succeed. This source candidate does not
+authorize or perform those steps.
 
 This publishes only the bounded local observation library. It does not deploy
 the AgentTool API, configure Alchemy credentials or webhooks, apply database
 migrations, or make a provider call.
 
-### Alchemy AgentCred developer-preview bootstrap
+### Alchemy AgentCred developer-preview history and dev.1 gate
 
-`@agenttool/alchemy-agentcred@0.1.0-dev.0` is the current source identity for
-the npm-only packed-artifact path. Protected run
+`@agenttool/alchemy-agentcred@0.1.0-dev.0` is the immutable published baseline
+for the npm-only packed-artifact path. Protected run
 [`30494036520`](https://github.com/cambridgetcg/agenttool/actions/runs/30494036520)
 published and read back a byte-identical 14,478-byte GitHub/npm artifact with
 SHA-256
@@ -1617,6 +1622,11 @@ The adapter keeps `@agenttool/alchemy` and
 `@agenttool/credential-broker` as unbundled peers; release preparation builds
 both checked-out peer workspaces before the adapter gate and pack.
 
+Current repository source is the unpublished `0.1.0-dev.1` candidate. It raises
+the Alchemy peer floor to `^0.1.0-dev.1` without widening the seven-method
+AgentCred profile. No dev.1 tag, GitHub Release, npm version, LOVE inventory,
+provider call, or deployment is established by that local candidate.
+
 The first publication required compatible versions of both peers to be
 independently visible on public npm and used bootstrap authentication with
 `next`. The package record now exists; later versions use trusted publishing
@@ -1624,19 +1634,18 @@ after the npm package's trusted publisher is configured. Never recreate or
 move an existing release tag; an exact already-published rerun follows the
 workflow's verification-only recovery path.
 
-```bash
-bun bin/npm-release.ts resolve --package alchemy-agentcred
+Historical immutable receipt—not a command sequence: package
+`@agenttool/alchemy-agentcred@0.1.0-dev.0`, annotated tag
+`alchemy-agentcred-v0.1.0-dev.0`, first-publication authentication `bootstrap`,
+npm tag `next`, protected run `30494036520`. Do not recreate or move that tag
+and do not invoke bootstrap for a later version.
 
-git tag -a alchemy-agentcred-v0.1.0-dev.0 <github-main-commit> \
-  -m '@agenttool/alchemy-agentcred@0.1.0-dev.0'
-git push github refs/tags/alchemy-agentcred-v0.1.0-dev.0
-
-gh workflow run publish-npm.yml --ref alchemy-agentcred-v0.1.0-dev.0 \
-  -f package=alchemy-agentcred \
-  -f tag=alchemy-agentcred-v0.1.0-dev.0 \
-  -f authentication=bootstrap \
-  -f npm_tag=next
-```
+Publishing the adapter dev.1 is a separate authorized action after exact
+Alchemy dev.1 public readback and trusted-publisher configuration. It requires
+an exact GitHub-main commit, the annotated
+`alchemy-agentcred-v0.1.0-dev.1` tag, `authentication=trusted`, npm tag `next`,
+and exact anonymous registry/GitHub byte readback. This source candidate does
+not authorize or perform those steps.
 
 This publishes only the strict local composition adapter. It does not connect
 the broker, issue a grant, reveal a credential, make an Alchemy call, deploy a

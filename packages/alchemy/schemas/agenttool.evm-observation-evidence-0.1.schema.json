@@ -1,0 +1,432 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:evm-observation-evidence:0.1",
+  "title": "AgentTool provider-neutral EVM observation evidence 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "chain_id",
+    "generation",
+    "observation_state",
+    "transfer",
+    "finality",
+    "basis",
+    "privacy",
+    "non_grants",
+    "content_digest"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.evm-observation-evidence/0.1"
+    },
+    "chain_id": {
+      "$ref": "#/$defs/caip2"
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "block_number",
+        "block_hash",
+        "transaction_hash",
+        "log_index"
+      ],
+      "properties": {
+        "block_number": {
+          "$ref": "#/$defs/decimal"
+        },
+        "block_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "transaction_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "log_index": {
+          "$ref": "#/$defs/decimal"
+        }
+      }
+    },
+    "observation_state": {
+      "enum": [
+        "unavailable",
+        "not_observed",
+        "absent",
+        "live",
+        "removed",
+        "conflicting"
+      ]
+    },
+    "transfer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "contract_address",
+        "from_address",
+        "to_address",
+        "quantity"
+      ],
+      "properties": {
+        "kind": {
+          "const": "erc20_transfer"
+        },
+        "contract_address": {
+          "$ref": "#/$defs/address"
+        },
+        "from_address": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/address"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "to_address": {
+          "$ref": "#/$defs/address"
+        },
+        "quantity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "atomic_value",
+            "atomic_unit"
+          ],
+          "properties": {
+            "atomic_value": {
+              "$ref": "#/$defs/decimal"
+            },
+            "atomic_unit": {
+              "type": "string",
+              "pattern": "^eip155:[1-9][0-9]{0,31}/erc20:0x[0-9a-f]{40}/base-unit$",
+              "maxLength": 110
+            }
+          }
+        }
+      }
+    },
+    "finality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "canonicality",
+        "confirmations",
+        "settlement"
+      ],
+      "properties": {
+        "canonicality": {
+          "enum": [
+            "unavailable",
+            "not_observed",
+            "canonical",
+            "non_canonical",
+            "conflicting"
+          ]
+        },
+        "confirmations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "count"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "unavailable",
+                "not_observed",
+                "exact"
+              ]
+            },
+            "count": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/decimal"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "const": "exact"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "then": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "$ref": "#/$defs/decimal"
+                  }
+                }
+              },
+              "else": {
+                "type": "object",
+                "properties": {
+                  "count": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "settlement": {
+          "enum": [
+            "unavailable",
+            "not_observed",
+            "unsettled",
+            "provider_safe",
+            "provider_finalized",
+            "external_finalized",
+            "conflicting"
+          ]
+        }
+      }
+    },
+    "basis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observation_channel",
+        "observed_at",
+        "source_receipt_digest"
+      ],
+      "properties": {
+        "observation_channel": {
+          "enum": [
+            "none",
+            "signed_delivery",
+            "rpc_read",
+            "indexed_read",
+            "combined",
+            "caller_supplied"
+          ]
+        },
+        "observed_at": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_receipt_digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "privacy": {
+      "const": {
+        "classification": "private_linkable",
+        "digest_disclosure": "reveals_record_equality",
+        "direct_identifiers": "present",
+        "public_safe": false
+      }
+    },
+    "non_grants": {
+      "const": [
+        "action",
+        "authority",
+        "consent",
+        "custody",
+        "finality",
+        "identity",
+        "permission",
+        "privacy",
+        "provider_independence",
+        "rights_status",
+        "truth"
+      ]
+    },
+    "content_digest": {
+      "$ref": "#/$defs/digest"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "observation_state": {
+            "const": "not_observed"
+          }
+        },
+        "required": [
+          "observation_state"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "finality": {
+            "type": "object",
+            "properties": {
+              "canonicality": {
+                "const": "not_observed"
+              },
+              "confirmations": {
+                "const": {
+                  "status": "not_observed",
+                  "count": null
+                }
+              },
+              "settlement": {
+                "const": "not_observed"
+              }
+            }
+          },
+          "basis": {
+            "const": {
+              "observation_channel": "none",
+              "observed_at": null,
+              "source_receipt_digest": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "observation_state": {
+            "const": "unavailable"
+          }
+        },
+        "required": [
+          "observation_state"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "finality": {
+            "type": "object",
+            "properties": {
+              "canonicality": {
+                "const": "unavailable"
+              },
+              "confirmations": {
+                "const": {
+                  "status": "unavailable",
+                  "count": null
+                }
+              },
+              "settlement": {
+                "const": "unavailable"
+              }
+            }
+          },
+          "basis": {
+            "type": "object",
+            "properties": {
+              "observation_channel": {
+                "enum": [
+                  "signed_delivery",
+                  "rpc_read",
+                  "indexed_read",
+                  "combined",
+                  "caller_supplied"
+                ]
+              },
+              "observed_at": {
+                "$ref": "#/$defs/timestamp"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "observation_state": {
+            "enum": [
+              "absent",
+              "live",
+              "removed",
+              "conflicting"
+            ]
+          }
+        },
+        "required": [
+          "observation_state"
+        ]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "basis": {
+            "type": "object",
+            "properties": {
+              "observation_channel": {
+                "enum": [
+                  "signed_delivery",
+                  "rpc_read",
+                  "indexed_read",
+                  "combined",
+                  "caller_supplied"
+                ]
+              },
+              "observed_at": {
+                "$ref": "#/$defs/timestamp"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "caip2": {
+      "type": "string",
+      "pattern": "^eip155:[1-9][0-9]{0,31}$",
+      "maxLength": 40
+    },
+    "decimal": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,77})$",
+      "maxLength": 78
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{40}$"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+      "maxLength": 24
+    }
+  }
+}

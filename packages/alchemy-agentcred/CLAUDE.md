@@ -4,6 +4,10 @@ Strict local composition between `@agenttool/alchemy` and
 `@agenttool/credential-broker`. It accepts only an already-connected client
 and trusted-host network-to-grant mapping.
 
+The current source candidate is `0.1.0-dev.1`; source metadata is not evidence
+of a registry release. The immutable `0.1.0-dev.0` release receipt remains
+historical evidence in `docs/ALCHEMY.md` and must not be rewritten.
+
 ## Commands
 
 ```bash
