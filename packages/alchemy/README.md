@@ -225,6 +225,13 @@ TypeScript API supplies the code exports. See the
 [mathematical framework](../../docs/ALCHEMY-MATHEMATICAL-FRAMEWORK.md) for the
 state, order, transition, privacy, and authority boundaries.
 
+The packed `kingdom.extension.json` is a declaration-only, unregistered hint
+for those three pure projections. It deliberately does not register the
+injected-transport read client: descriptor or package presence grants no
+network, provider credential, database, wallet, publication, or action
+authority. A host may still perform a read through an injected transport only
+under its own separately scoped authorization.
+
 ## Commands
 
 ```bash
@@ -235,8 +242,10 @@ npm pack --ignore-scripts --dry-run --json
 
 The current source candidate is `@agenttool/alchemy@0.1.0-dev.1`. It adds Base
 Mainnet to the explicit internal-transfer support set and carries the versioned
-evidence additions in this source tree. No `0.1.0-dev.1` tag, GitHub Release,
-npm version, or LOVE inventory is established by these local source bytes.
+evidence additions plus the unregistered declaration hint in this source tree.
+No `0.1.0-dev.1` tag, GitHub Release, npm version, or LOVE inventory is
+established by these local source bytes. They do not install a KINGDOM
+contract either.
 
 The immutable `0.1.0-dev.0` preview remains historical release evidence under
 annotated tag `alchemy-v0.1.0-dev.0` and npm dist-tag `next`. Its exact GitHub

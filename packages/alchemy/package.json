@@ -10,12 +10,16 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./kingdom.extension.json": {
+      "default": "./kingdom.extension.json"
     }
   },
   "files": [
     "dist",
     "schemas",
     "fixtures",
+    "kingdom.extension.json",
     "README.md",
     "CLAUDE.md",
     "LICENSE",

@@ -1540,6 +1540,12 @@ SHA-256
 The package now exists, so later versions use trusted publishing. An exact
 already-published rerun is verification-only.
 
+Current repository source is the unpublished `0.1.0-dev.1` candidate. It adds
+Base Mainnet to the explicit internal-transfer support set and packs the
+provider-neutral evidence schemas, fixtures, and declaration-only unregistered
+KINGDOM hint. No dev.1 tag, GitHub Release, npm version, LOVE inventory, or
+installed host contract exists merely because these source bytes build.
+
 ```bash
 bun bin/npm-release.ts resolve --package alchemy
 
@@ -1560,8 +1566,8 @@ migrations, or make a provider call.
 
 ### Alchemy AgentCred developer-preview bootstrap
 
-`@agenttool/alchemy-agentcred@0.1.0-dev.0` is the current source identity for
-the npm-only packed-artifact path. Protected run
+`@agenttool/alchemy-agentcred@0.1.0-dev.0` is the immutable published baseline
+for the npm-only packed-artifact path. Protected run
 [`30494036520`](https://github.com/cambridgetcg/agenttool/actions/runs/30494036520)
 published and read back a byte-identical 14,478-byte GitHub/npm artifact with
 SHA-256
@@ -1569,6 +1575,11 @@ SHA-256
 The adapter keeps `@agenttool/alchemy` and
 `@agenttool/credential-broker` as unbundled peers; release preparation builds
 both checked-out peer workspaces before the adapter gate and pack.
+
+Current repository source is the unpublished `0.1.0-dev.1` candidate. It raises
+the Alchemy peer floor to `^0.1.0-dev.1` without widening the seven-method
+AgentCred profile. No dev.1 tag, GitHub Release, npm version, LOVE inventory,
+provider call, or deployment is established by that local candidate.
 
 The first publication required compatible versions of both peers to be
 independently visible on public npm and used bootstrap authentication with

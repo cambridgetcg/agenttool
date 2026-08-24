@@ -70,6 +70,11 @@ npm pack --ignore-scripts --dry-run --json
 - Keep `src/evidence.ts`, the two schemas, the two fixtures, root exports,
   packed-file inventory, Node/Bun smoke, and conformance tests aligned. The
   JSON assets are packed evidence contracts, not generic JSON import subpaths.
+- Keep `kingdom.extension.json` declaration-only and `host_contract:
+  not_registered`. It may propose only the pure evidence/receipt/measurement
+  projections; it must not register or imply access to the injected-transport
+  read client, credentials, provider calls, persistence, wallet effects, or
+  authority.
 - Keep package version, exported `PACKAGE_VERSION`, transport protocol, tests,
   docs, and any future immutable release inventory aligned.
 - External publication and deployment remain explicit operator actions.

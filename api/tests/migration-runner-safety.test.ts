@@ -294,6 +294,7 @@ describe("migration runner safety", () => {
       "20260726T211500_deposit_watch_target_binding.sql",
       "20260726T214500_deposit_watch_target_registry.sql",
       "20260726T220000_crypto_finality_convergence.sql",
+      "20260824T132712_crypto_deposit_remainder_accounting.sql",
     ];
     const entries = read("api/migrations/quiescence-required.txt")
       .trim()

@@ -70,6 +70,7 @@ ALTER TABLE economy.crypto_webhook_events
       )
       OR (
         amount_base IS NOT NULL
+        AND credit_remainder_base IS NOT NULL
         AND credit_remainder_base = MOD(amount_base, 10000)
       )
     ),
@@ -103,9 +104,10 @@ COMMENT ON COLUMN economy.crypto_webhook_events.credit_remainder_base IS
   'Exact USDC atomic units left after whole-credit decomposition at the recorded 10,000-atomic credit quantum. NULL means historical amount evidence is absent; it never implies zero.';
 
 -- Keep the existing pending-generation fence and add one narrow direct path
--- for a distinct, non-crediting remainder generation. The immutable
--- observation table remains the full history; this trigger protects only the
--- mutable current projection. It cannot prove a wallet debit: the checked
+-- for a distinct, non-crediting remainder generation. The observation table
+-- retains one admitted snapshot per live/removed block generation, not every
+-- raw provider delivery; this trigger protects only the mutable current
+-- projection. It cannot prove a wallet debit: the checked
 -- reconciliation transaction owns the atomic debit/projection coupling when
 -- OLD carries a retained legacy effect and NEW clears it for a distinct block.
 CREATE OR REPLACE FUNCTION

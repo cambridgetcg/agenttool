@@ -855,8 +855,14 @@ describe("standard npm release policy", () => {
       ]),
     );
     expect(requiredArchiveEntries(releaseSpec("alchemy"))).toEqual(expect.arrayContaining([
+      "package/CLAUDE.md",
       "package/dist/index.js",
       "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schemas/agenttool.evm-observation-evidence-0.1.schema.json",
+      "package/schemas/agenttool.evm-evidence-transition-receipt-0.1.schema.json",
+      "package/fixtures/agenttool.evm-observation-evidence-0.1.json",
+      "package/fixtures/agenttool.evm-evidence-transition-receipt-0.1.json",
     ]));
     expect(requiredArchiveEntries(releaseSpec("alchemy-agentcred"))).toEqual(
       expect.arrayContaining([

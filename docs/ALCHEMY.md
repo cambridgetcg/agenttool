@@ -95,9 +95,12 @@ rather than creating a new dependency on a retiring surface. See
 
 `packages/alchemy` is now the local, unpublished `0.1.0-dev.1` source
 candidate. It adds Base Mainnet to the explicit internal-transfer support set
-and carries the versioned evidence additions in this source tree. No dev.1
-tag, GitHub Release, npm version, LOVE inventory, provider call, or deployment
-is established by this candidate.
+and carries the versioned evidence additions plus a declaration-only,
+unregistered KINGDOM hint for the pure evidence/receipt/measurement
+projections. That hint does not register the injected-transport read client or
+grant provider access. No dev.1 tag, GitHub Release, npm version, LOVE
+inventory, installed host contract, provider call, or deployment is
+established by this candidate.
 
 The immutable `0.1.0-dev.0` release remains historical evidence. Its
 allowlisted optional npm-only prerelease identity is annotated tag
@@ -350,6 +353,16 @@ confirmation worker
   -> credit the wallet once, or leave pending/quarantine/reject
 ```
 
+The immutable observation table is generation evidence, not a complete raw
+delivery ledger. Its unique key retains one admitted live or removed snapshot
+per logical event and block generation. An exact retry, or a later delivery
+with the same generation/removed key but conflicting provider metadata or raw
+payload, does not add a second observation row. Transfer-fact mismatches fail
+closed into the logical event's quarantine/error path, but the conflicting raw
+delivery itself is not archived. A future custody-grade delivery ledger must
+use a separately bounded content identity and retention policy; the portable
+dev.1 evidence format is not yet wired into this persistence path.
+
 This confirmation is separate from webhook handling, but it is a chain-local
 depth check through one configured RPC endpoint. That endpoint may be the same
 Alchemy provider used for delivery. It is not provider-independent consensus
@@ -411,18 +424,20 @@ errors.
 
 ## Rollout and remaining proof
 
-The repository contains five rollout-gated identity/watch/finality migrations.
-Their presence in source does not prove that a target database has applied
-them; use the current migration journal survey and deploy receipt. The finality
-migration deliberately keeps the database default at `credited` so an old
-immediate-credit replica cannot write a wallet effect mislabeled as `pending`;
-new code always writes an explicit state.
+The repository marks the identity, watch, finality, and exact-remainder
+migrations as quiescence-required. Their presence in source does not prove that
+a target database has applied them; use the current migration journal survey
+and deploy receipt. The finality migration deliberately keeps the database
+default at `credited` so an old immediate-credit replica cannot write a wallet
+effect mislabeled as `pending`; the remainder migration rejects an
+amount-present row whose exact remainder is omitted. New code always writes an
+explicit state and exact remainder.
 
 Whenever any of those migrations is pending, cutover requires an operator to:
 
 1. stop old API writers, webhook ingress, and all related workers;
-2. apply and review the identity, watch, finality, target-binding, and
-   target-registry migrations;
+2. apply and review the identity, watch, finality, target-binding,
+   target-registry, and exact-remainder migrations;
 3. deploy only the new writers/workers; and
 4. run a credentialed testnet proof of webhook metadata, pagination,
    PATCH-then-GET convergence, signed callback delivery, RPC evidence, reorg

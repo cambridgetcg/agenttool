@@ -892,7 +892,8 @@ export const cryptoWebhookEvents = economySchema.table(
     providerWebhookId: text("provider_webhook_id"),
     providerEventId: text("provider_event_id"),
     /** Monotonic incarnation token for the current mutable projection. The
-     * immutable observation table remains the full delivery history. */
+     * immutable observation table retains one admitted snapshot per
+     * live/removed block generation, not every raw provider delivery. */
     observationGeneration: integer("observation_generation").notNull().default(1),
     /** Generation whose evidence authorized the current credited state.
      * Database constraints make generation-unaware confirmers fail closed. */
@@ -943,6 +944,7 @@ export const cryptoWebhookEvents = economySchema.table(
         )
         OR (
           ${t.amountBase} IS NOT NULL
+          AND ${t.creditRemainderBase} IS NOT NULL
           AND ${t.creditRemainderBase} = MOD(${t.amountBase}, 10000)
         )`,
     ),

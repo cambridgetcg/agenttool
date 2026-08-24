@@ -104,6 +104,12 @@ describe("crypto deposit finality migration", () => {
       "ALTER COLUMN credit_remainder_base DROP DEFAULT",
     );
     expect(remainderMigration).toContain("amount_base IS NOT NULL");
+    expect(remainderMigration).toContain(
+      "amount_base IS NOT NULL\n        AND credit_remainder_base IS NOT NULL\n        AND credit_remainder_base = MOD(amount_base, 10000)",
+    );
+    expect(schema).toContain(
+      "${t.amountBase} IS NOT NULL\n          AND ${t.creditRemainderBase} IS NOT NULL\n          AND ${t.creditRemainderBase} = MOD(${t.amountBase}, 10000)",
+    );
     expect(remainderMigration).not.toMatch(
       /credit_remainder_base\s+NUMERIC\([^)]*\)\s+(?:NOT NULL\s+)?DEFAULT\s+0/i,
     );
@@ -164,6 +170,32 @@ describe("crypto deposit finality migration", () => {
     expect(
       confirmationSource.indexOf("const amount = classifyUsdcCreditAmount"),
     ).toBeLessThan(confirmationSource.indexOf("const settlementPolicy"));
+  });
+
+  test("quarantines same-generation transfer conflicts before any wallet effect", () => {
+    const liveConflict = service.slice(
+      service.indexOf("event.walletId !== walletId"),
+      service.indexOf("if (sameEvmBlockGeneration(event, transfer))"),
+    );
+    const removedHandler = service.slice(
+      service.indexOf("export async function reconcileRemovedInboundTransfer"),
+      service.indexOf("export async function creditConfirmedPendingDeposit"),
+    );
+    const removedConflict = removedHandler.slice(
+      removedHandler.indexOf("if (!immutableEvidenceMatches(event, transfer))"),
+      removedHandler.indexOf('if (event.status === "removed")'),
+    );
+
+    expect(liveConflict).toContain('status: "quarantined"');
+    expect(liveConflict).toContain('reason: "conflicting_live_evidence"');
+    expect(removedConflict).toContain('status: "quarantined"');
+    expect(removedConflict).toContain(
+      'reason: "matching_removal_transfer_mismatch"',
+    );
+    for (const branch of [liveConflict, removedConflict]) {
+      expect(branch).not.toContain("balance: sql");
+      expect(branch).not.toContain(".insert(transactions)");
+    }
   });
 
   test("fences every removed-to-remainder replacement generation", () => {

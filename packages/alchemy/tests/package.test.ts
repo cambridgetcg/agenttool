@@ -43,11 +43,15 @@ describe("public and packed boundary", () => {
     expect(pkg.dependencies).toBeUndefined();
     expect(pkg.main).toBe("dist/index.js");
     expect(pkg.types).toBe("dist/index.d.ts");
-    expect(Object.keys(pkg.exports ?? {})).toEqual(["."]);
+    expect(Object.keys(pkg.exports ?? {})).toEqual([
+      ".",
+      "./kingdom.extension.json",
+    ]);
     expect(pkg.files).toEqual([
       "dist",
       "schemas",
       "fixtures",
+      "kingdom.extension.json",
       "README.md",
       "CLAUDE.md",
       "LICENSE",
@@ -75,6 +79,7 @@ describe("public and packed boundary", () => {
     expect(paths).toContain("CLAUDE.md");
     expect(paths).toContain("LICENSE");
     expect(paths).toContain("NOTICE");
+    expect(paths).toContain("kingdom.extension.json");
     expect(paths).toContain(
       "schemas/agenttool.evm-observation-evidence-0.1.schema.json",
     );
@@ -94,6 +99,43 @@ describe("public and packed boundary", () => {
     expect(paths.some((path) => path.includes(".env"))).toBe(false);
   });
 
+  test("keeps the KINGDOM hint pure, unregistered, and zero-authority", async () => {
+    const extension = JSON.parse(
+      await readFile(join(packageRoot, "kingdom.extension.json"), "utf8"),
+    ) as {
+      schema: string;
+      id: string;
+      package: string;
+      version: string;
+      status: string;
+      host_contract: string;
+      proposed_abilities: Array<{ id: string }>;
+      defaults: Record<string, boolean>;
+      notes: string[];
+    };
+
+    expect(extension).toMatchObject({
+      schema: "kingdom-extension-local/v0.1",
+      id: "alchemy-evidence",
+      package: PACKAGE_NAME,
+      version: PACKAGE_VERSION,
+      status: "unpublished_source_candidate",
+      host_contract: "not_registered",
+    });
+    expect(extension.proposed_abilities.map(({ id }) => id)).toEqual([
+      "evm-evidence-normalize",
+      "evm-evidence-transition-receipt",
+      "evm-evidence-measurement-project",
+    ]);
+    expect(Object.values(extension.defaults).every((value) => value === false)).toBe(true);
+    expect(extension.notes.join(" ")).toMatch(
+      /declaration-only.*not an installed or registered host contract/i,
+    );
+    expect(extension.notes.join(" ")).toMatch(
+      /does not register or grant access.*injected-transport Alchemy read client/i,
+    );
+  });
+
   test("separates the dev.1 source candidate from immutable dev.0 receipts", async () => {
     const readme = await readFile(join(packageRoot, "README.md"), "utf8");
     expect(readme).toContain(
@@ -102,8 +144,8 @@ describe("public and packed boundary", () => {
     expect(readme).toContain(
       "The immutable `0.1.0-dev.0` preview remains historical release evidence",
     );
-    expect(readme).toMatch(
-      /No `0\.1\.0-dev\.1` tag, GitHub Release,\s+npm version, or LOVE inventory is established/,
+    expect(readme).toContain(
+      "No `0.1.0-dev.1` tag, GitHub Release, npm version, or LOVE inventory is\nestablished",
     );
     expect(readme).not.toContain("The public npm package is absent");
   });
