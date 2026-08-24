@@ -58,7 +58,7 @@ Known exceptions include:
   catalog, or other asset; that tree currently has no root licence. Its exact
   `@agenttool/xenia` dependency remains separately distributed under XENIA's
   own mixed terms, recorded in the package's `THIRD_PARTY_LICENSES`.
-- [`bin/vendor/es-module-lexer-2.3.2.js`](bin/vendor/es-module-lexer-2.3.2.js)
+- [`bin/vendor/es-module-lexer-2.3.2.mjs`](bin/vendor/es-module-lexer-2.3.2.mjs)
   is the repository-pinned JavaScript implementation from
   `es-module-lexer@2.3.2`, copyright Guy
   Bedford, used by the Whitehack runtime-closure verifier under the MIT

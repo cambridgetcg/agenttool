@@ -429,7 +429,7 @@ describe("Whitehack advisory containment", () => {
       repoRoot,
       "bin",
       "vendor",
-      "es-module-lexer-2.3.2.js",
+      "es-module-lexer-2.3.2.mjs",
     ));
     expect(createHash("sha256").update(lexerBytes).digest("hex")).toBe(
       "87c40d04a91a3b5e13568b0797f9fe22b8eac05c291852b627785e606639a6c6",

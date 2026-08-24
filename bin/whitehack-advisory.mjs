@@ -30,7 +30,7 @@ import {
 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { parse as parseModuleSyntax } from "./vendor/es-module-lexer-2.3.2.js";
+import { parse as parseModuleSyntax } from "./vendor/es-module-lexer-2.3.2.mjs";
 
 export const WHITEHACK_REPOSITORY = "https://github.com/cambridgetcg/whitehack";
 export const WHITEHACK_PACKAGE = "@agenttool/whitehack-scan";
