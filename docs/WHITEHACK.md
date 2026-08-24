@@ -29,30 +29,38 @@ editorial game is not a security tool and is outside this integration.
 ## Shipped slice: redacted crypto-aware changed-source advisory
 
 The `Whitehack advisory` workflow installs the exact public package
-[`@agenttool/whitehack-scan@0.9.0`](https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.9.0)
+[`@agenttool/whitehack-scan@0.10.0`](https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.10.0)
 inside `tools/whitehack-advisory/`. Its npm 11.17.0 lock binds the registry
 tarball to integrity
-`sha512-egZU36Eg0DqV7sBhc1hbNR7DJNUMAa7t8S4iiV4RMA/0fpUsyRuFVUEvuol2Ngu28MoQfDoL2+xS/9Z3Ytx4sw==`.
+`sha512-D1Y+XzG4Iy+lQxepEoDJew8YVATE78Om1O/uQYGow1hrwDegs7YN+u4wn03l2aDk14w2t43txgadZilIUkXjTg==`.
 CI uses `npm ci --ignore-scripts` with an isolated user config and explicit
 public registry, verifies the registry signature and SLSA attestation, and
 fails if the registry cannot supply or authenticate those exact bytes. The
 package's reviewed source revision is
-[`424c6e85601cd0ac031d1b28940c3f88b99b0a1d`](https://github.com/cambridgetcg/whitehack/tree/424c6e85601cd0ac031d1b28940c3f88b99b0a1d).
+[`566f83678f998a12b716f55599071a2af0495ca8`](https://github.com/cambridgetcg/whitehack/tree/566f83678f998a12b716f55599071a2af0495ca8).
 The versioned exact
-[`whitehack-v0.9.0`](https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.9.0)
+[`whitehack-v0.10.0`](https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.10.0)
 release publishes the same LOVE/GitHub/npm artifact:
-`agenttool-whitehack-scan-0.9.0.tgz`, 87,196 bytes, SHA-256
-`b7d004947bc3c7619daa38f002d9ddde731e2865644af0d0e609c8dd86528d3c`.
+`agenttool-whitehack-scan-0.10.0.tgz`, 106,256 bytes, SHA-256
+`34054dd75d9a8beb29eae42e0cd10e9ac02d60c367600e708af675bd06cd4aa3`.
+
+The historical exact 0.9.0 receipt remains preserved: source revision
+`424c6e85601cd0ac031d1b28940c3f88b99b0a1d`, 87,196-byte artifact, and
+SHA-256 `b7d004947bc3c7619daa38f002d9ddde731e2865644af0d0e609c8dd86528d3c`.
+That receipt still governs AgentTool's separately versioned encrypted-evidence
+wire, schema, validator, and fixtures; upgrading the advisory lock does not
+reinterpret an existing `scanner.version: "0.9.0"` capsule.
 
 The bridge independently checks the private tool lock's topology, exact name,
 version, registry URL, and integrity; the installed package's name, version,
-module type, exact `./core` and `./understanding` exports, zero runtime dependencies, and absence of npm
+module type, exact two-key `types`/`default` conditional records for `./core`
+and `./understanding`, zero runtime dependencies, and absence of npm
 install/publish/version lifecycle hooks; and the real paths of the package and
 selected module. Before import it also hashes the 54-module union of the reviewed
 `./core` and `./understanding` transitive source closures against
-`tools/whitehack-advisory/whitehack-runtime-closure-v0.9.0.json`; the manifest's
+`tools/whitehack-advisory/whitehack-runtime-closure-v0.10.0.json`; the manifest's
 own exact bytes are pinned at SHA-256
-`7d275fee36d6b899b5092574289509032355dad2bff5a5b0f9e76f317ad31575`.
+`17fe720ccb14d20d573704b6ca6e55c9dec8c8a14260dfac89a9e19352a46958`.
 It then calls only the pure
 `scanText()` API on source text that
 AgentTool already bounded and decoded. It does not invoke `npx`, a moving tag,
@@ -73,9 +81,19 @@ module symlink and containment checks remain separate mandatory gates. The
 shipped one-shot CLIs reach this check before any Whitehack import; the helper
 does not attest a module instance cached earlier in the same process.
 
+Whitehack 0.10.0 also publishes `./math-evidence` and its exact schema. Those
+are not approved loader names in this slice: AgentTool imports only `./core`
+and `./understanding`. The pin upgrade therefore does not convert or equate
+Principalities, Principality Atlas, Relational Geometry, Love Geometry, Math
+Cards, Dataset Influence, or training-garden records; does not infer emotions,
+personhood, consent, truth, authority, fitness, or reward; and does not assign
+dataset sampling/loss weight or enter a pre-RL/RL training path. A future
+crosswalk would need a separately reviewed exact-byte adapter and an explicit
+non-equivalence boundary.
+
 ### Crypto awareness is observation, not custody
 
-The 0.9.0 rule pack retains eleven bounded source-text signal families:
+The 0.10.0 rule pack retains eleven bounded source-text signal families:
 
 - possible embedded credentials, private-key material, or recovery phrases;
 - general-purpose pseudo-random generators used directly for security material;
@@ -94,7 +112,7 @@ The 0.9.0 rule pack retains eleven bounded source-text signal families:
   decorator; and
 - maximum ERC-20-style fungible-token approvals.
 
-Version 0.9.0 retains the previously narrowed `silent-failure` case: a numeric
+Version 0.10.0 retains the previously narrowed `silent-failure` case: a numeric
 identity default used in arithmetic or comparison through a non-reassigned
 binding to a locally constructed in-memory `Map`. Awaited reads, unknown `.get()` providers,
 reassignable or scope-ambiguous bindings, and standalone defaults remain
@@ -141,7 +159,7 @@ advisory's declared scope. The default bounds are:
 - at most 5,000 findings in aggregate;
 - at most 200 serialized finding details, while preserving the exact total.
 
-Whitehack 0.9.0 returns fixed markers for recognized sensitive rules, and its
+Whitehack 0.10.0 returns fixed markers for recognized sensitive rules, and its
 pure `scanText()` boundary also redacts other findings that overlap the same
 recognized sensitive line. Pattern coverage is incomplete, and ordinary
 findings can still include source snippets. AgentTool therefore does not rely
@@ -288,7 +306,7 @@ capability, intent, simulation, and optional continuity records with
 the local `@agenttool/wallet@0.1.3` source and exact LOVE release (the
 independently verified npm mirror is also exact version 0.1.3). It derives bounded relationship
 and policy states, then passes only closed enum assertions plus the six
-allowlisted finding fields to `@agenttool/whitehack-scan@0.9.0`'s
+allowlisted finding fields to `@agenttool/whitehack-scan@0.10.0`'s
 `createUnderstanding()`. stdout is the exact, deterministic
 `whitehack-understanding/v1` document rather than an AgentTool wrapper. Policy
 fields remain `unknown` unless every descriptor, capability, delegate, chain,
@@ -667,7 +685,7 @@ for the bounded changed-file set at that run. It does **not** prove:
 - that a target owner authorized an assessment;
 - that publication or disclosure is appropriate.
 
-Whitehack 0.9.0 is a zero-runtime-dependency text/regex linter rather than an AST
+Whitehack 0.10.0 is a zero-runtime-dependency text/regex linter rather than an AST
 or data-flow analyzer. Its confidence labels are evidence about the check's own
 calibration, not a severity score or bounty claim. The pinned revision emits
 `high`, `medium-high`, and `heuristic`. The advisory v0.1 bridge and schema

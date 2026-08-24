@@ -397,7 +397,7 @@ describe("Agent Wallet Whitehack projection", () => {
 });
 
 describe.skipIf(process.env.WHITEHACK_INTEGRATION !== "1")(
-  "exact Whitehack 0.9.0 integration",
+  "exact Whitehack 0.10.0 integration",
   () => {
     test("returns a schema-valid minimized understanding document", async () => {
       const { module } = await loadVerifiedWhitehackModule({
