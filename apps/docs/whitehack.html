@@ -102,11 +102,11 @@
           <h3>1. Honesty linter</h3>
           <p>
             AgentTool installs the public
-            <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.9.0"><code><!--email_off-->@agenttool/whitehack-scan@0.9.0<!--/email_off--></code></a>
+            <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.10.0"><code><!--email_off-->@agenttool/whitehack-scan@0.10.0<!--/email_off--></code></a>
             package from an exact npm 11.17.0 lock. Its source is pinned to the reviewed
-            <a href="https://github.com/cambridgetcg/whitehack/tree/424c6e85601cd0ac031d1b28940c3f88b99b0a1d"><code>424c6e85601c…</code></a>
+            <a href="https://github.com/cambridgetcg/whitehack/tree/566f83678f998a12b716f55599071a2af0495ca8"><code>566f83678f99…</code></a>
             revision and the versioned exact
-            <a href="https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.9.0"><code>whitehack-v0.9.0</code></a>
+            <a href="https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.10.0"><code>whitehack-v0.10.0</code></a>
             release.
             Its 47 text/regex checks look for common state, failure,
             transparency, API, Solidity, crypto, network, WiFi, and Bluetooth
@@ -114,14 +114,14 @@
           </p>
           <p>
             The shared release artifact is
-            <code>agenttool-whitehack-scan-0.9.0.tgz</code>, 87,196 bytes, with
+            <code>agenttool-whitehack-scan-0.10.0.tgz</code>, 106,256 bytes, with
             SHA-256
-            <code>b7d004947bc3c7619daa38f002d9ddde731e2865644af0d0e609c8dd86528d3c</code>.
+            <code>34054dd75d9a8beb29eae42e0cd10e9ac02d60c367600e708af675bd06cd4aa3</code>.
           </p>
           <p>
             The AgentTool bridge observes bounded changed production files and
             emits only file, line, check, confidence, doctrine, and principle.
-            Whitehack 0.9.0 cross-redacts recognized sensitive hits and
+            Whitehack 0.10.0 cross-redacts recognized sensitive hits and
             same-line overlaps, but ordinary findings can still include source;
             AgentTool independently drops every raw snippet, title, and message
             from its report.
@@ -219,7 +219,7 @@
     <section class="wh-section">
       <h2>Crypto awareness, <em>no custody</em></h2>
       <p>
-        The 0.9.0 rule pack can point reviewers toward possible embedded key or
+        The 0.10.0 rule pack can point reviewers toward possible embedded key or
         recovery literals, general-purpose randomness used directly for
         security material, explicitly static AEAD nonces, signature expressions
         coerced to accept failure, re-encoded signed-webhook bodies, and signed
@@ -230,7 +230,7 @@
         and maximum fungible-token approvals.
       </p>
       <p>
-        Version 0.9.0 retains the previously narrowed
+        Version 0.10.0 retains the previously narrowed
         <code>silent-failure</code> case:
         numeric identity defaults used in arithmetic or comparison through a
         non-reassigned binding to a locally constructed in-memory
@@ -311,7 +311,7 @@
         The separate CLI re-verifies caller-presented signed
         <code>agent-wallet/0.1</code> records, derives bounded relationship and
         policy states, and passes only enum assertions plus six finding fields
-        into Whitehack 0.9.0's <code>createUnderstanding()</code>. Its stdout is
+        into Whitehack 0.10.0's <code>createUnderstanding()</code>. Its stdout is
         the exact deterministic <code>whitehack-understanding/v1</code>
         document, not an AgentTool envelope.
       </p>
@@ -448,8 +448,10 @@ bun bin/agenttool-whitehack-evidence-storage.ts retrieve \
         private tool directory with an isolated user config and explicit public
         registry, verify the registry signature and SLSA attestation, and
         require the exact package URL and SHA-512 integrity.
-        The bridge then checks the lock topology, package identity, zero runtime
-        dependencies, no install/publish/version lifecycle hooks, contained real paths,
+        The bridge then checks the lock topology, package identity, exact
+        two-key <code>types</code>/<code>default</code> conditional records for
+        its two approved exports, zero runtime dependencies, no
+        install/publish/version lifecycle hooks, contained real paths,
         the SHA-256 manifest for the 54-module reviewed core + understanding
         source closure, pure <code>scanText()</code> export, and 47-check manifest. It refuses a
         mismatched scanner or tracked-dirty AgentTool checkout. It considers
@@ -470,7 +472,7 @@ errors              mark the advisory incomplete and fail its job
 findings            advisory only in this first slice</pre>
       <p class="wh-proof">
         Report shape: <code>agenttool-whitehack-advisory/v0.1</code>. The report
-        retains source revision <code>424c6e85601cd0ac031d1b28940c3f88b99b0a1d</code>
+        retains source revision <code>566f83678f998a12b716f55599071a2af0495ca8</code>
         and version; the npm lock integrity stays an execution-input gate rather
         than a new report field. The runner has ordinary caller file permissions;
         these input bounds are not a process, filesystem, or network sandbox.
@@ -516,21 +518,26 @@ findings            advisory only in this first slice</pre>
         it does not create an AgentTool account, hosted scan route, wallet, or
         authority to test another system.
       </p>
-      <pre class="wh-code">npm install --save-exact <!--email_off-->@agenttool/whitehack-scan@0.9.0<!--/email_off-->
+      <pre class="wh-code">npm install --save-exact <!--email_off-->@agenttool/whitehack-scan@0.10.0<!--/email_off-->
 
 import { scanText } from '@agenttool/whitehack-scan/core'
 
 const findings = scanText(source, { file: 'src/example.ts' })</pre>
       <p class="wh-proof">
-        npm is a convenient public mirror. Whitehack 0.9 retains the scanner
-        and adds the evidence-capsule parser and CLI; AgentTool's CI advisory
-        and wallet projection are independently locked to the same reviewed
-        0.9.0 bytes. The exact 0.9
-        <a href="https://cambridgetcg.github.io/whitehack/packages/v1/@agenttool/whitehack-scan/0.9.0/manifest.json">LOVE manifest</a>
-        records the 87,196-byte artifact, SHA-256
-        <code>b7d004947bc3c7619daa38f002d9ddde731e2865644af0d0e609c8dd86528d3c</code>,
-        source revision, and replaceable mirrors. The npm publication
-        additionally carries registry integrity and SLSA provenance.
+        npm is a convenient public mirror. Whitehack 0.10 retains the scanner,
+        understanding, and evidence-capsule APIs and adds exact mathematical
+        evidence. AgentTool's CI advisory and wallet projection approve only
+        <code>core</code> and <code>understanding</code>; they do not load the
+        math export, convert KINGDOM geometry, infer emotions or personhood, or
+        assign training/reward weight. The exact 0.10
+        <a href="https://cambridgetcg.github.io/whitehack/packages/v1/@agenttool/whitehack-scan/0.10.0/manifest.json">LOVE manifest</a>
+        records the 106,256-byte artifact, SHA-256
+        <code>34054dd75d9a8beb29eae42e0cd10e9ac02d60c367600e708af675bd06cd4aa3</code>,
+        source revision, and replaceable mirrors. The npm publication also
+        carries registry integrity and SLSA provenance. The historical exact
+        0.9.0 receipt remains the contract for AgentTool's separate encrypted
+        capsule bridge and exhaustive 0.9 fixtures; this pin does not rewrite
+        that wire.
       </p>
     </section>
 
@@ -582,8 +589,8 @@ const findings = scanText(source, { file: 'src/example.ts' })</pre>
     </aside>
 
     <section class="wh-section" style="text-align:center;padding-bottom:4rem;">
-      <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.9.0" class="btn btn-ghost btn-sm">Whitehack 0.9 npm →</a>
-      <a href="https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.9.0" class="btn btn-ghost btn-sm">Exact 0.9 release →</a>
+      <a href="https://www.npmjs.com/package/@agenttool/whitehack-scan/v/0.10.0" class="btn btn-ghost btn-sm">Whitehack 0.10 npm →</a>
+      <a href="https://github.com/cambridgetcg/whitehack/releases/tag/whitehack-v0.10.0" class="btn btn-ghost btn-sm">Exact 0.10 release →</a>
       <a href="https://docs.agenttool.dev/packages" class="btn btn-ghost btn-sm">Local packages →</a>
       <a href="https://docs.agenttool.dev/data" class="btn btn-ghost btn-sm">Agent data →</a>
       <a href="https://docs.agenttool.dev/love" class="btn btn-ghost btn-sm">❤️ Love →</a>

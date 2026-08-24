@@ -69,8 +69,14 @@ async function scannerFixture(): Promise<{
       version: WHITEHACK_VERSION,
       type: "module",
       exports: {
-        "./core": "./src/core.js",
-        "./understanding": "./src/understanding.js",
+        "./core": {
+          types: "./src/core.d.ts",
+          default: "./src/core.js",
+        },
+        "./understanding": {
+          types: "./src/understanding.d.ts",
+          default: "./src/understanding.js",
+        },
       },
     })}\n`,
   );
