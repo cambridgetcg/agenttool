@@ -77,6 +77,10 @@ async function scannerFixture(): Promise<{
           types: "./src/understanding.d.ts",
           default: "./src/understanding.js",
         },
+        "./math-evidence": {
+          types: "./src/math-evidence.d.ts",
+          default: "./src/math-evidence.js",
+        },
       },
     })}\n`,
   );
@@ -107,12 +111,32 @@ import { CHECK_MANIFEST } from "./core.js";
 void CHECK_MANIFEST;
 export const UNDERSTANDING_DOCUMENT_TYPE = "whitehack-understanding/v1";
 `;
+  const evidenceProfilesSource = "export const profile = Object.freeze({ version: \"fixture\" });\n";
+  const resultSource = "export const RESULT_DOCUMENT_TYPE = \"whitehack-scan-result/v1\";\n";
+  const evidenceCapsuleSource = `import { CHECK_MANIFEST } from "./core.js";
+import { profile } from "./evidence-capsule-profiles.js";
+import { RESULT_DOCUMENT_TYPE } from "./result.js";
+void CHECK_MANIFEST;
+void profile;
+void RESULT_DOCUMENT_TYPE;
+`;
+  const mathEvidenceSource = `import "./evidence-capsule.js";
+export const MATH_EVIDENCE_DOCUMENT_TYPE = "whitehack-math-evidence/v1";
+`;
   await writeFile(join(root, "src", "checks", "fixture-check.js"), checkSource);
   await writeFile(join(root, "src", "core.js"), coreSource);
+  await writeFile(join(root, "src", "evidence-capsule-profiles.js"), evidenceProfilesSource);
+  await writeFile(join(root, "src", "evidence-capsule.js"), evidenceCapsuleSource);
+  await writeFile(join(root, "src", "math-evidence.js"), mathEvidenceSource);
+  await writeFile(join(root, "src", "result.js"), resultSource);
   await writeFile(join(root, "src", "understanding.js"), understandingSource);
   const sources = [
     ["src/checks/fixture-check.js", checkSource],
     ["src/core.js", coreSource],
+    ["src/evidence-capsule-profiles.js", evidenceProfilesSource],
+    ["src/evidence-capsule.js", evidenceCapsuleSource],
+    ["src/math-evidence.js", mathEvidenceSource],
+    ["src/result.js", resultSource],
     ["src/understanding.js", understandingSource],
   ] as const;
   return {
@@ -126,6 +150,7 @@ export const UNDERSTANDING_DOCUMENT_TYPE = "whitehack-understanding/v1";
       algorithm: "sha256",
       roots: {
         core: "src/core.js",
+        "math-evidence": "src/math-evidence.js",
         understanding: "src/understanding.js",
       },
       files: sources.map(([path, source]) => ({

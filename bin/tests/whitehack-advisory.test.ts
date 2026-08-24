@@ -34,6 +34,9 @@ import {
   verifyCheckedOutHead,
   type WhitehackAdvisoryError,
 } from "../whitehack-advisory.mjs";
+import {
+  WHITEHACK_0_9_ALL_PROFILE_CANONICAL,
+} from "./fixtures/whitehack-evidence-capsule-v1-all-profiles";
 
 const cleanup: string[] = [];
 const repoRoot = resolve(import.meta.dir, "../..");
@@ -48,6 +51,10 @@ export const CHECK_MANIFEST = Object.freeze(Array.from(
 type ScannerFixture = {
   checkPath: string;
   corePath: string;
+  evidenceCapsulePath: string;
+  evidenceProfilesPath: string;
+  mathEvidencePath: string;
+  resultPath: string;
   understandingPath: string;
   lockPath: string;
   packagePath: string;
@@ -95,6 +102,10 @@ async function scannerFixture(
   const root = join(toolRoot, "node_modules", "@agenttool", "whitehack-scan");
   const checkPath = join(root, "src", "checks", "fixture-check.js");
   const corePath = join(root, "src", "core.js");
+  const evidenceCapsulePath = join(root, "src", "evidence-capsule.js");
+  const evidenceProfilesPath = join(root, "src", "evidence-capsule-profiles.js");
+  const mathEvidencePath = join(root, "src", "math-evidence.js");
+  const resultPath = join(root, "src", "result.js");
   const understandingPath = join(root, "src", "understanding.js");
   const packagePath = join(root, "package.json");
   const lockPath = join(toolRoot, "package-lock.json");
@@ -148,6 +159,10 @@ async function scannerFixture(
           types: "./src/understanding.d.ts",
           default: "./src/understanding.js",
         },
+        "./math-evidence": {
+          types: "./src/math-evidence.d.ts",
+          default: "./src/math-evidence.js",
+        },
       },
       scripts: { test: "node --test" },
     }, null, 2)}\n`,
@@ -175,9 +190,49 @@ export function createUnderstanding(options) {
 }
 `,
   );
+  await writeFile(
+    evidenceProfilesPath,
+    "export const profile = Object.freeze({ version: \"fixture\" });\n",
+  );
+  await writeFile(
+    resultPath,
+    "export const RESULT_DOCUMENT_TYPE = \"whitehack-scan-result/v1\";\n",
+  );
+  await writeFile(
+    evidenceCapsulePath,
+    `import { CHECK_MANIFEST } from "./core.js";
+import { profile } from "./evidence-capsule-profiles.js";
+import { RESULT_DOCUMENT_TYPE } from "./result.js";
+void CHECK_MANIFEST;
+void profile;
+void RESULT_DOCUMENT_TYPE;
+export function parseEvidenceCapsuleBytes(bytes) { return bytes; }
+`,
+  );
+  await writeFile(
+    mathEvidencePath,
+    `import { createHash } from "node:crypto";
+import { parseEvidenceCapsuleBytes } from "./evidence-capsule.js";
+void parseEvidenceCapsuleBytes;
+export const MATH_EVIDENCE_ADDRESS_ALGORITHM = "sha256";
+export const MATH_EVIDENCE_AXES = Object.freeze(["observation", "hypothesis", "reproduction", "impact", "provenance", "authorization"]);
+export const MATH_EVIDENCE_DOCUMENT_TYPE = "whitehack-math-evidence/v1";
+export const MATH_EVIDENCE_MEDIA_TYPE = "application/vnd.whitehack.math-evidence.v1+json";
+export const MAX_MATH_EVIDENCE_BYTES = 262144;
+export function canonicalizeMathEvidence(document) { return JSON.stringify(document); }
+export function createMathEvidence(options) { return options; }
+export function encodeMathEvidence(document) { return new TextEncoder().encode(canonicalizeMathEvidence(document)); }
+export function parseMathEvidenceBytes(bytes) { return JSON.parse(new TextDecoder().decode(bytes)); }
+export function addressMathEvidence(document) { return \`sha256:\${createHash("sha256").update(encodeMathEvidence(document)).digest("hex")}\`; }
+`,
+  );
   const scanner = {
     checkPath,
     corePath,
+    evidenceCapsulePath,
+    evidenceProfilesPath,
+    mathEvidencePath,
+    resultPath,
     understandingPath,
     lockPath,
     packagePath,
@@ -194,6 +249,10 @@ async function fixtureRuntimeManifest(scanner: ScannerFixture) {
   const files = [
     ["src/checks/fixture-check.js", scanner.checkPath],
     ["src/core.js", scanner.corePath],
+    ["src/evidence-capsule-profiles.js", scanner.evidenceProfilesPath],
+    ["src/evidence-capsule.js", scanner.evidenceCapsulePath],
+    ["src/math-evidence.js", scanner.mathEvidencePath],
+    ["src/result.js", scanner.resultPath],
     ["src/understanding.js", scanner.understandingPath],
   ] as const;
   return {
@@ -204,6 +263,7 @@ async function fixtureRuntimeManifest(scanner: ScannerFixture) {
     algorithm: "sha256",
     roots: {
       core: "src/core.js",
+      "math-evidence": "src/math-evidence.js",
       understanding: "src/understanding.js",
     },
     files: await Promise.all(files.map(async ([path, absolute]) => ({
@@ -241,6 +301,16 @@ function understandingLoaderOptions(scanner: ScannerFixture) {
     scanner_lock: scanner.lockPath,
     scanner_root: scanner.root,
     export_name: "understanding",
+    expected_revision: fixtureRevision,
+    expected_runtime_manifest: scanner.runtimeManifest,
+  };
+}
+
+function mathEvidenceLoaderOptions(scanner: ScannerFixture) {
+  return {
+    scanner_lock: scanner.lockPath,
+    scanner_root: scanner.root,
+    export_name: "math-evidence",
     expected_revision: fixtureRevision,
     expected_runtime_manifest: scanner.runtimeManifest,
   };
@@ -355,6 +425,28 @@ describe("Whitehack advisory containment", () => {
       integrity: WHITEHACK_INTEGRITY,
       dev: true,
     });
+    const lexerBytes = await readFile(join(
+      repoRoot,
+      "bin",
+      "vendor",
+      "es-module-lexer-2.3.2.mjs",
+    ));
+    expect(createHash("sha256").update(lexerBytes).digest("hex")).toBe(
+      "5f5fdc9b959f3c87af22b01d522c89363835acb37ed5d6f300d557b32fae4ecc",
+    );
+    const lexerLicenseBytes = await readFile(join(
+      repoRoot,
+      "bin",
+      "vendor",
+      "es-module-lexer-2.3.2.LICENSE.txt",
+    ));
+    expect(createHash("sha256").update(lexerLicenseBytes).digest("hex")).toBe(
+      "8a4b6c44eebfb026d23719a348145a661a555568dbfdc11618ff2d0dd9306b00",
+    );
+    expect(await readFile(join(repoRoot, "LICENSING.md"), "utf8"))
+      .toContain("bin/vendor/es-module-lexer-2.3.2.LICENSE.txt");
+    expect(await readFile(join(repoRoot, "NOTICE"), "utf8"))
+      .toContain("es-module-lexer 2.3.2");
     const runtimeManifestPath = join(repoRoot, WHITEHACK_RUNTIME_MANIFEST);
     const runtimeManifestBytes = await readFile(runtimeManifestPath);
     expect(createHash("sha256").update(runtimeManifestBytes).digest("hex")).toBe(
@@ -369,17 +461,47 @@ describe("Whitehack advisory containment", () => {
       algorithm: "sha256",
       roots: {
         core: "src/core.js",
+        "math-evidence": "src/math-evidence.js",
         understanding: "src/understanding.js",
       },
     });
-    expect(runtimeManifest.files).toHaveLength(54);
+    expect(runtimeManifest.files).toHaveLength(58);
     const runtimePaths = runtimeManifest.files.map(({ path }) => path);
     expect(runtimePaths).toEqual([...runtimePaths].sort());
     expect(new Set(runtimePaths).size).toBe(runtimePaths.length);
     expect(runtimePaths.filter((path) => path.startsWith("src/checks/")))
       .toHaveLength(48);
     expect(runtimePaths).toContain("src/core.js");
+    expect(runtimePaths).toContain("src/evidence-capsule-profiles.js");
+    expect(runtimePaths).toContain("src/evidence-capsule.js");
+    expect(runtimePaths).toContain("src/math-evidence.js");
+    expect(runtimePaths).toContain("src/result.js");
     expect(runtimePaths).toContain("src/understanding.js");
+
+    const previousManifest = await readJson(join(
+      repoRoot,
+      "tools",
+      "whitehack-advisory",
+      "whitehack-runtime-closure-v0.9.0.json",
+    ));
+    const previousHashes = new Map(
+      previousManifest.files.map(({ path, sha256 }) => [path, sha256]),
+    );
+    expect(previousManifest.files).toHaveLength(54);
+    expect(runtimeManifest.files
+      .filter(({ path }) => !previousHashes.has(path))
+      .map(({ path }) => path))
+      .toEqual([
+        "src/evidence-capsule-profiles.js",
+        "src/evidence-capsule.js",
+        "src/math-evidence.js",
+        "src/result.js",
+      ]);
+    expect(previousManifest.files.every(
+      ({ path, sha256 }) => runtimeManifest.files.some(
+        (entry) => entry.path === path && entry.sha256 === sha256,
+      ),
+    )).toBe(true);
 
     const publicHtml = await readFile(
       join(repoRoot, "apps", "docs", "whitehack.html"),
@@ -413,6 +535,26 @@ describe("Whitehack advisory containment", () => {
     })).rejects.toMatchObject({
       code: "scanner_export_name_invalid",
     } satisfies Partial<WhitehackAdvisoryError>);
+  });
+
+  test("loads the separately reviewed math-evidence root", async () => {
+    const scanner = await scannerFixture("export function scanText() { return []; }\n");
+    const loaded = await loadVerifiedWhitehackModule(mathEvidenceLoaderOptions(scanner));
+
+    expect(loaded.module.MATH_EVIDENCE_DOCUMENT_TYPE).toBe(
+      "whitehack-math-evidence/v1",
+    );
+    expect(loaded.module.MATH_EVIDENCE_AXES).toEqual([
+      "observation",
+      "hypothesis",
+      "reproduction",
+      "impact",
+      "provenance",
+      "authorization",
+    ]);
+    expect(typeof loaded.module.parseMathEvidenceBytes).toBe("function");
+    expect(typeof loaded.module.addressMathEvidence).toBe("function");
+    expect(loaded.scanner.modulePath).toBe(await realpath(scanner.mathEvidencePath));
   });
 
   test("refuses hostile conditional understanding export declarations", async () => {
@@ -454,6 +596,45 @@ describe("Whitehack advisory containment", () => {
     }
   });
 
+  test("refuses hostile conditional math-evidence export declarations", async () => {
+    const hostileExports = [
+      "./src/math-evidence.js",
+      null,
+      [],
+      { types: "./src/math-evidence.d.ts" },
+      { default: "./src/math-evidence.js" },
+      {
+        types: "./src/changed.d.ts",
+        default: "./src/math-evidence.js",
+      },
+      {
+        types: "./src/math-evidence.d.ts",
+        default: "./src/changed.js",
+      },
+      {
+        types: "./src/math-evidence.d.ts",
+        default: "../outside.js",
+      },
+      {
+        types: "./src/math-evidence.d.ts",
+        default: "./src/math-evidence.js",
+        node: "./src/changed.js",
+      },
+    ];
+    for (const declaredExport of hostileExports) {
+      const scanner = await scannerFixture("export function scanText() { return []; }\n");
+      const packageJson = await readJson(scanner.packagePath);
+      packageJson.exports["./math-evidence"] = declaredExport;
+      await writeJson(scanner.packagePath, packageJson);
+
+      await expect(loadVerifiedWhitehackModule(
+        mathEvidenceLoaderOptions(scanner),
+      )).rejects.toMatchObject({
+        code: "scanner_math_evidence_export_mismatch",
+      } satisfies Partial<WhitehackAdvisoryError>);
+    }
+  });
+
   test("refuses a symlinked understanding module outside the package", async () => {
     const scanner = await scannerFixture("export function scanText() { return []; }\n");
     const outsideRoot = await temporaryRoot("whitehack-outside-understanding-");
@@ -467,6 +648,24 @@ describe("Whitehack advisory containment", () => {
 
     await expect(loadVerifiedWhitehackModule(
       understandingLoaderOptions(scanner),
+    )).rejects.toMatchObject({
+      code: "scanner_module_outside_root",
+    } satisfies Partial<WhitehackAdvisoryError>);
+  });
+
+  test("refuses a symlinked math-evidence module outside the package", async () => {
+    const scanner = await scannerFixture("export function scanText() { return []; }\n");
+    const outsideRoot = await temporaryRoot("whitehack-outside-math-evidence-");
+    const outsideModule = join(outsideRoot, "math-evidence.js");
+    await writeFile(
+      outsideModule,
+      "export function parseMathEvidenceBytes() { return {}; }\n",
+    );
+    await rm(scanner.mathEvidencePath);
+    await symlink(outsideModule, scanner.mathEvidencePath);
+
+    await expect(loadVerifiedWhitehackModule(
+      mathEvidenceLoaderOptions(scanner),
     )).rejects.toMatchObject({
       code: "scanner_module_outside_root",
     } satisfies Partial<WhitehackAdvisoryError>);
@@ -489,13 +688,15 @@ export function createUnderstanding() { return {}; }
     } satisfies Partial<WhitehackAdvisoryError>);
   });
 
-  test("refuses persistent byte drift across core, understanding, and a transitive check", async () => {
+  test("refuses persistent byte drift across all roots and transitive modules", async () => {
     const cases: Array<{
       path: (scanner: ScannerFixture) => string;
-      export_name: "core" | "understanding";
+      export_name: "core" | "understanding" | "math-evidence";
     }> = [
       { path: (scanner) => scanner.corePath, export_name: "core" },
       { path: (scanner) => scanner.understandingPath, export_name: "understanding" },
+      { path: (scanner) => scanner.mathEvidencePath, export_name: "math-evidence" },
+      { path: (scanner) => scanner.evidenceCapsulePath, export_name: "math-evidence" },
       { path: (scanner) => scanner.checkPath, export_name: "core" },
     ];
     for (const testCase of cases) {
@@ -510,6 +711,90 @@ export function createUnderstanding() { return {}; }
         code: "scanner_runtime_integrity_mismatch",
       } satisfies Partial<WhitehackAdvisoryError>);
     }
+  });
+
+  test("fails closed on omitted, surplus, and escaping runtime closure entries", async () => {
+    const omitted = await scannerFixture("export function scanText() { return []; }\n");
+    omitted.runtimeManifest = {
+      ...omitted.runtimeManifest,
+      files: omitted.runtimeManifest.files.filter(
+        ({ path }: { path: string }) => path !== "src/evidence-capsule-profiles.js",
+      ),
+    };
+    await expect(loadVerifiedWhitehackModule(
+      mathEvidenceLoaderOptions(omitted),
+    )).rejects.toMatchObject({
+      code: "scanner_runtime_closure_mismatch",
+    } satisfies Partial<WhitehackAdvisoryError>);
+
+    const surplus = await scannerFixture("export function scanText() { return []; }\n");
+    const surplusPath = join(surplus.root, "src", "unreachable.js");
+    await writeFile(surplusPath, "export const unreachable = true;\n");
+    surplus.runtimeManifest = {
+      ...surplus.runtimeManifest,
+      files: [
+        ...surplus.runtimeManifest.files,
+        {
+          path: "src/unreachable.js",
+          sha256: createHash("sha256").update(await readFile(surplusPath)).digest("hex"),
+        },
+      ],
+    };
+    await expect(loadVerifiedWhitehackModule(
+      mathEvidenceLoaderOptions(surplus),
+    )).rejects.toMatchObject({
+      code: "scanner_runtime_closure_mismatch",
+    } satisfies Partial<WhitehackAdvisoryError>);
+
+    const escaping = await scannerFixture("export function scanText() { return []; }\n");
+    await writeFile(
+      escaping.mathEvidencePath,
+      "import value from \"../../outside.js\";\nexport default value;\n",
+    );
+    await refreshRuntimeManifest(escaping);
+    await expect(loadVerifiedWhitehackModule(
+      mathEvidenceLoaderOptions(escaping),
+    )).rejects.toMatchObject({
+      code: "scanner_runtime_closure_mismatch",
+    } satisfies Partial<WhitehackAdvisoryError>);
+  });
+
+  test("uses a real module lexer for comment-separated and non-line-leading edges", async () => {
+    const hostileSources = [
+      'import/*comment*/ value from "./outside.js"; void value;\n',
+      'await import/*comment*/("./outside.js");\n',
+      'void 0; import "./outside.js";\n',
+      'export/*comment*/{ value }from/*comment*/"./outside.js";\n',
+      'import {\n  value\n} from\n  "./outside.js";\nvoid value;\n',
+    ];
+
+    for (const hostileSource of hostileSources) {
+      const scanner = await scannerFixture(hostileSource);
+      await expect(loadVerifiedWhitehackModule(
+        mathEvidenceLoaderOptions(scanner),
+      )).rejects.toMatchObject({
+        code: "scanner_runtime_closure_mismatch",
+      } satisfies Partial<WhitehackAdvisoryError>);
+    }
+  });
+
+  test("does not confuse comments, strings, templates, or regexes with module edges", async () => {
+    const scanner = await scannerFixture(`
+const quotedExamples = [
+  "import('./outside.js')",
+  \`export * from "./outside.js"\`,
+  /import\\s*\\(\\s*['\"]\\.\\/outside\\.js/,
+];
+/* import value from "./outside.js"; */
+void quotedExamples;
+export function scanText() { return []; }
+`);
+
+    await expect(loadVerifiedWhitehackModule(
+      mathEvidenceLoaderOptions(scanner),
+    )).resolves.toMatchObject({
+      scanner: { version: WHITEHACK_VERSION },
+    });
   });
 
   test.skipIf(process.env.WHITEHACK_INTEGRATION !== "1")(
@@ -559,6 +844,93 @@ export function createUnderstanding() { return {}; }
         .toBe("indeterminate");
       expect(Object.isFrozen(document)).toBe(true);
       expect(Object.isFrozen(document.boundaries.direct_capabilities)).toBe(true);
+    },
+  );
+
+  test.skipIf(process.env.WHITEHACK_INTEGRATION !== "1")(
+    "checks the exact installed Whitehack math-evidence API contract",
+    async () => {
+      const scannerRoot = join(
+        repoRoot,
+        "tools",
+        "whitehack-advisory",
+        "node_modules",
+        "@agenttool",
+        "whitehack-scan",
+      );
+      const { module, scanner } = await loadVerifiedWhitehackModule({
+        scanner_root: scannerRoot,
+        scanner_lock: join(repoRoot, "tools/whitehack-advisory/package-lock.json"),
+        export_name: "math-evidence",
+      });
+
+      expect(scanner).toMatchObject({
+        revision: WHITEHACK_REVISION,
+        version: WHITEHACK_VERSION,
+      });
+      expect(Object.keys(module).sort()).toEqual([
+        "MATH_EVIDENCE_ADDRESS_ALGORITHM",
+        "MATH_EVIDENCE_AXES",
+        "MATH_EVIDENCE_DOCUMENT_TYPE",
+        "MATH_EVIDENCE_MEDIA_TYPE",
+        "MAX_MATH_EVIDENCE_BYTES",
+        "addressMathEvidence",
+        "canonicalizeMathEvidence",
+        "createMathEvidence",
+        "encodeMathEvidence",
+        "parseMathEvidenceBytes",
+      ]);
+
+      const unknown = (note: string | null = null) => ({
+        disposition: "unknown",
+        claim: null,
+        support: [],
+        refute: [],
+        quantities: [],
+        note,
+      });
+      const document = module.createMathEvidence({
+        capsule: JSON.parse(WHITEHACK_0_9_ALL_PROFILE_CANONICAL),
+        axes: {
+          observation: unknown(),
+          hypothesis: unknown(),
+          reproduction: unknown(),
+          impact: unknown(),
+          provenance: unknown(),
+          authorization: {
+            disposition: "refused",
+            claim: null,
+            support: [],
+            refute: [],
+            quantities: [],
+            note: null,
+          },
+        },
+      });
+      const bytes = module.encodeMathEvidence(document);
+      const parsed = module.parseMathEvidenceBytes(bytes);
+      const address = module.addressMathEvidence(parsed);
+
+      expect(document.document_type).toBe("whitehack-math-evidence/v1");
+      expect(document.source.capsule_address).toMatch(/^sha256:[0-9a-f]{64}$/u);
+      expect(document.epistemic.axis_relation).toBe(
+        "separate-non-scalar-no-implicit-order",
+      );
+      expect(document.boundaries.inferences_performed).toMatchObject({
+        emotion: false,
+        personhood: false,
+        consent: false,
+        authorization: false,
+      });
+      expect(document.boundaries.authorization_effect).toBe("none");
+      expect(document.boundaries.downstream_weight_effect).toBe(
+        "none-training-reward-ranking-or-fitness",
+      );
+      expect(address).toBe(
+        `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+      );
+      expect(new TextDecoder().decode(bytes).endsWith("\n")).toBe(false);
+      expect(parsed).toEqual(document);
     },
   );
 
@@ -892,7 +1264,11 @@ export function scanText() {
     const shortManifest = await scannerFixture("export function scanText() { return []; }\n");
     await writeFile(
       shortManifest.corePath,
-      "export const CHECK_MANIFEST = Array.from({ length: 46 });\nexport function scanText() { return []; }\n",
+      `import { fixtureCheckLoaded } from "./checks/fixture-check.js";
+void fixtureCheckLoaded;
+export const CHECK_MANIFEST = Array.from({ length: 46 });
+export function scanText() { return []; }
+`,
     );
     await refreshRuntimeManifest(shortManifest);
     await expectScannerFailure(shortManifest, "scanner_import_failed");

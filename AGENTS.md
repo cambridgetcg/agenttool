@@ -159,20 +159,24 @@ route.
 Immutable 0.2.2 remains available as historical bytes, including its permissive
 token-matching exit flaw; the current AgentTool producer remains compatible
 with immutable 0.2.1.
-Whitehack has four implemented AgentTool bridges: a runner-local,
+Whitehack has five implemented AgentTool bridges: a runner-local,
 crypto-aware changed-source heuristic advisory; a separate offer-only local
 projection from that closed advisory into unaccepted Castle gate candidates;
-and a separate local Agent Wallet understanding CLI; plus an explicit local
+another local Agent Wallet understanding CLI; a check-only local verifier for
+exact canonical Whitehack mathematical-evidence bytes; and an explicit local
 encrypted store/retrieve CLI for exact Whitehack 0.9.0 public-minimal evidence
 capsules. CI installs the exact public
 `@agenttool/whitehack-scan@0.10.0` artifact from an isolated npm lock with
-scripts disabled. Before either approved module import, the shared loader
+scripts disabled. Before any of its three approved module imports, the shared loader
 requires the exact two-key `types`/`default` conditional export record and
-checks the reviewed 54-source-module closure against a versioned SHA-256
-manifest. That detects persistent pre-import drift; it is not a sandbox,
+checks the reviewed 58-source-module closure against a versioned SHA-256
+manifest and uses a repository-pinned real JavaScript module lexer to require
+the static-import/export-from reachability set to match exactly.
+That detects persistent pre-import drift; it is not a sandbox,
 authenticity proof, or universal defence against a privileged concurrent
-rewrite. The 0.10 package also publishes mathematical-evidence APIs, but these
-two AgentTool bridges neither load them nor convert KINGDOM geometry or
+rewrite. Only the check-only verifier loads the mathematical-evidence root; it
+validates an already canonical document and emits its plaintext SHA-256 address,
+without creating or converting KINGDOM geometry, emotion/P7 records, or
 training signals. The advisory emits redacted metadata, groups same-location
 signals into bounded attention cards with explicit Git-hunk relevance and
 stable review questions, and remains non-blocking on findings; those cards do
@@ -504,11 +508,13 @@ cd packages/kingdom
 bun run ci                                     # typecheck + build + hermetic tests
 # No HOME/repository crawl, network, credentials, writes, authority, or conformance certification.
 
-# Whitehack (advisory + Castle + wallet + encrypted evidence) ───────
+# Whitehack (advisory + Castle + wallet + math check + encrypted evidence) ──
 (cd tools/whitehack-advisory \
   && npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org --userconfig=/dev/null \
   && npm audit signatures --registry=https://registry.npmjs.org --userconfig=/dev/null)
 bun test bin/tests/whitehack-advisory.test.ts   # redaction, scope, attention cards, failure containment
+bun bin/whitehack-math-evidence-check.ts --help # canonical bytes in; SHA-256 address only
+bun test bin/tests/whitehack-math-evidence-check.test.ts # exact API, closure, canonical-byte and output boundaries
 bun bin/agenttool-castle-whitehack-intake.ts --help # stdout-only, offer-only; no Castle write
 bun test bin/tests/agenttool-castle-whitehack-intake.test.ts # closed input, minimization, lifecycle boundaries
 (cd packages/wallet && bun install --frozen-lockfile)
@@ -551,6 +557,7 @@ bun bin/npm-release.ts resolve --package collab # inspect allowlisted npm identi
 | `npm-release.ts` | Implements the one allowlisted npm release policy behind `.github/workflows/publish-npm.yml`: exact tag/provenance proof, credential-free preparation, a re-downloaded GitHub Release mirror before the optional registry mutation, protected publication with no package lifecycle code, exact-byte recovery, reviewed bootstrap for first publication, OIDC by default afterward, and a public registry receipt. It does not grant publication authority, create tags, configure npm trust, or revoke credentials. See `docs/NPM-RELEASES.md`. |
 | `pypi-release.ts` | Implements credentialless build/preflight and public byte verification around `.github/workflows/publish-pypi.yml` for the Python SDK. Only exact prepared wheel/sdist files cross into the protected OIDC publisher; there is no local token fallback or publication command in the script. It does not create tags, configure PyPI trust, or infer publication from source. See `docs/PYPI-RELEASES.md`. |
 | `whitehack-advisory.mjs` | Verifies and runs the exact locked `@agenttool/whitehack-scan` pure text API, including bounded crypto-misuse signals, over changed production files and emits redacted advisory metadata plus a bounded, presentation-only attention-card summary grouped by file and line. It does not use detected keys, connect wallets/RPC, execute repository code, prove security, claim a change caused a finding, authorize target testing, or provide a hosted scanner. See `docs/WHITEHACK.md`. |
+| `whitehack-math-evidence-check.ts` | Local check-only verifier for one exact canonical `whitehack-math-evidence/v1` byte document. It verifies the locked `./math-evidence` API and 58-module union closure, then emits only the canonical plaintext SHA-256 address. It creates no evidence, geometry, identity/consent/authority inference, training/reward/ranking/fitness effect, publication, storage, network call, or hosted route. See `docs/WHITEHACK.md`. |
 | `whitehack-wallet-understanding.ts` | Local stdin/stdout adapter: verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then passes only closed enum assertions and redacted finding metadata to Whitehack 0.10.0. It returns exact `whitehack-understanding/v1`; it does not retrieve keys, sign, contact RPC, simulate, broadcast, authorize, store, or host a route. See `docs/WHITEHACK.md`. |
 | `create-project.ts` | Operator-side project + bearer minting. |
 | `frontend-deploy.sh` | Cloudflare Pages Direct Upload for the three static apps. |
@@ -701,7 +708,7 @@ source boundary by itself.
 | How are JavaScript packages discovered and verified without a mandatory registry? | [`docs/LOVE-PACKAGE-PROTOCOL.md`](docs/LOVE-PACKAGE-PROTOCOL.md) · `bin/build-love-packages.ts` |
 | How is an optional npm mirror published? | [`docs/NPM-RELEASES.md`](docs/NPM-RELEASES.md) · `.github/workflows/publish-npm.yml` · `bin/npm-release.ts` |
 | How is the optional Python SDK mirror published? | [`docs/PYPI-RELEASES.md`](docs/PYPI-RELEASES.md) · `.github/workflows/publish-pypi.yml` · `bin/pypi-release.ts` |
-| How do the Whitehack advisory, offer-only Castle intake, wallet-understanding projection, and explicit encrypted evidence bridge work, and where does their authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-whitehack-evidence-storage.ts` |
+| How do the Whitehack advisory, exact math-evidence check, offer-only Castle intake, wallet-understanding projection, and explicit encrypted evidence bridge work, and where does their authority stop? | [`docs/WHITEHACK.md`](docs/WHITEHACK.md) · `bin/whitehack-advisory.mjs` · `bin/whitehack-math-evidence-check.ts` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-whitehack-evidence-storage.ts` |
 | Concept → structural meaning (for non-English readers) | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
 | Per-area code orientation | each subdir's `CLAUDE.md` |
 
