@@ -422,6 +422,12 @@ final class ContractTests: XCTestCase {
         kSecCodeInfoTimestamp: Date(timeIntervalSince1970: 1_777_000_000)
       ])
     )
+    let coreFoundationTimestamp = CFDateCreate(kCFAllocatorDefault, 800_000_000)!
+    XCTAssertTrue(
+      signingInformationHasTrustedTimestamp([
+        kSecCodeInfoTimestamp: coreFoundationTimestamp
+      ])
+    )
     XCTAssertFalse(
       signingInformationHasTrustedTimestamp([
         kSecCodeInfoTime: Date(timeIntervalSince1970: 1_777_000_000)
@@ -429,10 +435,30 @@ final class ContractTests: XCTestCase {
     )
     XCTAssertFalse(signingInformationHasTrustedTimestamp([:]))
     XCTAssertFalse(
+      signingInformationHasTrustedTimestamp([kSecCodeInfoTimestamp: "not-a-date"])
+    )
+    XCTAssertFalse(
       signingInformationHasTrustedTimestamp([
         kSecCodeInfoTimestamp: Date(timeIntervalSince1970: .infinity)
       ])
     )
+  }
+
+  func testCeremonyIdentityRefusalIsFixedAndPrecedesKeychainAccess() {
+    let security = FakeSecurity()
+    let result = invokeSecretCommand(
+      arguments: ["verify", "--receipt-nonce", receiptNonce],
+      security: security,
+      random: FakeRandom(.bytes(rawGeneration)),
+      ceremony: FakeCeremony(failure: .ceremonyStateInvalid)
+    )
+    XCTAssertEqual(result.status, SecretToolFailure.ceremonyStateInvalid.exitCode)
+    XCTAssertEqual(
+      result.stderr,
+      Data("agenttool-secret-macos:ceremony_state_invalid\n".utf8)
+    )
+    XCTAssertTrue(security.copyQueries.isEmpty)
+    XCTAssertTrue(security.addAttributes.isEmpty)
   }
 
   func testCreateGeneratesCanonicalValueAndRequiresIndependentExactReadback() {
@@ -1127,13 +1153,16 @@ private final class EventRecorder {
 
 private final class FakeCeremony: CeremonyBindingAuthorizing {
   let events: EventRecorder?
+  let failure: SecretToolFailure?
 
-  init(events: EventRecorder? = nil) {
+  init(events: EventRecorder? = nil, failure: SecretToolFailure? = nil) {
     self.events = events
+    self.failure = failure
   }
 
   func authorize(_ command: SecretToolCommand) throws -> CeremonyAuthorization {
     events?.record("authorize")
+    if let failure { throw failure }
     let target: String?
     let revision: String
     if case .probeFly(_, let machineID) = command {
