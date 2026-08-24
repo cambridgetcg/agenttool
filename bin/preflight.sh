@@ -149,7 +149,7 @@ packages_gate() {
     bash -c 'cd packages/collab-zerone && bun run ci'
   run "local-first agent browser (fake/fixture tests; no browser download)" \
     bash -c 'cd packages/browser && bun run ci'
-  run "private read-only Hugging Face metadata and research scout" \
+  run "local read-only Hugging Face metadata and provenance scout" \
     bash -c 'cd packages/hf-scout && bun run ci'
   # The command substitutions intentionally run inside the credential-narrowed child.
   # shellcheck disable=SC2016
