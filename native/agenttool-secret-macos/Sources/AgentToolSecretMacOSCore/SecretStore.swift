@@ -5,11 +5,39 @@ import Security
 public enum SecretToolContract {
   public static let randomByteCount = 32
   public static let serializedByteCount = 64
+  public static let ceremonyNonceByteCount = 16
+  public static let ceremonyNonceSerializedByteCount = 32
+}
+
+public struct SecretToolCeremonyNonce: Equatable, Sendable {
+  public let value: String
+
+  public init(_ value: String) throws {
+    let bytes = Array(value.utf8)
+    guard bytes.count == SecretToolContract.ceremonyNonceSerializedByteCount,
+      bytes.allSatisfy(isLowercaseHexByte)
+    else {
+      throw SecretToolFailure.invalidCeremonyNonce
+    }
+    self.value = value
+  }
+
+  var data: Data {
+    let bytes = Array(value.utf8)
+    var decoded = Data(capacity: SecretToolContract.ceremonyNonceByteCount)
+    for index in stride(from: 0, to: bytes.count, by: 2) {
+      decoded.append((hexNibble(bytes[index]) << 4) | hexNibble(bytes[index + 1]))
+    }
+    return decoded
+  }
 }
 
 public enum SecretToolFailure: Error, Equatable, Sendable {
   case invalidInvocation
   case invalidSelector
+  case invalidCeremonyNonce
+  case invalidMachineID
+  case ceremonyStateInvalid
   case itemAbsent
   case itemExists
   case interactionForbidden
@@ -18,12 +46,20 @@ public enum SecretToolFailure: Error, Equatable, Sendable {
   case storeFailed
   case readbackFailed
   case readbackMismatch
+  case receiptBindingMismatch
+  case flyContractInvalid
+  case flyChildFailed
+  case flyChildTimedOut
+  case flyRuntimeProofFailed
   case internalFailure
 
   public var safeCode: String {
     switch self {
     case .invalidInvocation: "invalid_invocation"
     case .invalidSelector: "invalid_selector"
+    case .invalidCeremonyNonce: "invalid_ceremony_nonce"
+    case .invalidMachineID: "invalid_machine_id"
+    case .ceremonyStateInvalid: "ceremony_state_invalid"
     case .itemAbsent: "item_absent"
     case .itemExists: "item_exists"
     case .interactionForbidden: "interaction_forbidden"
@@ -32,6 +68,11 @@ public enum SecretToolFailure: Error, Equatable, Sendable {
     case .storeFailed: "store_failed"
     case .readbackFailed: "readback_failed"
     case .readbackMismatch: "readback_mismatch"
+    case .receiptBindingMismatch: "receipt_binding_mismatch"
+    case .flyContractInvalid: "fly_contract_invalid"
+    case .flyChildFailed: "fly_child_failed"
+    case .flyChildTimedOut: "fly_child_timed_out"
+    case .flyRuntimeProofFailed: "fly_runtime_proof_failed"
     case .internalFailure: "internal_failure"
     }
   }
@@ -40,6 +81,9 @@ public enum SecretToolFailure: Error, Equatable, Sendable {
     switch self {
     case .invalidInvocation: 2
     case .invalidSelector: 3
+    case .invalidCeremonyNonce: 12
+    case .invalidMachineID: 19
+    case .ceremonyStateInvalid: 20
     case .itemAbsent:
       4
     case .itemExists:
@@ -56,6 +100,16 @@ public enum SecretToolFailure: Error, Equatable, Sendable {
       10
     case .readbackMismatch:
       11
+    case .receiptBindingMismatch:
+      13
+    case .flyContractInvalid:
+      14
+    case .flyChildFailed:
+      16
+    case .flyChildTimedOut:
+      17
+    case .flyRuntimeProofFailed:
+      18
     case .internalFailure:
       70
     }
@@ -129,9 +183,14 @@ public struct SecretStore {
   public func createRandom(
     service: String,
     account: String,
+    ceremonyNonce: SecretToolCeremonyNonce,
     random: any RandomByteGenerating = NativeRandomByteGenerator()
   ) throws {
-    if case .present = try presence(service: service, account: account) {
+    if case .present = try presence(
+      service: service,
+      account: account,
+      ceremonyNonce: ceremonyNonce
+    ) {
       throw SecretToolFailure.itemExists
     }
 
@@ -153,11 +212,20 @@ public struct SecretStore {
       value.resetBytes(in: value.startIndex..<value.endIndex)
     }
 
-    try add(value, service: service, account: account)
+    try add(
+      value,
+      service: service,
+      account: account,
+      ceremonyNonce: ceremonyNonce
+    )
 
     var storedValue: Data
     do {
-      switch try lookup(service: service, account: account) {
+      switch try lookup(
+        service: service,
+        account: account,
+        ceremonyNonce: ceremonyNonce
+      ) {
       case .absent:
         throw SecretToolFailure.readbackFailed
       case .found(let readbackValue):
@@ -167,6 +235,8 @@ public struct SecretStore {
       throw SecretToolFailure.interactionForbidden
     } catch SecretToolFailure.itemAmbiguous {
       throw SecretToolFailure.itemAmbiguous
+    } catch SecretToolFailure.receiptBindingMismatch {
+      throw SecretToolFailure.receiptBindingMismatch
     } catch is SecretToolFailure {
       throw SecretToolFailure.readbackFailed
     } catch {
@@ -182,10 +252,15 @@ public struct SecretStore {
 
   public func verifyCanonicalGeneration(
     service: String,
-    account: String
+    account: String,
+    ceremonyNonce: SecretToolCeremonyNonce
   ) throws {
     var stored: Data
-    switch try lookup(service: service, account: account) {
+    switch try lookup(
+      service: service,
+      account: account,
+      ceremonyNonce: ceremonyNonce
+    ) {
     case .absent:
       throw SecretToolFailure.itemAbsent
     case .found(let value):
@@ -194,7 +269,66 @@ public struct SecretStore {
     stored.resetBytes(in: stored.startIndex..<stored.endIndex)
   }
 
-  private func presence(service: String, account: String) throws -> Presence {
+  func stageCanonicalGeneration(
+    service: String,
+    account: String,
+    ceremonyNonce: SecretToolCeremonyNonce,
+    using fly: any FlyGenerationOperating
+  ) throws {
+    var stored = try canonicalGeneration(
+      service: service,
+      account: account,
+      ceremonyNonce: ceremonyNonce
+    )
+    defer { stored.resetBytes(in: stored.startIndex..<stored.endIndex) }
+    try fly.stage(generation: stored)
+  }
+
+  func verifyCanonicalGenerationOnFlyRuntime(
+    service: String,
+    account: String,
+    ceremonyNonce: SecretToolCeremonyNonce,
+    machineID: SecretToolMachineID,
+    expectedRevision: String,
+    role: CeremonyRuntimeRole,
+    using fly: any FlyGenerationOperating
+  ) throws {
+    var stored = try canonicalGeneration(
+      service: service,
+      account: account,
+      ceremonyNonce: ceremonyNonce
+    )
+    defer { stored.resetBytes(in: stored.startIndex..<stored.endIndex) }
+    try fly.verifyRuntime(
+      generation: stored,
+      machineID: machineID,
+      expectedRevision: expectedRevision,
+      role: role
+    )
+  }
+
+  private func canonicalGeneration(
+    service: String,
+    account: String,
+    ceremonyNonce: SecretToolCeremonyNonce
+  ) throws -> Data {
+    switch try lookup(
+      service: service,
+      account: account,
+      ceremonyNonce: ceremonyNonce
+    ) {
+    case .absent:
+      throw SecretToolFailure.itemAbsent
+    case .found(let value):
+      return value
+    }
+  }
+
+  private func presence(
+    service: String,
+    account: String,
+    ceremonyNonce: SecretToolCeremonyNonce
+  ) throws -> Presence {
     let response = security.copyMatching(presenceQuery(service: service, account: account))
     if response.status == errSecItemNotFound {
       return .absent
@@ -206,11 +340,20 @@ public struct SecretStore {
       throw SecretToolFailure.readbackFailed
     }
     let attributes = try exactlyOneAttributes(from: response.result)
-    try validateIdentity(attributes, service: service, account: account)
+    try validateIdentity(
+      attributes,
+      service: service,
+      account: account,
+      ceremonyNonce: ceremonyNonce
+    )
     return .present
   }
 
-  private func lookup(service: String, account: String) throws -> Lookup {
+  private func lookup(
+    service: String,
+    account: String,
+    ceremonyNonce: SecretToolCeremonyNonce
+  ) throws -> Lookup {
     let response = security.copyMatching(readQuery(service: service, account: account))
     if response.status == errSecItemNotFound {
       return .absent
@@ -222,7 +365,12 @@ public struct SecretStore {
       throw SecretToolFailure.readbackFailed
     }
     let attributes = try exactlyOneAttributes(from: response.result)
-    try validateIdentity(attributes, service: service, account: account)
+    try validateIdentity(
+      attributes,
+      service: service,
+      account: account,
+      ceremonyNonce: ceremonyNonce
+    )
     guard let value = attributes.object(forKey: kSecValueData) as? Data else {
       throw SecretToolFailure.readbackFailed
     }
@@ -234,8 +382,14 @@ public struct SecretStore {
     return .found(value)
   }
 
-  private func add(_ value: Data, service: String, account: String) throws {
+  private func add(
+    _ value: Data,
+    service: String,
+    account: String,
+    ceremonyNonce: SecretToolCeremonyNonce
+  ) throws {
     var attributes = identityQuery(service: service, account: account)
+    attributes[kSecAttrGeneric] = ceremonyNonce.data
     attributes[kSecValueData] = value
     let status = security.add(attributes)
     if status == errSecDuplicateItem {
@@ -297,13 +451,17 @@ public struct SecretStore {
   private func validateIdentity(
     _ attributes: NSDictionary,
     service: String,
-    account: String
+    account: String,
+    ceremonyNonce: SecretToolCeremonyNonce
   ) throws {
     guard
       attributes.object(forKey: kSecAttrService) as? String == service,
       attributes.object(forKey: kSecAttrAccount) as? String == account
     else {
       throw SecretToolFailure.readbackFailed
+    }
+    guard attributes.object(forKey: kSecAttrGeneric) as? Data == ceremonyNonce.data else {
+      throw SecretToolFailure.receiptBindingMismatch
     }
     if let synchronizable = attributes.object(forKey: kSecAttrSynchronizable) as? Bool,
       synchronizable
@@ -328,8 +486,12 @@ private func lowercaseHex(_ raw: Data) -> Data {
   return encoded
 }
 
-private func isLowercaseHexByte(_ byte: UInt8) -> Bool {
+func isLowercaseHexByte(_ byte: UInt8) -> Bool {
   (byte >= 0x30 && byte <= 0x39) || (byte >= 0x61 && byte <= 0x66)
+}
+
+private func hexNibble(_ byte: UInt8) -> UInt8 {
+  byte <= 0x39 ? byte - 0x30 : byte - 0x61 + 10
 }
 
 func constantTimeEqual(_ lhs: Data, _ rhs: Data) -> Bool {

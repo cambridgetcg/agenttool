@@ -17,6 +17,7 @@ Tests in this directory exercise multi-component flows that need a real DB row t
 | `covenants-v2-terminal.test.ts` | Partial terminal-path fixtures; the cross-instance reject case is skipped and must not be counted as coverage. |
 | `covenant-authority-gates.test.ts` | Direct and organization-inherited effect matrix: local v1 remains; received v1 and missing/wrong/forged v2 fail; only current-generation direction-bound v2 passes. Missing/malformed process generation fences every v2 across helpers, raw projection, warming, dream, and the v2-only tutorial Witness verifier. |
 | `covenants-v2-authority.test.ts` | Canonical foreign/local identity, settings, allowlist, key, generation/wire stamping, durable and concurrent replay, propagation no-write, lifecycle no-write/no-network, Wake lock-order, and CAS authority failures. |
+| `federation-generation-hold-postgres.test.ts` | Opt-in disposable-PostgreSQL proof of the private generation-hold CHECK in both mutation orders and actual settings-PATCH serialization behind the singleton row lock. |
 
 ## When to use this tier
 
@@ -45,6 +46,12 @@ plaintext, and other remote providers refuse until they have a reviewed CA
 contract. Tests normally clean up after themselves; after a crash, inspect the
 target with the authenticated inventory/client appropriate to that disposable
 database rather than the retired Drizzle Studio path.
+
+Tests that can create or drop schemas require their own explicitly named
+disposable-database variable and refuse a target where their owned schemas
+already exist. For the generation hold proof, use
+`FEDERATION_GENERATION_HOLD_TEST_DATABASE_URL`; ordinary `DATABASE_URL` or
+`POSTGRES_URL` never opts it in.
 
 The skipped `covenants-v2-happy` and two-instance Playwright cases are design
 fixtures, not executed evidence. A passing database tier must report the

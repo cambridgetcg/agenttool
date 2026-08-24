@@ -748,51 +748,83 @@ This prevents even a correctly stamped new covenant from being admitted while
 Machines are restarting. A later allowlist change is a separate reviewed
 configuration action after Phase B.
 
-**Phase B is blocked and must not be executed.** A synthetic test on
+The B1 operator must first set the private database-only
+`covenant_v2_generation_hold` interlock while the locked allowlist is empty.
+The database constraint keeps `allowed_origins` empty while that durable hold
+is true, including after operator or database-session loss; the ordinary
+settings API cannot read, set, or clear the hold and returns the fixed
+`covenant_v2_generation_hold_requires_empty_allowed_origins` conflict when a
+platform-authorized patch would make the allowlist nonempty. Keep a live row
+lock for the active ceremony as an additional serialization boundary, but do
+not mistake that session-scoped lock for crash durability. Leave the durable
+hold set after Phase B. Clearing it and adding peers belong to the later,
+separately reviewed allowlist ceremony.
+
+**Phase B remains blocked until the exact B1 operator and installed artifacts
+are frozen and independently cleared.** A synthetic test on
 current macOS proved that `bin/agenttool-secret set <service> -` can return
 success while its underlying non-TTY `security ... -w` call stores no
 retrievable item. It is therefore not an activation ceremony and remains
 prohibited for this value.
 
-The source-only B0 primitive lives at
+The source-only B1 native boundary lives at
 `native/agenttool-secret-macos/`. It is the native Security.framework
-create-once generator and exact-readback foundation; its tests must pass on
-macOS before the existing required `API and protocol` status can pass. That
-proof establishes only the generate-once/non-exporting-verify primitive against
-a disposable Keychain item. CI does not publish an executable, and an unsigned
-CI or local build is not an installed, identity-pinned activation tool.
+create-once generator, exact-readback verifier, nonce-bound staged Fly stdin
+bridge, and one-Machine runtime comparison boundary; its tests must pass on
+macOS before the existing required `API and protocol` status can pass. CI uses
+only a disposable Keychain tuple and fake flyctl. It does not contact Fly,
+publish an executable, or authorize an unsigned local build.
 
-The B0 executable generates 32 random bytes internally and stores exactly 64
-lowercase hexadecimal bytes. It exposes only create-once storage and
-non-exporting canonical-presence verification. Its production build is
-compile-time bound to the one authority service/account tuple and accepts no
-runtime selector, secret stdin, or raw-value read; it has no caller-supplied
-create, overwrite, upsert, or delete verb. A later B1 ceremony must keep
-Keychain read and Fly child-process stdin transfer inside one reviewed process
-boundary; interrupted reentry must reuse the retained item without exposing it
-as command output. Rotation or repair is not an authority granted by this
-primitive.
+The native executable generates 32 random bytes internally and stores exactly
+64 lowercase hexadecimal bytes. Its exact verbs require a non-secret 32-hex
+receipt nonce; the decoded 16 bytes are stored in `kSecAttrGeneric` and must
+match the canonical active marker before any operation. Its production build
+is compile-time bound to the one authority service/account tuple and fixed
+root-owned Fly v0.4.74 path. It has no raw-value read, caller-supplied value,
+overwrite, upsert, delete, unset, rotate, or repair verb. `stage-fly` invokes
+only `secrets import --stage --app agenttool`; rollout is a later secret-free
+`fly secrets deploy --app agenttool --dns-checks=false` operator checkpoint.
+`probe-fly` handles one write-ahead Machine target and keeps both secret values
+and their digests out of output. Interrupted reentry must re-stage and deploy
+the same retained item.
 
-Phase B additionally requires a separately reviewed B1 ceremony with a pinned
-native artifact, write-ahead receipt and non-exporting resumable same-value
-recovery, an empty-allowlist interlock for the entire mixed restart, complete
-five-Machine and four-running-process parity proof, and the documented
-stopped-standby and zero-row gates. Do not improvise a shell, argv,
+Operational use still requires a separately reviewed B1 operator with one
+Developer-ID-signed native artifact retained for the generation lifetime, the
+exact root-owned pinned Fly executable, a canonical 0600 write-ahead marker and
+final receipt, non-exporting resumable same-value recovery, the durable hold
+plus a live row lock, complete five-Machine and four-running-process parity,
+and the documented stopped-standby and zero-row gates. Do not improvise a shell, argv,
 environment-variable, output, or temporary-file substitute. Until that
 ceremony lands and is independently reviewed, retain the Phase-A state:
 generation absent, v2 fail-closed, and allowlist empty.
 
-Once that prerequisite is met in a later reviewed release, the generation is
+The active marker's one canonical location is
+`$HOME/.local/state/agenttool/deploy-state/phase-b-authority-generation-active.json`;
+`XDG_STATE_HOME` cannot relocate it. Every mutating `bin/deploy.sh` invocation
+exits 74 while any object exists at that path, before dependency preparation,
+migration, preflight, Fly, or frontend work; survey and dry-run remain
+inspection-only. The B1 operator must share the same device lock as the deploy
+wrapper and prove the maintenance marker absent before it publishes this
+marker. Only the reviewed, nonce-bound B1 recovery/finalization path may retire
+it. There is deliberately no generic deploy bypass: if code repair is required
+after staging, that recovery needs a separately reviewed marker-bound
+fix-forward lane which still enforces the covenant runtime-fence floor.
+
+Once that prerequisite is met in a reviewed release, the generation is
 durable release identity. Generate it directly inside the native OS secret-store
 operation, validate its exact internal Keychain readback, and import that same
-retained value to Fly only through the later reviewed in-process child stdin
+retained value to Fly only through the reviewed in-process child stdin
 bridge. The value must never enter the operator shell environment,
 an argument, command output, file, repository, or receipt. It necessarily
 enters the remote process environment as the named Fly runtime secret.
 
-That later secret rollout is safe to roll only because old Phase-A processes
+That staged secret rollout is safe to deploy only because old Phase-A processes
 remain fail-closed while restarted processes can stamp the new generation, and
-the empty allowlist prevents covenant admission during that mixed restart. Use
+the durable empty-allowlist hold prevents covenant admission during that mixed
+restart. After an acknowledged stage, require the full five-Machine inventory
+to remain unchanged and the one named secret to report exactly `Staged` before
+the secret-free deploy. Any lost stage-to-deploy continuity, failed/partial
+deploy, or restore must first re-stage the retained item. Use
 `fly secrets list --json -a agenttool` to verify the named secret reports a
 fully deployed status across the fleet; do not copy its provider digest into
 logs or documentation.
