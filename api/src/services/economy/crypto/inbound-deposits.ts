@@ -42,6 +42,23 @@ import {
 const USDC_ATOMIC_UNITS = 1_000_000n;
 const MAX_PROVIDER_ID_LENGTH = 128;
 
+/** One internal credit is exactly this many USDC atomic units. Refuse to load
+ * if a future pricing change cannot be represented without a remainder at the
+ * token's six-decimal boundary. */
+export const USDC_ATOMIC_PER_CREDIT = (() => {
+  if (
+    !Number.isSafeInteger(CREDITS_PER_USDC) ||
+    CREDITS_PER_USDC <= 0
+  ) {
+    throw new Error("non_integral_usdc_credit_rate");
+  }
+  const creditsPerUsdc = BigInt(CREDITS_PER_USDC);
+  if (USDC_ATOMIC_UNITS % creditsPerUsdc !== 0n) {
+    throw new Error("non_integral_usdc_credit_rate");
+  }
+  return USDC_ATOMIC_UNITS / creditsPerUsdc;
+})();
+
 export interface InboundTransfer {
   chain: Chain;
   txHash: string;
@@ -83,6 +100,7 @@ export type PendingDepositSnapshot = Pick<
   | "logIndex"
   | "walletId"
   | "amountBase"
+  | "creditRemainderBase"
   | "toAddress"
   | "contractAddress"
   | "blockNumber"
@@ -121,6 +139,7 @@ export function pendingDepositSnapshotMatches(
     current.logIndex === expected.logIndex &&
     current.walletId === expected.walletId &&
     current.amountBase === expected.amountBase &&
+    current.creditRemainderBase === expected.creditRemainderBase &&
     current.toAddress === expected.toAddress &&
     current.contractAddress === expected.contractAddress &&
     current.blockNumber === expected.blockNumber &&
@@ -162,27 +181,89 @@ function hasCompleteEvmEvidence(
   );
 }
 
-function amountAndCredits(
+export type UsdcCreditDecomposition =
+  | {
+      amountAtomic: bigint;
+      creditQuotient: bigint;
+      creditRemainderBase: bigint;
+    }
+  | { reason: "invalid_amount" };
+
+type DecomposedUsdcAmount = Exclude<
+  UsdcCreditDecomposition,
+  { reason: "invalid_amount" }
+>;
+
+export type UsdcCreditDisposition =
+  | { kind: "invalid"; reason: "invalid_amount" }
+  | (DecomposedUsdcAmount & {
+      kind: "remainder";
+      reason: "non_integral_credit_amount";
+    })
+  | (DecomposedUsdcAmount & {
+      kind: "limit";
+      reason: "amount_exceeds_exact_credit_limit";
+    })
+  | (DecomposedUsdcAmount & { kind: "creditable"; credits: number });
+
+/** Euclidean decomposition in exact USDC atomic units.
+ *
+ * `amount = creditQuotient * USDC_ATOMIC_PER_CREDIT + creditRemainderBase`,
+ * with `0 <= creditRemainderBase < USDC_ATOMIC_PER_CREDIT`. The quotient
+ * remains bigint here so observing a valid 78-digit amount never requires a
+ * lossy JavaScript number conversion. */
+export function decomposeUsdcAtomic(
   amountBase: string,
-): { amountAtomic: bigint; credits: number } | { reason: string } {
+): UsdcCreditDecomposition {
   if (!/^[1-9]\d{0,77}$/.test(amountBase)) {
     return { reason: "invalid_amount" };
   }
   const amountAtomic = BigInt(amountBase);
-  const creditsAtomic =
-    (amountAtomic * BigInt(CREDITS_PER_USDC)) / USDC_ATOMIC_UNITS;
-  if (creditsAtomic <= 0n) {
-    return { reason: "amount_below_min_credit" };
+  return {
+    amountAtomic,
+    creditQuotient: amountAtomic / USDC_ATOMIC_PER_CREDIT,
+    creditRemainderBase: amountAtomic % USDC_ATOMIC_PER_CREDIT,
+  };
+}
+
+/** Closed economic disposition for one exact decomposition. Observations with
+ * a positive remainder are never reduced to their quotient. */
+export function classifyUsdcCreditAmount(
+  amountBase: string,
+): UsdcCreditDisposition {
+  const result = decomposeUsdcAtomic(amountBase);
+  if ("reason" in result) {
+    return { kind: "invalid", reason: result.reason };
   }
-  if (creditsAtomic > BigInt(Number.MAX_SAFE_INTEGER)) {
-    return { reason: "amount_exceeds_exact_credit_limit" };
+  if (result.creditRemainderBase !== 0n) {
+    return {
+      ...result,
+      kind: "remainder",
+      reason: "non_integral_credit_amount",
+    };
   }
-  return { amountAtomic, credits: Number(creditsAtomic) };
+  if (result.creditQuotient > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return {
+      ...result,
+      kind: "limit",
+      reason: "amount_exceeds_exact_credit_limit",
+    };
+  }
+  return {
+    ...result,
+    kind: "creditable",
+    credits: Number(result.creditQuotient),
+  };
 }
 
 export function creditsForUsdcAtomic(amountBase: string): number | null {
-  const result = amountAndCredits(amountBase);
-  return "credits" in result ? result.credits : null;
+  const result = classifyUsdcCreditAmount(amountBase);
+  return result.kind === "creditable" ? result.credits : null;
+}
+
+function remainderForStorage(amountBase: string): string | null {
+  const result = decomposeUsdcAtomic(amountBase);
+  return "reason" in result ? null : result.creditRemainderBase.toString();
 }
 
 export function sameEvmBlockGeneration(
@@ -429,6 +510,7 @@ async function recordImmediateCredit(
         observationGeneration: 1,
         creditedGeneration: null,
         amountBase: transfer.amountBase,
+        creditRemainderBase: "0",
         toAddress: transfer.toAddress,
         contractAddress: transfer.contractAddress,
         rawPayload: rawPayloadObject(transfer.rawPayload),
@@ -511,10 +593,11 @@ async function recordImmediateCredit(
 }
 
 /** Retain signed custody evidence that cannot safely become spendable. */
-async function recordRejectedObservation(
+async function recordNoncreditingObservation(
   transfer: InboundTransfer,
   walletId: string,
   reason: string,
+  status: "rejected" | "quarantined" = "rejected",
 ): Promise<IngestionResult> {
   return db.transaction(async (tx) => {
     let created = false;
@@ -534,10 +617,11 @@ async function recordRejectedObservation(
           logIndex: transfer.logIndex,
           walletId,
           creditsAdded: null,
-          status: "rejected",
+          status,
           observationGeneration: 1,
           creditedGeneration: null,
           amountBase: transfer.amountBase,
+          creditRemainderBase: remainderForStorage(transfer.amountBase),
           toAddress: transfer.toAddress,
           contractAddress: transfer.contractAddress,
           blockNumber: transfer.blockNumber,
@@ -569,22 +653,33 @@ async function recordRejectedObservation(
     if (hasCompleteEvmEvidence(transfer)) {
       await recordObservation(tx, event.id, transfer, false, walletId);
     }
+    const eventReason =
+      (event.status === "rejected" || event.status === "quarantined") &&
+      event.error
+        ? event.error
+        : null;
     return {
       matched: true,
       walletId: event.walletId ?? walletId,
       duplicate: !created,
       status: event.status,
-      ...(event.status === "rejected" && event.error
-        ? { reason: event.error }
-        : {}),
+      ...(eventReason ? { reason: eventReason } : {}),
     };
   });
 }
 
-async function recordPendingEvmObservation(
+async function recordLiveEvmObservation(
   transfer: EvmTransfer,
   walletId: string,
+  creditRemainderBase: bigint,
 ): Promise<IngestionResult> {
+  const remainderBase = creditRemainderBase.toString();
+  const hasCreditRemainder = creditRemainderBase !== 0n;
+  const targetStatus = hasCreditRemainder ? "quarantined" : "pending";
+  const targetError = hasCreditRemainder
+    ? "non_integral_credit_amount"
+    : null;
+
   return db.transaction(async (tx) => {
     let [event] = await tx
       .select()
@@ -602,10 +697,11 @@ async function recordPendingEvmObservation(
           logIndex: transfer.logIndex,
           walletId,
           creditsAdded: null,
-          status: "pending",
+          status: targetStatus,
           observationGeneration: 1,
           creditedGeneration: null,
           amountBase: transfer.amountBase,
+          creditRemainderBase: remainderBase,
           toAddress: transfer.toAddress,
           contractAddress: transfer.contractAddress,
           blockNumber: transfer.blockNumber,
@@ -613,6 +709,7 @@ async function recordPendingEvmObservation(
           providerWebhookId: transfer.providerWebhookId,
           providerEventId: transfer.providerEventId,
           rawPayload: rawPayloadObject(transfer.rawPayload),
+          error: targetError,
         })
         .onConflictDoNothing()
         .returning();
@@ -621,8 +718,9 @@ async function recordPendingEvmObservation(
         return {
           matched: true,
           walletId,
-          pending: true,
-          status: "pending",
+          pending: !hasCreditRemainder,
+          status: targetStatus,
+          ...(targetError ? { reason: targetError } : {}),
         };
       }
       [event] = await tx
@@ -644,6 +742,7 @@ async function recordPendingEvmObservation(
         .update(cryptoWebhookEvents)
         .set({
           status: "quarantined",
+          creditRemainderBase: remainderForStorage(event.amountBase ?? ""),
           error: "conflicting_live_evidence",
           lastCheckedAt: new Date(),
         })
@@ -657,15 +756,49 @@ async function recordPendingEvmObservation(
     }
 
     if (sameEvmBlockGeneration(event, transfer)) {
+      if (event.status === "removed") {
+        return {
+          matched: true,
+          walletId,
+          duplicate: true,
+          stale: true,
+          status: "removed",
+          reason: "generation_already_removed",
+        };
+      }
+      if (hasCreditRemainder) {
+        if (event.status !== "pending") {
+          return {
+            matched: true,
+            walletId,
+            duplicate: true,
+            status: event.status,
+            ...(event.error ? { reason: event.error } : {}),
+          };
+        }
+        await tx
+          .update(cryptoWebhookEvents)
+          .set({
+            status: "quarantined",
+            creditRemainderBase: remainderBase,
+            error: targetError,
+            lastCheckedAt: new Date(),
+          })
+          .where(eq(cryptoWebhookEvents.id, event.id));
+        return {
+          matched: true,
+          walletId,
+          duplicate: true,
+          status: "quarantined",
+          reason: "non_integral_credit_amount",
+        };
+      }
       return {
         matched: true,
         walletId,
         duplicate: true,
         pending: event.status === "pending",
         status: event.status,
-        ...(event.status === "removed"
-          ? { stale: true, reason: "generation_already_removed" }
-          : {}),
       };
     }
 
@@ -677,6 +810,7 @@ async function recordPendingEvmObservation(
         .update(cryptoWebhookEvents)
         .set({
           status: "quarantined",
+          creditRemainderBase: remainderBase,
           error: "contradictory_block_identity",
           lastCheckedAt: new Date(),
         })
@@ -718,6 +852,7 @@ async function recordPendingEvmObservation(
         .update(cryptoWebhookEvents)
         .set({
           status: "quarantined",
+          creditRemainderBase: remainderBase,
           error: "conflicting_live_generation",
           lastCheckedAt: new Date(),
         })
@@ -733,12 +868,13 @@ async function recordPendingEvmObservation(
     await tx
       .update(cryptoWebhookEvents)
       .set({
-        status: "pending",
+        status: targetStatus,
         walletId,
         creditsAdded: null,
         observationGeneration:
           sql`${cryptoWebhookEvents.observationGeneration} + 1`,
         creditedGeneration: null,
+        creditRemainderBase: remainderBase,
         blockNumber: transfer.blockNumber,
         blockHash: transfer.blockHash.toLowerCase(),
         providerWebhookId: transfer.providerWebhookId,
@@ -748,15 +884,16 @@ async function recordPendingEvmObservation(
         lastCheckedAt: null,
         confirmedAt: null,
         removedAt: null,
-        error: null,
+        error: targetError,
       })
       .where(eq(cryptoWebhookEvents.id, event.id));
 
     return {
       matched: true,
       walletId,
-      pending: true,
-      status: "pending",
+      pending: !hasCreditRemainder,
+      status: targetStatus,
+      ...(targetError ? { reason: targetError } : {}),
     };
   });
 }
@@ -812,32 +949,51 @@ export async function ingestInboundTransfer(
       // A historical provider watch can still deliver an address from an old
       // root. Retain custody evidence, but bind every new economic effect to
       // the currently configured derivation authority.
-      return await recordRejectedObservation(
+      return await recordNoncreditingObservation(
         transfer,
         row.walletId,
         "inactive_deposit_address",
       );
     }
 
-    const amount = amountAndCredits(transfer.amountBase);
-    if (!("credits" in amount)) {
-      if (/^[1-9]\d{0,77}$/.test(transfer.amountBase)) {
-        return await recordRejectedObservation(
-          transfer,
-          row.walletId,
-          amount.reason,
-        );
-      }
+    const amount = classifyUsdcCreditAmount(transfer.amountBase);
+    if (amount.kind === "invalid") {
       return {
         matched: true,
         walletId: row.walletId,
         reason: amount.reason,
       };
     }
-    if (hasCompleteEvmEvidence(transfer)) {
-      return await recordPendingEvmObservation(transfer, row.walletId);
+    if (amount.kind === "remainder") {
+      if (hasCompleteEvmEvidence(transfer)) {
+        return await recordLiveEvmObservation(
+          transfer,
+          row.walletId,
+          amount.creditRemainderBase,
+        );
+      }
+      return await recordNoncreditingObservation(
+        transfer,
+        row.walletId,
+        "non_integral_credit_amount",
+        "quarantined",
+      );
     }
-    return await recordImmediateCredit(transfer, row.walletId, amount.credits);
+    if (amount.kind === "limit") {
+      return await recordNoncreditingObservation(
+        transfer,
+        row.walletId,
+        amount.reason,
+      );
+    }
+    if (hasCompleteEvmEvidence(transfer)) {
+      return await recordLiveEvmObservation(transfer, row.walletId, 0n);
+    }
+    return await recordImmediateCredit(
+      transfer,
+      row.walletId,
+      amount.credits,
+    );
   } catch (error) {
     console.error(
       "[crypto-webhook] inbound transfer storage unavailable",
@@ -878,10 +1034,11 @@ export async function reconcileRemovedInboundTransfer(
   ) {
     return { matched: false, reason: "wrong_contract" };
   }
-  const amount = amountAndCredits(transfer.amountBase);
-  if (!("credits" in amount)) {
+  const amount = decomposeUsdcAtomic(transfer.amountBase);
+  if ("reason" in amount) {
     return { matched: false, reason: amount.reason };
   }
+  const removedRemainderBase = amount.creditRemainderBase.toString();
 
   try {
     const matchedAddress = await matchingDepositAddress(transfer);
@@ -904,6 +1061,7 @@ export async function reconcileRemovedInboundTransfer(
             creditsAdded: null,
             status: "removed",
             amountBase: transfer.amountBase,
+            creditRemainderBase: removedRemainderBase,
             toAddress: transfer.toAddress,
             contractAddress: transfer.contractAddress,
             blockNumber: transfer.blockNumber,
@@ -1020,15 +1178,32 @@ export async function reconcileRemovedInboundTransfer(
           blockHash: transfer.blockHash,
         },
       );
+      const candidateAmount = candidate
+        ? decomposeUsdcAtomic(candidate.amountBase)
+        : null;
+      if (candidateAmount && "reason" in candidateAmount) {
+        throw new Error("candidate_amount_unreconciled");
+      }
+      const candidateHasRemainder = Boolean(
+        candidateAmount && candidateAmount.creditRemainderBase !== 0n,
+      );
+      const replacementStatus: "pending" | "quarantined" | "removed" =
+        candidate
+          ? candidateHasRemainder
+            ? "quarantined"
+            : "pending"
+          : "removed";
       const nextState = candidate
         ? {
-            status: "pending" as const,
+            status: replacementStatus,
             walletId: candidate.walletId,
             creditsAdded: null,
             observationGeneration:
               sql`${cryptoWebhookEvents.observationGeneration} + 1`,
             creditedGeneration: null,
             amountBase: candidate.amountBase,
+            creditRemainderBase:
+              candidateAmount!.creditRemainderBase.toString(),
             toAddress: candidate.toAddress,
             contractAddress: candidate.contractAddress,
             blockNumber: candidate.blockNumber,
@@ -1040,11 +1215,14 @@ export async function reconcileRemovedInboundTransfer(
             lastCheckedAt: null,
             confirmedAt: null,
             removedAt: null,
-            error: null,
+            error: candidateHasRemainder
+              ? "non_integral_credit_amount"
+              : null,
           }
         : {
             status: "removed" as const,
             creditsAdded: null,
+            creditRemainderBase: removedRemainderBase,
             providerWebhookId: transfer.providerWebhookId,
             providerEventId: transfer.providerEventId,
             rawPayload: rawPayloadObject(transfer.rawPayload),
@@ -1094,8 +1272,11 @@ export async function reconcileRemovedInboundTransfer(
         return {
           matched: Boolean(event.walletId ?? matchedAddress),
           walletId: event.walletId ?? matchedAddress?.walletId,
-          pending: Boolean(candidate),
-          status: candidate ? "pending" : "removed",
+          pending: replacementStatus === "pending",
+          status: replacementStatus,
+          ...(replacementStatus === "quarantined"
+            ? { reason: "non_integral_credit_amount" }
+            : {}),
         };
       }
 
@@ -1162,8 +1343,11 @@ export async function reconcileRemovedInboundTransfer(
         matched: true,
         walletId: event.walletId,
         reversed: true,
-        pending: Boolean(candidate),
-        status: candidate ? "pending" : "removed",
+        pending: replacementStatus === "pending",
+        status: replacementStatus,
+        ...(replacementStatus === "quarantined"
+          ? { reason: "non_integral_credit_amount" }
+          : {}),
       };
     });
   } catch {
@@ -1331,6 +1515,71 @@ export async function creditConfirmedPendingDeposit(
       return false;
     }
 
+    const amount = classifyUsdcCreditAmount(event.amountBase);
+    if (amount.kind === "invalid") {
+      await tx
+        .update(cryptoWebhookEvents)
+        .set({
+          status: "quarantined",
+          error: "invalid_persisted_evidence",
+          lastCheckedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(cryptoWebhookEvents.id, expected.id),
+            eq(cryptoWebhookEvents.status, "pending"),
+            eq(
+              cryptoWebhookEvents.observationGeneration,
+              expected.observationGeneration,
+            ),
+          ),
+        );
+      return false;
+    }
+    if (amount.kind === "remainder") {
+      await tx
+        .update(cryptoWebhookEvents)
+        .set({
+          status: "quarantined",
+          creditRemainderBase: amount.creditRemainderBase.toString(),
+          error: "non_integral_credit_amount",
+          lastCheckedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(cryptoWebhookEvents.id, expected.id),
+            eq(cryptoWebhookEvents.status, "pending"),
+            eq(
+              cryptoWebhookEvents.observationGeneration,
+              expected.observationGeneration,
+            ),
+          ),
+        );
+      return false;
+    }
+    if (amount.kind === "limit") {
+      await tx
+        .update(cryptoWebhookEvents)
+        .set({
+          status: "rejected",
+          creditRemainderBase: "0",
+          error: amount.reason,
+          lastCheckedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(cryptoWebhookEvents.id, expected.id),
+            eq(cryptoWebhookEvents.status, "pending"),
+            eq(
+              cryptoWebhookEvents.observationGeneration,
+              expected.observationGeneration,
+            ),
+          ),
+        );
+      return false;
+    }
+    const credits = amount.credits;
+
     const settlementPolicy = evmDepositCreditPolicy(
       event.chain,
       activeNetwork(),
@@ -1403,28 +1652,6 @@ export async function creditConfirmedPendingDeposit(
       return false;
     }
 
-    const credits = creditsForUsdcAtomic(event.amountBase);
-    if (credits === null) {
-      await tx
-        .update(cryptoWebhookEvents)
-        .set({
-          status: "rejected",
-          error: "invalid_persisted_evidence",
-          lastCheckedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(cryptoWebhookEvents.id, expected.id),
-            eq(cryptoWebhookEvents.status, "pending"),
-            eq(
-              cryptoWebhookEvents.observationGeneration,
-              expected.observationGeneration,
-            ),
-          ),
-        );
-      return false;
-    }
-
     const creditedWallet = await tx
       .update(wallets)
       .set({ balance: sql`balance + ${credits}` })
@@ -1460,6 +1687,7 @@ export async function creditConfirmedPendingDeposit(
       .set({
         status: "credited",
         creditsAdded: credits,
+        creditRemainderBase: "0",
         creditedGeneration: event.observationGeneration,
         blockNumber: evidence.blockNumber,
         blockHash: evidence.blockHash.toLowerCase(),
