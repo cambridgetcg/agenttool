@@ -958,12 +958,6 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/hf/dataset/hash-manifest.json",
     );
   }
-  if (spec.name === "@agenttool/alchemy") {
-    entries.push(
-      "package/dist/index.js",
-      "package/dist/index.d.ts",
-    );
-  }
   if (spec.name === "@agenttool/alchemy-agentcred") {
     entries.push(
       "package/CLAUDE.md",

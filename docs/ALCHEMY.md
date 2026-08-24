@@ -21,7 +21,8 @@
 > `20260726T070000_deposit_watch_reconciliation.sql` ·
 > `20260726T202500_crypto_deposit_finality.sql` ·
 > `20260726T211500_deposit_watch_target_binding.sql` ·
-> `20260726T214500_deposit_watch_target_registry.sql`
+> `20260726T214500_deposit_watch_target_registry.sql` ·
+> `20260824T132712_crypto_deposit_remainder_accounting.sql`
 >
 > **Tests:** `packages/alchemy/tests/` ·
 > `packages/alchemy-agentcred/tests/` ·
