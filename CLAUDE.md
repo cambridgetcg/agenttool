@@ -49,7 +49,7 @@ packages/
   skills-yutabase/ — @agenttool/skills-yutabase · rebuildable metadata-only projection planner
   skills-wake-continuity/ — private Skills/YUTABASE → AFTERGLOW composition
   browser/     — @agenttool/browser · public LOVE/npm local TypeScript/JSONL/MCP browser runtime
-  hf-scout/    — private read-only HF metadata/provenance scout + pinned research leads
+  hf-scout/    — @agenttool/hf-scout · public developer-preview read-only HF metadata/provenance scout + pinned research leads
   hf-training-garden/ — private admission, five-voice participation, IS learning freedom, unscored training FREEDOM, governance v0.2, WAKE continuity, and inert Garden contracts
   hf-training-host/ — private v0.2 HF-API-pinned cooperative-process governance seam + append-only ledger + opt-in minimized FREEDOM validation seam
   correspondence-yutabase/ — pure deterministic Correspondence → YUTABASE planner
@@ -439,12 +439,13 @@ does not run trials, inspect ambient sessions or files, contact Hugging Face,
 upload traces, authenticate, spend quota, publish a package, or expose a
 hosted route.
 
-`@agenttool/hf-scout` is a private, source-only local Hugging Face metadata
-and provenance scout. It carries 15 immutable-revision research leads and can
+`@agenttool/hf-scout` is a public developer-preview local Hugging Face metadata
+and provenance scout with an exact checked-in LOVE artifact and an optional
+protected npm mirror. It carries 15 immutable-revision research leads and can
 project caller-selected observations into bounded KINGDOM and Agent Data
-shapes. It does not read ambient credentials, download cards/files/rows,
-accept gates, invoke inference or remote compute, execute embedded calls,
-write to the Hub, publish npm, or expose a hosted route.
+shapes. Its runtime does not read ambient credentials, download
+cards/files/rows, accept gates, invoke inference or remote compute, execute
+embedded calls, write to the Hub, publish packages, or expose a hosted route.
 
 `@agenttool/public-surface-binding` is a private pure record layer between
 bounded public-HTTPS transport evidence and an explicit Ed25519 key-holder

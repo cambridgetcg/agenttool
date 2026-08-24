@@ -7,12 +7,10 @@ import { tmpdir } from "node:os";
 import {
   DISCOVERY_PATH,
   INDEX_PATH,
-  LOVE_PACKAGE_CANDIDATES,
   LOVE_PACKAGES,
   LOVE_PACKAGE_PROTOCOL,
   buildLovePackages,
   inspectNpmTarball,
-  lovePackagesForCandidate,
   verifyLovePackages,
   type LovePackageSpec,
 } from "../build-love-packages";
@@ -132,30 +130,19 @@ describe("LOVE Package release inventory", () => {
       { name: "@agenttool/browser", version: "0.5.0", releaseTag: "browser-v0.5.0" },
       { name: "@agenttool/browser", version: "0.5.1", releaseTag: "browser-v0.5.1" },
       { name: "@agenttool/browser", version: "0.6.0", releaseTag: "browser-v0.6.0" },
+      { name: "@agenttool/hf-scout", version: "0.2.0-dev.0", releaseTag: "hf-scout-v0.2.0-dev.0" },
       { name: "@agenttool/principality-geometry", version: "0.1.0-dev.0", releaseTag: "principality-geometry-v0.1.0-dev.0" },
     ]);
   });
 
-  test("keeps HF Scout fail-closed as an explicit prospective release", () => {
-    expect(LOVE_PACKAGE_CANDIDATES).toEqual({
-      "hf-scout": {
-        name: "@agenttool/hf-scout",
-        version: "0.2.0-dev.0",
-        packagePath: "packages/hf-scout",
-        releaseTag: "hf-scout-v0.2.0-dev.0",
-        buildCommands: [["bun", "run", "ci"]],
-      },
+  test("requires the checked-in HF Scout developer preview", () => {
+    expect(LOVE_PACKAGES.find(({ name }) => name === "@agenttool/hf-scout")).toEqual({
+      name: "@agenttool/hf-scout",
+      version: "0.2.0-dev.0",
+      packagePath: "packages/hf-scout",
+      releaseTag: "hf-scout-v0.2.0-dev.0",
+      buildCommands: [["bun", "run", "ci"]],
     });
-    expect(LOVE_PACKAGES.some(({ name }) => name === "@agenttool/hf-scout")).toBe(false);
-    expect(lovePackagesForCandidate()).toBe(LOVE_PACKAGES);
-    const withScout = lovePackagesForCandidate("hf-scout");
-    expect(withScout).toHaveLength(LOVE_PACKAGES.length + 1);
-    expect(withScout.at(-1)).toEqual(
-      LOVE_PACKAGE_CANDIDATES["hf-scout"],
-    );
-    expect(() => lovePackagesForCandidate("unknown")).toThrow(
-      "unsupported LOVE Package candidate: unknown",
-    );
   });
 
   test("pins the coordinated ADDS and data-sync dependency lines", () => {

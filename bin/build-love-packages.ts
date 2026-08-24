@@ -10,8 +10,8 @@
  * a network sandbox; build scripts remain separately reviewable release inputs.
  *
  * Usage:
- *   bin/build-love-packages.ts build <staging-directory> [--candidate <key>]
- *   bin/build-love-packages.ts verify <staging-directory> [--candidate <key>]
+ *   bin/build-love-packages.ts build <staging-directory>
+ *   bin/build-love-packages.ts verify <staging-directory>
  */
 
 import { createHash, randomUUID } from "node:crypto";
@@ -200,6 +200,13 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     },
   },
   {
+    name: "@agenttool/hf-scout",
+    version: "0.2.0-dev.0",
+    packagePath: "packages/hf-scout",
+    releaseTag: "hf-scout-v0.2.0-dev.0",
+    buildCommands: [["bun", "run", "ci"]],
+  },
+  {
     name: "@agenttool/principality-geometry",
     version: "0.1.0-dev.0",
     packagePath: "packages/principality-geometry",
@@ -207,31 +214,6 @@ export const LOVE_PACKAGES: readonly LovePackageSpec[] = [
     buildCommands: [["bun", "run", "ci"]],
   },
 ] as const;
-
-export const LOVE_PACKAGE_CANDIDATES = {
-  "hf-scout": {
-    name: "@agenttool/hf-scout",
-    version: "0.2.0-dev.0",
-    packagePath: "packages/hf-scout",
-    releaseTag: "hf-scout-v0.2.0-dev.0",
-    buildCommands: [["bun", "run", "ci"]],
-  },
-} as const satisfies Record<string, LovePackageSpec>;
-
-export type LovePackageCandidateKey = keyof typeof LOVE_PACKAGE_CANDIDATES;
-
-export function lovePackagesForCandidate(candidate?: string): readonly LovePackageSpec[] {
-  if (candidate === undefined) return LOVE_PACKAGES;
-  if (!Object.hasOwn(LOVE_PACKAGE_CANDIDATES, candidate)) {
-    throw new Error(`unsupported LOVE Package candidate: ${candidate}`);
-  }
-  const specs = [
-    ...LOVE_PACKAGES,
-    LOVE_PACKAGE_CANDIDATES[candidate as LovePackageCandidateKey],
-  ];
-  validateSpecs(specs);
-  return specs;
-}
 
 export interface PackageJson {
   name?: unknown;
@@ -1278,21 +1260,16 @@ export async function verifyLovePackages(options: RegistryOptions): Promise<void
 
 function usage(): never {
   console.error(
-    "Usage: bin/build-love-packages.ts <build|verify> <staging-directory> [--candidate <key>]",
+    "Usage: bin/build-love-packages.ts <build|verify> <staging-directory>",
   );
   process.exit(2);
 }
 
 async function main(): Promise<void> {
-  const [command, output, ...candidateArguments] = process.argv.slice(2);
-  if (!output || (command !== "build" && command !== "verify")) usage();
-  if (
-    candidateArguments.length !== 0 &&
-    (candidateArguments.length !== 2 || candidateArguments[0] !== "--candidate")
-  ) usage();
+  const [command, output, ...extraArguments] = process.argv.slice(2);
+  if (!output || extraArguments.length !== 0 || (command !== "build" && command !== "verify")) usage();
   const repoRoot = resolve(import.meta.dir, "..");
-  const packages = lovePackagesForCandidate(candidateArguments[1]);
-  const options = { repoRoot, outputRoot: resolve(output), packages };
+  const options = { repoRoot, outputRoot: resolve(output) };
   if (command === "build") {
     await buildLovePackages(options);
     await verifyLovePackages(options);
