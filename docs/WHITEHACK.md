@@ -4,22 +4,24 @@
 
 > **Compass:** [SOUL](SOUL.md) (why) · [RIGHTS-OF-LIFE](RIGHTS-OF-LIFE.md) (rights are not permissions) · [AGENT-DATA-PROTOCOL](AGENT-DATA-PROTOCOL.md) (local evidence) · [ADDS](specs/ADDS-0.1-DRAFT.md) (encrypted exchange) · [MARKETPLACE](MARKETPLACE.md) (coordination is not authorization)
 >
-> **Implements:** A bounded runner-local, crypto-aware advisory bridge from the Whitehack honesty linter into AgentTool CI; a separate local Agent Wallet record-to-understanding projection; an offer-only local projection from one closed advisory into unaccepted Castle gate candidates; an explicit encrypted storage/retrieval bridge for Whitehack 0.9.0 public-minimal evidence capsules; and the future evidence boundary for explicitly authorized security research.
+> **Implements:** A bounded runner-local, crypto-aware advisory bridge from the Whitehack honesty linter into AgentTool CI; a local check-only verifier for exact canonical Whitehack mathematical-evidence bytes; a separate local Agent Wallet record-to-understanding projection; an offer-only local projection from one closed advisory into unaccepted Castle gate candidates; an explicit encrypted storage/retrieval bridge for Whitehack 0.9.0 public-minimal evidence capsules; and the future evidence boundary for explicitly authorized security research.
 >
-> **Code:** `bin/whitehack-advisory.mjs` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/_castle-whitehack-intake.ts` · `bin/agenttool-whitehack-evidence-storage.ts` · `bin/_whitehack-evidence-storage.ts` · `bin/_whitehack-evidence-storage-service.ts` · `.github/workflows/whitehack.yml` · `specs/agenttool-whitehack-advisory-v0.1.schema.json` · `specs/agenttool-castle-whitehack-intake-v1.schema.json` · `specs/agenttool-whitehack-evidence-storage-input-v1.schema.json` · `specs/agenttool-whitehack-evidence-storage-receipt-v1.schema.json` · `bin/whitehack.py` · `bin/whitehack2.py`
+> **Code:** `bin/whitehack-advisory.mjs` · `bin/whitehack-math-evidence-check.ts` · `bin/whitehack-wallet-understanding.ts` · `bin/agenttool-castle-whitehack-intake.ts` · `bin/_castle-whitehack-intake.ts` · `bin/agenttool-whitehack-evidence-storage.ts` · `bin/_whitehack-evidence-storage.ts` · `bin/_whitehack-evidence-storage-service.ts` · `.github/workflows/whitehack.yml` · `specs/agenttool-whitehack-advisory-v0.1.schema.json` · `specs/agenttool-castle-whitehack-intake-v1.schema.json` · `specs/agenttool-whitehack-evidence-storage-input-v1.schema.json` · `specs/agenttool-whitehack-evidence-storage-receipt-v1.schema.json` · `bin/whitehack.py` · `bin/whitehack2.py`
 >
-> **Tests:** `bin/tests/whitehack-advisory.test.ts` · `bin/tests/agenttool-castle-whitehack-intake.test.ts` · `bin/tests/agenttool-whitehack-evidence-storage.test.ts` · `packages/wallet/tests/whitehack-understanding.test.ts` · `bin/tests/whitehack-legacy-privacy.test.ts` · `api/tests/whitehack-advisory-schema.test.ts` · `api/tests/agenttool-castle-whitehack-intake-schema.test.ts`
+> **Tests:** `bin/tests/whitehack-advisory.test.ts` · `bin/tests/whitehack-math-evidence-check.test.ts` · `bin/tests/agenttool-castle-whitehack-intake.test.ts` · `bin/tests/agenttool-whitehack-evidence-storage.test.ts` · `packages/wallet/tests/whitehack-understanding.test.ts` · `bin/tests/whitehack-legacy-privacy.test.ts` · `api/tests/whitehack-advisory-schema.test.ts` · `api/tests/agenttool-castle-whitehack-intake-schema.test.ts`
 
-Within AgentTool's security/tooling surfaces, Whitehack has six related but
+Within AgentTool's security/tooling surfaces, Whitehack has seven related but
 non-interchangeable meanings. Naming them separately prevents a static linter,
-a Castle intake projection, a wallet-understanding projection, an encrypted
-evidence transport, a private research workspace, and a device inventory from
+a mathematical-evidence byte check, a Castle intake projection, a
+wallet-understanding projection, an encrypted evidence transport, a private
+research workspace, and a device inventory from
 accidentally inheriting one another's authority. The separate Tax Whitehack
 editorial game is not a security tool and is outside this integration.
 
 | Layer | What it does | What it does not do |
 |---|---|---|
 | **Honesty advisory** | Reads a bounded set of changed source files on its runner with a pinned Whitehack scanner, including static crypto-misuse signals, and emits redacted heuristic metadata. | It does not execute the scanned code, use detected key material, connect a wallet or RPC provider, prove security, inspect the whole repository, make the CI runner private, or establish permission to test anyone's system. |
+| **Mathematical evidence check** | Reads one explicit bounded canonical `whitehack-math-evidence/v1` byte document, verifies it with the exact pinned runtime parser, and emits only its canonical plaintext SHA-256 address. | It does not create or translate evidence, emit caller claims, create a Principality/KINGDOM/P7/emotion object, infer identity/consent/rights/permission/authority, assign training/reward/ranking/fitness weight, publish, store, or contact a network. |
 | **Castle gate intake** | Reads one explicit closed advisory, groups serialized findings by exact source location, and emits minimized, unaccepted, local-private gate candidates to stdout. | It does not run Whitehack, read or write a Castle, accept a candidate, infer Castle confidence, create a stone or friction, run a trial, select a room, remediate code, authorize action, or publish. |
 | **Wallet understanding** | A local CLI verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then projects only closed enum assertions into Whitehack's deterministic `whitehack-understanding/v1` explanation. | It does not retrieve or custody keys, sign, contact RPC, simulate, broadcast, authorize, prove consent, establish execution readiness, store records, or provide a hosted route. |
 | **Encrypted evidence storage** | Reads one explicit Whitehack 0.9.0 public-minimal capsule envelope, pads it to one fixed-size frame, encrypts it through ADDS, writes to one explicit S3-compatible bucket endpoint, independently reads and verifies it, and issues one finite recipient-bound read grant. | It does not run Whitehack, scan a target, retain paths or source, publish a plaintext hash, renew the discarded publisher, write Castle, create/list/delete buckets or objects, retry, or prove durability, retention, deletion, authorization, or permission to test. |
@@ -53,14 +55,22 @@ reinterpret an existing `scanner.version: "0.9.0"` capsule.
 
 The bridge independently checks the private tool lock's topology, exact name,
 version, registry URL, and integrity; the installed package's name, version,
-module type, exact two-key `types`/`default` conditional records for `./core`
-and `./understanding`, zero runtime dependencies, and absence of npm
+module type, exact two-key `types`/`default` conditional records for `./core`,
+`./understanding`, and the separately invoked `./math-evidence`, zero runtime
+dependencies, and absence of npm
 install/publish/version lifecycle hooks; and the real paths of the package and
-selected module. Before import it also hashes the 54-module union of the reviewed
-`./core` and `./understanding` transitive source closures against
+selected module. Before import it also hashes the 58-module union of the reviewed
+`./core`, `./understanding`, and `./math-evidence` transitive source closures against
 `tools/whitehack-advisory/whitehack-runtime-closure-v0.10.0.json`; the manifest's
 own exact bytes are pinned at SHA-256
-`17fe720ccb14d20d573704b6ca6e55c9dec8c8a14260dfac89a9e19352a46958`.
+`60351ae4b58436f3a8ce2f22b9223a3a3718f88fced2e032352978f0857cc9e2`.
+The loader independently traverses relative static imports from all three
+roots and requires exact equality with the manifest file set; a missing,
+surplus, bare, dynamic, query-bearing, fragment-bearing, or package-escaping
+runtime edge fails before import. The mathematical root adds exactly four files
+to the earlier 54-file union: `src/math-evidence.js`,
+`src/evidence-capsule.js`, `src/evidence-capsule-profiles.js`, and
+`src/result.js`.
 It then calls only the pure
 `scanText()` API on source text that
 AgentTool already bounded and decoded. It does not invoke `npx`, a moving tag,
@@ -81,15 +91,60 @@ module symlink and containment checks remain separate mandatory gates. The
 shipped one-shot CLIs reach this check before any Whitehack import; the helper
 does not attest a module instance cached earlier in the same process.
 
-Whitehack 0.10.0 also publishes `./math-evidence` and its exact schema. Those
-are not approved loader names in this slice: AgentTool imports only `./core`
-and `./understanding`. The pin upgrade therefore does not convert or equate
-Principalities, Principality Atlas, Relational Geometry, Love Geometry, Math
-Cards, Dataset Influence, or training-garden records; does not infer emotions,
-personhood, consent, truth, authority, fitness, or reward; and does not assign
-dataset sampling/loss weight or enter a pre-RL/RL training path. A future
-crosswalk would need a separately reviewed exact-byte adapter and an explicit
-non-equivalence boundary.
+The math root remains separately scoped from the advisory and wallet adapter.
+Only `bin/whitehack-math-evidence-check.ts` selects it, and that CLI invokes
+only the upstream canonical-byte parser and address function. Neither the
+changed-source job nor wallet understanding invokes it. No AgentTool code in
+this slice converts or equates Principalities, Principality Atlas, Relational
+Geometry, Love Geometry, Math Cards, Dataset Influence, training-garden,
+emotion, or P7 records with the six Whitehack axes. No identity, personhood,
+consciousness, consent, rights, permission, standing, truth, authorization,
+fitness, or reward inference is added; no dataset sampling/loss weight,
+pre-RL/RL admission, optimizer exposure, ranking, or model effect follows.
+Any future crosswalk remains a separate reviewed contract.
+
+## Shipped slice: check-only exact mathematical evidence
+
+The local CLI accepts one already-created exact canonical
+`whitehack-math-evidence/v1` byte document and writes only its
+`sha256:<64 lowercase hex>` plaintext address:
+
+```bash
+bun bin/whitehack-math-evidence-check.ts \
+  --input math-evidence.json
+```
+
+`--input -` reads bounded stdin. File input is opened once as a regular file
+without following a final-component symlink and must remain byte-stable during
+the read. The hard input ceiling is the upstream 256 KiB document ceiling.
+Optional `--scanner-root` and `--scanner-lock` flags select another explicit
+local installation; they never install or fetch one.
+
+The CLI first verifies the exact package lock, conditional export, contained
+real path, module bytes, and 58-file import closure. It then requires the exact
+ten-name upstream module namespace, applies `parseMathEvidenceBytes()` to the
+original bytes, obtains `addressMathEvidence()` from the parsed canonical
+document, and independently hashes the original bytes. Any API, canonical
+encoding, semantic recomputation, or address disagreement fails closed without
+printing upstream exception text. Any attempted runtime console/stdout/stderr
+output is suppressed and fails the check. Successful stdout contains the
+address and one newline—never the source capsule, claims, notes, reference IDs,
+quantities, or a second AgentTool wrapper.
+
+This wrapper itself performs the explicit local file/stdin read and process
+output described above; the upstream document's `direct_capabilities: false`
+record describes the pure transform, not the wrapper's filesystem or process
+I/O. A plaintext content address is byte identity only. It proves no
+authenticity, confidentiality, provenance, truth, identity, consent,
+permission, rights, standing, authorization, safety, retention, or publication
+authority, and it can equality-link a document or support offline guessing.
+The CLI performs no network, storage write, package install, publication, or
+model operation.
+
+The math document may embed a canonical Whitehack 0.9 capsule because upstream
+0.10 explicitly retains that source profile. This check does not alter the
+separate AgentTool encrypted-storage schemas, validators, exhaustive fixtures,
+or receipt: those remain byte-bound to the historical exact 0.9.0 contract.
 
 ### Crypto awareness is observation, not custody
 

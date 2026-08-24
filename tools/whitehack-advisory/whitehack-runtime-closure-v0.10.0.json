@@ -6,6 +6,7 @@
   "algorithm": "sha256",
   "roots": {
     "core": "src/core.js",
+    "math-evidence": "src/math-evidence.js",
     "understanding": "src/understanding.js"
   },
   "files": [
@@ -58,8 +59,12 @@
     { "path": "src/checks/wifi-protocol.js", "sha256": "328d65df0ece2e3d0eadec47af7db65576895cf0eb23337e3312e441f6aa269e" },
     { "path": "src/checks/wpa2-krack.js", "sha256": "6652af5aa5fd10d9378b5375264831f6754d8e581017b8d7bf9691e4f7257e89" },
     { "path": "src/core.js", "sha256": "a2e3f4ea67e6aada10a0c515c02a2cdb622bdc87a9dde2e26125b4a31b438b73" },
+    { "path": "src/evidence-capsule-profiles.js", "sha256": "7ff569a487b96e68fd327aa14410e87a75b369e9cffb809ce19f68398bf15760" },
+    { "path": "src/evidence-capsule.js", "sha256": "3eb1359ecf948550544143a41d24e5b42c002771c6ad3ed2340e31b51b5d2780" },
     { "path": "src/lines.js", "sha256": "092fcf156ae7cdc0718a0abfead1ad444e843edad56ac36295e9d27432927b48" },
+    { "path": "src/math-evidence.js", "sha256": "fb3be804dd6654f305d86a52f4e9d8ccb017aef6807b3959b20a8f8e26059070" },
     { "path": "src/redaction.js", "sha256": "015eb677d5de23a73e3799317886ca095c22200ea942dbd1eb53fbcd46326aad" },
+    { "path": "src/result.js", "sha256": "8e35e7760a48b4864f42dd07918d5c3c9d03101f15191a7e290a0dc9178d0af0" },
     { "path": "src/secret-text.js", "sha256": "96a7175d7338192033bce4907c52e1cab4db0904fcc1e39e3b8e46da82c5bfb9" },
     { "path": "src/source-text.js", "sha256": "bcd53fc6bf71cdb81c7c22a74556a3207c2dface6d9bcd3033e8cf7033a8f928" },
     { "path": "src/understanding.js", "sha256": "5a2e92cefbc1dd40e8d55e75c1ae5d93157cd3c9edf48927379cd6e2281cf869" }

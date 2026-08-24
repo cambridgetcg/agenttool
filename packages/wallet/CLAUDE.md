@@ -36,10 +36,13 @@ simulation, and optional continuity records with this package, then projects
 only closed enum assertions into Whitehack 0.10.0's `createUnderstanding()`. Its
 exact output is `whitehack-understanding/v1`.
 
-The shared loader verifies the reviewed core + understanding source closure
-against the pinned digest manifest before import. It detects persistent byte
-drift, but is not a sandbox, package authenticity proof, or universal defence
-against a privileged concurrent rewrite between verification and import.
+The shared loader verifies the reviewed core + understanding + math-evidence
+union closure against the pinned digest manifest before import. This adapter
+still selects only the exact understanding root; the separately invoked math
+root creates no Wallet inference or authority. The check detects persistent
+byte drift, but is not a sandbox, package authenticity proof, or universal
+defence against a privileged concurrent rewrite between verification and
+import.
 
 The adapter is not part of `@agenttool/wallet` and is not a new npm package. It
 does not use `assertIntentWithinCapabilityStatic()` as authorization, retrieve

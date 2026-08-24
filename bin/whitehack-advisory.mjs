@@ -24,6 +24,7 @@ import {
   dirname,
   extname,
   isAbsolute,
+  posix,
   resolve,
   sep,
 } from "node:path";
@@ -38,7 +39,7 @@ export const WHITEHACK_TARBALL_URL = "https://registry.npmjs.org/@agenttool/whit
 export const WHITEHACK_RUNTIME_MANIFEST =
   "tools/whitehack-advisory/whitehack-runtime-closure-v0.10.0.json";
 export const WHITEHACK_RUNTIME_MANIFEST_SHA256 =
-  "17fe720ccb14d20d573704b6ca6e55c9dec8c8a14260dfac89a9e19352a46958";
+  "60351ae4b58436f3a8ce2f22b9223a3a3718f88fced2e032352978f0857cc9e2";
 export const ADVISORY_SCHEMA = "agenttool-whitehack-advisory/v0.1";
 
 const WHITEHACK_EXPORTS = Object.freeze({
@@ -49,6 +50,10 @@ const WHITEHACK_EXPORTS = Object.freeze({
   understanding: Object.freeze({
     types: "./src/understanding.d.ts",
     default: "./src/understanding.js",
+  }),
+  "math-evidence": Object.freeze({
+    types: "./src/math-evidence.d.ts",
+    default: "./src/math-evidence.js",
   }),
 });
 const WHITEHACK_CHECK_COUNT = 47;
@@ -792,6 +797,71 @@ function validateRuntimeManifest(manifest, expected) {
   }
 }
 
+function runtimeImportSpecifiers(bytes) {
+  let source;
+  try {
+    source = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    fail("scanner_runtime_closure_mismatch");
+  }
+  if (/(?:^|[^a-z0-9_$])import\s*\(/iu.test(source)) {
+    fail("scanner_runtime_closure_mismatch");
+  }
+
+  const specifiers = [];
+  const fromPattern = /(?:^|\n)[\t ]*(?:import|export)\s+[\s\S]*?\sfrom\s*(['"])([^'"\r\n]+)\1/gu;
+  const sideEffectPattern = /(?:^|\n)[\t ]*import\s*(['"])([^'"\r\n]+)\1/gu;
+  for (const match of source.matchAll(fromPattern)) specifiers.push(match[2]);
+  for (const match of source.matchAll(sideEffectPattern)) specifiers.push(match[2]);
+  return specifiers;
+}
+
+function verifyRuntimeClosureTopology(manifest, sourceByPath) {
+  const manifestPaths = new Set(manifest.files.map(({ path }) => path));
+  const pending = Object.values(manifest.roots);
+  const reached = new Set();
+
+  while (pending.length > 0) {
+    const sourcePath = pending.pop();
+    if (reached.has(sourcePath)) continue;
+    const bytes = sourceByPath.get(sourcePath);
+    if (!bytes || !manifestPaths.has(sourcePath)) {
+      fail("scanner_runtime_closure_mismatch");
+    }
+    reached.add(sourcePath);
+
+    for (const specifier of runtimeImportSpecifiers(bytes)) {
+      if (specifier.startsWith("node:")) continue;
+      if (
+        (!specifier.startsWith("./") && !specifier.startsWith("../"))
+        || specifier.includes("\\")
+        || specifier.includes("?")
+        || specifier.includes("#")
+      ) {
+        fail("scanner_runtime_closure_mismatch");
+      }
+      const dependencyPath = posix.normalize(
+        posix.join(posix.dirname(sourcePath), specifier),
+      );
+      if (
+        dependencyPath.startsWith("../")
+        || !RUNTIME_SOURCE_PATH.test(dependencyPath)
+        || !manifestPaths.has(dependencyPath)
+      ) {
+        fail("scanner_runtime_closure_mismatch");
+      }
+      pending.push(dependencyPath);
+    }
+  }
+
+  if (
+    reached.size !== manifestPaths.size
+    || [...manifestPaths].some((path) => !reached.has(path))
+  ) {
+    fail("scanner_runtime_closure_mismatch");
+  }
+}
+
 async function verifyRuntimeSourceClosure(
   scanner,
   exportName,
@@ -808,6 +878,7 @@ async function verifyRuntimeSourceClosure(
   }
 
   let totalBytes = 0;
+  const sourceByPath = new Map();
   for (const entry of manifest.files) {
     const requestedPath = resolve(scanner.scannerRoot, entry.path);
     if (!isWithin(scanner.scannerRoot, requestedPath)) {
@@ -839,7 +910,9 @@ async function verifyRuntimeSourceClosure(
     if (createHash("sha256").update(bytes).digest("hex") !== entry.sha256) {
       fail("scanner_runtime_integrity_mismatch");
     }
+    sourceByPath.set(entry.path, bytes);
   }
+  verifyRuntimeClosureTopology(manifest, sourceByPath);
 }
 
 function dependencyFieldIsNonEmpty(value) {
@@ -955,7 +1028,7 @@ async function verifyScannerModule(
     || declaredExport.default !== expectedExport.default
     || declaredExport.types !== expectedExport.types
   ) {
-    fail(`scanner_${exportName}_export_mismatch`);
+    fail(`scanner_${exportName.replaceAll("-", "_")}_export_mismatch`);
   }
   const exportPath = expectedExport.default;
 
@@ -1002,7 +1075,7 @@ async function captureScannerOutput(operation) {
 /**
  * Verify and silently import one reviewed public module from the exact locked
  * Whitehack package. Before import, this rejects persistent byte drift in the
- * reviewed core + understanding source closure. It is not a sandbox,
+ * reviewed core + understanding + math-evidence source closure. It is not a sandbox,
  * signature/authenticity proof, authorization mechanism, or universal defence
  * against a privileged concurrent rewrite between verification and import.
  * The shipped one-shot CLIs reach this loader before any Whitehack import; the
