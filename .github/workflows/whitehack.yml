@@ -58,6 +58,10 @@ jobs:
         env:
           WHITEHACK_INTEGRATION: "1"
         run: bun test bin/tests/whitehack-advisory.test.ts
+      - name: Test the exact mathematical-evidence check
+        env:
+          WHITEHACK_INTEGRATION: "1"
+        run: bun test bin/tests/whitehack-math-evidence-check.test.ts
       - name: Test the Agent Wallet understanding projection
         env:
           WHITEHACK_INTEGRATION: "1"
