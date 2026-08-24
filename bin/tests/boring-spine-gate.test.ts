@@ -342,13 +342,26 @@ describe("boring test spine", () => {
   });
 
   test("pins required Linux and native macOS gates plus reproducible preparation", async () => {
-    const [workflow, preparer, preflight, deploy, migrator] = await Promise.all([
+    const [workflow, preparer, preflight, deploy, migrator, nativeContractTests] = await Promise.all([
       readFile(join(ROOT, ".github", "workflows", "ci.yml"), "utf8"),
       readFile(join(ROOT, "bin", "prepare-hermetic-deps.sh"), "utf8"),
       readFile(join(ROOT, "bin", "preflight.sh"), "utf8"),
       readFile(join(ROOT, "bin", "deploy.sh"), "utf8"),
       readFile(join(ROOT, "bin", "migrate-pending.sh"), "utf8"),
+      readFile(
+        join(
+          ROOT,
+          "native",
+          "agenttool-secret-macos",
+          "Tests",
+          "AgentToolSecretMacOSTests",
+          "ContractTests.swift",
+        ),
+        "utf8",
+      ),
     ]);
+    expect(nativeContractTests).toContain("private func invokeSecretCommand(");
+    expect(nativeContractTests).not.toMatch(/private func run\s*\(/);
     type WorkflowStep = {
       name?: string;
       uses?: string;

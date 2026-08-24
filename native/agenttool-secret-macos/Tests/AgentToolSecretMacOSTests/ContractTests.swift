@@ -67,7 +67,7 @@ final class ContractTests: XCTestCase {
       addStatuses: [errSecSuccess]
     )
     let random = FakeRandom(.bytes(rawGeneration))
-    let result = run(arguments: ["create"], security: security, random: random)
+    let result = invokeSecretCommand(arguments: ["create"], security: security, random: random)
 
     XCTAssertEqual(result.status, 0)
     XCTAssertEqual(result.stderr, Data())
@@ -98,7 +98,7 @@ final class ContractTests: XCTestCase {
     let security = FakeSecurity(copies: [(errSecSuccess, presenceResult())])
     let random = FakeRandom(.bytes(rawGeneration))
     assertFailure(
-      run(arguments: ["create"], security: security, random: random),
+      invokeSecretCommand(arguments: ["create"], security: security, random: random),
       .itemExists,
       excluding: [rawGeneration, serializedGeneration]
     )
@@ -110,7 +110,7 @@ final class ContractTests: XCTestCase {
     ])
     let ambiguousRandom = FakeRandom(.bytes(rawGeneration))
     assertFailure(
-      run(arguments: ["create"], security: ambiguous, random: ambiguousRandom),
+      invokeSecretCommand(arguments: ["create"], security: ambiguous, random: ambiguousRandom),
       .itemAmbiguous,
       excluding: [rawGeneration, serializedGeneration]
     )
@@ -124,7 +124,7 @@ final class ContractTests: XCTestCase {
       addStatuses: [errSecDuplicateItem]
     )
     assertFailure(
-      run(
+      invokeSecretCommand(
         arguments: ["create"],
         security: security,
         random: FakeRandom(.bytes(rawGeneration))
@@ -147,7 +147,7 @@ final class ContractTests: XCTestCase {
     ] {
       let security = FakeSecurity(copies: [(errSecItemNotFound, nil)])
       assertFailure(
-        run(arguments: ["create"], security: security, random: random),
+        invokeSecretCommand(arguments: ["create"], security: security, random: random),
         .generationFailed,
         excluding: [rawGeneration, serializedGeneration]
       )
@@ -166,7 +166,7 @@ final class ContractTests: XCTestCase {
       addStatuses: [errSecSuccess]
     )
     assertFailure(
-      run(
+      invokeSecretCommand(
         arguments: ["create"],
         security: mismatch,
         random: FakeRandom(.bytes(rawGeneration))
@@ -183,7 +183,7 @@ final class ContractTests: XCTestCase {
       addStatuses: [errSecSuccess]
     )
     assertFailure(
-      run(
+      invokeSecretCommand(
         arguments: ["create"],
         security: malformed,
         random: FakeRandom(.bytes(rawGeneration))
@@ -198,7 +198,7 @@ final class ContractTests: XCTestCase {
       (errSecSuccess, exactResult(value: serializedGeneration))
     ])
     let random = FakeRandom(.failure)
-    let result = run(arguments: ["verify"], security: security, random: random)
+    let result = invokeSecretCommand(arguments: ["verify"], security: security, random: random)
 
     XCTAssertEqual(result.status, 0)
     XCTAssertEqual(result.stderr, Data())
@@ -249,7 +249,7 @@ final class ContractTests: XCTestCase {
 
     for (security, failure) in cases {
       assertFailure(
-        run(
+        invokeSecretCommand(
           arguments: ["verify"],
           security: security,
           random: FakeRandom(.failure)
@@ -275,7 +275,7 @@ final class ContractTests: XCTestCase {
     ]
     for returned in [[wrongAccount] as [Any], [synchronizable] as [Any]] {
       assertFailure(
-        run(
+        invokeSecretCommand(
           arguments: ["verify"],
           security: FakeSecurity(copies: [(errSecSuccess, returned)]),
           random: FakeRandom(.failure)
@@ -326,7 +326,7 @@ final class ContractTests: XCTestCase {
 
     for (security, failure) in cases {
       assertFailure(
-        run(
+        invokeSecretCommand(
           arguments: ["create"],
           security: security,
           random: FakeRandom(.bytes(rawGeneration))
@@ -429,7 +429,7 @@ private struct RunResult {
   let stderr: Data
 }
 
-private func run(
+private func invokeSecretCommand(
   arguments: [String],
   security: FakeSecurity,
   random: FakeRandom
