@@ -46,6 +46,8 @@ describe("public and packed boundary", () => {
     expect(Object.keys(pkg.exports ?? {})).toEqual(["."]);
     expect(pkg.files).toEqual([
       "dist",
+      "schemas",
+      "fixtures",
       "README.md",
       "CLAUDE.md",
       "LICENSE",
@@ -73,10 +75,36 @@ describe("public and packed boundary", () => {
     expect(paths).toContain("CLAUDE.md");
     expect(paths).toContain("LICENSE");
     expect(paths).toContain("NOTICE");
+    expect(paths).toContain(
+      "schemas/agenttool.evm-observation-evidence-0.1.schema.json",
+    );
+    expect(paths).toContain(
+      "schemas/agenttool.evm-evidence-transition-receipt-0.1.schema.json",
+    );
+    expect(paths).toContain(
+      "fixtures/agenttool.evm-observation-evidence-0.1.json",
+    );
+    expect(paths).toContain(
+      "fixtures/agenttool.evm-evidence-transition-receipt-0.1.json",
+    );
     expect(paths.some((path) => path.startsWith("src/"))).toBe(false);
     expect(paths.some((path) => path.startsWith("tests/"))).toBe(false);
     expect(paths.some((path) => path.startsWith("scripts/"))).toBe(false);
     expect(paths.some((path) => path.includes("bun.lock"))).toBe(false);
     expect(paths.some((path) => path.includes(".env"))).toBe(false);
+  });
+
+  test("separates the dev.1 source candidate from immutable dev.0 receipts", async () => {
+    const readme = await readFile(join(packageRoot, "README.md"), "utf8");
+    expect(readme).toContain(
+      "The current source candidate is `@agenttool/alchemy@0.1.0-dev.1`.",
+    );
+    expect(readme).toContain(
+      "The immutable `0.1.0-dev.0` preview remains historical release evidence",
+    );
+    expect(readme).toMatch(
+      /No `0\.1\.0-dev\.1` tag, GitHub Release,\s+npm version, or LOVE inventory is established/,
+    );
+    expect(readme).not.toContain("The public npm package is absent");
   });
 });

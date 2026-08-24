@@ -67,13 +67,21 @@ Errors from the broker are collapsed to fixed adapter messages. Provider
 responses remain evidence, not consensus, finality, identity, consent, or
 authority to change money.
 
-Version `0.1.0-dev.0` is the current source identity. Its optional npm-only
-release identity uses annotated tag `alchemy-agentcred-v0.1.0-dev.0` and the
-`next` dist-tag. GitHub Release and npm availability are independently
-verifiable; neither public artifact was observed while preparing this source.
-This package has no LOVE inventory entry, hosted route, deployment, or live
-provider proof. Release wiring, package metadata, and local pack output do not
-establish any of those surfaces.
+Version `0.1.0-dev.1` is the current source candidate. It raises the Alchemy
+peer floor to the corresponding dev.1 source while preserving the same seven
+standard-method adapter and `agenttool.alchemy-agentcred/0.1` wire. No
+`0.1.0-dev.1` tag, GitHub Release, npm version, or LOVE inventory is
+established by these local source bytes.
+
+The immutable `0.1.0-dev.0` adapter remains historical release evidence under
+annotated tag `alchemy-agentcred-v0.1.0-dev.0` and npm dist-tag `next`. Its
+GitHub and npm tarballs were independently read back byte-identical; the
+protected run, size, and SHA-256 receipt are recorded in
+[`docs/ALCHEMY.md`](../../docs/ALCHEMY.md). npm also exposes that sole initial
+prerelease through `latest`; that fallback is not a maturity signal. This
+package has no LOVE inventory entry, hosted route, deployment, or live provider
+proof. Release wiring, package metadata, and local pack output do not establish
+any of those surfaces.
 
 ## Commands
 

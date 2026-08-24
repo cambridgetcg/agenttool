@@ -1,7 +1,7 @@
 {
   "name": "@agenttool/alchemy",
-  "version": "0.1.0-dev.0",
-  "description": "Bounded read-only primitives for Alchemy-backed EVM observations",
+  "version": "0.1.0-dev.1",
+  "description": "Bounded Alchemy reads and provider-neutral EVM evidence contracts",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -14,6 +14,8 @@
   },
   "files": [
     "dist",
+    "schemas",
+    "fixtures",
     "README.md",
     "CLAUDE.md",
     "LICENSE",

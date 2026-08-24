@@ -30,7 +30,7 @@ import {
 } from "@agenttool/credential-broker";
 
 export const PACKAGE_NAME = "@agenttool/alchemy-agentcred";
-export const PACKAGE_VERSION = "0.1.0-dev.0";
+export const PACKAGE_VERSION = "0.1.0-dev.1";
 export const ADAPTER_PROTOCOL = "agenttool.alchemy-agentcred/0.1";
 
 const ALCHEMY_TRANSPORT_PROTOCOL = "agenttool.alchemy.transport/0.1";

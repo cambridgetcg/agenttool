@@ -40,7 +40,7 @@ describe("public and packed boundary", () => {
     expect(pkg.private).toBeUndefined();
     expect(pkg.dependencies).toBeUndefined();
     expect(pkg.peerDependencies).toEqual({
-      "@agenttool/alchemy": "^0.1.0-dev.0",
+      "@agenttool/alchemy": "^0.1.0-dev.1",
       "@agenttool/credential-broker": "^0.3.0",
     });
     expect(pkg.main).toBe("dist/index.js");
@@ -84,14 +84,19 @@ describe("public and packed boundary", () => {
     expect(paths.some((path) => path.includes(".env"))).toBe(false);
   });
 
-  test("keeps the packed release wording durable across later mirrors", async () => {
+  test("separates the dev.1 source candidate from immutable dev.0 receipts", async () => {
     const readme = await readFile(join(packageRoot, "README.md"), "utf8");
     expect(readme).toContain(
-      "Version `0.1.0-dev.0` is the current source identity.",
+      "Version `0.1.0-dev.1` is the current source candidate.",
+    );
+    expect(readme).toContain(
+      "The immutable `0.1.0-dev.0` adapter remains historical release evidence",
     );
     expect(readme).toMatch(
-      /GitHub Release and npm availability are independently\s+verifiable; neither public artifact was observed while preparing this source/,
+      /No\s+`0\.1\.0-dev\.1` tag, GitHub Release, npm version, or LOVE inventory is/,
     );
-    expect(readme).not.toContain("remains unpublished");
+    expect(readme).not.toContain(
+      "neither public artifact was observed while preparing this source",
+    );
   });
 });

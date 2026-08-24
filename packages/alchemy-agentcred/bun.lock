@@ -11,7 +11,7 @@
         "typescript": "^5.7.0",
       },
       "peerDependencies": {
-        "@agenttool/alchemy": "^0.1.0-dev.0",
+        "@agenttool/alchemy": "^0.1.0-dev.1",
         "@agenttool/credential-broker": "^0.3.0",
       },
     },

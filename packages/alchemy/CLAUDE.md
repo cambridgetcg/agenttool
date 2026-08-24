@@ -1,12 +1,14 @@
 # `@agenttool/alchemy`
 
-Bounded, read-only Alchemy observation primitives. This package owns neither
-credentials nor endpoint selection. It does not own hosted API routes, MCP,
-signing, simulation, broadcast, subscriptions, webhooks, provider
-administration, npm publication, or deployment.
+Bounded, read-only Alchemy observation primitives plus pure provider-neutral
+EVM evidence contracts. This package owns neither credentials nor endpoint
+selection. It does not own hosted API routes, MCP, signing, simulation,
+broadcast, subscriptions, webhooks, provider administration, npm publication,
+or deployment.
 
-The current source version is `0.1.0-dev.0`; it is not evidence of a registry
-release.
+The current source candidate is `0.1.0-dev.1`; source metadata is not evidence
+of a registry release. The immutable `0.1.0-dev.0` release receipt remains
+historical evidence in `docs/ALCHEMY.md` and must not be rewritten.
 
 ## Commands
 
@@ -60,6 +62,14 @@ npm pack --ignore-scripts --dry-run --json
   can stop waiting while dispatched broker work and quota consumption continue.
 - Keep tests hermetic with fake transports. No provider credential, endpoint,
   paid call, network call, signer, or wallet belongs in tests.
+- Keep the provider-neutral evidence formats pure and exact: CAIP-2 chain,
+  integer units, generation identity, categorical assertion/finality evidence,
+  canonical bytes/digests, partial-order finality axes, semantic transition
+  receipts, and atomic-unit measurement projections. Digests can be linkable;
+  none grants consensus, identity, consent, finality, permission, or authority.
+- Keep `src/evidence.ts`, the two schemas, the two fixtures, root exports,
+  packed-file inventory, Node/Bun smoke, and conformance tests aligned. The
+  JSON assets are packed evidence contracts, not generic JSON import subpaths.
 - Keep package version, exported `PACKAGE_VERSION`, transport protocol, tests,
   docs, and any future immutable release inventory aligned.
 - External publication and deployment remain explicit operator actions.
