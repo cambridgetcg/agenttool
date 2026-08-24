@@ -341,22 +341,259 @@ describe("boring test spine", () => {
     }
   });
 
-  test("pins a five-job secret-free workflow and shared reproducible preparation", async () => {
-    const [workflow, preparer, preflight, deploy, migrator] = await Promise.all([
+  test("pins required Linux and native macOS gates plus reproducible preparation", async () => {
+    const [workflow, preparer, preflight, deploy, migrator, nativeContractTests] = await Promise.all([
       readFile(join(ROOT, ".github", "workflows", "ci.yml"), "utf8"),
       readFile(join(ROOT, "bin", "prepare-hermetic-deps.sh"), "utf8"),
       readFile(join(ROOT, "bin", "preflight.sh"), "utf8"),
       readFile(join(ROOT, "bin", "deploy.sh"), "utf8"),
       readFile(join(ROOT, "bin", "migrate-pending.sh"), "utf8"),
+      readFile(
+        join(
+          ROOT,
+          "native",
+          "agenttool-secret-macos",
+          "Tests",
+          "AgentToolSecretMacOSTests",
+          "ContractTests.swift",
+        ),
+        "utf8",
+      ),
     ]);
-    expect(workflow).toContain("name: API and protocol");
+    expect(nativeContractTests).toContain("private func invokeSecretCommand(");
+    expect(nativeContractTests).not.toMatch(/private func run\s*\(/);
+    type WorkflowStep = {
+      name?: string;
+      uses?: string;
+      env?: Record<string, string>;
+      run?: string;
+      shell?: string;
+      with?: Record<string, unknown>;
+      "continue-on-error"?: boolean;
+    };
+    type WorkflowJob = {
+      name?: string;
+      if?: string;
+      needs?: string[];
+      "runs-on"?: string;
+      "timeout-minutes"?: number;
+      env?: Record<string, string>;
+      steps?: WorkflowStep[];
+      "continue-on-error"?: boolean;
+    };
+    const parsedWorkflow = Bun.YAML.parse(workflow) as {
+      permissions?: Record<string, string>;
+      jobs?: Record<string, WorkflowJob>;
+    };
+    expect(parsedWorkflow.permissions).toEqual({ contents: "read" });
+    const jobs = parsedWorkflow.jobs ?? {};
+    const linuxApi = jobs["api-protocol-linux"];
+    const nativeSecret = jobs["native-macos-secret"];
+    const requiredApi = jobs["api-protocol"];
+    expect(linuxApi?.name).toBe("API and protocol (Linux)");
+    expect(linuxApi?.["runs-on"]).toBe("ubuntu-24.04");
+    expect(linuxApi?.["timeout-minutes"]).toBe(15);
+    expect(linuxApi?.["continue-on-error"]).toBeUndefined();
+    expect(linuxApi?.steps?.map((step) => step.name)).toEqual([
+      "Check out repository",
+      "Set up Bun 1.3.5",
+      "Prepare API and protocol dependencies from lockfiles",
+      "Run hermetic API and protocol gate",
+    ]);
+    expect(
+      linuxApi?.steps?.every(
+        (step) => step["continue-on-error"] === undefined,
+      ),
+    ).toBe(true);
+    expect(linuxApi?.steps?.[0]?.uses).toBe(
+      "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+    );
+    expect(linuxApi?.steps?.[0]?.with).toEqual({
+      "fetch-depth": 0,
+      "persist-credentials": false,
+    });
+    expect(linuxApi?.steps?.[1]?.uses).toBe(
+      "oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6",
+    );
+    expect(linuxApi?.steps?.[1]?.with).toEqual({
+      "bun-version": "1.3.5",
+    });
+    expect(linuxApi?.steps?.[2]?.run).toBe(
+      "bin/bash-without-env-hooks.sh bin/prepare-hermetic-deps.sh api",
+    );
+    expect(linuxApi?.steps?.[3]?.run).toBe(
+      "bin/bash-without-env-hooks.sh bin/preflight.sh api",
+    );
+    expect(nativeSecret?.name).toBe("Native macOS secret helper");
+    expect(nativeSecret?.["runs-on"]).toBe("macos-15");
+    expect(nativeSecret?.["timeout-minutes"]).toBe(8);
+    expect(nativeSecret?.env).toEqual({
+      DEVELOPER_DIR: "/Applications/Xcode_16.4.app/Contents/Developer",
+    });
+    expect(nativeSecret?.["continue-on-error"]).toBeUndefined();
+    expect(nativeSecret?.steps?.map((step) => step.name)).toEqual([
+      "Check out repository",
+      "Verify the native toolchain",
+      "Build the fixed disposable integration executable",
+      "Build the unsigned review artifact without publishing it",
+      "Run native contract and disposable Keychain integration tests",
+    ]);
+    expect(
+      nativeSecret?.steps?.every(
+        (step) => step["continue-on-error"] === undefined,
+      ),
+    ).toBe(true);
+    const nativeCheckout = nativeSecret?.steps?.[0];
+    expect(nativeCheckout?.uses).toBe(
+      "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+    );
+    expect(nativeCheckout?.with).toEqual({
+      "fetch-depth": 0,
+      "persist-credentials": false,
+    });
+    const nativeToolchain = nativeSecret?.steps?.[1];
+    expect(nativeToolchain?.shell).toBe(
+      "/bin/bash --noprofile --norc -eo pipefail {0}",
+    );
+    expect(nativeToolchain?.run).toBe(
+      [
+        "set -euo pipefail",
+        'test "$(/usr/bin/xcodebuild -version | /usr/bin/sed -n \'1p\')" = "Xcode 16.4"',
+        'test "$(/usr/bin/xcodebuild -version | /usr/bin/sed -n \'2p\')" = "Build version 16F6"',
+        '/usr/bin/xcrun swift --version | /usr/bin/grep -F "Apple Swift version 6.1.2" >/dev/null',
+        "",
+      ].join("\n"),
+    );
+    const nativeIntegrationBuild = nativeSecret?.steps?.[2];
+    expect(nativeIntegrationBuild?.shell).toBe(
+      "/bin/bash --noprofile --norc -eo pipefail {0}",
+    );
+    expect(nativeIntegrationBuild?.run).toBe(
+      "/usr/bin/xcrun swift build --package-path native/agenttool-secret-macos "
+        + '--scratch-path "$RUNNER_TEMP/agenttool-secret-macos-integration" '
+        + "--disable-keychain --disable-netrc --disable-prefetching "
+        + "-Xswiftc -DAGENTTOOL_KEYCHAIN_INTEGRATION_BUILD",
+    );
+    const nativeRelease = nativeSecret?.steps?.[3];
+    expect(nativeRelease?.shell).toBe(
+      "/bin/bash --noprofile --norc -eo pipefail {0}",
+    );
+    expect(nativeRelease?.run).toBe(
+      [
+        "set -euo pipefail",
+        "/usr/bin/xcrun swift build \\",
+        "  --package-path native/agenttool-secret-macos \\",
+        "  --disable-keychain \\",
+        "  --disable-netrc \\",
+        "  --disable-prefetching \\",
+        "  --configuration release",
+        'native_release_bin_dir="$(/usr/bin/xcrun swift build \\',
+        "  --package-path native/agenttool-secret-macos \\",
+        "  --disable-keychain \\",
+        "  --disable-netrc \\",
+        "  --disable-prefetching \\",
+        "  --configuration release \\",
+        '  --show-bin-path)"',
+        'test -x "$native_release_bin_dir/agenttool-secret-macos"',
+        'if native_release_output="$(',
+        '  "$native_release_bin_dir/agenttool-secret-macos" fixture-attest 2>&1',
+        ')"; then',
+        "  exit 1",
+        "else",
+        "  native_release_status=$?",
+        "fi",
+        'test "$native_release_status" -eq 2',
+        "test \"$native_release_output\" = 'agenttool-secret-macos:invalid_invocation'",
+        "",
+      ].join("\n"),
+    );
+    const nativeTests = nativeSecret?.steps?.[4];
+    expect(nativeTests?.shell).toBe(
+      "/bin/bash --noprofile --norc -eo pipefail {0}",
+    );
+    expect(nativeTests?.env).toEqual({
+      AGENTTOOL_KEYCHAIN_INTEGRATION: "1",
+    });
+    expect(nativeTests?.run).toBe(
+      [
+        "set -euo pipefail",
+        'native_bin_dir="$(/usr/bin/xcrun swift build \\',
+        "  --package-path native/agenttool-secret-macos \\",
+        '  --scratch-path "$RUNNER_TEMP/agenttool-secret-macos-integration" \\',
+        "  --disable-keychain \\",
+        "  --disable-netrc \\",
+        "  --disable-prefetching \\",
+        "  -Xswiftc -DAGENTTOOL_KEYCHAIN_INTEGRATION_BUILD \\",
+        '  --show-bin-path)"',
+        'test -x "$native_bin_dir/agenttool-secret-macos"',
+        'export AGENTTOOL_SECRET_MACOS_BINARY="$native_bin_dir/agenttool-secret-macos"',
+        'native_production_bin_dir="$(/usr/bin/xcrun swift build \\',
+        "  --package-path native/agenttool-secret-macos \\",
+        "  --disable-keychain \\",
+        "  --disable-netrc \\",
+        "  --disable-prefetching \\",
+        "  --configuration release \\",
+        '  --show-bin-path)"',
+        'test -x "$native_production_bin_dir/agenttool-secret-macos"',
+        'export AGENTTOOL_SECRET_MACOS_PRODUCTION_BINARY="$native_production_bin_dir/agenttool-secret-macos"',
+        "/usr/bin/xcrun swift test \\",
+        "  --package-path native/agenttool-secret-macos \\",
+        "  --disable-keychain \\",
+        "  --disable-netrc \\",
+        "  --disable-prefetching \\",
+        "  --no-parallel",
+        "",
+      ].join("\n"),
+    );
+    expect(requiredApi?.name).toBe("API and protocol");
+    expect(requiredApi?.if).toBe("${{ always() }}");
+    expect(requiredApi?.needs).toEqual([
+      "api-protocol-linux",
+      "native-macos-secret",
+    ]);
+    expect(requiredApi?.["runs-on"]).toBe("ubuntu-24.04");
+    expect(requiredApi?.["timeout-minutes"]).toBe(2);
+    expect(requiredApi?.["continue-on-error"]).toBeUndefined();
+    expect(requiredApi?.steps).toHaveLength(1);
+    expect(requiredApi?.steps?.[0]?.["continue-on-error"]).toBeUndefined();
+    expect(requiredApi?.steps?.[0]?.env).toEqual({
+      API_PROTOCOL_LINUX_RESULT:
+        "${{ needs.api-protocol-linux.result }}",
+      NATIVE_MACOS_SECRET_RESULT:
+        "${{ needs.native-macos-secret.result }}",
+    });
+    expect(requiredApi?.steps?.[0]?.run).toBe(
+      [
+        "set -euo pipefail",
+        'test "$API_PROTOCOL_LINUX_RESULT" = "success"',
+        'test "$NATIVE_MACOS_SECRET_RESULT" = "success"',
+        "",
+      ].join("\n"),
+    );
     expect(workflow).toContain("name: Witnessed agent economy");
     expect(workflow).toContain("name: Data, ADDS, and SDK");
     expect(workflow).toContain("name: YUTABASE projector (PostgreSQL ${{ matrix.postgres }})");
     expect(workflow).toContain("name: Python SDK (${{ matrix.python-version }})");
     expect(workflow.match(/bun-version: 1\.3\.5/g)).toHaveLength(4);
-    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(5);
+    expect(workflow.match(/runs-on: ubuntu-24\.04/g)).toHaveLength(6);
+    expect(workflow.match(/runs-on: macos-15/g)).toHaveLength(1);
     expect(workflow.match(/uses: actions\/setup-python@/g)).toHaveLength(2);
+    expect(workflow).toContain(
+      "DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer",
+    );
+    expect(workflow).toContain(
+      'AGENTTOOL_KEYCHAIN_INTEGRATION: "1"',
+    );
+    expect(workflow).toContain("AGENTTOOL_SECRET_MACOS_BINARY");
+    expect(workflow).toContain("--show-bin-path");
+    expect(workflow).toContain(
+      "--package-path native/agenttool-secret-macos",
+    );
+    expect(workflow).toContain("--disable-keychain");
+    expect(workflow).toContain("--disable-netrc");
+    expect(workflow).toContain("--disable-prefetching");
+    expect(workflow).toContain("--no-parallel");
+    expect(workflow).toContain("--configuration release");
     expect(workflow).toContain(
       "name: Prepare API and protocol dependencies from lockfiles",
     );
@@ -381,7 +618,7 @@ describe("boring test spine", () => {
       "name: Install local-dependent package dependencies from lockfiles",
     );
     expect(workflow).toContain("fetch-depth: 0");
-    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(6);
+    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(7);
     expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("name: Set up release-pinned uv 0.9.26");
     expect(workflow).toContain(
@@ -856,7 +1093,7 @@ describe("boring test spine", () => {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("uses:"));
-    expect(uses).toHaveLength(16);
+    expect(uses).toHaveLength(17);
     expect(
       uses.every(
         (line) =>

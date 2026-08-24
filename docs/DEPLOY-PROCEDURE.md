@@ -748,21 +748,45 @@ This prevents even a correctly stamped new covenant from being admitted while
 Machines are restarting. A later allowlist change is a separate reviewed
 configuration action after Phase B.
 
-**Phase B is blocked and must not be executed with the current repository
-tooling.** A synthetic test on current macOS proved that
-`bin/agenttool-secret set <service> -` can return success while its underlying
-non-TTY `security ... -w` call stores no retrievable item. It is therefore not
-an activation ceremony. Phase B requires a separately reviewed native
-Security.framework stdin writer that durably stores the value and proves an
-exact Keychain round trip. Do not expand this release by improvising a shell,
-argv, environment-variable, output, or temporary-file substitute. Until that
-writer lands and is independently reviewed, retain the Phase-A state:
+**Phase B is blocked and must not be executed.** A synthetic test on
+current macOS proved that `bin/agenttool-secret set <service> -` can return
+success while its underlying non-TTY `security ... -w` call stores no
+retrievable item. It is therefore not an activation ceremony and remains
+prohibited for this value.
+
+The source-only B0 primitive lives at
+`native/agenttool-secret-macos/`. It is the native Security.framework
+create-once generator and exact-readback foundation; its tests must pass on
+macOS before the existing required `API and protocol` status can pass. That
+proof establishes only the generate-once/non-exporting-verify primitive against
+a disposable Keychain item. CI does not publish an executable, and an unsigned
+CI or local build is not an installed, identity-pinned activation tool.
+
+The B0 executable generates 32 random bytes internally and stores exactly 64
+lowercase hexadecimal bytes. It exposes only create-once storage and
+non-exporting canonical-presence verification. Its production build is
+compile-time bound to the one authority service/account tuple and accepts no
+runtime selector, secret stdin, or raw-value read; it has no caller-supplied
+create, overwrite, upsert, or delete verb. A later B1 ceremony must keep
+Keychain read and Fly child-process stdin transfer inside one reviewed process
+boundary; interrupted reentry must reuse the retained item without exposing it
+as command output. Rotation or repair is not an authority granted by this
+primitive.
+
+Phase B additionally requires a separately reviewed B1 ceremony with a pinned
+native artifact, write-ahead receipt and non-exporting resumable same-value
+recovery, an empty-allowlist interlock for the entire mixed restart, complete
+five-Machine and four-running-process parity proof, and the documented
+stopped-standby and zero-row gates. Do not improvise a shell, argv,
+environment-variable, output, or temporary-file substitute. Until that
+ceremony lands and is independently reviewed, retain the Phase-A state:
 generation absent, v2 fail-closed, and allowlist empty.
 
 Once that prerequisite is met in a later reviewed release, the generation is
-durable release identity. Generate it directly into the OS secret store,
-validate an exact Keychain read, and import that same retained value to Fly
-only through stdin. The value must never enter the operator shell environment,
+durable release identity. Generate it directly inside the native OS secret-store
+operation, validate its exact internal Keychain readback, and import that same
+retained value to Fly only through the later reviewed in-process child stdin
+bridge. The value must never enter the operator shell environment,
 an argument, command output, file, repository, or receipt. It necessarily
 enters the remote process environment as the named Fly runtime secret.
 
