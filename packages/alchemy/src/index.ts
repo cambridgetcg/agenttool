@@ -17,6 +17,7 @@ export {
   ALCHEMY_NETWORKS,
   getAlchemyNetwork,
 } from "./networks.js";
+export * from "./evidence.js";
 export type {
   AlchemyAssetTransfer,
   AlchemyAssetTransfersRpcParams,
@@ -68,5 +69,5 @@ export type {
 } from "./types.js";
 
 export const PACKAGE_NAME = "@agenttool/alchemy";
-export const PACKAGE_VERSION = "0.1.0-dev.0";
+export const PACKAGE_VERSION = "0.1.0-dev.1";
 export const TRANSPORT_PROTOCOL = "agenttool.alchemy.transport/0.1";
