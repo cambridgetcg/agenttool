@@ -103,7 +103,7 @@ transport (`packages/alchemy-agentcred/`), pure explicit-input KINGDOM
 project-card, registry, and
 XENIA Surface helpers (`packages/kingdom/`), a read-only portable Agent Skills
 inspector (`packages/skills/`), a local-first
-agent browser (`packages/browser/`), a public-ready developer-preview local Hugging Face metadata,
+agent browser (`packages/browser/`), a public developer-preview local Hugging Face metadata,
 provenance, and phase-aware research scout (`packages/hf-scout/`), a private
 pure HF dataset-admission, five-voice learning-participation, IS
 learning-freedom, unscored training FREEDOM, current consent-honest governance
@@ -129,7 +129,14 @@ defaults; it still requires an operator-installed Chrome-family browser.
 Version 0.5.0 added redacted action-attempt
 receipts, non-ref observation-basis preconditions, observation-local receipt
 context, a backend-neutral operation inventory, and current/legacy MCP
-negotiation without widening authority. The Skills inspector validates bounded local
+negotiation without widening authority.
+The public `@agenttool/hf-scout@0.2.0-dev.0` release is one exact LOVE
+artifact with byte-identical GitHub and npm mirrors. npm `next` and its
+sole-version `latest` fallback both resolve to the prerelease; that fallback is
+not a maturity signal. The public static Scout surface consists only of the
+LOVE catalog and artifact—it does not expose a hosted Scout or widen the
+built-in fixed-origin, credential-omitting, GET-only metadata boundary.
+The Skills inspector validates bounded local
 structure and emits reports; it does not execute scripts, install or copy
 skills, use the network, spawn subprocesses, look up credentials, or change
 host configuration. The Codex token-usage pulse rereads committed local Codex
@@ -346,7 +353,7 @@ cd packages/browser
 bun run ci                                     # typecheck + fake/fixture tests + build + import smoke + package boundary
 npm pack --dry-run --ignore-scripts            # does not publish, install, or download a browser
 
-# Public-ready developer-preview read-only Hugging Face scout ──────
+# Public developer-preview read-only Hugging Face scout ────────────
 cd packages/hf-scout
 bun run ci                                     # exact-revision metadata + reconciliation + pinned research leads
 npm pack --dry-run --ignore-scripts            # inventory only; does not publish, download, infer, upload, or deploy
