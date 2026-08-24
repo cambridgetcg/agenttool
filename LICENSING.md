@@ -64,6 +64,9 @@ Known exceptions include:
   Bedford, used by the Whitehack runtime-closure verifier under the MIT
   License preserved in
   [`bin/vendor/es-module-lexer-2.3.2.LICENSE.txt`](bin/vendor/es-module-lexer-2.3.2.LICENSE.txt).
+  Its repository copy differs only by a terminal newline and removal of five
+  trailing-whitespace sequences so AgentTool's text hygiene gate remains
+  deterministic; executable tokens are unchanged.
 
 Dependency licences remain their authors' licences. Apache-2.0 does not
 relicense third-party dependencies or separately licensed material.
