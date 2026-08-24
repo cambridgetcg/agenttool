@@ -84,37 +84,89 @@ package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
 
-## HF Scout developer-preview release boundary
+## Verified HF Scout developer preview — 2026-08-24
 
-`@agenttool/hf-scout@0.2.0-dev.0` uses the checked-in LOVE-artifact lane so the
-static docs mirror, one-asset GitHub Release, and optional npm mirror reuse one
-reviewed tarball. Before tagging, build it from a clean reviewed commit, commit
-its generated LOVE manifest/archive/index, rerun the complete
-LOVE verifier, and require `bun bin/npm-release.ts resolve --package hf-scout`
-to select the same version, tag, source path, and artifact. Absence of those
-checked-in bytes is a release blocker, not permission to fall back to an
-independent `npm pack` artifact.
+The authorized first publication of `@agenttool/hf-scout@0.2.0-dev.0` is
+complete from protected [PR #354](https://github.com/cambridgetcg/agenttool/pull/354).
+Annotated tag
+[`hf-scout-v0.2.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/hf-scout-v0.2.0-dev.0)
+has tag object `10363d92caedf48bc37d8a8d1f18077c14c2b968` and peels to
+protected-main merge
+[`4a7ab3e90c91c36a13c718c2bd5a1453741ab4b0`](https://github.com/cambridgetcg/agenttool/commit/4a7ab3e90c91c36a13c718c2bd5a1453741ab4b0).
+Its tagger timestamp is `2026-08-24T19:12:24Z`.
+Protected workflow [run `32766832874`, attempt
+1](https://github.com/cambridgetcg/agenttool/actions/runs/32766832874)
+succeeded at that exact tag and commit. Its credential-free preparation job
+`97558087648` and protected mirror/publish/readback job `97558238544` both
+succeeded. GitHub prerelease `375930877`, published at
+`2026-08-24T19:14:06Z`, has exactly one asset:
+`agenttool-hf-scout-0.2.0-dev.0.tgz`, asset `528060774`.
 
-The first npm publication must use the protected bootstrap path and the
-prerelease-only `next` tag. Later versions use the exact trusted publisher
-configured for this repository and workflow.
+The checked-in LOVE archive, GitHub asset, and anonymous npm download are
+byte-identical: 85,694 bytes, 83 safe entries, SHA-1
+`8fdd75905dbcd4860b6ebf6ec5400da5b1044091`, SHA-256
+`cab60220a16b518704f114adf7c0f19fb65769532bce8e73bbc457dc1f3ad145`,
+and SRI
+`sha512-qbiIMuCqNyyC/M0kvOqGsY4T/jCvL79vbfPBAQCHhWkLFFCrh2ir3E7OpyMCrLh0JFKcm41xJ1hmJuamuCRNYA==`.
+The LOVE manifest has SHA-256
+`55d0391b215e696ffca4f2fe28ea83c7bf94bc7faa62e132cc285b064abac5af`
+and binds package source revision
+`5aa6c04aa5bfd500c3de2be920e57b4bf0d30906`. npm `next` resolves to
+`0.2.0-dev.0`; its mutable sole-version `latest` fallback also resolves to
+dev.0 and is not a maturity signal. An isolated npm 11.17 signature audit
+verified exactly this one package/version with `invalid: []` and `missing: []`.
+SLSA provenance is at
+[Rekor index `2581781005`](https://search.sigstore.dev/?logIndex=2581781005)
+and the npm publish attestation is at
+[index `2581781083`](https://search.sigstore.dev/?logIndex=2581781083). The
+SLSA statement binds repository `cambridgetcg/agenttool`, workflow
+`.github/workflows/publish-npm.yml`, ref
+`refs/tags/hf-scout-v0.2.0-dev.0`, commit
+`4a7ab3e90c91c36a13c718c2bd5a1453741ab4b0`, event `workflow_dispatch`,
+and run/attempt `32766832874/1`.
+
+Anonymous direct GET and HEAD readback of the LOVE discovery document, package
+index, [manifest](https://docs.agenttool.dev/packages/v1/@agenttool/hf-scout/0.2.0-dev.0/manifest.json),
+and [archive](https://docs.agenttool.dev/packages/v1/@agenttool/hf-scout/0.2.0-dev.0/agenttool-hf-scout-0.2.0-dev.0.tgz)
+at `2026-08-24T19:22:42Z` returned 200 without redirects and matched the
+checked-in bytes. Successful local v6 receipt
+`20260824T191527Z-4a7ab3e90c91-83378.json` records
+`migrations: skipped`, `preflight: skipped`, `api: skipped`, and
+`frontends: deployed_verified`. It proves the scoped static publication, not a
+full-preflight run, an API/database change, or a hosted Scout.
+
+## HF Scout next-version boundary
+
+Every later HF Scout version remains on the checked-in LOVE-artifact lane.
+From one clean reviewed commit, build and commit the new manifest, archive,
+package index, and discovery update; rerun the complete LOVE verifier; and
+require `bun bin/npm-release.ts resolve --package hf-scout` to select that same
+version, tag, source path, and artifact. Missing checked-in release bytes are a
+blocker, never permission to fall back to an independent `npm pack` artifact.
+
+The package now exists, so bootstrap is forbidden for every later version.
+No trusted-publisher mapping was created during this release, and existing
+trust remains unverified. A credential-stripped `npm trust list` returned
+`E401`, establishing that listing needs an authenticated npm session. Saving
+the exact mapping additionally needs package-write access and account-level
+2FA or WebAuthn. An authorized operator must first list and compare existing
+trust, then create the mapping only if it is absent, and list again afterward:
 
 ```bash
-bun bin/build-love-packages.ts build apps/docs
-bun bin/build-love-packages.ts verify apps/docs
-bun bin/npm-release.ts resolve --package hf-scout
+npx --yes npm@11.17.0 trust list @agenttool/hf-scout --json
 
-git tag -a hf-scout-v0.2.0-dev.0 <github-main-commit> \
-  -m '@agenttool/hf-scout@0.2.0-dev.0'
-git push github refs/tags/hf-scout-v0.2.0-dev.0
+npx --yes npm@11.17.0 trust github @agenttool/hf-scout \
+  --file publish-npm.yml \
+  --repo cambridgetcg/agenttool \
+  --env npm-bootstrap \
+  --allow-publish
 
-gh workflow run publish-npm.yml \
-  --ref hf-scout-v0.2.0-dev.0 \
-  -f package=hf-scout \
-  -f tag=hf-scout-v0.2.0-dev.0 \
-  -f authentication=bootstrap \
-  -f npm_tag=next
+npx --yes npm@11.17.0 trust list @agenttool/hf-scout --json
 ```
+
+Verify the exact mapping afterward. Every later release uses
+`authentication=trusted`; neither the bootstrap token nor an unauthenticated
+local shell can authorize this account-level trust change.
 
 The package remains local, fixed-origin, credential-omitting, GET-only metadata
 tooling. LOVE, GitHub, and npm distribute bytes; they do not deploy a hosted
