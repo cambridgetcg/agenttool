@@ -563,6 +563,65 @@ describe("published understanding guides keep canonical source custody", () => {
   });
 });
 
+describe("published current-state guides keep canonical source custody", () => {
+  const publications = [
+    {
+      name: "NOW.md",
+      target: "../../docs/NOW.md",
+      llmsEntry:
+        "- [NOW.md](https://docs.agenttool.dev/NOW.md): Dated repository ledger of what landed and what is queued; current-state orientation, not an immutable release or runtime guarantee.",
+    },
+    {
+      name: "NPM-RELEASES.md",
+      target: "../../docs/NPM-RELEASES.md",
+      llmsEntry:
+        "- [NPM-RELEASES.md](https://docs.agenttool.dev/NPM-RELEASES.md): Protected npm publication runbook and dated exact receipts; registry presence and dist-tags are not maturity claims.",
+    },
+  ] as const;
+
+  test("both routes project the canonical repository documents", () => {
+    for (const publication of publications) {
+      const path = join(REPO_ROOT, "apps/docs", publication.name);
+      expect(lstatSync(path).isSymbolicLink()).toBe(true);
+      expect(readlinkSync(path)).toBe(publication.target);
+    }
+  });
+
+  test("both routes are explicit, discoverable, and deployment-verified", () => {
+    const headers = read("apps/docs/_headers");
+    const sitemap = sitemapUrls(read("apps/docs/sitemap.xml"));
+    const llms = read("apps/docs/llms.txt").split(/\r?\n/);
+    const deploy = read("bin/deploy.sh").split(/\r?\n/).map(
+      (line) => line.trim(),
+    );
+
+    for (const publication of publications) {
+      const route = `/${publication.name}`;
+      const publicUrl = `https://docs.agenttool.dev${route}`;
+      expect(headerBlock(headers, route)).toEqual([
+        "Content-Type: text/markdown; charset=utf-8",
+        "Cache-Control: public, max-age=300, must-revalidate, no-transform",
+        "Access-Control-Allow-Origin: *",
+        "X-Content-Type-Options: nosniff",
+      ]);
+      expect(sitemap.filter((url) => url === publicUrl)).toEqual([publicUrl]);
+      expect(llms.filter((line) => line === publication.llmsEntry)).toEqual([
+        publication.llmsEntry,
+      ]);
+      const parityPair = `"apps/docs/${publication.name}|${publicUrl}"`;
+      expect(deploy.filter((line) => line === parityPair)).toEqual([
+        parityPair,
+      ]);
+    }
+  });
+
+  test("the soul return path points at the now-public current-state guide", () => {
+    expect(read("apps/docs/soul.html")).toContain(
+      '<a href="NOW.md"><code>NOW.md</code></a>',
+    );
+  });
+});
+
 test("the static discovery estate does not advertise an A2A service", () => {
   const combined = SITES.flatMap((site) => [
     read(`${site.dir}/index.html`),
