@@ -313,6 +313,23 @@ readonly -a LOCAL_GAME_HEADER_SPECS=(
 
 MAINTENANCE_FLYCTL_VERSION="v0.4.74"
 MAINTENANCE_FLYCTL_COMMIT="b74c9391409b3e443383a5f4d928cef007825ddc"
+PHASE_B_RUNTIME_FENCE_FLOOR="2ca44b44bcfde9d571b27771f9d5fc516a4df41e"
+PHASE_B_PINNED_FLYCTL="/usr/local/libexec/agenttool/phase-b-v1/flyctl-v0.4.74-darwin-arm64"
+PHASE_B_PINNED_FLY_HOME=""
+PHASE_B_ACTIVE_FLYCTL="fly"
+PHASE_B_AUTHORITY_STATE="unknown"
+PHASE_B_AUTHORITY_PREFLIGHT_VERIFIED=0
+PHASE_B_AUTHORITY_POSTFLIGHT_VERIFIED=0
+PHASE_B_AUTHORITY_PROVIDER_STATUS="Unknown"
+PHASE_B_AUTHORITY_DURABLE_HOLD=0
+PHASE_B_AUTHORITY_ALLOWED_ORIGINS_COUNT=-1
+PHASE_B_AUTHORITY_RESERVED_GENERATION_ROWS=-1
+PHASE_B_AUTHORITY_AUTHORITATIVE_V2_ROWS=-1
+PHASE_B_AUTHORITY_FLEET_VERIFIED=0
+PHASE_B_AUTHORITY_RUNTIME_VERIFIED_COUNT=0
+PHASE_B_AUTHORITY_STANDBY_BOUND=0
+PHASE_B_AUTHORITY_SOURCE_FLOOR_VERIFIED=0
+PHASE_B_AUTHORITY_OBSERVED_REVISION=""
 MAINTENANCE_RESTART_FENCED_CONFIG='{"restart":{"policy":"no","max_retries":10}}'
 MAINTENANCE_RESTART_RESTORED_CONFIG='{"restart":{"policy":"on-failure","max_retries":10}}'
 MAINTENANCE_IMAGE_LABEL=""
@@ -350,6 +367,19 @@ MAINTENANCE_WORKERS_DISABLED_VERIFIED=0
 MAINTENANCE_RECOVERY_FENCE_VERIFIED=0
 MAINTENANCE_MARKER_CLEARED=0
 PHASE_B_AUTHORITY_STATE_PATH=""
+
+run_fly_cli() {
+  if [ "$PHASE_B_AUTHORITY_STATE" = "configured" ]; then
+    /usr/bin/env -i \
+      HOME="$PHASE_B_PINNED_FLY_HOME" \
+      USER="${USER:-}" LOGNAME="${LOGNAME:-${USER:-}}" \
+      LANG=C LC_ALL=C NO_COLOR=1 TERM=dumb \
+      PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+      "$PHASE_B_ACTIVE_FLYCTL" "$@"
+  else
+    fly "$@"
+  fi
+}
 
 append_csv_value() {
   local current="$1"
@@ -686,7 +716,7 @@ verify_maintenance_state_owner() {
 
 verify_maintenance_flyctl_version() {
   local version_output
-  version_output="$(fly version 2>/dev/null)" || {
+  version_output="$(run_fly_cli version 2>/dev/null)" || {
     echo "$(red '✗') Could not read flyctl version for the maintenance contract." >&2
     return 1
   }
@@ -1590,7 +1620,7 @@ maintenance_update_image() {
   local image_reference="$2"
   (
     cd api || exit 1
-    fly machine update "$machine_id" -a "$FLY_APP" \
+    run_fly_cli machine update "$machine_id" -a "$FLY_APP" \
       --image "$image_reference" \
       --build-remote-only \
       --autostart=false \
@@ -1606,7 +1636,7 @@ maintenance_restore_app() {
   local machine_id="$1"
   (
     cd api || exit 1
-    fly machine update "$machine_id" -a "$FLY_APP" \
+    run_fly_cli machine update "$machine_id" -a "$FLY_APP" \
       --build-remote-only \
       --autostart=false \
       --machine-config "$MAINTENANCE_RESTART_RESTORED_CONFIG" \
@@ -1621,7 +1651,7 @@ maintenance_enable_app_autostart() {
   local machine_id="$1"
   (
     cd api || exit 1
-    fly machine update "$machine_id" -a "$FLY_APP" \
+    run_fly_cli machine update "$machine_id" -a "$FLY_APP" \
       --build-remote-only \
       --autostart=true \
       --machine-config "$MAINTENANCE_RESTART_RESTORED_CONFIG" \
@@ -1642,7 +1672,7 @@ maintenance_restore_thinker() {
     # ${arr[@]+...} guard: macOS system bash 3.2 treats expanding an EMPTY
     # array as an unbound variable under set -u, aborting the recovery path
     # mid-fence. Linux CI (bash 4.4+) never sees it — keep the guard.
-    fly machine update "$machine_id" -a "$FLY_APP" \
+    run_fly_cli machine update "$machine_id" -a "$FLY_APP" \
       --build-remote-only \
       --machine-config "$MAINTENANCE_RESTART_RESTORED_CONFIG" \
       ${standby_args[@]+"${standby_args[@]}"} \
@@ -1657,7 +1687,7 @@ maintenance_cordon_app() {
   local machine_id="$1"
   (
     cd api || exit 1
-    fly machine cordon "$machine_id" -a "$FLY_APP"
+    run_fly_cli machine cordon "$machine_id" -a "$FLY_APP"
   )
 }
 
@@ -1665,7 +1695,7 @@ maintenance_uncordon_app() {
   local machine_id="$1"
   (
     cd api || exit 1
-    fly machine uncordon "$machine_id" -a "$FLY_APP"
+    run_fly_cli machine uncordon "$machine_id" -a "$FLY_APP"
   )
 }
 
@@ -1683,7 +1713,7 @@ maintenance_refence_machine() {
   (
     cd api || exit 1
     # Same bash-3.2 empty-array guard as maintenance_restore_machine above.
-    fly machine update "$machine_id" -a "$FLY_APP" \
+    run_fly_cli machine update "$machine_id" -a "$FLY_APP" \
       --build-remote-only \
       ${app_args[@]+"${app_args[@]}"} \
       --machine-config "$MAINTENANCE_RESTART_FENCED_CONFIG" \
@@ -2124,6 +2154,167 @@ enforce_release_source() {
   return 0
 }
 
+run_phase_b_authority_guard() {
+  local phase_name="$1"
+  local expected_revision="${2:-}"
+  local -a guard_arguments
+  local guard_bun guard_version guard_output guard_fields observed_state observed_provider
+  local observed_hold observed_allowed observed_reserved observed_authoritative
+  local observed_fleet observed_runtime observed_standby observed_floor observed_revision
+  guard_arguments=("$phase_name")
+  if [ -n "$expected_revision" ]; then
+    guard_arguments+=(--revision "$expected_revision")
+  fi
+  guard_bun="$(command -v bun 2>/dev/null)" || return 1
+  if [[ "$guard_bun" != /* ]]; then
+    echo "$(red '✗ Release blocked:') Phase-B guard Bun path was not absolute." >&2
+    return 1
+  fi
+  guard_version="$(/usr/bin/env -i \
+    HOME="$HOME" USER="${USER:-}" LOGNAME="${LOGNAME:-${USER:-}}" \
+    LANG=C LC_ALL=C PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    "$guard_bun" --version 2>/dev/null)" || return 1
+  if [ "$guard_version" != "1.3.5" ]; then
+    echo "$(red '✗ Release blocked:') Phase-B guard requires exact Bun 1.3.5." >&2
+    return 1
+  fi
+  guard_output="$({
+    /usr/bin/env -i \
+      HOME="$HOME" USER="${USER:-}" LOGNAME="${LOGNAME:-${USER:-}}" \
+      LANG=C LC_ALL=C NO_COLOR=1 TERM=dumb \
+      PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+      DATABASE_URL="$DATABASE_URL" DATABASE_SESSION_URL="$DATABASE_SESSION_URL" \
+      "$guard_bun" --no-install --no-env-file bin/phase-b-deploy-guard.ts \
+        "${guard_arguments[@]}"
+  } 2>/dev/null)" || {
+    echo "$(red '✗ Release blocked:') Phase-B authority state could not be proven." >&2
+    echo "  Required state: exactly absent-before-activation or fully configured and coherent." >&2
+    echo "  Recovery: do not use ordinary deploy for Staged, Partial, unknown, or mixed state; resume through the reviewed B1 operator." >&2
+    return 1
+  }
+  guard_fields="$(printf '%s\n' "$guard_output" | /usr/bin/env -i \
+    HOME="$HOME" USER="${USER:-}" LOGNAME="${LOGNAME:-${USER:-}}" \
+    LANG=C LC_ALL=C PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    "$guard_bun" --no-install --no-env-file -e '
+    const bytes = new Uint8Array(await new Response(Bun.stdin.stream()).arrayBuffer());
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    if (!text.endsWith("\n") || text.slice(0, -1).includes("\n")) process.exit(1);
+    const value = JSON.parse(text);
+    const keys = [
+      "allowed_origins_count", "authoritative_v2_rows", "durable_hold",
+      "fleet_verified", "observed_revision", "phase", "provider_secret_status",
+      "reserved_generation_rows", "runtime_verified_count", "schema",
+      "source_floor_verified", "standby_bound", "state",
+    ];
+    if (!value || Array.isArray(value) || typeof value !== "object" ||
+        JSON.stringify(Object.keys(value)) !== JSON.stringify(keys) ||
+        JSON.stringify(value) + "\n" !== text ||
+        value.schema !== "agenttool.phase-b-deploy-proof/1" ||
+        !["preflight", "postflight"].includes(value.phase) ||
+        !["absent_fail_closed", "configured"].includes(value.state) ||
+        !["Absent", "Deployed"].includes(value.provider_secret_status) ||
+        typeof value.durable_hold !== "boolean" ||
+        typeof value.fleet_verified !== "boolean" ||
+        typeof value.source_floor_verified !== "boolean" ||
+        typeof value.standby_bound !== "boolean" ||
+        !Number.isSafeInteger(value.allowed_origins_count) ||
+        !Number.isSafeInteger(value.reserved_generation_rows) ||
+        !Number.isSafeInteger(value.authoritative_v2_rows) ||
+        !Number.isSafeInteger(value.runtime_verified_count) ||
+        !(value.observed_revision === null ||
+          /^[0-9a-f]{40}$/.test(value.observed_revision))) process.exit(1);
+    const field = (entry) => entry === null ? "" : String(entry);
+    process.stdout.write([
+      value.state, value.provider_secret_status, field(value.durable_hold),
+      field(value.allowed_origins_count), field(value.reserved_generation_rows),
+      field(value.authoritative_v2_rows), field(value.fleet_verified),
+      field(value.runtime_verified_count), field(value.standby_bound),
+      field(value.source_floor_verified), field(value.observed_revision), value.phase,
+    ].join("|") + "\n");
+  ' 2>/dev/null)" || {
+    echo "$(red '✗ Release blocked:') Phase-B authority proof was not canonical." >&2
+    return 1
+  }
+  IFS='|' read -r observed_state observed_provider observed_hold \
+    observed_allowed observed_reserved observed_authoritative observed_fleet \
+    observed_runtime observed_standby observed_floor observed_revision \
+    observed_phase <<< "$guard_fields"
+  if [ "$observed_phase" != "$phase_name" ] ||
+    [ "$observed_allowed" != 0 ] || [ "$observed_reserved" != 0 ] ||
+    [ "$observed_authoritative" != 0 ]; then
+    echo "$(red '✗ Release blocked:') Phase-B authority proof fields were inconsistent." >&2
+    return 1
+  fi
+  case "$observed_state" in
+    absent_fail_closed)
+      if [ "$observed_provider" != "Absent" ] || [ "$observed_hold" != false ] ||
+        [ "$observed_fleet" != false ] || [ "$observed_runtime" != 0 ] ||
+        [ "$observed_standby" != false ] || [ "$observed_floor" != false ] ||
+        { [ "$phase_name" = preflight ] && [ -n "$observed_revision" ]; } ||
+        { [ "$phase_name" = postflight ] && [[ ! "$observed_revision" =~ ^[0-9a-f]{40}$ ]]; }; then
+        echo "$(red '✗ Release blocked:') absent Phase-B authority proof was inconsistent." >&2
+        return 1
+      fi
+      ;;
+    configured)
+      if [ "$observed_provider" != "Deployed" ] || [ "$observed_hold" != true ] ||
+        [ "$observed_fleet" != true ] || [ "$observed_runtime" != 4 ] ||
+        [ "$observed_standby" != true ] || [ "$observed_floor" != true ] ||
+        { [ "$phase_name" = preflight ] && [ -n "$observed_revision" ]; } ||
+        { [ "$phase_name" = postflight ] && [[ ! "$observed_revision" =~ ^[0-9a-f]{40}$ ]]; }; then
+        echo "$(red '✗ Release blocked:') configured Phase-B authority proof was inconsistent." >&2
+        return 1
+      fi
+      ;;
+    *) return 1 ;;
+  esac
+  if [ "$PHASE_B_AUTHORITY_STATE" != "unknown" ] &&
+    [ "$PHASE_B_AUTHORITY_STATE" != "$observed_state" ]; then
+    echo "$(red '✗ Release blocked:') Phase-B authority state changed during this deploy." >&2
+    return 1
+  fi
+  PHASE_B_AUTHORITY_STATE="$observed_state"
+  PHASE_B_AUTHORITY_PROVIDER_STATUS="$observed_provider"
+  [ "$observed_hold" = true ] && PHASE_B_AUTHORITY_DURABLE_HOLD=1 || PHASE_B_AUTHORITY_DURABLE_HOLD=0
+  PHASE_B_AUTHORITY_ALLOWED_ORIGINS_COUNT="$observed_allowed"
+  PHASE_B_AUTHORITY_RESERVED_GENERATION_ROWS="$observed_reserved"
+  PHASE_B_AUTHORITY_AUTHORITATIVE_V2_ROWS="$observed_authoritative"
+  [ "$observed_fleet" = true ] && PHASE_B_AUTHORITY_FLEET_VERIFIED=1 || PHASE_B_AUTHORITY_FLEET_VERIFIED=0
+  PHASE_B_AUTHORITY_RUNTIME_VERIFIED_COUNT="$observed_runtime"
+  [ "$observed_standby" = true ] && PHASE_B_AUTHORITY_STANDBY_BOUND=1 || PHASE_B_AUTHORITY_STANDBY_BOUND=0
+  [ "$observed_floor" = true ] && PHASE_B_AUTHORITY_SOURCE_FLOOR_VERIFIED=1 || PHASE_B_AUTHORITY_SOURCE_FLOOR_VERIFIED=0
+  PHASE_B_AUTHORITY_OBSERVED_REVISION="$observed_revision"
+  if [ "$phase_name" = preflight ]; then
+    PHASE_B_AUTHORITY_PREFLIGHT_VERIFIED=1
+  else
+    PHASE_B_AUTHORITY_POSTFLIGHT_VERIFIED=1
+  fi
+}
+
+enforce_configured_phase_b_source() {
+  [ "$PHASE_B_AUTHORITY_STATE" = "configured" ] || return 0
+  if [ "$ALLOW_DIRTY_RELEASE" = 1 ] || [ "$ALLOW_NON_RELEASE_HEAD" = 1 ] ||
+    [ "$SKIP_PREFLIGHT" = 1 ]; then
+    echo "$(red '✗ Release blocked:') configured covenant authority forbids source and preflight overrides." >&2
+    return 1
+  fi
+  if [ "$MAINTENANCE_FENCED_API" = 1 ]; then
+    echo "$(red '✗ Release blocked:') configured covenant authority needs a separately reviewed compatible maintenance lane." >&2
+    return 1
+  fi
+  if [ "$SKIP_API" = 1 ]; then
+    echo "$(red '✗ Release blocked:') configured covenant authority requires API parity on every database-affecting deploy." >&2
+    return 1
+  fi
+  if ! git cat-file -e "$PHASE_B_RUNTIME_FENCE_FLOOR^{commit}" 2>/dev/null ||
+    ! git merge-base --is-ancestor "$PHASE_B_RUNTIME_FENCE_FLOOR" "$HEAD_REVISION"; then
+    echo "$(red '✗ Release blocked:') source is not a descendant of the permanent covenant runtime fence." >&2
+    return 1
+  fi
+  PHASE_B_PINNED_FLY_HOME="$HOME/.local/state/agenttool/phase-b/fly-home"
+  PHASE_B_ACTIVE_FLYCTL="$PHASE_B_PINNED_FLYCTL"
+}
+
 # Every deploy-shaped invocation proves source eligibility before it can run
 # worktree-controlled dependency hooks or contact the database.  --survey is
 # the deliberate source-independent inspection mode.  Later gates remain
@@ -2204,6 +2395,21 @@ else
   echo "$(red '✗ Release blocked:') configured database credentials are not the exact source-pinned production pair."
   echo "  Required operation: restore the reviewed transaction/session targets."
   echo "  Consequence: no database survey, migration, or publication was attempted."
+fi
+if [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] &&
+  [ "$PRODUCTION_DATABASE_PAIR_VERIFIED" = 1 ] &&
+  [ "$SURVEY_ONLY" = 0 ] && [ "$DRY_RUN" = 0 ]; then
+  if ! run_phase_b_authority_guard preflight; then
+    exit 1
+  fi
+  if ! enforce_configured_phase_b_source; then
+    exit 1
+  fi
+  if [ "$PHASE_B_AUTHORITY_STATE" = "configured" ]; then
+    echo "  ✓ Phase-B authority is configured, receipt-bound, fleet-exact, and runtime-parity verified"
+  else
+    echo "  ✓ Phase-B authority remains absent and fail-closed"
+  fi
 fi
 if [ "$MIGRATION_SURVEY_REQUIRED" = 1 ] &&
   [ "$PRODUCTION_DATABASE_PAIR_VERIFIED" = 1 ] &&
@@ -2358,26 +2564,50 @@ clear_maintenance_snapshots() {
 }
 
 list_fly_machines_json() {
-  (cd api || exit 1; fly machine list -a "$FLY_APP" --json)
+  (cd api || exit 1; run_fly_cli machine list -a "$FLY_APP" --json)
 }
 
 run_fly_ssh_probe_silently() {
   local machine_id="$1"
   local remote_command="$2"
+  local fly_executable=""
+  local fly_home="${HOME:-}"
+  local fly_configured=0
+  if [ "$PHASE_B_AUTHORITY_STATE" = "configured" ]; then
+    fly_executable="$PHASE_B_ACTIVE_FLYCTL"
+    fly_home="$PHASE_B_PINNED_FLY_HOME"
+    fly_configured=1
+  else
+    fly_executable="$(command -v fly 2>/dev/null)" || return 1
+  fi
+  if [[ "$fly_executable" != /* ]]; then
+    return 1
+  fi
   (
     cd api || exit 1
     FLY_PROBE_APP="$FLY_APP" \
       FLY_PROBE_MACHINE_ID="$machine_id" \
       FLY_PROBE_REMOTE_COMMAND="$remote_command" \
+      FLY_PROBE_EXECUTABLE="$fly_executable" \
+      FLY_PROBE_HOME="$fly_home" \
+      FLY_PROBE_CONFIGURED="$fly_configured" \
       bun --no-install --no-env-file -e '
         const app = process.env.FLY_PROBE_APP ?? "";
         const machineId = process.env.FLY_PROBE_MACHINE_ID ?? "";
         const remoteCommand = process.env.FLY_PROBE_REMOTE_COMMAND ?? "";
+        const executable = process.env.FLY_PROBE_EXECUTABLE ?? "";
+        const home = process.env.FLY_PROBE_HOME ?? "";
+        const configured = process.env.FLY_PROBE_CONFIGURED === "1";
         const configuredTimeout = Number(
           process.env.DEPLOY_SSH_PROBE_TIMEOUT_MS ?? "30000",
         );
         if (
           app !== "agenttool" ||
+          (configured
+            ? executable !== "/usr/local/libexec/agenttool/phase-b-v1/flyctl-v0.4.74-darwin-arm64"
+            : !(executable.startsWith("/") && executable.length <= 4_096 &&
+              !executable.includes("\n") && !executable.includes("\r"))) ||
+          !home.startsWith("/") ||
           !/^[0-9a-f]{14}$/.test(machineId) ||
           remoteCommand.length === 0 ||
           remoteCommand.includes("\n") ||
@@ -2392,13 +2622,25 @@ run_fly_ssh_probe_silently() {
         // never extend the production ceiling.
         const timeoutMs = Math.min(configuredTimeout, 30_000);
         const quote = String.fromCharCode(39);
+        const childEnvironment = configured
+          ? {
+              HOME: home,
+              USER: "yournameisai",
+              LOGNAME: "yournameisai",
+              LANG: "C",
+              LC_ALL: "C",
+              NO_COLOR: "1",
+              TERM: "dumb",
+              PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+            }
+          : process.env;
         const child = Bun.spawn(
           [
-            "fly", "ssh", "console", "-q", "-a", app,
+            executable, "ssh", "console", "-q", "-a", app,
             "--machine", machineId, "-C",
             `sh -c ${quote}${remoteCommand}${quote}`,
           ],
-          { stdout: "ignore", stderr: "ignore", env: process.env },
+          { stdout: "ignore", stderr: "ignore", env: childEnvironment },
         );
         let timedOut = false;
         let hardKill;
@@ -3492,6 +3734,20 @@ write_deploy_receipt() {
     DEPLOY_RECEIPT_DATABASE_PROOF_TRANSACTION="$DATABASE_PROOF_TRANSACTION_SELECT_ONE" \
     DEPLOY_RECEIPT_DATABASE_PROOF_SESSION="$DATABASE_PROOF_SESSION_SELECT_ONE" \
     DEPLOY_RECEIPT_DATABASE_PROOF_TLS_PROFILE="$DATABASE_PROOF_TLS_PROFILE" \
+    DEPLOY_RECEIPT_PHASE_B_STATE="$PHASE_B_AUTHORITY_STATE" \
+    DEPLOY_RECEIPT_PHASE_B_PREFLIGHT="$PHASE_B_AUTHORITY_PREFLIGHT_VERIFIED" \
+    DEPLOY_RECEIPT_PHASE_B_POSTFLIGHT="$PHASE_B_AUTHORITY_POSTFLIGHT_VERIFIED" \
+    DEPLOY_RECEIPT_PHASE_B_PROVIDER_STATUS="$PHASE_B_AUTHORITY_PROVIDER_STATUS" \
+    DEPLOY_RECEIPT_PHASE_B_HOLD="$PHASE_B_AUTHORITY_DURABLE_HOLD" \
+    DEPLOY_RECEIPT_PHASE_B_ALLOWED="$PHASE_B_AUTHORITY_ALLOWED_ORIGINS_COUNT" \
+    DEPLOY_RECEIPT_PHASE_B_RESERVED="$PHASE_B_AUTHORITY_RESERVED_GENERATION_ROWS" \
+    DEPLOY_RECEIPT_PHASE_B_AUTHORITATIVE="$PHASE_B_AUTHORITY_AUTHORITATIVE_V2_ROWS" \
+    DEPLOY_RECEIPT_PHASE_B_FLEET="$PHASE_B_AUTHORITY_FLEET_VERIFIED" \
+    DEPLOY_RECEIPT_PHASE_B_RUNTIME_COUNT="$PHASE_B_AUTHORITY_RUNTIME_VERIFIED_COUNT" \
+    DEPLOY_RECEIPT_PHASE_B_STANDBY="$PHASE_B_AUTHORITY_STANDBY_BOUND" \
+    DEPLOY_RECEIPT_PHASE_B_SOURCE_FLOOR="$PHASE_B_AUTHORITY_SOURCE_FLOOR_VERIFIED" \
+    DEPLOY_RECEIPT_PHASE_B_OBSERVED_REVISION="$PHASE_B_AUTHORITY_OBSERVED_REVISION" \
+    DEPLOY_RECEIPT_PHASE_B_FENCE_FLOOR="$PHASE_B_RUNTIME_FENCE_FLOOR" \
     DEPLOY_RECEIPT_MAINTENANCE="$MAINTENANCE_FENCED_API" \
     DEPLOY_RECEIPT_MAINTENANCE_CHECKPOINT="$MAINTENANCE_LAST_CHECKPOINT" \
     DEPLOY_RECEIPT_MAINTENANCE_TAG="$MAINTENANCE_IMAGE_TAG" \
@@ -3526,6 +3782,9 @@ write_deploy_receipt() {
         const maintenanceSucceeded =
           maintenanceMode &&
           process.env.DEPLOY_RECEIPT_OUTCOME === "succeeded";
+        const configuredAuthority =
+          process.env.DEPLOY_RECEIPT_PHASE_B_STATE === "configured";
+        const deploySucceeded = process.env.DEPLOY_RECEIPT_OUTCOME === "succeeded";
         const imageIds = new Set(csv("DEPLOY_RECEIPT_MAINTENANCE_IMAGE_IDS"));
         const startedIds = new Set(csv("DEPLOY_RECEIPT_MAINTENANCE_STARTED_IDS"));
         const uncordonedIds = new Set(
@@ -3579,8 +3838,30 @@ write_deploy_receipt() {
           !bool("DEPLOY_RECEIPT_MAINTENANCE_FINAL") ||
           !bool("DEPLOY_RECEIPT_MAINTENANCE_WORKERS")
         )) process.exit(1);
+        if (configuredAuthority && deploySucceeded && (
+          !bool("DEPLOY_RECEIPT_PHASE_B_PREFLIGHT") ||
+          !bool("DEPLOY_RECEIPT_PHASE_B_POSTFLIGHT") ||
+          process.env.DEPLOY_RECEIPT_PHASE_B_PROVIDER_STATUS !== "Deployed" ||
+          !bool("DEPLOY_RECEIPT_PHASE_B_HOLD") ||
+          integer("DEPLOY_RECEIPT_PHASE_B_ALLOWED") !== 0 ||
+          integer("DEPLOY_RECEIPT_PHASE_B_RESERVED") !== 0 ||
+          integer("DEPLOY_RECEIPT_PHASE_B_AUTHORITATIVE") !== 0 ||
+          !bool("DEPLOY_RECEIPT_PHASE_B_FLEET") ||
+          integer("DEPLOY_RECEIPT_PHASE_B_RUNTIME_COUNT") !== 4 ||
+          !bool("DEPLOY_RECEIPT_PHASE_B_STANDBY") ||
+          !bool("DEPLOY_RECEIPT_PHASE_B_SOURCE_FLOOR") ||
+          !/^[0-9a-f]{40}$/.test(
+            process.env.DEPLOY_RECEIPT_PHASE_B_OBSERVED_REVISION ?? "",
+          ) ||
+          process.env.DEPLOY_RECEIPT_PHASE_B_OBSERVED_REVISION !==
+            process.env.DEPLOY_RECEIPT_SOURCE_REVISION ||
+          process.env.DEPLOY_RECEIPT_PHASE_B_FENCE_FLOOR !==
+            "2ca44b44bcfde9d571b27771f9d5fc516a4df41e"
+        )) process.exit(1);
         const receipt = {
-          schema: "agenttool-deploy-receipt/v6",
+          schema: configuredAuthority
+            ? "agenttool-deploy-receipt/v7"
+            : "agenttool-deploy-receipt/v6",
           run_id: process.env.DEPLOY_RECEIPT_RUN_ID,
           mode: process.env.DEPLOY_RECEIPT_MODE,
           outcome: process.env.DEPLOY_RECEIPT_OUTCOME,
@@ -3627,6 +3908,35 @@ write_deploy_receipt() {
           },
           maintenance: null,
         };
+        if (configuredAuthority) {
+          receipt.authority_generation = {
+            proof_schema: "agenttool-phase-b-configured-deploy/v1",
+            state: "configured",
+            runtime_fence_floor:
+              process.env.DEPLOY_RECEIPT_PHASE_B_FENCE_FLOOR,
+            source_floor_verified:
+              bool("DEPLOY_RECEIPT_PHASE_B_SOURCE_FLOOR"),
+            preflight_verified: bool("DEPLOY_RECEIPT_PHASE_B_PREFLIGHT"),
+            postflight_verified: bool("DEPLOY_RECEIPT_PHASE_B_POSTFLIGHT"),
+            provider_secret_status:
+              process.env.DEPLOY_RECEIPT_PHASE_B_PROVIDER_STATUS,
+            durable_empty_allowlist_hold:
+              bool("DEPLOY_RECEIPT_PHASE_B_HOLD"),
+            allowed_origins_count:
+              integer("DEPLOY_RECEIPT_PHASE_B_ALLOWED"),
+            reserved_generation_rows:
+              integer("DEPLOY_RECEIPT_PHASE_B_RESERVED"),
+            authoritative_v2_rows:
+              integer("DEPLOY_RECEIPT_PHASE_B_AUTHORITATIVE"),
+            fleet_verified: bool("DEPLOY_RECEIPT_PHASE_B_FLEET"),
+            runtime_verified_count:
+              integer("DEPLOY_RECEIPT_PHASE_B_RUNTIME_COUNT"),
+            stopped_standby_bound:
+              bool("DEPLOY_RECEIPT_PHASE_B_STANDBY"),
+            observed_revision:
+              process.env.DEPLOY_RECEIPT_PHASE_B_OBSERVED_REVISION || null,
+          };
+        }
         if (maintenanceMode) {
           receipt.maintenance = {
             proof_schema: "agenttool-fly-maintenance-proof/v2",
@@ -3878,6 +4188,11 @@ if [ "$SKIP_API" = 0 ]; then
     echo "$(red '✗ Phase 3 blocked:') release inputs changed after the initial gate."
     exit 1
   fi
+  if ! run_phase_b_authority_guard preflight ||
+    ! enforce_configured_phase_b_source; then
+    echo "$(red '✗ Phase 3 blocked:') Phase-B authority admission changed before publication."
+    exit 1
+  fi
 
   # The API advertises Rights of Life, LOVE BOMB, and the local games. Publish
   # web first, then docs, and verify their exact prerequisite bytes and headers
@@ -3918,6 +4233,11 @@ if [ "$SKIP_API" = 0 ]; then
   fi
   if ! enforce_release_source; then
     echo "$(red '✗ Phase 3 blocked:') release inputs changed while publishing discovery prerequisites."
+    exit 1
+  fi
+  if ! run_phase_b_authority_guard preflight ||
+    ! enforce_configured_phase_b_source; then
+    echo "$(red '✗ Phase 3 blocked:') Phase-B authority admission changed before Fly rollout."
     exit 1
   fi
 
@@ -3999,7 +4319,7 @@ if [ "$SKIP_API" = 0 ]; then
     }
     API_RESULT="maintenance_image_building"
     EXTERNAL_MUTATION_STARTED=1
-    (cd api || exit 1; fly deploy "${MAINTENANCE_BUILD_ARGS[@]}") || {
+    (cd api || exit 1; run_fly_cli deploy "${MAINTENANCE_BUILD_ARGS[@]}") || {
       API_RESULT="failed_or_uncertain"
       echo ""
       echo "$(red '✗ Phase 3 maintenance image build/push failed.') No Machine start was attempted."
@@ -4115,7 +4435,7 @@ if [ "$SKIP_API" = 0 ]; then
         "attempting_app_start_${MAINTENANCE_STARTED_COUNT}_of_3" true || exit 1
       (
         cd api || exit 1
-        fly machine start "$MAINTENANCE_MACHINE_ID" -a "$FLY_APP"
+        run_fly_cli machine start "$MAINTENANCE_MACHINE_ID" -a "$FLY_APP"
       ) || {
         API_RESULT="failed_or_uncertain"
         echo "$(red '✗ Phase 3 failed:') an exact app start returned nonzero."
@@ -4123,7 +4443,7 @@ if [ "$SKIP_API" = 0 ]; then
       }
       (
         cd api || exit 1
-        fly machine wait "$MAINTENANCE_MACHINE_ID" -a "$FLY_APP" \
+        run_fly_cli machine wait "$MAINTENANCE_MACHINE_ID" -a "$FLY_APP" \
           --state started --wait-timeout 5m0s
       ) || {
         API_RESULT="failed_or_uncertain"
@@ -4160,7 +4480,7 @@ if [ "$SKIP_API" = 0 ]; then
       fi
       (
         cd api || exit 1
-        fly machine wait "$MAINTENANCE_MACHINE_ID" -a "$FLY_APP" \
+        run_fly_cli machine wait "$MAINTENANCE_MACHINE_ID" -a "$FLY_APP" \
           --state started --wait-timeout 5m0s
       ) || {
         API_RESULT="failed_or_uncertain"
@@ -4254,7 +4574,7 @@ if [ "$SKIP_API" = 0 ]; then
     )
     API_RESULT="deploying"
     EXTERNAL_MUTATION_STARTED=1
-    (cd api || exit 1; fly deploy "${FLY_DEPLOY_ARGS[@]}") || {
+    (cd api || exit 1; run_fly_cli deploy "${FLY_DEPLOY_ARGS[@]}") || {
       API_RESULT="failed_or_uncertain"
       echo ""
       echo "$(red '✗ Phase 3 failed.') Check fly logs."
@@ -4462,6 +4782,15 @@ if [ "$SKIP_API" = 0 ]; then
     echo "  ✓ $VERIFIED_MACHINE_COUNT started Fly machine(s) carry $HEAD_REVISION (dirty=$API_SOURCE_DIRTY) and proved both database paths"
   fi
   API_RESULT="deployed_verified"
+fi
+
+if [ "$SKIP_API" = 0 ]; then
+  if ! run_phase_b_authority_guard postflight "$HEAD_REVISION"; then
+    API_RESULT="failed_or_uncertain"
+    echo "  $(red '✗') Phase-B authority postflight did not prove the exact final release"
+    exit 1
+  fi
+  echo "  ✓ Phase-B authority postflight remained exact ($PHASE_B_AUTHORITY_STATE)"
 fi
 
 # Frontend parity, headers, and sensitive-path policy. Pages/Workers may finish

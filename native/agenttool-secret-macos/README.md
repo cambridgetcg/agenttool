@@ -13,14 +13,31 @@ agenttool-secret-macos verify --receipt-nonce <32-lowercase-hex>
 agenttool-secret-macos stage-fly --receipt-nonce <32-lowercase-hex>
 agenttool-secret-macos probe-fly --receipt-nonce <32-lowercase-hex> \
   --machine <14-lowercase-hex>
+agenttool-secret-macos verify-deployed-fly \
+  --receipt-nonce <32-lowercase-hex> --revision <40-lowercase-hex> \
+  --machine <14-lowercase-hex>
 ```
 
 The receipt nonce is non-secret continuity metadata. The helper decodes it to
-exactly 16 bytes and binds the Keychain item with `kSecAttrGeneric`. Every verb
-first validates the same nonce and its permitted write-ahead checkpoint in the
-canonical private Phase-B active marker. The Keychain query remains bound only
-to the fixed service/account tuple, so a foreign or unbound occupant is
-detected rather than hidden by a nonce-qualified lookup.
+exactly 16 bytes and binds the Keychain item with `kSecAttrGeneric`. The
+one-time ceremony verbs first validate the same nonce and their permitted
+write-ahead checkpoint in the canonical private Phase-B active marker. The
+Keychain query remains bound only to the fixed service/account tuple, so a
+foreign or unbound occupant is detected rather than hidden by a nonce-qualified
+lookup.
+
+`verify-deployed-fly` is the sole post-ceremony exception to the active-marker
+rule. It first requires the active marker to be strictly absent, then reads the
+canonical private completed receipt only from
+`~/.local/state/agenttool/deploy-state/phase-b-authority-generation-receipt-v1.json`.
+The receipt must be canonical, complete, generation-verified, final-gated, and
+carry the exact four-Machine attempted/verified runtime prefix. The requested
+Machine must be one of that receipt's three app Machines or thinker primary;
+the stopped thinker standby and every foreign Machine are refused. The role is
+derived from the receipt, never supplied by the caller. The revision argument
+is exactly 40 lowercase hexadecimal bytes and is proved against the actual
+running process; it cannot change the receipt's machine or generation binding.
+The active marker is checked absent again before authorization returns.
 
 `create` first requires the exact item to be absent, requests 32 random bytes
 from `SecRandomCopyBytes`, serializes them as exactly 64 lowercase hexadecimal
@@ -50,6 +67,9 @@ database paths; only the app role requires loopback configured health because
 the service-less thinker has no HTTP listener. The proof emits no value or
 digest. One Machine per invocation preserves the operator's attempted/verified
 prefix.
+`verify-deployed-fly` reuses this same no-output actual-process proof after the
+one-time ceremony has completed, but is admitted only by the final receipt and
+absent active marker described above.
 
 The helper never writes the generation to an argument, environment variable,
 stdout, stderr, temporary file, marker, or receipt. Child stdout and stderr go
@@ -65,9 +85,11 @@ The production executable is compile-time bound to the sole Phase-B authority
 service and account; it accepts no selector bytes from argv or the environment.
 It requires its resolved running path and device/inode to be the exact
 root-owned installed artifact, then validates both that file and its running
-`SecCode` against the marker-bound hash, Team ID, CDHash, hardened-runtime
-flags, empty entitlements, and designated requirement. An unsigned local copy
-cannot borrow an installed artifact's attestation.
+`SecCode` against an explicit Apple Developer ID Application certificate-chain
+requirement for the marker-bound Team ID, a trusted timestamp, the marker-bound
+hash and CDHash, hardened-runtime flags, empty entitlements, and designated
+requirement. An unsigned, ad-hoc, Apple Development, or locally self-signed
+copy cannot borrow an installed artifact's attestation.
 Every Keychain operation selects that one non-synchronizable generic-password
 tuple. A fresh `LAContext` has
 `interactionNotAllowed = true`, so an operation that would need UI fails

@@ -753,6 +753,7 @@ describe("federated covenant effect fences", () => {
     const nativeFly = read(
       "../native/agenttool-secret-macos/Sources/AgentToolSecretMacOSCore/FlyBridge.swift",
     );
+    const phaseBGuard = read("../bin/phase-b-deploy-guard.ts");
     expect(deploy).toMatch(/ordinary rolling\s+deploy is prohibited for Phase A/i);
     expect(deploy).toContain("--maintenance-fenced-api");
     expect(deploy).toContain("agenttool-deploy-receipt/v6");
@@ -787,17 +788,31 @@ describe("federated covenant effect fences", () => {
     expect(nativeCommand).toContain("case verify(SecretToolCeremonyNonce)");
     expect(nativeCommand).toContain("case stageFly(SecretToolCeremonyNonce)");
     expect(nativeCommand).toContain("case probeFly(SecretToolCeremonyNonce, SecretToolMachineID)");
+    expect(nativeCommand).toContain("case verifyDeployedFly(");
     expect(nativeCommand).not.toMatch(/case\s+(?:get|put|overwrite|delete)\b/);
     expect(nativeStore).toContain("SecRandomCopyBytes");
     expect(nativeStore).toContain("attributes[kSecAttrGeneric] = ceremonyNonce.data");
     expect(nativeStore).not.toContain("SecItemUpdate");
     expect(nativeStore).not.toContain("SecItemDelete");
     expect(nativeBinding).toContain("phase-b-authority-generation-active.json");
+    expect(nativeBinding).toContain("phase-b-authority-generation-receipt-v1.json");
+    expect(nativeBinding).toContain("try requireAbsent(activeMarkerURL)");
     expect(nativeBinding).toContain('attempt.checkpoint == "stage_attempting"');
     expect(nativeBinding).toContain('attempt.checkpoint == "runtime_probe_attempting"');
     expect(nativeBinding).toContain("_NSGetExecutablePath");
     expect(nativeBinding).toContain("executableIdentityMatches(");
     expect(nativeBinding).toContain("SecCodeCopySelf");
+    expect(nativeBinding).toContain("developerIDApplicationRequirement(");
+    expect(nativeBinding).toContain("anchor apple generic");
+    expect(nativeBinding).toContain(
+      "certificate 1[field.1.2.840.113635.100.6.2.6] exists",
+    );
+    expect(nativeBinding).toContain(
+      "certificate leaf[field.1.2.840.113635.100.6.1.13] exists",
+    );
+    expect(nativeBinding).toContain("kSecCodeInfoTimestamp");
+    expect(nativeReadme).toContain("Apple Developer ID Application certificate-chain");
+    expect(deploy).toContain("trusted-timestamped native artifact");
     expect(nativeFly).toContain("POSIX_SPAWN_CLOEXEC_DEFAULT");
     expect(nativeFly).toContain("F_SETNOSIGPIPE");
     expect(nativeFly).toContain("processGroupIsEmpty(processID)");
@@ -820,6 +835,13 @@ describe("federated covenant effect fences", () => {
     expect(deploy).toContain("Every mutating `bin/deploy.sh` invocation");
     expect(deploy).toContain("reserved_generation_rows=0");
     expect(deploy).toContain("authoritative_v2_rows=0");
+    expect(deploy).toContain("agenttool-deploy-receipt/v7");
+    expect(deploy).toContain("2ca44b44bcfde9d571b27771f9d5fc516a4df41e");
+    expect(phaseBGuard).toContain("agenttool.phase-b-deploy-proof/1");
+    expect(phaseBGuard).toContain("verify-deployed-fly");
+    expect(phaseBGuard).not.toContain(
+      "AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION=",
+    );
     expect(deploy).toMatch(/Do \*\*not\*\* start the\s+stopped thinker standby/);
     expect(deploy).toMatch(/absence\s+of a per-Machine generation override/);
     expect(playwrightReadme).toContain("Skipped topology placeholder");

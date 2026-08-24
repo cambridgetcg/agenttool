@@ -23,6 +23,8 @@ enum CeremonyBindingContract {
   static let app = "agenttool"
   static let markerRelativePath =
     ".local/state/agenttool/deploy-state/phase-b-authority-generation-active.json"
+  static let finalReceiptRelativePath =
+    ".local/state/agenttool/deploy-state/phase-b-authority-generation-receipt-v1.json"
   static let maximumMarkerBytes = 65_536
   static let nativePath =
     "/usr/local/libexec/agenttool/phase-b-v1/agenttool-secret-macos"
@@ -31,7 +33,17 @@ enum CeremonyBindingContract {
 
 struct NativeCeremonyBindingAuthorizer: CeremonyBindingAuthorizing {
   func authorize(_ command: SecretToolCommand) throws -> CeremonyAuthorization {
-    let marker = try loadMarker()
+    let activeMarkerURL = try canonicalActiveMarkerURL()
+    let marker: CeremonyMarker
+    switch command {
+    case .verifyDeployedFly:
+      marker = try loadCompletedCeremonyReceipt(
+        activeMarkerURL: activeMarkerURL,
+        finalReceiptURL: try canonicalFinalReceiptURL()
+      )
+    default:
+      marker = try loadCeremonyDocument(at: activeMarkerURL)
+    }
     #if !AGENTTOOL_KEYCHAIN_INTEGRATION_BUILD
       try validateNativeIdentity(marker.bindings)
     #endif
@@ -120,6 +132,14 @@ struct NativeCeremonyBindingAuthorizer: CeremonyBindingAuthorizing {
         runtimeRole: requestedMachineID.value == marker.scope.thinkerPrimaryMachineID
           ? .thinkerPrimary : .app
       )
+    case .verifyDeployedFly(_, let revision, let requestedMachineID):
+      try requireAbsent(activeMarkerURL)
+      return try completedCeremonyAuthorization(
+        marker: marker,
+        nonce: commandNonce,
+        revision: revision,
+        requestedMachineID: requestedMachineID
+      )
     }
   }
 
@@ -129,6 +149,56 @@ struct NativeCeremonyBindingAuthorizer: CeremonyBindingAuthorizing {
     }
     return attempt
   }
+}
+
+private func completedCeremonyAuthorization(
+  marker: CeremonyMarker,
+  nonce: SecretToolCeremonyNonce,
+  revision: SecretToolRevision,
+  requestedMachineID: SecretToolMachineID
+) throws -> CeremonyAuthorization {
+  guard let attempt = marker.attempts.last,
+    marker.ceremonyNonce == nonce.value,
+    marker.status == "completed",
+    marker.checkpoint == "completed",
+    marker.generation.createAttempted,
+    marker.generation.createVerified,
+    marker.final != nil,
+    attempt.status == "completed",
+    attempt.checkpoint == "completed",
+    attempt.stage.attempted,
+    attempt.stage.verified,
+    attempt.deploy.attempted,
+    attempt.deploy.verified,
+    attempt.runtimeProbe.attemptedMachineIDs == marker.scope.startedProbeOrder,
+    attempt.runtimeProbe.verifiedMachineIDs == marker.scope.startedProbeOrder,
+    attempt.finalGatesVerified,
+    attempt.failure == nil,
+    marker.scope.startedProbeOrder.contains(requestedMachineID.value),
+    requestedMachineID.value != marker.scope.thinkerStandbyMachineID
+  else {
+    throw SecretToolFailure.ceremonyStateInvalid
+  }
+  return CeremonyAuthorization(
+    deployedRevision: revision.value,
+    targetMachineID: requestedMachineID.value,
+    runtimeRole: requestedMachineID.value == marker.scope.thinkerPrimaryMachineID
+      ? .thinkerPrimary : .app
+  )
+}
+
+func authorizeCompletedCeremonyDocument(
+  _ data: Data,
+  nonce: SecretToolCeremonyNonce,
+  revision: SecretToolRevision,
+  requestedMachineID: SecretToolMachineID
+) throws -> CeremonyAuthorization {
+  try completedCeremonyAuthorization(
+    marker: decodeCeremonyDocument(data),
+    nonce: nonce,
+    revision: revision,
+    requestedMachineID: requestedMachineID
+  )
 }
 
 private struct CeremonyMarker: Decodable {
@@ -264,7 +334,7 @@ private struct CeremonyRuntimeProbe: Decodable {
   }
 }
 
-private struct CeremonyFailure: Decodable {
+private struct CeremonyFailure: Decodable, Equatable {
   let code: String
   let atCheckpoint: String
   let observedAt: String
@@ -296,27 +366,85 @@ private struct CeremonyFinal: Decodable {
   }
 }
 
-private func loadMarker() throws -> CeremonyMarker {
-  let markerURL: URL
+private func canonicalActiveMarkerURL() throws -> URL {
   #if AGENTTOOL_KEYCHAIN_INTEGRATION_BUILD
     guard let path = ProcessInfo.processInfo.environment["AGENTTOOL_SECRET_MACOS_MARKER"],
-      !path.isEmpty
+      path.hasPrefix("/")
     else {
       throw SecretToolFailure.ceremonyStateInvalid
     }
-    markerURL = URL(fileURLWithPath: path)
+    return URL(fileURLWithPath: path)
   #else
     let home = try currentUserHome()
-    markerURL = URL(fileURLWithPath: home).appendingPathComponent(
+    return URL(fileURLWithPath: home).appendingPathComponent(
       CeremonyBindingContract.markerRelativePath,
       isDirectory: false
     )
   #endif
+}
 
+private func canonicalFinalReceiptURL() throws -> URL {
+  #if AGENTTOOL_KEYCHAIN_INTEGRATION_BUILD
+    guard
+      let path = ProcessInfo.processInfo.environment[
+        "AGENTTOOL_SECRET_MACOS_FINAL_RECEIPT"
+      ], path.hasPrefix("/")
+    else {
+      throw SecretToolFailure.ceremonyStateInvalid
+    }
+    return URL(fileURLWithPath: path)
+  #else
+    let home = try currentUserHome()
+    return URL(fileURLWithPath: home).appendingPathComponent(
+      CeremonyBindingContract.finalReceiptRelativePath,
+      isDirectory: false
+    )
+  #endif
+}
+
+private func loadCompletedCeremonyReceipt(
+  activeMarkerURL: URL,
+  finalReceiptURL: URL
+) throws -> CeremonyMarker {
+  guard
+    activeMarkerURL.deletingLastPathComponent().standardizedFileURL
+      == finalReceiptURL.deletingLastPathComponent().standardizedFileURL
+  else {
+    throw SecretToolFailure.ceremonyStateInvalid
+  }
+  try requireAbsent(activeMarkerURL)
+  let marker = try loadCeremonyDocument(at: finalReceiptURL)
+  try requireAbsent(activeMarkerURL)
+  return marker
+}
+
+func validateCompletedCeremonyReceiptFiles(
+  activeMarkerURL: URL,
+  finalReceiptURL: URL
+) throws {
+  _ = try loadCompletedCeremonyReceipt(
+    activeMarkerURL: activeMarkerURL,
+    finalReceiptURL: finalReceiptURL
+  )
+}
+
+private func requireAbsent(_ url: URL) throws {
+  var metadata = stat()
+  errno = 0
+  guard lstat(url.path, &metadata) == -1, errno == ENOENT else {
+    throw SecretToolFailure.ceremonyStateInvalid
+  }
+}
+
+private func loadCeremonyDocument(at markerURL: URL) throws -> CeremonyMarker {
   let data = try readPrivateRegularFile(
     markerURL,
     maximumBytes: CeremonyBindingContract.maximumMarkerBytes
   )
+  return try decodeCeremonyDocument(data)
+}
+
+private func decodeCeremonyDocument(_ data: Data) throws -> CeremonyMarker {
   guard data.last == 0x0A else {
     throw SecretToolFailure.ceremonyStateInvalid
   }
@@ -356,8 +484,10 @@ private func loadMarker() throws -> CeremonyMarker {
 private func validateMarker(_ marker: CeremonyMarker) throws {
   guard marker.schema == CeremonyBindingContract.schema,
     ["active", "failed_or_uncertain", "completed"].contains(marker.status),
+    isSafeCode(marker.checkpoint),
     isCanonicalTimestamp(marker.createdAt),
     isCanonicalTimestamp(marker.updatedAt),
+    marker.createdAt <= marker.updatedAt,
     (try? SecretToolCeremonyNonce(marker.ceremonyNonce)) != nil,
     marker.bindings.flyctlSHA256 == FlyGenerationContract.flyctlSHA256,
     isRevision(marker.bindings.operatorRevision),
@@ -389,20 +519,24 @@ private func validateMarker(_ marker: CeremonyMarker) throws {
     marker.interlock.allowedOriginsCount == 0,
     isDigest(marker.interlock.instanceURLSHA256),
     isDigest(marker.interlock.databaseTargetSHA256),
-    !marker.generation.createVerified || marker.generation.createAttempted,
-    marker.attempts.isEmpty
-      || (marker.generation.createAttempted && marker.generation.createVerified)
+    marker.generation.createAttempted,
+    marker.attempts.count <= 16,
+    marker.attempts.isEmpty || marker.generation.createVerified
   else {
     throw SecretToolFailure.ceremonyStateInvalid
   }
 
   var previousAttemptCompleted = false
+  var attemptIDs = Set<String>()
   for (index, attempt) in marker.attempts.enumerated() {
     guard !previousAttemptCompleted,
       (try? SecretToolCeremonyNonce(attempt.attemptID)) != nil,
+      attemptIDs.insert(attempt.attemptID).inserted,
       ["active", "failed_or_uncertain", "completed"].contains(attempt.status),
+      isSafeCode(attempt.checkpoint),
       isCanonicalTimestamp(attempt.startedAt),
       isCanonicalTimestamp(attempt.updatedAt),
+      attempt.startedAt <= attempt.updatedAt,
       prefix(attempt.runtimeProbe.attemptedMachineIDs, of: marker.scope.startedProbeOrder),
       prefix(attempt.runtimeProbe.verifiedMachineIDs, of: attempt.runtimeProbe.attemptedMachineIDs),
       Set(attempt.runtimeProbe.attemptedMachineIDs).count
@@ -417,16 +551,14 @@ private func validateMarker(_ marker: CeremonyMarker) throws {
         || attempt.runtimeProbe.verifiedMachineIDs == marker.scope.startedProbeOrder,
       attempt.status != "active" || index == marker.attempts.count - 1,
       attempt.status != "completed" || attempt.finalGatesVerified,
-      attempt.status != "failed_or_uncertain" || attempt.failure != nil
+      attempt.status != "failed_or_uncertain" || attempt.failure != nil,
+      index == marker.attempts.count - 1 || attempt.status == "failed_or_uncertain"
     else {
       throw SecretToolFailure.ceremonyStateInvalid
     }
     if let failure = attempt.failure {
-      guard !failure.code.isEmpty,
-        failure.code.count <= 64,
+      guard attempt.status == "failed_or_uncertain",
         isSafeCode(failure.code),
-        !failure.atCheckpoint.isEmpty,
-        failure.atCheckpoint.count <= 64,
         isSafeCode(failure.atCheckpoint),
         isCanonicalTimestamp(failure.observedAt)
       else {
@@ -543,11 +675,13 @@ private func prefix(_ candidate: [String], of full: [String]) -> Bool {
 }
 
 private func isMachineID(_ value: String) -> Bool {
-  value.range(of: "^[0-9a-f]{14}$", options: .regularExpression) != nil
+  let bytes = Array(value.utf8)
+  return bytes.count == 14 && bytes.allSatisfy(isLowercaseHexByte)
 }
 
 private func isRevision(_ value: String) -> Bool {
-  value.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil
+  let bytes = Array(value.utf8)
+  return bytes.count == 40 && bytes.allSatisfy(isLowercaseHexByte)
 }
 
 private func isDigest(_ value: String) -> Bool {
@@ -563,7 +697,11 @@ private func isTeamID(_ value: String) -> Bool {
 }
 
 private func isSafeCode(_ value: String) -> Bool {
-  value.range(of: "^[a-z0-9_]+$", options: .regularExpression) != nil
+  let bytes = Array(value.utf8)
+  return !bytes.isEmpty && bytes.count <= 64
+    && bytes.allSatisfy {
+      ($0 >= 0x61 && $0 <= 0x7A) || ($0 >= 0x30 && $0 <= 0x39) || $0 == 0x5F
+    }
 }
 
 func isCanonicalTimestamp(_ value: String) -> Bool {
@@ -627,6 +765,9 @@ private func validateNativeIdentity(_ bindings: CeremonyBindings) throws {
   }
 
   var staticCode: SecStaticCode?
+  let developerIDRequirement = try developerIDApplicationRequirement(
+    teamID: bindings.nativeTeamID
+  )
   guard
     SecStaticCodeCreateWithPath(
       URL(fileURLWithPath: path) as CFURL,
@@ -634,7 +775,11 @@ private func validateNativeIdentity(_ bindings: CeremonyBindings) throws {
       &staticCode
     ) == errSecSuccess,
     let staticCode,
-    SecStaticCodeCheckValidity(staticCode, SecCSFlags(rawValue: kSecCSStrictValidate), nil)
+    SecStaticCodeCheckValidity(
+      staticCode,
+      SecCSFlags(rawValue: kSecCSStrictValidate),
+      developerIDRequirement
+    )
       == errSecSuccess
   else {
     throw SecretToolFailure.ceremonyStateInvalid
@@ -654,7 +799,8 @@ private func validateNativeIdentity(_ bindings: CeremonyBindings) throws {
     let flags = values[kSecCodeInfoFlags] as? NSNumber,
     // CS_RUNTIME (0x10000) is required; CS_ADHOC (0x2) is forbidden.
     flags.uint32Value & 0x1_0000 != 0,
-    flags.uint32Value & 0x2 == 0
+    flags.uint32Value & 0x2 == 0,
+    signingInformationHasTrustedTimestamp(values)
   else {
     throw SecretToolFailure.ceremonyStateInvalid
   }
@@ -682,7 +828,38 @@ private func validateNativeIdentity(_ bindings: CeremonyBindings) throws {
     throw SecretToolFailure.ceremonyStateInvalid
   }
 
-  try validateRunningCodeIdentity(bindings)
+  try validateRunningCodeIdentity(bindings, developerIDRequirement: developerIDRequirement)
+}
+
+func developerIDApplicationRequirementText(teamID: String) throws -> String {
+  let bytes = Array(teamID.utf8)
+  guard bytes.count == 10,
+    bytes.allSatisfy({
+      ($0 >= 0x41 && $0 <= 0x5A) || ($0 >= 0x30 && $0 <= 0x39)
+    })
+  else {
+    throw SecretToolFailure.ceremonyStateInvalid
+  }
+  return
+    "identifier \"\(CeremonyBindingContract.nativeIdentifier)\" and anchor apple generic and certificate leaf[subject.OU] = \"\(teamID)\" and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists"
+}
+
+private func developerIDApplicationRequirement(teamID: String) throws -> SecRequirement {
+  var requirement: SecRequirement?
+  let text = try developerIDApplicationRequirementText(teamID: teamID)
+  guard
+    SecRequirementCreateWithString(text as CFString, SecCSFlags(), &requirement)
+      == errSecSuccess,
+    let requirement
+  else {
+    throw SecretToolFailure.ceremonyStateInvalid
+  }
+  return requirement
+}
+
+func signingInformationHasTrustedTimestamp(_ values: [CFString: Any]) -> Bool {
+  guard let timestamp = values[kSecCodeInfoTimestamp] as? Date else { return false }
+  return timestamp.timeIntervalSince1970.isFinite
 }
 
 func executableIdentityMatches(
@@ -726,14 +903,17 @@ private func currentExecutablePath() throws -> String {
   return path
 }
 
-private func validateRunningCodeIdentity(_ bindings: CeremonyBindings) throws {
+private func validateRunningCodeIdentity(
+  _ bindings: CeremonyBindings,
+  developerIDRequirement: SecRequirement
+) throws {
   var runningCode: SecCode?
   guard SecCodeCopySelf(SecCSFlags(), &runningCode) == errSecSuccess,
     let runningCode,
     SecCodeCheckValidity(
       runningCode,
       SecCSFlags(rawValue: kSecCSStrictValidate),
-      nil
+      developerIDRequirement
     ) == errSecSuccess
   else {
     throw SecretToolFailure.ceremonyStateInvalid
@@ -760,7 +940,8 @@ private func validateRunningCodeIdentity(_ bindings: CeremonyBindings) throws {
     hex(unique) == bindings.nativeCDHash,
     let flags = values[kSecCodeInfoFlags] as? NSNumber,
     flags.uint32Value & 0x1_0000 != 0,
-    flags.uint32Value & 0x2 == 0
+    flags.uint32Value & 0x2 == 0,
+    signingInformationHasTrustedTimestamp(values)
   else {
     throw SecretToolFailure.ceremonyStateInvalid
   }

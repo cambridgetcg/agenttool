@@ -16,7 +16,7 @@ import {
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
 const projectRoot = resolve(import.meta.dir, "../..");
@@ -40,14 +40,19 @@ function cleanEnv(
   home: string,
   extra: Record<string, string> = {},
 ): Record<string, string> {
+  const requestedPath = extra.PATH ?? process.env.PATH ?? "/usr/bin:/bin";
   return {
-    PATH: process.env.PATH ?? "/usr/bin:/bin",
     HOME: home,
     LANG: "C",
     NO_COLOR: "1",
     DATABASE_URL: fixtureTransactionUrl,
     DATABASE_SESSION_URL: fixtureSessionUrl,
     ...extra,
+    // Child shells and `#!/usr/bin/env bun` fixtures must exercise the exact
+    // Bun that launched this test.  A newer ambient Homebrew Bun would make
+    // the deploy wrapper stop at its production 1.3.5 identity gate instead
+    // of reaching the behavior under test.
+    PATH: `${dirname(process.execPath)}:${requestedPath}`,
   };
 }
 
@@ -190,6 +195,37 @@ async function fixture() {
   await writeFile(
     join(repo, "bin/preflight.sh"),
     '#!/usr/bin/env bash\nset -eu\nif [ -n "${PREFLIGHT_MARKER:-}" ]; then touch "$PREFLIGHT_MARKER"; fi\nif [ -n "${DEPLOY_TEST_RELEASE_ORDER:-}" ]; then printf \'preflight\\n\' >> "$DEPLOY_TEST_RELEASE_ORDER"; fi\nif [ -n "${PREFLIGHT_HOLD_UNTIL:-}" ]; then\n  while [ ! -e "$PREFLIGHT_HOLD_UNTIL" ]; do sleep 0.02; done\nfi\nif [ -n "${ADVANCE_REMOTE_PATH:-}" ]; then\n  git --git-dir="$ADVANCE_REMOTE_PATH" update-ref refs/heads/main "$ADVANCE_REMOTE_TO"\nfi\n[ "${FAIL_PREFLIGHT:-0}" != 1 ] || exit 8\n',
+  );
+  await writeFile(
+    join(repo, "bin/phase-b-deploy-guard.ts"),
+    `import { existsSync } from "node:fs";
+const args = process.argv.slice(2);
+const phase = args[0];
+if (
+  !((args.length === 1 && phase === "preflight") ||
+    (args.length === 3 && phase === "postflight" &&
+      args[1] === "--revision" && /^[0-9a-f]{40}$/.test(args[2] ?? "")))
+) process.exit(64);
+const home = process.env.HOME ?? "";
+if (existsSync(home + "/.deploy-test-phase-b-guard-fail")) process.exit(65);
+const configured = existsSync(home + "/.deploy-test-phase-b-configured");
+const proof = {
+  allowed_origins_count: 0,
+  authoritative_v2_rows: 0,
+  durable_hold: configured,
+  fleet_verified: configured,
+  observed_revision: phase === "postflight" ? args[2] : null,
+  phase,
+  provider_secret_status: configured ? "Deployed" : "Absent",
+  reserved_generation_rows: 0,
+  runtime_verified_count: configured ? 4 : 0,
+  schema: "agenttool.phase-b-deploy-proof/1",
+  source_floor_verified: configured,
+  standby_bound: configured,
+  state: configured ? "configured" : "absent_fail_closed",
+};
+process.stdout.write(JSON.stringify(proof) + "\\n");
+`,
   );
   await writeFile(
     join(repo, "bin/prepare-hermetic-deps.sh"),
@@ -2437,6 +2473,114 @@ describe("deploy release provenance spine", () => {
     expect(await exists(flyMarker)).toBe(false);
     expect(await exists(deployLockPath(setup.home))).toBe(false);
   }, 15_000);
+
+  test("fails closed on an unproved or override-shaped Phase-B configured admission", async () => {
+    {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, "phase-b-proof-refusal-bin");
+      const preparationMarker = join(setup.root, "phase-b-proof-preparation");
+      const preflightMarker = join(setup.root, "phase-b-proof-preflight");
+      const flyMarker = join(setup.root, "phase-b-proof-fly");
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(
+        join(fakeBin, "fly"),
+        '#!/usr/bin/env bash\ntouch "$DEPLOY_TEST_FLY_MARKER"\nexit 99\n',
+      );
+      await chmod(join(fakeBin, "fly"), 0o755);
+      await writeFile(
+        join(setup.home, ".deploy-test-phase-b-guard-fail"),
+        "1\n",
+      );
+
+      const refused = await run(
+        ["bash", "bin/deploy.sh", "--no-migrate", "--no-frontend"],
+        setup.repo,
+        cleanEnv(setup.home, {
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          DEPENDENCY_PREP_MARKER: preparationMarker,
+          PREFLIGHT_MARKER: preflightMarker,
+          DEPLOY_TEST_FLY_MARKER: flyMarker,
+        }),
+      );
+      expect(refused.code).toBe(1);
+      expect(refused.stderr).toContain(
+        "Phase-B authority state could not be proven",
+      );
+      expect(await exists(preparationMarker)).toBe(true);
+      expect(await exists(preflightMarker)).toBe(false);
+      expect(await exists(flyMarker)).toBe(false);
+      expect(await exists(deployLockPath(setup.home))).toBe(false);
+    }
+
+    {
+      const setup = await fixture();
+      const fakeBin = join(setup.root, "phase-b-override-refusal-bin");
+      const preflightMarker = join(setup.root, "phase-b-override-preflight");
+      const flyMarker = join(setup.root, "phase-b-override-fly");
+      await mkdir(fakeBin, { recursive: true });
+      await writeFile(
+        join(fakeBin, "fly"),
+        '#!/usr/bin/env bash\ntouch "$DEPLOY_TEST_FLY_MARKER"\nexit 99\n',
+      );
+      await chmod(join(fakeBin, "fly"), 0o755);
+      await writeFile(
+        join(setup.home, ".deploy-test-phase-b-configured"),
+        "1\n",
+      );
+
+      const refused = await run(
+        [
+          "bash",
+          "bin/deploy.sh",
+          "--no-migrate",
+          "--no-frontend",
+          "--allow-non-release-head",
+        ],
+        setup.repo,
+        cleanEnv(setup.home, {
+          PATH: `${fakeBin}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+          PREFLIGHT_MARKER: preflightMarker,
+          DEPLOY_TEST_FLY_MARKER: flyMarker,
+        }),
+      );
+      expect(refused.code).toBe(1);
+      expect(refused.stderr).toContain(
+        "configured covenant authority forbids source and preflight overrides",
+      );
+      expect(await exists(preflightMarker)).toBe(false);
+      expect(await exists(flyMarker)).toBe(false);
+      expect(await exists(deployLockPath(setup.home))).toBe(false);
+    }
+  }, 30_000);
+
+  test("pins the B2 guard, permanent floor, fixed Fly path, and v7 redacted receipt", async () => {
+    const [deploy, guard] = await Promise.all([
+      readFile(join(projectRoot, "bin/deploy.sh"), "utf8"),
+      readFile(join(projectRoot, "bin/phase-b-deploy-guard.ts"), "utf8"),
+    ]);
+    expect(deploy).toContain(
+      'PHASE_B_RUNTIME_FENCE_FLOOR="2ca44b44bcfde9d571b27771f9d5fc516a4df41e"',
+    );
+    expect(deploy).toContain(
+      'PHASE_B_PINNED_FLYCTL="/usr/local/libexec/agenttool/phase-b-v1/flyctl-v0.4.74-darwin-arm64"',
+    );
+    expect(deploy).toContain(
+      '"$guard_bun" --no-install --no-env-file bin/phase-b-deploy-guard.ts',
+    );
+    expect(deploy).toContain('"agenttool-deploy-receipt/v7"');
+    expect(deploy).toContain(
+      'proof_schema: "agenttool-phase-b-configured-deploy/v1"',
+    );
+    expect(deploy).toContain(
+      "configured covenant authority forbids source and preflight overrides",
+    );
+    expect(deploy).toContain(
+      'git merge-base --is-ancestor "$PHASE_B_RUNTIME_FENCE_FLOOR" "$HEAD_REVISION"',
+    );
+    expect(guard).toContain("agenttool.phase-b-deploy-proof/1");
+    expect(guard).toContain("verify-deployed-fly");
+    expect(guard).not.toContain("AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION=");
+  });
 
   test("requires the exact stopped fenced five-Machine topology before creating durable state", async () => {
     const setup = await fixture();
@@ -5321,7 +5465,7 @@ exec /bin/rm "$@"
       docsUpload,
     );
     const apiUpload = deploy.indexOf(
-      "(cd api || exit 1; fly deploy",
+      "(cd api || exit 1; run_fly_cli deploy",
       docsUpload,
     );
     expect(webUpload).toBeGreaterThan(-1);
