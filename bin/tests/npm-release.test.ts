@@ -625,6 +625,7 @@ describe("standard npm release policy", () => {
       "package/README.md",
       "package/CLAUDE.md",
       "package/dist/cli.js",
+      "package/dist/kingdom-hf.js",
       "package/dist/facilities.js",
       "package/dist/facilities.d.ts",
       "package/dist/index.js",

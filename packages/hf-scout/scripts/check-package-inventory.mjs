@@ -9,6 +9,7 @@ const sourceStems = [
   "facilities",
   "format",
   "index",
+  "kingdom-hf",
   "lock",
   "projection",
   "public-hub-reader",

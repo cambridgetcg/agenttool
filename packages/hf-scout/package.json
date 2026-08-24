@@ -61,7 +61,7 @@
   },
   "bin": {
     "agenttool-hf-scout": "./dist/cli.js",
-    "kingdom-hf": "./dist/cli.js"
+    "kingdom-hf": "./dist/kingdom-hf.js"
   },
   "files": [
     "dist",
@@ -81,7 +81,7 @@
     "build": "bun run clean && tsc",
     "typecheck": "tsc --noEmit",
     "test": "bun test tests",
-    "smoke:runtimes": "node --input-type=module --eval \"const m = await import('./dist/index.js'); if (typeof m.inspectHfRepository !== 'function') process.exit(1)\" && bun --eval \"const m = await import('./dist/index.js'); if (typeof m.inspectHfRepository !== 'function') process.exit(1)\" && node dist/cli.js help >/dev/null && bun dist/cli.js help >/dev/null",
+    "smoke:runtimes": "node --input-type=module --eval \"const m = await import('./dist/index.js'); if (typeof m.inspectHfRepository !== 'function') process.exit(1)\" && bun --eval \"const m = await import('./dist/index.js'); if (typeof m.inspectHfRepository !== 'function') process.exit(1)\" && node dist/cli.js help >/dev/null && bun dist/cli.js help >/dev/null && node dist/kingdom-hf.js help >/dev/null && bun dist/kingdom-hf.js help >/dev/null",
     "check:package": "node scripts/check-package-inventory.mjs",
     "ci": "bun run typecheck && bun run test && bun run build && bun run smoke:runtimes && bun run check:package",
     "prepack": "bun run ci"

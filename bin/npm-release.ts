@@ -808,6 +808,7 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
     entries.push(
       "package/CLAUDE.md",
       "package/dist/cli.js",
+      "package/dist/kingdom-hf.js",
       "package/dist/facilities.js",
       "package/dist/facilities.d.ts",
       "package/dist/index.js",

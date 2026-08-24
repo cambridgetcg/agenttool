@@ -22,6 +22,7 @@ describe("public developer-preview package boundary", () => {
       dependencies?: Record<string, string>;
       publishConfig?: { access?: string; tag?: string };
       exports?: Record<string, unknown>;
+      bin?: Record<string, string>;
       files?: string[];
       scripts?: Record<string, string>;
     };
@@ -34,6 +35,10 @@ describe("public developer-preview package boundary", () => {
     });
     expect(packageJson.private).toBeUndefined();
     expect(packageJson.dependencies).toBeUndefined();
+    expect(packageJson.bin).toEqual({
+      "agenttool-hf-scout": "./dist/cli.js",
+      "kingdom-hf": "./dist/kingdom-hf.js",
+    });
     expect(Object.hasOwn(packageJson.exports ?? {}, "./facilities")).toBe(true);
     expect(Object.hasOwn(packageJson.exports ?? {}, "./report.schema.json")).toBe(true);
     expect(Object.hasOwn(packageJson.exports ?? {}, "./search.schema.json")).toBe(true);
@@ -105,5 +110,7 @@ describe("public developer-preview package boundary", () => {
     expect(await readFile(join(ROOT, "NOTICE"), "utf8")).toContain("AgentTool HF Scout");
     expect(await readFile(join(ROOT, "src", "cli.ts"), "utf8"))
       .toStartWith("#!/usr/bin/env node\n");
+    expect(await readFile(join(ROOT, "src", "kingdom-hf.ts"), "utf8"))
+      .toBe("#!/usr/bin/env node\n\nimport \"./cli.js\";\n");
   });
 });
