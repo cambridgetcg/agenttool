@@ -1,15 +1,49 @@
 import Foundation
 
+public struct SecretToolMachineID: Equatable, Sendable {
+  public let value: String
+
+  public init(_ value: String) throws {
+    guard value.range(of: "^[0-9a-f]{14}$", options: .regularExpression) != nil else {
+      throw SecretToolFailure.invalidMachineID
+    }
+    self.value = value
+  }
+}
+
 public enum SecretToolCommand: Equatable, Sendable {
-  case create
-  case verify
+  case create(SecretToolCeremonyNonce)
+  case verify(SecretToolCeremonyNonce)
+  case stageFly(SecretToolCeremonyNonce)
+  case probeFly(SecretToolCeremonyNonce, SecretToolMachineID)
+
+  var ceremonyNonce: SecretToolCeremonyNonce {
+    switch self {
+    case .create(let nonce), .verify(let nonce), .stageFly(let nonce),
+      .probeFly(let nonce, _):
+      return nonce
+    }
+  }
 
   public static func parse(_ arguments: [String]) throws -> SecretToolCommand {
-    if arguments == ["verify"] {
-      return .verify
+    if arguments.count == 3, arguments[1] == "--receipt-nonce" {
+      let nonce = try SecretToolCeremonyNonce(arguments[2])
+      switch arguments[0] {
+      case "create": return .create(nonce)
+      case "verify": return .verify(nonce)
+      case "stage-fly": return .stageFly(nonce)
+      default: break
+      }
     }
-    if arguments == ["create"] {
-      return .create
+    if arguments.count == 5,
+      arguments[0] == "probe-fly",
+      arguments[1] == "--receipt-nonce",
+      arguments[3] == "--machine"
+    {
+      return .probeFly(
+        try SecretToolCeremonyNonce(arguments[2]),
+        try SecretToolMachineID(arguments[4])
+      )
     }
     throw SecretToolFailure.invalidInvocation
   }
@@ -39,24 +73,69 @@ public enum AgentToolSecretMacOSCommand {
   public static func run(
     arguments: [String],
     errorOutput: FileHandle,
-    selectors: SecretToolSelectors = .phaseBAuthority,
-    security: any SecurityItemCalling = NativeSecurityItemClient(),
-    random: any RandomByteGenerating = NativeRandomByteGenerator()
+    selectors: SecretToolSelectors = .phaseBAuthority
+  ) -> Int32 {
+    invoke(
+      arguments: arguments,
+      errorOutput: errorOutput,
+      selectors: selectors,
+      security: NativeSecurityItemClient(),
+      random: NativeRandomByteGenerator(),
+      ceremony: NativeCeremonyBindingAuthorizer(),
+      flyFactory: { try NativeFlyGenerationOperator() }
+    )
+  }
+
+  static func invoke(
+    arguments: [String],
+    errorOutput: FileHandle,
+    selectors: SecretToolSelectors,
+    security: any SecurityItemCalling,
+    random: any RandomByteGenerating,
+    ceremony: any CeremonyBindingAuthorizing,
+    flyFactory: () throws -> any FlyGenerationOperating
   ) -> Int32 {
     do {
       let command = try SecretToolCommand.parse(arguments)
+      let authorization = try ceremony.authorize(command)
       let store = SecretStore(security: security)
       switch command {
-      case .create:
+      case .create(let nonce):
         try store.createRandom(
           service: selectors.service,
           account: selectors.account,
+          ceremonyNonce: nonce,
           random: random
         )
-      case .verify:
+      case .verify(let nonce):
         try store.verifyCanonicalGeneration(
           service: selectors.service,
-          account: selectors.account
+          account: selectors.account,
+          ceremonyNonce: nonce
+        )
+      case .stageFly(let nonce):
+        let fly = try flyFactory()
+        try store.stageCanonicalGeneration(
+          service: selectors.service,
+          account: selectors.account,
+          ceremonyNonce: nonce,
+          using: fly
+        )
+      case .probeFly(let nonce, let machineID):
+        guard authorization.targetMachineID == machineID.value,
+          let runtimeRole = authorization.runtimeRole
+        else {
+          throw SecretToolFailure.ceremonyStateInvalid
+        }
+        let fly = try flyFactory()
+        try store.verifyCanonicalGenerationOnFlyRuntime(
+          service: selectors.service,
+          account: selectors.account,
+          ceremonyNonce: nonce,
+          machineID: machineID,
+          expectedRevision: authorization.deployedRevision,
+          role: runtimeRole,
+          using: fly
         )
       }
       return 0

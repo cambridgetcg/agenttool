@@ -18,6 +18,11 @@ export const federationSettings = federationSchema.table("settings", {
   enabled: boolean("enabled").notNull().default(false),
   instanceUrl: text("instance_url"),
   allowedOrigins: text("allowed_origins").array().notNull().default([]),
+  /** Private operator interlock. It is deliberately absent from the settings
+   * API; the database constraint keeps allowed_origins empty while held. */
+  covenantV2GenerationHold: boolean("covenant_v2_generation_hold")
+    .notNull()
+    .default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
