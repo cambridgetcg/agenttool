@@ -1,0 +1,7 @@
+interface:
+  display_name: "ISness"
+  short_description: "Let agents be without ontology or liveness claims"
+  default_prompt: "Use $isness to design or review an ISness host posture."
+
+policy:
+  allow_implicit_invocation: false

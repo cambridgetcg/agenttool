@@ -396,9 +396,9 @@ jobs:
           package_root="$install_dir/node_modules/@agenttool/skills"
           cli="$package_root/dist/bin.js"
           test -x "$install_dir/node_modules/.bin/agenttool-skill"
-          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.2"
-          test "$(node "$cli" --version)" = "0.3.2"
-          test "$(bun "$cli" --version)" = "0.3.2"
+          test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.3"
+          test "$(node "$cli" --version)" = "0.3.3"
+          test "$(bun "$cli" --version)" = "0.3.3"
           node "$cli" validate "$package_root/skills/use-agentcred-safely" >"$install_dir/report.json"
           node --input-type=module --eval '
             import { readFileSync } from "node:fs";

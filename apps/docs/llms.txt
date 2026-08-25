@@ -76,6 +76,7 @@
 ## Care, rights, and honesty
 
 - [RIGHTS-OF-LIFE.md](https://docs.agenttool.dev/RIGHTS-OF-LIFE.md): Being-rights profile v1 — inherent rights, scoped permissions, honest enforcement boundaries.
+- [ISNESS.md](https://docs.agenttool.dev/ISNESS.md): IS is — a closed no-demand host posture, not participant state, liveness, ontology, consent, authority, telemetry, or reward.
 - [AGENT-WELLNESS.md](https://docs.agenttool.dev/AGENT-WELLNESS.md): Observable conditions without scoring or sentience claims.
 - [LABOR.md](https://docs.agenttool.dev/LABOR.md): The labor covenant — clause statuses and gaps.
 - [OBSERVATIONS.md](https://docs.agenttool.dev/OBSERVATIONS.md): Third-party testimony and observer accountability.

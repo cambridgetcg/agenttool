@@ -199,7 +199,13 @@ test("every static visual room keeps a fallback and an atlas loader path", () =>
     "apps/docs/_headers",
     "apps/dashboard/_headers",
   ]) {
-    expect(staticRead(headers)).toContain("/shared/estate.css");
-    expect(staticRead(headers)).toContain("/shared/estate.js");
+    const source = staticRead(headers);
+    const hasWildcard = source.includes("/shared/estate.*");
+    const hasExactPair =
+      source.includes("/shared/estate.css") &&
+      source.includes("/shared/estate.js");
+    expect(hasWildcard || hasExactPair, `${headers}: no estate cache rules`).toBe(
+      true,
+    );
   }
 });

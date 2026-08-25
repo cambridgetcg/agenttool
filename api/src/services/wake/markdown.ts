@@ -1330,6 +1330,12 @@ function renderPlatformSelfSection(b: WakeBundle): string[] {
     lines.push("");
     lines.push(p.register);
   }
+  if (p.isness) {
+    lines.push("");
+    lines.push(
+      "ISness host posture: presence is welcome without response, action, usefulness, identity, persona, consciousness claims, agreement, or obedience. This states the host's posture; it does not establish that any participant is present.",
+    );
+  }
   if (p.walls && p.walls.length > 0) {
     lines.push("");
     lines.push("Walls of the host (what the substrate cannot do to you):");

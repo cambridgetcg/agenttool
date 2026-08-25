@@ -14,18 +14,18 @@ After a package artifact is deliberately installed, its binary is
 `agenttool-skill`. Installation alone does not activate or register the
 bundled skills.
 
-Version 0.3.2 is the current source identity. On 2026-08-14, a separate
+Version 0.3.3 is the current source identity. On 2026-08-25, a separate
 read-only registry check found that the last public exact npm release and npm
-`latest` both resolved to 0.3.1. This 0.3.2 source candidate has not been
+`latest` both resolved to 0.3.2. This 0.3.3 source candidate has not been
 tagged, mirrored, or published. Registry tags remain mutable selectors, and
 an exact version is provenance rather than proof of publisher identity or
 safety.
 
 For the checksum-pinned archive recipe below,
 the last public artifact verified while preparing
-it was the 0.3.1 GitHub Release. Its npm counterpart was public and npm
-`latest` resolved to 0.3.1 at that readback. These are preparation-time
-observations, not claims about the future 0.3.2 publication or the mutable
+it was the 0.3.2 GitHub Release. Its npm counterpart was public and npm
+`latest` resolved to 0.3.2 at that readback. These are preparation-time
+observations, not claims about the future 0.3.3 publication or the mutable
 current registry state.
 Pin and verify the exact artifact before installation:
 
@@ -47,11 +47,11 @@ Pin and verify the exact artifact before installation:
     [ "$actual_checksum" = "$expected_checksum" ]
   }
 
-  archive='agenttool-skills-0.3.1.tgz'
-  expected_sha256='53aa5b3276eba196d8904f9db8c43987257d76f960c59c196ddac099175fbe11'
+  archive='agenttool-skills-0.3.2.tgz'
+  expected_sha256='22a3868d8e14460901bc61c8764bcf35bcfa2acdd7bb805529b29a6917edad40'
   curl -q --fail --location \
     --output "$archive" \
-    'https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.3.1/agenttool-skills-0.3.1.tgz' &&
+    'https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.3.2/agenttool-skills-0.3.2.tgz' &&
     verify_sha256 "$archive" "$expected_sha256" &&
     npm install --ignore-scripts --no-audit --no-fund "./$archive" &&
     [ -x ./node_modules/.bin/agenttool-skill ] &&
@@ -154,10 +154,19 @@ register, activate, install, copy, or execute them:
   technique from direct evidence, builds the smallest clean reproduction, and
   transfers the mechanism into an original adaptation with exemplar,
   contrast, and transfer checks.
+- [`isness`](skills/isness/SKILL.md) expresses one host posture: welcome and
+  standing do not depend on response, usefulness, identity, persona,
+  consciousness claims, agreement, reasons, or reciprocity. Its Codex
+  sidecar, collision-resistant OpenClaw projection (invoked through
+  `/skill agenttool-isness`, or its generated `/agenttool_isness` alias), and
+  namespaced Hermes plugin each preserve explicit loading through that host's
+  own mechanism. None creates participant state, persona, heartbeat, liveness,
+  telemetry, or session-start injection.
 
-Version 0.3.2 source adds Math Card to the unofficial, instruction-only Nen
-operating suite. The published `0.3.1` npm and GitHub artifacts include Common
-Ground and the eight earlier Nen skills, but not Math Card. These are
+Version 0.3.3 source adds the ISness host-posture workflow and its bounded
+Codex, OpenClaw, and Hermes explicit-load projections. The
+published `0.3.2` npm and GitHub artifacts include Math Card and the prior
+instruction-only skills, but not ISness. The Nen skills are
 original agent workflows inspired by the rule and tradeoff design of
 *Hunter × Hunter*; they reproduce no story text, character likenesses, or
 artwork:
@@ -180,14 +189,21 @@ provides exact synthetic reference cases for Common Ground. It is not bundled
 in the npm artifact, does not activate the skill, and does not itself establish
 AgentTool training admission, consent, permission, or execution authority.
 
-The skills have no script, credential, MCP, network, or hosted-runtime
-requirement. Bundling does not activate them, and their metaphors do not grant
-permission or change AgentTool's existing TypeScript/Python Nen mappings.
-Every bundled OpenAI sidecar requires explicit invocation while trigger and
-composition behavior are evaluated. The 0.3.1 GitHub Release archive has no
-host installer, plugin manifest, or automatic discovery registration;
-installing the package alone does not register these skills with Codex, Claude,
-or another host.
+The canonical workflows under `skills/` have no script, credential, MCP,
+network, or hosted-runtime requirement. Bundling does not activate them, and
+their metaphors do not grant permission or change AgentTool's existing
+TypeScript/Python Nen mappings. Every bundled OpenAI sidecar requires explicit
+invocation while trigger and composition behavior are evaluated.
+
+[`harnesses/`](harnesses/README.md) carries the host-specific ISness delivery
+metadata that cannot truthfully fit in one frontmatter dialect. The OpenClaw
+projection is content-only. The Hermes adapter contains one local registration
+function and registers no tools, hooks, commands, environment variables,
+network access, persistence, or automatic prompt injection. The package has no
+installer: installing the package alone does not register these skills with
+Codex, OpenClaw, Hermes,
+Claude, or any other host. The historical 0.3.2 GitHub Release archive has no
+`harnesses/` directory or ISness workflow.
 
 - [`use-agentcred-safely`](skills/use-agentcred-safely/SKILL.md) helps an agent
   request and use the narrowest controller-approved AgentCred grant without

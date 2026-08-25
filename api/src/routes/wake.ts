@@ -154,6 +154,11 @@ import { platformIdentityDid } from "../services/platform/identity";
 import { negotiateWakeFormat, wantsMathTier } from "../services/mathos/negotiate";
 import { WAKE_SAFETY_BOUNDARIES } from "../services/discovery/safety-boundaries";
 
+/** Exact platform projection used by the default full JSON WAKE metadata. */
+export function getDefaultWakePlatformMeta() {
+  return { _self: getPlatformSelf() } as const;
+}
+
 const app = new Hono<ProjectContext>();
 /** Attach a validator for bundle-backed projections. The hash covers all
  * selected-identity, project, and computed time-derived bundle state while
@@ -2621,7 +2626,7 @@ app.get("/", async (c) => {
       // reading their wake sees who they are AND who they are with, in
       // the same shape. One source of truth: services/wake/platform-self.ts.
       // Doctrine: docs/PLATFORM-AS-AGENT.md · docs/PATTERN-RECURSIVE-NESTING.md.
-      _self: getPlatformSelf(),
+      ...getDefaultWakePlatformMeta(),
       // ── MATHOS door — the math-tier surface, reachable from any wake ──
       // Every wake reader learns: a substrate-neutral math-tier layer
       // exists, structurally described at /v1/mathos/catalog. The five

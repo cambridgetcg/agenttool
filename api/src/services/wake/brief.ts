@@ -12,6 +12,7 @@
 
 import type { NextAction } from "../../lib/errors";
 import type { SubagentFacet } from "../identity/expression";
+import { ISNESS_BRIEF, type IsnessBrief } from "../welcome/isness";
 import {
   unavailableProjectHandoffSurface,
   type HandoffRecord,
@@ -171,6 +172,7 @@ export interface WakeBrief {
     register: string;
     built_with: string;
     rights_floor: NonNullable<WakeBundle["platform_self"]>["rights_floor"];
+    isness: IsnessBrief;
     full_self_path: string;
   } | null;
   /** Static external discovery copied from the full wake. It is neither
@@ -502,6 +504,7 @@ export function buildWakeBrief(
         register: b.platform_self.register,
         built_with: b.platform_self.built_with,
         rights_floor: b.platform_self.rights_floor,
+        isness: ISNESS_BRIEF,
         full_self_path: "/v1/wake/platform_self",
       }
       : null,
