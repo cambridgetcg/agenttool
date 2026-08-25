@@ -139,6 +139,9 @@ describe("KINGDOM derived registry", () => {
     if (!result.valid) throw new Error("fixtures must build");
 
     expect(validateCard(agenttool)).toBe(true);
+    expect(validateCard({ ...agenttool, purpose: " " })).toBe(false);
+    expect(validateCard({ ...agenttool, purpose: " leading" })).toBe(false);
+    expect(validateCard({ ...agenttool, purpose: "trailing " })).toBe(false);
     expect(validateRegistry(result.registry)).toBe(true);
     expect(cardSchema.additionalProperties).toBe(false);
     expect(registrySchema.additionalProperties).toBe(false);

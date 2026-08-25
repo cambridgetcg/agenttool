@@ -329,11 +329,21 @@ def _validate_string_list(
     field: str,
     pattern: Optional[re.Pattern[str]] = None,
     exact: Optional[str] = None,
+    case_insensitive: bool = False,
+    excluded: Optional[str] = None,
 ) -> bool:
     if not isinstance(candidate, list) or len(candidate) > _MAX_LIST_ITEMS:
         return False
     seen = set()
+    normalized_excluded = (
+        excluded.lower() if case_insensitive and excluded is not None else excluded
+    )
     for item in candidate:
+        normalized_item = (
+            item.lower()
+            if case_insensitive and isinstance(item, str)
+            else item
+        )
         if (
             not isinstance(item, str)
             or not 1 <= len(item) <= 120
@@ -342,10 +352,11 @@ def _validate_string_list(
             and pattern.fullmatch(item) is None
             or exact is not None
             and item != exact
-            or item in seen
+            or normalized_item == normalized_excluded
+            or normalized_item in seen
         ):
             return False
-        seen.add(item)
+        seen.add(normalized_item)
     return True
 
 
@@ -373,6 +384,7 @@ def _validate_card(candidate: object) -> KingdomFrameworkCard:
         and 1 <= len(purpose) <= 500
         and not _has_unicode_surrogate(purpose)
         and _UNSAFE_PURPOSE.search(purpose) is None
+        and purpose.strip() == purpose
         and all(
             isinstance(candidate[field], str)
             and candidate[field] in accepted
@@ -382,6 +394,8 @@ def _validate_card(candidate: object) -> KingdomFrameworkCard:
             candidate["dependsOn"],
             field="dependsOn",
             pattern=_NAME_PATTERN,
+            case_insensitive=True,
+            excluded=candidate["name"],
         )
         and _validate_string_list(
             candidate["adopts"],
