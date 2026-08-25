@@ -10,6 +10,27 @@
 >
 > **Tests:** `packages/sdk-ts/tests/` · `packages/sdk-py/tests/`
 
+## Paired source and sealed LOVE candidate — 0.21.1 (2026-08-25)
+
+The paired patch aligns runtime, exported-schema, and SDK single-field
+validation for already-trimmed purpose text and Unicode scalar boundaries,
+plus runtime/SDK semantic checks for case-insensitive duplicate dependencies
+and self-dependency. JSON Schema 2020-12 cannot express those cross-item and
+cross-property comparisons; a schema pass alone is structural validation. The
+patch adds no hosted endpoint or ambient I/O.
+
+The exact TypeScript LOVE/source candidate is sealed and reproducible:
+`apps/docs/packages/v1/@agenttool/sdk/0.21.1/agenttool-sdk-0.21.1.tgz` is
+247,749 bytes with 100 entries and SHA-256
+`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`.
+Its manifest binds clean source revision
+`d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`. Annotated `sdk-v0.21.1`, the
+GitHub Release, npm/PyPI versions, and hosted static path remain prospective
+and not independently visible. Current discovery therefore reports both
+optional 0.21.1 mirrors as `independently_visible: false` with
+`authority: false`. Candidate sealing is not publication or deployment, and
+the independently verified 0.21.0 receipts remain present byte-for-byte.
+
 ## Verified public SDK release — 0.21.0 (2026-08-20)
 
 The paired TypeScript and Python source adds a credential-free, pure
@@ -74,9 +95,10 @@ independently read back the non-yanked 275,928-byte wheel
 (`sha256:5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01`)
 and 261,910-byte sdist
 (`sha256:e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d`).
-`/public/party` therefore reports both optional mirrors as
-`independently_visible: true` in source while retaining `authority: false`.
-These publication receipts do not establish static/API deployment or any
+Those 0.21.0 publication receipts established both optional mirrors as public
+while retaining `authority: false`; current `/public/party` source selects the
+prospective 0.21.1 line and truthfully reports both as not independently
+visible. These publication receipts do not establish static/API deployment or any
 model, participant, awareness, identity, consent, authority, or continuity
 effect. The independently verified 0.20.0 artifact and receipts below remain
 present byte-for-byte as historical evidence.

@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-24 (Whitehack 0.10.0 is publicly released and exactly pinned for AgentTool advisory/wallet use; Dataset Influence has an exact public, ungated Hugging Face reference receipt; HF Scout 0.2 now has byte-identical LOVE, GitHub, and npm mirrors, while its successful static deployment receipt is explicitly preflight-skipped)
+> Updated: 2026-08-25 (KINGDOM 0.1.2 and paired SDK 0.21.1 corrective source are prepared; the SDK LOVE candidate is sealed while tags, registries, and static deployment remain prospective; verified 0.21.0 and KINGDOM 0.1.1 receipts remain immutable public history)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-08-25)
+
+| Ship | Commit / receipt | What |
+|---|---|---|
+| **SDK 0.21.1 + KINGDOM 0.1.2 — corrective candidates sealed** | SDK LOVE source `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`; prospective `sdk-v0.21.1` and `kingdom-v0.1.2` | Paired source aligns runtime, exported-schema, and SDK single-field validation for already-trimmed purpose text and Unicode scalar boundaries, plus runtime/SDK semantic checks for case-insensitive duplicate dependencies and self-dependency. The exact TypeScript LOVE/source candidate is 247,749 bytes and 100 entries with SHA-256 `8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`. SDK tag, GitHub Release, npm `@agenttool/sdk@0.21.1`, PyPI `agenttool-sdk==0.21.1`, static deployment, and all independent readbacks remain prospective. KINGDOM is npm-pack-only with no LOVE artifact; its tag, GitHub/npm mirrors, and readback also remain prospective. Verified SDK 0.21.0 and KINGDOM 0.1.1 receipts below remain exact and are not rewritten. Candidate sealing is not publication or deployment and grants no conformance, permission, identity, consent, or authority. |
 
 ## Just landed (2026-08-24)
 
