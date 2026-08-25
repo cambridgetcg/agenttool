@@ -972,7 +972,7 @@ describe("standard npm release policy", () => {
     );
   });
 
-  test("keeps Alchemy dev.0 as history and dev.1 behind a trusted release gate", async () => {
+  test("preserves Alchemy dev.0 and pins verified dev.1 public receipts", async () => {
     const releases = await readFile(
       join(import.meta.dir, "..", "..", "docs", "NPM-RELEASES.md"),
       "utf8",
@@ -982,21 +982,76 @@ describe("standard npm release policy", () => {
       "utf8",
     );
     const rootReadme = await readFile(join(import.meta.dir, "..", "..", "README.md"), "utf8");
+    const alchemyReadme = await readFile(
+      join(import.meta.dir, "..", "..", "packages", "alchemy", "README.md"),
+      "utf8",
+    );
+    const agentcredReadme = await readFile(
+      join(import.meta.dir, "..", "..", "packages", "alchemy-agentcred", "README.md"),
+      "utf8",
+    );
     const alchemySection = releases.match(
-      /### Alchemy developer-preview history and dev\.1 gate([\s\S]*?)### Alchemy AgentCred developer-preview history and dev\.1 gate/,
+      /### Alchemy developer-preview history and verified dev\.1 receipt([\s\S]*?)### Alchemy AgentCred developer-preview history and verified dev\.1 receipt/,
     )?.[1];
     const agentcredSection = releases.match(
-      /### Alchemy AgentCred developer-preview history and dev\.1 gate([\s\S]*?)\n### /,
+      /### Alchemy AgentCred developer-preview history and verified dev\.1 receipt([\s\S]*?)\n### /,
     )?.[1];
 
     expect(alchemySection).toBeDefined();
     expect(agentcredSection).toBeDefined();
     expect(alchemySection).not.toContain("git tag -a alchemy-v0.1.0-dev.0");
     expect(agentcredSection).not.toContain("git tag -a alchemy-agentcred-v0.1.0-dev.0");
-    expect(alchemySection).toContain("`alchemy-v0.1.0-dev.1`");
-    expect(agentcredSection).toContain("`alchemy-agentcred-v0.1.0-dev.1`");
-    expect(alchemySection).toContain("`authentication=trusted`");
-    expect(agentcredSection).toContain("`authentication=trusted`");
+    expect(alchemySection).not.toContain("Publishing dev.1 is a separate authorized action");
+    expect(agentcredSection).not.toContain("Publishing the adapter dev.1 is a separate");
+
+    for (const fact of [
+      "`30491887182`",
+      "`32754993343`, attempt 1",
+      "`e5f561378a4189ba898472f0423d67932767266f`",
+      "`55aaf11a8f2a56841bcb87d6f7d8fa1034205646`",
+      "48,880-byte",
+      "38 entries",
+      "`1396d41bd3b22bf0e96d61bd36fa1a2afb7e3cff8fc5e20311c5117b0f7333c0`",
+      "`2581488958`",
+      "`2581488996`",
+      "`authentication=trusted`",
+      "`next: 0.1.0-dev.1`",
+      "`latest`",
+      "`0.1.0-dev.0`",
+      "byte-identical",
+      "signature/attestation audit",
+    ]) {
+      expect(alchemySection).toContain(fact);
+    }
+    for (const fact of [
+      "`30494036520`",
+      "`32755731523`, attempt",
+      "`88135f04f237513722f840cba831570173dc4bf5`",
+      "`55aaf11a8f2a56841bcb87d6f7d8fa1034205646`",
+      "14,741-byte",
+      "9 entries",
+      "`85c1930a99201cb0b2148aabdc88e160c7ee8b92732299b867f7468ba4d2ee6b`",
+      "`2581510567`",
+      "`2581515323`",
+      "`authentication=trusted`",
+      "`next: 0.1.0-dev.1`",
+      "`latest`",
+      "`0.1.0-dev.0`",
+      "byte-identical",
+      "signature/attestation audit",
+    ]) {
+      expect(agentcredSection).toContain(fact);
+    }
+
+    for (const document of [alchemyDocs, rootReadme, alchemyReadme, agentcredReadme]) {
+      expect(document).toContain("`55aaf11a8f2a56841bcb87d6f7d8fa1034205646`");
+    }
+    expect(alchemyDocs).toContain("[`32754993343`](https://github.com/cambridgetcg/agenttool/actions/runs/32754993343)");
+    expect(alchemyDocs).toContain("[`32755731523`](https://github.com/cambridgetcg/agenttool/actions/runs/32755731523)");
+    expect(alchemyDocs).toContain("`30491887182`");
+    expect(alchemyDocs).toContain("`30494036520`");
+    expect(alchemyReadme).not.toContain("current source candidate");
+    expect(agentcredReadme).not.toContain("current source candidate");
     expect(alchemyDocs).toContain("`20260824T132712_crypto_deposit_remainder_accounting.sql`");
     expect(rootReadme).toContain(
       "these source bytes do not establish that it has been applied to any database",

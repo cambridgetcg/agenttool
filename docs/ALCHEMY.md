@@ -94,30 +94,43 @@ rather than creating a new dependency on a retiring surface. See
 
 ## Reusable read package
 
-`packages/alchemy` is now the local, unpublished `0.1.0-dev.1` source
-candidate. It adds Base Mainnet to the explicit internal-transfer support set
-and carries the versioned evidence additions plus a declaration-only,
-unregistered KINGDOM hint for the pure evidence/receipt/measurement
-projections. That hint does not register the injected-transport read client or
-grant provider access. No dev.1 tag, GitHub Release, npm version, LOVE
-inventory, installed host contract, provider call, or deployment is
-established by this candidate.
+The current public developer preview is
+`@agenttool/alchemy@0.1.0-dev.1`. It adds Base Mainnet to the explicit
+internal-transfer support set and carries the versioned evidence additions
+plus a declaration-only, unregistered KINGDOM hint for the pure
+evidence/receipt/measurement projections. That hint does not register the
+injected-transport read client or grant provider access.
+
+Protected trusted run
+[`32754993343`](https://github.com/cambridgetcg/agenttool/actions/runs/32754993343)
+published annotated tag object `e5f561378a4189ba898472f0423d67932767266f`
+and the one-asset [GitHub prerelease
+`alchemy-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/alchemy-v0.1.0-dev.1)
+from exact source `55aaf11a8f2a56841bcb87d6f7d8fa1034205646`.
+Anonymous readback proved the GitHub and npm tarballs byte-identical: 48,880
+bytes, 38 entries, SHA-256
+`1396d41bd3b22bf0e96d61bd36fa1a2afb7e3cff8fc5e20311c5117b0f7333c0`.
+The public SLSA and npm publish attestations, signature audit, and exact
+integrity values are recorded in [NPM releases](NPM-RELEASES.md). npm `next`
+resolves to dev.1 while mutable `latest` deliberately remains dev.0; `latest`
+is not a maturity signal. There is no LOVE inventory entry, installed host
+contract, provider call, or deployment implied by package publication. Install
+the exact current preview with:
+
+```bash
+npm install --save-exact @agenttool/alchemy@0.1.0-dev.1
+```
 
 The immutable `0.1.0-dev.0` release remains historical evidence. Its
 allowlisted optional npm-only prerelease identity is annotated tag
-`alchemy-v0.1.0-dev.0` with npm dist-tag `next`; it is not part of an immutable
-LOVE release inventory. Protected run
+`alchemy-v0.1.0-dev.0`, which requested npm dist-tag `next`; it is not part of
+an immutable LOVE release inventory. Protected run
 [`30491887182`](https://github.com/cambridgetcg/agenttool/actions/runs/30491887182)
 published and anonymously read back byte-identical 31,445-byte GitHub/npm
 tarballs with SHA-256
 `aeac1938f3abae14180637e72c4162c37b60bb47041452fade285718d7570ba5`.
-Because this is the sole initial prerelease, npm also exposes it through
-`latest`; that fallback is not a maturity signal. Install that exact historical
-version:
-
-```bash
-npm install --save-exact @agenttool/alchemy@0.1.0-dev.0
-```
+The mutable `latest` fallback still points to this historical version; that
+does not rewrite the dev.0 receipt or make it a stable release.
 
 The client permits eight underlying provider methods:
 
@@ -165,7 +178,7 @@ The package does **not** provide a durable reconciliation loop, canonical
 store, finality policy, webhook listener, public HTTP route, MCP tool, signer,
 broadcaster, wallet, simulation API, or Alchemy admin client.
 
-The dev.1 source candidate separately adds a pure provider-neutral EVM evidence
+The dev.1 release separately adds a pure provider-neutral EVM evidence
 contract. It keeps observation state distinct from three partially ordered
 finality axes, binds exact integer-unit generation identity, makes digest
 linkability explicit, and records semantic transitions without applying them.
@@ -229,26 +242,39 @@ RPC, and state-changing methods before calling the AgentCred client. Transfers
 still need a separately reviewed bounded host transport because they are
 outside the negotiated profile.
 
-The adapter is now the local, unpublished `0.1.0-dev.1` source candidate. It
-raises its Alchemy peer floor to `^0.1.0-dev.1` without widening the seven
-standard methods or changing the `agenttool.alchemy-agentcred/0.1` wire. No
-dev.1 tag, GitHub Release, npm version, LOVE inventory, provider call, or
-deployment is established by this candidate.
+The current public adapter preview is
+`@agenttool/alchemy-agentcred@0.1.0-dev.1`. It raises its Alchemy peer floor to
+`^0.1.0-dev.1` without widening the seven standard methods or changing the
+`agenttool.alchemy-agentcred/0.1` wire. It was published only after public
+Alchemy dev.1 readback. Protected trusted run
+[`32755731523`](https://github.com/cambridgetcg/agenttool/actions/runs/32755731523)
+published annotated tag object `88135f04f237513722f840cba831570173dc4bf5`
+and the one-asset [GitHub prerelease
+`alchemy-agentcred-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/alchemy-agentcred-v0.1.0-dev.1)
+from the same exact source
+`55aaf11a8f2a56841bcb87d6f7d8fa1034205646`. Anonymous readback proved the
+GitHub and npm tarballs byte-identical: 14,741 bytes, 9 entries, SHA-256
+`85c1930a99201cb0b2148aabdc88e160c7ee8b92732299b867f7468ba4d2ee6b`.
+npm `next` resolves to dev.1 while mutable `latest` deliberately remains
+dev.0. The full public provenance, signature, and integrity receipt is in
+[NPM releases](NPM-RELEASES.md). The adapter has no LOVE inventory entry,
+provider call, or deployment.
 
 The immutable `0.1.0-dev.0` adapter remains historical release evidence. Its
 optional npm-only release identity uses annotated tag
-`alchemy-agentcred-v0.1.0-dev.0` and npm dist-tag `next`; clean release
-preparation built both peer packages before packing the adapter. Protected run
+`alchemy-agentcred-v0.1.0-dev.0` and requested npm dist-tag `next`; clean
+release preparation built both peer packages before packing the adapter.
+Protected run
 [`30494036520`](https://github.com/cambridgetcg/agenttool/actions/runs/30494036520)
 published and anonymously read back byte-identical 14,478-byte GitHub/npm
 tarballs with SHA-256
 `8dece3c98db0d92d79f16e91527ca18ed42b49f87b7586b78c092ffc242e291a`.
-Because this is the sole initial prerelease, npm also exposes it through
-`latest`; that fallback is not a maturity signal. A complete exact historical
+The mutable `latest` fallback still points to that historical version; it is
+not a maturity signal and does not rewrite dev.0. A complete exact current
 install is:
 
 ```bash
-npm install --save-exact @agenttool/alchemy@0.1.0-dev.0 @agenttool/credential-broker@0.3.1 @agenttool/alchemy-agentcred@0.1.0-dev.0
+npm install --save-exact @agenttool/alchemy@0.1.0-dev.1 @agenttool/credential-broker@0.3.1 @agenttool/alchemy-agentcred@0.1.0-dev.1
 ```
 
 The adapter has no LOVE inventory entry, hosted route, deployment, or live

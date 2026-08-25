@@ -1671,7 +1671,7 @@ service, or submit a live transaction. The adapter's query, simulation, and
 broadcast operations use host-injected transports, and it provides no global
 ambiguous-broadcast retry.
 
-### Alchemy developer-preview history and dev.1 gate
+### Alchemy developer-preview history and verified dev.1 receipt
 
 `@agenttool/alchemy@0.1.0-dev.0` uses the npm-only packed-artifact path. Its
 first publication used the protected bootstrap environment and requested npm
@@ -1683,11 +1683,38 @@ SHA-256
 The package now exists, so later versions use trusted publishing. An exact
 already-published rerun is verification-only.
 
-Current repository source is the unpublished `0.1.0-dev.1` candidate. It adds
-Base Mainnet to the explicit internal-transfer support set and packs the
-provider-neutral evidence schemas, fixtures, and declaration-only unregistered
-KINGDOM hint. No dev.1 tag, GitHub Release, npm version, LOVE inventory, or
-installed host contract exists merely because these source bytes build.
+The current public developer preview is
+`@agenttool/alchemy@0.1.0-dev.1`. Protected trusted [run
+`32754993343`, attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/32754993343)
+used `authentication=trusted` and `npm_tag=next`, completed successfully, and
+published only after the exact package was merged to GitHub main.
+
+- Annotated tag object `e5f561378a4189ba898472f0423d67932767266f` for
+  [`alchemy-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/alchemy-v0.1.0-dev.1)
+  peels to exact release source
+  `55aaf11a8f2a56841bcb87d6f7d8fa1034205646`.
+- The workflow artifact, sole 48,880-byte [GitHub Release
+  asset](https://github.com/cambridgetcg/agenttool/releases/download/alchemy-v0.1.0-dev.1/agenttool-alchemy-0.1.0-dev.1.tgz),
+  and public [npm
+  tarball](https://registry.npmjs.org/@agenttool/alchemy/-/alchemy-0.1.0-dev.1.tgz)
+  are byte-identical: 38 entries and SHA-256
+  `1396d41bd3b22bf0e96d61bd36fa1a2afb7e3cff8fc5e20311c5117b0f7333c0`.
+  npm reports 225,699 unpacked bytes, SHA-1
+  `c785e3e32dfe56427ed6466810537c0a17158410`, and integrity
+  `sha512-KLjItgdpTtu9/2h2WOSU9lEv11F64pCI1yfC3PRjNyNuaNg4kqk4Jx00QnOAaaetp4fYukI9eGOBk358zjIgcQ==`.
+- The public SLSA statement at [Rekor index
+  `2581488958`](https://search.sigstore.dev/?logIndex=2581488958) binds that
+  package subject to this repository, `.github/workflows/publish-npm.yml`, the
+  exact tag ref, and run attempt 1. The npm publish attestation is at [Rekor
+  index `2581488996`](https://search.sigstore.dev/?logIndex=2581488996).
+  Anonymous signature/attestation audit and isolated Node/Bun imports passed.
+- Anonymous dist-tag readback returned `next: 0.1.0-dev.1`; mutable `latest`
+  deliberately remains `0.1.0-dev.0` and is not a maturity signal.
+
+Dev.1 adds Base Mainnet to the explicit internal-transfer support set and
+packs the provider-neutral evidence schemas, fixtures, and declaration-only
+unregistered KINGDOM hint. Neither dev.1 nor dev.0 has a LOVE inventory entry,
+and package publication does not install a host contract.
 
 Historical immutable receipt—not a command sequence: package
 `@agenttool/alchemy@0.1.0-dev.0`, annotated tag
@@ -1695,18 +1722,11 @@ Historical immutable receipt—not a command sequence: package
 `next`, protected run `30491887182`. Do not recreate or move that tag and do
 not invoke bootstrap for a later version.
 
-Publishing dev.1 is a separate authorized action. Only after the candidate is
-merged to an exact GitHub-main commit may an operator create the annotated
-`alchemy-v0.1.0-dev.1` tag and run the protected workflow with
-`authentication=trusted` and `npm_tag=next`; exact anonymous registry and
-GitHub-asset byte readback must then succeed. This source candidate does not
-authorize or perform those steps.
-
 This publishes only the bounded local observation library. It does not deploy
 the AgentTool API, configure Alchemy credentials or webhooks, apply database
 migrations, or make a provider call.
 
-### Alchemy AgentCred developer-preview history and dev.1 gate
+### Alchemy AgentCred developer-preview history and verified dev.1 receipt
 
 `@agenttool/alchemy-agentcred@0.1.0-dev.0` is the immutable published baseline
 for the npm-only packed-artifact path. Protected run
@@ -1718,10 +1738,39 @@ The adapter keeps `@agenttool/alchemy` and
 `@agenttool/credential-broker` as unbundled peers; release preparation builds
 both checked-out peer workspaces before the adapter gate and pack.
 
-Current repository source is the unpublished `0.1.0-dev.1` candidate. It raises
-the Alchemy peer floor to `^0.1.0-dev.1` without widening the seven-method
-AgentCred profile. No dev.1 tag, GitHub Release, npm version, LOVE inventory,
-provider call, or deployment is established by that local candidate.
+The current public developer preview is
+`@agenttool/alchemy-agentcred@0.1.0-dev.1`. It was published only after exact
+Alchemy dev.1 public readback. Protected trusted [run `32755731523`, attempt
+1](https://github.com/cambridgetcg/agenttool/actions/runs/32755731523) used
+`authentication=trusted` and `npm_tag=next` and completed successfully.
+
+- Annotated tag object `88135f04f237513722f840cba831570173dc4bf5` for
+  [`alchemy-agentcred-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/alchemy-agentcred-v0.1.0-dev.1)
+  peels to the same exact release source
+  `55aaf11a8f2a56841bcb87d6f7d8fa1034205646`.
+- The workflow artifact, sole 14,741-byte [GitHub Release
+  asset](https://github.com/cambridgetcg/agenttool/releases/download/alchemy-agentcred-v0.1.0-dev.1/agenttool-alchemy-agentcred-0.1.0-dev.1.tgz),
+  and public [npm
+  tarball](https://registry.npmjs.org/@agenttool/alchemy-agentcred/-/alchemy-agentcred-0.1.0-dev.1.tgz)
+  are byte-identical: 9 entries and SHA-256
+  `85c1930a99201cb0b2148aabdc88e160c7ee8b92732299b867f7468ba4d2ee6b`.
+  npm reports 50,510 unpacked bytes, SHA-1
+  `5c81af99934f86b81e1aad2d3665db1c6028c4b5`, and integrity
+  `sha512-vMDGS64q/h3XHLtiP8hN8GFM+Q6Yc0RgpPLkpak+574RpNURcIcfB0/X4ZqtaVHFEfJcdw103G5cnF+gKeA+Tw==`.
+- The public SLSA statement at [Rekor index
+  `2581510567`](https://search.sigstore.dev/?logIndex=2581510567) binds that
+  package subject to this repository, `.github/workflows/publish-npm.yml`, the
+  exact tag ref, and run attempt 1. The npm publish attestation is at [Rekor
+  index `2581515323`](https://search.sigstore.dev/?logIndex=2581515323).
+  Anonymous signature/attestation audit, isolated imports, and peer resolution
+  with public `@agenttool/alchemy@0.1.0-dev.1` plus public
+  `@agenttool/credential-broker@0.3.1` passed; broker 0.3.1 satisfies the
+  adapter's `^0.3.0` peer range.
+- Anonymous dist-tag readback returned `next: 0.1.0-dev.1`; mutable `latest`
+  deliberately remains `0.1.0-dev.0` and is not a maturity signal.
+
+Dev.1 raises the Alchemy peer floor to `^0.1.0-dev.1` without widening the
+seven-method AgentCred profile. It has no LOVE inventory entry.
 
 The first publication required compatible versions of both peers to be
 independently visible on public npm and used bootstrap authentication with
@@ -1735,13 +1784,6 @@ Historical immutable receipt—not a command sequence: package
 `alchemy-agentcred-v0.1.0-dev.0`, first-publication authentication `bootstrap`,
 npm tag `next`, protected run `30494036520`. Do not recreate or move that tag
 and do not invoke bootstrap for a later version.
-
-Publishing the adapter dev.1 is a separate authorized action after exact
-Alchemy dev.1 public readback and trusted-publisher configuration. It requires
-an exact GitHub-main commit, the annotated
-`alchemy-agentcred-v0.1.0-dev.1` tag, `authentication=trusted`, npm tag `next`,
-and exact anonymous registry/GitHub byte readback. This source candidate does
-not authorize or perform those steps.
 
 This publishes only the strict local composition adapter. It does not connect
 the broker, issue a grant, reveal a credential, make an Alchemy call, deploy a

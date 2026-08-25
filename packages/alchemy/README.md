@@ -191,7 +191,7 @@ source of truth.
 
 ## Portable evidence and transitions
 
-The dev.1 source candidate also exports pure, provider-neutral evidence
+The dev.1 release also exports pure, provider-neutral evidence
 builders and parsers. `agenttool.evm-observation-evidence/0.1` binds an exact
 EIP-155 CAIP-2 chain, block-number/hash plus transaction-hash/log-index
 generation, and a decimal atomic quantity with its named chain, contract, and
@@ -240,19 +240,27 @@ bun run ci
 npm pack --ignore-scripts --dry-run --json
 ```
 
-The current source candidate is `@agenttool/alchemy@0.1.0-dev.1`. It adds Base
-Mainnet to the explicit internal-transfer support set and carries the versioned
-evidence additions plus the unregistered declaration hint in this source tree.
-No `0.1.0-dev.1` tag, GitHub Release, npm version, or LOVE inventory is
-established by these local source bytes. They do not install a KINGDOM
-contract either.
+The current public developer preview is
+`@agenttool/alchemy@0.1.0-dev.1`. It adds Base Mainnet to the explicit
+internal-transfer support set and carries the versioned evidence additions
+plus the unregistered declaration hint. Protected trusted [run
+`32754993343`](https://github.com/cambridgetcg/agenttool/actions/runs/32754993343)
+published annotated [tag
+`alchemy-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/alchemy-v0.1.0-dev.1)
+from exact source `55aaf11a8f2a56841bcb87d6f7d8fa1034205646`.
+Anonymous GitHub/npm readback matched 48,880 bytes and SHA-256
+`1396d41bd3b22bf0e96d61bd36fa1a2afb7e3cff8fc5e20311c5117b0f7333c0`;
+npm `next` resolves to dev.1 while mutable `latest` deliberately remains
+dev.0. The exact tag-object, provenance, signature, and integrity receipt is in
+[`docs/ALCHEMY.md`](../../docs/ALCHEMY.md) and
+[`docs/NPM-RELEASES.md`](../../docs/NPM-RELEASES.md). This package still has no
+LOVE inventory entry, and publication does not install a KINGDOM contract.
 
 The immutable `0.1.0-dev.0` preview remains historical release evidence under
-annotated tag `alchemy-v0.1.0-dev.0` and npm dist-tag `next`. Its exact GitHub
-prerelease asset and npm tarball were independently read back byte-identical;
-the protected run, size, and SHA-256 receipt are recorded in
-[`docs/ALCHEMY.md`](../../docs/ALCHEMY.md). npm also exposes that sole initial
-prerelease through `latest`; that fallback is not a maturity signal. Neither
-the historical release nor this source candidate is part of an immutable LOVE
-inventory. Source metadata, building, and packing alone are not release
-evidence.
+annotated tag `alchemy-v0.1.0-dev.0` after requesting npm dist-tag `next`. Its
+exact GitHub prerelease asset and npm tarball were independently read back
+byte-identical; the protected run, size, and SHA-256 receipt are recorded in
+[`docs/ALCHEMY.md`](../../docs/ALCHEMY.md). Mutable `latest` remains on that
+historical version; that fallback is not a maturity signal and does not
+rewrite dev.0. Neither release is part of an immutable LOVE inventory. Source
+metadata, building, and packing alone are not release evidence.
