@@ -26,6 +26,7 @@ on:
           - memetic-landscape
           - math-cards
           - model-becoming
+          - dataset-influence
           - relational-geometry
           - credential-broker
           - sdk
