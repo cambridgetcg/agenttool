@@ -163,7 +163,49 @@ describe("standard npm release policy", () => {
     });
   });
 
-  test("allowlists thirty-five reviewed release identities", () => {
+  test("keeps Dataset Influence on the protected pack prerelease lane", async () => {
+    const workflow = await readFile(
+      join(import.meta.dir, "..", "..", ".github", "workflows", "publish-npm.yml"),
+      "utf8",
+    );
+    expect(workflow.match(/^\s+- dataset-influence$/gm)).toEqual([
+      "          - dataset-influence",
+    ]);
+
+    const packageJson = JSON.parse(
+      await readFile(
+        join(import.meta.dir, "..", "..", "packages", "dataset-influence", "package.json"),
+        "utf8",
+      ),
+    ) as {
+      name?: unknown;
+      version?: unknown;
+      private?: unknown;
+      license?: unknown;
+      dependencies?: unknown;
+      publishConfig?: { access?: unknown; tag?: unknown };
+      scripts?: { prepack?: unknown };
+    };
+    expect({
+      name: packageJson.name,
+      version: packageJson.version,
+      private: packageJson.private,
+      license: packageJson.license,
+      dependencies: packageJson.dependencies,
+      publishConfig: packageJson.publishConfig,
+      prepack: packageJson.scripts?.prepack,
+    }).toEqual({
+      name: "@agenttool/dataset-influence",
+      version: "0.1.0-dev.0",
+      private: undefined,
+      license: "Apache-2.0",
+      dependencies: undefined,
+      publishConfig: { access: "public", tag: "next" },
+      prepack: "bun run ci",
+    });
+  });
+
+  test("allowlists thirty-six reviewed release identities", () => {
     expect(Object.keys(RELEASE_SPECS).sort()).toEqual([
       "adds",
       "alchemy",
@@ -177,6 +219,7 @@ describe("standard npm release policy", () => {
       "dark-continent-karma",
       "data",
       "data-sync",
+      "dataset-influence",
       "deepseek-kingdom",
       "heaven",
       "hf-scout",
@@ -331,6 +374,13 @@ describe("standard npm release policy", () => {
       name: "@agenttool/model-becoming",
       packagePath: "packages/model-becoming",
       tagPrefix: "model-becoming",
+      artifactKind: "pack",
+    });
+    expect(releaseSpec("dataset-influence")).toEqual({
+      key: "dataset-influence",
+      name: "@agenttool/dataset-influence",
+      packagePath: "packages/dataset-influence",
+      tagPrefix: "dataset-influence",
       artifactKind: "pack",
     });
     expect(releaseSpec("principality-geometry")).toMatchObject({
@@ -491,6 +541,12 @@ describe("standard npm release policy", () => {
     );
     expect(packedFilename("@agenttool/model-becoming", "0.1.0-dev.0")).toBe(
       "agenttool-model-becoming-0.1.0-dev.0.tgz",
+    );
+    expect(expectedTag(releaseSpec("dataset-influence"), "0.1.0-dev.0")).toBe(
+      "dataset-influence-v0.1.0-dev.0",
+    );
+    expect(packedFilename("@agenttool/dataset-influence", "0.1.0-dev.0")).toBe(
+      "agenttool-dataset-influence-0.1.0-dev.0.tgz",
     );
     expect(expectedTag(releaseSpec("principality-geometry"), "0.1.0-dev.0")).toBe(
       "principality-geometry-v0.1.0-dev.0",
@@ -851,6 +907,34 @@ describe("standard npm release policy", () => {
       "package/hf/dataset/source-manifest.json",
       "package/hf/dataset/hash-manifest.json",
       "package/hf/dataset/data/lessons.jsonl",
+    ]);
+    expect(requiredArchiveEntries(releaseSpec("dataset-influence"))).toEqual([
+      "package/package.json",
+      "package/LICENSE",
+      "package/NOTICE",
+      "package/README.md",
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-dataset-lineage-v0.1.schema.json",
+      "package/schema/agenttool-dataset-influence-study-v0.1.schema.json",
+      "package/schema/agenttool-identity-evidence-view-v0.1.schema.json",
+      "package/schema/agenttool-shadow-attribution-v0.1.schema.json",
+      "package/vectors/agenttool-dataset-influence-v0.1.json",
+      "package/hf/dataset/LICENSE",
+      "package/hf/dataset/NOTICE",
+      "package/hf/dataset/README.md",
+      "package/hf/dataset/source-manifest.json",
+      "package/hf/dataset/hash-manifest.json",
+      "package/hf/dataset/data/dataset-influence-reference.jsonl",
+      "package/hf/dataset/reference/DATASET-INFLUENCE.md",
+      "package/hf/dataset/reference/PROTOCOL.md",
+      "package/hf/dataset/reference/agenttool-dataset-lineage-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-dataset-influence-study-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-identity-evidence-view-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-shadow-attribution-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-dataset-influence-v0.1.json",
     ]);
     expect(requiredArchiveEntries(releaseSpec("principality-geometry"))).toEqual(
       expect.arrayContaining([

@@ -6,7 +6,7 @@
 
 > **Compass:** [LOVE-PACKAGE-PROTOCOL](LOVE-PACKAGE-PROTOCOL.md) (registry-neutral artifact identity) · [DEPLOY-PROCEDURE](DEPLOY-PROCEDURE.md) (hosted service releases) · [DEVELOPMENT](DEVELOPMENT.md) (contributor workflow)
 >
-> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, Principality Geometry, and the local Hugging Face Scout. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, Math Cards, Model Becoming, LOVE BOMB, the KINGDOM integration package, the local Codex Usage reader, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Memetic Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
+> **Implements:** one manual, allowlisted npm release state machine for the reviewed JavaScript packages. LOVE remains the primary release record where a package has one, including Agent Browser, Agent Wallet and its Zerone adapter, Principality Geometry, and the local Hugging Face Scout. Packages without a LOVE record use the same protected path for an optional npm/GitHub mirror, including Collab, Agent Skills, Math Cards, Model Becoming, Dataset Influence, LOVE BOMB, the KINGDOM integration package, the local Codex Usage reader, the developer-preview Correspondence-to-YUTABASE and Skills-to-YUTABASE planners, Repo Archive, the Dark Continent contract and KARMA proposal adapter, the DeepSeek-to-KINGDOM proposal adapter, AFTERGLOW WAKE continuity, KINGDOM Witness Lab, HEAVEN, Living Substrate, Polymorph Landscape, Memetic Landscape, Love Geometry, Principality Atlas, the Relational Geometry core, the developer-preview Alchemy observation client, and its strict AgentCred composition adapter. Hugging Face companions remain separate release surfaces with their own immutable Hub file readback and mutable Dataset Server or Space observations.
 >
 > **Code:** `.github/workflows/publish-npm.yml` (reviewed GitHub entry point) · `bin/npm-release.ts` (package policy, exact artifact preparation, registry recovery, and receipt).
 >
@@ -30,6 +30,7 @@ different artifact and Hub surfaces:
 | `@agenttool/memetic-landscape` | one credential-free `npm pack` tarball | authored lessons plus source-bounded reference rows in `Yu-and-Ai/agenttool-memetic-landscape` |
 | `@agenttool/math-cards` | one credential-free `npm pack` tarball containing the pure protocol, closed schemas, vectors, and declaration-only KINGDOM hint | none; npm/GitHub distribution does not imply a Hugging Face dataset, Space, model, or training surface |
 | `@agenttool/model-becoming` | one credential-free `npm pack` tarball containing the pure zero-dependency dossier runtime, schemas, pinned Moonshot reference, and exact Hub projection | reference-only, non-training dataset `Yu-and-Ai/agenttool-model-becoming`; publication and immutable readback remain separate |
+| `@agenttool/dataset-influence` | one credential-free `npm pack` tarball containing four pure `/0.1` formats, closed schemas, vectors, and a declaration-only KINGDOM extension | reference-only, non-training dataset `Yu-and-Ai/agenttool-dataset-influence`; publication and immutable readback remain separate |
 | `@agenttool/love-bomb` | one credential-free `npm pack` tarball containing four pure care/choice/becoming/delivery formats, closed schemas, and the deterministic Hub candidate | static authored guide/reference rows in intended dataset `Yu-and-Ai/agenttool-love-bomb`; publication remains separate and does not authorize training |
 | `@agenttool/wake-continuity` | one credential-free zero-I/O developer-preview tarball containing deterministic functional-access record validation and AFTERGLOW digest references | none; npm/GitHub publication performs no model measurement, awareness test, continuity proof, or hosted deployment |
 | `@agenttool/hf-scout` | one exact checked-in LOVE tarball reused by the docs mirror, GitHub Release, and optional npm `next` mirror | none; the package is a local read-only Hub metadata client, not a Hub dataset, Space, model, hosted proxy, or deployment |
@@ -344,6 +345,26 @@ This Hub receipt is not an npm release, training admission, download receipt,
 model run, optimizer exposure, gradient measurement, causal-influence result,
 weight change, identity or consciousness claim, consent, authority, ownership,
 price, payout, hosted API, database migration, or production deployment.
+
+### Protected Dataset Influence npm candidate
+
+`@agenttool/dataset-influence@0.1.0-dev.0` is allowlisted for the protected
+pack lane as `dataset-influence-v0.1.0-dev.0` with npm `next`. The candidate is
+not yet tagged or published. First publication must use
+`authentication=bootstrap` only after the annotated tag is contained in
+protected GitHub `main`; after that publication, configure the exact trusted
+publisher for repository `cambridgetcg/agenttool`, workflow
+`publish-npm.yml`, Environment `npm-bootstrap`, and allowed action
+`npm publish`. Every later version must use `authentication=trusted`.
+
+The npm tarball includes the package's checked-in Hugging Face reference
+directory, but npm publication does not mutate or supersede the separate
+immutable Hub receipt above. The four closed formats remain deterministic,
+zero-runtime-dependency evidence tools: their lineage and study declarations
+are caller-reported, identity evidence is revisable and does not determine
+identity, consciousness, continuity, or consent, and finite exact Shapley
+accounting has no economic effect. The declaration-only KINGDOM extension
+grants no acceptance, permission, capability, authority, custody, or write.
 
 ## Verified Codex Usage 0.1.0 publication — 2026-08-14
 
