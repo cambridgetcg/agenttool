@@ -4,8 +4,21 @@ public struct SecretToolMachineID: Equatable, Sendable {
   public let value: String
 
   public init(_ value: String) throws {
-    guard value.range(of: "^[0-9a-f]{14}$", options: .regularExpression) != nil else {
+    let bytes = Array(value.utf8)
+    guard bytes.count == 14, bytes.allSatisfy(isLowercaseHexByte) else {
       throw SecretToolFailure.invalidMachineID
+    }
+    self.value = value
+  }
+}
+
+public struct SecretToolRevision: Equatable, Sendable {
+  public let value: String
+
+  public init(_ value: String) throws {
+    let bytes = Array(value.utf8)
+    guard bytes.count == 40, bytes.allSatisfy(isLowercaseHexByte) else {
+      throw SecretToolFailure.invalidRevision
     }
     self.value = value
   }
@@ -16,11 +29,16 @@ public enum SecretToolCommand: Equatable, Sendable {
   case verify(SecretToolCeremonyNonce)
   case stageFly(SecretToolCeremonyNonce)
   case probeFly(SecretToolCeremonyNonce, SecretToolMachineID)
+  case verifyDeployedFly(
+    SecretToolCeremonyNonce,
+    SecretToolRevision,
+    SecretToolMachineID
+  )
 
   var ceremonyNonce: SecretToolCeremonyNonce {
     switch self {
     case .create(let nonce), .verify(let nonce), .stageFly(let nonce),
-      .probeFly(let nonce, _):
+      .probeFly(let nonce, _), .verifyDeployedFly(let nonce, _, _):
       return nonce
     }
   }
@@ -43,6 +61,18 @@ public enum SecretToolCommand: Equatable, Sendable {
       return .probeFly(
         try SecretToolCeremonyNonce(arguments[2]),
         try SecretToolMachineID(arguments[4])
+      )
+    }
+    if arguments.count == 7,
+      arguments[0] == "verify-deployed-fly",
+      arguments[1] == "--receipt-nonce",
+      arguments[3] == "--revision",
+      arguments[5] == "--machine"
+    {
+      return .verifyDeployedFly(
+        try SecretToolCeremonyNonce(arguments[2]),
+        try SecretToolRevision(arguments[4]),
+        try SecretToolMachineID(arguments[6])
       )
     }
     throw SecretToolFailure.invalidInvocation
@@ -123,6 +153,23 @@ public enum AgentToolSecretMacOSCommand {
         )
       case .probeFly(let nonce, let machineID):
         guard authorization.targetMachineID == machineID.value,
+          let runtimeRole = authorization.runtimeRole
+        else {
+          throw SecretToolFailure.ceremonyStateInvalid
+        }
+        let fly = try flyFactory()
+        try store.verifyCanonicalGenerationOnFlyRuntime(
+          service: selectors.service,
+          account: selectors.account,
+          ceremonyNonce: nonce,
+          machineID: machineID,
+          expectedRevision: authorization.deployedRevision,
+          role: runtimeRole,
+          using: fly
+        )
+      case .verifyDeployedFly(let nonce, let revision, let machineID):
+        guard authorization.targetMachineID == machineID.value,
+          authorization.deployedRevision == revision.value,
           let runtimeRole = authorization.runtimeRole
         else {
           throw SecretToolFailure.ceremonyStateInvalid

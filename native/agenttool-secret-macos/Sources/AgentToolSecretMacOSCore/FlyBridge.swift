@@ -523,7 +523,8 @@ private func isCanonicalGeneration(_ generation: Data) -> Bool {
 }
 
 private func isRevision(_ value: String) -> Bool {
-  value.range(of: "^[0-9a-f]{40}$", options: .regularExpression) != nil
+  let bytes = Array(value.utf8)
+  return bytes.count == 40 && bytes.allSatisfy(isLowercaseHexByte)
 }
 
 private func runtimeProofCommand(

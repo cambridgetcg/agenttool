@@ -306,13 +306,15 @@ Machine sizing and the complete fleet remain live Fly registry state.
 
 Inspect both `fly machine list -a agenttool --json` and
 `fly status -a agenttool`; a process count, `fly scale show`, or `fly.toml`
-alone is not topology proof. The ordinary deploy verifies revision and
-dirty-source labels on started Machines; it does not verify CPU or memory
-sizing, stopped Machines, exact fleet identity, or a common immutable image
-digest. Every newly created Machine—including a capacity addition,
-replacement, clone, or recovery Machine—therefore needs an explicit reviewed
-size plus post-create registry verification, especially for an empty or
-previously absent process group.
+alone is not topology proof. The ordinary deploy verifies the exact five
+Machines, role/region/state, CPU and memory, restart and standby configuration,
+full common image reference, source labels, Machine-scoped secret-override
+absence, and all four started runtimes. When covenant authority is configured,
+the final B1 receipt fixes the five identities and the signed native verifier
+also compares the retained Keychain generation to each actual service process.
+Every newly created Machine—including a capacity addition, replacement, clone,
+or recovery Machine—therefore needs a separate reviewed identity update; the
+routine path fails closed rather than adopting it.
 
 ### Region shape
 
@@ -361,6 +363,19 @@ digest and exact process command and cannot override either database secret at
 Machine scope. SSH stdout/stderr is suppressed, so URLs, credentials, and
 driver errors are not copied into the deploy transcript.
 
+After the first covenant authority generation, a read-only Phase-B guard also
+requires the database's durable empty-allowlist hold, the canonical completed
+B1 receipt, provider secret status `Deployed`, the exact receipt-bound fleet,
+and four silent actual-process comparisons. It repeats immediately before and
+after API publication. Configured API/database-affecting releases reject
+source/preflight overrides and
+must descend from fence commit
+`2ca44b44bcfde9d571b27771f9d5fc516a4df41e`; mixed or staged secret state is B1
+recovery, never an ordinary deploy. The fixed root-owned Fly v0.4.74 artifact
+and private Fly home must be installed while the generation is still absent:
+the preactivation guard uses that same boundary to prove provider absence
+before the first B2 deploy, and configured mode keeps using it thereafter.
+
 If an independently authorised incident or recovery path has already left the
 Fly registry empty, keep admission closed and prepare a separate, reviewed
 recovery plan. No generic empty-registry restoration mode is supported, and an
@@ -387,10 +402,14 @@ migration, Fly rollout, Pages upload, or apex Worker deploy may have begun and
 the chain later returns non-zero or receives caught `INT`/`TERM`, the exit trap
 attempts a receipt with `outcome: "failed_or_uncertain"`. That outcome applies
 to the normal `routine` mode too; it is not reserved for maintenance rollouts.
-The fixed v4 shape records the source revision and dirty bit, the
+The preactivation/maintenance v6 shape records the source revision and dirty bit, the
 invocation-start release-head snapshot, explicit overrides, phase outcomes,
 exit status, and verified machine count—never credentials, ambient environment
-values, or command output. `SIGKILL`, host loss, or an unwritable state
+values, or command output. Configured API/database-affecting releases use v7,
+adding only the permanent fence floor, redacted provider/hold/fleet booleans,
+zero covenant counts, and a
+four-runtime proof count; it contains no generation, digest, Machine ID, or
+secret-derived value. `SIGKILL`, host loss, or an unwritable state
 directory can prevent that record; receipt absence never proves no mutation.
 
 Like CF Pages, **Fly is not connected to either Git host.** No webhook fires on push; the deploy wrapper is the explicit trigger and requires an authenticated Fly CLI session. HTTP port 80 is redirect-only (`force_https = true`); application traffic and public health probes use HTTPS or Fly's internal service check.

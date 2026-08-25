@@ -37,6 +37,7 @@ public enum SecretToolFailure: Error, Equatable, Sendable {
   case invalidSelector
   case invalidCeremonyNonce
   case invalidMachineID
+  case invalidRevision
   case ceremonyStateInvalid
   case itemAbsent
   case itemExists
@@ -59,6 +60,7 @@ public enum SecretToolFailure: Error, Equatable, Sendable {
     case .invalidSelector: "invalid_selector"
     case .invalidCeremonyNonce: "invalid_ceremony_nonce"
     case .invalidMachineID: "invalid_machine_id"
+    case .invalidRevision: "invalid_revision"
     case .ceremonyStateInvalid: "ceremony_state_invalid"
     case .itemAbsent: "item_absent"
     case .itemExists: "item_exists"
@@ -83,6 +85,7 @@ public enum SecretToolFailure: Error, Equatable, Sendable {
     case .invalidSelector: 3
     case .invalidCeremonyNonce: 12
     case .invalidMachineID: 19
+    case .invalidRevision: 21
     case .ceremonyStateInvalid: 20
     case .itemAbsent:
       4

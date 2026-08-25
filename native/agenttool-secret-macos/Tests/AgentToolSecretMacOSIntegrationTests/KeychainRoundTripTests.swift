@@ -226,6 +226,56 @@ final class KeychainRoundTripTests: XCTestCase {
     )
     XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.thinkerProbeProofPath))
 
+    try fixture.writeMarker(.completed)
+    try requireSuccessWithoutOutput(
+      try runBinary(
+        binaryPath,
+        arguments: [
+          "verify-deployed-fly", "--receipt-nonce", receiptNonce,
+          "--revision", String(repeating: "a", count: 40),
+          "--machine", fixture.probeMachineID,
+        ],
+        environment: environment
+      )
+    )
+    try requireSuccessWithoutOutput(
+      try runBinary(
+        binaryPath,
+        arguments: [
+          "verify-deployed-fly", "--receipt-nonce", receiptNonce,
+          "--revision", String(repeating: "a", count: 40),
+          "--machine", fixture.thinkerMachineID,
+        ],
+        environment: environment
+      )
+    )
+    assertFailure(
+      try runBinary(
+        binaryPath,
+        arguments: [
+          "verify-deployed-fly", "--receipt-nonce", receiptNonce,
+          "--revision", String(repeating: "a", count: 40),
+          "--machine", "55555555555555",
+        ],
+        environment: environment
+      ),
+      .ceremonyStateInvalid
+    )
+
+    try fixture.writeMarker(.generationVerified)
+    assertFailure(
+      try runBinary(
+        binaryPath,
+        arguments: [
+          "verify-deployed-fly", "--receipt-nonce", receiptNonce,
+          "--revision", String(repeating: "a", count: 40),
+          "--machine", fixture.probeMachineID,
+        ],
+        environment: environment
+      ),
+      .ceremonyStateInvalid
+    )
+
     assertFailure(
       try runBinary(binaryPath, arguments: ["get"], environment: environment),
       .invalidInvocation
@@ -409,11 +459,13 @@ private enum FixtureMarkerState {
   case probeAttempting
   case probeAttemptingWithoutGeneration
   case thinkerProbeAttempting
+  case completed
 }
 
 private final class FlyFixture {
   let rootURL: URL
   let markerURL: URL
+  let finalReceiptURL: URL
   let executableURL: URL
   let flyHomeURL: URL
   let probeMachineID = "11111111111111"
@@ -434,6 +486,7 @@ private final class FlyFixture {
   var environment: [String: String] {
     [
       "AGENTTOOL_SECRET_MACOS_MARKER": markerURL.path,
+      "AGENTTOOL_SECRET_MACOS_FINAL_RECEIPT": finalReceiptURL.path,
       "AGENTTOOL_SECRET_MACOS_FLY_FIXTURE": executableURL.path,
       "AGENTTOOL_SECRET_MACOS_FLY_HOME": flyHomeURL.path,
     ]
@@ -445,6 +498,7 @@ private final class FlyFixture {
       isDirectory: true
     )
     markerURL = rootURL.appendingPathComponent("active.json")
+    finalReceiptURL = rootURL.appendingPathComponent("receipt.json")
     executableURL = rootURL.appendingPathComponent("flyctl-fixture")
     flyHomeURL = rootURL.appendingPathComponent("fly-home", isDirectory: true)
 
@@ -531,6 +585,9 @@ private final class FlyFixture {
     let generation: [String: Any]
     let checkpoint: String
     let attempts: [[String: Any]]
+    var markerStatus = "active"
+    var final: Any = NSNull()
+    var destinationURL = markerURL
     switch state {
     case .createAttempting:
       checkpoint = "create_attempting"
@@ -592,11 +649,37 @@ private final class FlyFixture {
           timestamp: timestamp
         )
       ]
+    case .completed:
+      markerStatus = "completed"
+      checkpoint = "completed"
+      generation = ["create_attempted": true, "create_verified": true]
+      attempts = [
+        attempt(
+          status: "completed",
+          checkpoint: "completed",
+          stage: ["attempted": true, "verified": true],
+          deploy: ["attempted": true, "verified": true],
+          attemptedMachines: appIDs + [primary],
+          verifiedMachines: appIDs + [primary],
+          finalGatesVerified: true,
+          timestamp: timestamp
+        )
+      ]
+      final = [
+        "completed_at": timestamp,
+        "final_inventory_sha256": digest,
+        "final_secret_status": "Deployed",
+        "runtime_verified_count": 4,
+        "reserved_generation_rows": 0,
+        "authoritative_v2_rows": 0,
+        "allowed_origins_count": 0,
+      ]
+      destinationURL = finalReceiptURL
     }
 
     let marker: [String: Any] = [
       "schema": "agenttool.covenant-v2-generation-ceremony/1",
-      "status": "active",
+      "status": markerStatus,
       "checkpoint": checkpoint,
       "ceremony_nonce": "000102030405060708090a0b0c0d0e0f",
       "created_at": timestamp,
@@ -633,12 +716,17 @@ private final class FlyFixture {
       ],
       "generation": generation,
       "attempts": attempts,
-      "final": NSNull(),
+      "final": final,
     ]
     var data = try JSONSerialization.data(withJSONObject: marker, options: [.sortedKeys])
     data.append(0x0A)
-    try data.write(to: markerURL, options: .atomic)
-    guard chmod(markerURL.path, 0o600) == 0 else {
+    if destinationURL == finalReceiptURL,
+      FileManager.default.fileExists(atPath: markerURL.path)
+    {
+      try FileManager.default.removeItem(at: markerURL)
+    }
+    try data.write(to: destinationURL, options: .atomic)
+    guard chmod(destinationURL.path, 0o600) == 0 else {
       throw IntegrationFailure.fixtureSetupFailed
     }
   }
@@ -648,16 +736,18 @@ private final class FlyFixture {
   }
 
   private func attempt(
+    status: String = "active",
     checkpoint: String,
     stage: [String: Bool],
     deploy: [String: Bool],
     attemptedMachines: [String],
     verifiedMachines: [String],
+    finalGatesVerified: Bool = false,
     timestamp: String
   ) -> [String: Any] {
     [
       "attempt_id": "101112131415161718191a1b1c1d1e1f",
-      "status": "active",
+      "status": status,
       "checkpoint": checkpoint,
       "started_at": timestamp,
       "updated_at": timestamp,
@@ -667,7 +757,7 @@ private final class FlyFixture {
         "attempted_machine_ids": attemptedMachines,
         "verified_machine_ids": verifiedMachines,
       ],
-      "final_gates_verified": false,
+      "final_gates_verified": finalGatesVerified,
       "failure": NSNull(),
     ]
   }

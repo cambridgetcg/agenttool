@@ -760,8 +760,13 @@ not mistake that session-scoped lock for crash durability. Leave the durable
 hold set after Phase B. Clearing it and adding peers belong to the later,
 separately reviewed allowlist ceremony.
 
-**Phase B remains blocked until the exact B1 operator and installed artifacts
-are frozen and independently cleared.** A synthetic test on
+**Phase B remains blocked until the exact B1 operator, the configured-release
+B2 guard, and the installed artifacts are frozen and independently cleared.**
+Install the reviewed root-owned Fly executable, its private Fly home, and the
+final B2-capable signed native artifact while the generation is still absent,
+before the first deploy of the B2 wrapper: even its preactivation branch uses
+that fixed Fly boundary to prove provider absence. Only then deploy B2, seal
+the operator to those installed bytes, and begin B1 admission. A synthetic test on
 current macOS proved that `bin/agenttool-secret set <service> -` can return
 success while its underlying non-TTY `security ... -w` call stores no
 retrievable item. It is therefore not an activation ceremony and remains
@@ -789,14 +794,39 @@ and their digests out of output. Interrupted reentry must re-stage and deploy
 the same retained item.
 
 Operational use still requires a separately reviewed B1 operator with one
-Developer-ID-signed native artifact retained for the generation lifetime, the
-exact root-owned pinned Fly executable, a canonical 0600 write-ahead marker and
+Developer-ID-signed and trusted-timestamped native artifact retained for the
+generation lifetime. Its Apple Developer ID Application chain is evaluated
+against the exact receipt-bound Team ID. The operator also requires the exact
+root-owned pinned Fly executable, a canonical 0600 write-ahead marker and
 final receipt, non-exporting resumable same-value recovery, the durable hold
 plus a live row lock, complete five-Machine and four-running-process parity,
 and the documented stopped-standby and zero-row gates. Do not improvise a shell, argv,
 environment-variable, output, or temporary-file substitute. Until that
 ceremony lands and is independently reviewed, retain the Phase-A state:
 generation absent, v2 fail-closed, and allowlist empty.
+
+The B2 release ratchet is `bin/phase-b-deploy-guard.ts`, invoked only through
+the device-locked `bin/deploy.sh` path. Before any database or provider
+mutation it accepts exactly one of two states: (1) preactivation, with the
+durable hold false, the private final receipt absent, and the provider secret
+absent; or (2) configured-resting, with the durable hold true, the canonical
+private final receipt complete, the provider secret exactly `Deployed`, the
+five receipt-bound Machines exact, and the four started service processes
+silently equal to the retained Keychain generation. Any `Staged`, `Partial`,
+duplicate, malformed, missing-receipt, lost-Keychain, changed-Machine, or other
+mixed state refuses ordinary deploy and returns to B1 recovery. The same proof
+runs again immediately before Fly publication and after rollout.
+
+Once configured, the wrapper rejects dirty/non-main source, every source or
+preflight override, and every commit that is not a descendant of the permanent
+covenant runtime-fence floor
+`2ca44b44bcfde9d571b27771f9d5fc516a4df41e`. It uses the fixed root-owned Fly
+v0.4.74 artifact and its private reviewed Fly home. Configured maintenance is
+not a generic escape hatch: a database-affecting configured release must carry
+the API through the same four-runtime proof, and protected maintenance needs a
+separately reviewed compatible lane. This is an operator-path ratchet, not a
+platform ACL; a principal retaining unrestricted raw Fly authority can bypass
+the wrapper and must be governed accordingly.
 
 The active marker's one canonical location is
 `$HOME/.local/state/agenttool/deploy-state/phase-b-authority-generation-active.json`;
@@ -853,6 +883,14 @@ separate redacted ceremony note. `/federation/about` must still advertise
 allowlist change, repeat the exact redacted aggregate from Phase-A step 2 after
 the secret rollout and again require `reserved_generation_rows=0` and
 `authoritative_v2_rows=0`.
+
+A configured successful API/database-affecting release writes
+`agenttool-deploy-receipt/v7` with the fixed fence floor and only redacted
+booleans, statuses, zero counts, the four-runtime count, and the final source
+revision. It never records the generation, any secret/provider digest, Machine
+identifier, URL, child output, or secret-derived value. Preactivation and the
+Phase-A-compatible maintenance wrapper retain the v6 receipt shape so the
+existing Phase-A handoff remains exact.
 
 Never roll back to code predating this fence while the generation is
 configured. Fix forward. Deliberately changing the generation quarantines all
@@ -1057,22 +1095,23 @@ blocked until the exclusive cutover above has applied it.
 
 ### API
 
-The command below is a routine code rollback only. Never use it to restore an
-old writer after any quiescence-required SQL commits. Keep admission and
-workers held and fix forward with a compatible image; restarting the old
-writer can recreate the unsafe mixed semantics the cutover excluded. For
-code-only releases or ordinary migrations, independently prove full runtime
-and schema compatibility before rolling back.
+The supported API recovery is a clean protected-main fix-forward through
+`bin/deploy.sh`. Never restore an old writer after any quiescence-required SQL
+commits. Keep admission and workers held and advance a compatible image;
+restarting the old writer can recreate the unsafe mixed semantics the cutover
+excluded.
 
 If `AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION` has ever been configured,
 code predating the covenant generation fence is permanently outside this
 routine rollback path. Do not start it while the generation exists; removing
 the secret alone does not make pre-fence covenant semantics safe. Fix forward.
 
-```bash
-fly releases list -a agenttool
-fly releases rollback <previous-version> -a agenttool
-```
+`fly releases list -a agenttool` remains a read-only diagnostic. Raw
+`fly releases rollback`, `fly deploy`, Machine updates, and secret operations
+are not supported rollback instructions: they bypass the source floor,
+configured-generation parity, and redacted receipt. If unrestricted Fly
+credentials remain available, that is a platform-authority exception rather
+than evidence that the wrapper ratchet was enforced.
 
 ### Frontend
 
@@ -1100,7 +1139,7 @@ been advanced to a revision compatible with the exact next image. See
 bin/deploy.sh                          # full chain (Phases 0 → 5)
 bin/deploy.sh --survey                 # Phase 0 only — what's drifted?
 bin/deploy.sh --no-migrate             # skip Phase 1 (schema unchanged)
-bin/deploy.sh --no-api                 # skip Phase 3 (only docs/frontends changed)
+bin/deploy.sh --no-migrate --no-api    # frontend-only; configured authority forbids a DB-affecting --no-api shape
 bin/deploy.sh --no-frontend            # skip Pages/Worker deploy; still require live discovery prerequisites
 bin/deploy.sh --no-cache-api           # one-shot recovery: rebuild Fly image without cache
 bin/deploy.sh --skip-preflight         # skip dependency preparation + Phase 2 (NOT recommended)
