@@ -6,9 +6,16 @@ selection. It does not own hosted API routes, MCP, signing, simulation,
 broadcast, subscriptions, webhooks, provider administration, npm publication,
 or deployment.
 
-The current source candidate is `0.1.0-dev.1`; source metadata is not evidence
-of a registry release. The immutable `0.1.0-dev.0` release receipt remains
-historical evidence in `docs/ALCHEMY.md` and must not be rewritten.
+The current verified public developer preview is `0.1.0-dev.1`. Protected
+release run `32754993343` published its annotated tag from exact source
+`55aaf11a8f2a56841bcb87d6f7d8fa1034205646`; anonymous GitHub/npm readback
+matched SHA-256
+`1396d41bd3b22bf0e96d61bd36fa1a2afb7e3cff8fc5e20311c5117b0f7333c0`, and
+npm `next` resolves to dev.1 while mutable `latest` remains on dev.0. Verified
+public distribution creates no LOVE inventory entry, installs or registers no
+KINGDOM contract, and adds no hosted API, provider, or deployment authority.
+The immutable `0.1.0-dev.0` release receipt remains historical evidence in
+`docs/ALCHEMY.md` and must not be rewritten.
 
 ## Commands
 

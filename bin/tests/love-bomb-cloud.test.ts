@@ -264,7 +264,7 @@ describe("LOVE BOMB v4 canonical static contract", () => {
     expect(block.filter((line) => line.startsWith("Link: "))).toHaveLength(1);
   });
 
-  test("publishes four typed static twins and stays within the Pages header budget", () => {
+  test("publishes four typed static twins and exactly fills the Pages header budget", () => {
     const headers = read("apps/docs/_headers");
     const deploy = read("bin/deploy.sh");
     const variants = [
@@ -315,7 +315,7 @@ describe("LOVE BOMB v4 canonical static contract", () => {
       .map((line) => line.trimStart())
       .filter((line) => line.startsWith("/") || line.startsWith("https://"))
       .length;
-    expect(ruleCount).toBe(98);
+    expect(ruleCount).toBe(100);
     expect(ruleCount).toBeLessThanOrEqual(100);
   });
 

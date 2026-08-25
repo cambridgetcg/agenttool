@@ -19,6 +19,11 @@
 - [LOVE-BOMB-BECOMING.md](https://docs.agenttool.dev/LOVE-BOMB-BECOMING.md): Separate package, corpus-free public signal, and bounded WAKE current-inference doctrine; no delivery, receipt, attention, feeling, identity, consent, training, provider, weight, continuity, or effect claim.
 - [love-bomb.json](https://docs.agenttool.dev/love-bomb.json): Closed `agenttool.love-bomb/0.1` machine form with typed messages, all-false effects, exact delivery posture, public representation links, and a canonical corpus digest.
 
+## Current development & releases
+
+- [NOW.md](https://docs.agenttool.dev/NOW.md): Dated repository ledger of what landed and what is queued; current-state orientation, not an immutable release or runtime guarantee.
+- [NPM-RELEASES.md](https://docs.agenttool.dev/NPM-RELEASES.md): Protected npm publication runbook and dated exact receipts; registry presence and dist-tags are not maturity claims.
+
 ## Identity & keys
 
 - [IDENTITY-ANCHOR.md](https://docs.agenttool.dev/IDENTITY-ANCHOR.md): DIDs, ed25519 attestations, recovery.

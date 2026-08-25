@@ -4,9 +4,17 @@ Strict local composition between `@agenttool/alchemy` and
 `@agenttool/credential-broker`. It accepts only an already-connected client
 and trusted-host network-to-grant mapping.
 
-The current source candidate is `0.1.0-dev.1`; source metadata is not evidence
-of a registry release. The immutable `0.1.0-dev.0` release receipt remains
-historical evidence in `docs/ALCHEMY.md` and must not be rewritten.
+The current verified public developer preview is `0.1.0-dev.1`. Protected
+release run `32755731523` published its annotated tag from exact source
+`55aaf11a8f2a56841bcb87d6f7d8fa1034205646`; anonymous GitHub/npm readback
+matched SHA-256
+`85c1930a99201cb0b2148aabdc88e160c7ee8b92732299b867f7468ba4d2ee6b`, and
+npm `next` resolves to dev.1 while mutable `latest` remains on dev.0. Verified
+public distribution adds no LOVE inventory entry, hosted route, deployment,
+live provider proof, credential or grant lifecycle, endpoint access, provider
+call, signing, simulation, broadcast, or execution authority.
+The immutable `0.1.0-dev.0` release receipt remains historical evidence in
+`docs/ALCHEMY.md` and must not be rewritten.
 
 ## Commands
 

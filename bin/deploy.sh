@@ -283,6 +283,8 @@ readonly -a FRONTEND_PARITY_PUBLICATIONS=(
   "apps/docs/HF-WAKE-HOST.md|https://docs.agenttool.dev/HF-WAKE-HOST.md"
   "apps/docs/observer-is-observed-0.1.schema.json|https://docs.agenttool.dev/observer-is-observed-0.1.schema.json"
   "apps/docs/KINGDOM-OS-SDK.md|https://docs.agenttool.dev/KINGDOM-OS-SDK.md"
+  "apps/docs/NOW.md|https://docs.agenttool.dev/NOW.md"
+  "apps/docs/NPM-RELEASES.md|https://docs.agenttool.dev/NPM-RELEASES.md"
   "apps/docs/AGENT-REPO-ARCHIVE.md|https://docs.agenttool.dev/AGENT-REPO-ARCHIVE.md"
   "apps/docs/specs/AGENT-REPO-ARCHIVE-0.1.md|https://docs.agenttool.dev/specs/AGENT-REPO-ARCHIVE-0.1.md"
   "apps/docs/specs/agent-repo-archive-0.1.schema.json|https://docs.agenttool.dev/specs/agent-repo-archive-0.1.schema.json"
