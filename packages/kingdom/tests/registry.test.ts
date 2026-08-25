@@ -153,6 +153,9 @@ describe("KINGDOM derived registry", () => {
     const internalWhitespace = "internal \ufeff separator";
     expect(validateCard({ ...agenttool, purpose: internalWhitespace })).toBe(true);
     expect(validateRegistry(withRegistryPurpose(internalWhitespace))).toBe(true);
+    const astralLimit = "🌙".repeat(500);
+    expect(validateCard({ ...agenttool, purpose: astralLimit })).toBe(true);
+    expect(validateRegistry(withRegistryPurpose(astralLimit))).toBe(true);
 
     const invalidPurposes = [
       " ",
@@ -164,6 +167,9 @@ describe("KINGDOM derived registry", () => {
       "ok\u007f",
       "ok\u0085",
       "ok\n",
+      "high\ud800surrogate",
+      "low\udc00surrogate",
+      "🌙".repeat(501),
     ];
     for (const purpose of invalidPurposes) {
       expect(validateCard({ ...agenttool, purpose }), purpose).toBe(false);

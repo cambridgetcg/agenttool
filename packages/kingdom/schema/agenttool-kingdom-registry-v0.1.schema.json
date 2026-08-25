@@ -119,7 +119,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 500,
-          "pattern": "^(?!\\s)[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\s](?![\\s\\S])"
+          "pattern": "^(?!\\s)[^\\u0000-\\u001f\\u007f-\\u009f\\ud800-\\udfff\\u2028\\u2029]*[^\\u0000-\\u001f\\u007f-\\u009f\\ud800-\\udfff\\u2028\\u2029\\s](?![\\s\\S])"
         }
       },
       "additionalProperties": false

@@ -176,6 +176,26 @@ describe("KINGDOM flat-card parser", () => {
     }
   });
 
+  test("counts purpose bounds in code points and rejects unpaired surrogates", () => {
+    const parsed = parseKingdomCard(AGENTTOOL_CARD_SOURCE);
+    if (!parsed.valid) throw new Error("fixture must be valid");
+
+    expect(
+      validateKingdomCard({ ...parsed.card, purpose: "🌙".repeat(500) }).valid,
+    ).toBe(true);
+    for (const purpose of [
+      "🌙".repeat(501),
+      "high\ud800surrogate",
+      "low\udc00surrogate",
+    ]) {
+      const result = validateKingdomCard({ ...parsed.card, purpose });
+      expect(result.valid, JSON.stringify({ purpose, result })).toBe(false);
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({ code: "invalid-format", field: "purpose" }),
+      );
+    }
+  });
+
   test("enforces control-character, line-ending, line-count, and byte bounds", () => {
     const control = parseKingdomCard(
       AGENTTOOL_CARD_SOURCE.replace("active", "active\u0000"),

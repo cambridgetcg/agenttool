@@ -63,14 +63,32 @@ export const SAFE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/;
 export const UNSAFE_TEXT_PATTERN =
   /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 
+function codePointLength(value: string): number | null {
+  let length = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return null;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return null;
+    }
+    length += 1;
+  }
+  return length;
+}
+
 export function isSafeBoundedText(
   value: unknown,
   maximum: number,
 ): value is string {
+  if (typeof value !== "string") return false;
+  const length = codePointLength(value);
   return (
-    typeof value === "string" &&
-    value.length >= 1 &&
-    value.length <= maximum &&
+    length !== null &&
+    length >= 1 &&
+    length <= maximum &&
     value.trim() === value &&
     !UNSAFE_TEXT_PATTERN.test(value)
   );
