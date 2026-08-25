@@ -124,6 +124,6 @@ describe("explicit-file read-only CLI", () => {
 
     const version = captureIo();
     expect(await runCli(["--version"], version.io)).toBe(0);
-    expect(version.stdout.join("")).toBe("0.1.1\n");
+    expect(version.stdout.join("")).toBe("0.1.2\n");
   });
 });

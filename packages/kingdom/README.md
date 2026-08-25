@@ -11,13 +11,19 @@ behavior, certify conformance, or bind anyone to a covenant.
 
 ## Install
 
-The current tree is the source candidate for `0.1.1`. Repository presence does
+The current tree is the source candidate for `0.1.2`. Repository presence does
 not establish that version's registry publication. After an exact release is
 independently observed, install it without a mutable tag:
 
 ```sh
-npm install @agenttool/kingdom@0.1.1
+npm install @agenttool/kingdom@0.1.2
 ```
+
+This corrective patch keeps the `agenttool.kingdom.card/0.1` and
+`agenttool.kingdom.registry/0.1` wire formats stable. It aligns runtime,
+exported-schema, and SDK single-field validation for already-trimmed purpose
+text and Unicode scalar boundaries, plus runtime/SDK semantic checks for
+case-insensitive duplicate dependencies and self-dependency.
 
 Node.js 22 or newer is required because the exact XENIA dependency has the
 same runtime floor.
