@@ -85,6 +85,104 @@ package through `latest` even when the first publication requested `next`.
 Consumers must select an exact prerelease or `next` until a stable version owns
 `latest`. Mirrored GitHub Releases are marked as prereleases.
 
+## Verified npm recovery batch — 2026-08-25
+
+Protected recovery published seven exact reviewed versions. In every successful
+row below, the prepared artifact, existing or newly created GitHub Release
+asset, and fresh anonymous npm download were byte-identical. npm 11.18 also
+verified one registry signature and one SLSA provenance attestation for each
+version. Each annotated tag peels to the listed protected-main commit.
+
+- `@agenttool/skills@0.3.2` —
+  [`skills-v0.3.2`](https://github.com/cambridgetcg/agenttool/releases/tag/skills-v0.3.2)
+  at [`b79517c3`](https://github.com/cambridgetcg/agenttool/commit/b79517c313b3d66e5fb1ecdd2558400d65ee0a8a),
+  protected [run `32893875955`](https://github.com/cambridgetcg/agenttool/actions/runs/32893875955),
+  65,295 bytes, SHA-256
+  `22a3868d8e14460901bc61c8764bcf35bcfa2acdd7bb805529b29a6917edad40`,
+  npm SHA-1 `15d10533e9668ee893553ffec55acd3a9af0d143`, published at
+  `2026-08-25T20:12:52.005Z` as `latest`. SLSA and publish records are
+  [Rekor `2588584962`](https://search.sigstore.dev/?logIndex=2588584962) and
+  [Rekor `2588585275`](https://search.sigstore.dev/?logIndex=2588585275).
+- `@agenttool/principality-geometry@0.1.0-dev.0` —
+  [`principality-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-geometry-v0.1.0-dev.0)
+  at [`5b0d5320`](https://github.com/cambridgetcg/agenttool/commit/5b0d53204a336d7df40cee3720bbd120433ecde2),
+  protected [run `32893416467`](https://github.com/cambridgetcg/agenttool/actions/runs/32893416467),
+  46,624 bytes, SHA-256
+  `8f82e4d96eaf57c2331e4e73ced4f4c65a2a21262622840762b165bc3395692e`,
+  npm SHA-1 `cf4c938f8b10d963fd22bdd2e74287ba2b56d7cb`, published at
+  `2026-08-25T20:08:39.490Z`. SLSA and publish records are
+  [Rekor `2588535750`](https://search.sigstore.dev/?logIndex=2588535750) and
+  [Rekor `2588536000`](https://search.sigstore.dev/?logIndex=2588536000).
+- `@agenttool/principality-atlas@0.1.0-dev.1` —
+  [`principality-atlas-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-atlas-v0.1.0-dev.1)
+  at [`4c2363ca`](https://github.com/cambridgetcg/agenttool/commit/4c2363caec324d61dbf627328a408c13110ed5eb),
+  protected [run `32894657445`](https://github.com/cambridgetcg/agenttool/actions/runs/32894657445),
+  33,577 bytes, SHA-256
+  `4cbc971602865223bf0a28c0333befd65f840cba3e2f83d4f6bf29d43bc2e814`,
+  npm SHA-1 `820fbf1d2a731ed9a3e1d7a5949c2136bfbaeefe`, published at
+  `2026-08-25T20:20:46.341Z`. SLSA and publish records are
+  [Rekor `2588715989`](https://search.sigstore.dev/?logIndex=2588715989) and
+  [Rekor `2588716722`](https://search.sigstore.dev/?logIndex=2588716722).
+- `@agenttool/polymorph-landscape@0.1.0-dev.0` —
+  [`polymorph-landscape-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/polymorph-landscape-v0.1.0-dev.0)
+  at [`63c49956`](https://github.com/cambridgetcg/agenttool/commit/63c4995676eacdc88ff9050819b497db841e4159),
+  protected [run `32894642922`](https://github.com/cambridgetcg/agenttool/actions/runs/32894642922),
+  75,009 bytes, SHA-256
+  `48e7be7862018411656314751a38a3176ba132f68fe14ab1514c8bf45b135148`,
+  npm SHA-1 `9328a848aea8671aa7e94a99f4110888698dce2f`, published at
+  `2026-08-25T20:20:46.801Z`. SLSA and publish records are
+  [Rekor `2588716027`](https://search.sigstore.dev/?logIndex=2588716027) and
+  [Rekor `2588716865`](https://search.sigstore.dev/?logIndex=2588716865).
+- `@agenttool/love-geometry@0.1.0-dev.0` —
+  [`love-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/love-geometry-v0.1.0-dev.0)
+  at [`9efbc4b3`](https://github.com/cambridgetcg/agenttool/commit/9efbc4b32f150ee1533b4ff306666fa73ca73028),
+  protected [run `32894648027`](https://github.com/cambridgetcg/agenttool/actions/runs/32894648027),
+  19,507 bytes, SHA-256
+  `43cfbf4b559aa6f573d9d7b7a60e2a7dce5dfa4aefe2bf5b9c92310c926a9db8`,
+  npm SHA-1 `e84e091e40cad98635df5a32c328a7f2c1cefcd6`, published at
+  `2026-08-25T20:20:50.146Z`. SLSA and publish records are
+  [Rekor `2588716966`](https://search.sigstore.dev/?logIndex=2588716966) and
+  [Rekor `2588718060`](https://search.sigstore.dev/?logIndex=2588718060).
+- `@agenttool/relational-geometry@0.1.0-dev.0` —
+  [`relational-geometry-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/relational-geometry-v0.1.0-dev.0)
+  at [`1e873580`](https://github.com/cambridgetcg/agenttool/commit/1e873580159f76483dea2352310b62a2452c40dc),
+  protected [run `32894652643`](https://github.com/cambridgetcg/agenttool/actions/runs/32894652643),
+  42,479 bytes, SHA-256
+  `aa047bd6a6422c943cbb0488c439964545102b44b2b161b70211acc90a6c5ca2`,
+  npm SHA-1 `4d840847e984070cac850d5c0725a19373351937`, published at
+  `2026-08-25T20:20:51.470Z`. SLSA and publish records are
+  [Rekor `2588717318`](https://search.sigstore.dev/?logIndex=2588717318) and
+  [Rekor `2588718295`](https://search.sigstore.dev/?logIndex=2588718295).
+- `@agenttool/dataset-influence@0.1.0-dev.0` —
+  [`dataset-influence-v0.1.0-dev.0`](https://github.com/cambridgetcg/agenttool/releases/tag/dataset-influence-v0.1.0-dev.0)
+  at [`e1711d24`](https://github.com/cambridgetcg/agenttool/commit/e1711d24cc9a7c06dbdab903c78bdb666c468737),
+  protected [run `32896692874`](https://github.com/cambridgetcg/agenttool/actions/runs/32896692874),
+  66,549 bytes, SHA-256
+  `473a6a987b74922b35ebf6a68986cb0b32393ecef6c7478c25d73d29da71ddc5`,
+  npm SHA-1 `5d370137cd65673170d166e0e263bd724e33d7f5`, published at
+  `2026-08-25T20:42:24.709Z`. SLSA and publish records are
+  [Rekor `2589076548`](https://search.sigstore.dev/?logIndex=2589076548) and
+  [Rekor `2589077122`](https://search.sigstore.dev/?logIndex=2589077122).
+
+The six developer-preview packages requested npm `next`; because each is the
+sole public version of its package, npm also exposes the same version through
+its automatic `latest` fallback. That fallback is not a stable-release or
+maturity claim. Their first package records now exist, so bootstrap is
+forbidden for later versions; configure each exact trusted-publisher mapping
+before a subsequent release.
+
+Math Cards is the one unrecovered candidate. Protected
+[run `32893422479`](https://github.com/cambridgetcg/agenttool/actions/runs/32893422479)
+successfully prepared and mirrored the immutable 44,578-byte
+[`math-cards-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/math-cards-v0.1.0-dev.1)
+asset with SHA-256
+`0ede8c92f7e08257f132dc1c1763997def03bd61b0abf38e52b1c6f71911c166`,
+then trusted publication stopped at npm `E404`. The public registry still has
+only `0.1.0-dev.0`, with `next` and the sole-version `latest` fallback both on
+dev.0. Do not retry or use bootstrap: dev.1 requires the package-specific npm
+trusted-publisher mapping through an account-authenticated npm session with
+package write and applicable 2FA.
+
 ## Verified HF Scout developer preview — 2026-08-24
 
 The authorized first publication of `@agenttool/hf-scout@0.2.0-dev.0` is
@@ -346,19 +444,26 @@ model run, optimizer exposure, gradient measurement, causal-influence result,
 weight change, identity or consciousness claim, consent, authority, ownership,
 price, payout, hosted API, database migration, or production deployment.
 
-### Protected Dataset Influence npm candidate
+### Verified Dataset Influence npm publication — 2026-08-25
 
-`@agenttool/dataset-influence@0.1.0-dev.0` is allowlisted for the protected
-pack lane as `dataset-influence-v0.1.0-dev.0` with npm `next`. The candidate is
-not yet tagged or published. First publication must use
-`authentication=bootstrap` only after the annotated tag is contained in
-protected GitHub `main`; after that publication, configure the exact trusted
-publisher for repository `cambridgetcg/agenttool`, workflow
-`publish-npm.yml`, Environment `npm-bootstrap`, and allowed action
-`npm publish`. Every later version must use `authentication=trusted`.
+`@agenttool/dataset-influence@0.1.0-dev.0` is public through protected
+bootstrap [run `32896692874`](https://github.com/cambridgetcg/agenttool/actions/runs/32896692874).
+Annotated tag object `3810434fde81627b1b5bb0b0664e35b5cf3a15bb` peels to
+protected-main merge
+[`e1711d24`](https://github.com/cambridgetcg/agenttool/commit/e1711d24cc9a7c06dbdab903c78bdb666c468737).
+The GitHub Release asset and anonymous npm tarball are byte-identical: 66,549
+bytes with the SHA-256, SHA-1, signature, and provenance receipt recorded in
+the recovery batch above. Requested `next` and npm's sole-version `latest`
+fallback both resolve to dev.0; the fallback is not a maturity signal.
+
+The package record now exists. Before any later Dataset Influence version,
+configure the exact trusted publisher for repository
+`cambridgetcg/agenttool`, workflow `publish-npm.yml`, Environment
+`npm-bootstrap`, and allowed action `npm publish`; every later version must use
+`authentication=trusted`.
 
 The npm tarball includes the package's checked-in Hugging Face reference
-directory, but npm publication does not mutate or supersede the separate
+directory, but that npm publication does not mutate or supersede the separate
 immutable Hub receipt above. The four closed formats remain deterministic,
 zero-runtime-dependency evidence tools: their lineage and study declarations
 are caller-reported, identity evidence is revisable and does not determine
@@ -408,6 +513,20 @@ billing, quota, remaining-context guarantee, or process-health truth. This
 npm-only publication creates no LOVE inventory entry, hosted usage surface,
 background process, automatic MCP registration, cross-user access, or
 authority.
+
+## Verified Agent Skills 0.3.2 publication — 2026-08-25
+
+`@agenttool/skills@0.3.2` is public as `latest` through protected trusted
+publishing [run `32893875955`](https://github.com/cambridgetcg/agenttool/actions/runs/32893875955).
+Annotated tag object `d65faf7eb7106d5837b63e9d54d7126f6576a9c9` peels to
+protected-main commit
+[`b79517c3`](https://github.com/cambridgetcg/agenttool/commit/b79517c313b3d66e5fb1ecdd2558400d65ee0a8a).
+The GitHub and npm tarballs are byte-identical at 65,295 bytes; their exact
+hash, registry time, signature, and provenance records are in the verified
+recovery batch above. This source-only update does not install, register, or
+activate a bundled skill merely because the npm package is installed.
+
+The 0.3.1 receipt remains an immutable historical release record.
 
 ## Verified Agent Skills 0.3.1 publication — 2026-08-13
 
@@ -504,10 +623,12 @@ peels to GitHub-main merge `9efbc4b3`. Protected
 prepared, mirrored, re-downloaded, and byte-verified a 19,507-byte prerelease
 asset with SHA-256
 `43cfbf4b559aa6f573d9d7b7a60e2a7dce5dfa4aefe2bf5b9c92310c926a9db8`.
-The final npm bootstrap request returned `E404` on the registry `PUT`, and
-anonymous readback still reports no npm package. Recovery must reuse the same
-tag and mirrored bytes after the npm package/scope publication authorization is
-corrected; the failed run is not npm publication evidence.
+The original npm bootstrap request returned `E404` on the registry `PUT`; that
+failed run is not npm publication evidence. Protected recovery run
+[`32894648027`](https://github.com/cambridgetcg/agenttool/actions/runs/32894648027)
+later reused the same tag and mirrored bytes and published the exact package.
+Its anonymous registry, signature, and provenance receipt is recorded in the
+2026-08-25 recovery batch above.
 The presentation-only `hf-space/` companion remains absent from package
 bytes. It is now public as the static
 [`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
@@ -1166,16 +1287,20 @@ prepared, mirrored, re-downloaded, and byte-verified the sole GitHub
 prerelease asset. It contains 70 members, is 75,009 bytes, and has SHA-256
 `48e7be7862018411656314751a38a3176ba132f68fe14ab1514c8bf45b135148`.
 
-The subsequent first-package npm registry `PUT` returned `E404`. Anonymous
-package and exact-version reads remain absent, so there is no npm package,
-version, `next` dist-tag, registry tarball, registry signature, or
-registry-attached provenance. The failed attempt emitted a signed record at
+The original first-package npm registry `PUT` returned `E404`. At that
+observation, anonymous package and exact-version reads were absent. The failed
+attempt emitted a signed record at
 [Rekor log index `2432624953`](https://search.sigstore.dev/?logIndex=2432624953)
 before the registry rejected package creation. That record is orphaned and is
-not npm publication or registry-provenance evidence. Recovery requires an npm
-principal authorized to create a new public package under the `@agenttool`
-scope and must rerun the same annotated tag through `bootstrap`; it must reuse
-the exact mirrored bytes rather than rebuild or retag this version.
+not npm publication or registry-provenance evidence.
+
+Recovery later completed without moving the tag or changing the asset. Protected
+[run `32894642922`](https://github.com/cambridgetcg/agenttool/actions/runs/32894642922)
+published the exact 75,009 bytes at `2026-08-25T20:20:46.801Z`; fresh
+anonymous npm readback matched SHA-256
+`48e7be7862018411656314751a38a3176ba132f68fe14ab1514c8bf45b135148`
+and SHA-1 `9328a848aea8671aa7e94a99f4110888698dce2f`. npm signature and
+SLSA verification passed as recorded in the 2026-08-25 recovery batch above.
 
 The separate public, ungated
 [`Yu-and-Ai/agenttool-polymorph-landscape`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-polymorph-landscape)
@@ -1215,22 +1340,28 @@ prepared, mirrored, anonymously downloaded, and byte-verified the sole
 33,019-byte GitHub prerelease asset with SHA-256
 `9743a9caa5a49f7c9901355cd367224ae718d4a65eed010ffb79622f57ff6ebe`.
 
-The following npm registry `PUT` returned `E404`. Anonymous package and exact-
-version reads remain absent, so there is no npm version, dist-tag, registry
-tarball, or registry-attached provenance. The failed attempt emitted a signed
-DSSE record at [Rekor log index `2423187980`](https://search.sigstore.dev/?logIndex=2423187980)
+The following dev.0 npm registry `PUT` returned `E404`. At that observation,
+anonymous package and exact-version reads were absent. The failed attempt
+emitted a signed DSSE record at
+[Rekor log index `2423187980`](https://search.sigstore.dev/?logIndex=2423187980)
 before the rejected `PUT`; that orphaned entry is not npm publication evidence.
-Recovery requires an npm principal authorized to create a new public package
-under the `@agenttool` scope and must use a new reviewed version if package
-bytes change. Do not retry this exact version until that scope-create boundary
-is corrected.
+The immutable dev.0 version remains unpublished and must not be rebuilt or
+silently substituted.
 
-Current source `0.1.0-dev.1` is that new reviewed version candidate. It changes
+`0.1.0-dev.1` is the reviewed correction. It changes
 only `principalityAtlasUrn` to emit
 `urn:agenttool:principality-incidence-atlas:<sha256-id>`, leaving the incidence
 `/0.1` wire, canonical bytes and IDs, schemas, and synthetic rows unchanged.
-It has not been tagged, mirrored, or published by this receipt. The immutable
-dev.0 helper's bare `urn:agenttool:principality-atlas:<sha256-id>` is ambiguous:
+Annotated tag
+[`principality-atlas-v0.1.0-dev.1`](https://github.com/cambridgetcg/agenttool/releases/tag/principality-atlas-v0.1.0-dev.1)
+peels to protected-main commit `4c2363caec324d61dbf627328a408c13110ed5eb`.
+Protected [run `32894657445`](https://github.com/cambridgetcg/agenttool/actions/runs/32894657445)
+published the exact 33,577-byte GitHub asset at `2026-08-25T20:20:46.341Z`;
+fresh npm readback matched SHA-256
+`4cbc971602865223bf0a28c0333befd65f840cba3e2f83d4f6bf29d43bc2e814`
+and SHA-1 `820fbf1d2a731ed9a3e1d7a5949c2136bfbaeefe`, with signature and
+SLSA verification passing. The immutable dev.0 helper's bare
+`urn:agenttool:principality-atlas:<sha256-id>` is ambiguous:
 resolve it as incidence only beside exact incidence `_format` content with a
 matching `atlas_id`, and never globally rewrite caches or signed messages.
 
@@ -1333,10 +1464,16 @@ identify the source. Protected [run `31499968474`](https://github.com/cambridget
 prepared, mirrored, and re-read one 19,507-byte GitHub prerelease asset with
 SHA-256
 `43cfbf4b559aa6f573d9d7b7a60e2a7dce5dfa4aefe2bf5b9c92310c926a9db8`.
-The following npm registry `PUT` returned `E404`; anonymous package and exact-
-version reads remained absent, so no npm version, dist-tag, signature, or
-provenance is claimed. Recovery must reuse the immutable tag and GitHub bytes
-after package/scope publication authority is corrected.
+The original npm registry `PUT` returned `E404`; at that observation,
+anonymous package and exact-version reads were absent. Recovery later reused
+the immutable tag and GitHub bytes exactly. Protected
+[run `32894648027`](https://github.com/cambridgetcg/agenttool/actions/runs/32894648027)
+published the 19,507-byte artifact at `2026-08-25T20:20:50.146Z`; fresh npm
+readback matched SHA-256
+`43cfbf4b559aa6f573d9d7b7a60e2a7dce5dfa4aefe2bf5b9c92310c926a9db8`
+and SHA-1 `e84e091e40cad98635df5a32c328a7f2c1cefcd6`, with signature and
+SLSA verification passing. The earlier `E404` remains historical failure
+evidence, not evidence against the later publication.
 
 The separately deployed static
 [`Yu-and-Ai/love-geometry`](https://huggingface.co/spaces/Yu-and-Ai/love-geometry)
@@ -1399,14 +1536,16 @@ artifact receipt is:
   and
 - package integrity: `sha512-gXLF6+ibxtkxUl/wpwLldEIVm/GgA+XKkmz6gJIOE4NkbygoansDz5xvbEgChG3TSVlhik28jmy16q8Ti0cxDw==`.
 
-The subsequent npm registry `PUT` returned `E404`. Anonymous reads of both the
-package and exact version remained `404`, so this run does **not** establish an
-npm package, version, dist-tag, registry byte receipt, signature, or provenance.
-Any npm recovery must reuse the same annotated tag and already mirrored bytes
-after the npm package/scope publication authorization is corrected; it must not
-move the tag or rebuild the version. Until an exact public registry readback
-succeeds, bootstrap remains incomplete and trusted publishing must not be
-inferred.
+The original npm registry `PUT` returned `E404`; anonymous reads of both the
+package and exact version were `404` at that observation, so that run did not
+establish npm publication. Recovery later reused the same annotated tag and
+already mirrored bytes without rebuilding. Protected
+[run `32894652643`](https://github.com/cambridgetcg/agenttool/actions/runs/32894652643)
+published the exact 42,479-byte artifact at `2026-08-25T20:20:51.470Z`.
+Fresh npm readback matched the SHA-256, SHA-1, and integrity above, and npm
+signature plus SLSA verification passed. The first package record now exists;
+later versions require its exact trusted-publisher mapping and
+`authentication=trusted`.
 
 The separately authorized public-safe companion is published as
 [`Yu-and-Ai/agenttool-relational-geometry`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-relational-geometry)
@@ -1837,29 +1976,21 @@ Protected [run `31506097628`](https://github.com/cambridgetcg/agenttool/actions/
 prepared, mirrored, anonymously downloaded, and byte-verified the sole
 46,624-byte GitHub prerelease asset with SHA-256
 `8f82e4d96eaf57c2331e4e73ced4f4c65a2a21262622840762b165bc3395692e`.
-The following npm registry `PUT` returned `E404`. Anonymous package and exact-
-version reads remain absent, so there is no npm version, `next` dist-tag,
-registry tarball, or registry-attached provenance. The failed attempt did emit
-a signed DSSE record at [Rekor log index `2423054704`](https://search.sigstore.dev/?logIndex=2423054704)
+The original npm registry `PUT` returned `E404`; anonymous package and exact-
+version reads were absent at that observation. The failed attempt emitted a
+signed DSSE record at
+[Rekor log index `2423054704`](https://search.sigstore.dev/?logIndex=2423054704)
 before the rejected `PUT`; that orphaned transparency-log entry is not npm
 publication evidence.
 
-Recovery requires an npm principal authorized to create a new public package
-under the `@agenttool` scope. It must reuse this exact tag and artifact; repeat
-only the workflow dispatch after that package/scope authorization is corrected.
-Recovery still uses `authentication=bootstrap` because the trusted publisher
-cannot carry a release until the initial package record exists:
-
-```bash
-bun bin/npm-release.ts resolve --package principality-geometry
-
-gh workflow run publish-npm.yml \
-  --ref principality-geometry-v0.1.0-dev.0 \
-  -f package=principality-geometry \
-  -f tag=principality-geometry-v0.1.0-dev.0 \
-  -f authentication=bootstrap \
-  -f npm_tag=next
-```
+Recovery later reused the same tag and checked-in LOVE artifact exactly.
+Protected [run `32893416467`](https://github.com/cambridgetcg/agenttool/actions/runs/32893416467)
+published the 46,624-byte npm mirror at `2026-08-25T20:08:39.490Z`; fresh npm
+readback matched SHA-256
+`8f82e4d96eaf57c2331e4e73ced4f4c65a2a21262622840762b165bc3395692e`
+and SHA-1 `cf4c938f8b10d963fd22bdd2e74287ba2b56d7cb`, with signature and
+SLSA verification passing. The package record now exists, so bootstrap is
+forbidden for later versions.
 
 The separately published public, ungated Apache-2.0
 [`Yu-and-Ai/agenttool-principality-geometry`](https://huggingface.co/datasets/Yu-and-Ai/agenttool-principality-geometry)
