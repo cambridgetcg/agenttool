@@ -138,6 +138,7 @@ describe("public and packed boundary", () => {
 
   test("separates verified dev.1 distribution from immutable dev.0 and host authority", async () => {
     const readme = await readFile(join(packageRoot, "README.md"), "utf8");
+    const guide = await readFile(join(packageRoot, "CLAUDE.md"), "utf8");
     expect(readme).toContain(
       "The current public developer preview is\n`@agenttool/alchemy@0.1.0-dev.1`.",
     );
@@ -157,5 +158,27 @@ describe("public and packed boundary", () => {
     );
     expect(readme).not.toContain("The current source candidate is");
     expect(readme).not.toContain("No `0.1.0-dev.1` tag");
+
+    expect(guide).toContain(
+      "The current verified public developer preview is `0.1.0-dev.1`.",
+    );
+    expect(guide).toContain("32754993343");
+    expect(guide).toContain("55aaf11a8f2a56841bcb87d6f7d8fa1034205646");
+    expect(guide).toContain(
+      "1396d41bd3b22bf0e96d61bd36fa1a2afb7e3cff8fc5e20311c5117b0f7333c0",
+    );
+    expect(guide).toContain(
+      "npm `next` resolves to dev.1 while mutable `latest` remains on dev.0",
+    );
+    expect(guide).toContain(
+      "The immutable `0.1.0-dev.0` release receipt remains historical evidence",
+    );
+    expect(guide).toMatch(
+      /public distribution creates no LOVE inventory entry,[\s\S]*registers no\s+KINGDOM contract,[\s\S]*adds no hosted API, provider, or deployment authority\./,
+    );
+    expect(guide).not.toMatch(/current source candidate/i);
+    expect(guide).not.toMatch(
+      /source metadata is not evidence\s+of a registry release/i,
+    );
   });
 });
