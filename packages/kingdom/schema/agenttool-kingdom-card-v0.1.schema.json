@@ -78,7 +78,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 500,
-      "pattern": "^(?!\\s)[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*\\S$"
+      "pattern": "^(?!\\s)[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\s](?![\\s\\S])"
     },
     "dependsOn": {
       "type": "array",

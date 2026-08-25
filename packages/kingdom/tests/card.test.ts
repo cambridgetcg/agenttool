@@ -161,7 +161,13 @@ describe("KINGDOM flat-card parser", () => {
     const parsed = parseKingdomCard(AGENTTOOL_CARD_SOURCE);
     if (!parsed.valid) throw new Error("fixture must be valid");
 
-    for (const purpose of [" ", " leading", "trailing "]) {
+    for (const purpose of [
+      " ",
+      " leading",
+      "trailing ",
+      "\ufeffleading",
+      "trailing\ufeff",
+    ]) {
       const result = validateKingdomCard({ ...parsed.card, purpose });
       expect(result.valid, JSON.stringify({ purpose, result })).toBe(false);
       expect(result.diagnostics).toContainEqual(

@@ -659,6 +659,8 @@ describe("KingdomFrameworkClient closed card validation", () => {
     ["blank purpose", cloneCard({ purpose: " " })],
     ["leading purpose whitespace", cloneCard({ purpose: " leading" })],
     ["trailing purpose whitespace", cloneCard({ purpose: "trailing " })],
+    ["leading purpose byte-order mark", cloneCard({ purpose: "\ufeffleading" })],
+    ["trailing purpose byte-order mark", cloneCard({ purpose: "trailing\ufeff" })],
     ["long purpose", cloneCard({ purpose: "p".repeat(501) })],
     ["control in purpose", cloneCard({ purpose: "hello\nworld" })],
     ["C1 in purpose", cloneCard({ purpose: "hello\u0085world" })],

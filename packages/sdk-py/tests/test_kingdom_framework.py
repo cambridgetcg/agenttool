@@ -762,6 +762,8 @@ class TestKingdomFrameworkClosedSchema:
             ("purpose", " "),
             ("purpose", " leading"),
             ("purpose", "trailing "),
+            ("purpose", "\ufeffleading"),
+            ("purpose", "trailing\ufeff"),
             ("purpose", "p" * 501),
             ("purpose", "line one\nline two"),
             ("purpose", "unsafe\ud800"),
