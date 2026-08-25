@@ -672,7 +672,16 @@ runtime paths to `af64cf49` while keeping package artifact fields null and
 deterministic, unsigned, non-summable, write no KARMA, and choose or schedule
 no next action.
 
-`@agenttool/kingdom@0.1.1` is public through annotated tag
+`@agenttool/kingdom@0.1.2` is the current npm-only source candidate. It aligns
+runtime, exported-schema, and SDK single-field validation for already-trimmed
+purpose text and Unicode scalar boundaries, plus runtime/SDK semantic checks
+for case-insensitive duplicate dependencies and self-dependency. It has no
+LOVE inventory entry. Source preparation does not establish `kingdom-v0.1.2`, a
+GitHub Release, npm publication, dist-tag movement, or hosted deployment; any
+later publication must use the existing trusted `kingdom` release identity and
+separate anonymous artifact readback.
+
+`@agenttool/kingdom@0.1.1` remains public through annotated tag
 [`kingdom-v0.1.1`](https://github.com/cambridgetcg/agenttool/releases/tag/kingdom-v0.1.1)
 at the same `9efbc4b3` merge and protected trusted-publishing
 [run `31500229604`](https://github.com/cambridgetcg/agenttool/actions/runs/31500229604).
@@ -777,6 +786,18 @@ gradient access, persistence, training, steering, KINGDOM operation, awareness
 test, or continuity proof. Publication is not installation, invocation,
 deployment, participant receipt, model effect, or evidence of awareness,
 feeling, identity, consent, authority, or uninterrupted continuity.
+
+## Prepared SDK 0.21.1 candidate — 2026-08-25
+
+Paired TypeScript/Python source 0.21.1 corrects KINGDOM card validation parity
+without adding a hosted endpoint. The checked-in
+`agenttool-sdk-0.21.1.tgz` is 247,749 bytes with 100 entries and SHA-256
+`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`;
+its manifest binds clean source revision
+`d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`. No `sdk-v0.21.1` tag, GitHub
+Release, npm version, dist-tag receipt, PyPI distribution, static deployment,
+or hosted readback is established by those candidate bytes. The verified
+0.21.0 receipts below remain exact and are not rewritten.
 
 ## Verified SDK 0.21.0 publication — 2026-08-20
 

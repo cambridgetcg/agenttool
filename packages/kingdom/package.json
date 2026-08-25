@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/kingdom",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Pure, read-only KINGDOM project cards, registries, and XENIA Surface helpers",
   "license": "Apache-2.0",
   "type": "module",

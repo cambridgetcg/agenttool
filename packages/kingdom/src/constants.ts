@@ -1,6 +1,6 @@
 import { RIGHTS_BASELINE_VERSION } from "@agenttool/xenia/rights-0.1";
 
-export const PACKAGE_VERSION = "0.1.1" as const;
+export const PACKAGE_VERSION = "0.1.2" as const;
 export const KINGDOM_CARD_SCHEMA_VERSION =
   "agenttool.kingdom.card/0.1" as const;
 export const KINGDOM_REGISTRY_SCHEMA_VERSION =

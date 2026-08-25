@@ -722,20 +722,28 @@ host, or a live-chain deployment.
 Historical catalog releases whose manifests say `license: null` provide no
 reuse grant; the current `@agenttool/data@0.3.1`,
 `@agenttool/data-sync@0.1.2`, `@agenttool/adds@0.2.3`,
-`@agenttool/credential-broker@0.3.1`, `@agenttool/sdk@0.21.0`, and
+`@agenttool/credential-broker@0.3.1`, `@agenttool/sdk@0.21.1`, and
 `@agenttool/telescope@0.2.3`, `@agenttool/wallet@0.1.3`,
 `@agenttool/wallet-zerone@0.1.2`, `@agenttool/browser@0.6.0`, and
 `@agenttool/principality-geometry@0.1.0-dev.0` catalog entries instead declare
 `Apache-2.0` without retroactively changing those immutable older releases.
-The SDK 0.21.0 catalog entry is an exact 247,146-byte, 100-entry LOVE release
-with SHA-256
+The SDK 0.21.1 catalog entry is an exact 247,749-byte, 100-entry LOVE/source
+candidate with SHA-256
+`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`
+and source revision `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`.
+`sdk-v0.21.1`, the matching npm/PyPI versions, and the hosted static path
+remain prospective and not independently visible. The candidate does not
+rewrite or claim publication of the verified 0.21.0 bytes.
+
+The SDK 0.21.0 catalog entry remains an exact 247,146-byte, 100-entry public
+LOVE release with SHA-256
 `c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`
 and source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
 Annotated `sdk-v0.21.0` peels to protected-main commit
 `2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`; protected npm run
 `32374669064` and PyPI run `32374671268` independently read back its exact
 optional mirrors. The immutable verified 0.20.0 LOVE, tag, GitHub, npm, and
-PyPI receipts remain historical public evidence and are not rewritten.
+PyPI receipts remain earlier public evidence and are not rewritten.
 Historical Wallet `0.1.0`/`0.1.1`/`0.1.2` and Wallet Zerone
 `0.1.0`/`0.1.1` LOVE artifacts remain separately addressable and are not
 rewritten; public errata supersede stale release-state prose and record that
