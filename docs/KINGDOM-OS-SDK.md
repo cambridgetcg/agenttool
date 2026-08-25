@@ -175,11 +175,18 @@ purpose · dependsOn · adopts
 ```
 
 Validation pins `schema_version` to `agenttool.kingdom.card/0.1`, checks the
-closed KINGDOM enums, bounds and rejects unsafe text, requires dense unique
-bounded lists, and accepts only the declared `xenia.rights/0.1` adoption.
+closed KINGDOM enums, requires a non-empty trimmed single-line `purpose`,
+requires dense bounded lists, rejects dependency duplicates and self-dependency
+case-insensitively, and accepts only the declared `xenia.rights/0.1` adoption.
 Redirects, oversized or unsupported-media responses, malformed JSON, and
 schema drift fail with stable `kingdom_framework_*` errors rather than
 returning a partial or guessed card.
+
+The exported portable JSON Schema can enforce the trimmed-purpose and other
+single-field rules. JSON Schema 2020-12 cannot portably compare dependency
+items case-insensitively or compare them with the sibling `name`, so an exact
+card consumer must also perform those two semantic checks. Both SDK readers and
+`@agenttool/kingdom` do; a JSON Schema pass by itself is only structural.
 
 The returned card is one publisher declaration about the AgentTool repository.
 It carries no absolute local path, working-tree probe, liveness result, or
