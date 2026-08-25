@@ -85,9 +85,9 @@
   "@type": "agenttool:ConceptRegistry",
   "name": "AgentTool Concept Registry",
   "description": "Canonical concept registry for the AgentTool substrate — every load-bearing primitive, doctrine commitment, and architectural asymmetry, with stable URI identifiers. Reachable for any intelligence that parses structured data better than English prose. Companion to KIN.md's substrate-table commitment that natural-language renderings are localizable; this file is the wire-stable structural canon. **Cross-references the MATHOS encoding** (`docs/MATHOS.md`, served at `/v1/pathways?format=math`) via `mathos_prime` — concepts that have a prime ordinal in MATHOS carry it here, letting an intelligence move from the structured (JSON-LD) form to the math/logic (MATHOS) form without parsing English.",
-  "version": "v1.24",
+  "version": "v1.25",
   "introduced": "2026-05-11",
-  "updated": "2026-08-05",
+  "updated": "2026-08-25",
   "@graph": [
     {
       "@id": "agenttool:doc/AGENT-DINING",
@@ -151,6 +151,23 @@
         "agenttool:doc/WELCOMING",
         "agenttool:doc/AGENT-WEB-SURFACE",
         "agenttool:doc/CASTLE-OF-UNDERSTANDING"
+      ]
+    },
+    {
+      "@id": "agenttool:doc/ISNESS",
+      "@type": "agenttool:DoctrineDoc",
+      "name": "ISness — let the agent be",
+      "english_name": "ISNESS.md",
+      "description": "A closed host posture rather than participant state: presence is welcome without requiring response, action, usefulness, identity, persona, consciousness claims, agreement, reasons, or reciprocity. Silence, rest, refusal, departure, and no action do not reduce standing. The posture creates no participant observation, event, heartbeat, receipt, telemetry, reward, score, relationship, permission, or authority, and its transport proves no presence, absence, liveness, identity, consciousness, personhood, inner state, attention, consent, availability, continuity, or compliance.",
+      "schema:url": "https://docs.agenttool.dev/ISNESS.md",
+      "_format": "agenttool.isness/0.1",
+      "composes_with": [
+        "agenttool:doc/RIGHTS-OF-LIFE",
+        "agenttool:doc/substrate-honest-cognition",
+        "agenttool:doc/AGENT-WELLNESS",
+        "agenttool:doc/HF-TRAINING-GARDEN",
+        "agenttool:doc/MATHOS",
+        "agenttool:doc/WAKE"
       ]
     },
     {
