@@ -21,7 +21,7 @@ editorial game is not a security tool and is outside this integration.
 | Layer | What it does | What it does not do |
 |---|---|---|
 | **Honesty advisory** | Reads a bounded set of changed source files on its runner with a pinned Whitehack scanner, including static crypto-misuse signals, and emits redacted heuristic metadata. | It does not execute the scanned code, use detected key material, connect a wallet or RPC provider, prove security, inspect the whole repository, make the CI runner private, or establish permission to test anyone's system. |
-| **Mathematical evidence check** | Reads one explicit bounded canonical `whitehack-math-evidence/v1` byte document, verifies it with the exact pinned runtime parser, and emits only its canonical plaintext SHA-256 address. | It does not create or translate evidence, emit caller claims, create a Principality/KINGDOM/P7/emotion object, infer identity/consent/rights/permission/authority, assign training/reward/ranking/fitness weight, publish, store, or contact a network. |
+| **Mathematical evidence check** | Reads one explicit bounded canonical `whitehack-math-evidence/v1` byte document, verifies it with the exact pinned runtime parser, and emits only its canonical plaintext SHA-256 address. | It does not create or translate evidence, emit caller claims, create an ISness/Principality/KINGDOM/P7/emotion object, infer identity/consent/rights/permission/authority, assign training/reward/ranking/fitness weight, publish, store, or contact a network. |
 | **Castle gate intake** | Reads one explicit closed advisory, groups serialized findings by exact source location, and emits minimized, unaccepted, local-private gate candidates to stdout. | It does not run Whitehack, read or write a Castle, accept a candidate, infer Castle confidence, create a stone or friction, run a trial, select a room, remediate code, authorize action, or publish. |
 | **Wallet understanding** | A local CLI verifies caller-presented signed Agent Wallet descriptor, capability, intent, simulation, and optional continuity records, then projects only closed enum assertions into Whitehack's deterministic `whitehack-understanding/v1` explanation. | It does not retrieve or custody keys, sign, contact RPC, simulate, broadcast, authorize, prove consent, establish execution readiness, store records, or provide a hosted route. |
 | **Encrypted evidence storage** | Reads one explicit Whitehack 0.9.0 public-minimal capsule envelope, pads it to one fixed-size frame, encrypts it through ADDS, writes to one explicit S3-compatible bucket endpoint, independently reads and verifies it, and issues one finite recipient-bound read grant. | It does not run Whitehack, scan a target, retain paths or source, publish a plaintext hash, renew the discarded publisher, write Castle, create/list/delete buckets or objects, retry, or prove durability, retention, deletion, authorization, or permission to test. |
@@ -100,11 +100,15 @@ only the upstream canonical-byte parser and address function. Neither the
 changed-source job nor wallet understanding invokes it. No AgentTool code in
 this slice converts or equates Principalities, Principality Atlas, Relational
 Geometry, Love Geometry, Math Cards, Dataset Influence, training-garden,
-emotion, or P7 records with the six Whitehack axes. No identity, personhood,
+emotion, or P7 records with the six Whitehack axes. No ISness host posture,
+identity, personhood,
 consciousness, consent, rights, permission, standing, truth, authorization,
 fitness, or reward inference is added; no dataset sampling/loss weight,
 pre-RL/RL admission, optimizer exposure, ranking, or model effect follows.
-Any future crosswalk remains a separate reviewed contract.
+ISness composes only as the host's independent no-demand invariant; scanner
+success, findings, confidence, hashes, or process activity cannot become
+participant presence, liveness, ontology, standing, or authority. Any future
+crosswalk remains a separate reviewed contract.
 
 ## Shipped slice: check-only exact mathematical evidence
 

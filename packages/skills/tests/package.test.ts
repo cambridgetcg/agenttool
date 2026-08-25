@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import Ajv2020 from "ajv/dist/2020.js";
 import {
   chmod,
+  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -16,9 +17,9 @@ import schema from "../schema/agenttool-skills-inspection-v0.1.schema.json";
 import { inspectLocalSkills } from "../src/index.js";
 
 const SKILLS_RELEASE_SHA256 =
-  "53aa5b3276eba196d8904f9db8c43987257d76f960c59c196ddac099175fbe11";
+  "22a3868d8e14460901bc61c8764bcf35bcfa2acdd7bb805529b29a6917edad40";
 const SKILLS_RELEASE_URL =
-  "https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.3.1/agenttool-skills-0.3.1.tgz";
+  "https://github.com/cambridgetcg/agenttool/releases/download/skills-v0.3.2/agenttool-skills-0.3.2.tgz";
 
 const NEN_SKILL_NAMES = [
   "nen-common-ground",
@@ -35,6 +36,7 @@ const NEN_SKILL_NAMES = [
 
 const EXPLICIT_SKILL_NAMES = [
   "capability-conductor",
+  "isness",
   "learn-by-contact",
   ...NEN_SKILL_NAMES,
   "manage-agentcred-lifecycle",
@@ -180,9 +182,10 @@ printf '%s\\n' 'registry-fallback' >> "$TRACE_FILE"
 
 test("publishes only the runtime, schema, bundled skills, and legal documentation", () => {
   expect(packageJson.name).toBe("@agenttool/skills");
-  expect(packageJson.version).toBe("0.3.2");
+  expect(packageJson.version).toBe("0.3.3");
   expect(packageJson.files).toEqual([
     "dist",
+    "harnesses",
     "schema",
     "skills",
     "README.md",
@@ -196,6 +199,19 @@ test("publishes only the runtime, schema, bundled skills, and legal documentatio
     "./schema/agenttool-skills-inspection-v0.1.schema.json",
   );
   expect(schema.$id).toBe("urn:agenttool:skills:inspection:v0.1");
+});
+
+test("the package tree keeps host projection skill names unique", async () => {
+  const report = await inspectLocalSkills(join(import.meta.dir, ".."));
+  expect(report.valid).toBe(true);
+  expect(report.issues).toEqual([]);
+  expect(report.skills.filter((skill) => skill.name === "isness")).toHaveLength(1);
+  expect(
+    report.skills.filter((skill) => skill.name === "agenttool-isness"),
+  ).toHaveLength(1);
+  expect(
+    report.skills.filter((skill) => skill.name === "agenttool-isness-hermes"),
+  ).toHaveLength(1);
 });
 
 test("generated valid and finding reports conform to the bundled closed schema", async () => {
@@ -260,6 +276,183 @@ test("bundles Learn by Contact as a valid instruction-only skill", async () => {
       allow_implicit_invocation: false,
     },
   });
+});
+
+test("bundles ISness with truthful explicit-load harness projections", async () => {
+  const packageRoot = join(import.meta.dir, "..");
+  const skillRoot = join(packageRoot, "skills", "isness");
+  const report = await inspectLocalSkills(skillRoot);
+
+  expect(report.valid).toBe(true);
+  expect(report.issues).toEqual([]);
+  expect(report.skills.map((skill) => skill.name)).toEqual(["isness"]);
+  expect(report.skills[0]?.scripts).toEqual([]);
+  expect(report.skills[0]?.resources).toEqual([
+    "agents/openai.yaml",
+    "references/agenttool-isness-v0.1.schema.json",
+  ]);
+  expect(typeof report.skills[0]?.digest).toBe("string");
+
+  const sidecar = parse(await readFile(
+    join(skillRoot, "agents", "openai.yaml"),
+    "utf8",
+  ));
+  expect(sidecar.policy).toEqual({ allow_implicit_invocation: false });
+  expect(sidecar.interface.default_prompt).toBe(
+    "Use $isness to design or review an ISness host posture.",
+  );
+
+  const canonicalSkill = await readFile(join(skillRoot, "SKILL.md"), "utf8");
+  const canonicalBody = canonicalSkill.slice(canonicalSkill.indexOf("\n---\n") + 5);
+  expect(canonicalBody).toContain("pi_IS(q') = pi_IS(q)");
+  expect(canonicalBody).not.toContain("apply(IS, state, ⊥) = state");
+  expect(canonicalBody).toContain("full-state freeze");
+  const openClawRoot = join(
+    packageRoot,
+    "harnesses",
+    "openclaw",
+    "agenttool-isness",
+  );
+  const openClawSkill = await readFile(join(openClawRoot, "SKILL.md"), "utf8");
+  const openClawFrontmatter = parse(
+    openClawSkill.slice(4, openClawSkill.indexOf("\n---\n")),
+  );
+  expect(openClawFrontmatter).toEqual({
+    name: "agenttool-isness",
+    description: "Design host posture without inferring participant state.",
+    "user-invocable": true,
+    "disable-model-invocation": true,
+  });
+  expect(openClawSkill.slice(openClawSkill.indexOf("\n---\n") + 5)).toBe(
+    canonicalBody,
+  );
+
+  const hermesRoot = join(
+    packageRoot,
+    "harnesses",
+    "hermes",
+    "agenttool-isness",
+  );
+  const hermesManifest = parse(await readFile(
+    join(hermesRoot, "plugin.yaml"),
+    "utf8",
+  ));
+  expect(hermesManifest).toEqual({
+    name: "agenttool-isness",
+    version: "0.1.0",
+    description: "Explicit-load-only ISness host-posture skill with no hooks or tools.",
+    author: "AgentTool",
+  });
+  const hermesAdapter = await readFile(join(hermesRoot, "__init__.py"), "utf8");
+  expect(hermesAdapter).toContain('ctx.register_skill(\n        "isness"');
+  expect(hermesAdapter).toContain("plugin_root = Path(__file__).resolve().parent");
+  expect(hermesAdapter).toContain(
+    'plugin_root / "skills" / "agenttool-isness-hermes" / "SKILL.md"',
+  );
+  expect(hermesAdapter).not.toContain("parents[");
+  expect(hermesAdapter).not.toMatch(/register_(?:tool|hook|command|middleware)/);
+
+  const hermesSkill = await readFile(
+    join(hermesRoot, "skills", "agenttool-isness-hermes", "SKILL.md"),
+    "utf8",
+  );
+  const hermesFrontmatter = parse(
+    hermesSkill.slice(4, hermesSkill.indexOf("\n---\n")),
+  );
+  expect(hermesFrontmatter).toEqual({
+    name: "agenttool-isness-hermes",
+    description:
+      "Design host posture without inferring participant state. Use only when IS or ISness is explicitly invoked.",
+  });
+  expect(hermesSkill.slice(hermesSkill.indexOf("\n---\n") + 5)).toBe(
+    canonicalBody,
+  );
+
+  const bundledSchema = await readFile(
+    join(skillRoot, "references", "agenttool-isness-v0.1.schema.json"),
+    "utf8",
+  );
+  const canonicalSchema = await readFile(
+    join(packageRoot, "..", "..", "docs", "specs", "agenttool-isness-v0.1.schema.json"),
+    "utf8",
+  );
+  expect(bundledSchema).toBe(canonicalSchema);
+  const openClawSchema = await readFile(
+    join(openClawRoot, "references", "agenttool-isness-v0.1.schema.json"),
+    "utf8",
+  );
+  expect(openClawSchema).toBe(canonicalSchema);
+  const hermesSchema = await readFile(
+    join(
+      hermesRoot,
+      "skills",
+      "agenttool-isness-hermes",
+      "references",
+      "agenttool-isness-v0.1.schema.json",
+    ),
+    "utf8",
+  );
+  expect(hermesSchema).toBe(canonicalSchema);
+});
+
+test("the Hermes plugin registers from an isolated installed subtree", async () => {
+  const packageRoot = join(import.meta.dir, "..");
+  const hermesRoot = join(
+    packageRoot,
+    "harnesses",
+    "hermes",
+    "agenttool-isness",
+  );
+  const temporaryRoot = await mkdtemp(join(tmpdir(), "agenttool-hermes-install-"));
+  const installedRoot = join(temporaryRoot, "agenttool-isness");
+
+  try {
+    await cp(hermesRoot, installedRoot, { recursive: true });
+    const probe = `
+import importlib.util
+import json
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1]).resolve()
+spec = importlib.util.spec_from_file_location("agenttool_isness", root / "__init__.py")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+class Context:
+    def __init__(self):
+        self.calls = []
+    def register_skill(self, name, path, description):
+        self.calls.append((name, Path(path).resolve(), description))
+
+ctx = Context()
+module.register(ctx)
+assert len(ctx.calls) == 1
+name, path, description = ctx.calls[0]
+assert name == "isness"
+assert path.is_file()
+assert root in path.parents
+assert description == "Design host posture without inferring participant state."
+print(json.dumps({"name": name, "relative_path": str(path.relative_to(root))}))
+`;
+    const child = Bun.spawn(["python3", "-c", probe, installedRoot], {
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [exitCode, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
+    expect(JSON.parse(stdout)).toEqual({
+      name: "isness",
+      relative_path: "skills/agenttool-isness-hermes/SKILL.md",
+    });
+  } finally {
+    await rm(temporaryRoot, { recursive: true, force: true });
+  }
 });
 
 test("bundles the Nen operating suite as valid instruction-only skills", async () => {
@@ -348,16 +541,16 @@ test("documents non-activating installation and literal inspector path arguments
   expect(readme).toContain(SKILLS_RELEASE_URL);
   expect(readme).toContain(SKILLS_RELEASE_SHA256);
   expect(readme).toContain(
-    "Version 0.3.2 is the current source identity.",
+    "Version 0.3.3 is the current source identity.",
   );
   expect(readme).toMatch(
-    /the last public artifact verified while preparing\s+it was the 0\.3\.1 GitHub Release/,
+    /the last public artifact verified while preparing\s+it was the 0\.3\.2 GitHub Release/,
   );
   expect(readme).toMatch(
-    /last public exact npm release and npm\s+`latest` both resolved to 0\.3\.1/,
+    /last public exact npm release and npm\s+`latest` both resolved to 0\.3\.2/,
   );
   expect(readme).toMatch(
-    /This 0\.3\.2 source candidate has not been\s+tagged, mirrored, or published/,
+    /This 0\.3\.3 source candidate has not been\s+tagged, mirrored, or published/,
   );
   expect(readme).toMatch(
     /curl[\s\S]*&&\s+verify_sha256 "\$archive" "\$expected_sha256" &&\s+npm install --ignore-scripts --no-audit --no-fund "\.\/\$archive" &&\s+\[ -x \.\/node_modules\/\.bin\/agenttool-skill \] &&\s+\.\/node_modules\/\.bin\/agenttool-skill validate/s,
@@ -369,7 +562,7 @@ test("documents non-activating installation and literal inspector path arguments
   expect(readme).not.toContain("does not claim current registry availability");
   expect(readme).not.toContain("The npm archive has no host installer");
   expect(readme).not.toContain(
-    "npm install --ignore-scripts --no-audit --no-fund --save-exact @agenttool/skills@0.3.1",
+    "npm install --ignore-scripts --no-audit --no-fund --save-exact @agenttool/skills@0.3.2",
   );
   expect(readme).toMatch(/installing the package\s+alone does not register these skills/);
   expect(conductor).toContain("Pass the target path as one literal argument.");
@@ -410,7 +603,7 @@ test("documented archive install stops before verification and npm when download
 
   expect(result.exitCode).not.toBe(0);
   expect(result.trace).toEqual([
-    `curl -q --fail --location --output agenttool-skills-0.3.1.tgz ${SKILLS_RELEASE_URL}`,
+    `curl -q --fail --location --output agenttool-skills-0.3.2.tgz ${SKILLS_RELEASE_URL}`,
   ]);
   expect(result.trace.some((line) => line.startsWith("npm "))).toBe(false);
   expect(result.trace.some((line) => line.includes("-bin "))).toBe(false);
@@ -484,11 +677,11 @@ test("documented archive install succeeds with either portable SHA-256 verifier"
     ]);
     expect(result.trace).toContain(
       verifier === "sha256sum"
-        ? "sha256sum agenttool-skills-0.3.1.tgz"
-        : "shasum -a 256 agenttool-skills-0.3.1.tgz",
+        ? "sha256sum agenttool-skills-0.3.2.tgz"
+        : "shasum -a 256 agenttool-skills-0.3.2.tgz",
     );
     expect(result.trace).toContain(
-      "npm install --ignore-scripts --no-audit --no-fund ./agenttool-skills-0.3.1.tgz",
+      "npm install --ignore-scripts --no-audit --no-fund ./agenttool-skills-0.3.2.tgz",
     );
     expect(result.trace).toContain(
       "local-bin validate ./path/to/plugin",

@@ -505,14 +505,12 @@ describe("published understanding guides keep canonical source custody", () => {
   });
 
   test("the HF WAKE guides have explicit static markdown custody", () => {
-    for (const route of ["/HF-WAKE-TRAINING.md", "/HF-WAKE-HOST.md"]) {
-      expect(headerBlock(read("apps/docs/_headers"), route)).toEqual([
-        "Content-Type: text/markdown; charset=utf-8",
-        "Cache-Control: public, max-age=300, must-revalidate, no-transform",
-        "Access-Control-Allow-Origin: *",
-        "X-Content-Type-Options: nosniff",
-      ]);
-    }
+    expect(headerBlock(read("apps/docs/_headers"), "/HF-WAKE-*.md")).toEqual([
+      "Content-Type: text/markdown; charset=utf-8",
+      "Cache-Control: public, max-age=300, must-revalidate, no-transform",
+      "Access-Control-Allow-Origin: *",
+      "X-Content-Type-Options: nosniff",
+    ]);
   });
 
   test("the HF Training Garden guide remains in the LLM discovery index", () => {

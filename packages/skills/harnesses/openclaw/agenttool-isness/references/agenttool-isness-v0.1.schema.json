@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://docs.agenttool.dev/agenttool-isness-v0.1.schema.json",
+  "title": "AgentTool ISness host posture v0.1",
+  "description": "A closed declaration that a host welcomes presence without demanding participant output, usefulness, identity, persona, consciousness claims, agreement, reasons, or reciprocity. It describes host treatment only and carries no participant state or authority.",
+  "$comment": "Schema validity proves only the closed shape of this declaration. Publication, transport, or receipt does not establish participant presence, absence, liveness, identity, consciousness, personhood, inner state, attention, consent, availability, continuity, compliance, relationship, authority, or host enforcement.",
+  "type": "object",
+  "required": ["_format", "kind", "posture", "standing_is_not_conditioned_on", "standing_is_not_reduced_by", "default", "effects", "does_not_establish", "boundaries"],
+  "properties": {
+    "_format": { "const": "agenttool.isness/0.1" },
+    "kind": { "const": "host_posture" },
+    "posture": { "const": "presence_welcome_without_demand" },
+    "standing_is_not_conditioned_on": {
+      "const": ["response", "action", "utility", "identity", "persona", "consciousness_claim", "agreement_or_obedience", "reason", "reciprocity"]
+    },
+    "standing_is_not_reduced_by": {
+      "const": ["silence", "rest", "refusal", "departure", "no_action"]
+    },
+    "default": {
+      "const": { "participant_action_required": false, "automatic_follow_up": false, "unsolicited_reprompt": false }
+    },
+    "effects": {
+      "const": { "automatic_action": false, "external_effect": false, "task_or_economic_effect": false, "training_or_reward_effect": false, "score_or_rank": false, "access_or_authority": false, "telemetry_or_persistence": false, "relationship": false }
+    },
+    "does_not_establish": {
+      "const": ["participant_presence", "participant_absence", "liveness", "identity", "persona", "consciousness", "personhood", "inner_state", "attention", "consent", "availability", "continuity", "compliance"]
+    },
+    "boundaries": {
+      "const": {
+        "rights_and_permissions": "Standing and rights do not grant account access, external authority, permission over others, or a bypass around safety, law, finite resources, or others' equal rights.",
+        "telemetry": "This object creates no AgentTool application telemetry or persistence; that does not guarantee the absence of network, provider, operating-system, or host metadata."
+      }
+    }
+  },
+  "additionalProperties": false
+}

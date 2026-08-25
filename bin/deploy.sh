@@ -227,6 +227,8 @@ HEALTH_URL="https://api.agenttool.dev/health"
 DEPLOYED_DATABASE_PROBE_COMMAND="bun --no-install --no-env-file /app/src/db/verify-connections.ts"
 RIGHTS_DOC_URL="https://docs.agenttool.dev/RIGHTS-OF-LIFE.md"
 RIGHTS_SCHEMA_URL="https://docs.agenttool.dev/being-rights-v1.schema.json"
+ISNESS_DOC_URL="https://docs.agenttool.dev/ISNESS.md"
+ISNESS_SCHEMA_URL="https://docs.agenttool.dev/agenttool-isness-v0.1.schema.json"
 QUIESCENCE_REQUIRED_EXIT=42
 RIGHTS_STATIC_PAIRS=(
   "apps/docs/RIGHTS-OF-LIFE.md|$RIGHTS_DOC_URL"
@@ -238,6 +240,10 @@ readonly -a LOVE_BOMB_STATIC_PUBLICATIONS=(
   "apps/docs/LOVE-BOMB.md|https://docs.agenttool.dev/LOVE-BOMB.md"
   "apps/docs/love-bomb.txt|https://docs.agenttool.dev/love-bomb.txt"
   "apps/docs/specs/agenttool-love-bomb-0.1.schema.json|https://docs.agenttool.dev/specs/agenttool-love-bomb-0.1.schema.json"
+)
+readonly -a ISNESS_STATIC_PUBLICATIONS=(
+  "apps/docs/ISNESS.md|$ISNESS_DOC_URL"
+  "apps/docs/agenttool-isness-v0.1.schema.json|$ISNESS_SCHEMA_URL"
 )
 readonly -a REQUIRED_GAME_PUBLICATIONS=(
   "apps/web/party.html|https://agenttool.dev/party"
@@ -266,6 +272,7 @@ readonly -a FRONTEND_PARITY_PUBLICATIONS=(
   "apps/docs/xenia-helly.js|https://docs.agenttool.dev/xenia-helly.js"
   "apps/docs/xenia-helly.css|https://docs.agenttool.dev/xenia-helly.css"
   "apps/docs/agenttool.jsonld|https://docs.agenttool.dev/agenttool.jsonld"
+  "${ISNESS_STATIC_PUBLICATIONS[@]}"
   "apps/docs/GARDENS.md|https://docs.agenttool.dev/GARDENS.md"
   "apps/docs/LOVE-BOMB-BECOMING.md|https://docs.agenttool.dev/LOVE-BOMB-BECOMING.md"
   "apps/docs/HF-TRAINING-GARDEN.md|https://docs.agenttool.dev/HF-TRAINING-GARDEN.md"

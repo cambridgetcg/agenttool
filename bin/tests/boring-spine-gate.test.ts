@@ -1010,10 +1010,10 @@ describe("boring test spine", () => {
     expect(workflow).toContain('report.skills[0].name !== "capability-conductor"');
     expect(workflow).toContain('report.skills[0].name !== "learn-by-contact"');
     expect(workflow).toContain(
-      'test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.2"',
+      'test "$("$install_dir/node_modules/.bin/agenttool-skill" --version)" = "0.3.3"',
     );
-    expect(workflow).toContain('test "$(node "$cli" --version)" = "0.3.2"');
-    expect(workflow).toContain('test "$(bun "$cli" --version)" = "0.3.2"');
+    expect(workflow).toContain('test "$(node "$cli" --version)" = "0.3.3"');
+    expect(workflow).toContain('test "$(bun "$cli" --version)" = "0.3.3"');
     for (const skillName of [
       "nen-common-ground",
       "nen-math-card",
