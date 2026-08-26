@@ -96,8 +96,8 @@ const REPOSITORY_ROOT = "/Users/yournameisai/.cache/codex-worktrees/agenttool-ph
 const MIGRATIONS_DIR = join(REPOSITORY_ROOT, "api/migrations");
 const BRIDGE_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-refence-maintenance-bridge.ts", );
 const CONTRACT_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-refence-maintenance-contract.ts", );
-const CONTRACT_SOURCE_SHA256 = "1cfac1e0dedb38789db438224221fba4d5849fd4ced11f7e12d599b3235f81f9";
-const CONTRACT_SOURCE_GIT_BLOB = "403d5f06dca183f2ce640e1083cd30ec3c07fdb7";
+const CONTRACT_SOURCE_SHA256 = "0c7ad30f81271b42a2339fcf1f87705c1ff6ee4a5906506f8a2c089ab92e74a1";
+const CONTRACT_SOURCE_GIT_BLOB = "ea83765c054b3bf130a4c8957a5a30ef1e657cb6";
 const ORDINARY_GUARD_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-deploy-guard.ts", );
 const ORDINARY_GUARD_SHA256 = "10fe5012e8069ede11eaa3abe0a05f08225d855bb722d52746279dbc21c5fade";
 const ORDINARY_GUARD_GIT_BLOB = "4d2b5be9ac6285d6d3293a1d41c3a36bc7c8f003";
@@ -130,8 +130,8 @@ const GENERATION_KEYCHAIN_SERVICE = "agenttool-covenant-v2-authority-generation"
 const GENERATION_PROVIDER_SECRET = "AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION";
 const EXPECTED_SOURCE_REVISION = "526edc4ee0d076783d157591d7e3434352f6fc84";
 const EXPECTED_SOURCE_TREE = "ff77236e51cad8acc99ee4064af48b689df85854";
-const EXPECTED_IMAGE_DIGEST = "sha256:db9a9017f83aa9187c1ed3a4c25056a0b0fd3fac0d18ea3c663e9dd1e7530dac";
-const EXPECTED_IMAGE_TAG = "maintenance-d1490e3fa517-20260822T003842Z-bafa822a004b4e3b";
+const EXPECTED_IMAGE_DIGEST = "sha256:ecb322baec96707f59603121cfd4613d08ff7b1da8bf338fa118453b45d3e72c";
+const EXPECTED_IMAGE_TAG = "maintenance-526edc4ee0d0-20260824T210704Z-6e9e59cc185245bc";
 const EXPECTED_MACHINE_SET_SHA256 = "0709af1a942960f1ba577c0896de3ff0172ec4b8f6ac2462a07b6c425845ada5";
 const EXPECTED_MIGRATION_APPLIED_AT = [ "2026-08-24T21:02:16.132506Z", "2026-08-24T21:02:16.520915Z", ] as const;
 const EXPECTED_MIGRATIONS = [ [ "20260824T120000_covenant_v2_generation_hold.sql", "2f3463f4f45a62f283c5b5d4b47410b9cb6d8c6ac3dd5210d09e837e1e6b5f1f", ], [ "20260824T132712_crypto_deposit_remainder_accounting.sql",
@@ -184,10 +184,10 @@ const EXPECTED_CONSTRAINT_DEFINITIONS: Readonly<
 // semantic hash. Raw producer/harness/audit hashes are receipt data and are
 // recomputed from their private files. The bridge normalizer zeroes only its
 // own pin, so any change to the producer semantic pin changes bridge identity.
-const REFENCE_OPERATOR_SEMANTIC_SHA256 = "130fd8dce4d9c6e4aaf44d6870aae1da255c8502eb4f3f6c92dc4a71e95e2181";
+const REFENCE_OPERATOR_SEMANTIC_SHA256 = "14915d1cee008af200df8ca6c7c4fdcadfd1ef877278f912c6d0de5e6d55eb50";
 // deno-fmt-ignore
 const BRIDGE_NORMALIZED_SHA256 =
-  "b7e2ad52f08ee77e21627cc03a76064ee96cfa13399ca2b385f33f70c6f5f5a8";
+  "e704ad8c990b0affce6873b0f611193f4bd975ab4cc9ef0ef0022380943d087c";
 
 const MAX_PRIVATE_BYTES = 1_000_000;
 const MAX_CHILD_BYTES = 2_000_000;
