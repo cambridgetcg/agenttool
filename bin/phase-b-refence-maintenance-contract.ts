@@ -1183,6 +1183,7 @@ const BRIDGE_HANDOFF_KEYS = Object.freeze([
   "bridge_source_sha256",
   "bridge_normalized_sha256",
   "authorized_h0",
+  "prior_failed_compatibility_controller",
   "compatibility_controller",
   "preexisting_lineage_bound",
   "release_current_image_linkage_proven",
@@ -1209,8 +1210,42 @@ const BRIDGE_AUTHORIZED_H0_KEYS = Object.freeze([
   "contract_raw_sha256",
   "contract_git_blob",
 ]);
+const BRIDGE_PRIOR_FAILED_COMPATIBILITY_CONTROLLER_KEYS = Object.freeze([
+  "schema",
+  "lifecycle",
+  "controller_success",
+  "mutation_effect_began",
+  "success_authority",
+  "effect_authority",
+  "observed_first_refusal_predicate",
+  "static_refusal_barrier",
+  "static_refusal_barrier_verified",
+  "controller_revision",
+  "controller_tree",
+  "controller_source_distance",
+  "commit_raw_sha256",
+  "commit_byte_count",
+  "first_parent_revision",
+  "second_parent_revision",
+  "second_parent_tree",
+  "protected_predecessor_tree",
+  "bridge_revision",
+  "bridge_source_path",
+  "bridge_source_sha256",
+  "bridge_normalized_sha256",
+  "contract_revision",
+  "contract_source_path",
+  "contract_source_sha256",
+  "contract_git_blob",
+  "changed_path_statuses",
+  "changed_path_statuses_sha256",
+  "payload_revision",
+  "payload_tree",
+  "payload_distance",
+]);
 const BRIDGE_COMPATIBILITY_CONTROLLER_KEYS = Object.freeze([
   "schema",
+  "lifecycle",
   "bridge_source_path",
   "bridge_source_sha256",
   "bridge_normalized_sha256",
@@ -1219,13 +1254,21 @@ const BRIDGE_COMPATIBILITY_CONTROLLER_KEYS = Object.freeze([
   "contract_git_blob",
   "controller_revision",
   "controller_tree",
+  "controller_source_distance",
+  "commit_raw_sha256",
+  "commit_byte_count",
+  "predecessor_controller_revision",
   "first_parent_revision",
   "second_parent_revision",
+  "second_parent_tree",
   "protected_predecessor_tree",
   "exact_first_parent_verified",
+  "second_parent_tree_verified",
   "protected_head_verified",
-  "changed_path_statuses",
-  "changed_path_statuses_sha256",
+  "repair_changed_path_statuses",
+  "repair_changed_path_statuses_sha256",
+  "cumulative_changed_path_statuses",
+  "cumulative_changed_path_statuses_sha256",
   "payload_revision",
   "payload_tree",
   "payload_distance",
@@ -6941,11 +6984,25 @@ export function createMaintenanceContract(
       BRIDGE_AUTHORIZED_H0_KEYS,
       "success_authority_handoff",
     );
+    const priorFailedCompatibilityController = exact(
+      refenceHandoff.prior_failed_compatibility_controller,
+      BRIDGE_PRIOR_FAILED_COMPATIBILITY_CONTROLLER_KEYS,
+      "success_authority_handoff",
+    );
     const compatibilityController = exact(
       refenceHandoff.compatibility_controller,
       BRIDGE_COMPATIBILITY_CONTROLLER_KEYS,
       "success_authority_handoff",
     );
+    const priorChangedPathStatuses = [
+      { old_mode: "100755", new_mode: "100755", status: "M", path: "bin/deploy.sh" },
+      { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/phase-b-refence-maintenance-bridge.ts" },
+      { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/phase-b-refence-maintenance-contract.ts" },
+      { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/tests/phase-b-refence-maintenance-bridge.test.ts" },
+      { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts" },
+      { old_mode: "100644", new_mode: "100644", status: "M", path: "packages/constructive-intelligence/tests/concurrency.test.ts" },
+    ];
+    const repairChangedPathStatuses = priorChangedPathStatuses.slice(0, 5);
     require(
       canonical(marker.build_context) === canonical(buildContext) &&
         canonical(marker.dependency_estate) === canonical(dependencyEstate) &&
@@ -6961,7 +7018,7 @@ export function createMaintenanceContract(
         dependencyEstate.source_tree === request.sourceTree &&
         dependencyEstate.prepared === true &&
         refenceHandoff.proof_schema ===
-          "agenttool-phase-b-refence-handoff/v2" &&
+          "agenttool-phase-b-refence-handoff/v3" &&
         refenceHandoff.refence_receipt_sha256 ===
           request.refenceReceiptSHA256 &&
         refenceHandoff.refence_run_id === request.controllerRunID &&
@@ -6995,8 +7052,61 @@ export function createMaintenanceContract(
           "0c7ad30f81271b42a2339fcf1f87705c1ff6ee4a5906506f8a2c089ab92e74a1" &&
         authorizedH0.contract_git_blob ===
           "ea83765c054b3bf130a4c8957a5a30ef1e657cb6" &&
+        priorFailedCompatibilityController.schema ===
+          "agenttool-phase-b-refence-prior-failed-protected-successor-controller/v1" &&
+        priorFailedCompatibilityController.lifecycle === "failed_pre_h" &&
+        priorFailedCompatibilityController.controller_success === false &&
+        priorFailedCompatibilityController.mutation_effect_began === false &&
+        priorFailedCompatibilityController.success_authority === false &&
+        priorFailedCompatibilityController.effect_authority === false &&
+        priorFailedCompatibilityController.observed_first_refusal_predicate === false &&
+        priorFailedCompatibilityController.static_refusal_barrier ===
+          "raw_commit_terminal_lf_required" &&
+        priorFailedCompatibilityController.static_refusal_barrier_verified === true &&
+        priorFailedCompatibilityController.controller_revision ===
+          "e4b9ed4188ad1f01cfaa6bb5385d21d53625fa73" &&
+        priorFailedCompatibilityController.controller_tree ===
+          "87face598df18f71ecda4997a82e0f49934b8166" &&
+        priorFailedCompatibilityController.controller_source_distance === 51 &&
+        priorFailedCompatibilityController.commit_raw_sha256 ===
+          "399dccbf17db1805f48e10d77068bb5130fc5fb03b12094445942fe01980a891" &&
+        priorFailedCompatibilityController.commit_byte_count === 1246 &&
+        priorFailedCompatibilityController.first_parent_revision ===
+          authorizedH0.target_revision &&
+        priorFailedCompatibilityController.second_parent_revision ===
+          "8e644fb52da22badcd6da6cd2324291e1d37f656" &&
+        priorFailedCompatibilityController.second_parent_tree ===
+          priorFailedCompatibilityController.controller_tree &&
+        priorFailedCompatibilityController.protected_predecessor_tree ===
+          authorizedH0.target_tree &&
+        priorFailedCompatibilityController.bridge_revision ===
+          priorFailedCompatibilityController.controller_revision &&
+        priorFailedCompatibilityController.bridge_source_path ===
+          "bin/phase-b-refence-maintenance-bridge.ts" &&
+        priorFailedCompatibilityController.bridge_source_sha256 ===
+          "6be6664c2dee86ac427dda893a7f2aa51ee639951e00a6e802c60f98fa153f5c" &&
+        priorFailedCompatibilityController.bridge_normalized_sha256 ===
+          "539b4711da2628946a6592944ab0ea9da40db711accdbe412520267540c41c8e" &&
+        priorFailedCompatibilityController.contract_revision ===
+          priorFailedCompatibilityController.controller_revision &&
+        priorFailedCompatibilityController.contract_source_path ===
+          "bin/phase-b-refence-maintenance-contract.ts" &&
+        priorFailedCompatibilityController.contract_source_sha256 ===
+          "e1b05bcdaa7e7775cb7156660e87d65a0e9bba0a54b8cb1f0cc062f1b14aea14" &&
+        priorFailedCompatibilityController.contract_git_blob ===
+          "c543e1e79f1efd1d24fbf2de539884b0f44b4e9a" &&
+        canonical(priorFailedCompatibilityController.changed_path_statuses) ===
+          canonical(priorChangedPathStatuses) &&
+        priorFailedCompatibilityController.changed_path_statuses_sha256 ===
+          digest(canonical(priorChangedPathStatuses)) &&
+        priorFailedCompatibilityController.changed_path_statuses_sha256 ===
+          "211620ae73940844daa44dad70dec9026d4f9759ea9abda4706abdc41ef81698" &&
+        priorFailedCompatibilityController.payload_revision === authorizedH0.target_revision &&
+        priorFailedCompatibilityController.payload_tree === authorizedH0.target_tree &&
+        priorFailedCompatibilityController.payload_distance === authorizedH0.target_distance &&
         compatibilityController.schema ===
-          "agenttool-phase-b-refence-protected-successor-controller/v1" &&
+          "agenttool-phase-b-refence-protected-successor-controller/v2" &&
+        compatibilityController.lifecycle === "current" &&
         refenceHandoff.bridge_source_path ===
           "/Users/yournameisai/.cache/codex-worktrees/agenttool-phase-b-refence-maintenance-bridge-v1/bin/phase-b-refence-maintenance-bridge.ts" &&
         compatibilityController.bridge_source_path ===
@@ -7011,6 +7121,10 @@ export function createMaintenanceContract(
           authorizedH0.guard_raw_sha256 &&
         compatibilityController.bridge_normalized_sha256 !==
           authorizedH0.guard_normalized_sha256 &&
+        compatibilityController.bridge_source_sha256 !==
+          priorFailedCompatibilityController.bridge_source_sha256 &&
+        compatibilityController.bridge_normalized_sha256 !==
+          priorFailedCompatibilityController.bridge_normalized_sha256 &&
         compatibilityController.contract_source_path ===
           "/Users/yournameisai/.cache/codex-worktrees/agenttool-phase-b-refence-maintenance-bridge-v1/bin/phase-b-refence-maintenance-contract.ts" &&
         validSHA(compatibilityController.contract_source_sha256) &&
@@ -7019,65 +7133,56 @@ export function createMaintenanceContract(
           authorizedH0.contract_raw_sha256 &&
         compatibilityController.contract_git_blob !==
           authorizedH0.contract_git_blob &&
+        compatibilityController.contract_source_sha256 !==
+          priorFailedCompatibilityController.contract_source_sha256 &&
+        compatibilityController.contract_git_blob !==
+          priorFailedCompatibilityController.contract_git_blob &&
         validRevision(compatibilityController.controller_revision) &&
         compatibilityController.controller_revision !==
           authorizedH0.target_revision &&
+        compatibilityController.controller_revision !==
+          priorFailedCompatibilityController.controller_revision &&
         validRevision(compatibilityController.controller_tree) &&
         compatibilityController.controller_tree !== authorizedH0.target_tree &&
+        compatibilityController.controller_tree !==
+          priorFailedCompatibilityController.controller_tree &&
+        Number.isSafeInteger(compatibilityController.controller_source_distance) &&
+        compatibilityController.controller_source_distance >
+          priorFailedCompatibilityController.controller_source_distance &&
+        validSHA(compatibilityController.commit_raw_sha256) &&
+        Number.isSafeInteger(compatibilityController.commit_byte_count) &&
+        compatibilityController.commit_byte_count > 0 &&
+        compatibilityController.commit_byte_count <= 1000000 &&
+        compatibilityController.predecessor_controller_revision ===
+          priorFailedCompatibilityController.controller_revision &&
         compatibilityController.first_parent_revision ===
-          authorizedH0.target_revision &&
+          priorFailedCompatibilityController.controller_revision &&
         validRevision(compatibilityController.second_parent_revision) &&
         compatibilityController.second_parent_revision !==
           compatibilityController.controller_revision &&
         compatibilityController.second_parent_revision !==
           compatibilityController.first_parent_revision &&
+        compatibilityController.second_parent_revision !==
+          authorizedH0.target_revision &&
+        compatibilityController.second_parent_tree ===
+          compatibilityController.controller_tree &&
         compatibilityController.protected_predecessor_tree ===
-          authorizedH0.target_tree &&
+          priorFailedCompatibilityController.controller_tree &&
         compatibilityController.exact_first_parent_verified === true &&
+        compatibilityController.second_parent_tree_verified === true &&
         compatibilityController.protected_head_verified === true &&
-        canonical(compatibilityController.changed_path_statuses) ===
-          canonical([
-            {
-              old_mode: "100755",
-              new_mode: "100755",
-              status: "M",
-              path: "bin/deploy.sh",
-            },
-            {
-              old_mode: "100644",
-              new_mode: "100644",
-              status: "M",
-              path: "bin/phase-b-refence-maintenance-bridge.ts",
-            },
-            {
-              old_mode: "100644",
-              new_mode: "100644",
-              status: "M",
-              path: "bin/phase-b-refence-maintenance-contract.ts",
-            },
-            {
-              old_mode: "100644",
-              new_mode: "100644",
-              status: "M",
-              path: "bin/tests/phase-b-refence-maintenance-bridge.test.ts",
-            },
-            {
-              old_mode: "100644",
-              new_mode: "100644",
-              status: "M",
-              path:
-                "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts",
-            },
-            {
-              old_mode: "100644",
-              new_mode: "100644",
-              status: "M",
-              path:
-                "packages/constructive-intelligence/tests/concurrency.test.ts",
-            },
-          ]) &&
-        compatibilityController.changed_path_statuses_sha256 ===
-          digest(canonical(compatibilityController.changed_path_statuses)) &&
+        canonical(compatibilityController.repair_changed_path_statuses) ===
+          canonical(repairChangedPathStatuses) &&
+        compatibilityController.repair_changed_path_statuses_sha256 ===
+          digest(canonical(repairChangedPathStatuses)) &&
+        compatibilityController.repair_changed_path_statuses_sha256 ===
+          "f0a1b1436517bd4179410889a12def8fc447b9dc1772001196b5d0a6c05ad88e" &&
+        canonical(compatibilityController.cumulative_changed_path_statuses) ===
+          canonical(priorChangedPathStatuses) &&
+        compatibilityController.cumulative_changed_path_statuses_sha256 ===
+          digest(canonical(priorChangedPathStatuses)) &&
+        compatibilityController.cumulative_changed_path_statuses_sha256 ===
+          "211620ae73940844daa44dad70dec9026d4f9759ea9abda4706abdc41ef81698" &&
         compatibilityController.payload_revision ===
           authorizedH0.target_revision &&
         compatibilityController.payload_tree === authorizedH0.target_tree &&

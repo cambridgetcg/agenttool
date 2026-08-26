@@ -84,6 +84,8 @@ import {
   parseControllerPublicObservationForTest,
   parseGitTreeFiles,
   parsePrivateJsonDocumentForTest,
+  parsePriorFailedCompatibilityParentsForTest,
+  parsePriorProtectedSuccessorChangedPathsForTest,
   parseProtectedSuccessorChangedPathsForTest,
   parseProtectedSuccessorParentsForTest,
   performControllerFlyTransitionForTest,
@@ -189,7 +191,15 @@ const AUTHORIZED_H0_CONTRACT_RAW_SHA256 =
   "0c7ad30f81271b42a2339fcf1f87705c1ff6ee4a5906506f8a2c089ab92e74a1";
 const AUTHORIZED_H0_CONTRACT_GIT_BLOB =
   "ea83765c054b3bf130a4c8957a5a30ef1e657cb6";
-const PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES = [
+const PRIOR_FAILED_COMPATIBILITY_REVISION =
+  "e4b9ed4188ad1f01cfaa6bb5385d21d53625fa73";
+const PRIOR_FAILED_COMPATIBILITY_TREE =
+  "87face598df18f71ecda4997a82e0f49934b8166";
+const PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION =
+  "8e644fb52da22badcd6da6cd2324291e1d37f656";
+const PRIOR_FAILED_COMPATIBILITY_COMMIT_RAW_SHA256 =
+  "399dccbf17db1805f48e10d77068bb5130fc5fb03b12094445942fe01980a891";
+const PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES = [
   { old_mode: "100755", new_mode: "100755", status: "M", path: "bin/deploy.sh" },
   { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/phase-b-refence-maintenance-bridge.ts" },
   { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/phase-b-refence-maintenance-contract.ts" },
@@ -197,16 +207,47 @@ const PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES = [
   { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts" },
   { old_mode: "100644", new_mode: "100644", status: "M", path: "packages/constructive-intelligence/tests/concurrency.test.ts" },
 ] as const;
+const PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES = PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES.slice(0, 5);
 
 function protectedSuccessorGitProof(evidence: TerminalEvidence) {
   const contract = containedContractBytes();
   return {
     revision: revision("e"),
     tree: revision("f"),
-    source_distance: 50,
-    first_parent_revision: AUTHORIZED_H0_TARGET_REVISION,
+    source_distance: 53,
+    commit_raw_sha256: digest("c"),
+    commit_byte_count: 1_300,
+    first_parent_revision: PRIOR_FAILED_COMPATIBILITY_REVISION,
     second_parent_revision: revision("1"),
+    second_parent_tree: revision("f"),
     changed_path_statuses: structuredClone(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
+    cumulative_changed_path_statuses: structuredClone(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
+    prior_failed_compatibility_controller: {
+      revision: PRIOR_FAILED_COMPATIBILITY_REVISION,
+      tree: PRIOR_FAILED_COMPATIBILITY_TREE,
+      source_distance: 51,
+      commit_raw_sha256: PRIOR_FAILED_COMPATIBILITY_COMMIT_RAW_SHA256,
+      commit_byte_count: 1_246,
+      first_parent_revision: AUTHORIZED_H0_TARGET_REVISION,
+      second_parent_revision: PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION,
+      second_parent_tree: PRIOR_FAILED_COMPATIBILITY_TREE,
+      changed_path_statuses: structuredClone(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
+      bridge_source_sha256:
+        "6be6664c2dee86ac427dda893a7f2aa51ee639951e00a6e802c60f98fa153f5c",
+      bridge_normalized_sha256:
+        "539b4711da2628946a6592944ab0ea9da40db711accdbe412520267540c41c8e",
+      contract_source_sha256:
+        "e1b05bcdaa7e7775cb7156660e87d65a0e9bba0a54b8cb1f0cc062f1b14aea14",
+      contract_git_blob: "c543e1e79f1efd1d24fbf2de539884b0f44b4e9a",
+      lifecycle: "failed_pre_h",
+      static_refusal_barrier: "raw_commit_terminal_lf_required",
+      static_refusal_barrier_verified: true,
+      observed_first_refusal_predicate: false,
+      controller_success: false,
+      mutation_effect_began: false,
+      success_authority: false,
+      effect_authority: false,
+    },
     authorized_h0_guard_raw_sha256: AUTHORIZED_H0_GUARD_RAW_SHA256,
     authorized_h0_guard_normalized_sha256: AUTHORIZED_H0_GUARD_NORMALIZED_SHA256,
     authorized_h0_contract_source_sha256: AUTHORIZED_H0_CONTRACT_RAW_SHA256,
@@ -1602,16 +1643,16 @@ describe("closed source normalization", () => {
       );
       expect(currentFacts.longestLine).toBeLessThanOrEqual(320);
       expect(currentFacts.byteCount).toBeLessThan(512 * 1024);
-      expect(currentFacts.leafCount).toBe(80_460);
+      expect(currentFacts.leafCount).toBe(83_575);
       expect(currentFacts.leafSHA256).toBe(
-        "808e25b7670675d824de334255bfad69dd4113b7e18ac9d69358603f425bffea",
+        "9e8ec506ba6715146ac8308e3f234d990f822d5df09f1808f26192aca73487ea",
       );
       expect(currentFacts.astShapeSHA256).toBe(
-        "d69aee9de4aee8ebdecfc46f1900e4bf7a7b46917d4bb4ec2fbe12e823ce8110",
+        "3a99d09fde63b7284f7f4439401274ddb1dda360900c3874c2e5d4800d48f4ab",
       );
-      expect(currentFacts.emittedLeafCount).toBe(67_922);
+      expect(currentFacts.emittedLeafCount).toBe(70_713);
       expect(currentFacts.emittedLeafSHA256).toBe(
-        "a950dc332dfc1454029dfb15995b58ba0b5163fcf3d6f9df1f7adc76258ab609",
+        "be5beb00abc4a240bc30d26999109bf71b293616336300cef3a6f0025c0ba09c",
       );
     },
     15_000,
@@ -3221,7 +3262,7 @@ describe("closed source normalization", () => {
     ).toThrow(MaintenanceRefenceError);
   });
 
-  test("raw successor commit and six-path mode proofs refuse descendants and widening", () => {
+  test("raw prior/current commits and exact repair/cumulative proofs refuse widening", async () => {
     const commit = (
       parents: readonly string[],
       tree = revision("f"),
@@ -3241,7 +3282,7 @@ describe("closed source normalization", () => {
         .digest("hex");
       return { bytes, oid, tree };
     };
-    const exact = commit([AUTHORIZED_H0_TARGET_REVISION, revision("1")]);
+    const exact = commit([PRIOR_FAILED_COMPATIBILITY_REVISION, revision("1")]);
     expect(
       parseProtectedSuccessorParentsForTest(
         exact.bytes,
@@ -3249,10 +3290,22 @@ describe("closed source normalization", () => {
         exact.tree,
       ),
     ).toBe(revision("1"));
+    const noTerminalLF = exact.bytes.subarray(0, exact.bytes.byteLength - 1);
+    const noTerminalLFOID = createHash("sha1")
+      .update(`commit ${noTerminalLF.byteLength}\0`)
+      .update(noTerminalLF)
+      .digest("hex");
+    expect(
+      parseProtectedSuccessorParentsForTest(
+        noTerminalLF,
+        noTerminalLFOID,
+        exact.tree,
+      ),
+    ).toBe(revision("1"));
     for (const parents of [
-      [revision("2"), revision("1")],
-      [AUTHORIZED_H0_TARGET_REVISION],
-      [AUTHORIZED_H0_TARGET_REVISION, revision("1"), revision("2")],
+      [AUTHORIZED_H0_TARGET_REVISION, revision("1")],
+      [PRIOR_FAILED_COMPATIBILITY_REVISION],
+      [PRIOR_FAILED_COMPATIBILITY_REVISION, revision("1"), revision("2")],
     ]) {
       const changed = commit(parents);
       expect(() =>
@@ -3271,6 +3324,74 @@ describe("closed source normalization", () => {
       )
     ).toThrow(MaintenanceRefenceError);
 
+    const malformed = (text: string) => {
+      const bytes = Buffer.from(text);
+      const oid = createHash("sha1")
+        .update(`commit ${bytes.byteLength}\0`)
+        .update(bytes)
+        .digest("hex");
+      expect(() =>
+        parseProtectedSuccessorParentsForTest(bytes, oid, exact.tree)
+      ).toThrow(MaintenanceRefenceError);
+    };
+    const exactText = exact.bytes.toString("utf8");
+    malformed(exactText.replace(
+      `parent ${PRIOR_FAILED_COMPATIBILITY_REVISION}`,
+      "parent",
+    ));
+    malformed(exactText.replace(
+      `parent ${PRIOR_FAILED_COMPATIBILITY_REVISION}`,
+      `parent ${PRIOR_FAILED_COMPATIBILITY_REVISION}\n forbidden-continuation`,
+    ));
+    malformed(exactText.replace(
+      `tree ${exact.tree}`,
+      `tree ${exact.tree}\ntree ${exact.tree}`,
+    ));
+
+    const realPriorCommit = await runBuildManifestGit([
+      "--no-replace-objects",
+      "cat-file",
+      "commit",
+      PRIOR_FAILED_COMPATIBILITY_REVISION,
+    ]);
+    expect(realPriorCommit).toHaveLength(1_246);
+    expect(realPriorCommit.at(-1)).toBe("r".charCodeAt(0));
+    expect(sha256(realPriorCommit)).toBe(
+      PRIOR_FAILED_COMPATIBILITY_COMMIT_RAW_SHA256,
+    );
+    expect(
+      createHash("sha1")
+        .update(`commit ${realPriorCommit.byteLength}\0`)
+        .update(realPriorCommit)
+        .digest("hex"),
+    ).toBe(PRIOR_FAILED_COMPATIBILITY_REVISION);
+    expect(parsePriorFailedCompatibilityParentsForTest(
+      realPriorCommit,
+      PRIOR_FAILED_COMPATIBILITY_REVISION,
+      PRIOR_FAILED_COMPATIBILITY_TREE,
+    )).toBe(PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION);
+
+    const realPriorDiff = await runBuildManifestGit([
+      "--no-replace-objects",
+      "diff",
+      "--raw",
+      "-z",
+      "--abbrev=40",
+      "--no-renames",
+      "--no-ext-diff",
+      "--no-textconv",
+      AUTHORIZED_H0_TARGET_REVISION,
+      PRIOR_FAILED_COMPATIBILITY_REVISION,
+      "--",
+    ]);
+    expect(parsePriorProtectedSuccessorChangedPathsForTest(realPriorDiff))
+      .toEqual(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES);
+    expect(sha256(canonicalJson(
+      parsePriorProtectedSuccessorChangedPathsForTest(realPriorDiff),
+    ))).toBe(
+      "211620ae73940844daa44dad70dec9026d4f9759ea9abda4706abdc41ef81698",
+    );
+
     const rawDiff = (
       projection = PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
       unchangedBlobIndex?: number,
@@ -3287,12 +3408,12 @@ describe("closed source normalization", () => {
       (value: any[]) => value[0].new_mode = "100644",
       (value: any[]) => value[1].status = "A",
       (value: any[]) => value[2].path = "bin/other.ts",
-      (value: any[]) => value[5].old_mode = "100755",
-      (value: any[]) => value[5].new_mode = "100755",
-      (value: any[]) => value[5].status = "D",
+      (value: any[]) => value[4].old_mode = "100755",
+      (value: any[]) => value[4].new_mode = "100755",
+      (value: any[]) => value[4].status = "D",
       (value: any[]) =>
-        value[5].path = "packages/constructive-intelligence/tests/other.test.ts",
-      (value: any[]) => value.splice(4, 0, value.pop()),
+        value[4].path = "bin/tests/phase-b-refence-maintenance-other.test.ts",
+      (value: any[]) => value.splice(3, 0, value.pop()),
     ]) {
       const changed = structuredClone(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES) as any[];
       mutate(changed);
@@ -3308,12 +3429,19 @@ describe("closed source normalization", () => {
     expect(() =>
       parseProtectedSuccessorChangedPathsForTest(rawDiff(
         PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
-        5,
+        4,
       ))
     ).toThrow(MaintenanceRefenceError);
+
+    const revertedCumulative = structuredClone(
+      PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
+    ) as any[];
+    expect(() => parsePriorProtectedSuccessorChangedPathsForTest(
+      rawDiff(revertedCumulative as any, 0),
+    )).toThrow(MaintenanceRefenceError);
   });
 
-  test("typed successor proof never promotes a different H0 or historical guard", () => {
+  test("typed two-generation proof never promotes prior failure or a different H0", () => {
     const fixture = guardFixture();
     const proof = protectedSuccessorGitProof(fixture.evidence);
     expect(
@@ -3321,10 +3449,37 @@ describe("closed source normalization", () => {
     ).toEqual(proof);
     const proofMutations = [
       (value: any) => value.revision = AUTHORIZED_H0_TARGET_REVISION,
+      (value: any) => value.revision = PRIOR_FAILED_COMPATIBILITY_REVISION,
+      (value: any) => value.source_distance = 51,
+      (value: any) => value.commit_raw_sha256 = "not-a-sha",
+      (value: any) => value.commit_byte_count = 0,
       (value: any) => value.first_parent_revision = revision("2"),
       (value: any) => value.second_parent_revision = value.revision,
+      (value: any) => value.second_parent_tree = revision("2"),
       (value: any) => value.changed_path_statuses.pop(),
       (value: any) => value.changed_path_statuses[0].new_mode = "100644",
+      (value: any) => value.cumulative_changed_path_statuses.pop(),
+      (value: any) =>
+        value.cumulative_changed_path_statuses[5].status = "D",
+      (value: any) =>
+        value.prior_failed_compatibility_controller.revision = revision("2"),
+      (value: any) =>
+        value.prior_failed_compatibility_controller.commit_raw_sha256 =
+          digest("2"),
+      (value: any) =>
+        value.prior_failed_compatibility_controller.second_parent_tree =
+          revision("2"),
+      (value: any) =>
+        value.prior_failed_compatibility_controller.changed_path_statuses.pop(),
+      (value: any) =>
+        value.prior_failed_compatibility_controller.lifecycle = "current",
+      (value: any) =>
+        value.prior_failed_compatibility_controller.success_authority = true,
+      (value: any) =>
+        value.prior_failed_compatibility_controller.effect_authority = true,
+      (value: any) =>
+        value.prior_failed_compatibility_controller
+          .observed_first_refusal_predicate = true,
       (value: any) => value.authorized_h0_guard_raw_sha256 = digest("a"),
       (value: any) => value.bridge_source_sha256 = AUTHORIZED_H0_GUARD_RAW_SHA256,
       (value: any) => value.contract_source_sha256 = AUTHORIZED_H0_CONTRACT_RAW_SHA256,
@@ -3360,9 +3515,16 @@ describe("closed source normalization", () => {
     const binding = {
       controllerRevision: proof.revision,
       controllerTree: proof.tree,
+      controllerSourceDistance: proof.source_distance,
+      controllerCommitRawSHA256: proof.commit_raw_sha256,
+      controllerCommitByteCount: proof.commit_byte_count,
       controllerTopicRevision: proof.second_parent_revision,
+      controllerTopicTree: proof.second_parent_tree,
       changedPathStatusesSHA256: sha256(
         canonicalJson(proof.changed_path_statuses),
+      ),
+      cumulativeChangedPathStatusesSHA256: sha256(
+        canonicalJson(proof.cumulative_changed_path_statuses),
       ),
     };
     expect(validateCompatibilityControllerBindingsForTest(binding)).toEqual(
@@ -3370,11 +3532,18 @@ describe("closed source normalization", () => {
     );
     for (const mutate of [
       (value: any) => value.controllerRevision = AUTHORIZED_H0_TARGET_REVISION,
+      (value: any) => value.controllerRevision = PRIOR_FAILED_COMPATIBILITY_REVISION,
       (value: any) => value.controllerTree = AUTHORIZED_H0_TARGET_TREE,
+      (value: any) => value.controllerTree = PRIOR_FAILED_COMPATIBILITY_TREE,
+      (value: any) => value.controllerSourceDistance = 51,
+      (value: any) => value.controllerCommitRawSHA256 = "not-a-sha",
+      (value: any) => value.controllerCommitByteCount = 0,
       (value: any) => value.controllerTopicRevision = value.controllerRevision,
       (value: any) =>
         value.controllerTopicRevision = AUTHORIZED_H0_TARGET_REVISION,
+      (value: any) => value.controllerTopicTree = revision("7"),
       (value: any) => value.changedPathStatusesSHA256 = digest("7"),
+      (value: any) => value.cumulativeChangedPathStatusesSHA256 = digest("7"),
     ]) {
       const changed = structuredClone(binding);
       mutate(changed);
@@ -3599,9 +3768,9 @@ describe("closed source normalization", () => {
     expect(stat.mode & 0o777).toBe(0o644);
     expect(stat.nlink).toBe(1);
     expect(rawSHA256).toBe(
-      "e1b05bcdaa7e7775cb7156660e87d65a0e9bba0a54b8cb1f0cc062f1b14aea14",
+      "40136b456704debe4fa253745d83441c9ddb099d90b47a10aa27837c7a027a97",
     );
-    expect(blobSHA1).toBe("c543e1e79f1efd1d24fbf2de539884b0f44b4e9a");
+    expect(blobSHA1).toBe("79efd55c97a8e5e2fc6f2da1317ee73b95293b1c");
 
     const transpiler = new Bun.Transpiler({ loader: "ts", target: "bun" });
     const scan = transpiler.scan(source);
@@ -3797,11 +3966,59 @@ describe("closed source normalization", () => {
   });
 
   test("Git reader allowlist covers exact contract proof forms and refuses near misses", () => {
-    const accepted = [
-      ["cat-file", "commit", "HEAD"],
+    const sourceRevision = "526edc4ee0d076783d157591d7e3434352f6fc84";
+    const remoteMain = "refs/remotes/github/main";
+    const exactProofCommands = [
       ["config", "--local", "--null", "--list"],
+      ["rev-parse", "--git-common-dir"],
       ["for-each-ref", "--format=%(refname)", "refs/replace/"],
+      ["rev-parse", "HEAD"],
+      ["rev-parse", remoteMain],
+      ["rev-parse", "HEAD^{tree}"],
+      ["rev-parse", "HEAD^2^{tree}"],
       ["rev-parse", `${AUTHORIZED_H0_TARGET_REVISION}^{tree}`],
+      ["rev-parse", `${PRIOR_FAILED_COMPATIBILITY_REVISION}^{tree}`],
+      ["rev-parse", `${PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION}^{tree}`],
+      ["rev-list", "--count", `${sourceRevision}..HEAD`],
+      [
+        "rev-list",
+        "--count",
+        `${sourceRevision}..${PRIOR_FAILED_COMPATIBILITY_REVISION}`,
+      ],
+      ["cat-file", "commit", "HEAD"],
+      ["cat-file", "commit", PRIOR_FAILED_COMPATIBILITY_REVISION],
+      ["merge-base", "--is-ancestor", sourceRevision, "HEAD"],
+      [
+        "merge-base",
+        "--is-ancestor",
+        PRIOR_FAILED_COMPATIBILITY_REVISION,
+        "HEAD^2",
+      ],
+      ["status", "--porcelain=v1", "--untracked-files=all"],
+      [
+        "diff",
+        "--raw",
+        "-z",
+        "--abbrev=40",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        AUTHORIZED_H0_TARGET_REVISION,
+        PRIOR_FAILED_COMPATIBILITY_REVISION,
+        "--",
+      ],
+      [
+        "diff",
+        "--raw",
+        "-z",
+        "--abbrev=40",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        PRIOR_FAILED_COMPATIBILITY_REVISION,
+        "HEAD",
+        "--",
+      ],
       [
         "diff",
         "--raw",
@@ -3814,9 +4031,19 @@ describe("closed source normalization", () => {
         "HEAD",
         "--",
       ],
+      ["show", "HEAD:bin/phase-b-refence-maintenance-bridge.ts"],
+      [
+        "show",
+        `${PRIOR_FAILED_COMPATIBILITY_REVISION}:bin/phase-b-refence-maintenance-bridge.ts`,
+      ],
       [
         "show",
         `${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-bridge.ts`,
+      ],
+      ["show", "HEAD:bin/phase-b-refence-maintenance-contract.ts"],
+      [
+        "show",
+        `${PRIOR_FAILED_COMPATIBILITY_REVISION}:bin/phase-b-refence-maintenance-contract.ts`,
       ],
       [
         "show",
@@ -3824,37 +4051,68 @@ describe("closed source normalization", () => {
       ],
       [
         "ls-tree",
-        "-rz",
-        "--full-tree",
-        AUTHORIZED_H0_TARGET_REVISION,
-        "--",
-        "api",
-        "docs",
-      ],
-      ["show", "HEAD:bin/phase-b-refence-maintenance-contract.ts"],
-      [
-        "ls-tree",
         "-z",
         "HEAD",
         "--",
         "bin/phase-b-refence-maintenance-contract.ts",
       ],
-    ];
-    for (const argv of accepted) {
+      [
+        "ls-tree",
+        "-z",
+        PRIOR_FAILED_COMPATIBILITY_REVISION,
+        "--",
+        "bin/phase-b-refence-maintenance-contract.ts",
+      ],
+    ] as const;
+    for (const argv of exactProofCommands) {
       expect(refenceGitInvocationAllowedForTest(argv)).toBeTrue();
     }
+    expect(refenceGitInvocationAllowedForTest([
+      "ls-tree",
+      "-rz",
+      "--full-tree",
+      AUTHORIZED_H0_TARGET_REVISION,
+      "--",
+      "api",
+      "docs",
+    ])).toBeTrue();
     for (
       const argv of [
         ["show", "head:bin/phase-b-refence-maintenance-contract.ts"],
         ["show", "HEAD:bin/phase-b-refence-maintenance-contract.ts", "--"],
         ["cat-file", "commit", "HEAD^"],
+        ["cat-file", "commit", `${PRIOR_FAILED_COMPATIBILITY_REVISION}^`],
         ["rev-list", "--parents", "-n", "1", "HEAD"],
+        ["rev-parse", "HEAD^3^{tree}"],
+        ["rev-parse", `${revision("f")}^{tree}`],
+        [
+          "merge-base",
+          "--is-ancestor",
+          PRIOR_FAILED_COMPATIBILITY_REVISION,
+          "HEAD^3",
+        ],
+        [
+          "diff",
+          "--raw",
+          "-z",
+          "--abbrev=40",
+          "--no-renames",
+          "--no-ext-diff",
+          "--no-textconv",
+          PRIOR_FAILED_COMPATIBILITY_REVISION,
+          "HEAD^2",
+          "--",
+        ],
         [
           "diff",
           "--name-status",
-          AUTHORIZED_H0_TARGET_REVISION,
+          PRIOR_FAILED_COMPATIBILITY_REVISION,
           "HEAD",
           "--",
+        ],
+        [
+          "show",
+          `${revision("f")}:bin/phase-b-refence-maintenance-bridge.ts`,
         ],
         [
           "ls-tree",
@@ -3917,19 +4175,89 @@ describe("closed source normalization", () => {
         ),
       ),
     );
-    for (
-      const literal of [
-        '"cat-file", "commit", "HEAD"',
-        '"config", "--local", "--null", "--list"',
-        '"diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, "HEAD", "--"',
-        '`${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-bridge.ts`',
-        '"HEAD:bin/phase-b-refence-maintenance-contract.ts"',
-        '`${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-contract.ts`',
-        '"bin/phase-b-refence-maintenance-contract.ts"',
-      ]
-    ) {
-      expect(allowlist).toContain(literal);
-      expect(proof).toContain(literal);
+    const journalStart = bridge.indexOf(
+      "  const readGitProof = async",
+      bridge.indexOf("function createJournalledControllerLocalReaders("),
+    );
+    const journalProof = bridge.slice(
+      journalStart,
+      bridge.indexOf("  const runSecurity = async", journalStart),
+    );
+    const normalizeCommand = (value: string): string =>
+      value.replace(/\s+/g, "").replace(/,\]/g, "]");
+    const expectedSourceCommands = [
+      '["config","--local","--null","--list"]',
+      '["rev-parse","--git-common-dir"]',
+      '["for-each-ref","--format=%(refname)","refs/replace/"]',
+      '["rev-parse","HEAD"]',
+      '["rev-parse",GITHUB_MAIN_TRACKING_REF]',
+      '["rev-parse","HEAD^{tree}"]',
+      '["rev-parse","HEAD^2^{tree}"]',
+      '["rev-parse",AUTHORIZED_H0_TARGET_REVISION+"^{tree}"]',
+      '["rev-parse",PRIOR_FAILED_COMPATIBILITY_REVISION+"^{tree}"]',
+      '["rev-parse",PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION+"^{tree}"]',
+      '["rev-list","--count",EXPECTED_SOURCE_REVISION+"..HEAD"]',
+      '["rev-list","--count",EXPECTED_SOURCE_REVISION+".."+PRIOR_FAILED_COMPATIBILITY_REVISION]',
+      '["cat-file","commit","HEAD"]',
+      '["cat-file","commit",PRIOR_FAILED_COMPATIBILITY_REVISION]',
+      '["merge-base","--is-ancestor",EXPECTED_SOURCE_REVISION,"HEAD"]',
+      '["merge-base","--is-ancestor",PRIOR_FAILED_COMPATIBILITY_REVISION,"HEAD^2"]',
+      '["status","--porcelain=v1","--untracked-files=all"]',
+      '["diff","--raw","-z","--abbrev=40","--no-renames","--no-ext-diff","--no-textconv",AUTHORIZED_H0_TARGET_REVISION,PRIOR_FAILED_COMPATIBILITY_REVISION,"--"]',
+      '["diff","--raw","-z","--abbrev=40","--no-renames","--no-ext-diff","--no-textconv",PRIOR_FAILED_COMPATIBILITY_REVISION,"HEAD","--"]',
+      '["diff","--raw","-z","--abbrev=40","--no-renames","--no-ext-diff","--no-textconv",AUTHORIZED_H0_TARGET_REVISION,"HEAD","--"]',
+      '["show","HEAD:bin/phase-b-refence-maintenance-bridge.ts"]',
+      '["show",PRIOR_FAILED_COMPATIBILITY_REVISION+":bin/phase-b-refence-maintenance-bridge.ts"]',
+      '["show",AUTHORIZED_H0_TARGET_REVISION+":bin/phase-b-refence-maintenance-bridge.ts"]',
+      '["show","HEAD:bin/phase-b-refence-maintenance-contract.ts"]',
+      '["show",PRIOR_FAILED_COMPATIBILITY_REVISION+":bin/phase-b-refence-maintenance-contract.ts"]',
+      '["show",AUTHORIZED_H0_TARGET_REVISION+":bin/phase-b-refence-maintenance-contract.ts"]',
+      '["ls-tree","-z","HEAD","--","bin/phase-b-refence-maintenance-contract.ts"]',
+      '["ls-tree","-z",PRIOR_FAILED_COMPATIBILITY_REVISION,"--","bin/phase-b-refence-maintenance-contract.ts"]',
+      '["config","--local","--null","--list"]',
+    ];
+    const directCommands = [...proof.matchAll(
+      /runRefenceGitCLI\(\s*(\[[^\]]+\])/g,
+    )].map((match) => normalizeCommand(match[1]));
+    const journalCommands = [...journalProof.matchAll(
+      /runGit\(\s*"[^"]+",\s*(\[[^\]]+\])/g,
+    )].map((match) => normalizeCommand(match[1]));
+    expect(directCommands).toEqual(expectedSourceCommands);
+    expect(journalCommands).toEqual(expectedSourceCommands);
+    expect([...journalProof.matchAll(/runGit\(\s*"([^"]+)",\s*\[/g)]
+      .map((match) => match[1])).toEqual([
+      "local_config",
+      "common_directory",
+      "replacement_refs",
+      "revision",
+      "remote_revision",
+      "tree",
+      "topic_tree",
+      "authorized_h0_tree",
+      "prior_tree",
+      "prior_topic_tree",
+      "distance",
+      "prior_distance",
+      "commit",
+      "prior_commit",
+      "ancestry",
+      "topic_ancestry",
+      "status",
+      "prior_changed_paths",
+      "changed_paths",
+      "cumulative_changed_paths",
+      "bridge_source",
+      "prior_bridge_source",
+      "authorized_h0_bridge_source",
+      "contract_source",
+      "prior_contract_source",
+      "authorized_h0_contract_source",
+      "contract_tree",
+      "prior_contract_tree",
+      "local_config_rebound",
+    ]);
+    for (const command of expectedSourceCommands) {
+      expect(normalizeCommand(allowlist)).toContain(command);
     }
     expect(bridge).toContain('"--no-replace-objects"');
     expect(bridge).toContain("GIT_NO_REPLACE_OBJECTS: \"1\"");
@@ -10126,9 +10454,16 @@ function successAuthorityRequestFixture(options: {
     bridgeNormalizedSHA256: digest("b"),
     controllerRevision: revision("e"),
     controllerTree: revision("f"),
+    controllerSourceDistance: 53,
+    controllerCommitRawSHA256: digest("c"),
+    controllerCommitByteCount: 1_300,
     controllerTopicRevision: revision("1"),
+    controllerTopicTree: revision("f"),
     changedPathStatusesSHA256: sha256(
       canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
+    ),
+    cumulativeChangedPathStatusesSHA256: sha256(
+      canonicalJson(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
     ),
   };
   const preparation = {
@@ -10953,14 +11288,15 @@ describe("two-artifact success finalization", () => {
     );
   });
 
-  test("durable handoff v2 keeps historical H0 and current controller identities disjoint", () => {
+  test("durable handoff v3 keeps H0, failed e4, and current controller disjoint", () => {
     const positive = successAuthorityRequestFixture();
     const handoff = positive.refenceHandoff as any;
     const authorizedH0 = handoff.authorized_h0;
+    const prior = handoff.prior_failed_compatibility_controller;
     const controller = handoff.compatibility_controller;
     const contract = containedContractBytes();
     expect(handoff.proof_schema).toBe(
-      "agenttool-phase-b-refence-handoff/v2",
+      "agenttool-phase-b-refence-handoff/v3",
     );
     expect(authorizedH0.lifecycle).toBe("historical");
     expect(authorizedH0.receipt_sha256).toBe(
@@ -10969,6 +11305,39 @@ describe("two-artifact success finalization", () => {
     expect(authorizedH0.target_revision).toBe(
       AUTHORIZED_H0_TARGET_REVISION,
     );
+    expect(prior.lifecycle).toBe("failed_pre_h");
+    expect(prior.controller_revision).toBe(
+      PRIOR_FAILED_COMPATIBILITY_REVISION,
+    );
+    expect(prior.controller_tree).toBe(PRIOR_FAILED_COMPATIBILITY_TREE);
+    expect(prior.first_parent_revision).toBe(AUTHORIZED_H0_TARGET_REVISION);
+    expect(prior.second_parent_revision).toBe(
+      PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION,
+    );
+    expect(prior.second_parent_tree).toBe(prior.controller_tree);
+    expect(prior.commit_raw_sha256).toBe(
+      PRIOR_FAILED_COMPATIBILITY_COMMIT_RAW_SHA256,
+    );
+    expect(prior.static_refusal_barrier_verified).toBeTrue();
+    expect(prior.observed_first_refusal_predicate).toBeFalse();
+    expect(prior.controller_success).toBeFalse();
+    expect(prior.mutation_effect_began).toBeFalse();
+    expect(prior.success_authority).toBeFalse();
+    expect(prior.effect_authority).toBeFalse();
+    expect(prior.changed_path_statuses).toEqual(
+      PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
+    );
+    expect(prior.changed_path_statuses_sha256).toBe(
+      "211620ae73940844daa44dad70dec9026d4f9759ea9abda4706abdc41ef81698",
+    );
+    expect(controller.lifecycle).toBe("current");
+    expect(controller.predecessor_controller_revision).toBe(
+      PRIOR_FAILED_COMPATIBILITY_REVISION,
+    );
+    expect(controller.first_parent_revision).toBe(
+      PRIOR_FAILED_COMPATIBILITY_REVISION,
+    );
+    expect(controller.second_parent_tree).toBe(controller.controller_tree);
     expect(controller.bridge_source_sha256).toBe(
       handoff.bridge_source_sha256,
     );
@@ -10981,10 +11350,31 @@ describe("two-artifact success finalization", () => {
     expect(controller.bridge_normalized_sha256).not.toBe(
       authorizedH0.guard_normalized_sha256,
     );
+    expect(controller.bridge_source_sha256).not.toBe(
+      prior.bridge_source_sha256,
+    );
+    expect(controller.bridge_normalized_sha256).not.toBe(
+      prior.bridge_normalized_sha256,
+    );
     expect(controller.contract_source_sha256).toBe(contract.sha256);
     expect(controller.contract_git_blob).toBe(contract.gitBlobSHA1);
     expect(controller.contract_source_sha256).not.toBe(
       authorizedH0.contract_raw_sha256,
+    );
+    expect(controller.contract_source_sha256).not.toBe(
+      prior.contract_source_sha256,
+    );
+    expect(controller.repair_changed_path_statuses).toEqual(
+      PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
+    );
+    expect(controller.repair_changed_path_statuses_sha256).toBe(
+      "f0a1b1436517bd4179410889a12def8fc447b9dc1772001196b5d0a6c05ad88e",
+    );
+    expect(controller.cumulative_changed_path_statuses).toEqual(
+      PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
+    );
+    expect(controller.cumulative_changed_path_statuses_sha256).toBe(
+      "211620ae73940844daa44dad70dec9026d4f9759ea9abda4706abdc41ef81698",
     );
     expect(controller.payload_revision).toBe(AUTHORIZED_H0_TARGET_REVISION);
     expect(controller.payload_tree).toBe(AUTHORIZED_H0_TARGET_TREE);
@@ -11017,6 +11407,38 @@ describe("two-artifact success finalization", () => {
         (value) => value.authorized_h0.contract_git_blob = revision("7"),
       ],
       [
+        "prior lifecycle",
+        (value) => value.prior_failed_compatibility_controller.lifecycle = "current",
+      ],
+      [
+        "prior revision",
+        (value) => value.prior_failed_compatibility_controller.controller_revision = revision("7"),
+      ],
+      [
+        "prior commit",
+        (value) => value.prior_failed_compatibility_controller.commit_raw_sha256 = digest("7"),
+      ],
+      [
+        "prior topic tree",
+        (value) => value.prior_failed_compatibility_controller.second_parent_tree = revision("7"),
+      ],
+      [
+        "prior success authority",
+        (value) => value.prior_failed_compatibility_controller.success_authority = true,
+      ],
+      [
+        "prior effect authority",
+        (value) => value.prior_failed_compatibility_controller.effect_authority = true,
+      ],
+      [
+        "prior first-predicate claim",
+        (value) => value.prior_failed_compatibility_controller.observed_first_refusal_predicate = true,
+      ],
+      [
+        "prior changed projection",
+        (value) => value.prior_failed_compatibility_controller.changed_path_statuses.pop(),
+      ],
+      [
         "controller revision",
         (value) =>
           value.compatibility_controller.controller_revision =
@@ -11032,6 +11454,19 @@ describe("two-artifact success finalization", () => {
         "controller first parent",
         (value) =>
           value.compatibility_controller.first_parent_revision = revision("7"),
+      ],
+      [
+        "controller topic tree",
+        (value) =>
+          value.compatibility_controller.second_parent_tree = revision("7"),
+      ],
+      [
+        "controller source distance",
+        (value) => value.compatibility_controller.controller_source_distance = 51,
+      ],
+      [
+        "controller commit grammar",
+        (value) => value.compatibility_controller.commit_raw_sha256 = "invalid",
       ],
       [
         "controller second parent",
@@ -11082,16 +11517,20 @@ describe("two-artifact success finalization", () => {
         (value) => value.compatibility_controller.payload_distance = 48,
       ],
       [
-        "changed path projection",
+        "repair path projection",
         (value) => {
-          value.compatibility_controller.changed_path_statuses[0].new_mode =
+          value.compatibility_controller.repair_changed_path_statuses[0].new_mode =
             "100644";
-          value.compatibility_controller.changed_path_statuses_sha256 = sha256(
+          value.compatibility_controller.repair_changed_path_statuses_sha256 = sha256(
             canonicalJson(
-              value.compatibility_controller.changed_path_statuses,
+              value.compatibility_controller.repair_changed_path_statuses,
             ),
           );
         },
+      ],
+      [
+        "cumulative path projection",
+        (value) => value.compatibility_controller.cumulative_changed_path_statuses.pop(),
       ],
     ];
     for (const [name, mutate] of mutations) {
@@ -11100,6 +11539,23 @@ describe("two-artifact success finalization", () => {
       request.marker.refence_handoff = structuredClone(
         request.refenceHandoff,
       );
+      expectMaintenanceRefusalCode(
+        () => createSuccessAuthorityProjectionForTest(request),
+        "success_authority_handoff",
+      );
+    }
+    for (const mutate of [
+      (value: any) => delete value.prior_failed_compatibility_controller,
+      (value: any) => value.extra = false,
+      (value: any) =>
+        delete value.prior_failed_compatibility_controller.success_authority,
+      (value: any) =>
+        value.prior_failed_compatibility_controller.extra = false,
+      (value: any) => delete value.compatibility_controller.commit_byte_count,
+      (value: any) => value.compatibility_controller.extra = false,
+    ]) {
+      const request = structuredClone(successAuthorityRequestFixture());
+      mutate(request.refenceHandoff);
       expectMaintenanceRefusalCode(
         () => createSuccessAuthorityProjectionForTest(request),
         "success_authority_handoff",

@@ -96,8 +96,8 @@ const REPOSITORY_ROOT = "/Users/yournameisai/.cache/codex-worktrees/agenttool-ph
 const MIGRATIONS_DIR = join(REPOSITORY_ROOT, "api/migrations");
 const BRIDGE_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-refence-maintenance-bridge.ts", );
 const CONTRACT_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-refence-maintenance-contract.ts", );
-const CONTRACT_SOURCE_SHA256 = "e1b05bcdaa7e7775cb7156660e87d65a0e9bba0a54b8cb1f0cc062f1b14aea14";
-const CONTRACT_SOURCE_GIT_BLOB = "c543e1e79f1efd1d24fbf2de539884b0f44b4e9a";
+const CONTRACT_SOURCE_SHA256 = "40136b456704debe4fa253745d83441c9ddb099d90b47a10aa27837c7a027a97";
+const CONTRACT_SOURCE_GIT_BLOB = "79efd55c97a8e5e2fc6f2da1317ee73b95293b1c";
 const ORDINARY_GUARD_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-deploy-guard.ts", );
 const ORDINARY_GUARD_SHA256 = "10fe5012e8069ede11eaa3abe0a05f08225d855bb722d52746279dbc21c5fade";
 const ORDINARY_GUARD_GIT_BLOB = "4d2b5be9ac6285d6d3293a1d41c3a36bc7c8f003";
@@ -128,8 +128,23 @@ const AUTHORIZED_H0_GUARD_RAW_SHA256 = "dd324e32fada2053acc945d39012d5844caef402
 const AUTHORIZED_H0_GUARD_NORMALIZED_SHA256 = "9e0ddd120fa6d605f68a86be35303a1b2eba56155116218933f8801eda47340c";
 const AUTHORIZED_H0_CONTRACT_RAW_SHA256 = "0c7ad30f81271b42a2339fcf1f87705c1ff6ee4a5906506f8a2c089ab92e74a1";
 const AUTHORIZED_H0_CONTRACT_GIT_BLOB = "ea83765c054b3bf130a4c8957a5a30ef1e657cb6";
-const PROTECTED_SUCCESSOR_CHANGED_PATHS = Object.freeze([ "bin/deploy.sh", "bin/phase-b-refence-maintenance-bridge.ts", "bin/phase-b-refence-maintenance-contract.ts", "bin/tests/phase-b-refence-maintenance-bridge.test.ts",
+const PRIOR_FAILED_COMPATIBILITY_REVISION = "e4b9ed4188ad1f01cfaa6bb5385d21d53625fa73";
+const PRIOR_FAILED_COMPATIBILITY_TREE = "87face598df18f71ecda4997a82e0f49934b8166";
+const PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION = "8e644fb52da22badcd6da6cd2324291e1d37f656";
+const PRIOR_FAILED_COMPATIBILITY_TOPIC_TREE = "87face598df18f71ecda4997a82e0f49934b8166";
+const PRIOR_FAILED_COMPATIBILITY_SOURCE_DISTANCE = 51;
+const PRIOR_FAILED_COMPATIBILITY_COMMIT_RAW_SHA256 = "399dccbf17db1805f48e10d77068bb5130fc5fb03b12094445942fe01980a891";
+const PRIOR_FAILED_COMPATIBILITY_COMMIT_BYTE_COUNT = 1_246;
+const PRIOR_FAILED_COMPATIBILITY_BRIDGE_RAW_SHA256 = "6be6664c2dee86ac427dda893a7f2aa51ee639951e00a6e802c60f98fa153f5c";
+const PRIOR_FAILED_COMPATIBILITY_BRIDGE_NORMALIZED_SHA256 = "539b4711da2628946a6592944ab0ea9da40db711accdbe412520267540c41c8e";
+const PRIOR_FAILED_COMPATIBILITY_CONTRACT_RAW_SHA256 = "e1b05bcdaa7e7775cb7156660e87d65a0e9bba0a54b8cb1f0cc062f1b14aea14";
+const PRIOR_FAILED_COMPATIBILITY_CONTRACT_GIT_BLOB = "c543e1e79f1efd1d24fbf2de539884b0f44b4e9a";
+const PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATHS = Object.freeze([ "bin/deploy.sh", "bin/phase-b-refence-maintenance-bridge.ts", "bin/phase-b-refence-maintenance-contract.ts", "bin/tests/phase-b-refence-maintenance-bridge.test.ts",
   "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts", "packages/constructive-intelligence/tests/concurrency.test.ts", ] as const);
+const PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES = Object.freeze( PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATHS.map((path) => Object.freeze({ old_mode: path === "bin/deploy.sh" ? "100755" as const : "100644" as const,
+    new_mode: path === "bin/deploy.sh" ? "100755" as const : "100644" as const, status: "M" as const, path })), );
+const PROTECTED_SUCCESSOR_CHANGED_PATHS = Object.freeze([ "bin/deploy.sh", "bin/phase-b-refence-maintenance-bridge.ts", "bin/phase-b-refence-maintenance-contract.ts", "bin/tests/phase-b-refence-maintenance-bridge.test.ts",
+  "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts", ] as const);
 const PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES = Object.freeze( PROTECTED_SUCCESSOR_CHANGED_PATHS.map((path) => Object.freeze({ old_mode: path === "bin/deploy.sh" ? "100755" as const : "100644" as const,
     new_mode: path === "bin/deploy.sh" ? "100755" as const : "100644" as const, status: "M" as const, path })), );
 const GIT_CLOSED_FLAGS = [ "--no-replace-objects", "--no-optional-locks", "-c", "credential.helper=", "-c", "credential.interactive=false", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "http.proxy=", "-c", "https.proxy=", "-c",
@@ -202,7 +217,7 @@ const EXPECTED_CONSTRAINT_DEFINITIONS: Readonly<
 const REFENCE_OPERATOR_SEMANTIC_SHA256 = "f4ff28f2bd46c608745e56ca82001c9e4252cc16e8e07252ca60c804f38ecf7f";
 // deno-fmt-ignore
 const BRIDGE_NORMALIZED_SHA256 =
-  "539b4711da2628946a6592944ab0ea9da40db711accdbe412520267540c41c8e";
+  "e4c7a8ace65d84a3715182cb96d735747cadaf076e55efbbdde7c2f2bb1c5f2d";
 
 const MAX_PRIVATE_BYTES = 1_000_000;
 const MAX_CHILD_BYTES = 2_000_000;
@@ -1298,20 +1313,33 @@ interface MarkerBindings { rolloutID: string;
   bridgeNormalizedSHA256: string;
   controllerRevision: string;
   controllerTree: string;
+  controllerSourceDistance: number;
+  controllerCommitRawSHA256: string;
+  controllerCommitByteCount: number;
   controllerTopicRevision: string;
-  changedPathStatusesSHA256: string; }
+  controllerTopicTree: string;
+  changedPathStatusesSHA256: string;
+  cumulativeChangedPathStatusesSHA256: string; }
 
 type CompatibilityControllerBindings = Pick<
   MarkerBindings, | "controllerRevision"
   | "controllerTree"
+  | "controllerSourceDistance"
+  | "controllerCommitRawSHA256"
+  | "controllerCommitByteCount"
   | "controllerTopicRevision"
+  | "controllerTopicTree"
   | "changedPathStatusesSHA256"
+  | "cumulativeChangedPathStatusesSHA256"
 >;
 
 function requireCompatibilityControllerBindings( value: CompatibilityControllerBindings | undefined, ): CompatibilityControllerBindings { requireCondition( value !== undefined && validRevision(value.controllerRevision) &&
-      validRevision(value.controllerTree) && validRevision(value.controllerTopicRevision) && value.controllerRevision !== AUTHORIZED_H0_TARGET_REVISION && value.controllerTree !== AUTHORIZED_H0_TARGET_TREE &&
-      value.controllerTopicRevision !== value.controllerRevision && value.controllerTopicRevision !== AUTHORIZED_H0_TARGET_REVISION && value.changedPathStatusesSHA256 === sha256(canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES)),
-    "protected_successor_authority", );
+      validRevision(value.controllerTree) && Number.isSafeInteger(value.controllerSourceDistance) && value.controllerSourceDistance > PRIOR_FAILED_COMPATIBILITY_SOURCE_DISTANCE && validSha(value.controllerCommitRawSHA256) &&
+      Number.isSafeInteger(value.controllerCommitByteCount) && value.controllerCommitByteCount > 0 && value.controllerCommitByteCount <= MAX_PRIVATE_BYTES && validRevision(value.controllerTopicRevision) &&
+      value.controllerRevision !== AUTHORIZED_H0_TARGET_REVISION && value.controllerRevision !== PRIOR_FAILED_COMPATIBILITY_REVISION && value.controllerTree !== AUTHORIZED_H0_TARGET_TREE &&
+      value.controllerTree !== PRIOR_FAILED_COMPATIBILITY_TREE && value.controllerTopicRevision !== value.controllerRevision && value.controllerTopicRevision !== AUTHORIZED_H0_TARGET_REVISION &&
+      value.controllerTopicRevision !== PRIOR_FAILED_COMPATIBILITY_REVISION && value.controllerTopicTree === value.controllerTree && value.changedPathStatusesSHA256 === sha256(canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES)) &&
+      value.cumulativeChangedPathStatusesSHA256 === sha256(canonicalJson(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES)), "protected_successor_authority", );
   return value; }
 
 /** @internal Exact post-H compatibility-controller binding validator. */
@@ -1364,11 +1392,9 @@ interface ControllerPreparationBinding { startedAt: string;
 function refenceHandoffRecord(bindings: MarkerBindings): JsonRecord { requireCondition( bindings.receiptSHA256 === AUTHORIZED_H0_RECEIPT_SHA256 && bindings.runID === AUTHORIZED_H0_RUN_ID &&
       bindings.targetRevision === AUTHORIZED_H0_TARGET_REVISION && bindings.targetTree === AUTHORIZED_H0_TARGET_TREE && bindings.producerGuardRawSHA256 === AUTHORIZED_H0_GUARD_RAW_SHA256 &&
       bindings.producerGuardNormalizedSHA256 === AUTHORIZED_H0_GUARD_NORMALIZED_SHA256 && bindings.bridgeRawSHA256 !== bindings.producerGuardRawSHA256 &&
-      bindings.bridgeNormalizedSHA256 !== bindings.producerGuardNormalizedSHA256 && validRevision(bindings.controllerRevision) && bindings.controllerRevision !== AUTHORIZED_H0_TARGET_REVISION &&
-      validRevision(bindings.controllerTree) && bindings.controllerTree !== AUTHORIZED_H0_TARGET_TREE && validRevision(bindings.controllerTopicRevision) &&
-      bindings.controllerTopicRevision !== bindings.controllerRevision && bindings.controllerTopicRevision !== AUTHORIZED_H0_TARGET_REVISION &&
-      bindings.changedPathStatusesSHA256 === sha256(canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES)), "protected_successor_authority", );
-  return { proof_schema: "agenttool-phase-b-refence-handoff/v2", refence_receipt_sha256: bindings.receiptSHA256, refence_run_id: bindings.runID,
+      bindings.bridgeNormalizedSHA256 !== bindings.producerGuardNormalizedSHA256 && bindings.bridgeRawSHA256 !== PRIOR_FAILED_COMPATIBILITY_BRIDGE_RAW_SHA256 &&
+      bindings.bridgeNormalizedSHA256 !== PRIOR_FAILED_COMPATIBILITY_BRIDGE_NORMALIZED_SHA256 && requireCompatibilityControllerBindings(bindings) === bindings, "protected_successor_authority", );
+  return { proof_schema: "agenttool-phase-b-refence-handoff/v3", refence_receipt_sha256: bindings.receiptSHA256, refence_run_id: bindings.runID,
     source_revision: EXPECTED_SOURCE_REVISION, source_tree: EXPECTED_SOURCE_TREE, target_revision: bindings.targetRevision, target_tree: bindings.targetTree, anchor_archive_path: join( DEPLOY_STATE_DIR,
       `phase-b-refence-observed-526-anchor-retired-${bindings.runID}.json`, ), anchor_sha256: bindings.anchorSHA256, anchor_device: bindings.anchorDevice, anchor_inode: bindings.anchorInode, witness_archive_path: join( DEPLOY_STATE_DIR,
       `phase-b-refence-observed-526-armed-witness-retired-${bindings.runID}.json`, ), witness_sha256: bindings.witnessSHA256, witness_device: bindings.witnessDevice, witness_inode: bindings.witnessInode, wal_root: WAL_ROOT,
@@ -1377,12 +1403,26 @@ function refenceHandoffRecord(bindings: MarkerBindings): JsonRecord { requireCon
       target_tree: AUTHORIZED_H0_TARGET_TREE, target_distance: AUTHORIZED_H0_TARGET_DISTANCE, lifecycle: "historical", guard_revision: AUTHORIZED_H0_TARGET_REVISION,
       guard_source_path: "bin/phase-b-refence-maintenance-bridge.ts", guard_raw_sha256: AUTHORIZED_H0_GUARD_RAW_SHA256, guard_normalized_sha256: AUTHORIZED_H0_GUARD_NORMALIZED_SHA256,
       contract_revision: AUTHORIZED_H0_TARGET_REVISION, contract_source_path: "bin/phase-b-refence-maintenance-contract.ts", contract_raw_sha256: AUTHORIZED_H0_CONTRACT_RAW_SHA256,
-      contract_git_blob: AUTHORIZED_H0_CONTRACT_GIT_BLOB, }, compatibility_controller: {
-      schema: "agenttool-phase-b-refence-protected-successor-controller/v1", bridge_source_path: BRIDGE_SOURCE, bridge_source_sha256: bindings.bridgeRawSHA256,
+      contract_git_blob: AUTHORIZED_H0_CONTRACT_GIT_BLOB, }, prior_failed_compatibility_controller: {
+      schema: "agenttool-phase-b-refence-prior-failed-protected-successor-controller/v1", lifecycle: "failed_pre_h", controller_success: false, mutation_effect_began: false,
+      success_authority: false, effect_authority: false, observed_first_refusal_predicate: false, static_refusal_barrier: "raw_commit_terminal_lf_required", static_refusal_barrier_verified: true,
+      controller_revision: PRIOR_FAILED_COMPATIBILITY_REVISION, controller_tree: PRIOR_FAILED_COMPATIBILITY_TREE, controller_source_distance: PRIOR_FAILED_COMPATIBILITY_SOURCE_DISTANCE,
+      commit_raw_sha256: PRIOR_FAILED_COMPATIBILITY_COMMIT_RAW_SHA256, commit_byte_count: PRIOR_FAILED_COMPATIBILITY_COMMIT_BYTE_COUNT, first_parent_revision: AUTHORIZED_H0_TARGET_REVISION,
+      second_parent_revision: PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION, second_parent_tree: PRIOR_FAILED_COMPATIBILITY_TOPIC_TREE, protected_predecessor_tree: AUTHORIZED_H0_TARGET_TREE,
+      bridge_revision: PRIOR_FAILED_COMPATIBILITY_REVISION, bridge_source_path: "bin/phase-b-refence-maintenance-bridge.ts", bridge_source_sha256: PRIOR_FAILED_COMPATIBILITY_BRIDGE_RAW_SHA256,
+      bridge_normalized_sha256: PRIOR_FAILED_COMPATIBILITY_BRIDGE_NORMALIZED_SHA256, contract_revision: PRIOR_FAILED_COMPATIBILITY_REVISION,
+      contract_source_path: "bin/phase-b-refence-maintenance-contract.ts", contract_source_sha256: PRIOR_FAILED_COMPATIBILITY_CONTRACT_RAW_SHA256,
+      contract_git_blob: PRIOR_FAILED_COMPATIBILITY_CONTRACT_GIT_BLOB, changed_path_statuses: structuredClone(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
+      changed_path_statuses_sha256: sha256(canonicalJson(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES)), payload_revision: AUTHORIZED_H0_TARGET_REVISION,
+      payload_tree: AUTHORIZED_H0_TARGET_TREE, payload_distance: AUTHORIZED_H0_TARGET_DISTANCE, }, compatibility_controller: {
+      schema: "agenttool-phase-b-refence-protected-successor-controller/v2", lifecycle: "current", bridge_source_path: BRIDGE_SOURCE, bridge_source_sha256: bindings.bridgeRawSHA256,
       bridge_normalized_sha256: bindings.bridgeNormalizedSHA256, contract_source_path: CONTRACT_SOURCE, contract_source_sha256: CONTRACT_SOURCE_SHA256, contract_git_blob: CONTRACT_SOURCE_GIT_BLOB,
-      controller_revision: bindings.controllerRevision, controller_tree: bindings.controllerTree, first_parent_revision: AUTHORIZED_H0_TARGET_REVISION,
-      second_parent_revision: bindings.controllerTopicRevision, protected_predecessor_tree: AUTHORIZED_H0_TARGET_TREE, exact_first_parent_verified: true, protected_head_verified: true,
-      changed_path_statuses: structuredClone(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES), changed_path_statuses_sha256: bindings.changedPathStatusesSHA256,
+      controller_revision: bindings.controllerRevision, controller_tree: bindings.controllerTree, controller_source_distance: bindings.controllerSourceDistance,
+      commit_raw_sha256: bindings.controllerCommitRawSHA256, commit_byte_count: bindings.controllerCommitByteCount, predecessor_controller_revision: PRIOR_FAILED_COMPATIBILITY_REVISION,
+      first_parent_revision: PRIOR_FAILED_COMPATIBILITY_REVISION, second_parent_revision: bindings.controllerTopicRevision, second_parent_tree: bindings.controllerTopicTree,
+      protected_predecessor_tree: PRIOR_FAILED_COMPATIBILITY_TREE, exact_first_parent_verified: true, second_parent_tree_verified: true, protected_head_verified: true,
+      repair_changed_path_statuses: structuredClone(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES), repair_changed_path_statuses_sha256: bindings.changedPathStatusesSHA256,
+      cumulative_changed_path_statuses: structuredClone(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES), cumulative_changed_path_statuses_sha256: bindings.cumulativeChangedPathStatusesSHA256,
       payload_revision: AUTHORIZED_H0_TARGET_REVISION, payload_tree: AUTHORIZED_H0_TARGET_TREE, payload_distance: AUTHORIZED_H0_TARGET_DISTANCE, }, preexisting_lineage_bound: false, release_current_image_linkage_proven: false,
     release_status_completion_authority: false, release_stable_rollout_authority: false, release_ledger_safety_authority: false, release_history_may_be_truncated: true, public_surfaces_expected_unavailable: true, }; }
 
@@ -1849,15 +1889,44 @@ interface KeychainProof { generation_absent: true;
 interface ProcessProof { conflicting_process_count: 0;
   projection_sha256: string; }
 
+type ProtectedChangedPathStatus = { old_mode: "100644" | "100755";
+  new_mode: "100644" | "100755";
+  status: "M";
+  path: string };
+
+interface PriorFailedCompatibilityGitProof { revision: string;
+  tree: string;
+  source_distance: number;
+  commit_raw_sha256: string;
+  commit_byte_count: number;
+  first_parent_revision: string;
+  second_parent_revision: string;
+  second_parent_tree: string;
+  changed_path_statuses: readonly ProtectedChangedPathStatus[];
+  bridge_source_sha256: string;
+  bridge_normalized_sha256: string;
+  contract_source_sha256: string;
+  contract_git_blob: string;
+  lifecycle: "failed_pre_h";
+  static_refusal_barrier: "raw_commit_terminal_lf_required";
+  static_refusal_barrier_verified: true;
+  observed_first_refusal_predicate: false;
+  controller_success: false;
+  mutation_effect_began: false;
+  success_authority: false;
+  effect_authority: false; }
+
 interface GitProof { revision: string;
   tree: string;
   source_distance: number;
+  commit_raw_sha256: string;
+  commit_byte_count: number;
   first_parent_revision: string;
   second_parent_revision: string;
-  changed_path_statuses: readonly { old_mode: "100644" | "100755";
-    new_mode: "100644" | "100755";
-    status: "M";
-    path: string }[];
+  second_parent_tree: string;
+  changed_path_statuses: readonly ProtectedChangedPathStatus[];
+  cumulative_changed_path_statuses: readonly ProtectedChangedPathStatus[];
+  prior_failed_compatibility_controller: PriorFailedCompatibilityGitProof;
   authorized_h0_guard_raw_sha256: string;
   authorized_h0_guard_normalized_sha256: string;
   authorized_h0_contract_source_sha256: string;
@@ -1958,36 +2027,60 @@ function gitProofLine(bytes: Uint8Array, pattern: RegExp): string { const text =
   requireCondition( pattern.test(text) && text.endsWith("\n") && !text.slice(0, -1).includes("\n"), "git_proof", );
   return text.slice(0, -1); }
 
-function parseProtectedSuccessorCommit( bytes: Uint8Array, revision: string, tree: string, ): string { const text = decode(bytes, "git_proof");
-  requireCondition(text.endsWith("\n") && gitObjectSHA1("commit", bytes) === revision, "git_proof");
+function parseProtectedMergeCommit( bytes: Uint8Array, revision: string, tree: string, expectedFirstParent: string, ): string { const text = decode(bytes, "git_proof");
+  requireCondition( bytes.byteLength > 0 && validRevision(revision) && validRevision(tree) && validRevision(expectedFirstParent) && !text.includes("\0") && !text.includes("\r") && gitObjectSHA1("commit", bytes) === revision, "git_proof", );
   const headerEnd = text.indexOf("\n\n");
   requireCondition(headerEnd > 0, "git_proof");
   const headers = text.slice(0, headerEnd).split("\n");
-  requireCondition(headers[0] === `tree ${tree}`, "git_proof");
-  const parents = headers.filter((line) => line.startsWith("parent "));
-  requireCondition( parents.length === 2 && parents[0] === `parent ${AUTHORIZED_H0_TARGET_REVISION}` && /^parent [0-9a-f]{40}$/.test(parents[1] ?? ""), "git_proof", );
-  const secondParent = parents[1]!.slice("parent ".length);
-  requireCondition(secondParent !== revision && secondParent !== AUTHORIZED_H0_TARGET_REVISION, "git_proof");
+  const parsed: { key: string; value: string }[] = [];
+  let priorKey: string | null = null;
+  for (const line of headers) { if (line.startsWith(" ")) { requireCondition(priorKey !== null && priorKey !== "tree" && priorKey !== "parent", "git_proof");
+      continue; }
+    const match = line.match(/^([a-z][a-z0-9-]*) (.+)$/);
+    requireCondition(match !== null, "git_proof");
+    priorKey = match[1]!;
+    parsed.push({ key: match[1]!, value: match[2]! }); }
+  const trees = parsed.filter((entry) => entry.key === "tree");
+  const parents = parsed.filter((entry) => entry.key === "parent");
+  requireCondition( parsed[0]?.key === "tree" && trees.length === 1 && trees[0]!.value === tree && parents.length === 2 && parents.every((entry) => validRevision(entry.value)) && parents[0]!.value === expectedFirstParent, "git_proof", );
+  const secondParent = parents[1]!.value;
+  requireCondition(secondParent !== revision && secondParent !== expectedFirstParent, "git_proof");
   return secondParent; }
+
+function parsePriorFailedCompatibilityCommit( bytes: Uint8Array, revision: string, tree: string, ): string { requireCondition( revision === PRIOR_FAILED_COMPATIBILITY_REVISION && tree === PRIOR_FAILED_COMPATIBILITY_TREE && bytes.byteLength === PRIOR_FAILED_COMPATIBILITY_COMMIT_BYTE_COUNT &&
+      bytes.at(-1) !== 0x0a && sha256(bytes) === PRIOR_FAILED_COMPATIBILITY_COMMIT_RAW_SHA256, "git_proof", );
+  const secondParent = parseProtectedMergeCommit( bytes, revision, tree, AUTHORIZED_H0_TARGET_REVISION, );
+  requireCondition(secondParent === PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION, "git_proof");
+  return secondParent; }
+
+function validatePriorFailedCompatibilityStaticBarrier( sourceBytes: Uint8Array, commitBytes: Uint8Array, ): void { const source = decode(sourceBytes, "git_proof");
+  const barrier = 'requireCondition(text.endsWith("\\n") && gitObjectSHA1("commit", bytes) === revision, "git_proof");';
+  requireCondition( source.split(barrier).length === 2 && commitBytes.at(-1) !== 0x0a, "git_proof", ); }
+
+function parseProtectedSuccessorCommit( bytes: Uint8Array, revision: string, tree: string, ): string { return parseProtectedMergeCommit(bytes, revision, tree, PRIOR_FAILED_COMPATIBILITY_REVISION); }
 
 /** @internal Exact protected-successor parent-vector parser. */
 export function parseProtectedSuccessorParentsForTest( bytes: Uint8Array, revision: string, tree: string, ): string { return parseProtectedSuccessorCommit(bytes, revision, tree); }
 
-function parseProtectedSuccessorChangedPaths( bytes: Uint8Array, ): readonly { old_mode: "100644" | "100755";
-    new_mode: "100644" | "100755";
-    status: "M";
-    path: string }[] { const text = decode(bytes, "git_proof");
+/** @internal Exact immutable failed-compatibility parent-vector parser. */
+export function parsePriorFailedCompatibilityParentsForTest( bytes: Uint8Array, revision: string, tree: string, ): string { return parsePriorFailedCompatibilityCommit(bytes, revision, tree); }
+
+function parseExactProtectedChangedPaths( bytes: Uint8Array, expectedPaths: readonly string[], expectedStatuses: readonly ProtectedChangedPathStatus[], ): readonly ProtectedChangedPathStatus[] { const text = decode(bytes, "git_proof");
   requireCondition(text.endsWith("\0") && !text.includes("\n") && !text.includes("\r"), "git_proof");
   const fields = text.split("\0");
-  requireCondition(fields.pop() === "" && fields.length === PROTECTED_SUCCESSOR_CHANGED_PATHS.length * 2, "git_proof");
-  const projection = PROTECTED_SUCCESSOR_CHANGED_PATHS.map((expectedPath, index) => { const status = fields[index * 2];
+  requireCondition(fields.pop() === "" && fields.length === expectedPaths.length * 2, "git_proof");
+  const projection = expectedPaths.map((expectedPath, index) => { const status = fields[index * 2];
     const path = fields[index * 2 + 1];
     const match = status?.match(/^:(100644|100755) (100644|100755) ([0-9a-f]{40}) ([0-9a-f]{40}) M$/);
     const expectedMode = expectedPath === "bin/deploy.sh" ? "100755" : "100644";
     requireCondition(match !== null && match[1] === expectedMode && match[2] === expectedMode && match[3] !== match[4] && path === expectedPath, "git_proof");
     return { old_mode: expectedMode as "100644" | "100755", new_mode: expectedMode as "100644" | "100755", status: "M" as const, path }; });
-  requireCondition(canonicalJson(projection) === canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES), "git_proof");
+  requireCondition(canonicalJson(projection) === canonicalJson(expectedStatuses), "git_proof");
   return projection; }
+
+function parseProtectedSuccessorChangedPaths(bytes: Uint8Array): readonly ProtectedChangedPathStatus[] { return parseExactProtectedChangedPaths(bytes, PROTECTED_SUCCESSOR_CHANGED_PATHS, PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES); }
+
+function parsePriorProtectedSuccessorChangedPaths(bytes: Uint8Array): readonly ProtectedChangedPathStatus[] { return parseExactProtectedChangedPaths(bytes, PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATHS, PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES); }
 
 /** @internal Exact protected-successor changed-path/status parser. */
 export function parseProtectedSuccessorChangedPathsForTest( bytes: Uint8Array, ): readonly { old_mode: "100644" | "100755";
@@ -1995,21 +2088,44 @@ export function parseProtectedSuccessorChangedPathsForTest( bytes: Uint8Array, )
     status: "M";
     path: string }[] { return parseProtectedSuccessorChangedPaths(bytes); }
 
-function validateGitProof(raw: unknown, evidence: TerminalEvidence): GitProof { exactKeys( raw, [ "revision", "tree", "source_distance", "first_parent_revision", "second_parent_revision", "changed_path_statuses",
+/** @internal Exact prior/cumulative six-path status parser. */
+export function parsePriorProtectedSuccessorChangedPathsForTest(bytes: Uint8Array): readonly ProtectedChangedPathStatus[] { return parsePriorProtectedSuccessorChangedPaths(bytes); }
+
+function validatePriorFailedCompatibilityGitProof(raw: unknown): PriorFailedCompatibilityGitProof { exactKeys( raw, [ "revision", "tree", "source_distance", "commit_raw_sha256", "commit_byte_count", "first_parent_revision", "second_parent_revision", "second_parent_tree",
+      "changed_path_statuses", "bridge_source_sha256", "bridge_normalized_sha256", "contract_source_sha256", "contract_git_blob", "lifecycle", "static_refusal_barrier", "static_refusal_barrier_verified",
+      "observed_first_refusal_predicate", "controller_success", "mutation_effect_began", "success_authority", "effect_authority", ], "git_proof", );
+  const value = raw as PriorFailedCompatibilityGitProof;
+  requireCondition( value.revision === PRIOR_FAILED_COMPATIBILITY_REVISION && value.tree === PRIOR_FAILED_COMPATIBILITY_TREE && value.source_distance === PRIOR_FAILED_COMPATIBILITY_SOURCE_DISTANCE &&
+      value.commit_raw_sha256 === PRIOR_FAILED_COMPATIBILITY_COMMIT_RAW_SHA256 && value.commit_byte_count === PRIOR_FAILED_COMPATIBILITY_COMMIT_BYTE_COUNT && value.first_parent_revision === AUTHORIZED_H0_TARGET_REVISION &&
+      value.second_parent_revision === PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION && value.second_parent_tree === PRIOR_FAILED_COMPATIBILITY_TOPIC_TREE && value.tree === value.second_parent_tree &&
+      canonicalJson(value.changed_path_statuses) === canonicalJson(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES) && value.bridge_source_sha256 === PRIOR_FAILED_COMPATIBILITY_BRIDGE_RAW_SHA256 &&
+      value.bridge_normalized_sha256 === PRIOR_FAILED_COMPATIBILITY_BRIDGE_NORMALIZED_SHA256 && value.contract_source_sha256 === PRIOR_FAILED_COMPATIBILITY_CONTRACT_RAW_SHA256 &&
+      value.contract_git_blob === PRIOR_FAILED_COMPATIBILITY_CONTRACT_GIT_BLOB && value.lifecycle === "failed_pre_h" && value.static_refusal_barrier === "raw_commit_terminal_lf_required" &&
+      value.static_refusal_barrier_verified === true && value.observed_first_refusal_predicate === false && value.controller_success === false && value.mutation_effect_began === false &&
+      value.success_authority === false && value.effect_authority === false, "git_proof", );
+  return value; }
+
+function validateGitProof(raw: unknown, evidence: TerminalEvidence): GitProof { exactKeys( raw, [ "revision", "tree", "source_distance", "commit_raw_sha256", "commit_byte_count", "first_parent_revision", "second_parent_revision", "second_parent_tree",
+      "changed_path_statuses", "cumulative_changed_path_statuses", "prior_failed_compatibility_controller",
       "authorized_h0_guard_raw_sha256", "authorized_h0_guard_normalized_sha256", "authorized_h0_contract_source_sha256", "authorized_h0_contract_git_blob", "bridge_source_sha256", "bridge_normalized_sha256",
       "contract_source_sha256", "contract_git_blob", "protected_head", "clean", ], "git_proof", );
   const value = raw as GitProof;
+  const prior = validatePriorFailedCompatibilityGitProof(value.prior_failed_compatibility_controller);
   requireCondition( evidence.receiptSHA256 === AUTHORIZED_H0_RECEIPT_SHA256 && evidence.runID === AUTHORIZED_H0_RUN_ID && evidence.targetRevision === AUTHORIZED_H0_TARGET_REVISION &&
       evidence.targetTree === AUTHORIZED_H0_TARGET_TREE && evidence.targetDistance === AUTHORIZED_H0_TARGET_DISTANCE && evidence.producerGuardRawSHA256 === AUTHORIZED_H0_GUARD_RAW_SHA256 &&
-      evidence.producerGuardNormalizedSHA256 === AUTHORIZED_H0_GUARD_NORMALIZED_SHA256 && validRevision(value.revision) && value.revision !== AUTHORIZED_H0_TARGET_REVISION && validRevision(value.tree) &&
-      value.tree !== AUTHORIZED_H0_TARGET_TREE && Number.isSafeInteger(value.source_distance) && value.source_distance > AUTHORIZED_H0_TARGET_DISTANCE && value.first_parent_revision === AUTHORIZED_H0_TARGET_REVISION &&
+      evidence.producerGuardNormalizedSHA256 === AUTHORIZED_H0_GUARD_NORMALIZED_SHA256 && validRevision(value.revision) && value.revision !== AUTHORIZED_H0_TARGET_REVISION && value.revision !== prior.revision && validRevision(value.tree) &&
+      value.tree !== AUTHORIZED_H0_TARGET_TREE && value.tree !== prior.tree && Number.isSafeInteger(value.source_distance) && value.source_distance > PRIOR_FAILED_COMPATIBILITY_SOURCE_DISTANCE && validSha(value.commit_raw_sha256) &&
+      Number.isSafeInteger(value.commit_byte_count) && value.commit_byte_count > 0 && value.commit_byte_count <= MAX_PRIVATE_BYTES && value.first_parent_revision === PRIOR_FAILED_COMPATIBILITY_REVISION &&
       validRevision(value.second_parent_revision) && value.second_parent_revision !== value.revision && value.second_parent_revision !== value.first_parent_revision &&
+      value.second_parent_revision !== AUTHORIZED_H0_TARGET_REVISION && value.second_parent_tree === value.tree &&
       canonicalJson(value.changed_path_statuses) === canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES) && value.authorized_h0_guard_raw_sha256 === AUTHORIZED_H0_GUARD_RAW_SHA256 &&
+      canonicalJson(value.cumulative_changed_path_statuses) === canonicalJson(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES) &&
       value.authorized_h0_guard_normalized_sha256 === AUTHORIZED_H0_GUARD_NORMALIZED_SHA256 && value.authorized_h0_contract_source_sha256 === AUTHORIZED_H0_CONTRACT_RAW_SHA256 &&
       value.authorized_h0_contract_git_blob === AUTHORIZED_H0_CONTRACT_GIT_BLOB && value.bridge_source_sha256 === evidence.bridgeRawSHA256 && value.bridge_normalized_sha256 === evidence.bridgeNormalizedSHA256 &&
       value.bridge_source_sha256 !== value.authorized_h0_guard_raw_sha256 && value.bridge_normalized_sha256 !== value.authorized_h0_guard_normalized_sha256 && validSha(value.contract_source_sha256) &&
       value.contract_source_sha256 === CONTRACT_SOURCE_SHA256 && value.contract_git_blob === CONTRACT_SOURCE_GIT_BLOB && String(value.contract_source_sha256) !== String(value.authorized_h0_contract_source_sha256) &&
-      String(value.contract_git_blob) !== String(value.authorized_h0_contract_git_blob) && value.protected_head === true && value.clean === true, "git_proof", );
+      String(value.contract_git_blob) !== String(value.authorized_h0_contract_git_blob) && value.bridge_source_sha256 !== prior.bridge_source_sha256 && value.bridge_normalized_sha256 !== prior.bridge_normalized_sha256 &&
+      value.contract_source_sha256 !== prior.contract_source_sha256 && value.contract_git_blob !== prior.contract_git_blob && value.protected_head === true && value.clean === true, "git_proof", );
   return value; }
 
 /** @internal Exact typed H0/current-controller Git proof validator. */
@@ -2580,15 +2696,19 @@ async function runRefenceSecurityCLI( arguments_: readonly string[], ): Promise<
   requirePinnedSystemExecutable(SECURITY, SECURITY_SHA256, 1);
   return result; }
 
-function refenceGitInvocationAllowed(arguments_: readonly string[]): boolean { return [ ["rev-parse", "HEAD"], ["rev-parse", "HEAD^{tree}"], ["rev-parse", `${AUTHORIZED_H0_TARGET_REVISION}^{tree}`], ["rev-parse", "--git-common-dir"],
+function refenceGitInvocationAllowed(arguments_: readonly string[]): boolean { return [ ["rev-parse", "HEAD"], ["rev-parse", "HEAD^{tree}"], ["rev-parse", "HEAD^2^{tree}"],
+    ["rev-parse", AUTHORIZED_H0_TARGET_REVISION + "^{tree}"], ["rev-parse", PRIOR_FAILED_COMPATIBILITY_REVISION + "^{tree}"], ["rev-parse", PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION + "^{tree}"], ["rev-parse", "--git-common-dir"],
     ["config", "--local", "--null", "--list"],
-    ["for-each-ref", "--format=%(refname)", "refs/replace/"], ["rev-list", "--count", `${EXPECTED_SOURCE_REVISION}..HEAD`], ["cat-file", "commit", "HEAD"], ["merge-base", "--is-ancestor", EXPECTED_SOURCE_REVISION, "HEAD"],
-    ["merge-base", "--is-ancestor", AUTHORIZED_H0_TARGET_REVISION, "HEAD^2"], ["status", "--porcelain=v1", "--untracked-files=all"],
+    ["for-each-ref", "--format=%(refname)", "refs/replace/"], ["rev-list", "--count", EXPECTED_SOURCE_REVISION + "..HEAD"], ["rev-list", "--count", EXPECTED_SOURCE_REVISION + ".." + PRIOR_FAILED_COMPATIBILITY_REVISION],
+    ["cat-file", "commit", "HEAD"], ["cat-file", "commit", PRIOR_FAILED_COMPATIBILITY_REVISION], ["merge-base", "--is-ancestor", EXPECTED_SOURCE_REVISION, "HEAD"],
+    ["merge-base", "--is-ancestor", PRIOR_FAILED_COMPATIBILITY_REVISION, "HEAD^2"], ["status", "--porcelain=v1", "--untracked-files=all"],
+    ["diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, PRIOR_FAILED_COMPATIBILITY_REVISION, "--"],
+    ["diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", PRIOR_FAILED_COMPATIBILITY_REVISION, "HEAD", "--"],
     ["diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, "HEAD", "--"], ["show", "HEAD:bin/phase-b-refence-maintenance-bridge.ts"],
-    ["show", `${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-bridge.ts`], ["show", "HEAD:bin/phase-b-refence-maintenance-contract.ts"],
-    ["show", `${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-contract.ts`], ["rev-parse", GITHUB_MAIN_TRACKING_REF],
+    ["show", PRIOR_FAILED_COMPATIBILITY_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"], ["show", AUTHORIZED_H0_TARGET_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"], ["show", "HEAD:bin/phase-b-refence-maintenance-contract.ts"],
+    ["show", PRIOR_FAILED_COMPATIBILITY_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], ["show", AUTHORIZED_H0_TARGET_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], ["rev-parse", GITHUB_MAIN_TRACKING_REF],
     ["ls-tree", "-rz", "--full-tree", AUTHORIZED_H0_TARGET_REVISION, "--", "api", "docs"], [ "ls-tree", "-z", "HEAD", "--", "bin/phase-b-refence-maintenance-contract.ts", ],
-  ].some((candidate) => canonicalJson(candidate) === canonicalJson(arguments_)); }
+    [ "ls-tree", "-z", PRIOR_FAILED_COMPATIBILITY_REVISION, "--", "bin/phase-b-refence-maintenance-contract.ts", ], ].some((candidate) => canonicalJson(candidate) === canonicalJson(arguments_)); }
 
 /** @internal Exact Git read allowlist for contained closure tests. */
 export function refenceGitInvocationAllowedForTest( arguments_: readonly string[], ): boolean { return refenceGitInvocationAllowed(arguments_); }
@@ -3644,42 +3764,79 @@ async function readProductionGitProof(): Promise<GitProof> { requireCondition(ab
   const revisionResult = await runRefenceGitCLI(["rev-parse", "HEAD"]);
   const remoteResult = await runRefenceGitCLI([ "rev-parse", GITHUB_MAIN_TRACKING_REF, ]);
   const treeResult = await runRefenceGitCLI(["rev-parse", "HEAD^{tree}"]);
-  const protectedPredecessorTreeResult = await runRefenceGitCLI([ "rev-parse", `${AUTHORIZED_H0_TARGET_REVISION}^{tree}`, ]);
-  const distanceResult = await runRefenceGitCLI([ "rev-list", "--count", `${EXPECTED_SOURCE_REVISION}..HEAD`, ]);
+  const topicTreeResult = await runRefenceGitCLI(["rev-parse", "HEAD^2^{tree}"]);
+  const authorizedH0TreeResult = await runRefenceGitCLI([ "rev-parse", AUTHORIZED_H0_TARGET_REVISION + "^{tree}", ]);
+  const priorTreeResult = await runRefenceGitCLI([ "rev-parse", PRIOR_FAILED_COMPATIBILITY_REVISION + "^{tree}", ]);
+  const priorTopicTreeResult = await runRefenceGitCLI([ "rev-parse", PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION + "^{tree}", ]);
+  const distanceResult = await runRefenceGitCLI([ "rev-list", "--count", EXPECTED_SOURCE_REVISION + "..HEAD", ]);
+  const priorDistanceResult = await runRefenceGitCLI([ "rev-list", "--count", EXPECTED_SOURCE_REVISION + ".." + PRIOR_FAILED_COMPATIBILITY_REVISION, ]);
   const commitResult = await runRefenceGitCLI([ "cat-file", "commit", "HEAD", ], MAX_PRIVATE_BYTES);
+  const priorCommitResult = await runRefenceGitCLI([ "cat-file", "commit", PRIOR_FAILED_COMPATIBILITY_REVISION, ], MAX_PRIVATE_BYTES);
   const ancestryResult = await runRefenceGitCLI([ "merge-base", "--is-ancestor", EXPECTED_SOURCE_REVISION, "HEAD", ]);
-  const topicAncestryResult = await runRefenceGitCLI([ "merge-base", "--is-ancestor", AUTHORIZED_H0_TARGET_REVISION, "HEAD^2", ]);
+  const topicAncestryResult = await runRefenceGitCLI([ "merge-base", "--is-ancestor", PRIOR_FAILED_COMPATIBILITY_REVISION, "HEAD^2", ]);
   const statusResult = await runRefenceGitCLI([ "status", "--porcelain=v1", "--untracked-files=all", ]);
-  const changedPathsResult = await runRefenceGitCLI([ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, "HEAD", "--", ]);
+  const priorChangedPathsResult = await runRefenceGitCLI([ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, PRIOR_FAILED_COMPATIBILITY_REVISION, "--", ]);
+  const changedPathsResult = await runRefenceGitCLI([ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", PRIOR_FAILED_COMPATIBILITY_REVISION, "HEAD", "--", ]);
+  const cumulativeChangedPathsResult = await runRefenceGitCLI([ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, "HEAD", "--", ]);
   const sourceResult = await runRefenceGitCLI( ["show", "HEAD:bin/phase-b-refence-maintenance-bridge.ts"], MAX_PRIVATE_BYTES, );
-  const authorizedSourceResult = await runRefenceGitCLI( ["show", `${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-bridge.ts`], MAX_PRIVATE_BYTES, );
+  const priorSourceResult = await runRefenceGitCLI( ["show", PRIOR_FAILED_COMPATIBILITY_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"], MAX_PRIVATE_BYTES, );
+  const authorizedSourceResult = await runRefenceGitCLI( ["show", AUTHORIZED_H0_TARGET_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"], MAX_PRIVATE_BYTES, );
   const contractResult = await runRefenceGitCLI( ["show", "HEAD:bin/phase-b-refence-maintenance-contract.ts"], MAX_PRIVATE_BYTES, );
-  const authorizedContractResult = await runRefenceGitCLI( ["show", `${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-contract.ts`], MAX_PRIVATE_BYTES, );
+  const priorContractResult = await runRefenceGitCLI( ["show", PRIOR_FAILED_COMPATIBILITY_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], MAX_PRIVATE_BYTES, );
+  const authorizedContractResult = await runRefenceGitCLI( ["show", AUTHORIZED_H0_TARGET_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], MAX_PRIVATE_BYTES, );
   const contractTreeResult = await runRefenceGitCLI([ "ls-tree", "-z", "HEAD", "--", "bin/phase-b-refence-maintenance-contract.ts", ]);
+  const priorContractTreeResult = await runRefenceGitCLI([ "ls-tree", "-z", PRIOR_FAILED_COMPATIBILITY_REVISION, "--", "bin/phase-b-refence-maintenance-contract.ts", ]);
   const reboundLocalConfigResult = await runRefenceGitCLI(["config", "--local", "--null", "--list"]);
   requireCondition( localConfigResult.exitCode === 0 && reboundLocalConfigResult.exitCode === 0 && validateGitLocalConfig(localConfigResult.stdout) === validateGitLocalConfig(reboundLocalConfigResult.stdout) &&
       commonDirectoryResult.exitCode === 0 && gitProofLine(commonDirectoryResult.stdout, /^\/Users\/yournameisai\/Desktop\/agenttool\/\.git\n$/) === GIT_COMMON_DIR && replacementRefsResult.exitCode === 0 &&
-      replacementRefsResult.stdout.byteLength === 0 && revisionResult.exitCode === 0 && remoteResult.exitCode === 0 && treeResult.exitCode === 0 && protectedPredecessorTreeResult.exitCode === 0 && distanceResult.exitCode === 0 && commitResult.exitCode === 0 &&
+      replacementRefsResult.stdout.byteLength === 0 && revisionResult.exitCode === 0 && remoteResult.exitCode === 0 && treeResult.exitCode === 0 && topicTreeResult.exitCode === 0 && authorizedH0TreeResult.exitCode === 0 &&
+      priorTreeResult.exitCode === 0 && priorTopicTreeResult.exitCode === 0 && distanceResult.exitCode === 0 && priorDistanceResult.exitCode === 0 && commitResult.exitCode === 0 && priorCommitResult.exitCode === 0 &&
       ancestryResult.exitCode === 0 && topicAncestryResult.exitCode === 0 && topicAncestryResult.stdout.byteLength === 0 && statusResult.exitCode === 0 && statusResult.stdout.byteLength === 0 && changedPathsResult.exitCode === 0 &&
-      sourceResult.exitCode === 0 && authorizedSourceResult.exitCode === 0 && contractResult.exitCode === 0 && authorizedContractResult.exitCode === 0 && contractTreeResult.exitCode === 0 && decode(contractTreeResult.stdout, "git_proof") ===
-        `100644 blob ${CONTRACT_SOURCE_GIT_BLOB}\tbin/phase-b-refence-maintenance-contract.ts\0`, "git_proof", );
+      priorChangedPathsResult.exitCode === 0 && cumulativeChangedPathsResult.exitCode === 0 && sourceResult.exitCode === 0 && priorSourceResult.exitCode === 0 && authorizedSourceResult.exitCode === 0 && contractResult.exitCode === 0 &&
+      priorContractResult.exitCode === 0 && authorizedContractResult.exitCode === 0 && contractTreeResult.exitCode === 0 && priorContractTreeResult.exitCode === 0 &&
+      decode(contractTreeResult.stdout, "git_proof") === `100644 blob ${CONTRACT_SOURCE_GIT_BLOB}\tbin/phase-b-refence-maintenance-contract.ts\0` &&
+      decode(priorContractTreeResult.stdout, "git_proof") === `100644 blob ${PRIOR_FAILED_COMPATIBILITY_CONTRACT_GIT_BLOB}\tbin/phase-b-refence-maintenance-contract.ts\0`, "git_proof", );
   const revision = gitProofLine(revisionResult.stdout, /^[0-9a-f]{40}\n$/);
   const remoteRevision = gitProofLine( remoteResult.stdout, /^[0-9a-f]{40}\n$/, );
   const tree = gitProofLine(treeResult.stdout, /^[0-9a-f]{40}\n$/);
-  const protectedPredecessorTree = gitProofLine( protectedPredecessorTreeResult.stdout, /^[0-9a-f]{40}\n$/, );
+  const topicTree = gitProofLine(topicTreeResult.stdout, /^[0-9a-f]{40}\n$/);
+  const authorizedH0Tree = gitProofLine( authorizedH0TreeResult.stdout, /^[0-9a-f]{40}\n$/, );
+  const priorTree = gitProofLine(priorTreeResult.stdout, /^[0-9a-f]{40}\n$/);
+  const priorTopicTree = gitProofLine(priorTopicTreeResult.stdout, /^[0-9a-f]{40}\n$/);
   const distanceText = gitProofLine( distanceResult.stdout, /^(?:0|[1-9][0-9]*)\n$/, );
+  const priorDistanceText = gitProofLine( priorDistanceResult.stdout, /^(?:0|[1-9][0-9]*)\n$/, );
   const distance = Number(distanceText);
+  const priorDistance = Number(priorDistanceText);
+  const priorSecondParentRevision = parsePriorFailedCompatibilityCommit( priorCommitResult.stdout, PRIOR_FAILED_COMPATIBILITY_REVISION, priorTree, );
+  validatePriorFailedCompatibilityStaticBarrier(priorSourceResult.stdout, priorCommitResult.stdout);
   const secondParentRevision = parseProtectedSuccessorCommit( commitResult.stdout, revision, tree, );
+  const priorChangedPathStatuses = parsePriorProtectedSuccessorChangedPaths( priorChangedPathsResult.stdout, );
   const changedPathStatuses = parseProtectedSuccessorChangedPaths( changedPathsResult.stdout, );
-  requireCondition( Number.isSafeInteger(distance) && distance > AUTHORIZED_H0_TARGET_DISTANCE && remoteRevision === revision && protectedPredecessorTree === AUTHORIZED_H0_TARGET_TREE, "git_proof", );
+  const cumulativeChangedPathStatuses = parsePriorProtectedSuccessorChangedPaths( cumulativeChangedPathsResult.stdout, );
+  requireCondition( Number.isSafeInteger(distance) && distance > PRIOR_FAILED_COMPATIBILITY_SOURCE_DISTANCE && priorDistance === PRIOR_FAILED_COMPATIBILITY_SOURCE_DISTANCE && remoteRevision === revision &&
+      authorizedH0Tree === AUTHORIZED_H0_TARGET_TREE && priorTree === PRIOR_FAILED_COMPATIBILITY_TREE && priorTopicTree === PRIOR_FAILED_COMPATIBILITY_TOPIC_TREE && priorTree === priorTopicTree && topicTree === tree, "git_proof", );
   const bridgeHashes = bridgeSourceHashes();
   const currentContractRawSHA256 = sha256(contractResult.stdout);
   const currentContractGitBlob = gitBlobSHA1(contractResult.stdout);
+  const priorBridgeRawSHA256 = sha256(priorSourceResult.stdout);
+  const priorBridgeNormalizedSHA256 = sha256(normalizedBridgeSource(decode(priorSourceResult.stdout, "git_proof")));
+  const priorContractRawSHA256 = sha256(priorContractResult.stdout);
+  const priorContractGitBlob = gitBlobSHA1(priorContractResult.stdout);
   requireCondition( sha256(sourceResult.stdout) === bridgeHashes.raw && sha256(normalizedBridgeSource(decode(sourceResult.stdout, "git_proof"))) === bridgeHashes.normalized &&
+      priorBridgeRawSHA256 === PRIOR_FAILED_COMPATIBILITY_BRIDGE_RAW_SHA256 && priorBridgeNormalizedSHA256 === PRIOR_FAILED_COMPATIBILITY_BRIDGE_NORMALIZED_SHA256 &&
       sha256(authorizedSourceResult.stdout) === AUTHORIZED_H0_GUARD_RAW_SHA256 && sha256(normalizedBridgeSource(decode(authorizedSourceResult.stdout, "git_proof"))) === AUTHORIZED_H0_GUARD_NORMALIZED_SHA256 &&
-      currentContractRawSHA256 === CONTRACT_SOURCE_SHA256 && currentContractGitBlob === CONTRACT_SOURCE_GIT_BLOB && sha256(authorizedContractResult.stdout) === AUTHORIZED_H0_CONTRACT_RAW_SHA256 &&
+      currentContractRawSHA256 === CONTRACT_SOURCE_SHA256 && currentContractGitBlob === CONTRACT_SOURCE_GIT_BLOB && priorContractRawSHA256 === PRIOR_FAILED_COMPATIBILITY_CONTRACT_RAW_SHA256 &&
+      priorContractGitBlob === PRIOR_FAILED_COMPATIBILITY_CONTRACT_GIT_BLOB && sha256(authorizedContractResult.stdout) === AUTHORIZED_H0_CONTRACT_RAW_SHA256 &&
       gitBlobSHA1(authorizedContractResult.stdout) === AUTHORIZED_H0_CONTRACT_GIT_BLOB && absent(join(GIT_COMMON_DIR, "info/grafts")) && absent(join(GIT_COMMON_DIR, "shallow")), "git_proof", );
-  return { revision, tree, source_distance: distance, first_parent_revision: AUTHORIZED_H0_TARGET_REVISION, second_parent_revision: secondParentRevision, changed_path_statuses: changedPathStatuses,
+  const priorFailedCompatibilityController = validatePriorFailedCompatibilityGitProof({ revision: PRIOR_FAILED_COMPATIBILITY_REVISION, tree: priorTree, source_distance: priorDistance,
+    commit_raw_sha256: sha256(priorCommitResult.stdout), commit_byte_count: priorCommitResult.stdout.byteLength, first_parent_revision: AUTHORIZED_H0_TARGET_REVISION,
+    second_parent_revision: priorSecondParentRevision, second_parent_tree: priorTopicTree, changed_path_statuses: priorChangedPathStatuses, bridge_source_sha256: priorBridgeRawSHA256,
+    bridge_normalized_sha256: priorBridgeNormalizedSHA256, contract_source_sha256: priorContractRawSHA256, contract_git_blob: priorContractGitBlob, lifecycle: "failed_pre_h",
+    static_refusal_barrier: "raw_commit_terminal_lf_required", static_refusal_barrier_verified: true, observed_first_refusal_predicate: false, controller_success: false, mutation_effect_began: false,
+    success_authority: false, effect_authority: false, });
+  return { revision, tree, source_distance: distance, commit_raw_sha256: sha256(commitResult.stdout), commit_byte_count: commitResult.stdout.byteLength,
+    first_parent_revision: PRIOR_FAILED_COMPATIBILITY_REVISION, second_parent_revision: secondParentRevision, second_parent_tree: topicTree, changed_path_statuses: changedPathStatuses,
+    cumulative_changed_path_statuses: cumulativeChangedPathStatuses, prior_failed_compatibility_controller: priorFailedCompatibilityController,
     authorized_h0_guard_raw_sha256: AUTHORIZED_H0_GUARD_RAW_SHA256, authorized_h0_guard_normalized_sha256: AUTHORIZED_H0_GUARD_NORMALIZED_SHA256,
     authorized_h0_contract_source_sha256: AUTHORIZED_H0_CONTRACT_RAW_SHA256, authorized_h0_contract_git_blob: AUTHORIZED_H0_CONTRACT_GIT_BLOB, bridge_source_sha256: bridgeHashes.raw,
     bridge_normalized_sha256: bridgeHashes.normalized, contract_source_sha256: currentContractRawSHA256, contract_git_blob: currentContractGitBlob, protected_head: true, clean: true, }; }
@@ -4726,26 +4883,54 @@ function createJournalledControllerLocalReaders(request: { state: ProductionBrid
         return { value, semanticProjection: { remote_revision: value } }; }, ) as string;
     const tree = await runGit( "tree", ["rev-parse", "HEAD^{tree}"], (stdout) => { const value = gitProofLine(stdout, /^[0-9a-f]{40}\n$/);
         return { value, semanticProjection: { tree: value } }; }, ) as string;
-    const protectedPredecessorTree = await runGit( "protected_predecessor_tree", ["rev-parse", AUTHORIZED_H0_TARGET_REVISION + "^{tree}"], (stdout) => { const value = gitProofLine(stdout, /^[0-9a-f]{40}\n$/);
+    const topicTree = await runGit( "topic_tree", ["rev-parse", "HEAD^2^{tree}"], (stdout) => { const value = gitProofLine(stdout, /^[0-9a-f]{40}\n$/);
+        return { value, semanticProjection: { topic_tree: value } }; }, ) as string;
+    const authorizedH0Tree = await runGit( "authorized_h0_tree", ["rev-parse", AUTHORIZED_H0_TARGET_REVISION + "^{tree}"], (stdout) => { const value = gitProofLine(stdout, /^[0-9a-f]{40}\n$/);
         requireCondition(value === AUTHORIZED_H0_TARGET_TREE, "git_proof");
-        return { value, semanticProjection: { protected_predecessor_tree: value } }; }, ) as string;
+        return { value, semanticProjection: { authorized_h0_tree: value } }; }, ) as string;
+    const priorTree = await runGit( "prior_tree", ["rev-parse", PRIOR_FAILED_COMPATIBILITY_REVISION + "^{tree}"], (stdout) => { const value = gitProofLine(stdout, /^[0-9a-f]{40}\n$/);
+        requireCondition(value === PRIOR_FAILED_COMPATIBILITY_TREE, "git_proof");
+        return { value, semanticProjection: { prior_tree: value } }; }, ) as string;
+    const priorTopicTree = await runGit( "prior_topic_tree", ["rev-parse", PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION + "^{tree}"], (stdout) => { const value = gitProofLine(stdout, /^[0-9a-f]{40}\n$/);
+        requireCondition(value === PRIOR_FAILED_COMPATIBILITY_TOPIC_TREE, "git_proof");
+        return { value, semanticProjection: { prior_topic_tree: value } }; }, ) as string;
     const distanceText = await runGit( "distance", ["rev-list", "--count", EXPECTED_SOURCE_REVISION + "..HEAD"], (stdout) => { const value = gitProofLine(stdout, /^(?:0|[1-9][0-9]*)\n$/);
         return { value, semanticProjection: { distance: value } }; }, ) as string;
-    const secondParentRevision = await runGit( "commit", ["cat-file", "commit", "HEAD"], (stdout) => { const value = parseProtectedSuccessorCommit(stdout, revision, tree);
-        return { value, semanticProjection: { first_parent_revision: AUTHORIZED_H0_TARGET_REVISION, second_parent_revision: value } }; }, ) as string;
+    const priorDistanceText = await runGit( "prior_distance", ["rev-list", "--count", EXPECTED_SOURCE_REVISION + ".." + PRIOR_FAILED_COMPATIBILITY_REVISION], (stdout) => { const value = gitProofLine(stdout, /^(?:0|[1-9][0-9]*)\n$/);
+        requireCondition(Number(value) === PRIOR_FAILED_COMPATIBILITY_SOURCE_DISTANCE, "git_proof");
+        return { value, semanticProjection: { prior_distance: value } }; }, ) as string;
+    const commitProjectionJSON = await runGit( "commit", ["cat-file", "commit", "HEAD"], (stdout) => { const secondParent = parseProtectedSuccessorCommit(stdout, revision, tree);
+        const value = canonicalJson({ second_parent_revision: secondParent, raw_sha256: sha256(stdout), byte_count: stdout.byteLength });
+        return { value, semanticProjection: JSON.parse(value) }; }, ) as string;
+    const priorCommitProjectionJSON = await runGit( "prior_commit", ["cat-file", "commit", PRIOR_FAILED_COMPATIBILITY_REVISION], (stdout) => { const secondParent = parsePriorFailedCompatibilityCommit(stdout, PRIOR_FAILED_COMPATIBILITY_REVISION, priorTree);
+        const value = canonicalJson({ second_parent_revision: secondParent, raw_sha256: sha256(stdout), byte_count: stdout.byteLength, terminal_lf: false });
+        return { value, semanticProjection: JSON.parse(value) }; }, ) as string;
     await runGit( "ancestry", [ "merge-base", "--is-ancestor", EXPECTED_SOURCE_REVISION, "HEAD", ], (stdout) => { requireCondition(stdout.byteLength === 0, "git_proof");
         return { value: true, semanticProjection: { ancestry: true } }; }, );
-    await runGit( "topic_ancestry", [ "merge-base", "--is-ancestor", AUTHORIZED_H0_TARGET_REVISION, "HEAD^2", ], (stdout) => { requireCondition(stdout.byteLength === 0, "git_proof");
+    await runGit( "topic_ancestry", [ "merge-base", "--is-ancestor", PRIOR_FAILED_COMPATIBILITY_REVISION, "HEAD^2", ], (stdout) => { requireCondition(stdout.byteLength === 0, "git_proof");
         return { value: true, semanticProjection: { topic_ancestry: true } }; }, );
     await runGit( "status", ["status", "--porcelain=v1", "--untracked-files=all"], (stdout) => { requireCondition(stdout.byteLength === 0, "git_proof");
         return { value: true, semanticProjection: { clean: true } }; }, );
-    const changedPathStatusesJSON = await runGit( "changed_paths", [ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, "HEAD", "--", ], (stdout) => { const projection = parseProtectedSuccessorChangedPaths(stdout);
+    const priorChangedPathStatusesJSON = await runGit( "prior_changed_paths", [ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, PRIOR_FAILED_COMPATIBILITY_REVISION, "--", ], (stdout) => {
+        const projection = parsePriorProtectedSuccessorChangedPaths(stdout);
+        const value = canonicalJson(projection);
+        return { value, semanticProjection: { prior_changed_path_statuses: projection, prior_changed_path_statuses_sha256: sha256(value) } }; }, ) as string;
+    const changedPathStatusesJSON = await runGit( "changed_paths", [ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", PRIOR_FAILED_COMPATIBILITY_REVISION, "HEAD", "--", ], (stdout) => { const projection = parseProtectedSuccessorChangedPaths(stdout);
         const value = canonicalJson(projection);
         return { value, semanticProjection: { changed_path_statuses: projection, changed_path_statuses_sha256: sha256(value) } }; }, ) as string;
+    const cumulativeChangedPathStatusesJSON = await runGit( "cumulative_changed_paths", [ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, "HEAD", "--", ], (stdout) => {
+        const projection = parsePriorProtectedSuccessorChangedPaths(stdout);
+        const value = canonicalJson(projection);
+        return { value, semanticProjection: { cumulative_changed_path_statuses: projection, cumulative_changed_path_statuses_sha256: sha256(value) } }; }, ) as string;
     const currentBridgeProjection = await runGit( "bridge_source", ["show", "HEAD:bin/phase-b-refence-maintenance-bridge.ts"], (stdout) => { const value = canonicalJson({ raw: sha256(stdout),
           normalized: sha256(normalizedBridgeSource(decode(stdout, "git_proof"))), });
         requireCondition( value === canonicalJson({ raw: request.evidence.bridgeRawSHA256, normalized: request.evidence.bridgeNormalizedSHA256 }), "git_proof", );
         return { value, semanticProjection: JSON.parse(value), }; }, ) as string;
+    const priorBridgeProjection = await runGit( "prior_bridge_source", ["show", PRIOR_FAILED_COMPATIBILITY_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"], (stdout) => { const source = decode(stdout, "git_proof");
+        const barrier = 'requireCondition(text.endsWith("\\n") && gitObjectSHA1("commit", bytes) === revision, "git_proof");';
+        const value = canonicalJson({ raw: sha256(stdout), normalized: sha256(normalizedBridgeSource(source)), static_refusal_barrier_verified: source.split(barrier).length === 2 });
+        requireCondition(value === canonicalJson({ raw: PRIOR_FAILED_COMPATIBILITY_BRIDGE_RAW_SHA256, normalized: PRIOR_FAILED_COMPATIBILITY_BRIDGE_NORMALIZED_SHA256, static_refusal_barrier_verified: true }), "git_proof");
+        return { value, semanticProjection: JSON.parse(value) }; }, ) as string;
     const authorizedBridgeProjection = await runGit( "authorized_h0_bridge_source", ["show", AUTHORIZED_H0_TARGET_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"], (stdout) => { const value = canonicalJson({
           raw: sha256(stdout), normalized: sha256(normalizedBridgeSource(decode(stdout, "git_proof"))), });
         requireCondition(value === canonicalJson({ raw: AUTHORIZED_H0_GUARD_RAW_SHA256, normalized: AUTHORIZED_H0_GUARD_NORMALIZED_SHA256 }), "git_proof");
@@ -4753,6 +4938,9 @@ function createJournalledControllerLocalReaders(request: { state: ProductionBrid
     const currentContractProjection = await runGit( "contract_source", ["show", "HEAD:bin/phase-b-refence-maintenance-contract.ts"], (stdout) => { const value = canonicalJson({ raw: sha256(stdout), git_blob: gitBlobSHA1(stdout) });
         requireCondition(value === canonicalJson({ raw: CONTRACT_SOURCE_SHA256, git_blob: CONTRACT_SOURCE_GIT_BLOB }), "git_proof");
         return { value, semanticProjection: JSON.parse(value), }; }, ) as string;
+    const priorContractProjection = await runGit( "prior_contract_source", ["show", PRIOR_FAILED_COMPATIBILITY_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], (stdout) => { const value = canonicalJson({ raw: sha256(stdout), git_blob: gitBlobSHA1(stdout) });
+        requireCondition(value === canonicalJson({ raw: PRIOR_FAILED_COMPATIBILITY_CONTRACT_RAW_SHA256, git_blob: PRIOR_FAILED_COMPATIBILITY_CONTRACT_GIT_BLOB }), "git_proof");
+        return { value, semanticProjection: JSON.parse(value) }; }, ) as string;
     const authorizedContractProjection = await runGit( "authorized_h0_contract_source", ["show", AUTHORIZED_H0_TARGET_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], (stdout) => { const value = canonicalJson({
           raw: sha256(stdout), git_blob: gitBlobSHA1(stdout) });
         requireCondition(value === canonicalJson({ raw: AUTHORIZED_H0_CONTRACT_RAW_SHA256, git_blob: AUTHORIZED_H0_CONTRACT_GIT_BLOB }), "git_proof");
@@ -4760,19 +4948,39 @@ function createJournalledControllerLocalReaders(request: { state: ProductionBrid
     await runGit( "contract_tree", ["ls-tree", "-z", "HEAD", "--", "bin/phase-b-refence-maintenance-contract.ts"], (stdout) => { requireCondition( decode(stdout, "git_proof") ===
           `100644 blob ${CONTRACT_SOURCE_GIT_BLOB}\tbin/phase-b-refence-maintenance-contract.ts\0`, "git_proof", );
         return { value: true, semanticProjection: { contract_git_blob: CONTRACT_SOURCE_GIT_BLOB } }; }, );
+    await runGit( "prior_contract_tree", ["ls-tree", "-z", PRIOR_FAILED_COMPATIBILITY_REVISION, "--", "bin/phase-b-refence-maintenance-contract.ts"], (stdout) => { requireCondition( decode(stdout, "git_proof") ===
+          `100644 blob ${PRIOR_FAILED_COMPATIBILITY_CONTRACT_GIT_BLOB}\tbin/phase-b-refence-maintenance-contract.ts\0`, "git_proof", );
+        return { value: true, semanticProjection: { prior_contract_git_blob: PRIOR_FAILED_COMPATIBILITY_CONTRACT_GIT_BLOB } }; }, );
     const reboundLocalConfigSHA256 = await runGit( "local_config_rebound", ["config", "--local", "--null", "--list"], (stdout) => { const value = validateGitLocalConfig(stdout);
         return { value, semanticProjection: { local_config_sha256: value } }; }, ) as string;
     const distance = Number(distanceText);
+    const priorDistance = Number(priorDistanceText);
+    const commitProjection = record(JSON.parse(commitProjectionJSON), "git_proof");
+    const priorCommitProjection = record(JSON.parse(priorCommitProjectionJSON), "git_proof");
     const currentBridge = record(JSON.parse(currentBridgeProjection), "git_proof");
+    const priorBridge = record(JSON.parse(priorBridgeProjection), "git_proof");
     const authorizedBridge = record(JSON.parse(authorizedBridgeProjection), "git_proof");
     const currentContract = record(JSON.parse(currentContractProjection), "git_proof");
+    const priorContract = record(JSON.parse(priorContractProjection), "git_proof");
     const authorizedContract = record(JSON.parse(authorizedContractProjection), "git_proof");
-    const proof = validateGitProof({ revision, tree, source_distance: distance, first_parent_revision: AUTHORIZED_H0_TARGET_REVISION, second_parent_revision: secondParentRevision,
-      changed_path_statuses: JSON.parse(changedPathStatusesJSON), authorized_h0_guard_raw_sha256: authorizedBridge.raw, authorized_h0_guard_normalized_sha256: authorizedBridge.normalized,
+    const priorFailedCompatibilityController = validatePriorFailedCompatibilityGitProof({ revision: PRIOR_FAILED_COMPATIBILITY_REVISION, tree: priorTree, source_distance: priorDistance,
+      commit_raw_sha256: priorCommitProjection.raw_sha256, commit_byte_count: priorCommitProjection.byte_count, first_parent_revision: AUTHORIZED_H0_TARGET_REVISION,
+      second_parent_revision: priorCommitProjection.second_parent_revision, second_parent_tree: priorTopicTree, changed_path_statuses: JSON.parse(priorChangedPathStatusesJSON), bridge_source_sha256: priorBridge.raw,
+      bridge_normalized_sha256: priorBridge.normalized, contract_source_sha256: priorContract.raw, contract_git_blob: priorContract.git_blob, lifecycle: "failed_pre_h",
+      static_refusal_barrier: "raw_commit_terminal_lf_required", static_refusal_barrier_verified: priorBridge.static_refusal_barrier_verified, observed_first_refusal_predicate: false,
+      controller_success: false, mutation_effect_began: false, success_authority: false, effect_authority: false, });
+    const proof = validateGitProof({ revision, tree, source_distance: distance, commit_raw_sha256: commitProjection.raw_sha256, commit_byte_count: commitProjection.byte_count,
+      first_parent_revision: PRIOR_FAILED_COMPATIBILITY_REVISION, second_parent_revision: commitProjection.second_parent_revision, second_parent_tree: topicTree,
+      changed_path_statuses: JSON.parse(changedPathStatusesJSON), cumulative_changed_path_statuses: JSON.parse(cumulativeChangedPathStatusesJSON),
+      prior_failed_compatibility_controller: priorFailedCompatibilityController, authorized_h0_guard_raw_sha256: authorizedBridge.raw, authorized_h0_guard_normalized_sha256: authorizedBridge.normalized,
       authorized_h0_contract_source_sha256: authorizedContract.raw, authorized_h0_contract_git_blob: authorizedContract.git_blob, bridge_source_sha256: currentBridge.raw,
       bridge_normalized_sha256: currentBridge.normalized, contract_source_sha256: currentContract.raw, contract_git_blob: currentContract.git_blob, protected_head: true, clean: true, }, request.evidence);
-    requireCondition( localConfigSHA256 === reboundLocalConfigSHA256 && remoteRevision === revision && protectedPredecessorTree === AUTHORIZED_H0_TARGET_TREE && proof.revision === request.state.bindings.controllerRevision && proof.tree === request.state.bindings.controllerTree &&
-        proof.second_parent_revision === request.state.bindings.controllerTopicRevision && sha256(canonicalJson(proof.changed_path_statuses)) === request.state.bindings.changedPathStatusesSHA256, "git_proof", );
+    requireCondition( localConfigSHA256 === reboundLocalConfigSHA256 && remoteRevision === revision && authorizedH0Tree === AUTHORIZED_H0_TARGET_TREE && priorTree === PRIOR_FAILED_COMPATIBILITY_TREE &&
+        priorTopicTree === priorTree && topicTree === tree && proof.revision === request.state.bindings.controllerRevision && proof.tree === request.state.bindings.controllerTree &&
+        proof.source_distance === request.state.bindings.controllerSourceDistance && proof.commit_raw_sha256 === request.state.bindings.controllerCommitRawSHA256 &&
+        proof.commit_byte_count === request.state.bindings.controllerCommitByteCount && proof.second_parent_revision === request.state.bindings.controllerTopicRevision &&
+        proof.second_parent_tree === request.state.bindings.controllerTopicTree && sha256(canonicalJson(proof.changed_path_statuses)) === request.state.bindings.changedPathStatusesSHA256 &&
+        sha256(canonicalJson(proof.cumulative_changed_path_statuses)) === request.state.bindings.cumulativeChangedPathStatusesSHA256, "git_proof", );
     requireCondition(absent(join(GIT_COMMON_DIR, "info/grafts")) && absent(join(GIT_COMMON_DIR, "shallow")), "git_proof");
     return proof; };
   const runSecurity = async <T>(read: { suffix: string;
@@ -5035,8 +5243,9 @@ async function createProductionControllerSession( arguments_: ControllerArgument
     verifyDeployLockAuthority(lock);
     requireCondition( canonicalJson(readRefenceIngressTarget(arguments_.receiptSHA256)) === canonicalJson(ingress), "refence_ingress_drift", );
     const git = await readProductionGitProof();
-    requireCondition( git.clean === true && git.revision !== ingress.targetRevision && git.tree !== ingress.targetTree && git.first_parent_revision === ingress.targetRevision &&
-        canonicalJson(git.changed_path_statuses) === canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES), "controller_target_git", );
+    requireCondition( git.clean === true && git.revision !== ingress.targetRevision && git.revision !== PRIOR_FAILED_COMPATIBILITY_REVISION && git.tree !== ingress.targetTree &&
+        git.tree !== PRIOR_FAILED_COMPATIBILITY_TREE && git.first_parent_revision === PRIOR_FAILED_COMPATIBILITY_REVISION && canonicalJson(git.changed_path_statuses) === canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES) &&
+        canonicalJson(git.cumulative_changed_path_statuses) === canonicalJson(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES), "controller_target_git", );
     await loadVerifiedMaintenanceContract();
     verifyDeployLockAuthority(lock);
     const initialEvidence = classifyHandoff( arguments_.receiptSHA256, ingress.targetRevision, ingress.targetTree, rolloutID, );
@@ -5062,7 +5271,9 @@ async function createProductionControllerSession( arguments_: ControllerArgument
       anchorDevice: initialEvidence.anchorStat.dev, anchorInode: initialEvidence.anchorStat.ino, witnessSHA256: initialEvidence.witnessSHA256, witnessDevice: initialEvidence.witnessStat.dev, witnessInode: initialEvidence.witnessStat.ino,
       producerGuardRawSHA256: initialEvidence.producerGuardRawSHA256, producerGuardNormalizedSHA256: initialEvidence.producerGuardNormalizedSHA256,
       bridgeRawSHA256: initialEvidence.bridgeRawSHA256, bridgeNormalizedSHA256: initialEvidence.bridgeNormalizedSHA256, controllerRevision: git.revision, controllerTree: git.tree,
-      controllerTopicRevision: git.second_parent_revision, changedPathStatusesSHA256: sha256(canonicalJson(git.changed_path_statuses)), };
+      controllerSourceDistance: git.source_distance, controllerCommitRawSHA256: git.commit_raw_sha256, controllerCommitByteCount: git.commit_byte_count,
+      controllerTopicRevision: git.second_parent_revision, controllerTopicTree: git.second_parent_tree, changedPathStatusesSHA256: sha256(canonicalJson(git.changed_path_statuses)),
+      cumulativeChangedPathStatusesSHA256: sha256(canonicalJson(git.cumulative_changed_path_statuses)), };
     childlessBase = preparedDependencies.sealChildLaunchersForHandoff();
     preparedDependencies = null;
     verifyDeployLockAuthority(lock);
