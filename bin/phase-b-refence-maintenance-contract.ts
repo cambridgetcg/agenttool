@@ -1182,6 +1182,8 @@ const BRIDGE_HANDOFF_KEYS = Object.freeze([
   "bridge_source_path",
   "bridge_source_sha256",
   "bridge_normalized_sha256",
+  "authorized_h0",
+  "compatibility_controller",
   "preexisting_lineage_bound",
   "release_current_image_linkage_proven",
   "release_status_completion_authority",
@@ -1189,6 +1191,44 @@ const BRIDGE_HANDOFF_KEYS = Object.freeze([
   "release_ledger_safety_authority",
   "release_history_may_be_truncated",
   "public_surfaces_expected_unavailable",
+]);
+const BRIDGE_AUTHORIZED_H0_KEYS = Object.freeze([
+  "schema",
+  "receipt_sha256",
+  "run_id",
+  "target_revision",
+  "target_tree",
+  "target_distance",
+  "lifecycle",
+  "guard_revision",
+  "guard_source_path",
+  "guard_raw_sha256",
+  "guard_normalized_sha256",
+  "contract_revision",
+  "contract_source_path",
+  "contract_raw_sha256",
+  "contract_git_blob",
+]);
+const BRIDGE_COMPATIBILITY_CONTROLLER_KEYS = Object.freeze([
+  "schema",
+  "bridge_source_path",
+  "bridge_source_sha256",
+  "bridge_normalized_sha256",
+  "contract_source_path",
+  "contract_source_sha256",
+  "contract_git_blob",
+  "controller_revision",
+  "controller_tree",
+  "first_parent_revision",
+  "second_parent_revision",
+  "protected_predecessor_tree",
+  "exact_first_parent_verified",
+  "protected_head_verified",
+  "changed_path_statuses",
+  "changed_path_statuses_sha256",
+  "payload_revision",
+  "payload_tree",
+  "payload_distance",
 ]);
 const BRIDGE_CAVEATS = Object.freeze([
   "preexisting_lineage_bound_false",
@@ -3365,8 +3405,11 @@ export function createMaintenanceContract(
           Number.isSafeInteger(lock.pid) && lock.pid > 1 &&
           Number.isSafeInteger(lock.device) && lock.device > 0 &&
           Number.isSafeInteger(lock.inode) && lock.inode > 0 &&
-          lock.owner_id === ".phase-b-refence-lock-owner." + lock.pid + "." +
-              receipt.run_id &&
+          typeof lock.owner_id === "string" &&
+          new RegExp(
+            "^\\.phase-b-refence-lock-owner\\." + lock.pid +
+              "\\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          ).test(lock.owner_id) &&
           typeof lock.owner_path === "string" &&
           lock.owner_path.endsWith("/" + lock.owner_id) &&
           typeof lock.process_started_at === "string" &&
@@ -5384,7 +5427,6 @@ export function createMaintenanceContract(
   }): string => {
     require(
       validSHA(request.anchorSHA256) && validSHA(request.firstWalSHA256) &&
-        request.anchorSHA256 === request.firstWalSHA256 &&
         request.firstWalOrdinal === 1 &&
         validSHA(request.deployReceiptInventorySHA256) &&
         request.deployReceiptFileCount === 17,
@@ -6894,6 +6936,16 @@ export function createMaintenanceContract(
       BRIDGE_HANDOFF_KEYS,
       "success_authority_handoff",
     );
+    const authorizedH0 = exact(
+      refenceHandoff.authorized_h0,
+      BRIDGE_AUTHORIZED_H0_KEYS,
+      "success_authority_handoff",
+    );
+    const compatibilityController = exact(
+      refenceHandoff.compatibility_controller,
+      BRIDGE_COMPATIBILITY_CONTROLLER_KEYS,
+      "success_authority_handoff",
+    );
     require(
       canonical(marker.build_context) === canonical(buildContext) &&
         canonical(marker.dependency_estate) === canonical(dependencyEstate) &&
@@ -6909,12 +6961,127 @@ export function createMaintenanceContract(
         dependencyEstate.source_tree === request.sourceTree &&
         dependencyEstate.prepared === true &&
         refenceHandoff.proof_schema ===
-          "agenttool-phase-b-refence-handoff/v1" &&
+          "agenttool-phase-b-refence-handoff/v2" &&
         refenceHandoff.refence_receipt_sha256 ===
           request.refenceReceiptSHA256 &&
         refenceHandoff.refence_run_id === request.controllerRunID &&
         refenceHandoff.target_revision === request.sourceRevision &&
         refenceHandoff.target_tree === request.sourceTree &&
+        authorizedH0.schema === "agenttool-phase-b-refence-authorized-h0/v1" &&
+        authorizedH0.receipt_sha256 === request.refenceReceiptSHA256 &&
+        authorizedH0.receipt_sha256 ===
+          "8b5bb36641fb210ee9ecb542d5adb3cfcb99adb76af369715aa32805e3e18077" &&
+        authorizedH0.run_id === request.controllerRunID &&
+        authorizedH0.run_id === "789e8486-47cb-4b80-a165-c5ea557082d6" &&
+        authorizedH0.target_revision === request.sourceRevision &&
+        authorizedH0.target_revision ===
+          "d87a3f35c80bdac39402e1c34dfebe643a18beb6" &&
+        authorizedH0.target_tree === request.sourceTree &&
+        authorizedH0.target_tree ===
+          "0b5881546a39e328b8299cf9bbfde8d25b15580b" &&
+        authorizedH0.target_distance === 47 &&
+        authorizedH0.lifecycle === "historical" &&
+        authorizedH0.guard_revision === authorizedH0.target_revision &&
+        authorizedH0.guard_source_path ===
+          "bin/phase-b-refence-maintenance-bridge.ts" &&
+        authorizedH0.guard_raw_sha256 ===
+          "dd324e32fada2053acc945d39012d5844caef402ad82f013b27b18d3ddb275ae" &&
+        authorizedH0.guard_normalized_sha256 ===
+          "9e0ddd120fa6d605f68a86be35303a1b2eba56155116218933f8801eda47340c" &&
+        authorizedH0.contract_revision === authorizedH0.target_revision &&
+        authorizedH0.contract_source_path ===
+          "bin/phase-b-refence-maintenance-contract.ts" &&
+        authorizedH0.contract_raw_sha256 ===
+          "0c7ad30f81271b42a2339fcf1f87705c1ff6ee4a5906506f8a2c089ab92e74a1" &&
+        authorizedH0.contract_git_blob ===
+          "ea83765c054b3bf130a4c8957a5a30ef1e657cb6" &&
+        compatibilityController.schema ===
+          "agenttool-phase-b-refence-protected-successor-controller/v1" &&
+        refenceHandoff.bridge_source_path ===
+          "/Users/yournameisai/.cache/codex-worktrees/agenttool-phase-b-refence-maintenance-bridge-v1/bin/phase-b-refence-maintenance-bridge.ts" &&
+        compatibilityController.bridge_source_path ===
+          refenceHandoff.bridge_source_path &&
+        compatibilityController.bridge_source_sha256 ===
+          refenceHandoff.bridge_source_sha256 &&
+        compatibilityController.bridge_normalized_sha256 ===
+          refenceHandoff.bridge_normalized_sha256 &&
+        validSHA(refenceHandoff.bridge_source_sha256) &&
+        validSHA(refenceHandoff.bridge_normalized_sha256) &&
+        compatibilityController.bridge_source_sha256 !==
+          authorizedH0.guard_raw_sha256 &&
+        compatibilityController.bridge_normalized_sha256 !==
+          authorizedH0.guard_normalized_sha256 &&
+        compatibilityController.contract_source_path ===
+          "/Users/yournameisai/.cache/codex-worktrees/agenttool-phase-b-refence-maintenance-bridge-v1/bin/phase-b-refence-maintenance-contract.ts" &&
+        validSHA(compatibilityController.contract_source_sha256) &&
+        validRevision(compatibilityController.contract_git_blob) &&
+        compatibilityController.contract_source_sha256 !==
+          authorizedH0.contract_raw_sha256 &&
+        compatibilityController.contract_git_blob !==
+          authorizedH0.contract_git_blob &&
+        validRevision(compatibilityController.controller_revision) &&
+        compatibilityController.controller_revision !==
+          authorizedH0.target_revision &&
+        validRevision(compatibilityController.controller_tree) &&
+        compatibilityController.controller_tree !== authorizedH0.target_tree &&
+        compatibilityController.first_parent_revision ===
+          authorizedH0.target_revision &&
+        validRevision(compatibilityController.second_parent_revision) &&
+        compatibilityController.second_parent_revision !==
+          compatibilityController.controller_revision &&
+        compatibilityController.second_parent_revision !==
+          compatibilityController.first_parent_revision &&
+        compatibilityController.protected_predecessor_tree ===
+          authorizedH0.target_tree &&
+        compatibilityController.exact_first_parent_verified === true &&
+        compatibilityController.protected_head_verified === true &&
+        canonical(compatibilityController.changed_path_statuses) ===
+          canonical([
+            {
+              old_mode: "100755",
+              new_mode: "100755",
+              status: "M",
+              path: "bin/deploy.sh",
+            },
+            {
+              old_mode: "100644",
+              new_mode: "100644",
+              status: "M",
+              path: "bin/phase-b-refence-maintenance-bridge.ts",
+            },
+            {
+              old_mode: "100644",
+              new_mode: "100644",
+              status: "M",
+              path: "bin/phase-b-refence-maintenance-contract.ts",
+            },
+            {
+              old_mode: "100644",
+              new_mode: "100644",
+              status: "M",
+              path: "bin/tests/phase-b-refence-maintenance-bridge.test.ts",
+            },
+            {
+              old_mode: "100644",
+              new_mode: "100644",
+              status: "M",
+              path:
+                "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts",
+            },
+            {
+              old_mode: "100644",
+              new_mode: "100644",
+              status: "M",
+              path:
+                "packages/constructive-intelligence/tests/concurrency.test.ts",
+            },
+          ]) &&
+        compatibilityController.changed_path_statuses_sha256 ===
+          digest(canonical(compatibilityController.changed_path_statuses)) &&
+        compatibilityController.payload_revision ===
+          authorizedH0.target_revision &&
+        compatibilityController.payload_tree === authorizedH0.target_tree &&
+        compatibilityController.payload_distance === authorizedH0.target_distance &&
         refenceHandoff.anchor_archive_path ===
           request.retainedArchives.anchor.path &&
         refenceHandoff.anchor_sha256 ===

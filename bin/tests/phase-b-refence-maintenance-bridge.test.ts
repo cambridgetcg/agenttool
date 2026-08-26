@@ -83,6 +83,9 @@ import {
   parseArguments,
   parseControllerPublicObservationForTest,
   parseGitTreeFiles,
+  parsePrivateJsonDocumentForTest,
+  parseProtectedSuccessorChangedPathsForTest,
+  parseProtectedSuccessorParentsForTest,
   performControllerFlyTransitionForTest,
   performControllerJournalledProviderReadForTest,
   performControllerJournalledReadChildForTest,
@@ -97,6 +100,7 @@ import {
   releaseDeployLockForController,
   releaseDeployLockPublicForController,
   replaceDurableCanonicalJsonCAS,
+  requireAuthorizedH0ReceiptForTest,
   type RoleMap,
   runControllerCordonedRuntimeCoreForTest,
   runControllerDatabaseConvergenceCoreForTest,
@@ -120,14 +124,18 @@ import {
   validateControllerFleetTransitionForTest,
   validateControllerPublicFederationAboutForTest,
   validateControllerPublicHealthForTest,
+  validateCompatibilityControllerBindingsForTest,
   validateDatabaseConvergenceMarkerForTest,
   validateDatabaseConvergenceTransitionForTest,
   validateDatabaseOriginConvergenceForTest,
   validateFlyAuthenticationConfigText,
+  validateGitLocalConfigForTest,
   validateMaintenanceContractBytesForTest,
   validateOrdinaryAbsentPostflightBytesForTest,
   validateProducerEarlyRuntimeBindingsForTest,
   validateProducerLocalStateSandwichForTest,
+  validateProtectedSuccessorGitProofForTest,
+  validateRawDeployReceiptForTest,
   validateRefenceReceiptWalAuthorityForTest,
   validateSuccessArtifactBundleForTest,
   validateTargetFleetForTest,
@@ -166,6 +174,51 @@ afterEach(() => {
 
 const digest = (character: string) => character.repeat(64);
 const revision = (character: string) => character.repeat(40);
+const AUTHORIZED_H0_RECEIPT_SHA256 =
+  "8b5bb36641fb210ee9ecb542d5adb3cfcb99adb76af369715aa32805e3e18077";
+const AUTHORIZED_H0_RUN_ID = "789e8486-47cb-4b80-a165-c5ea557082d6";
+const AUTHORIZED_H0_TARGET_REVISION =
+  "d87a3f35c80bdac39402e1c34dfebe643a18beb6";
+const AUTHORIZED_H0_TARGET_TREE =
+  "0b5881546a39e328b8299cf9bbfde8d25b15580b";
+const AUTHORIZED_H0_GUARD_RAW_SHA256 =
+  "dd324e32fada2053acc945d39012d5844caef402ad82f013b27b18d3ddb275ae";
+const AUTHORIZED_H0_GUARD_NORMALIZED_SHA256 =
+  "9e0ddd120fa6d605f68a86be35303a1b2eba56155116218933f8801eda47340c";
+const AUTHORIZED_H0_CONTRACT_RAW_SHA256 =
+  "0c7ad30f81271b42a2339fcf1f87705c1ff6ee4a5906506f8a2c089ab92e74a1";
+const AUTHORIZED_H0_CONTRACT_GIT_BLOB =
+  "ea83765c054b3bf130a4c8957a5a30ef1e657cb6";
+const PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES = [
+  { old_mode: "100755", new_mode: "100755", status: "M", path: "bin/deploy.sh" },
+  { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/phase-b-refence-maintenance-bridge.ts" },
+  { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/phase-b-refence-maintenance-contract.ts" },
+  { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/tests/phase-b-refence-maintenance-bridge.test.ts" },
+  { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts" },
+  { old_mode: "100644", new_mode: "100644", status: "M", path: "packages/constructive-intelligence/tests/concurrency.test.ts" },
+] as const;
+
+function protectedSuccessorGitProof(evidence: TerminalEvidence) {
+  const contract = containedContractBytes();
+  return {
+    revision: revision("e"),
+    tree: revision("f"),
+    source_distance: 50,
+    first_parent_revision: AUTHORIZED_H0_TARGET_REVISION,
+    second_parent_revision: revision("1"),
+    changed_path_statuses: structuredClone(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
+    authorized_h0_guard_raw_sha256: AUTHORIZED_H0_GUARD_RAW_SHA256,
+    authorized_h0_guard_normalized_sha256: AUTHORIZED_H0_GUARD_NORMALIZED_SHA256,
+    authorized_h0_contract_source_sha256: AUTHORIZED_H0_CONTRACT_RAW_SHA256,
+    authorized_h0_contract_git_blob: AUTHORIZED_H0_CONTRACT_GIT_BLOB,
+    bridge_source_sha256: evidence.bridgeRawSHA256,
+    bridge_normalized_sha256: evidence.bridgeNormalizedSHA256,
+    contract_source_sha256: contract.sha256,
+    contract_git_blob: contract.gitBlobSHA1,
+    protected_head: true as const,
+    clean: true as const,
+  };
+}
 
 const HANDSHAKE_FIXTURE = join(
   import.meta.dir,
@@ -1230,7 +1283,7 @@ async function generateBuildManifestFromTree(): Promise<
     "ls-tree",
     "-rz",
     "--full-tree",
-    "HEAD",
+    AUTHORIZED_H0_TARGET_REVISION,
     "--",
     "api",
     "docs",
@@ -1338,13 +1391,13 @@ async function generateBuildManifestFromReversePaths(): Promise<
     "ls-tree",
     "-rz",
     "--name-only",
-    "HEAD",
+    AUTHORIZED_H0_TARGET_REVISION,
     "--",
     "api/src",
   ])).toString("utf8").split("\0").filter(Boolean);
   const doctrineNames = (await runBuildManifestGit([
     "show",
-    "HEAD:api/doctrine-docs.manifest",
+    `${AUTHORIZED_H0_TARGET_REVISION}:api/doctrine-docs.manifest`,
   ])).toString("utf8").split("\n").filter((line) =>
     line.length > 0 && !line.startsWith("#")
   );
@@ -1376,7 +1429,7 @@ async function generateBuildManifestFromReversePaths(): Promise<
     )
   );
   const blobs = await readBuildManifestGitBatch(
-    mappings.map((mapping) => `HEAD:${mapping.source}`),
+    mappings.map((mapping) => `${AUTHORIZED_H0_TARGET_REVISION}:${mapping.source}`),
   );
   let byteCount = 0;
   const rows = mappings.map((mapping, index) => {
@@ -1410,7 +1463,7 @@ async function generateBuildManifestFromReversePaths(): Promise<
 }
 
 describe("closed source normalization", () => {
-  test("the HEAD build context has two exact Git-only manifest reconstructions", async () => {
+  test("the literal d87 payload has two exact Git-only manifest reconstructions", async () => {
     const [tree, reverse] = await Promise.all([
       generateBuildManifestFromTree(),
       generateBuildManifestFromReversePaths(),
@@ -1429,7 +1482,7 @@ describe("closed source normalization", () => {
       "ls-tree",
       "-rz",
       "--full-tree",
-      "HEAD",
+      AUTHORIZED_H0_TARGET_REVISION,
       "--",
       "api",
       "docs",
@@ -1549,16 +1602,16 @@ describe("closed source normalization", () => {
       );
       expect(currentFacts.longestLine).toBeLessThanOrEqual(320);
       expect(currentFacts.byteCount).toBeLessThan(512 * 1024);
-      expect(currentFacts.leafCount).toBe(75_996);
+      expect(currentFacts.leafCount).toBe(80_460);
       expect(currentFacts.leafSHA256).toBe(
-        "647208a59a1c41359b5b049c65fbc065240891e863615407b8d1dfad861de6f7",
+        "808e25b7670675d824de334255bfad69dd4113b7e18ac9d69358603f425bffea",
       );
       expect(currentFacts.astShapeSHA256).toBe(
-        "80fbe2739612b166e5db35e088eaccf2f4d71f7e00d34ddf90ba8dfba70dfce0",
+        "d69aee9de4aee8ebdecfc46f1900e4bf7a7b46917d4bb4ec2fbe12e823ce8110",
       );
-      expect(currentFacts.emittedLeafCount).toBe(63_910);
+      expect(currentFacts.emittedLeafCount).toBe(67_922);
       expect(currentFacts.emittedLeafSHA256).toBe(
-        "0f849492e4273f0d565d1e79aa2043ed7ee34d400e5276cfade207f1720fabf8",
+        "a950dc332dfc1454029dfb15995b58ba0b5163fcf3d6f9df1f7adc76258ab609",
       );
     },
     15_000,
@@ -2684,6 +2737,50 @@ describe("closed source normalization", () => {
     15_000,
   );
 
+  test("live independent lock-owner UUID and distinct anchor/WAL authority validate exactly", () => {
+    const ownerUUID = "02fa6a6e-4755-4725-b1cf-fc381797a7a7";
+    const ownerID = `.phase-b-refence-lock-owner.28359.${ownerUUID}`;
+    const ownerPath =
+      `/Users/yournameisai/.local/state/agenttool/${ownerID}`;
+    const bindLiveOwner = ({ wal }: Record<string, any>) => {
+      for (const entry of wal) {
+        entry.lock.pid = 28_359;
+        entry.lock.owner_id = ownerID;
+        entry.lock.owner_path = ownerPath;
+      }
+    };
+    const live = reboundProductionShapeAuthority({ beforeChain: bindLiveOwner });
+    expect(live.documents.wal[0].run_id).not.toBe(ownerUUID);
+    expect(live.request.anchor.sha256).not.toBe(
+      live.request.walRecords[0]!.sha256,
+    );
+    expect(
+      validateRefenceReceiptWalAuthorityForTest(live.request).wal_entry_count,
+    ).toBe(114);
+
+    const mutations: Array<(wal: any[]) => void> = [
+      (wal) => wal[50].lock.pid = 28_360,
+      (wal) => wal[50].lock.owner_id =
+        ".phase-b-refence-lock-owner.28359.02FA6A6E-4755-4725-B1CF-FC381797A7A7",
+      (wal) => wal[50].lock.owner_path =
+        "/Users/yournameisai/.local/state/agenttool/substituted-owner",
+      (wal) => wal[50].lock.owner_id =
+        ".phase-b-refence-lock-owner.28359.02fa6a6e-4755-4725-b1cf-fc381797a7a8",
+    ];
+    for (const mutate of mutations) {
+      const forged = reboundProductionShapeAuthority({
+        beforeChain: (documents) => {
+          bindLiveOwner(documents);
+          mutate(documents.wal);
+        },
+      });
+      expectMaintenanceRefusalCode(
+        () => validateRefenceReceiptWalAuthorityForTest(forged.request),
+        "producer_authority_wal",
+      );
+    }
+  });
+
   test("live H1 admission rejects a fully rechained restored-config forgery", () => {
     const forgedConfigSHA256 = digest("0");
     const forgedCriticalSHA256 = digest("1");
@@ -2904,12 +3001,22 @@ describe("closed source normalization", () => {
       "--no-migrate",
       "--no-frontend",
       "--maintenance-fenced-api",
-      `--maintenance-refence-receipt-sha256=${digest("a")}`,
+      `--maintenance-refence-receipt-sha256=${AUTHORIZED_H0_RECEIPT_SHA256}`,
       "--maintenance-app-machines=8606e9ae201e98,e82945ec50ee08,8d9e16ce7573d8",
       "--maintenance-thinker-primary=e829421fd1e628",
       "--maintenance-thinker-standby=e820e09c6e7e28",
     ];
-    expect(parseArguments(arguments_).receiptSHA256).toBe(digest("a"));
+    expect(parseArguments(arguments_).receiptSHA256).toBe(
+      AUTHORIZED_H0_RECEIPT_SHA256,
+    );
+    expectMaintenanceRefusalCode(
+      () => parseArguments([
+        ...arguments_.slice(0, 3),
+        `--maintenance-refence-receipt-sha256=${digest("a")}`,
+        ...arguments_.slice(4),
+      ]),
+      "invalid_invocation",
+    );
     expect(() =>
       parseArguments([
         "--no-migrate",
@@ -2962,6 +3069,378 @@ describe("closed source normalization", () => {
     expect(main.match(/parseArguments\(/g)).toHaveLength(1);
     expect(main.match(/runProductionController\(/g)).toHaveLength(1);
     expect(main).not.toContain("controller_not_activated");
+    const selector = source.slice(
+      source.indexOf("function requireAuthorizedH0Receipt("),
+      source.indexOf(
+        "/** @internal Exact immutable predecessor-H0 selector",
+        source.indexOf("function requireAuthorizedH0Receipt("),
+      ),
+    );
+    expect(selector).not.toMatch(
+      /acquireDeployLock|readBoundedChild|fetchLiteralGitHubMain|runRefence|security|provider|database|keychain/i,
+    );
+  });
+
+  test("artifact-directed JSON accepts producer pretty and historical raw receipts only", () => {
+    const producer = { schema: "producer/v1", z: 1, a: { b: true } };
+    const producerPretty = `${JSON.stringify(producer, null, 2)}\n`;
+    expect(
+      parsePrivateJsonDocumentForTest(
+        Buffer.from(producerPretty),
+        "pretty",
+      ),
+    ).toEqual(producer);
+    expect(() =>
+      parsePrivateJsonDocumentForTest(
+        Buffer.from(`${canonicalJson(producer)}\n`),
+        "pretty",
+      )
+    ).toThrow(MaintenanceRefenceError);
+
+    const deployReceipt = {
+      completed_at: "2026-08-25T12:00:00Z",
+      exit_status: 0,
+      external_mutation_started: false,
+      outcome: "success",
+      phases: [],
+      release_head_snapshot: {},
+      schema: "agenttool-deploy-receipt/v2",
+      source_dirty: false,
+      source_overrides: [],
+      source_revision: AUTHORIZED_H0_TARGET_REVISION,
+      verified_api_machines: [],
+    };
+    const deployPretty = `${JSON.stringify(deployReceipt, null, 2)}\n`;
+    const deployCompact = `${JSON.stringify(deployReceipt)}\n`;
+    expect(
+      parsePrivateJsonDocumentForTest(
+        Buffer.from(deployPretty),
+        "raw_deploy_receipt",
+      ),
+    ).toEqual(deployReceipt);
+    expect(
+      parsePrivateJsonDocumentForTest(
+        Buffer.from(deployCompact),
+        "raw_deploy_receipt",
+      ),
+    ).toEqual(deployReceipt);
+    const receiptName =
+      "20260825T120000Z-d87a3f35c80b-1.json";
+    expect(
+      validateRawDeployReceiptForTest(receiptName, Buffer.from(deployPretty)),
+    ).toEqual(deployReceipt);
+    for (const invalid of [
+      ` ${deployPretty}`,
+      deployPretty.slice(0, -1),
+      deployPretty.replace(/\n/g, "\r\n"),
+      `\uFEFF${deployPretty}`,
+      `${deployPretty}\n`,
+    ]) {
+      expect(() =>
+        parsePrivateJsonDocumentForTest(
+          Buffer.from(invalid),
+          "raw_deploy_receipt",
+        )
+      ).toThrow(MaintenanceRefenceError);
+    }
+    expect(() =>
+      validateRawDeployReceiptForTest(
+        "20260825T120000Z-aaaaaaaaaaaa-1.json",
+        Buffer.from(deployPretty),
+      )
+    ).toThrow(MaintenanceRefenceError);
+    expect(() =>
+      parsePrivateJsonDocumentForTest(
+        Buffer.from(`${JSON.stringify({ ...deployReceipt, extra: true })}\n`),
+        "raw_deploy_receipt",
+      )
+    ).toThrow(MaintenanceRefenceError);
+
+    const anchor = {
+      schema: "agenttool-phase-b-refence-observed-526-anchor/v1",
+      value: true,
+    };
+    const marker = { schema: MAINTENANCE_MARKER_SCHEMA, value: true };
+    expect(
+      parsePrivateJsonDocumentForTest(
+        Buffer.from(`${JSON.stringify(anchor, null, 2)}\n`),
+        "producer_anchor_or_bridge_marker",
+      ),
+    ).toEqual(anchor);
+    expect(
+      parsePrivateJsonDocumentForTest(
+        Buffer.from(`${canonicalJson(marker)}\n`),
+        "producer_anchor_or_bridge_marker",
+      ),
+    ).toEqual(marker);
+  });
+
+  test("the immutable live H0 selector refuses every neighbouring authority", () => {
+    const receipt = {
+      run_id: AUTHORIZED_H0_RUN_ID,
+      readmission_target: {
+        protected_main_revision: AUTHORIZED_H0_TARGET_REVISION,
+        protected_main_tree: AUTHORIZED_H0_TARGET_TREE,
+        clean_526_ancestor_distance: 47,
+      },
+      readmission_guard_raw_sha256: AUTHORIZED_H0_GUARD_RAW_SHA256,
+      readmission_guard_normalized_sha256:
+        AUTHORIZED_H0_GUARD_NORMALIZED_SHA256,
+    };
+    expect(
+      requireAuthorizedH0ReceiptForTest(
+        receipt,
+        AUTHORIZED_H0_RECEIPT_SHA256,
+      ),
+    ).toEqual({
+      runID: AUTHORIZED_H0_RUN_ID,
+      targetRevision: AUTHORIZED_H0_TARGET_REVISION,
+      targetTree: AUTHORIZED_H0_TARGET_TREE,
+      targetDistance: 47,
+    });
+    const mutations = [
+      (value: any) => value.run_id = "789e8486-47cb-4b80-a165-c5ea557082d7",
+      (value: any) => value.readmission_target.protected_main_revision = revision("a"),
+      (value: any) => value.readmission_target.protected_main_tree = revision("b"),
+      (value: any) => value.readmission_target.clean_526_ancestor_distance = 48,
+      (value: any) => value.readmission_guard_raw_sha256 = digest("a"),
+      (value: any) => value.readmission_guard_normalized_sha256 = digest("b"),
+    ];
+    for (const mutate of mutations) {
+      const changed = structuredClone(receipt);
+      mutate(changed);
+      expect(() =>
+        requireAuthorizedH0ReceiptForTest(
+          changed,
+          AUTHORIZED_H0_RECEIPT_SHA256,
+        )
+      ).toThrow(MaintenanceRefenceError);
+    }
+    expect(() =>
+      requireAuthorizedH0ReceiptForTest(receipt, digest("f"))
+    ).toThrow(MaintenanceRefenceError);
+  });
+
+  test("raw successor commit and six-path mode proofs refuse descendants and widening", () => {
+    const commit = (
+      parents: readonly string[],
+      tree = revision("f"),
+    ) => {
+      const bytes = Buffer.from([
+        `tree ${tree}`,
+        ...parents.map((parent) => `parent ${parent}`),
+        "author Test <test@example.com> 1777777777 +0000",
+        "committer Test <test@example.com> 1777777777 +0000",
+        "",
+        "protected successor",
+        "",
+      ].join("\n"));
+      const oid = createHash("sha1")
+        .update(`commit ${bytes.byteLength}\0`)
+        .update(bytes)
+        .digest("hex");
+      return { bytes, oid, tree };
+    };
+    const exact = commit([AUTHORIZED_H0_TARGET_REVISION, revision("1")]);
+    expect(
+      parseProtectedSuccessorParentsForTest(
+        exact.bytes,
+        exact.oid,
+        exact.tree,
+      ),
+    ).toBe(revision("1"));
+    for (const parents of [
+      [revision("2"), revision("1")],
+      [AUTHORIZED_H0_TARGET_REVISION],
+      [AUTHORIZED_H0_TARGET_REVISION, revision("1"), revision("2")],
+    ]) {
+      const changed = commit(parents);
+      expect(() =>
+        parseProtectedSuccessorParentsForTest(
+          changed.bytes,
+          changed.oid,
+          changed.tree,
+        )
+      ).toThrow(MaintenanceRefenceError);
+    }
+    expect(() =>
+      parseProtectedSuccessorParentsForTest(
+        exact.bytes,
+        revision("e"),
+        exact.tree,
+      )
+    ).toThrow(MaintenanceRefenceError);
+
+    const rawDiff = (
+      projection = PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
+      unchangedBlobIndex?: number,
+    ) =>
+      Buffer.from(projection.map((entry, index) =>
+        `:${entry.old_mode} ${entry.new_mode} ${String(index + 1).repeat(40).slice(0, 40)} ${String(unchangedBlobIndex === index ? index + 1 : index + 6).repeat(40).slice(0, 40)} ${entry.status}\0${entry.path}\0`
+      ).join(""));
+    expect(parseProtectedSuccessorChangedPathsForTest(rawDiff())).toEqual(
+      PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
+    );
+    for (const mutate of [
+      (value: any[]) => value.pop(),
+      (value: any[]) => value.push({ ...value.at(-1), path: "bin/extra.ts" }),
+      (value: any[]) => value[0].new_mode = "100644",
+      (value: any[]) => value[1].status = "A",
+      (value: any[]) => value[2].path = "bin/other.ts",
+      (value: any[]) => value[5].old_mode = "100755",
+      (value: any[]) => value[5].new_mode = "100755",
+      (value: any[]) => value[5].status = "D",
+      (value: any[]) =>
+        value[5].path = "packages/constructive-intelligence/tests/other.test.ts",
+      (value: any[]) => value.splice(4, 0, value.pop()),
+    ]) {
+      const changed = structuredClone(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES) as any[];
+      mutate(changed);
+      expect(() =>
+        parseProtectedSuccessorChangedPathsForTest(rawDiff(changed as any))
+      ).toThrow(MaintenanceRefenceError);
+    }
+    expect(() =>
+      parseProtectedSuccessorChangedPathsForTest(
+        Buffer.concat([rawDiff(), Buffer.from("trailing\0")]),
+      )
+    ).toThrow(MaintenanceRefenceError);
+    expect(() =>
+      parseProtectedSuccessorChangedPathsForTest(rawDiff(
+        PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
+        5,
+      ))
+    ).toThrow(MaintenanceRefenceError);
+  });
+
+  test("typed successor proof never promotes a different H0 or historical guard", () => {
+    const fixture = guardFixture();
+    const proof = protectedSuccessorGitProof(fixture.evidence);
+    expect(
+      validateProtectedSuccessorGitProofForTest(proof, fixture.evidence),
+    ).toEqual(proof);
+    const proofMutations = [
+      (value: any) => value.revision = AUTHORIZED_H0_TARGET_REVISION,
+      (value: any) => value.first_parent_revision = revision("2"),
+      (value: any) => value.second_parent_revision = value.revision,
+      (value: any) => value.changed_path_statuses.pop(),
+      (value: any) => value.changed_path_statuses[0].new_mode = "100644",
+      (value: any) => value.authorized_h0_guard_raw_sha256 = digest("a"),
+      (value: any) => value.bridge_source_sha256 = AUTHORIZED_H0_GUARD_RAW_SHA256,
+      (value: any) => value.contract_source_sha256 = AUTHORIZED_H0_CONTRACT_RAW_SHA256,
+      (value: any) => value.protected_head = false,
+      (value: any) => value.clean = false,
+    ];
+    for (const mutate of proofMutations) {
+      const changed = structuredClone(proof);
+      mutate(changed);
+      expect(() =>
+        validateProtectedSuccessorGitProofForTest(changed, fixture.evidence)
+      ).toThrow(MaintenanceRefenceError);
+    }
+    const evidenceMutations = [
+      (value: any) => value.receiptSHA256 = digest("a"),
+      (value: any) => value.runID = "789e8486-47cb-4b80-a165-c5ea557082d7",
+      (value: any) => value.targetRevision = revision("a"),
+      (value: any) => value.targetTree = revision("b"),
+      (value: any) => value.targetDistance = 48,
+      (value: any) => value.producerGuardNormalizedSHA256 = digest("b"),
+    ];
+    for (const mutate of evidenceMutations) {
+      const changed = structuredClone(fixture.evidence);
+      mutate(changed);
+      expect(() =>
+        validateProtectedSuccessorGitProofForTest(proof, changed)
+      ).toThrow(MaintenanceRefenceError);
+    }
+  });
+
+  test("post-H5 prepublication reuses the immutable compatibility controller binding", () => {
+    const proof = protectedSuccessorGitProof(guardFixture().evidence);
+    const binding = {
+      controllerRevision: proof.revision,
+      controllerTree: proof.tree,
+      controllerTopicRevision: proof.second_parent_revision,
+      changedPathStatusesSHA256: sha256(
+        canonicalJson(proof.changed_path_statuses),
+      ),
+    };
+    expect(validateCompatibilityControllerBindingsForTest(binding)).toEqual(
+      binding,
+    );
+    for (const mutate of [
+      (value: any) => value.controllerRevision = AUTHORIZED_H0_TARGET_REVISION,
+      (value: any) => value.controllerTree = AUTHORIZED_H0_TARGET_TREE,
+      (value: any) => value.controllerTopicRevision = value.controllerRevision,
+      (value: any) =>
+        value.controllerTopicRevision = AUTHORIZED_H0_TARGET_REVISION,
+      (value: any) => value.changedPathStatusesSHA256 = digest("7"),
+    ]) {
+      const changed = structuredClone(binding);
+      mutate(changed);
+      expect(() =>
+        validateCompatibilityControllerBindingsForTest(changed)
+      ).toThrow(MaintenanceRefenceError);
+    }
+    expect(() => validateCompatibilityControllerBindingsForTest(undefined))
+      .toThrow(MaintenanceRefenceError);
+
+    const source = readFileSync(
+      join(import.meta.dir, "..", "phase-b-refence-maintenance-bridge.ts"),
+      "utf8",
+    );
+    const guard = source.slice(
+      source.indexOf("async function runMaintenanceRefenceGuardForController("),
+      source.indexOf(
+        "export function serializeMaintenanceRefenceProof(",
+        source.indexOf(
+          "async function runMaintenanceRefenceGuardForController(",
+        ),
+      ),
+    );
+    expect(guard).toContain("compatibilityController?:");
+    expect(guard).toContain("compatibilityController, ");
+    const prepublication = source.slice(
+      source.indexOf("async function runProductionSpecialGuard("),
+      source.indexOf(
+        "/** @internal Exact silent service-process proof",
+        source.indexOf("async function runProductionSpecialGuard("),
+      ),
+    );
+    expect(prepublication).toContain(
+      "session.guardDependencies, session.state.bindings",
+    );
+  });
+
+  test("local Git config closes URL rewrites, includes, credentials, and worktree config", () => {
+    const entries = [
+      ["core.repositoryformatversion", "0"],
+      ["core.filemode", "true"],
+      ["core.bare", "false"],
+      ["core.logallrefupdates", "true"],
+      ["core.ignorecase", "true"],
+      ["core.precomposeunicode", "true"],
+      ["branch.main.remote", "github"],
+      ["branch.main.merge", "refs/heads/main"],
+      ["remote.github.url", "https://github.com/cambridgetcg/agenttool.git"],
+      ["remote.github.fetch", "+refs/heads/*:refs/remotes/github/*"],
+    ] as const;
+    const bytes = (rows: readonly (readonly string[])[]) =>
+      Buffer.from(rows.map(([key, value]) => `${key}\n${value}\0`).join(""));
+    expect(validateGitLocalConfigForTest(bytes(entries))).toMatch(
+      /^[0-9a-f]{64}$/,
+    );
+    for (const row of [
+      ["url.https://evil.invalid/.insteadof", "https://github.com/"],
+      ["include.path", "/tmp/authority"],
+      ["http.proxy", "https://evil.invalid"],
+      ["credential.helper", "!evil"],
+      ["extensions.worktreeconfig", "true"],
+    ]) {
+      expect(() =>
+        validateGitLocalConfigForTest(bytes([...entries, row]))
+      ).toThrow(MaintenanceRefenceError);
+    }
   });
 
   test("ordinary absent postflight is pinned to one exact canonical line", () => {
@@ -3039,6 +3518,25 @@ describe("closed source normalization", () => {
     expect(preparation).not.toContain('"install"');
     expect(preparation).toContain("readStablePostgresRuntimeSource(");
     expect(preparation).toContain("createExclusiveDurableFile(");
+    expect(preparation).toContain(
+      'AUTHORIZED_H0_TARGET_REVISION, "--", "api", "docs"',
+    );
+    expect(preparation).not.toContain('"HEAD", "--", "api", "docs"');
+    const buildStart = source.indexOf(
+      "async function prepareProductionBuildContext(",
+    );
+    const buildEnd = source.indexOf(
+      "function requireBuildContext(",
+      buildStart,
+    );
+    const buildPreparation = source.slice(buildStart, buildEnd);
+    expect(buildPreparation).toContain(
+      'AUTHORIZED_H0_TARGET_REVISION, "--", "api", "docs"',
+    );
+    expect(buildPreparation).not.toContain('"HEAD", "--", "api", "docs"');
+    expect(source).toContain(
+      'target.AGENTTOOL_GIT_REVISION!=="${evidence.targetRevision}"',
+    );
     expect(source).not.toContain('import("../api/src/db/');
     expect(source).toContain(
       "689e732c8ffc35e0c5c3aac2d6328c915abd56eec5b77a5790da2d3b7a154b71",
@@ -3101,9 +3599,9 @@ describe("closed source normalization", () => {
     expect(stat.mode & 0o777).toBe(0o644);
     expect(stat.nlink).toBe(1);
     expect(rawSHA256).toBe(
-      "0c7ad30f81271b42a2339fcf1f87705c1ff6ee4a5906506f8a2c089ab92e74a1",
+      "e1b05bcdaa7e7775cb7156660e87d65a0e9bba0a54b8cb1f0cc062f1b14aea14",
     );
-    expect(blobSHA1).toBe("ea83765c054b3bf130a4c8957a5a30ef1e657cb6");
+    expect(blobSHA1).toBe("c543e1e79f1efd1d24fbf2de539884b0f44b4e9a");
 
     const transpiler = new Bun.Transpiler({ loader: "ts", target: "bun" });
     const scan = transpiler.scan(source);
@@ -3300,6 +3798,39 @@ describe("closed source normalization", () => {
 
   test("Git reader allowlist covers exact contract proof forms and refuses near misses", () => {
     const accepted = [
+      ["cat-file", "commit", "HEAD"],
+      ["config", "--local", "--null", "--list"],
+      ["for-each-ref", "--format=%(refname)", "refs/replace/"],
+      ["rev-parse", `${AUTHORIZED_H0_TARGET_REVISION}^{tree}`],
+      [
+        "diff",
+        "--raw",
+        "-z",
+        "--abbrev=40",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        AUTHORIZED_H0_TARGET_REVISION,
+        "HEAD",
+        "--",
+      ],
+      [
+        "show",
+        `${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-bridge.ts`,
+      ],
+      [
+        "show",
+        `${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-contract.ts`,
+      ],
+      [
+        "ls-tree",
+        "-rz",
+        "--full-tree",
+        AUTHORIZED_H0_TARGET_REVISION,
+        "--",
+        "api",
+        "docs",
+      ],
       ["show", "HEAD:bin/phase-b-refence-maintenance-contract.ts"],
       [
         "ls-tree",
@@ -3316,6 +3847,33 @@ describe("closed source normalization", () => {
       const argv of [
         ["show", "head:bin/phase-b-refence-maintenance-contract.ts"],
         ["show", "HEAD:bin/phase-b-refence-maintenance-contract.ts", "--"],
+        ["cat-file", "commit", "HEAD^"],
+        ["rev-list", "--parents", "-n", "1", "HEAD"],
+        [
+          "diff",
+          "--name-status",
+          AUTHORIZED_H0_TARGET_REVISION,
+          "HEAD",
+          "--",
+        ],
+        [
+          "ls-tree",
+          "-rz",
+          "--full-tree",
+          "HEAD",
+          "--",
+          "api",
+          "docs",
+        ],
+        [
+          "ls-tree",
+          "-rz",
+          "--full-tree",
+          revision("a"),
+          "--",
+          "api",
+          "docs",
+        ],
         [
           "ls-tree",
           "HEAD",
@@ -3361,13 +3919,21 @@ describe("closed source normalization", () => {
     );
     for (
       const literal of [
+        '"cat-file", "commit", "HEAD"',
+        '"config", "--local", "--null", "--list"',
+        '"diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, "HEAD", "--"',
+        '`${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-bridge.ts`',
         '"HEAD:bin/phase-b-refence-maintenance-contract.ts"',
+        '`${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-contract.ts`',
         '"bin/phase-b-refence-maintenance-contract.ts"',
       ]
     ) {
       expect(allowlist).toContain(literal);
       expect(proof).toContain(literal);
     }
+    expect(bridge).toContain('"--no-replace-objects"');
+    expect(bridge).toContain("GIT_NO_REPLACE_OBJECTS: \"1\"");
+    expect(proof.match(/validateGitLocalConfig\(/g)).toHaveLength(2);
   });
 
   test("Linux API gate typechecks bridge sources with only the installed compiler", () => {
@@ -4223,7 +4789,7 @@ describe("closed source normalization", () => {
       directory,
       controllerRunID: "01234567-89ab-cdef-0123-456789abcdef",
       rolloutID:
-        "maintenance-refence-aaaaaaaaaaaa-20260825T120000Z-0123456789abcdef",
+        "maintenance-refence-d87a3f35c80b-20260825T120000Z-0123456789abcdef",
       receiptSHA256: digest("a"),
     });
     const times = [
@@ -5671,9 +6237,9 @@ function guardFixture(
     targetDatabase?: boolean;
   } = {},
 ) {
-  const targetRevision = revision("a");
-  const targetTree = revision("b");
-  const receiptSHA256 = digest("c");
+  const targetRevision = AUTHORIZED_H0_TARGET_REVISION;
+  const targetTree = AUTHORIZED_H0_TARGET_TREE;
+  const receiptSHA256 = AUTHORIZED_H0_RECEIPT_SHA256;
   const fleet = stoppedFleet();
   const evidence: TerminalEvidence = {
     receipt: {
@@ -5688,13 +6254,13 @@ function guardFixture(
       terminal_fleet_sha256: fullFleetSHA256(fleet.fleet),
     },
     receiptSHA256,
-    runID: "01234567-89ab-cdef-0123-456789abcdef",
+    runID: AUTHORIZED_H0_RUN_ID,
     roles,
     sourceRevision: "526edc4ee0d076783d157591d7e3434352f6fc84",
     sourceTree: "ff77236e51cad8acc99ee4064af48b689df85854",
     targetRevision,
     targetTree,
-    targetDistance: 37,
+    targetDistance: 47,
     anchor: {},
     anchorSHA256: digest("d"),
     anchorPath: "/synthetic/anchor",
@@ -5734,6 +6300,8 @@ function guardFixture(
       drainSampleSHA256: digest("9"),
       drainEventSHA256s: [digest("a"), digest("b"), digest("c")],
     },
+    producerGuardRawSHA256: AUTHORIZED_H0_GUARD_RAW_SHA256,
+    producerGuardNormalizedSHA256: AUTHORIZED_H0_GUARD_NORMALIZED_SHA256,
     bridgeRawSHA256: digest("3"),
     bridgeNormalizedSHA256: digest("4"),
     edge: "H5",
@@ -5854,13 +6422,7 @@ function guardFixture(
         projection_sha256: digest("7"),
       }),
     readGitProof: async () =>
-      count("git", {
-        revision: targetRevision,
-        tree: targetTree,
-        source_distance: 37,
-        bridge_source_sha256: digest("3"),
-        clean: true,
-      }),
+      count("git", protectedSuccessorGitProof(evidence)),
     readFleetInventory: async () => {
       count("fleet", true);
       fleetReads += 1;
@@ -5898,7 +6460,7 @@ function guardFixture(
       targetRevision,
       targetTree,
       rolloutID:
-        "maintenance-refence-aaaaaaaaaaaa-20260825T120000Z-0123456789abcdef",
+        "maintenance-refence-d87a3f35c80b-20260825T120000Z-0123456789abcdef",
     },
   };
 }
@@ -6628,7 +7190,7 @@ describe("maintenance_refence stopped-fence guard", () => {
       public_surfaces_expected_unavailable: true,
       public_surfaces_verified: false,
       receipt_sha256: fixture.request.receiptSHA256,
-      refence_run_id: "01234567-89ab-cdef-0123-456789abcdef",
+      refence_run_id: AUTHORIZED_H0_RUN_ID,
       schema: MAINTENANCE_REFENCE_PROOF_SCHEMA,
       source_inventory_sha256: fixture.database.source_inventory_sha256,
       stable_fleet_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
@@ -6695,13 +7257,20 @@ describe("maintenance_refence stopped-fence guard", () => {
     }
 
     const localRequest = {
-      anchorSHA256: digest("a"),
-      firstWalSHA256: digest("a"),
+      anchorSHA256:
+        "ab64f37a5b50a3363db0cb1711cecb0744a8cfb43811b97c9daebf5260888e5a",
+      firstWalSHA256:
+        "5a04093b3864c073ba59d49db4b5ba42084fd4afa2ca91a40303844a2899cfab",
       firstWalOrdinal: 1,
-      deployReceiptInventorySHA256: digest("b"),
+      deployReceiptInventorySHA256:
+        "e479090da36b2132fb827f44d522d1b28ca91b1e2ca31f18accb7155f0d0f5a7",
       deployReceiptFileCount: 17,
     };
     const localSHA256 = producerLocalStateSandwichSHA256ForTest(localRequest);
+    expect(localRequest.anchorSHA256).not.toBe(localRequest.firstWalSHA256);
+    expect(localSHA256).toBe(
+      "f88f43d59040ccae950025d7328a25c0876e95b0d2c6b464ea7f67c61e8fa744",
+    );
     expect(
       validateProducerLocalStateSandwichForTest(localRequest, localSHA256),
     ).toBe(localSHA256);
@@ -6710,6 +7279,17 @@ describe("maintenance_refence stopped-fence guard", () => {
         validateProducerLocalStateSandwichForTest(localRequest, digest("c")),
       "producer_local_state_sandwich",
     );
+    for (const key of [
+      "anchorSHA256",
+      "firstWalSHA256",
+      "deployReceiptInventorySHA256",
+    ] as const) {
+      const changed = { ...localRequest, [key]: digest("c") };
+      expectMaintenanceRefusalCode(
+        () => validateProducerLocalStateSandwichForTest(changed, localSHA256),
+        "producer_local_state_sandwich",
+      );
+    }
   });
 
   test("refuses drift between fleet samples and still closes", async () => {
@@ -8403,13 +8983,7 @@ describe("strict target public and final authority contracts", () => {
         },
         readGitProof: async () => {
           calls.push(gitCount++ === 0 ? "git_before" : "git_after");
-          return {
-            revision: target.fixture.evidence.targetRevision,
-            tree: target.fixture.evidence.targetTree,
-            source_distance: target.fixture.evidence.targetDistance,
-            bridge_source_sha256: target.fixture.evidence.bridgeRawSHA256,
-            clean: true,
-          };
+          return protectedSuccessorGitProof(target.fixture.evidence);
         },
         readKeychainProof: async () => {
           calls.push(
@@ -8629,7 +9203,7 @@ describe("single-process controller rollout order", () => {
           lifecycle.a0Installed();
           return {
             receiptPath:
-              "/Users/yournameisai/.local/state/agenttool/deploy-receipts/20260825T120000Z-aaaaaaaaaaaa-1.json",
+              "/Users/yournameisai/.local/state/agenttool/deploy-receipts/20260825T120000Z-d87a3f35c80b-1.json",
             receiptSHA256: digest("8"),
             witnessPath:
               `/Users/yournameisai/.local/state/agenttool/deploy-state/phase-b-refence-maintenance-finalization-${fixture.evidence.runID}.json`,
@@ -9465,11 +10039,11 @@ function successAuthorityRequestFixture(options: {
     pid: number;
   };
 } = {}) {
-  const controllerRunID = "01234567-89ab-cdef-0123-456789abcdef";
+  const controllerRunID = AUTHORIZED_H0_RUN_ID;
   const rolloutID =
-    "maintenance-refence-aaaaaaaaaaaa-20260825T120000Z-0123456789abcdef";
-  const sourceRevision = revision("a");
-  const sourceTree = revision("b");
+    "maintenance-refence-d87a3f35c80b-20260825T120000Z-0123456789abcdef";
+  const sourceRevision = AUTHORIZED_H0_TARGET_REVISION;
+  const sourceTree = AUTHORIZED_H0_TARGET_TREE;
   const stateDirectory =
     "/Users/yournameisai/.local/state/agenttool/deploy-state";
   const stateRoot = "/Users/yournameisai/.local/state/agenttool";
@@ -9536,7 +10110,7 @@ function successAuthorityRequestFixture(options: {
   };
   const bindings = {
     rolloutID,
-    receiptSHA256: digest("c"),
+    receiptSHA256: AUTHORIZED_H0_RECEIPT_SHA256,
     runID: controllerRunID,
     targetRevision: sourceRevision,
     targetTree: sourceTree,
@@ -9546,8 +10120,16 @@ function successAuthorityRequestFixture(options: {
     witnessSHA256: digest("9"),
     witnessDevice: 42,
     witnessInode: 601,
+    producerGuardRawSHA256: AUTHORIZED_H0_GUARD_RAW_SHA256,
+    producerGuardNormalizedSHA256: AUTHORIZED_H0_GUARD_NORMALIZED_SHA256,
     bridgeRawSHA256: digest("a"),
     bridgeNormalizedSHA256: digest("b"),
+    controllerRevision: revision("e"),
+    controllerTree: revision("f"),
+    controllerTopicRevision: revision("1"),
+    changedPathStatusesSHA256: sha256(
+      canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
+    ),
   };
   const preparation = {
     startedAt: "2026-08-25T12:00:00Z",
@@ -9618,7 +10200,7 @@ function successAuthorityRequestFixture(options: {
     successProvenAt: options.successProvenAt ?? "2026-08-25T12:30:00Z",
     controllerRunID,
     rolloutID,
-    refenceReceiptSHA256: digest("c"),
+    refenceReceiptSHA256: AUTHORIZED_H0_RECEIPT_SHA256,
     sourceRevision,
     sourceTree,
     roles,
@@ -10369,6 +10951,160 @@ describe("two-artifact success finalization", () => {
       () => createSuccessArtifactsForTest(markerDrift),
       "success_artifact_marker",
     );
+  });
+
+  test("durable handoff v2 keeps historical H0 and current controller identities disjoint", () => {
+    const positive = successAuthorityRequestFixture();
+    const handoff = positive.refenceHandoff as any;
+    const authorizedH0 = handoff.authorized_h0;
+    const controller = handoff.compatibility_controller;
+    const contract = containedContractBytes();
+    expect(handoff.proof_schema).toBe(
+      "agenttool-phase-b-refence-handoff/v2",
+    );
+    expect(authorizedH0.lifecycle).toBe("historical");
+    expect(authorizedH0.receipt_sha256).toBe(
+      AUTHORIZED_H0_RECEIPT_SHA256,
+    );
+    expect(authorizedH0.target_revision).toBe(
+      AUTHORIZED_H0_TARGET_REVISION,
+    );
+    expect(controller.bridge_source_sha256).toBe(
+      handoff.bridge_source_sha256,
+    );
+    expect(controller.bridge_normalized_sha256).toBe(
+      handoff.bridge_normalized_sha256,
+    );
+    expect(controller.bridge_source_sha256).not.toBe(
+      authorizedH0.guard_raw_sha256,
+    );
+    expect(controller.bridge_normalized_sha256).not.toBe(
+      authorizedH0.guard_normalized_sha256,
+    );
+    expect(controller.contract_source_sha256).toBe(contract.sha256);
+    expect(controller.contract_git_blob).toBe(contract.gitBlobSHA1);
+    expect(controller.contract_source_sha256).not.toBe(
+      authorizedH0.contract_raw_sha256,
+    );
+    expect(controller.payload_revision).toBe(AUTHORIZED_H0_TARGET_REVISION);
+    expect(controller.payload_tree).toBe(AUTHORIZED_H0_TARGET_TREE);
+    expect(controller.payload_distance).toBe(47);
+    expect(() => createSuccessAuthorityProjectionForTest(positive)).not
+      .toThrow();
+
+    const mutations: Array<[
+      string,
+      (value: any) => void,
+    ]> = [
+      [
+        "historical lifecycle",
+        (value) => value.authorized_h0.lifecycle = "current",
+      ],
+      [
+        "historical guard raw",
+        (value) => value.authorized_h0.guard_raw_sha256 = digest("7"),
+      ],
+      [
+        "historical guard normalized",
+        (value) => value.authorized_h0.guard_normalized_sha256 = digest("7"),
+      ],
+      [
+        "historical contract raw",
+        (value) => value.authorized_h0.contract_raw_sha256 = digest("7"),
+      ],
+      [
+        "historical contract blob",
+        (value) => value.authorized_h0.contract_git_blob = revision("7"),
+      ],
+      [
+        "controller revision",
+        (value) =>
+          value.compatibility_controller.controller_revision =
+            AUTHORIZED_H0_TARGET_REVISION,
+      ],
+      [
+        "controller tree",
+        (value) =>
+          value.compatibility_controller.controller_tree =
+            AUTHORIZED_H0_TARGET_TREE,
+      ],
+      [
+        "controller first parent",
+        (value) =>
+          value.compatibility_controller.first_parent_revision = revision("7"),
+      ],
+      [
+        "controller second parent",
+        (value) =>
+          value.compatibility_controller.second_parent_revision =
+            value.compatibility_controller.controller_revision,
+      ],
+      [
+        "controller bridge raw",
+        (value) => {
+          value.bridge_source_sha256 = AUTHORIZED_H0_GUARD_RAW_SHA256;
+          value.compatibility_controller.bridge_source_sha256 =
+            AUTHORIZED_H0_GUARD_RAW_SHA256;
+        },
+      ],
+      [
+        "controller bridge normalized",
+        (value) => {
+          value.bridge_normalized_sha256 =
+            AUTHORIZED_H0_GUARD_NORMALIZED_SHA256;
+          value.compatibility_controller.bridge_normalized_sha256 =
+            AUTHORIZED_H0_GUARD_NORMALIZED_SHA256;
+        },
+      ],
+      [
+        "controller contract raw",
+        (value) =>
+          value.compatibility_controller.contract_source_sha256 =
+            AUTHORIZED_H0_CONTRACT_RAW_SHA256,
+      ],
+      [
+        "controller contract blob",
+        (value) =>
+          value.compatibility_controller.contract_git_blob =
+            AUTHORIZED_H0_CONTRACT_GIT_BLOB,
+      ],
+      [
+        "payload revision",
+        (value) =>
+          value.compatibility_controller.payload_revision = revision("7"),
+      ],
+      [
+        "payload tree",
+        (value) => value.compatibility_controller.payload_tree = revision("7"),
+      ],
+      [
+        "payload distance",
+        (value) => value.compatibility_controller.payload_distance = 48,
+      ],
+      [
+        "changed path projection",
+        (value) => {
+          value.compatibility_controller.changed_path_statuses[0].new_mode =
+            "100644";
+          value.compatibility_controller.changed_path_statuses_sha256 = sha256(
+            canonicalJson(
+              value.compatibility_controller.changed_path_statuses,
+            ),
+          );
+        },
+      ],
+    ];
+    for (const [name, mutate] of mutations) {
+      const request = structuredClone(successAuthorityRequestFixture());
+      mutate(request.refenceHandoff);
+      request.marker.refence_handoff = structuredClone(
+        request.refenceHandoff,
+      );
+      expectMaintenanceRefusalCode(
+        () => createSuccessAuthorityProjectionForTest(request),
+        "success_authority_handoff",
+      );
+    }
   });
 
   test("full marker authority and the artifact DAG reject every independent domain drift", () => {
