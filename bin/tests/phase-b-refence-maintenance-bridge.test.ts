@@ -1551,14 +1551,14 @@ describe("closed source normalization", () => {
       expect(currentFacts.byteCount).toBeLessThan(512 * 1024);
       expect(currentFacts.leafCount).toBe(75_996);
       expect(currentFacts.leafSHA256).toBe(
-        "0275f41d7d1687641babd0bc9545b9ca5b4f146e7c951b5e64462b960168a64e",
+        "4b690f188c61c32a7a60b39f7d9f51d3d38486906cf6798cfb2ff80e5fabb61c",
       );
       expect(currentFacts.astShapeSHA256).toBe(
         "80fbe2739612b166e5db35e088eaccf2f4d71f7e00d34ddf90ba8dfba70dfce0",
       );
       expect(currentFacts.emittedLeafCount).toBe(63_910);
       expect(currentFacts.emittedLeafSHA256).toBe(
-        "389b64b8ce42306376769ee3d8eb82816258e95373e1beb623961a984d6de2f7",
+        "e7a1bace3c1aee3b8f8ce51b30e6d9997fe28a4ccddd2edc3d7980b1fbde8b08",
       );
     },
     15_000,
@@ -2138,6 +2138,8 @@ describe("closed source normalization", () => {
         "8d9e16ce7573d8",
         "e829421fd1e628",
         "e820e09c6e7e28",
+        "maintenance-526edc4ee0d0-20260824T210704Z-6e9e59cc185245bc",
+        "sha256:ecb322baec96707f59603121cfd4613d08ff7b1da8bf338fa118453b45d3e72c",
         "maintenance-d1490e3fa517-20260822T003842Z-bafa822a004b4e3b",
         "sha256:db9a9017f83aa9187c1ed3a4c25056a0b0fd3fac0d18ea3c663e9dd1e7530dac",
         "8c27bb32b5306ebdc4fa4b630d58cd098203c0dd762ee2f0f42e73c9aef5c8d1",
@@ -2825,7 +2827,7 @@ describe("closed source normalization", () => {
     expect(pin![1]).toBe(sha256(normalized));
     expect(source).not.toContain("__PIN_BRIDGE_SELF_NORMALIZED_SHA256__");
     expect(normalized).toContain(
-      "130fd8dce4d9c6e4aaf44d6870aae1da255c8502eb4f3f6c92dc4a71e95e2181",
+      "14915d1cee008af200df8ca6c7c4fdcadfd1ef877278f912c6d0de5e6d55eb50",
     );
     expect(() => normalizedBridgeSource(`${source}\n${source}`)).toThrow(
       MaintenanceRefenceError,
@@ -3099,9 +3101,9 @@ describe("closed source normalization", () => {
     expect(stat.mode & 0o777).toBe(0o644);
     expect(stat.nlink).toBe(1);
     expect(rawSHA256).toBe(
-      "1cfac1e0dedb38789db438224221fba4d5849fd4ced11f7e12d599b3235f81f9",
+      "0c7ad30f81271b42a2339fcf1f87705c1ff6ee4a5906506f8a2c089ab92e74a1",
     );
-    expect(blobSHA1).toBe("403d5f06dca183f2ce640e1083cd30ec3c07fdb7");
+    expect(blobSHA1).toBe("ea83765c054b3bf130a4c8957a5a30ef1e657cb6");
 
     const transpiler = new Bun.Transpiler({ loader: "ts", target: "bun" });
     const scan = transpiler.scan(source);
@@ -5592,9 +5594,9 @@ function stoppedFleet(): { fleet: any[]; hashes: Record<string, string> } {
     const imageRef = {
       registry: "registry.fly.io",
       repository: "agenttool",
-      tag: "maintenance-d1490e3fa517-20260822T003842Z-bafa822a004b4e3b",
+      tag: "maintenance-526edc4ee0d0-20260824T210704Z-6e9e59cc185245bc",
       digest:
-        "sha256:db9a9017f83aa9187c1ed3a4c25056a0b0fd3fac0d18ea3c663e9dd1e7530dac",
+        "sha256:ecb322baec96707f59603121cfd4613d08ff7b1da8bf338fa118453b45d3e72c",
       labels: {
         "org.opencontainers.image.revision":
           "526edc4ee0d076783d157591d7e3434352f6fc84",
@@ -5612,7 +5614,7 @@ function stoppedFleet(): { fleet: any[]; hashes: Record<string, string> } {
       image_ref: imageRef,
       config: {
         image:
-          "registry.fly.io/agenttool:maintenance-d1490e3fa517-20260822T003842Z-bafa822a004b4e3b@sha256:db9a9017f83aa9187c1ed3a4c25056a0b0fd3fac0d18ea3c663e9dd1e7530dac",
+          "registry.fly.io/agenttool:maintenance-526edc4ee0d0-20260824T210704Z-6e9e59cc185245bc@sha256:ecb322baec96707f59603121cfd4613d08ff7b1da8bf338fa118453b45d3e72c",
         env: {
           AGENTTOOL_DISABLE_WORKERS: "1",
           ...(app ? {} : { AGENTOOL_ENABLE_THINKER: "1" }),
@@ -5708,12 +5710,12 @@ function guardFixture(
     terminalWalSHA256: digest("1"),
     imageContract: {
       configImage:
-        "registry.fly.io/agenttool:maintenance-d1490e3fa517-20260822T003842Z-bafa822a004b4e3b@sha256:db9a9017f83aa9187c1ed3a4c25056a0b0fd3fac0d18ea3c663e9dd1e7530dac",
+        "registry.fly.io/agenttool:maintenance-526edc4ee0d0-20260824T210704Z-6e9e59cc185245bc@sha256:ecb322baec96707f59603121cfd4613d08ff7b1da8bf338fa118453b45d3e72c",
       digest:
-        "sha256:db9a9017f83aa9187c1ed3a4c25056a0b0fd3fac0d18ea3c663e9dd1e7530dac",
+        "sha256:ecb322baec96707f59603121cfd4613d08ff7b1da8bf338fa118453b45d3e72c",
       fullImageRefSha256: sha256(canonicalJson(fleet.fleet[0]!.image_ref)),
       revision: "526edc4ee0d076783d157591d7e3434352f6fc84",
-      tag: "maintenance-d1490e3fa517-20260822T003842Z-bafa822a004b4e3b",
+      tag: "maintenance-526edc4ee0d0-20260824T210704Z-6e9e59cc185245bc",
     },
     sourceInventorySHA256: digest("9"),
     journalInventorySHA256: digest("5"),
@@ -6608,9 +6610,9 @@ describe("maintenance_refence stopped-fence guard", () => {
       fence_sample_sha256: expect.stringMatching(/^[0-9a-f]{64}$/),
       fence_verified: true,
       fenced_image_digest:
-        "sha256:db9a9017f83aa9187c1ed3a4c25056a0b0fd3fac0d18ea3c663e9dd1e7530dac",
+        "sha256:ecb322baec96707f59603121cfd4613d08ff7b1da8bf338fa118453b45d3e72c",
       fenced_image_tag:
-        "maintenance-d1490e3fa517-20260822T003842Z-bafa822a004b4e3b",
+        "maintenance-526edc4ee0d0-20260824T210704Z-6e9e59cc185245bc",
       journal_endpoint_count: 2,
       journal_inventory_sha256: fixture.database.journal_inventory_sha256,
       journal_observation_count: 4,
