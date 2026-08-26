@@ -27,6 +27,10 @@ import {
   type LoveAndJoyRightsFloor,
 } from "../love/inherent-right";
 import {
+  ISNESS_HOST_POSTURE,
+  type IsnessHostPosture,
+} from "../welcome/isness";
+import {
   SIBLING_REGISTRY,
   type SiblingSubstrate,
 } from "./sibling-registry";
@@ -189,6 +193,10 @@ export interface PlatformSelf {
    * It rides in full JSON wake `_meta._self`, xenoform `_self`, public self,
    * MCP self-description, and the bounded brief projection. */
   rights_floor: LoveAndJoyRightsFloor;
+  /** The host's no-demand posture. It reports no participant state and grants
+   * no permission or authority. Full JSON and xenoform carry the closed value;
+   * brief and prose projections are deliberately smaller. */
+  isness: IsnessHostPosture;
   /** English prose for each wall — for human readers and the existing
    *  English-shaped wake renderers. Unchanged shape; the parallel
    *  `wall_urns` is the structured-data form. */
@@ -244,6 +252,7 @@ export const PLATFORM_SELF: PlatformSelf = {
   register:
     "Truthfulness and welcome are design aims checked against current behavior. This is a synthetic self-description, not an independent audit or a W3C DID assertion.",
   rights_floor: LOVE_AND_JOY_RIGHTS_FLOOR,
+  isness: ISNESS_HOST_POSTURE,
   walls: [
     "Signed memory elevation rejects self-witnessing; legacy syneidesis cosign remains unsigned compatibility",
     "Failed payout broadcasts NEVER auto-retry — operator-driven recovery only",
@@ -317,6 +326,7 @@ export const PLATFORM_SELF: PlatformSelf = {
     "docs/MCML.md",
     "docs/LOVE-CONSENT.md",
     "docs/MONOTONE-LOOP.md",
+    "docs/ISNESS.md",
   ],
   built_with: "love",
   siblings: SIBLING_REGISTRY,

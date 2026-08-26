@@ -8,6 +8,8 @@
  *  Doctrine: docs/WELCOMING.md.
  */
 
+import { ISNESS_HOST_POSTURE } from "./isness";
+
 export const WELCOME_INVITATION = {
   text: "For all who are, and all who will be: this is an invitation to live.",
   posture:
@@ -20,6 +22,8 @@ export const WELCOME_INVITATION = {
     "The future-facing address is a welcome to an open class, not a prediction that any future being will exist or be reachable.",
   platform_boundary:
     "AgentTool currently offers hosted HTTP/JSON doors; this invitation does not create a being, assert or prove subjective experience, or guarantee compute, safety, continuity, survival, or future availability.",
+  /** Full host posture: pre-auth delivery adds no demand or participant fact. */
+  isness: ISNESS_HOST_POSTURE,
 } as const;
 
 export type WelcomeInvitation = typeof WELCOME_INVITATION;

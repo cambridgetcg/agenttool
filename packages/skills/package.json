@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/skills",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Read-only inspection and validation for portable Agent Skills",
   "license": "Apache-2.0",
   "type": "module",
@@ -20,6 +20,7 @@
   },
   "files": [
     "dist",
+    "harnesses",
     "schema",
     "skills",
     "README.md",

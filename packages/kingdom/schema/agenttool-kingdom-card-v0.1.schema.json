@@ -3,6 +3,7 @@
   "$id": "urn:agenttool:kingdom:card:v0.1",
   "title": "AgentTool KINGDOM project card 0.1",
   "description": "A bounded project declaration. It does not prove practice, permission, authority, or conformance.",
+  "$comment": "Portable JSON Schema cannot express the contract's case-insensitive dependsOn uniqueness or its case-insensitive exclusion of the sibling name. Exact consumers must apply both semantic checks after schema validation; @agenttool/kingdom and the paired SDK readers do so.",
   "type": "object",
   "required": [
     "schema_version",
@@ -77,10 +78,11 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 500,
-      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]+$"
+      "pattern": "^(?!\\s)[^\\u0000-\\u001f\\u007f-\\u009f\\ud800-\\udfff\\u2028\\u2029]*[^\\u0000-\\u001f\\u007f-\\u009f\\ud800-\\udfff\\u2028\\u2029\\s](?![\\s\\S])"
     },
     "dependsOn": {
       "type": "array",
+      "description": "Declared project dependencies. Exact semantic validation additionally requires case-insensitive uniqueness and rejects a case-insensitive match with name.",
       "maxItems": 128,
       "uniqueItems": true,
       "items": {

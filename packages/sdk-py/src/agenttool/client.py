@@ -60,7 +60,7 @@ from .wake_continuity import WakeContinuityLayer
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
-SDK_VERSION = "0.21.0"
+SDK_VERSION = "0.21.1"
 
 
 class AgentTool:

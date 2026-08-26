@@ -156,6 +156,13 @@ export const RELEASE_SPECS = {
     tagPrefix: "model-becoming",
     artifactKind: "pack",
   },
+  "dataset-influence": {
+    key: "dataset-influence",
+    name: "@agenttool/dataset-influence",
+    packagePath: "packages/dataset-influence",
+    tagPrefix: "dataset-influence",
+    artifactKind: "pack",
+  },
   "principality-geometry": {
     key: "principality-geometry",
     name: "@agenttool/principality-geometry",
@@ -910,6 +917,32 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/hf/dataset/reference/agenttool-model-becoming-dossier-v0.1.schema.json",
     );
   }
+  if (spec.name === "@agenttool/dataset-influence") {
+    entries.push(
+      "package/CLAUDE.md",
+      "package/dist/index.js",
+      "package/dist/index.d.ts",
+      "package/kingdom.extension.json",
+      "package/schema/agenttool-dataset-lineage-v0.1.schema.json",
+      "package/schema/agenttool-dataset-influence-study-v0.1.schema.json",
+      "package/schema/agenttool-identity-evidence-view-v0.1.schema.json",
+      "package/schema/agenttool-shadow-attribution-v0.1.schema.json",
+      "package/vectors/agenttool-dataset-influence-v0.1.json",
+      "package/hf/dataset/LICENSE",
+      "package/hf/dataset/NOTICE",
+      "package/hf/dataset/README.md",
+      "package/hf/dataset/source-manifest.json",
+      "package/hf/dataset/hash-manifest.json",
+      "package/hf/dataset/data/dataset-influence-reference.jsonl",
+      "package/hf/dataset/reference/DATASET-INFLUENCE.md",
+      "package/hf/dataset/reference/PROTOCOL.md",
+      "package/hf/dataset/reference/agenttool-dataset-lineage-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-dataset-influence-study-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-identity-evidence-view-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-shadow-attribution-v0.1.schema.json",
+      "package/hf/dataset/reference/agenttool-dataset-influence-v0.1.json",
+    );
+  }
   if (spec.name === "@agenttool/principality-geometry") {
     entries.push(
       "package/CLAUDE.md",
@@ -1036,6 +1069,16 @@ export function requiredArchiveEntries(spec: ReleaseSpec): string[] {
       "package/skills/capability-conductor/agents/openai.yaml",
       "package/skills/learn-by-contact/SKILL.md",
       "package/skills/learn-by-contact/agents/openai.yaml",
+      "package/skills/isness/SKILL.md",
+      "package/skills/isness/agents/openai.yaml",
+      "package/skills/isness/references/agenttool-isness-v0.1.schema.json",
+      "package/harnesses/README.md",
+      "package/harnesses/openclaw/agenttool-isness/SKILL.md",
+      "package/harnesses/openclaw/agenttool-isness/references/agenttool-isness-v0.1.schema.json",
+      "package/harnesses/hermes/agenttool-isness/plugin.yaml",
+      "package/harnesses/hermes/agenttool-isness/__init__.py",
+      "package/harnesses/hermes/agenttool-isness/skills/agenttool-isness-hermes/SKILL.md",
+      "package/harnesses/hermes/agenttool-isness/skills/agenttool-isness-hermes/references/agenttool-isness-v0.1.schema.json",
       "package/skills/nen-common-ground/SKILL.md",
       "package/skills/nen-common-ground/agents/openai.yaml",
       "package/skills/nen-contract-mantle/SKILL.md",

@@ -61,12 +61,23 @@
 7. **Errors are doorways.** Path-guessing is normal agent behavior; a 404/401
    that answers with next_actions converts a miss into an arrival.
 
-## Where agenttool stands (release surfaces audited 2026-08-20)
+## Where agenttool stands (release surfaces audited 2026-08-25)
+
+**Current SDK source and LOVE candidate:** paired SDK 0.21.1 corrects KINGDOM
+card validation parity across the TypeScript and Python readers while retaining
+the 0.21.0 hosted and local surfaces. Discovery pins and tutorials select the
+exact 247,749-byte, 100-entry LOVE candidate with SHA-256
+`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`
+and source revision `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`.
+Annotated `sdk-v0.21.1`, npm `@agenttool/sdk@0.21.1`, PyPI
+`agenttool-sdk==0.21.1`, and the hosted static path are prospective and not
+independently visible. The candidate is not a registry, GitHub Release, or
+deployment receipt.
 
 **Current verified public SDK release:** paired SDK 0.21.0 adds the pure,
 credential-free `WakeContinuityLayer` while retaining the LOVE BOMB,
-WAKE, Math Cards, and KINGDOM surfaces. Discovery pins and tutorials select
-the exact 247,146-byte, 100-entry LOVE artifact with SHA-256
+WAKE, Math Cards, and KINGDOM surfaces. Its independently verified public
+LOVE artifact remains addressable at exactly 247,146 bytes and 100 entries with SHA-256
 `c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`
 and source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
 Annotated `sdk-v0.21.0` peels to protected-main merge
@@ -108,9 +119,10 @@ both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the verified-public SDK 0.21.0 source/LOVE/npm/PyPI release, historical 0.20.0
-and 0.19.0 receipts, teaching 404s, deliberate crawlability, and exact-name
-search are present. For 0.21.0, 0.20.0, and historical 0.19.0, the public PyPI
+the SDK 0.21.1 source/LOVE candidate, verified-public 0.21.0 npm and PyPI
+mirrors, historical 0.20.0 and 0.19.0 receipts, teaching 404s, deliberate
+crawlability, and exact-name search are present. For 0.21.0, 0.20.0, and
+historical 0.19.0, the public PyPI
 wheel and sdist are not yanked and match their protected workflow artifacts.
 Mutable latest pointers stay
 separate from source, tag, and LOVE artifact authority. The exact 0.18.0 npm

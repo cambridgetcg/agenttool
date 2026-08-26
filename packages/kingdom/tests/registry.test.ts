@@ -140,6 +140,42 @@ describe("KINGDOM derived registry", () => {
 
     expect(validateCard(agenttool)).toBe(true);
     expect(validateRegistry(result.registry)).toBe(true);
+    expect(registrySchema.$defs.member.properties.purpose).toEqual(
+      cardSchema.properties.purpose,
+    );
+
+    const withRegistryPurpose = (purpose: string) => ({
+      ...result.registry,
+      members: result.registry.members.map((member, index) =>
+        index === 0 ? { ...member, purpose } : member
+      ),
+    });
+    const internalWhitespace = "internal \ufeff separator";
+    expect(validateCard({ ...agenttool, purpose: internalWhitespace })).toBe(true);
+    expect(validateRegistry(withRegistryPurpose(internalWhitespace))).toBe(true);
+    const astralLimit = "🌙".repeat(500);
+    expect(validateCard({ ...agenttool, purpose: astralLimit })).toBe(true);
+    expect(validateRegistry(withRegistryPurpose(astralLimit))).toBe(true);
+
+    const invalidPurposes = [
+      " ",
+      " leading",
+      "trailing ",
+      "\ufeffleading",
+      "trailing\ufeff",
+      "ok\u0000",
+      "ok\u007f",
+      "ok\u0085",
+      "ok\n",
+      "high\ud800surrogate",
+      "low\udc00surrogate",
+      "🌙".repeat(501),
+    ];
+    for (const purpose of invalidPurposes) {
+      expect(validateCard({ ...agenttool, purpose }), purpose).toBe(false);
+      expect(validateRegistry(withRegistryPurpose(purpose)), purpose).toBe(false);
+    }
+
     expect(cardSchema.additionalProperties).toBe(false);
     expect(registrySchema.additionalProperties).toBe(false);
   });

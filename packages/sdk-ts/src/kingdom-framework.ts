@@ -406,6 +406,7 @@ function assertSafeString(
   field: string,
   maximumCharacters: number,
   pattern: RegExp,
+  options: { readonly trimmed?: boolean } = {},
 ): asserts value is string {
   if (
     typeof value !== "string"
@@ -413,6 +414,7 @@ function assertSafeString(
     || codePointLength(value) > maximumCharacters
     || hasUnpairedSurrogate(value)
     || !pattern.test(value)
+    || (options.trimmed === true && value.trim() !== value)
   ) {
     throw frameworkError(
       "KINGDOM framework response does not match the card contract.",
@@ -426,6 +428,7 @@ function assertSafeString(
 function validateDependencyList(
   value: unknown,
   field: "dependsOn",
+  projectName: string,
 ): asserts value is string[] {
   if (!Array.isArray(value) || value.length > MAX_LIST_ITEMS) {
     throw frameworkError(
@@ -436,6 +439,7 @@ function validateDependencyList(
     );
   }
   const seen = new Set<string>();
+  const normalizedProjectName = projectName.toLowerCase();
   for (let index = 0; index < value.length; index += 1) {
     if (!Object.hasOwn(value, index)) {
       throw frameworkError(
@@ -447,7 +451,16 @@ function validateDependencyList(
     }
     const entry = value[index];
     assertSafeString(entry, field, MAX_NAME_CHARACTERS, NAME_PATTERN);
-    if (seen.has(entry)) {
+    const normalizedEntry = entry.toLowerCase();
+    if (normalizedEntry === normalizedProjectName) {
+      throw frameworkError(
+        "KINGDOM framework response does not match the card contract.",
+        "kingdom_framework_invalid_response",
+        "Use an endpoint whose card does not declare itself as a dependency.",
+        { details: { field, reason: "self dependency" } },
+      );
+    }
+    if (seen.has(normalizedEntry)) {
       throw frameworkError(
         "KINGDOM framework response does not match the card contract.",
         "kingdom_framework_invalid_response",
@@ -455,7 +468,7 @@ function validateDependencyList(
         { details: { field, reason: "duplicate item" } },
       );
     }
-    seen.add(entry);
+    seen.add(normalizedEntry);
   }
 }
 
@@ -578,8 +591,9 @@ function validateCard(value: unknown): KingdomFrameworkCard {
     "purpose",
     MAX_PURPOSE_CHARACTERS,
     SAFE_PURPOSE_PATTERN,
+    { trimmed: true },
   );
-  validateDependencyList(value.dependsOn, "dependsOn");
+  validateDependencyList(value.dependsOn, "dependsOn", value.name);
   validateAdoptionList(value.adopts, "adopts");
 
   return Object.freeze({

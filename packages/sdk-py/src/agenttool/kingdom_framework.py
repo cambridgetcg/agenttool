@@ -118,6 +118,12 @@ _JSON_SUFFIX_MEDIA_TYPE = re.compile(
     r"^application/[a-z0-9!#$&^_.+-]+\+json$"
 )
 _UNSAFE_PURPOSE = re.compile(r"[\u0000-\u001f\u007f-\u009f\u2028\u2029]")
+# ECMA-262 WhiteSpace and LineTerminator code points used by String.trim().
+_ECMASCRIPT_TRIM_CHARACTERS = (
+    "\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
 _KINDS = frozenset(
     {
         "doctrine",
@@ -329,11 +335,21 @@ def _validate_string_list(
     field: str,
     pattern: Optional[re.Pattern[str]] = None,
     exact: Optional[str] = None,
+    case_insensitive: bool = False,
+    excluded: Optional[str] = None,
 ) -> bool:
     if not isinstance(candidate, list) or len(candidate) > _MAX_LIST_ITEMS:
         return False
     seen = set()
+    normalized_excluded = (
+        excluded.lower() if case_insensitive and excluded is not None else excluded
+    )
     for item in candidate:
+        normalized_item = (
+            item.lower()
+            if case_insensitive and isinstance(item, str)
+            else item
+        )
         if (
             not isinstance(item, str)
             or not 1 <= len(item) <= 120
@@ -342,10 +358,11 @@ def _validate_string_list(
             and pattern.fullmatch(item) is None
             or exact is not None
             and item != exact
-            or item in seen
+            or normalized_item == normalized_excluded
+            or normalized_item in seen
         ):
             return False
-        seen.add(item)
+        seen.add(normalized_item)
     return True
 
 
@@ -373,6 +390,7 @@ def _validate_card(candidate: object) -> KingdomFrameworkCard:
         and 1 <= len(purpose) <= 500
         and not _has_unicode_surrogate(purpose)
         and _UNSAFE_PURPOSE.search(purpose) is None
+        and purpose.strip(_ECMASCRIPT_TRIM_CHARACTERS) == purpose
         and all(
             isinstance(candidate[field], str)
             and candidate[field] in accepted
@@ -382,6 +400,8 @@ def _validate_card(candidate: object) -> KingdomFrameworkCard:
             candidate["dependsOn"],
             field="dependsOn",
             pattern=_NAME_PATTERN,
+            case_insensitive=True,
+            excluded=candidate["name"],
         )
         and _validate_string_list(
             candidate["adopts"],

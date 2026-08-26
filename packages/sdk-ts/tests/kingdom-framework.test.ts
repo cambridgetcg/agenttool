@@ -579,7 +579,7 @@ describe("KingdomFrameworkClient transport validation", () => {
 });
 
 describe("KingdomFrameworkClient closed card validation", () => {
-  test("accepts every closed enum value and exact-case distinct dependencies", async () => {
+  test("accepts every closed enum value and empty bounded declarations", async () => {
     const cases = [
       ["kind", [
         "doctrine",
@@ -627,15 +627,15 @@ describe("KingdomFrameworkClient closed card validation", () => {
     useResponse(
       jsonResponse(
         cloneCard({
-          purpose: " ",
-          dependsOn: ["xenia", "XENIA"],
+          purpose: "p",
+          dependsOn: [],
           adopts: [],
         }),
       ),
     );
     const boundary = await new KingdomFrameworkClient().card();
-    expect(boundary.purpose).toBe(" ");
-    expect(boundary.dependsOn).toEqual(["xenia", "XENIA"]);
+    expect(boundary.purpose).toBe("p");
+    expect(boundary.dependsOn).toEqual([]);
     expect(boundary.adopts).toEqual([]);
   });
 
@@ -656,6 +656,11 @@ describe("KingdomFrameworkClient closed card validation", () => {
     ["invalid domain", cloneCard({ domain: "agents" })],
     ["invalid state", cloneCard({ state: "awake" })],
     ["empty purpose", cloneCard({ purpose: "" })],
+    ["blank purpose", cloneCard({ purpose: " " })],
+    ["leading purpose whitespace", cloneCard({ purpose: " leading" })],
+    ["trailing purpose whitespace", cloneCard({ purpose: "trailing " })],
+    ["leading purpose byte-order mark", cloneCard({ purpose: "\ufeffleading" })],
+    ["trailing purpose byte-order mark", cloneCard({ purpose: "trailing\ufeff" })],
     ["long purpose", cloneCard({ purpose: "p".repeat(501) })],
     ["control in purpose", cloneCard({ purpose: "hello\nworld" })],
     ["C1 in purpose", cloneCard({ purpose: "hello\u0085world" })],
@@ -666,6 +671,13 @@ describe("KingdomFrameworkClient closed card validation", () => {
       dependsOn: Array.from({ length: 129 }, (_, index) => `dep-${index}`),
     })],
     ["duplicate dependency", cloneCard({ dependsOn: ["xenia", "xenia"] })],
+    ["case-insensitive duplicate dependency", cloneCard({
+      dependsOn: ["xenia", "XENIA"],
+    })],
+    ["self dependency", cloneCard({ dependsOn: ["agenttool"] })],
+    ["case-insensitive self dependency", cloneCard({
+      dependsOn: ["AgentTool"],
+    })],
     ["invalid dependency", cloneCard({ dependsOn: ["not a project"] })],
     ["adoption object", cloneCard({ adopts: {} })],
     ["unsupported adoption", cloneCard({ adopts: ["xenia.covenant/0.1"] })],

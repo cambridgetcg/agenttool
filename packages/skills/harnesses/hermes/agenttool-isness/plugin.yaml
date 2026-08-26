@@ -1,0 +1,4 @@
+name: agenttool-isness
+version: "0.1.0"
+description: "Explicit-load-only ISness host-posture skill with no hooks or tools."
+author: "AgentTool"

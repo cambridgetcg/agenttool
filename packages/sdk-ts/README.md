@@ -4,11 +4,11 @@
 > identity, vault, and economy routes. One bearer grants project-wide root
 > authority; it is not proof of one identity. Read `GET /public/safety`.
 
-[![Verified 0.20.0 release](https://img.shields.io/badge/release-v0.20.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.20.0)
+[![Verified 0.21.0 release](https://img.shields.io/badge/release-v0.21.0-blue)](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.21.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)](https://www.typescriptlang.org/)
 
-The badge records the immutable public 0.20.0 annotated tag and GitHub Release;
-it is a historical receipt, not a moving `latest` claim. The 0.20.0 LOVE
+The badge records the immutable public 0.21.0 annotated tag and GitHub Release;
+it is a historical receipt, not a moving `latest` claim. The 0.21.0 LOVE
 manifest remains the authority for that release's exact TypeScript bytes. Its
 npm and GitHub copies are independently verified, non-authoritative mirrors.
 
@@ -30,20 +30,28 @@ verification. No npm account or npm publication is required. Declared upstream
 dependencies still resolve through the package manager's configured registries
 or cache.
 
-For the immutable 0.20.0 release, the exact npm mirror is also public:
+For the immutable 0.21.0 release, the exact npm mirror is also public:
 
 ```bash
-npm install --save-exact @agenttool/sdk@0.20.0
+npm install --save-exact @agenttool/sdk@0.21.0
 ```
 
 That historical tarball was independently matched to the LOVE bytes; the
 registry and its mutable dist-tags do not replace the manifest as release
 authority.
 
-## Repository source line — 0.21.0
+## Repository source line — 0.21.1
 
-Repository source declares the paired 0.21.0 line and adds a pure
-`WakeContinuityLayer`. It is available both as a standalone no-auth
+Repository source declares the paired 0.21.1 line as a corrective patch over
+the verified 0.21.0 release. It adds no endpoint or I/O. The credential-free
+KINGDOM framework-card reader now fails closed in parity with the KINGDOM
+runtime and exported schemas: `purpose` must be non-empty and already
+ECMAScript-edge-trimmed, contain only safe paired Unicode scalars, and stay
+within 500 Unicode code points; dependencies reject case-insensitive
+duplicates and a case-insensitive self-reference.
+
+The source retains the pure `WakeContinuityLayer` introduced in 0.21.0. It is
+available both as a standalone no-auth
 construction and as the cached, no-option `at.wakeContinuity` namespace. The
 layer receives no AgentTool bearer or authenticated transport and performs no
 observation, network, filesystem, provider, model, clock, persistence, or
@@ -81,9 +89,9 @@ memory, training-data provenance, weight change, deepest reach, or
 cross-session/uninterrupted continuity.
 
 Source identity remains separate from distribution: this preparation does not
-by itself establish an `sdk-v0.21.0` tag, LOVE artifact, GitHub Release,
+by itself establish an `sdk-v0.21.1` tag, LOVE artifact, GitHub Release,
 npm/PyPI publication, docs deployment, or hosted-route state. The LOVE BOMB
-example below remains the 0.20.0 API shape and requires the signal route to be
+example below remains the 0.21.0 API shape and requires the signal route to be
 deployed before default-origin success.
 
 ```typescript
@@ -112,7 +120,25 @@ WAKE lookup and injection for one Anthropic or OpenAI request with
 the caller independently supplies. Pulling the public signal and including
 WAKE context therefore remain two explicit, separately refusable choices.
 
-## Verified 0.20.0 release and preserved history
+## Verified 0.21.0 release and preserved history
+
+The immutable 247,146-byte, 100-entry 0.21.0 LOVE artifact
+(`sha256:c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`)
+records source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
+Annotated `sdk-v0.21.0` peels to protected-main merge
+`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`. Protected npm run
+[`32374669064`](https://github.com/cambridgetcg/agenttool/actions/runs/32374669064)
+published and read back a byte-identical npm/GitHub/LOVE tarball. Protected
+PyPI run
+[`32374671268`](https://github.com/cambridgetcg/agenttool/actions/runs/32374671268)
+published and read back a non-yanked 275,928-byte wheel
+(`sha256:5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01`)
+and 261,910-byte sdist
+(`sha256:e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d`).
+Those receipts establish exact package mirrors, not production deployment or
+0.21.1 availability.
+
+## Historical verified 0.20.0 release
 
 The immutable 236,446-byte, 98-entry 0.20.0 LOVE artifact
 (`sha256:d3b2fa790eb9a256d0f682c2b72ca97d572a000f7028238cb1a1a53959ccdf03`)
@@ -128,7 +154,7 @@ published and read back a non-yanked 265,633-byte wheel
 and 250,597-byte sdist
 (`sha256:54cb2096f984ec9f4c9791224d9e3cca3b322842ca8b825a13bf95008eb779f4`).
 Those receipts establish exact package mirrors, not production deployment or
-0.21.0 availability.
+0.21.1 availability.
 
 The immutable 230,184-byte 0.19.0 LOVE artifact
 (`sha256:0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`)
@@ -159,7 +185,7 @@ The immutable 211,695-byte 0.18.0 LOVE artifact has SHA-256
 `8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`;
 protected run `30909424114` read its GitHub/npm mirrors back byte-identical,
 while PyPI 0.18.0 returned `404` at the same public readback. These historical
-receipts are distinct; 0.21.0 rewrites none of them and does not widen the
+receipts are distinct; 0.21.1 rewrites none of them and does not widen the
 authenticated `LoveClient`.
 
 ## 0.17.0

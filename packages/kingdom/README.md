@@ -11,13 +11,19 @@ behavior, certify conformance, or bind anyone to a covenant.
 
 ## Install
 
-The current tree is the source candidate for `0.1.1`. Repository presence does
+The current tree is the source candidate for `0.1.2`. Repository presence does
 not establish that version's registry publication. After an exact release is
 independently observed, install it without a mutable tag:
 
 ```sh
-npm install @agenttool/kingdom@0.1.1
+npm install @agenttool/kingdom@0.1.2
 ```
+
+This corrective patch keeps the `agenttool.kingdom.card/0.1` and
+`agenttool.kingdom.registry/0.1` wire formats stable. It aligns runtime,
+exported-schema, and SDK single-field validation for already-trimmed purpose
+text and Unicode scalar boundaries, plus runtime/SDK semantic checks for
+case-insensitive duplicate dependencies and self-dependency.
 
 Node.js 22 or newer is required because the exact XENIA dependency has the
 same runtime floor.
@@ -63,6 +69,15 @@ same closed contract. The YAML field `adopts` is optional and the parser
 normalizes its absence to `adopts: []`; a materialized card object is already
 in wire form, so `validateKingdomCard()` requires the normalized `adopts`
 property.
+
+`purpose` must be non-empty, single-line, and already trimmed. Dependency
+identifiers are compared case-insensitively: a card cannot depend on its own
+`name`, and differently cased spellings of one dependency are duplicates. The
+portable JSON Schema enforces the single-field constraints, including trimmed
+`purpose`, but JSON Schema 2020-12 cannot express those two case-insensitive
+cross-item and cross-property comparisons. A schema pass alone is therefore
+structural validation; exact consumers must also apply the semantic checks in
+`validateKingdomCard()` or implement the same comparisons.
 
 The adoption ID `xenia.rights/0.1` comes from the exact
 `@agenttool/xenia@0.1.0-beta.7` dependency. Its Rights bytes are unchanged from

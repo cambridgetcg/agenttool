@@ -53,6 +53,18 @@ an independently named one-day workflow artifact. The build constraint file
 and development environment do not. Only a missing distribution crosses into
 the protected publication job.
 
+## Prepared candidate — 0.21.1
+
+Paired TypeScript/Python source 0.21.1 corrects KINGDOM card validation parity
+without adding a hosted endpoint. The exact TypeScript LOVE/source candidate
+is sealed locally: its 247,749-byte, 100-entry tarball has SHA-256
+`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`
+and binds clean source revision
+`d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`. Those TypeScript bytes do not
+predict Python wheel or sdist bytes and are not evidence that `sdk-v0.21.1`,
+the PyPI release, npm mirror, GitHub Release, or hosted static path exists.
+The verified 0.21.0 distributions below remain exact and are not rewritten.
+
 ## Current verified release — 0.21.0
 
 Repository source 0.21.0 adds the credential-free, pure
