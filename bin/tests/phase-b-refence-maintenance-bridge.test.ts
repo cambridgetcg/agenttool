@@ -1551,14 +1551,14 @@ describe("closed source normalization", () => {
       expect(currentFacts.byteCount).toBeLessThan(512 * 1024);
       expect(currentFacts.leafCount).toBe(75_996);
       expect(currentFacts.leafSHA256).toBe(
-        "035dd500a5aaed195364f292ee7a29b225abc8f952c2d2e8103dd5a357b5e460",
+        "65e72c85361e33e83d5c102d23a331958b4b09ca4c6bd2068d14b98eafae1367",
       );
       expect(currentFacts.astShapeSHA256).toBe(
         "80fbe2739612b166e5db35e088eaccf2f4d71f7e00d34ddf90ba8dfba70dfce0",
       );
       expect(currentFacts.emittedLeafCount).toBe(63_910);
       expect(currentFacts.emittedLeafSHA256).toBe(
-        "51eaa1fcf908e983232432e0d927effcc0bf502e9c5e67a2f1acb6b2c2ee2337",
+        "3a8133efedf929041a5d7380e13cd2ca285ff9f307995dc9e842682ada7eedba",
       );
     },
     15_000,
@@ -2827,7 +2827,7 @@ describe("closed source normalization", () => {
     expect(pin![1]).toBe(sha256(normalized));
     expect(source).not.toContain("__PIN_BRIDGE_SELF_NORMALIZED_SHA256__");
     expect(normalized).toContain(
-      "71fa9f6cd4de141add54500701e56de5e49c74089e27dd13a2be77bb54bbe44d",
+      "a135bbd4ed2a41f14b3c03395483963da2319901093c51436f53665a74a8d823",
     );
     expect(() => normalizedBridgeSource(`${source}\n${source}`)).toThrow(
       MaintenanceRefenceError,
