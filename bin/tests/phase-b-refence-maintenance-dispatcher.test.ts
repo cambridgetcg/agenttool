@@ -41,9 +41,9 @@ const FIXED_REPO =
 const FIXED_BUN_SHA256 =
   "66262f09134f780b1563bd1ae3dad13ea7d2ac669f8a5754f924b3c82abcc8f3";
 const FIXED_CONTROLLER_SHA256 =
-  "5b422b303dd003ca84eaf93ef0a8046fa3fc1efbf43517deec71d37f5575a7f3";
+  "714809d5474ceb684aed6ddaff5c09c08ae42f82240888f0c34880a0123b5b2c";
 const FIXED_CONTROLLER_NORMALIZED_SHA256 =
-  "4a704d835c446cb66969dbaf5091370b640ef01f2774a28cd3bd7253607964b0";
+  "b7e2ad52f08ee77e21627cc03a76064ee96cfa13399ca2b385f33f70c6f5f5a8";
 const INVALID = "maintenance_refence_bridge_invalid_invocation\n";
 const REFUSED = "maintenance_refence_bridge_refused\n";
 const PERL_LAUNCHER =
@@ -385,7 +385,7 @@ async function createFixture(): Promise<DispatcherFixture> {
   );
   transformed = replaceExact(
     transformed,
-    'local controller_size="462849"',
+    'local controller_size="462854"',
     `local controller_size=${
       JSON.stringify(String(controllerBytes.byteLength))
     }`,
@@ -545,7 +545,7 @@ describe("Phase-B refence maintenance deploy dispatcher", () => {
     expect(dispatcherSpan).toContain("REFRESH_CONTROLLER_DISPATCH_PIN");
     const bridge = bridgeBytes.toString("utf8");
     expect(bridge).toContain(
-      `const BRIDGE_NORMALIZED_SHA256 = "${FIXED_CONTROLLER_NORMALIZED_SHA256}";`,
+      `const BRIDGE_NORMALIZED_SHA256 =\n  "${FIXED_CONTROLLER_NORMALIZED_SHA256}";`,
     );
     expect(bridge).not.toContain("__PIN_BRIDGE_SELF_NORMALIZED_SHA256__");
     const main = bridge.slice(

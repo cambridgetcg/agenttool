@@ -186,7 +186,8 @@ const EXPECTED_CONSTRAINT_DEFINITIONS: Readonly<
 // own pin, so any change to the producer semantic pin changes bridge identity.
 const REFENCE_OPERATOR_SEMANTIC_SHA256 = "130fd8dce4d9c6e4aaf44d6870aae1da255c8502eb4f3f6c92dc4a71e95e2181";
 // deno-fmt-ignore
-const BRIDGE_NORMALIZED_SHA256 = "4a704d835c446cb66969dbaf5091370b640ef01f2774a28cd3bd7253607964b0";
+const BRIDGE_NORMALIZED_SHA256 =
+  "b7e2ad52f08ee77e21627cc03a76064ee96cfa13399ca2b385f33f70c6f5f5a8";
 
 const MAX_PRIVATE_BYTES = 1_000_000;
 const MAX_CHILD_BYTES = 2_000_000;
@@ -795,7 +796,7 @@ function validateLocalControlInventory( runID: string, edge: HandoffEdge, archiv
   for (const name of deployNames) { if ( !reservedPhaseBControlName(name) && !/^phase-b-refence-observed-526-(?:anchor|armed-witness)-retired-/.test( name, ) ) continue;
     requireCondition(allowedDeploy.has(name), "local_control_inventory"); } }
 
-export function normalizedBridgeSource(text: string): string { const expression = /const BRIDGE_NORMALIZED_SHA256 = "[0-9a-f]{64}";/;
+export function normalizedBridgeSource(text: string): string { const expression = /const BRIDGE_NORMALIZED_SHA256 =\n  "[0-9a-f]{64}";/;
   const matches = text.match(new RegExp(expression.source, "g"));
   requireCondition(matches?.length === 1, "bridge_normalization_contract");
   return text.replace( expression, 'const BRIDGE_NORMALIZED_SHA256 = "__BRIDGE_SELF_NORMALIZED_SHA256__";', ); }
