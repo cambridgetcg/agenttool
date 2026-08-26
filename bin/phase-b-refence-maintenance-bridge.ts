@@ -184,10 +184,10 @@ const EXPECTED_CONSTRAINT_DEFINITIONS: Readonly<
 // semantic hash. Raw producer/harness/audit hashes are receipt data and are
 // recomputed from their private files. The bridge normalizer zeroes only its
 // own pin, so any change to the producer semantic pin changes bridge identity.
-const REFENCE_OPERATOR_SEMANTIC_SHA256 = "a135bbd4ed2a41f14b3c03395483963da2319901093c51436f53665a74a8d823";
+const REFENCE_OPERATOR_SEMANTIC_SHA256 = "f4ff28f2bd46c608745e56ca82001c9e4252cc16e8e07252ca60c804f38ecf7f";
 // deno-fmt-ignore
 const BRIDGE_NORMALIZED_SHA256 =
-  "f9036a1944db0a64825b0a52698e4451c7a40ae262a0ca1e814c3a1dfdba8364";
+  "9e0ddd120fa6d605f68a86be35303a1b2eba56155116218933f8801eda47340c";
 
 const MAX_PRIVATE_BYTES = 1_000_000;
 const MAX_CHILD_BYTES = 2_000_000;
