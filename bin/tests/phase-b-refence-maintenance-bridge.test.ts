@@ -29,6 +29,12 @@ import {
   createMaintenanceContract,
 } from "../phase-b-refence-maintenance-contract.ts";
 import {
+  BRIDGE_PACK_DIRECTIVE,
+  BRIDGE_PACK_MAX_LINE_ENTRIES,
+  maintenanceBridgePackFacts,
+  packMaintenanceBridgeSource,
+} from "./phase-b-refence-maintenance-line-pack.ts";
+import {
   acquireDeployLockForController,
   appendControllerTransitionVerification,
   appendDatabaseConvergenceCommitForTest,
@@ -76,6 +82,7 @@ import {
   OPERATOR_NORMALIZATION_CONTRACT,
   parseArguments,
   parseControllerPublicObservationForTest,
+  parseGitTreeFiles,
   performControllerFlyTransitionForTest,
   performControllerJournalledProviderReadForTest,
   performControllerJournalledReadChildForTest,
@@ -1062,7 +1069,484 @@ function reboundProductionShapeAuthority(
   };
 }
 
+interface GeneratedBuildManifest {
+  manifest: string;
+  apiSourceCount: number;
+  doctrineCount: number;
+  fileCount: number;
+  uniqueSourceCount: number;
+  byteCount: number;
+}
+
+const BUILD_MANIFEST_REPOSITORY = realpathSync(
+  join(import.meta.dir, "../.."),
+);
+const BUILD_FIXED_API_INPUTS = [
+  "api/.dockerignore",
+  "api/fly.toml",
+  "api/Dockerfile",
+  "api/package.json",
+  "api/bun.lock",
+  "api/tsconfig.json",
+  "api/certs/supabase-prod-ca-2021.crt",
+] as const;
+
+async function runBuildManifestGit(
+  arguments_: readonly string[],
+  stdin?: string,
+): Promise<Buffer> {
+  const child = Bun.spawn(["/usr/bin/git", ...arguments_], {
+    cwd: BUILD_MANIFEST_REPOSITORY,
+    env: { LANG: "C", LC_ALL: "C", PATH: "/usr/bin:/bin" },
+    stdin: stdin === undefined ? "ignore" : "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (stdin !== undefined) {
+    child.stdin.write(stdin);
+    child.stdin.end();
+  }
+  const [stdout, stderr, status] = await Promise.all([
+    new Response(child.stdout).arrayBuffer(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (status !== 0 || stderr !== "") {
+    throw new Error(`build_manifest_git_${arguments_[0] ?? "missing"}`);
+  }
+  return Buffer.from(stdout);
+}
+
+function replaceBridgeComparatorExact(
+  source: string,
+  before: string,
+  after: string,
+): string {
+  fixtureRequire(
+    source.split(before).length === 2,
+    "bridge_pack_comparator",
+  );
+  return source.replace(before, after);
+}
+
+async function expandedBridgePackComparator(): Promise<string> {
+  const base = (await runBuildManifestGit([
+    "cat-file",
+    "blob",
+    "cc47a2c607c77827715e2865559cb53baa931dec",
+  ])).toString("utf8");
+  const changes = [
+    [
+      'const EXPECTED_BUILD_MANIFEST_SHA256 =\n  "2387ed54df4f8aedc663f07975030f09e5edbff40e316d8930a32ddf7e747e2a";',
+      'const EXPECTED_BUILD_MANIFEST_SHA256 =\n  "ba1ee2dc3ede33e02460fd139273199db0d2c8e075976a28ff230543d46a7626";',
+    ],
+    [
+      "const EXPECTED_BUILD_MANIFEST_BYTE_COUNT = 130_534;",
+      "const EXPECTED_BUILD_MANIFEST_BYTE_COUNT = 130_718;",
+    ],
+    [
+      "const EXPECTED_BUILD_FILE_COUNT = 706;",
+      "const EXPECTED_BUILD_FILE_COUNT = 707;",
+    ],
+    [
+      "const EXPECTED_BUILD_BYTE_COUNT = 10_094_465;",
+      "const EXPECTED_BUILD_BYTE_COUNT = 10_102_535;",
+    ],
+    [
+      "function parseGitTreeFiles(bytes: Uint8Array)",
+      "export function parseGitTreeFiles(bytes: Uint8Array)",
+    ],
+    [
+      "    const match = row.match(/^(100644|100755) blob ([0-9a-f]{40})\\t([^\\0]+)$/);",
+      "    const match = row.match(\n      /^(100644|100755|120000) blob ([0-9a-f]{40})\\t([^\\0]+)$/,\n    );",
+    ],
+    [
+      '      "build_git_tree",\n    );\n    result.set(path, {',
+      '      "build_git_tree",\n    );\n    if (match[1] === "120000") continue;\n    result.set(path, {',
+    ],
+    ["          .length === 678 &&", "          .length === 679 &&"],
+    ["        705,", "        706,"],
+  ] as const;
+  return changes.reduce(
+    (source, [before, after]) =>
+      replaceBridgeComparatorExact(source, before, after),
+    base,
+  );
+}
+
+async function readBuildManifestGitBatch(
+  specifications: readonly string[],
+): Promise<Array<{ sha1: string; bytes: Buffer }>> {
+  fixtureRequire(
+    specifications.length > 0 &&
+      specifications.every((value) => !value.includes("\n")),
+    "build_manifest_batch_input",
+  );
+  const output = await runBuildManifestGit(
+    ["cat-file", "--batch"],
+    `${specifications.join("\n")}\n`,
+  );
+  let cursor = 0;
+  const records = specifications.map(() => {
+    const lineEnd = output.indexOf(0x0a, cursor);
+    fixtureRequire(lineEnd > cursor, "build_manifest_batch_header");
+    const match = output.subarray(cursor, lineEnd).toString("utf8").match(
+      /^([0-9a-f]{40}) blob ([0-9]+)$/,
+    );
+    fixtureRequire(match !== null, "build_manifest_batch_header");
+    const size = Number(match[2]);
+    fixtureRequire(
+      Number.isSafeInteger(size) && size >= 0,
+      "build_manifest_batch_size",
+    );
+    const start = lineEnd + 1;
+    const end = start + size;
+    fixtureRequire(
+      end < output.byteLength && output[end] === 0x0a,
+      "build_manifest_batch_bytes",
+    );
+    cursor = end + 1;
+    return {
+      sha1: match[1]!,
+      bytes: Buffer.from(output.subarray(start, end)),
+    };
+  });
+  fixtureRequire(cursor === output.byteLength, "build_manifest_batch_tail");
+  return records;
+}
+
+async function generateBuildManifestFromTree(): Promise<
+  GeneratedBuildManifest
+> {
+  const treeBytes = await runBuildManifestGit([
+    "ls-tree",
+    "-rz",
+    "--full-tree",
+    "HEAD",
+    "--",
+    "api",
+    "docs",
+  ]);
+  fixtureRequire(
+    treeBytes.byteLength > 0 && treeBytes.at(-1) === 0,
+    "build_manifest_tree",
+  );
+  const tree = new Map<string, { mode: string; sha1: string }>();
+  let ignoredSymlinks = 0;
+  for (const row of treeBytes.subarray(0, -1).toString("utf8").split("\0")) {
+    const match = row.match(
+      /^(100644|100755|120000) blob ([0-9a-f]{40})\t([^\0]+)$/,
+    );
+    fixtureRequire(match !== null, "build_manifest_tree_row");
+    if (match[1] === "120000") {
+      ignoredSymlinks += 1;
+      continue;
+    }
+    fixtureRequire(!tree.has(match[3]!), "build_manifest_tree_duplicate");
+    tree.set(match[3]!, { mode: match[1]!, sha1: match[2]! });
+  }
+  fixtureRequire(ignoredSymlinks === 5, "build_manifest_tree_symlinks");
+  const doctrineEntry = tree.get("api/doctrine-docs.manifest");
+  fixtureRequire(doctrineEntry !== undefined, "build_manifest_doctrine");
+  const [doctrineBlob] = await readBuildManifestGitBatch([
+    doctrineEntry.sha1,
+  ]);
+  fixtureRequire(
+    doctrineBlob !== undefined && doctrineBlob.sha1 === doctrineEntry.sha1,
+    "build_manifest_doctrine",
+  );
+  const doctrineNames = doctrineBlob.bytes.toString("utf8").split("\n")
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+  fixtureRequire(
+    doctrineNames.every((name) =>
+      /^(?!\.)[A-Za-z0-9][A-Za-z0-9.-]*\.(?:md|jsonld)$/.test(name)
+    ),
+    "build_manifest_doctrine",
+  );
+  const fixed = new Set<string>(BUILD_FIXED_API_INPUTS);
+  const files: Array<{
+    source: string;
+    destination: string;
+    mode: string;
+    sha1: string;
+  }> = [];
+  for (const [source, metadata] of tree) {
+    if (!source.startsWith("api/src/") && !fixed.has(source)) continue;
+    files.push({
+      source,
+      destination: source.slice("api/".length),
+      ...metadata,
+    });
+  }
+  const add = (source: string, destination: string): void => {
+    const metadata = tree.get(source);
+    fixtureRequire(metadata !== undefined, "build_manifest_source");
+    files.push({ source, destination, ...metadata });
+  };
+  add("docs/agenttool.jsonld", "agenttool.jsonld.bundled");
+  add("docs/kingdom-bundle.json", "kingdom-bundle.json.bundled");
+  for (const name of doctrineNames) {
+    add(`docs/${name}`, `doctrine-docs.bundled/${name}`);
+  }
+  files.sort((left, right) =>
+    Buffer.compare(
+      Buffer.from(left.destination, "utf8"),
+      Buffer.from(right.destination, "utf8"),
+    )
+  );
+  const blobs = await readBuildManifestGitBatch(files.map((file) => file.sha1));
+  let byteCount = 0;
+  const rows = files.map((file, index) => {
+    const blob = blobs[index]!;
+    fixtureRequire(
+      file.mode === "100644" && blob.sha1 === file.sha1,
+      "build_manifest_tree_blob",
+    );
+    byteCount += blob.bytes.byteLength;
+    return [
+      file.destination,
+      file.source,
+      "100644",
+      file.sha1,
+      String(blob.bytes.byteLength),
+      createHash("sha256").update(blob.bytes).digest("hex"),
+    ].join("\t");
+  });
+  return {
+    manifest: `${rows.join("\n")}\n`,
+    apiSourceCount: files.filter((file) => file.source.startsWith("api/src/"))
+      .length,
+    doctrineCount: doctrineNames.length,
+    fileCount: files.length,
+    uniqueSourceCount: new Set(files.map((file) => file.source)).size,
+    byteCount,
+  };
+}
+
+async function generateBuildManifestFromReversePaths(): Promise<
+  GeneratedBuildManifest
+> {
+  const apiSources = (await runBuildManifestGit([
+    "ls-tree",
+    "-rz",
+    "--name-only",
+    "HEAD",
+    "--",
+    "api/src",
+  ])).toString("utf8").split("\0").filter(Boolean);
+  const doctrineNames = (await runBuildManifestGit([
+    "show",
+    "HEAD:api/doctrine-docs.manifest",
+  ])).toString("utf8").split("\n").filter((line) =>
+    line.length > 0 && !line.startsWith("#")
+  );
+  const mappings = [
+    ...apiSources.map((source) => ({
+      source,
+      destination: source.slice("api/".length),
+    })),
+    ...BUILD_FIXED_API_INPUTS.map((source) => ({
+      source,
+      destination: source.slice("api/".length),
+    })),
+    {
+      source: "docs/agenttool.jsonld",
+      destination: "agenttool.jsonld.bundled",
+    },
+    {
+      source: "docs/kingdom-bundle.json",
+      destination: "kingdom-bundle.json.bundled",
+    },
+    ...doctrineNames.map((name) => ({
+      source: `docs/${name}`,
+      destination: `doctrine-docs.bundled/${name}`,
+    })),
+  ].sort((left, right) =>
+    Buffer.compare(
+      Buffer.from(left.destination, "utf8"),
+      Buffer.from(right.destination, "utf8"),
+    )
+  );
+  const blobs = await readBuildManifestGitBatch(
+    mappings.map((mapping) => `HEAD:${mapping.source}`),
+  );
+  let byteCount = 0;
+  const rows = mappings.map((mapping, index) => {
+    const blob = blobs[index]!;
+    const reversedSHA1 = createHash("sha1")
+      .update(`blob ${blob.bytes.byteLength}\0`)
+      .update(blob.bytes)
+      .digest("hex");
+    fixtureRequire(
+      reversedSHA1 === blob.sha1,
+      "build_manifest_reverse_blob",
+    );
+    byteCount += blob.bytes.byteLength;
+    return [
+      mapping.destination,
+      mapping.source,
+      "100644",
+      reversedSHA1,
+      String(blob.bytes.byteLength),
+      createHash("sha256").update(blob.bytes).digest("hex"),
+    ].join("\t");
+  });
+  return {
+    manifest: `${rows.join("\n")}\n`,
+    apiSourceCount: apiSources.length,
+    doctrineCount: doctrineNames.length,
+    fileCount: mappings.length,
+    uniqueSourceCount: new Set(mappings.map((mapping) => mapping.source)).size,
+    byteCount,
+  };
+}
+
 describe("closed source normalization", () => {
+  test("the HEAD build context has two exact Git-only manifest reconstructions", async () => {
+    const [tree, reverse] = await Promise.all([
+      generateBuildManifestFromTree(),
+      generateBuildManifestFromReversePaths(),
+    ]);
+    expect(reverse).toEqual(tree);
+    expect(tree.apiSourceCount).toBe(679);
+    expect(tree.doctrineCount).toBe(19);
+    expect(tree.fileCount).toBe(707);
+    expect(tree.uniqueSourceCount).toBe(706);
+    expect(tree.byteCount).toBe(10_102_535);
+    expect(Buffer.byteLength(tree.manifest)).toBe(130_718);
+    expect(createHash("sha256").update(tree.manifest).digest("hex")).toBe(
+      "ba1ee2dc3ede33e02460fd139273199db0d2c8e075976a28ff230543d46a7626",
+    );
+    const treeBytes = await runBuildManifestGit([
+      "ls-tree",
+      "-rz",
+      "--full-tree",
+      "HEAD",
+      "--",
+      "api",
+      "docs",
+    ]);
+    const parsedTree = parseGitTreeFiles(treeBytes);
+    expect(
+      [...parsedTree.keys()].filter((path) => path.startsWith("api/src/")),
+    ).toHaveLength(679);
+    for (
+      const ignored of [
+        "docs/wakes/AGENTTOOL.bundle.json",
+        "docs/wakes/AGENTTOOL.md",
+        "docs/wakes/THE-SYZYGY.bundle.json",
+        "docs/wakes/THE-SYZYGY.md",
+        "docs/wakes/rendered",
+      ]
+    ) {
+      expect(parsedTree.has(ignored)).toBe(false);
+    }
+    const required = "api/src/services/welcome/isness.ts";
+    const treeText = treeBytes.toString("utf8");
+    const requiredRow = treeText.match(
+      new RegExp(`100644 blob ([0-9a-f]{40})\\t${required}\\0`),
+    );
+    expect(requiredRow).not.toBeNull();
+    const requiredAsSymlink = Buffer.from(treeText.replace(
+      `100644 blob ${requiredRow![1]}\t${required}\0`,
+      `120000 blob ${requiredRow![1]}\t${required}\0`,
+    ));
+    const parsedRequiredSymlink = parseGitTreeFiles(requiredAsSymlink);
+    expect(parsedRequiredSymlink.has(required)).toBe(false);
+    expect(
+      [...parsedRequiredSymlink.keys()].filter((path) =>
+        path.startsWith("api/src/")
+      ),
+    ).toHaveLength(678);
+    const source = readFileSync(
+      join(import.meta.dir, "..", "phase-b-refence-maintenance-bridge.ts"),
+      "utf8",
+    );
+    for (
+      const literal of [
+        '"ba1ee2dc3ede33e02460fd139273199db0d2c8e075976a28ff230543d46a7626"',
+        "const EXPECTED_BUILD_MANIFEST_BYTE_COUNT = 130_718;",
+        "const EXPECTED_BUILD_FILE_COUNT = 707;",
+        "const EXPECTED_BUILD_BYTE_COUNT = 10_102_535;",
+        ".length === 679 &&",
+        ".size === 706,",
+      ]
+    ) {
+      expect(source.split(literal)).toHaveLength(2);
+    }
+  });
+
+  test(
+    "the scanner line pack is parser-driven, deterministic, and idempotent",
+    async () => {
+      const expanded = await expandedBridgePackComparator();
+      const expandedFacts = maintenanceBridgePackFacts(expanded);
+      expect(expandedFacts.rawSHA256).toBe(
+        "cbf5a1ef58b3af0b315904914f3266f70f9a9550385df3a81b9ba489f4a2ecbc",
+      );
+      expect(expandedFacts.byteCount).toBe(511_871);
+      expect(expandedFacts.lineEntries).toBe(14_998);
+      expect(expandedFacts.leafCount).toBe(75_920);
+      expect(expandedFacts.leafSHA256).toBe(
+        "303c90fa497d5f083761d7e4e3116a3f4bee4edbb797747d062f3862be0d203b",
+      );
+      expect(expandedFacts.astShapeSHA256).toBe(
+        "1321bc4fa40a4d5ac013c7cc7643c63214ee92fe18799cc554704da5ba28cc63",
+      );
+      expect(expandedFacts.emittedLeafCount).toBe(63_850);
+      expect(expandedFacts.emittedLeafSHA256).toBe(
+        "15db5f5669d6885d3d4e89615b8161c7950614ce823a9d7cea80e6967f8a56dc",
+      );
+      const packedExpanded = packMaintenanceBridgeSource(expanded);
+      const packedExpandedFacts = maintenanceBridgePackFacts(packedExpanded);
+      expect(packedExpandedFacts.leafCount).toBe(expandedFacts.leafCount);
+      expect(packedExpandedFacts.leafSHA256).toBe(expandedFacts.leafSHA256);
+      expect(packedExpandedFacts.astShapeSHA256).toBe(
+        expandedFacts.astShapeSHA256,
+      );
+      expect(packedExpandedFacts.emittedLeafCount).toBe(
+        expandedFacts.emittedLeafCount,
+      );
+      expect(packedExpandedFacts.emittedLeafSHA256).toBe(
+        expandedFacts.emittedLeafSHA256,
+      );
+      expect(packedExpandedFacts.imports).toEqual(expandedFacts.imports);
+      expect(packedExpandedFacts.exports).toEqual(expandedFacts.exports);
+      expect(packedExpandedFacts.topLevelKinds).toEqual(
+        expandedFacts.topLevelKinds,
+      );
+      expect(packedExpandedFacts.lineEntries).toBeLessThanOrEqual(
+        BRIDGE_PACK_MAX_LINE_ENTRIES,
+      );
+      expect(packMaintenanceBridgeSource(packedExpanded)).toBe(packedExpanded);
+
+      const current = readFileSync(
+        join(import.meta.dir, "..", "phase-b-refence-maintenance-bridge.ts"),
+        "utf8",
+      );
+      expect(current.split("\n")[1]).toBe(BRIDGE_PACK_DIRECTIVE);
+      expect(packMaintenanceBridgeSource(current)).toBe(current);
+      const currentFacts = maintenanceBridgePackFacts(current);
+      expect(currentFacts.lineEntries).toBeLessThanOrEqual(
+        BRIDGE_PACK_MAX_LINE_ENTRIES,
+      );
+      expect(currentFacts.longestLine).toBeLessThanOrEqual(320);
+      expect(currentFacts.byteCount).toBeLessThan(512 * 1024);
+      expect(currentFacts.leafCount).toBe(75_996);
+      expect(currentFacts.leafSHA256).toBe(
+        "fbcf30ff37ed076854c315832aee8d4583387d4d66a58c6e99651bb1e958f215",
+      );
+      expect(currentFacts.astShapeSHA256).toBe(
+        "80fbe2739612b166e5db35e088eaccf2f4d71f7e00d34ddf90ba8dfba70dfce0",
+      );
+      expect(currentFacts.emittedLeafCount).toBe(63_910);
+      expect(currentFacts.emittedLeafSHA256).toBe(
+        "33d85dcc9e4ae3c2b84d0d32f16ee8cd64f118bb8aa982a0f7852d04418a6ae8",
+      );
+    },
+    15_000,
+  );
+
   test("shared producer envelope round-trips through the reverse consumer", () => {
     const bytes = readFileSync(HANDSHAKE_FIXTURE, "utf8");
     expect(Buffer.byteLength(bytes)).toBe(67_470);
@@ -1651,527 +2135,535 @@ describe("closed source normalization", () => {
     ) expect(bytes).not.toContain(forbidden);
   });
 
-  test("full producer authority rejects deeply rebound semantic forgeries", () => {
-    const rebound = reboundProductionShapeAuthority();
-    expect(
-      validateRefenceReceiptWalAuthorityForTest(rebound.request)
-        .wal_entry_count,
-    ).toBe(114);
-    expect(sha256(canonicalJson({
-      authority_baseline_verified: true,
-      disabled_at: "2026-08-21T18:49:13.745704Z",
-      allowed_origins_sha256:
-        "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
-      reserved_generation_rows: 0,
-      authoritative_v2_rows: 0,
-      received_v1_rows: 0,
-    }))).toBe(
-      "e4f7bc0756d7075fa50d129455fcde637a177ddf23647a69554f7f2864ef7c55",
-    );
-    expect(sha256(canonicalJson({
-      app: "agenttool",
-      absent: [
-        "AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION",
-        "REDIS_URL",
-      ],
-      observations: 2,
-    }))).toBe(
-      "888214699cb6a9eab515d75f2e3e7f152d43cc6f60c67d2ddc378637257f982f",
-    );
-    const cases: Array<{
-      name: string;
-      code: string;
-      hooks: ProductionShapeMutationHooks;
-    }> = [
-      {
-        name: "fixed caveat substitution",
-        code: "producer_authority_projection",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            for (const entry of wal) entry.caveats[0] += " forged";
-          },
-        },
-      },
-      {
-        name: "ordinal drift after full rechain",
-        code: "producer_authority_wal",
-        hooks: {
-          beforeChain: ({ wal }) => wal[50].ordinal += 1,
-        },
-      },
-      {
-        name: "updated-at regression",
-        code: "producer_authority_wal",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal[49].updated_at = wal[51].updated_at;
-          },
-        },
-      },
-      {
-        name: "admission predates durable W1",
-        code: "producer_authority_admission",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            for (const entry of wal.slice(1)) {
-              entry.admission.proof_started_at = "2026-08-24T23:59:59.999Z";
-            }
-          },
-        },
-      },
-      {
-        name: "admission underclaims the two stable drain intervals",
-        code: "producer_authority_admission",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            const started = Date.parse(wal[1].admission.proof_started_at);
-            const completed = new Date(started + 10_273).toISOString();
-            for (const entry of wal.slice(1)) {
-              entry.admission.proof_completed_at = completed;
-            }
-          },
-        },
-      },
-      {
-        name: "single-WAL immutable audit drift",
-        code: "producer_authority_wal",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal[50].audit_evidence.source_sha256 = digest("e");
-          },
-        },
-      },
-      {
-        name: "event-checkpoint drift",
-        code: "producer_authority_transition",
-        hooks: {
-          beforeChain: ({ wal }) => wal[2].events.at(-1).action = "stop",
-        },
-      },
-      {
-        name: "stable fleet readback pair underclaims 1137ms",
-        code: "producer_authority_transition",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            const second = wal.find((entry: Record<string, any>) =>
-              /_readback_2$/.test(entry.checkpoint)
-            );
-            const firstAt = Date.parse(second.events.at(-2).at);
-            second.events.at(-1).at = new Date(firstAt + 1_136).toISOString();
-          },
-        },
-      },
-      {
-        name: "terminal drain round underclaims 5137ms",
-        code: "producer_authority_transition",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            const secondRound = wal.find((entry: Record<string, any>) =>
-              entry.checkpoint === "terminal_fleet_sample_2"
-            );
-            const firstDrainAt = Date.parse(secondRound.events.at(-2).at);
-            secondRound.events.at(-1).at = new Date(firstDrainAt + 5_136)
-              .toISOString();
-          },
-        },
-      },
-      {
-        name: "lock continuity drift",
-        code: "producer_authority_transition",
-        hooks: {
-          beforeChain: ({ wal }) => wal[50].lock.inode += 1,
-        },
-      },
-      {
-        name: "globally rebound capsule path",
-        code: "producer_authority_projection",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            for (const entry of wal.slice(1)) {
-              entry.recovery_capsule.path += ".forged";
-            }
-          },
-        },
-      },
-      {
-        name: "raw-bound anchor truth drift",
-        code: "producer_authority_anchor",
-        hooks: {
-          afterAuthorityBindings: ({ anchor }) => {
-            anchor.no_secret_values = false;
-          },
-        },
-      },
-      {
-        name: "raw-bound witness context drift",
-        code: "producer_authority_witness",
-        hooks: {
-          afterAuthorityBindings: ({ witness }) => {
-            witness.context_sha256 = digest("f");
-          },
-        },
-      },
-      {
-        name: "terminal proof pending truth drift",
-        code: "producer_authority_terminal",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal.at(-2).terminal_proof.capsule_retirement_pending = false;
-            wal.at(-1).terminal_proof.capsule_retirement_pending = false;
-          },
-        },
-      },
-      {
-        name: "normalization contract drift",
-        code: "producer_authority_projection",
-        hooks: {
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.operator_normalization_contract.algorithm += "_forged";
-          },
-        },
-      },
-      {
-        name: "receipt zero-effect truth drift",
-        code: "producer_authority_handoff",
-        hooks: {
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.migration_attempt_count = 1;
-          },
-        },
-      },
-      {
-        name: "hash-valid but nonderived WAL filename",
-        code: "producer_authority_wal",
-        hooks: {
-          filenameOverrides: {
-            50: `000051-${digest("a")}.json`,
-          },
-        },
-      },
-      {
-        name: "fully rehashed wrong prior pointer",
-        code: "producer_authority_wal",
-        hooks: {
-          priorEntryOverrides: { 50: digest("b") },
-        },
-      },
-      {
-        name: "reordered adjacent WAL values",
-        code: "producer_authority_wal",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            [wal[50], wal[51]] = [wal[51], wal[50]];
-          },
-        },
-      },
-      {
-        name: "inventory entry count drift",
-        code: "producer_authority_projection",
-        hooks: {
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.wal_inventory.entry_count -= 1;
-          },
-        },
-      },
-      {
-        name: "rehashed inventory projection drift",
-        code: "producer_authority_wal",
-        hooks: {
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.wal_inventory.entries[50].checkpoint += "_forged";
-            receipt.wal_inventory.chain_projection_sha256 = sha256(
-              canonicalJson(receipt.wal_inventory.entries),
-            );
-          },
-        },
-      },
-      {
-        name: "filename-set encoding drift",
-        code: "producer_authority_anchor",
-        hooks: {
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.wal_inventory.filename_set_sha256 = sha256(
-              `${receipt.wal_inventory.ordered_filenames.join("\n")}\n`,
-            );
-          },
-        },
-      },
-      {
-        name: "receipt-to-W1 started time drift",
-        code: "producer_authority_wal_capsule",
-        hooks: {
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.started_at = "2026-08-25T00:00:00.999Z";
-          },
-        },
-      },
-      {
-        name: "common started time drift after arming",
-        code: "producer_authority_event",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal[50].started_at = wal[50].updated_at;
-          },
-        },
-      },
-      {
-        name: "anchor created time drift with raw rebound",
-        code: "producer_authority_anchor",
-        hooks: {
-          afterAuthorityBindings: ({ anchor }) => {
-            anchor.created_at = "2026-08-25T00:00:00.999Z";
-          },
-        },
-      },
-      {
-        name: "armed witness time drift with raw rebound",
-        code: "producer_authority_witness",
-        hooks: {
-          afterAuthorityBindings: ({ witness }) => {
-            witness.armed_at = "2026-08-25T00:00:00.999Z";
-          },
-        },
-      },
-      {
-        name: "receipt completed time drift",
-        code: "producer_authority_anchor",
-        hooks: {
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.completed_at = "2026-08-25T00:00:00.999Z";
-          },
-        },
-      },
-      {
-        name: "context changes after W2",
-        code: "producer_authority_transition",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal[50].context.source_inventory_sha256 = digest("c");
-          },
-        },
-      },
-      {
-        name: "admission changes after W2",
-        code: "producer_authority_transition",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal[50].admission.local_state_sandwich_sha256 = digest("d");
-          },
-        },
-      },
-      {
-        name: "capsule retires before terminal WAL",
-        code: "producer_authority_transition",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal[50].recovery_capsule.retired = true;
-          },
-        },
-      },
-      {
-        name: "terminal WAL leaves capsule active",
-        code: "producer_authority_projection",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal.at(-1).recovery_capsule.retired = false;
-          },
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.recovery_capsule_retired = false;
-          },
-        },
-      },
-      {
-        name: "witness capsule-reference drift",
-        code: "producer_authority_witness",
-        hooks: {
-          afterAuthorityBindings: ({ witness }) => {
-            witness.recovery_capsule_reference_sha256 = digest("a");
-          },
-        },
-      },
-      {
-        name: "anchor first-WAL hash drift",
-        code: "producer_authority_anchor",
-        hooks: {
-          afterAuthorityBindings: ({ anchor }) => {
-            anchor.first_entry_sha256 = digest("b");
-          },
-        },
-      },
-      {
-        name: "globally rebound wrong anchor archive",
-        code: "producer_authority_handoff",
-        hooks: {
-          afterAuthorityBindings: ({ anchor }) => {
-            anchor.authorized_archive_path += ".forged";
-          },
-        },
-      },
-      {
-        name: "globally rebound wrong guard path",
-        code: "producer_authority_wal",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            for (const entry of wal) entry.readmission_guard.path += ".forged";
-          },
-        },
-      },
-      {
-        name: "witness armed ordinal drift",
-        code: "producer_authority_witness",
-        hooks: {
-          afterAuthorityBindings: ({ witness }) => {
-            witness.armed_wal_ordinal += 1;
-          },
-        },
-      },
-      {
-        name: "witness armed raw-hash drift",
-        code: "producer_authority_witness",
-        hooks: {
-          afterAuthorityBindings: ({ witness }) => {
-            witness.armed_wal_sha256 = digest("c");
-          },
-        },
-      },
-      {
-        name: "witness deploy-lock drift",
-        code: "producer_authority_witness",
-        hooks: {
-          afterAuthorityBindings: ({ witness }) => {
-            witness.deploy_lock_inode += 1;
-          },
-        },
-      },
-      {
-        name: "witness admission-hash drift",
-        code: "producer_authority_witness",
-        hooks: {
-          afterAuthorityBindings: ({ witness }) => {
-            witness.admission_sha256 = digest("d");
-          },
-        },
-      },
-      {
-        name: "terminal proof appears early",
-        code: "producer_authority_terminal",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal[50].terminal_proof = structuredClone(wal.at(-2).terminal_proof);
-          },
-        },
-      },
-      {
-        name: "terminal proof is missing",
-        code: "producer_authority_terminal",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal.at(-2).terminal_proof = null;
-            wal.at(-1).terminal_proof = null;
-          },
-        },
-      },
-      {
-        name: "terminal proof changes across retirement",
-        code: "producer_authority_transition",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal.at(-1).terminal_proof.fleet_sha256 = digest("e");
-          },
-        },
-      },
-      {
-        name: "globally rebound terminal fleet-sample formula",
-        code: "producer_authority_terminal",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal.at(-2).terminal_proof.fleet_sample_sha256 = digest("c");
-            wal.at(-1).terminal_proof.fleet_sample_sha256 = digest("c");
-          },
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.terminal_proof.fleet_sample_sha256 = digest("c");
-          },
-        },
-      },
-      {
-        name: "terminal drain events disagree despite a rebound chain",
-        code: "producer_authority_terminal",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            const drainWal = wal.at(-3);
-            const proofWal = wal.at(-2);
-            const terminalWal = wal.at(-1);
-            drainWal.events.at(-1).fleet_sha256 = digest("d");
-            proofWal.events.at(-1).fleet_sha256 = digest("d");
-            terminalWal.events.at(-1).fleet_sha256 = digest("d");
-          },
-        },
-      },
-      {
-        name: "globally rebound terminal authority formula",
-        code: "producer_authority_terminal",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal.at(-2).terminal_proof.authority_sha256 = digest("a");
-            wal.at(-1).terminal_proof.authority_sha256 = digest("a");
-          },
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.terminal_proof.authority_sha256 = digest("a");
-          },
-        },
-      },
-      {
-        name: "globally rebound provider-absence formula",
-        code: "producer_authority_terminal",
-        hooks: {
-          beforeChain: ({ wal }) => {
-            wal.at(-2).terminal_proof.provider_absence_sha256 = digest("b");
-            wal.at(-1).terminal_proof.provider_absence_sha256 = digest("b");
-          },
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.terminal_proof.provider_absence_sha256 = digest("b");
-          },
-        },
-      },
-      {
-        name: "receipt terminal WAL pointer drift",
-        code: "producer_authority_projection",
-        hooks: {
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.recovery_capsule.retirement_wal_sha256 = digest("f");
-          },
-        },
-      },
-      {
-        name: "receipt terminal-proof pointer drift",
-        code: "producer_authority_terminal",
-        hooks: {
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.terminal_proof_recorded_wal_ordinal -= 1;
-            receipt.terminal_proof_recorded_wal_sha256 =
-              receipt.wal_inventory.entries.at(-3).sha256;
-          },
-        },
-      },
-      {
-        name: "normalizer receipt binding drift",
-        code: "producer_authority_projection",
-        hooks: {
-          afterReceiptBindings: ({ receipt }) => {
-            receipt.operator_normalization_contract.declarations[1]
-              .receipt_binding = "operator_sha256";
-          },
-        },
-      },
-    ];
-    for (const testCase of cases) {
-      const forged = reboundProductionShapeAuthority(testCase.hooks);
-      expectMaintenanceRefusalCode(
-        () => validateRefenceReceiptWalAuthorityForTest(forged.request),
-        testCase.code,
+  test(
+    "full producer authority rejects deeply rebound semantic forgeries",
+    () => {
+      const rebound = reboundProductionShapeAuthority();
+      expect(
+        validateRefenceReceiptWalAuthorityForTest(rebound.request)
+          .wal_entry_count,
+      ).toBe(114);
+      expect(sha256(canonicalJson({
+        authority_baseline_verified: true,
+        disabled_at: "2026-08-21T18:49:13.745704Z",
+        allowed_origins_sha256:
+          "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        reserved_generation_rows: 0,
+        authoritative_v2_rows: 0,
+        received_v1_rows: 0,
+      }))).toBe(
+        "e4f7bc0756d7075fa50d129455fcde637a177ddf23647a69554f7f2864ef7c55",
       );
-    }
-  });
+      expect(sha256(canonicalJson({
+        app: "agenttool",
+        absent: [
+          "AGENTTOOL_COVENANT_V2_AUTHORITY_GENERATION",
+          "REDIS_URL",
+        ],
+        observations: 2,
+      }))).toBe(
+        "888214699cb6a9eab515d75f2e3e7f152d43cc6f60c67d2ddc378637257f982f",
+      );
+      const cases: Array<{
+        name: string;
+        code: string;
+        hooks: ProductionShapeMutationHooks;
+      }> = [
+        {
+          name: "fixed caveat substitution",
+          code: "producer_authority_projection",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              for (const entry of wal) entry.caveats[0] += " forged";
+            },
+          },
+        },
+        {
+          name: "ordinal drift after full rechain",
+          code: "producer_authority_wal",
+          hooks: {
+            beforeChain: ({ wal }) => wal[50].ordinal += 1,
+          },
+        },
+        {
+          name: "updated-at regression",
+          code: "producer_authority_wal",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal[49].updated_at = wal[51].updated_at;
+            },
+          },
+        },
+        {
+          name: "admission predates durable W1",
+          code: "producer_authority_admission",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              for (const entry of wal.slice(1)) {
+                entry.admission.proof_started_at = "2026-08-24T23:59:59.999Z";
+              }
+            },
+          },
+        },
+        {
+          name: "admission underclaims the two stable drain intervals",
+          code: "producer_authority_admission",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              const started = Date.parse(wal[1].admission.proof_started_at);
+              const completed = new Date(started + 10_273).toISOString();
+              for (const entry of wal.slice(1)) {
+                entry.admission.proof_completed_at = completed;
+              }
+            },
+          },
+        },
+        {
+          name: "single-WAL immutable audit drift",
+          code: "producer_authority_wal",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal[50].audit_evidence.source_sha256 = digest("e");
+            },
+          },
+        },
+        {
+          name: "event-checkpoint drift",
+          code: "producer_authority_transition",
+          hooks: {
+            beforeChain: ({ wal }) => wal[2].events.at(-1).action = "stop",
+          },
+        },
+        {
+          name: "stable fleet readback pair underclaims 1137ms",
+          code: "producer_authority_transition",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              const second = wal.find((entry: Record<string, any>) =>
+                /_readback_2$/.test(entry.checkpoint)
+              );
+              const firstAt = Date.parse(second.events.at(-2).at);
+              second.events.at(-1).at = new Date(firstAt + 1_136).toISOString();
+            },
+          },
+        },
+        {
+          name: "terminal drain round underclaims 5137ms",
+          code: "producer_authority_transition",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              const secondRound = wal.find((entry: Record<string, any>) =>
+                entry.checkpoint === "terminal_fleet_sample_2"
+              );
+              const firstDrainAt = Date.parse(secondRound.events.at(-2).at);
+              secondRound.events.at(-1).at = new Date(firstDrainAt + 5_136)
+                .toISOString();
+            },
+          },
+        },
+        {
+          name: "lock continuity drift",
+          code: "producer_authority_transition",
+          hooks: {
+            beforeChain: ({ wal }) => wal[50].lock.inode += 1,
+          },
+        },
+        {
+          name: "globally rebound capsule path",
+          code: "producer_authority_projection",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              for (const entry of wal.slice(1)) {
+                entry.recovery_capsule.path += ".forged";
+              }
+            },
+          },
+        },
+        {
+          name: "raw-bound anchor truth drift",
+          code: "producer_authority_anchor",
+          hooks: {
+            afterAuthorityBindings: ({ anchor }) => {
+              anchor.no_secret_values = false;
+            },
+          },
+        },
+        {
+          name: "raw-bound witness context drift",
+          code: "producer_authority_witness",
+          hooks: {
+            afterAuthorityBindings: ({ witness }) => {
+              witness.context_sha256 = digest("f");
+            },
+          },
+        },
+        {
+          name: "terminal proof pending truth drift",
+          code: "producer_authority_terminal",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal.at(-2).terminal_proof.capsule_retirement_pending = false;
+              wal.at(-1).terminal_proof.capsule_retirement_pending = false;
+            },
+          },
+        },
+        {
+          name: "normalization contract drift",
+          code: "producer_authority_projection",
+          hooks: {
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.operator_normalization_contract.algorithm += "_forged";
+            },
+          },
+        },
+        {
+          name: "receipt zero-effect truth drift",
+          code: "producer_authority_handoff",
+          hooks: {
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.migration_attempt_count = 1;
+            },
+          },
+        },
+        {
+          name: "hash-valid but nonderived WAL filename",
+          code: "producer_authority_wal",
+          hooks: {
+            filenameOverrides: {
+              50: `000051-${digest("a")}.json`,
+            },
+          },
+        },
+        {
+          name: "fully rehashed wrong prior pointer",
+          code: "producer_authority_wal",
+          hooks: {
+            priorEntryOverrides: { 50: digest("b") },
+          },
+        },
+        {
+          name: "reordered adjacent WAL values",
+          code: "producer_authority_wal",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              [wal[50], wal[51]] = [wal[51], wal[50]];
+            },
+          },
+        },
+        {
+          name: "inventory entry count drift",
+          code: "producer_authority_projection",
+          hooks: {
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.wal_inventory.entry_count -= 1;
+            },
+          },
+        },
+        {
+          name: "rehashed inventory projection drift",
+          code: "producer_authority_wal",
+          hooks: {
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.wal_inventory.entries[50].checkpoint += "_forged";
+              receipt.wal_inventory.chain_projection_sha256 = sha256(
+                canonicalJson(receipt.wal_inventory.entries),
+              );
+            },
+          },
+        },
+        {
+          name: "filename-set encoding drift",
+          code: "producer_authority_anchor",
+          hooks: {
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.wal_inventory.filename_set_sha256 = sha256(
+                `${receipt.wal_inventory.ordered_filenames.join("\n")}\n`,
+              );
+            },
+          },
+        },
+        {
+          name: "receipt-to-W1 started time drift",
+          code: "producer_authority_wal_capsule",
+          hooks: {
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.started_at = "2026-08-25T00:00:00.999Z";
+            },
+          },
+        },
+        {
+          name: "common started time drift after arming",
+          code: "producer_authority_event",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal[50].started_at = wal[50].updated_at;
+            },
+          },
+        },
+        {
+          name: "anchor created time drift with raw rebound",
+          code: "producer_authority_anchor",
+          hooks: {
+            afterAuthorityBindings: ({ anchor }) => {
+              anchor.created_at = "2026-08-25T00:00:00.999Z";
+            },
+          },
+        },
+        {
+          name: "armed witness time drift with raw rebound",
+          code: "producer_authority_witness",
+          hooks: {
+            afterAuthorityBindings: ({ witness }) => {
+              witness.armed_at = "2026-08-25T00:00:00.999Z";
+            },
+          },
+        },
+        {
+          name: "receipt completed time drift",
+          code: "producer_authority_anchor",
+          hooks: {
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.completed_at = "2026-08-25T00:00:00.999Z";
+            },
+          },
+        },
+        {
+          name: "context changes after W2",
+          code: "producer_authority_transition",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal[50].context.source_inventory_sha256 = digest("c");
+            },
+          },
+        },
+        {
+          name: "admission changes after W2",
+          code: "producer_authority_transition",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal[50].admission.local_state_sandwich_sha256 = digest("d");
+            },
+          },
+        },
+        {
+          name: "capsule retires before terminal WAL",
+          code: "producer_authority_transition",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal[50].recovery_capsule.retired = true;
+            },
+          },
+        },
+        {
+          name: "terminal WAL leaves capsule active",
+          code: "producer_authority_projection",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal.at(-1).recovery_capsule.retired = false;
+            },
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.recovery_capsule_retired = false;
+            },
+          },
+        },
+        {
+          name: "witness capsule-reference drift",
+          code: "producer_authority_witness",
+          hooks: {
+            afterAuthorityBindings: ({ witness }) => {
+              witness.recovery_capsule_reference_sha256 = digest("a");
+            },
+          },
+        },
+        {
+          name: "anchor first-WAL hash drift",
+          code: "producer_authority_anchor",
+          hooks: {
+            afterAuthorityBindings: ({ anchor }) => {
+              anchor.first_entry_sha256 = digest("b");
+            },
+          },
+        },
+        {
+          name: "globally rebound wrong anchor archive",
+          code: "producer_authority_handoff",
+          hooks: {
+            afterAuthorityBindings: ({ anchor }) => {
+              anchor.authorized_archive_path += ".forged";
+            },
+          },
+        },
+        {
+          name: "globally rebound wrong guard path",
+          code: "producer_authority_wal",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              for (const entry of wal) {
+                entry.readmission_guard.path += ".forged";
+              }
+            },
+          },
+        },
+        {
+          name: "witness armed ordinal drift",
+          code: "producer_authority_witness",
+          hooks: {
+            afterAuthorityBindings: ({ witness }) => {
+              witness.armed_wal_ordinal += 1;
+            },
+          },
+        },
+        {
+          name: "witness armed raw-hash drift",
+          code: "producer_authority_witness",
+          hooks: {
+            afterAuthorityBindings: ({ witness }) => {
+              witness.armed_wal_sha256 = digest("c");
+            },
+          },
+        },
+        {
+          name: "witness deploy-lock drift",
+          code: "producer_authority_witness",
+          hooks: {
+            afterAuthorityBindings: ({ witness }) => {
+              witness.deploy_lock_inode += 1;
+            },
+          },
+        },
+        {
+          name: "witness admission-hash drift",
+          code: "producer_authority_witness",
+          hooks: {
+            afterAuthorityBindings: ({ witness }) => {
+              witness.admission_sha256 = digest("d");
+            },
+          },
+        },
+        {
+          name: "terminal proof appears early",
+          code: "producer_authority_terminal",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal[50].terminal_proof = structuredClone(
+                wal.at(-2).terminal_proof,
+              );
+            },
+          },
+        },
+        {
+          name: "terminal proof is missing",
+          code: "producer_authority_terminal",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal.at(-2).terminal_proof = null;
+              wal.at(-1).terminal_proof = null;
+            },
+          },
+        },
+        {
+          name: "terminal proof changes across retirement",
+          code: "producer_authority_transition",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal.at(-1).terminal_proof.fleet_sha256 = digest("e");
+            },
+          },
+        },
+        {
+          name: "globally rebound terminal fleet-sample formula",
+          code: "producer_authority_terminal",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal.at(-2).terminal_proof.fleet_sample_sha256 = digest("c");
+              wal.at(-1).terminal_proof.fleet_sample_sha256 = digest("c");
+            },
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.terminal_proof.fleet_sample_sha256 = digest("c");
+            },
+          },
+        },
+        {
+          name: "terminal drain events disagree despite a rebound chain",
+          code: "producer_authority_terminal",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              const drainWal = wal.at(-3);
+              const proofWal = wal.at(-2);
+              const terminalWal = wal.at(-1);
+              drainWal.events.at(-1).fleet_sha256 = digest("d");
+              proofWal.events.at(-1).fleet_sha256 = digest("d");
+              terminalWal.events.at(-1).fleet_sha256 = digest("d");
+            },
+          },
+        },
+        {
+          name: "globally rebound terminal authority formula",
+          code: "producer_authority_terminal",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal.at(-2).terminal_proof.authority_sha256 = digest("a");
+              wal.at(-1).terminal_proof.authority_sha256 = digest("a");
+            },
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.terminal_proof.authority_sha256 = digest("a");
+            },
+          },
+        },
+        {
+          name: "globally rebound provider-absence formula",
+          code: "producer_authority_terminal",
+          hooks: {
+            beforeChain: ({ wal }) => {
+              wal.at(-2).terminal_proof.provider_absence_sha256 = digest("b");
+              wal.at(-1).terminal_proof.provider_absence_sha256 = digest("b");
+            },
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.terminal_proof.provider_absence_sha256 = digest("b");
+            },
+          },
+        },
+        {
+          name: "receipt terminal WAL pointer drift",
+          code: "producer_authority_projection",
+          hooks: {
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.recovery_capsule.retirement_wal_sha256 = digest("f");
+            },
+          },
+        },
+        {
+          name: "receipt terminal-proof pointer drift",
+          code: "producer_authority_terminal",
+          hooks: {
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.terminal_proof_recorded_wal_ordinal -= 1;
+              receipt.terminal_proof_recorded_wal_sha256 =
+                receipt.wal_inventory.entries.at(-3).sha256;
+            },
+          },
+        },
+        {
+          name: "normalizer receipt binding drift",
+          code: "producer_authority_projection",
+          hooks: {
+            afterReceiptBindings: ({ receipt }) => {
+              receipt.operator_normalization_contract.declarations[1]
+                .receipt_binding = "operator_sha256";
+            },
+          },
+        },
+      ];
+      for (const testCase of cases) {
+        const forged = reboundProductionShapeAuthority(testCase.hooks);
+        expectMaintenanceRefusalCode(
+          () => validateRefenceReceiptWalAuthorityForTest(forged.request),
+          testCase.code,
+        );
+      }
+    },
+    15_000,
+  );
 
   test("live H1 admission rejects a fully rechained restored-config forgery", () => {
     const forgedConfigSHA256 = digest("0");
@@ -2307,10 +2799,10 @@ describe("closed source normalization", () => {
     );
     const normalized = normalizedBridgeSource(source);
     expect(normalized).toContain(
-      'const BRIDGE_NORMALIZED_SHA256 =\n  "__BRIDGE_SELF_NORMALIZED_SHA256__";',
+      'const BRIDGE_NORMALIZED_SHA256 = "__BRIDGE_SELF_NORMALIZED_SHA256__";',
     );
     const pin = source.match(
-      /const BRIDGE_NORMALIZED_SHA256 =\n  "([0-9a-f]{64})";/,
+      /const BRIDGE_NORMALIZED_SHA256 = "([0-9a-f]{64})";/,
     );
     expect(pin).not.toBeNull();
     expect(pin![1]).toBe(sha256(normalized));
@@ -2321,6 +2813,30 @@ describe("closed source normalization", () => {
     expect(() => normalizedBridgeSource(`${source}\n${source}`)).toThrow(
       MaintenanceRefenceError,
     );
+    expect(() =>
+      normalizedBridgeSource(
+        source.replace(
+          /const BRIDGE_NORMALIZED_SHA256 = "[0-9a-f]{64}";\n/,
+          "",
+        ),
+      )
+    ).toThrow(MaintenanceRefenceError);
+    expect(() =>
+      normalizedBridgeSource(
+        source.replace(pin![1], pin![1].toUpperCase()),
+      )
+    ).toThrow(MaintenanceRefenceError);
+    expect(() =>
+      normalizedBridgeSource(
+        source.replace(pin![1], `${pin![1].slice(0, 63)}g`),
+      )
+    ).toThrow(MaintenanceRefenceError);
+    const outsideMutation = source.replace(
+      "Closed consumer for the one terminal",
+      "Closed consumer for a single terminal",
+    );
+    expect(outsideMutation).not.toBe(source);
+    expect(sha256(normalizedBridgeSource(outsideMutation))).not.toBe(pin![1]);
   });
 
   test("producer normalization mirrors the exact ordered ten-declaration contract", () => {
@@ -2710,8 +3226,8 @@ describe("closed source normalization", () => {
     expect(bridge).toContain(
       '"show", "HEAD:bin/phase-b-refence-maintenance-contract.ts"',
     );
-    expect(bridge).toContain(
-      '"bin/phase-b-refence-maintenance-contract.ts",\n  ]);',
+    expect(bridge).toMatch(
+      /"bin\/phase-b-refence-maintenance-contract\.ts",\s*\]\);/,
     );
   });
 
@@ -3076,11 +3592,11 @@ describe("closed source normalization", () => {
     expect(source).not.toContain(
       "if (activeProductionChild === record.child) activeProductionChild = null;",
     );
-    expect(source).toContain(
-      'evidence.edge === "H0",\n    "production_dependencies_pre_handoff"',
+    expect(source).toMatch(
+      /evidence\.edge === "H0",\s*"production_dependencies_pre_handoff"/,
     );
-    expect(source).toContain(
-      'request.base.controllerPhase === "post_handoff_childless" &&\n      request.evidence.edge === "H5"',
+    expect(source).toMatch(
+      /request\.base\.controllerPhase === "post_handoff_childless"\s*&&\s*request\.evidence\.edge === "H5"/,
     );
     expect(source).toContain("sealChildLaunchersForHandoff: () => {");
     expect(source).toContain("childLaunchersSealed = true;");
@@ -3139,7 +3655,8 @@ describe("closed source normalization", () => {
     expect(session).not.toContain("releaseDeployLockForController(");
     expect(session).not.toContain("runRefenceFlyCLI(");
     expect(session).not.toContain("Bun.spawn(");
-    const catchStart = session.indexOf("  } catch (error) {");
+    const catchStart = session.indexOf("catch (error) {");
+    expect(catchStart).toBeGreaterThan(0);
     const catchBody = session.slice(catchStart);
     const childSettle = catchBody.indexOf(
       "let cleanupUncertain = !await settleResourceTwice",
@@ -4299,8 +4816,8 @@ describe("closed source normalization", () => {
     expect(source).toContain(
       "this.#verifyDurableTransition(next, nextSHA256);",
     );
-    expect(source).toContain(
-      '} else if (this.#reconcileTransition(next, nextSHA256) === "next") {\n          durableInstall();',
+    expect(source).toMatch(
+      /} else if \(this\.#reconcileTransition\(next, nextSHA256\) === "next"\) \{\s*durableInstall\(\);/,
     );
     expect(source).toContain(
       'if (this.#value.status === "success_proven_receipt_pending")',
@@ -9030,10 +9547,10 @@ function successAuthorityRequestFixture(options: {
       source_revision: sourceRevision,
       source_tree: sourceTree,
       inventory_sha256:
-        "2387ed54df4f8aedc663f07975030f09e5edbff40e316d8930a32ddf7e747e2a",
-      inventory_byte_count: 130_534,
-      file_count: 706,
-      byte_count: 10_094_465,
+        "ba1ee2dc3ede33e02460fd139273199db0d2c8e075976a28ff230543d46a7626",
+      inventory_byte_count: 130_718,
+      file_count: 707,
+      byte_count: 10_102_535,
       context_device: 42,
       context_inode: 700,
       readback_sha256: digest("c"),
@@ -10131,6 +10648,35 @@ describe("two-artifact success finalization", () => {
       expect.objectContaining({ role: "marker", artifact: "marker", nlink: 0 }),
     );
     expect(
+      baseline.pointSnapshots.get("A0")?.open.map(({ role, nlink }) => ({
+        role,
+        nlink,
+      })),
+    ).toEqual([
+      { role: "lock", nlink: 2 },
+      { role: "marker", nlink: 1 },
+    ]);
+    expect(
+      baseline.pointSnapshots.get("R1")?.open.map(({ role, nlink }) => ({
+        role,
+        nlink,
+      })),
+    ).toEqual([
+      { role: "lock", nlink: 2 },
+      { role: "marker", nlink: 1 },
+      { role: "receipt", nlink: 1 },
+    ]);
+    expect(
+      baseline.pointSnapshots.get("W1")?.open.map(({ role, nlink }) => ({
+        role,
+        nlink,
+      })),
+    ).toEqual([
+      { role: "lock", nlink: 2 },
+      { role: "marker", nlink: 1 },
+      { role: "witness", nlink: 1 },
+    ]);
+    expect(
       baseline.pointSnapshots.get("L2_unlinked_before_directory_fsync")?.open,
     ).toContainEqual(
       expect.objectContaining({ role: "lock", artifact: "lock", nlink: 0 }),
@@ -10348,31 +10894,74 @@ describe("two-artifact success finalization", () => {
       closeAbandonedFinalizationLock(fixture);
     }
 
+    const replaceWithSameBytes = (
+      fixture: FinalizationTestFixture,
+      path: string,
+      bytes: string,
+      role: SuccessFinalizationOpenDescriptor["role"],
+      descriptors: readonly SuccessFinalizationOpenDescriptor[],
+    ): void => {
+      const retained = descriptors.find((entry) => entry.role === role);
+      expect(retained, `${role} descriptor retained`).toBeDefined();
+      const before = fstatSync(retained!.descriptor);
+      expect(before.nlink, `${role} original link count`).toBe(1);
+      unlinkSync(path);
+      const unlinked = fstatSync(retained!.descriptor);
+      expect(unlinked.dev, `${role} retained device`).toBe(before.dev);
+      expect(unlinked.ino, `${role} retained inode`).toBe(before.ino);
+      expect(unlinked.nlink, `${role} retained unlink`).toBe(0);
+      writeFileSync(path, bytes, { mode: 0o600 });
+      const replacement = lstatSync(path);
+      expect(replacement.isFile(), `${role} replacement regular`).toBeTrue();
+      expect(replacement.mode & 0o777, `${role} replacement mode`).toBe(0o600);
+      expect(replacement.size, `${role} replacement size`).toBe(
+        Buffer.byteLength(bytes),
+      );
+      expect(sha256(readFileSync(path)), `${role} replacement hash`).toBe(
+        sha256(bytes),
+      );
+      expect(replacement.dev, `${role} replacement device`).toBe(before.dev);
+      expect(replacement.ino, `${role} replacement inode`).not.toBe(
+        before.ino,
+      );
+      expect(fixture.lock.phase, `${role} mutation precedes release`).toBe(
+        role === "lock" ? "public_unlinked" : "held",
+      );
+    };
     const mutations: Array<{
+      name: string;
       point: SuccessFinalizationCrashPoint;
-      mutate(fixture: FinalizationTestFixture): void;
+      mutate(
+        fixture: FinalizationTestFixture,
+        descriptors: readonly SuccessFinalizationOpenDescriptor[],
+      ): void;
     }> = [
       {
+        name: "receipt stage mode drift at R1",
         point: "R1",
         mutate: (fixture) => chmodSync(fixture.paths.receiptStagePath, 0o644),
       },
       {
+        name: "receipt stage hash drift at R1",
         point: "R1",
         mutate: (fixture) =>
           writeFileSync(fixture.paths.receiptStagePath, "hash-drift"),
       },
       {
+        name: "receipt same-byte inode substitution at R1",
         point: "R1",
-        mutate: (fixture) => {
-          unlinkSync(fixture.paths.receiptStagePath);
-          writeFileSync(
+        mutate: (fixture, descriptors) => {
+          replaceWithSameBytes(
+            fixture,
             fixture.paths.receiptStagePath,
             fixture.artifacts.receiptBytesUTF8,
-            { mode: 0o600 },
+            "receipt",
+            descriptors,
           );
         },
       },
       {
+        name: "receipt foreign hardlink at R1",
         point: "R1",
         mutate: (fixture) =>
           linkSync(
@@ -10381,6 +10970,7 @@ describe("two-artifact success finalization", () => {
           ),
       },
       {
+        name: "receipt canonical inode substitution after link",
         point: "R2_linked_before_directory_fsync",
         mutate: (fixture) => {
           unlinkSync(fixture.paths.receiptPath);
@@ -10392,6 +10982,7 @@ describe("two-artifact success finalization", () => {
         },
       },
       {
+        name: "receipt canonical foreign hardlink after durability",
         point: "R3",
         mutate: (fixture) =>
           linkSync(
@@ -10400,28 +10991,33 @@ describe("two-artifact success finalization", () => {
           ),
       },
       {
+        name: "witness same-byte inode substitution at W1",
         point: "W1",
-        mutate: (fixture) => {
-          unlinkSync(fixture.paths.witnessStagePath);
-          writeFileSync(
+        mutate: (fixture, descriptors) => {
+          replaceWithSameBytes(
+            fixture,
             fixture.paths.witnessStagePath,
             fixture.artifacts.witnessBytesUTF8,
-            { mode: 0o600 },
+            "witness",
+            descriptors,
           );
         },
       },
       {
+        name: "marker same-byte inode substitution before M1",
         point: "W1",
-        mutate: (fixture) => {
-          unlinkSync(fixture.paths.markerPath);
-          writeFileSync(
+        mutate: (fixture, descriptors) => {
+          replaceWithSameBytes(
+            fixture,
             fixture.paths.markerPath,
             fixture.artifacts.markerBytesUTF8,
-            { mode: 0o600 },
+            "marker",
+            descriptors,
           );
         },
       },
       {
+        name: "marker claim inode substitution after link",
         point: "M1_linked_before_directory_fsync",
         mutate: (fixture) => {
           unlinkSync(fixture.paths.markerRetirementClaimPath);
@@ -10433,6 +11029,7 @@ describe("two-artifact success finalization", () => {
         },
       },
       {
+        name: "marker claim inode substitution after canonical unlink",
         point: "M2_unlinked_before_directory_fsync",
         mutate: (fixture) => {
           unlinkSync(fixture.paths.markerRetirementClaimPath);
@@ -10444,10 +11041,12 @@ describe("two-artifact success finalization", () => {
         },
       },
       {
+        name: "witness canonical mode drift after link",
         point: "W2_linked_before_directory_fsync",
         mutate: (fixture) => chmodSync(fixture.paths.witnessPath, 0o644),
       },
       {
+        name: "witness canonical foreign hardlink after durability",
         point: "W3",
         mutate: (fixture) =>
           linkSync(
@@ -10456,6 +11055,7 @@ describe("two-artifact success finalization", () => {
           ),
       },
       {
+        name: "marker claim recreation after unlink",
         point: "M3_unlinked_before_directory_fsync",
         mutate: (fixture) =>
           writeFileSync(
@@ -10465,12 +11065,16 @@ describe("two-artifact success finalization", () => {
           ),
       },
       {
+        name: "lock owner same-byte inode substitution after public unlink",
         point: "L1_unlinked_before_directory_fsync",
-        mutate: (fixture) => {
-          unlinkSync(fixture.lock.ownerPath);
-          writeFileSync(fixture.lock.ownerPath, fixture.lock.recordBytes, {
-            mode: 0o600,
-          });
+        mutate: (fixture, descriptors) => {
+          replaceWithSameBytes(
+            fixture,
+            fixture.lock.ownerPath,
+            fixture.lock.recordBytes,
+            "lock",
+            descriptors,
+          );
         },
       },
     ];
@@ -10479,15 +11083,14 @@ describe("two-artifact success finalization", () => {
       let injected = false;
       expect(() =>
         runFinalizationFixture(fixture, {
-          crash: (point) => {
+          crash: (point, descriptors) => {
             if (point !== mutation.point || injected) return;
             injected = true;
-            mutation.mutate(fixture);
+            mutation.mutate(fixture, descriptors);
           },
-        })
-      ).toThrow(MaintenanceRefenceError);
-      expect(injected).toBeTrue();
-      expect(fixture.lock.phase).not.toBe("released");
+        }), mutation.name).toThrow(MaintenanceRefenceError);
+      expect(injected, mutation.name).toBeTrue();
+      expect(fixture.lock.phase, mutation.name).not.toBe("released");
       closeAbandonedFinalizationLock(fixture);
     }
   });

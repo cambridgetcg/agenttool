@@ -29,11 +29,11 @@ const BRIDGE = join(ROOT, "bin/phase-b-refence-maintenance-bridge.ts");
 const GUARD = join(ROOT, "bin/phase-b-deploy-guard.ts");
 const BEGIN = "# BEGIN agenttool-phase-b-refence-maintenance-dispatch/v1\n";
 const END = "# END agenttool-phase-b-refence-maintenance-dispatch/v1\n\n";
-const BASE_SIZE = 206_338;
+const BASE_SIZE = 206_660;
 const BASE_SHA256 =
-  "2e9e6c269597dc2d74c86d5ef8f5bf9b10c68b2c3c22aaed7e88301ae94fa133";
-const BASE_BLOB_SHA1 = "32a8e2751561354e5281750567b8a7743de8f833";
-const BASE_REVISION = "a4a80db6dd58855eda1727f06a78f72c683952d1";
+  "64b51b69255201e14b7a46c85b846700cb66a117a5be9d883e9919f084f95dc3";
+const BASE_BLOB_SHA1 = "4db101ffec2ce6912aa32bbfae75139942e8d6d0";
+const BASE_REVISION = "a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6";
 const GUARD_SHA256 =
   "10fe5012e8069ede11eaa3abe0a05f08225d855bb722d52746279dbc21c5fade";
 const FIXED_REPO =
@@ -41,9 +41,9 @@ const FIXED_REPO =
 const FIXED_BUN_SHA256 =
   "66262f09134f780b1563bd1ae3dad13ea7d2ac669f8a5754f924b3c82abcc8f3";
 const FIXED_CONTROLLER_SHA256 =
-  "4d660ef6633a20093246515a7fd113913c82be8d77ed322487fbb6dd231e1324";
+  "5b422b303dd003ca84eaf93ef0a8046fa3fc1efbf43517deec71d37f5575a7f3";
 const FIXED_CONTROLLER_NORMALIZED_SHA256 =
-  "574b8b61f0c87a2e39e09662d9238889861a670672e14c1d23d8ccdf189923bd";
+  "4a704d835c446cb66969dbaf5091370b640ef01f2774a28cd3bd7253607964b0";
 const INVALID = "maintenance_refence_bridge_invalid_invocation\n";
 const REFUSED = "maintenance_refence_bridge_refused\n";
 const PERL_LAUNCHER =
@@ -385,7 +385,7 @@ async function createFixture(): Promise<DispatcherFixture> {
   );
   transformed = replaceExact(
     transformed,
-    'local controller_size="511803"',
+    'local controller_size="462849"',
     `local controller_size=${
       JSON.stringify(String(controllerBytes.byteLength))
     }`,
@@ -495,7 +495,7 @@ afterAll(async () => {
 });
 
 describe("Phase-B refence maintenance deploy dispatcher", () => {
-  test("is one reversible span at byte 1841 over the exact a4a deploy", async () => {
+  test("is one reversible span at byte 1841 over the exact main deploy", async () => {
     expect(Buffer.byteLength(BEGIN)).toBe(BEGIN.length);
     const beginBytes = Buffer.from(BEGIN);
     const endBytes = Buffer.from(END);
@@ -545,7 +545,7 @@ describe("Phase-B refence maintenance deploy dispatcher", () => {
     expect(dispatcherSpan).toContain("REFRESH_CONTROLLER_DISPATCH_PIN");
     const bridge = bridgeBytes.toString("utf8");
     expect(bridge).toContain(
-      `const BRIDGE_NORMALIZED_SHA256 =\n  "${FIXED_CONTROLLER_NORMALIZED_SHA256}";`,
+      `const BRIDGE_NORMALIZED_SHA256 = "${FIXED_CONTROLLER_NORMALIZED_SHA256}";`,
     );
     expect(bridge).not.toContain("__PIN_BRIDGE_SELF_NORMALIZED_SHA256__");
     const main = bridge.slice(
