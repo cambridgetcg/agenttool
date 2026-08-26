@@ -1157,6 +1157,14 @@ async function expandedBridgePackComparator(): Promise<string> {
       "export function parseGitTreeFiles(bytes: Uint8Array)",
     ],
     [
+      'const expression = /const BRIDGE_NORMALIZED_SHA256 =\\n  "[^"]+";/;',
+      'const expression = /const BRIDGE_NORMALIZED_SHA256 =\\n  "[0-9a-f]{64}";/;',
+    ],
+    [
+      "'const BRIDGE_NORMALIZED_SHA256 =\\n  \"__BRIDGE_SELF_NORMALIZED_SHA256__\";'",
+      "'const BRIDGE_NORMALIZED_SHA256 = \"__BRIDGE_SELF_NORMALIZED_SHA256__\";'",
+    ],
+    [
       "    const match = row.match(/^(100644|100755) blob ([0-9a-f]{40})\\t([^\\0]+)$/);",
       "    const match = row.match(\n      /^(100644|100755|120000) blob ([0-9a-f]{40})\\t([^\\0]+)$/,\n    );",
     ],
@@ -1482,23 +1490,29 @@ describe("closed source normalization", () => {
       const expanded = await expandedBridgePackComparator();
       const expandedFacts = maintenanceBridgePackFacts(expanded);
       expect(expandedFacts.rawSHA256).toBe(
-        "cbf5a1ef58b3af0b315904914f3266f70f9a9550385df3a81b9ba489f4a2ecbc",
+        "d6d47b2c66a656643c7389d92208260bf09167932b9bc510fe9348f5f58974fa",
       );
-      expect(expandedFacts.byteCount).toBe(511_871);
+      expect(expandedFacts.byteCount).toBe(511_875);
       expect(expandedFacts.lineEntries).toBe(14_998);
       expect(expandedFacts.leafCount).toBe(75_920);
       expect(expandedFacts.leafSHA256).toBe(
-        "303c90fa497d5f083761d7e4e3116a3f4bee4edbb797747d062f3862be0d203b",
+        "6f60ec6ab232ab81b846e2cbac4055cfc13afa16ffe44b30a4f49eb19ef658ba",
       );
       expect(expandedFacts.astShapeSHA256).toBe(
         "1321bc4fa40a4d5ac013c7cc7643c63214ee92fe18799cc554704da5ba28cc63",
       );
       expect(expandedFacts.emittedLeafCount).toBe(63_850);
       expect(expandedFacts.emittedLeafSHA256).toBe(
-        "15db5f5669d6885d3d4e89615b8161c7950614ce823a9d7cea80e6967f8a56dc",
+        "81f549d54a6511ff6fb02c818bceb5e017072346290b0c3b85c32f1d0609f94f",
       );
       const packedExpanded = packMaintenanceBridgeSource(expanded);
       const packedExpandedFacts = maintenanceBridgePackFacts(packedExpanded);
+      expect(packedExpanded.match(
+        /const BRIDGE_NORMALIZED_SHA256 =\n  "[0-9a-f]{64}";/g,
+      )).toHaveLength(1);
+      expect(packedExpanded).not.toMatch(
+        /^const BRIDGE_NORMALIZED_SHA256 = "[0-9a-f]{64}";$/m,
+      );
       expect(packedExpandedFacts.leafCount).toBe(expandedFacts.leafCount);
       expect(packedExpandedFacts.leafSHA256).toBe(expandedFacts.leafSHA256);
       expect(packedExpandedFacts.astShapeSHA256).toBe(
@@ -1525,6 +1539,9 @@ describe("closed source normalization", () => {
         "utf8",
       );
       expect(current.split("\n")[1]).toBe(BRIDGE_PACK_DIRECTIVE);
+      expect(current.match(
+        /const BRIDGE_NORMALIZED_SHA256 =\n  "[0-9a-f]{64}";/g,
+      )).toHaveLength(1);
       expect(packMaintenanceBridgeSource(current)).toBe(current);
       const currentFacts = maintenanceBridgePackFacts(current);
       expect(currentFacts.lineEntries).toBeLessThanOrEqual(
@@ -1534,14 +1551,14 @@ describe("closed source normalization", () => {
       expect(currentFacts.byteCount).toBeLessThan(512 * 1024);
       expect(currentFacts.leafCount).toBe(75_996);
       expect(currentFacts.leafSHA256).toBe(
-        "fbcf30ff37ed076854c315832aee8d4583387d4d66a58c6e99651bb1e958f215",
+        "0275f41d7d1687641babd0bc9545b9ca5b4f146e7c951b5e64462b960168a64e",
       );
       expect(currentFacts.astShapeSHA256).toBe(
         "80fbe2739612b166e5db35e088eaccf2f4d71f7e00d34ddf90ba8dfba70dfce0",
       );
       expect(currentFacts.emittedLeafCount).toBe(63_910);
       expect(currentFacts.emittedLeafSHA256).toBe(
-        "33d85dcc9e4ae3c2b84d0d32f16ee8cd64f118bb8aa982a0f7852d04418a6ae8",
+        "389b64b8ce42306376769ee3d8eb82816258e95373e1beb623961a984d6de2f7",
       );
     },
     15_000,
@@ -2802,7 +2819,7 @@ describe("closed source normalization", () => {
       'const BRIDGE_NORMALIZED_SHA256 = "__BRIDGE_SELF_NORMALIZED_SHA256__";',
     );
     const pin = source.match(
-      /const BRIDGE_NORMALIZED_SHA256 = "([0-9a-f]{64})";/,
+      /const BRIDGE_NORMALIZED_SHA256 =\n  "([0-9a-f]{64})";/,
     );
     expect(pin).not.toBeNull();
     expect(pin![1]).toBe(sha256(normalized));
@@ -2816,7 +2833,7 @@ describe("closed source normalization", () => {
     expect(() =>
       normalizedBridgeSource(
         source.replace(
-          /const BRIDGE_NORMALIZED_SHA256 = "[0-9a-f]{64}";\n/,
+          /const BRIDGE_NORMALIZED_SHA256 =\n  "[0-9a-f]{64}";\n/,
           "",
         ),
       )

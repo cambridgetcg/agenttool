@@ -168,6 +168,19 @@ function protectedNewlines(source: string, parsed: ParsedSource): Set<number> {
       protectedPositions.add(comment.end);
     }
   }
+  const selfPinDeclarations = [...source.matchAll(
+    /const BRIDGE_NORMALIZED_SHA256 =\n  "[0-9a-f]{64}";/g,
+  )];
+  if (
+    selfPinDeclarations.length !== 1 ||
+    selfPinDeclarations[0]!.index === undefined
+  ) {
+    throw new Error("bridge_pack_self_pin_contract");
+  }
+  const selfPinDeclaration = selfPinDeclarations[0]!;
+  const selfPinNewline = selfPinDeclaration[0].indexOf("\n");
+  if (selfPinNewline < 0) throw new Error("bridge_pack_self_pin_contract");
+  protectedPositions.add(selfPinDeclaration.index! + selfPinNewline);
   return protectedPositions;
 }
 
