@@ -36,6 +36,375 @@
 
 set -uo pipefail
 
+# BEGIN agenttool-phase-b-refence-maintenance-dispatch/v1
+_agenttool_refence_dispatch_invalid() {
+  builtin printf '%s\n' 'maintenance_refence_bridge_invalid_invocation' >&2
+  builtin exit 64
+}
+
+_agenttool_refence_dispatch_refused() {
+  builtin printf '%s\n' 'maintenance_refence_bridge_refused' >&2
+  builtin exit 74
+}
+
+_agenttool_refence_dispatch() {
+  local nocasematch_was_set=0
+  if builtin shopt -q nocasematch; then
+    nocasematch_was_set=1
+  fi
+  builtin shopt -u nocasematch
+  local selected=0
+  local argument
+  for argument in "$@"; do
+    case "$argument" in
+      --maintenance-refence*) selected=1 ;;
+    esac
+  done
+  if ((selected == 0)); then
+    if ((nocasematch_was_set == 1)); then
+      builtin shopt -s nocasematch
+    fi
+    return 0
+  fi
+  local LC_ALL=C LANG=C
+  builtin umask 077
+
+  local no_migrate_count=0
+  local no_frontend_count=0
+  local fenced_api_count=0
+  local receipt_count=0
+  local app_count=0
+  local primary_count=0
+  local standby_count=0
+  local receipt=""
+  local apps=""
+  local primary=""
+  local standby=""
+  for argument in "$@"; do
+    case "$argument" in
+      --no-migrate)
+        no_migrate_count=$((no_migrate_count + 1))
+        ;;
+      --no-frontend)
+        no_frontend_count=$((no_frontend_count + 1))
+        ;;
+      --maintenance-fenced-api)
+        fenced_api_count=$((fenced_api_count + 1))
+        ;;
+      --maintenance-refence-receipt-sha256=*)
+        receipt_count=$((receipt_count + 1))
+        receipt="${argument#*=}"
+        ;;
+      --maintenance-app-machines=*)
+        app_count=$((app_count + 1))
+        apps="${argument#*=}"
+        ;;
+      --maintenance-thinker-primary=*)
+        primary_count=$((primary_count + 1))
+        primary="${argument#*=}"
+        ;;
+      --maintenance-thinker-standby=*)
+        standby_count=$((standby_count + 1))
+        standby="${argument#*=}"
+        ;;
+      *)
+        _agenttool_refence_dispatch_invalid
+        ;;
+    esac
+  done
+  [ "$#" -eq 7 ] || _agenttool_refence_dispatch_invalid
+  [ "$no_migrate_count" -eq 1 ] || _agenttool_refence_dispatch_invalid
+  [ "$no_frontend_count" -eq 1 ] || _agenttool_refence_dispatch_invalid
+  [ "$fenced_api_count" -eq 1 ] || _agenttool_refence_dispatch_invalid
+  [ "$receipt_count" -eq 1 ] || _agenttool_refence_dispatch_invalid
+  [ "$app_count" -eq 1 ] || _agenttool_refence_dispatch_invalid
+  [ "$primary_count" -eq 1 ] || _agenttool_refence_dispatch_invalid
+  [ "$standby_count" -eq 1 ] || _agenttool_refence_dispatch_invalid
+  [[ "$receipt" =~ ^[0-9a-f]{64}$ ]] ||
+    _agenttool_refence_dispatch_invalid
+  [[ "$apps" =~ ^[0-9a-f]{14},[0-9a-f]{14},[0-9a-f]{14}$ ]] ||
+    _agenttool_refence_dispatch_invalid
+  [[ "$primary" =~ ^[0-9a-f]{14}$ ]] ||
+    _agenttool_refence_dispatch_invalid
+  [[ "$standby" =~ ^[0-9a-f]{14}$ ]] ||
+    _agenttool_refence_dispatch_invalid
+
+  local app_one="${apps%%,*}"
+  local app_tail="${apps#*,}"
+  local app_two="${app_tail%%,*}"
+  local app_three="${app_tail#*,}"
+  local machine_ids=(
+    "$app_one"
+    "$app_two"
+    "$app_three"
+    "$primary"
+    "$standby"
+  )
+  local machine_i
+  local machine_j
+  for ((machine_i = 0; machine_i < 5; machine_i++)); do
+    for ((machine_j = machine_i + 1; machine_j < 5; machine_j++)); do
+      [ "${machine_ids[$machine_i]}" != "${machine_ids[$machine_j]}" ] ||
+        _agenttool_refence_dispatch_invalid
+    done
+  done
+
+  local filesystem_root="/"
+  local users_root="/Users"
+  local home="/Users/yournameisai"
+  local operator="yournameisai"
+  local operator_uid="501"
+  local operator_gid="20"
+  [ "$UID" = "$operator_uid" ] || _agenttool_refence_dispatch_refused
+  [ "$EUID" = "$operator_uid" ] || _agenttool_refence_dispatch_refused
+  [ "${GROUPS[0]}" = "$operator_gid" ] ||
+    _agenttool_refence_dispatch_refused
+  local repo="/Users/yournameisai/.cache/codex-worktrees/agenttool-phase-b-refence-maintenance-bridge-v1"
+  local controller="$repo/bin/phase-b-refence-maintenance-bridge.ts"
+  # REFRESH_CONTROLLER_DISPATCH_PIN only after the controller self-pin and
+  # activation entry are frozen; the dispatcher must bind executed TS bytes.
+  local controller_sha256="5b422b303dd003ca84eaf93ef0a8046fa3fc1efbf43517deec71d37f5575a7f3"
+  local controller_size="462849"
+  local bun_directory="$home/.cache/pinned-runtimes/bun-v1.3.5/bun-darwin-aarch64"
+  local bun="$bun_directory/bun"
+  local bun_sha256="66262f09134f780b1563bd1ae3dad13ea7d2ac669f8a5754f924b3c82abcc8f3"
+  local bun_size="59885424"
+  local bun_magic="cffaedfe0c000001"
+  local runtime_path="$home/.cache/codex-tools/flyctl-v0.4.74:$bun_directory:/usr/bin:/bin:/usr/sbin:/sbin"
+  local controller_environment=(
+    "HOME=$home"
+    "USER=$operator"
+    "LOGNAME=$operator"
+    "LANG=C"
+    "LC_ALL=C"
+    "NO_COLOR=1"
+    "TERM=dumb"
+    "PATH=$runtime_path"
+  )
+  local tool_environment=("LANG=C" "LC_ALL=C" "PATH=/usr/bin:/bin")
+  local directory_contracts=(
+    "$filesystem_root|0|0|755"
+    "$users_root|0|80|755"
+    "$home|$operator_uid|$operator_gid|700"
+    "$home/.cache|$operator_uid|$operator_gid|755"
+    "$home/.cache/pinned-runtimes|$operator_uid|$operator_gid|755"
+    "$home/.cache/pinned-runtimes/bun-v1.3.5|$operator_uid|$operator_gid|755"
+    "$bun_directory|$operator_uid|$operator_gid|755"
+    "$home/.cache/codex-worktrees|$operator_uid|$operator_gid|755"
+    "$repo|$operator_uid|$operator_gid|755"
+    "$repo/bin|$operator_uid|$operator_gid|755"
+  )
+  local directory_contract
+  local directory_path
+  local directory_uid
+  local directory_gid
+  local directory_mode
+  local directory_observed
+  local directory_snapshots=()
+  for directory_contract in "${directory_contracts[@]}"; do
+    IFS='|' read -r directory_path directory_uid directory_gid directory_mode \
+      <<< "$directory_contract"
+    directory_observed="$(
+      /usr/bin/env -i "${tool_environment[@]}" \
+        /usr/bin/stat -f '%HT|%u|%g|%Lp|%d|%i' -- "$directory_path" 2>&1
+    )" || _agenttool_refence_dispatch_refused
+    [[ "$directory_observed" =~ ^Directory\|$directory_uid\|$directory_gid\|$directory_mode\|[0-9]+\|[1-9][0-9]*$ ]] ||
+      _agenttool_refence_dispatch_refused
+    directory_snapshots+=("$directory_observed")
+  done
+
+  local bun_stat_a
+  local bun_type
+  local bun_uid
+  local bun_gid
+  local bun_mode
+  local bun_nlink
+  local bun_observed_size
+  local bun_device
+  local bun_inode
+  bun_stat_a="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/stat -f '%HT|%u|%g|%Lp|%l|%z|%d|%i' -- "$bun" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  IFS='|' read -r bun_type bun_uid bun_gid bun_mode bun_nlink \
+    bun_observed_size bun_device bun_inode <<< "$bun_stat_a"
+  [ "$bun_type" = "Regular File" ] || _agenttool_refence_dispatch_refused
+  [ "$bun_uid" = "$operator_uid" ] || _agenttool_refence_dispatch_refused
+  [ "$bun_gid" = "$operator_gid" ] || _agenttool_refence_dispatch_refused
+  [ "$bun_mode" = "755" ] || _agenttool_refence_dispatch_refused
+  [ "$bun_nlink" = "1" ] || _agenttool_refence_dispatch_refused
+  [ "$bun_observed_size" = "$bun_size" ] ||
+    _agenttool_refence_dispatch_refused
+  [[ "$bun_device" =~ ^[0-9]+$ ]] || _agenttool_refence_dispatch_refused
+  [[ "$bun_inode" =~ ^[1-9][0-9]*$ ]] ||
+    _agenttool_refence_dispatch_refused
+
+  local observed_magic
+  observed_magic="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/xxd -p -c 8 -l 8 -- "$bun" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  [ "$observed_magic" = "$bun_magic" ] ||
+    _agenttool_refence_dispatch_refused
+
+  local observed_hash
+  observed_hash="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/shasum -a 256 -- "$bun" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  [ "$observed_hash" = "$bun_sha256  $bun" ] ||
+    _agenttool_refence_dispatch_refused
+
+  local bun_stat_b
+  bun_stat_b="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/stat -f '%HT|%u|%g|%Lp|%l|%z|%d|%i' -- "$bun" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  [ "$bun_stat_b" = "$bun_stat_a" ] ||
+    _agenttool_refence_dispatch_refused
+
+  local controller_stat_a
+  local controller_type
+  local controller_uid
+  local controller_gid
+  local controller_mode
+  local controller_nlink
+  local controller_observed_size
+  local controller_device
+  local controller_inode
+  controller_stat_a="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/stat -f '%HT|%u|%g|%Lp|%l|%z|%d|%i' -- "$controller" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  IFS='|' read -r controller_type controller_uid controller_gid \
+    controller_mode controller_nlink controller_observed_size \
+    controller_device controller_inode <<< "$controller_stat_a"
+  [ "$controller_type" = "Regular File" ] ||
+    _agenttool_refence_dispatch_refused
+  [ "$controller_uid" = "$operator_uid" ] ||
+    _agenttool_refence_dispatch_refused
+  [ "$controller_gid" = "$operator_gid" ] ||
+    _agenttool_refence_dispatch_refused
+  [ "$controller_mode" = "644" ] ||
+    _agenttool_refence_dispatch_refused
+  [ "$controller_nlink" = "1" ] ||
+    _agenttool_refence_dispatch_refused
+  [ "$controller_observed_size" = "$controller_size" ] ||
+    _agenttool_refence_dispatch_refused
+  [[ "$controller_device" =~ ^[0-9]+$ ]] ||
+    _agenttool_refence_dispatch_refused
+  [[ "$controller_inode" =~ ^[1-9][0-9]*$ ]] ||
+    _agenttool_refence_dispatch_refused
+
+  local observed_controller_hash
+  observed_controller_hash="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/shasum -a 256 -- "$controller" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  [ "$observed_controller_hash" = "$controller_sha256  $controller" ] ||
+    _agenttool_refence_dispatch_refused
+
+  local controller_stat_b
+  controller_stat_b="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/stat -f '%HT|%u|%g|%Lp|%l|%z|%d|%i' -- "$controller" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  [ "$controller_stat_b" = "$controller_stat_a" ] ||
+    _agenttool_refence_dispatch_refused
+
+  local observed_version
+  local version_sentinel="__agenttool_refence_version_end__"
+  observed_version="$(
+    /usr/bin/env -i "${controller_environment[@]}" \
+      "$bun" --no-install --no-env-file --config=/dev/null \
+      "--cwd=$repo" --version 2>&1
+    version_status=$?
+    builtin printf '%s' "$version_sentinel"
+    builtin exit "$version_status"
+  )" || _agenttool_refence_dispatch_refused
+  [ "$observed_version" = $'1.3.5\n'"$version_sentinel" ] ||
+    _agenttool_refence_dispatch_refused
+
+  local bun_stat_c
+  bun_stat_c="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/stat -f '%HT|%u|%g|%Lp|%l|%z|%d|%i' -- "$bun" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  [ "$bun_stat_c" = "$bun_stat_a" ] ||
+    _agenttool_refence_dispatch_refused
+
+  local directory_index=0
+  for directory_contract in "${directory_contracts[@]}"; do
+    IFS='|' read -r directory_path directory_uid directory_gid directory_mode \
+      <<< "$directory_contract"
+    directory_observed="$(
+      /usr/bin/env -i "${tool_environment[@]}" \
+        /usr/bin/stat -f '%HT|%u|%g|%Lp|%d|%i' -- "$directory_path" 2>&1
+    )" || _agenttool_refence_dispatch_refused
+    [ "$directory_observed" = "${directory_snapshots[$directory_index]}" ] ||
+      _agenttool_refence_dispatch_refused
+    directory_index=$((directory_index + 1))
+  done
+
+  observed_controller_hash="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/shasum -a 256 -- "$controller" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  [ "$observed_controller_hash" = "$controller_sha256  $controller" ] ||
+    _agenttool_refence_dispatch_refused
+
+  local controller_stat_c
+  controller_stat_c="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/stat -f '%HT|%u|%g|%Lp|%l|%z|%d|%i' -- "$controller" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  [ "$controller_stat_c" = "$controller_stat_a" ] ||
+    _agenttool_refence_dispatch_refused
+
+  observed_magic="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/xxd -p -c 8 -l 8 -- "$bun" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  [ "$observed_magic" = "$bun_magic" ] ||
+    _agenttool_refence_dispatch_refused
+  observed_hash="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/shasum -a 256 -- "$bun" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  [ "$observed_hash" = "$bun_sha256  $bun" ] ||
+    _agenttool_refence_dispatch_refused
+
+  local bun_stat_d
+  bun_stat_d="$(
+    /usr/bin/env -i "${tool_environment[@]}" \
+      /usr/bin/stat -f '%HT|%u|%g|%Lp|%l|%z|%d|%i' -- "$bun" 2>&1
+  )" || _agenttool_refence_dispatch_refused
+  [ "$bun_stat_d" = "$bun_stat_a" ] ||
+    _agenttool_refence_dispatch_refused
+
+  local perl_launcher='my $refusal="maintenance_refence_bridge_refused\n";@ARGV==17 or do{print STDERR $refusal;exit 74};my($home,$operator,$path,$bun,@arguments)=@ARGV;%ENV=("HOME"=>$home,"USER"=>$operator,"LOGNAME"=>$operator,"LANG"=>"C","LC_ALL"=>"C","NO_COLOR"=>"1","TERM"=>"dumb","PATH"=>$path);{local $SIG{"__WARN__"}=sub{};exec {$bun} $bun,@arguments}print STDERR $refusal;exit 74'
+  builtin shopt -s execfail
+  builtin exec /usr/bin/env -i LANG=C LC_ALL=C PATH=/usr/bin:/bin \
+    /usr/bin/perl -e "$perl_launcher" \
+    "$home" "$operator" "$runtime_path" "$bun" \
+    --no-install --no-env-file --config=/dev/null "--cwd=$repo" \
+    "$controller" controller \
+    --no-migrate \
+    --no-frontend \
+    --maintenance-fenced-api \
+    "--maintenance-refence-receipt-sha256=$receipt" \
+    "--maintenance-app-machines=$apps" \
+    "--maintenance-thinker-primary=$primary" \
+    "--maintenance-thinker-standby=$standby"
+  _agenttool_refence_dispatch_refused
+}
+
+_agenttool_refence_dispatch "$@"
+builtin unset -f _agenttool_refence_dispatch
+builtin unset -f _agenttool_refence_dispatch_invalid
+builtin unset -f _agenttool_refence_dispatch_refused
+# END agenttool-phase-b-refence-maintenance-dispatch/v1
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 DEPLOY_STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
