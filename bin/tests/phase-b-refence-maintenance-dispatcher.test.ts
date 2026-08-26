@@ -41,9 +41,9 @@ const FIXED_REPO =
 const FIXED_BUN_SHA256 =
   "66262f09134f780b1563bd1ae3dad13ea7d2ac669f8a5754f924b3c82abcc8f3";
 const FIXED_CONTROLLER_SHA256 =
-  "6be6664c2dee86ac427dda893a7f2aa51ee639951e00a6e802c60f98fa153f5c";
+  "5ebe56c754c39a12bf851b967acbbc31ca5dfa644d15e736c736353c9636ef54";
 const FIXED_CONTROLLER_NORMALIZED_SHA256 =
-  "539b4711da2628946a6592944ab0ea9da40db711accdbe412520267540c41c8e";
+  "e4c7a8ace65d84a3715182cb96d735747cadaf076e55efbbdde7c2f2bb1c5f2d";
 const INVALID = "maintenance_refence_bridge_invalid_invocation\n";
 const REFUSED = "maintenance_refence_bridge_refused\n";
 const PERL_LAUNCHER =
@@ -385,7 +385,7 @@ async function createFixture(): Promise<DispatcherFixture> {
   );
   transformed = replaceExact(
     transformed,
-    'local controller_size="495050"',
+    'local controller_size="520855"',
     `local controller_size=${
       JSON.stringify(String(controllerBytes.byteLength))
     }`,
