@@ -41,9 +41,9 @@ const FIXED_REPO =
 const FIXED_BUN_SHA256 =
   "66262f09134f780b1563bd1ae3dad13ea7d2ac669f8a5754f924b3c82abcc8f3";
 const FIXED_CONTROLLER_SHA256 =
-  "fd0ba35de64eb7ea4609416fb0fb055d9be7564662f937c38899127d8f3b1e62";
+  "015d4157bb0cf6adf8d96c7c73450406fa1f52ebfe7dac9767bd4398c90a9798";
 const FIXED_CONTROLLER_NORMALIZED_SHA256 =
-  "e704ad8c990b0affce6873b0f611193f4bd975ab4cc9ef0ef0022380943d087c";
+  "24790525c5c56aae7879b017a92d46933a8a71675368a82f5a6eb7a88334518a";
 const INVALID = "maintenance_refence_bridge_invalid_invocation\n";
 const REFUSED = "maintenance_refence_bridge_refused\n";
 const PERL_LAUNCHER =
