@@ -195,6 +195,7 @@ const PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES = [
   { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/phase-b-refence-maintenance-contract.ts" },
   { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/tests/phase-b-refence-maintenance-bridge.test.ts" },
   { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts" },
+  { old_mode: "100644", new_mode: "100644", status: "M", path: "packages/constructive-intelligence/tests/concurrency.test.ts" },
 ] as const;
 
 function protectedSuccessorGitProof(evidence: TerminalEvidence) {
@@ -1601,16 +1602,16 @@ describe("closed source normalization", () => {
       );
       expect(currentFacts.longestLine).toBeLessThanOrEqual(320);
       expect(currentFacts.byteCount).toBeLessThan(512 * 1024);
-      expect(currentFacts.leafCount).toBe(80_458);
+      expect(currentFacts.leafCount).toBe(80_460);
       expect(currentFacts.leafSHA256).toBe(
-        "f4cc6b7288cce9f286724d45cc488f0031574f537433f1dc13e18e63d666e99e",
+        "808e25b7670675d824de334255bfad69dd4113b7e18ac9d69358603f425bffea",
       );
       expect(currentFacts.astShapeSHA256).toBe(
-        "55a530570143fd75046f52411d186e3072b386d9bc86b72efbf3ab769626d271",
+        "d69aee9de4aee8ebdecfc46f1900e4bf7a7b46917d4bb4ec2fbe12e823ce8110",
       );
-      expect(currentFacts.emittedLeafCount).toBe(67_920);
+      expect(currentFacts.emittedLeafCount).toBe(67_922);
       expect(currentFacts.emittedLeafSHA256).toBe(
-        "a842ef30471a782177ecc26284727ae6cda49960f003192984fa90854bd9bd0f",
+        "a950dc332dfc1454029dfb15995b58ba0b5163fcf3d6f9df1f7adc76258ab609",
       );
     },
     15_000,
@@ -3220,7 +3221,7 @@ describe("closed source normalization", () => {
     ).toThrow(MaintenanceRefenceError);
   });
 
-  test("raw successor commit and five-path mode proofs refuse descendants and widening", () => {
+  test("raw successor commit and six-path mode proofs refuse descendants and widening", () => {
     const commit = (
       parents: readonly string[],
       tree = revision("f"),
@@ -3270,9 +3271,12 @@ describe("closed source normalization", () => {
       )
     ).toThrow(MaintenanceRefenceError);
 
-    const rawDiff = (projection = PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES) =>
+    const rawDiff = (
+      projection = PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
+      unchangedBlobIndex?: number,
+    ) =>
       Buffer.from(projection.map((entry, index) =>
-        `:${entry.old_mode} ${entry.new_mode} ${String(index + 1).repeat(40).slice(0, 40)} ${String(index + 6).repeat(40).slice(0, 40)} ${entry.status}\0${entry.path}\0`
+        `:${entry.old_mode} ${entry.new_mode} ${String(index + 1).repeat(40).slice(0, 40)} ${String(unchangedBlobIndex === index ? index + 1 : index + 6).repeat(40).slice(0, 40)} ${entry.status}\0${entry.path}\0`
       ).join(""));
     expect(parseProtectedSuccessorChangedPathsForTest(rawDiff())).toEqual(
       PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
@@ -3283,6 +3287,12 @@ describe("closed source normalization", () => {
       (value: any[]) => value[0].new_mode = "100644",
       (value: any[]) => value[1].status = "A",
       (value: any[]) => value[2].path = "bin/other.ts",
+      (value: any[]) => value[5].old_mode = "100755",
+      (value: any[]) => value[5].new_mode = "100755",
+      (value: any[]) => value[5].status = "D",
+      (value: any[]) =>
+        value[5].path = "packages/constructive-intelligence/tests/other.test.ts",
+      (value: any[]) => value.splice(4, 0, value.pop()),
     ]) {
       const changed = structuredClone(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES) as any[];
       mutate(changed);
@@ -3290,6 +3300,17 @@ describe("closed source normalization", () => {
         parseProtectedSuccessorChangedPathsForTest(rawDiff(changed as any))
       ).toThrow(MaintenanceRefenceError);
     }
+    expect(() =>
+      parseProtectedSuccessorChangedPathsForTest(
+        Buffer.concat([rawDiff(), Buffer.from("trailing\0")]),
+      )
+    ).toThrow(MaintenanceRefenceError);
+    expect(() =>
+      parseProtectedSuccessorChangedPathsForTest(rawDiff(
+        PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
+        5,
+      ))
+    ).toThrow(MaintenanceRefenceError);
   });
 
   test("typed successor proof never promotes a different H0 or historical guard", () => {
@@ -3578,9 +3599,9 @@ describe("closed source normalization", () => {
     expect(stat.mode & 0o777).toBe(0o644);
     expect(stat.nlink).toBe(1);
     expect(rawSHA256).toBe(
-      "3646a812cfbe607c387f052b535fe10bce13e8de83cc87d484dcad9e08eade68",
+      "e1b05bcdaa7e7775cb7156660e87d65a0e9bba0a54b8cb1f0cc062f1b14aea14",
     );
-    expect(blobSHA1).toBe("e224807f30e0f1b77b9c5283a254f33392366084");
+    expect(blobSHA1).toBe("c543e1e79f1efd1d24fbf2de539884b0f44b4e9a");
 
     const transpiler = new Bun.Transpiler({ loader: "ts", target: "bun" });
     const scan = transpiler.scan(source);

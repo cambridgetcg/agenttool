@@ -96,8 +96,8 @@ const REPOSITORY_ROOT = "/Users/yournameisai/.cache/codex-worktrees/agenttool-ph
 const MIGRATIONS_DIR = join(REPOSITORY_ROOT, "api/migrations");
 const BRIDGE_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-refence-maintenance-bridge.ts", );
 const CONTRACT_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-refence-maintenance-contract.ts", );
-const CONTRACT_SOURCE_SHA256 = "3646a812cfbe607c387f052b535fe10bce13e8de83cc87d484dcad9e08eade68";
-const CONTRACT_SOURCE_GIT_BLOB = "e224807f30e0f1b77b9c5283a254f33392366084";
+const CONTRACT_SOURCE_SHA256 = "e1b05bcdaa7e7775cb7156660e87d65a0e9bba0a54b8cb1f0cc062f1b14aea14";
+const CONTRACT_SOURCE_GIT_BLOB = "c543e1e79f1efd1d24fbf2de539884b0f44b4e9a";
 const ORDINARY_GUARD_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-deploy-guard.ts", );
 const ORDINARY_GUARD_SHA256 = "10fe5012e8069ede11eaa3abe0a05f08225d855bb722d52746279dbc21c5fade";
 const ORDINARY_GUARD_GIT_BLOB = "4d2b5be9ac6285d6d3293a1d41c3a36bc7c8f003";
@@ -129,7 +129,7 @@ const AUTHORIZED_H0_GUARD_NORMALIZED_SHA256 = "9e0ddd120fa6d605f68a86be35303a1b2
 const AUTHORIZED_H0_CONTRACT_RAW_SHA256 = "0c7ad30f81271b42a2339fcf1f87705c1ff6ee4a5906506f8a2c089ab92e74a1";
 const AUTHORIZED_H0_CONTRACT_GIT_BLOB = "ea83765c054b3bf130a4c8957a5a30ef1e657cb6";
 const PROTECTED_SUCCESSOR_CHANGED_PATHS = Object.freeze([ "bin/deploy.sh", "bin/phase-b-refence-maintenance-bridge.ts", "bin/phase-b-refence-maintenance-contract.ts", "bin/tests/phase-b-refence-maintenance-bridge.test.ts",
-  "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts", ] as const);
+  "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts", "packages/constructive-intelligence/tests/concurrency.test.ts", ] as const);
 const PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES = Object.freeze( PROTECTED_SUCCESSOR_CHANGED_PATHS.map((path) => Object.freeze({ old_mode: path === "bin/deploy.sh" ? "100755" as const : "100644" as const,
     new_mode: path === "bin/deploy.sh" ? "100755" as const : "100644" as const, status: "M" as const, path })), );
 const GIT_CLOSED_FLAGS = [ "--no-replace-objects", "--no-optional-locks", "-c", "credential.helper=", "-c", "credential.interactive=false", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "http.proxy=", "-c", "https.proxy=", "-c",
@@ -202,7 +202,7 @@ const EXPECTED_CONSTRAINT_DEFINITIONS: Readonly<
 const REFENCE_OPERATOR_SEMANTIC_SHA256 = "f4ff28f2bd46c608745e56ca82001c9e4252cc16e8e07252ca60c804f38ecf7f";
 // deno-fmt-ignore
 const BRIDGE_NORMALIZED_SHA256 =
-  "90b7cae46ba8b5a91720650699cef93d63006ddecc66f4c16a216df7335e8d35";
+  "539b4711da2628946a6592944ab0ea9da40db711accdbe412520267540c41c8e";
 
 const MAX_PRIVATE_BYTES = 1_000_000;
 const MAX_CHILD_BYTES = 2_000_000;

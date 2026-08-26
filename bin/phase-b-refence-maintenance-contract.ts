@@ -7068,6 +7068,13 @@ export function createMaintenanceContract(
               path:
                 "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts",
             },
+            {
+              old_mode: "100644",
+              new_mode: "100644",
+              status: "M",
+              path:
+                "packages/constructive-intelligence/tests/concurrency.test.ts",
+            },
           ]) &&
         compatibilityController.changed_path_statuses_sha256 ===
           digest(canonical(compatibilityController.changed_path_statuses)) &&
