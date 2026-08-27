@@ -6,6 +6,57 @@ export interface ContractPrimitives { canonical(value: unknown): string;
   digest(value: string): string;
   refuse(code: string): never; }
 
+export type HandoffEdge = "H0" | "H1" | "H2" | "H3" | "H4" | "H5";
+export type HandoffCrashPoint = | "H1_file_fsynced_before_directory_fsync"
+  | "H2_linked_before_directory_fsync"
+  | "H3_linked_before_directory_fsync"
+  | "H4_renamed_before_directory_fsync"
+  | "H5_unlinked_before_directory_fsync";
+export type SuccessFinalizationCrashPoint = | "A0"
+  | "R1"
+  | "R2_linked_before_directory_fsync"
+  | "R3"
+  | "R4_unlinked_before_directory_fsync"
+  | "R5"
+  | "W1"
+  | "M1_linked_before_directory_fsync"
+  | "M1"
+  | "M2_unlinked_before_directory_fsync"
+  | "M2"
+  | "W2_linked_before_directory_fsync"
+  | "W2"
+  | "W3_unlinked_before_directory_fsync"
+  | "W3"
+  | "M3_unlinked_before_directory_fsync"
+  | "M3"
+  | "L1_unlinked_before_directory_fsync"
+  | "L1"
+  | "L2_unlinked_before_directory_fsync"
+  | "L2";
+export interface DurableFileIdentity { device: number;
+  inode: number;
+  sha256: string;
+  size: number; }
+export interface DeployLockAuthority { readonly ownerPath: string;
+  readonly recordBytes: string;
+  readonly identity: DurableFileIdentity;
+  readonly descriptor: number;
+  phase: "held" | "public_unlinked" | "released"; }
+export interface SuccessFinalizationPaths { stateDirectory: string;
+  lockDirectory: string;
+  receiptDirectory: string;
+  worktree: string;
+  markerPath: string;
+  markerRetirementClaimPath: string;
+  receiptPath: string;
+  receiptStagePath: string;
+  witnessPath: string;
+  witnessStagePath: string;
+  publicLockPath: string; }
+export type SuccessFinalizationDescriptorRole = "lock" | "receipt" | "marker" | "witness";
+export interface SuccessFinalizationOpenDescriptor { role: SuccessFinalizationDescriptorRole;
+  descriptor: number; }
+
 export interface ContractEvidence { edge: string;
   runID: string;
   receiptSHA256: string;
@@ -38,6 +89,232 @@ export interface ContractEvidence { edge: string;
   producerTerminalProof: { journalSHA256: string;
     drainSampleSHA256: string;
     drainEventSHA256s: [string, string, string]; }; }
+
+export interface TerminalEvidence { receipt: Row;
+  receiptSHA256: string;
+  runID: string;
+  roles: ContractEvidence["roles"];
+  sourceRevision: string;
+  sourceTree: string;
+  targetRevision: string;
+  targetTree: string;
+  targetDistance: number;
+  anchor: Row;
+  anchorSHA256: string;
+  anchorPath: string;
+  anchorArchivePath: string;
+  anchorStat: { dev: number; ino: number; size: number };
+  witness: Row;
+  witnessSHA256: string;
+  witnessPath: string;
+  witnessArchivePath: string;
+  witnessStat: { dev: number; ino: number; size: number };
+  walDirectory: string;
+  walInventorySHA256: string;
+  terminalWalSHA256: string;
+  imageContract: Row;
+  sourceInventorySHA256: string;
+  journalInventorySHA256: string;
+  cronSHA256: string;
+  restoredConfigSHA256ByMachine: Record<string, string>;
+  fencedConfigSHA256ByMachine: Record<string, string>;
+  deployReceiptInventorySHA256: string;
+  deployReceiptFileCount: number;
+  producerAdmission: { embeddedCriticalContractSHA256: string;
+    localStateSandwichSHA256: string; };
+  producerTerminalProof: { journalSHA256: string;
+    drainSampleSHA256: string;
+    drainEventSHA256s: [string, string, string]; };
+  producerGuardRawSHA256: string;
+  producerGuardNormalizedSHA256: string;
+  bridgeRawSHA256: string;
+  bridgeNormalizedSHA256: string;
+  edge: HandoffEdge; }
+export interface MarkerBindings { rolloutID: string;
+  receiptSHA256: string;
+  runID: string;
+  targetRevision: string;
+  targetTree: string;
+  anchorSHA256: string;
+  anchorDevice: number;
+  anchorInode: number;
+  witnessSHA256: string;
+  witnessDevice: number;
+  witnessInode: number;
+  producerGuardRawSHA256: string;
+  producerGuardNormalizedSHA256: string;
+  bridgeRawSHA256: string;
+  bridgeNormalizedSHA256: string;
+  controllerRevision: string;
+  controllerTree: string;
+  controllerSourceDistance: number;
+  controllerCommitRawSHA256: string;
+  controllerCommitByteCount: number;
+  controllerTopicRevision: string;
+  controllerTopicTree: string;
+  changedPathsRawSHA256: string;
+  changedPathStatusesSHA256: string;
+  cumulativeChangedPathsRawSHA256: string;
+  cumulativeChangedPathStatusesSHA256: string; }
+export type CompatibilityControllerBindings = Pick<MarkerBindings, | "controllerRevision"
+  | "controllerTree"
+  | "controllerSourceDistance"
+  | "controllerCommitRawSHA256"
+  | "controllerCommitByteCount"
+  | "controllerTopicRevision"
+  | "controllerTopicTree"
+  | "changedPathsRawSHA256"
+  | "changedPathStatusesSHA256"
+  | "cumulativeChangedPathsRawSHA256"
+  | "cumulativeChangedPathStatusesSHA256">;
+export interface ControllerPreparationBinding { startedAt: string;
+  deployLock: { schema: "agenttool-local-deploy-lock/v1";
+    public_path: string;
+    owner_record: string;
+    device: number;
+    inode: number;
+    sha256: string;
+    pid: number; };
+  buildContext: { schema: "agenttool-phase-b-refence-build-context/v1";
+    path: string;
+    source_revision: string;
+    source_tree: string;
+    inventory_sha256: string;
+    inventory_byte_count: number;
+    file_count: number;
+    byte_count: number;
+    context_device: number;
+    context_inode: number;
+    readback_sha256: string;
+    ready_path: string;
+    ready_sha256: string;
+    prepared: true; };
+  dependencyEstate: { schema: "agenttool-phase-b-refence-dependency-estate/v1";
+    path: string;
+    project_path: string;
+    runtime_source_path: string;
+    source_revision: string;
+    source_tree: string;
+    source_inventory_sha256: string;
+    postgres_runtime_closure_sha256: string;
+    dependency_inventory_sha256: string;
+    dependency_file_count: number;
+    dependency_byte_count: number;
+    dependency_symlink_count: number;
+    estate_device: number;
+    estate_inode: number;
+    ready_path: string;
+    ready_sha256: string;
+    prepared: true; };
+  controllerWalDirectory: string;
+  earlyGuardSHA256: string;
+  earlyDatabaseProofSHA256: string;
+  databaseTargetSHA256: string; }
+export interface HandoffCeremonyPaths { anchor: string;
+  witness: string;
+  anchorArchive: string;
+  witnessArchive: string;
+  stage: string;
+  directory: string; }
+export interface HandoffCeremonyResult { edge: "H5";
+  resumed_from: HandoffEdge;
+  verified_edges: HandoffEdge[]; }
+export interface HandoffCompletion extends HandoffCeremonyResult { anchor: { archive_inode: number;
+    archive_device: number;
+    archive_nlink: number;
+    original_inode: number;
+    original_device: number;
+    sha256: string; };
+  marker: { inode: number; device: number; nlink: number; sha256: string };
+  witness: { archive_inode: number;
+    archive_device: number;
+    archive_nlink: number;
+    original_inode: number;
+    original_device: number;
+    sha256: string; }; }
+export interface MaintenanceRefenceDependencies { readDatabaseProof(): Promise<unknown>;
+  readProviderSecretInventory(): Promise<unknown>;
+  readKeychainProof(): Promise<unknown>;
+  readProcessProof(): Promise<unknown>;
+  readGitProof(): Promise<unknown>;
+  readFleetInventory(): Promise<unknown>;
+  pause(milliseconds: number): Promise<void>;
+  close(): Promise<void>; }
+export interface ChildlessMaintenanceRefenceBase { readonly controllerPhase: "post_handoff_childless";
+  readDatabaseProof(): Promise<unknown>;
+  convergeFederationInstanceURL(): Promise<DatabaseOriginConvergenceProof>;
+  takeOrdinaryPostflightDatabaseEnvironment(): Readonly<{ DATABASE_URL: string;
+    DATABASE_SESSION_URL: string }>;
+  pause(milliseconds: number): Promise<void>;
+  close(): Promise<void>; }
+export interface PreparedMaintenanceRefenceDependencies extends MaintenanceRefenceDependencies { readonly controllerPhase: "pre_handoff_prepared";
+  sealChildLaunchersForHandoff(): ChildlessMaintenanceRefenceBase; }
+export interface MaintenanceRefenceProof { anchor_sha256: string;
+  audit_witness_sha256: string;
+  authority_sandwich_sha256: string;
+  authority_verified: true;
+  bridge_normalized_sha256: string;
+  bridge_source_sha256: string;
+  checkpoint: "early" | "prepublication";
+  database_journal_verified: true;
+  database_instance_url_sha256: string;
+  database_federation_updated_at: string;
+  database_target_sha256: string;
+  drain_sample_count: 3;
+  drain_verified: true;
+  fence_sample_count: 2;
+  fence_sample_sha256: string;
+  fence_verified: true;
+  fenced_image_digest: "sha256:ecb322baec96707f59603121cfd4613d08ff7b1da8bf338fa118453b45d3e72c";
+  fenced_image_tag: "maintenance-526edc4ee0d0-20260824T210704Z-6e9e59cc185245bc";
+  journal_endpoint_count: 2;
+  journal_inventory_sha256: string;
+  journal_observation_count: 4;
+  local_evidence_verified: true;
+  machine_set_sha256: "0709af1a942960f1ba577c0896de3ff0172ec4b8f6ac2462a07b6c425845ada5";
+  non_image_config_sha256: string;
+  observed_revision: "526edc4ee0d076783d157591d7e3434352f6fc84";
+  process_census_sha256: string;
+  process_census_verified: true;
+  provider_inventory_sha256: string;
+  provider_secret_status: "Absent";
+  public_surfaces_expected_unavailable: true;
+  public_surfaces_verified: false;
+  receipt_sha256: string;
+  refence_run_id: string;
+  schema: "agenttool.phase-b-maintenance-refence-proof/1";
+  source_inventory_sha256: string;
+  stable_fleet_sha256: string;
+  state: "maintenance_refence";
+  target_revision: string;
+  target_tree: string;
+  terminal_wal_sha256: string;
+  wal_inventory_sha256: string;
+  witness_sha256: string; }
+export interface MaintenanceRefenceGuardRequest { checkpoint: "early" | "prepublication";
+  receiptSHA256: string;
+  targetRevision: string;
+  targetTree: string;
+  rolloutID: string;
+  expectedDatabaseUpdatedAt?: string; }
+export interface ControllerStoppedFenceProof extends Row { schema: "agenttool-phase-b-refence-target-stopped-fence/v1";
+  checkpoint: "post_build" | "recovery_terminal";
+  stable_fleet_sha256: string;
+  fence_verified: true; }
+export interface ControllerCordonedRuntimeProof extends Row { schema: "agenttool-phase-b-refence-cordoned-runtime/v1";
+  stable_fleet_sha256: string;
+  cordon_verified: true; }
+export interface ControllerFirstCanaryPublicDependencies { readFleetInventory(): unknown | Promise<unknown>;
+  readPublicJson(url: "https://api.agenttool.dev/health" | "https://api.agenttool.dev/federation/about", checkpoint: string): Promise<PublicJsonObservation>;
+  pause(milliseconds: number): Promise<void>; }
+export interface ControllerFinalAuthorityDependencies { readEvidence(): TerminalEvidence | Promise<TerminalEvidence>;
+  readGitProof(): Promise<unknown>;
+  readKeychainProof(): Promise<unknown>;
+  readProviderSecretInventory(): Promise<unknown>;
+  readDeployedProcessProof(checkpoint: string): Promise<string>;
+  readFleetInventory(): Promise<unknown>;
+  readPublicJson(url: "https://api.agenttool.dev/health" | "https://api.agenttool.dev/federation/about", checkpoint: string): Promise<PublicJsonObservation>;
+  readDatabaseProof(): Promise<unknown>; }
 
 export interface TargetImageContract { tag: string;
   digest: string;
@@ -97,26 +374,49 @@ export interface FlySSHAgentLSOFEntry { pid: number;
   name: string;
   device: string | null;
   inode: number | null; }
-export interface FlySSHAgentProtocolPing { schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-ping/v1";
+export interface FlySSHAgentProtocolPing { schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-ping/v2";
   transport: "local_unix_stream";
   socket_path: "/Users/yournameisai/.fly/fly-agent.sock";
+  connection_role: "ping";
+  connection_ordinal: 1;
   connected_without_write: true;
   connected_rebound_sha256: string;
   connected_rebound_wal_sha256: string;
   identity_sha256: string;
+  initial_peer_pid: number;
+  prewrite_peer_pid: number;
+  peer_attested: true;
   ping_frame_sha256: string;
   response_pid: number;
   response_version: "0.4.74";
   response_disabled: boolean;
   response_byte_count: number;
   response_sha256: string;
+  command_count: 1;
+  remote_eof_observed: true;
+  local_close_awaited: true;
   child_spawn_count: 0; }
-export interface FlySSHAgentStopReceipt { schema: "agenttool-phase-b-refence-fly-ssh-agent-stop/v2";
+export interface FlySSHAgentKillConnectionAuthority { schema: "agenttool-phase-b-refence-fly-ssh-agent-kill-connection-authority/v1";
+  transport: "local_unix_stream";
+  socket_path: "/Users/yournameisai/.fly/fly-agent.sock";
+  connection_role: "kill";
+  connection_ordinal: 2;
+  connected_without_write: true;
+  connected_rebound_sha256: string;
+  connected_rebound_wal_sha256: string;
+  initial_peer_pid: number;
+  peer_attested: true;
+  command_count_before_attempt: 0;
+  child_spawn_count: 0; }
+export interface FlySSHAgentStopReceipt { schema: "agenttool-phase-b-refence-fly-ssh-agent-stop/v3";
   batch_id: string;
   identity_sha256: string;
   cli_semantic_argv_sha256: string;
   cli_semantic_executed: false;
   protocol_authority_sha256: string;
+  kill_connection_authority_sha256: string;
+  ping_connected_rebound_sha256: string;
+  kill_connected_rebound_sha256: string;
   protocol_operation_sha256: string;
   durable_intent_sha256: string;
   settlement_sha256: string;
@@ -125,20 +425,35 @@ export interface FlySSHAgentStopReceipt { schema: "agenttool-phase-b-refence-fly
   ping_frame_sha256: string;
   kill_frame_sha256: string;
   ping_response_sha256: string;
-  kill_response_byte_count: 3;
+  kill_response_byte_count: 2;
   kill_response_sha256: string;
+  ping_initial_peer_pid: number;
+  ping_prewrite_peer_pid: number;
+  kill_initial_peer_pid: number;
+  kill_prewrite_peer_pid: number;
+  ping_remote_eof_observed: true;
+  kill_remote_eof_observed: true;
+  ping_local_close_awaited: true;
+  kill_local_close_awaited: true;
+  connection_count: 2;
+  ping_connection_count: 1;
+  kill_connection_count: 1;
   protocol_acknowledged: true;
   child_spawn_count: 0;
   stop_send_count: 1; }
-export interface FlySSHAgentStopIntent { schema: "agenttool-phase-b-refence-fly-ssh-agent-stop-intent/v2";
+export interface FlySSHAgentStopIntent { schema: "agenttool-phase-b-refence-fly-ssh-agent-stop-intent/v3";
   batch_id: string;
   identity_sha256: string;
   cli_semantic_argv_sha256: string;
   cli_semantic_executed: false;
   protocol_authority_sha256: string;
+  ping_connected_rebound_sha256: string;
+  ping_connected_rebound_wal_sha256: string;
+  ping_peer_pid: number;
+  ping_connection_closed: true;
   ping_response_sha256: string;
   durable_intent_sha256: string; }
-export interface FlySSHAgentBatchCleanup { schema: "agenttool-phase-b-refence-fly-ssh-agent-cleanup/v1";
+export interface FlySSHAgentBatchCleanup { schema: "agenttool-phase-b-refence-fly-ssh-agent-cleanup/v2";
   batch_id: string;
   batch_kind: FlySSHAgentBatchKind;
   expected_probe_count: 4 | 8;
@@ -148,7 +463,14 @@ export interface FlySSHAgentBatchCleanup { schema: "agenttool-phase-b-refence-fl
   identity_sha256: string | null;
   stop_intent_sha256: string | null;
   stop_settlement_sha256: string | null;
+  ping_connection_authority_sha256: string | null;
+  kill_connection_authority_sha256: string | null;
+  ping_connected_rebound_sha256: string | null;
+  kill_connected_rebound_sha256: string | null;
   stop_send_count: 0 | 1;
+  protocol_connection_count: 0 | 2;
+  ping_connection_count: 0 | 1;
+  kill_connection_count: 0 | 1;
   first_absence_sha256: string;
   second_absence_sha256: string;
   absence_interval_milliseconds: 257;
@@ -237,28 +559,590 @@ export interface DatabaseOriginConvergenceProof { schema: "agenttool-phase-b-ref
   commit_ambiguity: false;
   rollback_attempt_count: 0; }
 
-export interface ControllerWalContractEntry extends Row { schema: "agenttool-phase-b-refence-maintenance-child-wal/v1";
+export type ControllerEffectKind = | "database_convergence"
+  | "build_push"
+  | "update_image"
+  | "restore_config"
+  | "refence_config"
+  | "start_machine"
+  | "enable_autostart"
+  | "uncordon_machine"
+  | "cordon_machine"
+  | "stop_machine"
+  | "wait_machine"
+  | "read_fleet"
+  | "read_secrets"
+  | "read_git"
+  | "read_keychain"
+  | "read_process"
+  | "public_probe"
+  | "ordinary_postflight"
+  | "runtime_probe"
+  | "local_agent_stop";
+export type ControllerWalPhase = | "ready"
+  | "lifecycle_intent"
+  | "attempting"
+  | "spawned"
+  | "settled"
+  | "verified"
+  | "transition_verified"
+  | "failed_or_uncertain"
+  | "complete";
+export interface ControllerWalContractEntry { schema: "agenttool-phase-b-refence-maintenance-child-wal/v1";
   ordinal: number;
   prior_entry_sha256: string | null;
   controller_run_id: string;
   rollout_id: string;
   receipt_sha256: string;
   recorded_at: string;
-  phase: string;
+  phase: ControllerWalPhase;
   checkpoint: string;
   effect_id: string | null;
-  effect_kind: string | null;
+  effect_kind: ControllerEffectKind | null;
   target: string | null;
   argv_sha256: string | null;
   pid: number | null;
   pgid: number | null;
   exit_code: number | null;
-  termination: string | null;
+  termination: "exit" | "signal" | "timeout" | null;
   local_process_group_settled: boolean;
   provider_transition_sha256: string | null;
   fleet_readback_sha256: string | null;
   detail_sha256: string | null;
   failure_code: string | null; }
+export interface ControllerWalProjection { directory: string;
+  entry_count: number;
+  ordered_filenames: string[];
+  chain_sha256: string;
+  terminal_entry_sha256: string;
+  terminal_phase: ControllerWalPhase; }
+export interface ControllerDatabaseConvergenceDependencies { now(): string;
+  recordIntent(entry: ControllerWalContractEntry): Promise<void> | void;
+  verifyIntent(entry: ControllerWalContractEntry): Promise<void> | void;
+  readPreMutationProof(): Promise<DatabaseProof>;
+  converge(): Promise<DatabaseOriginConvergenceProof>;
+  recordCommit(proof: DatabaseOriginConvergenceProof, entry: ControllerWalContractEntry): Promise<void> | void;
+  readPostMutationProof(): Promise<DatabaseProof>;
+  recordVerified(afterProofSHA256: string, entry: ControllerWalContractEntry): Promise<void> | void;
+  retainManual(code: string): Promise<void> | void; }
+export interface ControllerDatabaseConvergenceResult { proof: DatabaseOriginConvergenceProof;
+  beforeProofSHA256: string;
+  afterProofSHA256: string; }
+export interface ControllerEffectChild { pid: number;
+  pgid: number; }
+export interface ControllerEffectSettlement { exitCode: number | null;
+  termination: "exit" | "signal" | "timeout";
+  processGroupSettled: boolean;
+  detailSHA256: string; }
+export interface ControllerEffectVerification { providerTransitionSHA256: string;
+  fleetReadbackSHA256: string;
+  detailSHA256: string; }
+export interface ControllerEffectRuntime { now(): string;
+  spawn(argv: readonly string[]): ControllerEffectChild;
+  settle(child: ControllerEffectChild, timeoutMilliseconds: number): Promise<ControllerEffectSettlement>; }
+export interface ControllerReadEffectRuntime extends ControllerEffectRuntime { takeStdout(identity: ControllerEffectChild, acceptedExitCodes: readonly number[]): Uint8Array;
+  takeStderr?(identity: ControllerEffectChild, acceptedExitCodes: readonly number[]): Uint8Array; }
+export interface ControllerSettledEffect { effectID: string;
+  child: ControllerEffectChild;
+  settlement: ControllerEffectSettlement; }
+export interface ControllerRecoveryDependencies { performFlyOperation(operation: FlyOperation, expectedFleet: TargetFleetExpectation, expectedPreFleetSHA256: string): Promise<{ image?: TargetImageContract;
+    proofSHA256: string;
+    fleetSHA256: string }>;
+  recordCheckpoint(checkpoint: string, detail: Row): Promise<void>;
+  proveStoppedFence(expectation: TargetFleetExpectation, expectedPreFleetSHA256: string): Promise<{ proofSHA256: string; fleetSHA256: string }>; }
+export interface ControllerFinalizationLifecycle { effectsClosed(): void;
+  a0Installed(): void; }
+export interface ControllerRolloutDependencies { recordCheckpoint(checkpoint: string, detail: Row): Promise<void>;
+  runSpecialGuard(checkpoint: "prepublication_before_build" | "prepublication_before_image"): Promise<{ proofSHA256: string; fleetSHA256: string }>;
+  performFlyOperation(operation: FlyOperation, expectedFleet: TargetFleetExpectation, expectedPreFleetSHA256: string): Promise<{ image?: TargetImageContract;
+    proofSHA256: string;
+    fleetSHA256: string }>;
+  proveCordonedRuntime(startedMachineIDs: readonly string[]): Promise<{ proofSHA256: string;
+    cleanupSHA256: string }>;
+  proveFirstCanaryPublic(): Promise<string>;
+  proveFinalAuthorityAndPublic(): Promise<{ publicProofSHA256: string;
+    authorityProofSHA256: string;
+    cleanupSHA256: string }>;
+  runOrdinaryAbsentPostflight(): Promise<string>;
+  finalizeSuccess(proofs: Row, lifecycle: ControllerFinalizationLifecycle): Promise<{ receiptPath: string;
+    receiptSHA256: string;
+    witnessPath: string;
+    witnessSHA256: string }>;
+  recoverToStoppedFence(reason: string, context: { providerEffectVerified: boolean;
+      fleetMutationVerified: boolean }): Promise<string>;
+  retainManualBlocker(reason: string): Promise<void>;
+  retainFinalizationManualBlocker(reason: string): Promise<void>; }
+export interface ControllerArguments { receiptSHA256: string;
+  appMachines: string;
+  thinkerPrimary: string;
+  thinkerStandby: string; }
+export interface SuccessFinalizationCeremonyRequest { paths: SuccessFinalizationPaths;
+  authorityPaths?: SuccessFinalizationPaths;
+  lock: DeployLockAuthority;
+  artifacts: SuccessArtifactBundle;
+  beginMarkerFinalization(): DurableFileIdentity;
+  verifyPreFinalization(): void;
+  verifyClosedLocalAuthority(): void;
+  crash?(point: SuccessFinalizationCrashPoint, openDescriptors: readonly SuccessFinalizationOpenDescriptor[]): void;
+  fsyncDirectory?(path: string, openDescriptors: readonly SuccessFinalizationOpenDescriptor[]): void; }
+export interface SuccessFinalizationCeremonyResult { receiptPath: string;
+  receiptSHA256: string;
+  witnessPath: string;
+  witnessSHA256: string; }
+export interface ControllerFinalAuthorityBridgeRequest { evidence: TerminalEvidence;
+  image: TargetImageContract;
+  expectation: TargetFleetExpectation;
+  expectedFleetSHA256: string;
+  expectedDatabaseUpdatedAt: string;
+  dependencies: ControllerFinalAuthorityDependencies; }
+export interface ControllerFinalAuthorityBridgeResult { publicProofSHA256: string;
+  authorityProofSHA256: string; }
+export interface ControllerStoppedFenceBridgeRequest { checkpoint: "post_build" | "recovery_terminal";
+  receiptSHA256: string;
+  targetRevision: string;
+  targetTree: string;
+  expectedDatabaseUpdatedAt: string;
+  expectedFleetSHA256: string;
+  image: TargetImageContract | null;
+  expectation: TargetFleetExpectation;
+  dependencies: MaintenanceRefenceDependencies;
+  readEvidence(): TerminalEvidence | Promise<TerminalEvidence>; }
+export interface ControllerCordonedRuntimeBridgeRequest { evidence: TerminalEvidence;
+  image: TargetImageContract;
+  expectation: TargetFleetExpectation;
+  expectedFleetSHA256: string;
+  startedMachineIDs: readonly string[];
+  dependencies: { readFleetInventory(): Promise<unknown>;
+    runMachineProbe(machineID: string, role: "app" | "thinker_primary"): Promise<string>;
+    pause(milliseconds: number): Promise<void> }; }
+export interface FlySSHAgentOwnedBatchRequest<Result, LaunchAuthority> { batchID: string;
+  batchKind: FlySSHAgentBatchKind;
+  expectedProbeCount: 4 | 8;
+  nowUnixMilliseconds(): number;
+  observe(tracked: FlySSHAgentIdentity | null, checkpoint: string): Promise<FlySSHAgentObservation>;
+  connectStopProtocol(role: "ping" | "kill", identity: FlySSHAgentIdentity): Promise<unknown>;
+  pingStopProtocol(protocol: unknown, identity: FlySSHAgentIdentity, identitySHA256: string, connectedReboundSHA256: string): Promise<FlySSHAgentProtocolPing>;
+  recordStopIntent(batchID: string, identity: FlySSHAgentIdentity, identitySHA256: string, ping: FlySSHAgentProtocolPing, connectedReboundSHA256: string): Promise<FlySSHAgentStopIntent>;
+  bindKillStopProtocol(protocol: unknown, identity: FlySSHAgentIdentity, identitySHA256: string, connectedReboundSHA256: string): Promise<FlySSHAgentKillConnectionAuthority>;
+  sendStop(protocol: unknown, intent: FlySSHAgentStopIntent, identity: FlySSHAgentIdentity, ping: FlySSHAgentProtocolPing, killAuthority: FlySSHAgentKillConnectionAuthority,
+    killConnectedReboundSHA256: string): Promise<FlySSHAgentStopReceipt>;
+  closeStopProtocol(protocol: unknown): Promise<void> | void;
+  pause(milliseconds: number): Promise<void>;
+  onCleanup?(cleanupSHA256: string, cleanup: FlySSHAgentBatchCleanup): void;
+  runBatch(launch: <Value>(argv: readonly string[], perform: (authority: LaunchAuthority) => Promise<Value>) => Promise<Value>): Promise<Result>; }
+export interface FlySSHAgentOwnedBatchResult<Result> { result: Result;
+  cleanupSHA256: string;
+  cleanup: FlySSHAgentBatchCleanup; }
+export interface ControllerFleetTransitionRequest { beforeFirst: unknown;
+  beforeSecond: unknown;
+  first: unknown;
+  second: unknown;
+  evidence: TerminalEvidence;
+  operation: FlyOperation;
+  image: TargetImageContract | null;
+  expectation: TargetFleetExpectation; }
+export interface ControllerEffectRequest<Wal> { wal: Wal;
+  runtime: ControllerEffectRuntime;
+  effectID: string;
+  effectKind: ControllerEffectKind;
+  checkpoint: string;
+  target: string;
+  argv: readonly string[];
+  timeoutMilliseconds: number;
+  verify(): Promise<ControllerEffectVerification>; }
+export interface ControllerEffectToSettlementRequest<Wal> { wal: Wal;
+  runtime: ControllerEffectRuntime;
+  effectID: string;
+  effectKind: ControllerEffectKind;
+  checkpoint: string;
+  target: string;
+  argv: readonly string[];
+  timeoutMilliseconds: number;
+  durableIntentSHA256?: string;
+  acceptedExitCodes?: readonly number[]; }
+export interface ControllerJournalledReadChildRequest<T, Wal> { wal: Wal;
+  runtime: ControllerReadEffectRuntime;
+  effectID: string;
+  effectKind: "read_git" | "read_keychain" | "read_process" | "public_probe" | "ordinary_postflight" | "runtime_probe";
+  checkpoint: string;
+  target: string;
+  argv: readonly string[];
+  timeoutMilliseconds: number;
+  acceptedExitCodes: readonly number[];
+  validate(stdout: Uint8Array, exitCode: number): { value: T; semanticProjection: unknown };
+  validateStderr?(stderr: Uint8Array): void; }
+export interface ControllerJournalledReadChildResult<T> { value: T;
+  semanticSHA256: string; }
+export interface ControllerRecoveryBridgeRequest { evidence: TerminalEvidence;
+  reason: string;
+  image: TargetImageContract | null;
+  initialFleetSHA256: string;
+  initialExpectation: TargetFleetExpectation;
+  dependencies: ControllerRecoveryDependencies; }
+export interface ControllerRecoveryDispatchBridgeRequest extends ControllerRecoveryBridgeRequest { providerEffectVerified: boolean;
+  fleetMutationVerified: boolean; }
+export interface ControllerRecoveryBridgeResult { proofSHA256: string;
+  expectation: TargetFleetExpectation; }
+export interface OwnedControllerSessionRequest<Session, Dependencies, Result> { createSession(): Promise<Session>;
+  createDependencies(session: Session): Dependencies;
+  run(session: Session, dependencies: Dependencies): Promise<Result>;
+  closeResources(session: Session): Promise<void>;
+  closeAuthority(session: Session): boolean;
+  retainCleanupUncertainty(session: Session): void; }
+export interface WalInventoryValidationResult { roles: ContractEvidence["roles"];
+  directory: string;
+  inventorySHA256: string;
+  terminalSHA256: string;
+  imageContract: Row;
+  sourceInventorySHA256: string;
+  journalInventorySHA256: string;
+  cronSHA256: string;
+  restoredConfigSHA256ByMachine: Record<string, string>;
+  fencedConfigSHA256ByMachine: Record<string, string>;
+  deployReceiptInventorySHA256: string;
+  deployReceiptFileCount: number;
+  embeddedCriticalContractSHA256: string;
+  localStateSandwichSHA256: string;
+  terminalJournalSHA256: string;
+  terminalDrainSampleSHA256: string;
+  terminalDrainEventSHA256s: [string, string, string];
+  records: readonly { value: Row; sha256: string; filename: string }[]; }
+export interface MaintenanceRefenceGuardResult { proof: MaintenanceRefenceProof;
+  evidence: TerminalEvidence;
+  nonImageConfigSHA256: string;
+  databaseProof: DatabaseProof;
+  databaseProofSHA256: string; }
+export interface HandoffCeremonyRequest<OpenedStat> { initialEdge: HandoffEdge;
+  paths: HandoffCeremonyPaths;
+  markerBytes: string;
+  refresh(): HandoffEdge;
+  crashAfter?: HandoffEdge;
+  crashAt?: HandoffCrashPoint;
+  afterStageOpenForTest?(descriptor: number, opened: OpenedStat): void; }
+export interface DurableCanonicalJsonCASRequest { canonicalPath: string;
+  directory: string;
+  stagePath: string;
+  expectedCurrentSHA256: string;
+  nextValue: Row;
+  verifyAuthority(): void;
+  validateCurrent(value: Row): void;
+  validateNext(value: Row): void;
+  onDurableInstall?(): void;
+  fsyncDirectory?(path: string, afterSync?: () => void): void; }
+export interface DurableCanonicalJsonCASResult { sha256: string;
+  identity: DurableFileIdentity; }
+export interface DurableCanonicalJsonReconciliationRequest { canonicalPath: string;
+  directory: string;
+  stagePath: string;
+  currentValue: Row;
+  currentSHA256: string;
+  nextValue: Row;
+  nextSHA256: string;
+  verifyAuthority(): void;
+  validate(value: Row): void;
+  fsyncDirectory?(path: string, afterSync?: () => void): void; }
+export interface ControllerFlyTransitionBridgeRequest<Wal, Runtime> { wal: Wal;
+  runtime: Runtime;
+  evidence: TerminalEvidence;
+  operation: FlyOperation;
+  beforeExpectation: TargetFleetExpectation;
+  expectation: TargetFleetExpectation;
+  image: TargetImageContract | null;
+  expectedPreFleetSHA256: string | null;
+  ordinal: number;
+  pause(milliseconds: number): Promise<void>;
+  afterVerified?(proof: FleetTransitionProof): Promise<void>; }
+export interface ControllerFlyTransitionBridgeResult { image?: TargetImageContract;
+  proofSHA256: string;
+  fleetSHA256: string; }
+export interface RefenceReceiptWalAuthorityRequest { receipt: Row;
+  walRecords: readonly { value: Row; sha256: string; filename: string }[];
+  anchor: { value: Row; sha256: string };
+  witness: { value: Row; sha256: string }; }
+export interface SuccessReadyBridgeMarkerRequest { bindings: MarkerBindings;
+  roles: ContractEvidence["roles"];
+  configFingerprint: string;
+  preparation: ControllerPreparationBinding;
+  updatedAt: string;
+  imageDigest: string;
+  databaseConvergence: Row;
+  controllerWal: Row;
+  rolloutProofs: Row; }
+export interface ValidateControllerFinalAuthorityRequest { targetRevision: string;
+  targetTree: string;
+  expectedDatabaseUpdatedAt: string;
+  databaseInstanceURLSHA256: string;
+  databaseUpdatedAt: string;
+  databaseTargetSHA256: string;
+  events: readonly PublicGateEvent[]; }
+export interface ValidateControllerFinalAuthorityResult { publicProof: Row;
+  authorityProof: Row; }
+export interface ControllerFirstCanaryPublicBridgeRequest { evidence: TerminalEvidence;
+  image: TargetImageContract;
+  expectation: TargetFleetExpectation;
+  expectedFleetSHA256: string;
+  dependencies: ControllerFirstCanaryPublicDependencies; }
+export interface BoundedChildOptions { maximumBytes?: number;
+  timeoutMs?: number;
+  cwd?: string;
+  environment?: Readonly<Record<string, string>>; }
+export interface BoundedChildResult { exitCode: number;
+  stdout: Uint8Array; }
+export interface ControllerDatabaseConvergenceBridgeRequest<Wal> { wal: Wal;
+  handoffEdge: HandoffEdge;
+  interrupted(): boolean;
+  inheritedProof: DatabaseProof;
+  inheritedProofSHA256: string;
+  dependencies: ControllerDatabaseConvergenceDependencies; }
+export interface ControllerJournalledProviderReadRequest<Wal, Runtime> { wal: Wal;
+  runtime: Runtime;
+  operation: { kind: "list" } | { kind: "secrets" };
+  effectID: string;
+  checkpoint: string;
+  target: string;
+  semanticProjection(value: unknown[]): unknown; }
+export interface ControllerJournalledProviderReadResult { value: unknown[];
+  semanticSHA256: string; }
+export interface ProducerLocalStateSandwichRequest { anchorSHA256: string;
+  firstWalSHA256: string;
+  firstWalOrdinal: number;
+  deployReceiptInventorySHA256: string;
+  deployReceiptFileCount: number; }
+export interface ProducerEarlyRuntimeBindingsRequest { evidence: TerminalEvidence;
+  databaseProof: DatabaseProof;
+  firstFleet: StoppedFleetProof;
+  secondFleet: StoppedFleetProof; }
+export interface ControllerRolloutBridgeRequest { evidence: TerminalEvidence;
+  rolloutID: string;
+  dependencies: ControllerRolloutDependencies; }
+export interface ControllerRolloutBridgeResult { receiptPath: string;
+  receiptSHA256: string; }
+export interface FlyAgentPeerAttestationFixture { fdBefore: number;
+  destroyedBefore: boolean;
+  expectedPeerPID: number;
+  result: number;
+  outputLength: number;
+  peerPID: number;
+  afterCall: "none" | "handle_swap" | "fd_swap" | "destroy"; }
+export interface ProductionFlyChildRecord<Operation, Child, Settlement> { operation: Operation;
+  argv: string[];
+  cwd: string;
+  child: Child;
+  stdout: Uint8Array | null;
+  stderr: Uint8Array | null;
+  settlement: Settlement | null; }
+export interface ProductionReadChildRecord<LaunchAuthority, Child, Settlement> { argv: string[];
+  cwd: string;
+  environment: Readonly<Record<string, string>>;
+  flySSHAgentLaunchAuthority: LaunchAuthority | null;
+  verifyContract(): void;
+  child: Child;
+  stdout: Uint8Array | null;
+  stderr: Uint8Array | null;
+  settlement: Settlement | null; }
+export interface ProductionControllerSessionShape<Lock, State, Childless, GuardDependencies, FlyAdapter, Lifecycle> { readonly rolloutID: string;
+  readonly evidence: TerminalEvidence;
+  readonly lock: Lock;
+  readonly state: State;
+  readonly databaseConvergence: Readonly<{ proof: DatabaseOriginConvergenceProof; beforeProofSHA256: string; afterProofSHA256: string }>;
+  readonly databaseConvergenceMarkerSHA256: string;
+  readonly childlessBase: Childless;
+  readonly guardDependencies: GuardDependencies;
+  readonly fly: FlyAdapter;
+  readonly flyAgentLifecycle: Lifecycle;
+  closeForFinalization(): Promise<void>;
+  closeResources(): Promise<void>;
+  closeAuthority(): boolean;
+  finalizationResourcesClosed(): boolean; }
+export type ProductionStreamOutcome = | { fulfilled: true; resourceSettled: true; value: Uint8Array }
+  | { fulfilled: false; resourceSettled: boolean };
+export interface ProductionChildPipeOwner<Child> { readonly child: Child;
+  readonly abort: AbortController;
+  readonly streams: readonly [Promise<ProductionStreamOutcome>, Promise<ProductionStreamOutcome>]; }
+export interface DatabaseClientRegistry { register<T extends { end(options: { timeout: number }): unknown }>(client: T): T;
+  closeClients(clients: readonly unknown[]): Promise<void>;
+  closeAll(): Promise<void>;
+  activeCount(): number; }
+export interface SessionResourceTeardown { close(): Promise<void>;
+  complete(): boolean; }
+export interface BoundedProductionChildResult { exitCode: number | null;
+  stdout: Uint8Array;
+  stderr: Uint8Array;
+  timedOut: boolean;
+  outputFailed: boolean;
+  forcedSettlement: boolean;
+  processGroupSettled: boolean; }
+export interface GitTreeFile { mode: 0o644 | 0o755;
+  objectSHA1: string;
+  sourceRelativePath: string;
+  destinationRelativePath: string;
+  kind: "tracked_api" | "bundled_registry" | "bundled_doctrine"; }
+export interface DependencyEstateInventory { sha256: string;
+  fileCount: number;
+  byteCount: number;
+  symlinkCount: number; }
+export interface MaintenanceContractBytes { bytes: Uint8Array;
+  sha256: string;
+  gitBlobSHA1: string; }
+export interface ProductionFlyOperationAdapter { performFlyOperation: ControllerRolloutDependencies["performFlyOperation"];
+  snapshot(): { image: TargetImageContract | null; expectation: TargetFleetExpectation; fleetSHA256: string | null }; }
+export interface ProductionFlySSHAgentStopContext { effectID: string;
+  intentOrdinal: number;
+  batchKind: FlySSHAgentBatchKind;
+  identity: FlySSHAgentIdentity;
+  identitySHA256: string;
+  ping: FlySSHAgentProtocolPing;
+  pingConnectedReboundSHA256: string;
+  protocolAuthoritySHA256: string; }
+export interface DeployLockPaths { directory: string;
+  publicPath: string;
+  worktree: string; }
+export interface SourceMigration { filename: string;
+  checksum: string; }
+export interface WalInventoryEntry { ordinal: number;
+  filename: string;
+  sha256: string;
+  prior_entry_sha256: string | null;
+  checkpoint: string;
+  status: string;
+  mutation_armed: boolean; }
+export interface RefenceIngressTarget { runID: string;
+  targetRevision: string;
+  targetTree: string;
+  targetDistance: number; }
+export interface ProducerJournalRow { filename: string;
+  checksum: string;
+  applied_at: string; }
+export interface ProducerJournalProof { rows: ProducerJournalRow[];
+  targetAppliedAt: [string, string]; }
+export interface ProducerDrainSnapshot { counts: Record<string, number>;
+  informational: { payout_requested: number; x402_inserted: number };
+  cron_sha256: string; }
+export interface KeychainProof { generation_absent: true;
+  machine_map_sha256: string;
+  roles: ContractEvidence["roles"]; }
+export interface ProcessProof { conflicting_process_count: 0;
+  projection_sha256: string; }
+export interface ContainedFlyAgentEndpointIdentity { parent_path: string;
+  parent_device: number;
+  parent_inode: number;
+  socket_path: string;
+  socket_device: number;
+  socket_inode: number; }
+export interface ContainedFlySSHAgentProtocolRequest { path: string;
+  timeoutMilliseconds: number;
+  role: "ping" | "kill";
+  expectedPeerPID: number;
+  suppressWriteCallback?: boolean;
+  forcePostconditionFailure?: boolean;
+  afterConnectForTest?: () => void; }
+export interface ProductionFlySSHAgentConnectedRequest<State, Protocol> { state: State;
+  protocol: Protocol;
+  identity: FlySSHAgentIdentity;
+  identitySHA256: string;
+  connectedReboundSHA256: string;
+  batchKind: FlySSHAgentBatchKind; }
+export interface ProductionFlySSHAgentStopIntentRequest<State> { state: State;
+  batchID: string;
+  batchKind: FlySSHAgentBatchKind;
+  identity: FlySSHAgentIdentity;
+  identitySHA256: string;
+  ping: FlySSHAgentProtocolPing;
+  connectedReboundSHA256: string;
+  contexts: Map<string, ProductionFlySSHAgentStopContext>; }
+export interface ProductionFlySSHAgentStopRequest<State, Protocol> { state: State;
+  protocol: Protocol;
+  intent: FlySSHAgentStopIntent;
+  identity: FlySSHAgentIdentity;
+  ping: FlySSHAgentProtocolPing;
+  killAuthority: FlySSHAgentKillConnectionAuthority;
+  killConnectedReboundSHA256: string;
+  contexts: Map<string, ProductionFlySSHAgentStopContext>;
+  sentIntents: Set<string>; }
+export interface ProductionFlySSHAgentObservationRequest<State, Runtime> { state: State;
+  runtime: Runtime;
+  tracked: FlySSHAgentIdentity | null;
+  checkpoint: string; }
+export interface ProductionBridgeMarkerStateRequest<Wal> { bindings: MarkerBindings;
+  roles: ContractEvidence["roles"];
+  lock: DeployLockAuthority;
+  preparation: ControllerPreparationBinding;
+  wal: Wal; }
+export interface BridgeMarkerFinalizationRequest { successProvenAt: string;
+  walProjection: ControllerWalProjection;
+  authorityProjectionSHA256: string;
+  receiptPath: string;
+  witnessPath: string;
+  markerRetirementClaimPath: string; }
+export interface BridgeMarkerFinalizationPreview { value: Row;
+  bytesUTF8: string;
+  sha256: string; }
+export interface BridgeMarkerFinalizationResult { identity: DurableFileIdentity;
+  bytesUTF8: string;
+  sha256: string; }
+export interface BridgeMarkerCASRequest { bindings: MarkerBindings;
+  roles: ContractEvidence["roles"];
+  lock: DeployLockAuthority;
+  expectedCurrentSHA256: string;
+  nextValue: Row;
+  onDurableInstall?(): void; }
+export interface ControllerFirstCanaryValidationRequest { targetRevision: string;
+  events: readonly PublicGateEvent[]; }
+export interface SessionResourceTeardownRequest { settleActiveChild(): Promise<boolean>;
+  closeDatabaseClients(): Promise<void>; }
+export interface ControllerWalWriterRequest { directory: string;
+  controllerRunID: string;
+  rolloutID: string;
+  receiptSHA256: string; }
+export interface DatabaseConvergenceIntentRequest<Wal> { wal: Wal;
+  recordedAt: string;
+  beforeProofSHA256: string;
+  databaseTargetSHA256: string; }
+export interface DatabaseConvergenceCommitRequest<Wal> { wal: Wal;
+  recordedAt: string;
+  proof: DatabaseOriginConvergenceProof; }
+export interface DatabaseConvergenceVerifiedRequest<Wal> extends DatabaseConvergenceCommitRequest<Wal> { afterProofSHA256: string; }
+export interface WalFailureRequest<Wal> { wal: Wal;
+  recordedAt: string;
+  failureCode: string; }
+export interface ControllerEffectFailureRequest<Wal> extends WalFailureRequest<Wal> { effectID: string; }
+export interface ProductionFlyEffectRuntimeRequest { buildContextPath: string;
+  verifyLocalAuthority(): void; }
+export interface ProductionReadChildArmRequest<LaunchAuthority> { argv: readonly string[];
+  cwd: string;
+  environment: Readonly<Record<string, string>>;
+  flySSHAgentLaunchAuthority?: LaunchAuthority;
+  verifyContract(): void; }
+export interface ControllerTransitionVerificationRequest<Wal> { wal: Wal;
+  effectID: string;
+  recordedAt: string;
+  providerTransitionSHA256: string;
+  fleetReadbackSHA256: string;
+  detailSHA256: string; }
+export interface ControllerSettledVerificationRequest<Wal> { wal: Wal;
+  effectID: string;
+  recordedAt: string;
+  verification: ControllerEffectVerification; }
+export interface ProductionFlyOperationAdapterRequest<State> { state: State;
+  evidence: TerminalEvidence; }
+export type CompatibilityGitRunner = (suffix: string, arguments_: readonly string[], validate: (stdout: Uint8Array) => { value: string | true; semanticProjection: unknown }) => Promise<string | true>;
+export interface JournalledControllerLocalReadersRequest<State> { state: State;
+  evidence: TerminalEvidence; }
+export interface JournalledControllerGuardDependenciesRequest<State, Base> extends JournalledControllerLocalReadersRequest<State> { base: Base; }
+export interface JournalledLocalReadSpec<T> { suffix: string;
+  effectKind: "read_git" | "read_keychain" | "read_process";
+  checkpoint: string;
+  target: string;
+  argv: readonly string[];
+  cwd: string;
+  environment: Readonly<Record<string, string>>;
+  acceptedExitCodes: readonly number[];
+  verifyContract(): void;
+  validate(stdout: Uint8Array, exitCode: number): { value: T; semanticProjection: unknown }; }
+export interface JournalledSecurityReadSpec<T> { suffix: string;
+  arguments: readonly string[];
+  acceptedExitCodes: readonly number[];
+  validate(stdout: Uint8Array, exitCode: number): { value: T; semanticProjection: unknown }; }
 
 export interface PublicJsonObservation { body: unknown;
   bodyByteCount: number;
@@ -494,6 +1378,115 @@ export interface ProducerCriticalStaticContract { migrationAppliedAt: readonly [
     thinker_primary: string;
     thinker_standby: string; }>; }
 
+export interface ProtectedChangedPathStatus { old_mode: "100644" | "100755";
+  new_mode: "100644" | "100755";
+  status: "M";
+  path: string; }
+export interface PriorFailedCompatibilityGitProof { revision: string;
+  tree: string;
+  source_distance: number;
+  commit_raw_sha256: string;
+  commit_byte_count: number;
+  first_parent_revision: string;
+  second_parent_revision: string;
+  second_parent_tree: string;
+  changed_paths_raw_sha256: string;
+  changed_path_statuses: readonly ProtectedChangedPathStatus[];
+  bridge_source_sha256: string;
+  bridge_normalized_sha256: string;
+  contract_source_sha256: string;
+  contract_git_blob: string;
+  lifecycle: "failed_pre_h";
+  static_refusal_barrier: "raw_commit_terminal_lf_required";
+  static_refusal_barrier_verified: true;
+  observed_first_refusal_predicate: false;
+  controller_success: false;
+  mutation_effect_began: false;
+  success_authority: false;
+  effect_authority: false; }
+export interface ImmediateFailedCompatibilityGitProof { revision: string;
+  tree: string;
+  source_distance: number;
+  commit_raw_sha256: string;
+  commit_byte_count: number;
+  first_parent_revision: string;
+  second_parent_revision: string;
+  second_parent_tree: string;
+  changed_paths_raw_sha256: string;
+  changed_path_statuses: readonly ProtectedChangedPathStatus[];
+  cumulative_changed_paths_raw_sha256: string;
+  cumulative_changed_path_statuses: readonly ProtectedChangedPathStatus[];
+  bridge_source_sha256: string;
+  bridge_normalized_sha256: string;
+  contract_source_sha256: string;
+  contract_git_blob: string;
+  lifecycle: "failed_pre_h";
+  refusal_predicate: "process_census";
+  observed_first_refusal_predicate: true;
+  controller_exit_code: 74;
+  stderr_sha256: string;
+  stderr_byte_count: 35;
+  retained_deploy_lock_sha256: string;
+  controller_success: false;
+  mutation_effect_began: false;
+  success_authority: false;
+  effect_authority: false;
+  downstream_effects: Readonly<Record<string, 0>>; }
+export interface PriorProtocolIncompatibleGitProof { revision: string;
+  tree: string;
+  source_distance: 56;
+  commit_raw_sha256: string;
+  commit_byte_count: 1226;
+  first_parent_revision: string;
+  second_parent_revision: string;
+  second_parent_tree: string;
+  changed_paths_raw_sha256: string;
+  changed_path_statuses: readonly ProtectedChangedPathStatus[];
+  cumulative_changed_paths_raw_sha256: string;
+  cumulative_changed_path_statuses: readonly ProtectedChangedPathStatus[];
+  bridge_source_sha256: string;
+  bridge_normalized_sha256: string;
+  contract_source_sha256: string;
+  contract_git_blob: string;
+  lifecycle: "prior_unexecuted_protocol_incompatible_successor";
+  source_admission_verified: true;
+  static_admission_verified: true;
+  controller_invocation_observed: false;
+  deploy_invocation_observed: false;
+  controller_effect_observed: false;
+  controller_success: false;
+  mutation_effect_began: false;
+  success_authority: false;
+  effect_authority: false;
+  source_admission_evidence: Row;
+  protocol_incompatibility: Row;
+  downstream_effects: Readonly<Record<string, 0>>; }
+export interface CompatibilityGitProof { revision: string;
+  tree: string;
+  source_distance: number;
+  commit_raw_sha256: string;
+  commit_byte_count: number;
+  first_parent_revision: string;
+  second_parent_revision: string;
+  second_parent_tree: string;
+  changed_paths_raw_sha256: string;
+  changed_path_statuses: readonly ProtectedChangedPathStatus[];
+  cumulative_changed_paths_raw_sha256: string;
+  cumulative_changed_path_statuses: readonly ProtectedChangedPathStatus[];
+  prior_failed_compatibility_controller: PriorFailedCompatibilityGitProof;
+  immediate_failed_compatibility_controller: ImmediateFailedCompatibilityGitProof;
+  prior_unexecuted_protocol_incompatible_successor: PriorProtocolIncompatibleGitProof;
+  authorized_h0_guard_raw_sha256: string;
+  authorized_h0_guard_normalized_sha256: string;
+  authorized_h0_contract_source_sha256: string;
+  authorized_h0_contract_git_blob: string;
+  bridge_source_sha256: string;
+  bridge_normalized_sha256: string;
+  contract_source_sha256: string;
+  contract_git_blob: string;
+  protected_head: true;
+  clean: true; }
+
 export interface MaintenanceContract { schema: typeof CONTRACT_SCHEMA;
   databaseOriginContract: Readonly<{ schema: string;
     transaction_mode: string;
@@ -582,15 +1575,21 @@ export interface MaintenanceContract { schema: typeof CONTRACT_SCHEMA;
   requireFlySSHAgentActive(observation: any, existing: any, batchStartedAtUnixMs: number, code: string): any;
   flySSHAgentAbsenceProjection(observation: any): Row;
   flySSHAgentActiveProjection(observation: any): Row;
+  flySSHAgentProtocolSettlementProjection(protocolAuthoritySHA256: string, killConnectionAuthoritySHA256: string, protocolOperationSHA256: string, peerPID: number,
+    pingConnectedReboundSHA256: string, killConnectedReboundSHA256: string, pingConnectedReboundWalSHA256: string, killConnectedReboundWalSHA256: string): Row;
   flySSHAgentDirectStopWalVerificationProjection(request: any): Row;
   validateFlySSHAgentProtocolPing(ping: any, identity: any, identitySHA256: string, connectedReboundSHA256: string): any;
   flySSHAgentProtocolAuthorityProjection(ping: any): Row;
-  flySSHAgentProtocolOperationProjection(intent: any): Row;
+  validateFlySSHAgentKillConnectionAuthority(authority: any, identity: any, identitySHA256: string, connectedReboundSHA256: string): any;
+  flySSHAgentProtocolOperationProjection(intent: any, killAuthority: any): Row;
   validateFlySSHAgentStopIntent(intent: any, batchID: string, identity: any, identitySHA256: string, ping: any, connectedReboundSHA256: string): void;
   runFlySSHAgentOwnedBatchCore(request: any): Promise<any>;
   parseCompatibilityChangedPaths(text: string, generation: "prior" | "immediate" | "current" | "cumulative"): readonly Row[];
   validatePriorFailedCompatibilityGitProof(raw: unknown): Row;
   validateImmediateFailedCompatibilityGitProof(raw: unknown, prior: Row): Row;
+  validatePriorProtocolIncompatibleGitProof(raw: unknown, immediate: Row): Row;
+  priorProtocolSourceAdmissionEvidenceProjection(): Row;
+  priorProtocolIncompatibilityProjection(): Row;
   validateCompatibilityGitProof(raw: unknown, evidence: any): Row;
   localEvidenceFingerprint(evidence: any): string;
   runMaintenanceRefenceGuardCore(request: any): Promise<any>;
@@ -707,7 +1706,7 @@ const BRIDGE_SUCCESS_FINALIZATION_KEYS = Object.freeze([ "schema", "authority_pr
 const BRIDGE_RUNTIME_PIN_KEYS = Object.freeze([ "bun_path", "bun_sha256", "bun_byte_count", "bun_version", "fly_path", "fly_sha256", "stable_user_owned_pins", "concurrent_same_uid_immutability_claimed", ]);
 const BRIDGE_HANDOFF_KEYS = Object.freeze([ "proof_schema", "refence_receipt_sha256", "refence_run_id", "source_revision", "source_tree", "target_revision", "target_tree", "anchor_archive_path", "anchor_sha256", "anchor_device",
   "anchor_inode", "witness_archive_path", "witness_sha256", "witness_device", "witness_inode", "wal_root", "bridge_source_path", "bridge_source_sha256", "bridge_normalized_sha256", "authorized_h0", "prior_failed_compatibility_controller",
-  "immediate_failed_compatibility_controller", "compatibility_controller", "preexisting_lineage_bound", "release_current_image_linkage_proven", "release_status_completion_authority", "release_stable_rollout_authority",
+  "immediate_failed_compatibility_controller", "prior_unexecuted_protocol_incompatible_successor", "compatibility_controller", "preexisting_lineage_bound", "release_current_image_linkage_proven", "release_status_completion_authority", "release_stable_rollout_authority",
   "release_ledger_safety_authority", "release_history_may_be_truncated", "public_surfaces_expected_unavailable", ]);
 const BRIDGE_AUTHORIZED_H0_KEYS = Object.freeze([ "schema", "receipt_sha256", "run_id", "target_revision", "target_tree", "target_distance", "lifecycle", "guard_revision", "guard_source_path", "guard_raw_sha256", "guard_normalized_sha256",
   "contract_revision", "contract_source_path", "contract_raw_sha256", "contract_git_blob", ]);
@@ -726,6 +1725,11 @@ const BRIDGE_IMMEDIATE_FAILED_COMPATIBILITY_CONTROLLER_KEYS = Object.freeze([ "s
   "cumulative_changed_path_statuses_sha256", "payload_revision", "payload_tree", "payload_distance", "downstream_effects", ]);
 const BRIDGE_IMMEDIATE_FAILED_DOWNSTREAM_EFFECT_KEYS = Object.freeze([ "git_fetch_attempt_count", "controller_wal_entry_count", "handoff_transition_count", "build_context_create_count", "dependency_estate_create_count",
   "network_attempt_count", "provider_effect_count", "fleet_effect_count", "database_write_attempt_count", "keychain_write_attempt_count", ]);
+const BRIDGE_PRIOR_PROTOCOL_INCOMPATIBLE_KEYS = Object.freeze([ "schema", "lifecycle", "source_admission_verified", "static_admission_verified", "controller_invocation_observed", "deploy_invocation_observed",
+  "controller_effect_observed", "controller_success", "mutation_effect_began", "success_authority", "effect_authority", "controller_revision", "controller_tree", "controller_source_distance", "commit_raw_sha256", "commit_byte_count",
+  "first_parent_revision", "second_parent_revision", "second_parent_tree", "protected_predecessor_tree", "bridge_revision", "bridge_source_path", "bridge_source_sha256", "bridge_normalized_sha256", "contract_revision",
+  "contract_source_path", "contract_source_sha256", "contract_git_blob", "changed_paths_raw_sha256", "changed_path_statuses", "changed_path_statuses_sha256", "cumulative_changed_paths_raw_sha256",
+  "cumulative_changed_path_statuses", "cumulative_changed_path_statuses_sha256", "source_admission_evidence", "protocol_incompatibility", "payload_revision", "payload_tree", "payload_distance", "downstream_effects", ]);
 const BRIDGE_CAVEATS = Object.freeze([ "preexisting_lineage_bound_false", "release_current_image_linkage_not_authority", "release_history_may_be_truncated", "sigkill_with_deploy_lock_requires_manual_recovery",
   "timed_out_or_unsettled_provider_effect_requires_manual_recovery", "database_origin_convergence_never_rolled_back", "success_receipt_with_marker_requires_manual_finalization", ]);
 const BRIDGE_MARKER_MUTABLE_KEYS = Object.freeze( new Set([ "updated_at", "status", "checkpoint", "recovery_required", "manual_finalization_required", "mutation_effect_began", "failure_code", "cordoned_runtime_verified",
@@ -1065,6 +2069,49 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
   const compatibilitySixStatuses = compatibilityStatuses( compatibilitySixPaths, );
   const compatibilityDownstreamEffects = Object.freeze({ git_fetch_attempt_count: 0, controller_wal_entry_count: 0, handoff_transition_count: 0, build_context_create_count: 0, dependency_estate_create_count: 0, network_attempt_count: 0,
     provider_effect_count: 0, fleet_effect_count: 0, database_write_attempt_count: 0, keychain_write_attempt_count: 0, });
+  const priorProtocolSourceAdmissionEvidenceProjection = (): Row => ({ schema: "agenttool-phase-b-refence-prior-source-admission-evidence/v1", validator: Object.freeze({
+      path: "/Users/yournameisai/.local/state/agenttool/phase-b-refence-final-fly-lifecycle-protected-successor-post-merge-v1.ts", sha256:
+        "daf7e372fb2bf84fd6b04c89e11fb8fa462c2580b4f6812102f82e02fddb72e5", byte_count: 76_864, mode: "0600", uid: 501, gid: 20, nlink: 1, }), finalized_checklist: Object.freeze({
+      path: "/Users/yournameisai/.local/state/agenttool/phase-b-refence-final-fly-lifecycle-protected-successor-post-merge-v1.checklist.md", sha256:
+        "36d872f24bc698e05d3f56cb331d02489fc3dcfee00f34b6c6172753c1d24598", byte_count: 14_143, mode: "0600", uid: 501, gid: 20, nlink: 1, exact_once_attested_by_finalized_checklist: true,
+      do_not_rerun_attested_by_finalized_checklist: true, }), durable_result: Object.freeze({ path:
+        "/Users/yournameisai/.local/state/agenttool/phase-b-refence-final-fly-lifecycle-protected-successor-post-merge-v1.result.json", sha256:
+        "d641e74570fa67dd5097c72934e4594002fe3586d3a9faf7ff253b724720d3a0", byte_count: 15_530, mode: "0600", uid: 501, gid: 20, nlink: 1, schema:
+        "agenttool-phase-b-refence-final-fly-lifecycle-protected-successor-preflight/v1", validator_mode: "post_merge", decision: "READY_FOR_NEXT_GATE", gate_status:
+        "READY_FOR_SEPARATE_EFFECT_AUTHORITY_REVIEW", final_source_admission: true, final_effect_admission: false, controller_entrypoint_authority: false, deploy_authority: false,
+      source_only_read_only_no_effect: true, production_bridge_imported_or_invoked: false, controller_imported_or_invoked: false, deploy_imported_or_invoked: false, effects: Object.freeze({ authorized: Object.freeze({
+          consensus: 0, economic: 0, governance: 0, identity: 0, karma: 0, nen: 0, network: 0, permission: 0, score: 0, storage: 0, }), horizon: "this_validator_process", validator: Object.freeze({
+          consensus: 0, economic: 0, governance: 0, identity: 0, karma: 0, nen: 0, network: 0, permission: 0, score: 0, storage: 0, }), }), }), result_itself_carries_invocation_count: false, });
+  const priorProtocolIncompatibilityProjection = (): Row => ({ schema: "agenttool-phase-b-refence-fly-v0.4.74-one-command-protocol-incompatibility/v1", fly_version: "0.4.74", binary_path:
+      "/Users/yournameisai/.cache/codex-tools/flyctl-v0.4.74/fly", binary_sha256: "7e919b0f42867e33d736398ba151ed00f2bfb577bf9424fbe57573bfee9ae1b3", binary_byte_count: 110_007_826,
+    server_session_source_path: "/home/runner/work/flyctl/flyctl/agent/server/session.go", run_session_address: "0x10199c0b0", run_session_byte_count: 0x340, run_session_line: 49,
+    sole_run_command_call_address: "0x10199c368", sole_run_command_call_line: 86, deferred_cleanup_return_line: 87, run_command_address: "0x10199c6b0", run_command_byte_count: 0x4f0,
+    run_command_line: 89, sole_proto_read_address: "0x10199c704", sole_proto_read_line: 90, proto_read_count: 1, handler_return_address: "0x10199cafc", handler_return_line: 135,
+    server_command_count_per_connection: 1, merged_client_connection_count: 1, merged_client_command_count: 2, merged_client_source_path: "bin/phase-b-refence-maintenance-bridge.ts",
+    merged_client_expected_kill_response_body: "ok ", merged_client_expected_kill_response_byte_count: 3, merged_client_expected_kill_response_sha256:
+      "bf2a63ad5d209b2be8586a0f249aac31e432115a64d4fb93433d702564be2469", merged_client_expected_kill_response_declaration:
+      'const FLY_AGENT_KILL_RESPONSE_SHA256 = "bf2a63ad5d209b2be8586a0f249aac31e432115a64d4fb93433d702564be2469";', merged_client_kill_validator_literal:
+      'bytes.byteLength === 3 && decode(bytes, "fly_agent_protocol_kill") === "ok "', merged_client_response_constant_line: 131, merged_client_kill_validator_start_line: 4_289,
+    ping_request_frame_hex: "040070696e67", ping_request_frame_sha256: "705631fc8ed0643d62cba3fd15eb48d1b4c4e6ec9c7ec5801b7487baecac1cf0", kill_request_frame_hex: "04006b696c6c", kill_request_frame_sha256:
+      "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be", kill_response_body: "ok", kill_response_body_byte_count: 2, kill_response_body_sha256:
+      "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df", kill_response_frame_hex: "02006f6b", kill_response_frame_sha256:
+      "4a2f8c6bd5fefd5f5fa6302fe657e23b4f181b498963d7b7ef05a9b3e8ade7b5", observed_controller_failure: false, incompatibility_verified: true, });
+  const priorProtocolIncompatibleHandoffProjection = (): Row => ({ schema: "agenttool-phase-b-refence-prior-unexecuted-protocol-incompatible-successor/v1",
+    lifecycle: "prior_unexecuted_protocol_incompatible_successor", source_admission_verified: true, static_admission_verified: true, controller_invocation_observed: false, deploy_invocation_observed: false,
+    controller_effect_observed: false, controller_success: false, mutation_effect_began: false, success_authority: false, effect_authority: false, controller_revision:
+      "296f57e0d291337b8664fc8caa5c3de08fa3cb02", controller_tree: "b70dda2bd6d47d5a0ffe30925e222bc656df0838", controller_source_distance: 56, commit_raw_sha256:
+      "95fa2e442a5adfe7ccea56ae1768489dede998488b939629a264502bdfac83dd", commit_byte_count: 1_226, first_parent_revision: "56dcf1bf5029bd8416a915e65e0e7c1416eea099",
+    second_parent_revision: "d0a92a4691ce8fabb29e084a2576eb38a53aa283", second_parent_tree: "b70dda2bd6d47d5a0ffe30925e222bc656df0838", protected_predecessor_tree:
+      "2f0a48ad44d8734edf954e1bd031a032cd390373", bridge_revision: "296f57e0d291337b8664fc8caa5c3de08fa3cb02", bridge_source_path: "bin/phase-b-refence-maintenance-bridge.ts", bridge_source_sha256:
+      "68892049dd5e3ffee92cd79548cfc69c86b7241d55d42018747827dfb34a21c5", bridge_normalized_sha256: "ef7f73430716438b5a79832be01f30f01adf06afe8c2f69b83422f8b3ec40ece",
+    contract_revision: "296f57e0d291337b8664fc8caa5c3de08fa3cb02", contract_source_path: "bin/phase-b-refence-maintenance-contract.ts", contract_source_sha256:
+      "a0489a4d7f7222f0f3fbc247f9ad824436b23967b231c42c71297f5de8061030", contract_git_blob: "177f7f932aa92dc55802714505089669e9e1ff91", changed_paths_raw_sha256:
+      "57d4f31969729438491e3c2d38334f7f2cb68e326d3843aa21ce5067924be24e", changed_path_statuses: structuredClone(compatibilityFiveStatuses), changed_path_statuses_sha256:
+      digest(canonical(compatibilityFiveStatuses)), cumulative_changed_paths_raw_sha256: "d43f8128c3ccb4cb34c24b5317552893e935ff43b6542da726607994e228dd4f",
+    cumulative_changed_path_statuses: structuredClone(compatibilitySixStatuses), cumulative_changed_path_statuses_sha256: digest(canonical(compatibilitySixStatuses)),
+    source_admission_evidence: priorProtocolSourceAdmissionEvidenceProjection(),
+    protocol_incompatibility: priorProtocolIncompatibilityProjection(), payload_revision: "d87a3f35c80bdac39402e1c34dfebe643a18beb6", payload_tree: "0b5881546a39e328b8299cf9bbfde8d25b15580b",
+    payload_distance: 47, downstream_effects: structuredClone(compatibilityDownstreamEffects), });
   const parseCompatibilityChangedPaths = ( text: string, generation: "prior" | "immediate" | "current" | "cumulative", ): readonly Row[] => { require( typeof text === "string" && text.endsWith("\0") &&
         !text.includes("\n") && !text.includes("\r") && ["prior", "immediate", "current", "cumulative"].includes(generation), "git_proof", );
     const expectedPaths = generation === "prior" || generation === "cumulative" ? compatibilitySixPaths : compatibilityFivePaths;
@@ -1107,21 +2154,47 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
         value.retained_deploy_lock_sha256 === "63b41175b9b17ddb000c815a477ca357ee923d9c18eabec7b339ba3f5f1288cf" && value.controller_success === false && value.mutation_effect_began === false &&
         value.success_authority === false && value.effect_authority === false && canonical(value.downstream_effects) === canonical(compatibilityDownstreamEffects), "git_proof", );
     return value; };
+  const validatePriorProtocolIncompatibleGitProof = (raw: unknown, immediate: Row): Row => { const value = exact(raw, [ "revision", "tree", "source_distance", "commit_raw_sha256", "commit_byte_count", "first_parent_revision",
+      "second_parent_revision", "second_parent_tree", "changed_paths_raw_sha256", "changed_path_statuses", "cumulative_changed_paths_raw_sha256", "cumulative_changed_path_statuses", "bridge_source_sha256",
+      "bridge_normalized_sha256", "contract_source_sha256", "contract_git_blob", "lifecycle", "source_admission_verified", "static_admission_verified", "controller_invocation_observed", "deploy_invocation_observed",
+      "controller_effect_observed", "controller_success", "mutation_effect_began", "success_authority", "effect_authority", "source_admission_evidence", "protocol_incompatibility", "downstream_effects", ], "git_proof");
+    exact(value.source_admission_evidence, Object.keys(priorProtocolSourceAdmissionEvidenceProjection()), "git_proof");
+    const protocol = exact(value.protocol_incompatibility, [ "schema", "fly_version", "binary_path", "binary_sha256", "binary_byte_count", "server_session_source_path", "run_session_address", "run_session_byte_count",
+      "run_session_line", "sole_run_command_call_address", "sole_run_command_call_line", "deferred_cleanup_return_line", "run_command_address", "run_command_byte_count", "run_command_line", "sole_proto_read_address",
+      "sole_proto_read_line", "proto_read_count", "handler_return_address", "handler_return_line", "server_command_count_per_connection", "merged_client_connection_count", "merged_client_command_count",
+      "merged_client_source_path", "merged_client_expected_kill_response_body", "merged_client_expected_kill_response_byte_count", "merged_client_expected_kill_response_sha256",
+      "merged_client_expected_kill_response_declaration", "merged_client_kill_validator_literal", "merged_client_response_constant_line", "merged_client_kill_validator_start_line",
+      "ping_request_frame_hex", "ping_request_frame_sha256", "kill_request_frame_hex", "kill_request_frame_sha256", "kill_response_body", "kill_response_body_byte_count", "kill_response_body_sha256",
+      "kill_response_frame_hex", "kill_response_frame_sha256", "observed_controller_failure", "incompatibility_verified", ], "git_proof");
+    exact(value.downstream_effects, Object.keys(compatibilityDownstreamEffects), "git_proof");
+    require( value.revision === "296f57e0d291337b8664fc8caa5c3de08fa3cb02" && value.tree === "b70dda2bd6d47d5a0ffe30925e222bc656df0838" && value.source_distance === 56 && value.commit_raw_sha256 ===
+          "95fa2e442a5adfe7ccea56ae1768489dede998488b939629a264502bdfac83dd" && value.commit_byte_count === 1_226 && value.first_parent_revision === immediate.revision && value.second_parent_revision ===
+          "d0a92a4691ce8fabb29e084a2576eb38a53aa283" && value.second_parent_tree === value.tree && value.changed_paths_raw_sha256 === "57d4f31969729438491e3c2d38334f7f2cb68e326d3843aa21ce5067924be24e" &&
+        canonical(value.changed_path_statuses) === canonical(compatibilityFiveStatuses) && value.cumulative_changed_paths_raw_sha256 === "d43f8128c3ccb4cb34c24b5317552893e935ff43b6542da726607994e228dd4f" &&
+        canonical(value.cumulative_changed_path_statuses) === canonical(compatibilitySixStatuses) && value.bridge_source_sha256 === "68892049dd5e3ffee92cd79548cfc69c86b7241d55d42018747827dfb34a21c5" &&
+        value.bridge_normalized_sha256 === "ef7f73430716438b5a79832be01f30f01adf06afe8c2f69b83422f8b3ec40ece" && value.contract_source_sha256 === "a0489a4d7f7222f0f3fbc247f9ad824436b23967b231c42c71297f5de8061030" &&
+        value.contract_git_blob === "177f7f932aa92dc55802714505089669e9e1ff91" && value.lifecycle === "prior_unexecuted_protocol_incompatible_successor" && value.source_admission_verified === true &&
+        value.static_admission_verified === true && value.controller_invocation_observed === false && value.deploy_invocation_observed === false && value.controller_effect_observed === false && value.controller_success === false &&
+        value.mutation_effect_began === false && value.success_authority === false && value.effect_authority === false && canonical(value.downstream_effects) === canonical(compatibilityDownstreamEffects) &&
+        canonical(value.source_admission_evidence) === canonical(priorProtocolSourceAdmissionEvidenceProjection()) &&
+        canonical(protocol) === canonical(priorProtocolIncompatibilityProjection()), "git_proof", );
+    return value; };
   const validateCompatibilityGitProof = ( raw: unknown, evidence: Row, ): Row => { const value = exact(raw, [ "revision", "tree", "source_distance", "commit_raw_sha256", "commit_byte_count", "first_parent_revision",
       "second_parent_revision", "second_parent_tree", "changed_paths_raw_sha256", "changed_path_statuses", "cumulative_changed_paths_raw_sha256", "cumulative_changed_path_statuses", "prior_failed_compatibility_controller",
-      "immediate_failed_compatibility_controller", "authorized_h0_guard_raw_sha256", "authorized_h0_guard_normalized_sha256", "authorized_h0_contract_source_sha256", "authorized_h0_contract_git_blob", "bridge_source_sha256",
+      "immediate_failed_compatibility_controller", "prior_unexecuted_protocol_incompatible_successor", "authorized_h0_guard_raw_sha256", "authorized_h0_guard_normalized_sha256", "authorized_h0_contract_source_sha256", "authorized_h0_contract_git_blob", "bridge_source_sha256",
       "bridge_normalized_sha256", "contract_source_sha256", "contract_git_blob", "protected_head", "clean", ], "git_proof");
     const prior = validatePriorFailedCompatibilityGitProof( value.prior_failed_compatibility_controller, );
     const immediate = validateImmediateFailedCompatibilityGitProof( value.immediate_failed_compatibility_controller, prior, );
+    const incompatible = validatePriorProtocolIncompatibleGitProof(value.prior_unexecuted_protocol_incompatible_successor, immediate);
     require( evidence.receiptSHA256 === "8b5bb36641fb210ee9ecb542d5adb3cfcb99adb76af369715aa32805e3e18077" && evidence.runID === "789e8486-47cb-4b80-a165-c5ea557082d6" && evidence.targetRevision ===
           "d87a3f35c80bdac39402e1c34dfebe643a18beb6" && evidence.targetTree === "0b5881546a39e328b8299cf9bbfde8d25b15580b" && evidence.targetDistance === 47 && evidence.producerGuardRawSHA256 ===
           "dd324e32fada2053acc945d39012d5844caef402ad82f013b27b18d3ddb275ae" && evidence.producerGuardNormalizedSHA256 === "9e0ddd120fa6d605f68a86be35303a1b2eba56155116218933f8801eda47340c" && validRevision(value.revision) && ![
-          evidence.targetRevision, prior.revision, immediate.revision, ].includes(value.revision) && validRevision(value.tree) && ![evidence.targetTree, prior.tree, immediate.tree].includes(value.tree) &&
-        Number.isSafeInteger(value.source_distance) && value.source_distance > 53 && validSHA(value.commit_raw_sha256) && Number.isSafeInteger(value.commit_byte_count) &&
-        value.commit_byte_count > 0 && value.commit_byte_count <= 1_000_000 && value.first_parent_revision === immediate.revision && validRevision(value.second_parent_revision) && value.second_parent_revision !== value.revision &&
-        value.second_parent_revision !== value.first_parent_revision && ![evidence.targetRevision, prior.revision].includes( value.second_parent_revision, ) && value.second_parent_tree === value.tree &&
-        validSHA(value.changed_paths_raw_sha256) && ![ prior.changed_paths_raw_sha256, immediate.changed_paths_raw_sha256, ].includes(value.changed_paths_raw_sha256) && canonical(value.changed_path_statuses) ===
-          canonical(compatibilityFiveStatuses) && validSHA(value.cumulative_changed_paths_raw_sha256) && value.cumulative_changed_paths_raw_sha256 !== immediate.cumulative_changed_paths_raw_sha256 &&
+          evidence.targetRevision, prior.revision, immediate.revision, incompatible.revision, ].includes(value.revision) && validRevision(value.tree) && ![evidence.targetTree, prior.tree, immediate.tree, incompatible.tree].includes(value.tree) &&
+        Number.isSafeInteger(value.source_distance) && value.source_distance > 56 && validSHA(value.commit_raw_sha256) && Number.isSafeInteger(value.commit_byte_count) &&
+        value.commit_byte_count > 0 && value.commit_byte_count <= 1_000_000 && value.first_parent_revision === incompatible.revision && validRevision(value.second_parent_revision) && value.second_parent_revision !== value.revision &&
+        value.second_parent_revision !== value.first_parent_revision && ![evidence.targetRevision, prior.revision, immediate.revision].includes( value.second_parent_revision, ) && value.second_parent_tree === value.tree &&
+        validSHA(value.changed_paths_raw_sha256) && ![ prior.changed_paths_raw_sha256, immediate.changed_paths_raw_sha256, incompatible.changed_paths_raw_sha256, ].includes(value.changed_paths_raw_sha256) && canonical(value.changed_path_statuses) ===
+          canonical(compatibilityFiveStatuses) && validSHA(value.cumulative_changed_paths_raw_sha256) && ![immediate.cumulative_changed_paths_raw_sha256, incompatible.cumulative_changed_paths_raw_sha256].includes(value.cumulative_changed_paths_raw_sha256) &&
         canonical(value.cumulative_changed_path_statuses) === canonical(compatibilitySixStatuses) && value.authorized_h0_guard_raw_sha256 === evidence.producerGuardRawSHA256 && value.authorized_h0_guard_normalized_sha256 ===
           evidence.producerGuardNormalizedSHA256 && value.authorized_h0_contract_source_sha256 === "0c7ad30f81271b42a2339fcf1f87705c1ff6ee4a5906506f8a2c089ab92e74a1" && value.authorized_h0_contract_git_blob ===
           "ea83765c054b3bf130a4c8957a5a30ef1e657cb6" && value.bridge_source_sha256 === evidence.bridgeRawSHA256 && value.bridge_normalized_sha256 === evidence.bridgeNormalizedSHA256 &&
@@ -1130,6 +2203,8 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
         value.contract_git_blob !== value.authorized_h0_contract_git_blob && [ value.bridge_source_sha256 !== prior.bridge_source_sha256, value.bridge_normalized_sha256 !== prior.bridge_normalized_sha256,
           value.contract_source_sha256 !== prior.contract_source_sha256, value.contract_git_blob !== prior.contract_git_blob, value.bridge_source_sha256 !== immediate.bridge_source_sha256,
           value.bridge_normalized_sha256 !== immediate.bridge_normalized_sha256, value.contract_source_sha256 !== immediate.contract_source_sha256, value.contract_git_blob !== immediate.contract_git_blob,
+          value.bridge_source_sha256 !== incompatible.bridge_source_sha256, value.bridge_normalized_sha256 !== incompatible.bridge_normalized_sha256,
+          value.contract_source_sha256 !== incompatible.contract_source_sha256, value.contract_git_blob !== incompatible.contract_git_blob,
         ].every(Boolean) && value.protected_head === true && value.clean === true, "git_proof", );
     return value; };
   const validRevision = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{40}$/.test(value);
@@ -1734,17 +2809,38 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
         Number.isSafeInteger(value.drain_informational.payout_requested) && value.drain_informational.payout_requested >= 0 && Number.isSafeInteger(value.drain_informational.x402_inserted) && value.drain_informational.x402_inserted >= 0 &&
         value.drain_zero === true && value.cron_sha256 === EXPECTED_CRON_SHA256 && validSHA(value.database_target_sha256), "database_convergence_admission", );
     return value; };
-  const flySSHAgentDirectStopSettlementSHA256 = ( protocolOperationSHA256: string, ): string => { require(validSHA(protocolOperationSHA256), "fly_agent_stop_settlement");
-    return digest(canonical({ schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-settlement/v1", transport: "local_unix_stream", socket_path: "/Users/yournameisai/.fly/fly-agent.sock",
-      protocol_operation_sha256: protocolOperationSHA256, kill_frame_sha256: "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be", kill_response_sha256: "bf2a63ad5d209b2be8586a0f249aac31e432115a64d4fb93433d702564be2469",
-      protocol_acknowledged: true, child_spawn_count: 0, stop_send_count: 1, })); };
-  const flySSHAgentDirectStopWalVerificationProjection = ( request: any, ): Row => { const value = exact(request, [ "batchID", "protocolAuthoritySHA256", "durableIntentSHA256", "protocolOperationSHA256", "settlementSHA256",
+  const flySSHAgentProtocolSettlementProjection = (protocolAuthoritySHA256: string, killConnectionAuthoritySHA256: string, protocolOperationSHA256: string, peerPID: number, pingConnectedReboundSHA256: string,
+    killConnectedReboundSHA256: string, pingConnectedReboundWalSHA256: string, killConnectedReboundWalSHA256: string): Row => ({ schema:
+    "agenttool-phase-b-refence-fly-ssh-agent-protocol-settlement/v2", transport: "local_unix_stream", socket_path: "/Users/yournameisai/.fly/fly-agent.sock", connection_model: "two_distinct_one_command_connections",
+    protocol_authority_sha256: protocolAuthoritySHA256, kill_connection_authority_sha256: killConnectionAuthoritySHA256, protocol_operation_sha256: protocolOperationSHA256, ping_initial_peer_pid: peerPID,
+    ping_connected_rebound_sha256: pingConnectedReboundSHA256, kill_connected_rebound_sha256: killConnectedReboundSHA256, ping_connected_rebound_wal_sha256: pingConnectedReboundWalSHA256,
+    kill_connected_rebound_wal_sha256: killConnectedReboundWalSHA256,
+    ping_prewrite_peer_pid: peerPID, kill_initial_peer_pid: peerPID, kill_prewrite_peer_pid: peerPID, peer_reattested_before_kill: true, kill_frame_sha256: "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be",
+    kill_response_sha256: "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df", ping_remote_eof_observed: true, kill_remote_eof_observed: true, ping_local_close_awaited: true,
+    kill_local_close_awaited: true, connection_count: 2, ping_connection_count: 1, kill_connection_count: 1, protocol_acknowledged: true, child_spawn_count: 0, stop_send_count: 1, });
+  const flySSHAgentDirectStopSettlementSHA256 = ( protocolAuthoritySHA256: string, killConnectionAuthoritySHA256: string, protocolOperationSHA256: string, peerPID: number,
+    pingConnectedReboundSHA256: string, killConnectedReboundSHA256: string, pingConnectedReboundWalSHA256: string, killConnectedReboundWalSHA256: string, ): string => { require(
+      [protocolAuthoritySHA256, killConnectionAuthoritySHA256, protocolOperationSHA256, pingConnectedReboundSHA256, killConnectedReboundSHA256, pingConnectedReboundWalSHA256,
+        killConnectedReboundWalSHA256].every(validSHA) && pingConnectedReboundSHA256 !== killConnectedReboundSHA256 && pingConnectedReboundWalSHA256 !== killConnectedReboundWalSHA256 &&
+        Number.isSafeInteger(peerPID) && peerPID > 1, "fly_agent_stop_settlement", );
+    return digest(canonical(flySSHAgentProtocolSettlementProjection(protocolAuthoritySHA256, killConnectionAuthoritySHA256, protocolOperationSHA256, peerPID, pingConnectedReboundSHA256,
+      killConnectedReboundSHA256, pingConnectedReboundWalSHA256, killConnectedReboundWalSHA256))); };
+  const flySSHAgentDirectStopWalVerificationProjection = ( request: any, ): Row => { const value = exact(request, [ "batchID", "protocolAuthoritySHA256", "killConnectionAuthoritySHA256", "durableIntentSHA256", "protocolOperationSHA256", "settlementSHA256", "peerPID",
+      "pingConnectedReboundSHA256", "killConnectedReboundSHA256", "pingConnectedReboundWalSHA256", "killConnectedReboundWalSHA256",
     ], "fly_agent_stop_wal_verification");
-    require( typeof value.batchID === "string" && /^(?:cordoned_runtime|final_authority)_[0-9a-f]{24}$/.test( value.batchID, ) && [ value.protocolAuthoritySHA256, value.durableIntentSHA256, value.protocolOperationSHA256,
-          value.settlementSHA256, ].every(validSHA) && value.settlementSHA256 === flySSHAgentDirectStopSettlementSHA256( value.protocolOperationSHA256, ), "fly_agent_stop_wal_verification", );
-    return { schema: "agenttool-phase-b-refence-fly-ssh-agent-stop-wal-verification/v1", transport: "local_unix_stream", socket_path: "/Users/yournameisai/.fly/fly-agent.sock", batch_id: value.batchID,
-      protocol_authority_sha256: value.protocolAuthoritySHA256, durable_intent_sha256: value.durableIntentSHA256, protocol_operation_sha256: value.protocolOperationSHA256, settlement_sha256: value.settlementSHA256, kill_frame_sha256:
-        "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be", kill_response_sha256: "bf2a63ad5d209b2be8586a0f249aac31e432115a64d4fb93433d702564be2469", protocol_acknowledged: true, child_spawn_count: 0, stop_send_count: 1, };
+    require( typeof value.batchID === "string" && /^(?:cordoned_runtime|final_authority)_[0-9a-f]{24}$/.test( value.batchID, ) && [ value.protocolAuthoritySHA256, value.killConnectionAuthoritySHA256, value.durableIntentSHA256,
+          value.protocolOperationSHA256, value.settlementSHA256, value.pingConnectedReboundSHA256, value.killConnectedReboundSHA256, value.pingConnectedReboundWalSHA256,
+          value.killConnectedReboundWalSHA256, ].every(validSHA) && value.pingConnectedReboundSHA256 !== value.killConnectedReboundSHA256 && value.pingConnectedReboundWalSHA256 !==
+          value.killConnectedReboundWalSHA256 && Number.isSafeInteger(value.peerPID) && value.peerPID > 1 && value.settlementSHA256 === flySSHAgentDirectStopSettlementSHA256(
+          value.protocolAuthoritySHA256, value.killConnectionAuthoritySHA256, value.protocolOperationSHA256, value.peerPID, value.pingConnectedReboundSHA256, value.killConnectedReboundSHA256,
+          value.pingConnectedReboundWalSHA256, value.killConnectedReboundWalSHA256), "fly_agent_stop_wal_verification", );
+    return { schema: "agenttool-phase-b-refence-fly-ssh-agent-stop-wal-verification/v2", transport: "local_unix_stream", socket_path: "/Users/yournameisai/.fly/fly-agent.sock", batch_id: value.batchID,
+      protocol_authority_sha256: value.protocolAuthoritySHA256, kill_connection_authority_sha256: value.killConnectionAuthoritySHA256, durable_intent_sha256: value.durableIntentSHA256,
+      protocol_operation_sha256: value.protocolOperationSHA256, settlement_sha256: value.settlementSHA256, peer_pid: value.peerPID, ping_connected_rebound_sha256: value.pingConnectedReboundSHA256,
+      kill_connected_rebound_sha256: value.killConnectedReboundSHA256, ping_connected_rebound_wal_sha256: value.pingConnectedReboundWalSHA256,
+      kill_connected_rebound_wal_sha256: value.killConnectedReboundWalSHA256, connection_count: 2, ping_connection_count: 1, kill_connection_count: 1,
+      kill_frame_sha256: "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be", kill_response_sha256: "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df",
+      protocol_acknowledged: true, child_spawn_count: 0, stop_send_count: 1, };
   };
   const validateControllerWalEntry = ( value: ControllerWalContractEntry, previous: ControllerWalContractEntry | null, history: readonly ControllerWalContractEntry[], expected: { controllerRunID: string;
       rolloutID: string;
@@ -1766,7 +2862,7 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
         const consumedEntries = lifecycleIntents.flatMap((intent) => { const stopEffectID = intent.effect_id!.replace(/_intent$/, "");
           const stopChain = history.filter((entry) => entry.effect_id === stopEffectID );
           require( stopEffectID !== intent.effect_id && stopChain.length === 3 && canonical(stopChain.map((entry) => entry.phase)) === canonical(["attempting", "settled", "verified"]) && stopChain.every((entry) =>
-                entry.effect_kind === "local_agent_stop" && entry.target === intent.target && entry.detail_sha256 !== null ) && stopChain[0]!.detail_sha256 === digest(`${canonical(intent)}\n`), "controller_wal_lifecycle_complete", );
+                entry.effect_kind === "local_agent_stop" && entry.target === intent.target && entry.detail_sha256 !== null ) && stopChain[0]!.detail_sha256 !== intent.detail_sha256, "controller_wal_lifecycle_complete", );
           return [intent, ...stopChain]; });
         require( previous?.phase === "verified" || previous?.phase === "transition_verified", "controller_wal_phase", );
         require( lifecycleIntents.length === 2 && new Set(lifecycleIntents.map((entry) => entry.target)).size === 2 && lifecycleEntries.length === consumedEntries.length && new Set(consumedEntries).size === consumedEntries.length,
@@ -1798,19 +2894,50 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
               entry.checkpoint === checkpoint && entry.argv_sha256 === digest(canonical(expectedArgv)) && entry.failure_code === null && entry.phase === ["attempting", "spawned", "settled", "verified"][ phase ] ),
           "controller_wal_lifecycle_rebound", ); }
       return identityPID; };
-    const directOperationSHA256 = ( intent: ControllerWalContractEntry, ): string => digest(canonical({ schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-operation/v1", transport: "local_unix_stream",
-      socket_path: "/Users/yournameisai/.fly/fly-agent.sock", protocol_authority_sha256: intent.detail_sha256, durable_intent_sha256: digest(`${canonical(intent)}\n`), cli_semantic_argv_sha256: intent.argv_sha256,
-      cli_semantic_executed: false, ping_frame_sha256: "705631fc8ed0643d62cba3fd15eb48d1b4c4e6ec9c7ec5801b7487baecac1cf0", kill_frame_sha256: "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be", child_spawn_count: 0,
-      stop_send_count: 1, retry_authorized: false, }));
+    const directKillAuthority = (peerPID: number, connectedReboundSHA256: string, connectedReboundWalSHA256: string): Row => ({ schema: "agenttool-phase-b-refence-fly-ssh-agent-kill-connection-authority/v1", transport: "local_unix_stream",
+      socket_path: "/Users/yournameisai/.fly/fly-agent.sock", connection_role: "kill", connection_ordinal: 2, connected_without_write: true, connected_rebound_wal_sha256: connectedReboundWalSHA256,
+      connected_rebound_sha256: connectedReboundSHA256,
+      initial_peer_pid: peerPID, peer_attested: true, command_count_before_attempt: 0, child_spawn_count: 0, });
+    const directOperation = (intent: ControllerWalContractEntry, pingEntries: readonly ControllerWalContractEntry[], killEntries: readonly ControllerWalContractEntry[], peerPID: number,
+      killConnectedReboundSHA256: string): Row => { require( pingEntries.length === 16 && killEntries.length === 16 && Number.isSafeInteger(peerPID) && peerPID > 1 && validSHA(intent.detail_sha256) &&
+        validSHA(killConnectedReboundSHA256) && intent.detail_sha256 !== killConnectedReboundSHA256, "controller_wal_lifecycle_rebound", );
+      const pingSpanSHA256 = digest(canonical(pingEntries));
+      const killSpanSHA256 = digest(canonical(killEntries));
+      require(pingSpanSHA256 !== killSpanSHA256, "controller_wal_lifecycle_rebound");
+      const killAuthority = directKillAuthority(peerPID, killConnectedReboundSHA256, killSpanSHA256);
+      return { schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-operation/v2", transport: "local_unix_stream", socket_path: "/Users/yournameisai/.fly/fly-agent.sock",
+        connection_model: "two_distinct_one_command_connections", protocol_authority_sha256: intent.argv_sha256, kill_connection_authority_sha256: digest(canonical(killAuthority)),
+        durable_intent_sha256: digest(`${canonical(intent)}\n`), peer_pid: peerPID, ping_connected_rebound_sha256: intent.detail_sha256, ping_connected_rebound_wal_sha256: pingSpanSHA256,
+        kill_connected_rebound_sha256: killConnectedReboundSHA256, kill_connected_rebound_wal_sha256: killSpanSHA256, cli_semantic_argv_sha256: stopCliSemanticSHA256, cli_semantic_executed: false,
+        ping_frame_sha256: "705631fc8ed0643d62cba3fd15eb48d1b4c4e6ec9c7ec5801b7487baecac1cf0",
+        kill_frame_sha256: "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be", connection_count: 2, ping_connection_count: 1, kill_connection_count: 1,
+        child_spawn_count: 0, stop_send_count: 1, retry_authorized: false, }; };
     const directIntentForAttempt = ( attempt: ControllerWalContractEntry, ): ControllerWalContractEntry | null => history.find((entry) => entry.phase === "lifecycle_intent" && entry.effect_kind === "local_agent_stop" &&
-        entry.target === attempt.target && digest(`${canonical(entry)}\n`) === attempt.detail_sha256 ) ?? null;
+        entry.target === attempt.target && entry.effect_id?.replace(/_intent$/, "") === attempt.effect_id ) ?? null;
+    const directAttemptBinding = (attempt: ControllerWalContractEntry): Row | null => { const intent = directIntentForAttempt(attempt);
+      if (intent === null) return null;
+      const intentIndex = history.indexOf(intent);
+      const attemptIndex = history.indexOf(attempt);
+      if (intentIndex < 16 || attemptIndex !== intentIndex + 17) return null;
+      const batchKind = String(intent.target).startsWith("cordoned_runtime_") ? "cordoned_runtime" : "final_authority";
+      const pingEntries = history.slice(intentIndex - 16, intentIndex);
+      const killEntries = history.slice(intentIndex + 1, attemptIndex);
+      const pingPID = validateReboundChains(pingEntries, `${batchKind}_cleanup_ping_connected_rebound`);
+      const killPID = validateReboundChains(killEntries, `${batchKind}_cleanup_kill_connected_rebound`);
+      if (pingPID === null || pingPID !== killPID) return null;
+      if (!validSHA(attempt.detail_sha256)) return null;
+      const operation = directOperation(intent, pingEntries, killEntries, pingPID, attempt.detail_sha256);
+      const killAuthority = directKillAuthority(pingPID, attempt.detail_sha256, digest(canonical(killEntries)));
+      return { intent, peerPID: pingPID, operation, operationSHA256: digest(canonical(operation)), killConnectionAuthoritySHA256: digest(canonical(killAuthority)),
+        pingConnectedReboundSHA256: intent.detail_sha256, killConnectedReboundSHA256: attempt.detail_sha256, pingConnectedReboundWalSHA256: digest(canonical(pingEntries)),
+        killConnectedReboundWalSHA256: digest(canonical(killEntries)), }; };
     const lifecycleIntents = history.filter((entry) => entry.phase === "lifecycle_intent" );
     const stopAttemptsFor = (intent: ControllerWalContractEntry) => history.filter((entry) => entry.phase === "attempting" && entry.effect_kind === "local_agent_stop" && entry.target === intent.target &&
-        entry.detail_sha256 === digest(`${canonical(intent)}\n`) );
+        entry.effect_id === intent.effect_id?.replace(/_intent$/, "") );
     const pendingLifecycleIntents = lifecycleIntents.filter((intent) => stopAttemptsFor(intent).length === 0 );
     require( lifecycleIntents.length <= 2 && pendingLifecycleIntents.length <= 1 && lifecycleIntents.every((intent) => stopAttemptsFor(intent).length <= 1), "controller_wal_lifecycle_intent", );
     const pendingLifecycleIntent = pendingLifecycleIntents[0] ?? null;
-    const reboundCheckpoint = pendingLifecycleIntent === null ? null : String(pendingLifecycleIntent.target).startsWith("cordoned_runtime_") ? "cordoned_runtime_cleanup_intent_rebound" : "final_authority_cleanup_intent_rebound";
+    const reboundCheckpoint = pendingLifecycleIntent === null ? null : String(pendingLifecycleIntent.target).startsWith("cordoned_runtime_") ? "cordoned_runtime_cleanup_kill_connected_rebound" : "final_authority_cleanup_kill_connected_rebound";
     const pendingIntentIndex = pendingLifecycleIntent === null ? -1 : history.indexOf(pendingLifecycleIntent);
     const rebound = pendingIntentIndex < 0 ? [] : history.slice(pendingIntentIndex + 1);
     const reboundPartialLength = rebound.length % 4;
@@ -1825,38 +2952,48 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
       const expectedArgv = reboundGroup === 0 ? processCensusArgv : reboundGroup === 1 ? pathHoldersArgv : reboundGroup === 2 ? identityArgv(pid!) : textArgv(pid!);
       const intentEffectOrdinal = Number( pendingLifecycleIntent.effect_id!.slice(6, 12), );
       reboundReadAttempt = match !== null && Number(match[1]) === intentEffectOrdinal + reboundGroup + 1 && value.argv_sha256 === digest(canonical(expectedArgv)); }
-    const stopAttempt = value.phase === "attempting" && pendingLifecycleIntent !== null && rebound.length === 16 && completedReboundPID !== null && value.effect_kind === "local_agent_stop" && value.checkpoint ===
-        "fly_agent_cleanup_stop_direct_unix_protocol_child_spawn_count_0" && value.target === pendingLifecycleIntent.target && value.argv_sha256 === directOperationSHA256(pendingLifecycleIntent) &&
-      value.detail_sha256 === digest(`${canonical(pendingLifecycleIntent)}\n`) && value.effect_id === pendingLifecycleIntent.effect_id!.replace( /_intent$/, "", );
-    if (stopAttempt) { const connectedCheckpoint = String(pendingLifecycleIntent.target) .startsWith("cordoned_runtime_") ? "cordoned_runtime_cleanup_connected_rebound" : "final_authority_cleanup_connected_rebound";
-      const connectedPID = validateReboundChains( history.slice(pendingIntentIndex - 16, pendingIntentIndex), connectedCheckpoint, );
-      require( connectedPID === completedReboundPID, "controller_wal_lifecycle_rebound", ); }
+    const pingCheckpoint = pendingLifecycleIntent === null ? null : String(pendingLifecycleIntent.target).startsWith("cordoned_runtime_") ? "cordoned_runtime_cleanup_ping_connected_rebound" :
+      "final_authority_cleanup_ping_connected_rebound";
+    const pingEntries = pendingIntentIndex < 16 ? [] : history.slice(pendingIntentIndex - 16, pendingIntentIndex);
+    const pingPID = pendingLifecycleIntent === null || pingEntries.length !== 16 ? null : validateReboundChains(pingEntries, pingCheckpoint!);
+    const expectedOperation = pendingLifecycleIntent === null || rebound.length !== 16 || completedReboundPID === null || pingPID !== completedReboundPID || !validSHA(value.detail_sha256) ? null : directOperation(
+      pendingLifecycleIntent, pingEntries, rebound, completedReboundPID, value.detail_sha256!, );
+    const stopAttempt = value.phase === "attempting" && pendingLifecycleIntent !== null && expectedOperation !== null && value.effect_kind === "local_agent_stop" && value.checkpoint ===
+        "fly_agent_cleanup_stop_direct_unix_protocol_two_connections_child_spawn_count_0" && value.target === pendingLifecycleIntent.target && value.argv_sha256 === digest(canonical(expectedOperation)) &&
+      value.detail_sha256 !== pendingLifecycleIntent.detail_sha256 && value.effect_id === pendingLifecycleIntent.effect_id!.replace( /_intent$/, "", );
     if (value.phase === "lifecycle_intent") { const batchKind = lifecycleIntents.length === 0 ? "cordoned_runtime" : "final_authority";
-      const connectedCheckpoint = `${batchKind}_cleanup_connected_rebound`;
+      const connectedCheckpoint = `${batchKind}_cleanup_ping_connected_rebound`;
       const intentEffectMatch = value.effect_id.match( /^agent_([0-9]{6})_stop_intent$/, );
       const connectedLastEffectMatch = previous?.effect_id?.match( /^agent_([0-9]{6})_text_[1-9][0-9]*$/, ) ?? null;
       require( pendingLifecycleIntent === null && lifecycleIntents.length < 2 && value.effect_kind === "local_agent_stop" && previous !== null && previous.phase === "verified" && value.checkpoint ===
-            "fly_agent_cleanup_stop_intent_direct_unix_protocol" && intentEffectMatch !== null && connectedLastEffectMatch !== null && Number(intentEffectMatch[1]) === Number(connectedLastEffectMatch[1]) + 1 &&
-          new Set(lifecycleIntents.map((entry) => entry.target)).size === lifecycleIntents.length && new RegExp(`^${batchKind}_[0-9a-f]{24}$`).test(value.target) && value.argv_sha256 === stopCliSemanticSHA256 &&
+            "fly_agent_cleanup_stop_intent_two_connections" && intentEffectMatch !== null && connectedLastEffectMatch !== null && Number(intentEffectMatch[1]) === Number(connectedLastEffectMatch[1]) + 1 &&
+          new Set(lifecycleIntents.map((entry) => entry.target)).size === lifecycleIntents.length && new RegExp(`^${batchKind}_[0-9a-f]{24}$`).test(value.target) && validSHA(value.argv_sha256) &&
           value.pid === null && value.pgid === null && value.exit_code === null && value.termination === null && value.local_process_group_settled && value.provider_transition_sha256 === null && value.fleet_readback_sha256 === null &&
-          validSHA(value.detail_sha256) && value.failure_code === null && validateReboundChains(history.slice(-16), connectedCheckpoint) !== null, "controller_wal_phase", ); } else if (value.phase === "attempting") { require(
+          validSHA(value.detail_sha256) && value.argv_sha256 !== value.detail_sha256 && value.failure_code === null && validateReboundChains(history.slice(-16), connectedCheckpoint) !== null, "controller_wal_phase", ); } else if(value.phase === "attempting") { require(
         previous !== null && (pendingLifecycleIntent === null ? ["ready", "settled", "verified", "transition_verified"] .includes(previous.phase) && !directStop : reboundReadAttempt || stopAttempt) &&
           value.pid === null && value.pgid === null && value.exit_code === null && value.termination === null && value.local_process_group_settled === (databaseConvergence || stopAttempt) && value.provider_transition_sha256 === null &&
-          value.fleet_readback_sha256 === null && value.failure_code === null, "controller_wal_phase", ); } else if ( value.phase !== "transition_verified" && value.phase !== "lifecycle_intent" && !transitionFailure ) { require(
+          value.fleet_readback_sha256 === null && value.failure_code === null, "controller_wal_phase", ); } else if (value.phase !== "transition_verified" && !transitionFailure) { require(
         previous !== null && value.effect_id === previous.effect_id && value.effect_kind === previous.effect_kind && value.target === previous.target && value.argv_sha256 === previous.argv_sha256, "controller_wal_effect_chain", ); }
     if (value.phase === "spawned") { require( !databaseConvergence && !directStop && previous?.phase === "attempting" && Number.isSafeInteger(value.pid) && value.pid! > 1 && value.pgid === value.pid && value.exit_code === null &&
           value.termination === null && !value.local_process_group_settled && value.provider_transition_sha256 === null && value.fleet_readback_sha256 === null && value.failure_code === null, "controller_wal_phase", ); }
-    if (value.phase === "settled") { if (databaseConvergence || directStop) { require( previous?.phase === "attempting" && value.pid === null && value.pgid === null && value.exit_code === null &&
-            value.termination === null && value.local_process_group_settled && value.provider_transition_sha256 === null && value.fleet_readback_sha256 === null && (directStop ? value.detail_sha256 ===
-                flySSHAgentDirectStopSettlementSHA256(value.argv_sha256!) : validSHA(value.detail_sha256)) && value.failure_code === null, "controller_wal_phase", ); } else { require(
+    if (value.phase === "settled") { if (databaseConvergence || directStop) { const binding = directStop && previous !== null ? directAttemptBinding(previous) : null;
+        require( previous?.phase === "attempting" && value.pid === null && value.pgid === null && value.exit_code === null && value.termination === null && value.local_process_group_settled &&
+            value.provider_transition_sha256 === null && value.fleet_readback_sha256 === null && (directStop ? binding !== null && binding.operationSHA256 === value.argv_sha256 && value.detail_sha256 ===
+                flySSHAgentDirectStopSettlementSHA256(binding.intent.argv_sha256, binding.killConnectionAuthoritySHA256, binding.operationSHA256, binding.peerPID,
+                  binding.pingConnectedReboundSHA256, binding.killConnectedReboundSHA256, binding.pingConnectedReboundWalSHA256, binding.killConnectedReboundWalSHA256) : validSHA(value.detail_sha256)) &&
+            value.failure_code === null, "controller_wal_phase", ); } else { require(
           previous?.phase === "spawned" && value.pid === previous.pid && value.pgid === previous.pgid && Number.isSafeInteger(value.exit_code) && value.exit_code! >= 0 && value.exit_code! <= 255 &&
             value.termination === "exit" && value.local_process_group_settled && value.provider_transition_sha256 === null && value.fleet_readback_sha256 === null && value.failure_code === null, "controller_wal_phase", ); } }
     if (value.phase === "verified") { if (databaseConvergence) { require( previous?.phase === "settled" && value.pid === null && value.pgid === null && value.exit_code === null &&
             value.termination === null && value.local_process_group_settled && validSHA(value.provider_transition_sha256) && validSHA(value.fleet_readback_sha256) && validSHA(value.detail_sha256) && value.failure_code === null,
           "controller_wal_phase", ); } else if (directStop) { const attempting = [...history].reverse().find((entry) => entry.effect_id === value.effect_id && entry.phase === "attempting" ) ?? null;
         const intent = attempting === null ? null : directIntentForAttempt(attempting);
-        const expectedVerificationSHA256 = attempting === null || intent === null || previous === null ? null : digest(canonical( flySSHAgentDirectStopWalVerificationProjection({ batchID: intent.target,
-                protocolAuthoritySHA256: intent.detail_sha256, durableIntentSHA256: attempting.detail_sha256, protocolOperationSHA256: attempting.argv_sha256, settlementSHA256: previous.detail_sha256, }), ));
+      const binding = attempting === null ? null : directAttemptBinding(attempting);
+      const expectedVerificationSHA256 = attempting === null || intent === null || previous === null || binding === null ? null : digest(canonical( flySSHAgentDirectStopWalVerificationProjection({ batchID: intent.target,
+                protocolAuthoritySHA256: intent.argv_sha256, killConnectionAuthoritySHA256: binding.killConnectionAuthoritySHA256, durableIntentSHA256: digest(`${canonical(intent)}\n`),
+                protocolOperationSHA256: attempting.argv_sha256, settlementSHA256: previous.detail_sha256, peerPID: binding.peerPID,
+                pingConnectedReboundSHA256: binding.pingConnectedReboundSHA256, killConnectedReboundSHA256: binding.killConnectedReboundSHA256,
+                pingConnectedReboundWalSHA256: binding.pingConnectedReboundWalSHA256, killConnectedReboundWalSHA256: binding.killConnectedReboundWalSHA256, }), ));
         require( previous?.phase === "settled" && value.pid === null && value.pgid === null && value.exit_code === null && value.termination === null && value.local_process_group_settled && value.provider_transition_sha256 === null &&
             value.fleet_readback_sha256 === null && expectedVerificationSHA256 !== null && value.detail_sha256 === expectedVerificationSHA256 && value.failure_code === null, "controller_wal_phase", ); } else { require(
           previous?.phase === "settled" && value.pid === previous.pid && value.pgid === previous.pgid && value.exit_code === previous.exit_code && Number.isSafeInteger(value.exit_code) &&
@@ -2489,7 +3626,7 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
   const flyAgentVersion = "0.4.74";
   const flyAgentPingFrameSHA256 = "705631fc8ed0643d62cba3fd15eb48d1b4c4e6ec9c7ec5801b7487baecac1cf0";
   const flyAgentKillFrameSHA256 = "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be";
-  const flyAgentKillResponseSHA256 = "bf2a63ad5d209b2be8586a0f249aac31e432115a64d4fb93433d702564be2469";
+  const flyAgentKillResponseSHA256 = "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df";
   const flyAgentCommand = /^\/Users\/yournameisai\/\.cache\/codex-tools\/flyctl-v0\.4\.74\/fly agent run (\/Users\/yournameisai\/\.fly\/agent-logs\/[A-Za-z0-9._-]{1,128}\.log)$/;
   const parseFlySSHAgentPSText = (text: string): readonly FlySSHAgentParsedPSRow[] => { require(text.endsWith("\n") && !text.includes("\r") && text.length <= 2_000_000, "fly_agent_ps");
     const rows: FlySSHAgentParsedPSRow[] = [];
@@ -2568,44 +3705,79 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
     tracked_pgid_absent: observation.tracked_pgid_absent, socket: null, lock: observation.lock === null ? null : { ...observation.lock, holder_pids: [] }, });
   const flySSHAgentActiveProjection = (observation: Row): Row => ({ schema: observation.schema, agent_processes: observation.agent_processes.map( flySSHAgentStableIdentityProjection, ),
     pinned_fly_process_count: observation.pinned_fly_process_count, other_pinned_fly_process_count: observation.other_pinned_fly_process_count, socket: observation.socket, lock: observation.lock, });
-  const validateFlySSHAgentProtocolPing = ( ping: Row, identity: Row, identitySHA256: string, connectedReboundSHA256: string, ): Row => { const value = exact(ping, [ "schema", "transport", "socket_path", "connected_without_write",
-      "connected_rebound_sha256", "connected_rebound_wal_sha256", "identity_sha256", "ping_frame_sha256", "response_pid", "response_version", "response_disabled", "response_byte_count", "response_sha256", "child_spawn_count",
-    ], "fly_agent_protocol_ping");
+  const validateFlySSHAgentProtocolPing = ( ping: Row, identity: Row, identitySHA256: string, connectedReboundSHA256: string, ): Row => { const value = exact(ping, [ "schema", "transport", "socket_path", "connection_role",
+      "connection_ordinal", "connected_without_write", "connected_rebound_sha256", "connected_rebound_wal_sha256", "identity_sha256", "initial_peer_pid", "prewrite_peer_pid", "peer_attested", "ping_frame_sha256",
+      "response_pid", "response_version", "response_disabled", "response_byte_count", "response_sha256", "command_count", "remote_eof_observed", "local_close_awaited", "child_spawn_count", ], "fly_agent_protocol_ping");
     const stableIdentitySHA256 = digest(canonical( flySSHAgentStableIdentityProjection(identity), ));
     const expectedResponse = `ok {"pid":${identity.pid},"version":"${flyAgentVersion}","disabled":${String(value.response_disabled)}}`;
-    require( identitySHA256 === stableIdentitySHA256 && value.schema === "agenttool-phase-b-refence-fly-ssh-agent-protocol-ping/v1" && value.transport === "local_unix_stream" && value.socket_path === flyAgentSocket &&
-        value.connected_without_write === true && value.connected_rebound_sha256 === connectedReboundSHA256 && validSHA(value.connected_rebound_wal_sha256) && value.identity_sha256 === identitySHA256 &&
-        value.ping_frame_sha256 === flyAgentPingFrameSHA256 && value.response_pid === identity.pid && value.response_version === flyAgentVersion && typeof value.response_disabled === "boolean" &&
-        value.response_byte_count === expectedResponse.length && value.response_sha256 === digest(expectedResponse) && value.child_spawn_count === 0, "fly_agent_protocol_ping", );
+    require( identitySHA256 === stableIdentitySHA256 && value.schema === "agenttool-phase-b-refence-fly-ssh-agent-protocol-ping/v2" && value.transport === "local_unix_stream" && value.socket_path === flyAgentSocket &&
+        value.connection_role === "ping" && value.connection_ordinal === 1 && value.connected_without_write === true && value.connected_rebound_sha256 === connectedReboundSHA256 && validSHA(value.connected_rebound_wal_sha256) &&
+        value.identity_sha256 === identitySHA256 && value.initial_peer_pid === identity.pid && value.prewrite_peer_pid === identity.pid && value.peer_attested === true && value.ping_frame_sha256 === flyAgentPingFrameSHA256 &&
+        value.response_pid === identity.pid && value.response_version === flyAgentVersion && typeof value.response_disabled === "boolean" && value.response_byte_count === expectedResponse.length &&
+        value.response_sha256 === digest(expectedResponse) && value.command_count === 1 && value.remote_eof_observed === true && value.local_close_awaited === true && value.child_spawn_count === 0, "fly_agent_protocol_ping", );
     return value; };
-  const flySSHAgentProtocolAuthorityProjection = ( ping: Row, ): Row => { require( validSHA(ping.connected_rebound_sha256) && validSHA(ping.connected_rebound_wal_sha256), "fly_agent_protocol_authority", );
-    return { schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-authority/v1", transport: "local_unix_stream", socket_path: flyAgentSocket, connected_without_write: true, connected_rebound_sha256: ping.connected_rebound_sha256,
-      connected_rebound_wal_sha256: ping.connected_rebound_wal_sha256, identity_sha256: ping.identity_sha256, ping_frame_sha256: flyAgentPingFrameSHA256, kill_frame_sha256: flyAgentKillFrameSHA256,
-      ping_response_sha256: ping.response_sha256, ping_response_pid: ping.response_pid, ping_response_version: ping.response_version, ping_response_disabled: ping.response_disabled, child_spawn_count: 0, }; };
-  const flySSHAgentProtocolOperationProjection = (intent: Row): Row => ({ schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-operation/v1", transport: "local_unix_stream", socket_path: flyAgentSocket,
-    protocol_authority_sha256: intent.protocol_authority_sha256, durable_intent_sha256: intent.durable_intent_sha256, cli_semantic_argv_sha256: intent.cli_semantic_argv_sha256, cli_semantic_executed: false,
-    ping_frame_sha256: flyAgentPingFrameSHA256, kill_frame_sha256: flyAgentKillFrameSHA256, child_spawn_count: 0, stop_send_count: 1, retry_authorized: false, });
+  const flySSHAgentProtocolAuthorityProjection = ( ping: Row, ): Row => { require( validSHA(ping.connected_rebound_sha256) && validSHA(ping.connected_rebound_wal_sha256) && Number.isSafeInteger(ping.initial_peer_pid),
+      "fly_agent_protocol_authority", );
+    return { schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-authority/v2", transport: "local_unix_stream", socket_path: flyAgentSocket, connection_model: "two_distinct_one_command_connections",
+      connection_role: "ping", connection_ordinal: 1, connected_without_write: true, connected_rebound_sha256: ping.connected_rebound_sha256, connected_rebound_wal_sha256: ping.connected_rebound_wal_sha256,
+      identity_sha256: ping.identity_sha256, initial_peer_pid: ping.initial_peer_pid, prewrite_peer_pid: ping.prewrite_peer_pid, peer_attested: true, ping_frame_sha256: flyAgentPingFrameSHA256,
+      ping_response_sha256: ping.response_sha256, ping_response_pid: ping.response_pid, ping_response_version: ping.response_version, ping_response_disabled: ping.response_disabled, command_count: 1,
+      remote_eof_observed: true, local_close_awaited: true, child_spawn_count: 0, }; };
+  const validateFlySSHAgentKillConnectionAuthority = ( raw: Row, identity: Row, identitySHA256: string, connectedReboundSHA256: string, ): Row => { const value = exact(raw, [ "schema", "transport", "socket_path", "connection_role",
+      "connection_ordinal", "connected_without_write", "connected_rebound_sha256", "connected_rebound_wal_sha256", "initial_peer_pid", "peer_attested", "command_count_before_attempt", "child_spawn_count",
+    ], "fly_agent_kill_connection_authority");
+    require( value.schema === "agenttool-phase-b-refence-fly-ssh-agent-kill-connection-authority/v1" && value.transport === "local_unix_stream" && value.socket_path === flyAgentSocket && value.connection_role === "kill" &&
+        value.connection_ordinal === 2 && value.connected_without_write === true && value.connected_rebound_sha256 === connectedReboundSHA256 && validSHA(connectedReboundSHA256) &&
+        validSHA(value.connected_rebound_wal_sha256) && identitySHA256 === digest(canonical(flySSHAgentStableIdentityProjection(identity))) &&
+        value.initial_peer_pid === identity.pid && value.peer_attested === true && value.command_count_before_attempt === 0 && value.child_spawn_count === 0,
+      "fly_agent_kill_connection_authority", );
+    return value; };
+  const flySSHAgentProtocolOperationProjection = (intent: Row, rawKillAuthority: Row): Row => { const killAuthority = exact(rawKillAuthority, [ "schema", "transport", "socket_path", "connection_role", "connection_ordinal",
+      "connected_without_write", "connected_rebound_sha256", "connected_rebound_wal_sha256", "initial_peer_pid", "peer_attested", "command_count_before_attempt", "child_spawn_count", ], "fly_agent_protocol_operation");
+    require( killAuthority.schema === "agenttool-phase-b-refence-fly-ssh-agent-kill-connection-authority/v1" && killAuthority.transport === "local_unix_stream" && killAuthority.socket_path === flyAgentSocket &&
+        killAuthority.connection_role === "kill" && killAuthority.connection_ordinal === 2 && killAuthority.connected_without_write === true && validSHA(killAuthority.connected_rebound_sha256) && validSHA(killAuthority.connected_rebound_wal_sha256) &&
+        killAuthority.initial_peer_pid === intent.ping_peer_pid && killAuthority.peer_attested === true && killAuthority.command_count_before_attempt === 0 &&
+        killAuthority.child_spawn_count === 0 && validSHA(intent.ping_connected_rebound_sha256) && validSHA(intent.ping_connected_rebound_wal_sha256) &&
+        intent.ping_connected_rebound_sha256 !== killAuthority.connected_rebound_sha256 && intent.ping_connected_rebound_wal_sha256 !== killAuthority.connected_rebound_wal_sha256,
+      "fly_agent_protocol_operation", );
+    return { schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-operation/v2", transport: "local_unix_stream", socket_path: flyAgentSocket, connection_model: "two_distinct_one_command_connections",
+      protocol_authority_sha256: intent.protocol_authority_sha256, kill_connection_authority_sha256: digest(canonical(killAuthority)), durable_intent_sha256: intent.durable_intent_sha256,
+      peer_pid: killAuthority.initial_peer_pid, ping_connected_rebound_sha256: intent.ping_connected_rebound_sha256, ping_connected_rebound_wal_sha256: intent.ping_connected_rebound_wal_sha256,
+      kill_connected_rebound_sha256: killAuthority.connected_rebound_sha256,
+      kill_connected_rebound_wal_sha256: killAuthority.connected_rebound_wal_sha256, cli_semantic_argv_sha256: intent.cli_semantic_argv_sha256, cli_semantic_executed: false, ping_frame_sha256: flyAgentPingFrameSHA256,
+      kill_frame_sha256: flyAgentKillFrameSHA256, connection_count: 2, ping_connection_count: 1, kill_connection_count: 1, child_spawn_count: 0, stop_send_count: 1, retry_authorized: false, }; };
   const validateFlySSHAgentStopIntent = ( intent: Row, batchID: string, identity: Row, identitySHA256: string, ping: Row, connectedReboundSHA256: string, ): void => { exact(intent, [ "schema", "batch_id", "identity_sha256",
-      "cli_semantic_argv_sha256", "cli_semantic_executed", "protocol_authority_sha256", "ping_response_sha256", "durable_intent_sha256", ], "fly_agent_stop_intent");
+      "cli_semantic_argv_sha256", "cli_semantic_executed", "protocol_authority_sha256", "ping_connected_rebound_sha256", "ping_connected_rebound_wal_sha256", "ping_peer_pid", "ping_connection_closed", "ping_response_sha256",
+      "durable_intent_sha256", ], "fly_agent_stop_intent");
     const validatedPing = validateFlySSHAgentProtocolPing( ping, identity, identitySHA256, connectedReboundSHA256, );
-    require( intent.schema === "agenttool-phase-b-refence-fly-ssh-agent-stop-intent/v2" && intent.batch_id === batchID && intent.identity_sha256 === identitySHA256 && intent.cli_semantic_argv_sha256 ===
+    require( intent.schema === "agenttool-phase-b-refence-fly-ssh-agent-stop-intent/v3" && intent.batch_id === batchID && intent.identity_sha256 === identitySHA256 && intent.cli_semantic_argv_sha256 ===
           digest(canonical([flyAgentExecutable, "agent", "stop"])) && intent.cli_semantic_executed === false && intent.protocol_authority_sha256 === digest(canonical( flySSHAgentProtocolAuthorityProjection(validatedPing),
-        )) && intent.ping_response_sha256 === validatedPing.response_sha256 && validSHA(intent.durable_intent_sha256), "fly_agent_stop_intent", ); };
-  const validateFlySSHAgentStopReceipt = ( receipt: Row, batchID: string, identitySHA256: string, intent: Row, ): void => { exact(receipt, [ "schema", "batch_id", "identity_sha256", "cli_semantic_argv_sha256", "cli_semantic_executed",
-      "protocol_authority_sha256", "protocol_operation_sha256", "durable_intent_sha256", "settlement_sha256", "transport", "socket_path", "ping_frame_sha256", "kill_frame_sha256", "ping_response_sha256", "kill_response_byte_count",
-      "kill_response_sha256", "protocol_acknowledged", "child_spawn_count", "stop_send_count", ], "fly_agent_stop");
-    const settlementSHA256 = digest(canonical({ schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-settlement/v1", transport: "local_unix_stream", socket_path: flyAgentSocket,
-      protocol_operation_sha256: receipt.protocol_operation_sha256, kill_frame_sha256: flyAgentKillFrameSHA256, kill_response_sha256: flyAgentKillResponseSHA256, protocol_acknowledged: true, child_spawn_count: 0, stop_send_count: 1, }));
-    require( receipt.schema === "agenttool-phase-b-refence-fly-ssh-agent-stop/v2" && receipt.batch_id === batchID && receipt.identity_sha256 === identitySHA256 && receipt.cli_semantic_argv_sha256 ===
+        )) && intent.ping_connected_rebound_sha256 === connectedReboundSHA256 && intent.ping_connected_rebound_wal_sha256 === validatedPing.connected_rebound_wal_sha256 && intent.ping_peer_pid === identity.pid &&
+        intent.ping_connection_closed === true &&
+        intent.ping_response_sha256 === validatedPing.response_sha256 && validSHA(intent.durable_intent_sha256), "fly_agent_stop_intent", ); };
+  const validateFlySSHAgentStopReceipt = ( receipt: Row, batchID: string, identitySHA256: string, intent: Row, killAuthority: Row, killConnectedReboundSHA256: string, ): void => { exact(receipt, [ "schema", "batch_id",
+      "identity_sha256", "cli_semantic_argv_sha256", "cli_semantic_executed", "protocol_authority_sha256", "kill_connection_authority_sha256", "ping_connected_rebound_sha256", "kill_connected_rebound_sha256", "protocol_operation_sha256",
+      "durable_intent_sha256", "settlement_sha256", "transport", "socket_path", "ping_frame_sha256", "kill_frame_sha256", "ping_response_sha256", "kill_response_byte_count", "kill_response_sha256",
+      "ping_initial_peer_pid", "ping_prewrite_peer_pid", "kill_initial_peer_pid", "kill_prewrite_peer_pid", "ping_remote_eof_observed", "kill_remote_eof_observed", "ping_local_close_awaited", "kill_local_close_awaited",
+      "connection_count", "ping_connection_count", "kill_connection_count", "protocol_acknowledged", "child_spawn_count", "stop_send_count", ], "fly_agent_stop");
+    const killConnectionAuthoritySHA256 = digest(canonical(killAuthority));
+    const operationSHA256 = digest(canonical(flySSHAgentProtocolOperationProjection(intent, killAuthority)));
+    const settlementSHA256 = digest(canonical(flySSHAgentProtocolSettlementProjection(intent.protocol_authority_sha256, killConnectionAuthoritySHA256, operationSHA256, intent.ping_peer_pid,
+      intent.ping_connected_rebound_sha256, killAuthority.connected_rebound_sha256, intent.ping_connected_rebound_wal_sha256, killAuthority.connected_rebound_wal_sha256)));
+    require( receipt.schema === "agenttool-phase-b-refence-fly-ssh-agent-stop/v3" && receipt.batch_id === batchID && receipt.identity_sha256 === identitySHA256 && receipt.cli_semantic_argv_sha256 ===
           digest(canonical([flyAgentExecutable, "agent", "stop"])) && receipt.cli_semantic_executed === false && receipt.protocol_authority_sha256 === intent.protocol_authority_sha256 &&
-        receipt.protocol_operation_sha256 === digest(canonical( flySSHAgentProtocolOperationProjection(intent), )) && receipt.durable_intent_sha256 === intent.durable_intent_sha256 && receipt.settlement_sha256 === settlementSHA256 &&
+        receipt.kill_connection_authority_sha256 === killConnectionAuthoritySHA256 && receipt.ping_connected_rebound_sha256 === intent.ping_connected_rebound_sha256 &&
+        receipt.kill_connected_rebound_sha256 === killConnectedReboundSHA256 && validSHA(killConnectedReboundSHA256) && receipt.ping_connected_rebound_sha256 !== receipt.kill_connected_rebound_sha256 &&
+        receipt.protocol_operation_sha256 === operationSHA256 && receipt.durable_intent_sha256 === intent.durable_intent_sha256 && receipt.settlement_sha256 === settlementSHA256 &&
         receipt.transport === "local_unix_stream" && receipt.socket_path === flyAgentSocket && receipt.ping_frame_sha256 === flyAgentPingFrameSHA256 && receipt.kill_frame_sha256 === flyAgentKillFrameSHA256 &&
-        receipt.ping_response_sha256 === intent.ping_response_sha256 && receipt.kill_response_byte_count === 3 && receipt.kill_response_sha256 === flyAgentKillResponseSHA256 && receipt.protocol_acknowledged === true &&
-        receipt.child_spawn_count === 0 && receipt.stop_send_count === 1, "fly_agent_stop", ); };
+        receipt.ping_response_sha256 === intent.ping_response_sha256 && receipt.kill_response_byte_count === 2 && receipt.kill_response_sha256 === flyAgentKillResponseSHA256 &&
+        [receipt.ping_initial_peer_pid, receipt.ping_prewrite_peer_pid, receipt.kill_initial_peer_pid, receipt.kill_prewrite_peer_pid].every((pid) => pid === intent.ping_peer_pid) &&
+        receipt.ping_remote_eof_observed === true && receipt.kill_remote_eof_observed === true && receipt.ping_local_close_awaited === true && receipt.kill_local_close_awaited === true && receipt.connection_count === 2 &&
+        receipt.ping_connection_count === 1 && receipt.kill_connection_count === 1 && receipt.protocol_acknowledged === true && receipt.child_spawn_count === 0 && receipt.stop_send_count === 1, "fly_agent_stop", ); };
   const runFlySSHAgentOwnedBatchCore = async ( request: any, ): Promise<any> => { const value = exact(request, [ "batchID", "batchKind", "expectedProbeCount", "nowUnixMilliseconds", "observe", "connectStopProtocol", "pingStopProtocol",
-      "recordStopIntent", "sendStop", "closeStopProtocol", "pause", "onCleanup", "runBatch", "issueLaunchAuthority", "launchAuthorityConsumed", "manual", "isManual", ], "fly_agent_batch_admission");
+      "recordStopIntent", "bindKillStopProtocol", "sendStop", "closeStopProtocol", "pause", "onCleanup", "runBatch", "issueLaunchAuthority", "launchAuthorityConsumed", "manual", "isManual", ], "fly_agent_batch_admission");
     require( /^[a-z0-9_]{1,128}$/.test(value.batchID) && (value.batchKind === "cordoned_runtime" && value.expectedProbeCount === 4 || value.batchKind === "final_authority" && value.expectedProbeCount === 8) && [ value.nowUnixMilliseconds,
-          value.observe, value.connectStopProtocol, value.pingStopProtocol, value.recordStopIntent, value.sendStop, value.closeStopProtocol, value.pause, value.runBatch, value.issueLaunchAuthority, value.launchAuthorityConsumed,
+          value.observe, value.connectStopProtocol, value.pingStopProtocol, value.recordStopIntent, value.bindKillStopProtocol, value.sendStop, value.closeStopProtocol, value.pause, value.runBatch, value.issueLaunchAuthority, value.launchAuthorityConsumed,
           value.manual, value.isManual, ].every((entry) => typeof entry === "function") && (value.onCleanup === undefined || typeof value.onCleanup === "function"), "fly_agent_batch_admission", );
     const manual = (code: string): never => { throw value.manual(code); };
     const batchStartedAtUnixMs = value.nowUnixMilliseconds();
@@ -2647,20 +3819,33 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
       if (identity === null) { requireFlySSHAgentAbsent(beforeStop, null, "fly_agent_cleanup"); } else { const reboundIdentity = requireFlySSHAgentActive( beforeStop, identity, batchStartedAtUnixMs, "fly_agent_cleanup", );
         require( activeProjection !== null && canonical(activeProjection) === canonical(flySSHAgentActiveProjection(beforeStop)), "fly_agent_identity_drift", );
         identitySHA256 = digest(canonical( flySSHAgentStableIdentityProjection(reboundIdentity), ));
-        let protocol: unknown = null;
-        try { protocol = await value.connectStopProtocol();
-          const connectedRebound = validateFlySSHAgentObservation( await value.observe( identity, `${value.batchKind}_cleanup_connected_rebound`, ), identity, "fly_agent_cleanup", );
-          requireFlySSHAgentActive( connectedRebound, reboundIdentity, batchStartedAtUnixMs, "fly_agent_cleanup", );
-          require( canonical(flySSHAgentActiveProjection(beforeStop)) === canonical(flySSHAgentActiveProjection(connectedRebound)), "fly_agent_cleanup_connected_rebound", );
-          const connectedReboundSHA256 = digest(canonical(connectedRebound));
-          const ping = validateFlySSHAgentProtocolPing( await value.pingStopProtocol( protocol, reboundIdentity, identitySHA256, connectedReboundSHA256, ), reboundIdentity, identitySHA256, connectedReboundSHA256, );
-          const intent = await value.recordStopIntent( value.batchID, reboundIdentity, identitySHA256, ping, connectedReboundSHA256, protocol, );
-          validateFlySSHAgentStopIntent( intent, value.batchID, reboundIdentity, identitySHA256, ping, connectedReboundSHA256, );
-          const intentRebound = validateFlySSHAgentObservation( await value.observe( identity, `${value.batchKind}_cleanup_intent_rebound`, ), identity, "fly_agent_cleanup", );
-          requireFlySSHAgentActive( intentRebound, reboundIdentity, batchStartedAtUnixMs, "fly_agent_cleanup", );
-          require( canonical(flySSHAgentActiveProjection(connectedRebound)) === canonical(flySSHAgentActiveProjection(intentRebound)), "fly_agent_cleanup_intent_rebound", );
-          stopReceipt = await value.sendStop( protocol, intent, reboundIdentity, ping, );
-          validateFlySSHAgentStopReceipt( stopReceipt!, value.batchID, identitySHA256, intent, ); } finally { if (protocol !== null) await value.closeStopProtocol(protocol); } }
+        let pingProtocol: unknown = null;
+        let pingClosed = false;
+        let pingConnectedRebound: Row;
+        let ping: Row;
+        try { pingProtocol = await value.connectStopProtocol("ping", reboundIdentity);
+          pingConnectedRebound = validateFlySSHAgentObservation( await value.observe( identity, `${value.batchKind}_cleanup_ping_connected_rebound`, ), identity, "fly_agent_cleanup", );
+          requireFlySSHAgentActive( pingConnectedRebound, reboundIdentity, batchStartedAtUnixMs, "fly_agent_cleanup", );
+          require( canonical(flySSHAgentActiveProjection(beforeStop)) === canonical(flySSHAgentActiveProjection(pingConnectedRebound)), "fly_agent_cleanup_ping_connected_rebound", );
+          const pingConnectedReboundSHA256 = digest(canonical(pingConnectedRebound));
+          ping = validateFlySSHAgentProtocolPing( await value.pingStopProtocol( pingProtocol, reboundIdentity, identitySHA256, pingConnectedReboundSHA256, ), reboundIdentity, identitySHA256, pingConnectedReboundSHA256, );
+          pingClosed = true; } finally { if (pingProtocol !== null && !pingClosed) await value.closeStopProtocol(pingProtocol); }
+        const pingConnectedReboundSHA256 = digest(canonical(pingConnectedRebound!));
+        const intent = await value.recordStopIntent( value.batchID, reboundIdentity, identitySHA256, ping!, pingConnectedReboundSHA256, );
+        validateFlySSHAgentStopIntent( intent, value.batchID, reboundIdentity, identitySHA256, ping!, pingConnectedReboundSHA256, );
+        let killProtocol: unknown = null;
+        let killClosed = false;
+        try { killProtocol = await value.connectStopProtocol("kill", reboundIdentity);
+          require(killProtocol !== pingProtocol, "fly_agent_cleanup_distinct_connections");
+          const killConnectedRebound = validateFlySSHAgentObservation( await value.observe( identity, `${value.batchKind}_cleanup_kill_connected_rebound`, ), identity, "fly_agent_cleanup", );
+          requireFlySSHAgentActive( killConnectedRebound, reboundIdentity, batchStartedAtUnixMs, "fly_agent_cleanup", );
+          require( canonical(flySSHAgentActiveProjection(pingConnectedRebound!)) === canonical(flySSHAgentActiveProjection(killConnectedRebound)), "fly_agent_cleanup_kill_connected_rebound", );
+          const killConnectedReboundSHA256 = digest(canonical(killConnectedRebound));
+          const killAuthority = validateFlySSHAgentKillConnectionAuthority( await value.bindKillStopProtocol(killProtocol, reboundIdentity, identitySHA256, killConnectedReboundSHA256), reboundIdentity, identitySHA256,
+            killConnectedReboundSHA256, );
+          stopReceipt = await value.sendStop( killProtocol, intent, reboundIdentity, ping!, killAuthority, killConnectedReboundSHA256, );
+          validateFlySSHAgentStopReceipt( stopReceipt!, value.batchID, identitySHA256, intent, killAuthority, killConnectedReboundSHA256, );
+          killClosed = true; } finally { if (killProtocol !== null && !killClosed) await value.closeStopProtocol(killProtocol); } }
       let firstAbsence: Row | null = null;
       const maximumPollCount = Math.ceil(5_000 / 250) + 1;
       for (let index = 0; index < maximumPollCount; index += 1) { const observation = validateFlySSHAgentObservation( await value.observe( identity, `${value.batchKind}_cleanup_settlement`, ), identity, "fly_agent_cleanup", );
@@ -2674,13 +3859,19 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
       const secondAbsence = validateFlySSHAgentObservation( await value.observe( identity, `${value.batchKind}_cleanup_absence_rebound`, ), identity, "fly_agent_cleanup", );
       requireFlySSHAgentAbsent(secondAbsence, identity, "fly_agent_cleanup");
       require( canonical(flySSHAgentAbsenceProjection(firstAbsence!)) === canonical(flySSHAgentAbsenceProjection(secondAbsence)), "fly_agent_cleanup_rebound", );
-      cleanup = { schema: "agenttool-phase-b-refence-fly-ssh-agent-cleanup/v1", batch_id: value.batchID, batch_kind: value.batchKind, expected_probe_count: value.expectedProbeCount, completed_probe_count: completedProbeCount,
+      cleanup = { schema: "agenttool-phase-b-refence-fly-ssh-agent-cleanup/v2", batch_id: value.batchID, batch_kind: value.batchKind, expected_probe_count: value.expectedProbeCount, completed_probe_count: completedProbeCount,
         admission_sha256: admissionSHA256, agent_created: identity !== null, identity_sha256: identitySHA256, stop_intent_sha256: stopReceipt?.durable_intent_sha256 ?? null, stop_settlement_sha256: stopReceipt?.settlement_sha256 ?? null,
-        stop_send_count: stopReceipt === null ? 0 : 1, first_absence_sha256: digest(canonical(firstAbsence)), second_absence_sha256: digest(canonical(secondAbsence)), absence_interval_milliseconds: 257, pid_absent_twice: true,
+        ping_connection_authority_sha256: stopReceipt?.protocol_authority_sha256 ?? null, kill_connection_authority_sha256: stopReceipt?.kill_connection_authority_sha256 ?? null,
+        ping_connected_rebound_sha256: stopReceipt?.ping_connected_rebound_sha256 ?? null, kill_connected_rebound_sha256: stopReceipt?.kill_connected_rebound_sha256 ?? null,
+        stop_send_count: stopReceipt === null ? 0 : 1, protocol_connection_count: stopReceipt === null ? 0 : 2, ping_connection_count: stopReceipt === null ? 0 : 1, kill_connection_count: stopReceipt === null ? 0 : 1,
+        first_absence_sha256: digest(canonical(firstAbsence)), second_absence_sha256: digest(canonical(secondAbsence)), absence_interval_milliseconds: 257, pid_absent_twice: true,
         process_group_absent_twice: true, socket_absent_twice: true, agent_lock_unheld_twice: true, verified: true, };
       exact(cleanup, [ "schema", "batch_id", "batch_kind", "expected_probe_count", "completed_probe_count", "admission_sha256", "agent_created", "identity_sha256", "stop_intent_sha256", "stop_settlement_sha256", "stop_send_count",
+        "ping_connection_authority_sha256", "kill_connection_authority_sha256", "ping_connected_rebound_sha256", "kill_connected_rebound_sha256",
+        "protocol_connection_count", "ping_connection_count", "kill_connection_count",
         "first_absence_sha256", "second_absence_sha256", "absence_interval_milliseconds", "pid_absent_twice", "process_group_absent_twice", "socket_absent_twice", "agent_lock_unheld_twice", "verified", ], "fly_agent_cleanup");
-      require( batchFailure !== noFailure || cleanup.completed_probe_count === cleanup.expected_probe_count && cleanup.agent_created && cleanup.stop_send_count === 1, "fly_agent_cleanup", );
+      require( batchFailure !== noFailure || cleanup.completed_probe_count === cleanup.expected_probe_count && cleanup.agent_created && cleanup.stop_send_count === 1 && cleanup.protocol_connection_count === 2 &&
+          cleanup.ping_connection_count === 1 && cleanup.kill_connection_count === 1, "fly_agent_cleanup", );
       value.onCleanup?.(digest(canonical(cleanup)), cleanup); } catch { manual("fly_agent_cleanup_uncertain"); }
     if (batchFailure !== noFailure) throw batchFailure;
     return { result: batchResult, cleanupSHA256: digest(canonical(cleanup!)), cleanup: cleanup!, }; };
@@ -2843,19 +4034,21 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
     const priorTree = "87face598df18f71ecda4997a82e0f49934b8166";
     const immediateRevision = "56dcf1bf5029bd8416a915e65e0e7c1416eea099";
     const immediateTree = "2f0a48ad44d8734edf954e1bd031a032cd390373";
+    const protocolRevision = "296f57e0d291337b8664fc8caa5c3de08fa3cb02";
+    const protocolTree = "b70dda2bd6d47d5a0ffe30925e222bc656df0838";
     require( bindings.receiptSHA256 === "8b5bb36641fb210ee9ecb542d5adb3cfcb99adb76af369715aa32805e3e18077" && bindings.runID === "789e8486-47cb-4b80-a165-c5ea557082d6" &&
         bindings.targetRevision === h0Revision && bindings.targetTree === h0Tree && bindings.producerGuardRawSHA256 === "dd324e32fada2053acc945d39012d5844caef402ad82f013b27b18d3ddb275ae" && bindings.producerGuardNormalizedSHA256 ===
           "9e0ddd120fa6d605f68a86be35303a1b2eba56155116218933f8801eda47340c" && validSHA(bindings.bridgeRawSHA256) && validSHA(bindings.bridgeNormalizedSHA256) && ![ bindings.producerGuardRawSHA256,
-          "6be6664c2dee86ac427dda893a7f2aa51ee639951e00a6e802c60f98fa153f5c", "5ebe56c754c39a12bf851b967acbbc31ca5dfa644d15e736c736353c9636ef54", ].includes(bindings.bridgeRawSHA256) && ![ bindings.producerGuardNormalizedSHA256,
-          "539b4711da2628946a6592944ab0ea9da40db711accdbe412520267540c41c8e", "e4c7a8ace65d84a3715182cb96d735747cadaf076e55efbbdde7c2f2bb1c5f2d", ].includes(bindings.bridgeNormalizedSHA256) && validRevision(bindings.controllerRevision) &&
-        ![h0Revision, priorRevision, immediateRevision].includes( bindings.controllerRevision, ) && validRevision(bindings.controllerTree) && ![h0Tree, priorTree, immediateTree].includes(bindings.controllerTree) &&
-        Number.isSafeInteger(bindings.controllerSourceDistance) && bindings.controllerSourceDistance > 53 && validSHA(bindings.controllerCommitRawSHA256) && Number.isSafeInteger(bindings.controllerCommitByteCount) &&
-        bindings.controllerCommitByteCount > 0 && bindings.controllerCommitByteCount <= 1_000_000 && validRevision(bindings.controllerTopicRevision) && ![ bindings.controllerRevision, h0Revision, priorRevision, immediateRevision,
+          "6be6664c2dee86ac427dda893a7f2aa51ee639951e00a6e802c60f98fa153f5c", "5ebe56c754c39a12bf851b967acbbc31ca5dfa644d15e736c736353c9636ef54", "68892049dd5e3ffee92cd79548cfc69c86b7241d55d42018747827dfb34a21c5", ].includes(bindings.bridgeRawSHA256) && ![ bindings.producerGuardNormalizedSHA256,
+          "539b4711da2628946a6592944ab0ea9da40db711accdbe412520267540c41c8e", "e4c7a8ace65d84a3715182cb96d735747cadaf076e55efbbdde7c2f2bb1c5f2d", "ef7f73430716438b5a79832be01f30f01adf06afe8c2f69b83422f8b3ec40ece", ].includes(bindings.bridgeNormalizedSHA256) && validRevision(bindings.controllerRevision) &&
+        ![h0Revision, priorRevision, immediateRevision, protocolRevision].includes( bindings.controllerRevision, ) && validRevision(bindings.controllerTree) && ![h0Tree, priorTree, immediateTree, protocolTree].includes(bindings.controllerTree) &&
+        Number.isSafeInteger(bindings.controllerSourceDistance) && bindings.controllerSourceDistance > 56 && validSHA(bindings.controllerCommitRawSHA256) && Number.isSafeInteger(bindings.controllerCommitByteCount) &&
+        bindings.controllerCommitByteCount > 0 && bindings.controllerCommitByteCount <= 1_000_000 && validRevision(bindings.controllerTopicRevision) && ![ bindings.controllerRevision, h0Revision, priorRevision, immediateRevision, protocolRevision,
         ].includes(bindings.controllerTopicRevision) && bindings.controllerTopicTree === bindings.controllerTree && validSHA(bindings.changedPathsRawSHA256) && ![ "a66803eadc08fb8deb23fe3076deeadfc5310c1c6b5aeb50f5edc284511aaf28",
-          "ea34fd5818a88c0554303040c9472d7b3699db15bbae5344c4b1e670577bc6f8", ].includes(bindings.changedPathsRawSHA256) && bindings.changedPathStatusesSHA256 === digest(canonical(compatibilityFiveStatuses)) &&
-        validSHA(bindings.cumulativeChangedPathsRawSHA256) && bindings.cumulativeChangedPathsRawSHA256 !== "8d83631671ddfab6bc122d5b571df49ab0907c2e40ac1353f2663ccae407d7c2" && bindings.cumulativeChangedPathStatusesSHA256 ===
+          "ea34fd5818a88c0554303040c9472d7b3699db15bbae5344c4b1e670577bc6f8", "57d4f31969729438491e3c2d38334f7f2cb68e326d3843aa21ce5067924be24e", ].includes(bindings.changedPathsRawSHA256) && bindings.changedPathStatusesSHA256 === digest(canonical(compatibilityFiveStatuses)) &&
+        validSHA(bindings.cumulativeChangedPathsRawSHA256) && !["8d83631671ddfab6bc122d5b571df49ab0907c2e40ac1353f2663ccae407d7c2", "d43f8128c3ccb4cb34c24b5317552893e935ff43b6542da726607994e228dd4f"].includes(bindings.cumulativeChangedPathsRawSHA256) && bindings.cumulativeChangedPathStatusesSHA256 ===
           digest(canonical(compatibilitySixStatuses)), "protected_successor_authority", );
-    return { proof_schema: "agenttool-phase-b-refence-handoff/v4", refence_receipt_sha256: bindings.receiptSHA256, refence_run_id: bindings.runID, source_revision: profile.expectedSourceRevision, source_tree: profile.expectedSourceTree,
+    return { proof_schema: "agenttool-phase-b-refence-handoff/v5", refence_receipt_sha256: bindings.receiptSHA256, refence_run_id: bindings.runID, source_revision: profile.expectedSourceRevision, source_tree: profile.expectedSourceTree,
       target_revision: bindings.targetRevision, target_tree: bindings.targetTree, anchor_archive_path: `${profile.deployStateDirectory}/phase-b-refence-observed-526-anchor-retired-${bindings.runID}.json`,
       anchor_sha256: bindings.anchorSHA256, anchor_device: bindings.anchorDevice, anchor_inode: bindings.anchorInode, witness_archive_path:
         `${profile.deployStateDirectory}/phase-b-refence-observed-526-armed-witness-retired-${bindings.runID}.json`, witness_sha256: bindings.witnessSHA256, witness_device: bindings.witnessDevice, witness_inode: bindings.witnessInode,
@@ -2881,11 +4074,13 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
           "40136b456704debe4fa253745d83441c9ddb099d90b47a10aa27837c7a027a97", contract_git_blob: "79efd55c97a8e5e2fc6f2da1317ee73b95293b1c", changed_path_statuses: structuredClone(compatibilityFiveStatuses), changed_paths_raw_sha256:
           "ea34fd5818a88c0554303040c9472d7b3699db15bbae5344c4b1e670577bc6f8", changed_path_statuses_sha256: digest(canonical(compatibilityFiveStatuses)), cumulative_changed_path_statuses: structuredClone(compatibilitySixStatuses),
         cumulative_changed_paths_raw_sha256: "8d83631671ddfab6bc122d5b571df49ab0907c2e40ac1353f2663ccae407d7c2", cumulative_changed_path_statuses_sha256: digest(canonical(compatibilitySixStatuses)), payload_revision: h0Revision,
-        payload_tree: h0Tree, payload_distance: 47, downstream_effects: structuredClone(compatibilityDownstreamEffects), }, compatibility_controller: { schema: "agenttool-phase-b-refence-protected-successor-controller/v3",
+        payload_tree: h0Tree, payload_distance: 47, downstream_effects: structuredClone(compatibilityDownstreamEffects), },
+      prior_unexecuted_protocol_incompatible_successor: priorProtocolIncompatibleHandoffProjection(),
+      compatibility_controller: { schema: "agenttool-phase-b-refence-protected-successor-controller/v4",
         lifecycle: "current", bridge_source_path: profile.bridgeSource, bridge_source_sha256: bindings.bridgeRawSHA256, bridge_normalized_sha256: bindings.bridgeNormalizedSHA256, contract_source_path: profile.contractSource,
         contract_source_sha256: profile.contractSourceSHA256, contract_git_blob: profile.contractGitBlob, controller_revision: bindings.controllerRevision, controller_tree: bindings.controllerTree,
-        controller_source_distance: bindings.controllerSourceDistance, commit_raw_sha256: bindings.controllerCommitRawSHA256, commit_byte_count: bindings.controllerCommitByteCount, predecessor_controller_revision: immediateRevision,
-        first_parent_revision: immediateRevision, second_parent_revision: bindings.controllerTopicRevision, second_parent_tree: bindings.controllerTopicTree, protected_predecessor_tree: immediateTree, exact_first_parent_verified: true,
+        controller_source_distance: bindings.controllerSourceDistance, commit_raw_sha256: bindings.controllerCommitRawSHA256, commit_byte_count: bindings.controllerCommitByteCount, predecessor_controller_revision: protocolRevision,
+        first_parent_revision: protocolRevision, second_parent_revision: bindings.controllerTopicRevision, second_parent_tree: bindings.controllerTopicTree, protected_predecessor_tree: protocolTree, exact_first_parent_verified: true,
         second_parent_tree_verified: true, protected_head_verified: true, repair_changed_paths_raw_sha256: bindings.changedPathsRawSHA256, repair_changed_path_statuses: structuredClone(compatibilityFiveStatuses),
         repair_changed_path_statuses_sha256: bindings.changedPathStatusesSHA256, cumulative_changed_paths_raw_sha256: bindings.cumulativeChangedPathsRawSHA256, cumulative_changed_path_statuses: structuredClone(compatibilitySixStatuses),
         cumulative_changed_path_statuses_sha256: bindings.cumulativeChangedPathStatusesSHA256, payload_revision: h0Revision, payload_tree: h0Tree, payload_distance: 47, }, preexisting_lineage_bound: false,
@@ -3059,6 +4254,9 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
     const priorFailedCompatibilityController = exact( refenceHandoff.prior_failed_compatibility_controller, BRIDGE_PRIOR_FAILED_COMPATIBILITY_CONTROLLER_KEYS, "success_authority_handoff", );
     const immediateFailedCompatibilityController = exact( refenceHandoff.immediate_failed_compatibility_controller, BRIDGE_IMMEDIATE_FAILED_COMPATIBILITY_CONTROLLER_KEYS, "success_authority_handoff", );
     const immediateFailedDownstreamEffects = exact( immediateFailedCompatibilityController.downstream_effects, BRIDGE_IMMEDIATE_FAILED_DOWNSTREAM_EFFECT_KEYS, "success_authority_handoff", );
+    const priorProtocolIncompatibleSuccessor = exact(refenceHandoff.prior_unexecuted_protocol_incompatible_successor, BRIDGE_PRIOR_PROTOCOL_INCOMPATIBLE_KEYS, "success_authority_handoff");
+    const priorProtocolIncompatibleDownstreamEffects = exact(priorProtocolIncompatibleSuccessor.downstream_effects, BRIDGE_IMMEDIATE_FAILED_DOWNSTREAM_EFFECT_KEYS, "success_authority_handoff");
+    exact(priorProtocolIncompatibleSuccessor.protocol_incompatibility, Object.keys(priorProtocolIncompatibilityProjection()), "success_authority_handoff");
     const compatibilityController = exact( refenceHandoff.compatibility_controller, BRIDGE_COMPATIBILITY_CONTROLLER_KEYS, "success_authority_handoff", );
     const priorChangedPathStatuses = [ { old_mode: "100755", new_mode: "100755", status: "M", path: "bin/deploy.sh" }, { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/phase-b-refence-maintenance-bridge.ts" },
       { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/phase-b-refence-maintenance-contract.ts" }, { old_mode: "100644", new_mode: "100644", status: "M", path: "bin/tests/phase-b-refence-maintenance-bridge.test.ts" },
@@ -3068,7 +4266,7 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
     require( canonical(marker.build_context) === canonical(buildContext) && canonical(marker.dependency_estate) === canonical(dependencyEstate) && canonical(marker.refence_handoff) === canonical(refenceHandoff) && buildContext.schema ===
           "agenttool-phase-b-refence-build-context/v1" && buildContext.source_revision === request.sourceRevision && buildContext.source_tree === request.sourceTree && buildContext.prepared === true && dependencyEstate.schema ===
           "agenttool-phase-b-refence-dependency-estate/v1" && dependencyEstate.source_revision === request.sourceRevision && dependencyEstate.source_tree === request.sourceTree && dependencyEstate.prepared === true &&
-        refenceHandoff.proof_schema === "agenttool-phase-b-refence-handoff/v4" && refenceHandoff.refence_receipt_sha256 === request.refenceReceiptSHA256 && refenceHandoff.refence_run_id === request.controllerRunID &&
+        refenceHandoff.proof_schema === "agenttool-phase-b-refence-handoff/v5" && refenceHandoff.refence_receipt_sha256 === request.refenceReceiptSHA256 && refenceHandoff.refence_run_id === request.controllerRunID &&
         refenceHandoff.target_revision === request.sourceRevision && refenceHandoff.target_tree === request.sourceTree && authorizedH0.schema === "agenttool-phase-b-refence-authorized-h0/v1" &&
         authorizedH0.receipt_sha256 === request.refenceReceiptSHA256 && authorizedH0.receipt_sha256 === "8b5bb36641fb210ee9ecb542d5adb3cfcb99adb76af369715aa32805e3e18077" && authorizedH0.run_id === request.controllerRunID &&
         authorizedH0.run_id === "789e8486-47cb-4b80-a165-c5ea557082d6" && authorizedH0.target_revision === request.sourceRevision && authorizedH0.target_revision === "d87a3f35c80bdac39402e1c34dfebe643a18beb6" &&
@@ -3113,33 +4311,39 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
         immediateFailedCompatibilityController.cumulative_changed_paths_raw_sha256 === "8d83631671ddfab6bc122d5b571df49ab0907c2e40ac1353f2663ccae407d7c2" &&
         canonical(immediateFailedCompatibilityController.cumulative_changed_path_statuses) === canonical(priorChangedPathStatuses) && immediateFailedCompatibilityController.cumulative_changed_path_statuses_sha256 ===
           digest(canonical(priorChangedPathStatuses)) && immediateFailedCompatibilityController.payload_revision === authorizedH0.target_revision && immediateFailedCompatibilityController.payload_tree === authorizedH0.target_tree &&
-        immediateFailedCompatibilityController.payload_distance === authorizedH0.target_distance && Object.values(immediateFailedDownstreamEffects).every((value) => value === 0) && compatibilityController.schema ===
-          "agenttool-phase-b-refence-protected-successor-controller/v3" && compatibilityController.lifecycle === "current" && refenceHandoff.bridge_source_path ===
+        immediateFailedCompatibilityController.payload_distance === authorizedH0.target_distance && Object.values(immediateFailedDownstreamEffects).every((value) => value === 0) &&
+        canonical(priorProtocolIncompatibleSuccessor) === canonical(priorProtocolIncompatibleHandoffProjection()) && Object.values(priorProtocolIncompatibleDownstreamEffects).every((value) => value === 0) &&
+        compatibilityController.schema === "agenttool-phase-b-refence-protected-successor-controller/v4" && compatibilityController.lifecycle === "current" && refenceHandoff.bridge_source_path ===
           "/Users/yournameisai/.cache/codex-worktrees/agenttool-phase-b-refence-maintenance-bridge-v1/bin/phase-b-refence-maintenance-bridge.ts" && compatibilityController.bridge_source_path === refenceHandoff.bridge_source_path &&
         compatibilityController.bridge_source_sha256 === refenceHandoff.bridge_source_sha256 && compatibilityController.bridge_normalized_sha256 === refenceHandoff.bridge_normalized_sha256 && validSHA(refenceHandoff.bridge_source_sha256) &&
         validSHA(refenceHandoff.bridge_normalized_sha256) && compatibilityController.bridge_source_sha256 !== authorizedH0.guard_raw_sha256 && compatibilityController.bridge_normalized_sha256 !== authorizedH0.guard_normalized_sha256 &&
         compatibilityController.bridge_source_sha256 !== priorFailedCompatibilityController.bridge_source_sha256 && compatibilityController.bridge_normalized_sha256 !== priorFailedCompatibilityController.bridge_normalized_sha256 &&
         compatibilityController.bridge_source_sha256 !== immediateFailedCompatibilityController.bridge_source_sha256 && compatibilityController.bridge_normalized_sha256 !== immediateFailedCompatibilityController.bridge_normalized_sha256 &&
+        compatibilityController.bridge_source_sha256 !== priorProtocolIncompatibleSuccessor.bridge_source_sha256 && compatibilityController.bridge_normalized_sha256 !== priorProtocolIncompatibleSuccessor.bridge_normalized_sha256 &&
         compatibilityController.contract_source_path === "/Users/yournameisai/.cache/codex-worktrees/agenttool-phase-b-refence-maintenance-bridge-v1/bin/phase-b-refence-maintenance-contract.ts" &&
         validSHA(compatibilityController.contract_source_sha256) && validRevision(compatibilityController.contract_git_blob) && compatibilityController.contract_source_sha256 !== authorizedH0.contract_raw_sha256 &&
         compatibilityController.contract_git_blob !== authorizedH0.contract_git_blob && compatibilityController.contract_source_sha256 !== priorFailedCompatibilityController.contract_source_sha256 &&
         compatibilityController.contract_git_blob !== priorFailedCompatibilityController.contract_git_blob && compatibilityController.contract_source_sha256 !== immediateFailedCompatibilityController.contract_source_sha256 &&
-        compatibilityController.contract_git_blob !== immediateFailedCompatibilityController.contract_git_blob && validRevision(compatibilityController.controller_revision) && compatibilityController.controller_revision !==
+        compatibilityController.contract_git_blob !== immediateFailedCompatibilityController.contract_git_blob && compatibilityController.contract_source_sha256 !== priorProtocolIncompatibleSuccessor.contract_source_sha256 &&
+        compatibilityController.contract_git_blob !== priorProtocolIncompatibleSuccessor.contract_git_blob && validRevision(compatibilityController.controller_revision) && compatibilityController.controller_revision !==
           authorizedH0.target_revision && compatibilityController.controller_revision !== priorFailedCompatibilityController.controller_revision && compatibilityController.controller_revision !==
-          immediateFailedCompatibilityController.controller_revision && validRevision(compatibilityController.controller_tree) && compatibilityController.controller_tree !== authorizedH0.target_tree &&
+          immediateFailedCompatibilityController.controller_revision && compatibilityController.controller_revision !== priorProtocolIncompatibleSuccessor.controller_revision && validRevision(compatibilityController.controller_tree) && compatibilityController.controller_tree !== authorizedH0.target_tree &&
         compatibilityController.controller_tree !== priorFailedCompatibilityController.controller_tree && compatibilityController.controller_tree !== immediateFailedCompatibilityController.controller_tree &&
+        compatibilityController.controller_tree !== priorProtocolIncompatibleSuccessor.controller_tree &&
         Number.isSafeInteger(compatibilityController.controller_source_distance) && compatibilityController.controller_source_distance >
-          immediateFailedCompatibilityController.controller_source_distance && validSHA(compatibilityController.commit_raw_sha256) && Number.isSafeInteger(compatibilityController.commit_byte_count) &&
-        compatibilityController.commit_byte_count > 0 && compatibilityController.commit_byte_count <= 1000000 && compatibilityController.predecessor_controller_revision === immediateFailedCompatibilityController.controller_revision &&
-        compatibilityController.first_parent_revision === immediateFailedCompatibilityController.controller_revision && validRevision(compatibilityController.second_parent_revision) && compatibilityController.second_parent_revision !==
+          priorProtocolIncompatibleSuccessor.controller_source_distance && validSHA(compatibilityController.commit_raw_sha256) && Number.isSafeInteger(compatibilityController.commit_byte_count) &&
+        compatibilityController.commit_byte_count > 0 && compatibilityController.commit_byte_count <= 1000000 && compatibilityController.predecessor_controller_revision === priorProtocolIncompatibleSuccessor.controller_revision &&
+        compatibilityController.first_parent_revision === priorProtocolIncompatibleSuccessor.controller_revision && validRevision(compatibilityController.second_parent_revision) && compatibilityController.second_parent_revision !==
           compatibilityController.controller_revision && compatibilityController.second_parent_revision !== compatibilityController.first_parent_revision && compatibilityController.second_parent_revision !== authorizedH0.target_revision &&
-        compatibilityController.second_parent_revision !== immediateFailedCompatibilityController.controller_revision && compatibilityController.second_parent_tree === compatibilityController.controller_tree &&
-        compatibilityController.protected_predecessor_tree === immediateFailedCompatibilityController.controller_tree && compatibilityController.exact_first_parent_verified === true &&
-        compatibilityController.second_parent_tree_verified === true && compatibilityController.protected_head_verified === true && validSHA(compatibilityController.repair_changed_paths_raw_sha256) &&
-        compatibilityController.repair_changed_paths_raw_sha256 !== immediateFailedCompatibilityController.changed_paths_raw_sha256 && canonical(compatibilityController.repair_changed_path_statuses) ===
+        compatibilityController.second_parent_revision !== immediateFailedCompatibilityController.controller_revision && compatibilityController.second_parent_revision !== priorProtocolIncompatibleSuccessor.controller_revision && compatibilityController.second_parent_tree === compatibilityController.controller_tree &&
+        compatibilityController.protected_predecessor_tree === priorProtocolIncompatibleSuccessor.controller_tree && compatibilityController.exact_first_parent_verified === true &&
+        compatibilityController.second_parent_tree_verified === true && compatibilityController.protected_head_verified === true &&
+        validSHA(compatibilityController.repair_changed_paths_raw_sha256) && compatibilityController.repair_changed_paths_raw_sha256 !== immediateFailedCompatibilityController.changed_paths_raw_sha256 &&
+        compatibilityController.repair_changed_paths_raw_sha256 !== priorProtocolIncompatibleSuccessor.changed_paths_raw_sha256 && canonical(compatibilityController.repair_changed_path_statuses) ===
           canonical(repairChangedPathStatuses) && compatibilityController.repair_changed_path_statuses_sha256 === digest(canonical(repairChangedPathStatuses)) && compatibilityController.repair_changed_path_statuses_sha256 ===
           "f0a1b1436517bd4179410889a12def8fc447b9dc1772001196b5d0a6c05ad88e" && validSHA(compatibilityController.cumulative_changed_paths_raw_sha256) && compatibilityController.cumulative_changed_paths_raw_sha256 !==
-          immediateFailedCompatibilityController.cumulative_changed_paths_raw_sha256 && canonical(compatibilityController.cumulative_changed_path_statuses) === canonical(priorChangedPathStatuses) &&
+          immediateFailedCompatibilityController.cumulative_changed_paths_raw_sha256 && compatibilityController.cumulative_changed_paths_raw_sha256 !== priorProtocolIncompatibleSuccessor.cumulative_changed_paths_raw_sha256 &&
+        canonical(compatibilityController.cumulative_changed_path_statuses) === canonical(priorChangedPathStatuses) &&
         compatibilityController.cumulative_changed_path_statuses_sha256 === digest(canonical(priorChangedPathStatuses)) && compatibilityController.cumulative_changed_path_statuses_sha256 ===
           "211620ae73940844daa44dad70dec9026d4f9759ea9abda4706abdc41ef81698" && compatibilityController.payload_revision === authorizedH0.target_revision && compatibilityController.payload_tree === authorizedH0.target_tree &&
         compatibilityController.payload_distance === authorizedH0.target_distance && refenceHandoff.anchor_archive_path === request.retainedArchives.anchor.path && refenceHandoff.anchor_sha256 === request.retainedArchives.anchor.sha256 &&
@@ -3371,8 +4575,11 @@ export function createMaintenanceContract( primitives: ContractPrimitives, ): Ma
     validateDatabaseConvergenceTransition, validateFinalAuthority, validateDatabaseOriginConvergence, validateDatabaseProof, validateStoppedFleet, validateTargetFleet, validateTargetFleetExpectation: requireExpectation,
     validateFleetTransition, validateFirstCanaryPublic, runFirstCanaryPublicCore, runFinalAuthorityCore, runStoppedFenceCore, runCordonedRuntimeCore, runControllerRolloutCore, parseFlySSHAgentPSText, parseFlySSHAgentLSOFText,
     classifyFlySSHAgentProcessRows, flySSHAgentHolderPIDs, flySSHAgentStableIdentityProjection, validateFlySSHAgentObservation, requireFlySSHAgentAbsent, requireFlySSHAgentActive, flySSHAgentAbsenceProjection, flySSHAgentActiveProjection,
-    flySSHAgentDirectStopWalVerificationProjection, validateFlySSHAgentProtocolPing, flySSHAgentProtocolAuthorityProjection, flySSHAgentProtocolOperationProjection, validateFlySSHAgentStopIntent, runFlySSHAgentOwnedBatchCore,
-    parseCompatibilityChangedPaths, validatePriorFailedCompatibilityGitProof, validateImmediateFailedCompatibilityGitProof, validateCompatibilityGitProof, localEvidenceFingerprint, runMaintenanceRefenceGuardCore,
+    flySSHAgentProtocolSettlementProjection, flySSHAgentDirectStopWalVerificationProjection, validateFlySSHAgentProtocolPing, flySSHAgentProtocolAuthorityProjection, validateFlySSHAgentKillConnectionAuthority, flySSHAgentProtocolOperationProjection,
+    validateFlySSHAgentStopIntent, runFlySSHAgentOwnedBatchCore,
+    parseCompatibilityChangedPaths, validatePriorFailedCompatibilityGitProof, validateImmediateFailedCompatibilityGitProof, validatePriorProtocolIncompatibleGitProof, priorProtocolSourceAdmissionEvidenceProjection,
+    priorProtocolIncompatibilityProjection,
+    validateCompatibilityGitProof, localEvidenceFingerprint, runMaintenanceRefenceGuardCore,
     validatePublicFederationAbout, validatePublicHealth, validateVerifiedDatabaseConvergence, createCompatibilityHandoff, createInitialBridgeMarker, validateProductionBridgeMarker, bridgeMarkerSuccessAuthorityProjection,
     validateBridgeMarkerTransition, validateProducerAuthorityProjection, validateProducerEarlyRuntimeBindings, validateProducerLocalStateSandwich, applyRecoveryMarkerTransition, createSuccessAuthorityProjection, createSuccessArtifacts,
     previewSuccessFinalizationMarker, validateSuccessArtifactBundle, }); }

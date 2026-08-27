@@ -23,7 +23,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { createServer, type Socket as NetSocket } from "node:net";
 import { basename, dirname, join } from "node:path";
 import {
   CONTRACT_SCHEMA,
@@ -45,7 +44,6 @@ import {
   canonicalJson,
   classifyFlySSHAgentPSForTest,
   closeRetainedDeployLockDescriptorForTest,
-  connectFlySSHAgentProtocolForContainedTest,
   controllerFlyArgv,
   type ControllerFlyEffectRuntime,
   type ControllerFlyOperation,
@@ -90,6 +88,7 @@ import {
   parsePrivateJsonDocumentForTest,
   parseImmediateFailedCompatibilityParentsForTest,
   parseImmediateProtectedSuccessorChangedPathsForTest,
+  parsePriorProtocolIncompatibleParentsForTest,
   parsePriorFailedCompatibilityParentsForTest,
   parsePriorProtectedSuccessorChangedPathsForTest,
   parseProtectedSuccessorChangedPathsForTest,
@@ -155,6 +154,8 @@ import {
   parseFlySSHAgentPSForTest,
   type FlySSHAgentIdentity,
   type FlySSHAgentObservation,
+  type FlySSHAgentProtocolPing,
+  type FlySSHAgentKillConnectionAuthority,
   type FlySSHAgentStopIntent,
   type FlySSHAgentStopReceipt,
 } from "../phase-b-refence-maintenance-bridge.ts";
@@ -191,6 +192,13 @@ afterEach(() => {
 
 const digest = (character: string) => character.repeat(64);
 const revision = (character: string) => character.repeat(40);
+const PURE_CONTRACT = createMaintenanceContract({
+  canonical: canonicalJson,
+  digest: sha256,
+  refuse: (code: string): never => {
+    throw new MaintenanceRefenceError(code);
+  },
+});
 const AUTHORIZED_H0_RECEIPT_SHA256 =
   "8b5bb36641fb210ee9ecb542d5adb3cfcb99adb76af369715aa32805e3e18077";
 const AUTHORIZED_H0_RUN_ID = "789e8486-47cb-4b80-a165-c5ea557082d6";
@@ -222,6 +230,14 @@ const IMMEDIATE_FAILED_COMPATIBILITY_TOPIC_REVISION =
   "d33d35c4b757bdd8ee10b568a6d0a6caea8e80d8";
 const IMMEDIATE_FAILED_COMPATIBILITY_COMMIT_RAW_SHA256 =
   "bad2d53cb767c326b27bf6ccbe4fd0f447ff19da6165b5fb7cba2f66c7b1b041";
+const PRIOR_PROTOCOL_INCOMPATIBLE_REVISION =
+  "296f57e0d291337b8664fc8caa5c3de08fa3cb02";
+const PRIOR_PROTOCOL_INCOMPATIBLE_TREE =
+  "b70dda2bd6d47d5a0ffe30925e222bc656df0838";
+const PRIOR_PROTOCOL_INCOMPATIBLE_TOPIC_REVISION =
+  "d0a92a4691ce8fabb29e084a2576eb38a53aa283";
+const PRIOR_PROTOCOL_INCOMPATIBLE_COMMIT_RAW_SHA256 =
+  "95fa2e442a5adfe7ccea56ae1768489dede998488b939629a264502bdfac83dd";
 const IMMEDIATE_FAILED_DOWNSTREAM_EFFECTS = {
   git_fetch_attempt_count: 0,
   controller_wal_entry_count: 0,
@@ -249,10 +265,10 @@ function protectedSuccessorGitProof(evidence: TerminalEvidence) {
   return {
     revision: revision("e"),
     tree: revision("f"),
-    source_distance: 54,
+    source_distance: 57,
     commit_raw_sha256: digest("c"),
     commit_byte_count: 1_300,
-    first_parent_revision: IMMEDIATE_FAILED_COMPATIBILITY_REVISION,
+    first_parent_revision: PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
     second_parent_revision: revision("1"),
     second_parent_tree: revision("f"),
     changed_paths_raw_sha256: sha256("current repair raw diff"),
@@ -322,6 +338,44 @@ function protectedSuccessorGitProof(evidence: TerminalEvidence) {
       mutation_effect_began: false,
       success_authority: false,
       effect_authority: false,
+      downstream_effects: structuredClone(IMMEDIATE_FAILED_DOWNSTREAM_EFFECTS),
+    },
+    prior_unexecuted_protocol_incompatible_successor: {
+      revision: PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
+      tree: PRIOR_PROTOCOL_INCOMPATIBLE_TREE,
+      source_distance: 56,
+      commit_raw_sha256: PRIOR_PROTOCOL_INCOMPATIBLE_COMMIT_RAW_SHA256,
+      commit_byte_count: 1_226,
+      first_parent_revision: IMMEDIATE_FAILED_COMPATIBILITY_REVISION,
+      second_parent_revision: PRIOR_PROTOCOL_INCOMPATIBLE_TOPIC_REVISION,
+      second_parent_tree: PRIOR_PROTOCOL_INCOMPATIBLE_TREE,
+      changed_paths_raw_sha256:
+        "57d4f31969729438491e3c2d38334f7f2cb68e326d3843aa21ce5067924be24e",
+      changed_path_statuses: structuredClone(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
+      cumulative_changed_paths_raw_sha256:
+        "d43f8128c3ccb4cb34c24b5317552893e935ff43b6542da726607994e228dd4f",
+      cumulative_changed_path_statuses: structuredClone(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
+      bridge_source_sha256:
+        "68892049dd5e3ffee92cd79548cfc69c86b7241d55d42018747827dfb34a21c5",
+      bridge_normalized_sha256:
+        "ef7f73430716438b5a79832be01f30f01adf06afe8c2f69b83422f8b3ec40ece",
+      contract_source_sha256:
+        "a0489a4d7f7222f0f3fbc247f9ad824436b23967b231c42c71297f5de8061030",
+      contract_git_blob: "177f7f932aa92dc55802714505089669e9e1ff91",
+      lifecycle: "prior_unexecuted_protocol_incompatible_successor",
+      source_admission_verified: true,
+      static_admission_verified: true,
+      controller_invocation_observed: false,
+      deploy_invocation_observed: false,
+      controller_effect_observed: false,
+      controller_success: false,
+      mutation_effect_began: false,
+      success_authority: false,
+      effect_authority: false,
+      source_admission_evidence:
+        PURE_CONTRACT.priorProtocolSourceAdmissionEvidenceProjection(),
+      protocol_incompatibility:
+        PURE_CONTRACT.priorProtocolIncompatibilityProjection(),
       downstream_effects: structuredClone(IMMEDIATE_FAILED_DOWNSTREAM_EFFECTS),
     },
     authorized_h0_guard_raw_sha256: AUTHORIZED_H0_GUARD_RAW_SHA256,
@@ -1719,16 +1773,16 @@ describe("closed source normalization", () => {
       );
       expect(currentFacts.longestLine).toBeLessThanOrEqual(320);
       expect(currentFacts.byteCount).toBeLessThan(512 * 1024);
-      expect(currentFacts.leafCount).toBe(84_484);
+      expect(currentFacts.leafCount).toBe(82_952);
       expect(currentFacts.leafSHA256).toBe(
-        "4d3b2063636950ae8a13e662f66c9a84c6288dbf78a21087fbfddfff5dca5fc9",
+        "fa4605b773319fdb19e4af7539fbe736b87bb3af19a54689ab6faaa4fe2cc8e8",
       );
       expect(currentFacts.astShapeSHA256).toBe(
-        "f74ad8fd2c02d802ec62903c41e020fc3c9219484971993c8178786b08eac218",
+        "0e37f7766bdcd1e8b8ca5e295214886bcae673c0ead69204c5d0dd7ff029c199",
       );
-      expect(currentFacts.emittedLeafCount).toBe(71_366);
+      expect(currentFacts.emittedLeafCount).toBe(74_619);
       expect(currentFacts.emittedLeafSHA256).toBe(
-        "f48ac5ff1d41cc65e9b1f8bf6089cf957746355fd19797323a44e75a644a53e8",
+        "506f3708be86a1b7bbc2f8275a57b07b8657978d0956a5117b4cc5dac8138532",
       );
     },
     15_000,
@@ -3358,7 +3412,7 @@ describe("closed source normalization", () => {
         .digest("hex");
       return { bytes, oid, tree };
     };
-    const exact = commit([IMMEDIATE_FAILED_COMPATIBILITY_REVISION, revision("1")]);
+    const exact = commit([PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, revision("1")]);
     expect(
       parseProtectedSuccessorParentsForTest(
         exact.bytes,
@@ -3380,8 +3434,9 @@ describe("closed source normalization", () => {
     ).toBe(revision("1"));
     for (const parents of [
       [AUTHORIZED_H0_TARGET_REVISION, revision("1")],
-      [IMMEDIATE_FAILED_COMPATIBILITY_REVISION],
-      [IMMEDIATE_FAILED_COMPATIBILITY_REVISION, revision("1"), revision("2")],
+      [IMMEDIATE_FAILED_COMPATIBILITY_REVISION, revision("1")],
+      [PRIOR_PROTOCOL_INCOMPATIBLE_REVISION],
+      [PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, revision("1"), revision("2")],
     ]) {
       const changed = commit(parents);
       expect(() =>
@@ -3412,12 +3467,12 @@ describe("closed source normalization", () => {
     };
     const exactText = exact.bytes.toString("utf8");
     malformed(exactText.replace(
-      `parent ${IMMEDIATE_FAILED_COMPATIBILITY_REVISION}`,
+      `parent ${PRIOR_PROTOCOL_INCOMPATIBLE_REVISION}`,
       "parent",
     ));
     malformed(exactText.replace(
-      `parent ${IMMEDIATE_FAILED_COMPATIBILITY_REVISION}`,
-      `parent ${IMMEDIATE_FAILED_COMPATIBILITY_REVISION}\n forbidden-continuation`,
+      `parent ${PRIOR_PROTOCOL_INCOMPATIBLE_REVISION}`,
+      `parent ${PRIOR_PROTOCOL_INCOMPATIBLE_REVISION}\n forbidden-continuation`,
     ));
     malformed(exactText.replace(
       `tree ${exact.tree}`,
@@ -3463,6 +3518,22 @@ describe("closed source normalization", () => {
       IMMEDIATE_FAILED_COMPATIBILITY_REVISION,
       IMMEDIATE_FAILED_COMPATIBILITY_TREE,
     )).toBe(IMMEDIATE_FAILED_COMPATIBILITY_TOPIC_REVISION);
+
+    const realProtocolIncompatibleCommit = await runBuildManifestGit([
+      "--no-replace-objects",
+      "cat-file",
+      "commit",
+      PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
+    ]);
+    expect(realProtocolIncompatibleCommit).toHaveLength(1_226);
+    expect(sha256(realProtocolIncompatibleCommit)).toBe(
+      PRIOR_PROTOCOL_INCOMPATIBLE_COMMIT_RAW_SHA256,
+    );
+    expect(parsePriorProtocolIncompatibleParentsForTest(
+      realProtocolIncompatibleCommit,
+      PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
+      PRIOR_PROTOCOL_INCOMPATIBLE_TREE,
+    )).toBe(PRIOR_PROTOCOL_INCOMPATIBLE_TOPIC_REVISION);
 
     const realPriorDiff = await runBuildManifestGit([
       "--no-replace-objects",
@@ -3527,6 +3598,32 @@ describe("closed source normalization", () => {
       "8d83631671ddfab6bc122d5b571df49ab0907c2e40ac1353f2663ccae407d7c2",
     );
 
+    const realProtocolDiff = await runBuildManifestGit([
+      "--no-replace-objects", "diff", "--raw", "-z", "--abbrev=40",
+      "--no-renames", "--no-ext-diff", "--no-textconv",
+      IMMEDIATE_FAILED_COMPATIBILITY_REVISION,
+      PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
+      "--",
+    ]);
+    expect(parseProtectedSuccessorChangedPathsForTest(realProtocolDiff))
+      .toEqual(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES);
+    expect(sha256(realProtocolDiff)).toBe(
+      "57d4f31969729438491e3c2d38334f7f2cb68e326d3843aa21ce5067924be24e",
+    );
+    const realProtocolCumulativeDiff = await runBuildManifestGit([
+      "--no-replace-objects", "diff", "--raw", "-z", "--abbrev=40",
+      "--no-renames", "--no-ext-diff", "--no-textconv",
+      AUTHORIZED_H0_TARGET_REVISION,
+      PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
+      "--",
+    ]);
+    expect(parsePriorProtectedSuccessorChangedPathsForTest(
+      realProtocolCumulativeDiff,
+    )).toEqual(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES);
+    expect(sha256(realProtocolCumulativeDiff)).toBe(
+      "d43f8128c3ccb4cb34c24b5317552893e935ff43b6542da726607994e228dd4f",
+    );
+
     const rawDiff = (
       projection = PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
       unchangedBlobIndex?: number,
@@ -3576,7 +3673,7 @@ describe("closed source normalization", () => {
     )).toThrow(MaintenanceRefenceError);
   });
 
-  test("typed three-generation proof never aliases raw closures or promotes a failure", () => {
+  test("typed five-generation proof never aliases raw closures or promotes a prior successor", () => {
     const fixture = guardFixture();
     const proof = protectedSuccessorGitProof(fixture.evidence);
     expect(
@@ -3586,17 +3683,19 @@ describe("closed source normalization", () => {
       (value: any) => value.revision = AUTHORIZED_H0_TARGET_REVISION,
       (value: any) => value.revision = PRIOR_FAILED_COMPATIBILITY_REVISION,
       (value: any) => value.revision = IMMEDIATE_FAILED_COMPATIBILITY_REVISION,
-      (value: any) => value.source_distance = 53,
+      (value: any) => value.revision = PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
+      (value: any) => value.source_distance = 56,
       (value: any) => value.commit_raw_sha256 = "not-a-sha",
       (value: any) => value.commit_byte_count = 0,
       (value: any) => value.first_parent_revision = revision("2"),
       (value: any) => value.second_parent_revision = value.revision,
       (value: any) => value.second_parent_tree = revision("2"),
       (value: any) => value.changed_paths_raw_sha256 =
-        value.immediate_failed_compatibility_controller.changed_paths_raw_sha256,
+        value.prior_unexecuted_protocol_incompatible_successor
+          .changed_paths_raw_sha256,
       (value: any) => value.changed_path_statuses.pop(),
       (value: any) => value.cumulative_changed_paths_raw_sha256 =
-        value.immediate_failed_compatibility_controller
+        value.prior_unexecuted_protocol_incompatible_successor
           .cumulative_changed_paths_raw_sha256,
       (value: any) => value.changed_path_statuses[0].new_mode = "100644",
       (value: any) => value.cumulative_changed_path_statuses.pop(),
@@ -3634,6 +3733,37 @@ describe("closed source normalization", () => {
       (value: any) =>
         value.immediate_failed_compatibility_controller
           .cumulative_changed_paths_raw_sha256 = digest("3"),
+      (value: any) =>
+        value.prior_unexecuted_protocol_incompatible_successor.revision =
+          revision("4"),
+      (value: any) =>
+        value.prior_unexecuted_protocol_incompatible_successor.lifecycle =
+          "current",
+      (value: any) =>
+        value.prior_unexecuted_protocol_incompatible_successor
+          .controller_invocation_observed = true,
+      (value: any) =>
+        value.prior_unexecuted_protocol_incompatible_successor
+          .success_authority = true,
+      (value: any) =>
+        value.prior_unexecuted_protocol_incompatible_successor
+          .source_admission_evidence.durable_result.final_effect_admission = true,
+      (value: any) =>
+        value.prior_unexecuted_protocol_incompatible_successor
+          .source_admission_evidence.validator.sha256 = digest("4"),
+      (value: any) =>
+        value.prior_unexecuted_protocol_incompatible_successor
+          .protocol_incompatibility.merged_client_expected_kill_response_body =
+            "ok",
+      (value: any) =>
+        value.prior_unexecuted_protocol_incompatible_successor
+          .protocol_incompatibility.kill_response_body = "ok ",
+      (value: any) =>
+        value.prior_unexecuted_protocol_incompatible_successor
+          .protocol_incompatibility.server_command_count_per_connection = 2,
+      (value: any) =>
+        value.prior_unexecuted_protocol_incompatible_successor
+          .downstream_effects.network_attempt_count = 1,
       (value: any) => value.authorized_h0_guard_raw_sha256 = digest("a"),
       (value: any) => value.bridge_source_sha256 = AUTHORIZED_H0_GUARD_RAW_SHA256,
       (value: any) => value.contract_source_sha256 = AUTHORIZED_H0_CONTRACT_RAW_SHA256,
@@ -3691,10 +3821,12 @@ describe("closed source normalization", () => {
       (value: any) => value.controllerRevision = AUTHORIZED_H0_TARGET_REVISION,
       (value: any) => value.controllerRevision = PRIOR_FAILED_COMPATIBILITY_REVISION,
       (value: any) => value.controllerRevision = IMMEDIATE_FAILED_COMPATIBILITY_REVISION,
+      (value: any) => value.controllerRevision = PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
       (value: any) => value.controllerTree = AUTHORIZED_H0_TARGET_TREE,
       (value: any) => value.controllerTree = PRIOR_FAILED_COMPATIBILITY_TREE,
       (value: any) => value.controllerTree = IMMEDIATE_FAILED_COMPATIBILITY_TREE,
-      (value: any) => value.controllerSourceDistance = 53,
+      (value: any) => value.controllerTree = PRIOR_PROTOCOL_INCOMPATIBLE_TREE,
+      (value: any) => value.controllerSourceDistance = 56,
       (value: any) => value.controllerCommitRawSHA256 = "not-a-sha",
       (value: any) => value.controllerCommitByteCount = 0,
       (value: any) => value.controllerTopicRevision = value.controllerRevision,
@@ -3702,10 +3834,10 @@ describe("closed source normalization", () => {
         value.controllerTopicRevision = AUTHORIZED_H0_TARGET_REVISION,
       (value: any) => value.controllerTopicTree = revision("7"),
       (value: any) => value.changedPathsRawSHA256 =
-        "ea34fd5818a88c0554303040c9472d7b3699db15bbae5344c4b1e670577bc6f8",
+        "57d4f31969729438491e3c2d38334f7f2cb68e326d3843aa21ce5067924be24e",
       (value: any) => value.changedPathStatusesSHA256 = digest("7"),
       (value: any) => value.cumulativeChangedPathsRawSHA256 =
-        "8d83631671ddfab6bc122d5b571df49ab0907c2e40ac1353f2663ccae407d7c2",
+        "d43f8128c3ccb4cb34c24b5317552893e935ff43b6542da726607994e228dd4f",
       (value: any) => value.cumulativeChangedPathStatusesSHA256 = digest("7"),
     ]) {
       const changed = structuredClone(binding);
@@ -3930,13 +4062,13 @@ describe("closed source normalization", () => {
     expect(stat.isSymbolicLink()).toBeFalse();
     expect(stat.mode & 0o777).toBe(0o644);
     expect(stat.nlink).toBe(1);
-    expect(bytes.byteLength).toBe(401_997);
-    expect(source.split("\n")).toHaveLength(3_379);
+    expect(bytes.byteLength).toBe(476_711);
+    expect(source.split("\n")).toHaveLength(4_586);
     expect(source.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(rawSHA256).toBe(
-      "a0489a4d7f7222f0f3fbc247f9ad824436b23967b231c42c71297f5de8061030",
+      "124adb40b8b86c86bd560986b587446f21b2ad877972a51aeaa93017cc3be490",
     );
-    expect(blobSHA1).toBe("177f7f932aa92dc55802714505089669e9e1ff91");
+    expect(blobSHA1).toBe("703f42c04362883c74df2bdd93ce52d3566d7a56");
 
     const transpiler = new Bun.Transpiler({ loader: "ts", target: "bun" });
     const scan = transpiler.scan(source);
@@ -4002,6 +4134,7 @@ describe("closed source normalization", () => {
       "flySSHAgentHolderPIDs",
       "flySSHAgentProtocolAuthorityProjection",
       "flySSHAgentProtocolOperationProjection",
+      "flySSHAgentProtocolSettlementProjection",
       "flySSHAgentStableIdentityProjection",
       "localEvidenceFingerprint",
       "maintenanceDatabaseProofSQL",
@@ -4013,6 +4146,8 @@ describe("closed source normalization", () => {
       "parseFlySSHAgentPSText",
       "parsePublicObservation",
       "previewSuccessFinalizationMarker",
+      "priorProtocolIncompatibilityProjection",
+      "priorProtocolSourceAdmissionEvidenceProjection",
       "producerCriticalContractSHA256",
       "producerLocalStateSandwichSHA256",
       "refenceOperatorDeclarationValues",
@@ -4039,12 +4174,14 @@ describe("closed source normalization", () => {
       "validateFirstCanaryPublic",
       "validateFleetTransition",
       "validateFlyAuthenticationConfigText",
+      "validateFlySSHAgentKillConnectionAuthority",
       "validateFlySSHAgentObservation",
       "validateFlySSHAgentProtocolPing",
       "validateFlySSHAgentStopIntent",
       "validateGitLocalConfigText",
       "validateImmediateFailedCompatibilityGitProof",
       "validatePriorFailedCompatibilityGitProof",
+      "validatePriorProtocolIncompatibleGitProof",
       "validateProducerAuthorityProjection",
       "validateProducerEarlyRuntimeBindings",
       "validateProducerLocalStateSandwich",
@@ -4224,6 +4361,8 @@ describe("closed source normalization", () => {
       ["rev-parse", `${PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION}^{tree}`],
       ["rev-parse", `${IMMEDIATE_FAILED_COMPATIBILITY_REVISION}^{tree}`],
       ["rev-parse", `${IMMEDIATE_FAILED_COMPATIBILITY_TOPIC_REVISION}^{tree}`],
+      ["rev-parse", `${PRIOR_PROTOCOL_INCOMPATIBLE_REVISION}^{tree}`],
+      ["rev-parse", `${PRIOR_PROTOCOL_INCOMPATIBLE_TOPIC_REVISION}^{tree}`],
       ["rev-list", "--count", `${sourceRevision}..HEAD`],
       [
         "rev-list",
@@ -4235,14 +4374,20 @@ describe("closed source normalization", () => {
         "--count",
         `${sourceRevision}..${IMMEDIATE_FAILED_COMPATIBILITY_REVISION}`,
       ],
+      [
+        "rev-list",
+        "--count",
+        `${sourceRevision}..${PRIOR_PROTOCOL_INCOMPATIBLE_REVISION}`,
+      ],
       ["cat-file", "commit", "HEAD"],
       ["cat-file", "commit", PRIOR_FAILED_COMPATIBILITY_REVISION],
       ["cat-file", "commit", IMMEDIATE_FAILED_COMPATIBILITY_REVISION],
+      ["cat-file", "commit", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION],
       ["merge-base", "--is-ancestor", sourceRevision, "HEAD"],
       [
         "merge-base",
         "--is-ancestor",
-        IMMEDIATE_FAILED_COMPATIBILITY_REVISION,
+        PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
         "HEAD^2",
       ],
       ["status", "--porcelain=v1", "--untracked-files=all"],
@@ -4291,6 +4436,30 @@ describe("closed source normalization", () => {
         "--no-ext-diff",
         "--no-textconv",
         IMMEDIATE_FAILED_COMPATIBILITY_REVISION,
+        PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
+        "--",
+      ],
+      [
+        "diff",
+        "--raw",
+        "-z",
+        "--abbrev=40",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        AUTHORIZED_H0_TARGET_REVISION,
+        PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
+        "--",
+      ],
+      [
+        "diff",
+        "--raw",
+        "-z",
+        "--abbrev=40",
+        "--no-renames",
+        "--no-ext-diff",
+        "--no-textconv",
+        PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
         "HEAD",
         "--",
       ],
@@ -4317,6 +4486,10 @@ describe("closed source normalization", () => {
       ],
       [
         "show",
+        `${PRIOR_PROTOCOL_INCOMPATIBLE_REVISION}:bin/phase-b-refence-maintenance-bridge.ts`,
+      ],
+      [
+        "show",
         `${AUTHORIZED_H0_TARGET_REVISION}:bin/phase-b-refence-maintenance-bridge.ts`,
       ],
       ["show", "HEAD:bin/phase-b-refence-maintenance-contract.ts"],
@@ -4327,6 +4500,10 @@ describe("closed source normalization", () => {
       [
         "show",
         `${IMMEDIATE_FAILED_COMPATIBILITY_REVISION}:bin/phase-b-refence-maintenance-contract.ts`,
+      ],
+      [
+        "show",
+        `${PRIOR_PROTOCOL_INCOMPATIBLE_REVISION}:bin/phase-b-refence-maintenance-contract.ts`,
       ],
       [
         "show",
@@ -4350,6 +4527,13 @@ describe("closed source normalization", () => {
         "ls-tree",
         "-z",
         PRIOR_FAILED_COMPATIBILITY_REVISION,
+        "--",
+        "bin/phase-b-refence-maintenance-contract.ts",
+      ],
+      [
+        "ls-tree",
+        "-z",
+        PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,
         "--",
         "bin/phase-b-refence-maintenance-contract.ts",
       ],
@@ -4481,6 +4665,8 @@ describe("closed source normalization", () => {
     );
     const normalizeCommand = (value: string): string =>
       value.replace(/\s+/g, "").replace(/,\]/g, "]");
+    const rawDiff = (left: string, right: string) =>
+      `["diff","--raw","-z","--abbrev=40","--no-renames","--no-ext-diff","--no-textconv",${left},${right},"--"]`;
     const expectedSourceCommands = [
       '["config","--local","--null","--list"]',
       '["rev-parse","--git-common-dir"]',
@@ -4494,31 +4680,40 @@ describe("closed source normalization", () => {
       '["rev-parse",PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION+"^{tree}"]',
       '["rev-parse",IMMEDIATE_FAILED_COMPATIBILITY_REVISION+"^{tree}"]',
       '["rev-parse",IMMEDIATE_FAILED_COMPATIBILITY_TOPIC_REVISION+"^{tree}"]',
+      '["rev-parse",PRIOR_PROTOCOL_INCOMPATIBLE_REVISION+"^{tree}"]',
+      '["rev-parse",PRIOR_PROTOCOL_INCOMPATIBLE_TOPIC_REVISION+"^{tree}"]',
       '["rev-list","--count",EXPECTED_SOURCE_REVISION+"..HEAD"]',
       '["rev-list","--count",EXPECTED_SOURCE_REVISION+".."+PRIOR_FAILED_COMPATIBILITY_REVISION]',
       '["rev-list","--count",EXPECTED_SOURCE_REVISION+".."+IMMEDIATE_FAILED_COMPATIBILITY_REVISION]',
+      '["rev-list","--count",EXPECTED_SOURCE_REVISION+".."+PRIOR_PROTOCOL_INCOMPATIBLE_REVISION]',
       '["cat-file","commit","HEAD"]',
       '["cat-file","commit",PRIOR_FAILED_COMPATIBILITY_REVISION]',
       '["cat-file","commit",IMMEDIATE_FAILED_COMPATIBILITY_REVISION]',
+      '["cat-file","commit",PRIOR_PROTOCOL_INCOMPATIBLE_REVISION]',
       '["merge-base","--is-ancestor",EXPECTED_SOURCE_REVISION,"HEAD"]',
-      '["merge-base","--is-ancestor",IMMEDIATE_FAILED_COMPATIBILITY_REVISION,"HEAD^2"]',
+      '["merge-base","--is-ancestor",PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,"HEAD^2"]',
       '["status","--porcelain=v1","--untracked-files=all"]',
-      '["diff","--raw","-z","--abbrev=40","--no-renames","--no-ext-diff","--no-textconv",AUTHORIZED_H0_TARGET_REVISION,PRIOR_FAILED_COMPATIBILITY_REVISION,"--"]',
-      '["diff","--raw","-z","--abbrev=40","--no-renames","--no-ext-diff","--no-textconv",PRIOR_FAILED_COMPATIBILITY_REVISION,IMMEDIATE_FAILED_COMPATIBILITY_REVISION,"--"]',
-      '["diff","--raw","-z","--abbrev=40","--no-renames","--no-ext-diff","--no-textconv",AUTHORIZED_H0_TARGET_REVISION,IMMEDIATE_FAILED_COMPATIBILITY_REVISION,"--"]',
-      '["diff","--raw","-z","--abbrev=40","--no-renames","--no-ext-diff","--no-textconv",IMMEDIATE_FAILED_COMPATIBILITY_REVISION,"HEAD","--"]',
-      '["diff","--raw","-z","--abbrev=40","--no-renames","--no-ext-diff","--no-textconv",AUTHORIZED_H0_TARGET_REVISION,"HEAD","--"]',
+      rawDiff("AUTHORIZED_H0_TARGET_REVISION", "PRIOR_FAILED_COMPATIBILITY_REVISION"),
+      rawDiff("PRIOR_FAILED_COMPATIBILITY_REVISION", "IMMEDIATE_FAILED_COMPATIBILITY_REVISION"),
+      rawDiff("AUTHORIZED_H0_TARGET_REVISION", "IMMEDIATE_FAILED_COMPATIBILITY_REVISION"),
+      rawDiff("IMMEDIATE_FAILED_COMPATIBILITY_REVISION", "PRIOR_PROTOCOL_INCOMPATIBLE_REVISION"),
+      rawDiff("AUTHORIZED_H0_TARGET_REVISION", "PRIOR_PROTOCOL_INCOMPATIBLE_REVISION"),
+      rawDiff("PRIOR_PROTOCOL_INCOMPATIBLE_REVISION", '"HEAD"'),
+      rawDiff("AUTHORIZED_H0_TARGET_REVISION", '"HEAD"'),
       '["show","HEAD:bin/phase-b-refence-maintenance-bridge.ts"]',
       '["show",PRIOR_FAILED_COMPATIBILITY_REVISION+":bin/phase-b-refence-maintenance-bridge.ts"]',
       '["show",IMMEDIATE_FAILED_COMPATIBILITY_REVISION+":bin/phase-b-refence-maintenance-bridge.ts"]',
+      '["show",PRIOR_PROTOCOL_INCOMPATIBLE_REVISION+":bin/phase-b-refence-maintenance-bridge.ts"]',
       '["show",AUTHORIZED_H0_TARGET_REVISION+":bin/phase-b-refence-maintenance-bridge.ts"]',
       '["show","HEAD:bin/phase-b-refence-maintenance-contract.ts"]',
       '["show",PRIOR_FAILED_COMPATIBILITY_REVISION+":bin/phase-b-refence-maintenance-contract.ts"]',
       '["show",IMMEDIATE_FAILED_COMPATIBILITY_REVISION+":bin/phase-b-refence-maintenance-contract.ts"]',
+      '["show",PRIOR_PROTOCOL_INCOMPATIBLE_REVISION+":bin/phase-b-refence-maintenance-contract.ts"]',
       '["show",AUTHORIZED_H0_TARGET_REVISION+":bin/phase-b-refence-maintenance-contract.ts"]',
       '["ls-tree","-z","HEAD","--","bin/phase-b-refence-maintenance-contract.ts"]',
       '["ls-tree","-z",PRIOR_FAILED_COMPATIBILITY_REVISION,"--","bin/phase-b-refence-maintenance-contract.ts"]',
       '["ls-tree","-z",IMMEDIATE_FAILED_COMPATIBILITY_REVISION,"--","bin/phase-b-refence-maintenance-contract.ts"]',
+      '["ls-tree","-z",PRIOR_PROTOCOL_INCOMPATIBLE_REVISION,"--","bin/phase-b-refence-maintenance-contract.ts"]',
       '["config","--local","--null","--list"]',
     ];
     const sharedCommands = [...sharedProof.matchAll(
@@ -4549,31 +4744,40 @@ describe("closed source normalization", () => {
       "prior_topic_tree",
       "immediate_tree",
       "immediate_topic_tree",
+      "protocol_incompatible_tree",
+      "protocol_incompatible_topic_tree",
       "distance",
       "prior_distance",
       "immediate_distance",
+      "protocol_incompatible_distance",
       "commit",
       "prior_commit",
       "immediate_commit",
+      "protocol_incompatible_commit",
       "ancestry",
       "topic_ancestry",
       "status",
       "prior_changed_paths",
       "immediate_changed_paths",
       "immediate_cumulative_changed_paths",
+      "protocol_incompatible_changed_paths",
+      "protocol_incompatible_cumulative_changed_paths",
       "changed_paths",
       "cumulative_changed_paths",
       "bridge_source",
       "prior_bridge_source",
       "immediate_bridge_source",
+      "protocol_incompatible_bridge_source",
       "authorized_h0_bridge_source",
       "contract_source",
       "prior_contract_source",
       "immediate_contract_source",
+      "protocol_incompatible_contract_source",
       "authorized_h0_contract_source",
       "contract_tree",
       "prior_contract_tree",
       "immediate_contract_tree",
+      "protocol_incompatible_contract_tree",
       "local_config_rebound",
     ]);
     for (const command of expectedSourceCommands) {
@@ -4687,280 +4891,6 @@ describe("closed source normalization", () => {
           receiptSHA256: digest("a"),
         },
       ), "controller_wal_contract");
-  });
-
-  test("post-handoff guard children have no unjournalled launcher path", () => {
-    const source = readFileSync(
-      join(import.meta.dir, "..", "phase-b-refence-maintenance-bridge.ts"),
-      "utf8",
-    );
-    const localStart = source.indexOf(
-      "function createJournalledControllerLocalReaders(",
-    );
-    const guardStart = source.indexOf(
-      "function createJournalledControllerGuardDependencies(",
-      localStart,
-    );
-    const guardEnd = source.indexOf(
-      "class ProductionFlySSHAgentLifecycle",
-      guardStart,
-    );
-    expect(localStart).toBeGreaterThan(0);
-    expect(guardStart).toBeGreaterThan(localStart);
-    expect(guardEnd).toBeGreaterThan(guardStart);
-    const localReaders = source.slice(localStart, guardStart);
-    const guardDependencies = source.slice(guardStart, guardEnd);
-    const forbiddenPostH = [
-      "readBoundedChild(",
-      "runRefenceFlyCLI(",
-      "runRefenceGitCLI(",
-      "runRefenceSecurityCLI(",
-      "readProductionGitProof(",
-      "readProductionProcessProof(",
-      "readSettledDatabaseURLs(",
-      "fetchLiteralGitHubMain(",
-      "Bun.spawn(",
-      "Bun.spawnSync(",
-      "Deno.Command",
-      "node:child_process",
-    ];
-    for (const body of [localReaders, guardDependencies]) {
-      for (const token of forbiddenPostH) expect(body).not.toContain(token);
-      expect(body).not.toMatch(/\bruntime\.(?:spawn|settle|takeStdout)\s*\(/);
-    }
-    expect(localReaders).toContain(
-      "performControllerJournalledReadChildForTest({",
-    );
-    expect(guardDependencies).toContain(
-      "performControllerJournalledProviderReadForTest({",
-    );
-    expect(guardDependencies).toContain(
-      "createJournalledControllerLocalReaders(request)",
-    );
-    expect(guardDependencies).not.toContain("request.base.readGitProof");
-    expect(guardDependencies).not.toContain("request.base.readKeychainProof");
-    expect(guardDependencies).not.toContain("request.base.readProcessProof");
-    expect(guardDependencies).not.toContain(
-      "request.base.readProviderSecretInventory",
-    );
-    expect(guardDependencies).not.toContain("request.base.readFleetInventory");
-    expect(
-      [...guardDependencies.matchAll(/request\.base\.([A-Za-z0-9_]+)/g)]
-        .map((match) => match[1]).sort(),
-    ).toEqual([
-      "close",
-      "controllerPhase",
-      "pause",
-      "readDatabaseProof",
-    ]);
-
-    const range = (startToken: string, endToken: string): string => {
-      const start = source.indexOf(startToken);
-      const end = source.indexOf(endToken, start);
-      expect(start).toBeGreaterThan(0);
-      expect(end).toBeGreaterThan(start);
-      return source.slice(start, end);
-    };
-    const legacyChild = range(
-      "async function readBoundedChild(",
-      "async function runRefenceFlyCLI(",
-    );
-    const flyRuntime = range(
-      "class ProductionFlyEffectRuntime",
-      "interface ProductionReadChildRecord",
-    );
-    const readRuntime = range(
-      "class ProductionControllerReadEffectRuntime",
-      "export interface ControllerReadEffectRuntime",
-    );
-    for (const body of [legacyChild, flyRuntime, readRuntime]) {
-      expect(body.match(/\bBun\.spawn\(/g)).toHaveLength(1);
-    }
-    let outsideLaunchers = source;
-    for (const body of [legacyChild, flyRuntime, readRuntime]) {
-      outsideLaunchers = outsideLaunchers.replace(body, "");
-    }
-    expect(outsideLaunchers).not.toContain("Bun.spawn(");
-    expect(source).not.toContain('Bun["spawn"]');
-    expect(source).not.toContain("Bun.spawnSync");
-    expect(source).not.toMatch(/=\s*Bun\.spawn\s*;/);
-    expect(source).not.toContain("node:child_process");
-    expect(source).not.toContain("Deno.Command");
-    for (const runtimeBody of [flyRuntime, readRuntime]) {
-      const spawnIndex = runtimeBody.indexOf("const child = Bun.spawn(");
-      const activeOwnerIndex = runtimeBody.indexOf(
-        "ownProductionChild(child);",
-        spawnIndex,
-      );
-      const pidIndex = runtimeBody.indexOf(
-        "const pid = Number(child.pid);",
-        spawnIndex,
-      );
-      expect(spawnIndex).toBeGreaterThan(0);
-      expect(activeOwnerIndex).toBeGreaterThan(spawnIndex);
-      expect(pidIndex).toBeGreaterThan(activeOwnerIndex);
-      expect(runtimeBody).toContain("settleBoundedProductionChild(");
-      expect(runtimeBody).not.toContain(
-        "await Promise.all([record.child.exited, output])",
-      );
-      expect(runtimeBody).not.toContain("await Promise.allSettled([output])");
-    }
-    const settlement = range(
-      "async function settleBoundedProductionChild(",
-      "async function readBoundedChild(",
-    );
-    expect(settlement).toContain("const owner = activeProductionChildPipes;");
-    expect(settlement).toContain("const abort = owner.abort;");
-    expect(settlement).toContain("releaseSettledProductionChild(child)");
-    expect(settlement).toContain("settlePromiseWithin(");
-    expect(settlement).not.toContain("await child.exited");
-    expect(
-      source.match(
-        /if \(processGroupSettled && activeProductionChild === record\.child\)/g,
-      ),
-    ).toHaveLength(2);
-    expect(
-      source.match(/if \(processGroupSettled && interruptHardKill\)/g),
-    ).toHaveLength(2);
-    expect(source).not.toContain(
-      "if (activeProductionChild === record.child) activeProductionChild = null;",
-    );
-    expect(source).toMatch(
-      /evidence\.edge === "H0",\s*"production_dependencies_pre_handoff"/,
-    );
-    expect(source).toMatch(
-      /request\.base\.controllerPhase === "post_handoff_childless"\s*&&\s*request\.evidence\.edge === "H5"/,
-    );
-    expect(source).toContain("sealChildLaunchersForHandoff: () => {");
-    expect(source).toContain("childLaunchersSealed = true;");
-    expect(source).toContain('"pre_handoff_child_authority"');
-  });
-
-  test("the production session seals children before H and journals ready after H5", () => {
-    const source = readFileSync(
-      join(import.meta.dir, "..", "phase-b-refence-maintenance-bridge.ts"),
-      "utf8",
-    );
-    expect(Buffer.byteLength(source)).toBeLessThan(512 * 1024);
-    const start = source.indexOf(
-      "async function createProductionControllerSession(",
-    );
-    const end = source.indexOf(
-      "export interface ControllerRecoveryDependencies",
-      start,
-    );
-    expect(start).toBeGreaterThan(0);
-    expect(end).toBeGreaterThan(start);
-    const session = source.slice(start, end);
-    const ordered = [
-      "requireProductionControllerLaunchContract();",
-      "const lock = acquireDeployLockForController();",
-      "const ingress = readRefenceIngressTarget(arguments_.receiptSHA256);",
-      "validateProcessProof(await readProductionProcessProof());",
-      "await loadVerifiedMaintenanceContract();",
-      "await fetchLiteralGitHubMain();",
-      "const initialEvidence = classifyHandoff(",
-      "const git = await readProductionGitProof(initialEvidence);",
-      "await prepareProductionDependencyEstate(",
-      "await prepareProductionBuildContext(initialEvidence);",
-      "await createProductionDependencies(",
-      "await runMaintenanceRefenceGuardForController({",
-      "createPrivateDirectoryExclusive(CONTROLLER_WAL_ROOT, DEPLOY_STATE_DIR);",
-      "preparedDependencies.sealChildLaunchersForHandoff();",
-      "preparedDependencies = null;",
-      "const handoff = completeHandoff(",
-      "const adoptedEvidence = classifyHandoff(",
-      "const wal = new ControllerWalWriter({",
-      "state = new ProductionBridgeMarkerState({",
-      "wal.append({",
-      'state.advance("controller_ready");',
-      "await runControllerDatabaseConvergenceCoreForTest({",
-      "validateVerifiedDatabaseConvergenceForTest(",
-      "createJournalledControllerGuardDependencies({",
-      "createProductionFlyOperationAdapter({",
-    ];
-    let previous = -1;
-    for (const token of ordered) {
-      const index = session.indexOf(token, previous + 1);
-      expect(index).toBeGreaterThan(previous);
-      previous = index;
-    }
-    expect(session).not.toContain("releaseDeployLockForController(");
-    expect(session).not.toContain("runRefenceFlyCLI(");
-    expect(session).not.toContain("Bun.spawn(");
-    const catchStart = session.indexOf("catch (error) {");
-    expect(catchStart).toBeGreaterThan(0);
-    const catchBody = session.slice(catchStart);
-    const childSettle = catchBody.indexOf(
-      "let cleanupUncertain = !await settleResourceTwice",
-    );
-    const databaseSettle = catchBody.indexOf("closeable.close()", childSettle);
-    const retain = catchBody.indexOf(
-      'state.retainManualFailure("controller_resource_cleanup_uncertain")',
-      databaseSettle,
-    );
-    const descriptorClose = catchBody.indexOf(
-      "closeRetainedDeployLockDescriptor(lock)",
-      retain,
-    );
-    expect(childSettle).toBeGreaterThan(0);
-    expect(databaseSettle).toBeGreaterThan(childSettle);
-    expect(retain).toBeGreaterThan(databaseSettle);
-    expect(descriptorClose).toBeGreaterThan(retain);
-    expect(session).toContain("closeResources: resourceTeardown.close,");
-    expect(session).toContain(
-      "closeAuthority: () => closeRetainedDeployLockDescriptor(lock)",
-    );
-    const main = source.slice(source.indexOf("async function main():"));
-    expect(main).not.toContain("createProductionControllerSession(");
-    expect(main.match(/await runProductionController\(arguments_\);/g))
-      .toHaveLength(1);
-  });
-
-  test("the production controller composes the one-shot owned graph", () => {
-    const source = readFileSync(
-      join(import.meta.dir, "..", "phase-b-refence-maintenance-bridge.ts"),
-      "utf8",
-    );
-    const start = source.indexOf("async function runProductionController(");
-    const end = source.indexOf(
-      "export interface ControllerRolloutDependencies",
-      start,
-    );
-    expect(start).toBeGreaterThan(0);
-    expect(end).toBeGreaterThan(start);
-    const body = source.slice(start, end);
-    const ordered = [
-      "return runOwnedControllerSessionForTest({",
-      "createSession: () => createProductionControllerSession(arguments_),",
-      "createDependencies: (session) =>",
-      "createProductionRolloutDependencies(session),",
-      "run: (session, dependencies) =>",
-      "runControllerRolloutCore({",
-      "evidence: session.evidence,",
-      "rolloutID: session.rolloutID,",
-      "dependencies,",
-      "closeResources: (session) => session.closeResources(),",
-      "closeAuthority: (session) => session.closeAuthority(),",
-      "retainCleanupUncertainty: (session) =>",
-      '"controller_resource_cleanup_uncertain",',
-    ];
-    let previous = -1;
-    for (const token of ordered) {
-      const index = body.indexOf(token, previous + 1);
-      expect(index).toBeGreaterThan(previous);
-      previous = index;
-    }
-    expect(body.match(/createProductionControllerSession\(/g)).toHaveLength(1);
-    expect(body.match(/createProductionRolloutDependencies\(/g)).toHaveLength(
-      1,
-    );
-    expect(body.match(/runControllerRolloutCore\(/g)).toHaveLength(1);
-    expect(body).not.toMatch(/releaseDeployLockForController|Bun\.spawn/);
-    const main = source.slice(source.indexOf("async function main():"));
-    expect(main.match(/await runProductionController\(arguments_\);/g))
-      .toHaveLength(1);
-    expect(main).not.toContain("controller_not_activated");
   });
 
   test("owned session teardown preserves the primary failure and marks uncertainty", async () => {
@@ -9250,9 +9180,10 @@ describe("owned Fly SSH-agent lifecycle", () => {
   });
   const activeObservation = (
     tracked: FlySSHAgentIdentity | null,
+    observedAtUnixMs = startedAt + 1_000,
   ): FlySSHAgentObservation => ({
     schema: "agenttool-phase-b-refence-fly-ssh-agent-observation/v1",
-    observed_at_unix_ms: startedAt + 1_000,
+    observed_at_unix_ms: observedAtUnixMs,
     agent_processes: [structuredClone(identity)],
     pinned_fly_process_count: 1,
     other_pinned_fly_process_count: 0,
@@ -9274,87 +9205,38 @@ describe("owned Fly SSH-agent lifecycle", () => {
     socket: null,
     lock: lock([]),
   });
-  const protocolFrame = (body: string): Buffer => {
-    const payload = Buffer.from(body, "ascii");
-    const frame = Buffer.alloc(payload.byteLength + 2);
-    frame.writeUInt16LE(payload.byteLength, 0);
-    payload.copy(frame, 2);
-    return frame;
-  };
-  const protocolEndpoint = async (
-    onRequest: (request: string, socket: NetSocket, ordinal: number) => void,
-  ) => {
-    const directory = realpathSync(
-      mkdtempSync("/tmp/agenttool-contained-fly-protocol-"),
-    );
-    temporaryDirectories.push(directory);
-    const path = join(directory, "agent.sock");
-    const requests: string[] = [];
-    const sockets = new Set<NetSocket>();
-    let connectionCount = 0;
-    const server = createServer((connection) => {
-      connectionCount += 1;
-      sockets.add(connection);
-      connection.on("error", () => {});
-      connection.on("close", () => sockets.delete(connection));
-      let buffer = Buffer.alloc(0);
-      connection.on("data", (chunk) => {
-        buffer = Buffer.concat([buffer, chunk]);
-        while (buffer.byteLength >= 2) {
-          const length = buffer.readUInt16LE(0);
-          if (buffer.byteLength < length + 2) return;
-          const request = buffer.subarray(2, length + 2).toString("ascii");
-          buffer = buffer.subarray(length + 2);
-          requests.push(request);
-          onRequest(request, connection, requests.length);
-        }
-      });
-    });
-    await new Promise<void>((resolve, reject) => {
-      server.once("error", reject);
-      server.listen(path, () => {
-        server.off("error", reject);
-        resolve();
-      });
-    });
-    const waitForClosed = async () => {
-      for (let attempt = 0; attempt < 100 && sockets.size > 0; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 2));
-      }
-      expect(sockets.size).toBe(0);
-    };
-    const close = async () => {
-      for (const connection of sockets) connection.destroy();
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => error ? reject(error) : resolve())
-      );
-    };
-    return {
-      path,
-      requests,
-      connectionCount: () => connectionCount,
-      activeConnections: () => sockets.size,
-      waitForClosed,
-      close,
-    };
-  };
-
+  const lifecycleContract = PURE_CONTRACT;
+  const pingFrameSHA256 =
+    "705631fc8ed0643d62cba3fd15eb48d1b4c4e6ec9c7ec5801b7487baecac1cf0";
+  const killFrameSHA256 =
+    "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be";
+  const killResponseSHA256 =
+    "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df";
+  type HarnessFault =
+    | "ping_connect"
+    | "ping_rebound"
+    | "ping_command"
+    | "ping_close"
+    | "intent"
+    | "same_protocol"
+    | "kill_connect"
+    | "kill_rebound"
+    | "kill_authority"
+    | "before_write"
+    | "ack"
+    | "settlement"
+    | "receipt";
   type HarnessOptions = {
     batchID?: string;
     batchKind?: "cordoned_runtime" | "final_authority";
     probeFailureOrdinal?: number;
     recordIntentFailure?: boolean;
-    sendMode?:
-      | "ok"
-      | "spawn"
-      | "nonzero"
-      | "timeout"
-      | "output"
-      | "two_sends"
-      | "wrong_batch"
-      | "wrong_argv"
-      | "wrong_settlement";
+    fault?: HarnessFault;
+    aliasConnectedObservations?: boolean;
+    sendMode?: "ok" | "spawn" | "nonzero" | "timeout" | "output" |
+      "two_sends" | "wrong_batch" | "wrong_argv" | "wrong_settlement";
     holdAgentAfterStop?: boolean;
+    receiptMutation?: (receipt: Record<string, unknown>) => void;
     mutateObservation?: (
       checkpoint: string,
       occurrence: number,
@@ -9372,6 +9254,10 @@ describe("owned Fly SSH-agent lifecycle", () => {
     let stopIntentCount = 0;
     let stopSendCount = 0;
     let cleanupCount = 0;
+    let pingConnectCount = 0;
+    let killConnectCount = 0;
+    let observationOrdinal = 0;
+    const sharedProtocol = { role: "shared", closed: false };
     const promise = runFlySSHAgentOwnedBatchForTest({
       batchID,
       batchKind,
@@ -9381,141 +9267,197 @@ describe("owned Fly SSH-agent lifecycle", () => {
         events.push(`observe:${checkpoint}`);
         const occurrence = (checkpointOccurrences.get(checkpoint) ?? 0) + 1;
         checkpointOccurrences.set(checkpoint, occurrence);
+        observationOrdinal += 1;
         const raw = created && (!stopped || options.holdAgentAfterStop)
-          ? activeObservation(tracked)
+          ? activeObservation(
+            tracked,
+            options.aliasConnectedObservations && checkpoint.includes("connected_rebound")
+              ? startedAt + 50_000
+              : startedAt + 1_000 + observationOrdinal,
+          )
           : absentObservation(tracked);
+        if (
+          (options.fault === "ping_rebound" && checkpoint.includes("ping_connected")) ||
+          (options.fault === "kill_rebound" && checkpoint.includes("kill_connected"))
+        ) raw.socket!.inode += 1;
         return options.mutateObservation?.(
           checkpoint,
           occurrence,
           structuredClone(raw),
         ) ?? raw;
       },
-      connectStopProtocol: async () => {
-        events.push("protocol:connect");
-        return { closed: false };
+      connectStopProtocol: async (role) => {
+        events.push(`protocol:${role}:connect`);
+        if (role === "ping") pingConnectCount += 1;
+        else killConnectCount += 1;
+        if (options.fault === `${role}_connect`) throw new Error(`${role}_connect`);
+        if (options.fault === "same_protocol") return sharedProtocol;
+        return { role, closed: false };
       },
       pingStopProtocol: async (_protocol, receivedIdentity, identitySHA256, connectedReboundSHA256) => {
         events.push("protocol:ping");
+        if (options.fault === "ping_command") throw new Error("ping_command");
         const response = `ok {"pid":${receivedIdentity.pid},"version":"0.4.74","disabled":false}`;
-        return {
-          schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-ping/v1",
+        const ping: FlySSHAgentProtocolPing = {
+          schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-ping/v2",
           transport: "local_unix_stream",
           socket_path: socketPath,
+          connection_role: "ping",
+          connection_ordinal: 1,
           connected_without_write: true,
           connected_rebound_sha256: connectedReboundSHA256,
-          connected_rebound_wal_sha256: sha256("connected-wal"),
+          connected_rebound_wal_sha256: sha256(`ping-wal:${batchID}`),
           identity_sha256: identitySHA256,
-          ping_frame_sha256:
-            "705631fc8ed0643d62cba3fd15eb48d1b4c4e6ec9c7ec5801b7487baecac1cf0",
+          initial_peer_pid: receivedIdentity.pid,
+          prewrite_peer_pid: receivedIdentity.pid,
+          peer_attested: true,
+          ping_frame_sha256: pingFrameSHA256,
           response_pid: receivedIdentity.pid,
           response_version: "0.4.74",
           response_disabled: false,
           response_byte_count: response.length,
           response_sha256: sha256(response),
+          command_count: 1,
+          remote_eof_observed: true,
+          local_close_awaited: true,
           child_spawn_count: 0,
         };
+        if (options.fault === "ping_close") throw new Error("ping_close");
+        events.push("protocol:ping:eof");
+        (_protocol as { closed: boolean }).closed = true;
+        events.push("protocol:ping:close");
+        return ping;
       },
       recordStopIntent: async (receivedBatchID, receivedIdentity, identitySHA256, ping, connectedReboundSHA256) => {
         events.push("stop:intent");
         stopIntentCount += 1;
-        if (options.recordIntentFailure) throw new Error("intent uncertain");
-        const protocolAuthoritySHA256 = sha256(canonicalJson({
-          schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-authority/v1",
-          transport: "local_unix_stream",
-          socket_path: socketPath,
-          connected_without_write: true,
-          connected_rebound_sha256: connectedReboundSHA256,
-          connected_rebound_wal_sha256: ping.connected_rebound_wal_sha256,
-          identity_sha256: identitySHA256,
-          ping_frame_sha256: ping.ping_frame_sha256,
-          kill_frame_sha256:
-            "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be",
-          ping_response_sha256: ping.response_sha256,
-          ping_response_pid: ping.response_pid,
-          ping_response_version: ping.response_version,
-          ping_response_disabled: ping.response_disabled,
-          child_spawn_count: 0,
-        }));
+        if (options.recordIntentFailure || options.fault === "intent") {
+          throw new Error("intent uncertain");
+        }
+        const protocolAuthoritySHA256 = sha256(canonicalJson(
+          lifecycleContract.flySSHAgentProtocolAuthorityProjection(ping),
+        ));
         return {
-          schema: "agenttool-phase-b-refence-fly-ssh-agent-stop-intent/v2",
+          schema: "agenttool-phase-b-refence-fly-ssh-agent-stop-intent/v3",
           batch_id: receivedBatchID,
           identity_sha256: identitySHA256,
           cli_semantic_argv_sha256: sha256(canonicalJson([fly, "agent", "stop"])),
           cli_semantic_executed: false,
           protocol_authority_sha256: protocolAuthoritySHA256,
+          ping_connected_rebound_sha256: connectedReboundSHA256,
+          ping_connected_rebound_wal_sha256: ping.connected_rebound_wal_sha256,
+          ping_peer_pid: receivedIdentity.pid,
+          ping_connection_closed: true,
           ping_response_sha256: ping.response_sha256,
-          durable_intent_sha256: sha256(`intent:${protocolAuthoritySHA256}`),
+          durable_intent_sha256: sha256(canonicalJson({
+            batch_id: receivedBatchID,
+            protocol_authority_sha256: protocolAuthoritySHA256,
+            ping_connected_rebound_sha256: connectedReboundSHA256,
+          })),
         };
       },
-      sendStop: async (_protocol, intent, receivedIdentity, ping) => {
+      bindKillStopProtocol: async (_protocol, receivedIdentity, _identitySHA256, connectedReboundSHA256) => {
+        events.push("protocol:kill:bind");
+        return {
+          schema: "agenttool-phase-b-refence-fly-ssh-agent-kill-connection-authority/v1",
+          transport: "local_unix_stream",
+          socket_path: socketPath,
+          connection_role: "kill",
+          connection_ordinal: 2,
+          connected_without_write: true,
+          connected_rebound_sha256: connectedReboundSHA256,
+          connected_rebound_wal_sha256: sha256(`kill-wal:${batchID}`),
+          initial_peer_pid: options.fault === "kill_authority"
+            ? receivedIdentity.pid + 1
+            : receivedIdentity.pid,
+          peer_attested: true,
+          command_count_before_attempt: 0,
+          child_spawn_count: 0,
+        } satisfies FlySSHAgentKillConnectionAuthority;
+      },
+      sendStop: async (_protocol, intent, receivedIdentity, ping, killAuthority) => {
+        const operation = lifecycleContract.flySSHAgentProtocolOperationProjection(
+          intent,
+          killAuthority,
+        );
+        const protocolOperationSHA256 = sha256(canonicalJson(operation));
+        const killConnectionAuthoritySHA256 = sha256(canonicalJson(killAuthority));
+        events.push("stop:attempt");
+        events.push("stop:before_write");
+        if (options.fault === "before_write") throw new Error("before_write");
         events.push("stop:send");
         stopSendCount += 1;
-        if (["spawn", "nonzero", "timeout"].includes(options.sendMode ?? "")) {
-          throw new Error(`stop ${options.sendMode}`);
-        }
         stopped = true;
-        const protocolOperationSHA256 = sha256(canonicalJson({
-          schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-operation/v1",
-          transport: "local_unix_stream",
-          socket_path: socketPath,
-          protocol_authority_sha256: intent.protocol_authority_sha256,
-          durable_intent_sha256: intent.durable_intent_sha256,
-          cli_semantic_argv_sha256: intent.cli_semantic_argv_sha256,
-          cli_semantic_executed: false,
-          ping_frame_sha256: ping.ping_frame_sha256,
-          kill_frame_sha256:
-            "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be",
-          child_spawn_count: 0,
-          stop_send_count: 1,
-          retry_authorized: false,
-        }));
-        const settlementSHA256 = sha256(canonicalJson({
-          schema:
-            "agenttool-phase-b-refence-fly-ssh-agent-protocol-settlement/v1",
-          transport: "local_unix_stream",
-          socket_path: socketPath,
-          protocol_operation_sha256: protocolOperationSHA256,
-          kill_frame_sha256:
-            "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be",
-          kill_response_sha256:
-            "bf2a63ad5d209b2be8586a0f249aac31e432115a64d4fb93433d702564be2469",
-          protocol_acknowledged: true,
-          child_spawn_count: 0,
-          stop_send_count: 1,
-        }));
+        if (
+          options.fault === "ack" ||
+          ["spawn", "nonzero", "timeout"].includes(options.sendMode ?? "")
+        ) throw new Error(`stop ${options.fault ?? options.sendMode}`);
+        const settlementSHA256 = sha256(canonicalJson(
+          lifecycleContract.flySSHAgentProtocolSettlementProjection(
+            intent.protocol_authority_sha256,
+            killConnectionAuthoritySHA256,
+            protocolOperationSHA256,
+            receivedIdentity.pid,
+            intent.ping_connected_rebound_sha256,
+            killAuthority.connected_rebound_sha256,
+            intent.ping_connected_rebound_wal_sha256,
+            killAuthority.connected_rebound_wal_sha256,
+          ),
+        ));
         const receipt = {
-          schema: "agenttool-phase-b-refence-fly-ssh-agent-stop/v2",
+          schema: "agenttool-phase-b-refence-fly-ssh-agent-stop/v3",
           batch_id: intent.batch_id,
           identity_sha256: sha256(canonicalJson(stableIdentity(receivedIdentity))),
           cli_semantic_argv_sha256: sha256(canonicalJson([fly, "agent", "stop"])),
           cli_semantic_executed: false,
           protocol_authority_sha256: intent.protocol_authority_sha256,
+          kill_connection_authority_sha256: killConnectionAuthoritySHA256,
+          ping_connected_rebound_sha256: intent.ping_connected_rebound_sha256,
+          kill_connected_rebound_sha256: killAuthority.connected_rebound_sha256,
           protocol_operation_sha256: protocolOperationSHA256,
           durable_intent_sha256: intent.durable_intent_sha256,
           settlement_sha256: settlementSHA256,
           transport: "local_unix_stream",
           socket_path: socketPath,
           ping_frame_sha256: ping.ping_frame_sha256,
-          kill_frame_sha256:
-            "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be",
+          kill_frame_sha256: killFrameSHA256,
           ping_response_sha256: ping.response_sha256,
-          kill_response_byte_count: 3,
-          kill_response_sha256:
-            "bf2a63ad5d209b2be8586a0f249aac31e432115a64d4fb93433d702564be2469",
+          kill_response_byte_count: 2,
+          kill_response_sha256: killResponseSHA256,
+          ping_initial_peer_pid: receivedIdentity.pid,
+          ping_prewrite_peer_pid: receivedIdentity.pid,
+          kill_initial_peer_pid: receivedIdentity.pid,
+          kill_prewrite_peer_pid: receivedIdentity.pid,
+          ping_remote_eof_observed: true,
+          kill_remote_eof_observed: true,
+          ping_local_close_awaited: true,
+          kill_local_close_awaited: true,
+          connection_count: 2,
+          ping_connection_count: 1,
+          kill_connection_count: 1,
           protocol_acknowledged: true,
           child_spawn_count: 0,
           stop_send_count: 1,
         };
-        if (options.sendMode === "output") receipt.kill_response_byte_count = 4 as 3;
+        if (options.sendMode === "output") receipt.kill_response_byte_count = 3 as 2;
         if (options.sendMode === "two_sends") receipt.stop_send_count = 2;
         if (options.sendMode === "wrong_batch") receipt.batch_id = "wrong_batch";
         if (options.sendMode === "wrong_argv") receipt.cli_semantic_argv_sha256 = digest("f");
         if (options.sendMode === "wrong_settlement") receipt.settlement_sha256 = digest("e");
+        if (options.fault === "settlement") receipt.settlement_sha256 = digest("d");
+        if (options.fault === "receipt") receipt.protocol_authority_sha256 = digest("c");
+        options.receiptMutation?.(receipt);
+        events.push("protocol:kill:eof");
+        (_protocol as { closed: boolean }).closed = true;
+        events.push("protocol:kill:close");
         return receipt as unknown as FlySSHAgentStopReceipt;
       },
       closeStopProtocol: async (protocol) => {
-        events.push("protocol:close");
-        (protocol as { closed: boolean }).closed = true;
+        const value = protocol as { role?: string; closed: boolean };
+        if (!value.closed) {
+          value.closed = true;
+          events.push(`protocol:${value.role ?? "shared"}:close`);
+        }
       },
       pause: async (milliseconds) => {
         events.push(`pause:${milliseconds}`);
@@ -9551,6 +9493,7 @@ describe("owned Fly SSH-agent lifecycle", () => {
       promise,
       events,
       counts: () => ({ cleanupCount, stopIntentCount, stopSendCount }),
+      transportCounts: () => ({ pingConnectCount, killConnectCount }),
     };
   };
   const requireManual = async (fixture: ReturnType<typeof harness>) => {
@@ -9715,186 +9658,6 @@ describe("owned Fly SSH-agent lifecycle", () => {
     expect(lifecycle.finalAbsenceSHA256).toBe(expected);
   });
 
-  test("direct Unix protocol binds one fragmented ping and kill on one closed connection", async () => {
-    const pingBody =
-      `ok {"pid":${identity.pid},"version":"0.4.74","disabled":false}`;
-    const endpoint = await protocolEndpoint((request, connection) => {
-      const frame = protocolFrame(request === "ping" ? pingBody : "ok ");
-      connection.write(frame.subarray(0, 1));
-      setTimeout(() => connection.write(frame.subarray(1, 3)), 2);
-      setTimeout(() => connection.write(frame.subarray(3)), 4);
-    });
-    let protocol: Awaited<ReturnType<
-      typeof connectFlySSHAgentProtocolForContainedTest
-    >> | null = null;
-    try {
-      protocol = await connectFlySSHAgentProtocolForContainedTest({
-        path: endpoint.path,
-        timeoutMilliseconds: 200,
-      });
-      const identitySHA256 = sha256(canonicalJson(stableIdentity(identity)));
-      const ping = await protocol.ping(
-        identity,
-        identitySHA256,
-        sha256("connected-rebound"),
-        sha256("connected-rebound-wal"),
-      );
-      expect(ping.response_pid).toBe(identity.pid);
-      expect(ping.response_version).toBe("0.4.74");
-      let authorityChecks = 0;
-      await expect(protocol.kill(() => authorityChecks += 1)).resolves.toBe(
-        "bf2a63ad5d209b2be8586a0f249aac31e432115a64d4fb93433d702564be2469",
-      );
-      expect(authorityChecks).toBe(1);
-      expect(endpoint.requests).toEqual(["ping", "kill"]);
-      expect(endpoint.connectionCount()).toBe(1);
-    } finally {
-      if (protocol !== null) await protocol.close().catch(() => {});
-      await endpoint.waitForClosed();
-      await endpoint.close();
-    }
-  });
-
-  test("direct Unix protocol refuses hostile framing, preloads, uncertainty, and leaked connects", async () => {
-    const pingBody =
-      `ok {"pid":${identity.pid},"version":"0.4.74","disabled":false}`;
-    const identitySHA256 = sha256(canonicalJson(stableIdentity(identity)));
-    const pingArguments = [
-      identity,
-      identitySHA256,
-      sha256("connected-rebound"),
-      sha256("connected-rebound-wal"),
-    ] as const;
-    const pingFailures = [
-      ["wrong_pid", (connection: NetSocket) =>
-        connection.write(protocolFrame(pingBody.replace("43768", "43769")))],
-      ["wrong_version", (connection: NetSocket) =>
-        connection.write(protocolFrame(pingBody.replace("0.4.74", "0.4.75")))],
-      ["trailing", (connection: NetSocket) =>
-        connection.write(Buffer.concat([protocolFrame(pingBody), Buffer.of(0)]))],
-      ["short_length", (connection: NetSocket) =>
-        connection.write(Buffer.of(2, 0, 111, 107))],
-      ["oversize", (connection: NetSocket) =>
-        connection.write(Buffer.alloc(1_027, 97))],
-      ["eof", (connection: NetSocket) => connection.end()],
-      ["read_timeout", (_connection: NetSocket) => {}],
-      ["partial_timeout", (connection: NetSocket) =>
-        connection.write(Buffer.of(10, 0, 111))],
-      ["socket_error", (connection: NetSocket) => connection.destroy()],
-    ] as const;
-    for (const [name, respond] of pingFailures) {
-      const endpoint = await protocolEndpoint((_request, connection) =>
-        respond(connection)
-      );
-      let protocol: Awaited<ReturnType<
-        typeof connectFlySSHAgentProtocolForContainedTest
-      >> | null = null;
-      try {
-        protocol = await connectFlySSHAgentProtocolForContainedTest({
-          path: endpoint.path,
-          timeoutMilliseconds: 60,
-        });
-        await expect(protocol.ping(...pingArguments), name).rejects.toBeDefined();
-        expect(endpoint.requests, name).toEqual(["ping"]);
-      } finally {
-        if (protocol !== null) await protocol.close().catch(() => {});
-        await endpoint.waitForClosed();
-        await endpoint.close();
-      }
-    }
-
-    const preloaded = await protocolEndpoint((request, connection) => {
-      if (request === "ping") {
-        connection.write(protocolFrame(pingBody));
-        setTimeout(() => connection.write(protocolFrame("ok ")), 4);
-      }
-    });
-    let preloadedProtocol: Awaited<ReturnType<
-      typeof connectFlySSHAgentProtocolForContainedTest
-    >> | null = null;
-    try {
-      preloadedProtocol = await connectFlySSHAgentProtocolForContainedTest({
-        path: preloaded.path,
-        timeoutMilliseconds: 100,
-      });
-      await preloadedProtocol.ping(...pingArguments);
-      await new Promise((resolve) => setTimeout(resolve, 12));
-      let authorityChecks = 0;
-      await expect(preloadedProtocol.kill(() => authorityChecks += 1)).rejects
-        .toBeInstanceOf(MaintenanceRefenceError);
-      expect(authorityChecks).toBe(1);
-      expect(preloaded.requests).toEqual(["ping"]);
-    } finally {
-      if (preloadedProtocol !== null) {
-        await preloadedProtocol.close().catch(() => {});
-      }
-      await preloaded.waitForClosed();
-      await preloaded.close();
-    }
-
-    for (const mode of ["wrong_ack", "eof", "timeout"] as const) {
-      const endpoint = await protocolEndpoint((request, connection) => {
-        if (request === "ping") connection.write(protocolFrame(pingBody));
-        else if (mode === "wrong_ack") connection.write(protocolFrame("no "));
-        else if (mode === "eof") connection.end();
-      });
-      let protocol: Awaited<ReturnType<
-        typeof connectFlySSHAgentProtocolForContainedTest
-      >> | null = null;
-      try {
-        protocol = await connectFlySSHAgentProtocolForContainedTest({
-          path: endpoint.path,
-          timeoutMilliseconds: 60,
-        });
-        await protocol.ping(...pingArguments);
-        let authorityChecks = 0;
-        await expect(protocol.kill(() => authorityChecks += 1), mode).rejects
-          .toBeDefined();
-        expect(authorityChecks, mode).toBe(1);
-        expect(endpoint.requests, mode).toEqual(["ping", "kill"]);
-      } finally {
-        if (protocol !== null) await protocol.close().catch(() => {});
-        await endpoint.waitForClosed();
-        await endpoint.close();
-      }
-    }
-
-    const writeTimeout = await protocolEndpoint(() => {});
-    let writeTimeoutProtocol: Awaited<ReturnType<
-      typeof connectFlySSHAgentProtocolForContainedTest
-    >> | null = null;
-    try {
-      writeTimeoutProtocol = await connectFlySSHAgentProtocolForContainedTest({
-        path: writeTimeout.path,
-        timeoutMilliseconds: 40,
-        suppressWriteCallback: true,
-      });
-      await expect(writeTimeoutProtocol.ping(...pingArguments)).rejects
-        .toBeDefined();
-      expect(writeTimeout.requests).toEqual(["ping"]);
-    } finally {
-      if (writeTimeoutProtocol !== null) {
-        await writeTimeoutProtocol.close().catch(() => {});
-      }
-      await writeTimeout.waitForClosed();
-      await writeTimeout.close();
-    }
-
-    const postcondition = await protocolEndpoint(() => {});
-    try {
-      await expect(connectFlySSHAgentProtocolForContainedTest({
-        path: postcondition.path,
-        timeoutMilliseconds: 60,
-        forcePostconditionFailure: true,
-      })).rejects.toBeInstanceOf(MaintenanceRefenceError);
-      await postcondition.waitForClosed();
-      expect(postcondition.connectionCount()).toBe(1);
-      expect(postcondition.activeConnections()).toBe(0);
-    } finally {
-      await postcondition.close();
-    }
-  });
-
   test("owns exactly four and eight SSH probes with one intent, stop, and two absences", async () => {
     for (const batchKind of ["cordoned_runtime", "final_authority"] as const) {
       const fixture = harness({ batchKind });
@@ -9906,6 +9669,9 @@ describe("owned Fly SSH-agent lifecycle", () => {
       expect(result.cleanup.expected_probe_count).toBe(count);
       expect(result.cleanup.completed_probe_count).toBe(count);
       expect(result.cleanup.stop_send_count).toBe(1);
+      expect(result.cleanup.protocol_connection_count).toBe(2);
+      expect(result.cleanup.ping_connection_count).toBe(1);
+      expect(result.cleanup.kill_connection_count).toBe(1);
       expect(result.cleanup.absence_interval_milliseconds).toBe(257);
       expect(fixture.counts()).toEqual({
         cleanupCount: 1,
@@ -9914,14 +9680,28 @@ describe("owned Fly SSH-agent lifecycle", () => {
       });
       expect(fixture.events.filter((entry) => entry.startsWith("probe:")))
         .toHaveLength(count);
+      expect(fixture.transportCounts()).toEqual({
+        pingConnectCount: 1,
+        killConnectCount: 1,
+      });
+      expect(fixture.events.indexOf("protocol:ping:close")).toBeLessThan(
+        fixture.events.indexOf("stop:intent"),
+      );
       expect(fixture.events.indexOf("stop:intent")).toBeLessThan(
-        fixture.events.indexOf(
-          `observe:${batchKind}_cleanup_intent_rebound`,
-        ),
+        fixture.events.indexOf("protocol:kill:connect"),
       );
       expect(fixture.events.indexOf(
-        `observe:${batchKind}_cleanup_intent_rebound`,
-      )).toBeLessThan(fixture.events.indexOf("stop:send"));
+        `observe:${batchKind}_cleanup_kill_connected_rebound`,
+      )).toBeLessThan(fixture.events.indexOf("protocol:kill:bind"));
+      expect(fixture.events.indexOf("protocol:kill:bind")).toBeLessThan(
+        fixture.events.indexOf("stop:attempt"),
+      );
+      expect(fixture.events.indexOf("stop:attempt")).toBeLessThan(
+        fixture.events.indexOf("stop:before_write"),
+      );
+      expect(fixture.events.indexOf("stop:before_write")).toBeLessThan(
+        fixture.events.indexOf("stop:send"),
+      );
       expect(fixture.events.at(-3)).toBe("pause:257");
       expect(fixture.events.at(-2)).toBe(
         `observe:${batchKind}_cleanup_absence_rebound`,
@@ -10124,7 +9904,7 @@ describe("owned Fly SSH-agent lifecycle", () => {
     for (const mutate of mutations) {
       const fixture = harness({
         mutateObservation: (checkpoint, _occurrence, value) => {
-          if (checkpoint === "cordoned_runtime_cleanup_intent_rebound") {
+          if (checkpoint === "cordoned_runtime_cleanup_kill_connected_rebound") {
             mutate(value);
           }
           return value;
@@ -10155,6 +9935,29 @@ describe("owned Fly SSH-agent lifecycle", () => {
       expect(fixture.counts().stopSendCount, sendMode).toBe(1);
       expect(fixture.counts().cleanupCount, sendMode).toBe(0);
     }
+    const receiptMutations: Array<[string, (value: Record<string, unknown>) => void]> = [
+      ...["ping_initial_peer_pid", "ping_prewrite_peer_pid", "kill_initial_peer_pid", "kill_prewrite_peer_pid"]
+        .map((key) => [key, (value: Record<string, unknown>) => {
+          value[key] = identity.pid + 1;
+        }] as [string, (value: Record<string, unknown>) => void]),
+      ...["ping_remote_eof_observed", "kill_remote_eof_observed", "ping_local_close_awaited", "kill_local_close_awaited"]
+        .map((key) => [key, (value: Record<string, unknown>) => {
+          value[key] = false;
+        }] as [string, (value: Record<string, unknown>) => void]),
+      ...[["connection_count", 1], ["ping_connection_count", 2], ["kill_connection_count", 2]]
+        .map(([key, count]) => [String(key), (value: Record<string, unknown>) => {
+          value[String(key)] = count;
+        }] as [string, (value: Record<string, unknown>) => void]),
+    ];
+    for (const [label, receiptMutation] of receiptMutations) {
+      const fixture = harness({ receiptMutation });
+      await requireManual(fixture);
+      expect(fixture.counts(), label).toEqual({
+        cleanupCount: 0,
+        stopIntentCount: 1,
+        stopSendCount: 1,
+      });
+    }
     const intent = harness({ recordIntentFailure: true });
     await requireManual(intent);
     expect(intent.counts()).toEqual({
@@ -10183,7 +9986,51 @@ describe("owned Fly SSH-agent lifecycle", () => {
     });
   });
 
-  test("WAL replays two ordered four-read groups and one exact no-child stop", async () => {
+  test("two-connection cutpoints never reconnect, resend, or forge cleanup", async () => {
+    const faults: Array<[HarnessFault, number, number, number]> = [
+      ["ping_connect", 0, 0, 0],
+      ["ping_rebound", 0, 0, 0],
+      ["ping_command", 0, 0, 0],
+      ["ping_close", 0, 0, 0],
+      ["intent", 1, 0, 0],
+      ["same_protocol", 1, 0, 0],
+      ["kill_connect", 1, 0, 0],
+      ["kill_rebound", 1, 0, 0],
+      ["kill_authority", 1, 0, 0],
+      ["before_write", 1, 0, 0],
+      ["ack", 1, 1, 0],
+      ["settlement", 1, 1, 0],
+      ["receipt", 1, 1, 0],
+    ];
+    for (const [fault, intents, sends, cleanups] of faults) {
+      const fixture = harness({ fault });
+      await requireManual(fixture);
+      expect(fixture.transportCounts(), fault).toEqual({
+        pingConnectCount: 1,
+        killConnectCount: faults.slice(0, 5).some(([value]) => value === fault)
+          ? 0
+          : 1,
+      });
+      expect(fixture.counts(), fault).toEqual({
+        cleanupCount: cleanups,
+        stopIntentCount: intents,
+        stopSendCount: sends,
+      });
+    }
+    const alias = harness({ aliasConnectedObservations: true });
+    await requireManual(alias);
+    expect(alias.transportCounts()).toEqual({
+      pingConnectCount: 1,
+      killConnectCount: 1,
+    });
+    expect(alias.counts()).toEqual({
+      cleanupCount: 0,
+      stopIntentCount: 1,
+      stopSendCount: 0,
+    });
+  });
+
+  test("WAL replays two distinct 16-entry rebound spans and exact no-child stops", async () => {
     const directory = realpathSync(
       mkdtempSync(join(tmpdir(), "refence-agent-lifecycle-wal-")),
     );
@@ -10215,23 +10062,23 @@ describe("owned Fly SSH-agent lifecycle", () => {
       detail_sha256: digest("b"),
       failure_code: null,
     });
-    let nextPID = 50_000;
+    let childPID = 50_000;
     const runtime = {
       now: () => "2026-08-26T09:47:21Z",
       spawn: () => {
-        nextPID += 1;
-        return { pid: nextPID, pgid: nextPID };
+        childPID += 1;
+        return { pid: childPID, pgid: childPID };
       },
       settle: async () => ({
         exitCode: 0,
         termination: "exit" as const,
         processGroupSettled: true,
-        detailSHA256: sha256(`settled:${nextPID}`),
+        detailSHA256: sha256("settled:" + childPID),
       }),
       takeStdout: () => new Uint8Array(),
       takeStderr: () => new Uint8Array(),
     };
-    const read = async (
+    const read = (
       effectID: string,
       checkpoint: string,
       target = "local_fly_ssh_agent",
@@ -10250,8 +10097,6 @@ describe("owned Fly SSH-agent lifecycle", () => {
       validateStderr: (stderr) => expect(stderr.byteLength).toBe(0),
     });
     await read("initial_process", "controller_initial_process", "local_processes");
-    const stopArgv = [fly, "agent", "stop"] as const;
-    const batchID = `cordoned_runtime_${"a".repeat(24)}`;
     const observationArgvs = [
       [
         "/bin/ps", "-axo", "pid=", "-o", "ppid=", "-o", "pgid=", "-o",
@@ -10262,410 +10107,66 @@ describe("owned Fly SSH-agent lifecycle", () => {
         "/usr/sbin/lsof", "-nP", "-F", "pftnDi", "--", lockPath, socketPath,
       ],
       [
-        "/bin/ps", "-p", "43768", "-ww", "-o", "pid=", "-o", "ppid=",
-        "-o", "pgid=", "-o", "uid=", "-o", "gid=", "-o", "lstart=", "-o",
-        "state=", "-o", "command=",
+        "/bin/ps", "-p", String(identity.pid), "-ww", "-o", "pid=", "-o",
+        "ppid=", "-o", "pgid=", "-o", "uid=", "-o", "gid=", "-o",
+        "lstart=", "-o", "state=", "-o", "command=",
       ],
       [
-        "/usr/sbin/lsof", "-nP", "-a", "-p", "43768", "-d", "txt", "-F",
-        "pftnDi",
+        "/usr/sbin/lsof", "-nP", "-a", "-p", String(identity.pid), "-d",
+        "txt", "-F", "pftnDi",
       ],
     ] as const;
     const appendObservation = async (
       firstEffectOrdinal: number,
       checkpoint: string,
     ) => {
+      const firstWalOrdinal = wal.lastEntry!.ordinal + 1;
       const suffixes = [
         "process_census",
         "path_holders",
-        "identity_43768",
-        "text_43768",
+        "identity_" + identity.pid,
+        "text_" + identity.pid,
       ];
-      for (let index = 0; index < suffixes.length; index += 1) {
+      for (let index = 0; index < 4; index += 1) {
         await read(
-          `agent_${String(firstEffectOrdinal + index).padStart(6, "0")}_${suffixes[index]}`,
+          "agent_" + String(firstEffectOrdinal + index).padStart(6, "0") +
+            "_" + suffixes[index],
           checkpoint,
           "local_fly_ssh_agent",
           observationArgvs[index],
         );
       }
-    };
-    await appendObservation(2, "cordoned_runtime_cleanup_connected_rebound");
-    const intent = wal.append({
-      recorded_at: "2026-08-26T09:47:22Z",
-      phase: "lifecycle_intent",
-      checkpoint: "fly_agent_cleanup_stop_intent_direct_unix_protocol",
-      effect_id: "agent_000006_stop_intent",
-      effect_kind: "local_agent_stop",
-      target: batchID,
-      argv_sha256: sha256(canonicalJson(stopArgv)),
-      pid: null,
-      pgid: null,
-      exit_code: null,
-      termination: null,
-      local_process_group_settled: true,
-      provider_transition_sha256: null,
-      fleet_readback_sha256: null,
-      detail_sha256: sha256("protocol-authority"),
-      failure_code: null,
-    });
-    const intentSHA256 = sha256(`${canonicalJson(intent)}\n`);
-    await appendObservation(7, "cordoned_runtime_cleanup_intent_rebound");
-    const protocolOperationSHA256 = sha256(canonicalJson({
-      schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-operation/v1",
-      transport: "local_unix_stream",
-      socket_path: socketPath,
-      protocol_authority_sha256: intent.detail_sha256,
-      durable_intent_sha256: intentSHA256,
-      cli_semantic_argv_sha256: intent.argv_sha256,
-      cli_semantic_executed: false,
-      ping_frame_sha256:
-        "705631fc8ed0643d62cba3fd15eb48d1b4c4e6ec9c7ec5801b7487baecac1cf0",
-      kill_frame_sha256:
-        "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be",
-      child_spawn_count: 0,
-      stop_send_count: 1,
-      retry_authorized: false,
-    }));
-    const stopBase = {
-      checkpoint:
-        "fly_agent_cleanup_stop_direct_unix_protocol_child_spawn_count_0",
-      effect_id: "agent_000006_stop",
-      effect_kind: "local_agent_stop" as const,
-      target: batchID,
-      argv_sha256: protocolOperationSHA256,
-    };
-    const directSettlementSHA256 = (operationSHA256: string) =>
-      sha256(canonicalJson({
-        schema:
-          "agenttool-phase-b-refence-fly-ssh-agent-protocol-settlement/v1",
-        transport: "local_unix_stream",
-        socket_path: socketPath,
-        protocol_operation_sha256: operationSHA256,
-        kill_frame_sha256:
-          "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be",
-        kill_response_sha256:
-          "bf2a63ad5d209b2be8586a0f249aac31e432115a64d4fb93433d702564be2469",
-        protocol_acknowledged: true,
-        child_spawn_count: 0,
-        stop_send_count: 1,
-      }));
-    const directVerificationSHA256 = (request: {
-      batchID: string;
-      protocolAuthoritySHA256: string;
-      durableIntentSHA256: string;
-      protocolOperationSHA256: string;
-      settlementSHA256: string;
-    }) => sha256(canonicalJson({
-      schema:
-        "agenttool-phase-b-refence-fly-ssh-agent-stop-wal-verification/v1",
-      transport: "local_unix_stream",
-      socket_path: socketPath,
-      batch_id: request.batchID,
-      protocol_authority_sha256: request.protocolAuthoritySHA256,
-      durable_intent_sha256: request.durableIntentSHA256,
-      protocol_operation_sha256: request.protocolOperationSHA256,
-      settlement_sha256: request.settlementSHA256,
-      kill_frame_sha256:
-        "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be",
-      kill_response_sha256:
-        "bf2a63ad5d209b2be8586a0f249aac31e432115a64d4fb93433d702564be2469",
-      protocol_acknowledged: true,
-      child_spawn_count: 0,
-      stop_send_count: 1,
-    }));
-    const settlementSHA256 = directSettlementSHA256(protocolOperationSHA256);
-    const walVerificationSHA256 = directVerificationSHA256({
-      batchID,
-      protocolAuthoritySHA256: intent.detail_sha256!,
-      durableIntentSHA256: intentSHA256,
-      protocolOperationSHA256,
-      settlementSHA256,
-    });
-    wal.append({
-      ...stopBase,
-      recorded_at: "2026-08-26T09:47:23Z",
-      phase: "attempting",
-      pid: null,
-      pgid: null,
-      exit_code: null,
-      termination: null,
-      local_process_group_settled: true,
-      provider_transition_sha256: null,
-      fleet_readback_sha256: null,
-      detail_sha256: intentSHA256,
-      failure_code: null,
-    });
-    wal.append({
-      ...stopBase,
-      recorded_at: "2026-08-26T09:47:24Z",
-      phase: "settled",
-      pid: null,
-      pgid: null,
-      exit_code: null,
-      termination: null,
-      local_process_group_settled: true,
-      provider_transition_sha256: null,
-      fleet_readback_sha256: null,
-      detail_sha256: settlementSHA256,
-      failure_code: null,
-    });
-    const firstStopVerified = wal.append({
-      ...stopBase,
-      recorded_at: "2026-08-26T09:47:25Z",
-      phase: "verified",
-      pid: null,
-      pgid: null,
-      exit_code: null,
-      termination: null,
-      local_process_group_settled: true,
-      provider_transition_sha256: null,
-      fleet_readback_sha256: null,
-      detail_sha256: walVerificationSHA256,
-      failure_code: null,
-    });
-    await appendObservation(11, "final_authority_cleanup_connected_rebound");
-    const secondBatchID = `final_authority_${"b".repeat(24)}`;
-    const secondIntent = wal.append({
-      recorded_at: "2026-08-26T09:47:26Z",
-      phase: "lifecycle_intent",
-      checkpoint: "fly_agent_cleanup_stop_intent_direct_unix_protocol",
-      effect_id: "agent_000015_stop_intent",
-      effect_kind: "local_agent_stop",
-      target: secondBatchID,
-      argv_sha256: sha256(canonicalJson(stopArgv)),
-      pid: null,
-      pgid: null,
-      exit_code: null,
-      termination: null,
-      local_process_group_settled: true,
-      provider_transition_sha256: null,
-      fleet_readback_sha256: null,
-      detail_sha256: sha256("second-protocol-authority"),
-      failure_code: null,
-    });
-    const secondIntentSHA256 = sha256(`${canonicalJson(secondIntent)}\n`);
-    await appendObservation(16, "final_authority_cleanup_intent_rebound");
-    const secondProtocolOperationSHA256 = sha256(canonicalJson({
-      schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-operation/v1",
-      transport: "local_unix_stream",
-      socket_path: socketPath,
-      protocol_authority_sha256: secondIntent.detail_sha256,
-      durable_intent_sha256: secondIntentSHA256,
-      cli_semantic_argv_sha256: secondIntent.argv_sha256,
-      cli_semantic_executed: false,
-      ping_frame_sha256:
-        "705631fc8ed0643d62cba3fd15eb48d1b4c4e6ec9c7ec5801b7487baecac1cf0",
-      kill_frame_sha256:
-        "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be",
-      child_spawn_count: 0,
-      stop_send_count: 1,
-      retry_authorized: false,
-    }));
-    const secondSettlementSHA256 = directSettlementSHA256(
-      secondProtocolOperationSHA256,
-    );
-    const secondVerificationSHA256 = directVerificationSHA256({
-      batchID: secondBatchID,
-      protocolAuthoritySHA256: secondIntent.detail_sha256!,
-      durableIntentSHA256: secondIntentSHA256,
-      protocolOperationSHA256: secondProtocolOperationSHA256,
-      settlementSHA256: secondSettlementSHA256,
-    });
-    const secondStopBase = {
-      checkpoint:
-        "fly_agent_cleanup_stop_direct_unix_protocol_child_spawn_count_0",
-      effect_id: "agent_000015_stop",
-      effect_kind: "local_agent_stop" as const,
-      target: secondBatchID,
-      argv_sha256: secondProtocolOperationSHA256,
-    };
-    wal.append({
-      ...secondStopBase,
-      recorded_at: "2026-08-26T09:47:27Z",
-      phase: "attempting",
-      pid: null,
-      pgid: null,
-      exit_code: null,
-      termination: null,
-      local_process_group_settled: true,
-      provider_transition_sha256: null,
-      fleet_readback_sha256: null,
-      detail_sha256: secondIntentSHA256,
-      failure_code: null,
-    });
-    wal.append({
-      ...secondStopBase,
-      recorded_at: "2026-08-26T09:47:28Z",
-      phase: "settled",
-      pid: null,
-      pgid: null,
-      exit_code: null,
-      termination: null,
-      local_process_group_settled: true,
-      provider_transition_sha256: null,
-      fleet_readback_sha256: null,
-      detail_sha256: secondSettlementSHA256,
-      failure_code: null,
-    });
-    const secondStopVerified = wal.append({
-      ...secondStopBase,
-      recorded_at: "2026-08-26T09:47:29Z",
-      phase: "verified",
-      pid: null,
-      pgid: null,
-      exit_code: null,
-      termination: null,
-      local_process_group_settled: true,
-      provider_transition_sha256: null,
-      fleet_readback_sha256: null,
-      detail_sha256: secondVerificationSHA256,
-      failure_code: null,
-    });
-    wal.append({
-      recorded_at: "2026-08-26T09:47:30Z",
-      phase: "complete",
-      checkpoint: "controller_complete",
-      effect_id: null,
-      effect_kind: null,
-      target: null,
-      argv_sha256: null,
-      pid: null,
-      pgid: null,
-      exit_code: null,
-      termination: null,
-      local_process_group_settled: true,
-      provider_transition_sha256: null,
-      fleet_readback_sha256: null,
-      detail_sha256: sha256("complete"),
-      failure_code: null,
-    });
-    expect(wal.replayProjection()).toEqual(wal.projection());
-    expect(wal.replayProjection()).toEqual(wal.projection());
-    const records = Array.from(
-      { length: wal.lastEntry!.ordinal },
-      (_, index) => wal.entryAt(index + 1)!,
-    );
-    const stopAttempt = records.find((entry) =>
-      entry.effect_id === "agent_000006_stop" && entry.phase === "attempting"
-    )!;
-    expect(stopAttempt.detail_sha256).toBe(intentSHA256);
-    const contract = createMaintenanceContract({
-      canonical: canonicalJson,
-      digest: sha256,
-      refuse: (code: string): never => {
-        throw new MaintenanceRefenceError(code);
-      },
-    });
-    const rehash = (candidates: any[]) => {
-      for (let index = 0; index < candidates.length; index += 1) {
-        candidates[index].ordinal = index + 1;
-        candidates[index].prior_entry_sha256 = index === 0
-          ? null
-          : sha256(`${canonicalJson(candidates[index - 1])}\n`);
-      }
-    };
-    const validateRecords = (candidates: any[]) => {
-      const accepted: any[] = [];
-      for (const candidate of candidates) {
-        contract.validateControllerWalEntry(
-          candidate,
-          accepted.at(-1) ?? null,
-          accepted,
-          expected,
-        );
-        accepted.push(candidate);
-      }
-    };
-    const replay = (mutate: (records: any[]) => void) => {
-      const candidates = structuredClone(records) as any[];
-      mutate(candidates);
-      rehash(candidates);
-      validateRecords(candidates);
-    };
-    expect(() => replay(() => {})).not.toThrow();
-    expect(() => replay((candidates) => {
-      const entry = candidates.find((candidate) =>
-        candidate.effect_id === "agent_000006_stop" &&
-        candidate.phase === "attempting"
+      return Array.from({ length: 16 }, (_, index) =>
+        wal.entryAt(firstWalOrdinal + index)!
       );
-      entry.detail_sha256 = digest("f");
-    })).toThrow(MaintenanceRefenceError);
-    expect(() => replay((candidates) => {
-      const entry = candidates.find((candidate) =>
-        candidate.phase === "lifecycle_intent"
+    };
+    const stopCliSHA256 = sha256(canonicalJson([fly, "agent", "stop"]));
+    const appendLifecycle = async (
+      batchKind: "cordoned_runtime" | "final_authority",
+      pingFirstEffectOrdinal: number,
+      intentEffectOrdinal: number,
+      killFirstEffectOrdinal: number,
+      seed: string,
+    ) => {
+      const batchID = batchKind + "_" + seed.repeat(24);
+      const pingCheckpoint = batchKind + "_cleanup_ping_connected_rebound";
+      const killCheckpoint = batchKind + "_cleanup_kill_connected_rebound";
+      const pingEntries = await appendObservation(
+        pingFirstEffectOrdinal,
+        pingCheckpoint,
       );
-      entry.target = `final_authority_${"b".repeat(24)}`;
-    })).toThrow(MaintenanceRefenceError);
-    expect(() => replay((candidates) => {
-      const entry = candidates.find((candidate) =>
-        candidate.phase === "lifecycle_intent"
-      );
-      entry.effect_id = "agent_000099_stop_intent";
-    })).toThrow(MaintenanceRefenceError);
-    expect(() => replay((candidates) => {
-      const entry = candidates.find((candidate) =>
-        candidate.effect_id === "agent_000007_process_census"
-      );
-      entry.effect_id = "agent_000099_process_census";
-    })).toThrow(MaintenanceRefenceError);
-    expect(() => replay((candidates) => {
-      for (const entry of candidates.filter((candidate) =>
-        candidate.effect_id === "agent_000006_stop"
-      )) entry.effect_id = "agent_000011_stop";
-    })).toThrow(MaintenanceRefenceError);
-    expect(() => replay((candidates) => {
-      const entry = candidates.find((candidate) =>
-        candidate.effect_id === "agent_000006_stop" &&
-        candidate.phase === "settled"
-      );
-      entry.detail_sha256 = sha256("wrong-settlement");
-    })).toThrow(MaintenanceRefenceError);
-    expect(() => replay((candidates) => {
-      const entry = candidates.find((candidate) =>
-        candidate.effect_id === "agent_000006_stop" &&
-        candidate.phase === "verified"
-      );
-      entry.detail_sha256 = sha256("wrong-verification");
-    })).toThrow(MaintenanceRefenceError);
-
-    const firstAttemptingIndex = records.findIndex((entry) =>
-      entry.effect_id === "agent_000006_stop" && entry.phase === "attempting"
-    );
-    const failedRecords = structuredClone(
-      records.slice(0, firstAttemptingIndex + 1),
-    ) as any[];
-    const failedPrevious = failedRecords.at(-1)!;
-    failedRecords.push({
-      ...failedPrevious,
-      ordinal: failedPrevious.ordinal + 1,
-      prior_entry_sha256: sha256(`${canonicalJson(failedPrevious)}\n`),
-      recorded_at: "2026-08-26T09:47:24Z",
-      phase: "failed_or_uncertain",
-      detail_sha256: failedPrevious.argv_sha256,
-      failure_code: "fly_agent_stop_uncertain",
-    });
-    expect(() => validateRecords(failedRecords)).not.toThrow();
-    const wrongFailedRecords = structuredClone(failedRecords) as any[];
-    wrongFailedRecords.at(-1)!.detail_sha256 = sha256("wrong-failed");
-    rehash(wrongFailedRecords);
-    expect(() => validateRecords(wrongFailedRecords))
-      .toThrow(MaintenanceRefenceError);
-
-    const refuseTerminalComplete = (prefix: any[]) => {
-      const candidates = structuredClone(prefix) as any[];
-      const previous = candidates.at(-1)!;
-      candidates.push({
-        ...previous,
-        ordinal: previous.ordinal + 1,
-        prior_entry_sha256: sha256(`${canonicalJson(previous)}\n`),
-        recorded_at: "2026-08-26T09:47:29Z",
-        phase: "complete",
-        checkpoint: "controller_complete",
-        effect_id: null,
-        effect_kind: null,
-        target: null,
-        argv_sha256: null,
+      const pingSemanticSHA256 = sha256("ping-semantic:" + seed);
+      const killSemanticSHA256 = sha256("kill-semantic:" + seed);
+      const protocolAuthoritySHA256 = sha256("protocol-authority:" + seed);
+      const intent = wal.append({
+        recorded_at: "2026-08-26T09:47:22Z",
+        phase: "lifecycle_intent",
+        checkpoint: "fly_agent_cleanup_stop_intent_two_connections",
+        effect_id: "agent_" + String(intentEffectOrdinal).padStart(6, "0") +
+          "_stop_intent",
+        effect_kind: "local_agent_stop",
+        target: batchID,
+        argv_sha256: protocolAuthoritySHA256,
         pid: null,
         pgid: null,
         exit_code: null,
@@ -10673,218 +10174,498 @@ describe("owned Fly SSH-agent lifecycle", () => {
         local_process_group_settled: true,
         provider_transition_sha256: null,
         fleet_readback_sha256: null,
-        detail_sha256: digest("d"),
+        detail_sha256: pingSemanticSHA256,
         failure_code: null,
       });
+      const durableIntentSHA256 = sha256(canonicalJson(intent) + "\n");
+      const killEntries = await appendObservation(
+        killFirstEffectOrdinal,
+        killCheckpoint,
+      );
+      const pingSpanSHA256 = sha256(canonicalJson(pingEntries));
+      const killSpanSHA256 = sha256(canonicalJson(killEntries));
+      expect(pingSemanticSHA256).not.toBe(killSemanticSHA256);
+      expect(pingSpanSHA256).not.toBe(killSpanSHA256);
+      const killAuthority: FlySSHAgentKillConnectionAuthority = {
+        schema:
+          "agenttool-phase-b-refence-fly-ssh-agent-kill-connection-authority/v1",
+        transport: "local_unix_stream",
+        socket_path: socketPath,
+        connection_role: "kill",
+        connection_ordinal: 2,
+        connected_without_write: true,
+        connected_rebound_sha256: killSemanticSHA256,
+        connected_rebound_wal_sha256: killSpanSHA256,
+        initial_peer_pid: identity.pid,
+        peer_attested: true,
+        command_count_before_attempt: 0,
+        child_spawn_count: 0,
+      };
+      const intentProjection = {
+        protocol_authority_sha256: protocolAuthoritySHA256,
+        durable_intent_sha256: durableIntentSHA256,
+        ping_peer_pid: identity.pid,
+        ping_connected_rebound_sha256: pingSemanticSHA256,
+        ping_connected_rebound_wal_sha256: pingSpanSHA256,
+        cli_semantic_argv_sha256: stopCliSHA256,
+      };
+      const operation = lifecycleContract.flySSHAgentProtocolOperationProjection(
+        intentProjection,
+        killAuthority,
+      );
+      const protocolOperationSHA256 = sha256(canonicalJson(operation));
+      const killAuthoritySHA256 = sha256(canonicalJson(killAuthority));
+      const base = {
+        checkpoint:
+          "fly_agent_cleanup_stop_direct_unix_protocol_two_connections_child_spawn_count_0",
+        effect_id: "agent_" + String(intentEffectOrdinal).padStart(6, "0") +
+          "_stop",
+        effect_kind: "local_agent_stop" as const,
+        target: batchID,
+        argv_sha256: protocolOperationSHA256,
+      };
+      const settlementProjection =
+        lifecycleContract.flySSHAgentProtocolSettlementProjection(
+          protocolAuthoritySHA256,
+          killAuthoritySHA256,
+          protocolOperationSHA256,
+          identity.pid,
+          pingSemanticSHA256,
+          killSemanticSHA256,
+          pingSpanSHA256,
+          killSpanSHA256,
+        );
+      const settlementSHA256 = sha256(canonicalJson(settlementProjection));
+      const verificationProjection =
+        lifecycleContract.flySSHAgentDirectStopWalVerificationProjection({
+          batchID,
+          protocolAuthoritySHA256,
+          killConnectionAuthoritySHA256: killAuthoritySHA256,
+          durableIntentSHA256,
+          protocolOperationSHA256,
+          settlementSHA256,
+          peerPID: identity.pid,
+          pingConnectedReboundSHA256: pingSemanticSHA256,
+          killConnectedReboundSHA256: killSemanticSHA256,
+          pingConnectedReboundWalSHA256: pingSpanSHA256,
+          killConnectedReboundWalSHA256: killSpanSHA256,
+        });
+      const verificationSHA256 = sha256(canonicalJson(verificationProjection));
+      const attempting = wal.append({
+        ...base,
+        recorded_at: "2026-08-26T09:47:23Z",
+        phase: "attempting",
+        pid: null,
+        pgid: null,
+        exit_code: null,
+        termination: null,
+        local_process_group_settled: true,
+        provider_transition_sha256: null,
+        fleet_readback_sha256: null,
+        detail_sha256: killSemanticSHA256,
+        failure_code: null,
+      });
+      const settled = wal.append({
+        ...base,
+        recorded_at: "2026-08-26T09:47:24Z",
+        phase: "settled",
+        pid: null,
+        pgid: null,
+        exit_code: null,
+        termination: null,
+        local_process_group_settled: true,
+        provider_transition_sha256: null,
+        fleet_readback_sha256: null,
+        detail_sha256: settlementSHA256,
+        failure_code: null,
+      });
+      const verified = wal.append({
+        ...base,
+        recorded_at: "2026-08-26T09:47:25Z",
+        phase: "verified",
+        pid: null,
+        pgid: null,
+        exit_code: null,
+        termination: null,
+        local_process_group_settled: true,
+        provider_transition_sha256: null,
+        fleet_readback_sha256: null,
+        detail_sha256: verificationSHA256,
+        failure_code: null,
+      });
+      return {
+        batchID,
+        pingCheckpoint,
+        killCheckpoint,
+        pingSemanticSHA256,
+        killSemanticSHA256,
+        pingSpanSHA256,
+        killSpanSHA256,
+        protocolAuthoritySHA256,
+        durableIntentSHA256,
+        protocolOperationSHA256,
+        killAuthoritySHA256,
+        settlementSHA256,
+        verificationSHA256,
+        operation,
+        settlementProjection,
+        verificationProjection,
+        intent,
+        attempting,
+        settled,
+        verified,
+      };
+    };
+    const first = await appendLifecycle("cordoned_runtime", 2, 6, 7, "a");
+    const second = await appendLifecycle("final_authority", 11, 15, 16, "b");
+    wal.sealComplete("2026-08-26T09:47:30Z", sha256("complete"));
+    expect(wal.replayProjection()).toEqual(wal.projection());
+    const records = Array.from(
+      { length: wal.lastEntry!.ordinal },
+      (_, index) => wal.entryAt(index + 1)!,
+    );
+    const rehash = (values: any[]) => {
+      for (let index = 0; index < values.length; index += 1) {
+        values[index].ordinal = index + 1;
+        values[index].prior_entry_sha256 = index === 0
+          ? null
+          : sha256(canonicalJson(values[index - 1]) + "\n");
+      }
+    };
+    const validateRecords = (values: any[]) => {
       const accepted: any[] = [];
-      for (const candidate of candidates) {
-        contract.validateControllerWalEntry(
-          candidate,
+      for (const value of values) {
+        lifecycleContract.validateControllerWalEntry(
+          value,
           accepted.at(-1) ?? null,
           accepted,
           expected,
         );
-        accepted.push(candidate);
+        accepted.push(value);
       }
     };
-    expect(() => refuseTerminalComplete(
-      records.slice(0, firstStopVerified.ordinal),
-    )).toThrow(MaintenanceRefenceError);
-    for (const completedReboundGroups of [0, 1, 2, 3]) {
-      const count = secondIntent.ordinal + completedReboundGroups * 4;
-      expect(
-        () => refuseTerminalComplete(records.slice(0, count)),
-        `second lifecycle terminal after ${completedReboundGroups} rebound groups`,
-      ).toThrow(MaintenanceRefenceError);
-    }
-    const threeLifecycleHistory = structuredClone(
-      records.slice(0, -1),
-    ) as any[];
-    const sourceThird = threeLifecycleHistory.filter((entry) =>
-      entry.effect_id === "agent_000015_stop_intent" ||
-      entry.effect_id === "agent_000015_stop"
-    );
-    const thirdBatchID = `cordoned_runtime_${"c".repeat(24)}`;
-    const thirdIntent = structuredClone(sourceThird[0]);
-    thirdIntent.ordinal = threeLifecycleHistory.at(-1)!.ordinal + 1;
-    thirdIntent.prior_entry_sha256 = sha256(
-      `${canonicalJson(threeLifecycleHistory.at(-1)!)}\n`,
-    );
-    thirdIntent.effect_id = "agent_000024_stop_intent";
-    thirdIntent.target = thirdBatchID;
-    threeLifecycleHistory.push(thirdIntent);
-    const thirdIntentSHA256 = sha256(`${canonicalJson(thirdIntent)}\n`);
-    for (const source of sourceThird.slice(1)) {
-      const entry = structuredClone(source);
-      entry.ordinal = threeLifecycleHistory.at(-1)!.ordinal + 1;
-      entry.prior_entry_sha256 = sha256(
-        `${canonicalJson(threeLifecycleHistory.at(-1)!)}\n`,
-      );
-      entry.effect_id = "agent_000024_stop";
-      entry.target = thirdBatchID;
-      if (entry.phase === "attempting") entry.detail_sha256 = thirdIntentSHA256;
-      threeLifecycleHistory.push(entry);
-    }
-    const threePrevious = threeLifecycleHistory.at(-1)!;
-    const threeComplete = {
-      ...records.at(-1)!,
-      ordinal: threePrevious.ordinal + 1,
-      prior_entry_sha256: sha256(`${canonicalJson(threePrevious)}\n`),
+    const replayMutation = (mutate: (values: any[]) => void) => {
+      const values = structuredClone(records) as any[];
+      mutate(values);
+      rehash(values);
+      validateRecords(values);
     };
-    expect(() => contract.validateControllerWalEntry(
-      threeComplete,
-      threePrevious,
-      threeLifecycleHistory,
-      expected,
-    )).toThrow(MaintenanceRefenceError);
-
-    const wrongRequests = [
-      {
-        effectID: "wrong_build",
-        effectKind: "build_push" as const,
-        checkpoint: "cordoned_runtime_cleanup_intent_rebound",
-        target: "agenttool",
+    expect(() => replayMutation(() => {})).not.toThrow();
+    const lifecycleDAG = (
+      values: any[],
+      chain: typeof first,
+    ) => {
+      const pingEntries = values.filter((entry) =>
+        entry.checkpoint === chain.pingCheckpoint
+      );
+      const killEntries = values.filter((entry) =>
+        entry.checkpoint === chain.killCheckpoint
+      );
+      const intent = values.find((entry) =>
+        entry.target === chain.batchID && entry.phase === "lifecycle_intent"
+      );
+      const attempt = values.find((entry) =>
+        entry.target === chain.batchID && entry.phase === "attempting" &&
+        entry.effect_kind === "local_agent_stop"
+      );
+      const pingSpanSHA256 = sha256(canonicalJson(pingEntries));
+      const killSpanSHA256 = sha256(canonicalJson(killEntries));
+      const killAuthority = {
+        schema:
+          "agenttool-phase-b-refence-fly-ssh-agent-kill-connection-authority/v1",
+        transport: "local_unix_stream",
+        socket_path: socketPath,
+        connection_role: "kill",
+        connection_ordinal: 2,
+        connected_without_write: true,
+        connected_rebound_sha256: attempt.detail_sha256,
+        connected_rebound_wal_sha256: killSpanSHA256,
+        initial_peer_pid: identity.pid,
+        peer_attested: true,
+        command_count_before_attempt: 0,
+        child_spawn_count: 0,
+      };
+      const operation = lifecycleContract.flySSHAgentProtocolOperationProjection({
+        protocol_authority_sha256: intent.argv_sha256,
+        durable_intent_sha256: sha256(canonicalJson(intent) + "\n"),
+        ping_peer_pid: identity.pid,
+        ping_connected_rebound_sha256: intent.detail_sha256,
+        ping_connected_rebound_wal_sha256: pingSpanSHA256,
+        cli_semantic_argv_sha256: stopCliSHA256,
+      }, killAuthority);
+      const operationSHA256 = sha256(canonicalJson(operation));
+      const killAuthoritySHA256 = sha256(canonicalJson(killAuthority));
+      const settlementSHA256 = sha256(canonicalJson(
+        lifecycleContract.flySSHAgentProtocolSettlementProjection(
+          intent.argv_sha256,
+          killAuthoritySHA256,
+          operationSHA256,
+          identity.pid,
+          intent.detail_sha256,
+          attempt.detail_sha256,
+          pingSpanSHA256,
+          killSpanSHA256,
+        ),
+      ));
+      const verificationSHA256 = sha256(canonicalJson(
+        lifecycleContract.flySSHAgentDirectStopWalVerificationProjection({
+          batchID: chain.batchID,
+          protocolAuthoritySHA256: intent.argv_sha256,
+          killConnectionAuthoritySHA256: killAuthoritySHA256,
+          durableIntentSHA256: sha256(canonicalJson(intent) + "\n"),
+          protocolOperationSHA256: operationSHA256,
+          settlementSHA256,
+          peerPID: identity.pid,
+          pingConnectedReboundSHA256: intent.detail_sha256,
+          killConnectedReboundSHA256: attempt.detail_sha256,
+          pingConnectedReboundWalSHA256: pingSpanSHA256,
+          killConnectedReboundWalSHA256: killSpanSHA256,
+        }),
+      ));
+      return {
+        operationSHA256,
+        settlementSHA256,
+        verificationSHA256,
+        cleanupSHA256: sha256(canonicalJson({
+          schema: "agenttool-phase-b-refence-fly-ssh-agent-cleanup/v2",
+          batch_id: chain.batchID,
+          batch_kind: chain.batchID.startsWith("cordoned_runtime_")
+            ? "cordoned_runtime"
+            : "final_authority",
+          expected_probe_count: chain.batchID.startsWith("cordoned_runtime_") ? 4 : 8,
+          completed_probe_count: chain.batchID.startsWith("cordoned_runtime_") ? 4 : 8,
+          admission_sha256: digest("4"),
+          agent_created: true,
+          identity_sha256: sha256(canonicalJson(stableIdentity(identity))),
+          stop_intent_sha256: sha256(canonicalJson(intent) + "\n"),
+          stop_settlement_sha256: settlementSHA256,
+          ping_connection_authority_sha256: intent.argv_sha256,
+          kill_connection_authority_sha256: killAuthoritySHA256,
+          ping_connected_rebound_sha256: intent.detail_sha256,
+          kill_connected_rebound_sha256: attempt.detail_sha256,
+          stop_send_count: 1,
+          protocol_connection_count: 2,
+          ping_connection_count: 1,
+          kill_connection_count: 1,
+          first_absence_sha256: digest("5"),
+          second_absence_sha256: digest("5"),
+          absence_interval_milliseconds: 257,
+          pid_absent_twice: true,
+          process_group_absent_twice: true,
+          socket_absent_twice: true,
+          agent_lock_unheld_twice: true,
+          verified: true,
+        })),
+      };
+    };
+    for (const checkpoint of [first.pingCheckpoint, first.killCheckpoint]) {
+      const values = structuredClone(records) as any[];
+      const row = values.find((entry) =>
+        entry.checkpoint === checkpoint && entry.phase === "verified"
+      );
+      row.detail_sha256 = digest(checkpoint === first.pingCheckpoint ? "c" : "d");
+      rehash(values);
+      const original = lifecycleDAG(records, first);
+      const changed = lifecycleDAG(values, first);
+      expect(changed.operationSHA256, checkpoint)
+        .not.toBe(original.operationSHA256);
+      expect(changed.settlementSHA256, checkpoint)
+        .not.toBe(original.settlementSHA256);
+      expect(changed.verificationSHA256, checkpoint)
+        .not.toBe(original.verificationSHA256);
+      expect(changed.cleanupSHA256, checkpoint)
+        .not.toBe(original.cleanupSHA256);
+      expect(() => validateRecords(values), checkpoint)
+        .toThrow(MaintenanceRefenceError);
+    }
+    const mutations: Array<(values: any[]) => void> = [
+      (values) => {
+        values.find((entry) =>
+          entry.checkpoint === first.pingCheckpoint &&
+          entry.effect_id.endsWith("path_holders") &&
+          entry.phase === "attempting"
+        ).checkpoint = first.killCheckpoint;
       },
-      {
-        effectID: "wrong_fleet",
-        effectKind: "read_fleet" as const,
-        checkpoint: "cordoned_runtime_cleanup_intent_rebound",
-        target: "local_fly_ssh_agent",
+      (values) => {
+        values.find((entry) =>
+          entry.checkpoint === first.pingCheckpoint &&
+          entry.effect_id.includes("identity_") &&
+          entry.phase === "attempting"
+        ).effect_id = "agent_000004_identity_43769";
       },
-      {
-        effectID: "agent_000003_process_census",
-        effectKind: "read_process" as const,
-        checkpoint: "wrong_checkpoint",
-        target: "local_fly_ssh_agent",
+      (values) => {
+        values.find((entry) =>
+          entry.checkpoint === first.killCheckpoint &&
+          entry.phase === "attempting"
+        ).argv_sha256 = digest("e");
       },
-      {
-        effectID: "agent_000003_process_census",
-        effectKind: "read_process" as const,
-        checkpoint: "cordoned_runtime_cleanup_intent_rebound",
-        target: "wrong_target",
+      (values) => {
+        values.find((entry) =>
+          entry.checkpoint === first.killCheckpoint &&
+          entry.phase === "settled"
+        ).phase = "verified";
+      },
+      (values) => {
+        values.find((entry) =>
+          entry.target === first.batchID && entry.phase === "lifecycle_intent"
+        ).argv_sha256 = digest("f");
+      },
+      (values) => {
+        const intent = values.find((entry) =>
+          entry.target === first.batchID && entry.phase === "lifecycle_intent"
+        );
+        intent.detail_sha256 = first.killSemanticSHA256;
+      },
+      (values) => {
+        const attempt = values.find((entry) =>
+          entry.target === first.batchID && entry.phase === "attempting" &&
+          entry.effect_kind === "local_agent_stop"
+        );
+        attempt.detail_sha256 = first.pingSemanticSHA256;
+      },
+      (values) => {
+        const attempt = values.find((entry) =>
+          entry.target === first.batchID && entry.phase === "attempting" &&
+          entry.effect_kind === "local_agent_stop"
+        );
+        attempt.argv_sha256 = digest("1");
+      },
+      (values) => {
+        values.find((entry) =>
+          entry.target === first.batchID && entry.phase === "settled" &&
+          entry.effect_kind === "local_agent_stop"
+        ).detail_sha256 = digest("2");
+      },
+      (values) => {
+        values.find((entry) =>
+          entry.target === first.batchID && entry.phase === "verified" &&
+          entry.effect_kind === "local_agent_stop"
+        ).detail_sha256 = digest("3");
       },
     ];
-    for (const wrong of wrongRequests) {
-      const isolatedDirectory = realpathSync(
-        mkdtempSync(join(tmpdir(), "refence-agent-wal-wrong-")),
-      );
-      temporaryDirectories.push(isolatedDirectory);
-      chownSync(
-        isolatedDirectory,
-        process.getuid!(),
-        process.getgid!(),
-      );
-      chmodSync(isolatedDirectory, 0o700);
-      const isolated = new ControllerWalWriter({
-        directory: isolatedDirectory,
-        ...expected,
-      });
-      for (const entry of records.slice(0, intent.ordinal)) {
-        isolated.append({
-          recorded_at: entry.recorded_at,
-          phase: entry.phase,
-          checkpoint: entry.checkpoint,
-          effect_id: entry.effect_id,
-          effect_kind: entry.effect_kind,
-          target: entry.target,
-          argv_sha256: entry.argv_sha256,
-          pid: entry.pid,
-          pgid: entry.pgid,
-          exit_code: entry.exit_code,
-          termination: entry.termination,
-          local_process_group_settled: entry.local_process_group_settled,
-          provider_transition_sha256: entry.provider_transition_sha256,
-          fleet_readback_sha256: entry.fleet_readback_sha256,
-          detail_sha256: entry.detail_sha256,
-          failure_code: entry.failure_code,
-        });
-      }
-      await expect(executeControllerEffectToSettlement({
-        wal: isolated,
-        runtime,
-        ...wrong,
-        argv: ["/bin/ps"],
-        timeoutMilliseconds: 30_000,
-        acceptedExitCodes: [0],
-      })).rejects.toBeInstanceOf(MaintenanceRefenceError);
+    for (const mutate of mutations) {
+      expect(() => replayMutation(mutate)).toThrow(MaintenanceRefenceError);
     }
-    const noIntentDirectory = realpathSync(
-      mkdtempSync(join(tmpdir(), "refence-agent-wal-no-intent-")),
+    const secondIntentIndex = records.findIndex((entry) =>
+      entry.target === second.batchID && entry.phase === "lifecycle_intent"
     );
-    temporaryDirectories.push(noIntentDirectory);
-    chownSync(noIntentDirectory, process.getuid!(), process.getgid!());
-    chmodSync(noIntentDirectory, 0o700);
-    const noIntent = new ControllerWalWriter({
-      directory: noIntentDirectory,
-      ...expected,
+    const completeTemplate = structuredClone(records.at(-1)!);
+    for (const groupCount of [0, 1, 2, 3]) {
+      const values = structuredClone(
+        records.slice(0, secondIntentIndex + 1 + groupCount * 4),
+      ) as any[];
+      values.push(structuredClone(completeTemplate));
+      rehash(values);
+      expect(() => validateRecords(values), "partial_" + groupCount)
+        .toThrow(MaintenanceRefenceError);
+    }
+    const firstVerifiedIndex = records.findIndex((entry) =>
+      entry.target === first.batchID && entry.phase === "verified" &&
+      entry.effect_kind === "local_agent_stop"
+    );
+    const oneLifecycle = structuredClone(
+      records.slice(0, firstVerifiedIndex + 1),
+    ) as any[];
+    oneLifecycle.push(structuredClone(completeTemplate));
+    rehash(oneLifecycle);
+    expect(() => validateRecords(oneLifecycle)).toThrow(MaintenanceRefenceError);
+    const thirdIntent = structuredClone(second.intent) as any;
+    thirdIntent.target = "final_authority_" + "c".repeat(24);
+    thirdIntent.effect_id = "agent_000024_stop_intent";
+    const thirdAttempt = structuredClone(records.slice(0, -1)) as any[];
+    thirdAttempt.push(thirdIntent);
+    rehash(thirdAttempt);
+    expect(() => validateRecords(thirdAttempt)).toThrow(MaintenanceRefenceError);
+    const secondAttemptIndex = records.findIndex((entry) =>
+      entry.target === second.batchID && entry.phase === "attempting" &&
+      entry.effect_kind === "local_agent_stop"
+    );
+    const secondSettledIndex = records.findIndex((entry) =>
+      entry.target === second.batchID && entry.phase === "settled" &&
+      entry.effect_kind === "local_agent_stop"
+    );
+    for (
+      let cut = secondIntentIndex + 1;
+      cut <= secondSettledIndex + 1;
+      cut += 1
+    ) {
+      const barePrefix = structuredClone(records.slice(0, cut)) as any[];
+      rehash(barePrefix);
+      expect(() => validateRecords(barePrefix), "accepted_cut_" + cut)
+        .not.toThrow();
+      const prefix = structuredClone(barePrefix) as any[];
+      const forgedComplete = structuredClone(completeTemplate);
+      prefix.push(forgedComplete);
+      rehash(prefix);
+      expect(() => validateRecords(prefix), "complete_cut_" + cut)
+        .toThrow(MaintenanceRefenceError);
+      const forgedIntent = structuredClone(second.intent) as any;
+      forgedIntent.target = "final_authority_" + "d".repeat(24);
+      prefix.splice(-1, 1, forgedIntent);
+      rehash(prefix);
+      expect(() => validateRecords(prefix), "intent_cut_" + cut)
+        .toThrow(MaintenanceRefenceError);
+    }
+    const failed = structuredClone(
+      records.slice(0, secondAttemptIndex + 1),
+    ) as any[];
+    failed.push({
+      ...structuredClone(second.attempting),
+      recorded_at: "2026-08-26T09:47:29Z",
+      phase: "failed_or_uncertain",
+      detail_sha256: second.protocolOperationSHA256,
+      failure_code: "fly_agent_stop_uncertain",
     });
-    for (const entry of records.slice(0, intent.ordinal - 1)) {
-      noIntent.append({
-        recorded_at: entry.recorded_at,
-        phase: entry.phase,
-        checkpoint: entry.checkpoint,
-        effect_id: entry.effect_id,
-        effect_kind: entry.effect_kind,
-        target: entry.target,
-        argv_sha256: entry.argv_sha256,
-        pid: entry.pid,
-        pgid: entry.pgid,
-        exit_code: entry.exit_code,
-        termination: entry.termination,
-        local_process_group_settled: entry.local_process_group_settled,
-        provider_transition_sha256: entry.provider_transition_sha256,
-        fleet_readback_sha256: entry.fleet_readback_sha256,
-        detail_sha256: entry.detail_sha256,
-        failure_code: entry.failure_code,
-      });
-    }
-    await expect(executeControllerEffectToSettlement({
-      wal: noIntent,
-      runtime,
-      effectID: "agent_000006_stop",
-      effectKind: "local_agent_stop",
-      checkpoint: "fly_agent_cleanup_stop_direct_unix_protocol_child_spawn_count_0",
-      target: batchID,
-      argv: ["direct-unix-protocol"],
-      timeoutMilliseconds: 30_000,
-      durableIntentSHA256: intentSHA256,
-      acceptedExitCodes: [0],
-    })).rejects.toBeInstanceOf(MaintenanceRefenceError);
-
-    expect(() => wal.append({
-      recorded_at: "2026-08-26T09:47:31Z",
-      phase: "lifecycle_intent",
-      checkpoint: "fly_agent_cleanup_stop_intent_direct_unix_protocol",
-      effect_id: "agent_000024_stop_intent",
-      effect_kind: "local_agent_stop",
-      target: `cordoned_runtime_${"c".repeat(24)}`,
-      argv_sha256: sha256(canonicalJson(stopArgv)),
-      pid: null,
-      pgid: null,
-      exit_code: null,
-      termination: null,
-      local_process_group_settled: true,
-      provider_transition_sha256: null,
-      fleet_readback_sha256: null,
-      detail_sha256: digest("e"),
-      failure_code: null,
-    })).toThrow(MaintenanceRefenceError);
-  });
-
-  test("source binds umask-derived 0700 socket and exact lsof holder forms", () => {
-    const bridgeSource = readFileSync(
-      join(import.meta.dir, "..", "phase-b-refence-maintenance-bridge.ts"),
-      "utf8",
+    rehash(failed);
+    expect(() => validateRecords(failed)).not.toThrow();
+    const afterFailed = [...failed, structuredClone(completeTemplate)];
+    rehash(afterFailed);
+    expect(() => validateRecords(afterFailed)).toThrow(MaintenanceRefenceError);
+    const settledFailed = structuredClone(
+      records.slice(0, secondSettledIndex + 1),
+    ) as any[];
+    settledFailed.push({
+      ...structuredClone(second.settled),
+      recorded_at: "2026-08-26T09:47:29Z",
+      phase: "failed_or_uncertain",
+      detail_sha256: second.protocolOperationSHA256,
+      failure_code: "fly_agent_stop_uncertain",
+    });
+    rehash(settledFailed);
+    expect(() => validateRecords(settledFailed)).not.toThrow();
+    const verifiedFailed = structuredClone(records.slice(0, -1)) as any[];
+    verifiedFailed.push({
+      ...structuredClone(second.verified),
+      recorded_at: "2026-08-26T09:47:29Z",
+      phase: "failed_or_uncertain",
+      detail_sha256: second.protocolOperationSHA256,
+      failure_code: "fly_agent_stop_uncertain",
+    });
+    rehash(verifiedFailed);
+    expect(() => validateRecords(verifiedFailed))
+      .toThrow(MaintenanceRefenceError);
+    const extraRead = structuredClone(records) as any[];
+    const attemptIndex = extraRead.findIndex((entry) =>
+      entry.target === first.batchID && entry.phase === "attempting" &&
+      entry.effect_kind === "local_agent_stop"
     );
-    const contractSource = readFileSync(CONTRACT_PATH, "utf8");
-    expect(bridgeSource).toContain("const OWNED_FLY_AGENT_SOCKET_MODE = 0o700;");
-    expect(bridgeSource).toContain('"pftnDi"');
-    expect(contractSource).toContain('entry.type === (metadata.type === "file" ? "REG" : "unix")');
-    expect(contractSource).toContain("entry.device === null && entry.inode === null");
-    expect(contractSource).toContain("const flyRows = rows.filter");
-    expect(contractSource).toContain("(?:fly|flyctl)");
-    expect(bridgeSource).not.toContain("agent run (~\\/.fly");
-    expect(contractSource).not.toContain("agent run (~\\/.fly");
+    const processRows = extraRead.filter((entry) =>
+      entry.checkpoint === first.killCheckpoint &&
+      entry.effect_id.endsWith("process_census")
+    ).map((entry) => ({
+      ...structuredClone(entry),
+      effect_id: "agent_000011_process_census",
+    }));
+    expect(processRows).toHaveLength(4);
+    extraRead.splice(attemptIndex, 0, ...processRows);
+    rehash(extraRead);
+    const seventeenthRowPrefix = structuredClone(
+      extraRead.slice(0, attemptIndex + 1),
+    ) as any[];
+    rehash(seventeenthRowPrefix);
+    expect(() => validateRecords(seventeenthRowPrefix))
+      .toThrow(MaintenanceRefenceError);
+    expect(() => validateRecords(extraRead)).toThrow(MaintenanceRefenceError);
   });
 });
 
@@ -12353,346 +12134,95 @@ describe("single-process controller recovery order", () => {
   });
 });
 
-function successFlyEffectsFixture(): Array<{
-  operation: string;
+function successFlyEffectsFixture(): Array<{ operation: string;
   target: string;
-  proof_sha256: string;
-}> {
-  const applications = [...roles.app_lhr, roles.app_cdg];
-  const effects: Array<[string, string]> = [
-    ["build_push", "agenttool"],
-    ["update_image", roles.thinker_primary],
-    ...[...applications, roles.thinker_standby].map((id) =>
-      [
-        "update_image",
-        id,
-      ] as [string, string]
-    ),
-    ...applications.map((id) => ["restore_app", id] as [string, string]),
-    ["restore_primary", roles.thinker_primary],
-    ["restore_standby", roles.thinker_standby],
-    ...applications.flatMap((id) => [
-      ["start", id] as [string, string],
-      ["wait_started", id] as [string, string],
-    ]),
-    ...applications.flatMap((id) => [
-      ["enable_autostart", id] as [string, string],
-      ["wait_started", id] as [string, string],
-    ]),
-    ["start", roles.thinker_primary],
-    ["wait_started", roles.thinker_primary],
-    ...applications.map((id) => ["uncordon", id] as [string, string]),
-  ];
-  return effects.map(([operation, target], index) => ({
-    operation,
-    target,
-    proof_sha256: sha256(`success-effect-${index}`),
-  }));
-}
+  proof_sha256: string; }> { const applications = [...roles.app_lhr, roles.app_cdg];
+  const effects: Array<[string, string]> = [ ["build_push", "agenttool"], ["update_image", roles.thinker_primary], ...[...applications, roles.thinker_standby].map((id) => [ "update_image", id, ] as [string, string] ),
+    ...applications.map((id) => ["restore_app", id] as [string, string]), ["restore_primary", roles.thinker_primary], ["restore_standby", roles.thinker_standby], ...applications.flatMap((id) => [ ["start", id] as [string, string],
+      ["wait_started", id] as [string, string], ]), ...applications.flatMap((id) => [ ["enable_autostart", id] as [string, string], ["wait_started", id] as [string, string], ]), ["start", roles.thinker_primary],
+    ["wait_started", roles.thinker_primary], ...applications.map((id) => ["uncordon", id] as [string, string]), ];
+  return effects.map(([operation, target], index) => ({ operation, target, proof_sha256: sha256(`success-effect-${index}`), })); }
 
-function successAuthorityRequestFixture(options: {
-  successProvenAt?: string;
-  lock?: {
-    ownerPath: string;
+function successAuthorityRequestFixture(options: { successProvenAt?: string;
+  lock?: { ownerPath: string;
     device: number;
     inode: number;
     sha256: string;
-    pid: number;
-  };
-} = {}) {
-  const controllerRunID = AUTHORIZED_H0_RUN_ID;
-  const rolloutID =
-    "maintenance-refence-d87a3f35c80b-20260825T120000Z-0123456789abcdef";
+    pid: number; }; } = {}) { const controllerRunID = AUTHORIZED_H0_RUN_ID;
+  const rolloutID = "maintenance-refence-d87a3f35c80b-20260825T120000Z-0123456789abcdef";
   const sourceRevision = AUTHORIZED_H0_TARGET_REVISION;
   const sourceTree = AUTHORIZED_H0_TARGET_TREE;
-  const stateDirectory =
-    "/Users/yournameisai/.local/state/agenttool/deploy-state";
+  const stateDirectory = "/Users/yournameisai/.local/state/agenttool/deploy-state";
   const stateRoot = "/Users/yournameisai/.local/state/agenttool";
   const buildRoot = `${stateRoot}/refence-maintenance-build-contexts`;
   const dependencyRoot = `${stateRoot}/refence-maintenance-dependency-estates`;
   const terminalEntrySHA256 = digest("1");
-  const controllerWal = {
-    directory:
-      `${stateDirectory}/phase-b-refence-maintenance-bridge-wal/${controllerRunID}`,
-    entry_count: 1,
-    ordered_filenames: [`000001-${terminalEntrySHA256}.json`],
-    chain_sha256: digest("2"),
-    terminal_entry_sha256: terminalEntrySHA256,
-    terminal_phase: "complete",
-  };
-  const lock = options.lock ?? {
-    ownerPath:
-      `${stateRoot}/.deploy-lock-owner.refence-${process.pid}-0123456789abcdef`,
-    device: 42,
-    inode: 526,
-    sha256: digest("5"),
-    pid: process.pid,
-  };
-  const databaseConvergence = {
-    schema: "agenttool-phase-b-refence-database-origin-convergence/v1",
-    status: "verified",
-    intent_durable: true,
-    statement_attempted: true,
-    commit_state: "acknowledged",
-    verified: true,
-    reconciliation_required: false,
-    database_write_attempt_count: 1,
-    rows_updated: 1,
-    rollback_attempt_count: 0,
-    statement_sha256: databaseOriginStatementSHA256ForTest(),
-    database_target_sha256: digest("3"),
-    before_proof_sha256: digest("4"),
-    after_proof_sha256: digest("5"),
-    before_row_sha256: digest("6"),
-    after_row_sha256: digest("7"),
-    unchanged_projection_sha256: digest("8"),
-    delta_sha256: digest("9"),
-    before_instance_url_sha256: PRE_REFENCE_URL_SHA256,
-    after_instance_url_sha256: TARGET_URL_SHA256,
-    before_updated_at: PRE_REFENCE_UPDATED_AT,
-    after_updated_at: CONVERGED_UPDATED_AT,
-    clock_before: CONVERGENCE_CLOCK_BEFORE,
-    clock_after: CONVERGENCE_CLOCK_AFTER,
-    intent_wal_ordinal: 2,
-    intent_wal_sha256: digest("a"),
-    commit_ack_wal_ordinal: 3,
-    commit_ack_wal_sha256: digest("b"),
-    verified_wal_ordinal: 4,
-    verified_wal_sha256: digest("c"),
-  };
-  const rolloutProofs = {
-    special_guards: [digest("d"), digest("e")],
-    fly_effects: successFlyEffectsFixture(),
-    cordoned_runtime_sha256: digest("f"),
-    cordoned_runtime_agent_cleanup_sha256: sha256("cordoned-agent-cleanup"),
-    public_first_canary_sha256: digest("0"),
-    public_final_sha256: digest("1"),
-    final_authority_sha256: digest("2"),
-    final_authority_agent_cleanup_sha256: sha256("final-agent-cleanup"),
-    final_absence_sha256: sha256("final-agent-absence"),
-    ordinary_absent_postflight_sha256: digest("3"),
-  };
-  const bindings = {
-    rolloutID,
-    receiptSHA256: AUTHORIZED_H0_RECEIPT_SHA256,
-    runID: controllerRunID,
-    targetRevision: sourceRevision,
-    targetTree: sourceTree,
-    anchorSHA256: digest("8"),
-    anchorDevice: 42,
-    anchorInode: 600,
-    witnessSHA256: digest("9"),
-    witnessDevice: 42,
-    witnessInode: 601,
-    producerGuardRawSHA256: AUTHORIZED_H0_GUARD_RAW_SHA256,
-    producerGuardNormalizedSHA256: AUTHORIZED_H0_GUARD_NORMALIZED_SHA256,
-    bridgeRawSHA256: digest("a"),
-    bridgeNormalizedSHA256: digest("b"),
-    controllerRevision: revision("e"),
-    controllerTree: revision("f"),
-    controllerSourceDistance: 54,
-    controllerCommitRawSHA256: digest("c"),
-    controllerCommitByteCount: 1_300,
-    controllerTopicRevision: revision("1"),
-    controllerTopicTree: revision("f"),
-    changedPathsRawSHA256: sha256("current repair raw diff"),
-    changedPathStatusesSHA256: sha256(
-      canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
-    ),
-    cumulativeChangedPathsRawSHA256: sha256("current cumulative raw diff"),
-    cumulativeChangedPathStatusesSHA256: sha256(
-      canonicalJson(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES),
-    ),
-  };
-  const preparation = {
-    startedAt: "2026-08-25T12:00:00Z",
-    deployLock: {
-      schema: "agenttool-local-deploy-lock/v1" as const,
-      public_path: `${stateRoot}/deploy.lock`,
-      owner_record: lock.ownerPath,
-      device: lock.device,
-      inode: lock.inode,
-      sha256: lock.sha256,
-      pid: lock.pid,
-    },
-    buildContext: {
-      schema: "agenttool-phase-b-refence-build-context/v1" as const,
-      path: `${buildRoot}/${controllerRunID}`,
-      source_revision: sourceRevision,
-      source_tree: sourceTree,
-      inventory_sha256:
-        "ba1ee2dc3ede33e02460fd139273199db0d2c8e075976a28ff230543d46a7626",
-      inventory_byte_count: 130_718,
-      file_count: 707,
-      byte_count: 10_102_535,
-      context_device: 42,
-      context_inode: 700,
-      readback_sha256: digest("c"),
-      ready_path: `${buildRoot}/${controllerRunID}.ready.json`,
-      ready_sha256: digest("d"),
-      prepared: true as const,
-    },
-    dependencyEstate: {
-      schema: "agenttool-phase-b-refence-dependency-estate/v1" as const,
-      path: `${dependencyRoot}/${controllerRunID}`,
-      project_path: `${dependencyRoot}/${controllerRunID}/project`,
-      runtime_source_path:
-        "/Users/yournameisai/.bun/install/cache/postgres@3.4.9@@@1",
-      source_revision: sourceRevision,
-      source_tree: sourceTree,
-      source_inventory_sha256: digest("e"),
-      postgres_runtime_closure_sha256:
-        "689e732c8ffc35e0c5c3aac2d6328c915abd56eec5b77a5790da2d3b7a154b71",
-      dependency_inventory_sha256: digest("f"),
-      dependency_file_count: 17,
-      dependency_byte_count: 197_937,
-      dependency_symlink_count: 0,
-      estate_device: 42,
-      estate_inode: 701,
-      ready_path: `${dependencyRoot}/${controllerRunID}.ready.json`,
-      ready_sha256: digest("0"),
-      prepared: true as const,
-    },
-    controllerWalDirectory: controllerWal.directory,
-    earlyGuardSHA256: digest("1"),
-    earlyDatabaseProofSHA256: databaseConvergence.before_proof_sha256,
-    databaseTargetSHA256: databaseConvergence.database_target_sha256,
-  };
-  const marker = createSuccessReadyBridgeMarkerForTest({
-    bindings,
-    roles,
-    configFingerprint: digest("2"),
-    preparation,
-    updatedAt: "2026-08-25T12:29:59Z",
-    imageDigest: `sha256:${"a".repeat(64)}`,
-    databaseConvergence,
-    controllerWal,
-    rolloutProofs,
-  });
-  return {
-    successProvenAt: options.successProvenAt ?? "2026-08-25T12:30:00Z",
-    controllerRunID,
-    rolloutID,
-    refenceReceiptSHA256: AUTHORIZED_H0_RECEIPT_SHA256,
-    sourceRevision,
-    sourceTree,
-    roles,
-    marker,
-    databaseConvergence,
-    deployLock: structuredClone(preparation.deployLock),
-    deployLockSHA256: lock.sha256,
-    earlyGuardSHA256: preparation.earlyGuardSHA256,
-    buildContext: structuredClone(marker.build_context),
-    dependencyEstate: structuredClone(marker.dependency_estate),
-    refenceHandoff: structuredClone(marker.refence_handoff),
-    retainedArchives: {
-      anchor: {
-        path:
-          `${stateDirectory}/phase-b-refence-observed-526-anchor-retired-${controllerRunID}.json`,
-        sha256: bindings.anchorSHA256,
-        device: 42,
-        inode: 600,
-        nlink: 1,
-      },
-      witness: {
-        path:
-          `${stateDirectory}/phase-b-refence-observed-526-armed-witness-retired-${controllerRunID}.json`,
-        sha256: bindings.witnessSHA256,
-        device: 42,
-        inode: 601,
-        nlink: 1,
-      },
-    },
-    controllerWal,
-    rolloutProofs,
-    finalTruth: {
-      schema: "agenttool-phase-b-refence-maintenance-final-truth/v1",
-      database_convergence_verified: true,
-      target_image_machine_count: 5,
-      started_service_machine_count: 4,
-      autostart_enabled_app_count: 3,
-      uncordoned_app_count: 3,
-      standby_stopped: true,
-      authority_state: "absent_fail_closed",
-      ordinary_absent_postflight_verified: true,
-      controller_wal_sealed: true,
-      active_child_count: 0,
-      effects_closed: true,
-      migration_attempt_count: 0,
-      database_write_attempt_count: 1,
-      rollback_attempt_count: 0,
-      fly_ssh_agent_cleanup_count: 2,
-      final_absence_sha256: rolloutProofs.final_absence_sha256,
-    },
-  };
-}
+  const controllerWal = { directory: `${stateDirectory}/phase-b-refence-maintenance-bridge-wal/${controllerRunID}`, entry_count: 1, ordered_filenames: [`000001-${terminalEntrySHA256}.json`], chain_sha256: digest("2"),
+    terminal_entry_sha256: terminalEntrySHA256, terminal_phase: "complete", };
+  const lock = options.lock ?? { ownerPath: `${stateRoot}/.deploy-lock-owner.refence-${process.pid}-0123456789abcdef`, device: 42, inode: 526, sha256: digest("5"), pid: process.pid, };
+  const databaseConvergence = { schema: "agenttool-phase-b-refence-database-origin-convergence/v1", status: "verified", intent_durable: true, statement_attempted: true, commit_state: "acknowledged", verified: true,
+    reconciliation_required: false, database_write_attempt_count: 1, rows_updated: 1, rollback_attempt_count: 0, statement_sha256: databaseOriginStatementSHA256ForTest(), database_target_sha256: digest("3"),
+    before_proof_sha256: digest("4"), after_proof_sha256: digest("5"), before_row_sha256: digest("6"), after_row_sha256: digest("7"), unchanged_projection_sha256: digest("8"), delta_sha256: digest("9"),
+    before_instance_url_sha256: PRE_REFENCE_URL_SHA256, after_instance_url_sha256: TARGET_URL_SHA256, before_updated_at: PRE_REFENCE_UPDATED_AT, after_updated_at: CONVERGED_UPDATED_AT, clock_before: CONVERGENCE_CLOCK_BEFORE,
+    clock_after: CONVERGENCE_CLOCK_AFTER, intent_wal_ordinal: 2, intent_wal_sha256: digest("a"), commit_ack_wal_ordinal: 3, commit_ack_wal_sha256: digest("b"), verified_wal_ordinal: 4, verified_wal_sha256: digest("c"), };
+  const rolloutProofs = { special_guards: [digest("d"), digest("e")], fly_effects: successFlyEffectsFixture(), cordoned_runtime_sha256: digest("f"), cordoned_runtime_agent_cleanup_sha256: sha256("cordoned-agent-cleanup"),
+    public_first_canary_sha256: digest("0"), public_final_sha256: digest("1"), final_authority_sha256: digest("2"), final_authority_agent_cleanup_sha256: sha256("final-agent-cleanup"), final_absence_sha256: sha256("final-agent-absence"),
+    ordinary_absent_postflight_sha256: digest("3"), };
+  const bindings = { rolloutID, receiptSHA256: AUTHORIZED_H0_RECEIPT_SHA256, runID: controllerRunID, targetRevision: sourceRevision, targetTree: sourceTree, anchorSHA256: digest("8"), anchorDevice: 42, anchorInode: 600,
+    witnessSHA256: digest("9"), witnessDevice: 42, witnessInode: 601, producerGuardRawSHA256: AUTHORIZED_H0_GUARD_RAW_SHA256, producerGuardNormalizedSHA256: AUTHORIZED_H0_GUARD_NORMALIZED_SHA256, bridgeRawSHA256: digest("a"),
+    bridgeNormalizedSHA256: digest("b"), controllerRevision: revision("e"), controllerTree: revision("f"), controllerSourceDistance: 57, controllerCommitRawSHA256: digest("c"), controllerCommitByteCount: 1_300,
+    controllerTopicRevision: revision("1"), controllerTopicTree: revision("f"), changedPathsRawSHA256: sha256("current repair raw diff"), changedPathStatusesSHA256: sha256( canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES), ),
+    cumulativeChangedPathsRawSHA256: sha256("current cumulative raw diff"), cumulativeChangedPathStatusesSHA256: sha256( canonicalJson(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES), ), };
+  const preparation = { startedAt: "2026-08-25T12:00:00Z", deployLock: { schema: "agenttool-local-deploy-lock/v1" as const, public_path: `${stateRoot}/deploy.lock`, owner_record: lock.ownerPath, device: lock.device, inode: lock.inode,
+      sha256: lock.sha256, pid: lock.pid, }, buildContext: { schema: "agenttool-phase-b-refence-build-context/v1" as const, path: `${buildRoot}/${controllerRunID}`, source_revision: sourceRevision, source_tree: sourceTree, inventory_sha256:
+        "ba1ee2dc3ede33e02460fd139273199db0d2c8e075976a28ff230543d46a7626", inventory_byte_count: 130_718, file_count: 707, byte_count: 10_102_535, context_device: 42, context_inode: 700, readback_sha256: digest("c"),
+      ready_path: `${buildRoot}/${controllerRunID}.ready.json`, ready_sha256: digest("d"), prepared: true as const, }, dependencyEstate: { schema: "agenttool-phase-b-refence-dependency-estate/v1" as const,
+      path: `${dependencyRoot}/${controllerRunID}`, project_path: `${dependencyRoot}/${controllerRunID}/project`, runtime_source_path: "/Users/yournameisai/.bun/install/cache/postgres@3.4.9@@@1", source_revision: sourceRevision,
+      source_tree: sourceTree, source_inventory_sha256: digest("e"), postgres_runtime_closure_sha256: "689e732c8ffc35e0c5c3aac2d6328c915abd56eec5b77a5790da2d3b7a154b71", dependency_inventory_sha256: digest("f"), dependency_file_count: 17,
+      dependency_byte_count: 197_937, dependency_symlink_count: 0, estate_device: 42, estate_inode: 701, ready_path: `${dependencyRoot}/${controllerRunID}.ready.json`, ready_sha256: digest("0"), prepared: true as const, },
+    controllerWalDirectory: controllerWal.directory, earlyGuardSHA256: digest("1"), earlyDatabaseProofSHA256: databaseConvergence.before_proof_sha256, databaseTargetSHA256: databaseConvergence.database_target_sha256, };
+  const marker = createSuccessReadyBridgeMarkerForTest({ bindings, roles, configFingerprint: digest("2"), preparation, updatedAt: "2026-08-25T12:29:59Z", imageDigest: `sha256:${"a".repeat(64)}`, databaseConvergence, controllerWal,
+    rolloutProofs, });
+  return { successProvenAt: options.successProvenAt ?? "2026-08-25T12:30:00Z", controllerRunID, rolloutID, refenceReceiptSHA256: AUTHORIZED_H0_RECEIPT_SHA256, sourceRevision, sourceTree, roles, marker, databaseConvergence,
+    deployLock: structuredClone(preparation.deployLock), deployLockSHA256: lock.sha256, earlyGuardSHA256: preparation.earlyGuardSHA256, buildContext: structuredClone(marker.build_context),
+    dependencyEstate: structuredClone(marker.dependency_estate), refenceHandoff: structuredClone(marker.refence_handoff), retainedArchives: { anchor: { path:
+          `${stateDirectory}/phase-b-refence-observed-526-anchor-retired-${controllerRunID}.json`, sha256: bindings.anchorSHA256, device: 42, inode: 600, nlink: 1, }, witness: { path:
+          `${stateDirectory}/phase-b-refence-observed-526-armed-witness-retired-${controllerRunID}.json`, sha256: bindings.witnessSHA256, device: 42, inode: 601, nlink: 1, }, }, controllerWal, rolloutProofs, finalTruth: {
+      schema: "agenttool-phase-b-refence-maintenance-final-truth/v1", database_convergence_verified: true, target_image_machine_count: 5, started_service_machine_count: 4, autostart_enabled_app_count: 3, uncordoned_app_count: 3,
+      standby_stopped: true, authority_state: "absent_fail_closed", ordinary_absent_postflight_verified: true, controller_wal_sealed: true, active_child_count: 0, effects_closed: true, migration_attempt_count: 0,
+      database_write_attempt_count: 1, rollback_attempt_count: 0, fly_ssh_agent_cleanup_count: 2, final_absence_sha256: rolloutProofs.final_absence_sha256, }, }; }
 
 function successArtifactRequestFixture(options: Parameters<
   typeof successAuthorityRequestFixture
->[0] = {}) {
-  const authorityRequest = successAuthorityRequestFixture(options);
+>[0] = {}) { const authorityRequest = successAuthorityRequestFixture(options);
   const authority = createSuccessAuthorityProjectionForTest(authorityRequest);
   const stateRoot = "/Users/yournameisai/.local/state/agenttool";
   const stateDirectory = `${stateRoot}/deploy-state`;
   const receiptDirectory = `${stateRoot}/deploy-receipts`;
-  const receiptPath = `${receiptDirectory}/20260825T120000Z-${
-    authority.source_revision.slice(0, 12)
-  }-1.json`;
-  const witnessPath =
-    `${stateDirectory}/phase-b-refence-maintenance-finalization-${authority.controller_run_id}.json`;
-  const markerRetirementClaimPath =
-    `${stateDirectory}/.phase-b-refence-maintenance-marker-retirement-${authority.controller_run_id}.claim`;
+  const receiptPath = `${receiptDirectory}/20260825T120000Z-${ authority.source_revision.slice(0, 12) }-1.json`;
+  const witnessPath = `${stateDirectory}/phase-b-refence-maintenance-finalization-${authority.controller_run_id}.json`;
+  const markerRetirementClaimPath = `${stateDirectory}/.phase-b-refence-maintenance-marker-retirement-${authority.controller_run_id}.claim`;
   const authorityProjectionSHA256 = sha256(canonicalJson(authority));
-  const marker = previewSuccessFinalizationMarkerForTest({
-    currentMarker: authorityRequest.marker,
-    successProvenAt: authorityRequest.successProvenAt,
-    walProjection: authorityRequest.controllerWal,
-    authorityProjectionSHA256,
-    receiptPath,
-    witnessPath,
-    markerRetirementClaimPath,
-  });
-  return {
-    authorityRequest,
-    authorityProjection: authority,
-    markerPath: `${stateDirectory}/maintenance-active.json`,
-    markerBytesUTF8: `${canonicalJson(marker)}\n`,
-    receiptPath,
-    witnessPath,
-    markerRetirementClaimPath,
-    lockPublicPath: `${stateRoot}/deploy.lock`,
-    lockOwnerPath: authorityRequest.marker.deploy_lock.owner_record,
-    lockDevice: String(authorityRequest.marker.deploy_lock.device),
-    lockInode: String(authorityRequest.marker.deploy_lock.inode),
-    lockSHA256: authority.deploy_lock_sha256,
-  };
-}
+  const marker = previewSuccessFinalizationMarkerForTest({ currentMarker: authorityRequest.marker, successProvenAt: authorityRequest.successProvenAt, walProjection: authorityRequest.controllerWal, authorityProjectionSHA256, receiptPath,
+    witnessPath, markerRetirementClaimPath, });
+  return { authorityRequest, authorityProjection: authority, markerPath: `${stateDirectory}/maintenance-active.json`, markerBytesUTF8: `${canonicalJson(marker)}\n`, receiptPath, witnessPath, markerRetirementClaimPath,
+    lockPublicPath: `${stateRoot}/deploy.lock`, lockOwnerPath: authorityRequest.marker.deploy_lock.owner_record, lockDevice: String(authorityRequest.marker.deploy_lock.device), lockInode: String(authorityRequest.marker.deploy_lock.inode),
+    lockSHA256: authority.deploy_lock_sha256, }; }
 
-function resealForgedSuccessBundle(
-  original: SuccessFinalizationArtifacts,
-  mutateAuthority: (authority: Record<string, any>) => void,
-): SuccessFinalizationArtifacts {
-  const bundle = structuredClone(original);
+function resealForgedSuccessBundle( original: SuccessFinalizationArtifacts, mutateAuthority: (authority: Record<string, any>) => void, ): SuccessFinalizationArtifacts { const bundle = structuredClone(original);
   mutateAuthority(bundle.authorityProjection);
-  bundle.authorityProjectionSHA256 = sha256(
-    canonicalJson(bundle.authorityProjection),
-  );
+  bundle.authorityProjectionSHA256 = sha256( canonicalJson(bundle.authorityProjection), );
   const marker = JSON.parse(bundle.markerBytesUTF8);
-  marker.success_finalization.authority_projection_sha256 =
-    bundle.authorityProjectionSHA256;
+  marker.success_finalization.authority_projection_sha256 = bundle.authorityProjectionSHA256;
   bundle.markerBytesUTF8 = `${canonicalJson(marker)}\n`;
   bundle.markerSHA256 = sha256(bundle.markerBytesUTF8);
-  bundle.witness.authority_projection = structuredClone(
-    bundle.authorityProjection,
-  );
+  bundle.witness.authority_projection = structuredClone( bundle.authorityProjection, );
   bundle.witness.authority_projection_sha256 = bundle.authorityProjectionSHA256;
   bundle.witness.marker_bytes_utf8 = bundle.markerBytesUTF8;
   bundle.witness.marker_sha256 = bundle.markerSHA256;
   bundle.witnessBytesUTF8 = `${canonicalJson(bundle.witness)}\n`;
   bundle.witnessSHA256 = sha256(bundle.witnessBytesUTF8);
-  bundle.receipt.authority_projection = structuredClone(
-    bundle.authorityProjection,
-  );
+  bundle.receipt.authority_projection = structuredClone( bundle.authorityProjection, );
   bundle.receipt.authority_projection_sha256 = bundle.authorityProjectionSHA256;
   bundle.receipt.marker_bytes_utf8 = bundle.markerBytesUTF8;
   bundle.receipt.marker_sha256 = bundle.markerSHA256;
@@ -12700,18 +12230,11 @@ function resealForgedSuccessBundle(
   bundle.receipt.witness_sha256 = bundle.witnessSHA256;
   bundle.receiptBytesUTF8 = `${JSON.stringify(bundle.receipt, null, 2)}\n`;
   bundle.receiptSHA256 = sha256(bundle.receiptBytesUTF8);
-  return bundle;
-}
+  return bundle; }
 
-function resealSuccessBundleEnvelope(
-  original: SuccessFinalizationArtifacts,
-  mutate: (value: {
-    marker: Record<string, any>;
+function resealSuccessBundleEnvelope( original: SuccessFinalizationArtifacts, mutate: (value: { marker: Record<string, any>;
     witness: Record<string, any>;
-    receipt: Record<string, any>;
-  }) => void,
-): SuccessFinalizationArtifacts {
-  const bundle = structuredClone(original);
+    receipt: Record<string, any>; }) => void, ): SuccessFinalizationArtifacts { const bundle = structuredClone(original);
   const marker = JSON.parse(bundle.markerBytesUTF8);
   mutate({ marker, witness: bundle.witness, receipt: bundle.receipt });
   bundle.markerBytesUTF8 = `${canonicalJson(marker)}\n`;
@@ -12726,48 +12249,22 @@ function resealSuccessBundleEnvelope(
   bundle.receipt.witness_sha256 = bundle.witnessSHA256;
   bundle.receiptBytesUTF8 = `${JSON.stringify(bundle.receipt, null, 2)}\n`;
   bundle.receiptSHA256 = sha256(bundle.receiptBytesUTF8);
-  return bundle;
-}
+  return bundle; }
 
-function fsyncTestDirectory(path: string): void {
-  const descriptor = openSync(path, fsConstants.O_RDONLY);
-  try {
-    fsyncSync(descriptor);
-  } finally {
-    closeSync(descriptor);
-  }
-}
+function fsyncTestDirectory(path: string): void { const descriptor = openSync(path, fsConstants.O_RDONLY);
+  try { fsyncSync(descriptor); } finally { closeSync(descriptor); } }
 
-function writeDurableTestFile(
-  path: string,
-  bytes: string,
-): DurableFileIdentity {
-  const descriptor = openSync(
-    path,
-    fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL |
-      fsConstants.O_NOFOLLOW,
-    0o600,
-  );
+function writeDurableTestFile( path: string, bytes: string, ): DurableFileIdentity { const descriptor = openSync( path, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL |
+      fsConstants.O_NOFOLLOW, 0o600, );
   let identity: DurableFileIdentity;
-  try {
-    writeFileSync(descriptor, bytes);
+  try { writeFileSync(descriptor, bytes);
     fsyncSync(descriptor);
     const stat = fstatSync(descriptor);
-    identity = {
-      device: stat.dev,
-      inode: stat.ino,
-      sha256: sha256(bytes),
-      size: stat.size,
-    };
-  } finally {
-    closeSync(descriptor);
-  }
+    identity = { device: stat.dev, inode: stat.ino, sha256: sha256(bytes), size: stat.size, }; } finally { closeSync(descriptor); }
   fsyncTestDirectory(dirname(path));
-  return identity!;
-}
+  return identity!; }
 
-interface FinalizationTestFixture {
-  root: string;
+interface FinalizationTestFixture { root: string;
   paths: SuccessFinalizationPaths;
   authorityPaths: SuccessFinalizationPaths;
   artifacts: SuccessFinalizationArtifacts;
@@ -12775,13 +12272,9 @@ interface FinalizationTestFixture {
   lock: DeployLockAuthority;
   preMarkerSHA256: string;
   markerCASStagePath: string;
-  counts: { begin: number; pre: number; closed: number };
-}
+  counts: { begin: number; pre: number; closed: number }; }
 
-function finalizationTestFixture(): FinalizationTestFixture {
-  const root = realpathSync(
-    mkdtempSync(join(tmpdir(), "refence-success-finalization-")),
-  );
+function finalizationTestFixture(): FinalizationTestFixture { const root = realpathSync( mkdtempSync(join(tmpdir(), "refence-success-finalization-")), );
   temporaryDirectories.push(root);
   chmodSync(root, 0o700);
   chownSync(root, process.getuid?.() ?? 0, process.getgid?.() ?? 0);
@@ -12795,185 +12288,57 @@ function finalizationTestFixture(): FinalizationTestFixture {
   const canonicalRoot = "/Users/yournameisai/.local/state/agenttool";
   const canonicalStateDirectory = `${canonicalRoot}/deploy-state`;
   const canonicalReceiptDirectory = `${canonicalRoot}/deploy-receipts`;
-  const canonicalWorktree =
-    "/Users/yournameisai/.cache/codex-worktrees/agenttool-phase-b-refence-maintenance-bridge-v1";
-  const canonicalOwnerPath =
-    `${canonicalRoot}/.deploy-lock-owner.refence-${process.pid}-0123456789abcdef`;
+  const canonicalWorktree = "/Users/yournameisai/.cache/codex-worktrees/agenttool-phase-b-refence-maintenance-bridge-v1";
+  const canonicalOwnerPath = `${canonicalRoot}/.deploy-lock-owner.refence-${process.pid}-0123456789abcdef`;
   const lockOwnerPath = join(root, basename(canonicalOwnerPath));
   const publicLockPath = join(root, "deploy.lock");
-  const lockRecordBytes = [
-    "schema=agenttool-local-deploy-lock/v1",
-    `owner_id=${basename(canonicalOwnerPath)}`,
-    `pid=${process.pid}`,
-    "started_at=2026-08-25T12:00:00Z",
-    `worktree=${canonicalWorktree}`,
-    `owner_record=${canonicalOwnerPath}`,
-    "",
-  ].join("\n");
+  const lockRecordBytes = [ "schema=agenttool-local-deploy-lock/v1", `owner_id=${basename(canonicalOwnerPath)}`, `pid=${process.pid}`, "started_at=2026-08-25T12:00:00Z", `worktree=${canonicalWorktree}`, `owner_record=${canonicalOwnerPath}`,
+    "", ].join("\n");
   const lockIdentity = writeDurableTestFile(lockOwnerPath, lockRecordBytes);
-  const lockDescriptor = openSync(
-    lockOwnerPath,
-    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
-  );
+  const lockDescriptor = openSync( lockOwnerPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW, );
   linkSync(lockOwnerPath, publicLockPath);
   fsyncTestDirectory(root);
-  const lock: DeployLockAuthority = {
-    ownerPath: lockOwnerPath,
-    recordBytes: lockRecordBytes,
-    identity: lockIdentity,
-    descriptor: lockDescriptor,
-    phase: "held",
-  };
-  const artifactRequest = successArtifactRequestFixture({
-    lock: {
-      ownerPath: canonicalOwnerPath,
-      device: lockIdentity.device,
-      inode: lockIdentity.inode,
-      sha256: lockIdentity.sha256,
-      pid: process.pid,
-    },
-  });
+  const lock: DeployLockAuthority = { ownerPath: lockOwnerPath, recordBytes: lockRecordBytes, identity: lockIdentity, descriptor: lockDescriptor, phase: "held", };
+  const artifactRequest = successArtifactRequestFixture({ lock: { ownerPath: canonicalOwnerPath, device: lockIdentity.device, inode: lockIdentity.inode, sha256: lockIdentity.sha256, pid: process.pid, }, });
   const artifacts = createSuccessArtifactsForTest(artifactRequest);
   validateSuccessArtifactBundleForTest(artifacts);
   const runID = artifactRequest.authorityRequest.controllerRunID;
-  const authorityPaths: SuccessFinalizationPaths = {
-    stateDirectory: canonicalStateDirectory,
-    lockDirectory: canonicalRoot,
-    receiptDirectory: canonicalReceiptDirectory,
-    worktree: canonicalWorktree,
-    markerPath: artifactRequest.markerPath,
-    markerRetirementClaimPath: artifactRequest.markerRetirementClaimPath,
-    receiptPath: artifactRequest.receiptPath,
-    receiptStagePath:
-      `${canonicalReceiptDirectory}/.phase-b-refence-maintenance-receipt-${runID}.stage`,
-    witnessPath: artifactRequest.witnessPath,
-    witnessStagePath:
-      `${canonicalStateDirectory}/.phase-b-refence-maintenance-finalization-${runID}.stage`,
-    publicLockPath: artifactRequest.lockPublicPath,
-  };
-  const paths: SuccessFinalizationPaths = {
-    stateDirectory: realpathSync(stateDirectory),
-    lockDirectory: root,
-    receiptDirectory: realpathSync(receiptDirectory),
-    worktree: root,
-    markerPath: join(stateDirectory, basename(authorityPaths.markerPath)),
-    markerRetirementClaimPath: join(
-      stateDirectory,
-      basename(authorityPaths.markerRetirementClaimPath),
-    ),
-    receiptPath: join(receiptDirectory, basename(authorityPaths.receiptPath)),
-    receiptStagePath: join(
-      receiptDirectory,
-      basename(authorityPaths.receiptStagePath),
-    ),
-    witnessPath: join(stateDirectory, basename(authorityPaths.witnessPath)),
-    witnessStagePath: join(
-      stateDirectory,
-      basename(authorityPaths.witnessStagePath),
-    ),
-    publicLockPath,
-  };
-  const preMarkerBytes = `${
-    canonicalJson(artifactRequest.authorityRequest.marker)
-  }\n`;
-  const preMarkerIdentity = writeDurableTestFile(
-    paths.markerPath,
-    preMarkerBytes,
-  );
-  return {
-    root,
-    paths,
-    authorityPaths,
-    artifacts,
-    authorityRequest: artifactRequest.authorityRequest,
-    lock,
-    preMarkerSHA256: preMarkerIdentity.sha256,
-    markerCASStagePath: join(
-      stateDirectory,
-      `.maintenance-active-${runID}-success-finalization.stage`,
-    ),
-    counts: { begin: 0, pre: 0, closed: 0 },
-  };
-}
+  const authorityPaths: SuccessFinalizationPaths = { stateDirectory: canonicalStateDirectory, lockDirectory: canonicalRoot, receiptDirectory: canonicalReceiptDirectory, worktree: canonicalWorktree, markerPath: artifactRequest.markerPath,
+    markerRetirementClaimPath: artifactRequest.markerRetirementClaimPath, receiptPath: artifactRequest.receiptPath, receiptStagePath: `${canonicalReceiptDirectory}/.phase-b-refence-maintenance-receipt-${runID}.stage`,
+    witnessPath: artifactRequest.witnessPath, witnessStagePath: `${canonicalStateDirectory}/.phase-b-refence-maintenance-finalization-${runID}.stage`, publicLockPath: artifactRequest.lockPublicPath, };
+  const paths: SuccessFinalizationPaths = { stateDirectory: realpathSync(stateDirectory), lockDirectory: root, receiptDirectory: realpathSync(receiptDirectory), worktree: root,
+    markerPath: join(stateDirectory, basename(authorityPaths.markerPath)), markerRetirementClaimPath: join( stateDirectory, basename(authorityPaths.markerRetirementClaimPath), ),
+    receiptPath: join(receiptDirectory, basename(authorityPaths.receiptPath)), receiptStagePath: join( receiptDirectory, basename(authorityPaths.receiptStagePath), ), witnessPath: join(stateDirectory, basename(authorityPaths.witnessPath)),
+    witnessStagePath: join( stateDirectory, basename(authorityPaths.witnessStagePath), ), publicLockPath, };
+  const preMarkerBytes = `${ canonicalJson(artifactRequest.authorityRequest.marker) }\n`;
+  const preMarkerIdentity = writeDurableTestFile( paths.markerPath, preMarkerBytes, );
+  return { root, paths, authorityPaths, artifacts, authorityRequest: artifactRequest.authorityRequest, lock, preMarkerSHA256: preMarkerIdentity.sha256, markerCASStagePath: join( stateDirectory,
+      `.maintenance-active-${runID}-success-finalization.stage`, ), counts: { begin: 0, pre: 0, closed: 0 }, }; }
 
-function runFinalizationFixture(
-  fixture: FinalizationTestFixture,
-  options: {
-    crash?: (
-      point: SuccessFinalizationCrashPoint,
-      descriptors: readonly SuccessFinalizationOpenDescriptor[],
-    ) => void;
-    fsyncDirectory?: (
-      path: string,
-      descriptors: readonly SuccessFinalizationOpenDescriptor[],
-    ) => void;
+function runFinalizationFixture( fixture: FinalizationTestFixture, options: { crash?: ( point: SuccessFinalizationCrashPoint, descriptors: readonly SuccessFinalizationOpenDescriptor[], ) => void;
+    fsyncDirectory?: ( path: string, descriptors: readonly SuccessFinalizationOpenDescriptor[], ) => void;
     afterBegin?: () => void;
-    onA0Installed?: () => void;
-  } = {},
-) {
-  return performSuccessFinalizationCeremony({
-    paths: fixture.paths,
-    authorityPaths: fixture.authorityPaths,
-    lock: fixture.lock,
-    artifacts: fixture.artifacts,
-    beginMarkerFinalization: () => {
+    onA0Installed?: () => void; } = {}, ) { return performSuccessFinalizationCeremony({ paths: fixture.paths, authorityPaths: fixture.authorityPaths, lock: fixture.lock, artifacts: fixture.artifacts, beginMarkerFinalization: () => {
       fixture.counts.begin += 1;
       const nextValue = JSON.parse(fixture.artifacts.markerBytesUTF8);
-      const result = replaceDurableCanonicalJsonCAS({
-        canonicalPath: fixture.paths.markerPath,
-        directory: fixture.paths.stateDirectory,
-        stagePath: fixture.markerCASStagePath,
-        expectedCurrentSHA256: fixture.preMarkerSHA256,
-        nextValue,
-        verifyAuthority: () => {
-          const lockStat = fstatSync(fixture.lock.descriptor);
+      const result = replaceDurableCanonicalJsonCAS({ canonicalPath: fixture.paths.markerPath, directory: fixture.paths.stateDirectory, stagePath: fixture.markerCASStagePath, expectedCurrentSHA256: fixture.preMarkerSHA256, nextValue,
+        verifyAuthority: () => { const lockStat = fstatSync(fixture.lock.descriptor);
           expect(fixture.lock.phase).toBe("held");
           expect(lockStat.dev).toBe(fixture.lock.identity.device);
           expect(lockStat.ino).toBe(fixture.lock.identity.inode);
-          expect(lockStat.nlink).toBe(2);
-        },
-        validateCurrent: (value) =>
-          expect(canonicalJson(value)).toBe(
-            canonicalJson(fixture.authorityRequest.marker),
-          ),
-        validateNext: (value) => {
-          const expected = previewSuccessFinalizationMarkerForTest({
-            currentMarker: fixture.authorityRequest.marker,
-            successProvenAt: fixture.authorityRequest.successProvenAt,
-            walProjection: fixture.authorityRequest.controllerWal,
-            authorityProjectionSHA256:
-              fixture.artifacts.authorityProjectionSHA256,
-            receiptPath: fixture.authorityPaths.receiptPath,
-            witnessPath: fixture.authorityPaths.witnessPath,
-            markerRetirementClaimPath:
-              fixture.authorityPaths.markerRetirementClaimPath,
-          });
+          expect(lockStat.nlink).toBe(2); }, validateCurrent: (value) => expect(canonicalJson(value)).toBe( canonicalJson(fixture.authorityRequest.marker), ), validateNext: (value) => {
+          const expected = previewSuccessFinalizationMarkerForTest({ currentMarker: fixture.authorityRequest.marker, successProvenAt: fixture.authorityRequest.successProvenAt, walProjection: fixture.authorityRequest.controllerWal,
+            authorityProjectionSHA256: fixture.artifacts.authorityProjectionSHA256, receiptPath: fixture.authorityPaths.receiptPath, witnessPath: fixture.authorityPaths.witnessPath, markerRetirementClaimPath:
+              fixture.authorityPaths.markerRetirementClaimPath, });
           expect(canonicalJson(value)).toBe(canonicalJson(expected));
-          expect(`${canonicalJson(value)}\n`).toBe(
-            fixture.artifacts.markerBytesUTF8,
-          );
-        },
-        onDurableInstall: options.onA0Installed,
-      });
+          expect(`${canonicalJson(value)}\n`).toBe( fixture.artifacts.markerBytesUTF8, ); }, onDurableInstall: options.onA0Installed, });
       expect(result.sha256).toBe(fixture.artifacts.markerSHA256);
       options.afterBegin?.();
-      return result.identity;
-    },
-    verifyPreFinalization: () => {
-      fixture.counts.pre += 1;
-    },
-    verifyClosedLocalAuthority: () => {
-      fixture.counts.closed += 1;
-    },
-    crash: options.crash,
-    fsyncDirectory: options.fsyncDirectory,
-  });
-}
+      return result.identity; }, verifyPreFinalization: () => { fixture.counts.pre += 1; }, verifyClosedLocalAuthority: () => { fixture.counts.closed += 1; }, crash: options.crash, fsyncDirectory: options.fsyncDirectory, }); }
 
 type FinalizationDirectoryRole = "state" | "receipt" | "lock";
 
-interface FinalizationNamespaceRecord {
-  directory: FinalizationDirectoryRole;
+interface FinalizationNamespaceRecord { directory: FinalizationDirectoryRole;
   alias: string;
   inodeKey: string;
   artifact: string;
@@ -12981,273 +12346,121 @@ interface FinalizationNamespaceRecord {
   gid: number;
   mode: number;
   size: number;
-  reportedNlink: number;
-}
+  reportedNlink: number; }
 
-interface FinalizationNamespaceGroup {
-  artifact: string;
+interface FinalizationNamespaceGroup { artifact: string;
   aliases: string[];
   uid: number;
   gid: number;
   mode: number;
   size: number;
-  nlink: number;
-}
+  nlink: number; }
 
-interface FinalizationOpenRecord {
-  role: string;
+interface FinalizationOpenRecord { role: string;
   artifact: string;
   uid: number;
   gid: number;
   mode: number;
   size: number;
-  nlink: number;
-}
+  nlink: number; }
 
-interface FinalizationSnapshot {
-  visible: FinalizationNamespaceGroup[];
+interface FinalizationSnapshot { visible: FinalizationNamespaceGroup[];
   durable: FinalizationNamespaceGroup[];
   open: FinalizationOpenRecord[];
-  lockPhase: DeployLockAuthority["phase"];
-}
+  lockPhase: DeployLockAuthority["phase"]; }
 
-function descriptorBytes(descriptor: number, size: number): Uint8Array {
-  const bytes = Buffer.alloc(size);
+function descriptorBytes(descriptor: number, size: number): Uint8Array { const bytes = Buffer.alloc(size);
   let offset = 0;
-  while (offset < size) {
-    const count = readSync(descriptor, bytes, offset, size - offset, offset);
+  while (offset < size) { const count = readSync(descriptor, bytes, offset, size - offset, offset);
     if (count <= 0) throw new Error("finalization_snapshot_descriptor");
-    offset += count;
-  }
-  return bytes;
-}
+    offset += count; }
+  return bytes; }
 
-class FinalizationSnapshotOracle {
-  readonly fixture: FinalizationTestFixture;
+class FinalizationSnapshotOracle { readonly fixture: FinalizationTestFixture;
   readonly durable = new Map<
-    FinalizationDirectoryRole,
-    FinalizationNamespaceRecord[]
+    FinalizationDirectoryRole, FinalizationNamespaceRecord[]
   >();
 
-  constructor(fixture: FinalizationTestFixture) {
-    this.fixture = fixture;
-    for (const role of ["state", "receipt", "lock"] as const) {
-      this.commitRole(role);
-    }
-  }
+  constructor(fixture: FinalizationTestFixture) { this.fixture = fixture;
+    for (const role of ["state", "receipt", "lock"] as const) { this.commitRole(role); } }
 
-  private directory(role: FinalizationDirectoryRole): string {
-    return role === "state"
-      ? this.fixture.paths.stateDirectory
-      : role === "receipt"
-      ? this.fixture.paths.receiptDirectory
-      : this.fixture.paths.lockDirectory;
-  }
+  private directory(role: FinalizationDirectoryRole): string { return role === "state" ? this.fixture.paths.stateDirectory : role === "receipt" ? this.fixture.paths.receiptDirectory : this.fixture.paths.lockDirectory; }
 
-  private directoryRole(path: string): FinalizationDirectoryRole {
-    for (const role of ["state", "receipt", "lock"] as const) {
-      if (path === this.directory(role)) return role;
-    }
-    throw new Error("finalization_snapshot_directory");
-  }
+  private directoryRole(path: string): FinalizationDirectoryRole { for (const role of ["state", "receipt", "lock"] as const) { if (path === this.directory(role)) return role; }
+    throw new Error("finalization_snapshot_directory"); }
 
-  private artifact(hash: string): string {
-    if (hash === this.fixture.artifacts.markerSHA256) return "marker";
+  private artifact(hash: string): string { if (hash === this.fixture.artifacts.markerSHA256) return "marker";
     if (hash === this.fixture.preMarkerSHA256) return "pre_marker";
     if (hash === this.fixture.artifacts.receiptSHA256) return "receipt";
     if (hash === this.fixture.artifacts.witnessSHA256) return "witness";
     if (hash === this.fixture.lock.identity.sha256) return "lock";
-    return `foreign:${hash}`;
-  }
+    return `foreign:${hash}`; }
 
-  private scanRole(
-    role: FinalizationDirectoryRole,
-  ): FinalizationNamespaceRecord[] {
-    const directory = this.directory(role);
+  private scanRole( role: FinalizationDirectoryRole, ): FinalizationNamespaceRecord[] { const directory = this.directory(role);
     const rows: FinalizationNamespaceRecord[] = [];
-    for (const name of readdirSync(directory).sort()) {
-      const path = join(directory, name);
+    for (const name of readdirSync(directory).sort()) { const path = join(directory, name);
       const stat = lstatSync(path);
       if (stat.isDirectory()) continue;
-      if (!stat.isFile() || stat.isSymbolicLink()) {
-        throw new Error("finalization_snapshot_nonregular");
-      }
+      if (!stat.isFile() || stat.isSymbolicLink()) { throw new Error("finalization_snapshot_nonregular"); }
       const hash = sha256(readFileSync(path));
-      rows.push({
-        directory: role,
-        alias: `${role}/${name}`,
-        inodeKey: `${stat.dev}:${stat.ino}`,
-        artifact: this.artifact(hash),
-        uid: stat.uid,
-        gid: stat.gid,
-        mode: stat.mode & 0o777,
-        size: stat.size,
-        reportedNlink: stat.nlink,
-      });
-    }
-    return rows;
-  }
+      rows.push({ directory: role, alias: `${role}/${name}`, inodeKey: `${stat.dev}:${stat.ino}`, artifact: this.artifact(hash), uid: stat.uid, gid: stat.gid, mode: stat.mode & 0o777, size: stat.size, reportedNlink: stat.nlink, }); }
+    return rows; }
 
-  private visibleRecords(): FinalizationNamespaceRecord[] {
-    return (["state", "receipt", "lock"] as const).flatMap((role) =>
-      this.scanRole(role)
-    );
-  }
+  private visibleRecords(): FinalizationNamespaceRecord[] { return (["state", "receipt", "lock"] as const).flatMap((role) => this.scanRole(role) ); }
 
-  private normalize(
-    records: readonly FinalizationNamespaceRecord[],
-    durable: boolean,
-  ): FinalizationNamespaceGroup[] {
-    const grouped = new Map<string, FinalizationNamespaceRecord[]>();
-    for (const record of records) {
-      const values = grouped.get(record.inodeKey) ?? [];
+  private normalize( records: readonly FinalizationNamespaceRecord[], durable: boolean, ): FinalizationNamespaceGroup[] { const grouped = new Map<string, FinalizationNamespaceRecord[]>();
+    for (const record of records) { const values = grouped.get(record.inodeKey) ?? [];
       values.push(record);
-      grouped.set(record.inodeKey, values);
-    }
-    return [...grouped.values()].map((values) => {
-      const first = values[0]!;
-      expect(values.every((value) => value.artifact === first.artifact))
-        .toBeTrue();
+      grouped.set(record.inodeKey, values); }
+    return [...grouped.values()].map((values) => { const first = values[0]!;
+      expect(values.every((value) => value.artifact === first.artifact)) .toBeTrue();
       expect(values.every((value) => value.uid === first.uid)).toBeTrue();
       expect(values.every((value) => value.gid === first.gid)).toBeTrue();
       expect(values.every((value) => value.mode === first.mode)).toBeTrue();
       expect(values.every((value) => value.size === first.size)).toBeTrue();
       const aliases = values.map((value) => value.alias).sort();
       const nlink = durable ? aliases.length : first.reportedNlink;
-      if (!durable) {
-        expect(values.every((value) => value.reportedNlink === nlink))
-          .toBeTrue();
-      }
-      return {
-        artifact: first.artifact,
-        aliases,
-        uid: first.uid,
-        gid: first.gid,
-        mode: first.mode,
-        size: first.size,
-        nlink,
-      };
-    }).sort((left, right) => {
-      const a = canonicalJson(left);
+      if (!durable) { expect(values.every((value) => value.reportedNlink === nlink)) .toBeTrue(); }
+      return { artifact: first.artifact, aliases, uid: first.uid, gid: first.gid, mode: first.mode, size: first.size, nlink, }; }).sort((left, right) => { const a = canonicalJson(left);
       const b = canonicalJson(right);
-      return a < b ? -1 : a > b ? 1 : 0;
-    });
-  }
+      return a < b ? -1 : a > b ? 1 : 0; }); }
 
-  private openRecords(
-    descriptors: readonly SuccessFinalizationOpenDescriptor[],
-  ): FinalizationOpenRecord[] {
-    return descriptors.map(({ role, descriptor }) => {
-      const stat = fstatSync(descriptor);
+  private openRecords( descriptors: readonly SuccessFinalizationOpenDescriptor[], ): FinalizationOpenRecord[] { return descriptors.map(({ role, descriptor }) => { const stat = fstatSync(descriptor);
       const hash = sha256(descriptorBytes(descriptor, stat.size));
-      return {
-        role,
-        artifact: this.artifact(hash),
-        uid: stat.uid,
-        gid: stat.gid,
-        mode: stat.mode & 0o777,
-        size: stat.size,
-        nlink: stat.nlink,
-      };
-    }).sort((left, right) => left.role < right.role ? -1 : 1);
-  }
+      return { role, artifact: this.artifact(hash), uid: stat.uid, gid: stat.gid, mode: stat.mode & 0o777, size: stat.size, nlink: stat.nlink, }; }).sort((left, right) => left.role < right.role ? -1 : 1); }
 
-  commit(path: string): void {
-    this.commitRole(this.directoryRole(path));
-  }
+  commit(path: string): void { this.commitRole(this.directoryRole(path)); }
 
-  private commitRole(role: FinalizationDirectoryRole): void {
-    this.durable.set(role, this.scanRole(role));
-  }
+  private commitRole(role: FinalizationDirectoryRole): void { this.durable.set(role, this.scanRole(role)); }
 
-  capture(
-    descriptors: readonly SuccessFinalizationOpenDescriptor[],
-  ): FinalizationSnapshot {
-    const durableRecords = (["state", "receipt", "lock"] as const).flatMap(
-      (role) => this.durable.get(role) ?? [],
-    );
-    return {
-      visible: this.normalize(this.visibleRecords(), false),
-      durable: this.normalize(durableRecords, true),
-      open: this.openRecords(descriptors),
-      lockPhase: this.fixture.lock.phase,
-    };
-  }
-}
+  capture( descriptors: readonly SuccessFinalizationOpenDescriptor[], ): FinalizationSnapshot { const durableRecords = (["state", "receipt", "lock"] as const).flatMap( (role) => this.durable.get(role) ?? [], );
+    return { visible: this.normalize(this.visibleRecords(), false), durable: this.normalize(durableRecords, true), open: this.openRecords(descriptors), lockPhase: this.fixture.lock.phase, }; } }
 
-const FINALIZATION_CRASH_POINTS: readonly SuccessFinalizationCrashPoint[] = [
-  "A0",
-  "R1",
-  "R2_linked_before_directory_fsync",
-  "R3",
-  "R4_unlinked_before_directory_fsync",
-  "R5",
-  "W1",
-  "M1_linked_before_directory_fsync",
-  "M1",
-  "M2_unlinked_before_directory_fsync",
-  "M2",
-  "W2_linked_before_directory_fsync",
-  "W2",
-  "W3_unlinked_before_directory_fsync",
-  "W3",
-  "M3_unlinked_before_directory_fsync",
-  "M3",
-  "L1_unlinked_before_directory_fsync",
-  "L1",
-  "L2_unlinked_before_directory_fsync",
-  "L2",
-] as const;
+const FINALIZATION_CRASH_POINTS: readonly SuccessFinalizationCrashPoint[] = [ "A0", "R1", "R2_linked_before_directory_fsync", "R3", "R4_unlinked_before_directory_fsync", "R5", "W1", "M1_linked_before_directory_fsync", "M1",
+  "M2_unlinked_before_directory_fsync", "M2", "W2_linked_before_directory_fsync", "W2", "W3_unlinked_before_directory_fsync", "W3", "M3_unlinked_before_directory_fsync", "M3", "L1_unlinked_before_directory_fsync", "L1",
+  "L2_unlinked_before_directory_fsync", "L2", ] as const;
 
-function closeAbandonedFinalizationLock(
-  fixture: FinalizationTestFixture,
-): void {
-  if (fixture.lock.phase !== "released") closeSync(fixture.lock.descriptor);
-}
+function closeAbandonedFinalizationLock( fixture: FinalizationTestFixture, ): void { if (fixture.lock.phase !== "released") closeSync(fixture.lock.descriptor); }
 
-function finalizationBaselineTrace() {
-  const fixture = finalizationTestFixture();
+function finalizationBaselineTrace() { const fixture = finalizationTestFixture();
   const oracle = new FinalizationSnapshotOracle(fixture);
   const points: SuccessFinalizationCrashPoint[] = [];
   const pointSnapshots = new Map<
-    SuccessFinalizationCrashPoint,
-    FinalizationSnapshot
+    SuccessFinalizationCrashPoint, FinalizationSnapshot
   >();
   const fsyncDirectories: FinalizationDirectoryRole[] = [];
   const fsyncBefore: FinalizationSnapshot[] = [];
-  runFinalizationFixture(fixture, {
-    afterBegin: () => oracle.commit(fixture.paths.stateDirectory),
-    crash: (point, descriptors) => {
-      points.push(point);
-      pointSnapshots.set(point, oracle.capture(descriptors));
-    },
-    fsyncDirectory: (path, descriptors) => {
-      fsyncBefore.push(oracle.capture(descriptors));
-      fsyncDirectories.push(
-        path === fixture.paths.receiptDirectory
-          ? "receipt"
-          : path === fixture.paths.stateDirectory
-          ? "state"
-          : path === fixture.paths.lockDirectory
-          ? "lock"
-          : (() => {
-            throw new Error("finalization_snapshot_directory");
-          })(),
-      );
+  runFinalizationFixture(fixture, { afterBegin: () => oracle.commit(fixture.paths.stateDirectory), crash: (point, descriptors) => { points.push(point);
+      pointSnapshots.set(point, oracle.capture(descriptors)); }, fsyncDirectory: (path, descriptors) => { fsyncBefore.push(oracle.capture(descriptors));
+      fsyncDirectories.push( path === fixture.paths.receiptDirectory ? "receipt" : path === fixture.paths.stateDirectory ? "state" : path === fixture.paths.lockDirectory ? "lock" : (() => {
+            throw new Error("finalization_snapshot_directory"); })(), );
       fsyncTestDirectory(path);
-      oracle.commit(path);
-    },
-  });
-  return { fixture, points, pointSnapshots, fsyncDirectories, fsyncBefore };
-}
+      oracle.commit(path); }, });
+  return { fixture, points, pointSnapshots, fsyncDirectories, fsyncBefore }; }
 
-describe("two-artifact success finalization", () => {
-  test("pure authority and acyclic receipt/witness schemas are exact and deeply frozen", () => {
-    const authorityRequest = successAuthorityRequestFixture();
+describe("two-artifact success finalization", () => { test("pure authority and acyclic receipt/witness schemas are exact and deeply frozen", () => { const authorityRequest = successAuthorityRequestFixture();
     const authority = createSuccessAuthorityProjectionForTest(authorityRequest);
-    expect(authority.retained_archives.witness.path).toContain(
-      "-armed-witness-retired-",
-    );
+    expect(authority.retained_archives.witness.path).toContain( "-armed-witness-retired-", );
     expect(authority.controller_wal.terminal_phase).toBe("complete");
     expect(authority.rollout_proofs.fly_effects).toHaveLength(28);
     expect(Object.isFrozen(authority)).toBeTrue();
@@ -13255,12 +12468,8 @@ describe("two-artifact success finalization", () => {
 
     const artifactRequest = successArtifactRequestFixture();
     const bundle = createSuccessArtifactsForTest(artifactRequest);
-    expect(bundle.witnessBytesUTF8).toBe(
-      `${canonicalJson(bundle.witness)}\n`,
-    );
-    expect(bundle.receiptBytesUTF8).toBe(
-      `${JSON.stringify(bundle.receipt, null, 2)}\n`,
-    );
+    expect(bundle.witnessBytesUTF8).toBe( `${canonicalJson(bundle.witness)}\n`, );
+    expect(bundle.receiptBytesUTF8).toBe( `${JSON.stringify(bundle.receipt, null, 2)}\n`, );
     expect(bundle.receipt.witness_bytes_utf8).toBe(bundle.witnessBytesUTF8);
     expect(bundle.receipt.witness_sha256).toBe(bundle.witnessSHA256);
     expect(bundle.witness).not.toHaveProperty("receipt_sha256");
@@ -13269,790 +12478,242 @@ describe("two-artifact success finalization", () => {
     expect(bundle.receipt.lock_inode).toBe("526");
     expect(bundle.witness.lock_device).toBe("42");
     expect(bundle.witness.lock_inode).toBe("526");
-    expect(bundle.receipt.truth).toEqual({
-      marker_present_at_install: true,
-      lock_held_at_install: true,
-      marker_retirement_authorized: true,
-      finalization_witness_required_before_lock_cleanup: true,
-      marker_absence_claimed: false,
-      lock_absence_claimed: false,
-    });
-    expect(bundle.witness.truth).toEqual({
-      receipt_exact_and_durable: true,
-      marker_canonical_absent_and_directory_fsynced: true,
-      marker_retirement_claim_retained_at_install: true,
-      same_original_lock_inode_held: true,
-      lock_cleanup_authorized: true,
-      lock_absence_claimed: false,
-    });
+    expect(bundle.receipt.truth).toEqual({ marker_present_at_install: true, lock_held_at_install: true, marker_retirement_authorized: true, finalization_witness_required_before_lock_cleanup: true, marker_absence_claimed: false,
+      lock_absence_claimed: false, });
+    expect(bundle.witness.truth).toEqual({ receipt_exact_and_durable: true, marker_canonical_absent_and_directory_fsynced: true, marker_retirement_claim_retained_at_install: true, same_original_lock_inode_held: true,
+      lock_cleanup_authorized: true, lock_absence_claimed: false, });
     expect(Object.isFrozen(bundle)).toBeTrue();
     expect(Object.isFrozen(bundle.receipt.authority_projection)).toBeTrue();
 
     const badArchive = structuredClone(authorityRequest);
-    badArchive.retainedArchives.witness.path = badArchive.retainedArchives
-      .witness.path.replace(
-        "armed-witness",
-        "witness",
-      );
-    expectMaintenanceRefusalCode(
-      () => createSuccessAuthorityProjectionForTest(badArchive),
-      "success_authority_handoff",
-    );
+    badArchive.retainedArchives.witness.path = badArchive.retainedArchives .witness.path.replace( "armed-witness", "witness", );
+    expectMaintenanceRefusalCode( () => createSuccessAuthorityProjectionForTest(badArchive), "success_authority_handoff", );
     const badEffect = structuredClone(authorityRequest);
-    [
-      badEffect.rolloutProofs.fly_effects[0],
-      badEffect.rolloutProofs.fly_effects[1],
-    ] = [
-      badEffect.rolloutProofs.fly_effects[1],
-      badEffect.rolloutProofs.fly_effects[0],
-    ];
-    expectMaintenanceRefusalCode(
-      () => createSuccessAuthorityProjectionForTest(badEffect),
-      "success_authority_rollout_proofs",
-    );
-    for (const lockDevice of ["", "01", "-1", "1.0", " 1", "+1"]) {
-      const bad = structuredClone(artifactRequest);
+    [ badEffect.rolloutProofs.fly_effects[0], badEffect.rolloutProofs.fly_effects[1], ] = [ badEffect.rolloutProofs.fly_effects[1], badEffect.rolloutProofs.fly_effects[0], ];
+    expectMaintenanceRefusalCode( () => createSuccessAuthorityProjectionForTest(badEffect), "success_authority_rollout_proofs", );
+    for (const lockDevice of ["", "01", "-1", "1.0", " 1", "+1"]) { const bad = structuredClone(artifactRequest);
       bad.lockDevice = lockDevice;
-      expectMaintenanceRefusalCode(
-        () => createSuccessArtifactsForTest(bad),
-        "success_artifact_paths",
-      );
-    }
+      expectMaintenanceRefusalCode( () => createSuccessArtifactsForTest(bad), "success_artifact_paths", ); }
     const markerDrift = structuredClone(artifactRequest);
     const marker = JSON.parse(markerDrift.markerBytesUTF8);
     marker.success_receipt.durable = true;
     markerDrift.markerBytesUTF8 = `${canonicalJson(marker)}\n`;
-    expectMaintenanceRefusalCode(
-      () => createSuccessArtifactsForTest(markerDrift),
-      "success_artifact_marker",
-    );
-  });
+    expectMaintenanceRefusalCode( () => createSuccessArtifactsForTest(markerDrift), "success_artifact_marker", ); });
 
-  test("durable handoff v4 keeps H0, failed e4/56dc, and current controller disjoint", () => {
-    const positive = successAuthorityRequestFixture();
+  test("durable handoff v5 keeps H0, failed e4/56dc, unexecuted 296, and current disjoint", () => { const positive = successAuthorityRequestFixture();
     const handoff = positive.refenceHandoff as any;
     const authorizedH0 = handoff.authorized_h0;
     const prior = handoff.prior_failed_compatibility_controller;
     const immediate = handoff.immediate_failed_compatibility_controller;
+    const incompatible = handoff.prior_unexecuted_protocol_incompatible_successor;
     const controller = handoff.compatibility_controller;
     const contract = containedContractBytes();
-    expect(handoff.proof_schema).toBe(
-      "agenttool-phase-b-refence-handoff/v4",
-    );
+    expect(handoff.proof_schema).toBe( "agenttool-phase-b-refence-handoff/v5", );
     expect(authorizedH0.lifecycle).toBe("historical");
-    expect(authorizedH0.receipt_sha256).toBe(
-      AUTHORIZED_H0_RECEIPT_SHA256,
-    );
-    expect(authorizedH0.target_revision).toBe(
-      AUTHORIZED_H0_TARGET_REVISION,
-    );
+    expect(authorizedH0.receipt_sha256).toBe( AUTHORIZED_H0_RECEIPT_SHA256, );
+    expect(authorizedH0.target_revision).toBe( AUTHORIZED_H0_TARGET_REVISION, );
     expect(prior.lifecycle).toBe("failed_pre_h");
-    expect(prior.controller_revision).toBe(
-      PRIOR_FAILED_COMPATIBILITY_REVISION,
-    );
+    expect(prior.controller_revision).toBe( PRIOR_FAILED_COMPATIBILITY_REVISION, );
     expect(prior.controller_tree).toBe(PRIOR_FAILED_COMPATIBILITY_TREE);
     expect(prior.first_parent_revision).toBe(AUTHORIZED_H0_TARGET_REVISION);
-    expect(prior.second_parent_revision).toBe(
-      PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION,
-    );
+    expect(prior.second_parent_revision).toBe( PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION, );
     expect(prior.second_parent_tree).toBe(prior.controller_tree);
-    expect(prior.commit_raw_sha256).toBe(
-      PRIOR_FAILED_COMPATIBILITY_COMMIT_RAW_SHA256,
-    );
+    expect(prior.commit_raw_sha256).toBe( PRIOR_FAILED_COMPATIBILITY_COMMIT_RAW_SHA256, );
     expect(prior.static_refusal_barrier_verified).toBeTrue();
     expect(prior.observed_first_refusal_predicate).toBeFalse();
     expect(prior.controller_success).toBeFalse();
     expect(prior.mutation_effect_began).toBeFalse();
     expect(prior.success_authority).toBeFalse();
     expect(prior.effect_authority).toBeFalse();
-    expect(prior.changed_path_statuses).toEqual(
-      PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
-    );
-    expect(prior.changed_path_statuses_sha256).toBe(
-      "211620ae73940844daa44dad70dec9026d4f9759ea9abda4706abdc41ef81698",
-    );
-    expect(prior.changed_paths_raw_sha256).toBe(
-      "a66803eadc08fb8deb23fe3076deeadfc5310c1c6b5aeb50f5edc284511aaf28",
-    );
+    expect(prior.changed_path_statuses).toEqual( PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES, );
+    expect(prior.changed_path_statuses_sha256).toBe( "211620ae73940844daa44dad70dec9026d4f9759ea9abda4706abdc41ef81698", );
+    expect(prior.changed_paths_raw_sha256).toBe( "a66803eadc08fb8deb23fe3076deeadfc5310c1c6b5aeb50f5edc284511aaf28", );
     expect(immediate.lifecycle).toBe("failed_pre_h");
-    expect(immediate.controller_revision).toBe(
-      IMMEDIATE_FAILED_COMPATIBILITY_REVISION,
-    );
-    expect(immediate.first_parent_revision).toBe(
-      PRIOR_FAILED_COMPATIBILITY_REVISION,
-    );
+    expect(immediate.controller_revision).toBe( IMMEDIATE_FAILED_COMPATIBILITY_REVISION, );
+    expect(immediate.first_parent_revision).toBe( PRIOR_FAILED_COMPATIBILITY_REVISION, );
     expect(immediate.refusal_predicate).toBe("process_census");
     expect(immediate.controller_exit_code).toBe(74);
-    expect(immediate.stderr_sha256).toBe(
-      "60298dba6e24230d90d2f8ae15f3319f284b498cd3f14dbdbbedb8f1689322d8",
-    );
-    expect(immediate.retained_deploy_lock_sha256).toBe(
-      "63b41175b9b17ddb000c815a477ca357ee923d9c18eabec7b339ba3f5f1288cf",
-    );
-    expect(immediate.changed_paths_raw_sha256).toBe(
-      "ea34fd5818a88c0554303040c9472d7b3699db15bbae5344c4b1e670577bc6f8",
-    );
-    expect(immediate.cumulative_changed_paths_raw_sha256).toBe(
-      "8d83631671ddfab6bc122d5b571df49ab0907c2e40ac1353f2663ccae407d7c2",
-    );
-    expect(Object.values(immediate.downstream_effects)).toEqual(
-      Array(10).fill(0),
-    );
+    expect(immediate.stderr_sha256).toBe( "60298dba6e24230d90d2f8ae15f3319f284b498cd3f14dbdbbedb8f1689322d8", );
+    expect(immediate.retained_deploy_lock_sha256).toBe( "63b41175b9b17ddb000c815a477ca357ee923d9c18eabec7b339ba3f5f1288cf", );
+    expect(immediate.changed_paths_raw_sha256).toBe( "ea34fd5818a88c0554303040c9472d7b3699db15bbae5344c4b1e670577bc6f8", );
+    expect(immediate.cumulative_changed_paths_raw_sha256).toBe( "8d83631671ddfab6bc122d5b571df49ab0907c2e40ac1353f2663ccae407d7c2", );
+    expect(Object.values(immediate.downstream_effects)).toEqual( Array(10).fill(0), );
     expect(immediate.success_authority).toBeFalse();
     expect(immediate.effect_authority).toBeFalse();
+    expect([ incompatible.lifecycle, incompatible.controller_revision, incompatible.first_parent_revision, incompatible.controller_source_distance, incompatible.source_admission_verified, incompatible.controller_invocation_observed,
+      incompatible.deploy_invocation_observed, incompatible.controller_effect_observed, incompatible.controller_success, incompatible.success_authority, incompatible.effect_authority, ]).toEqual([
+      "prior_unexecuted_protocol_incompatible_successor", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, IMMEDIATE_FAILED_COMPATIBILITY_REVISION, 56, true, false, false, false, false, false, false, ]);
+    expect(incompatible.source_admission_evidence.durable_result.sha256).toBe( "d641e74570fa67dd5097c72934e4594002fe3586d3a9faf7ff253b724720d3a0", );
+    expect(incompatible.source_admission_evidence.durable_result.effects.horizon) .toBe("this_validator_process");
+    expect(incompatible.protocol_incompatibility.merged_client_expected_kill_response_body) .toBe("ok ");
+    expect(incompatible.protocol_incompatibility.kill_response_body).toBe("ok");
+    expect(incompatible.protocol_incompatibility.observed_controller_failure) .toBeFalse();
+    expect(Object.values(incompatible.downstream_effects)).toEqual( Array(10).fill(0), );
     expect(controller.lifecycle).toBe("current");
-    expect(controller.predecessor_controller_revision).toBe(
-      IMMEDIATE_FAILED_COMPATIBILITY_REVISION,
-    );
-    expect(controller.first_parent_revision).toBe(
-      IMMEDIATE_FAILED_COMPATIBILITY_REVISION,
-    );
+    expect(controller.predecessor_controller_revision).toBe( PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, );
+    expect(controller.first_parent_revision).toBe( PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, );
     expect(controller.second_parent_tree).toBe(controller.controller_tree);
-    expect(controller.bridge_source_sha256).toBe(
-      handoff.bridge_source_sha256,
-    );
-    expect(controller.bridge_normalized_sha256).toBe(
-      handoff.bridge_normalized_sha256,
-    );
-    expect(controller.bridge_source_sha256).not.toBe(
-      authorizedH0.guard_raw_sha256,
-    );
-    expect(controller.bridge_normalized_sha256).not.toBe(
-      authorizedH0.guard_normalized_sha256,
-    );
-    expect(controller.bridge_source_sha256).not.toBe(
-      prior.bridge_source_sha256,
-    );
-    expect(controller.bridge_normalized_sha256).not.toBe(
-      prior.bridge_normalized_sha256,
-    );
-    expect(controller.bridge_source_sha256).not.toBe(
-      immediate.bridge_source_sha256,
-    );
+    expect(controller.bridge_source_sha256).toBe( handoff.bridge_source_sha256, );
+    expect(controller.bridge_normalized_sha256).toBe( handoff.bridge_normalized_sha256, );
+    expect(controller.bridge_source_sha256).not.toBe( authorizedH0.guard_raw_sha256, );
+    expect(controller.bridge_normalized_sha256).not.toBe( authorizedH0.guard_normalized_sha256, );
+    expect(controller.bridge_source_sha256).not.toBe( prior.bridge_source_sha256, );
+    expect(controller.bridge_normalized_sha256).not.toBe( prior.bridge_normalized_sha256, );
+    expect(controller.bridge_source_sha256).not.toBe( immediate.bridge_source_sha256, );
+    expect(controller.bridge_source_sha256).not.toBe( incompatible.bridge_source_sha256, );
     expect(controller.contract_source_sha256).toBe(contract.sha256);
     expect(controller.contract_git_blob).toBe(contract.gitBlobSHA1);
-    expect(controller.contract_source_sha256).not.toBe(
-      authorizedH0.contract_raw_sha256,
-    );
-    expect(controller.contract_source_sha256).not.toBe(
-      prior.contract_source_sha256,
-    );
-    expect(controller.contract_source_sha256).not.toBe(
-      immediate.contract_source_sha256,
-    );
-    expect(controller.repair_changed_paths_raw_sha256).not.toBe(
-      immediate.changed_paths_raw_sha256,
-    );
-    expect(controller.repair_changed_path_statuses).toEqual(
-      PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
-    );
-    expect(controller.repair_changed_path_statuses_sha256).toBe(
-      "f0a1b1436517bd4179410889a12def8fc447b9dc1772001196b5d0a6c05ad88e",
-    );
-    expect(controller.cumulative_changed_path_statuses).toEqual(
-      PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES,
-    );
-    expect(controller.cumulative_changed_path_statuses_sha256).toBe(
-      "211620ae73940844daa44dad70dec9026d4f9759ea9abda4706abdc41ef81698",
-    );
-    expect(controller.cumulative_changed_paths_raw_sha256).not.toBe(
-      immediate.cumulative_changed_paths_raw_sha256,
-    );
+    expect(controller.contract_source_sha256).not.toBe( authorizedH0.contract_raw_sha256, );
+    expect(controller.contract_source_sha256).not.toBe( prior.contract_source_sha256, );
+    expect(controller.contract_source_sha256).not.toBe( immediate.contract_source_sha256, );
+    expect(controller.contract_source_sha256).not.toBe( incompatible.contract_source_sha256, );
+    expect(controller.repair_changed_paths_raw_sha256).not.toBe( incompatible.changed_paths_raw_sha256, );
+    expect(controller.repair_changed_path_statuses).toEqual( PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES, );
+    expect(controller.repair_changed_path_statuses_sha256).toBe( "f0a1b1436517bd4179410889a12def8fc447b9dc1772001196b5d0a6c05ad88e", );
+    expect(controller.cumulative_changed_path_statuses).toEqual( PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES, );
+    expect(controller.cumulative_changed_path_statuses_sha256).toBe( "211620ae73940844daa44dad70dec9026d4f9759ea9abda4706abdc41ef81698", );
+    expect(controller.cumulative_changed_paths_raw_sha256).not.toBe( incompatible.cumulative_changed_paths_raw_sha256, );
     expect(controller.payload_revision).toBe(AUTHORIZED_H0_TARGET_REVISION);
     expect(controller.payload_tree).toBe(AUTHORIZED_H0_TARGET_TREE);
     expect(controller.payload_distance).toBe(47);
-    expect(() => createSuccessAuthorityProjectionForTest(positive)).not
-      .toThrow();
+    expect(() => createSuccessAuthorityProjectionForTest(positive)).not .toThrow();
 
-    const mutations: Array<[
-      string,
-      (value: any) => void,
-    ]> = [
-      [
-        "historical lifecycle",
-        (value) => value.authorized_h0.lifecycle = "current",
-      ],
-      [
-        "historical guard raw",
-        (value) => value.authorized_h0.guard_raw_sha256 = digest("7"),
-      ],
-      [
-        "historical guard normalized",
-        (value) => value.authorized_h0.guard_normalized_sha256 = digest("7"),
-      ],
-      [
-        "historical contract raw",
-        (value) => value.authorized_h0.contract_raw_sha256 = digest("7"),
-      ],
-      [
-        "historical contract blob",
-        (value) => value.authorized_h0.contract_git_blob = revision("7"),
-      ],
-      [
-        "prior lifecycle",
-        (value) => value.prior_failed_compatibility_controller.lifecycle = "current",
-      ],
-      [
-        "prior revision",
-        (value) => value.prior_failed_compatibility_controller.controller_revision = revision("7"),
-      ],
-      [
-        "prior commit",
-        (value) => value.prior_failed_compatibility_controller.commit_raw_sha256 = digest("7"),
-      ],
-      [
-        "prior topic tree",
-        (value) => value.prior_failed_compatibility_controller.second_parent_tree = revision("7"),
-      ],
-      [
-        "prior success authority",
-        (value) => value.prior_failed_compatibility_controller.success_authority = true,
-      ],
-      [
-        "prior effect authority",
-        (value) => value.prior_failed_compatibility_controller.effect_authority = true,
-      ],
-      [
-        "prior first-predicate claim",
-        (value) => value.prior_failed_compatibility_controller.observed_first_refusal_predicate = true,
-      ],
-      [
-        "prior changed projection",
-        (value) => value.prior_failed_compatibility_controller.changed_path_statuses.pop(),
-      ],
-      [
-        "immediate cumulative raw closure",
-        (value) =>
-          value.immediate_failed_compatibility_controller
-            .cumulative_changed_paths_raw_sha256 = digest("7"),
-      ],
-      [
-        "immediate refusal",
-        (value) =>
-          value.immediate_failed_compatibility_controller.controller_exit_code = 0,
-      ],
-      [
-        "immediate downstream effect",
-        (value) =>
-          value.immediate_failed_compatibility_controller.downstream_effects
-            .provider_effect_count = 1,
-      ],
-      [
-        "controller revision",
-        (value) =>
-          value.compatibility_controller.controller_revision =
-            AUTHORIZED_H0_TARGET_REVISION,
-      ],
-      [
-        "controller tree",
-        (value) =>
-          value.compatibility_controller.controller_tree =
-            AUTHORIZED_H0_TARGET_TREE,
-      ],
-      [
-        "controller first parent",
-        (value) =>
-          value.compatibility_controller.first_parent_revision = revision("7"),
-      ],
-      [
-        "controller topic tree",
-        (value) =>
-          value.compatibility_controller.second_parent_tree = revision("7"),
-      ],
-      [
-        "controller source distance",
-        (value) => value.compatibility_controller.controller_source_distance = 51,
-      ],
-      [
-        "controller commit grammar",
-        (value) => value.compatibility_controller.commit_raw_sha256 = "invalid",
-      ],
-      [
-        "controller second parent",
-        (value) =>
-          value.compatibility_controller.second_parent_revision =
-            value.compatibility_controller.controller_revision,
-      ],
-      [
-        "controller bridge raw",
-        (value) => {
-          value.bridge_source_sha256 = AUTHORIZED_H0_GUARD_RAW_SHA256;
-          value.compatibility_controller.bridge_source_sha256 =
-            AUTHORIZED_H0_GUARD_RAW_SHA256;
-        },
-      ],
-      [
-        "controller bridge normalized",
-        (value) => {
-          value.bridge_normalized_sha256 =
-            AUTHORIZED_H0_GUARD_NORMALIZED_SHA256;
-          value.compatibility_controller.bridge_normalized_sha256 =
-            AUTHORIZED_H0_GUARD_NORMALIZED_SHA256;
-        },
-      ],
-      [
-        "controller contract raw",
-        (value) =>
-          value.compatibility_controller.contract_source_sha256 =
-            AUTHORIZED_H0_CONTRACT_RAW_SHA256,
-      ],
-      [
-        "controller contract blob",
-        (value) =>
-          value.compatibility_controller.contract_git_blob =
-            AUTHORIZED_H0_CONTRACT_GIT_BLOB,
-      ],
-      [
-        "payload revision",
-        (value) =>
-          value.compatibility_controller.payload_revision = revision("7"),
-      ],
-      [
-        "payload tree",
-        (value) => value.compatibility_controller.payload_tree = revision("7"),
-      ],
-      [
-        "payload distance",
-        (value) => value.compatibility_controller.payload_distance = 48,
-      ],
-      [
-        "repair path projection",
-        (value) => {
-          value.compatibility_controller.repair_changed_path_statuses[0].new_mode =
-            "100644";
-          value.compatibility_controller.repair_changed_path_statuses_sha256 = sha256(
-            canonicalJson(
-              value.compatibility_controller.repair_changed_path_statuses,
-            ),
-          );
-        },
-      ],
-      [
-        "repair raw closure aliases immediate",
-        (value) =>
-          value.compatibility_controller.repair_changed_paths_raw_sha256 =
-            value.immediate_failed_compatibility_controller
-              .changed_paths_raw_sha256,
-      ],
-      [
-        "cumulative path projection",
-        (value) => value.compatibility_controller.cumulative_changed_path_statuses.pop(),
-      ],
-      [
-        "cumulative raw closure aliases 56dc",
-        (value) =>
-          value.compatibility_controller.cumulative_changed_paths_raw_sha256 =
-            value.immediate_failed_compatibility_controller
-              .cumulative_changed_paths_raw_sha256,
-      ],
-    ];
-    for (const [name, mutate] of mutations) {
-      const request = structuredClone(successAuthorityRequestFixture());
+    const mutations: Array<[ string, (value: any) => void, ]> = [ [ "historical lifecycle", (value) => value.authorized_h0.lifecycle = "current", ], [ "historical guard raw", (value) => value.authorized_h0.guard_raw_sha256 = digest("7"), ],
+      [ "historical guard normalized", (value) => value.authorized_h0.guard_normalized_sha256 = digest("7"), ], [ "historical contract raw", (value) => value.authorized_h0.contract_raw_sha256 = digest("7"), ], [ "historical contract blob",
+        (value) => value.authorized_h0.contract_git_blob = revision("7"), ], [ "prior lifecycle", (value) => value.prior_failed_compatibility_controller.lifecycle = "current", ], [ "prior revision",
+        (value) => value.prior_failed_compatibility_controller.controller_revision = revision("7"), ], [ "prior commit", (value) => value.prior_failed_compatibility_controller.commit_raw_sha256 = digest("7"), ], [ "prior topic tree",
+        (value) => value.prior_failed_compatibility_controller.second_parent_tree = revision("7"), ], [ "prior success authority", (value) => value.prior_failed_compatibility_controller.success_authority = true, ], [
+        "prior effect authority", (value) => value.prior_failed_compatibility_controller.effect_authority = true, ], [ "prior first-predicate claim",
+        (value) => value.prior_failed_compatibility_controller.observed_first_refusal_predicate = true, ], [ "prior changed projection", (value) => value.prior_failed_compatibility_controller.changed_path_statuses.pop(), ], [
+        "immediate cumulative raw closure", (value) => value.immediate_failed_compatibility_controller .cumulative_changed_paths_raw_sha256 = digest("7"), ], [ "immediate refusal", (value) =>
+          value.immediate_failed_compatibility_controller.controller_exit_code = 0, ], [ "immediate downstream effect", (value) => value.immediate_failed_compatibility_controller.downstream_effects .provider_effect_count = 1, ],
+      ["296 revision", (value) => value.prior_unexecuted_protocol_incompatible_successor .controller_revision = revision("7")], ["296 source result", (value) => value.prior_unexecuted_protocol_incompatible_successor
+          .source_admission_evidence.durable_result.sha256 = digest("7")], ["296 expected ack", (value) => value.prior_unexecuted_protocol_incompatible_successor .protocol_incompatibility.merged_client_expected_kill_response_body = "ok"],
+      ["296 authority", (value) => value.prior_unexecuted_protocol_incompatible_successor .effect_authority = true], [ "controller revision", (value) => value.compatibility_controller.controller_revision = AUTHORIZED_H0_TARGET_REVISION, ],
+      [ "controller tree", (value) => value.compatibility_controller.controller_tree = AUTHORIZED_H0_TARGET_TREE, ], [ "controller first parent", (value) => value.compatibility_controller.first_parent_revision = revision("7"), ], [
+        "controller topic tree", (value) => value.compatibility_controller.second_parent_tree = revision("7"), ], [ "controller source distance", (value) => value.compatibility_controller.controller_source_distance = 51, ], [
+        "controller commit grammar", (value) => value.compatibility_controller.commit_raw_sha256 = "invalid", ], [ "controller second parent", (value) => value.compatibility_controller.second_parent_revision =
+            value.compatibility_controller.controller_revision, ], [ "controller bridge raw", (value) => { value.bridge_source_sha256 = AUTHORIZED_H0_GUARD_RAW_SHA256;
+          value.compatibility_controller.bridge_source_sha256 = AUTHORIZED_H0_GUARD_RAW_SHA256; }, ], [ "controller bridge normalized", (value) => { value.bridge_normalized_sha256 = AUTHORIZED_H0_GUARD_NORMALIZED_SHA256;
+          value.compatibility_controller.bridge_normalized_sha256 = AUTHORIZED_H0_GUARD_NORMALIZED_SHA256; }, ], [ "controller contract raw", (value) => value.compatibility_controller.contract_source_sha256 =
+            AUTHORIZED_H0_CONTRACT_RAW_SHA256, ], [ "controller contract blob", (value) => value.compatibility_controller.contract_git_blob = AUTHORIZED_H0_CONTRACT_GIT_BLOB, ], [ "payload revision", (value) =>
+          value.compatibility_controller.payload_revision = revision("7"), ], [ "payload tree", (value) => value.compatibility_controller.payload_tree = revision("7"), ], [ "payload distance",
+        (value) => value.compatibility_controller.payload_distance = 48, ], [ "repair path projection", (value) => { value.compatibility_controller.repair_changed_path_statuses[0].new_mode = "100644";
+          value.compatibility_controller.repair_changed_path_statuses_sha256 = sha256( canonicalJson( value.compatibility_controller.repair_changed_path_statuses, ), ); }, ], [ "repair raw closure aliases immediate", (value) =>
+          value.compatibility_controller.repair_changed_paths_raw_sha256 = value.immediate_failed_compatibility_controller .changed_paths_raw_sha256, ], [ "cumulative path projection",
+        (value) => value.compatibility_controller.cumulative_changed_path_statuses.pop(), ], [ "cumulative raw closure aliases 56dc", (value) => value.compatibility_controller.cumulative_changed_paths_raw_sha256 =
+            value.immediate_failed_compatibility_controller .cumulative_changed_paths_raw_sha256, ], ];
+    for (const [name, mutate] of mutations) { const request = structuredClone(successAuthorityRequestFixture());
       mutate(request.refenceHandoff);
-      request.marker.refence_handoff = structuredClone(
-        request.refenceHandoff,
-      );
-      expectMaintenanceRefusalCode(
-        () => createSuccessAuthorityProjectionForTest(request),
-        "success_authority_handoff",
-      );
-    }
-    for (const mutate of [
-      (value: any) => delete value.prior_failed_compatibility_controller,
-      (value: any) => delete value.immediate_failed_compatibility_controller,
-      (value: any) => value.extra = false,
-      (value: any) =>
-        delete value.prior_failed_compatibility_controller.success_authority,
-      (value: any) =>
-        value.prior_failed_compatibility_controller.extra = false,
-      (value: any) =>
-        value.immediate_failed_compatibility_controller.extra = false,
-      (value: any) => delete value.compatibility_controller.commit_byte_count,
-      (value: any) => value.compatibility_controller.extra = false,
-    ]) {
-      const request = structuredClone(successAuthorityRequestFixture());
+      request.marker.refence_handoff = structuredClone( request.refenceHandoff, );
+      expectMaintenanceRefusalCode( () => createSuccessAuthorityProjectionForTest(request), "success_authority_handoff", ); }
+    for (const mutate of [ (value: any) => delete value.prior_failed_compatibility_controller, (value: any) => delete value.immediate_failed_compatibility_controller, (value: any) =>
+        delete value.prior_unexecuted_protocol_incompatible_successor, (value: any) => value.extra = false, (value: any) => delete value.prior_failed_compatibility_controller.success_authority, (value: any) =>
+        value.prior_failed_compatibility_controller.extra = false, (value: any) => value.immediate_failed_compatibility_controller.extra = false, (value: any) => value.prior_unexecuted_protocol_incompatible_successor.extra = false,
+      (value: any) => delete value.compatibility_controller.commit_byte_count, (value: any) => value.compatibility_controller.extra = false, ]) { const request = structuredClone(successAuthorityRequestFixture());
       mutate(request.refenceHandoff);
-      expectMaintenanceRefusalCode(
-        () => createSuccessAuthorityProjectionForTest(request),
-        "success_authority_handoff",
-      );
-    }
-  });
+      expectMaintenanceRefusalCode( () => createSuccessAuthorityProjectionForTest(request), "success_authority_handoff", ); } });
 
-  test("full marker authority and the artifact DAG reject every independent domain drift", () => {
-    const mutations: Array<[
-      string,
-      (request: ReturnType<typeof successAuthorityRequestFixture>) => void,
-    ]> = [
-      [
-        "marker child WAL",
-        (value) => value.marker.child_wal.chain_sha256 = digest("7"),
-      ],
-      [
-        "marker database",
-        (value) =>
-          value.marker.database_convergence.after_proof_sha256 = digest("7"),
-      ],
-      [
-        "marker build",
-        (value) => value.marker.build_context.ready_sha256 = digest("7"),
-      ],
-      [
-        "marker dependencies",
-        (value) => value.marker.dependency_estate.ready_sha256 = digest("7"),
-      ],
-      [
-        "marker handoff",
-        (value) => value.marker.refence_handoff.anchor_sha256 = digest("7"),
-      ],
-      [
-        "marker guard",
-        (value) => value.marker.guard_proofs.final_sha256 = digest("7"),
-      ],
-      [
-        "marker early guard",
-        (value) => value.marker.guard_proofs.early_sha256 = digest("7"),
-      ],
-      [
-        "marker public",
-        (value) => value.marker.public_proofs.final_sha256 = digest("7"),
-      ],
-      ["marker progress", (value) => value.marker.attempted_machine_ids.pop()],
-      ["marker lock", (value) => value.marker.deploy_lock.sha256 = digest("7")],
-      ["request roles", (value) => value.roles.app_lhr.reverse()],
-      ["request source", (value) => value.sourceRevision = revision("7")],
-      [
-        "request run",
-        (value) =>
-          value.controllerRunID = "11234567-89ab-cdef-0123-456789abcdef",
-      ],
-      [
-        "request WAL",
-        (value) => value.controllerWal.chain_sha256 = digest("7"),
-      ],
-      [
-        "request database",
-        (value) => value.databaseConvergence.after_row_sha256 = digest("0"),
-      ],
-      [
-        "request build",
-        (value) => value.buildContext.readback_sha256 = digest("7"),
-      ],
-      [
-        "request dependencies",
-        (value) =>
-          value.dependencyEstate.dependency_inventory_sha256 = digest("7"),
-      ],
-      [
-        "request handoff",
-        (value) => value.refenceHandoff.witness_sha256 = digest("7"),
-      ],
-      [
-        "request early guard",
-        (value) => value.earlyGuardSHA256 = digest("7"),
-      ],
-      ["request lock", (value) => value.deployLockSHA256 = digest("7")],
-      [
-        "request lock owner",
-        (value) =>
-          value.deployLock.owner_record = value.deployLock.owner_record.replace(
-            "0123456789abcdef",
-            "1123456789abcdef",
-          ),
-      ],
-      [
-        "request lock device",
-        (value) => value.deployLock.device += 1,
-      ],
-      [
-        "request lock inode",
-        (value) => value.deployLock.inode += 1,
-      ],
-      [
-        "request anchor device",
-        (value) => value.retainedArchives.anchor.device += 1,
-      ],
-      [
-        "request anchor inode",
-        (value) => value.retainedArchives.anchor.inode += 1,
-      ],
-      [
-        "request witness device",
-        (value) => value.retainedArchives.witness.device += 1,
-      ],
-      [
-        "request witness inode",
-        (value) => value.retainedArchives.witness.inode += 1,
-      ],
-      ["final truth", (value) => value.finalTruth.effects_closed = false],
-      [
-        "final absence rollout proof",
-        (value) => value.rolloutProofs.final_absence_sha256 = digest("7"),
-      ],
-      [
-        "final absence truth",
-        (value) => value.finalTruth.final_absence_sha256 = digest("7"),
-      ],
-    ];
-    for (const [name, mutate] of mutations) {
-      const request = structuredClone(successAuthorityRequestFixture());
+  test("full marker authority and the artifact DAG reject every independent domain drift", () => { const mutations: Array<[ string, (request: ReturnType<typeof successAuthorityRequestFixture>) => void, ]> = [ [ "marker child WAL",
+        (value) => value.marker.child_wal.chain_sha256 = digest("7"), ], [ "marker database", (value) => value.marker.database_convergence.after_proof_sha256 = digest("7"), ], [ "marker build",
+        (value) => value.marker.build_context.ready_sha256 = digest("7"), ], [ "marker dependencies", (value) => value.marker.dependency_estate.ready_sha256 = digest("7"), ], [ "marker handoff",
+        (value) => value.marker.refence_handoff.anchor_sha256 = digest("7"), ], [ "marker guard", (value) => value.marker.guard_proofs.final_sha256 = digest("7"), ], [ "marker early guard",
+        (value) => value.marker.guard_proofs.early_sha256 = digest("7"), ], [ "marker public", (value) => value.marker.public_proofs.final_sha256 = digest("7"), ], ["marker progress", (value) => value.marker.attempted_machine_ids.pop()],
+      ["marker lock", (value) => value.marker.deploy_lock.sha256 = digest("7")], ["request roles", (value) => value.roles.app_lhr.reverse()], ["request source", (value) => value.sourceRevision = revision("7")], [ "request run", (value) =>
+          value.controllerRunID = "11234567-89ab-cdef-0123-456789abcdef", ], [ "request WAL", (value) => value.controllerWal.chain_sha256 = digest("7"), ], [ "request database",
+        (value) => value.databaseConvergence.after_row_sha256 = digest("0"), ], [ "request build", (value) => value.buildContext.readback_sha256 = digest("7"), ], [ "request dependencies", (value) =>
+          value.dependencyEstate.dependency_inventory_sha256 = digest("7"), ], [ "request handoff", (value) => value.refenceHandoff.witness_sha256 = digest("7"), ], [ "request early guard", (value) => value.earlyGuardSHA256 = digest("7"),
+      ], ["request lock", (value) => value.deployLockSHA256 = digest("7")], [ "request lock owner", (value) => value.deployLock.owner_record = value.deployLock.owner_record.replace( "0123456789abcdef", "1123456789abcdef", ), ], [
+        "request lock device", (value) => value.deployLock.device += 1, ], [ "request lock inode", (value) => value.deployLock.inode += 1, ], [ "request anchor device", (value) => value.retainedArchives.anchor.device += 1, ], [
+        "request anchor inode", (value) => value.retainedArchives.anchor.inode += 1, ], [ "request witness device", (value) => value.retainedArchives.witness.device += 1, ], [ "request witness inode",
+        (value) => value.retainedArchives.witness.inode += 1, ], ["final truth", (value) => value.finalTruth.effects_closed = false], [ "final absence rollout proof", (value) => value.rolloutProofs.final_absence_sha256 = digest("7"), ], [
+        "final absence truth", (value) => value.finalTruth.final_absence_sha256 = digest("7"), ], ];
+    for (const [name, mutate] of mutations) { const request = structuredClone(successAuthorityRequestFixture());
       mutate(request);
-      expect(
-        () => createSuccessAuthorityProjectionForTest(request),
-        name,
-      ).toThrow(MaintenanceRefenceError);
-    }
+      expect( () => createSuccessAuthorityProjectionForTest(request), name, ).toThrow(MaintenanceRefenceError); }
 
     const artifactRequest = successArtifactRequestFixture();
     const authorityDrift = structuredClone(artifactRequest);
     authorityDrift.authorityProjection.final_truth.effects_closed = false;
-    expect(() => createSuccessArtifactsForTest(authorityDrift)).toThrow(
-      MaintenanceRefenceError,
-    );
+    expect(() => createSuccessArtifactsForTest(authorityDrift)).toThrow( MaintenanceRefenceError, );
     const bundle = createSuccessArtifactsForTest(artifactRequest);
-    const forged = resealForgedSuccessBundle(bundle, (authority) => {
-      authority.final_truth.effects_closed = false;
-    });
-    expect(() => validateSuccessArtifactBundleForTest(forged)).toThrow(
-      MaintenanceRefenceError,
-    );
-    for (
-      const [name, mutate] of [
-        [
-          "retained archive device",
-          (authority: Record<string, any>) =>
-            authority.retained_archives.anchor.device += 1,
-        ],
-        [
-          "retained archive inode",
-          (authority: Record<string, any>) =>
-            authority.retained_archives.witness.inode += 1,
-        ],
-        [
-          "refence receipt SHA",
-          (authority: Record<string, any>) =>
-            authority.refence_receipt_sha256 = digest("7"),
-        ],
-      ] as const
-    ) {
+    const forged = resealForgedSuccessBundle(bundle, (authority) => { authority.final_truth.effects_closed = false; });
+    expect(() => validateSuccessArtifactBundleForTest(forged)).toThrow( MaintenanceRefenceError, );
+    for ( const [name, mutate] of [ [ "retained archive device", (authority: Record<string, any>) => authority.retained_archives.anchor.device += 1, ], [ "retained archive inode", (authority: Record<string, any>) =>
+            authority.retained_archives.witness.inode += 1, ], [ "refence receipt SHA", (authority: Record<string, any>) => authority.refence_receipt_sha256 = digest("7"), ], ] as const ) {
       const bad = resealForgedSuccessBundle(bundle, mutate);
-      expect(() => validateSuccessArtifactBundleForTest(bad), name).toThrow(
-        MaintenanceRefenceError,
-      );
-    }
-    for (
-      const [name, mutate] of [
-        [
-          "A0 authority digest",
-          (value: any) =>
-            value.marker.success_finalization.authority_projection_sha256 =
-              digest("7"),
-        ],
-        [
-          "A0 receipt pending",
-          (value: any) =>
-            value.marker.success_finalization.receipt_pending = false,
-        ],
-        [
-          "A0 retirement authorization",
-          (value: any) =>
-            value.marker.success_finalization.marker_retirement_authorized =
-              false,
-        ],
-        [
-          "witness run",
-          (value: any) =>
-            value.witness.run_id = "11234567-89ab-cdef-0123-456789abcdef",
-        ],
-        [
-          "receipt source",
-          (value: any) => value.receipt.source_revision = revision("7"),
-        ],
-        [
-          "receipt tree",
-          (value: any) => value.receipt.source_tree = revision("7"),
-        ],
-        [
-          "receipt time",
-          (value: any) =>
-            value.receipt.success_proven_at = "2026-08-25T12:30:01Z",
-        ],
-        [
-          "receipt basename",
-          (value: any) => {
-            const path = value.witness.receipt_path.replace(
-              /[^/]+$/,
-              "wrong.json",
-            );
+      expect(() => validateSuccessArtifactBundleForTest(bad), name).toThrow( MaintenanceRefenceError, ); }
+    for ( const [name, mutate] of [ [ "A0 authority digest", (value: any) => value.marker.success_finalization.authority_projection_sha256 = digest("7"), ], [ "A0 receipt pending", (value: any) =>
+            value.marker.success_finalization.receipt_pending = false, ], [ "A0 retirement authorization", (value: any) => value.marker.success_finalization.marker_retirement_authorized = false, ], [ "witness run", (value: any) =>
+            value.witness.run_id = "11234567-89ab-cdef-0123-456789abcdef", ], [ "receipt source", (value: any) => value.receipt.source_revision = revision("7"), ], [ "receipt tree", (value: any) => value.receipt.source_tree = revision("7"),
+        ], [ "receipt time", (value: any) => value.receipt.success_proven_at = "2026-08-25T12:30:01Z", ], [ "receipt basename", (value: any) => { const path = value.witness.receipt_path.replace( /[^/]+$/, "wrong.json", );
             value.witness.receipt_path = path;
-            value.marker.success_receipt.path = path;
-          },
-        ],
-      ] as const
-    ) {
-      const bad = resealSuccessBundleEnvelope(bundle, mutate);
-      expect(() => validateSuccessArtifactBundleForTest(bad), name).toThrow(
-        MaintenanceRefenceError,
-      );
-    }
-    for (
-      const key of [
-        "authorityProjectionSHA256",
-        "markerSHA256",
-        "witnessSHA256",
-        "receiptSHA256",
-      ] as const
-    ) {
-      const bad = structuredClone(bundle);
+            value.marker.success_receipt.path = path; }, ], ] as const ) { const bad = resealSuccessBundleEnvelope(bundle, mutate);
+      expect(() => validateSuccessArtifactBundleForTest(bad), name).toThrow( MaintenanceRefenceError, ); }
+    for ( const key of [ "authorityProjectionSHA256", "markerSHA256", "witnessSHA256", "receiptSHA256", ] as const ) { const bad = structuredClone(bundle);
       bad[key] = digest("7");
-      expect(() => validateSuccessArtifactBundleForTest(bad), key).toThrow(
-        MaintenanceRefenceError,
-      );
-    }
+      expect(() => validateSuccessArtifactBundleForTest(bad), key).toThrow( MaintenanceRefenceError, ); }
     const swapped = structuredClone(bundle);
     swapped.witnessBytesUTF8 = bundle.markerBytesUTF8;
     swapped.witnessSHA256 = bundle.markerSHA256;
-    expect(() => validateSuccessArtifactBundleForTest(swapped)).toThrow(
-      MaintenanceRefenceError,
-    );
-  });
+    expect(() => validateSuccessArtifactBundleForTest(swapped)).toThrow( MaintenanceRefenceError, ); });
 
-  test("success ceremony reaches R5/W3/M3/L2 with exact final artifacts", () => {
-    const fixture = finalizationTestFixture();
+  test("success ceremony reaches R5/W3/M3/L2 with exact final artifacts", () => { const fixture = finalizationTestFixture();
     expect(lstatSync(fixture.paths.lockDirectory).mode & 0o777).toBe(0o700);
-    expect(realpathSync(fixture.paths.lockDirectory)).toBe(
-      fixture.paths.lockDirectory,
-    );
+    expect(realpathSync(fixture.paths.lockDirectory)).toBe( fixture.paths.lockDirectory, );
     expect(lstatSync(fixture.paths.lockDirectory).uid).toBe(process.getuid?.());
     expect(lstatSync(fixture.paths.lockDirectory).gid).toBe(process.getgid?.());
     expect(lstatSync(fixture.paths.lockDirectory).isDirectory()).toBeTrue();
     expect(lstatSync(fixture.paths.lockDirectory).isSymbolicLink()).toBeFalse();
     const result = runFinalizationFixture(fixture);
-    expect(result).toEqual({
-      receiptPath: fixture.paths.receiptPath,
-      receiptSHA256: fixture.artifacts.receiptSHA256,
-      witnessPath: fixture.paths.witnessPath,
-      witnessSHA256: fixture.artifacts.witnessSHA256,
-    });
+    expect(result).toEqual({ receiptPath: fixture.paths.receiptPath, receiptSHA256: fixture.artifacts.receiptSHA256, witnessPath: fixture.paths.witnessPath, witnessSHA256: fixture.artifacts.witnessSHA256, });
     expect(existsSync(fixture.paths.markerPath)).toBeFalse();
     expect(existsSync(fixture.paths.markerRetirementClaimPath)).toBeFalse();
     expect(existsSync(fixture.paths.receiptStagePath)).toBeFalse();
     expect(existsSync(fixture.paths.witnessStagePath)).toBeFalse();
     expect(existsSync(fixture.paths.publicLockPath)).toBeFalse();
     expect(existsSync(fixture.lock.ownerPath)).toBeFalse();
-    expect(readFileSync(fixture.paths.receiptPath, "utf8")).toBe(
-      fixture.artifacts.receiptBytesUTF8,
-    );
-    expect(readFileSync(fixture.paths.witnessPath, "utf8")).toBe(
-      fixture.artifacts.witnessBytesUTF8,
-    );
+    expect(readFileSync(fixture.paths.receiptPath, "utf8")).toBe( fixture.artifacts.receiptBytesUTF8, );
+    expect(readFileSync(fixture.paths.witnessPath, "utf8")).toBe( fixture.artifacts.witnessBytesUTF8, );
     expect(fixture.lock.phase).toBe("released");
     expect(() => fstatSync(fixture.lock.descriptor)).toThrow();
-    expect(fixture.counts).toEqual({ begin: 1, pre: 1, closed: 1 });
-  });
+    expect(fixture.counts).toEqual({ begin: 1, pre: 1, closed: 1 }); });
 
-  test("every crash cut matches the no-fault fsync ledger without namespace repair", () => {
-    const baseline = finalizationBaselineTrace();
+  test("every crash cut matches the no-fault fsync ledger without namespace repair", () => { const baseline = finalizationBaselineTrace();
     expect(baseline.points).toEqual(FINALIZATION_CRASH_POINTS);
-    expect(baseline.fsyncDirectories).toEqual([
-      "receipt",
-      "receipt",
-      "state",
-      "state",
-      "state",
-      "state",
-      "state",
-      "lock",
-      "lock",
-    ]);
-    for (const snapshot of baseline.pointSnapshots.values()) {
-      for (const entry of [...snapshot.visible, ...snapshot.durable]) {
-        expect(entry.uid).toBe(process.getuid?.());
+    expect(baseline.fsyncDirectories).toEqual([ "receipt", "receipt", "state", "state", "state", "state", "state", "lock", "lock", ]);
+    for (const snapshot of baseline.pointSnapshots.values()) { for (const entry of [...snapshot.visible, ...snapshot.durable]) { expect(entry.uid).toBe(process.getuid?.());
         expect(entry.gid).toBe(process.getgid?.());
         expect(entry.mode).toBe(0o600);
-        expect(entry.nlink).toBe(entry.aliases.length);
-      }
-      for (const entry of snapshot.open) {
-        expect(entry.uid).toBe(process.getuid?.());
+        expect(entry.nlink).toBe(entry.aliases.length); }
+      for (const entry of snapshot.open) { expect(entry.uid).toBe(process.getuid?.());
         expect(entry.gid).toBe(process.getgid?.());
         expect(entry.mode).toBe(0o600);
-        expect(entry.role).toBe(entry.artifact);
-      }
-    }
-    expect(baseline.pointSnapshots.get("M3")?.open).toContainEqual(
-      expect.objectContaining({ role: "marker", artifact: "marker", nlink: 0 }),
-    );
-    expect(
-      baseline.pointSnapshots.get("A0")?.open.map(({ role, nlink }) => ({
-        role,
-        nlink,
-      })),
-    ).toEqual([
-      { role: "lock", nlink: 2 },
-      { role: "marker", nlink: 1 },
-    ]);
-    expect(
-      baseline.pointSnapshots.get("R1")?.open.map(({ role, nlink }) => ({
-        role,
-        nlink,
-      })),
-    ).toEqual([
-      { role: "lock", nlink: 2 },
-      { role: "marker", nlink: 1 },
-      { role: "receipt", nlink: 1 },
-    ]);
-    expect(
-      baseline.pointSnapshots.get("W1")?.open.map(({ role, nlink }) => ({
-        role,
-        nlink,
-      })),
-    ).toEqual([
-      { role: "lock", nlink: 2 },
-      { role: "marker", nlink: 1 },
-      { role: "witness", nlink: 1 },
-    ]);
-    expect(
-      baseline.pointSnapshots.get("L2_unlinked_before_directory_fsync")?.open,
-    ).toContainEqual(
-      expect.objectContaining({ role: "lock", artifact: "lock", nlink: 0 }),
-    );
+        expect(entry.role).toBe(entry.artifact); } }
+    expect(baseline.pointSnapshots.get("M3")?.open).toContainEqual( expect.objectContaining({ role: "marker", artifact: "marker", nlink: 0 }), );
+    expect( baseline.pointSnapshots.get("A0")?.open.map(({ role, nlink }) => ({ role, nlink, })), ).toEqual([ { role: "lock", nlink: 2 }, { role: "marker", nlink: 1 }, ]);
+    expect( baseline.pointSnapshots.get("R1")?.open.map(({ role, nlink }) => ({ role, nlink, })), ).toEqual([ { role: "lock", nlink: 2 }, { role: "marker", nlink: 1 }, { role: "receipt", nlink: 1 }, ]);
+    expect( baseline.pointSnapshots.get("W1")?.open.map(({ role, nlink }) => ({ role, nlink, })), ).toEqual([ { role: "lock", nlink: 2 }, { role: "marker", nlink: 1 }, { role: "witness", nlink: 1 }, ]);
+    expect( baseline.pointSnapshots.get("L2_unlinked_before_directory_fsync")?.open, ).toContainEqual( expect.objectContaining({ role: "lock", artifact: "lock", nlink: 0 }), );
     expect(baseline.pointSnapshots.get("L2")?.open).toEqual([]);
 
-    for (const point of FINALIZATION_CRASH_POINTS) {
-      const fixture = finalizationTestFixture();
+    for (const point of FINALIZATION_CRASH_POINTS) { const fixture = finalizationTestFixture();
       const oracle = new FinalizationSnapshotOracle(fixture);
       let reached = false;
       let captured: FinalizationSnapshot | null = null;
       const observed: SuccessFinalizationCrashPoint[] = [];
       const fsyncs: string[] = [];
-      expect(() =>
-        runFinalizationFixture(fixture, {
-          afterBegin: () => oracle.commit(fixture.paths.stateDirectory),
-          fsyncDirectory: (path) => {
-            fsyncs.push(path);
+      expect(() => runFinalizationFixture(fixture, { afterBegin: () => oracle.commit(fixture.paths.stateDirectory), fsyncDirectory: (path) => { fsyncs.push(path);
             fsyncTestDirectory(path);
-            oracle.commit(path);
-          },
-          crash: (observedPoint, descriptors) => {
-            observed.push(observedPoint);
+            oracle.commit(path); }, crash: (observedPoint, descriptors) => { observed.push(observedPoint);
             if (observedPoint !== point) return;
             reached = true;
             captured = oracle.capture(descriptors);
-            throw new Error(`injected_${point}`);
-          },
-        })
-      ).toThrow(`injected_${point}`);
+            throw new Error(`injected_${point}`); }, }) ).toThrow(`injected_${point}`);
       expect(reached).toBeTrue();
-      expect(observed).toEqual(
-        FINALIZATION_CRASH_POINTS.slice(
-          0,
-          FINALIZATION_CRASH_POINTS.indexOf(point) + 1,
-        ),
-      );
+      expect(observed).toEqual( FINALIZATION_CRASH_POINTS.slice( 0, FINALIZATION_CRASH_POINTS.indexOf(point) + 1, ), );
       expect(captured).toEqual(baseline.pointSnapshots.get(point));
-      const remainingDescriptors = fixture.lock.phase === "released"
-        ? []
-        : [{ role: "lock" as const, descriptor: fixture.lock.descriptor }];
+      const remainingDescriptors = fixture.lock.phase === "released" ? [] : [{ role: "lock" as const, descriptor: fixture.lock.descriptor }];
       const afterThrow = oracle.capture(remainingDescriptors);
       expect(afterThrow.visible).toEqual(captured!.visible);
       expect(afterThrow.durable).toEqual(captured!.durable);
@@ -14060,182 +12721,73 @@ describe("two-artifact success finalization", () => {
       expect(fixture.lock.phase).toBe(captured!.lockPhase);
       expect(fixture.counts.begin).toBe(1);
       expect(fixture.counts.pre).toBe(1);
-      expect(fixture.counts.closed).toBe(
-        point.startsWith("L") ? 1 : 0,
-      );
-      if (point === "L2") {
-        expect(() => fstatSync(fixture.lock.descriptor)).toThrow();
-      } else {
-        expect(fstatSync(fixture.lock.descriptor).dev).toBe(
-          fixture.lock.identity.device,
-        );
-      }
-      closeAbandonedFinalizationLock(fixture);
-    }
-  });
+      expect(fixture.counts.closed).toBe( point.startsWith("L") ? 1 : 0, );
+      if (point === "L2") { expect(() => fstatSync(fixture.lock.descriptor)).toThrow(); } else { expect(fstatSync(fixture.lock.descriptor).dev).toBe( fixture.lock.identity.device, ); }
+      closeAbandonedFinalizationLock(fixture); } });
 
-  test("each directory fsync failure preserves the automatically captured durable snapshot", () => {
-    const baseline = finalizationBaselineTrace();
+  test("each directory fsync failure preserves the automatically captured durable snapshot", () => { const baseline = finalizationBaselineTrace();
     expect(baseline.fsyncBefore).toHaveLength(9);
-    for (const targetIndex of baseline.fsyncBefore.keys()) {
-      const fixture = finalizationTestFixture();
+    for (const targetIndex of baseline.fsyncBefore.keys()) { const fixture = finalizationTestFixture();
       const oracle = new FinalizationSnapshotOracle(fixture);
       let calls = 0;
       let captured: FinalizationSnapshot | null = null;
-      expect(() =>
-        runFinalizationFixture(fixture, {
-          afterBegin: () => oracle.commit(fixture.paths.stateDirectory),
-          fsyncDirectory: (path, descriptors) => {
-            const index = calls++;
-            if (index === targetIndex) {
-              captured = oracle.capture(descriptors);
-              throw new Error(`fsync_${index}`);
-            }
+      expect(() => runFinalizationFixture(fixture, { afterBegin: () => oracle.commit(fixture.paths.stateDirectory), fsyncDirectory: (path, descriptors) => { const index = calls++;
+            if (index === targetIndex) { captured = oracle.capture(descriptors);
+              throw new Error(`fsync_${index}`); }
             fsyncTestDirectory(path);
-            oracle.commit(path);
-          },
-        })
-      ).toThrow(`fsync_${targetIndex}`);
+            oracle.commit(path); }, }) ).toThrow(`fsync_${targetIndex}`);
       expect(calls).toBe(targetIndex + 1);
       expect(captured).toEqual(baseline.fsyncBefore[targetIndex]);
-      const remainingDescriptors = fixture.lock.phase === "released"
-        ? []
-        : [{ role: "lock" as const, descriptor: fixture.lock.descriptor }];
+      const remainingDescriptors = fixture.lock.phase === "released" ? [] : [{ role: "lock" as const, descriptor: fixture.lock.descriptor }];
       const afterThrow = oracle.capture(remainingDescriptors);
       expect(afterThrow.visible).toEqual(captured!.visible);
       expect(afterThrow.durable).toEqual(captured!.durable);
-      closeAbandonedFinalizationLock(fixture);
-    }
-  });
+      closeAbandonedFinalizationLock(fixture); } });
 
-  test("bundle, path, directory, symlink, and hardlink substitutions refuse before retirement", () => {
-    const pathMutations: Array<[
-      string,
-      (fixture: FinalizationTestFixture) => void,
-    ]> = [
-      ["witness-claim-swap", (fixture) => {
-        [fixture.paths.witnessPath, fixture.paths.markerRetirementClaimPath] = [
-          fixture.paths.markerRetirementClaimPath,
-          fixture.paths.witnessPath,
-        ];
-      }],
-      ["receipt-stage-alias", (fixture) => {
-        fixture.paths.receiptStagePath = fixture.paths.receiptPath;
-      }],
-      ["lock-marker-alias", (fixture) => {
-        fixture.paths.publicLockPath = fixture.paths.markerPath;
-      }],
-      ["authority-witness-claim-swap", (fixture) => {
-        [
-          fixture.authorityPaths.witnessPath,
-          fixture.authorityPaths.markerRetirementClaimPath,
-        ] = [
-          fixture.authorityPaths.markerRetirementClaimPath,
-          fixture.authorityPaths.witnessPath,
-        ];
-      }],
-      ["same-directory-inode", (fixture) => {
+  test("bundle, path, directory, symlink, and hardlink substitutions refuse before retirement", () => { const pathMutations: Array<[ string, (fixture: FinalizationTestFixture) => void, ]> = [ ["witness-claim-swap", (fixture) => {
+        [fixture.paths.witnessPath, fixture.paths.markerRetirementClaimPath] = [ fixture.paths.markerRetirementClaimPath, fixture.paths.witnessPath, ]; }], ["receipt-stage-alias", (fixture) => {
+        fixture.paths.receiptStagePath = fixture.paths.receiptPath; }], ["lock-marker-alias", (fixture) => { fixture.paths.publicLockPath = fixture.paths.markerPath; }], ["authority-witness-claim-swap", (fixture) => { [
+          fixture.authorityPaths.witnessPath, fixture.authorityPaths.markerRetirementClaimPath, ] = [ fixture.authorityPaths.markerRetirementClaimPath, fixture.authorityPaths.witnessPath, ]; }], ["same-directory-inode", (fixture) => {
         fixture.paths.receiptDirectory = fixture.paths.stateDirectory;
-        fixture.paths.receiptPath = join(
-          fixture.paths.stateDirectory,
-          basename(fixture.authorityPaths.receiptPath),
-        );
-        fixture.paths.receiptStagePath = join(
-          fixture.paths.stateDirectory,
-          basename(fixture.authorityPaths.receiptStagePath),
-        );
-      }],
-      ["symlink-state-directory", (fixture) => {
-        const alias = join(fixture.root, "state-alias");
+        fixture.paths.receiptPath = join( fixture.paths.stateDirectory, basename(fixture.authorityPaths.receiptPath), );
+        fixture.paths.receiptStagePath = join( fixture.paths.stateDirectory, basename(fixture.authorityPaths.receiptStagePath), ); }], ["symlink-state-directory", (fixture) => { const alias = join(fixture.root, "state-alias");
         symlinkSync(fixture.paths.stateDirectory, alias);
         fixture.paths.stateDirectory = alias;
-        fixture.paths.markerPath = join(
-          alias,
-          basename(fixture.paths.markerPath),
-        );
-        fixture.paths.markerRetirementClaimPath = join(
-          alias,
-          basename(fixture.paths.markerRetirementClaimPath),
-        );
-        fixture.paths.witnessPath = join(
-          alias,
-          basename(fixture.paths.witnessPath),
-        );
-        fixture.paths.witnessStagePath = join(
-          alias,
-          basename(fixture.paths.witnessStagePath),
-        );
-      }],
-    ];
-    for (const [name, mutate] of pathMutations) {
-      const fixture = finalizationTestFixture();
+        fixture.paths.markerPath = join( alias, basename(fixture.paths.markerPath), );
+        fixture.paths.markerRetirementClaimPath = join( alias, basename(fixture.paths.markerRetirementClaimPath), );
+        fixture.paths.witnessPath = join( alias, basename(fixture.paths.witnessPath), );
+        fixture.paths.witnessStagePath = join( alias, basename(fixture.paths.witnessStagePath), ); }], ];
+    for (const [name, mutate] of pathMutations) { const fixture = finalizationTestFixture();
       mutate(fixture);
-      expect(() => runFinalizationFixture(fixture), name).toThrow(
-        MaintenanceRefenceError,
-      );
+      expect(() => runFinalizationFixture(fixture), name).toThrow( MaintenanceRefenceError, );
       expect(fixture.counts.begin, name).toBe(0);
       expect(fixture.lock.phase, name).toBe("held");
-      closeAbandonedFinalizationLock(fixture);
-    }
+      closeAbandonedFinalizationLock(fixture); }
 
     const markerAlias = finalizationTestFixture();
-    linkSync(
-      markerAlias.paths.markerPath,
-      markerAlias.paths.markerRetirementClaimPath,
-    );
-    expect(() => runFinalizationFixture(markerAlias)).toThrow(
-      MaintenanceRefenceError,
-    );
+    linkSync( markerAlias.paths.markerPath, markerAlias.paths.markerRetirementClaimPath, );
+    expect(() => runFinalizationFixture(markerAlias)).toThrow( MaintenanceRefenceError, );
     expect(markerAlias.counts.begin).toBe(0);
     closeAbandonedFinalizationLock(markerAlias);
 
     const substituted = finalizationTestFixture();
-    const alternativeRequest = successArtifactRequestFixture({
-      successProvenAt: "2026-08-25T12:31:00Z",
-      lock: {
-        ownerPath: substituted.artifacts.witness.lock_owner_path,
-        device: substituted.lock.identity.device,
-        inode: substituted.lock.identity.inode,
-        sha256: substituted.lock.identity.sha256,
-        pid: process.pid,
-      },
-    });
+    const alternativeRequest = successArtifactRequestFixture({ successProvenAt: "2026-08-25T12:31:00Z", lock: { ownerPath: substituted.artifacts.witness.lock_owner_path, device: substituted.lock.identity.device,
+        inode: substituted.lock.identity.inode, sha256: substituted.lock.identity.sha256, pid: process.pid, }, });
     substituted.artifacts = createSuccessArtifactsForTest(alternativeRequest);
     expect(() => runFinalizationFixture(substituted)).toThrow();
     expect(substituted.counts.begin).toBe(1);
-    expect(sha256(readFileSync(substituted.paths.markerPath))).toBe(
-      substituted.preMarkerSHA256,
-    );
+    expect(sha256(readFileSync(substituted.paths.markerPath))).toBe( substituted.preMarkerSHA256, );
     expect(substituted.lock.phase).toBe("held");
-    closeAbandonedFinalizationLock(substituted);
-  });
+    closeAbandonedFinalizationLock(substituted); });
 
-  test("collisions and pre/post-link inode, hash, mode, and nlink drift refuse", () => {
-    for (
-      const key of [
-        "markerRetirementClaimPath",
-        "receiptPath",
-        "receiptStagePath",
-        "witnessPath",
-        "witnessStagePath",
-      ] as const
-    ) {
+  test("collisions and pre/post-link inode, hash, mode, and nlink drift refuse", () => { for ( const key of [ "markerRetirementClaimPath", "receiptPath", "receiptStagePath", "witnessPath", "witnessStagePath", ] as const ) {
       const fixture = finalizationTestFixture();
       writeFileSync(fixture.paths[key], "foreign", { mode: 0o600 });
-      expect(() => runFinalizationFixture(fixture)).toThrow(
-        MaintenanceRefenceError,
-      );
+      expect(() => runFinalizationFixture(fixture)).toThrow( MaintenanceRefenceError, );
       expect(fixture.counts).toEqual({ begin: 0, pre: 0, closed: 0 });
-      closeAbandonedFinalizationLock(fixture);
-    }
+      closeAbandonedFinalizationLock(fixture); }
 
-    const replaceWithSameBytes = (
-      fixture: FinalizationTestFixture,
-      path: string,
-      bytes: string,
-      role: SuccessFinalizationOpenDescriptor["role"],
-      descriptors: readonly SuccessFinalizationOpenDescriptor[],
-    ): void => {
+    const replaceWithSameBytes = ( fixture: FinalizationTestFixture, path: string, bytes: string, role: SuccessFinalizationOpenDescriptor["role"], descriptors: readonly SuccessFinalizationOpenDescriptor[], ): void => {
       const retained = descriptors.find((entry) => entry.role === role);
       expect(retained, `${role} descriptor retained`).toBeDefined();
       const before = fstatSync(retained!.descriptor);
@@ -14249,208 +12801,45 @@ describe("two-artifact success finalization", () => {
       const replacement = lstatSync(path);
       expect(replacement.isFile(), `${role} replacement regular`).toBeTrue();
       expect(replacement.mode & 0o777, `${role} replacement mode`).toBe(0o600);
-      expect(replacement.size, `${role} replacement size`).toBe(
-        Buffer.byteLength(bytes),
-      );
-      expect(sha256(readFileSync(path)), `${role} replacement hash`).toBe(
-        sha256(bytes),
-      );
+      expect(replacement.size, `${role} replacement size`).toBe( Buffer.byteLength(bytes), );
+      expect(sha256(readFileSync(path)), `${role} replacement hash`).toBe( sha256(bytes), );
       expect(replacement.dev, `${role} replacement device`).toBe(before.dev);
-      expect(replacement.ino, `${role} replacement inode`).not.toBe(
-        before.ino,
-      );
-      expect(fixture.lock.phase, `${role} mutation precedes release`).toBe(
-        role === "lock" ? "public_unlinked" : "held",
-      );
-    };
-    const mutations: Array<{
-      name: string;
+      expect(replacement.ino, `${role} replacement inode`).not.toBe( before.ino, );
+      expect(fixture.lock.phase, `${role} mutation precedes release`).toBe( role === "lock" ? "public_unlinked" : "held", ); };
+    const mutations: Array<{ name: string;
       point: SuccessFinalizationCrashPoint;
-      mutate(
-        fixture: FinalizationTestFixture,
-        descriptors: readonly SuccessFinalizationOpenDescriptor[],
-      ): void;
-    }> = [
-      {
-        name: "receipt stage mode drift at R1",
-        point: "R1",
-        mutate: (fixture) => chmodSync(fixture.paths.receiptStagePath, 0o644),
-      },
-      {
-        name: "receipt stage hash drift at R1",
-        point: "R1",
-        mutate: (fixture) =>
-          writeFileSync(fixture.paths.receiptStagePath, "hash-drift"),
-      },
-      {
-        name: "receipt same-byte inode substitution at R1",
-        point: "R1",
-        mutate: (fixture, descriptors) => {
-          replaceWithSameBytes(
-            fixture,
-            fixture.paths.receiptStagePath,
-            fixture.artifacts.receiptBytesUTF8,
-            "receipt",
-            descriptors,
-          );
-        },
-      },
-      {
-        name: "receipt foreign hardlink at R1",
-        point: "R1",
-        mutate: (fixture) =>
-          linkSync(
-            fixture.paths.receiptStagePath,
-            join(fixture.paths.receiptDirectory, "foreign-receipt-link"),
-          ),
-      },
-      {
-        name: "receipt canonical inode substitution after link",
-        point: "R2_linked_before_directory_fsync",
-        mutate: (fixture) => {
-          unlinkSync(fixture.paths.receiptPath);
-          writeFileSync(
-            fixture.paths.receiptPath,
-            fixture.artifacts.receiptBytesUTF8,
-            { mode: 0o600 },
-          );
-        },
-      },
-      {
-        name: "receipt canonical foreign hardlink after durability",
-        point: "R3",
-        mutate: (fixture) =>
-          linkSync(
-            fixture.paths.receiptPath,
-            join(fixture.paths.receiptDirectory, "foreign-receipt-link"),
-          ),
-      },
-      {
-        name: "witness same-byte inode substitution at W1",
-        point: "W1",
-        mutate: (fixture, descriptors) => {
-          replaceWithSameBytes(
-            fixture,
-            fixture.paths.witnessStagePath,
-            fixture.artifacts.witnessBytesUTF8,
-            "witness",
-            descriptors,
-          );
-        },
-      },
-      {
-        name: "marker same-byte inode substitution before M1",
-        point: "W1",
-        mutate: (fixture, descriptors) => {
-          replaceWithSameBytes(
-            fixture,
-            fixture.paths.markerPath,
-            fixture.artifacts.markerBytesUTF8,
-            "marker",
-            descriptors,
-          );
-        },
-      },
-      {
-        name: "marker claim inode substitution after link",
-        point: "M1_linked_before_directory_fsync",
-        mutate: (fixture) => {
+      mutate( fixture: FinalizationTestFixture, descriptors: readonly SuccessFinalizationOpenDescriptor[], ): void; }> = [ { name: "receipt stage mode drift at R1", point: "R1",
+        mutate: (fixture) => chmodSync(fixture.paths.receiptStagePath, 0o644), }, { name: "receipt stage hash drift at R1", point: "R1", mutate: (fixture) => writeFileSync(fixture.paths.receiptStagePath, "hash-drift"), }, {
+        name: "receipt same-byte inode substitution at R1", point: "R1", mutate: (fixture, descriptors) => { replaceWithSameBytes( fixture, fixture.paths.receiptStagePath, fixture.artifacts.receiptBytesUTF8, "receipt", descriptors, ); }, },
+      { name: "receipt foreign hardlink at R1", point: "R1", mutate: (fixture) => linkSync( fixture.paths.receiptStagePath, join(fixture.paths.receiptDirectory, "foreign-receipt-link"), ), }, {
+        name: "receipt canonical inode substitution after link", point: "R2_linked_before_directory_fsync", mutate: (fixture) => { unlinkSync(fixture.paths.receiptPath);
+          writeFileSync( fixture.paths.receiptPath, fixture.artifacts.receiptBytesUTF8, { mode: 0o600 }, ); }, }, { name: "receipt canonical foreign hardlink after durability", point: "R3", mutate: (fixture) => linkSync(
+            fixture.paths.receiptPath, join(fixture.paths.receiptDirectory, "foreign-receipt-link"), ), }, { name: "witness same-byte inode substitution at W1", point: "W1", mutate: (fixture, descriptors) => { replaceWithSameBytes( fixture,
+            fixture.paths.witnessStagePath, fixture.artifacts.witnessBytesUTF8, "witness", descriptors, ); }, }, { name: "marker same-byte inode substitution before M1", point: "W1", mutate: (fixture, descriptors) => { replaceWithSameBytes(
+            fixture, fixture.paths.markerPath, fixture.artifacts.markerBytesUTF8, "marker", descriptors, ); }, }, { name: "marker claim inode substitution after link", point: "M1_linked_before_directory_fsync", mutate: (fixture) => {
           unlinkSync(fixture.paths.markerRetirementClaimPath);
-          writeFileSync(
-            fixture.paths.markerRetirementClaimPath,
-            fixture.artifacts.markerBytesUTF8,
-            { mode: 0o600 },
-          );
-        },
-      },
-      {
-        name: "marker claim inode substitution after canonical unlink",
-        point: "M2_unlinked_before_directory_fsync",
-        mutate: (fixture) => {
-          unlinkSync(fixture.paths.markerRetirementClaimPath);
-          writeFileSync(
-            fixture.paths.markerRetirementClaimPath,
-            fixture.artifacts.markerBytesUTF8,
-            { mode: 0o600 },
-          );
-        },
-      },
-      {
-        name: "witness canonical mode drift after link",
-        point: "W2_linked_before_directory_fsync",
-        mutate: (fixture) => chmodSync(fixture.paths.witnessPath, 0o644),
-      },
-      {
-        name: "witness canonical foreign hardlink after durability",
-        point: "W3",
-        mutate: (fixture) =>
-          linkSync(
-            fixture.paths.witnessPath,
-            join(fixture.paths.stateDirectory, "foreign-witness-link"),
-          ),
-      },
-      {
-        name: "marker claim recreation after unlink",
-        point: "M3_unlinked_before_directory_fsync",
-        mutate: (fixture) =>
-          writeFileSync(
-            fixture.paths.markerRetirementClaimPath,
-            fixture.artifacts.markerBytesUTF8,
-            { mode: 0o600 },
-          ),
-      },
-      {
-        name: "lock owner same-byte inode substitution after public unlink",
-        point: "L1_unlinked_before_directory_fsync",
-        mutate: (fixture, descriptors) => {
-          replaceWithSameBytes(
-            fixture,
-            fixture.lock.ownerPath,
-            fixture.lock.recordBytes,
-            "lock",
-            descriptors,
-          );
-        },
-      },
-    ];
-    for (const mutation of mutations) {
-      const fixture = finalizationTestFixture();
+          writeFileSync( fixture.paths.markerRetirementClaimPath, fixture.artifacts.markerBytesUTF8, { mode: 0o600 }, ); }, }, { name: "marker claim inode substitution after canonical unlink", point: "M2_unlinked_before_directory_fsync",
+        mutate: (fixture) => { unlinkSync(fixture.paths.markerRetirementClaimPath);
+          writeFileSync( fixture.paths.markerRetirementClaimPath, fixture.artifacts.markerBytesUTF8, { mode: 0o600 }, ); }, }, { name: "witness canonical mode drift after link", point: "W2_linked_before_directory_fsync",
+        mutate: (fixture) => chmodSync(fixture.paths.witnessPath, 0o644), }, { name: "witness canonical foreign hardlink after durability", point: "W3", mutate: (fixture) => linkSync( fixture.paths.witnessPath,
+            join(fixture.paths.stateDirectory, "foreign-witness-link"), ), }, { name: "marker claim recreation after unlink", point: "M3_unlinked_before_directory_fsync", mutate: (fixture) => writeFileSync(
+            fixture.paths.markerRetirementClaimPath, fixture.artifacts.markerBytesUTF8, { mode: 0o600 }, ), }, { name: "lock owner same-byte inode substitution after public unlink", point: "L1_unlinked_before_directory_fsync",
+        mutate: (fixture, descriptors) => { replaceWithSameBytes( fixture, fixture.lock.ownerPath, fixture.lock.recordBytes, "lock", descriptors, ); }, }, ];
+    for (const mutation of mutations) { const fixture = finalizationTestFixture();
       let injected = false;
-      expect(() =>
-        runFinalizationFixture(fixture, {
-          crash: (point, descriptors) => {
-            if (point !== mutation.point || injected) return;
+      expect(() => runFinalizationFixture(fixture, { crash: (point, descriptors) => { if (point !== mutation.point || injected) return;
             injected = true;
-            mutation.mutate(fixture, descriptors);
-          },
-        }), mutation.name).toThrow(MaintenanceRefenceError);
+            mutation.mutate(fixture, descriptors); }, }), mutation.name).toThrow(MaintenanceRefenceError);
       expect(injected, mutation.name).toBeTrue();
       expect(fixture.lock.phase, mutation.name).not.toBe("released");
-      closeAbandonedFinalizationLock(fixture);
-    }
-  });
+      closeAbandonedFinalizationLock(fixture); } });
 
-  test("post-A0 finalization has no child, Git, Keychain, DB, Fly, or HTTP path", () => {
-    const source = readFileSync(
-      join(import.meta.dir, "..", "phase-b-refence-maintenance-bridge.ts"),
-      "utf8",
-    );
-    const start = source.indexOf(
-      "export function performSuccessFinalizationCeremony(",
-    );
+  test("post-A0 finalization has no child, Git, Keychain, DB, Fly, or HTTP path", () => { const source = readFileSync( join(import.meta.dir, "..", "phase-b-refence-maintenance-bridge.ts"), "utf8", );
+    const start = source.indexOf( "export function performSuccessFinalizationCeremony(", );
     const end = source.indexOf("function requirePrivateDirectory(", start);
     const body = source.slice(start, end);
     expect(start).toBeGreaterThan(0);
     expect(end).toBeGreaterThan(start);
-    expect(body).not.toMatch(
-      /Bun\.spawn|readProduction|runRefenceFly|fetch\(|sql\.|security|DATABASE_URL|GIT_/,
-    );
-    expect(body.match(/request\.verifyClosedLocalAuthority\(\)/g)).toHaveLength(
-      1,
-    );
-    expect(body.indexOf("request.verifyClosedLocalAuthority();"))
-      .toBeGreaterThan(
-        body.indexOf('crash("M3")'),
-      );
-  });
-});
+    expect(body).not.toMatch( /Bun\.spawn|readProduction|runRefenceFly|fetch\(|sql\.|security|DATABASE_URL|GIT_/, );
+    expect(body.match(/request\.verifyClosedLocalAuthority\(\)/g)).toHaveLength( 1, );
+    expect(body.indexOf("request.verifyClosedLocalAuthority();")) .toBeGreaterThan( body.indexOf('crash("M3")'), ); }); });
