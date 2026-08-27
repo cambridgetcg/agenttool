@@ -97,8 +97,8 @@ const REPOSITORY_ROOT = "/Users/yournameisai/.cache/codex-worktrees/agenttool-ph
 const MIGRATIONS_DIR = join(REPOSITORY_ROOT, "api/migrations");
 const BRIDGE_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-refence-maintenance-bridge.ts", );
 const CONTRACT_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-refence-maintenance-contract.ts", );
-const CONTRACT_SOURCE_SHA256 = "70e742ee541c495d42a9aeeb02a82bc0fe48b6de56139f12e3fe6496ae6b640b";
-const CONTRACT_SOURCE_GIT_BLOB = "35fb32f3a25468533716d7e968a321a7f8d5b231";
+const CONTRACT_SOURCE_SHA256 = "a0489a4d7f7222f0f3fbc247f9ad824436b23967b231c42c71297f5de8061030";
+const CONTRACT_SOURCE_GIT_BLOB = "177f7f932aa92dc55802714505089669e9e1ff91";
 const ORDINARY_GUARD_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-deploy-guard.ts", );
 const ORDINARY_GUARD_SHA256 = "10fe5012e8069ede11eaa3abe0a05f08225d855bb722d52746279dbc21c5fade";
 const ORDINARY_GUARD_GIT_BLOB = "4d2b5be9ac6285d6d3293a1d41c3a36bc7c8f003";
@@ -253,7 +253,7 @@ const EXPECTED_CONSTRAINT_DEFINITIONS: Readonly<
 const REFENCE_OPERATOR_SEMANTIC_SHA256 = "f4ff28f2bd46c608745e56ca82001c9e4252cc16e8e07252ca60c804f38ecf7f";
 // deno-fmt-ignore
 const BRIDGE_NORMALIZED_SHA256 =
-  "a29c7eee740bfccdca72e30c1570d8b69519f89d73b879f031f22c6cddbd467e";
+  "ef7f73430716438b5a79832be01f30f01adf06afe8c2f69b83422f8b3ec40ece";
 
 const MAX_PRIVATE_BYTES = 1_000_000;
 const MAX_CHILD_BYTES = 2_000_000;

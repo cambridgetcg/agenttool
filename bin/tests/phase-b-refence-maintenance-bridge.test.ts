@@ -1721,14 +1721,14 @@ describe("closed source normalization", () => {
       expect(currentFacts.byteCount).toBeLessThan(512 * 1024);
       expect(currentFacts.leafCount).toBe(84_484);
       expect(currentFacts.leafSHA256).toBe(
-        "854f31311cc07df76587f9971271865c32ecdbc24bd34fa1da598c98e6532997",
+        "4d3b2063636950ae8a13e662f66c9a84c6288dbf78a21087fbfddfff5dca5fc9",
       );
       expect(currentFacts.astShapeSHA256).toBe(
         "f74ad8fd2c02d802ec62903c41e020fc3c9219484971993c8178786b08eac218",
       );
       expect(currentFacts.emittedLeafCount).toBe(71_366);
       expect(currentFacts.emittedLeafSHA256).toBe(
-        "c535ea7cd343e13a6a19d3dd1600ceef6bfe69768889e379faaa6396b196c567",
+        "f48ac5ff1d41cc65e9b1f8bf6089cf957746355fd19797323a44e75a644a53e8",
       );
     },
     15_000,
@@ -3930,10 +3930,13 @@ describe("closed source normalization", () => {
     expect(stat.isSymbolicLink()).toBeFalse();
     expect(stat.mode & 0o777).toBe(0o644);
     expect(stat.nlink).toBe(1);
+    expect(bytes.byteLength).toBe(401_997);
+    expect(source.split("\n")).toHaveLength(3_379);
+    expect(source.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(rawSHA256).toBe(
-      "70e742ee541c495d42a9aeeb02a82bc0fe48b6de56139f12e3fe6496ae6b640b",
+      "a0489a4d7f7222f0f3fbc247f9ad824436b23967b231c42c71297f5de8061030",
     );
-    expect(blobSHA1).toBe("35fb32f3a25468533716d7e968a321a7f8d5b231");
+    expect(blobSHA1).toBe("177f7f932aa92dc55802714505089669e9e1ff91");
 
     const transpiler = new Bun.Transpiler({ loader: "ts", target: "bun" });
     const scan = transpiler.scan(source);
