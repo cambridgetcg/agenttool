@@ -28,38 +28,15 @@ import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import type * as ContractTypes from "./phase-b-refence-maintenance-contract.ts";
 
 declare const Bun: any;
 
 type JsonRecord = Record<string, any>;
 type Checkpoint = "early" | "prepublication";
-export type HandoffEdge = "H0" | "H1" | "H2" | "H3" | "H4" | "H5";
-export type HandoffCrashPoint = | "H1_file_fsynced_before_directory_fsync"
-  | "H2_linked_before_directory_fsync"
-  | "H3_linked_before_directory_fsync"
-  | "H4_renamed_before_directory_fsync"
-  | "H5_unlinked_before_directory_fsync";
-export type SuccessFinalizationCrashPoint = | "A0"
-  | "R1"
-  | "R2_linked_before_directory_fsync"
-  | "R3"
-  | "R4_unlinked_before_directory_fsync"
-  | "R5"
-  | "W1"
-  | "M1_linked_before_directory_fsync"
-  | "M1"
-  | "M2_unlinked_before_directory_fsync"
-  | "M2"
-  | "W2_linked_before_directory_fsync"
-  | "W2"
-  | "W3_unlinked_before_directory_fsync"
-  | "W3"
-  | "M3_unlinked_before_directory_fsync"
-  | "M3"
-  | "L1_unlinked_before_directory_fsync"
-  | "L1"
-  | "L2_unlinked_before_directory_fsync"
-  | "L2";
+export type HandoffEdge = ContractTypes.HandoffEdge;
+export type HandoffCrashPoint = ContractTypes.HandoffCrashPoint;
+export type SuccessFinalizationCrashPoint = ContractTypes.SuccessFinalizationCrashPoint;
 
 export const MAINTENANCE_REFENCE_PROOF_SCHEMA = "agenttool.phase-b-maintenance-refence-proof/1" as const;
 export const MAINTENANCE_REFENCE_ADOPTION_SCHEMA = "agenttool.phase-b-maintenance-refence-adoption/1" as const;
@@ -97,8 +74,8 @@ const REPOSITORY_ROOT = "/Users/yournameisai/.cache/codex-worktrees/agenttool-ph
 const MIGRATIONS_DIR = join(REPOSITORY_ROOT, "api/migrations");
 const BRIDGE_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-refence-maintenance-bridge.ts", );
 const CONTRACT_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-refence-maintenance-contract.ts", );
-const CONTRACT_SOURCE_SHA256 = "a0489a4d7f7222f0f3fbc247f9ad824436b23967b231c42c71297f5de8061030";
-const CONTRACT_SOURCE_GIT_BLOB = "177f7f932aa92dc55802714505089669e9e1ff91";
+const CONTRACT_SOURCE_SHA256 = "124adb40b8b86c86bd560986b587446f21b2ad877972a51aeaa93017cc3be490";
+const CONTRACT_SOURCE_GIT_BLOB = "703f42c04362883c74df2bdd93ce52d3566d7a56";
 const ORDINARY_GUARD_SOURCE = join( REPOSITORY_ROOT, "bin/phase-b-deploy-guard.ts", );
 const ORDINARY_GUARD_SHA256 = "10fe5012e8069ede11eaa3abe0a05f08225d855bb722d52746279dbc21c5fade";
 const ORDINARY_GUARD_GIT_BLOB = "4d2b5be9ac6285d6d3293a1d41c3a36bc7c8f003";
@@ -128,7 +105,7 @@ const FLY_AGENT_PROTOCOL_TIMEOUT_MILLISECONDS = 3_000;
 const FLY_AGENT_PROTOCOL_MAX_RESPONSE_BYTES = 1_024;
 const FLY_AGENT_PING_FRAME_SHA256 = "705631fc8ed0643d62cba3fd15eb48d1b4c4e6ec9c7ec5801b7487baecac1cf0";
 const FLY_AGENT_KILL_FRAME_SHA256 = "47d190cebc34dd4b455ab19f9fe49c4fd342228b94651f6006b5c19e2b0e38be";
-const FLY_AGENT_KILL_RESPONSE_SHA256 = "bf2a63ad5d209b2be8586a0f249aac31e432115a64d4fb93433d702564be2469";
+const FLY_AGENT_KILL_RESPONSE_SHA256 = "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df";
 const FLY_AGENT_SETTLEMENT_POLL_MILLISECONDS = 250;
 const FLY_AGENT_SETTLEMENT_TIMEOUT_MILLISECONDS = 5_000;
 const FLY_AGENT_ABSENCE_INTERVAL_MILLISECONDS = 257;
@@ -173,6 +150,19 @@ const IMMEDIATE_FAILED_COMPATIBILITY_CHANGED_PATHS_RAW_SHA256 = "ea34fd5818a88c0
 const IMMEDIATE_FAILED_COMPATIBILITY_CUMULATIVE_CHANGED_PATHS_RAW_SHA256 = "8d83631671ddfab6bc122d5b571df49ab0907c2e40ac1353f2663ccae407d7c2";
 const IMMEDIATE_FAILED_COMPATIBILITY_STDERR_SHA256 = "60298dba6e24230d90d2f8ae15f3319f284b498cd3f14dbdbbedb8f1689322d8";
 const IMMEDIATE_FAILED_COMPATIBILITY_LOCK_SHA256 = "63b41175b9b17ddb000c815a477ca357ee923d9c18eabec7b339ba3f5f1288cf";
+const PRIOR_PROTOCOL_INCOMPATIBLE_REVISION = "296f57e0d291337b8664fc8caa5c3de08fa3cb02";
+const PRIOR_PROTOCOL_INCOMPATIBLE_TREE = "b70dda2bd6d47d5a0ffe30925e222bc656df0838";
+const PRIOR_PROTOCOL_INCOMPATIBLE_TOPIC_REVISION = "d0a92a4691ce8fabb29e084a2576eb38a53aa283";
+const PRIOR_PROTOCOL_INCOMPATIBLE_TOPIC_TREE = "b70dda2bd6d47d5a0ffe30925e222bc656df0838";
+const PRIOR_PROTOCOL_INCOMPATIBLE_SOURCE_DISTANCE = 56;
+const PRIOR_PROTOCOL_INCOMPATIBLE_COMMIT_RAW_SHA256 = "95fa2e442a5adfe7ccea56ae1768489dede998488b939629a264502bdfac83dd";
+const PRIOR_PROTOCOL_INCOMPATIBLE_COMMIT_BYTE_COUNT = 1_226;
+const PRIOR_PROTOCOL_INCOMPATIBLE_BRIDGE_RAW_SHA256 = "68892049dd5e3ffee92cd79548cfc69c86b7241d55d42018747827dfb34a21c5";
+const PRIOR_PROTOCOL_INCOMPATIBLE_BRIDGE_NORMALIZED_SHA256 = "ef7f73430716438b5a79832be01f30f01adf06afe8c2f69b83422f8b3ec40ece";
+const PRIOR_PROTOCOL_INCOMPATIBLE_CONTRACT_RAW_SHA256 = "a0489a4d7f7222f0f3fbc247f9ad824436b23967b231c42c71297f5de8061030";
+const PRIOR_PROTOCOL_INCOMPATIBLE_CONTRACT_GIT_BLOB = "177f7f932aa92dc55802714505089669e9e1ff91";
+const PRIOR_PROTOCOL_INCOMPATIBLE_CHANGED_PATHS_RAW_SHA256 = "57d4f31969729438491e3c2d38334f7f2cb68e326d3843aa21ce5067924be24e";
+const PRIOR_PROTOCOL_INCOMPATIBLE_CUMULATIVE_CHANGED_PATHS_RAW_SHA256 = "d43f8128c3ccb4cb34c24b5317552893e935ff43b6542da726607994e228dd4f";
 const PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATHS = Object.freeze([ "bin/deploy.sh", "bin/phase-b-refence-maintenance-bridge.ts", "bin/phase-b-refence-maintenance-contract.ts", "bin/tests/phase-b-refence-maintenance-bridge.test.ts",
   "bin/tests/phase-b-refence-maintenance-dispatcher.test.ts", "packages/constructive-intelligence/tests/concurrency.test.ts", ] as const);
 const PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES = Object.freeze( PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATHS.map((path) => Object.freeze({ old_mode: path === "bin/deploy.sh" ? "100755" as const : "100644" as const,
@@ -253,7 +243,7 @@ const EXPECTED_CONSTRAINT_DEFINITIONS: Readonly<
 const REFENCE_OPERATOR_SEMANTIC_SHA256 = "f4ff28f2bd46c608745e56ca82001c9e4252cc16e8e07252ca60c804f38ecf7f";
 // deno-fmt-ignore
 const BRIDGE_NORMALIZED_SHA256 =
-  "ef7f73430716438b5a79832be01f30f01adf06afe8c2f69b83422f8b3ec40ece";
+  "b68fed4d4fe0760451bcc655644a668e2b7e30784927385aa5e8a78a05bb81ac";
 
 const MAX_PRIVATE_BYTES = 1_000_000;
 const MAX_CHILD_BYTES = 2_000_000;
@@ -348,10 +338,7 @@ function fsyncPath(path: string, afterSync?: () => void): void { const descripto
   try { fsyncSync(descriptor);
     afterSync?.(); } finally { closeSync(descriptor); } }
 
-export interface DurableFileIdentity { device: number;
-  inode: number;
-  sha256: string;
-  size: number; }
+export type DurableFileIdentity = ContractTypes.DurableFileIdentity;
 
 function sameFileIdentity(left: Stats, right: Stats): boolean { return left.dev === right.dev && left.ino === right.ino; }
 
@@ -429,11 +416,7 @@ function createExclusiveFsyncedStageFile( path: string, bytes: string | Uint8Arr
     return { identity, descriptor }; } catch (error) { closeSync(descriptor);
     throw error; } }
 
-export interface DeployLockAuthority { readonly ownerPath: string;
-  readonly recordBytes: string;
-  readonly identity: DurableFileIdentity;
-  readonly descriptor: number;
-  phase: "held" | "public_unlinked" | "released"; }
+export type DeployLockAuthority = ContractTypes.DeployLockAuthority;
 
 const deployLockDescriptorState = new WeakMap<
   DeployLockAuthority, "open" | "attempted" | "closed"
@@ -454,9 +437,7 @@ function closeRetainedDeployLockDescriptor( authority: DeployLockAuthority, ): b
 /** @internal Closes only the owned descriptor; retained lock names are untouched. */
 export function closeRetainedDeployLockDescriptorForTest( authority: DeployLockAuthority, ): boolean { return closeRetainedDeployLockDescriptor(authority); }
 
-interface DeployLockPaths { directory: string;
-  publicPath: string;
-  worktree: string; }
+type DeployLockPaths = ContractTypes.DeployLockPaths;
 
 function deployLockRecord( ownerPath: string, startedAt: string, worktree: string, ): string { return [ "schema=agenttool-local-deploy-lock/v1", `owner_id=${basename(ownerPath)}`, `pid=${process.pid}`, `started_at=${startedAt}`,
     `worktree=${worktree}`, `owner_record=${ownerPath}`, "", ].join("\n"); }
@@ -536,41 +517,14 @@ export function releaseDeployLockOwnerForController( authority: DeployLockAuthor
   requireCondition( closeRetainedDeployLockDescriptor(authority), "deploy_lock_release", );
   authority.phase = "released"; }
 
-export interface SuccessFinalizationPaths { stateDirectory: string;
-  lockDirectory: string;
-  receiptDirectory: string;
-  worktree: string;
-  markerPath: string;
-  markerRetirementClaimPath: string;
-  receiptPath: string;
-  receiptStagePath: string;
-  witnessPath: string;
-  witnessStagePath: string;
-  publicLockPath: string; }
+export type SuccessFinalizationPaths = ContractTypes.SuccessFinalizationPaths;
 
 export type SuccessFinalizationArtifacts = SuccessArtifactContractBundle;
 
-export type SuccessFinalizationDescriptorRole = | "lock"
-  | "receipt"
-  | "marker"
-  | "witness";
+export type SuccessFinalizationDescriptorRole = ContractTypes.SuccessFinalizationDescriptorRole;
+export type SuccessFinalizationOpenDescriptor = ContractTypes.SuccessFinalizationOpenDescriptor;
 
-export interface SuccessFinalizationOpenDescriptor { role: SuccessFinalizationDescriptorRole;
-  descriptor: number; }
-
-export function performSuccessFinalizationCeremony(request: { paths: SuccessFinalizationPaths;
-  /** @internal Contained tests map fixed authority paths to private temp paths. */
-  authorityPaths?: SuccessFinalizationPaths;
-  lock: DeployLockAuthority;
-  artifacts: SuccessFinalizationArtifacts;
-  beginMarkerFinalization(): DurableFileIdentity;
-  verifyPreFinalization(): void;
-  verifyClosedLocalAuthority(): void;
-  crash?: ( point: SuccessFinalizationCrashPoint, openDescriptors: readonly SuccessFinalizationOpenDescriptor[], ) => void;
-  fsyncDirectory?: ( path: string, openDescriptors: readonly SuccessFinalizationOpenDescriptor[], ) => void; }): { receiptPath: string;
-  receiptSHA256: string;
-  witnessPath: string;
-  witnessSHA256: string; } { const { paths, artifacts } = request;
+export function performSuccessFinalizationCeremony(request: ContractTypes.SuccessFinalizationCeremonyRequest): ContractTypes.SuccessFinalizationCeremonyResult { const { paths, artifacts } = request;
   const openDescriptors = new Map<SuccessFinalizationDescriptorRole, number>([ ["lock", request.lock.descriptor], ]);
   const descriptorSnapshot = (): readonly SuccessFinalizationOpenDescriptor[] => Object.freeze( [...openDescriptors].map(([role, descriptor]) => Object.freeze({ role, descriptor }) ), );
   const crash = (point: SuccessFinalizationCrashPoint): void => request.crash?.(point, descriptorSnapshot());
@@ -793,8 +747,7 @@ function readStablePrivateFile( path: string, options: { maximumBytes?: number; 
         rebound.ino === opened.ino && rebound.size === opened.size && rebound.nlink === opened.nlink, "private_file_changed", );
     return { bytes, stat: rebound }; } finally { closeSync(descriptor); } }
 
-interface SourceMigration { filename: string;
-  checksum: string; }
+type SourceMigration = ContractTypes.SourceMigration;
 
 function validMigrationFilename(filename: string): boolean { return /^(?:[0-9]{4}|[0-9]{8}T[0-9]{6})_[a-z0-9_]+\.sql$/.test(filename); }
 
@@ -914,7 +867,7 @@ export function bridgeSourceHashes(path = BRIDGE_SOURCE): { raw: string;
   requireCondition( validSha(BRIDGE_NORMALIZED_SHA256) && hashes.normalized === BRIDGE_NORMALIZED_SHA256, "bridge_source_binding", );
   return hashes; }
 
-export type RoleMap = import("./phase-b-refence-maintenance-contract.ts").ContractEvidence["roles"];
+export type RoleMap = ContractTypes.ContractEvidence["roles"];
 
 function validateRoles(value: unknown): RoleMap { exactKeys( value, ["app_lhr", "app_cdg", "thinker_primary", "thinker_standby"], "role_map", );
   const roles = value as RoleMap;
@@ -931,54 +884,9 @@ function machineSetSHA256(roles: RoleMap): string { return sha256(`${machineIDs(
 
 function roleMapSHA256(roles: RoleMap): string { return sha256(canonicalJson(roles)); }
 
-interface WalInventoryEntry { ordinal: number;
-  filename: string;
-  sha256: string;
-  prior_entry_sha256: string | null;
-  checkpoint: string;
-  status: string;
-  mutation_armed: boolean; }
+type WalInventoryEntry = ContractTypes.WalInventoryEntry;
 
-export interface TerminalEvidence { receipt: JsonRecord;
-  receiptSHA256: string;
-  runID: string;
-  roles: RoleMap;
-  sourceRevision: string;
-  sourceTree: string;
-  targetRevision: string;
-  targetTree: string;
-  targetDistance: number;
-  anchor: JsonRecord;
-  anchorSHA256: string;
-  anchorPath: string;
-  anchorArchivePath: string;
-  anchorStat: Stats;
-  witness: JsonRecord;
-  witnessSHA256: string;
-  witnessPath: string;
-  witnessArchivePath: string;
-  witnessStat: Stats;
-  walDirectory: string;
-  walInventorySHA256: string;
-  terminalWalSHA256: string;
-  imageContract: JsonRecord;
-  sourceInventorySHA256: string;
-  journalInventorySHA256: string;
-  cronSHA256: string;
-  restoredConfigSHA256ByMachine: Record<string, string>;
-  fencedConfigSHA256ByMachine: Record<string, string>;
-  deployReceiptInventorySHA256: string;
-  deployReceiptFileCount: number;
-  producerAdmission: { embeddedCriticalContractSHA256: string;
-    localStateSandwichSHA256: string; };
-  producerTerminalProof: { journalSHA256: string;
-    drainSampleSHA256: string;
-    drainEventSHA256s: [string, string, string]; };
-  producerGuardRawSHA256: string;
-  producerGuardNormalizedSHA256: string;
-  bridgeRawSHA256: string;
-  bridgeNormalizedSHA256: string;
-  edge: HandoffEdge; }
+export type TerminalEvidence = ContractTypes.TerminalEvidence;
 
 export const RECEIPT_KEYS = [ "schema", "run_id", "status", "source_revision", "source_tree", "operator_path", "operator_sha256", "operator_normalized_sha256", "operator_harness_sha256", "operator_normalization_contract",
   "readmission_target", "prior_audited_lineage", "audit_evidence", "started_at", "completed_at", "machine_set_sha256", "roles_sha256", "image_contract_sha256", "restored_config_map_sha256", "fenced_config_map_sha256",
@@ -989,33 +897,9 @@ export const RECEIPT_KEYS = [ "schema", "run_id", "status", "source_revision", "
   "keychain_generation_absence_observed_before_mutation", "keychain_generation_absence_revalidated_after_fence", "keychain_generation_absence_after_fence", "journal_verified_after_fence", "authority_verified_after_fence",
   "drain_verified_after_fence", "application_actor", "application_path", "application_time_quiescence_proven", "historical_lineage_bound", "caveats", ] as const;
 
-export function validateRefenceReceiptWalAuthorityForTest(request: { receipt: JsonRecord;
-  walRecords: readonly { value: JsonRecord;
-    sha256: string;
-    filename: string; }[];
-  anchor: { value: JsonRecord; sha256: string };
-  witness: { value: JsonRecord; sha256: string }; }): JsonRecord { return maintenanceContract().validateProducerAuthorityProjection(request); }
+export function validateRefenceReceiptWalAuthorityForTest(request: ContractTypes.RefenceReceiptWalAuthorityRequest): JsonRecord { return maintenanceContract().validateProducerAuthorityProjection(request); }
 
-function validateWalInventory( receipt: JsonRecord, expectedRunID: string, ): { roles: RoleMap;
-  directory: string;
-  inventorySHA256: string;
-  terminalSHA256: string;
-  imageContract: JsonRecord;
-  sourceInventorySHA256: string;
-  journalInventorySHA256: string;
-  cronSHA256: string;
-  restoredConfigSHA256ByMachine: Record<string, string>;
-  fencedConfigSHA256ByMachine: Record<string, string>;
-  deployReceiptInventorySHA256: string;
-  deployReceiptFileCount: number;
-  embeddedCriticalContractSHA256: string;
-  localStateSandwichSHA256: string;
-  terminalJournalSHA256: string;
-  terminalDrainSampleSHA256: string;
-  terminalDrainEventSHA256s: [string, string, string];
-  records: readonly { value: JsonRecord;
-    sha256: string;
-    filename: string; }[]; } { const inventory = record(receipt.wal_inventory, "wal_inventory");
+function validateWalInventory(receipt: JsonRecord, expectedRunID: string): ContractTypes.WalInventoryValidationResult { const inventory = record(receipt.wal_inventory, "wal_inventory");
   exactKeys( inventory, [ "directory", "entry_count", "ordered_filenames", "entries", "first_entry_sha256", "terminal_entry_sha256", "chain_projection_sha256", "filename_set_sha256", ], "wal_inventory", );
   requireCondition( typeof inventory.directory === "string" && dirname(inventory.directory) === WAL_ROOT && basename(inventory.directory) === expectedRunID && Number.isSafeInteger(inventory.entry_count) && inventory.entry_count > 0 &&
       inventory.entry_count <= MAX_WAL_ENTRIES && Array.isArray(inventory.ordered_filenames) && inventory.ordered_filenames.length === inventory.entry_count && Array.isArray(inventory.entries) &&
@@ -1119,10 +1003,7 @@ function archivePaths(receipt: JsonRecord, runID: string): { anchor: string;
       witness.silent_deletion_forbidden === true && witness.wrapper_window_open === false, "archive_binding", );
   return { anchor: expectedAnchor, witness: expectedWitness }; }
 
-interface RefenceIngressTarget { runID: string;
-  targetRevision: string;
-  targetTree: string;
-  targetDistance: number; }
+type RefenceIngressTarget = ContractTypes.RefenceIngressTarget;
 
 function requireAuthorizedH0Receipt( value: JsonRecord, digest: string, ): RefenceIngressTarget { const target = record(value.readmission_target, "refence_ingress_target");
   exactKeys( target, [ "protected_main_revision", "protected_main_tree", "clean_526_ancestor_distance", ], "refence_ingress_target", );
@@ -1155,11 +1036,7 @@ function readRefenceIngressTarget( expectedReceiptSHA256: string, ): RefenceIngr
   return ingress; }
 
 /** @internal Exact producer H0 local-admission projection. */
-export function producerLocalStateSandwichSHA256ForTest(request: { anchorSHA256: string;
-  firstWalSHA256: string;
-  firstWalOrdinal: number;
-  deployReceiptInventorySHA256: string;
-  deployReceiptFileCount: number; }): string { return maintenanceContract().producerLocalStateSandwichSHA256(request); }
+export function producerLocalStateSandwichSHA256ForTest(request: ContractTypes.ProducerLocalStateSandwichRequest): string { return maintenanceContract().producerLocalStateSandwichSHA256(request); }
 
 /** @internal Exact H0 comparator; the claim never selects its own inputs. */
 export function validateProducerLocalStateSandwichForTest( request: Parameters<typeof producerLocalStateSandwichSHA256ForTest>[0], claimedSHA256: string, ): string { return maintenanceContract().validateProducerLocalStateSandwich( request,
@@ -1329,106 +1206,27 @@ function validateHandoffLinks( edge: HandoffEdge, anchor: ReturnType<typeof pars
 
 function handoffStagePath(runID: string): string { return join( DEPLOY_STATE_DIR, `.phase-b-refence-maintenance-marker-${runID}.tmp`, ); }
 
-interface MarkerBindings { rolloutID: string;
-  receiptSHA256: string;
-  runID: string;
-  targetRevision: string;
-  targetTree: string;
-  anchorSHA256: string;
-  anchorDevice: number;
-  anchorInode: number;
-  witnessSHA256: string;
-  witnessDevice: number;
-  witnessInode: number;
-  producerGuardRawSHA256: string;
-  producerGuardNormalizedSHA256: string;
-  bridgeRawSHA256: string;
-  bridgeNormalizedSHA256: string;
-  controllerRevision: string;
-  controllerTree: string;
-  controllerSourceDistance: number;
-  controllerCommitRawSHA256: string;
-  controllerCommitByteCount: number;
-  controllerTopicRevision: string;
-  controllerTopicTree: string;
-  changedPathsRawSHA256: string;
-  changedPathStatusesSHA256: string;
-  cumulativeChangedPathsRawSHA256: string;
-  cumulativeChangedPathStatusesSHA256: string; }
-
-type CompatibilityControllerBindings = Pick<
-  MarkerBindings, | "controllerRevision"
-  | "controllerTree"
-  | "controllerSourceDistance"
-  | "controllerCommitRawSHA256"
-  | "controllerCommitByteCount"
-  | "controllerTopicRevision"
-  | "controllerTopicTree"
-  | "changedPathsRawSHA256"
-  | "changedPathStatusesSHA256"
-  | "cumulativeChangedPathsRawSHA256"
-  | "cumulativeChangedPathStatusesSHA256"
->;
+type MarkerBindings = ContractTypes.MarkerBindings;
+type CompatibilityControllerBindings = ContractTypes.CompatibilityControllerBindings;
 
 function requireCompatibilityControllerBindings( value: CompatibilityControllerBindings | undefined, ): CompatibilityControllerBindings { requireCondition( value !== undefined && validRevision(value.controllerRevision) &&
-      validRevision(value.controllerTree) && Number.isSafeInteger(value.controllerSourceDistance) && value.controllerSourceDistance > IMMEDIATE_FAILED_COMPATIBILITY_SOURCE_DISTANCE && validSha(value.controllerCommitRawSHA256) &&
+      validRevision(value.controllerTree) && Number.isSafeInteger(value.controllerSourceDistance) && value.controllerSourceDistance > PRIOR_PROTOCOL_INCOMPATIBLE_SOURCE_DISTANCE && validSha(value.controllerCommitRawSHA256) &&
       Number.isSafeInteger(value.controllerCommitByteCount) && value.controllerCommitByteCount > 0 && value.controllerCommitByteCount <= MAX_PRIVATE_BYTES && validRevision(value.controllerTopicRevision) &&
-      value.controllerRevision !== AUTHORIZED_H0_TARGET_REVISION && value.controllerRevision !== PRIOR_FAILED_COMPATIBILITY_REVISION && value.controllerRevision !== IMMEDIATE_FAILED_COMPATIBILITY_REVISION &&
-      value.controllerTree !== AUTHORIZED_H0_TARGET_TREE && value.controllerTree !== PRIOR_FAILED_COMPATIBILITY_TREE && value.controllerTree !== IMMEDIATE_FAILED_COMPATIBILITY_TREE &&
+      ![AUTHORIZED_H0_TARGET_REVISION, PRIOR_FAILED_COMPATIBILITY_REVISION, IMMEDIATE_FAILED_COMPATIBILITY_REVISION, PRIOR_PROTOCOL_INCOMPATIBLE_REVISION].includes(value.controllerRevision) &&
+      ![AUTHORIZED_H0_TARGET_TREE, PRIOR_FAILED_COMPATIBILITY_TREE, IMMEDIATE_FAILED_COMPATIBILITY_TREE, PRIOR_PROTOCOL_INCOMPATIBLE_TREE].includes(value.controllerTree) &&
       value.controllerTopicRevision !== value.controllerRevision && value.controllerTopicRevision !== AUTHORIZED_H0_TARGET_REVISION && value.controllerTopicRevision !== PRIOR_FAILED_COMPATIBILITY_REVISION &&
-      value.controllerTopicRevision !== IMMEDIATE_FAILED_COMPATIBILITY_REVISION && value.controllerTopicTree === value.controllerTree && validSha(value.changedPathsRawSHA256) &&
+      value.controllerTopicRevision !== IMMEDIATE_FAILED_COMPATIBILITY_REVISION && value.controllerTopicRevision !== PRIOR_PROTOCOL_INCOMPATIBLE_REVISION && value.controllerTopicTree === value.controllerTree && validSha(value.changedPathsRawSHA256) &&
       value.changedPathsRawSHA256 !== PRIOR_FAILED_COMPATIBILITY_CHANGED_PATHS_RAW_SHA256 && value.changedPathsRawSHA256 !== IMMEDIATE_FAILED_COMPATIBILITY_CHANGED_PATHS_RAW_SHA256 &&
+      value.changedPathsRawSHA256 !== PRIOR_PROTOCOL_INCOMPATIBLE_CHANGED_PATHS_RAW_SHA256 &&
       value.changedPathStatusesSHA256 === sha256(canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES)) && validSha(value.cumulativeChangedPathsRawSHA256) &&
-      value.cumulativeChangedPathsRawSHA256 !== IMMEDIATE_FAILED_COMPATIBILITY_CUMULATIVE_CHANGED_PATHS_RAW_SHA256 &&
+      value.cumulativeChangedPathsRawSHA256 !== IMMEDIATE_FAILED_COMPATIBILITY_CUMULATIVE_CHANGED_PATHS_RAW_SHA256 && value.cumulativeChangedPathsRawSHA256 !== PRIOR_PROTOCOL_INCOMPATIBLE_CUMULATIVE_CHANGED_PATHS_RAW_SHA256 &&
       value.cumulativeChangedPathStatusesSHA256 === sha256(canonicalJson(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES)), "protected_successor_authority", );
   return value; }
 
 /** @internal Exact post-H compatibility-controller binding validator. */
 export function validateCompatibilityControllerBindingsForTest( value: CompatibilityControllerBindings | undefined, ): CompatibilityControllerBindings { return requireCompatibilityControllerBindings(value); }
 
-interface ControllerPreparationBinding { startedAt: string;
-  deployLock: { schema: "agenttool-local-deploy-lock/v1";
-    public_path: string;
-    owner_record: string;
-    device: number;
-    inode: number;
-    sha256: string;
-    pid: number; };
-  buildContext: { schema: "agenttool-phase-b-refence-build-context/v1";
-    path: string;
-    source_revision: string;
-    source_tree: string;
-    inventory_sha256: string;
-    inventory_byte_count: number;
-    file_count: number;
-    byte_count: number;
-    context_device: number;
-    context_inode: number;
-    readback_sha256: string;
-    ready_path: string;
-    ready_sha256: string;
-    prepared: true; };
-  dependencyEstate: { schema: "agenttool-phase-b-refence-dependency-estate/v1";
-    path: string;
-    project_path: string;
-    runtime_source_path: string;
-    source_revision: string;
-    source_tree: string;
-    source_inventory_sha256: string;
-    postgres_runtime_closure_sha256: string;
-    dependency_inventory_sha256: string;
-    dependency_file_count: number;
-    dependency_byte_count: number;
-    dependency_symlink_count: number;
-    estate_device: number;
-    estate_inode: number;
-    ready_path: string;
-    ready_sha256: string;
-    prepared: true; };
-  controllerWalDirectory: string;
-  earlyGuardSHA256: string;
-  earlyDatabaseProofSHA256: string;
-  databaseTargetSHA256: string; }
+type ControllerPreparationBinding = ContractTypes.ControllerPreparationBinding;
 
 function bridgeMarkerContractProfile(): JsonRecord { return { maintenanceMarkerSchema: MAINTENANCE_MARKER_SCHEMA, stateDirectory: STATE_DIR, deployStateDirectory: DEPLOY_STATE_DIR, deployReceiptDirectory: DEPLOY_RECEIPT_DIR,
   deployLockPath: DEPLOY_LOCK, walRoot: WAL_ROOT, controllerWalRoot: CONTROLLER_WAL_ROOT, controllerBuildRoot: CONTROLLER_BUILD_ROOT, controllerDependencyRoot: CONTROLLER_DEPENDENCY_ROOT, postgresRuntimeSource: POSTGRES_RUNTIME_SOURCE,
@@ -1444,15 +1242,7 @@ function initialBridgeMarker( bindings: MarkerBindings, roles: RoleMap, configFi
     configFingerprint, preparation, profile: bridgeMarkerContractProfile(), }); }
 
 /** @internal Complete production-shaped pre-A0 marker for contained tests. */
-export function createSuccessReadyBridgeMarkerForTest(request: { bindings: MarkerBindings;
-  roles: RoleMap;
-  configFingerprint: string;
-  preparation: ControllerPreparationBinding;
-  updatedAt: string;
-  imageDigest: string;
-  databaseConvergence: JsonRecord;
-  controllerWal: JsonRecord;
-  rolloutProofs: JsonRecord; }): JsonRecord { const marker = initialBridgeMarker( request.bindings, request.roles, request.configFingerprint, request.preparation, );
+export function createSuccessReadyBridgeMarkerForTest(request: ContractTypes.SuccessReadyBridgeMarkerRequest): JsonRecord { const marker = initialBridgeMarker( request.bindings, request.roles, request.configFingerprint, request.preparation, );
   const expectedIDs = machineIDs(request.roles).sort();
   const expectedApps = appIDs(request.roles).sort();
   marker.updated_at = request.updatedAt;
@@ -1493,16 +1283,7 @@ export function validateDatabaseConvergenceTransitionForTest( current: unknown, 
 
 function validateBridgeMarker( value: JsonRecord, bindings: MarkerBindings, roles: RoleMap, initial = false, ): void { maintenanceContract().validateProductionBridgeMarker(value, { bindings, roles, initial,
     profile: bridgeMarkerContractProfile(), }); }
-export function replaceDurableCanonicalJsonCAS(request: { canonicalPath: string;
-  directory: string;
-  stagePath: string;
-  expectedCurrentSHA256: string;
-  nextValue: JsonRecord;
-  verifyAuthority(): void;
-  validateCurrent(value: JsonRecord): void;
-  validateNext(value: JsonRecord): void;
-  onDurableInstall?(): void;
-  fsyncDirectory?(path: string, afterSync?: () => void): void; }): { sha256: string; identity: DurableFileIdentity } { requireCondition( dirname(request.canonicalPath) === request.directory &&
+export function replaceDurableCanonicalJsonCAS(request: ContractTypes.DurableCanonicalJsonCASRequest): ContractTypes.DurableCanonicalJsonCASResult { requireCondition( dirname(request.canonicalPath) === request.directory &&
       dirname(request.stagePath) === request.directory && request.stagePath !== request.canonicalPath && validSha(request.expectedCurrentSHA256), "marker_cas_contract", );
   request.verifyAuthority();
   const current = parsePrivateJson(request.canonicalPath);
@@ -1538,16 +1319,7 @@ export function replaceDurableCanonicalJsonCAS(request: { canonicalPath: string;
   request.validateNext(next.value);
   return { sha256: nextSHA256, identity: stageIdentity }; }
 
-function reconcileDurableCanonicalJsonTransition(request: { canonicalPath: string;
-  directory: string;
-  stagePath: string;
-  currentValue: JsonRecord;
-  currentSHA256: string;
-  nextValue: JsonRecord;
-  nextSHA256: string;
-  verifyAuthority(): void;
-  validate(value: JsonRecord): void;
-  fsyncDirectory?(path: string, afterSync?: () => void): void; }): "current" | "next" { const sync = (): void => { let synchronized = false;
+function reconcileDurableCanonicalJsonTransition(request: ContractTypes.DurableCanonicalJsonReconciliationRequest): "current" | "next" { const sync = (): void => { let synchronized = false;
     try { (request.fsyncDirectory ?? fsyncPath)(request.directory, () => { synchronized = true; }); } catch (error) { if (!synchronized) throw error; }
     requireCondition(synchronized, "bridge_marker_reconciliation"); };
   request.verifyAuthority();
@@ -1582,12 +1354,7 @@ function verifyRetainedHandoffEvidence(bindings: MarkerBindings): void { const a
 
 function bridgeMarkerTransitionStagePath( bindings: MarkerBindings, nextSHA256: string, ): string { return join( DEPLOY_STATE_DIR, `.phase-b-refence-marker-transition-${bindings.runID}-${nextSHA256}.tmp`, ); }
 
-function advanceBridgeMarkerCAS(request: { bindings: MarkerBindings;
-  roles: RoleMap;
-  lock: DeployLockAuthority;
-  expectedCurrentSHA256: string;
-  nextValue: JsonRecord;
-  onDurableInstall?(): void; }): { sha256: string; identity: DurableFileIdentity } { const current = parsePrivateJson(MAINTENANCE_MARKER);
+function advanceBridgeMarkerCAS(request: ContractTypes.BridgeMarkerCASRequest): { sha256: string; identity: DurableFileIdentity } { const current = parsePrivateJson(MAINTENANCE_MARKER);
   validateBridgeMarker(current.value, request.bindings, request.roles);
   validateBridgeMarker(request.nextValue, request.bindings, request.roles);
   validateDatabaseConvergenceTransition( record( current.value.database_convergence, "bridge_marker_database_convergence", ), record( request.nextValue.database_convergence, "bridge_marker_database_convergence", ), );
@@ -1631,30 +1398,9 @@ export function completeHandoff( evidence: TerminalEvidence, bindings: MarkerBin
       sha256: evidence.anchorSHA256, }, marker: { inode: markerFile.stat.ino, device: markerFile.stat.dev, nlink: markerFile.stat.nlink, sha256: markerFile.digest, }, witness: { archive_inode: witnessArchive.ino,
       archive_device: witnessArchive.dev, archive_nlink: witnessArchive.nlink, original_inode: evidence.witnessStat.ino, original_device: evidence.witnessStat.dev, sha256: evidence.witnessSHA256, }, }; }
 
-export interface HandoffCeremonyPaths { anchor: string;
-  witness: string;
-  anchorArchive: string;
-  witnessArchive: string;
-  stage: string;
-  directory: string; }
-
-export interface HandoffCeremonyResult { edge: "H5";
-  resumed_from: HandoffEdge;
-  verified_edges: HandoffEdge[]; }
-
-export interface HandoffCompletion extends HandoffCeremonyResult { anchor: { archive_inode: number;
-    archive_device: number;
-    archive_nlink: number;
-    original_inode: number;
-    original_device: number;
-    sha256: string; };
-  marker: { inode: number; device: number; nlink: number; sha256: string };
-  witness: { archive_inode: number;
-    archive_device: number;
-    archive_nlink: number;
-    original_inode: number;
-    original_device: number;
-    sha256: string; }; }
+export type HandoffCeremonyPaths = ContractTypes.HandoffCeremonyPaths;
+export type HandoffCeremonyResult = ContractTypes.HandoffCeremonyResult;
+export type HandoffCompletion = ContractTypes.HandoffCompletion;
 
 function requireCeremonyFileIdentity( path: string, expectedBytes: string, expectedIdentity?: Pick<Stats, "dev" | "ino">, ): Stats { const before = lstatSync(path);
   requireCondition( before.isFile() && !before.isSymbolicLink() && before.uid === process.getuid?.() && before.gid === process.getgid?.() && before.nlink === 1 && (before.mode & 0o777) === 0o600 &&
@@ -1671,14 +1417,7 @@ function requireCeremonyFileIdentity( path: string, expectedBytes: string, expec
     return opened; } finally { closeSync(descriptor); } }
 
 /** @internal Shared verbatim by production handoff and contained crash tests. */
-export function performHandoffCeremony(request: { initialEdge: HandoffEdge;
-  paths: HandoffCeremonyPaths;
-  markerBytes: string;
-  refresh(): HandoffEdge;
-  crashAfter?: HandoffEdge;
-  crashAt?: HandoffCrashPoint;
-  /** @internal Contained race injection only; production never supplies it. */
-  afterStageOpenForTest?: (descriptor: number, opened: Stats) => void; }): HandoffCeremonyResult { const verifiedEdges: HandoffEdge[] = [];
+export function performHandoffCeremony(request: ContractTypes.HandoffCeremonyRequest<Stats>): HandoffCeremonyResult { const verifiedEdges: HandoffEdge[] = [];
   const expectEdge = (expected: HandoffEdge): void => { requireCondition(request.refresh() === expected, "handoff_transition");
     verifiedEdges.push(expected);
     if (request.crashAfter === expected) refuse("injected_handoff_crash"); };
@@ -1749,130 +1488,25 @@ export function performHandoffCeremony(request: { initialEdge: HandoffEdge;
   requireCondition(edge === "H5", "handoff_not_complete");
   return { edge, resumed_from: request.initialEdge, verified_edges: verifiedEdges, }; }
 
-export type DatabaseProof = import("./phase-b-refence-maintenance-contract.ts").DatabaseProof;
+export type DatabaseProof = ContractTypes.DatabaseProof;
 
-interface ProducerJournalRow { filename: string;
-  checksum: string;
-  applied_at: string; }
+type ProducerJournalRow = ContractTypes.ProducerJournalRow;
+type ProducerJournalProof = ContractTypes.ProducerJournalProof;
+type ProducerDrainSnapshot = ContractTypes.ProducerDrainSnapshot;
+type KeychainProof = ContractTypes.KeychainProof;
+type ProcessProof = ContractTypes.ProcessProof;
 
-interface ProducerJournalProof { rows: ProducerJournalRow[];
-  targetAppliedAt: [string, string]; }
+type ProtectedChangedPathStatus = ContractTypes.ProtectedChangedPathStatus;
+type PriorFailedCompatibilityGitProof = ContractTypes.PriorFailedCompatibilityGitProof;
+type ImmediateFailedCompatibilityGitProof = ContractTypes.ImmediateFailedCompatibilityGitProof;
+type PriorProtocolIncompatibleGitProof = ContractTypes.PriorProtocolIncompatibleGitProof;
+type GitProof = ContractTypes.CompatibilityGitProof;
 
-interface ProducerDrainSnapshot { counts: Record<string, number>;
-  informational: { payout_requested: number; x402_inserted: number };
-  cron_sha256: string; }
+export type MaintenanceRefenceDependencies = ContractTypes.MaintenanceRefenceDependencies;
+type PreparedMaintenanceRefenceDependencies = ContractTypes.PreparedMaintenanceRefenceDependencies;
+type ChildlessMaintenanceRefenceBase = ContractTypes.ChildlessMaintenanceRefenceBase;
 
-interface KeychainProof { generation_absent: true;
-  machine_map_sha256: string;
-  roles: RoleMap; }
-
-interface ProcessProof { conflicting_process_count: 0;
-  projection_sha256: string; }
-
-type ProtectedChangedPathStatus = { old_mode: "100644" | "100755";
-  new_mode: "100644" | "100755";
-  status: "M";
-  path: string };
-
-interface PriorFailedCompatibilityGitProof { revision: string;
-  tree: string;
-  source_distance: number;
-  commit_raw_sha256: string;
-  commit_byte_count: number;
-  first_parent_revision: string;
-  second_parent_revision: string;
-  second_parent_tree: string;
-  changed_paths_raw_sha256: string;
-  changed_path_statuses: readonly ProtectedChangedPathStatus[];
-  bridge_source_sha256: string;
-  bridge_normalized_sha256: string;
-  contract_source_sha256: string;
-  contract_git_blob: string;
-  lifecycle: "failed_pre_h";
-  static_refusal_barrier: "raw_commit_terminal_lf_required";
-  static_refusal_barrier_verified: true;
-  observed_first_refusal_predicate: false;
-  controller_success: false;
-  mutation_effect_began: false;
-  success_authority: false;
-  effect_authority: false; }
-
-interface ImmediateFailedCompatibilityGitProof { revision: string;
-  tree: string;
-  source_distance: number;
-  commit_raw_sha256: string;
-  commit_byte_count: number;
-  first_parent_revision: string;
-  second_parent_revision: string;
-  second_parent_tree: string;
-  changed_paths_raw_sha256: string;
-  changed_path_statuses: readonly ProtectedChangedPathStatus[];
-  cumulative_changed_paths_raw_sha256: string;
-  cumulative_changed_path_statuses: readonly ProtectedChangedPathStatus[];
-  bridge_source_sha256: string;
-  bridge_normalized_sha256: string;
-  contract_source_sha256: string;
-  contract_git_blob: string;
-  lifecycle: "failed_pre_h";
-  refusal_predicate: "process_census";
-  observed_first_refusal_predicate: true;
-  controller_exit_code: 74;
-  stderr_sha256: string;
-  stderr_byte_count: 35;
-  retained_deploy_lock_sha256: string;
-  controller_success: false;
-  mutation_effect_began: false;
-  success_authority: false;
-  effect_authority: false;
-  downstream_effects: typeof IMMEDIATE_FAILED_DOWNSTREAM_EFFECTS; }
-
-interface GitProof { revision: string;
-  tree: string;
-  source_distance: number;
-  commit_raw_sha256: string;
-  commit_byte_count: number;
-  first_parent_revision: string;
-  second_parent_revision: string;
-  second_parent_tree: string;
-  changed_paths_raw_sha256: string;
-  changed_path_statuses: readonly ProtectedChangedPathStatus[];
-  cumulative_changed_paths_raw_sha256: string;
-  cumulative_changed_path_statuses: readonly ProtectedChangedPathStatus[];
-  prior_failed_compatibility_controller: PriorFailedCompatibilityGitProof;
-  immediate_failed_compatibility_controller: ImmediateFailedCompatibilityGitProof;
-  authorized_h0_guard_raw_sha256: string;
-  authorized_h0_guard_normalized_sha256: string;
-  authorized_h0_contract_source_sha256: string;
-  authorized_h0_contract_git_blob: string;
-  bridge_source_sha256: string;
-  bridge_normalized_sha256: string;
-  contract_source_sha256: string;
-  contract_git_blob: string;
-  protected_head: true;
-  clean: true; }
-
-export interface MaintenanceRefenceDependencies { readDatabaseProof(): Promise<unknown>;
-  readProviderSecretInventory(): Promise<unknown>;
-  readKeychainProof(): Promise<unknown>;
-  readProcessProof(): Promise<unknown>;
-  readGitProof(): Promise<unknown>;
-  readFleetInventory(): Promise<unknown>;
-  pause(milliseconds: number): Promise<void>;
-  close(): Promise<void>; }
-
-interface PreparedMaintenanceRefenceDependencies
-  extends MaintenanceRefenceDependencies { readonly controllerPhase: "pre_handoff_prepared";
-  sealChildLaunchersForHandoff(): ChildlessMaintenanceRefenceBase; }
-
-interface ChildlessMaintenanceRefenceBase { readonly controllerPhase: "post_handoff_childless";
-  readDatabaseProof(): Promise<unknown>;
-  convergeFederationInstanceURL(): Promise<DatabaseOriginConvergenceProof>;
-  takeOrdinaryPostflightDatabaseEnvironment(): Readonly<{ DATABASE_URL: string;
-    DATABASE_SESSION_URL: string; }>;
-  pause(milliseconds: number): Promise<void>;
-  close(): Promise<void>; }
-
-export type DatabaseOriginConvergenceProof = import("./phase-b-refence-maintenance-contract.ts").DatabaseOriginConvergenceProof;
+export type DatabaseOriginConvergenceProof = ContractTypes.DatabaseOriginConvergenceProof;
 
 /** @internal Carries a definite commit through later close/signal failures. */
 export class DatabaseConvergenceAcknowledgedError extends Error { readonly code: string;
@@ -1959,13 +1593,22 @@ function parseImmediateFailedCompatibilityCommit( bytes: Uint8Array, revision: s
   requireCondition(secondParent === IMMEDIATE_FAILED_COMPATIBILITY_TOPIC_REVISION, "git_proof");
   return secondParent; }
 
-function parseProtectedSuccessorCommit( bytes: Uint8Array, revision: string, tree: string, ): string { return parseProtectedMergeCommit(bytes, revision, tree, IMMEDIATE_FAILED_COMPATIBILITY_REVISION); }
+function parsePriorProtocolIncompatibleCommit(bytes: Uint8Array, revision: string, tree: string): string { requireCondition(revision === PRIOR_PROTOCOL_INCOMPATIBLE_REVISION && tree === PRIOR_PROTOCOL_INCOMPATIBLE_TREE &&
+      bytes.byteLength === PRIOR_PROTOCOL_INCOMPATIBLE_COMMIT_BYTE_COUNT && bytes.at(-1) !== 0x0a && sha256(bytes) === PRIOR_PROTOCOL_INCOMPATIBLE_COMMIT_RAW_SHA256, "git_proof");
+  const secondParent = parseProtectedMergeCommit(bytes, revision, tree, IMMEDIATE_FAILED_COMPATIBILITY_REVISION);
+  requireCondition(secondParent === PRIOR_PROTOCOL_INCOMPATIBLE_TOPIC_REVISION, "git_proof");
+  return secondParent; }
+
+function parseProtectedSuccessorCommit( bytes: Uint8Array, revision: string, tree: string, ): string { return parseProtectedMergeCommit(bytes, revision, tree, PRIOR_PROTOCOL_INCOMPATIBLE_REVISION); }
 
 /** @internal Exact protected-successor parent-vector parser. */
 export function parseProtectedSuccessorParentsForTest( bytes: Uint8Array, revision: string, tree: string, ): string { return parseProtectedSuccessorCommit(bytes, revision, tree); }
 
 /** @internal Exact immediate failed-controller parent-vector parser. */
 export function parseImmediateFailedCompatibilityParentsForTest( bytes: Uint8Array, revision: string, tree: string, ): string { return parseImmediateFailedCompatibilityCommit(bytes, revision, tree); }
+
+/** @internal Exact unexecuted protocol-incompatible predecessor parent-vector parser. */
+export function parsePriorProtocolIncompatibleParentsForTest(bytes: Uint8Array, revision: string, tree: string): string { return parsePriorProtocolIncompatibleCommit(bytes, revision, tree); }
 
 /** @internal Exact immutable failed-compatibility parent-vector parser. */
 export function parsePriorFailedCompatibilityParentsForTest( bytes: Uint8Array, revision: string, tree: string, ): string { return parsePriorFailedCompatibilityCommit(bytes, revision, tree); }
@@ -1992,11 +1635,14 @@ function validatePriorFailedCompatibilityGitProof(raw: unknown): PriorFailedComp
 
 function validateImmediateFailedCompatibilityGitProof(raw: unknown, prior: PriorFailedCompatibilityGitProof): ImmediateFailedCompatibilityGitProof { return maintenanceContract().validateImmediateFailedCompatibilityGitProof(raw, prior) as ImmediateFailedCompatibilityGitProof; }
 
+function validatePriorProtocolIncompatibleGitProof(raw: unknown, immediate: ImmediateFailedCompatibilityGitProof): PriorProtocolIncompatibleGitProof {
+  return maintenanceContract().validatePriorProtocolIncompatibleGitProof(raw, immediate) as unknown as PriorProtocolIncompatibleGitProof; }
+
 function validateGitProof(raw: unknown, evidence: TerminalEvidence): GitProof { return maintenanceContract().validateCompatibilityGitProof(raw, { ...evidence, contractSourceSHA256: CONTRACT_SOURCE_SHA256, contractGitBlob: CONTRACT_SOURCE_GIT_BLOB }) as GitProof; }
 /** @internal Exact typed H0/current-controller Git proof validator. */
 export function validateProtectedSuccessorGitProofForTest( raw: unknown, evidence: TerminalEvidence, ): GitProof { return validateGitProof(raw, evidence); }
 
-export type StoppedFleetProof = import("./phase-b-refence-maintenance-contract.ts").StoppedFleetProof;
+export type StoppedFleetProof = ContractTypes.StoppedFleetProof;
 
 function validateStoppedFleet( raw: unknown, evidence: TerminalEvidence, ): StoppedFleetProof { const proof = maintenanceContract().validateStoppedFleet(raw, evidence);
   requireCondition( Array.isArray(raw) && raw.every((entry) => isRecord(entry) && validUtcTimestamp(entry.updated_at) ), "fleet_contract", );
@@ -2007,16 +1653,13 @@ export function producerCriticalContractSHA256ForTest( source: readonly SourceMi
     PRODUCER_CRITICAL_STATIC_CONTRACT, ); }
 
 /** @internal Exact pre-H1 rebind of the four producer runtime commitments. */
-export function validateProducerEarlyRuntimeBindingsForTest(request: { evidence: TerminalEvidence;
-  databaseProof: DatabaseProof;
-  firstFleet: StoppedFleetProof;
-  secondFleet: StoppedFleetProof; }): string { return maintenanceContract().validateProducerEarlyRuntimeBindings({ ...request, staticContract: PRODUCER_CRITICAL_STATIC_CONTRACT, }); }
+export function validateProducerEarlyRuntimeBindingsForTest(request: ContractTypes.ProducerEarlyRuntimeBindingsRequest): string { return maintenanceContract().validateProducerEarlyRuntimeBindings({ ...request, staticContract: PRODUCER_CRITICAL_STATIC_CONTRACT, }); }
 
-export type TargetImageContract = import("./phase-b-refence-maintenance-contract.ts").TargetImageContract;
+export type TargetImageContract = ContractTypes.TargetImageContract;
 
-export type TargetFleetExpectation = import("./phase-b-refence-maintenance-contract.ts").TargetFleetExpectation;
+export type TargetFleetExpectation = ContractTypes.TargetFleetExpectation;
 
-export type ControllerFlyOperation = import("./phase-b-refence-maintenance-contract.ts").FlyOperation;
+export type ControllerFlyOperation = ContractTypes.FlyOperation;
 
 function requireTargetFleetExpectation( evidence: TerminalEvidence, expectation: TargetFleetExpectation, ): void { maintenanceContract().validateTargetFleetExpectation(evidence, expectation); }
 
@@ -2026,91 +1669,26 @@ export function validateTargetFleetForTest( raw: unknown, evidence: TerminalEvid
 
 function localEvidenceFingerprint(evidence: TerminalEvidence): string { return maintenanceContract().localEvidenceFingerprint(evidence); }
 
-export interface MaintenanceRefenceProof { anchor_sha256: string;
-  audit_witness_sha256: string;
-  authority_sandwich_sha256: string;
-  authority_verified: true;
-  bridge_normalized_sha256: string;
-  bridge_source_sha256: string;
-  checkpoint: Checkpoint;
-  database_journal_verified: true;
-  database_instance_url_sha256: string;
-  database_federation_updated_at: string;
-  database_target_sha256: string;
-  drain_sample_count: 3;
-  drain_verified: true;
-  fence_sample_count: 2;
-  fence_sample_sha256: string;
-  fence_verified: true;
-  fenced_image_digest: typeof EXPECTED_IMAGE_DIGEST;
-  fenced_image_tag: typeof EXPECTED_IMAGE_TAG;
-  journal_endpoint_count: 2;
-  journal_inventory_sha256: string;
-  journal_observation_count: 4;
-  local_evidence_verified: true;
-  machine_set_sha256: typeof EXPECTED_MACHINE_SET_SHA256;
-  non_image_config_sha256: string;
-  observed_revision: typeof EXPECTED_SOURCE_REVISION;
-  process_census_sha256: string;
-  process_census_verified: true;
-  provider_inventory_sha256: string;
-  provider_secret_status: "Absent";
-  public_surfaces_expected_unavailable: true;
-  public_surfaces_verified: false;
-  receipt_sha256: string;
-  refence_run_id: string;
-  schema: typeof MAINTENANCE_REFENCE_PROOF_SCHEMA;
-  source_inventory_sha256: string;
-  stable_fleet_sha256: string;
-  state: "maintenance_refence";
-  target_revision: string;
-  target_tree: string;
-  terminal_wal_sha256: string;
-  wal_inventory_sha256: string;
-  witness_sha256: string; }
+export type MaintenanceRefenceProof = ContractTypes.MaintenanceRefenceProof;
+export type MaintenanceRefenceGuardRequest = ContractTypes.MaintenanceRefenceGuardRequest;
 
-export interface MaintenanceRefenceGuardRequest { checkpoint: Checkpoint;
-  receiptSHA256: string;
-  targetRevision: string;
-  targetTree: string;
-  rolloutID: string;
-  expectedDatabaseUpdatedAt?: string; }
-
-async function runMaintenanceRefenceGuardCore( request: MaintenanceRefenceGuardRequest, dependencies: MaintenanceRefenceDependencies, readEvidence: () => TerminalEvidence | Promise<TerminalEvidence>, closeAfter = true, ): Promise<{
-  proof: MaintenanceRefenceProof;
-  evidence: TerminalEvidence;
-  nonImageConfigSHA256: string;
-  databaseProof: DatabaseProof;
-  databaseProofSHA256: string; }> { return maintenanceContract().runMaintenanceRefenceGuardCore({ guard: request, closeAfter, readEvidence,
+async function runMaintenanceRefenceGuardCore( request: MaintenanceRefenceGuardRequest, dependencies: MaintenanceRefenceDependencies, readEvidence: () => TerminalEvidence | Promise<TerminalEvidence>, closeAfter = true,
+): Promise<ContractTypes.MaintenanceRefenceGuardResult> { return maintenanceContract().runMaintenanceRefenceGuardCore({ guard: request, closeAfter, readEvidence,
     readGit: async (evidence: TerminalEvidence) => validateGitProof(await dependencies.readGitProof(), evidence),
     readDatabase: async (evidence: TerminalEvidence, expectedOrigin: { instanceURLSHA256: string; updatedAt: string }) => validateDatabaseProof(await dependencies.readDatabaseProof(), evidence, expectedOrigin),
     readProvider: async () => validateProviderAbsence(await dependencies.readProviderSecretInventory()), readKeychain: async (roles: RoleMap) => validateKeychainProof(await dependencies.readKeychainProof(), roles),
     readProcess: async () => validateProcessProof(await dependencies.readProcessProof()), readFleet: async (evidence: TerminalEvidence) => validateStoppedFleet(await dependencies.readFleetInventory(), evidence),
-    pause: (milliseconds: number) => dependencies.pause(milliseconds), close: () => dependencies.close(), validateEarlyBindings: validateProducerEarlyRuntimeBindingsForTest, }) as Promise<{ proof: MaintenanceRefenceProof;
-    evidence: TerminalEvidence;
-    nonImageConfigSHA256: string;
-    databaseProof: DatabaseProof;
-    databaseProofSHA256: string; }>; }
+    pause: (milliseconds: number) => dependencies.pause(milliseconds), close: () => dependencies.close(), validateEarlyBindings: validateProducerEarlyRuntimeBindingsForTest, }) as Promise<ContractTypes.MaintenanceRefenceGuardResult>; }
 
-export async function runMaintenanceRefenceGuard( request: MaintenanceRefenceGuardRequest, dependencies: MaintenanceRefenceDependencies, ): Promise<{ proof: MaintenanceRefenceProof;
-  evidence: TerminalEvidence;
-  nonImageConfigSHA256: string;
-  databaseProof: DatabaseProof;
-  databaseProofSHA256: string; }> { return runMaintenanceRefenceGuardCore( request, dependencies, () => classifyHandoff( request.receiptSHA256, request.targetRevision, request.targetTree, request.rolloutID, ), ); }
+export async function runMaintenanceRefenceGuard( request: MaintenanceRefenceGuardRequest, dependencies: MaintenanceRefenceDependencies,
+): Promise<ContractTypes.MaintenanceRefenceGuardResult> { return runMaintenanceRefenceGuardCore( request, dependencies, () => classifyHandoff( request.receiptSHA256, request.targetRevision, request.targetTree, request.rolloutID, ), ); }
 
 /** @internal Uses the production sandwich with a contained evidence reader. */
-export async function runMaintenanceRefenceGuardCoreForTest( request: MaintenanceRefenceGuardRequest, dependencies: MaintenanceRefenceDependencies, readEvidence: () => TerminalEvidence | Promise<TerminalEvidence>, ): Promise<{
-  proof: MaintenanceRefenceProof;
-  evidence: TerminalEvidence;
-  nonImageConfigSHA256: string;
-  databaseProof: DatabaseProof;
-  databaseProofSHA256: string; }> { return runMaintenanceRefenceGuardCore(request, dependencies, readEvidence); }
+export async function runMaintenanceRefenceGuardCoreForTest( request: MaintenanceRefenceGuardRequest, dependencies: MaintenanceRefenceDependencies, readEvidence: () => TerminalEvidence | Promise<TerminalEvidence>,
+): Promise<ContractTypes.MaintenanceRefenceGuardResult> { return runMaintenanceRefenceGuardCore(request, dependencies, readEvidence); }
 
-async function runMaintenanceRefenceGuardForController( request: MaintenanceRefenceGuardRequest, dependencies: MaintenanceRefenceDependencies, compatibilityController?: CompatibilityControllerBindings, ): Promise<{ proof: MaintenanceRefenceProof;
-  evidence: TerminalEvidence;
-  nonImageConfigSHA256: string;
-  databaseProof: DatabaseProof;
-  databaseProofSHA256: string; }> { return runMaintenanceRefenceGuardCore( request, dependencies, () => classifyHandoff( request.receiptSHA256, request.targetRevision, request.targetTree, request.rolloutID,
+async function runMaintenanceRefenceGuardForController( request: MaintenanceRefenceGuardRequest, dependencies: MaintenanceRefenceDependencies, compatibilityController?: CompatibilityControllerBindings,
+): Promise<ContractTypes.MaintenanceRefenceGuardResult> { return runMaintenanceRefenceGuardCore( request, dependencies, () => classifyHandoff( request.receiptSHA256, request.targetRevision, request.targetTree, request.rolloutID,
     compatibilityController, ), false, ); }
 
 export function serializeMaintenanceRefenceProof( proof: MaintenanceRefenceProof, ): string { const keys = Object.keys(proof);
@@ -2124,18 +1702,12 @@ export function validateOrdinaryAbsentPostflightBytesForTest( bytes: Uint8Array,
   requireCondition( bytes.byteLength === Buffer.byteLength(expected) && Buffer.from(bytes).equals(Buffer.from(expected, "utf8")), "ordinary_postflight_proof", );
   return sha256(bytes); }
 
-export interface ControllerStoppedFenceProof extends JsonRecord { schema: "agenttool-phase-b-refence-target-stopped-fence/v1";
-  checkpoint: "post_build" | "recovery_terminal";
-  stable_fleet_sha256: string;
-  fence_verified: true; }
+export type ControllerStoppedFenceProof = ContractTypes.ControllerStoppedFenceProof;
+export type ControllerCordonedRuntimeProof = ContractTypes.ControllerCordonedRuntimeProof;
 
-export interface ControllerCordonedRuntimeProof extends JsonRecord { schema: "agenttool-phase-b-refence-cordoned-runtime/v1";
-  stable_fleet_sha256: string;
-  cordon_verified: true; }
+export type ControllerPublicJsonObservation = ContractTypes.PublicJsonObservation;
 
-export type ControllerPublicJsonObservation = import("./phase-b-refence-maintenance-contract.ts").PublicJsonObservation;
-
-export type ControllerPublicGateEvent = import("./phase-b-refence-maintenance-contract.ts").PublicGateEvent;
+export type ControllerPublicGateEvent = ContractTypes.PublicGateEvent;
 
 /** @internal Exact pinned-Bun public-observation child argv. */
 export function controllerPublicHTTPArgvForTest(url: string): string[] { requireCondition( (url === PUBLIC_HEALTH_URL || url === PUBLIC_FEDERATION_ABOUT_URL) && Buffer.byteLength(PUBLIC_HTTP_PROGRAM) <= 4_096 &&
@@ -2152,48 +1724,23 @@ export function validateControllerPublicHealthForTest( observation: ControllerPu
 export function validateControllerPublicFederationAboutForTest( observation: ControllerPublicJsonObservation, ): string { return maintenanceContract().validatePublicFederationAbout(observation); }
 
 /** @internal Exact one-canary three-round public trace validator. */
-export function validateControllerFirstCanaryPublicForTest(request: { targetRevision: string;
-  events: readonly ControllerPublicGateEvent[]; }): JsonRecord { return maintenanceContract().validateFirstCanaryPublic(request); }
+export function validateControllerFirstCanaryPublicForTest(request: ContractTypes.ControllerFirstCanaryValidationRequest): JsonRecord { return maintenanceContract().validateFirstCanaryPublic(request); }
 
 /** @internal Exact indivisible final local-public-DB-local sandwich. */
-export function validateControllerFinalAuthorityForTest(request: { targetRevision: string;
-  targetTree: string;
-  expectedDatabaseUpdatedAt: string;
-  databaseInstanceURLSHA256: string;
-  databaseUpdatedAt: string;
-  databaseTargetSHA256: string;
-  events: readonly ControllerPublicGateEvent[]; }): { publicProof: JsonRecord; authorityProof: JsonRecord } { return maintenanceContract().validateFinalAuthority(request); }
+export function validateControllerFinalAuthorityForTest(request: ContractTypes.ValidateControllerFinalAuthorityRequest): ContractTypes.ValidateControllerFinalAuthorityResult { return maintenanceContract().validateFinalAuthority(request); }
 
-export interface ControllerFirstCanaryPublicDependencies { readFleetInventory(): unknown | Promise<unknown>;
-  readPublicJson( url: typeof PUBLIC_HEALTH_URL | typeof PUBLIC_FEDERATION_ABOUT_URL, checkpoint: string, ): Promise<ControllerPublicJsonObservation>;
-  pause(milliseconds: number): Promise<void>; }
+export type ControllerFirstCanaryPublicDependencies = ContractTypes.ControllerFirstCanaryPublicDependencies;
 
 /** @internal Exact fleet-(H,A)x3-fleet canary gate; all I/O is injected. */
-export async function runControllerFirstCanaryPublicCoreForTest(request: { evidence: TerminalEvidence;
-  image: TargetImageContract;
-  expectation: TargetFleetExpectation;
-  expectedFleetSHA256: string;
-  dependencies: ControllerFirstCanaryPublicDependencies; }): Promise<JsonRecord> { return maintenanceContract().runFirstCanaryPublicCore({ evidence: request.evidence, expectation: request.expectation,
+export async function runControllerFirstCanaryPublicCoreForTest(request: ContractTypes.ControllerFirstCanaryPublicBridgeRequest): Promise<JsonRecord> { return maintenanceContract().runFirstCanaryPublicCore({ evidence: request.evidence, expectation: request.expectation,
     expectedFleetSHA256: request.expectedFleetSHA256, dependencies: { readFleetProof: async () => validateTargetFleetForTest( await request.dependencies.readFleetInventory(), request.evidence, request.image, request.expectation, ),
       readPublicJson: (url: string, checkpoint: string) => request.dependencies.readPublicJson( url as typeof PUBLIC_HEALTH_URL | typeof PUBLIC_FEDERATION_ABOUT_URL, checkpoint, ),
       pause: (milliseconds: number) => request.dependencies.pause(milliseconds), }, }); }
 
-export interface ControllerFinalAuthorityDependencies { readEvidence(): TerminalEvidence | Promise<TerminalEvidence>;
-  readGitProof(): Promise<unknown>;
-  readKeychainProof(): Promise<unknown>;
-  readProviderSecretInventory(): Promise<unknown>;
-  readDeployedProcessProof(checkpoint: string): Promise<string>;
-  readFleetInventory(): Promise<unknown>;
-  readPublicJson( url: typeof PUBLIC_HEALTH_URL | typeof PUBLIC_FEDERATION_ABOUT_URL, checkpoint: string, ): Promise<ControllerPublicJsonObservation>;
-  readDatabaseProof(): Promise<unknown>; }
+export type ControllerFinalAuthorityDependencies = ContractTypes.ControllerFinalAuthorityDependencies;
 
 /** @internal Exact indivisible local-(H,A,DB,A,H)-local final gate. */
-export async function runControllerFinalAuthorityCoreForTest(request: { evidence: TerminalEvidence;
-  image: TargetImageContract;
-  expectation: TargetFleetExpectation;
-  expectedFleetSHA256: string;
-  expectedDatabaseUpdatedAt: string;
-  dependencies: ControllerFinalAuthorityDependencies; }): Promise<{ publicProofSHA256: string; authorityProofSHA256: string }> { const readEvidenceProof = async (): Promise<string> => {
+export async function runControllerFinalAuthorityCoreForTest(request: ContractTypes.ControllerFinalAuthorityBridgeRequest): Promise<ContractTypes.ControllerFinalAuthorityBridgeResult> { const readEvidenceProof = async (): Promise<string> => {
     const evidence = await request.dependencies.readEvidence();
     requireOriginalTerminalIdentity(evidence, request.evidence);
     requireCondition(evidence.edge === "H5", "controller_final_evidence");
@@ -2208,16 +1755,7 @@ export async function runControllerFinalAuthorityCoreForTest(request: { evidence
         return { proofSHA256: sha256(canonicalJson(proof)), instanceURLSHA256: proof.federation_instance_url_sha256, updatedAt: proof.federation_updated_at, targetSHA256: proof.database_target_sha256, }; }, }, }); }
 
 /** @internal Target-aware stopped proof; all child I/O is dependency-owned. */
-export async function runControllerStoppedFenceProofCoreForTest(request: { checkpoint: "post_build" | "recovery_terminal";
-  receiptSHA256: string;
-  targetRevision: string;
-  targetTree: string;
-  expectedDatabaseUpdatedAt: string;
-  expectedFleetSHA256: string;
-  image: TargetImageContract | null;
-  expectation: TargetFleetExpectation;
-  dependencies: MaintenanceRefenceDependencies;
-  readEvidence(): TerminalEvidence | Promise<TerminalEvidence>; }): Promise<ControllerStoppedFenceProof> { let evidence: TerminalEvidence | null = null;
+export async function runControllerStoppedFenceProofCoreForTest(request: ContractTypes.ControllerStoppedFenceBridgeRequest): Promise<ControllerStoppedFenceProof> { let evidence: TerminalEvidence | null = null;
   const currentEvidence = (): TerminalEvidence => { requireCondition(evidence !== null, "controller_stopped_fence_evidence");
     return evidence!; };
   const readEvidenceProof = async () => { evidence = await request.readEvidence();
@@ -2234,25 +1772,18 @@ export async function runControllerStoppedFenceProofCoreForTest(request: { check
     }, }); }
 
 /** @internal Four cordoned runtime probes inside an exact fleet sandwich. */
-export async function runControllerCordonedRuntimeCoreForTest(request: { evidence: TerminalEvidence;
-  image: TargetImageContract;
-  expectation: TargetFleetExpectation;
-  expectedFleetSHA256: string;
-  startedMachineIDs: readonly string[];
-  dependencies: { readFleetInventory(): Promise<unknown>;
-    runMachineProbe( machineID: string, role: "app" | "thinker_primary", ): Promise<string>;
-    pause(milliseconds: number): Promise<void>; }; }): Promise<ControllerCordonedRuntimeProof> { return maintenanceContract().runCordonedRuntimeCore({ evidence: request.evidence, image: request.image, expectation: request.expectation,
+export async function runControllerCordonedRuntimeCoreForTest(request: ContractTypes.ControllerCordonedRuntimeBridgeRequest): Promise<ControllerCordonedRuntimeProof> { return maintenanceContract().runCordonedRuntimeCore({ evidence: request.evidence, image: request.image, expectation: request.expectation,
     expectedFleetSHA256: request.expectedFleetSHA256, startedMachineIDs: request.startedMachineIDs, dependencies: { readFleetProof: async () => validateTargetFleetForTest( await request.dependencies.readFleetInventory(), request.evidence,
           request.image, request.expectation, ), runMachineProbe: ( machineID: string, role: "app" | "thinker_primary", ) => request.dependencies.runMachineProbe(machineID, role),
       pause: (milliseconds: number) => request.dependencies.pause(milliseconds), }, }); }
 
-export type FlySSHAgentBatchKind = import("./phase-b-refence-maintenance-contract.ts").FlySSHAgentBatchKind;
+export type FlySSHAgentBatchKind = ContractTypes.FlySSHAgentBatchKind;
 
-export type FlySSHAgentIdentity = import("./phase-b-refence-maintenance-contract.ts").FlySSHAgentIdentity;
+export type FlySSHAgentIdentity = ContractTypes.FlySSHAgentIdentity;
 
-export type FlySSHAgentPathObservation = import("./phase-b-refence-maintenance-contract.ts").FlySSHAgentPathObservation;
+export type FlySSHAgentPathObservation = ContractTypes.FlySSHAgentPathObservation;
 
-export type FlySSHAgentObservation = import("./phase-b-refence-maintenance-contract.ts").FlySSHAgentObservation;
+export type FlySSHAgentObservation = ContractTypes.FlySSHAgentObservation;
 
 const FLY_SSH_AGENT_LAUNCH_AUTHORITY = Symbol("fly_ssh_agent_launch_authority");
 const issuedFlySSHAgentLaunchAuthorities = new WeakSet<object>();
@@ -2279,13 +1810,15 @@ function consumeFlySSHAgentLaunchAuthority(authority: FlySSHAgentLaunchAuthority
 /** @internal Contained runtimes use the same one-shot authority claim as production. */
 export function consumeFlySSHAgentLaunchAuthorityForTest(authority: FlySSHAgentLaunchAuthority, argv: readonly string[]): void { consumeFlySSHAgentLaunchAuthority(authority, argv); }
 
-export type FlySSHAgentStopReceipt = import("./phase-b-refence-maintenance-contract.ts").FlySSHAgentStopReceipt;
+export type FlySSHAgentStopReceipt = ContractTypes.FlySSHAgentStopReceipt;
 
-export type FlySSHAgentStopIntent = import("./phase-b-refence-maintenance-contract.ts").FlySSHAgentStopIntent;
+export type FlySSHAgentStopIntent = ContractTypes.FlySSHAgentStopIntent;
 
-export type FlySSHAgentProtocolPing = import("./phase-b-refence-maintenance-contract.ts").FlySSHAgentProtocolPing;
+export type FlySSHAgentProtocolPing = ContractTypes.FlySSHAgentProtocolPing;
 
-export type FlySSHAgentBatchCleanup = import("./phase-b-refence-maintenance-contract.ts").FlySSHAgentBatchCleanup;
+export type FlySSHAgentKillConnectionAuthority = ContractTypes.FlySSHAgentKillConnectionAuthority;
+
+export type FlySSHAgentBatchCleanup = ContractTypes.FlySSHAgentBatchCleanup;
 function flySSHAgentStableIdentityProjection(identity: FlySSHAgentIdentity): JsonRecord { return maintenanceContract().flySSHAgentStableIdentityProjection(identity) as JsonRecord; }
 
 function exactFlySSHAgentObservation(raw: unknown, tracked: FlySSHAgentIdentity | null, code: string): FlySSHAgentObservation { return maintenanceContract().validateFlySSHAgentObservation(raw, tracked, code) as FlySSHAgentObservation; }
@@ -2303,30 +1836,19 @@ function validateFlySSHAgentProtocolPing(ping: FlySSHAgentProtocolPing, identity
 
 function flySSHAgentProtocolAuthorityProjection(ping: FlySSHAgentProtocolPing): JsonRecord { return maintenanceContract().flySSHAgentProtocolAuthorityProjection(ping) as JsonRecord; }
 
-function flySSHAgentProtocolOperationProjection(intent: FlySSHAgentStopIntent): JsonRecord { return maintenanceContract().flySSHAgentProtocolOperationProjection(intent) as JsonRecord; }
+function validateFlySSHAgentKillConnectionAuthority(authority: FlySSHAgentKillConnectionAuthority, identity: FlySSHAgentIdentity, identitySHA256: string,
+  connectedReboundSHA256: string): FlySSHAgentKillConnectionAuthority { return maintenanceContract().validateFlySSHAgentKillConnectionAuthority(authority, identity, identitySHA256,
+    connectedReboundSHA256) as FlySSHAgentKillConnectionAuthority; }
+
+function flySSHAgentProtocolOperationProjection(intent: FlySSHAgentStopIntent, killAuthority: FlySSHAgentKillConnectionAuthority): JsonRecord { return maintenanceContract().flySSHAgentProtocolOperationProjection(
+    intent, killAuthority) as JsonRecord; }
 
 function validateFlySSHAgentStopIntent(intent: FlySSHAgentStopIntent, batchID: string, identity: FlySSHAgentIdentity, identitySHA256: string,
   ping: FlySSHAgentProtocolPing, connectedReboundSHA256: string): void { maintenanceContract().validateFlySSHAgentStopIntent(intent, batchID, identity, identitySHA256, ping, connectedReboundSHA256); }
 
-export async function runFlySSHAgentOwnedBatchForTest<Result>(request: { batchID: string;
-  batchKind: FlySSHAgentBatchKind;
-  expectedProbeCount: 4 | 8;
-  nowUnixMilliseconds(): number;
-  observe(tracked: FlySSHAgentIdentity | null, checkpoint: string): Promise<FlySSHAgentObservation>;
-  connectStopProtocol(): Promise<unknown>;
-  pingStopProtocol(protocol: unknown, identity: FlySSHAgentIdentity, identitySHA256: string, connectedReboundSHA256: string): Promise<FlySSHAgentProtocolPing>;
-  recordStopIntent(batchID: string, identity: FlySSHAgentIdentity, identitySHA256: string, ping: FlySSHAgentProtocolPing, connectedReboundSHA256: string, protocol: unknown): Promise<FlySSHAgentStopIntent>;
-  sendStop(protocol: unknown, intent: FlySSHAgentStopIntent, identity: FlySSHAgentIdentity, ping: FlySSHAgentProtocolPing): Promise<FlySSHAgentStopReceipt>;
-  closeStopProtocol(protocol: unknown): Promise<void> | void;
-  pause(milliseconds: number): Promise<void>;
-  onCleanup?(cleanupSHA256: string, cleanup: FlySSHAgentBatchCleanup): void;
-  runBatch(launch: <Value>(argv: readonly string[], perform: (authority: FlySSHAgentLaunchAuthority) => Promise<Value>) => Promise<Value>): Promise<Result>; }): Promise<{ result: Result;
-    cleanupSHA256: string;
-    cleanup: FlySSHAgentBatchCleanup; }> { return maintenanceContract().runFlySSHAgentOwnedBatchCore({ ...request, onCleanup: request.onCleanup,
+export async function runFlySSHAgentOwnedBatchForTest<Result>(request: ContractTypes.FlySSHAgentOwnedBatchRequest<Result, FlySSHAgentLaunchAuthority>): Promise<ContractTypes.FlySSHAgentOwnedBatchResult<Result>> { return maintenanceContract().runFlySSHAgentOwnedBatchCore({ ...request, onCleanup: request.onCleanup,
       issueLaunchAuthority: issueFlySSHAgentLaunchAuthority, launchAuthorityConsumed: (authority: object) => consumedFlySSHAgentLaunchAuthorities.has(authority),
-      manual: (code: string) => new ControllerManualInterventionError(code), isManual: (error: unknown) => error instanceof ControllerManualInterventionError, }) as Promise<{ result: Result;
-        cleanupSHA256: string;
-        cleanup: FlySSHAgentBatchCleanup; }>; }
+      manual: (code: string) => new ControllerManualInterventionError(code), isManual: (error: unknown) => error instanceof ControllerManualInterventionError, }) as Promise<ContractTypes.FlySSHAgentOwnedBatchResult<Result>>; }
 
 // Production dependency construction is intentionally below the pure core so
 // focused tests can exercise every refusal without credentials or network.
@@ -2348,8 +1870,7 @@ function requestProductionInterrupt(signal: "SIGINT" | "SIGTERM"): void { const 
   signalProcessGroup(Number(activeProductionChild.pid), "SIGTERM");
   if (interruptHardKill === null) { interruptHardKill = setTimeout( () => signalProcessGroup(Number(activeProductionChild?.pid), "SIGKILL"), 2_000, ); } }
 
-type ProductionStreamOutcome = | { fulfilled: true; resourceSettled: true; value: Uint8Array }
-  | { fulfilled: false; resourceSettled: boolean };
+type ProductionStreamOutcome = ContractTypes.ProductionStreamOutcome;
 
 async function readBoundedStream( stream: ReadableStream<Uint8Array>, maximumBytes: number, signal?: AbortSignal, ): Promise<ProductionStreamOutcome> { const reader = stream.getReader();
   const chunks: Uint8Array[] = [];
@@ -2377,9 +1898,7 @@ async function readBoundedStream( stream: ReadableStream<Uint8Array>, maximumByt
     offset += chunk.byteLength; }
   return { fulfilled: true, resourceSettled: true, value: output }; }
 
-interface ProductionChildPipeOwner { readonly child: any;
-  readonly abort: AbortController;
-  readonly streams: readonly [ Promise<ProductionStreamOutcome>, Promise<ProductionStreamOutcome>, ]; }
+type ProductionChildPipeOwner = ContractTypes.ProductionChildPipeOwner<any>;
 
 function createProductionChildPipeOwner( child: any, maximumBytes: number, ): ProductionChildPipeOwner { const abort = new AbortController();
   const track = (stream: ReadableStream<Uint8Array>) => readBoundedStream(stream, maximumBytes, abort.signal);
@@ -2427,10 +1946,7 @@ async function settlePromiseWithin<T>( promise: Promise<T>, milliseconds: number
   try { return await Promise.race([ promise.then( (value) => ({ settled: true, fulfilled: true, value } as const), () => ({ settled: true, fulfilled: false } as const), ),
       new Promise<{ settled: false; fulfilled: false }>((resolvePromise) => { timer = setTimeout( () => resolvePromise({ settled: false, fulfilled: false }), milliseconds, ); }), ]); } finally { if (timer) clearTimeout(timer); } }
 
-interface DatabaseClientRegistry { register<T extends { end(options: { timeout: number }): unknown }>( client: T, ): T;
-  closeClients(clients: readonly unknown[]): Promise<void>;
-  closeAll(): Promise<void>;
-  activeCount(): number; }
+type DatabaseClientRegistry = ContractTypes.DatabaseClientRegistry;
 
 function createDatabaseClientRegistry( settlementMilliseconds = 2_500, ): DatabaseClientRegistry { requireCondition( Number.isSafeInteger(settlementMilliseconds) && settlementMilliseconds > 0, "database_close_contract", );
   const clients = new Set<any>();
@@ -2454,16 +1970,14 @@ function createDatabaseClientRegistry( settlementMilliseconds = 2_500, ): Databa
 /** @internal Bounded retained-handle registry for contained settlement tests. */
 export function createDatabaseClientRegistryForTest( settlementMilliseconds: number, ): DatabaseClientRegistry { return createDatabaseClientRegistry(settlementMilliseconds); }
 
-interface SessionResourceTeardown { close(): Promise<void>;
-  complete(): boolean; }
+type SessionResourceTeardown = ContractTypes.SessionResourceTeardown;
 
 async function settleResourceTwice( settle: () => Promise<boolean>, ): Promise<boolean> { for (let attempt = 0; attempt < 2; attempt += 1) { try { if (await settle()) return true; } catch {} }
   return false; }
 
 export function settleResourceTwiceForTest( settle: () => Promise<boolean>, ): Promise<boolean> { return settleResourceTwice(settle); }
 
-function createSessionResourceTeardown(request: { settleActiveChild(): Promise<boolean>;
-  closeDatabaseClients(): Promise<void>; }): SessionResourceTeardown { let complete = false;
+function createSessionResourceTeardown(request: ContractTypes.SessionResourceTeardownRequest): SessionResourceTeardown { let complete = false;
   let inFlight: Promise<void> | null = null;
   const close = (): Promise<void> => { if (complete) return Promise.resolve();
     if (inFlight !== null) return inFlight;
@@ -2476,8 +1990,7 @@ function createSessionResourceTeardown(request: { settleActiveChild(): Promise<b
   return { close, complete: () => complete }; }
 
 /** @internal Idempotent all-resource teardown for contained ownership tests. */
-export function createSessionResourceTeardownForTest(request: { settleActiveChild(): Promise<boolean>;
-  closeDatabaseClients(): Promise<void>; }): SessionResourceTeardown { return createSessionResourceTeardown(request); }
+export function createSessionResourceTeardownForTest(request: ContractTypes.SessionResourceTeardownRequest): SessionResourceTeardown { return createSessionResourceTeardown(request); }
 
 async function terminateAndSettle(child: any): Promise<void> { const pid = Number(child.pid);
   signalProcessGroup(pid, "SIGTERM");
@@ -2488,13 +2001,7 @@ async function terminateAndSettle(child: any): Promise<void> { const pid = Numbe
   while (processGroupExists(pid) && Date.now() < deadline) { await new Promise((resolvePromise) => setTimeout(resolvePromise, 10)); }
   requireCondition( exit.settled && !processGroupExists(pid), "child_tree_not_settled", ); }
 
-interface BoundedProductionChildResult { exitCode: number | null;
-  stdout: Uint8Array;
-  stderr: Uint8Array;
-  timedOut: boolean;
-  outputFailed: boolean;
-  forcedSettlement: boolean;
-  processGroupSettled: boolean; }
+type BoundedProductionChildResult = ContractTypes.BoundedProductionChildResult;
 
 async function settleBoundedProductionChild( child: any, pgid: number, timeoutMilliseconds: number, ): Promise<BoundedProductionChildResult> { const owner = activeProductionChildPipes;
   requireCondition( activeProductionChild === child && owner !== null && owner.child === child, "controller_child_identity", );
@@ -2532,10 +2039,7 @@ async function settleBoundedProductionChild( child: any, pgid: number, timeoutMi
   const processGroupSettled = await releaseSettledProductionChild(child);
   return { exitCode, stdout, stderr, timedOut, outputFailed, forcedSettlement, processGroupSettled, }; }
 
-async function readBoundedChild( argv: readonly string[], options: { maximumBytes?: number;
-    timeoutMs?: number;
-    cwd?: string;
-    environment?: Readonly<Record<string, string>>; } = {}, ): Promise<{ exitCode: number; stdout: Uint8Array }> { requireCondition(productionInterrupted === null, "interrupted");
+async function readBoundedChild( argv: readonly string[], options: ContractTypes.BoundedChildOptions = {}, ): Promise<ContractTypes.BoundedChildResult> { requireCondition(productionInterrupted === null, "interrupted");
   requireCondition(activeProductionChild === null, "child_overlap");
   const maximum = options.maximumBytes ?? MAX_CHILD_BYTES;
   const child = Bun.spawn([...argv], { cwd: options.cwd ?? HOME, env: { ...(options.environment ?? CONTROLLER_ENVIRONMENT) }, stdin: "ignore", stdout: "pipe", stderr: "pipe", detached: true, });
@@ -2580,22 +2084,27 @@ async function runRefenceSecurityCLI( arguments_: readonly string[], ): Promise<
 function refenceGitInvocationAllowed(arguments_: readonly string[]): boolean { return [ ["rev-parse", "HEAD"], ["rev-parse", "HEAD^{tree}"], ["rev-parse", "HEAD^2^{tree}"],
     ["rev-parse", AUTHORIZED_H0_TARGET_REVISION + "^{tree}"], ["rev-parse", PRIOR_FAILED_COMPATIBILITY_REVISION + "^{tree}"], ["rev-parse", PRIOR_FAILED_COMPATIBILITY_TOPIC_REVISION + "^{tree}"], ["rev-parse", "--git-common-dir"],
     ["rev-parse", IMMEDIATE_FAILED_COMPATIBILITY_REVISION + "^{tree}"], ["rev-parse", IMMEDIATE_FAILED_COMPATIBILITY_TOPIC_REVISION + "^{tree}"], ["config", "--local", "--null", "--list"],
+    ["rev-parse", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION + "^{tree}"], ["rev-parse", PRIOR_PROTOCOL_INCOMPATIBLE_TOPIC_REVISION + "^{tree}"],
     ["for-each-ref", "--format=%(refname)", "refs/replace/"], ["rev-list", "--count", EXPECTED_SOURCE_REVISION + "..HEAD"], ["rev-list", "--count", EXPECTED_SOURCE_REVISION + ".." + PRIOR_FAILED_COMPATIBILITY_REVISION],
     ["rev-list", "--count", EXPECTED_SOURCE_REVISION + ".." + IMMEDIATE_FAILED_COMPATIBILITY_REVISION], ["cat-file", "commit", "HEAD"], ["cat-file", "commit", PRIOR_FAILED_COMPATIBILITY_REVISION],
-    ["cat-file", "commit", IMMEDIATE_FAILED_COMPATIBILITY_REVISION], ["merge-base", "--is-ancestor", EXPECTED_SOURCE_REVISION, "HEAD"],
-    ["merge-base", "--is-ancestor", IMMEDIATE_FAILED_COMPATIBILITY_REVISION, "HEAD^2"], ["status", "--porcelain=v1", "--untracked-files=all"],
+    ["rev-list", "--count", EXPECTED_SOURCE_REVISION + ".." + PRIOR_PROTOCOL_INCOMPATIBLE_REVISION], ["cat-file", "commit", IMMEDIATE_FAILED_COMPATIBILITY_REVISION],
+    ["cat-file", "commit", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION], ["merge-base", "--is-ancestor", EXPECTED_SOURCE_REVISION, "HEAD"],
+    ["merge-base", "--is-ancestor", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, "HEAD^2"], ["status", "--porcelain=v1", "--untracked-files=all"],
     ["diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, PRIOR_FAILED_COMPATIBILITY_REVISION, "--"],
     ["diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", PRIOR_FAILED_COMPATIBILITY_REVISION, IMMEDIATE_FAILED_COMPATIBILITY_REVISION, "--"],
     ["diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, IMMEDIATE_FAILED_COMPATIBILITY_REVISION, "--"],
-    ["diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", IMMEDIATE_FAILED_COMPATIBILITY_REVISION, "HEAD", "--"],
+    ["diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", IMMEDIATE_FAILED_COMPATIBILITY_REVISION, PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, "--"],
+    ["diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, "--"],
+    ["diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, "HEAD", "--"],
     ["diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, "HEAD", "--"], ["show", "HEAD:bin/phase-b-refence-maintenance-bridge.ts"],
     ["show", PRIOR_FAILED_COMPATIBILITY_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"], ["show", IMMEDIATE_FAILED_COMPATIBILITY_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"],
+    ["show", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"],
     ["show", AUTHORIZED_H0_TARGET_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"], ["show", "HEAD:bin/phase-b-refence-maintenance-contract.ts"],
     ["show", PRIOR_FAILED_COMPATIBILITY_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], ["show", IMMEDIATE_FAILED_COMPATIBILITY_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"],
-    ["show", AUTHORIZED_H0_TARGET_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], ["rev-parse", GITHUB_MAIN_TRACKING_REF],
+    ["show", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], ["show", AUTHORIZED_H0_TARGET_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], ["rev-parse", GITHUB_MAIN_TRACKING_REF],
     ["ls-tree", "-rz", "--full-tree", AUTHORIZED_H0_TARGET_REVISION, "--", "api", "docs"], [ "ls-tree", "-z", "HEAD", "--", "bin/phase-b-refence-maintenance-contract.ts", ],
-    [ "ls-tree", "-z", PRIOR_FAILED_COMPATIBILITY_REVISION, "--", "bin/phase-b-refence-maintenance-contract.ts", ],
-    [ "ls-tree", "-z", IMMEDIATE_FAILED_COMPATIBILITY_REVISION, "--", "bin/phase-b-refence-maintenance-contract.ts", ], ].some((candidate) => canonicalJson(candidate) === canonicalJson(arguments_)); }
+    [ "ls-tree", "-z", PRIOR_FAILED_COMPATIBILITY_REVISION, "--", "bin/phase-b-refence-maintenance-contract.ts", ], [ "ls-tree", "-z", IMMEDIATE_FAILED_COMPATIBILITY_REVISION, "--", "bin/phase-b-refence-maintenance-contract.ts", ],
+    [ "ls-tree", "-z", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, "--", "bin/phase-b-refence-maintenance-contract.ts", ], ].some((candidate) => canonicalJson(candidate) === canonicalJson(arguments_)); }
 
 /** @internal Exact Git read allowlist for contained closure tests. */
 export function refenceGitInvocationAllowedForTest( arguments_: readonly string[], ): boolean { return refenceGitInvocationAllowed(arguments_); }
@@ -2620,16 +2129,9 @@ async function fetchLiteralGitHubMain(): Promise<void> { requirePinnedSystemExec
   const afterConfig = await runRefenceGitCLI(["config", "--local", "--null", "--list"]);
   requireCondition(result.exitCode === 0 && afterConfig.exitCode === 0 && validateGitLocalConfig(afterConfig.stdout) === beforeConfigSHA256, "github_main_fetch"); }
 
-interface GitTreeFile { mode: 0o644 | 0o755;
-  objectSHA1: string;
-  sourceRelativePath: string;
-  destinationRelativePath: string;
-  kind: "tracked_api" | "bundled_registry" | "bundled_doctrine"; }
+type GitTreeFile = ContractTypes.GitTreeFile;
 
-interface DependencyEstateInventory { sha256: string;
-  fileCount: number;
-  byteCount: number;
-  symlinkCount: number; }
+type DependencyEstateInventory = ContractTypes.DependencyEstateInventory;
 
 const DEPENDENCY_SOURCE_PATHS = [ "api/package.json", "api/bun.lock", "api/tsconfig.json", "api/src/db/supabase-target.ts", "api/src/db/verified-postgres.ts", "api/certs/supabase-prod-ca-2021.crt", ] as const;
 const DEPENDENCY_SOURCE_CONTRACT: Readonly<
@@ -2851,47 +2353,15 @@ function readStableRepositoryBlob( relativePath: string, expected: { mode: 0o644
         [opened, after, rebound].every(exactMetadata) && gitHash === expected.objectSHA1, "build_source_file", );
     return { bytes, stat: rebound }; } finally { closeSync(descriptor); } }
 
-interface SuccessAuthorityContractRequest { successProvenAt: string;
-  controllerRunID: string;
-  rolloutID: string;
-  refenceReceiptSHA256: string;
-  sourceRevision: string;
-  sourceTree: string;
-  roles: RoleMap;
-  marker: JsonRecord;
-  databaseConvergence: JsonRecord;
-  deployLock: JsonRecord;
-  deployLockSHA256: string;
-  earlyGuardSHA256: string;
-  buildContext: JsonRecord;
-  dependencyEstate: JsonRecord;
-  refenceHandoff: JsonRecord;
-  retainedArchives: JsonRecord;
-  controllerWal: JsonRecord;
-  rolloutProofs: JsonRecord;
-  finalTruth: JsonRecord; }
+type SuccessAuthorityContractRequest = ContractTypes.SuccessAuthorityRequest;
+type SuccessArtifactContractBundle = ContractTypes.SuccessArtifactBundle;
 
-interface SuccessArtifactContractBundle { authorityProjection: JsonRecord;
-  authorityProjectionSHA256: string;
-  markerBytesUTF8: string;
-  markerSHA256: string;
-  witness: JsonRecord;
-  witnessBytesUTF8: string;
-  witnessSHA256: string;
-  receipt: JsonRecord;
-  receiptBytesUTF8: string;
-  receiptSHA256: string; }
-
-type PureMaintenanceContract = ReturnType<
-  typeof import("./phase-b-refence-maintenance-contract.ts").createMaintenanceContract
->;
+type PureMaintenanceContract = ReturnType<typeof ContractTypes.createMaintenanceContract>;
 type VerifiedMaintenanceContract = { [Key in keyof PureMaintenanceContract]: PureMaintenanceContract[Key] extends (...arguments_: any[]) => any ? (...arguments_: any[]) => any : PureMaintenanceContract[Key] };
 
 let verifiedMaintenanceContract: VerifiedMaintenanceContract | null = null;
 
-interface MaintenanceContractBytes { bytes: Uint8Array;
-  sha256: string;
-  gitBlobSHA1: string; }
+type MaintenanceContractBytes = ContractTypes.MaintenanceContractBytes;
 
 async function validateMaintenanceContractBytes( request: MaintenanceContractBytes, ): Promise<VerifiedMaintenanceContract> { const bytes = Uint8Array.from(request.bytes);
   requireCondition( request.sha256 === CONTRACT_SOURCE_SHA256 && request.gitBlobSHA1 === CONTRACT_SOURCE_GIT_BLOB && sha256(bytes) === request.sha256 && createHash("sha1").update(`blob ${bytes.byteLength}\0`).update(bytes)
@@ -2909,24 +2379,26 @@ async function validateMaintenanceContractBytes( request: MaintenanceContractByt
   requireCondition( canonicalJson(Object.keys(created).sort()) === canonicalJson([ "applyRecoveryMarkerTransition", "bridgeMarkerSuccessAuthorityProjection", "classifyFlySSHAgentProcessRows", "controllerFlyArgv",
           "controllerOperationContract", "createCompatibilityHandoff", "createInitialBridgeMarker", "createSuccessArtifacts", "createSuccessAuthorityProjection", "databaseOriginContract", "expectedAuditWitness",
           "expectedOrdinaryAbsentPostflightBytes", "flySSHAgentAbsenceProjection", "flySSHAgentActiveProjection", "flySSHAgentDirectStopWalVerificationProjection", "flySSHAgentHolderPIDs",
-          "flySSHAgentProtocolAuthorityProjection", "flySSHAgentProtocolOperationProjection", "flySSHAgentStableIdentityProjection", "localEvidenceFingerprint", "maintenanceDatabaseProofSQL", "normalizedFullAudit",
+          "flySSHAgentProtocolAuthorityProjection", "flySSHAgentProtocolOperationProjection", "flySSHAgentProtocolSettlementProjection", "flySSHAgentStableIdentityProjection", "localEvidenceFingerprint", "maintenanceDatabaseProofSQL", "normalizedFullAudit",
           "normalizedRefenceOperator", "parseCompatibilityChangedPaths", "parseFleetChildOutput", "parseFlySSHAgentLSOFText", "parseFlySSHAgentPSText", "parsePublicObservation",
-          "previewSuccessFinalizationMarker", "producerCriticalContractSHA256", "producerLocalStateSandwichSHA256", "refenceOperatorDeclarationValues", "refenceOperatorImmutableCaveats",
+          "previewSuccessFinalizationMarker", "priorProtocolIncompatibilityProjection", "priorProtocolSourceAdmissionEvidenceProjection", "producerCriticalContractSHA256", "producerLocalStateSandwichSHA256",
+          "refenceOperatorDeclarationValues", "refenceOperatorImmutableCaveats",
           "requireFlySSHAgentAbsent", "requireFlySSHAgentActive", "runControllerRolloutCore", "runCordonedRuntimeCore", "runFinalAuthorityCore", "runFirstCanaryPublicCore", "runFlySSHAgentOwnedBatchCore",
           "runMaintenanceRefenceGuardCore", "runStoppedFenceCore", "schema", "validateBridgeMarkerTransition", "validateCompatibilityGitProof", "validateControllerWalEntry", "validateDatabaseConvergenceInheritedProof",
           "validateDatabaseConvergenceMarker", "validateDatabaseConvergenceTransition", "validateDatabaseOriginConvergence", "validateDatabaseProof", "validateFinalAuthority", "validateFirstCanaryPublic", "validateFleetTransition",
-          "validateFlyAuthenticationConfigText", "validateFlySSHAgentObservation", "validateFlySSHAgentProtocolPing", "validateFlySSHAgentStopIntent", "validateGitLocalConfigText",
-          "validateImmediateFailedCompatibilityGitProof", "validatePriorFailedCompatibilityGitProof", "validateProducerAuthorityProjection", "validateProducerEarlyRuntimeBindings", "validateProducerLocalStateSandwich",
+          "validateFlyAuthenticationConfigText", "validateFlySSHAgentKillConnectionAuthority", "validateFlySSHAgentObservation", "validateFlySSHAgentProtocolPing", "validateFlySSHAgentStopIntent", "validateGitLocalConfigText",
+          "validateImmediateFailedCompatibilityGitProof", "validatePriorFailedCompatibilityGitProof", "validatePriorProtocolIncompatibleGitProof", "validateProducerAuthorityProjection", "validateProducerEarlyRuntimeBindings", "validateProducerLocalStateSandwich",
           "validateProductionBridgeMarker", "validatePublicFederationAbout", "validatePublicHealth",
           "validateStoppedFleet", "validateSuccessArtifactBundle", "validateTargetFleet", "validateTargetFleetExpectation", "validateVerifiedDatabaseConvergence", ]) && created.schema ===
         "agenttool-phase-b-refence-maintenance-contract/v1" && Object.isFrozen(created) && deeplyFrozen(created.databaseOriginContract) && typeof created.expectedAuditWitness === "function" &&
       typeof created.expectedOrdinaryAbsentPostflightBytes === "function" && typeof created.normalizedFullAudit === "function" && typeof created.normalizedRefenceOperator === "function" &&
       typeof created.localEvidenceFingerprint === "function" && typeof created.parseCompatibilityChangedPaths === "function" && typeof created.parseFleetChildOutput === "function" &&
       typeof created.parseFlySSHAgentLSOFText === "function" && typeof created.parseFlySSHAgentPSText === "function" && typeof created.parsePublicObservation === "function" &&
+      typeof created.priorProtocolIncompatibilityProjection === "function" && typeof created.priorProtocolSourceAdmissionEvidenceProjection === "function" &&
       typeof created.refenceOperatorDeclarationValues === "function" && typeof created.refenceOperatorImmutableCaveats === "function" && typeof created.classifyFlySSHAgentProcessRows === "function" &&
       typeof created.flySSHAgentAbsenceProjection === "function" && typeof created.flySSHAgentActiveProjection === "function" && typeof created.flySSHAgentHolderPIDs === "function" &&
       typeof created.flySSHAgentProtocolAuthorityProjection === "function" && typeof created.flySSHAgentProtocolOperationProjection === "function" && typeof created.flySSHAgentStableIdentityProjection === "function" &&
-      typeof created.flySSHAgentDirectStopWalVerificationProjection === "function" &&
+      typeof created.flySSHAgentProtocolSettlementProjection === "function" && typeof created.validateFlySSHAgentKillConnectionAuthority === "function" && typeof created.flySSHAgentDirectStopWalVerificationProjection === "function" &&
       typeof created.requireFlySSHAgentAbsent === "function" && typeof created.requireFlySSHAgentActive === "function" && typeof created.runControllerRolloutCore === "function" &&
       typeof created.runCordonedRuntimeCore === "function" && typeof created.runFinalAuthorityCore === "function" && typeof created.runFirstCanaryPublicCore === "function" &&
       typeof created.runFlySSHAgentOwnedBatchCore === "function" && typeof created.runMaintenanceRefenceGuardCore === "function" &&
@@ -2939,6 +2411,7 @@ async function validateMaintenanceContractBytes( request: MaintenanceContractByt
       typeof created.validateCompatibilityGitProof === "function" && typeof created.validateDatabaseOriginConvergence === "function" && typeof created.validateDatabaseProof === "function" &&
       typeof created.validateFinalAuthority === "function" && typeof created.validateFlySSHAgentObservation === "function" && typeof created.validateFlySSHAgentProtocolPing === "function" &&
       typeof created.validateFlySSHAgentStopIntent === "function" && typeof created.validateImmediateFailedCompatibilityGitProof === "function" && typeof created.validatePriorFailedCompatibilityGitProof === "function" &&
+      typeof created.validatePriorProtocolIncompatibleGitProof === "function" &&
       typeof created.validateFlyAuthenticationConfigText === "function" && typeof created.validateGitLocalConfigText === "function" && typeof created.validateFleetTransition === "function" && typeof created.validateFirstCanaryPublic === "function" &&
       typeof created.validatePublicFederationAbout === "function" && typeof created.validatePublicHealth === "function" && typeof created.validateProducerAuthorityProjection === "function" &&
       typeof created.validateProducerEarlyRuntimeBindings === "function" && typeof created.validateProducerLocalStateSandwich === "function" && typeof created.validateStoppedFleet === "function" &&
@@ -3565,26 +3038,7 @@ const DATABASE_ORIGIN_STATEMENT_SHA256 = "00e53468e58ad0c0d7db6255278fd122b19683
 /** @internal Exact non-secret statement projection used by contained tests. */
 export function databaseOriginStatementSHA256ForTest(): string { return sha256(canonicalJson(maintenanceContract().databaseOriginContract)); }
 
-export type ControllerEffectKind = | "database_convergence"
-  | "build_push"
-  | "update_image"
-  | "restore_config"
-  | "refence_config"
-  | "start_machine"
-  | "enable_autostart"
-  | "uncordon_machine"
-  | "cordon_machine"
-  | "stop_machine"
-  | "wait_machine"
-  | "read_fleet"
-  | "read_secrets"
-  | "read_git"
-  | "read_keychain"
-  | "read_process"
-  | "public_probe"
-  | "ordinary_postflight"
-  | "runtime_probe"
-  | "local_agent_stop";
+export type ControllerEffectKind = ContractTypes.ControllerEffectKind;
 
 export function controllerFlyArgv(operation: ControllerFlyOperation): string[] { return maintenanceContract().controllerFlyArgv(operation, PINNED_FLY); }
 
@@ -3600,60 +3054,17 @@ function controllerFleetProjection( byID: Map<string, JsonRecord>, ): JsonRecord
 
 function sameStringSet( left: readonly string[], right: readonly string[], ): boolean { return canonicalJson([...left].sort()) === canonicalJson([...right].sort()); }
 
-export type ControllerFleetTransitionProof = import("./phase-b-refence-maintenance-contract.ts").FleetTransitionProof;
+export type ControllerFleetTransitionProof = ContractTypes.FleetTransitionProof;
 
 /**
  * @internal Exact provider transition oracle. It evolves only fields authorized
  * by one reviewed Fly operation from the previously proved full-five snapshot.
  */
-export function validateControllerFleetTransitionForTest(request: { beforeFirst: unknown;
-  beforeSecond: unknown;
-  first: unknown;
-  second: unknown;
-  evidence: TerminalEvidence;
-  operation: ControllerFlyOperation;
-  image: TargetImageContract | null;
-  expectation: TargetFleetExpectation; }): ControllerFleetTransitionProof { return maintenanceContract().validateFleetTransition(request); }
+export function validateControllerFleetTransitionForTest(request: ContractTypes.ControllerFleetTransitionRequest): ControllerFleetTransitionProof { return maintenanceContract().validateFleetTransition(request); }
 
-export type ControllerWalPhase = | "ready"
-  | "lifecycle_intent"
-  | "attempting"
-  | "spawned"
-  | "settled"
-  | "verified"
-  | "transition_verified"
-  | "failed_or_uncertain"
-  | "complete";
-
-export interface ControllerWalEntry { schema: "agenttool-phase-b-refence-maintenance-child-wal/v1";
-  ordinal: number;
-  prior_entry_sha256: string | null;
-  controller_run_id: string;
-  rollout_id: string;
-  receipt_sha256: string;
-  recorded_at: string;
-  phase: ControllerWalPhase;
-  checkpoint: string;
-  effect_id: string | null;
-  effect_kind: ControllerEffectKind | null;
-  target: string | null;
-  argv_sha256: string | null;
-  pid: number | null;
-  pgid: number | null;
-  exit_code: number | null;
-  termination: "exit" | "signal" | "timeout" | null;
-  local_process_group_settled: boolean;
-  provider_transition_sha256: string | null;
-  fleet_readback_sha256: string | null;
-  detail_sha256: string | null;
-  failure_code: string | null; }
-
-export interface ControllerWalProjection { directory: string;
-  entry_count: number;
-  ordered_filenames: string[];
-  chain_sha256: string;
-  terminal_entry_sha256: string;
-  terminal_phase: ControllerWalPhase; }
+export type ControllerWalPhase = ContractTypes.ControllerWalPhase;
+export type ControllerWalEntry = ContractTypes.ControllerWalContractEntry;
+export type ControllerWalProjection = ContractTypes.ControllerWalProjection;
 
 function createPrivateDirectoryExclusive(path: string, parent: string): Stats { requirePrivateDirectory(parent);
   mkdirSync(path, { mode: 0o700 });
@@ -3699,10 +3110,7 @@ export class ControllerWalWriter { readonly directory: string;
     const entry = this.#entries[ordinal - 1];
     return entry === undefined ? null : structuredClone(entry); }
 
-  constructor(request: { directory: string;
-    controllerRunID: string;
-    rolloutID: string;
-    receiptSHA256: string; }) { requirePrivateDirectory(request.directory);
+  constructor(request: ContractTypes.ControllerWalWriterRequest) { requirePrivateDirectory(request.directory);
     requireCondition( readdirSync(request.directory).length === 0 && validRunID(request.controllerRunID) && /^maintenance-refence-[0-9a-f]{12}-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{16}$/ .test(request.rolloutID) && validSha(request.receiptSHA256),
       "controller_wal_admission", );
     this.directory = request.directory;
@@ -3771,37 +3179,27 @@ function databaseConvergenceWalBase( entry: ControllerWalEntry, ): Pick<
   return { checkpoint: entry.checkpoint, effect_id: entry.effect_id, effect_kind: entry.effect_kind, target: entry.target, argv_sha256: entry.argv_sha256, }; }
 
 /** @internal Durable non-child database intent for contained crash tests. */
-export function appendDatabaseConvergenceIntentForTest(request: { wal: ControllerWalWriter;
-  recordedAt: string;
-  beforeProofSHA256: string;
-  databaseTargetSHA256: string; }): ControllerWalEntry { requireCondition( request.wal.lastEntry?.phase === "ready" && validUtcTimestamp(request.recordedAt) && validSha(request.beforeProofSHA256) && validSha(request.databaseTargetSHA256),
-    "database_convergence_intent", );
+export function appendDatabaseConvergenceIntentForTest( request: ContractTypes.DatabaseConvergenceIntentRequest<ControllerWalWriter>,
+): ControllerWalEntry { requireCondition( request.wal.lastEntry?.phase === "ready" && validUtcTimestamp(request.recordedAt) && validSha(request.beforeProofSHA256) && validSha(request.databaseTargetSHA256), "database_convergence_intent", );
   return request.wal.append({ recorded_at: request.recordedAt, phase: "attempting", checkpoint: "database_convergence_intent", effect_id: "database_origin_convergence", effect_kind: "database_convergence", target: "federation.settings:1",
     argv_sha256: DATABASE_ORIGIN_STATEMENT_SHA256, pid: null, pgid: null, exit_code: null, termination: null, local_process_group_settled: true, provider_transition_sha256: null, fleet_readback_sha256: null,
     detail_sha256: sha256(canonicalJson({ before_proof_sha256: request.beforeProofSHA256, database_target_sha256: request.databaseTargetSHA256, database_write_attempt_count: 1, rollback_attempt_count: 0,
       statement_sha256: DATABASE_ORIGIN_STATEMENT_SHA256, })), failure_code: null, }); }
 
-export function appendDatabaseConvergenceCommitForTest(request: { wal: ControllerWalWriter;
-  recordedAt: string;
-  proof: DatabaseOriginConvergenceProof; }): ControllerWalEntry { const previous = request.wal.lastEntry;
+export function appendDatabaseConvergenceCommitForTest(request: ContractTypes.DatabaseConvergenceCommitRequest<ControllerWalWriter>): ControllerWalEntry { const previous = request.wal.lastEntry;
   requireCondition( previous !== null && previous.phase === "attempting" && validUtcTimestamp(request.recordedAt), "database_convergence_commit", );
   const base = databaseConvergenceWalBase(previous);
   return request.wal.append({ ...base, recorded_at: request.recordedAt, phase: "settled", checkpoint: "database_convergence_commit_acknowledged", pid: null, pgid: null, exit_code: null, termination: null, local_process_group_settled: true,
     provider_transition_sha256: null, fleet_readback_sha256: null, detail_sha256: sha256(canonicalJson(request.proof)), failure_code: null, }); }
 
-export function appendDatabaseConvergenceVerifiedForTest(request: { wal: ControllerWalWriter;
-  recordedAt: string;
-  proof: DatabaseOriginConvergenceProof;
-  afterProofSHA256: string; }): ControllerWalEntry { const previous = request.wal.lastEntry;
+export function appendDatabaseConvergenceVerifiedForTest(request: ContractTypes.DatabaseConvergenceVerifiedRequest<ControllerWalWriter>): ControllerWalEntry { const previous = request.wal.lastEntry;
   requireCondition( previous !== null && previous.phase === "settled" && validUtcTimestamp(request.recordedAt) && validSha(request.afterProofSHA256), "database_convergence_verified", );
   const base = databaseConvergenceWalBase(previous);
   return request.wal.append({ ...base, recorded_at: request.recordedAt, phase: "verified", checkpoint: "database_convergence_verified", pid: null, pgid: null, exit_code: null, termination: null, local_process_group_settled: true,
     provider_transition_sha256: request.proof.delta_sha256, fleet_readback_sha256: request.afterProofSHA256, detail_sha256: sha256(canonicalJson({ convergence_sha256: sha256(canonicalJson(request.proof)),
       after_proof_sha256: request.afterProofSHA256, })), failure_code: null, }); }
 
-export function appendDatabaseConvergenceFailureForTest(request: { wal: ControllerWalWriter;
-  recordedAt: string;
-  failureCode: string; }): ControllerWalEntry { const previous = request.wal.lastEntry;
+export function appendDatabaseConvergenceFailureForTest(request: ContractTypes.WalFailureRequest<ControllerWalWriter>): ControllerWalEntry { const previous = request.wal.lastEntry;
   requireCondition( previous !== null && ["attempting", "settled", "verified"].includes(previous.phase) && previous.effect_kind === "database_convergence" && validUtcTimestamp(request.recordedAt) &&
       /^[a-z0-9_]{1,64}$/.test(request.failureCode), "database_convergence_failure", );
   const base = databaseConvergenceWalBase(previous);
@@ -3810,27 +3208,11 @@ export function appendDatabaseConvergenceFailureForTest(request: { wal: Controll
     provider_transition_sha256: null, fleet_readback_sha256: null, detail_sha256: sha256(canonicalJson({ failure_code: request.failureCode, reconciliation_required: true, rollback_attempt_count: 0, })), failure_code: request.failureCode,
   }); }
 
-export interface ControllerDatabaseConvergenceDependencies { now(): string;
-  recordIntent(entry: ControllerWalEntry): Promise<void> | void;
-  verifyIntent(entry: ControllerWalEntry): Promise<void> | void;
-  readPreMutationProof(): Promise<DatabaseProof>;
-  converge(): Promise<DatabaseOriginConvergenceProof>;
-  recordCommit( proof: DatabaseOriginConvergenceProof, entry: ControllerWalEntry, ): Promise<void> | void;
-  readPostMutationProof(): Promise<DatabaseProof>;
-  recordVerified( afterProofSHA256: string, entry: ControllerWalEntry, ): Promise<void> | void;
-  retainManual(code: string): Promise<void> | void; }
-
-export interface ControllerDatabaseConvergenceResult { proof: DatabaseOriginConvergenceProof;
-  beforeProofSHA256: string;
-  afterProofSHA256: string; }
+export type ControllerDatabaseConvergenceDependencies = ContractTypes.ControllerDatabaseConvergenceDependencies;
+export type ControllerDatabaseConvergenceResult = ContractTypes.ControllerDatabaseConvergenceResult;
 
 /** @internal First and only post-H database mutation; no provider dependency. */
-export async function runControllerDatabaseConvergenceCoreForTest(request: { wal: ControllerWalWriter;
-  handoffEdge: HandoffEdge;
-  interrupted(): boolean;
-  inheritedProof: DatabaseProof;
-  inheritedProofSHA256: string;
-  dependencies: ControllerDatabaseConvergenceDependencies; }): Promise<ControllerDatabaseConvergenceResult> { const inheritedProof = validateDatabaseConvergenceInheritedProof( request.inheritedProof, );
+export async function runControllerDatabaseConvergenceCoreForTest(request: ContractTypes.ControllerDatabaseConvergenceBridgeRequest<ControllerWalWriter>): Promise<ControllerDatabaseConvergenceResult> { const inheritedProof = validateDatabaseConvergenceInheritedProof( request.inheritedProof, );
   requireCondition( request.handoffEdge === "H5" && request.interrupted() === false && request.wal.lastEntry?.phase === "ready" && request.wal.lastEntry.checkpoint === "controller_ready" && request.wal.lastEntry.effect_id === null &&
       request.wal.lastEntry.effect_kind === null && request.wal.lastEntry.local_process_group_settled === true && validSha(request.inheritedProofSHA256) && sha256(canonicalJson(inheritedProof)) === request.inheritedProofSHA256 &&
       inheritedProof.federation_instance_url_sha256 === PRE_REFENCE_INSTANCE_URL_SHA256, "database_convergence_admission", );
@@ -3877,31 +3259,12 @@ export function validateVerifiedDatabaseConvergenceForTest( rawMarker: unknown, 
     marker, result, intent: Number.isSafeInteger(intentOrdinal) ? wal.entryAt(intentOrdinal) : null, commit: Number.isSafeInteger(commitOrdinal) ? wal.entryAt(commitOrdinal) : null, verified: Number.isSafeInteger(verifiedOrdinal)
       ? wal.entryAt(verifiedOrdinal) : null, lastEntry: wal.lastEntry, }); }
 
-export interface ControllerEffectChild { pid: number;
-  pgid: number; }
+export type ControllerEffectChild = ContractTypes.ControllerEffectChild;
+export type ControllerEffectSettlement = ContractTypes.ControllerEffectSettlement;
+export type ControllerEffectVerification = ContractTypes.ControllerEffectVerification;
+export type ControllerEffectRuntime = ContractTypes.ControllerEffectRuntime;
 
-export interface ControllerEffectSettlement { exitCode: number | null;
-  termination: "exit" | "signal" | "timeout";
-  processGroupSettled: boolean;
-  detailSHA256: string; }
-
-export interface ControllerEffectVerification { providerTransitionSHA256: string;
-  fleetReadbackSHA256: string;
-  detailSHA256: string; }
-
-export interface ControllerEffectRuntime { now(): string;
-  spawn(argv: readonly string[]): ControllerEffectChild;
-  settle( child: ControllerEffectChild, timeoutMilliseconds: number, ): Promise<ControllerEffectSettlement>; }
-
-export async function executeControllerEffect(request: { wal: ControllerWalWriter;
-  runtime: ControllerEffectRuntime;
-  effectID: string;
-  effectKind: ControllerEffectKind;
-  checkpoint: string;
-  target: string;
-  argv: readonly string[];
-  timeoutMilliseconds: number;
-  verify(): Promise<ControllerEffectVerification>; }): Promise<ControllerEffectVerification> { requireCondition( request.wal.lastEntry !== null && ["ready", "settled", "verified", "transition_verified"].includes(
+export async function executeControllerEffect(request: ContractTypes.ControllerEffectRequest<ControllerWalWriter>): Promise<ControllerEffectVerification> { requireCondition( request.wal.lastEntry !== null && ["ready", "settled", "verified", "transition_verified"].includes(
         request.wal.lastEntry.phase, ) && /^[a-z0-9_]{1,128}$/.test(request.effectID) && /^[a-z0-9_]{1,128}$/.test(request.checkpoint) && request.argv.length >= 1 && request.argv.length <= 128 && request.argv.every((entry) =>
         typeof entry === "string" && entry.length >= 1 && entry.length <= 4096 && !entry.includes("\0") && !entry.includes("\n") && !entry.includes("\r") ) && Number.isSafeInteger(request.timeoutMilliseconds) &&
       request.timeoutMilliseconds >= 1_000 && request.timeoutMilliseconds <= 600_000, "controller_effect_contract", );
@@ -3945,13 +3308,7 @@ export class ControllerSettledObservationError extends Error { readonly code: st
     this.name = "ControllerSettledObservationError";
     this.code = /^[a-z0-9_]{1,64}$/.test(code) ? code : "controller_observation_refused"; } }
 
-interface ProductionFlyChildRecord { operation: ControllerFlyOperation;
-  argv: string[];
-  cwd: string;
-  child: any;
-  stdout: Uint8Array | null;
-  stderr: Uint8Array | null;
-  settlement: ControllerEffectSettlement | null; }
+type ProductionFlyChildRecord = ContractTypes.ProductionFlyChildRecord<ControllerFlyOperation, any, ControllerEffectSettlement>;
 
 class ProductionFlyEffectRuntime implements ControllerFlyEffectRuntime { readonly buildContextPath: string;
   readonly verifyLocalAuthority: () => void;
@@ -3959,8 +3316,7 @@ class ProductionFlyEffectRuntime implements ControllerFlyEffectRuntime { readonl
     | null = null;
   #records = new Map<number, ProductionFlyChildRecord>();
 
-  constructor(request: { buildContextPath: string;
-    verifyLocalAuthority(): void; }) { this.buildContextPath = request.buildContextPath;
+  constructor(request: ContractTypes.ProductionFlyEffectRuntimeRequest) { this.buildContextPath = request.buildContextPath;
     this.verifyLocalAuthority = request.verifyLocalAuthority; }
 
   now(): string { const value = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -4014,15 +3370,7 @@ class ProductionFlyEffectRuntime implements ControllerFlyEffectRuntime { readonl
     record.stderr = null;
     return bytes; } }
 
-interface ProductionReadChildRecord { argv: string[];
-  cwd: string;
-  environment: Readonly<Record<string, string>>;
-  flySSHAgentLaunchAuthority: FlySSHAgentLaunchAuthority | null;
-  verifyContract(): void;
-  child: any;
-  stdout: Uint8Array | null;
-  stderr: Uint8Array | null;
-  settlement: ControllerEffectSettlement | null; }
+type ProductionReadChildRecord = ContractTypes.ProductionReadChildRecord<FlySSHAgentLaunchAuthority, any, ControllerEffectSettlement>;
 
 class ProductionControllerReadEffectRuntime implements ControllerEffectRuntime { readonly verifyLocalAuthority: () => void;
   #armed: { argv: string[];
@@ -4038,11 +3386,7 @@ class ProductionControllerReadEffectRuntime implements ControllerEffectRuntime {
     requireCondition(validUtcTimestamp(value), "controller_time");
     return value; }
 
-  arm(request: { argv: readonly string[];
-    cwd: string;
-    environment: Readonly<Record<string, string>>;
-    flySSHAgentLaunchAuthority?: FlySSHAgentLaunchAuthority;
-    verifyContract(): void; }): string[] { requireCondition( this.#armed === null && request.argv.length >= 1 && request.argv.length <= 128 && request.argv.every((entry) => entry.length >= 1 && entry.length <= 4_096 &&
+  arm(request: ContractTypes.ProductionReadChildArmRequest<FlySSHAgentLaunchAuthority>): string[] { requireCondition( this.#armed === null && request.argv.length >= 1 && request.argv.length <= 128 && request.argv.every((entry) => entry.length >= 1 && entry.length <= 4_096 &&
           !/[\0\r\n]/.test(entry) ) && realpathSync(request.cwd) === request.cwd && Object.keys(request.environment).length >= 1 && Object.keys(request.environment).length <= 64 && Object.entries(request.environment).every(([key, value]) =>
           /^[A-Z_][A-Z0-9_]*$/.test(key) && value.length <= 32_768 && !/[\0\r\n]/.test(value) ), "controller_read_child_arm", );
     const isFlySSH = canonicalJson(request.argv.slice(0, 3)) === canonicalJson([PINNED_FLY, "ssh", "console"]);
@@ -4095,29 +3439,17 @@ class ProductionControllerReadEffectRuntime implements ControllerEffectRuntime {
     record.stderr = null;
     return bytes; } }
 
-export interface ControllerReadEffectRuntime extends ControllerEffectRuntime { takeStdout( identity: ControllerEffectChild, acceptedExitCodes: readonly number[], ): Uint8Array;
-  takeStderr?( identity: ControllerEffectChild, acceptedExitCodes: readonly number[], ): Uint8Array; }
+export type ControllerReadEffectRuntime = ContractTypes.ControllerReadEffectRuntime;
+export type ControllerSettledEffect = ContractTypes.ControllerSettledEffect;
 
-export interface ControllerSettledEffect { effectID: string;
-  child: ControllerEffectChild;
-  settlement: ControllerEffectSettlement; }
-
-export async function executeControllerEffectToSettlement(request: { wal: ControllerWalWriter;
-  runtime: ControllerEffectRuntime;
-  effectID: string;
-  effectKind: ControllerEffectKind;
-  checkpoint: string;
-  target: string;
-  argv: readonly string[];
-  timeoutMilliseconds: number;
-  durableIntentSHA256?: string;
-  acceptedExitCodes?: readonly number[]; }): Promise<ControllerSettledEffect> { const acceptedExitCodes = request.acceptedExitCodes ?? [0];
+export async function executeControllerEffectToSettlement(request: ContractTypes.ControllerEffectToSettlementRequest<ControllerWalWriter>): Promise<ControllerSettledEffect> { const acceptedExitCodes = request.acceptedExitCodes ?? [0];
   const history: ControllerWalEntry[] = [];
   for (let ordinal = 1; ordinal <= (request.wal.lastEntry?.ordinal ?? 0); ordinal += 1) history.push(request.wal.entryAt(ordinal)!);
   const lifecycleIntents = history.filter((entry) => entry.phase === "lifecycle_intent");
   const pendingLifecycleIntent = lifecycleIntents.find((intent) => !history.some((entry) => entry.phase === "attempting" && entry.effect_kind === "local_agent_stop" && entry.target === intent.target &&
-    entry.detail_sha256 === sha256(`${canonicalJson(intent)}\n`))) ?? null;
-  const expectedReboundCheckpoint = typeof pendingLifecycleIntent?.target === "string" && pendingLifecycleIntent.target.startsWith("cordoned_runtime_") ? "cordoned_runtime_cleanup_intent_rebound" : "final_authority_cleanup_intent_rebound";
+    entry.effect_id === intent.effect_id?.replace(/_intent$/, ""))) ?? null;
+  const expectedReboundCheckpoint = typeof pendingLifecycleIntent?.target === "string" && pendingLifecycleIntent.target.startsWith("cordoned_runtime_") ? "cordoned_runtime_cleanup_kill_connected_rebound" :
+    "final_authority_cleanup_kill_connected_rebound";
   const lifecycleAdmission = request.effectKind !== "local_agent_stop" && (pendingLifecycleIntent === null || request.effectKind === "read_process" && request.target === "local_fly_ssh_agent" &&
       request.checkpoint === expectedReboundCheckpoint && request.durableIntentSHA256 === undefined && /^agent_[0-9]{6}_(?:process_census|path_holders|identity_[1-9][0-9]*|text_[1-9][0-9]*)$/.test(request.effectID));
   requireCondition( lifecycleAdmission && request.wal.lastEntry !== null && (["ready", "lifecycle_intent", "verified", "transition_verified"].includes( request.wal.lastEntry.phase, ) || (request.wal.lastEntry.phase === "settled" &&
@@ -4152,12 +3484,7 @@ export async function executeControllerEffectToSettlement(request: { wal: Contro
     if ( error instanceof ControllerManualInterventionError || error instanceof ControllerSettledObservationError ) throw error;
     throw new ControllerManualInterventionError( error instanceof MaintenanceRefenceError ? error.code : "controller_child_refused", ); } }
 
-export function appendControllerTransitionVerification(request: { wal: ControllerWalWriter;
-  effectID: string;
-  recordedAt: string;
-  providerTransitionSHA256: string;
-  fleetReadbackSHA256: string;
-  detailSHA256: string; }): ControllerWalEntry { const subject = request.wal.settledEffect(request.effectID);
+export function appendControllerTransitionVerification(request: ContractTypes.ControllerTransitionVerificationRequest<ControllerWalWriter>): ControllerWalEntry { const subject = request.wal.settledEffect(request.effectID);
   const terminal = request.wal.lastEntry;
   requireCondition( subject !== null && terminal !== null && terminal.phase === "verified" && terminal.effect_kind === "read_fleet" && validUtcTimestamp(request.recordedAt) && validSha(request.providerTransitionSHA256) &&
       validSha(request.fleetReadbackSHA256) && validSha(request.detailSHA256), "controller_transition_verification", );
@@ -4166,10 +3493,7 @@ export function appendControllerTransitionVerification(request: { wal: Controlle
     pgid: subject.pgid, exit_code: subject.exit_code, termination: "exit", local_process_group_settled: true, provider_transition_sha256: request.providerTransitionSHA256, fleet_readback_sha256: request.fleetReadbackSHA256,
     detail_sha256: request.detailSHA256, failure_code: null, }); }
 
-function appendControllerTransitionFailure(request: { wal: ControllerWalWriter;
-  effectID: string;
-  recordedAt: string;
-  failureCode: string; }): ControllerWalEntry { const subject = request.wal.settledEffect(request.effectID);
+function appendControllerTransitionFailure(request: ContractTypes.ControllerEffectFailureRequest<ControllerWalWriter>): ControllerWalEntry { const subject = request.wal.settledEffect(request.effectID);
   const terminal = request.wal.lastEntry;
   requireCondition( subject !== null && terminal !== null && terminal.phase === "verified" && terminal.effect_kind === "read_fleet" && validUtcTimestamp(request.recordedAt) && /^[a-z0-9_]{1,64}$/.test(request.failureCode),
     "controller_transition_failure", );
@@ -4178,10 +3502,7 @@ function appendControllerTransitionFailure(request: { wal: ControllerWalWriter;
     pgid: subject.pgid, exit_code: subject.exit_code, termination: "exit", local_process_group_settled: true, provider_transition_sha256: null, fleet_readback_sha256: null, detail_sha256: sha256(canonicalJson({
       failure_code: request.failureCode, terminal_read_effect_id: terminal.effect_id, terminal_read_fleet_sha256: terminal.fleet_readback_sha256, })), failure_code: request.failureCode, }); }
 
-export function appendControllerSettledVerification(request: { wal: ControllerWalWriter;
-  effectID: string;
-  recordedAt: string;
-  verification: ControllerEffectVerification; }): ControllerWalEntry { const subject = request.wal.lastEntry;
+export function appendControllerSettledVerification(request: ContractTypes.ControllerSettledVerificationRequest<ControllerWalWriter>): ControllerWalEntry { const subject = request.wal.lastEntry;
   requireCondition( subject !== null && subject.phase === "settled" && subject.effect_id === request.effectID && validUtcTimestamp(request.recordedAt) && validSha(request.verification.providerTransitionSHA256) &&
       validSha(request.verification.fleetReadbackSHA256) && validSha(request.verification.detailSHA256), "controller_effect_verification", );
   return request.wal.append({
@@ -4189,10 +3510,7 @@ export function appendControllerSettledVerification(request: { wal: ControllerWa
     pgid: subject.pgid, exit_code: subject.exit_code, termination: "exit", local_process_group_settled: true, provider_transition_sha256: request.verification.providerTransitionSHA256,
     fleet_readback_sha256: request.verification.fleetReadbackSHA256, detail_sha256: request.verification.detailSHA256, failure_code: null, }); }
 
-function appendControllerSettledFailure(request: { wal: ControllerWalWriter;
-  effectID: string;
-  recordedAt: string;
-  failureCode: string; }): ControllerWalEntry { const subject = request.wal.lastEntry;
+function appendControllerSettledFailure(request: ContractTypes.ControllerEffectFailureRequest<ControllerWalWriter>): ControllerWalEntry { const subject = request.wal.lastEntry;
   requireCondition( subject !== null && subject.phase === "settled" && subject.effect_id === request.effectID && validUtcTimestamp(request.recordedAt) && /^[a-z0-9_]{1,64}$/.test(request.failureCode), "controller_effect_failure", );
   return request.wal.append({
     recorded_at: request.recordedAt, phase: "failed_or_uncertain", checkpoint: subject.checkpoint, effect_id: subject.effect_id, effect_kind: subject.effect_kind, target: subject.target, argv_sha256: subject.argv_sha256, pid: subject.pid,
@@ -4200,22 +3518,8 @@ function appendControllerSettledFailure(request: { wal: ControllerWalWriter;
     failure_code: request.failureCode, }); }
 
 /** @internal Closed observation child with durable intent and redacted WAL. */
-export async function performControllerJournalledReadChildForTest<T>( request: { wal: ControllerWalWriter;
-    runtime: ControllerReadEffectRuntime;
-    effectID: string;
-    effectKind: | "read_git"
-      | "read_keychain"
-      | "read_process"
-      | "public_probe"
-      | "ordinary_postflight"
-      | "runtime_probe";
-    checkpoint: string;
-    target: string;
-    argv: readonly string[];
-    timeoutMilliseconds: number;
-    acceptedExitCodes: readonly number[];
-    validate( stdout: Uint8Array, exitCode: number, ): { value: T; semanticProjection: unknown };
-    validateStderr?(stderr: Uint8Array): void; }, ): Promise<{ value: T; semanticSHA256: string }> { const settled = await executeControllerEffectToSettlement({ wal: request.wal, runtime: request.runtime, effectID: request.effectID,
+export async function performControllerJournalledReadChildForTest<T>( request: ContractTypes.ControllerJournalledReadChildRequest<T, ControllerWalWriter>,
+): Promise<ContractTypes.ControllerJournalledReadChildResult<T>> { const settled = await executeControllerEffectToSettlement({ wal: request.wal, runtime: request.runtime, effectID: request.effectID,
     effectKind: request.effectKind, checkpoint: request.checkpoint, target: request.target, argv: request.argv, timeoutMilliseconds: request.timeoutMilliseconds, acceptedExitCodes: request.acceptedExitCodes, });
   let value: T;
   let rawSHA256: string;
@@ -4238,9 +3542,9 @@ export async function performControllerJournalledReadChildForTest<T>( request: {
         detailSHA256: sha256(canonicalJson({ exit_code: exitCode, raw_sha256: rawSHA256, semantic_sha256: semanticSHA256, })), }, }); } catch { throw new ControllerManualInterventionError( "controller_observation_wal", ); }
   return { value, semanticSHA256 }; }
 
-type FlySSHAgentPSRow = import("./phase-b-refence-maintenance-contract.ts").FlySSHAgentPSRow;
-type FlySSHAgentParsedPSRow = import("./phase-b-refence-maintenance-contract.ts").FlySSHAgentParsedPSRow;
-type FlySSHAgentLSOFEntry = import("./phase-b-refence-maintenance-contract.ts").FlySSHAgentLSOFEntry;
+type FlySSHAgentPSRow = ContractTypes.FlySSHAgentPSRow;
+type FlySSHAgentParsedPSRow = ContractTypes.FlySSHAgentParsedPSRow;
+type FlySSHAgentLSOFEntry = ContractTypes.FlySSHAgentLSOFEntry;
 
 export function parseFlySSHAgentPSForTest(bytes: Uint8Array): readonly FlySSHAgentPSRow[] { const text = decode(bytes, "fly_agent_ps");
   return (maintenanceContract().parseFlySSHAgentPSText(text) as readonly FlySSHAgentParsedPSRow[]).map((row) => { const startedAtUnixMs = Date.parse(row.lstart);
@@ -4271,8 +3575,8 @@ export function encodeFlySSHAgentProtocolFrameForTest(payload: "ping" | "kill"):
   return frame; }
 
 /** @internal Strict exact-serialization protocol response fixtures. */
-export function parseFlySSHAgentProtocolPingForTest(bytes: Uint8Array, identity: FlySSHAgentIdentity, identitySHA256: string, connectedReboundSHA256: string, connectedReboundWalSHA256: string): FlySSHAgentProtocolPing {
-  requireCondition(bytes.byteLength >= 3 && bytes.byteLength <= FLY_AGENT_PROTOCOL_MAX_RESPONSE_BYTES, "fly_agent_protocol_ping");
+export function parseFlySSHAgentProtocolPingForTest(bytes: Uint8Array, identity: FlySSHAgentIdentity, identitySHA256: string, connectedReboundSHA256: string, connectedReboundWalSHA256: string,
+  initialPeerPID = identity.pid, prewritePeerPID = identity.pid): FlySSHAgentProtocolPing { requireCondition(bytes.byteLength >= 3 && bytes.byteLength <= FLY_AGENT_PROTOCOL_MAX_RESPONSE_BYTES, "fly_agent_protocol_ping");
   const text = decode(bytes, "fly_agent_protocol_ping");
   requireCondition(text.startsWith("ok ") && !/[\0\r\n]/.test(text), "fly_agent_protocol_ping");
   let raw: unknown;
@@ -4281,46 +3585,114 @@ export function parseFlySSHAgentProtocolPingForTest(bytes: Uint8Array, identity:
   const value = raw as { pid: number; version: string; disabled: boolean };
   requireCondition(value.pid === identity.pid && value.version === FLY_AGENT_VERSION && typeof value.disabled === "boolean" &&
       text === `ok {"pid":${identity.pid},"version":"${FLY_AGENT_VERSION}","disabled":${String(value.disabled)}}` && validSha(connectedReboundSHA256) && validSha(connectedReboundWalSHA256), "fly_agent_protocol_ping");
-  return validateFlySSHAgentProtocolPing({ schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-ping/v1", transport: "local_unix_stream", socket_path: FLY_AGENT_SOCKET,
-    connected_without_write: true, connected_rebound_sha256: connectedReboundSHA256, connected_rebound_wal_sha256: connectedReboundWalSHA256, identity_sha256: identitySHA256,
+  return validateFlySSHAgentProtocolPing({ schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-ping/v2", transport: "local_unix_stream", socket_path: FLY_AGENT_SOCKET, connection_role: "ping", connection_ordinal: 1,
+    connected_without_write: true, connected_rebound_sha256: connectedReboundSHA256, connected_rebound_wal_sha256: connectedReboundWalSHA256, identity_sha256: identitySHA256, initial_peer_pid: initialPeerPID,
+    prewrite_peer_pid: prewritePeerPID, peer_attested: true,
     ping_frame_sha256: FLY_AGENT_PING_FRAME_SHA256, response_pid: value.pid, response_version: FLY_AGENT_VERSION, response_disabled: value.disabled, response_byte_count: bytes.byteLength,
-    response_sha256: sha256(bytes), child_spawn_count: 0 }, identity, identitySHA256, connectedReboundSHA256); }
+    response_sha256: sha256(bytes), command_count: 1, remote_eof_observed: true, local_close_awaited: true, child_spawn_count: 0 }, identity, identitySHA256, connectedReboundSHA256); }
 
-export function validateFlySSHAgentProtocolKillForTest(bytes: Uint8Array): string { requireCondition(bytes.byteLength === 3 && decode(bytes, "fly_agent_protocol_kill") === "ok " &&
+export function validateFlySSHAgentProtocolKillForTest(bytes: Uint8Array): string { requireCondition(bytes.byteLength === 2 && decode(bytes, "fly_agent_protocol_kill") === "ok" &&
     sha256(bytes) === FLY_AGENT_KILL_RESPONSE_SHA256, "fly_agent_protocol_kill");
   return FLY_AGENT_KILL_RESPONSE_SHA256; }
 
-async function destroyProductionFlySSHAgentSocket(socket: Socket, timeoutMilliseconds = FLY_AGENT_PROTOCOL_TIMEOUT_MILLISECONDS): Promise<void> { if ((socket as any).closed === true) return;
-  await new Promise<void>((resolve, reject) => { let complete = false;
+type FlyAgentGetSockOpt = (fd: number, level: number, option: number, output: Int32Array, outputLength: Uint32Array) => number;
+type ContainedFlyAgentEndpointIdentity = ContractTypes.ContainedFlyAgentEndpointIdentity;
+function containedFlyAgentEndpointIdentity(path: string, expected: ContainedFlyAgentEndpointIdentity | null = null): ContainedFlyAgentEndpointIdentity { const parent = dirname(path);
+  requireCondition(/^\/private\/tmp\/agenttool-contained-fly-protocol-[A-Za-z0-9._-]+$/.test(parent) && path === join(parent, "agent.sock") && path !== FLY_AGENT_SOCKET, "fly_agent_protocol_contained");
+  const parentBefore = lstatSync(parent);
+  requireCondition(parentBefore.isDirectory() && !parentBefore.isSymbolicLink() && parentBefore.uid === process.getuid?.() && parentBefore.gid === process.getgid?.() && parentBefore.nlink >= 2 &&
+      (parentBefore.mode & 0o777) === 0o700 && realpathSync(parent) === parent, "fly_agent_protocol_contained");
+  const socketBefore = lstatSync(path);
+  requireCondition(socketBefore.isSocket() && !socketBefore.isSymbolicLink() && socketBefore.uid === process.getuid?.() && socketBefore.gid === process.getgid?.() && socketBefore.nlink === 1 &&
+      (socketBefore.mode & 0o777) === 0o600 && socketBefore.size === 0, "fly_agent_protocol_contained");
+  const parentAfter = lstatSync(parent);
+  const socketAfter = lstatSync(path);
+  requireCondition(sameFileIdentity(parentBefore, parentAfter) && sameFileIdentity(socketBefore, socketAfter) && !parentAfter.isSymbolicLink() && !socketAfter.isSymbolicLink(), "fly_agent_protocol_contained");
+  const identity = { parent_path: parent, parent_device: parentAfter.dev, parent_inode: parentAfter.ino, socket_path: path, socket_device: socketAfter.dev, socket_inode: socketAfter.ino };
+  requireCondition(expected === null || canonicalJson(identity) === canonicalJson(expected), "fly_agent_protocol_contained");
+  return identity; }
+let flyAgentGetSockOpt: FlyAgentGetSockOpt | null = null;
+let flyAgentFFILibrary: any = null;
+async function productionFlyAgentGetSockOpt(): Promise<FlyAgentGetSockOpt> { if (flyAgentGetSockOpt !== null) return flyAgentGetSockOpt;
+  requirePinnedBunController();
+  requireCondition(realpathSync(process.execPath) === PINNED_BUN, "fly_agent_peer_runtime");
+  const ffi = await import("bun:ffi");
+  const library = ffi.dlopen("/usr/lib/libSystem.B.dylib", { getsockopt: { args: ["i32", "i32", "i32", "ptr", "ptr"], returns: "i32" } });
+  const symbol = library.symbols.getsockopt as FlyAgentGetSockOpt;
+  requireCondition(typeof symbol === "function", "fly_agent_peer_runtime");
+  flyAgentFFILibrary = library;
+  flyAgentGetSockOpt = symbol;
+  return symbol; }
+
+function attestProductionFlyAgentPeer(socket: Socket, getsockopt: FlyAgentGetSockOpt, expectedPeerPID: number): number { const handleBefore = (socket as any)._handle;
+  const fdBefore = handleBefore?.fd;
+  requireCondition(typeof handleBefore === "object" && handleBefore !== null && Number.isSafeInteger(fdBefore) && fdBefore >= 0 && !socket.destroyed && Number.isSafeInteger(expectedPeerPID) && expectedPeerPID > 1, "fly_agent_peer_pid");
+  const peer = new Int32Array(1);
+  const length = new Uint32Array([4]);
+  const result = getsockopt(fdBefore, 0, 2, peer, length);
+  const handleAfter = (socket as any)._handle;
+  requireCondition(handleAfter === handleBefore && handleAfter?.fd === fdBefore && !socket.destroyed && result === 0 && length[0] === 4 && Number.isSafeInteger(peer[0]) && peer[0]! > 1 && peer[0] === expectedPeerPID, "fly_agent_peer_pid");
+  return peer[0]!; }
+
+/** @internal Pure contained fault seam over the exact production peer attestor. */
+export function attestFlySSHAgentPeerForContainedTest(request: ContractTypes.FlyAgentPeerAttestationFixture): number { exactKeys(request,
+    ["fdBefore", "destroyedBefore", "expectedPeerPID", "result", "outputLength", "peerPID", "afterCall"], "fly_agent_peer_fixture");
+  requireCondition(["none", "handle_swap", "fd_swap", "destroy"].includes(request.afterCall), "fly_agent_peer_fixture");
+  const handle = { fd: request.fdBefore };
+  const socket: any = { _handle: handle, destroyed: request.destroyedBefore };
+  const getsockopt: FlyAgentGetSockOpt = (fd, level, option, output, outputLength) => { requireCondition(fd === request.fdBefore && level === 0 && option === 2, "fly_agent_peer_fixture");
+    output[0] = request.peerPID; outputLength[0] = request.outputLength;
+    if (request.afterCall === "handle_swap") socket._handle = { fd }; else if (request.afterCall === "fd_swap") handle.fd = fd + 1; else if (request.afterCall === "destroy") socket.destroyed = true;
+    return request.result; };
+  return attestProductionFlyAgentPeer(socket as Socket, getsockopt, request.expectedPeerPID); }
+
+async function destroyProductionFlySSHAgentSocket(socket: Socket, timeoutMilliseconds = FLY_AGENT_PROTOCOL_TIMEOUT_MILLISECONDS): Promise<void> { await new Promise<void>((resolve, reject) => { let complete = false;
     const finish = (error: unknown): void => { if (complete) return;
       complete = true; clearTimeout(timer); socket.off("close", onClose);
       if (error === null) resolve(); else reject(error); };
     const onClose = (): void => finish(null);
     const timer = setTimeout(() => finish(new Error("fly_agent_protocol_close_timeout")), timeoutMilliseconds);
-    socket.once("close", onClose); socket.destroy();
-    if ((socket as any).closed === true) finish(null); });
+    socket.once("close", onClose); socket.destroy(); });
   requireCondition(socket.destroyed && (socket as any).closed === true, "fly_agent_protocol_close"); }
 
 class ProductionFlySSHAgentProtocol { readonly #socket: Socket;
   readonly #timeoutMilliseconds: number;
   readonly #suppressWriteCallback: boolean;
+  readonly #role: "ping" | "kill";
+  readonly #expectedPeerPID: number;
+  readonly #getsockopt: FlyAgentGetSockOpt;
+  readonly #initialPeerPID: number;
+  readonly #containedEndpoint: ContainedFlyAgentEndpointIdentity | null;
   #buffer = Buffer.alloc(0);
   #ended = false;
   #socketClosed = false;
+  #responseComplete = false;
   #error: Error | null = null;
   #wake: (() => void) | null = null;
-  #stage: "connected" | "pinged" | "kill_dispatched" | "acknowledged" | "closed" = "connected";
+  #stage: "connected" | "command_dispatched" | "acknowledged" | "closed" = "connected";
+  #prewritePeerPID: number | null = null;
 
-  private constructor(socket: Socket, timeoutMilliseconds: number, suppressWriteCallback = false) { this.#socket = socket;
-    this.#timeoutMilliseconds = timeoutMilliseconds; this.#suppressWriteCallback = suppressWriteCallback;
+  private constructor(socket: Socket, timeoutMilliseconds: number, suppressWriteCallback: boolean, role: "ping" | "kill", expectedPeerPID: number, getsockopt: FlyAgentGetSockOpt,
+    containedEndpoint: ContainedFlyAgentEndpointIdentity | null) { this.#socket = socket;
+    this.#timeoutMilliseconds = timeoutMilliseconds; this.#suppressWriteCallback = suppressWriteCallback; this.#role = role; this.#expectedPeerPID = expectedPeerPID; this.#getsockopt = getsockopt;
+    this.#containedEndpoint = containedEndpoint;
+    this.#initialPeerPID = attestProductionFlyAgentPeer(socket, getsockopt, expectedPeerPID);
     socket.on("data", (chunk: Buffer) => { if (this.#stage === "closed") return;
-      if (chunk.byteLength > FLY_AGENT_PROTOCOL_MAX_RESPONSE_BYTES + 2 - this.#buffer.byteLength) { this.#error = new Error("fly_agent_protocol_oversize"); socket.destroy(); } else this.#buffer = Buffer.concat([this.#buffer, chunk]);
+      if (this.#responseComplete || chunk.byteLength > FLY_AGENT_PROTOCOL_MAX_RESPONSE_BYTES + 2 - this.#buffer.byteLength) { this.#error = new Error(this.#responseComplete ? "fly_agent_protocol_trailing" : "fly_agent_protocol_oversize"); socket.destroy(); }
+      else this.#buffer = Buffer.concat([this.#buffer, chunk]);
       this.#wake?.(); this.#wake = null; });
     socket.on("end", () => { this.#ended = true; this.#wake?.(); this.#wake = null; });
     socket.on("error", (error) => { this.#error = error; this.#wake?.(); this.#wake = null; });
     socket.on("close", () => { this.#socketClosed = true; this.#wake?.(); this.#wake = null; }); }
 
-  private static async connectPath(path: string, timeoutMilliseconds: number, suppressWriteCallback = false, forcePostconditionFailure = false): Promise<ProductionFlySSHAgentProtocol> { const socket = createConnection({ path });
+  private static async connectPath(path: string, timeoutMilliseconds: number, role: "ping" | "kill", expectedPeerPID: number, suppressWriteCallback = false, forcePostconditionFailure = false,
+    containedEndpoint: ContainedFlyAgentEndpointIdentity | null = null, afterConnectForTest?: () => void): Promise<ProductionFlySSHAgentProtocol> { const getsockopt = await productionFlyAgentGetSockOpt();
+    const socket = createConnection({ path });
+    const constructionErrorSink = (): void => {};
+    let constructionCloseObserved = false;
+    const constructionCloseObserver = (): void => { constructionCloseObserved = true; };
+    socket.on("error", constructionErrorSink);
+    socket.on("close", constructionCloseObserver);
     try { await new Promise<void>((resolve, reject) => { let complete = false;
         const finish = (error: unknown): void => { if (complete) return;
           complete = true; clearTimeout(timer); socket.off("connect", onConnect); socket.off("error", onError);
@@ -4329,28 +3701,50 @@ class ProductionFlySSHAgentProtocol { readonly #socket: Socket;
         const onError = (error: Error): void => finish(error);
         const timer = setTimeout(() => finish(new Error("fly_agent_protocol_connect_timeout")), timeoutMilliseconds);
         socket.once("connect", onConnect); socket.once("error", onError); });
+      afterConnectForTest?.();
       requireCondition(!forcePostconditionFailure && !socket.destroyed && !socket.connecting && socket.remoteAddress === undefined && socket.remotePort === undefined, "fly_agent_protocol_connect");
-      return new ProductionFlySSHAgentProtocol(socket, timeoutMilliseconds, suppressWriteCallback); } catch (error) { await destroyProductionFlySSHAgentSocket(socket, timeoutMilliseconds); throw error; } }
+      if (containedEndpoint !== null) containedFlyAgentEndpointIdentity(path, containedEndpoint);
+      const protocol = new ProductionFlySSHAgentProtocol(socket, timeoutMilliseconds, suppressWriteCallback, role, expectedPeerPID, getsockopt, containedEndpoint);
+      socket.off("error", constructionErrorSink); socket.off("close", constructionCloseObserver);
+      return protocol; } catch (error) { try { if (!constructionCloseObserved) await destroyProductionFlySSHAgentSocket(socket, timeoutMilliseconds);
+        requireCondition(constructionCloseObserved, "fly_agent_protocol_close"); } finally { socket.off("error", constructionErrorSink); socket.off("close", constructionCloseObserver); }
+      throw error; } }
 
-  static async connect(): Promise<ProductionFlySSHAgentProtocol> { requireCondition(FLY_AGENT_SOCKET === join(FLY_CONFIG_DIRECTORY, "fly-agent.sock"), "fly_agent_protocol_connect");
-    return ProductionFlySSHAgentProtocol.connectPath(FLY_AGENT_SOCKET, FLY_AGENT_PROTOCOL_TIMEOUT_MILLISECONDS); }
+  static async connect(role: "ping" | "kill", expectedPeerPID: number): Promise<ProductionFlySSHAgentProtocol> { requireCondition(FLY_AGENT_SOCKET === join(FLY_CONFIG_DIRECTORY, "fly-agent.sock"), "fly_agent_protocol_connect");
+    return ProductionFlySSHAgentProtocol.connectPath(FLY_AGENT_SOCKET, FLY_AGENT_PROTOCOL_TIMEOUT_MILLISECONDS, role, expectedPeerPID); }
 
-  static async connectContained(path: string, timeoutMilliseconds: number, suppressWriteCallback: boolean, forcePostconditionFailure: boolean): Promise<ProductionFlySSHAgentProtocol> {
-    return ProductionFlySSHAgentProtocol.connectPath(path, timeoutMilliseconds, suppressWriteCallback, forcePostconditionFailure); }
+  static async connectContained(path: string, timeoutMilliseconds: number, role: "ping" | "kill", expectedPeerPID: number, suppressWriteCallback: boolean, forcePostconditionFailure: boolean,
+    afterConnectForTest?: () => void): Promise<ProductionFlySSHAgentProtocol> { const identity = containedFlyAgentEndpointIdentity(path);
+    return ProductionFlySSHAgentProtocol.connectPath(path, timeoutMilliseconds, role, expectedPeerPID, suppressWriteCallback, forcePostconditionFailure, identity, afterConnectForTest); }
+
+  initialPeerPID(): number { requireCondition(this.#stage === "connected", "fly_agent_protocol_order");
+    return this.#initialPeerPID; }
 
   async ping(identity: FlySSHAgentIdentity, identitySHA256: string, connectedReboundSHA256: string, connectedReboundWalSHA256: string): Promise<FlySSHAgentProtocolPing> {
-    requireCondition(this.#stage === "connected", "fly_agent_protocol_order");
-    const response = await this.#exchange("ping");
-    const ping = parseFlySSHAgentProtocolPingForTest(response, identity, identitySHA256, connectedReboundSHA256, connectedReboundWalSHA256);
-    this.#stage = "pinged";
-    return ping; }
+    requireCondition(this.#stage === "connected" && this.#role === "ping", "fly_agent_protocol_order");
+    this.#stage = "command_dispatched";
+    try { const response = await this.#exchange("ping");
+      await this.#requireRemoteEOF();
+      const initialPeerPID = this.#initialPeerPID;
+      const prewritePeerPID = this.#prewritePeerPID;
+      requireCondition(prewritePeerPID === identity.pid, "fly_agent_peer_pid");
+      this.#stage = "acknowledged";
+      await this.close();
+      return parseFlySSHAgentProtocolPingForTest(response, identity, identitySHA256, connectedReboundSHA256, connectedReboundWalSHA256, initialPeerPID, prewritePeerPID!); } catch (error) { try { await this.close(); } catch {}
+      throw error; } }
 
-  async kill(beforeWrite: () => void): Promise<string> { requireCondition(this.#stage === "pinged" && typeof beforeWrite === "function", "fly_agent_protocol_order");
-    this.#stage = "kill_dispatched";
-    const response = await this.#exchange("kill", beforeWrite);
-    const hash = validateFlySSHAgentProtocolKillForTest(response);
-    this.#stage = "acknowledged";
-    return hash; }
+  async kill(beforeWrite: () => void): Promise<{ responseSHA256: string; initialPeerPID: number; prewritePeerPID: number }> { requireCondition(this.#stage === "connected" && this.#role === "kill" &&
+      typeof beforeWrite === "function", "fly_agent_protocol_order");
+    this.#stage = "command_dispatched";
+    try { const response = await this.#exchange("kill", beforeWrite);
+      const responseSHA256 = validateFlySSHAgentProtocolKillForTest(response);
+      await this.#requireRemoteEOF();
+      const prewritePeerPID = this.#prewritePeerPID;
+      requireCondition(prewritePeerPID === this.#expectedPeerPID, "fly_agent_peer_pid");
+      this.#stage = "acknowledged";
+      await this.close();
+      return { responseSHA256, initialPeerPID: this.#initialPeerPID, prewritePeerPID: prewritePeerPID! }; } catch (error) { try { await this.close(); } catch {}
+      throw error; } }
 
   async #exchange(payload: "ping" | "kill", beforeWrite?: () => void): Promise<Uint8Array> { const frame = encodeFlySSHAgentProtocolFrameForTest(payload);
     await new Promise<void>((resolve, reject) => { let complete = false;
@@ -4360,32 +3754,44 @@ class ProductionFlySSHAgentProtocol { readonly #socket: Socket;
       const timer = setTimeout(() => { this.#socket.destroy(); finish(new Error("fly_agent_protocol_write_timeout")); }, this.#timeoutMilliseconds);
       try { beforeWrite?.();
         requireCondition(this.#buffer.byteLength === 0 && this.#error === null && !this.#ended && !this.#socketClosed && !this.#socket.destroyed, "fly_agent_protocol_prewrite");
+        if (this.#containedEndpoint !== null) containedFlyAgentEndpointIdentity(this.#containedEndpoint.socket_path, this.#containedEndpoint);
+        this.#prewritePeerPID = attestProductionFlyAgentPeer(this.#socket, this.#getsockopt, this.#expectedPeerPID);
+        if (this.#containedEndpoint !== null) containedFlyAgentEndpointIdentity(this.#containedEndpoint.socket_path, this.#containedEndpoint);
+        requireCondition(this.#buffer.byteLength === 0 && this.#error === null && !this.#ended && !this.#socketClosed && !this.#socket.destroyed, "fly_agent_protocol_prewrite");
         if (this.#suppressWriteCallback) this.#socket.write(frame); else this.#socket.write(frame, (error?: Error | null) => finish(error ?? null)); } catch (error) { finish(error); } });
     const deadline = Date.now() + this.#timeoutMilliseconds;
     while (true) { if (this.#error !== null) throw this.#error;
       requireCondition(this.#buffer.byteLength <= FLY_AGENT_PROTOCOL_MAX_RESPONSE_BYTES + 2, "fly_agent_protocol_oversize");
       if (this.#buffer.byteLength >= 2) { const length = this.#buffer.readUInt16LE(0);
-        requireCondition(length >= 3 && length <= FLY_AGENT_PROTOCOL_MAX_RESPONSE_BYTES, "fly_agent_protocol_response");
+        requireCondition(length >= 2 && length <= FLY_AGENT_PROTOCOL_MAX_RESPONSE_BYTES, "fly_agent_protocol_response");
         if (this.#buffer.byteLength >= length + 2) { requireCondition(this.#buffer.byteLength === length + 2, "fly_agent_protocol_trailing");
-          const body = Uint8Array.from(this.#buffer.subarray(2)); this.#buffer = Buffer.alloc(0); return body; } }
+          const body = Uint8Array.from(this.#buffer.subarray(2)); this.#buffer = Buffer.alloc(0); this.#responseComplete = true; return body; } }
       requireCondition(!this.#ended, "fly_agent_protocol_eof");
       const remaining = deadline - Date.now();
       requireCondition(remaining > 0, "fly_agent_protocol_response_timeout");
       await new Promise<void>((resolve) => { const wake = (): void => { clearTimeout(timer); if (this.#wake === wake) this.#wake = null; resolve(); };
         const timer = setTimeout(wake, Math.min(remaining, 250)); this.#wake = wake; }); } }
 
+  async #requireRemoteEOF(): Promise<void> { const deadline = Date.now() + this.#timeoutMilliseconds;
+    while (!this.#ended) { if (this.#error !== null) throw this.#error;
+      requireCondition(!this.#socketClosed, "fly_agent_protocol_eof");
+      const remaining = deadline - Date.now();
+      requireCondition(remaining > 0, "fly_agent_protocol_eof_timeout");
+      await new Promise<void>((resolve) => { const wake = (): void => { clearTimeout(timer); if (this.#wake === wake) this.#wake = null; resolve(); };
+        const timer = setTimeout(wake, Math.min(remaining, 250)); this.#wake = wake; }); }
+    requireCondition(this.#error === null && this.#responseComplete && this.#buffer.byteLength === 0, "fly_agent_protocol_eof"); }
+
   async close(): Promise<void> { if (this.#stage !== "closed") { this.#stage = "closed"; this.#buffer = Buffer.alloc(0); this.#wake?.(); this.#wake = null; }
-    await destroyProductionFlySSHAgentSocket(this.#socket, this.#timeoutMilliseconds);
+    if (!this.#socketClosed) await destroyProductionFlySSHAgentSocket(this.#socket, this.#timeoutMilliseconds);
     requireCondition(this.#socketClosed, "fly_agent_protocol_close"); } }
 
 /** @internal Contained Unix-stream transport seam; permanently refuses the live Fly pathname. */
-export async function connectFlySSHAgentProtocolForContainedTest(request: { path: string;
-  timeoutMilliseconds: number;
-  suppressWriteCallback?: boolean;
-  forcePostconditionFailure?: boolean; }): Promise<Pick<ProductionFlySSHAgentProtocol, "ping" | "kill" | "close">> { requireCondition(
-    /^\/(?:private\/)?tmp\/agenttool-contained-fly-protocol-[A-Za-z0-9._-]+\/agent\.sock$/.test(request.path) && request.path !== FLY_AGENT_SOCKET && Number.isSafeInteger(request.timeoutMilliseconds) && request.timeoutMilliseconds >= 20 && request.timeoutMilliseconds <= 1_000 &&
-      [request.suppressWriteCallback, request.forcePostconditionFailure].every((value) => value === undefined || typeof value === "boolean"), "fly_agent_protocol_contained", );
-  return ProductionFlySSHAgentProtocol.connectContained(request.path, request.timeoutMilliseconds, request.suppressWriteCallback === true, request.forcePostconditionFailure === true); }
+export async function connectFlySSHAgentProtocolForContainedTest(request: ContractTypes.ContainedFlySSHAgentProtocolRequest): Promise<Pick<ProductionFlySSHAgentProtocol, "ping" | "kill" | "close" | "initialPeerPID">> { requireCondition(
+    /^\/private\/tmp\/agenttool-contained-fly-protocol-[A-Za-z0-9._-]+\/agent\.sock$/.test(request.path) && request.path !== FLY_AGENT_SOCKET && Number.isSafeInteger(request.timeoutMilliseconds) && request.timeoutMilliseconds >= 20 && request.timeoutMilliseconds <= 1_000 &&
+      (request.role === "ping" || request.role === "kill") && Number.isSafeInteger(request.expectedPeerPID) && request.expectedPeerPID > 1 && [request.suppressWriteCallback, request.forcePostconditionFailure].every((value) =>
+        value === undefined || typeof value === "boolean") && (request.afterConnectForTest === undefined || typeof request.afterConnectForTest === "function"), "fly_agent_protocol_contained", );
+  return ProductionFlySSHAgentProtocol.connectContained(request.path, request.timeoutMilliseconds, request.role, request.expectedPeerPID, request.suppressWriteCallback === true, request.forcePostconditionFailure === true,
+    request.afterConnectForTest); }
 
 function flySSHAgentProcessCensusArgv(): readonly string[] { return [ PS, "-axo", "pid=", "-o", "ppid=", "-o", "pgid=", "-o", "uid=", "-o", "gid=", "-o", "lstart=", "-o", "state=", "-o", "command=", ]; }
 function flySSHAgentPathHoldersArgv(): readonly string[] { return [LSOF, "-nP", "-F", "pftnDi", "--", FLY_AGENT_LOCK, FLY_AGENT_SOCKET]; }
@@ -4398,10 +3804,8 @@ function flySSHAgentPathMetadata(path: string, type: "file" | "socket"): FlySSHA
     return { path, type, device: info.dev, inode: info.ino, mode: info.mode & 0o777, uid: info.uid, gid: info.gid, nlink: info.nlink, size: info.size, holder_pids: [], }; } catch (error: any) { if (error?.code === "ENOENT") return null;
     throw error; } }
 
-async function readProductionFlySSHAgentObservation(request: { state: Pick<ProductionBridgeMarkerState, "wal" | "nextEffectOrdinal" | "verifyLocalAuthority">;
-  runtime: ProductionControllerReadEffectRuntime;
-  tracked: FlySSHAgentIdentity | null;
-  checkpoint: string; }): Promise<FlySSHAgentObservation> { requireCondition(/^[a-z0-9_]{1,128}$/.test(request.checkpoint), "fly_agent_observation");
+async function readProductionFlySSHAgentObservation(request: ContractTypes.ProductionFlySSHAgentObservationRequest<Pick<ProductionBridgeMarkerState, "wal" | "nextEffectOrdinal" | "verifyLocalAuthority">,
+  ProductionControllerReadEffectRuntime>): Promise<FlySSHAgentObservation> { requireCondition(/^[a-z0-9_]{1,128}$/.test(request.checkpoint), "fly_agent_observation");
   const run = async (suffix: string, argv: readonly string[], acceptedExitCodes: readonly number[]): Promise<{ stdout: Uint8Array; exitCode: number }> => { const ordinal = request.state.nextEffectOrdinal();
     const armed = request.runtime.arm({ argv, cwd: HOME, environment: CONTROLLER_ENVIRONMENT, verifyContract: () => { if (argv[0] === PS) requirePinnedSystemExecutable(PS, PS_SHA256, 1);
         else { requireCondition(argv[0] === LSOF, "fly_agent_observation");
@@ -4455,13 +3859,7 @@ export interface ControllerFlyEffectRuntime extends ControllerEffectRuntime { ar
   takeStdout(identity: ControllerEffectChild): Uint8Array; }
 
 /** @internal Journalled read shared by the controller guards and fakes. */
-export async function performControllerJournalledProviderReadForTest(request: { wal: ControllerWalWriter;
-  runtime: ControllerFlyEffectRuntime;
-  operation: { kind: "list" } | { kind: "secrets" };
-  effectID: string;
-  checkpoint: string;
-  target: string;
-  semanticProjection(value: unknown[]): unknown; }): Promise<{ value: unknown[]; semanticSHA256: string }> { let argv: string[];
+export async function performControllerJournalledProviderReadForTest(request: ContractTypes.ControllerJournalledProviderReadRequest<ControllerWalWriter, ControllerFlyEffectRuntime>): Promise<ContractTypes.ControllerJournalledProviderReadResult> { let argv: string[];
   try { argv = request.runtime.arm(request.operation); } catch (error) { throw new ControllerManualInterventionError( error instanceof MaintenanceRefenceError ? error.code : "controller_provider_read_arm", ); }
   const effectKind = request.operation.kind === "list" ? "read_fleet" : "read_secrets";
   const settled = await executeControllerEffectToSettlement({ wal: request.wal, runtime: request.runtime, effectID: request.effectID, effectKind, checkpoint: request.checkpoint, target: request.target, argv, timeoutMilliseconds: 120_000,
@@ -4481,19 +3879,8 @@ export async function performControllerJournalledProviderReadForTest(request: { 
   return { value, semanticSHA256 }; }
 
 /** @internal One effect plus fresh pre/post full-five provider sandwiches. */
-export async function performControllerFlyTransitionForTest(request: { wal: ControllerWalWriter;
-  runtime: ControllerFlyEffectRuntime;
-  evidence: TerminalEvidence;
-  operation: ControllerFlyOperation;
-  beforeExpectation: TargetFleetExpectation;
-  expectation: TargetFleetExpectation;
-  image: TargetImageContract | null;
-  expectedPreFleetSHA256: string | null;
-  ordinal: number;
-  pause(milliseconds: number): Promise<void>;
-  afterVerified?(proof: ControllerFleetTransitionProof): Promise<void>; }): Promise<{ image?: TargetImageContract;
-  proofSHA256: string;
-  fleetSHA256: string; }> { requireCondition( Number.isSafeInteger(request.ordinal) && request.ordinal >= 1 && request.ordinal <= 999_999 && request.operation.kind !== "list" && request.operation.kind !== "secrets",
+export async function performControllerFlyTransitionForTest( request: ContractTypes.ControllerFlyTransitionBridgeRequest<ControllerWalWriter, ControllerFlyEffectRuntime>,
+): Promise<ContractTypes.ControllerFlyTransitionBridgeResult> { requireCondition( Number.isSafeInteger(request.ordinal) && request.ordinal >= 1 && request.ordinal <= 999_999 && request.operation.kind !== "list" && request.operation.kind !== "secrets",
     "controller_transition_runner", );
   const prefix = `effect_${String(request.ordinal).padStart(6, "0")}`;
   const readFleet = async (suffix: string): Promise<unknown[]> => { const effectID = `${prefix}_${suffix}`;
@@ -4544,11 +3931,7 @@ class ProductionBridgeMarkerState { readonly bindings: MarkerBindings;
   #effectsClosed = false;
   #a0Installed = false;
 
-  constructor(request: { bindings: MarkerBindings;
-    roles: RoleMap;
-    lock: DeployLockAuthority;
-    preparation: ControllerPreparationBinding;
-    wal: ControllerWalWriter; }) { this.bindings = request.bindings;
+  constructor(request: ContractTypes.ProductionBridgeMarkerStateRequest<ControllerWalWriter>) { this.bindings = request.bindings;
     this.roles = request.roles;
     this.lock = request.lock;
     this.preparation = request.preparation;
@@ -4642,25 +4025,13 @@ class ProductionBridgeMarkerState { readonly bindings: MarkerBindings;
             .terminal_phase === "complete", "success_finalization_authority", );
     return structuredClone(this.#value); }
 
-  previewSuccessFinalization(request: { successProvenAt: string;
-    walProjection: ControllerWalProjection;
-    authorityProjectionSHA256: string;
-    receiptPath: string;
-    witnessPath: string;
-    markerRetirementClaimPath: string; }): { value: JsonRecord; bytesUTF8: string; sha256: string } { this.verifyLocalAuthority();
+  previewSuccessFinalization(request: ContractTypes.BridgeMarkerFinalizationRequest): ContractTypes.BridgeMarkerFinalizationPreview { this.verifyLocalAuthority();
     requireCondition( this.#effectsClosed && this.wal.sealed, "success_finalization_preview", );
     const value = maintenanceContract().previewSuccessFinalizationMarker({ currentMarker: this.#value, ...request, });
     const bytesUTF8 = `${canonicalJson(value)}\n`;
     return { value, bytesUTF8, sha256: sha256(bytesUTF8) }; }
 
-  beginSuccessFinalization(request: { successProvenAt: string;
-    walProjection: ControllerWalProjection;
-    authorityProjectionSHA256: string;
-    receiptPath: string;
-    witnessPath: string;
-    markerRetirementClaimPath: string; }, onA0Installed: () => void): { identity: DurableFileIdentity;
-    bytesUTF8: string;
-    sha256: string; } { const preview = this.previewSuccessFinalization(request);
+  beginSuccessFinalization(request: ContractTypes.BridgeMarkerFinalizationRequest, onA0Installed: () => void): ContractTypes.BridgeMarkerFinalizationResult { const preview = this.previewSuccessFinalization(request);
     const next = preview.value;
     const result = this.#transition(next, () => { this.#a0Installed = true;
       onA0Installed(); });
@@ -4747,13 +4118,9 @@ class ProductionBridgeMarkerState { readonly bindings: MarkerBindings;
 export function applyRecoveryMarkerTransitionForTest( value: JsonRecord, operation: ControllerFlyOperation, roles: RoleMap, recoveryActive: boolean, ): void { maintenanceContract().applyRecoveryMarkerTransition( value, operation, roles,
     recoveryActive, ); }
 
-interface ProductionFlyOperationAdapter { performFlyOperation: ControllerRolloutDependencies["performFlyOperation"];
-  snapshot(): { image: TargetImageContract | null;
-    expectation: TargetFleetExpectation;
-    fleetSHA256: string | null; }; }
+type ProductionFlyOperationAdapter = ContractTypes.ProductionFlyOperationAdapter;
 
-function createProductionFlyOperationAdapter(request: { state: ProductionBridgeMarkerState;
-  evidence: TerminalEvidence; }): ProductionFlyOperationAdapter { const runtime = new ProductionFlyEffectRuntime({ buildContextPath: request.state.preparation.buildContext.path,
+function createProductionFlyOperationAdapter(request: ContractTypes.ProductionFlyOperationAdapterRequest<ProductionBridgeMarkerState>): ProductionFlyOperationAdapter { const runtime = new ProductionFlyEffectRuntime({ buildContextPath: request.state.preparation.buildContext.path,
     verifyLocalAuthority: () => request.state.verifyLocalAuthority(), });
   let image: TargetImageContract | null = null;
   let previousFleetSHA256: string | null = null;
@@ -4772,7 +4139,7 @@ function createProductionFlyOperationAdapter(request: { state: ProductionBridgeM
     return result; };
   return { performFlyOperation, snapshot: () => ({ image: image === null ? null : structuredClone(image), expectation: structuredClone(previousExpectation), fleetSHA256: previousFleetSHA256, }), }; }
 
-type CompatibilityGitRunner = (suffix: string, arguments_: readonly string[], validate: (stdout: Uint8Array) => { value: string | true; semanticProjection: unknown }) => Promise<string | true>;
+type CompatibilityGitRunner = ContractTypes.CompatibilityGitRunner;
 
 async function readCompatibilityGitProofWithRunner(evidence: TerminalEvidence, runGit: CompatibilityGitRunner): Promise<GitProof> { requireCondition(absent(join(GIT_COMMON_DIR, "info/grafts")) && absent(join(GIT_COMMON_DIR, "shallow")), "git_proof");
   const localConfigSHA256 = await runGit( "local_config", ["config", "--local", "--null", "--list"], (stdout) => { const value = validateGitLocalConfig(stdout);
@@ -4805,6 +4172,12 @@ async function readCompatibilityGitProofWithRunner(evidence: TerminalEvidence, r
   const immediateTopicTree = await runGit( "immediate_topic_tree", ["rev-parse", IMMEDIATE_FAILED_COMPATIBILITY_TOPIC_REVISION + "^{tree}"], (stdout) => { const value = gitProofLine(stdout, /^[0-9a-f]{40}\n$/);
       requireCondition(value === IMMEDIATE_FAILED_COMPATIBILITY_TOPIC_TREE, "git_proof");
       return { value, semanticProjection: { immediate_topic_tree: value } }; }, ) as string;
+  const protocolIncompatibleTree = await runGit( "protocol_incompatible_tree", ["rev-parse", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION + "^{tree}"], (stdout) => { const value = gitProofLine(stdout, /^[0-9a-f]{40}\n$/);
+      requireCondition(value === PRIOR_PROTOCOL_INCOMPATIBLE_TREE, "git_proof");
+      return { value, semanticProjection: { protocol_incompatible_tree: value } }; }, ) as string;
+  const protocolIncompatibleTopicTree = await runGit( "protocol_incompatible_topic_tree", ["rev-parse", PRIOR_PROTOCOL_INCOMPATIBLE_TOPIC_REVISION + "^{tree}"], (stdout) => { const value = gitProofLine(stdout, /^[0-9a-f]{40}\n$/);
+      requireCondition(value === PRIOR_PROTOCOL_INCOMPATIBLE_TOPIC_TREE, "git_proof");
+      return { value, semanticProjection: { protocol_incompatible_topic_tree: value } }; }, ) as string;
   const distanceText = await runGit( "distance", ["rev-list", "--count", EXPECTED_SOURCE_REVISION + "..HEAD"], (stdout) => { const value = gitProofLine(stdout, /^(?:0|[1-9][0-9]*)\n$/);
       return { value, semanticProjection: { distance: value } }; }, ) as string;
   const priorDistanceText = await runGit( "prior_distance", ["rev-list", "--count", EXPECTED_SOURCE_REVISION + ".." + PRIOR_FAILED_COMPATIBILITY_REVISION], (stdout) => { const value = gitProofLine(stdout, /^(?:0|[1-9][0-9]*)\n$/);
@@ -4813,6 +4186,9 @@ async function readCompatibilityGitProofWithRunner(evidence: TerminalEvidence, r
   const immediateDistanceText = await runGit( "immediate_distance", ["rev-list", "--count", EXPECTED_SOURCE_REVISION + ".." + IMMEDIATE_FAILED_COMPATIBILITY_REVISION], (stdout) => { const value = gitProofLine(stdout, /^(?:0|[1-9][0-9]*)\n$/);
       requireCondition(Number(value) === IMMEDIATE_FAILED_COMPATIBILITY_SOURCE_DISTANCE, "git_proof");
       return { value, semanticProjection: { immediate_distance: value } }; }, ) as string;
+  const protocolIncompatibleDistanceText = await runGit( "protocol_incompatible_distance", ["rev-list", "--count", EXPECTED_SOURCE_REVISION + ".." + PRIOR_PROTOCOL_INCOMPATIBLE_REVISION], (stdout) => { const value = gitProofLine(stdout, /^(?:0|[1-9][0-9]*)\n$/);
+      requireCondition(Number(value) === PRIOR_PROTOCOL_INCOMPATIBLE_SOURCE_DISTANCE, "git_proof");
+      return { value, semanticProjection: { protocol_incompatible_distance: value } }; }, ) as string;
   const commitProjectionJSON = await runGit( "commit", ["cat-file", "commit", "HEAD"], (stdout) => { const secondParent = parseProtectedSuccessorCommit(stdout, revision, tree);
       const value = canonicalJson({ second_parent_revision: secondParent, raw_sha256: sha256(stdout), byte_count: stdout.byteLength });
       return { value, semanticProjection: JSON.parse(value) }; }, ) as string;
@@ -4823,9 +4199,13 @@ async function readCompatibilityGitProofWithRunner(evidence: TerminalEvidence, r
         IMMEDIATE_FAILED_COMPATIBILITY_REVISION, immediateTree);
       const value = canonicalJson({ second_parent_revision: secondParent, raw_sha256: sha256(stdout), byte_count: stdout.byteLength, terminal_lf: false });
       return { value, semanticProjection: JSON.parse(value) }; }, ) as string;
+  const protocolIncompatibleCommitProjectionJSON = await runGit( "protocol_incompatible_commit", ["cat-file", "commit", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION], (stdout) => { const secondParent =
+      parsePriorProtocolIncompatibleCommit(stdout, PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, protocolIncompatibleTree);
+      const value = canonicalJson({ second_parent_revision: secondParent, raw_sha256: sha256(stdout), byte_count: stdout.byteLength, terminal_lf: false });
+      return { value, semanticProjection: JSON.parse(value) }; }, ) as string;
   await runGit( "ancestry", [ "merge-base", "--is-ancestor", EXPECTED_SOURCE_REVISION, "HEAD", ], (stdout) => { requireCondition(stdout.byteLength === 0, "git_proof");
       return { value: true, semanticProjection: { ancestry: true } }; }, );
-  await runGit( "topic_ancestry", [ "merge-base", "--is-ancestor", IMMEDIATE_FAILED_COMPATIBILITY_REVISION, "HEAD^2", ], (stdout) => { requireCondition(stdout.byteLength === 0, "git_proof");
+  await runGit( "topic_ancestry", [ "merge-base", "--is-ancestor", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, "HEAD^2", ], (stdout) => { requireCondition(stdout.byteLength === 0, "git_proof");
       return { value: true, semanticProjection: { topic_ancestry: true } }; }, );
   await runGit( "status", ["status", "--porcelain=v1", "--untracked-files=all"], (stdout) => { requireCondition(stdout.byteLength === 0, "git_proof");
       return { value: true, semanticProjection: { clean: true } }; }, );
@@ -4846,7 +4226,19 @@ async function readCompatibilityGitProofWithRunner(evidence: TerminalEvidence, r
       const value = canonicalJson(projection);
       requireCondition(sha256(stdout) === IMMEDIATE_FAILED_COMPATIBILITY_CUMULATIVE_CHANGED_PATHS_RAW_SHA256, "git_proof");
       return { value, semanticProjection: { immediate_cumulative_changed_paths_raw_sha256: sha256(stdout), immediate_cumulative_changed_path_statuses: projection, immediate_cumulative_changed_path_statuses_sha256: sha256(value) } }; }, ) as string;
-  const changedPathStatusesJSON = await runGit( "changed_paths", [ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", IMMEDIATE_FAILED_COMPATIBILITY_REVISION, "HEAD", "--", ], (stdout) => { const projection = parseProtectedSuccessorChangedPaths(stdout);
+  const protocolIncompatibleChangedPathStatusesJSON = await runGit( "protocol_incompatible_changed_paths", [ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv",
+    IMMEDIATE_FAILED_COMPATIBILITY_REVISION, PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, "--", ], (stdout) => { const projection = parseProtectedSuccessorChangedPaths(stdout);
+      const value = canonicalJson(projection);
+      requireCondition(sha256(stdout) === PRIOR_PROTOCOL_INCOMPATIBLE_CHANGED_PATHS_RAW_SHA256, "git_proof");
+      return { value, semanticProjection: { protocol_incompatible_changed_paths_raw_sha256: sha256(stdout), protocol_incompatible_changed_path_statuses: projection,
+          protocol_incompatible_changed_path_statuses_sha256: sha256(value) } }; }, ) as string;
+  const protocolIncompatibleCumulativeChangedPathStatusesJSON = await runGit( "protocol_incompatible_cumulative_changed_paths", [ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff",
+    "--no-textconv", AUTHORIZED_H0_TARGET_REVISION, PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, "--", ], (stdout) => { const projection = parsePriorProtectedSuccessorChangedPaths(stdout);
+      const value = canonicalJson(projection);
+      requireCondition(sha256(stdout) === PRIOR_PROTOCOL_INCOMPATIBLE_CUMULATIVE_CHANGED_PATHS_RAW_SHA256, "git_proof");
+      return { value, semanticProjection: { protocol_incompatible_cumulative_changed_paths_raw_sha256: sha256(stdout), protocol_incompatible_cumulative_changed_path_statuses: projection,
+          protocol_incompatible_cumulative_changed_path_statuses_sha256: sha256(value) } }; }, ) as string;
+  const changedPathStatusesJSON = await runGit( "changed_paths", [ "diff", "--raw", "-z", "--abbrev=40", "--no-renames", "--no-ext-diff", "--no-textconv", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, "HEAD", "--", ], (stdout) => { const projection = parseProtectedSuccessorChangedPaths(stdout);
       const value = canonicalJson(projection);
       currentChangedPathsRawSHA256 = sha256(stdout);
       return { value, semanticProjection: { changed_paths_raw_sha256: sha256(stdout), changed_path_statuses: projection, changed_path_statuses_sha256: sha256(value) } }; }, ) as string;
@@ -4868,6 +4260,10 @@ async function readCompatibilityGitProofWithRunner(evidence: TerminalEvidence, r
         raw: sha256(stdout), normalized: sha256(normalizedBridgeSource(decode(stdout, "git_proof"))), });
       requireCondition(value === canonicalJson({ raw: IMMEDIATE_FAILED_COMPATIBILITY_BRIDGE_RAW_SHA256, normalized: IMMEDIATE_FAILED_COMPATIBILITY_BRIDGE_NORMALIZED_SHA256 }), "git_proof");
       return { value, semanticProjection: JSON.parse(value) }; }, ) as string;
+  const protocolIncompatibleBridgeProjection = await runGit( "protocol_incompatible_bridge_source", ["show", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"], (stdout) => {
+      const value = canonicalJson({ raw: sha256(stdout), normalized: sha256(normalizedBridgeSource(decode(stdout, "git_proof"))) });
+      requireCondition(value === canonicalJson({ raw: PRIOR_PROTOCOL_INCOMPATIBLE_BRIDGE_RAW_SHA256, normalized: PRIOR_PROTOCOL_INCOMPATIBLE_BRIDGE_NORMALIZED_SHA256 }), "git_proof");
+      return { value, semanticProjection: JSON.parse(value) }; }, ) as string;
   const authorizedBridgeProjection = await runGit( "authorized_h0_bridge_source", ["show", AUTHORIZED_H0_TARGET_REVISION + ":bin/phase-b-refence-maintenance-bridge.ts"], (stdout) => { const value = canonicalJson({
         raw: sha256(stdout), normalized: sha256(normalizedBridgeSource(decode(stdout, "git_proof"))), });
       requireCondition(value === canonicalJson({ raw: AUTHORIZED_H0_GUARD_RAW_SHA256, normalized: AUTHORIZED_H0_GUARD_NORMALIZED_SHA256 }), "git_proof");
@@ -4882,6 +4278,10 @@ async function readCompatibilityGitProofWithRunner(evidence: TerminalEvidence, r
         git_blob: gitBlobSHA1(stdout) });
       requireCondition(value === canonicalJson({ raw: IMMEDIATE_FAILED_COMPATIBILITY_CONTRACT_RAW_SHA256, git_blob: IMMEDIATE_FAILED_COMPATIBILITY_CONTRACT_GIT_BLOB }), "git_proof");
       return { value, semanticProjection: JSON.parse(value) }; }, ) as string;
+  const protocolIncompatibleContractProjection = await runGit( "protocol_incompatible_contract_source", ["show", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], (stdout) => {
+      const value = canonicalJson({ raw: sha256(stdout), git_blob: gitBlobSHA1(stdout) });
+      requireCondition(value === canonicalJson({ raw: PRIOR_PROTOCOL_INCOMPATIBLE_CONTRACT_RAW_SHA256, git_blob: PRIOR_PROTOCOL_INCOMPATIBLE_CONTRACT_GIT_BLOB }), "git_proof");
+      return { value, semanticProjection: JSON.parse(value) }; }, ) as string;
   const authorizedContractProjection = await runGit( "authorized_h0_contract_source", ["show", AUTHORIZED_H0_TARGET_REVISION + ":bin/phase-b-refence-maintenance-contract.ts"], (stdout) => { const value = canonicalJson({
         raw: sha256(stdout), git_blob: gitBlobSHA1(stdout) });
       requireCondition(value === canonicalJson({ raw: AUTHORIZED_H0_CONTRACT_RAW_SHA256, git_blob: AUTHORIZED_H0_CONTRACT_GIT_BLOB }), "git_proof");
@@ -4895,21 +4295,28 @@ async function readCompatibilityGitProofWithRunner(evidence: TerminalEvidence, r
   await runGit( "immediate_contract_tree", ["ls-tree", "-z", IMMEDIATE_FAILED_COMPATIBILITY_REVISION, "--", "bin/phase-b-refence-maintenance-contract.ts"], (stdout) => { requireCondition( decode(stdout, "git_proof") ===
         `100644 blob ${IMMEDIATE_FAILED_COMPATIBILITY_CONTRACT_GIT_BLOB}\tbin/phase-b-refence-maintenance-contract.ts\0`, "git_proof", );
       return { value: true, semanticProjection: { immediate_contract_git_blob: IMMEDIATE_FAILED_COMPATIBILITY_CONTRACT_GIT_BLOB } }; }, );
+  await runGit( "protocol_incompatible_contract_tree", ["ls-tree", "-z", PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, "--", "bin/phase-b-refence-maintenance-contract.ts"], (stdout) => { requireCondition(
+      decode(stdout, "git_proof") === `100644 blob ${PRIOR_PROTOCOL_INCOMPATIBLE_CONTRACT_GIT_BLOB}\tbin/phase-b-refence-maintenance-contract.ts\0`, "git_proof");
+      return { value: true, semanticProjection: { protocol_incompatible_contract_git_blob: PRIOR_PROTOCOL_INCOMPATIBLE_CONTRACT_GIT_BLOB } }; }, );
   const reboundLocalConfigSHA256 = await runGit( "local_config_rebound", ["config", "--local", "--null", "--list"], (stdout) => { const value = validateGitLocalConfig(stdout);
       return { value, semanticProjection: { local_config_sha256: value } }; }, ) as string;
   const distance = Number(distanceText);
   const priorDistance = Number(priorDistanceText);
   const immediateDistance = Number(immediateDistanceText);
+  const protocolIncompatibleDistance = Number(protocolIncompatibleDistanceText);
   const commitProjection = record(JSON.parse(commitProjectionJSON), "git_proof");
   const priorCommitProjection = record(JSON.parse(priorCommitProjectionJSON), "git_proof");
   const immediateCommitProjection = record(JSON.parse(immediateCommitProjectionJSON), "git_proof");
+  const protocolIncompatibleCommitProjection = record(JSON.parse(protocolIncompatibleCommitProjectionJSON), "git_proof");
   const currentBridge = record(JSON.parse(currentBridgeProjection), "git_proof");
   const priorBridge = record(JSON.parse(priorBridgeProjection), "git_proof");
   const immediateBridge = record(JSON.parse(immediateBridgeProjection), "git_proof");
+  const protocolIncompatibleBridge = record(JSON.parse(protocolIncompatibleBridgeProjection), "git_proof");
   const authorizedBridge = record(JSON.parse(authorizedBridgeProjection), "git_proof");
   const currentContract = record(JSON.parse(currentContractProjection), "git_proof");
   const priorContract = record(JSON.parse(priorContractProjection), "git_proof");
   const immediateContract = record(JSON.parse(immediateContractProjection), "git_proof");
+  const protocolIncompatibleContract = record(JSON.parse(protocolIncompatibleContractProjection), "git_proof");
   const authorizedContract = record(JSON.parse(authorizedContractProjection), "git_proof");
   requireCondition(validSha(currentChangedPathsRawSHA256) && validSha(currentCumulativeChangedPathsRawSHA256), "git_proof");
   const priorFailedCompatibilityController = validatePriorFailedCompatibilityGitProof({ revision: PRIOR_FAILED_COMPATIBILITY_REVISION, tree: priorTree, source_distance: priorDistance,
@@ -4925,32 +4332,33 @@ async function readCompatibilityGitProofWithRunner(evidence: TerminalEvidence, r
     contract_source_sha256: immediateContract.raw, contract_git_blob: immediateContract.git_blob, lifecycle: "failed_pre_h", refusal_predicate: "process_census", observed_first_refusal_predicate: true,
     controller_exit_code: 74, stderr_sha256: IMMEDIATE_FAILED_COMPATIBILITY_STDERR_SHA256, stderr_byte_count: 35, retained_deploy_lock_sha256: IMMEDIATE_FAILED_COMPATIBILITY_LOCK_SHA256,
     controller_success: false, mutation_effect_began: false, success_authority: false, effect_authority: false, downstream_effects: IMMEDIATE_FAILED_DOWNSTREAM_EFFECTS, }, priorFailedCompatibilityController);
+  const priorProtocolIncompatibleSuccessor = validatePriorProtocolIncompatibleGitProof({ revision: PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, tree: protocolIncompatibleTree,
+    source_distance: protocolIncompatibleDistance, commit_raw_sha256: protocolIncompatibleCommitProjection.raw_sha256, commit_byte_count: protocolIncompatibleCommitProjection.byte_count,
+    first_parent_revision: IMMEDIATE_FAILED_COMPATIBILITY_REVISION, second_parent_revision: protocolIncompatibleCommitProjection.second_parent_revision, second_parent_tree: protocolIncompatibleTopicTree,
+    changed_paths_raw_sha256: PRIOR_PROTOCOL_INCOMPATIBLE_CHANGED_PATHS_RAW_SHA256, changed_path_statuses: JSON.parse(protocolIncompatibleChangedPathStatusesJSON),
+    cumulative_changed_paths_raw_sha256: PRIOR_PROTOCOL_INCOMPATIBLE_CUMULATIVE_CHANGED_PATHS_RAW_SHA256, cumulative_changed_path_statuses: JSON.parse(protocolIncompatibleCumulativeChangedPathStatusesJSON),
+    bridge_source_sha256: protocolIncompatibleBridge.raw, bridge_normalized_sha256: protocolIncompatibleBridge.normalized, contract_source_sha256: protocolIncompatibleContract.raw,
+    contract_git_blob: protocolIncompatibleContract.git_blob, lifecycle: "prior_unexecuted_protocol_incompatible_successor", source_admission_verified: true, static_admission_verified: true,
+    controller_invocation_observed: false, deploy_invocation_observed: false, controller_effect_observed: false, controller_success: false, mutation_effect_began: false, success_authority: false, effect_authority: false,
+    source_admission_evidence: maintenanceContract().priorProtocolSourceAdmissionEvidenceProjection(),
+    protocol_incompatibility: maintenanceContract().priorProtocolIncompatibilityProjection(), downstream_effects: IMMEDIATE_FAILED_DOWNSTREAM_EFFECTS, }, immediateFailedCompatibilityController);
   const proof = validateGitProof({ revision, tree, source_distance: distance, commit_raw_sha256: commitProjection.raw_sha256, commit_byte_count: commitProjection.byte_count,
-    first_parent_revision: IMMEDIATE_FAILED_COMPATIBILITY_REVISION, second_parent_revision: commitProjection.second_parent_revision, second_parent_tree: topicTree,
+    first_parent_revision: PRIOR_PROTOCOL_INCOMPATIBLE_REVISION, second_parent_revision: commitProjection.second_parent_revision, second_parent_tree: topicTree,
     changed_paths_raw_sha256: currentChangedPathsRawSHA256!, changed_path_statuses: JSON.parse(changedPathStatusesJSON), cumulative_changed_paths_raw_sha256: currentCumulativeChangedPathsRawSHA256!, cumulative_changed_path_statuses: JSON.parse(cumulativeChangedPathStatusesJSON),
     prior_failed_compatibility_controller: priorFailedCompatibilityController, immediate_failed_compatibility_controller: immediateFailedCompatibilityController,
-    authorized_h0_guard_raw_sha256: authorizedBridge.raw, authorized_h0_guard_normalized_sha256: authorizedBridge.normalized,
+    prior_unexecuted_protocol_incompatible_successor: priorProtocolIncompatibleSuccessor, authorized_h0_guard_raw_sha256: authorizedBridge.raw, authorized_h0_guard_normalized_sha256: authorizedBridge.normalized,
     authorized_h0_contract_source_sha256: authorizedContract.raw, authorized_h0_contract_git_blob: authorizedContract.git_blob, bridge_source_sha256: currentBridge.raw,
     bridge_normalized_sha256: currentBridge.normalized, contract_source_sha256: currentContract.raw, contract_git_blob: currentContract.git_blob, protected_head: true, clean: true, }, evidence);
   requireCondition( localConfigSHA256 === reboundLocalConfigSHA256 && remoteRevision === revision && authorizedH0Tree === AUTHORIZED_H0_TARGET_TREE && priorTree === PRIOR_FAILED_COMPATIBILITY_TREE &&
-      priorTopicTree === priorTree && immediateTree === IMMEDIATE_FAILED_COMPATIBILITY_TREE && immediateTopicTree === immediateTree && topicTree === tree, "git_proof", );
+      priorTopicTree === priorTree && immediateTree === IMMEDIATE_FAILED_COMPATIBILITY_TREE && immediateTopicTree === immediateTree && protocolIncompatibleTree === PRIOR_PROTOCOL_INCOMPATIBLE_TREE &&
+      protocolIncompatibleTopicTree === protocolIncompatibleTree && topicTree === tree, "git_proof", );
   requireCondition(absent(join(GIT_COMMON_DIR, "info/grafts")) && absent(join(GIT_COMMON_DIR, "shallow")), "git_proof");
   return proof; }
 
-function createJournalledControllerLocalReaders(request: { state: ProductionBridgeMarkerState;
-  evidence: TerminalEvidence; }): Pick<
+function createJournalledControllerLocalReaders(request: ContractTypes.JournalledControllerLocalReadersRequest<ProductionBridgeMarkerState>): Pick<
   MaintenanceRefenceDependencies, "readGitProof" | "readKeychainProof" | "readProcessProof"
 > { const runtime = new ProductionControllerReadEffectRuntime( () => request.state.verifyLocalAuthority(), );
-  const run = async <T>(read: { suffix: string;
-    effectKind: "read_git" | "read_keychain" | "read_process";
-    checkpoint: string;
-    target: string;
-    argv: readonly string[];
-    cwd: string;
-    environment: Readonly<Record<string, string>>;
-    acceptedExitCodes: readonly number[];
-    verifyContract(): void;
-    validate( stdout: Uint8Array, exitCode: number, ): { value: T; semanticProjection: unknown }; }): Promise<T> => { const ordinal = request.state.nextEffectOrdinal();
+  const run = async <T>(read: ContractTypes.JournalledLocalReadSpec<T>): Promise<T> => { const ordinal = request.state.nextEffectOrdinal();
     const argv = runtime.arm({ argv: read.argv, cwd: read.cwd, environment: read.environment, verifyContract: read.verifyContract, });
     const result = await performControllerJournalledReadChildForTest({ wal: request.state.wal, runtime, effectID: "local_" + String(ordinal).padStart(6, "0") + "_" +
         read.suffix, effectKind: read.effectKind, checkpoint: read.checkpoint, target: read.target, argv, timeoutMilliseconds: 120_000, acceptedExitCodes: read.acceptedExitCodes, validate: read.validate, });
@@ -4966,10 +4374,7 @@ function createJournalledControllerLocalReaders(request: { state: ProductionBrid
       proof.changed_paths_raw_sha256 === request.state.bindings.changedPathsRawSHA256 && sha256(canonicalJson(proof.changed_path_statuses)) === request.state.bindings.changedPathStatusesSHA256 &&
       proof.cumulative_changed_paths_raw_sha256 === request.state.bindings.cumulativeChangedPathsRawSHA256 && sha256(canonicalJson(proof.cumulative_changed_path_statuses)) === request.state.bindings.cumulativeChangedPathStatusesSHA256, "git_proof", );
     return proof; };
-  const runSecurity = async <T>(read: { suffix: string;
-    arguments: readonly string[];
-    acceptedExitCodes: readonly number[];
-    validate( stdout: Uint8Array, exitCode: number, ): { value: T; semanticProjection: unknown }; }): Promise<T> => run({ suffix: read.suffix, effectKind: "read_keychain", checkpoint: "guard_keychain_" + read.suffix, target: read.suffix,
+  const runSecurity = async <T>(read: ContractTypes.JournalledSecurityReadSpec<T>): Promise<T> => run({ suffix: read.suffix, effectKind: "read_keychain", checkpoint: "guard_keychain_" + read.suffix, target: read.suffix,
       argv: [SECURITY, ...read.arguments], cwd: HOME, environment: CONTROLLER_ENVIRONMENT, acceptedExitCodes: read.acceptedExitCodes, verifyContract: () => requirePinnedSystemExecutable(SECURITY, SECURITY_SHA256, 1),
       validate: read.validate, });
   const readKeychainProof = async (): Promise<KeychainProof> => { await runSecurity({ suffix: "generation_absence", arguments: [ "find-generic-password", "-s", GENERATION_KEYCHAIN_SERVICE, "-a", KEYCHAIN_ACCOUNT, ], acceptedExitCodes: [44],
@@ -4991,9 +4396,8 @@ function createJournalledControllerLocalReaders(request: { state: ProductionBrid
         return { value, semanticProjection: value }; }, });
   return { readGitProof, readKeychainProof, readProcessProof }; }
 
-function createJournalledControllerGuardDependencies(request: { state: ProductionBridgeMarkerState;
-  evidence: TerminalEvidence;
-  base: ChildlessMaintenanceRefenceBase; }): MaintenanceRefenceDependencies { requireCondition( request.base.controllerPhase === "post_handoff_childless" && request.evidence.edge === "H5", "controller_guard_dependency_phase", );
+function createJournalledControllerGuardDependencies( request: ContractTypes.JournalledControllerGuardDependenciesRequest<ProductionBridgeMarkerState, ChildlessMaintenanceRefenceBase>,
+): MaintenanceRefenceDependencies { requireCondition( request.base.controllerPhase === "post_handoff_childless" && request.evidence.edge === "H5", "controller_guard_dependency_phase", );
   const runtime = new ProductionFlyEffectRuntime({ buildContextPath: request.state.preparation.buildContext.path, verifyLocalAuthority: () => request.state.verifyLocalAuthority(), });
   const local = createJournalledControllerLocalReaders(request);
   const readProvider = async ( operation: { kind: "list" } | { kind: "secrets" }, checkpoint: string, ): Promise<unknown[]> => { const ordinal = request.state.nextEffectOrdinal();
@@ -5039,15 +4443,7 @@ export class ProductionFlySSHAgentLifecycle { readonly rolloutID: string;
 
   get finalAbsenceSHA256(): string | null { return this.#finalAbsenceSHA256; } }
 
-interface ProductionFlySSHAgentStopContext { effectID: string;
-  intentOrdinal: number;
-  batchKind: FlySSHAgentBatchKind;
-  identity: FlySSHAgentIdentity;
-  identitySHA256: string;
-  protocol: ProductionFlySSHAgentProtocol;
-  ping: FlySSHAgentProtocolPing;
-  connectedReboundSHA256: string;
-  protocolAuthoritySHA256: string; }
+type ProductionFlySSHAgentStopContext = ContractTypes.ProductionFlySSHAgentStopContext;
 
 function exactProductionFlySSHAgentObservationWalSpan(wal: ControllerWalWriter, checkpoint: string, identity: FlySSHAgentIdentity, firstOrdinal?: number): string { const start = firstOrdinal ?? (wal.lastEntry?.ordinal ?? 0) - 15;
   requireCondition(Number.isSafeInteger(start) && start >= 1 && wal.lastEntry !== null && wal.lastEntry.ordinal === start + 15, "fly_agent_observation_wal");
@@ -5063,81 +4459,83 @@ function exactProductionFlySSHAgentObservationWalSpan(wal: ControllerWalWriter, 
       entry.checkpoint === checkpoint && entry.argv_sha256 === sha256(canonicalJson(argvs[group])) && entry.phase === (["attempting", "spawned", "settled", "verified"] as const)[phase] && entry.failure_code === null), "fly_agent_observation_wal"); }
   return sha256(canonicalJson(entries)); }
 
-async function pingProductionFlySSHAgentProtocol(request: { state: ProductionBridgeMarkerState;
-  protocol: ProductionFlySSHAgentProtocol;
-  identity: FlySSHAgentIdentity;
-  identitySHA256: string;
-  connectedReboundSHA256: string;
-  batchKind: FlySSHAgentBatchKind; }): Promise<FlySSHAgentProtocolPing> { const walSHA256 = exactProductionFlySSHAgentObservationWalSpan(request.state.wal, `${request.batchKind}_cleanup_connected_rebound`, request.identity);
+async function pingProductionFlySSHAgentProtocol(request: ContractTypes.ProductionFlySSHAgentConnectedRequest<ProductionBridgeMarkerState,
+  ProductionFlySSHAgentProtocol>): Promise<FlySSHAgentProtocolPing> { const walSHA256 = exactProductionFlySSHAgentObservationWalSpan(request.state.wal, `${request.batchKind}_cleanup_ping_connected_rebound`, request.identity);
   request.state.verifyLocalAuthority();
   return request.protocol.ping(request.identity, request.identitySHA256, request.connectedReboundSHA256, walSHA256); }
 
-async function recordProductionFlySSHAgentStopIntent(request: { state: ProductionBridgeMarkerState;
-  batchID: string;
-  batchKind: FlySSHAgentBatchKind;
-  identity: FlySSHAgentIdentity;
-  identitySHA256: string;
-  ping: FlySSHAgentProtocolPing;
-  connectedReboundSHA256: string;
-  protocol: ProductionFlySSHAgentProtocol;
-  contexts: Map<string, ProductionFlySSHAgentStopContext>; }): Promise<FlySSHAgentStopIntent> { requireCondition( request.contexts.size === 0 && request.identitySHA256 === sha256(canonicalJson(flySSHAgentStableIdentityProjection(request.identity))),
-    "fly_agent_stop_intent", );
+async function recordProductionFlySSHAgentStopIntent(request: ContractTypes.ProductionFlySSHAgentStopIntentRequest<ProductionBridgeMarkerState>): Promise<FlySSHAgentStopIntent> { requireCondition(
+  request.contexts.size === 0 && request.identitySHA256 === sha256(canonicalJson(flySSHAgentStableIdentityProjection(request.identity))), "fly_agent_stop_intent", );
   const ping = validateFlySSHAgentProtocolPing(request.ping, request.identity, request.identitySHA256, request.connectedReboundSHA256);
-  requireCondition(ping.connected_rebound_wal_sha256 === exactProductionFlySSHAgentObservationWalSpan(request.state.wal, `${request.batchKind}_cleanup_connected_rebound`, request.identity), "fly_agent_stop_intent");
+  requireCondition(ping.connected_rebound_wal_sha256 === exactProductionFlySSHAgentObservationWalSpan(request.state.wal, `${request.batchKind}_cleanup_ping_connected_rebound`, request.identity), "fly_agent_stop_intent");
   const protocolAuthoritySHA256 = sha256(canonicalJson(flySSHAgentProtocolAuthorityProjection(ping)));
   request.state.verifyLocalAuthority();
   const ordinal = request.state.nextEffectOrdinal();
   const effectID = `agent_${String(ordinal).padStart(6, "0")}_stop`;
   const cliSemanticArgvSHA256 = sha256(canonicalJson([PINNED_FLY, "agent", "stop"]));
-  const lifecycleIntent = request.state.wal.append({ recorded_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), phase: "lifecycle_intent", checkpoint: "fly_agent_cleanup_stop_intent_direct_unix_protocol", effect_id: `${effectID}_intent`,
-    effect_kind: "local_agent_stop", target: request.batchID, argv_sha256: cliSemanticArgvSHA256, pid: null, pgid: null, exit_code: null, termination: null, local_process_group_settled: true, provider_transition_sha256: null,
-    fleet_readback_sha256: null, detail_sha256: protocolAuthoritySHA256, failure_code: null, });
+  const lifecycleIntent = request.state.wal.append({ recorded_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), phase: "lifecycle_intent", checkpoint: "fly_agent_cleanup_stop_intent_two_connections", effect_id: `${effectID}_intent`,
+    effect_kind: "local_agent_stop", target: request.batchID, argv_sha256: protocolAuthoritySHA256, pid: null, pgid: null, exit_code: null, termination: null, local_process_group_settled: true,
+    provider_transition_sha256: null, fleet_readback_sha256: null, detail_sha256: request.connectedReboundSHA256, failure_code: null, });
   const durableIntentSHA256 = sha256(`${canonicalJson(lifecycleIntent)}\n`);
-  const intent: FlySSHAgentStopIntent = { schema: "agenttool-phase-b-refence-fly-ssh-agent-stop-intent/v2", batch_id: request.batchID, identity_sha256: request.identitySHA256,
-    cli_semantic_argv_sha256: cliSemanticArgvSHA256, cli_semantic_executed: false, protocol_authority_sha256: protocolAuthoritySHA256, ping_response_sha256: ping.response_sha256, durable_intent_sha256: durableIntentSHA256 };
+  const intent: FlySSHAgentStopIntent = { schema: "agenttool-phase-b-refence-fly-ssh-agent-stop-intent/v3", batch_id: request.batchID, identity_sha256: request.identitySHA256,
+    cli_semantic_argv_sha256: cliSemanticArgvSHA256, cli_semantic_executed: false, protocol_authority_sha256: protocolAuthoritySHA256, ping_connected_rebound_sha256: request.connectedReboundSHA256,
+    ping_connected_rebound_wal_sha256: ping.connected_rebound_wal_sha256, ping_peer_pid: ping.initial_peer_pid, ping_connection_closed: true, ping_response_sha256: ping.response_sha256, durable_intent_sha256: durableIntentSHA256 };
   validateFlySSHAgentStopIntent(intent, request.batchID, request.identity, request.identitySHA256, ping, request.connectedReboundSHA256);
   request.contexts.set(durableIntentSHA256, { effectID, intentOrdinal: lifecycleIntent.ordinal, batchKind: request.batchKind, identity: structuredClone(request.identity), identitySHA256: request.identitySHA256,
-    protocol: request.protocol, ping: structuredClone(ping), connectedReboundSHA256: request.connectedReboundSHA256, protocolAuthoritySHA256 });
+    ping: structuredClone(ping), pingConnectedReboundSHA256: request.connectedReboundSHA256, protocolAuthoritySHA256 });
   request.state.verifyLocalAuthority();
   return intent; }
 
-async function sendProductionFlySSHAgentStop(request: { state: ProductionBridgeMarkerState;
-  protocol: ProductionFlySSHAgentProtocol;
-  intent: FlySSHAgentStopIntent;
-  identity: FlySSHAgentIdentity;
-  ping: FlySSHAgentProtocolPing;
-  contexts: Map<string, ProductionFlySSHAgentStopContext>;
-  sentIntents: Set<string>; }): Promise<FlySSHAgentStopReceipt> { const context = request.contexts.get(request.intent.durable_intent_sha256);
-  requireCondition( context !== undefined && context.protocol === request.protocol && !request.sentIntents.has(request.intent.durable_intent_sha256) &&
+async function bindProductionFlySSHAgentKillProtocol(request: ContractTypes.ProductionFlySSHAgentConnectedRequest<ProductionBridgeMarkerState,
+  ProductionFlySSHAgentProtocol>): Promise<FlySSHAgentKillConnectionAuthority> { const walSHA256 = exactProductionFlySSHAgentObservationWalSpan(request.state.wal, `${request.batchKind}_cleanup_kill_connected_rebound`, request.identity);
+  request.state.verifyLocalAuthority();
+  return validateFlySSHAgentKillConnectionAuthority({ schema: "agenttool-phase-b-refence-fly-ssh-agent-kill-connection-authority/v1", transport: "local_unix_stream", socket_path: FLY_AGENT_SOCKET,
+    connection_role: "kill", connection_ordinal: 2, connected_without_write: true, connected_rebound_sha256: request.connectedReboundSHA256, connected_rebound_wal_sha256: walSHA256,
+    initial_peer_pid: request.protocol.initialPeerPID(), peer_attested: true, command_count_before_attempt: 0, child_spawn_count: 0 }, request.identity, request.identitySHA256, request.connectedReboundSHA256); }
+
+async function sendProductionFlySSHAgentStop(request: ContractTypes.ProductionFlySSHAgentStopRequest<ProductionBridgeMarkerState,
+  ProductionFlySSHAgentProtocol>): Promise<FlySSHAgentStopReceipt> { const context = request.contexts.get(request.intent.durable_intent_sha256);
+  requireCondition( context !== undefined && !request.sentIntents.has(request.intent.durable_intent_sha256) &&
     canonicalJson(context.ping) === canonicalJson(request.ping) && canonicalJson(flySSHAgentStableIdentityProjection(context.identity)) === canonicalJson(flySSHAgentStableIdentityProjection(request.identity)) &&
     context.identitySHA256 === sha256(canonicalJson(flySSHAgentStableIdentityProjection(request.identity))) && context.protocolAuthoritySHA256 === request.intent.protocol_authority_sha256, "fly_agent_stop", );
-  validateFlySSHAgentStopIntent(request.intent, request.intent.batch_id, request.identity, context.identitySHA256, request.ping, context.connectedReboundSHA256);
+  validateFlySSHAgentStopIntent(request.intent, request.intent.batch_id, request.identity, context.identitySHA256, request.ping, context.pingConnectedReboundSHA256);
   const lifecycleIntent = request.state.wal.entryAt(context.intentOrdinal);
   requireCondition(lifecycleIntent !== null && lifecycleIntent.effect_id === `${context.effectID}_intent` && lifecycleIntent.phase === "lifecycle_intent" &&
-    lifecycleIntent.effect_kind === "local_agent_stop" && lifecycleIntent.target === request.intent.batch_id && lifecycleIntent.argv_sha256 === request.intent.cli_semantic_argv_sha256 &&
-    lifecycleIntent.detail_sha256 === request.intent.protocol_authority_sha256 && sha256(`${canonicalJson(lifecycleIntent)}\n`) === request.intent.durable_intent_sha256, "fly_agent_stop_intent");
-  exactProductionFlySSHAgentObservationWalSpan(request.state.wal, `${context.batchKind}_cleanup_intent_rebound`, request.identity, context.intentOrdinal + 1);
-  const protocolOperationSHA256 = sha256(canonicalJson(flySSHAgentProtocolOperationProjection(request.intent)));
-  const base = { checkpoint: "fly_agent_cleanup_stop_direct_unix_protocol_child_spawn_count_0", effect_id: context.effectID, effect_kind: "local_agent_stop" as const, target: request.intent.batch_id, argv_sha256: protocolOperationSHA256 };
+    lifecycleIntent.effect_kind === "local_agent_stop" && lifecycleIntent.target === request.intent.batch_id && lifecycleIntent.argv_sha256 === request.intent.protocol_authority_sha256 &&
+    lifecycleIntent.detail_sha256 === request.intent.ping_connected_rebound_sha256 && sha256(`${canonicalJson(lifecycleIntent)}\n`) === request.intent.durable_intent_sha256, "fly_agent_stop_intent");
+  const killWalSHA256 = exactProductionFlySSHAgentObservationWalSpan(request.state.wal, `${context.batchKind}_cleanup_kill_connected_rebound`, request.identity, context.intentOrdinal + 1);
+  const killAuthority = validateFlySSHAgentKillConnectionAuthority(request.killAuthority, request.identity, context.identitySHA256, request.killConnectedReboundSHA256);
+  requireCondition(killAuthority.connected_rebound_wal_sha256 === killWalSHA256 && request.intent.ping_connected_rebound_sha256 !== killAuthority.connected_rebound_sha256 &&
+    request.intent.ping_connected_rebound_wal_sha256 !== killAuthority.connected_rebound_wal_sha256, "fly_agent_stop");
+  const killConnectionAuthoritySHA256 = sha256(canonicalJson(killAuthority));
+  const protocolOperationSHA256 = sha256(canonicalJson(flySSHAgentProtocolOperationProjection(request.intent, killAuthority)));
+  const base = { checkpoint: "fly_agent_cleanup_stop_direct_unix_protocol_two_connections_child_spawn_count_0", effect_id: context.effectID, effect_kind: "local_agent_stop" as const,
+    target: request.intent.batch_id, argv_sha256: protocolOperationSHA256 };
   request.sentIntents.add(request.intent.durable_intent_sha256);
   let attemptingDurable = false;
   try { request.state.wal.append({ ...base, recorded_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), phase: "attempting", pid: null, pgid: null, exit_code: null, termination: null,
-      local_process_group_settled: true, provider_transition_sha256: null, fleet_readback_sha256: null, detail_sha256: request.intent.durable_intent_sha256, failure_code: null });
+      local_process_group_settled: true, provider_transition_sha256: null, fleet_readback_sha256: null, detail_sha256: request.killConnectedReboundSHA256, failure_code: null });
     attemptingDurable = true;
-    const killResponseSHA256 = await request.protocol.kill(() => request.state.verifyLocalAuthority());
+    const kill = await request.protocol.kill(() => request.state.verifyLocalAuthority());
     request.state.verifyLocalAuthority();
-    requireCondition(killResponseSHA256 === FLY_AGENT_KILL_RESPONSE_SHA256, "fly_agent_protocol_kill");
-    const settlementSHA256 = sha256(canonicalJson({ schema: "agenttool-phase-b-refence-fly-ssh-agent-protocol-settlement/v1", transport: "local_unix_stream", socket_path: FLY_AGENT_SOCKET,
-      protocol_operation_sha256: protocolOperationSHA256, kill_frame_sha256: FLY_AGENT_KILL_FRAME_SHA256, kill_response_sha256: killResponseSHA256, protocol_acknowledged: true, child_spawn_count: 0, stop_send_count: 1 }));
+    requireCondition(kill.responseSHA256 === FLY_AGENT_KILL_RESPONSE_SHA256 && kill.initialPeerPID === request.identity.pid && kill.prewritePeerPID === request.identity.pid, "fly_agent_protocol_kill");
+    const settlementSHA256 = sha256(canonicalJson(maintenanceContract().flySSHAgentProtocolSettlementProjection(request.intent.protocol_authority_sha256, killConnectionAuthoritySHA256,
+      protocolOperationSHA256, request.identity.pid, request.intent.ping_connected_rebound_sha256, request.killConnectedReboundSHA256, request.intent.ping_connected_rebound_wal_sha256, killAuthority.connected_rebound_wal_sha256)));
     request.state.wal.append({ ...base, recorded_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), phase: "settled", pid: null, pgid: null, exit_code: null, termination: null,
       local_process_group_settled: true, provider_transition_sha256: null, fleet_readback_sha256: null, detail_sha256: settlementSHA256, failure_code: null });
-    const receipt: FlySSHAgentStopReceipt = { schema: "agenttool-phase-b-refence-fly-ssh-agent-stop/v2", batch_id: request.intent.batch_id, identity_sha256: context.identitySHA256,
+    const receipt: FlySSHAgentStopReceipt = { schema: "agenttool-phase-b-refence-fly-ssh-agent-stop/v3", batch_id: request.intent.batch_id, identity_sha256: context.identitySHA256,
       cli_semantic_argv_sha256: request.intent.cli_semantic_argv_sha256, cli_semantic_executed: false, protocol_authority_sha256: request.intent.protocol_authority_sha256,
-      protocol_operation_sha256: protocolOperationSHA256, durable_intent_sha256: request.intent.durable_intent_sha256, settlement_sha256: settlementSHA256, transport: "local_unix_stream",
+      kill_connection_authority_sha256: killConnectionAuthoritySHA256, ping_connected_rebound_sha256: request.intent.ping_connected_rebound_sha256,
+      kill_connected_rebound_sha256: request.killConnectedReboundSHA256, protocol_operation_sha256: protocolOperationSHA256, durable_intent_sha256: request.intent.durable_intent_sha256,
+      settlement_sha256: settlementSHA256, transport: "local_unix_stream",
       socket_path: FLY_AGENT_SOCKET, ping_frame_sha256: FLY_AGENT_PING_FRAME_SHA256, kill_frame_sha256: FLY_AGENT_KILL_FRAME_SHA256, ping_response_sha256: request.ping.response_sha256,
-      kill_response_byte_count: 3, kill_response_sha256: killResponseSHA256, protocol_acknowledged: true, child_spawn_count: 0, stop_send_count: 1 };
+      kill_response_byte_count: 2, kill_response_sha256: kill.responseSHA256, ping_initial_peer_pid: request.ping.initial_peer_pid, ping_prewrite_peer_pid: request.ping.prewrite_peer_pid,
+      kill_initial_peer_pid: kill.initialPeerPID, kill_prewrite_peer_pid: kill.prewritePeerPID, ping_remote_eof_observed: true, kill_remote_eof_observed: true, ping_local_close_awaited: true,
+      kill_local_close_awaited: true, connection_count: 2, ping_connection_count: 1, kill_connection_count: 1, protocol_acknowledged: true, child_spawn_count: 0, stop_send_count: 1 };
     const walVerificationSHA256 = sha256(canonicalJson(maintenanceContract().flySSHAgentDirectStopWalVerificationProjection({ batchID: request.intent.batch_id,
-      protocolAuthoritySHA256: request.intent.protocol_authority_sha256, durableIntentSHA256: request.intent.durable_intent_sha256, protocolOperationSHA256, settlementSHA256 })));
+      protocolAuthoritySHA256: request.intent.protocol_authority_sha256, killConnectionAuthoritySHA256, durableIntentSHA256: request.intent.durable_intent_sha256, protocolOperationSHA256,
+      settlementSHA256, peerPID: request.identity.pid, pingConnectedReboundSHA256: request.intent.ping_connected_rebound_sha256, killConnectedReboundSHA256: request.killConnectedReboundSHA256,
+      pingConnectedReboundWalSHA256: request.intent.ping_connected_rebound_wal_sha256, killConnectedReboundWalSHA256: killAuthority.connected_rebound_wal_sha256 })));
     request.state.wal.append({ ...base, recorded_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), phase: "verified", pid: null, pgid: null, exit_code: null, termination: null,
       local_process_group_settled: true, provider_transition_sha256: null, fleet_readback_sha256: null, detail_sha256: walVerificationSHA256, failure_code: null });
     return receipt; } catch { if (attemptingDurable && request.state.wal.lastEntry?.effect_id === context.effectID && request.state.wal.lastEntry.phase !== "failed_or_uncertain" &&
@@ -5145,22 +4543,8 @@ async function sendProductionFlySSHAgentStop(request: { state: ProductionBridgeM
           pid: null, pgid: null, exit_code: null, termination: null, local_process_group_settled: true, provider_transition_sha256: null, fleet_readback_sha256: null,
           detail_sha256: protocolOperationSHA256, failure_code: "fly_agent_stop_uncertain" }); } catch {} }
     throw new ControllerManualInterventionError("fly_agent_stop_uncertain"); } }
-interface ProductionControllerSession { readonly rolloutID: string;
-  readonly evidence: TerminalEvidence;
-  readonly lock: DeployLockAuthority;
-  readonly state: ProductionBridgeMarkerState;
-  readonly databaseConvergence: Readonly<{ proof: DatabaseOriginConvergenceProof;
-    beforeProofSHA256: string;
-    afterProofSHA256: string; }>;
-  readonly databaseConvergenceMarkerSHA256: string;
-  readonly childlessBase: ChildlessMaintenanceRefenceBase;
-  readonly guardDependencies: MaintenanceRefenceDependencies;
-  readonly fly: ProductionFlyOperationAdapter;
-  readonly flyAgentLifecycle: ProductionFlySSHAgentLifecycle;
-  closeForFinalization(): Promise<void>;
-  closeResources(): Promise<void>;
-  closeAuthority(): boolean;
-  finalizationResourcesClosed(): boolean; }
+type ProductionControllerSession = ContractTypes.ProductionControllerSessionShape<DeployLockAuthority, ProductionBridgeMarkerState, ChildlessMaintenanceRefenceBase,
+  MaintenanceRefenceDependencies, ProductionFlyOperationAdapter, ProductionFlySSHAgentLifecycle>;
 
 function recordProductionControllerCheckpoint( session: ProductionControllerSession, checkpoint: string, detail: JsonRecord, ): Promise<void> { const requireSHA = (key: string): string => { const value = detail[key];
     requireCondition( typeof value === "string" && validSha(value), "controller_checkpoint", );
@@ -5259,12 +4643,14 @@ async function runProductionCordonedRuntime( session: ProductionControllerSessio
   const stopContexts = new Map<string, ProductionFlySSHAgentStopContext>();
   const sentIntents = new Set<string>();
   const owned = await runFlySSHAgentOwnedBatchForTest({ batchID, batchKind: "cordoned_runtime", expectedProbeCount: 4, nowUnixMilliseconds: () => Date.now(),
-    observe: (tracked, checkpoint) => readProductionFlySSHAgentObservation({ state: session.state, runtime, tracked, checkpoint }), connectStopProtocol: () => ProductionFlySSHAgentProtocol.connect(),
+    observe: (tracked, checkpoint) => readProductionFlySSHAgentObservation({ state: session.state, runtime, tracked, checkpoint }), connectStopProtocol: (role, identity) => ProductionFlySSHAgentProtocol.connect(role, identity.pid),
     pingStopProtocol: (protocol, identity, identitySHA256, connectedReboundSHA256) => pingProductionFlySSHAgentProtocol({ state: session.state, protocol: protocol as ProductionFlySSHAgentProtocol, identity, identitySHA256, connectedReboundSHA256, batchKind: "cordoned_runtime" }),
-    recordStopIntent: (_batchID, identity, identitySHA256, ping, connectedReboundSHA256, protocol) => recordProductionFlySSHAgentStopIntent({ state: session.state, batchID: _batchID,
-      batchKind: "cordoned_runtime", identity, identitySHA256, ping, connectedReboundSHA256, protocol: protocol as ProductionFlySSHAgentProtocol, contexts: stopContexts }),
-    sendStop: (protocol, intent, identity, ping) => sendProductionFlySSHAgentStop({ state: session.state, protocol: protocol as ProductionFlySSHAgentProtocol, intent, identity, ping, contexts: stopContexts, sentIntents }),
-    closeStopProtocol: (protocol) => (protocol as ProductionFlySSHAgentProtocol).close(),
+    recordStopIntent: (_batchID, identity, identitySHA256, ping, connectedReboundSHA256) => recordProductionFlySSHAgentStopIntent({ state: session.state, batchID: _batchID,
+      batchKind: "cordoned_runtime", identity, identitySHA256, ping, connectedReboundSHA256, contexts: stopContexts }),
+    bindKillStopProtocol: (protocol, identity, identitySHA256, connectedReboundSHA256) => bindProductionFlySSHAgentKillProtocol({ state: session.state, protocol: protocol as ProductionFlySSHAgentProtocol,
+      identity, identitySHA256, connectedReboundSHA256, batchKind: "cordoned_runtime" }),
+    sendStop: (protocol, intent, identity, ping, killAuthority, killConnectedReboundSHA256) => sendProductionFlySSHAgentStop({ state: session.state, protocol: protocol as ProductionFlySSHAgentProtocol,
+      intent, identity, ping, killAuthority, killConnectedReboundSHA256, contexts: stopContexts, sentIntents }), closeStopProtocol: (protocol) => (protocol as ProductionFlySSHAgentProtocol).close(),
     pause: (milliseconds) => session.childlessBase.pause(milliseconds), onCleanup: (cleanupSHA256, cleanup) => session.flyAgentLifecycle.recordCleanup("cordoned_runtime", cleanupSHA256, cleanup),
     runBatch: async (launch) => runControllerCordonedRuntimeCoreForTest({ evidence: session.evidence, image: snapshot.image!, expectation: snapshot.expectation, expectedFleetSHA256: snapshot.fleetSHA256!, startedMachineIDs,
       dependencies: { readFleetInventory: () => session.guardDependencies.readFleetInventory(), pause: (milliseconds) => session.childlessBase.pause(milliseconds), runMachineProbe: (machineID, role) => { const flyArgv = controllerRuntimeFlyArgvForTest(
@@ -5318,12 +4704,14 @@ async function runProductionFinalAuthorityAndPublic( session: ProductionControll
   const stopContexts = new Map<string, ProductionFlySSHAgentStopContext>();
   const sentIntents = new Set<string>();
   const owned = await runFlySSHAgentOwnedBatchForTest({ batchID, batchKind: "final_authority", expectedProbeCount: 8, nowUnixMilliseconds: () => Date.now(),
-    observe: (tracked, checkpoint) => readProductionFlySSHAgentObservation({ state: session.state, runtime: agentRuntime, tracked, checkpoint }), connectStopProtocol: () => ProductionFlySSHAgentProtocol.connect(),
+    observe: (tracked, checkpoint) => readProductionFlySSHAgentObservation({ state: session.state, runtime: agentRuntime, tracked, checkpoint }), connectStopProtocol: (role, identity) => ProductionFlySSHAgentProtocol.connect(role, identity.pid),
     pingStopProtocol: (protocol, identity, identitySHA256, connectedReboundSHA256) => pingProductionFlySSHAgentProtocol({ state: session.state, protocol: protocol as ProductionFlySSHAgentProtocol, identity, identitySHA256, connectedReboundSHA256, batchKind: "final_authority" }),
-    recordStopIntent: (_batchID, identity, identitySHA256, ping, connectedReboundSHA256, protocol) => recordProductionFlySSHAgentStopIntent({ state: session.state, batchID: _batchID,
-      batchKind: "final_authority", identity, identitySHA256, ping, connectedReboundSHA256, protocol: protocol as ProductionFlySSHAgentProtocol, contexts: stopContexts }),
-    sendStop: (protocol, intent, identity, ping) => sendProductionFlySSHAgentStop({ state: session.state, protocol: protocol as ProductionFlySSHAgentProtocol, intent, identity, ping, contexts: stopContexts, sentIntents }),
-    closeStopProtocol: (protocol) => (protocol as ProductionFlySSHAgentProtocol).close(),
+    recordStopIntent: (_batchID, identity, identitySHA256, ping, connectedReboundSHA256) => recordProductionFlySSHAgentStopIntent({ state: session.state, batchID: _batchID,
+      batchKind: "final_authority", identity, identitySHA256, ping, connectedReboundSHA256, contexts: stopContexts }),
+    bindKillStopProtocol: (protocol, identity, identitySHA256, connectedReboundSHA256) => bindProductionFlySSHAgentKillProtocol({ state: session.state, protocol: protocol as ProductionFlySSHAgentProtocol,
+      identity, identitySHA256, connectedReboundSHA256, batchKind: "final_authority" }),
+    sendStop: (protocol, intent, identity, ping, killAuthority, killConnectedReboundSHA256) => sendProductionFlySSHAgentStop({ state: session.state, protocol: protocol as ProductionFlySSHAgentProtocol,
+      intent, identity, ping, killAuthority, killConnectedReboundSHA256, contexts: stopContexts, sentIntents }), closeStopProtocol: (protocol) => (protocol as ProductionFlySSHAgentProtocol).close(),
     pause: (milliseconds) => session.childlessBase.pause(milliseconds), onCleanup: (cleanupSHA256, cleanup) => session.flyAgentLifecycle.recordCleanup("final_authority", cleanupSHA256, cleanup),
     runBatch: (launch) => runControllerFinalAuthorityCoreForTest({ evidence: session.evidence, image: snapshot.image!, expectation: snapshot.expectation, expectedFleetSHA256: snapshot.fleetSHA256!, expectedDatabaseUpdatedAt:
         session.databaseConvergence.proof.after_updated_at, dependencies: { readEvidence: () => classifyHandoff( session.state.bindings.receiptSHA256, session.evidence.targetRevision, session.evidence.targetTree, session.rolloutID,
@@ -5399,8 +4787,8 @@ async function createProductionControllerSession( arguments_: ControllerArgument
     const initialEvidence = classifyHandoff( arguments_.receiptSHA256, ingress.targetRevision, ingress.targetTree, rolloutID, );
     requireCondition( initialEvidence.edge === "H0" && initialEvidence.runID === ingress.runID, "controller_handoff_admission", );
     const git = await readProductionGitProof(initialEvidence);
-    requireCondition( git.clean === true && git.revision !== ingress.targetRevision && git.revision !== PRIOR_FAILED_COMPATIBILITY_REVISION && git.revision !== IMMEDIATE_FAILED_COMPATIBILITY_REVISION &&
-        git.tree !== ingress.targetTree && git.tree !== PRIOR_FAILED_COMPATIBILITY_TREE && git.tree !== IMMEDIATE_FAILED_COMPATIBILITY_TREE && git.first_parent_revision === IMMEDIATE_FAILED_COMPATIBILITY_REVISION &&
+    requireCondition( git.clean === true && ![ingress.targetRevision, PRIOR_FAILED_COMPATIBILITY_REVISION, IMMEDIATE_FAILED_COMPATIBILITY_REVISION, PRIOR_PROTOCOL_INCOMPATIBLE_REVISION].includes(git.revision) &&
+        ![ingress.targetTree, PRIOR_FAILED_COMPATIBILITY_TREE, IMMEDIATE_FAILED_COMPATIBILITY_TREE, PRIOR_PROTOCOL_INCOMPATIBLE_TREE].includes(git.tree) && git.first_parent_revision === PRIOR_PROTOCOL_INCOMPATIBLE_REVISION &&
         canonicalJson(git.changed_path_statuses) === canonicalJson(PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES) &&
         canonicalJson(git.cumulative_changed_path_statuses) === canonicalJson(PRIOR_PROTECTED_SUCCESSOR_CHANGED_PATH_STATUSES), "controller_target_git", );
     requireCondition(canonicalJson(classifyHandoff(arguments_.receiptSHA256, ingress.targetRevision, ingress.targetTree, rolloutID)) === canonicalJson(initialEvidence), "controller_handoff_admission");
@@ -5481,11 +4869,7 @@ async function createProductionControllerSession( arguments_: ControllerArgument
     // SIGKILL/stale-lock recovery is a permanent-manual lane.
     throw error; } }
 
-export interface ControllerRecoveryDependencies { performFlyOperation( operation: ControllerFlyOperation, expectedFleet: TargetFleetExpectation, expectedPreFleetSHA256: string, ): Promise<{ image?: TargetImageContract;
-    proofSHA256: string;
-    fleetSHA256: string; }>;
-  recordCheckpoint(checkpoint: string, detail: JsonRecord): Promise<void>;
-  proveStoppedFence( expectation: TargetFleetExpectation, expectedPreFleetSHA256: string, ): Promise<{ proofSHA256: string; fleetSHA256: string }>; }
+export type ControllerRecoveryDependencies = ContractTypes.ControllerRecoveryDependencies;
 
 function withoutMachineID( values: readonly string[], machineID: string, ): string[] { return values.filter((entry) => entry !== machineID); }
 
@@ -5494,13 +4878,7 @@ function withoutMachineID( values: readonly string[], machineID: string, ): stri
  * backward and has no retry path: its dependency must throw manual on any
  * mutator uncertainty before another child can be armed.
  */
-export async function runControllerRecoveryCoreForTest(request: { evidence: TerminalEvidence;
-  reason: string;
-  image: TargetImageContract | null;
-  initialFleetSHA256: string;
-  initialExpectation: TargetFleetExpectation;
-  dependencies: ControllerRecoveryDependencies; }): Promise<{ proofSHA256: string;
-  expectation: TargetFleetExpectation; }> { requireCondition( /^[a-z0-9_]{1,64}$/.test(request.reason) && validSha(request.initialFleetSHA256), "controller_recovery_admission", );
+export async function runControllerRecoveryCoreForTest(request: ContractTypes.ControllerRecoveryBridgeRequest): Promise<ContractTypes.ControllerRecoveryBridgeResult> { requireCondition( /^[a-z0-9_]{1,64}$/.test(request.reason) && validSha(request.initialFleetSHA256), "controller_recovery_admission", );
   requireTargetFleetExpectation(request.evidence, request.initialExpectation);
   if (request.image !== null) { requireCondition( /^maintenance-refence-[0-9a-f]{12}-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{16}$/ .test(request.image.tag) && /^sha256:[0-9a-f]{64}$/.test(request.image.digest) &&
         request.image.revision === request.evidence.targetRevision, "controller_recovery_admission", ); }
@@ -5540,15 +4918,7 @@ export async function runControllerRecoveryCoreForTest(request: { evidence: Term
  * re-prove the unchanged stopped fence. The latter uses the closed recovery
  * order above and requires the resolved target image.
  */
-export async function runControllerRecoveryDispatchCoreForTest(request: { evidence: TerminalEvidence;
-  reason: string;
-  providerEffectVerified: boolean;
-  fleetMutationVerified: boolean;
-  image: TargetImageContract | null;
-  initialFleetSHA256: string;
-  initialExpectation: TargetFleetExpectation;
-  dependencies: ControllerRecoveryDependencies; }): Promise<{ proofSHA256: string;
-  expectation: TargetFleetExpectation; }> { requireCondition( request.providerEffectVerified && validSha(request.initialFleetSHA256), "controller_recovery_dispatch", );
+export async function runControllerRecoveryDispatchCoreForTest(request: ContractTypes.ControllerRecoveryDispatchBridgeRequest): Promise<ContractTypes.ControllerRecoveryBridgeResult> { requireCondition( request.providerEffectVerified && validSha(request.initialFleetSHA256), "controller_recovery_dispatch", );
   requireTargetFleetExpectation(request.evidence, request.initialExpectation);
   if (request.fleetMutationVerified) { requireCondition(request.image !== null, "controller_recovery_dispatch");
     return runControllerRecoveryCoreForTest({
@@ -5586,8 +4956,8 @@ async function recoverProductionControllerToStoppedFence( session: ProductionCon
   session.state.recordFailure(reason, false, true);
   return result.proofSHA256; }
 
-function productionSuccessArchiveBindings( session: ProductionControllerSession, ): JsonRecord { verifyRetainedHandoffEvidence(session.state.bindings);
-  const bind = ( path: string, digest: string, source: Stats, ): JsonRecord => { const identity: DurableFileIdentity = { device: source.dev, inode: source.ino, sha256: digest, size: source.size, };
+function productionSuccessArchiveBindings( session: ProductionControllerSession, ): SuccessAuthorityContractRequest["retainedArchives"] { verifyRetainedHandoffEvidence(session.state.bindings);
+  const bind = ( path: string, digest: string, source: Pick<Stats, "dev" | "ino" | "size">, ): SuccessAuthorityContractRequest["retainedArchives"]["anchor"] => { const identity: DurableFileIdentity = { device: source.dev, inode: source.ino, sha256: digest, size: source.size, };
     const current = requireExactFileIdentity(path, identity, { links: [1] });
     return { path, sha256: digest, device: current.dev, inode: current.ino, nlink: 1, }; };
   return {
@@ -5657,12 +5027,7 @@ function createProductionRolloutDependencies( session: ProductionControllerSessi
       return Promise.resolve(); }, }; }
 
 export async function runOwnedControllerSessionForTest<
-  Session, Dependencies, Result, >( request: { createSession(): Promise<Session>;
-    createDependencies(session: Session): Dependencies;
-    run(session: Session, dependencies: Dependencies): Promise<Result>;
-    closeResources(session: Session): Promise<void>;
-    closeAuthority(session: Session): boolean;
-    retainCleanupUncertainty(session: Session): void; }, ): Promise<Result> { const session = await request.createSession();
+  Session, Dependencies, Result, >(request: ContractTypes.OwnedControllerSessionRequest<Session, Dependencies, Result>): Promise<Result> { const session = await request.createSession();
   const noFailure = Symbol("no_failure");
   let failure: unknown = noFailure;
   let result!: Result;
@@ -5685,43 +5050,17 @@ async function runProductionController(arguments_: ControllerArguments) { return
       createProductionRolloutDependencies(session), run: (session, dependencies) => runControllerRolloutCore({ evidence: session.evidence, rolloutID: session.rolloutID, dependencies, }),
     closeResources: (session) => session.closeResources(), closeAuthority: (session) => session.closeAuthority(), retainCleanupUncertainty: (session) => session.state.retainManualFailure( "controller_resource_cleanup_uncertain", ), }); }
 
-export interface ControllerFinalizationLifecycle { effectsClosed(): void;
-  a0Installed(): void; }
-
-export interface ControllerRolloutDependencies { recordCheckpoint( checkpoint: string, detail: JsonRecord, ): Promise<void>;
-  runSpecialGuard( checkpoint: "prepublication_before_build" | "prepublication_before_image", ): Promise<{ proofSHA256: string; fleetSHA256: string }>;
-  performFlyOperation( operation: ControllerFlyOperation, expectedFleet: TargetFleetExpectation, expectedPreFleetSHA256: string, ): Promise<{ image?: TargetImageContract;
-    proofSHA256: string;
-    fleetSHA256: string; }>;
-  proveCordonedRuntime( startedMachineIDs: readonly string[], ): Promise<{ proofSHA256: string;
-    cleanupSHA256: string }>;
-  proveFirstCanaryPublic(): Promise<string>;
-  proveFinalAuthorityAndPublic(): Promise<{ publicProofSHA256: string;
-    authorityProofSHA256: string;
-    cleanupSHA256: string; }>;
-  runOrdinaryAbsentPostflight(): Promise<string>;
-  finalizeSuccess( proofs: JsonRecord, lifecycle: ControllerFinalizationLifecycle, ): Promise<{ receiptPath: string;
-    receiptSHA256: string;
-    witnessPath: string;
-    witnessSHA256: string; }>;
-  recoverToStoppedFence( reason: string, context: { providerEffectVerified: boolean;
-      fleetMutationVerified: boolean; }, ): Promise<string>;
-  retainManualBlocker(reason: string): Promise<void>;
-  retainFinalizationManualBlocker(reason: string): Promise<void>; }
-export async function runControllerRolloutCore(request: { evidence: TerminalEvidence;
-  rolloutID: string;
-  dependencies: ControllerRolloutDependencies; }): Promise<{ receiptPath: string; receiptSHA256: string }> { return maintenanceContract().runControllerRolloutCore({ ...request,
+export type ControllerFinalizationLifecycle = ContractTypes.ControllerFinalizationLifecycle;
+export type ControllerRolloutDependencies = ContractTypes.ControllerRolloutDependencies;
+export async function runControllerRolloutCore(request: ContractTypes.ControllerRolloutBridgeRequest): Promise<ContractTypes.ControllerRolloutBridgeResult> { return maintenanceContract().runControllerRolloutCore({ ...request,
     classifyFailure: (error: unknown) => ({ reason: error instanceof ControllerManualInterventionError ? error.code : error instanceof ControllerSettledObservationError ? error.code :
         error instanceof MaintenanceRefenceError ? error.code : "controller_rollout_failure", manual: error instanceof ControllerManualInterventionError, }),
     validateReceipt: (receipt: JsonRecord, evidence: TerminalEvidence) => { const receiptName = basename(receipt.receiptPath);
       requireCondition( dirname(receipt.receiptPath) === DEPLOY_RECEIPT_DIR && dirname(receipt.witnessPath) === DEPLOY_STATE_DIR && /^20[0-9]{6}T[0-9]{6}Z-[0-9a-f]{12}-[1-9][0-9]*\.json$/ .test(receiptName) &&
           receiptName.slice(17, 29) === evidence.targetRevision.slice(0, 12) && receipt.witnessPath === join(DEPLOY_STATE_DIR, `phase-b-refence-maintenance-finalization-${evidence.runID}.json`) &&
-          validSha(receipt.receiptSHA256) && validSha(receipt.witnessSHA256), "controller_success_receipt", ); }, }) as Promise<{ receiptPath: string; receiptSHA256: string }>; }
+          validSha(receipt.receiptSHA256) && validSha(receipt.witnessSHA256), "controller_success_receipt", ); }, }) as Promise<ContractTypes.ControllerRolloutBridgeResult>; }
 
-export interface ControllerArguments { receiptSHA256: string;
-  appMachines: string;
-  thinkerPrimary: string;
-  thinkerStandby: string; }
+export type ControllerArguments = ContractTypes.ControllerArguments;
 
 export function parseArguments( arguments_: readonly string[], ): ControllerArguments { requireCondition(arguments_.length === 7, "invalid_invocation");
   const [ noMigrate, noFrontend, maintenanceFencedAPI, receiptArgument, appArgument, primaryArgument, standbyArgument, ] = arguments_;

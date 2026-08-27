@@ -163,8 +163,8 @@ _agenttool_refence_dispatch() {
   local controller="$repo/bin/phase-b-refence-maintenance-bridge.ts"
   # REFRESH_CONTROLLER_DISPATCH_PIN only after the controller self-pin and
   # activation entry are frozen; the dispatcher must bind executed TS bytes.
-  local controller_sha256="68892049dd5e3ffee92cd79548cfc69c86b7241d55d42018747827dfb34a21c5"
-  local controller_size="519970"
+  local controller_sha256="f56ac1e40151a202f976753bef61d9d622db348c751b6b3d19f029a33afeec52"
+  local controller_size="516691"
   local bun_directory="$home/.cache/pinned-runtimes/bun-v1.3.5/bun-darwin-aarch64"
   local bun="$bun_directory/bun"
   local bun_sha256="66262f09134f780b1563bd1ae3dad13ea7d2ac669f8a5754f924b3c82abcc8f3"
