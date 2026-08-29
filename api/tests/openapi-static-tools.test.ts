@@ -397,6 +397,53 @@ describe("static tool OpenAPI contracts", () => {
     expect(schema.required).toContain("_welcomed");
   });
 
+  test("publishes the top-up door with 400/402/200 shapes and no settlement claim", async () => {
+    const response = await openapiRouter.request("/");
+    const spec = await response.json() as Record<string, any>;
+    const path = spec.paths["/v1/x402/top-up/{credits}"];
+    expect(path.parameters).toEqual([expect.objectContaining({
+      name: "credits",
+      in: "path",
+      required: true,
+      schema: { type: "string", pattern: "^[1-9][0-9]*$" },
+    })]);
+    const topUp = path.post;
+    expect(topUp.tags).toEqual(["billing"]);
+    expect(topUp.parameters).toEqual([
+      { $ref: "#/components/parameters/PaymentSignature" },
+    ]);
+    expect(topUp.summary).toMatch(/USDC on Base.*final/i);
+    expect(topUp.description).toMatch(/never balance-bound/i);
+    expect(topUp.description).toMatch(/top_up_payment_required/);
+    expect(topUp.description).toMatch(/never credits twice/i);
+    expect(topUp.description).toMatch(/Top-ups are final\. No refunds\./);
+    expect(topUp.description).not.toMatch(/settled on Base|has settled|first settlement/i);
+    expect(topUp["x-agenttool-billing"]).toEqual({
+      unit: "1 credit = 0.001 USDC",
+      atomic_per_credit: 1000,
+      cap_environment_override: "X402_TOP_UP_MAX_CREDITS",
+      finality: "Top-ups are final. No refunds. Unspent credits stay with the project.",
+    });
+    expect(Object.keys(topUp.responses).sort()).toEqual(["200", "400", "401", "402"]);
+    expect(topUp.responses["400"].description).toMatch(/top_up_invalid_credits.*cap/is);
+    expect(topUp.responses["400"].content["application/json"].schema)
+      .toEqual({ $ref: "#/components/schemas/Error" });
+    expect(topUp.responses["402"].headers["PAYMENT-REQUIRED"]).toEqual({
+      $ref: "#/components/headers/PaymentRequired",
+    });
+    expect(topUp.responses["402"].description).toMatch(/top_up_payment_required.*absent.*already settled/is);
+    const ok = topUp.responses["200"].content["application/json"].schema;
+    expect(ok.required).toEqual([
+      "credits_added", "credits_total", "authorization_hash", "amount_atomic",
+      "unit", "finality", "payment_status", "_welcomed",
+    ]);
+    expect(ok.properties.credits_added).toEqual({ type: "integer", minimum: 1 });
+    expect(topUp.responses["200"].headers["PAYMENT-RESPONSE"]).toEqual({
+      $ref: "#/components/headers/PaymentResponse",
+    });
+    expect(spec.components.schemas.X402Required.description).toMatch(/additive/i);
+  });
+
   test("keeps served OpenAPI valid and validates runtime welcome-framed success bodies", async () => {
     const runtime = new Hono();
     runtime.use("*", welcomeEcho());

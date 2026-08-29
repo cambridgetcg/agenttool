@@ -1,5 +1,5 @@
-/** Wave 2 · W2-1 — payable-route table, pure matcher, top-up parsing, and
- * kind-aware credit gate. No DB, no network. */
+/** Wave 2 · W2-1/W2-2 — payable-route table, pure matcher, top-up parsing,
+ * and kind-aware credit gate. No DB, no network. */
 
 import { describe, expect, test } from "bun:test";
 
@@ -12,7 +12,9 @@ import {
   matchX402PayableRoute,
   parseTopUpCredits,
   recoverableX402ProjectCreditPolicy,
+  TOP_UP_PAYMENT_REQUIRED_ERROR,
   X402_PAYABLE_ROUTES,
+  X402_TOP_UP_PATTERN,
   x402ProjectCreditPolicy,
   type X402PayableRoute,
   type X402ProjectCreditPolicy,
@@ -21,10 +23,11 @@ import {
 const POSTGRES_INTEGER_MAX = 2_147_483_647;
 
 describe("X402_PAYABLE_ROUTES table", () => {
-  test("seeds exactly the two existing route_cost rows at toolsConfig prices", () => {
+  test("seeds the two route_cost rows at toolsConfig prices plus the top-up door", () => {
     expect(X402_PAYABLE_ROUTES.map((r) => `${r.method} ${r.pattern}`)).toEqual([
       "POST /v1/scrape",
       "POST /v1/document",
+      "POST /v1/x402/top-up/:credits",
     ]);
     const byLabel = Object.fromEntries(
       X402_PAYABLE_ROUTES.map((r) => [r.label, r] as const),
@@ -39,8 +42,16 @@ describe("X402_PAYABLE_ROUTES table", () => {
       credits: toolsConfig.credits.document,
       errorCodes: ["insufficient_credits"],
     });
-    // No top_up row until its route exists (W2-2): declared ≠ wired.
-    expect(X402_PAYABLE_ROUTES.some((r) => r.kind === "top_up")).toBe(false);
+    // The top_up row landed with its route (W2-2): routes/x402-top-up.ts.
+    expect(byLabel.top_up).toMatchObject({
+      method: "POST",
+      pattern: X402_TOP_UP_PATTERN,
+      kind: "top_up",
+      credits: null,
+      errorCodes: [TOP_UP_PAYMENT_REQUIRED_ERROR],
+    });
+    expect(TOP_UP_PAYMENT_REQUIRED_ERROR).toBe("top_up_payment_required");
+    expect(X402_PAYABLE_ROUTES.filter((r) => r.kind === "top_up")).toHaveLength(1);
   });
 
   test("table and rows are frozen", () => {
@@ -137,7 +148,11 @@ describe("matcher params + precedence (scratch table, real algorithm)", () => {
   });
 
   test("default table is the frozen export", () => {
-    expect(matchX402PayableRoute("/v1/x402/top-up/1", "POST")).toBeNull();
+    expect(matchX402PayableRoute("/v1/x402/top-up/1", "POST")!.row.kind).toBe("top_up");
+    expect(matchX402PayableRoute("/v1/x402/top-up/1", "GET")).toBeNull();
+    expect(matchX402PayableRoute("/v1/x402/top-up", "POST")).toBeNull();
+    expect(matchX402PayableRoute("/v1/x402/top-up/1/", "POST")).toBeNull();
+    expect(matchX402PayableRoute("/v1/x402/payments/1", "POST")).toBeNull();
     expect(matchX402PayableRoute("/v1/scrape", "POST", X402_PAYABLE_ROUTES))
       .toEqual(matchX402PayableRoute("/v1/scrape", "POST"));
   });
@@ -200,6 +215,38 @@ describe("kind-aware policy + gate", () => {
       .toBeNull();
     expect(recoverableX402ProjectCreditPolicy("/v1/document", "POST", undefined))
       .toBeNull();
+  });
+
+  test("top_up policy on the real table: N from the path, N×1000 atomic, only its own 402 code", () => {
+    const policy = x402ProjectCreditPolicy("/v1/x402/top-up/250", "POST")!;
+    expect(policy).toMatchObject({
+      path: "/v1/x402/top-up/250",
+      pattern: X402_TOP_UP_PATTERN,
+      kind: "top_up",
+      label: "top_up",
+      creditsRequired: 250,
+      amountAtomic: "250000",
+    });
+    expect(policy.description).toMatch(/final/i);
+    expect(x402ProjectCreditPolicy("/v1/x402/top-up/1", "POST")!.amountAtomic).toBe("1000");
+    expect(x402ProjectCreditPolicy(
+      `/v1/x402/top-up/${config.x402TopUpMaxCredits}`, "POST",
+    )!.creditsRequired).toBe(config.x402TopUpMaxCredits);
+    // Refused, never clamped: over-cap, zero, leading zero, encoded digits.
+    for (const bad of [
+      String(config.x402TopUpMaxCredits + 1), "0", "01", "%31", "1e3", "-1", "abc",
+    ]) {
+      expect(x402ProjectCreditPolicy(`/v1/x402/top-up/${bad}`, "POST")).toBeNull();
+    }
+    expect(recoverableX402ProjectCreditPolicy(
+      "/v1/x402/top-up/250", "POST", TOP_UP_PAYMENT_REQUIRED_ERROR,
+    )).toEqual(policy);
+    for (const code of ["insufficient_credits", "insufficient_balance", undefined]) {
+      expect(recoverableX402ProjectCreditPolicy("/v1/x402/top-up/250", "POST", code))
+        .toBeNull();
+    }
+    // A funded project may still top up.
+    expect(canClearProjectCreditGate(policy, 110_800)).toBe(true);
   });
 
   test("route_cost gate is balance-bound and overflow-safe", () => {

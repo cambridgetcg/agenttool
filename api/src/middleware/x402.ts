@@ -383,15 +383,59 @@ export function x402Middleware(opts: X402MiddlewareOptions): MiddlewareHandler {
 
     const paymentRequired = await opts.buildPaymentRequired(c);
     if (!paymentRequired) return;
+    const guidance = await readJsonRecord(c.res);
     const headers = new Headers(c.res.headers);
     headers.set("content-type", "application/json; charset=utf-8");
     headers.set("Cache-Control", "private, no-store");
     headers.set("PAYMENT-REQUIRED", encodePaymentRequiredHeader(paymentRequired));
-    c.res = new Response(JSON.stringify(paymentRequired), {
-      status: 402,
-      headers,
-    });
+    c.res = new Response(
+      JSON.stringify(mergePaymentRequiredBody(guidance, paymentRequired)),
+      { status: 402, headers },
+    );
   };
+}
+
+/** Keys owned by the x402 V2 PaymentRequired object. A handler's guidance
+ * body may never define them; the header stays the pure spec object. */
+export const PAYMENT_REQUIRED_SPEC_KEYS = Object.freeze([
+  "x402Version",
+  "resource",
+  "accepts",
+  "extensions",
+] as const);
+
+/** Additive 402 body: the handler's errors-as-instructions guidance keeps its
+ * fields (message, hint, next_actions, docs, route-specific facts) and the
+ * PaymentRequired object is spread last so every spec key is authoritative.
+ * Spec keys are stripped from the guidance first, so a guidance body cannot
+ * smuggle an `accepts`/`resource`/`x402Version`/`extensions` value even when
+ * PaymentRequired omits that optional key. `error` is shared by both shapes:
+ * PaymentRequired.error wins when present; otherwise the handler's string
+ * code stays and any non-string `error` is dropped. */
+export function mergePaymentRequiredBody(
+  guidance: Record<string, unknown> | null | undefined,
+  paymentRequired: PaymentRequired,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = {};
+  if (guidance) {
+    const owned = new Set<string>(PAYMENT_REQUIRED_SPEC_KEYS);
+    for (const [key, value] of Object.entries(guidance)) {
+      if (owned.has(key)) continue;
+      if (key === "error" && typeof value !== "string") continue;
+      merged[key] = value;
+    }
+  }
+  return { ...merged, ...paymentRequired };
+}
+
+async function readJsonRecord(res: Response): Promise<Record<string, unknown> | null> {
+  try {
+    const ct = res.headers.get("content-type") ?? "";
+    if (!ct.includes("json")) return null;
+    return objectRecord(await res.clone().json());
+  } catch {
+    return null;
+  }
 }
 
 export function getX402Payment(c: Context): PaymentPayload | undefined {

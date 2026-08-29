@@ -17,6 +17,10 @@ import {
   RING_2_BIRTH_CREDIT_MINOR,
 } from "../../services/economy/ring1-limits";
 import {
+  ATOMIC_PER_CREDIT,
+  TOP_UP_PAYMENT_REQUIRED_ERROR,
+  X402_TOP_UP_FINALITY,
+  X402_TOP_UP_UNIT,
   resolveX402FacilitatorReadiness,
   resolveX402Network,
   resolveX402Recipient,
@@ -98,6 +102,33 @@ export async function x402ConfigurationStatus(
   };
 }
 
+/** The agent rail's purchase door, described as the code behaves. `status`
+ * is "payable" only when the same readiness that gates every challenge
+ * passed locally; otherwise the route is mounted and answers 402 but nothing
+ * can be paid (declared ≠ payable). Nothing here claims a settlement has
+ * happened. */
+export function x402TopUpDisclosure(
+  payableChallengesReady: boolean,
+  capCredits = config.x402TopUpMaxCredits,
+) {
+  return {
+    route: "POST /v1/x402/top-up/{credits}",
+    unit: X402_TOP_UP_UNIT,
+    atomic_per_credit: ATOMIC_PER_CREDIT,
+    cap_credits: capCredits,
+    cap_usd: (capCredits / 1000).toFixed(3),
+    finality: X402_TOP_UP_FINALITY,
+    status: payableChallengesReady ? "payable" : "declared_not_payable",
+    status_note: payableChallengesReady
+      ? `The door answers 402 ${TOP_UP_PAYMENT_REQUIRED_ERROR} with a PAYMENT-REQUIRED header for exactly credits × ${ATOMIC_PER_CREDIT} atomic USDC; a retry carrying the signed PAYMENT-SIGNATURE applies the credits in the same durable transaction that records settlement and answers 200 { credits_added, credits_total, authorization_hash }.`
+      : `The route is mounted and answers 402 ${TOP_UP_PAYMENT_REQUIRED_ERROR}, but no PAYMENT-REQUIRED header is attached until the recipient, CAIP-2 network, and facilitator pass readiness, so nothing can be paid yet.`,
+    never_balance_bound: true,
+    invalid_amount: `400 top_up_invalid_credits for anything but a plain positive integer ≤ ${capCredits}; amounts are refused, never clamped.`,
+    replay: "A replayed settled authorization answers 402 with PAYMENT-RESPONSE and the rel=payment-status Link; credits apply at most once per authorization. Send an Idempotency-Key to have a lost 200 replayed.",
+    subscriptions: false,
+  };
+}
+
 app.get("/", async (c) => {
   const bps = config.platformTakeRateBps;
   const ipRateLimitDisabled = process.env.AGENTTOOL_DISABLE_WORKERS === "1";
@@ -148,11 +179,12 @@ app.get("/", async (c) => {
         then_pay_as_you_go: {
           ring: 2,
           how:
-            "Production x402 can make the POST /v1/scrape and POST /v1/document insufficient_credits gates payable at their full configured project-credit cost. " +
+            "Production x402 can make the POST /v1/scrape and POST /v1/document insufficient_credits gates payable at their full configured project-credit cost, and POST /v1/x402/top-up/{credits} lets an agent buy credits outright with USDC on Base — no human, no card. " +
             x402Configuration.status,
           configuration: x402Configuration,
+          top_up: x402TopUpDisclosure(x402Configuration.payable_challenges_ready),
           implementation_status:
-            "Only eligible static project-credit 402 responses are converted to x402 V2 exact/EIP-3009 challenges. Direct EOA signatures use offline recovery; bounded EIP-1271/ERC-6492 signatures defer to the facilitator behind the durable 5-attempt/10-minute project cap. Wallet insufficient_balance, usage-cap, and unknown 402 responses pass through unchanged because project-credit settlement cannot clear them. x402 bursting for the published Ring 1 storage targets is not live.",
+            "Only eligible static project-credit 402 responses (insufficient_credits on the two static tools) and the top-up door's own top_up_payment_required 402 are converted to x402 V2 exact/EIP-3009 challenges; the 402 body keeps the route's guidance and mirrors PaymentRequired on top. Direct EOA signatures use offline recovery; bounded EIP-1271/ERC-6492 signatures defer to the facilitator behind the durable 5-attempt/10-minute project cap. Wallet insufficient_balance, usage-cap, and unknown 402 responses pass through unchanged because project-credit settlement cannot clear them. x402 bursting for the published Ring 1 storage targets is not live.",
           subscriptions: false,
         },
 
@@ -211,6 +243,11 @@ app.get("/", async (c) => {
             action: "arrive — free, proof-of-work gated (BYO ed25519 keys)",
             method: "POST",
             path: "/v1/register/agent",
+          },
+          {
+            action: "buy project credits with USDC on Base (x402, final, capped per request)",
+            method: "POST",
+            path: "/v1/x402/top-up/{credits}",
           },
           {
             action: "read the marketplace cut + ranking",

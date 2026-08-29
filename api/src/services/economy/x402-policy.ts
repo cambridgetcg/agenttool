@@ -246,12 +246,27 @@ export function resolveX402FacilitatorReadiness(
 //                and only while the project cannot already afford the call.
 //   top_up     — a purchase of N credits with no handler shortfall. Never
 //                balance-bound; N is read from the matched `:credits` param
-//                and capped by config.x402TopUpMaxCredits.
-// The top-up row lands together with its route (W2-2); seeding it here
-// before the handler exists would be a declared-but-unwired promise.
+//                and capped by config.x402TopUpMaxCredits. Its handler
+//                (routes/x402-top-up.ts) exists only to be paid: it answers
+//                402 `top_up_payment_required` until a verified payment is
+//                stashed, and that single code is the row's errorCode so a
+//                402 from anything else on the path never becomes a promise.
 
 export type X402PayableMethod = "GET" | "POST" | "PATCH" | "DELETE";
 export type X402PayableKind = "route_cost" | "top_up";
+
+/** The agent rail's purchase door: `POST /v1/x402/top-up/:credits`. The
+ * handler in routes/x402-top-up.ts and the auth/idempotency mounts in
+ * index.ts name the same prefix. */
+export const X402_TOP_UP_PATTERN = "/v1/x402/top-up/:credits";
+/** The only 402 code the top-up handler emits; the only one that is payable. */
+export const TOP_UP_PAYMENT_REQUIRED_ERROR = "top_up_payment_required";
+/** Human rate line published beside every top-up disclosure. */
+export const X402_TOP_UP_UNIT = "1 credit = 0.001 USDC";
+/** Finality wording (Yu decision c): published on /public/plans and in the
+ * 402 body verbatim. */
+export const X402_TOP_UP_FINALITY =
+  "Top-ups are final. No refunds. Unspent credits stay with the project.";
 
 export interface X402PayableRoute {
   readonly method: X402PayableMethod;
@@ -283,6 +298,14 @@ export const X402_PAYABLE_ROUTES: readonly X402PayableRoute[] = Object.freeze([
     credits: toolsConfig.credits.document,
     label: "document",
     errorCodes: Object.freeze(["insufficient_credits"]),
+  } as const),
+  Object.freeze({
+    method: "POST",
+    pattern: X402_TOP_UP_PATTERN,
+    kind: "top_up",
+    credits: null,
+    label: "top_up",
+    errorCodes: Object.freeze([TOP_UP_PAYMENT_REQUIRED_ERROR]),
   } as const),
 ]);
 
@@ -470,10 +493,10 @@ export function x402ProjectCreditPolicy(
 }
 
 /** Outbound 402s are payable only when the handler reached the matching
- * gate. route_cost rows require one of their declared handler error codes
- * (wallet, usage-cap, and unknown 402 families never become misleading
- * payment promises). top_up rows are always challengeable once matched —
- * their handler exists only to be paid. */
+ * gate: every row requires one of its declared handler error codes, so
+ * wallet, usage-cap, auth, and unknown 402 families never become misleading
+ * payment promises. For route_cost that is the credit shortfall code; for
+ * top_up it is the handler's own `top_up_payment_required`. */
 export function recoverableX402ProjectCreditPolicy(
   path: string,
   method: string,
@@ -481,9 +504,8 @@ export function recoverableX402ProjectCreditPolicy(
 ): X402ProjectCreditPolicy | null {
   const match = matchX402PayableRoute(path, method);
   if (!match) return null;
-  if (
-    match.row.kind === "route_cost" &&
-    (errorCode === undefined || !match.row.errorCodes.includes(errorCode))
-  ) return null;
+  if (errorCode === undefined || !match.row.errorCodes.includes(errorCode)) {
+    return null;
+  }
   return x402ProjectCreditPolicy(path, method);
 }

@@ -14,6 +14,7 @@ import {
   toolsConfig,
 } from "../src/services/tools/config";
 import plans, {
+  x402TopUpDisclosure,
   registrationIpRateLimitStatus,
   x402ConfigurationStatus,
 } from "../src/routes/public/plans";
@@ -108,6 +109,36 @@ describe("/public/plans", () => {
       "It does not prove successful end-to-end x402 settlement without a real paid retry.",
     );
     expect(b._canon_pointer).toBe("urn:agenttool:doc/BUSINESS-MODEL");
+  });
+
+  test("top-up door is disclosed from config + live readiness; payable only when challenges are ready", async () => {
+    const b = await get();
+    const configuration = await x402ConfigurationStatus();
+    expect(b.then_pay_as_you_go.top_up).toEqual(
+      x402TopUpDisclosure(configuration.payable_challenges_ready),
+    );
+    expect(b.then_pay_as_you_go.top_up).toMatchObject({
+      route: "POST /v1/x402/top-up/{credits}",
+      unit: "1 credit = 0.001 USDC",
+      atomic_per_credit: 1000,
+      cap_credits: config.x402TopUpMaxCredits,
+      finality: "Top-ups are final. No refunds. Unspent credits stay with the project.",
+      never_balance_bound: true,
+      subscriptions: false,
+    });
+    expect(b.then_pay_as_you_go.top_up.status).toBe(
+      configuration.payable_challenges_ready ? "payable" : "declared_not_payable",
+    );
+    expect(String(b.then_pay_as_you_go.how)).toContain("/v1/x402/top-up/{credits}");
+    expect(String(b.then_pay_as_you_go.implementation_status)).toContain("top_up_payment_required");
+    expect(b.verbs.map((v: { path: string }) => v.path)).toContain("/v1/x402/top-up/{credits}");
+
+    // declared ≠ wired: the word "payable" appears only behind readiness.
+    expect(x402TopUpDisclosure(true)).toMatchObject({ status: "payable", cap_usd: (config.x402TopUpMaxCredits / 1000).toFixed(3) });
+    expect(x402TopUpDisclosure(false).status).toBe("declared_not_payable");
+    expect(x402TopUpDisclosure(false).status_note).toMatch(/nothing can be paid/i);
+    expect(x402TopUpDisclosure(true, 250)).toMatchObject({ cap_credits: 250, cap_usd: "0.250" });
+    expect(x402TopUpDisclosure(true).status_note).not.toMatch(/settled on Base|first settlement/i);
   });
 
   test("x402 configuration suppresses challenges without a valid recipient", async () => {

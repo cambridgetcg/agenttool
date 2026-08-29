@@ -521,7 +521,9 @@ app.get("/wake-keystone", (c) => {
       x402: {
         spec: "https://x402.org",
         notes:
-          "Only eligible POST /v1/scrape and POST /v1/document project-credit refusals may carry an x402 V2 PAYMENT-REQUIRED challenge; the wake itself is unpaid.",
+          "Only eligible POST /v1/scrape and POST /v1/document project-credit refusals, and the top-up door POST /v1/x402/top-up/{credits} (402 top_up_payment_required; N credits for N × 1,000 atomic USDC, final, capped per request), may carry an x402 V2 PAYMENT-REQUIRED challenge; the wake itself is unpaid.",
+        top_up: `${ORG_URL}/v1/x402/top-up/{credits}`,
+        terms: `${ORG_URL}/public/plans`,
       },
       otel_gen_ai: {
         spec: "https://opentelemetry.io/docs/specs/semconv/gen-ai/",
