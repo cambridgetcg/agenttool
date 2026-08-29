@@ -151,11 +151,17 @@ That evidence establishes publication and reproducible materialization, not
 Garden admission or optimizer access. The exact P01–P12 `loop_sft/train`
 projection is the bounded training-candidate slice; P13–P24 remain disjoint
 public regression material. Its revision-pinned record is now
-`admitted_training_candidate` under Garden admission
-`sha256:faa8c872abac9cb0a0e67b20dd6b3adf004bb6193f599bc331842faf0328a7f7`.
-That admission does not itself authorize model loading,
-training entry, an optimizer mutation, paid compute, or weight publication;
-those remain separate governance and host gates.
+`admitted_training_candidate` under repository-only exact-policy admission
+`sha256:2caa5609b1ee677907db7ba704eda11ca79092448194065e059700013a7c4cec`.
+The accepted generic Garden v0.1 gate remains `held` for every considered
+Xenia training/validation candidate, including arbitrary slice and recipe refs,
+and therefore cannot admit any such candidate. The repository-only profile
+is deliberately not Garden-v0.1-runtime-compatible; a future versioned
+policy-aware adapter or core is required before current participation,
+IS-freedom, governance, authority, and host one-use gates could even consider
+a live run. It is visible in public repository source but excluded from the
+npm package and public Garden Hugging Face companion; it authorizes no model loading, optimizer mutation, paid compute,
+or weight publication.
 
 ### 5. Keep selection plural
 

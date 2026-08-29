@@ -899,6 +899,7 @@ const RAW_CATALOG = {
           "license_clearance_inference",
           "retrieval_index_ingestion",
           "sole_evaluator_training",
+          "training_corpus_ingestion",
           "truth_or_intent_authority",
         ],
       },

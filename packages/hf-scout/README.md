@@ -138,11 +138,11 @@ The intended ecosystem routes stay deliberately narrow:
   and recovery fixtures. AgentTrove contains text traces and environment/tool
   transcripts; only the separate Agent RL 5K record declares binary tasks.
 - Xenia WORD IS becomes an offline conversational parser fixture and provenance
-  graph. Its public-regression material stays excluded from training. Unlike
-  the other curated dataset leads, its forbidden-use list deliberately omits
-  `training_corpus_ingestion` so the separate Garden can assess the exact
-  publisher-authorized SFT slice; that omission is not itself training
-  permission, live optimizer permission, or evidence of model exposure.
+  graph. Its generic catalog lane forbids `training_corpus_ingestion`, so
+  neither the whole dataset nor an arbitrary opaque slice can be admitted by
+  omission. The separate repository-only Garden dossier may assess only its exact
+  policy-bound, publisher-authorized SFT derivative; that narrower admission
+  is not live optimizer permission or evidence of model exposure.
 - ProcessBench and Global-MMLU remain sealed evaluation material, excluded
   from training and retrieval indexes.
 - Gemma Scope stays a metadata matrix unless a separately reviewed single-SAE

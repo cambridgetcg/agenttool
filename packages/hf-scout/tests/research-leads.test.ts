@@ -99,11 +99,12 @@ describe("phase-aware HF research leads", () => {
           "license_clearance_inference",
           "retrieval_index_ingestion",
           "sole_evaluator_training",
+          "training_corpus_ingestion",
           "truth_or_intent_authority",
         ],
       },
     });
-    expect(xeniaWordIs.research.forbidden_uses).not.toContain("training_corpus_ingestion");
+    expect(xeniaWordIs.research.forbidden_uses).toContain("training_corpus_ingestion");
     expect(JSON.stringify(catalog)).not.toMatch(/downloads|likes|trending|updated_at|access_token/u);
   });
 

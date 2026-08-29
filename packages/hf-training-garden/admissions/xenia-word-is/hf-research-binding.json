@@ -6,7 +6,7 @@
     "id": "Yu-and-Ai/xenia-word-is",
     "revision": "64e3c4be051b2780409ab25578ea0c8bf926a72a"
   },
-  "definition_sha256": "7b4177cf5af0207e8b40b924cf721b04a2ea7b8d0912b06b97cf62180e2ded52",
+  "definition_sha256": "707995039da4ae48dd676d361bb51f2cc02052e3d9d7a36023235bd6d2af94f6",
   "snapshot_sha256": "1f5cac55dd4063509cebbf62b0a998e1be39b5da4f4186d9781fafec424c47c4",
   "observation": {
     "transport": "public_hub_api",

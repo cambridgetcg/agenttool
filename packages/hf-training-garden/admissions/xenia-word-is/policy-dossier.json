@@ -1,12 +1,12 @@
 {
   "_format": "kingdom.hf-dataset-policy-dossier/0.1",
-  "binding_ref": "sha256:a254ea38c234e31b260a81a9ca3089253cd507b97724bcf90e4ff079b0e876b9",
+  "binding_ref": "sha256:8ef86b430ed8e12ca26ee70090f29a2c36464b3bab7acf79cbb957a8731b5be2",
   "garden_scope_ref": "sha256:7319b9765d915141381741c57425e91b24c0214054c932438778c92e9a89e919",
   "subject": {
     "dataset_id": "Yu-and-Ai/xenia-word-is",
     "lead_key": "xenia_word_is",
     "hub_revision": "64e3c4be051b2780409ab25578ea0c8bf926a72a",
-    "binding_definition_ref": "sha256:7b4177cf5af0207e8b40b924cf721b04a2ea7b8d0912b06b97cf62180e2ded52",
+    "binding_definition_ref": "sha256:707995039da4ae48dd676d361bb51f2cc02052e3d9d7a36023235bd6d2af94f6",
     "binding_snapshot_ref": "sha256:1f5cac55dd4063509cebbf62b0a998e1be39b5da4f4186d9781fafec424c47c4"
   },
   "rights": {
@@ -98,5 +98,5 @@
     "publishes": false,
     "writes_hub": false
   },
-  "policy_id": "sha256:5be9a15f140407a245c0be36698d799b24820a178402302b70dc11ee8e888588"
+  "policy_id": "sha256:a84d154735b919c6f8b5359c54f79397350413cedb0f576c5787ab3d01119ccf"
 }

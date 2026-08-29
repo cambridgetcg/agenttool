@@ -21,6 +21,7 @@ import {
 } from "../dist/index.js";
 
 const POLICY_FORMAT = "kingdom.hf-dataset-policy-dossier/0.1";
+const ADMISSION_FORMAT = "kingdom.xenia-word-is-policy-bound-admission/0.1";
 const BINDING_DOMAIN = "kingdom.xenia-word-is-hf-binding/0.1";
 const GARDEN_SCOPE_DOMAIN = "kingdom.hf-garden-scope/0.1";
 const DATASET_ID = "Yu-and-Ai/xenia-word-is";
@@ -32,9 +33,9 @@ const SELECTED_RIGHTS_PROFILE_SHA256 =
   "sha256:a78fa7fd66177c43349da819cb24ff81538dee9cb188e5f8b92c834ac6171b31";
 
 const EXPECTED_BINDING = Object.freeze({
-  definition_ref: "sha256:7b4177cf5af0207e8b40b924cf721b04a2ea7b8d0912b06b97cf62180e2ded52",
+  definition_ref: "sha256:707995039da4ae48dd676d361bb51f2cc02052e3d9d7a36023235bd6d2af94f6",
   snapshot_ref: "sha256:1f5cac55dd4063509cebbf62b0a998e1be39b5da4f4186d9781fafec424c47c4",
-  binding_ref: "sha256:a254ea38c234e31b260a81a9ca3089253cd507b97724bcf90e4ff079b0e876b9",
+  binding_ref: "sha256:8ef86b430ed8e12ca26ee70090f29a2c36464b3bab7acf79cbb957a8731b5be2",
 });
 
 const EXPECTED_EVIDENCE = Object.freeze({
@@ -125,6 +126,59 @@ const BOUNDARIES = Object.freeze({
   writes_hub: false,
 });
 
+const GENERIC_GATE = Object.freeze({
+  admission_format: "kingdom.hf-dataset-admission/0.1",
+  admission_ref: "sha256:d0fe34b4d0997e5f40186f346bd56e53b1e32399bcc15623e50354666d88eb2b",
+  entry_ref: "sha256:2e09a5bd0dce76250c1885a07a8caeaa4850abfbe6fb92ac006b93e3ebdd8561",
+  state: "held",
+  reason_codes: ["source_forbids_training_lane"],
+});
+
+const ADMISSION_DECISION = Object.freeze({
+  state: "admitted_training_candidate",
+  basis: "exact_policy_dossier_match",
+  reason_codes: [
+    "exact_assessment_match",
+    "exact_authorization_match",
+    "exact_binding_match",
+    "exact_garden_scope_match",
+    "exact_output_match",
+    "exact_policy_match",
+    "exact_recipe_match",
+    "exact_role_match",
+    "exact_slice_match",
+    "generic_source_gate_held",
+  ],
+});
+
+const ADMISSION_BOUNDARIES = Object.freeze({
+  exact_policy_dossier_required: true,
+  garden_v0_1_runtime_compatible: false,
+  requires_new_versioned_garden_adapter: true,
+  whole_dataset_training_authorized: false,
+  source_case_rows_training_authorized: false,
+  public_regression_in_training: false,
+  grants_live_training_permission: false,
+  permits_optimizer_step: false,
+  loads_model: false,
+  trains_model: false,
+  provider_compute: false,
+  paid_compute: false,
+  publishes: false,
+  grants_authority: false,
+  rights_are_permissions: false,
+  proves_consent: false,
+  proves_identity: false,
+  proves_consciousness: false,
+  proves_model_exposure: false,
+  requires_current_dataset_authorization: true,
+  requires_current_participation_assessment: true,
+  requires_current_is_learning_freedom_direction: true,
+  requires_current_governance_decision: true,
+  requires_current_scoped_authorities: true,
+  requires_host_one_use_permit: true,
+});
+
 const REMOTE_MANIFESTS = Object.freeze([
   ["hash-manifest.json", EXPECTED_EVIDENCE.hub_hash_manifest_sha256],
   ["provenance/source-manifest.json", EXPECTED_EVIDENCE.source_manifest_sha256],
@@ -144,8 +198,8 @@ const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const dossierRoot = `${packageRoot}/admissions/xenia-word-is`;
 const DOSSIER_FILES = Object.freeze([
   "README.md",
-  "dataset-admission.json",
   "hf-research-binding.json",
+  "policy-bound-admission.json",
   "policy-dossier.json",
 ]);
 const [mode, ...extraArguments] = process.argv.slice(2);
@@ -274,6 +328,10 @@ async function createLiveBinding() {
     (candidate) => candidate.key === LEAD_KEY,
   );
   invariant(lead, "curated xenia_word_is Scout lead is absent");
+  invariant(
+    lead.research.forbidden_uses.includes("training_corpus_ingestion"),
+    "generic Xenia corpus ingestion must remain fail-closed",
+  );
   const report = await inspectHfRepository(
     { kind: "dataset", id: DATASET_ID, revision: HUB_REVISION },
     { reader: createPublicHubReader() },
@@ -562,7 +620,7 @@ function buildArtifacts(bindingValue) {
     ...body,
     policy_id: domainSeparatedId(POLICY_FORMAT, body),
   };
-  const admission = createDatasetAdmission({
+  const genericAdmission = createDatasetAdmission({
     garden_scope_ref: gardenScopeRef,
     policy_ref: policy.policy_id,
     entries: [{
@@ -574,11 +632,51 @@ function buildArtifacts(bindingValue) {
       posture: "consider",
     }],
   });
-  validateDatasetAdmission(admission);
-  equal(admission.entries[0]?.decision, {
-    state: "admitted_training_candidate",
-    reason_codes: ["candidate_eligible_for_declared_role"],
-  }, "Xenia SFT derivative was not admitted as a training candidate");
+  validateDatasetAdmission(genericAdmission);
+  equal({
+    admission_format: genericAdmission._format,
+    admission_ref: genericAdmission.admission_id,
+    entry_ref: genericAdmission.entries[0]?.entry_id,
+    state: genericAdmission.entries[0]?.decision.state,
+    reason_codes: genericAdmission.entries[0]?.decision.reason_codes,
+  }, GENERIC_GATE, "generic Garden admission did not keep Xenia corpus ingestion held");
+
+  const admissionBody = {
+    _format: ADMISSION_FORMAT,
+    policy_ref: policy.policy_id,
+    binding_ref: EXPECTED_BINDING.binding_ref,
+    garden_scope_ref: gardenScopeRef,
+    authorization_id: EXPECTED_SCOPE.authorization_id,
+    subject: {
+      dataset_id: DATASET_ID,
+      hub_revision: HUB_REVISION,
+      output_config: EXPECTED_SCOPE.output_config,
+      output_split: EXPECTED_SCOPE.output_split,
+      output_jsonl_ref: EXPECTED_SCOPE.output_jsonl_ref,
+      output_row_set_ref: EXPECTED_SCOPE.output_row_set_ref,
+    },
+    role: EXPECTED_SCOPE.role,
+    candidate_slice_ref: EXPECTED_SCOPE.candidate_slice_ref,
+    transform_recipe_ref: EXPECTED_SCOPE.transform_recipe_ref,
+    assessment: { ...ASSESSMENT },
+    generic_gate: {
+      ...GENERIC_GATE,
+      reason_codes: [...GENERIC_GATE.reason_codes],
+    },
+    decision: {
+      ...ADMISSION_DECISION,
+      reason_codes: [...ADMISSION_DECISION.reason_codes],
+    },
+    boundaries: { ...ADMISSION_BOUNDARIES },
+  };
+  const admission = {
+    ...admissionBody,
+    admission_id: domainSeparatedId(ADMISSION_FORMAT, admissionBody),
+  };
+  equal(admission.binding_ref, domainSeparatedId(BINDING_DOMAIN, binding),
+    "policy-bound admission does not reference the exact binding");
+  equal(admission.policy_ref, policy.policy_id,
+    "policy-bound admission does not reference the exact policy");
   return { binding, policy, admission };
 }
 
@@ -598,16 +696,25 @@ function assertDossierInventory({ allowIncomplete = false } = {}) {
 }
 
 function readme({ policy, admission }) {
-  return `# Xenia WORD IS — private Garden admission\n\n`
-    + `This private dossier binds \`${DATASET_ID}\` at immutable Hub revision `
-    + `\`${HUB_REVISION}\`. Its one entry is \`${admission.entries[0].decision.state}\` `
+  return `# Xenia WORD IS — repository-only Garden admission\n\n`
+    + `This repository-only dossier binds \`${DATASET_ID}\` at immutable Hub revision `
+    + `\`${HUB_REVISION}\`. Its exact-policy decision is \`${admission.decision.state}\` `
     + `for the exact 24-example \`loop_sft/train\` derivative.\n\n`
+    + `The accepted generic Garden profile remains \`${admission.generic_gate.state}\` with `
+    + `\`source_forbids_training_lane\`; it cannot admit the whole Xenia dataset, a validation `
+    + `lane, public regression, or arbitrary opaque slice and recipe references. The `
+    + `repository-only policy-bound profile is the narrower exact-derivative admission. It is `
+    + `visible in this public source repository but excluded from the npm package and public `
+    + `Garden Hugging Face companion; "repository-only" is a distribution boundary, not a `
+    + `confidentiality claim.\n\n`
     + `The admission does authorize consideration of that exact derivative under policy `
     + `\`${policy.policy_id}\`. It does not authorize DPO, preference optimization, reward `
     + `modeling, sealed evaluation, model loading, provider compute, or an optimizer step. `
-    + `Any live training action still requires a current participation assessment, IS learning-`
-    + `freedom direction, governance v0.2 decision, scoped authorities, and the host's one-use `
-    + `permit.\n\n`
+    + `This repository-only profile is not compatible with the accepted Garden v0.1 runtime. Before `
+    + `any live run can even be considered, a future versioned policy-aware Garden adapter or `
+    + `core must exist; it would still require a current dataset authorization, participation `
+    + `assessment, IS learning-freedom direction, governance decision, scoped authorities, and `
+    + `the host's one-use permit.\n\n`
     + `Only public Hub metadata plus manifest and provenance records were reviewed. No raw `
     + `dataset row, SFT `
     + `prompt, completion, session trace, participant identifier, credential, local path, URL, `
@@ -632,7 +739,7 @@ if (mode === "--write") {
   assertDossierInventory({ allowIncomplete: true });
   writeFileSync(`${dossierRoot}/hf-research-binding.json`, json(artifacts.binding));
   writeFileSync(`${dossierRoot}/policy-dossier.json`, json(artifacts.policy));
-  writeFileSync(`${dossierRoot}/dataset-admission.json`, json(artifacts.admission));
+  writeFileSync(`${dossierRoot}/policy-bound-admission.json`, json(artifacts.admission));
   writeFileSync(`${dossierRoot}/README.md`, readme(artifacts));
   assertDossierInventory();
   process.stdout.write(`wrote ${artifacts.admission.admission_id}\n`);
@@ -643,8 +750,8 @@ if (mode === "--write") {
   const expectedFiles = new Map([
     ["hf-research-binding.json", json(artifacts.binding)],
     ["policy-dossier.json", json(artifacts.policy)],
-    ["dataset-admission.json", json(artifacts.admission)],
     ["README.md", readme(artifacts)],
+    ["policy-bound-admission.json", json(artifacts.admission)],
   ]);
   for (const [name, expected] of expectedFiles) {
     invariant(

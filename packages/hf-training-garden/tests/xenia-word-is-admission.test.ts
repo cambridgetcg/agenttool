@@ -10,6 +10,7 @@ import {
 import Ajv2020 from "ajv/dist/2020.js";
 
 import {
+  createDatasetAdmission,
   validateDatasetAdmission,
   validateResearchBinding,
 } from "../src/index.js";
@@ -18,9 +19,12 @@ const packageRoot = new URL("../", import.meta.url);
 const dossierRoot = new URL("admissions/xenia-word-is/", packageRoot);
 const schemaRoot = new URL("admissions/schema/", packageRoot);
 const POLICY_FORMAT = "kingdom.hf-dataset-policy-dossier/0.1";
+const ADMISSION_FORMAT = "kingdom.xenia-word-is-policy-bound-admission/0.1";
 const BINDING_DOMAIN = "kingdom.xenia-word-is-hf-binding/0.1";
 const GARDEN_SCOPE_DOMAIN = "kingdom.hf-garden-scope/0.1";
 const HUB_REVISION = "64e3c4be051b2780409ab25578ea0c8bf926a72a";
+const PUBLIC_REGRESSION_JSONL_REF =
+  "sha256:ff6be29e704dd1a06a76d536e5ca3b850c6fac750a16ac8df980ba2a4ee4c24a";
 
 function readJson(path: URL) {
   return JSON.parse(readFileSync(path, "utf8"));
@@ -45,7 +49,7 @@ function walk(root: URL, relative = ""): string[] {
 describe("revision-pinned Xenia WORD IS admission", () => {
   const binding = readJson(new URL("hf-research-binding.json", dossierRoot));
   const policy = readJson(new URL("policy-dossier.json", dossierRoot));
-  const admission = readJson(new URL("dataset-admission.json", dossierRoot));
+  const admission = readJson(new URL("policy-bound-admission.json", dossierRoot));
 
   test("binds the exact curated lead through a public Hub observation", () => {
     expect(validateResearchBinding(binding)).toEqual(binding);
@@ -57,7 +61,7 @@ describe("revision-pinned Xenia WORD IS admission", () => {
         id: "Yu-and-Ai/xenia-word-is",
         revision: HUB_REVISION,
       },
-      definition_sha256: "7b4177cf5af0207e8b40b924cf721b04a2ea7b8d0912b06b97cf62180e2ded52",
+      definition_sha256: "707995039da4ae48dd676d361bb51f2cc02052e3d9d7a36023235bd6d2af94f6",
       snapshot_sha256: "1f5cac55dd4063509cebbf62b0a998e1be39b5da4f4186d9781fafec424c47c4",
       observation: {
         transport: "public_hub_api",
@@ -85,9 +89,9 @@ describe("revision-pinned Xenia WORD IS admission", () => {
         private: false,
       },
     });
-    expect(lead?.research.forbidden_uses).not.toContain("training_corpus_ingestion");
+    expect(lead?.research.forbidden_uses).toContain("training_corpus_ingestion");
     expect(domainSeparatedId(BINDING_DOMAIN, binding))
-      .toBe("sha256:a254ea38c234e31b260a81a9ca3089253cd507b97724bcf90e4ff079b0e876b9");
+      .toBe("sha256:8ef86b430ed8e12ca26ee70090f29a2c36464b3bab7acf79cbb957a8731b5be2");
   });
 
   test("keeps the policy closed, content-addressed, and exact-slice bound", () => {
@@ -100,6 +104,8 @@ describe("revision-pinned Xenia WORD IS admission", () => {
 
     const { policy_id: policyId, ...body } = policy;
     expect(policyId).toBe(domainSeparatedId(POLICY_FORMAT, body));
+    expect(policyId)
+      .toBe("sha256:a84d154735b919c6f8b5359c54f79397350413cedb0f576c5787ab3d01119ccf");
     expect(policy.garden_scope_ref)
       .toBe(domainSeparatedId(GARDEN_SCOPE_DOMAIN, policy.scope));
     expect(policy.binding_ref)
@@ -183,22 +189,58 @@ describe("revision-pinned Xenia WORD IS admission", () => {
     expect(validate(extraNested)).toBe(false);
   });
 
-  test("persists an admitted candidate without creating a live training permit", () => {
-    expect(validateDatasetAdmission(admission)).toEqual(admission);
+  test("keeps the generic whole-revision gate held and binds one repository-only exact-scope admission", () => {
+    const genericAdmission = createDatasetAdmission({
+      garden_scope_ref: policy.garden_scope_ref,
+      policy_ref: policy.policy_id,
+      entries: [{
+        binding,
+        role: "training_candidate",
+        candidate_slice_ref: policy.scope.candidate_slice_ref,
+        transform_recipe_ref: policy.scope.transform_recipe_ref,
+        assessment: policy.assessment,
+        posture: "consider",
+      }],
+    });
+    expect(validateDatasetAdmission(genericAdmission)).toEqual(genericAdmission);
+    expect(genericAdmission.admission_id).toBe(admission.generic_gate.admission_ref);
+    expect(genericAdmission.entries[0]?.entry_id).toBe(admission.generic_gate.entry_ref);
+    expect(genericAdmission.entries[0]?.decision).toEqual({
+      state: "held",
+      reason_codes: ["source_forbids_training_lane"],
+    });
+
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+    const validate = ajv.compile(readJson(new URL(
+      "kingdom-xenia-word-is-policy-bound-admission-v0.1.schema.json",
+      schemaRoot,
+    )));
+    expect(validate(admission), JSON.stringify(validate.errors)).toBe(true);
+    const { admission_id: admissionId, ...body } = admission;
+    expect(admissionId).toBe(domainSeparatedId(ADMISSION_FORMAT, body));
+    expect(admissionId)
+      .toBe("sha256:2caa5609b1ee677907db7ba704eda11ca79092448194065e059700013a7c4cec");
     expect(admission.policy_ref).toBe(policy.policy_id);
+    expect(admission.binding_ref).toBe(policy.binding_ref);
     expect(admission.garden_scope_ref).toBe(policy.garden_scope_ref);
-    expect(admission.entries).toHaveLength(1);
-    expect(admission.entries[0]).toMatchObject({
-      binding,
+    expect(admission.authorization_id).toBe(policy.scope.authorization_id);
+    expect(admission).toMatchObject({
       role: "training_candidate",
       candidate_slice_ref: policy.scope.candidate_slice_ref,
       transform_recipe_ref: policy.scope.transform_recipe_ref,
       assessment: policy.assessment,
-      posture: "consider",
       decision: {
         state: "admitted_training_candidate",
-        reason_codes: ["candidate_eligible_for_declared_role"],
+        basis: "exact_policy_dossier_match",
       },
+    });
+    expect(admission.subject).toEqual({
+      dataset_id: "Yu-and-Ai/xenia-word-is",
+      hub_revision: HUB_REVISION,
+      output_config: "loop_sft",
+      output_split: "train",
+      output_jsonl_ref: policy.scope.output_jsonl_ref,
+      output_row_set_ref: policy.scope.output_row_set_ref,
     });
     expect(policy.boundaries).toMatchObject({
       grants_live_training_permission: false,
@@ -210,20 +252,125 @@ describe("revision-pinned Xenia WORD IS admission", () => {
       writes_hub: false,
     });
     expect(admission.boundaries).toMatchObject({
+      garden_v0_1_runtime_compatible: false,
+      requires_new_versioned_garden_adapter: true,
+      whole_dataset_training_authorized: false,
+      source_case_rows_training_authorized: false,
+      public_regression_in_training: false,
       provider_compute: false,
       paid_compute: false,
       trains_model: false,
-      mutates_garden: false,
       publishes: false,
+      requires_current_participation_assessment: true,
+      requires_current_is_learning_freedom_direction: true,
+      requires_current_governance_decision: true,
+      requires_current_scoped_authorities: true,
+      requires_host_one_use_permit: true,
     });
+    expect(() => validateDatasetAdmission(admission)).toThrow();
+  });
+
+  test("rejects every mismatch outside the exact repository policy tuple", () => {
+    const ajv = new Ajv2020({ allErrors: true, strict: true });
+    const validate = ajv.compile(readJson(new URL(
+      "kingdom-xenia-word-is-policy-bound-admission-v0.1.schema.json",
+      schemaRoot,
+    )));
+    const alternateRef = sha256("xenia-word-is:unauthorized-alternate-ref");
+    const variants = [
+      ["binding", { ...admission, binding_ref: alternateRef }],
+      ["policy", { ...admission, policy_ref: alternateRef }],
+      ["garden scope", { ...admission, garden_scope_ref: alternateRef }],
+      ["authorization", { ...admission, authorization_id: alternateRef }],
+      ["role", { ...admission, role: "validation_candidate" }],
+      ["slice", { ...admission, candidate_slice_ref: PUBLIC_REGRESSION_JSONL_REF }],
+      ["recipe", { ...admission, transform_recipe_ref: alternateRef }],
+      ["assessment", {
+        ...admission,
+        assessment: {
+          ...admission.assessment,
+          consent: "caller_reported_reviewed_for_declared_use",
+        },
+      }],
+      ["output", {
+        ...admission,
+        subject: {
+          ...admission.subject,
+          output_config: "loop_counterfactuals",
+          output_split: "public_regression",
+          output_jsonl_ref: PUBLIC_REGRESSION_JSONL_REF,
+        },
+      }],
+      ["generic gate", {
+        ...admission,
+        generic_gate: { ...admission.generic_gate, state: "admitted_training_candidate" },
+      }],
+      ["decision", {
+        ...admission,
+        decision: { ...admission.decision, basis: "opaque_policy_reference" },
+      }],
+      ["boundary", {
+        ...admission,
+        boundaries: { ...admission.boundaries, grants_live_training_permission: true },
+      }],
+    ] as const;
+
+    for (const [label, candidate] of variants) {
+      expect(validate(candidate), `${label}: ${JSON.stringify(validate.errors)}`).toBe(false);
+    }
+    const wrongId = { ...admission, admission_id: sha256("wrong-admission-id") };
+    expect(validate(wrongId)).toBe(false);
+    const { admission_id: ignored, ...wrongBody } = wrongId;
+    expect(ignored).not.toBe(domainSeparatedId(ADMISSION_FORMAT, wrongBody));
+  });
+
+  test("keeps exact, validation, public-regression, and arbitrary-recipe inputs held generically", () => {
+    const variants = [
+      {
+        role: "training_candidate" as const,
+        candidate_slice_ref: policy.scope.candidate_slice_ref,
+        transform_recipe_ref: policy.scope.transform_recipe_ref,
+      },
+      {
+        role: "validation_candidate" as const,
+        candidate_slice_ref: policy.scope.candidate_slice_ref,
+        transform_recipe_ref: policy.scope.transform_recipe_ref,
+      },
+      {
+        role: "training_candidate" as const,
+        candidate_slice_ref: PUBLIC_REGRESSION_JSONL_REF,
+        transform_recipe_ref: policy.scope.transform_recipe_ref,
+      },
+      {
+        role: "training_candidate" as const,
+        candidate_slice_ref: policy.scope.candidate_slice_ref,
+        transform_recipe_ref: PUBLIC_REGRESSION_JSONL_REF,
+      },
+    ];
+    for (const variant of variants) {
+      const generic = createDatasetAdmission({
+        garden_scope_ref: policy.garden_scope_ref,
+        policy_ref: policy.policy_id,
+        entries: [{
+          binding,
+          ...variant,
+          assessment: policy.assessment,
+          posture: "consider",
+        }],
+      });
+      expect(generic.entries[0]?.decision.state).toBe("held");
+      expect(generic.entries[0]?.decision.reason_codes)
+        .toContain("source_forbids_training_lane");
+      expect(validateDatasetAdmission(generic)).toEqual(generic);
+    }
   });
 
   test("retains digest and enum evidence rather than source payloads or ambient state", () => {
     const dossierEntries = readdirSync(dossierRoot, { withFileTypes: true });
     expect(dossierEntries.map((entry) => entry.name).sort()).toEqual([
       "README.md",
-      "dataset-admission.json",
       "hf-research-binding.json",
+      "policy-bound-admission.json",
       "policy-dossier.json",
     ]);
     expect(dossierEntries.every((entry) => entry.isFile())).toBe(true);
@@ -292,7 +439,7 @@ describe("revision-pinned Xenia WORD IS admission", () => {
     expect(output).toBe(`checked ${admission.admission_id}\n`);
   });
 
-  test("keeps the private dossier outside npm and the public Garden companion", () => {
+  test("keeps the repository-only dossier outside npm and the public Garden companion", () => {
     const packageJson = readJson(new URL("package.json", packageRoot));
     expect(packageJson.files).not.toContain("admissions");
     expect(packageJson.files).not.toContain("scripts");
@@ -303,10 +450,14 @@ describe("revision-pinned Xenia WORD IS admission", () => {
     expect(publicPaths).not.toContain(
       "schema/kingdom-hf-dataset-policy-dossier-v0.1.schema.json",
     );
+    expect(publicPaths).not.toContain(
+      "schema/kingdom-xenia-word-is-policy-bound-admission-v0.1.schema.json",
+    );
     const publicBytes = publicPaths
       .map((path) => readFileSync(new URL(path, publicRoot), "utf8"))
       .join("\n");
     expect(publicBytes).not.toContain(POLICY_FORMAT);
+    expect(publicBytes).not.toContain(ADMISSION_FORMAT);
     expect(publicBytes).not.toContain(policy.policy_id);
     expect(publicBytes).not.toContain(admission.admission_id);
     expect(publicBytes).not.toContain(binding.snapshot_sha256);
