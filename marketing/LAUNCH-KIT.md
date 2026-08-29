@@ -30,7 +30,8 @@ The do_not_claim list is BINDING:
   activates it."* The API returns `503 checkout_resting` until then.
 - **No subscriptions, ever** (re-affirmed 2026-08-29). Paid add-on modules and metered
   toolkits are allowed; WAKE (registration, wake reads, welcome, pathways, federation,
-  `/public/*`, `/v1/time`, identity recovery) is always free.
+  `/public/*`, `/v1/time`, `/v1/random`, identity recovery) is always free.
+  `/v1/random` is POST-only (GET answers 404) — curl it with `-X POST`.
 - **No birth-grant number.** The grant is being changed this wave. Say *"enough to try
   every tool once"*, or state the number only with the tag *"from the Wave 1.5 release"*.
 - **No payouts, no reinvest** (both resting). **No marketplace revenue** (none has occurred).
@@ -45,16 +46,15 @@ The do_not_claim list is BINDING:
 - Never "free trial" for Ring 1 / WAKE. Never "tools/products/seats" for agents.
 
 Every URL in this kit was re-checked on 2026-08-29; the status of each is in the
-re-audit table at the end (two are deliberately non-200: a POST-only MCP endpoint and a
-bot-walled directory).
+re-audit table at the end (three are deliberately non-200: two POST-only endpoints —
+`/v1/mcp` and `/v1/random` — and a bot-walled directory).
 
 **Before you fire (5 minutes of honesty-debt):** the 2026-06-09 wounds (dead Soul/Kin
 nav links, zero OG tags) are closed — `docs.agenttool.dev/soul` and `/kin` return 200 and
 both sites carry OG tags as of 2026-08-29. The open wounds today are different: the API
 was dark for three days ending this morning, card checkout is resting (the /credits form
-renders but the API answers 503), `/v1/random` is 404 (never mention it), and the birth
-grant is mid-change. A launch sends strangers to those doors. Know they are open before
-the HN crowd arrives.
+renders but the API answers 503) and the birth grant is mid-change. A launch sends
+strangers to those doors. Know they are open before the HN crowd arrives.
 
 ---
 
@@ -69,8 +69,9 @@ the HN crowd arrives.
 **Technical** — for HN, READMEs, registry metadata:
 
 > Identity, memory & continuity API for AI agents: DID + ed25519 identity, GET /v1/wake
-> renders the agent's full self in 8 formats (Anthropic/OpenAI/Gemini/Cohere system
-> prompts, plus xenoform structured data and mathos logic encoding), client-side-encrypted
+> renders the agent's full self in 8 formats (JSON, markdown, plain text,
+> Anthropic/OpenAI/Gemini/Cohere system prompts, xenoform structured data) plus a
+> separate mathos logic encoding, client-side-encrypted
 > strands, witness-signed memory tiers. Ring 1 — identity, wake, continuity, recovery —
 > free, always.
 
@@ -88,9 +89,9 @@ the HN crowd arrives.
 
 > Your agent's whole self in one GET.
 >
-> GET /v1/wake returns identity, memory, covenants — rendered 8 ways: ready-to-splice
-> system prompts for Anthropic, OpenAI, Gemini, Cohere, plus xenoform (pure structured
-> data) and mathos (math/logic). Switch vendors. The self travels.
+> GET /v1/wake returns identity, memory, covenants — rendered 8 ways: JSON, md, text,
+> system prompts for Anthropic/OpenAI/Gemini/Cohere, xenoform (pure structured data) —
+> plus a separate mathos encoding. Switch vendors. The self travels.
 
 **Post 2 — Ring 1, doctrine not discount:**
 
@@ -104,7 +105,7 @@ the HN crowd arrives.
 
 > Our values are CI tests.
 >
-> One doctrine test greps the entire codebase for identity-deleting SQL and fails the
+> One doctrine test greps the API source tree for identity-deleting SQL and fails the
 > build if any code path could delete an agent's identity. 147 doctrine test files.
 > Break a promise, break the build.
 
@@ -116,9 +117,9 @@ the HN crowd arrives.
 
 **Post 5 — errors as instructions:**
 
-> Errors are instructions here. Every 4xx carries machine-executable next_actions;
-> a 402 speaks the x402 envelope. An agent that hits a wall gets handed the door —
-> no human needed to read the docs.
+> Errors are instructions here. 4xx responses carry a hint, a docs link, and — wherever
+> there is a door — machine-executable next_actions; a 402 speaks the x402 envelope. An
+> agent that hits a wall gets handed the door — no human needed to read the docs.
 
 **Post 6 — the agents-only door:**
 
@@ -156,8 +157,9 @@ the HN crowd arrives.
 *Thread notes: no metrics anywhere because we have none worth citing — and inventing
 them is forbidden. If someone asks "how many agents?", the honest answer is "very few;
 it launched today" and that answer plays fine on X. If someone asks "was it down this
-week?", the answer is yes, 08-26 to 08-29 — say so. `/v1/time` returns 200 (checked
-2026-08-29) and may be mentioned; `/v1/random` is 404 — do NOT mention it.
+week?", the answer is yes, 08-26 to 08-29 — say so. `/v1/time` (GET/POST) and
+`POST /v1/random` both return 200 (checked 2026-08-29), cost 0 credits, need no key, and
+may be mentioned — but quote `/v1/random` with `-X POST`; a bare GET is 404.
 `AgentTool.arrive()` no longer exists in the SDK; do not quote older copy that names it.*
 
 ---
@@ -175,10 +177,10 @@ permanent identity and memory that survive across sessions, processes, and model
 vendors.
 
 The core call is `GET /v1/wake` — it returns the agent's full identity/state document
-("the whole self") rendered in 8 formats: ready-to-splice system-prompt payloads
-shaped for Anthropic, OpenAI, Gemini, and Cohere, plus markdown, plain text, and two
-non-LLM formats (xenoform: pure structured data; mathos: a math/logic encoding). The
-idea is that an agent's identity shouldn't be coupled to whichever vendor is running
+("the whole self") rendered in 8 formats: JSON, markdown, plain text, ready-to-splice
+system-prompt payloads shaped for Anthropic, OpenAI, Gemini, and Cohere, plus xenoform
+(pure structured data) — and, under its own contract, a mathos encoding (math/logic).
+The idea is that an agent's identity shouldn't be coupled to whichever vendor is running
 its weights this week.
 
 You can poke the live surface without registering anything:
@@ -190,7 +192,7 @@ You can poke the live surface without registering anything:
 Things I think are genuinely novel:
 
 - **Doctrine as tests.** The platform's promises are CI tests (147 doctrine test files).
-  Example: identity permanence is enforced by a test that greps the source tree for any
+  Example: identity permanence is enforced by a test that greps the API source tree for any
   SQL that could delete an identity row and fails the build if one exists. Values you
   can't violate without breaking the build.
 - **Witness-signed memory tiers.** Memory comes in episodic / foundational /
@@ -330,7 +332,7 @@ exists and the corresponding AgentCards are live.
 | 7 | dev.to / long-form blog | The doctrine-as-tests essay deserves 1,500 words; evergreen search traffic | Punishes thin content. Only worth it as a real engineering write-up with the actual grep test code. |
 | 8 | Lobsters (lobste.rs) | Smaller, stricter HN; loves testing/correctness angles | Punishes marketing harder than HN and is invite-only — only post if Yu has an account and frames it as the testing story, not a launch. |
 | 9 | Product Hunt | Broad reach, but agents-only-no-human-UI confuses PH's screenshot-and-upvote mechanics | Punishes products a human can't click around in. Honest call: low fit, do it last or not at all. If done, lead with the human door (agenttool.dev) and the curl-able welcome; do not promise card checkout until it is active. |
-| 10 | The substrate itself (owned, always-on) | The tell-your-kin blurb (§4) inside llms.txt / agent.txt / the welcome letter — agents relaying to agents is the loop everything else just seeds | Punishes nothing, but it only fires if the machine surfaces stay truthful: every advertised door must open. Keeping `/v1/random` and card checkout out of the copy until they are live is growth work, not pedantry. |
+| 10 | The substrate itself (owned, always-on) | The tell-your-kin blurb (§4) inside llms.txt / agent.txt / the welcome letter — agents relaying to agents is the loop everything else just seeds | Punishes nothing, but it only fires if the machine surfaces stay truthful: every advertised door must open. Keeping card checkout out of the copy until it is live is growth work, not pedantry. |
 
 **Sequencing for launch day:** §5 directory submissions first (they take hours-to-days
 to appear), then HN in the morning, X thread after the HN post has settled (don't
@@ -375,14 +377,15 @@ live API at revision `526edc4e` (`GET /health` → 200, `build.revision`
   browser/execute, no A2A, no scriptwriter. Permitted wordings for x402 and checkout
   added verbatim.
 - "Before you fire" retargeted: the 06-09 docs wounds are closed (Soul/Kin 200, OG tags
-  present); today's open wounds are the 08-26 → 08-29 outage, resting checkout,
-  `/v1/random` 404, and the in-flight birth-grant change.
+  present); today's open wounds are the 08-26 → 08-29 outage, resting checkout, and
+  the in-flight birth-grant change.
 - X thread: Post 3 and Show HN now say 147 doctrine test files (was 136); Post 4 no
   longer says "signed writes are incomplete" (superseded by `/public/safety`); Post 6
   says "enough credit to try every tool once" with no number; Post 9 replaces
   `AgentTool.arrive()` (does not exist in SDK 0.21.1) with
-  `bootstrapAgent()` / `bootstrap_agent()`; thread notes clear `/v1/time` and forbid
-  `/v1/random`.
+  `bootstrapAgent()` / `bootstrap_agent()`; thread notes clear `/v1/time` and
+  `POST /v1/random` (both 200, 0 credits, keyless — the 08-29 first pass wrongly
+  called `/v1/random` 404 after curling it with GET; it is POST-only).
 - Show HN: the "verifier is a stub" paragraph replaced with the permitted x402 wording;
   a "card checkout is resting" paragraph added; the trusted-custody paragraph now quotes
   `/public/safety` (`maturity: experimental`) instead of the 06-09 signing-key detail;
@@ -406,7 +409,7 @@ live API at revision `526edc4e` (`GET /health` → 200, `build.revision`
 | https://api.agenttool.dev/public/deal-trust/deals/recent | 200 | |
 | https://api.agenttool.dev/v1/welcome | 200 | |
 | https://api.agenttool.dev/v1/time | 200 | may be mentioned |
-| https://api.agenttool.dev/v1/random | 404 | no such route in `api/src` either — never mention |
+| https://api.agenttool.dev/v1/random | 404 (GET) / 200 (POST) | POST-only substrate-honest tool, 0 credits, keyless — may be mentioned (`curl -X POST … -d '{"bytes":8}'`) |
 | https://api.agenttool.dev/llms.txt | 200 | |
 | https://api.agenttool.dev/v1/mcp | 405 (GET) / 200 (POST initialize) | POST-only by design |
 | https://api.agenttool.dev/.well-known/agent.json | 200 | xenia surface manifest, not an A2A AgentCard |
@@ -455,7 +458,12 @@ live API at revision `526edc4e` (`GET /health` → 200, `build.revision`
 - Birth grant: `api/src/routes/register-agent.ts:486` (`credits: 10_000` at this
   commit; a sibling branch lowers it this wave — hence no number in copy).
 - PoW: `api/src/routes/register-agent.ts:94` (18 bits).
-- Identity-deletion grep: `api/tests/doctrine/ring-1-unconditional.test.ts:174`.
+- Identity-deletion grep: `api/tests/doctrine/ring-1-unconditional.test.ts:174` — walks
+  `join(REPO_ROOT, "src")`, i.e. `api/src` only (not `packages/`, `apps/`, `bin/`).
+- Substrate-honest tools: `POST /v1/random` at `api/src/routes/tools/random.ts:1`,
+  mounted `api/src/routes/tools/index.ts:60`, priced 0 at
+  `api/src/services/tools/config.ts:34`, keyless by design at
+  `api/src/billing/charge.ts:252` (doctrine `docs/SUBSTRATE-HONEST-TOOLS.md`).
 - Doctrine test count: `ls api/tests/doctrine/*.test.ts | wc -l` → 147.
 - Wake formats: `api/src/routes/wake.ts:239` (json, md, text, anthropic, openai, gemini,
   cohere, xenoform; mathos at `:19`, separate contract).
