@@ -132,6 +132,31 @@ cache fingerprints help identify transformations
 cache fingerprint is useful evidence, not a substitute for an independently
 stored source and recipe manifest.
 
+### Current revision-pinned candidate: Xenia Word/IS
+
+Protected [PR #381](https://github.com/cambridgetcg/agenttool/pull/381)
+merged as
+[`546331483f3363263a13ecf8ebd745ceb5c6171d`](https://github.com/cambridgetcg/agenttool/commit/546331483f3363263a13ecf8ebd745ceb5c6171d),
+and its separately uploaded public, ungated dataset is
+[`Yu-and-Ai/xenia-word-is`](https://huggingface.co/datasets/Yu-and-Ai/xenia-word-is)
+at immutable revision
+[`64e3c4be051b2780409ab25578ea0c8bf926a72a`](https://huggingface.co/datasets/Yu-and-Ai/xenia-word-is/commit/64e3c4be051b2780409ab25578ea0c8bf926a72a).
+Anonymous exact-revision byte verification matched all 17 repository-owned
+files and 183,345 bytes, with provider-managed `.gitattributes` as the sole
+extra. Anonymous exact-revision loading matched three 24-row configs:
+`loop_reference/reference`, `loop_counterfactuals/public_regression`, and
+`loop_sft/train`.
+
+That evidence establishes publication and reproducible materialization, not
+Garden admission or optimizer access. The exact P01–P12 `loop_sft/train`
+projection is the bounded training-candidate slice; P13–P24 remain disjoint
+public regression material. Its revision-pinned record is now
+`admitted_training_candidate` under Garden admission
+`sha256:faa8c872abac9cb0a0e67b20dd6b3adf004bb6193f599bc331842faf0328a7f7`.
+That admission does not itself authorize model loading,
+training entry, an optimizer mutation, paid compute, or weight publication;
+those remain separate governance and host gates.
+
 ### 5. Keep selection plural
 
 The Garden deliberately has no universal quality scalar. The current twelve

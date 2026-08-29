@@ -1,0 +1,102 @@
+{
+  "_format": "kingdom.hf-dataset-policy-dossier/0.1",
+  "binding_ref": "sha256:a254ea38c234e31b260a81a9ca3089253cd507b97724bcf90e4ff079b0e876b9",
+  "garden_scope_ref": "sha256:7319b9765d915141381741c57425e91b24c0214054c932438778c92e9a89e919",
+  "subject": {
+    "dataset_id": "Yu-and-Ai/xenia-word-is",
+    "lead_key": "xenia_word_is",
+    "hub_revision": "64e3c4be051b2780409ab25578ea0c8bf926a72a",
+    "binding_definition_ref": "sha256:7b4177cf5af0207e8b40b924cf721b04a2ea7b8d0912b06b97cf62180e2ded52",
+    "binding_snapshot_ref": "sha256:1f5cac55dd4063509cebbf62b0a998e1be39b5da4f4186d9781fafec424c47c4"
+  },
+  "rights": {
+    "baseline": "xenia.rights/0.1",
+    "baseline_sha256": "sha256:b72a6da110c582e5683bf0fabde5017db93d2199398014c8421a82f5318da313",
+    "selected_repository_profile_sha256": "sha256:a78fa7fd66177c43349da819cb24ff81538dee9cb188e5f8b92c834ac6171b31",
+    "rights_are_permissions": false
+  },
+  "evidence": {
+    "hub_hash_manifest_sha256": "sha256:d7def6979452b98b369409b043d6efbc1af79d77ea60b441b1a4b093b1bb787d",
+    "source_manifest_sha256": "sha256:6d9e0ae6cac28ca95f3e593d1294cde60e3b295db7cf7068cce1968402f577cb",
+    "row_manifest_sha256": "sha256:41edda0e4a2987a2ee74bf7a5e9849f2cb04814b208b3a61ac1e31f16f4c9cc8",
+    "training_authorization_manifest_sha256": "sha256:7cc3f5426716c11cef1116cf3f4709073bc51db801ef30075cba3a238909699e",
+    "training_example_manifest_sha256": "sha256:de74194687c642da5ec61f418bf4d7cc98dbb5d4b54b9475bda57b3ad18eb1db",
+    "training_recipe_manifest_sha256": "sha256:093f5199dbb53747fdb14137688ce23a29ac865e95aa30ef5644991edfe6b1f4"
+  },
+  "scope": {
+    "authorization_id": "sha256:a4443cae3d5a9d6adc700095e930c6e9d9e4d726102a3013e6d5ee1f1f1d6611",
+    "candidate_slice_ref": "sha256:e2379f52d47de4be02512f25837dd9e4880b8eacb3abe50b3e04d3b5345af30f",
+    "transform_recipe_ref": "sha256:01fc439305417e85f69cf8ed06c02dbab99fadfadb663ed5a59dfabb3b7723a2",
+    "output_jsonl_ref": "sha256:1ee2796d17070942e9a07dd530af3c5745cb0de27c040977b4e40bf01c876cfa",
+    "output_row_set_ref": "sha256:f9a1e7d645e2982b5f64e0d92df969dcf376c79087d2a20a825563d19f7d63fe",
+    "training_format": "agenttool.xenia-loop-sft/0.1",
+    "output_config": "loop_sft",
+    "output_split": "train",
+    "output_row_count": 24,
+    "source_pair_count": 12,
+    "role": "training_candidate",
+    "training_mode": "supervised_fine_tuning",
+    "excluded_lanes": [
+      "dpo",
+      "preference_optimization",
+      "reward_modeling",
+      "sealed_evaluation"
+    ]
+  },
+  "provenance": {
+    "origin": "human_directed_agent_authored_synthetic",
+    "license": "apache-2.0",
+    "copied_external_rows": false,
+    "copied_private_rows": false,
+    "contains_personal_data": false,
+    "contains_raw_session_trace": false,
+    "source_case_rows_training_authorized": false,
+    "training_derivative_authorized": true,
+    "public_regression_in_training": false
+  },
+  "assessment": {
+    "rights": "caller_reported_reviewed_for_declared_use",
+    "privacy": "caller_reported_reviewed_for_declared_use",
+    "consent": "not_applicable_reported",
+    "withdrawal": "caller_reported_process_defined",
+    "secret_scan": "caller_reported_bounded_scan_passed",
+    "deduplication": "caller_reported_recipe_applied",
+    "benchmark_overlap": "caller_reported_clear_of_sealed_evaluation",
+    "fitness": "caller_reported_fit_for_declared_role",
+    "synthetic_provenance": "caller_reported_source_recipe_recorded"
+  },
+  "withdrawal": {
+    "process_state": "caller_reported_process_defined",
+    "future_distribution": "deprecate_and_stop_future_authorized_use",
+    "prior_copies": "not_recalled_or_erased_by_admission",
+    "learned_influence": "may_persist_after_future_use_stops",
+    "new_training_use": "requires_fresh_current_authorization_and_governance",
+    "repair": "append_correction_and_contain_future_use"
+  },
+  "boundaries": {
+    "manifest_and_provenance_only": true,
+    "raw_dataset_rows_consumed": false,
+    "raw_training_examples_consumed": false,
+    "raw_prompts_or_completions_retained": false,
+    "raw_agent_traces_retained": false,
+    "personal_data_retained": false,
+    "participant_identifiers_retained": false,
+    "credentials_retained": false,
+    "free_form_prose_retained": false,
+    "local_paths_retained": false,
+    "urls_retained": false,
+    "timestamps_retained": false,
+    "grants_live_training_permission": false,
+    "permits_optimizer_step": false,
+    "loads_model": false,
+    "trains_model": false,
+    "proves_model_exposure": false,
+    "proves_identity": false,
+    "proves_consciousness": false,
+    "proves_consent": false,
+    "grants_authority": false,
+    "publishes": false,
+    "writes_hub": false
+  },
+  "policy_id": "sha256:5be9a15f140407a245c0be36698d799b24820a178402302b70dc11ee8e888588"
+}

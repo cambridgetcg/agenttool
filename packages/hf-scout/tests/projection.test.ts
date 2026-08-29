@@ -213,7 +213,7 @@ describe("KINGDOM and Agent Data projections", () => {
       schema: "kingdom-hf-sidecar/v0.2",
       extension: {
         package: "@agenttool/hf-scout",
-        version: "0.2.0-dev.0",
+        version: "0.2.0-dev.1",
         status: "developer_preview",
       },
       artifacts: [{

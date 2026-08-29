@@ -32,7 +32,7 @@ import {
   safeRemoteString,
 } from "./validation.js";
 
-export const HF_RESEARCH_CURATED_ON = "2026-07-31" as const;
+export const HF_RESEARCH_CURATED_ON = "2026-08-29" as const;
 
 const PHASES = new Set<HfResearchPhase>([
   "agent_failure_recovery",
@@ -855,6 +855,51 @@ const RAW_CATALOG = {
           "license_clearance_inference",
           "truth_or_intent_authority",
           "unsandboxed_archive_extraction",
+        ],
+      },
+    },
+    {
+      schema: RESEARCH_LEAD_SCHEMA,
+      key: "xenia_word_is",
+      match: {
+        kind: "dataset",
+        id: "Yu-and-Ai/xenia-word-is",
+        revision: "64e3c4be051b2780409ab25578ea0c8bf926a72a",
+        declared: {
+          basis: "publisher_assertion",
+          license: "apache-2.0",
+          gated: false,
+          private: false,
+        },
+      },
+      origin_assertions: {
+        basis: "publisher_assertion",
+        features: ["failure_mode_matrix"],
+      },
+      research: {
+        basis: "researcher_inference",
+        evidence_paper_ids: [],
+        phase: "agent_trace_sft",
+        payload: "conversation_text",
+        priority: 16,
+        primary: "agenttool_fixture",
+        secondary: ["kingdom_registry", "yutabase_provenance"],
+        mode: "offline_parser_fixture",
+        boundaries: [
+          "benchmark_excluded_from_training",
+          "synthetic_or_simulated_not_truth",
+          "upstream_terms_separate",
+        ],
+        bounded_uses: [
+          "offline_parser_fixture",
+          "provenance_graph",
+        ],
+        forbidden_uses: [
+          "benchmark_tuning",
+          "license_clearance_inference",
+          "retrieval_index_ingestion",
+          "sole_evaluator_training",
+          "truth_or_intent_authority",
         ],
       },
     },

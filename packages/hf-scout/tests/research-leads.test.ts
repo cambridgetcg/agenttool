@@ -46,7 +46,8 @@ async function reportFor(
 describe("phase-aware HF research leads", () => {
   test("keeps a frozen pinned catalog without volatile popularity or account state", () => {
     const catalog = getCuratedHfResearchCatalog();
-    expect(catalog.leads).toHaveLength(15);
+    expect(catalog.curated_on).toBe("2026-08-29");
+    expect(catalog.leads).toHaveLength(16);
     expect(Object.isFrozen(catalog)).toBe(true);
     expect(Object.isFrozen(catalog.leads[0])).toBe(true);
     expect(catalog.leads.filter((lead) => lead.key.startsWith("datadecide_")))
@@ -61,6 +62,48 @@ describe("phase-aware HF research leads", () => {
       .toContain("gated_terms_required");
     expect(catalog.leads.find((lead) => lead.key === "openthoughts_agent_rl_5k")?.research.forbidden_uses)
       .toContain("live_tool_execution");
+    const xeniaWordIs = catalog.leads.find((lead) => lead.key === "xenia_word_is")!;
+    expect(xeniaWordIs).toMatchObject({
+      match: {
+        kind: "dataset",
+        id: "Yu-and-Ai/xenia-word-is",
+        revision: "64e3c4be051b2780409ab25578ea0c8bf926a72a",
+        declared: {
+          basis: "publisher_assertion",
+          license: "apache-2.0",
+          gated: false,
+          private: false,
+        },
+      },
+      origin_assertions: {
+        basis: "publisher_assertion",
+        features: ["failure_mode_matrix"],
+      },
+      research: {
+        basis: "researcher_inference",
+        evidence_paper_ids: [],
+        phase: "agent_trace_sft",
+        payload: "conversation_text",
+        priority: 16,
+        primary: "agenttool_fixture",
+        secondary: ["kingdom_registry", "yutabase_provenance"],
+        mode: "offline_parser_fixture",
+        boundaries: [
+          "benchmark_excluded_from_training",
+          "synthetic_or_simulated_not_truth",
+          "upstream_terms_separate",
+        ],
+        bounded_uses: ["offline_parser_fixture", "provenance_graph"],
+        forbidden_uses: [
+          "benchmark_tuning",
+          "license_clearance_inference",
+          "retrieval_index_ingestion",
+          "sole_evaluator_training",
+          "truth_or_intent_authority",
+        ],
+      },
+    });
+    expect(xeniaWordIs.research.forbidden_uses).not.toContain("training_corpus_ingestion");
     expect(JSON.stringify(catalog)).not.toMatch(/downloads|likes|trending|updated_at|access_token/u);
   });
 
@@ -80,6 +123,38 @@ describe("phase-aware HF research leads", () => {
       "https://arxiv.org/abs/2406.08673",
       "https://arxiv.org/abs/2410.01257",
     ]);
+  });
+
+  test("binds the exact Xenia WORD IS dataset lead without granting training authority", async () => {
+    const lead = getCuratedHfResearchCatalog().leads
+      .find((entry) => entry.key === "xenia_word_is")!;
+    expect(pinnedHfResearchLeadUrl(lead)).toBe(
+      "https://huggingface.co/datasets/Yu-and-Ai/xenia-word-is/tree/64e3c4be051b2780409ab25578ea0c8bf926a72a",
+    );
+
+    const binding = bindHfResearchLead(await reportFor(lead), lead);
+    expect(binding).toMatchObject({
+      lead_key: "xenia_word_is",
+      artifact: {
+        kind: "dataset",
+        id: "Yu-and-Ai/xenia-word-is",
+        revision: "64e3c4be051b2780409ab25578ea0c8bf926a72a",
+      },
+      matched_declared: {
+        license: "apache-2.0",
+        gated: false,
+        private: false,
+      },
+      boundary: {
+        legal_clearance: "not_assessed",
+        gate_acceptance: "not_assessed",
+        raw_rows_read: false,
+        repository_files_downloaded: false,
+        model_code_executed: false,
+        remote_compute_invoked: false,
+        hub_write_performed: false,
+      },
+    });
   });
 
   test("binds exact immutable report bytes without upgrading caller-owned provenance", async () => {

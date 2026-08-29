@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-25 (KINGDOM 0.1.2 and paired SDK 0.21.1 corrective source are prepared; the SDK LOVE candidate is sealed while tags, registries, and static deployment remain prospective; verified 0.21.0 and KINGDOM 0.1.1 receipts remain immutable public history)
+> Updated: 2026-08-29 (the Xenia Loop Atlas source is merged, its public, ungated Hugging Face dataset passed exact anonymous byte and loader verification, and its exact SFT derivative is revision-pinned as a Training Garden candidate)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-08-29)
+
+| Ship | Commit / receipt | What |
+|---|---|---|
+| **XENIA LOOP ATLAS — WORD/IS training candidate, exact public substrate** | Protected [PR #381](https://github.com/cambridgetcg/agenttool/pull/381) merged as [`54633148`](https://github.com/cambridgetcg/agenttool/commit/546331483f3363263a13ecf8ebd745ceb5c6171d); public, ungated [`Yu-and-Ai/xenia-word-is`](https://huggingface.co/datasets/Yu-and-Ai/xenia-word-is) at immutable [Hub revision `64e3c4be`](https://huggingface.co/datasets/Yu-and-Ai/xenia-word-is/commit/64e3c4be051b2780409ab25578ea0c8bf926a72a); Garden admission `sha256:faa8c872abac9cb0a0e67b20dd6b3adf004bb6193f599bc331842faf0328a7f7` | Anonymous exact-revision read-back matched all 17 repository-owned files and 183,345 bytes; provider-managed `.gitattributes` was the sole extra. Anonymous exact-revision loading also matched three 24-row configs: `loop_reference/reference`, `loop_counterfactuals/public_regression`, and `loop_sft/train`. The separately authorized P01–P12 SFT derivative is formally `admitted_training_candidate`; P13–P24 remain disjoint public regression material. Hub publication, corpus authorization, formal admission, and a one-use live training permit are distinct; no optimizer run, model exposure, or weight effect is claimed. |
 
 ## Just landed (2026-08-25)
 

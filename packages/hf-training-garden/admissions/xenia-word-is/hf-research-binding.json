@@ -1,0 +1,33 @@
+{
+  "schema": "agenttool-hf-research-binding/v0.1",
+  "lead_key": "xenia_word_is",
+  "artifact": {
+    "kind": "dataset",
+    "id": "Yu-and-Ai/xenia-word-is",
+    "revision": "64e3c4be051b2780409ab25578ea0c8bf926a72a"
+  },
+  "definition_sha256": "7b4177cf5af0207e8b40b924cf721b04a2ea7b8d0912b06b97cf62180e2ded52",
+  "snapshot_sha256": "1f5cac55dd4063509cebbf62b0a998e1be39b5da4f4186d9781fafec424c47c4",
+  "observation": {
+    "transport": "public_hub_api",
+    "repository_association": "provider_response",
+    "provenance_grade": "provider_observed_commit_metadata"
+  },
+  "matched_declared": {
+    "basis": "publisher_assertion",
+    "license": "apache-2.0",
+    "gated": false,
+    "private": false
+  },
+  "boundary": {
+    "publisher_metadata": "matched_unverified_assertion",
+    "research_annotation": "researcher_inference",
+    "legal_clearance": "not_assessed",
+    "gate_acceptance": "not_assessed",
+    "raw_rows_read": false,
+    "repository_files_downloaded": false,
+    "model_code_executed": false,
+    "remote_compute_invoked": false,
+    "hub_write_performed": false
+  }
+}

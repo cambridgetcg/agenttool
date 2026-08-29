@@ -68,7 +68,7 @@ describe("HF dataset admission", () => {
     });
   });
 
-  test("holds every current Scout training corpus lane that forbids ingestion", () => {
+  test("holds a curated training corpus lane when that lead forbids ingestion", () => {
     const value = admission("training_candidate");
     expect(value.entries[0]?.decision.state).toBe("held");
     expect(value.entries[0]?.decision.reason_codes).toContain("source_forbids_training_lane");

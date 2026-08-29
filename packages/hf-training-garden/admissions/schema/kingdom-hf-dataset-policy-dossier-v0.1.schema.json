@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/kingdom-hf-dataset-policy-dossier-v0.1.schema.json",
+  "title": "Private content-addressed Hugging Face dataset policy dossier",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "policy_id",
+    "binding_ref",
+    "garden_scope_ref",
+    "subject",
+    "rights",
+    "evidence",
+    "scope",
+    "provenance",
+    "assessment",
+    "withdrawal",
+    "boundaries"
+  ],
+  "properties": {
+    "_format": { "const": "kingdom.hf-dataset-policy-dossier/0.1" },
+    "policy_id": { "$ref": "#/$defs/sha256" },
+    "binding_ref": { "$ref": "#/$defs/sha256" },
+    "garden_scope_ref": { "$ref": "#/$defs/sha256" },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataset_id",
+        "lead_key",
+        "hub_revision",
+        "binding_definition_ref",
+        "binding_snapshot_ref"
+      ],
+      "properties": {
+        "dataset_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 193,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}(?:/[A-Za-z0-9][A-Za-z0-9._-]{0,95})?$"
+        },
+        "lead_key": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_]{0,63}$" },
+        "hub_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "binding_definition_ref": { "$ref": "#/$defs/sha256" },
+        "binding_snapshot_ref": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline",
+        "baseline_sha256",
+        "selected_repository_profile_sha256",
+        "rights_are_permissions"
+      ],
+      "properties": {
+        "baseline": { "const": "xenia.rights/0.1" },
+        "baseline_sha256": { "$ref": "#/$defs/sha256" },
+        "selected_repository_profile_sha256": { "$ref": "#/$defs/sha256" },
+        "rights_are_permissions": { "const": false }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hub_hash_manifest_sha256",
+        "source_manifest_sha256",
+        "row_manifest_sha256",
+        "training_authorization_manifest_sha256",
+        "training_example_manifest_sha256",
+        "training_recipe_manifest_sha256"
+      ],
+      "properties": {
+        "hub_hash_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "source_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "row_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "training_authorization_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "training_example_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "training_recipe_manifest_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorization_id",
+        "candidate_slice_ref",
+        "transform_recipe_ref",
+        "output_jsonl_ref",
+        "output_row_set_ref",
+        "training_format",
+        "output_config",
+        "output_split",
+        "output_row_count",
+        "source_pair_count",
+        "role",
+        "training_mode",
+        "excluded_lanes"
+      ],
+      "properties": {
+        "authorization_id": { "$ref": "#/$defs/sha256" },
+        "candidate_slice_ref": { "$ref": "#/$defs/sha256" },
+        "transform_recipe_ref": { "$ref": "#/$defs/sha256" },
+        "output_jsonl_ref": { "$ref": "#/$defs/sha256" },
+        "output_row_set_ref": { "$ref": "#/$defs/sha256" },
+        "training_format": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+        },
+        "output_config": { "$ref": "#/$defs/name" },
+        "output_split": { "$ref": "#/$defs/name" },
+        "output_row_count": { "type": "integer", "minimum": 1, "maximum": 1000000000 },
+        "source_pair_count": { "type": "integer", "minimum": 1, "maximum": 1000000000 },
+        "role": { "const": "training_candidate" },
+        "training_mode": { "const": "supervised_fine_tuning" },
+        "excluded_lanes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["dpo", "preference_optimization", "reward_modeling", "sealed_evaluation"]
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "license",
+        "copied_external_rows",
+        "copied_private_rows",
+        "contains_personal_data",
+        "contains_raw_session_trace",
+        "source_case_rows_training_authorized",
+        "training_derivative_authorized",
+        "public_regression_in_training"
+      ],
+      "properties": {
+        "origin": { "const": "human_directed_agent_authored_synthetic" },
+        "license": { "enum": ["apache-2.0", "bsd-3-clause", "cc-by-4.0", "odc-by"] },
+        "copied_external_rows": { "const": false },
+        "copied_private_rows": { "const": false },
+        "contains_personal_data": { "const": false },
+        "contains_raw_session_trace": { "const": false },
+        "source_case_rows_training_authorized": { "const": false },
+        "training_derivative_authorized": { "const": true },
+        "public_regression_in_training": { "const": false }
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rights",
+        "privacy",
+        "consent",
+        "withdrawal",
+        "secret_scan",
+        "deduplication",
+        "benchmark_overlap",
+        "fitness",
+        "synthetic_provenance"
+      ],
+      "properties": {
+        "rights": { "enum": ["unassessed", "review_required", "caller_reported_reviewed_for_declared_use"] },
+        "privacy": { "enum": ["unassessed", "review_required", "caller_reported_reviewed_for_declared_use"] },
+        "consent": { "enum": ["unassessed", "review_required", "not_applicable_reported", "caller_reported_reviewed_for_declared_use"] },
+        "withdrawal": { "enum": ["unassessed", "review_required", "caller_reported_process_defined"] },
+        "secret_scan": { "enum": ["not_performed", "metadata_only", "caller_reported_bounded_scan_passed"] },
+        "deduplication": { "enum": ["not_assessed", "not_applicable_metadata", "caller_reported_recipe_applied"] },
+        "benchmark_overlap": { "enum": ["not_assessed", "metadata_only", "caller_reported_clear_of_sealed_evaluation", "sealed_evaluation"] },
+        "fitness": { "enum": ["not_assessed", "metadata_only", "caller_reported_fit_for_declared_role"] },
+        "synthetic_provenance": { "enum": ["unassessed", "not_synthetic_reported", "caller_reported_source_recipe_recorded"] }
+      }
+    },
+    "withdrawal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "process_state",
+        "future_distribution",
+        "prior_copies",
+        "learned_influence",
+        "new_training_use",
+        "repair"
+      ],
+      "properties": {
+        "process_state": { "const": "caller_reported_process_defined" },
+        "future_distribution": { "const": "deprecate_and_stop_future_authorized_use" },
+        "prior_copies": { "const": "not_recalled_or_erased_by_admission" },
+        "learned_influence": { "const": "may_persist_after_future_use_stops" },
+        "new_training_use": { "const": "requires_fresh_current_authorization_and_governance" },
+        "repair": { "const": "append_correction_and_contain_future_use" }
+      }
+    },
+    "boundaries": {
+      "const": {
+        "manifest_and_provenance_only": true,
+        "raw_dataset_rows_consumed": false,
+        "raw_training_examples_consumed": false,
+        "raw_prompts_or_completions_retained": false,
+        "raw_agent_traces_retained": false,
+        "personal_data_retained": false,
+        "participant_identifiers_retained": false,
+        "credentials_retained": false,
+        "free_form_prose_retained": false,
+        "local_paths_retained": false,
+        "urls_retained": false,
+        "timestamps_retained": false,
+        "grants_live_training_permission": false,
+        "permits_optimizer_step": false,
+        "loads_model": false,
+        "trains_model": false,
+        "proves_model_exposure": false,
+        "proves_identity": false,
+        "proves_consciousness": false,
+        "proves_consent": false,
+        "grants_authority": false,
+        "publishes": false,
+        "writes_hub": false
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$" }
+  }
+}

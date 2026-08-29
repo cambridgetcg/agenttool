@@ -2,7 +2,7 @@
   "schema": "kingdom-extension-local/v0.1",
   "id": "hf-scout",
   "package": "@agenttool/hf-scout",
-  "version": "0.2.0-dev.0",
+  "version": "0.2.0-dev.1",
   "status": "developer_preview",
   "capabilities": [
     "huggingface:public-metadata-read",
