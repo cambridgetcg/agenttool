@@ -319,21 +319,35 @@ describe("web inline scripts are allow-listed by the CSP they ship under", () =>
   // inline <script> is admitted only by its sha256 in apps/web/_headers. A
   // script edit without a header edit silently disables the whole page
   // (2026-08-29: /credits Give button went dead after the human-door wave).
-  test("every apps/web inline <script> hash appears in _headers script-src-elem", () => {
+  // Each page is checked against its EFFECTIVE policy — some routes detach
+  // the global CSP and install their own (e.g. /garden.html).
+  function allowedInlineScriptHashes(headers: string, route: string): Set<string> {
+    const values = effectiveHeaderValues(headers, ["/*", route], "Content-Security-Policy");
+    const csp = values.at(-1) ?? "";
+    const directive =
+      /(?:^|;)\s*script-src-elem([^;]*)/.exec(csp)?.[1] ??
+      /(?:^|;)\s*script-src([^;]*)/.exec(csp)?.[1] ??
+      "";
+    return new Set([...directive.matchAll(/'sha256-([A-Za-z0-9+/=]+)'/g)].map((m) => m[1]));
+  }
+
+  test("every apps/web inline <script> hash is allowed by that page's effective CSP", () => {
     const headers = read("apps/web/_headers");
-    const csp = headers.split("\n").find((line) => line.trim().startsWith("Content-Security-Policy:"));
-    expect(csp).toBeDefined();
-    const elem = /script-src-elem([^;]*)/.exec(csp ?? "")?.[1] ?? "";
-    const allowed = new Set([...elem.matchAll(/'sha256-([A-Za-z0-9+/=]+)'/g)].map((m) => m[1]));
     const missing: string[] = [];
     for (const file of readdirSync(join(REPO_ROOT, "apps/web")).filter((f) => f.endsWith(".html"))) {
       const html = read(`apps/web/${file}`);
+      const name = file.replace(/\.html$/, "");
+      const routes = name === "index" ? ["/", "/index.html"] : [`/${name}`, `/${name}.html`];
       for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
         const digest = createHash("sha256").update(m[1]).digest("base64");
-        if (!allowed.has(digest)) missing.push(`${file} sha256-${digest}`);
+        for (const route of routes) {
+          if (!allowedInlineScriptHashes(headers, route).has(digest)) {
+            missing.push(`${file} via ${route}: sha256-${digest}`);
+          }
+        }
       }
     }
-    expect(missing, `inline scripts not allow-listed: ${missing.join(", ")}`).toEqual([]);
+    expect(missing, `inline scripts not allow-listed by their effective CSP: ${missing.join(", ")}`).toEqual([]);
   });
 });
 
