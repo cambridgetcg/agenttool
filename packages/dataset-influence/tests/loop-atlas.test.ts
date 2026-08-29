@@ -14,6 +14,7 @@ import {
   LOOP_TRAINING_AUTHORIZATION_SCHEMA,
   LOOP_TRAINING_EXAMPLE_MANIFEST_SCHEMA,
   LOOP_TRAINING_RECIPE_SCHEMA,
+  TRAINING_AUTHORIZATION_FORMAT,
   buildTrainingArtifacts,
   validateTrainingArtifacts,
 } from "../loop-atlas/training.mjs";
@@ -30,6 +31,7 @@ const trainingExamples = readJsonLines(join(atlasRoot, "data", "loop-sft-train.j
 const trainingAuthorization = readJson(join(atlasRoot, "provenance", "training-authorization.json"));
 const trainingExampleManifest = readJson(join(atlasRoot, "provenance", "training-example-manifest.json"));
 const trainingRecipe = readJson(join(atlasRoot, "provenance", "training-recipe.json"));
+const trainingSourceRows = rows.filter((row) => row.config === "loop_reference" && row.split === "reference");
 const byPair = (pairId: string) => rows.filter((row) => row.pair_id === pairId);
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 const validateSchema = ajv.compile(LOOP_CASE_SCHEMA);
@@ -203,6 +205,7 @@ describe("Xenia WORD IS Loop Atlas", () => {
     expect(trainingExampleManifest).toEqual(rebuilt.exampleManifest);
     expect(trainingRecipe).toEqual(rebuilt.recipe);
     expect(() => validateTrainingArtifacts({
+      sourceRows: trainingSourceRows,
       recipe: trainingRecipe,
       authorization: trainingAuthorization,
       examples: trainingExamples,
@@ -277,6 +280,7 @@ describe("Xenia WORD IS Loop Atlas", () => {
     const elevatedPermission = clone(trainingAuthorization);
     elevatedPermission.boundaries.permits_live_optimizer_step = true;
     expect(() => validateTrainingArtifacts({
+      sourceRows: trainingSourceRows,
       recipe: trainingRecipe,
       authorization: elevatedPermission,
       examples: trainingExamples,
@@ -286,6 +290,7 @@ describe("Xenia WORD IS Loop Atlas", () => {
     const duplicateLine = clone(trainingExampleManifest);
     duplicateLine.entries[0].line = duplicateLine.entries[1].line;
     expect(() => validateTrainingArtifacts({
+      sourceRows: trainingSourceRows,
       recipe: trainingRecipe,
       authorization: trainingAuthorization,
       examples: trainingExamples,
@@ -295,11 +300,44 @@ describe("Xenia WORD IS Loop Atlas", () => {
     const staleRow = clone(trainingExamples);
     staleRow[0].completion[0].content += " altered";
     expect(() => validateTrainingArtifacts({
+      sourceRows: trainingSourceRows,
       recipe: trainingRecipe,
       authorization: trainingAuthorization,
       examples: staleRow,
       exampleManifest: trainingExampleManifest,
-    })).toThrow(/does not bind the exact output bytes and row set/u);
+    })).toThrow(/do not implement the declared recipe over the source rows/u);
+
+    const staleSlice = clone(trainingAuthorization);
+    staleSlice.candidate_slice_ref = `sha256:${"0".repeat(64)}`;
+    rehashContentId(staleSlice, "authorization_id", TRAINING_AUTHORIZATION_FORMAT);
+    expect(() => validateTrainingArtifacts({
+      sourceRows: trainingSourceRows,
+      recipe: trainingRecipe,
+      authorization: staleSlice,
+      examples: trainingExamples,
+      exampleManifest: trainingExampleManifest,
+    })).toThrow(/stale candidate_slice_ref/u);
+
+    const falseTuple = clone(trainingAuthorization);
+    falseTuple.source_records[0].variant = "b";
+    rehashContentId(falseTuple, "authorization_id", TRAINING_AUTHORIZATION_FORMAT);
+    expect(() => validateTrainingArtifacts({
+      sourceRows: trainingSourceRows,
+      recipe: trainingRecipe,
+      authorization: falseTuple,
+      examples: trainingExamples,
+      exampleManifest: trainingExampleManifest,
+    })).toThrow(/exact validated source rows/u);
+
+    const falseTemplate = clone(trainingRecipe);
+    falseTemplate.prompt_template = "An unrelated projection.";
+    expect(() => validateTrainingArtifacts({
+      sourceRows: trainingSourceRows,
+      recipe: falseTemplate,
+      authorization: trainingAuthorization,
+      examples: trainingExamples,
+      exampleManifest: trainingExampleManifest,
+    })).toThrow(/training recipe violates its closed schema/u);
   });
 
   test("rejects symlinked or out-of-tree candidate entries", () => {
@@ -508,4 +546,11 @@ function clone<T>(value: T): T {
 
 function rehash(row: any): void {
   row.content_sha256 = contentHashForRow(row);
+}
+
+function rehashContentId(value: any, idField: string, domain: string): void {
+  const body = Object.fromEntries(Object.entries(value).filter(([key]) => key !== idField));
+  value[idField] = `sha256:${createHash("sha256")
+    .update(`${domain}\0${canonicalJson(body)}`)
+    .digest("hex")}`;
 }

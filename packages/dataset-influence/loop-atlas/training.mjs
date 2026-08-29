@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import Ajv2020 from "ajv/dist/2020.js";
 
 import { FORMAT, INTENDED_HF_ID } from "./constants.mjs";
-import { canonicalJson } from "./validate.mjs";
+import { canonicalJson, validateLoopAtlas } from "./validate.mjs";
 
 export const TRAINING_FORMAT = "agenttool.xenia-loop-sft/0.1";
 export const TRAINING_RECIPE_FORMAT = "agenttool.xenia-loop-training-recipe/0.1";
@@ -65,7 +65,7 @@ export const LOOP_TRAINING_RECIPE_SCHEMA = {
     output_config: { const: TRAINING_CONFIG },
     output_split: { const: TRAINING_SPLIT },
     projection: { const: "conversational_prompt_completion" },
-    prompt_template: { type: "string", minLength: 1, maxLength: 1200 },
+    prompt_template: { const: trainingPrompt("{changed_fact}", "{input_text}") },
     prompt_fields: { const: ["changed_fact", "input_text"] },
     completion_fields: { const: ["target_text"] },
     pair_policy: { const: "preserve_source_pair_and_neutral_variant_in_manifest" },
@@ -309,11 +309,17 @@ export function buildTrainingArtifacts(rows) {
     })).sort((left, right) => left.example_id < right.example_id ? -1 : left.example_id > right.example_id ? 1 : 0),
   };
 
-  validateTrainingArtifacts({ recipe, authorization, examples, exampleManifest });
+  validateTrainingArtifacts({
+    sourceRows: selected,
+    recipe,
+    authorization,
+    examples,
+    exampleManifest,
+  });
   return { recipe, authorization, examples, exampleManifest };
 }
 
-export function validateTrainingArtifacts({ recipe, authorization, examples, exampleManifest }) {
+export function validateTrainingArtifacts({ sourceRows, recipe, authorization, examples, exampleManifest }) {
   const ajv = new Ajv2020({ allErrors: true, strict: true });
   for (const [name, schema, values] of [
     ["training recipe", LOOP_TRAINING_RECIPE_SCHEMA, [recipe]],
@@ -326,6 +332,17 @@ export function validateTrainingArtifacts({ recipe, authorization, examples, exa
       if (!validate(value)) throw new Error(`${name} violates its closed schema: ${JSON.stringify(validate.errors)}`);
     }
   }
+  if (!Array.isArray(sourceRows)) {
+    throw new Error("Xenia training verification requires the source rows");
+  }
+  validateLoopAtlas(sourceRows, { requireComplete: false });
+  if (sourceRows.length !== 24
+    || new Set(sourceRows.map((row) => row.pair_id)).size !== 12
+    || sourceRows.some((row) => (
+      row.config !== TRAINING_SOURCE_CONFIG || row.split !== TRAINING_SOURCE_SPLIT
+    ))) {
+    throw new Error("Xenia training verification requires exactly the 24 authorized reference rows");
+  }
   const recipeBody = withoutKey(recipe, "recipe_id");
   if (recipe.recipe_id !== contentId(TRAINING_RECIPE_FORMAT, recipeBody)) {
     throw new Error("Xenia training recipe has a stale recipe_id");
@@ -336,6 +353,26 @@ export function validateTrainingArtifacts({ recipe, authorization, examples, exa
   }
   if (authorization.transform_recipe_ref !== recipe.recipe_id) {
     throw new Error("Xenia training authorization does not bind the exact recipe");
+  }
+  const expectedSourceRecords = sourceRows.map((row) => ({
+    record_id: row.record_id,
+    content_sha256: row.content_sha256,
+    pair_id: row.pair_id,
+    variant: row.variant,
+  }));
+  if (canonicalJson(authorization.source_records) !== canonicalJson(expectedSourceRecords)) {
+    throw new Error("Xenia training authorization does not bind the exact validated source rows");
+  }
+  const expectedSliceRef = contentId("agenttool.xenia-loop-training-slice/0.1", expectedSourceRecords);
+  if (authorization.candidate_slice_ref !== expectedSliceRef) {
+    throw new Error("Xenia training authorization has a stale candidate_slice_ref");
+  }
+  const expectedExamples = sourceRows.map((row) => ({
+    prompt: [{ role: "user", content: trainingPrompt(row.changed_fact, row.input_text) }],
+    completion: [{ role: "assistant", content: row.target_text }],
+  }));
+  if (canonicalJson(examples) !== canonicalJson(expectedExamples)) {
+    throw new Error("Xenia training examples do not implement the declared recipe over the source rows");
   }
   const lines = examples.map((example) => `${JSON.stringify(example)}\n`);
   if (authorization.output_jsonl_sha256 !== `sha256:${hash(lines.join(""))}`

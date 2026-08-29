@@ -52,9 +52,7 @@
       "const": "conversational_prompt_completion"
     },
     "prompt_template": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 1200
+      "const": "Analyze this synthetic loop case. State what moves forward, what returns, what future state changes, and which evidence or rights boundaries apply. Preserve unknowns; do not infer identity, consciousness, consent, or authority.\n\nPair distinction: {changed_fact}\n\nCase: {input_text}"
     },
     "prompt_fields": {
       "const": [

@@ -40,7 +40,7 @@
     {
       "path": "provenance/source-manifest.json",
       "bytes": 7688,
-      "sha256": "8ecdd81e29723cfeb58c3fb59ebc6c324193d993c5ffbb3d5a7849920cd633ec"
+      "sha256": "06f49147476f02b86506c2fe764284d89ec57cc3ae02d5f85323b19254db1a46"
     },
     {
       "path": "provenance/training-authorization.json",
@@ -79,8 +79,8 @@
     },
     {
       "path": "schema/agenttool-xenia-loop-training-recipe-v0.1.schema.json",
-      "bytes": 1941,
-      "sha256": "79ac8c56e51c607adea1dd553b8e413c9cee91232ba0debdb2ddd09406d6b125"
+      "bytes": 2174,
+      "sha256": "8861b25372dd1f6658c5ec555386da2ded587ad60624cc65ad9f570569d44186"
     }
   ]
 }
