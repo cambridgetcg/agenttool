@@ -465,7 +465,7 @@ async function cmdVerify(args: { base: string; hash: string | undefined }): Prom
   log(`verdict: ${summary.verdict}`);
   for (const line of summary.lines) log(`  ${line}`);
   log(`  treasury: ${KINGDOM_TREASURY}`);
-  if (summary.verdict !== "settled") throw new LoopOpen(`ledger verdict is ${summary.verdict}, not settled`);
+  if (summary.verdict !== "settled") throw new LoopOpen(`verdict is ${summary.verdict}, not settled (ledger + receipt must agree)`);
 }
 
 function usage(): void {

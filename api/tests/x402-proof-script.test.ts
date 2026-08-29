@@ -440,6 +440,16 @@ describe("verdicts", () => {
     expect(replayVerdict(null, 100).ok).toBe(false);
   });
 
+  test("verify: settled row without a receipt is settled_unverified, never settled", () => {
+    const v = summarizeVerification({
+      status: { status: "settled", credits_purchased: 1, credits_applied: 1, amount: "1000", pay_to: KINGDOM_TREASURY, transaction: `0x${"ab".repeat(32)}` },
+      treasuryBalanceAtomic: null,
+      receipt: null,
+      txHash: `0x${"ab".repeat(32)}`,
+    });
+    expect(v.verdict).toBe("settled_unverified");
+  });
+
   test("verify: settled row + successful receipt → settled", () => {
     const v = summarizeVerification({
       status: { status: "settled", credits_purchased: 1, credits_applied: 1, amount: "1000", pay_to: KINGDOM_TREASURY, transaction: `0x${"ab".repeat(32)}`, next_action: "complete" },

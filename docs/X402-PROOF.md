@@ -16,7 +16,7 @@ nothing wider.
 |---|---|---|
 | Payer wallet (`wallet-init`, `address`) | code + tests; **not yet run for real** — no keychain item, no `~/.config/kingdom/x402-payer.json` | Yu runs `wallet-init`, then funds it (decision e) |
 | `POST /v1/x402/top-up/:credits` | **does not exist** in `api/src` on this branch | W2-2 (route) → W2-4 (deploy) |
-| `topup N` | code + tests; against production today it exits 3: `expected 402 … got 404` | W2-2 + W2-4 |
+| `topup N` | code + tests; without a payer it exits 2 (`x402-payer.json is missing`); with one, against production before W2-4 it exits 3 (`expected 402 … got 404`) | W2-2 + W2-4 |
 | `replay`, `verify` | code + tests; need a stashed payment from `topup` | after the first `topup` |
 | `GET /v1/x402/payments/:payment_id` | live (`api/src/routes/x402-payments.ts`, mounted `index.ts:994`, authed `index.ts:431`) | — |
 
@@ -40,7 +40,7 @@ Printed: addresses, balances, ids, statuses, JSON bodies, decoded PAYMENT-RESPON
 ## Step 0 — baselines (proves: nothing moved that must not move)
 
 ```
-cd api && bun test tests/x402-*.test.ts        # 119 pass on this branch (79 baseline + 40 proof-lib)
+cd api && bun test tests/x402-*.test.ts        # 225 pass on the merged Wave 2 branch (79 baseline + W2-1/2/3)
 wc -c api/package.json api/bun.lock            # 1574 / 108446 — byte-pinned, no new dependency
 ```
 
@@ -149,18 +149,9 @@ Three witnesses, reported as themselves:
 Verdict `settled` only when the ledger says `settled` and the receipt is not reverted.
 Anything else exits 3 and says which witness disagreed.
 
-## Dry run against a local api (proves: the wire path, without CDP)
+## Dry run against a local api
 
-```
-cd api && AGENTTOOL_X402_RECIPIENT=0xA9eeA60CAaF239AbAfAA05FcB152128dB16dD3d8 bun src/index.ts   # plus a fake facilitator
-cd api && bun scripts/x402-proof.ts topup 1 --base http://127.0.0.1:3000 --dry-run
-```
-
-The payTo wall is not relaxed for local runs — the local api must be configured with the
-treasury as recipient, or the script refuses (that refusal is itself a passing test of the
-wall). `--dry-run` stops after signing + stashing; drop it to exercise the paid retry against
-a fake facilitator. This proves the challenge → select → sign → header path; it proves nothing
-about Base or CDP.
+Not yet possible honestly: there is no fake facilitator in the repo. `--dry-run` today only exercises argument parsing and requirement selection against a local api's real 402; the sign→verify leg needs CDP. Lands when a test facilitator exists.
 
 ## If CDP `/settle` refuses (W2-4)
 

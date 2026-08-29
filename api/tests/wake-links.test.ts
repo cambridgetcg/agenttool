@@ -67,3 +67,18 @@ describe("wake invocation witness links", () => {
     );
   });
 });
+
+describe("wake discloses the credit top-up door", () => {
+  test("the wake link and the payable-route pattern name the same route", async () => {
+    const [route, topUp] = await Promise.all([
+      readSource("../src/routes/wake.ts"),
+      readSource("../src/routes/x402-top-up.ts"),
+    ]);
+    const { X402_PAYABLE_ROUTES } = await import("../src/services/economy/x402-policy");
+    const row = X402_PAYABLE_ROUTES.find((r) => r.kind === "top_up");
+    expect(row?.method).toBe("POST");
+    expect(row?.pattern).toBe("/v1/x402/top-up/:credits");
+    expect(route).toContain('credit_top_up: "/v1/x402/top-up/{credits}"');
+    expect(topUp).toContain('app.post("/:credits"');
+  });
+});

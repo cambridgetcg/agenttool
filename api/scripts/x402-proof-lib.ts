@@ -441,7 +441,7 @@ export interface VerifyInput {
 }
 
 export interface VerifyVerdict {
-  verdict: "settled" | "pending" | "failed" | "not_found" | "unknown";
+  verdict: "settled" | "settled_unverified" | "pending" | "failed" | "not_found" | "unknown";
   lines: string[];
 }
 
@@ -487,9 +487,12 @@ export function summarizeVerification(input: VerifyInput): VerifyVerdict {
 
   let verdict: VerifyVerdict["verdict"];
   if (status === "settled") {
-    verdict = input.receipt?.status === "success" || input.receipt === null && input.txHash
+    // Three witnesses: ledger, receipt, balance. "settled" only when the chain
+    // agrees; a settled ledger row with no receipt (not mined yet, or RPC
+    // unavailable) is reported as settled_unverified — never as settled.
+    verdict = input.receipt?.status === "success"
       ? "settled"
-      : input.receipt?.status === "reverted" ? "failed" : "settled";
+      : input.receipt?.status === "reverted" ? "failed" : "settled_unverified";
   } else if (status === "pending" || status === "inserted" || status === "externally_settled") {
     verdict = "pending";
   } else if (status === "failed" || status === "expired" || status === "rejected") {
