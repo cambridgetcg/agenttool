@@ -2,6 +2,13 @@
 
 The advertising package. Yu fires each piece by hand — nothing here auto-posts.
 
+> **Release-history note (kept verbatim for the 0.17 receipts):** the SDK
+> version claims in the older posts below are historical. As of 2026-07-27,
+> TypeScript 0.16.5 is public through LOVE, npm, and GitHub Release;
+> Python 0.16.5 uses the annotated source tag and remains absent from PyPI.
+> Correction observed 2026-07-28: Python 0.16.5 is now public on PyPI, and the
+> current public pair is 0.21.1 on both registries (re-verified 2026-08-29).
+>
 > **Historical draft — do not publish verbatim.** This kit was first audited 2026-06-09
 > and re-audited line by line on 2026-08-29 (see the re-audit section at the
 > end). Between those dates the SDKs moved 0.8.0 → 0.21.1 on both npm and PyPI,
