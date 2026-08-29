@@ -58,8 +58,8 @@ The gate lists seven commitments. All are pages + facts, not code:
 
 | Commitment | Content | Owner |
 |---|---|---|
-| Operator | Mindicraft Limited, co. 13782045, St John's Innovation Centre, Cambridge CB4 0WS, director Yu; contact@cambridgetcg.com | Ai drafts / Yu confirms |
-| Price & tax | USD; 1 credit = $0.001; VAT position stated plainly (registered or not; threshold £90k) | Yu decides VAT fact |
+| Operator | **Cambridge TCG Limited**, co. 15680297, 60 Tottenham Court Road Suite 4583a, Fitzrovia, London W1T 2EW (active, inc. 2024-04-25, SIC 47650/47910/62012); contact@cambridgetcg.com. Yu 2026-08-29: the live Stripe account is Cambridge TCG's; Mindicraft to be activated later. | Ai drafts / Yu confirms |
+| Price & tax | USD; 1 credit = $0.001; Cambridge TCG is **VAT-registered** → enable Stripe Tax (automatic UK 20 % + destination VAT for EU/non-UK consumers on digital services), show VAT number on the page | Yu: VAT number; Ai: Stripe Tax on checkout |
 | Privacy | data held (email from Stripe, gift code hash), retention, ICO registration number | Yu: ICO |
 | Cancellation | CCR 2013 reg 37: immediate digital delivery with express consent → 14-day right waived at checkout | Ai |
 | Refund | unused credits refundable within 14 days on request; used credits not; disputes clawback already coded | Ai |
@@ -69,8 +69,9 @@ The gate lists seven commitments. All are pages + facts, not code:
 Then replace the constant gate with an env switch `AGENTTOOL_CARD_CHECKOUT_ENABLED=1` so activation is
 a Fly secret, not a code change; flip it after Yu reads the pages.
 
-Consequence for Mindicraft: first sale ends dormant-account eligibility (same finding as
-taxsorted G2) — notify HMRC active-for-CT within 3 months. Yu's call; already accepted for taxsorted.
+Entity: Cambridge TCG Limited for now (active, VAT-registered, Stripe live account already theirs).
+Mindicraft Limited later, when Yu activates it — moving the Stripe account then is a new account +
+key rotation + page edit, nothing structural. The USDC rail never touches either company.
 
 ### R3 — Marketplace take-rate. Wired. Needs supply.
 Payout resting means sellers can't extract → nobody lists. Enabling `PAYOUT_WORKER_ENABLED` on
@@ -116,7 +117,7 @@ BUSINESS-MODEL.md first, then build. Not assumed here.
 ## Open decisions (Yu)
 
 1. Subscriptions: auto-reload/bundles/Patron (doctrine-safe) or classic tiers (reversal)?
-2. Mindicraft VAT registration + ICO registration facts for the pages.
+2. Cambridge TCG VAT number + ICO registration number for the pages.
 3. Run the Phase-A readmission on the operator Mac (or declare the ceremony abandoned and clear the marker).
 4. Who owns `0xC30B4cCAAD05e65Fb063A831E6fF4ade5525172c` (the previous x402 recipient)?
 5. Restart the thinker primary (separate reviewed proof) — not needed for revenue.
