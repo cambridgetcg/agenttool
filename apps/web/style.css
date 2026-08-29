@@ -258,6 +258,12 @@
   border-radius:12px; padding:22px 26px; display:inline-block; }
 pre.mono { background:var(--panel2); border:1px solid var(--line); border-radius:8px;
   padding:14px 16px; font-size:12.5px; overflow-x:auto; }
+.amounts { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+.amt-btn { border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+  padding:10px 20px; border-radius:8px; font-size:16px; cursor:pointer; }
+.amt-btn.selected { border-color:var(--accent); color:var(--accent); }
+.custom input { width:70px; background:transparent; border:none; border-bottom:1px dashed var(--faint);
+  color:var(--ink); font:inherit; padding:4px 2px; }
 .checkout-boundary { border:2px solid var(--control-line); background:var(--panel2); padding:18px 20px; border-radius:10px; margin:22px 0; }
 .directory { margin-top:28px; }
 .directory summary { cursor:pointer; font-weight:700; padding:12px 0; }

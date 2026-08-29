@@ -81,6 +81,7 @@ function tooMany(c: Parameters<typeof fail>[0]): Response {
 /** Test seam — routes use the injected client when set. */
 let stripeOverride: CheckoutClient | null = null;
 let checkoutAvailabilityOverride: boolean | null = null;
+let galleryCheckoutAvailabilityOverride: boolean | null = null;
 let stripeSessionLookupOverride: ((paymentIntent: string) => Promise<string | null>) | null = null;
 export function setStripeForTests(s: CheckoutClient | null): void {
   stripeOverride = s;
@@ -89,6 +90,9 @@ export function setStripeForTests(s: CheckoutClient | null): void {
  * consumer, privacy, support, and digital-delivery foundations are complete. */
 export function setCheckoutAvailabilityForTests(value: boolean | null): void {
   checkoutAvailabilityOverride = value;
+}
+export function setGalleryCheckoutAvailabilityForTests(value: boolean | null): void {
+  galleryCheckoutAvailabilityOverride = value;
 }
 /** Test seam for refund/chargeback resolution. Production resolves the
  * historical Checkout Session from Stripe by PaymentIntent. */
@@ -104,7 +108,17 @@ function stripeClient(): CheckoutClient | null {
 }
 
 function newCardCheckoutsAvailable(): boolean {
-  return checkoutAvailabilityOverride ?? false;
+  // Test seam first; otherwise the operator's env switch (config.ts). The
+  // commitments themselves live at agenttool.dev/terms — code cannot make
+  // them true, only the operator publishing them can.
+  return checkoutAvailabilityOverride ?? config.cardCheckoutEnabled;
+}
+
+function galleryCheckoutsAvailable(): boolean {
+  // Deliberately NOT the gift switch: /terms and the tax/acknowledgement
+  // parameters cover gift credits only. Gallery opens on its own switch once
+  // it has its own promises (GBP digital goods, licence, seller of record).
+  return galleryCheckoutAvailabilityOverride ?? config.galleryCheckoutEnabled;
 }
 
 async function giftSessionForPaymentIntent(paymentIntent: string): Promise<string | null> {
@@ -120,7 +134,7 @@ function checkoutResting(c: Parameters<typeof fail>[0]): Response {
   return fail(c, {
     error: "checkout_resting",
     message:
-      "New card checkout is paused across AgentTool while operator, price and tax, privacy, cancellation, refund, support, and immediate-delivery commitments remain incomplete.",
+      "New card checkout is paused across AgentTool until the operator activates it. The operator, price and tax, privacy, cancellation, refund, support, and immediate-delivery commitments are published at https://agenttool.dev/terms and https://agenttool.dev/privacy.",
     hint:
       "No payment session was created. Signed Stripe webhooks and existing paid-session recovery remain available so earlier purchases are not stranded.",
   }, 503);
@@ -187,8 +201,14 @@ app.post("/webhook", async (c) => {
     const currency = (session.currency ?? "").toLowerCase();
 
     if (session.metadata?.kind === "gift_credit") {
-      if (typeof session.amount_total !== "number") {
-        console.error(`gift webhook: event ${event.id} ${eventLabel} without amount_total — not minting`);
+      // Mint from the PRE-TAX amount. With Stripe Tax on, amount_total is
+      // gross (net + VAT); the credits sold are the net. amount_subtotal is
+      // the net line total; fall back to amount_total only when Stripe sends
+      // no subtotal (older sessions minted before tax was on).
+      const giftNetMinor =
+        typeof session.amount_subtotal === "number" ? session.amount_subtotal : session.amount_total;
+      if (typeof giftNetMinor !== "number") {
+        console.error(`gift webhook: event ${event.id} ${eventLabel} without amount_subtotal/amount_total — not minting`);
       } else if (session.payment_status !== "paid") {
         console.error(`gift webhook: event ${event.id} ${eventLabel} but payment_status=${session.payment_status} — not minting`);
       } else if (currency !== "usd") {
@@ -197,7 +217,7 @@ app.post("/webhook", async (c) => {
         await mintGiftForSession(db, {
           stripeSessionId: session.id,
           stripeEventId: event.id,
-          amountMinor: session.amount_total,
+          amountMinor: giftNetMinor,
           currency,
         });
       }
@@ -294,7 +314,7 @@ const GALLERY_CLAIM_TOKEN = /^GLRY-[A-Za-z0-9_-]{32}$/;
 const galleryCheckoutSchema = z.object({ artifact_id: z.string().uuid() });
 
 app.post("/gallery-checkout", async (c) => {
-  if (!newCardCheckoutsAvailable()) return checkoutResting(c);
+  if (!galleryCheckoutsAvailable()) return checkoutResting(c);
   if (rateLimited(c, "gallery-checkout", 10, 10 * 60_000)) return tooMany(c);
   const parsed = galleryCheckoutSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) {

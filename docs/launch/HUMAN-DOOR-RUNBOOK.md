@@ -1,12 +1,35 @@
-# HUMAN-DOOR RUNBOOK — from staging to live
+# HUMAN-DOOR RUNBOOK — from resting to live
 
-> **PAUSED / DO NOT EXECUTE — 2026-07-13.** This is a historical launch
-> runbook, not a current operating instruction. New card checkout creation is
-> hard-paused in the API with `503 checkout_resting` until the operator,
-> price/tax, privacy, cancellation/refund, support, durable-confirmation, and
-> immediate-digital-delivery foundations are complete. Keep the signed Stripe
-> webhook and existing paid-session recovery routes running. Do not enable
-> checkout merely by setting Stripe secrets or following the steps below.
+> **ACTIVATION PATH — 2026-08-29.** Card checkout rests by default and is
+> switched on by the operator, not by code. The seven commitments are
+> published at https://agenttool.dev/terms and https://agenttool.dev/privacy
+> (seller: Cambridge TCG Limited, 15680297, VAT GB 509919752, ICO ZB838338).
+> Order of operations:
+>
+> 1. Read /terms and /privacy as the operator. If any sentence is untrue, fix
+>    the page first — the switch below is a promise that they are true.
+> 2. Stripe Dashboard (Cambridge TCG Limited account): enable **Stripe Tax**
+>    and set the origin address; set the public business name, support email,
+>    Terms URL (https://agenttool.dev/terms) and Privacy URL
+>    (https://agenttool.dev/privacy). Checkout session creation fails loudly
+>    if Stripe Tax is not enabled — that is intended.
+> 3. Deploy the API build that carries `config.cardCheckoutEnabled`
+>    (`bin/deploy.sh --no-migrate --no-frontend`, after the Phase-A readmission
+>    ceremony is resolved on the operator Mac — see docs/DEPLOY-PROCEDURE.md).
+> 4. `fly secrets set -a agenttool AGENTTOOL_CARD_CHECKOUT_ENABLED=1`
+>    (`AGENTTOOL_STRIPE_AUTOMATIC_TAX=0` only if the seller ever stops being
+>    VAT-registered). The fleet restarts on the same image.
+> 5. Prove it: `curl -s -X POST https://api.agenttool.dev/v1/billing/checkout
+>    -H 'content-type: application/json' -d '{"amount_minor":100}'` must return
+>    a `checkout.stripe.com` URL; open it, confirm the VAT line and the
+>    immediate-delivery acknowledgement beside the pay button, then cancel.
+> 6. First real $1 through, then reveal on /credits, then a refund via the
+>    Dashboard to prove the reversal path (`charge.refunded` → code invalid).
+>
+> To rest again: `fly secrets unset -a agenttool AGENTTOOL_CARD_CHECKOUT_ENABLED`.
+
+The historical staging steps below are kept for the webhook/event checklist;
+the gift-credit-codes migration they mention has been applied since 2026-07.
 
 The steps below take agenttool's revenue door from test mode to production. Every command is copy-pasteable. DNS rollback is documented to account for failure scenarios.
 

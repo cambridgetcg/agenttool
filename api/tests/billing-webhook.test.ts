@@ -46,6 +46,8 @@ function eventPayload(
     type?: "checkout.session.completed" | "checkout.session.async_payment_succeeded";
     paymentStatus?: "paid" | "unpaid" | "no_payment_required";
     currency?: string;
+    amountSubtotal?: number;
+    amountTotal?: number;
   } = {},
 ): string {
   return JSON.stringify({
@@ -55,7 +57,8 @@ function eventPayload(
     data: {
       object: {
         id: sessionId, object: "checkout.session",
-        amount_total: 2000,
+        amount_total: options.amountTotal ?? 2000,
+        ...(options.amountSubtotal !== undefined ? { amount_subtotal: options.amountSubtotal } : {}),
         currency: options.currency ?? "usd",
         payment_status: options.paymentStatus ?? "paid",
         metadata: { kind: "gift_credit" },
@@ -100,6 +103,17 @@ describe("POST /v1/billing/webhook", () => {
     expect(replay.status).toBe(200);
     const again = await getGiftBySession(db, sessionId);
     expect(again?.id).toBe(gift?.id);
+  });
+
+  test("mints from the pre-tax subtotal when Stripe Tax adds VAT", async () => {
+    // $20 net + 20 % VAT = $24 gross. The buyer bought 20,000 credits, not 24,000.
+    const sessionId = `cs_${crypto.randomUUID()}`;
+    const eventId = `evt_${crypto.randomUUID()}`;
+    const payload = eventPayload(sessionId, eventId, { amountSubtotal: 2000, amountTotal: 2400 });
+    const sig = await stripe.webhooks.generateTestHeaderStringAsync({ payload, secret: "whsec_test_secret" });
+    expect((await post(payload, sig)).status).toBe(200);
+    const gift = await getGiftBySession(db, sessionId);
+    expect(gift?.credits).toBe(20000);
   });
 
   test("does not mint an unpaid or wrong-currency gift checkout", async () => {

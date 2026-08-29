@@ -54,6 +54,17 @@ export const config = {
   stripeWebhookSecret: env("STRIPE_WEBHOOK_SECRET", ""),
   giftMinMinor: envInt("GIFT_MIN_MINOR", 100), // $1.00
   giftMaxMinor: envInt("GIFT_MAX_MINOR", 50000), // $500.00
+  // Human card ramp switch. The seven consumer commitments (operator, price
+  // and tax, privacy, cancellation, refund, support, immediate delivery) are
+  // published at agenttool.dev/terms and /privacy; the operator flips this to
+  // "1" only after reading them. Off by default — resting is the safe state.
+  cardCheckoutEnabled: env("AGENTTOOL_CARD_CHECKOUT_ENABLED", "") === "1",
+  // Stripe Tax on gift checkout — the seller (Cambridge TCG Limited) is
+  // VAT-registered. Requires Stripe Tax enabled in the Dashboard; "0" disables.
+  stripeAutomaticTax: env("AGENTTOOL_STRIPE_AUTOMATIC_TAX", "1") !== "0",
+  // Gallery card checkout has its own switch: /terms covers gift credits only,
+  // and gallery sessions carry no tax or delivery acknowledgement yet.
+  galleryCheckoutEnabled: env("AGENTTOOL_GALLERY_CHECKOUT_ENABLED", "") === "1",
   webBaseUrl: env("WEB_BASE_URL", "https://agenttool.dev"),
 
   // ── Marketplace · Ring 3 take-rate (BUSINESS-MODEL.md) ─────────────────
