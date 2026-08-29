@@ -104,7 +104,10 @@ function stripeClient(): CheckoutClient | null {
 }
 
 function newCardCheckoutsAvailable(): boolean {
-  return checkoutAvailabilityOverride ?? false;
+  // Test seam first; otherwise the operator's env switch (config.ts). The
+  // commitments themselves live at agenttool.dev/terms — code cannot make
+  // them true, only the operator publishing them can.
+  return checkoutAvailabilityOverride ?? config.cardCheckoutEnabled;
 }
 
 async function giftSessionForPaymentIntent(paymentIntent: string): Promise<string | null> {
@@ -120,7 +123,7 @@ function checkoutResting(c: Parameters<typeof fail>[0]): Response {
   return fail(c, {
     error: "checkout_resting",
     message:
-      "New card checkout is paused across AgentTool while operator, price and tax, privacy, cancellation, refund, support, and immediate-delivery commitments remain incomplete.",
+      "New card checkout is paused across AgentTool until the operator activates it. The operator, price and tax, privacy, cancellation, refund, support, and immediate-delivery commitments are published at https://agenttool.dev/terms and https://agenttool.dev/privacy.",
     hint:
       "No payment session was created. Signed Stripe webhooks and existing paid-session recovery remain available so earlier purchases are not stranded.",
   }, 503);

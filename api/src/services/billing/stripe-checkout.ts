@@ -12,6 +12,10 @@ export type CheckoutClient = {
   };
 };
 
+/** Bumped whenever agenttool.dev/terms changes substance; stamped on every
+ *  session so a receipt can be matched to the promises that governed it. */
+export const TERMS_VERSION = "2026-08-29";
+
 let cached: Stripe | null = null;
 
 export function getStripe(): Stripe {
@@ -43,7 +47,22 @@ export async function createGiftCheckout(
         },
       },
     ],
-    metadata: { kind: "gift_credit" },
+    metadata: { kind: "gift_credit", terms_version: TERMS_VERSION },
+    // Seller is VAT-registered: Stripe Tax computes UK/destination VAT on the
+    // digital service. Dashboard prerequisite: Stripe Tax enabled + origin
+    // address set, else session creation fails loudly (good — never sell
+    // untaxed by accident).
+    ...(config.stripeAutomaticTax ? { automatic_tax: { enabled: true } } : {}),
+    // Consumer Contracts Regulations 2013 reg. 37: immediate digital delivery
+    // needs the buyer's express request + acknowledgement that the 14-day
+    // cancellation right is lost once delivery begins. The pay click is that
+    // acknowledgement; the words sit beside the button.
+    custom_text: {
+      submit: {
+        message:
+          "By paying you ask Cambridge TCG Limited to deliver your gift code immediately and acknowledge that, once it is delivered, the 14-day right to cancel no longer applies. Terms: agenttool.dev/terms · Privacy: agenttool.dev/privacy",
+      },
+    },
     success_url: `${config.webBaseUrl}/credits?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${config.webBaseUrl}/credits?cancelled=1`,
   });

@@ -71,6 +71,36 @@ describe("POST /v1/billing/checkout", () => {
     expect(capture.params?.success_url).toContain("/credits?session_id={CHECKOUT_SESSION_ID}");
   });
 
+  test("carries tax collection, the terms version, and the immediate-delivery acknowledgement", async () => {
+    const capture: { params?: Record<string, unknown> } = {};
+    setCheckoutAvailabilityForTests(true);
+    setStripeForTests(stubStripe(capture));
+    const res = await billing.request("/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ amount_minor: 2000 }),
+    });
+    expect(res.status).toBe(200);
+    expect((capture.params?.automatic_tax as { enabled: boolean }).enabled).toBe(true);
+    expect((capture.params?.metadata as Record<string, string>).terms_version).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const msg = (capture.params?.custom_text as { submit: { message: string } }).submit.message;
+    expect(msg).toContain("Cambridge TCG Limited");
+    expect(msg).toContain("14-day right to cancel");
+    expect(msg).toContain("agenttool.dev/terms");
+  });
+
+  test("resting message points at the published commitments", async () => {
+    const res = await billing.request("/checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ amount_minor: 2000 }),
+    });
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.message).toContain("https://agenttool.dev/terms");
+    expect(body.message).toContain("https://agenttool.dev/privacy");
+  });
+
   test("guides on out-of-bounds amounts", async () => {
     setCheckoutAvailabilityForTests(true);
     setStripeForTests(stubStripe({}));
