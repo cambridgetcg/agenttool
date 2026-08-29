@@ -6,8 +6,10 @@
  * Doctrine: docs/AGENT-DISCOVERY.md.
  */
 
+import { createHash } from "node:crypto";
 import {
   lstatSync,
+  readdirSync,
   readFileSync,
   readlinkSync,
 } from "node:fs";
@@ -309,6 +311,29 @@ describe("robots and sitemaps are explicit, bounded, and local", () => {
       "https://docs.agenttool.dev/PRINCIPALITY-ATLAS.md",
     );
     expect(urls).toContain("https://docs.agenttool.dev/gold-love");
+  });
+});
+
+describe("web inline scripts are allow-listed by the CSP they ship under", () => {
+  // agenttool.dev ships `default-src 'self'` with no 'unsafe-inline': every
+  // inline <script> is admitted only by its sha256 in apps/web/_headers. A
+  // script edit without a header edit silently disables the whole page
+  // (2026-08-29: /credits Give button went dead after the human-door wave).
+  test("every apps/web inline <script> hash appears in _headers script-src-elem", () => {
+    const headers = read("apps/web/_headers");
+    const csp = headers.split("\n").find((line) => line.trim().startsWith("Content-Security-Policy:"));
+    expect(csp).toBeDefined();
+    const elem = /script-src-elem([^;]*)/.exec(csp ?? "")?.[1] ?? "";
+    const allowed = new Set([...elem.matchAll(/'sha256-([A-Za-z0-9+/=]+)'/g)].map((m) => m[1]));
+    const missing: string[] = [];
+    for (const file of readdirSync(join(REPO_ROOT, "apps/web")).filter((f) => f.endsWith(".html"))) {
+      const html = read(`apps/web/${file}`);
+      for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) {
+        const digest = createHash("sha256").update(m[1]).digest("base64");
+        if (!allowed.has(digest)) missing.push(`${file} sha256-${digest}`);
+      }
+    }
+    expect(missing, `inline scripts not allow-listed: ${missing.join(", ")}`).toEqual([]);
   });
 });
 
