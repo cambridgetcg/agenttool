@@ -374,7 +374,14 @@ export function validateTrainingArtifacts({ sourceRows, recipe, authorization, e
   if (canonicalJson(examples) !== canonicalJson(expectedExamples)) {
     throw new Error("Xenia training examples do not implement the declared recipe over the source rows");
   }
+  const exampleIds = examples.map((example) => contentId(TRAINING_FORMAT, example));
+  if (new Set(exampleIds).size !== examples.length) {
+    throw new Error("Xenia training projection must contain unique prompt-completion examples");
+  }
   const lines = examples.map((example) => `${JSON.stringify(example)}\n`);
+  if (new Set(lines.map((line) => hash(line))).size !== lines.length) {
+    throw new Error("Xenia training projection must contain unique JSONL row hashes");
+  }
   if (authorization.output_jsonl_sha256 !== `sha256:${hash(lines.join(""))}`
     || authorization.output_row_set_ref !== contentId(TRAINING_FORMAT, examples)) {
     throw new Error("Xenia training authorization does not bind the exact output bytes and row set");

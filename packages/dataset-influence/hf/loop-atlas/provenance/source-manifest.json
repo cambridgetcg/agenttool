@@ -12,7 +12,7 @@
   "source_manifest_scope": "selected_generation_inputs_not_complete_repository_inventory",
   "source_files_complete": false,
   "source_manifest_is_attestation": false,
-  "selected_source_set_sha256": "83c4fec50a8baa19787eb53874ebe83e0b9ffbfbb5ada31892bee539cdffb002",
+  "selected_source_set_sha256": "8d6be854f39e643e91beea5108c8487ba30beecf8f6f82cddfaf2b8a507dd050",
   "external_sources_are_bibliographic_not_fetched_at_generation": true,
   "external_sources": [
     {
@@ -175,8 +175,8 @@
     },
     {
       "path": "loop-atlas/training.mjs",
-      "bytes": 19058,
-      "sha256": "d2691bd803ad4d7fc1e8cf5ee1820f3c9b2e7edf435b394dc947ddd9ced2b703"
+      "bytes": 19461,
+      "sha256": "41b3cde444b036777dbf44669f0cf387fcd763cf497e2db2ecb0011e3f6d5ebd"
     },
     {
       "path": "loop-atlas/validate.mjs",
@@ -190,8 +190,8 @@
     },
     {
       "path": "scripts/build-loop-atlas.mjs",
-      "bytes": 16820,
-      "sha256": "fbe9f595b9a0a8106ab03eba678214ed3f6d0ce9d08659488f7cbab38ee4e7d4"
+      "bytes": 17287,
+      "sha256": "af2cd7350f378430d91882768fae293ebd40604f6880fb4c5685e67c6511bc49"
     }
   ]
 }

@@ -5,11 +5,11 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   lstatSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,14 +47,31 @@ function run(arguments_) {
     throw new Error("usage: build-loop-atlas.mjs --write|--check");
   }
   const check = arguments_[0] === "--check";
-  const scratch = check ? mkdtempSync(join(tmpdir(), "agenttool-xenia-loop-atlas-")) : null;
-  const outputRoot = scratch ? join(scratch, "loop-atlas") : committedRoot;
+  const scratch = mkdtempSync(join(dirname(committedRoot), ".agenttool-xenia-loop-atlas-"));
+  const outputRoot = join(scratch, "loop-atlas");
   try {
     build(outputRoot);
     if (check) compareTrees(committedRoot, outputRoot);
+    else replaceCommittedTree(committedRoot, outputRoot, scratch);
   } finally {
-    if (scratch) rmSync(scratch, { recursive: true, force: true });
+    rmSync(scratch, { recursive: true, force: true });
   }
+}
+
+function replaceCommittedTree(currentRoot, stagedRoot, scratchRoot) {
+  if (!statExists(currentRoot)) {
+    renameSync(stagedRoot, currentRoot);
+    return;
+  }
+  const backupRoot = join(scratchRoot, "previous-valid-loop-atlas");
+  renameSync(currentRoot, backupRoot);
+  try {
+    renameSync(stagedRoot, currentRoot);
+  } catch (error) {
+    renameSync(backupRoot, currentRoot);
+    throw error;
+  }
+  rmSync(backupRoot, { recursive: true, force: true });
 }
 
 function build(root) {

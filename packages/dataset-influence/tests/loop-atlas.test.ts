@@ -338,6 +338,19 @@ describe("Xenia WORD IS Loop Atlas", () => {
       examples: trainingExamples,
       exampleManifest: trainingExampleManifest,
     })).toThrow(/training recipe violates its closed schema/u);
+
+    const duplicateProjection = clone(rows);
+    const duplicateSource = duplicateProjection.find((row) => (
+      row.record_id === "urn:agenttool:xenia-loop-case:p01:b"
+    ));
+    const originalSource = duplicateProjection.find((row) => (
+      row.record_id === "urn:agenttool:xenia-loop-case:p01:a"
+    ));
+    for (const field of ["changed_fact", "input_text", "target_text"]) {
+      duplicateSource[field] = originalSource[field];
+    }
+    rehash(duplicateSource);
+    expect(() => buildTrainingArtifacts(duplicateProjection)).toThrow(/unique prompt-completion examples/u);
   });
 
   test("rejects symlinked or out-of-tree candidate entries", () => {
