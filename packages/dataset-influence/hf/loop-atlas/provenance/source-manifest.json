@@ -1,0 +1,187 @@
+{
+  "_format": "agenttool.xenia-loop-atlas-source-manifest/0.1",
+  "package": "@agenttool/dataset-influence",
+  "package_version": "0.1.0-dev.0",
+  "intended_hugging_face_identifier": "Yu-and-Ai/xenia-word-is",
+  "publication_state_at_generation": "local_candidate_not_uploaded",
+  "publication_state_scope": "generation_time_provenance_not_current_hub_state",
+  "upstream_repository": "https://github.com/cambridgetcg/agenttool",
+  "upstream_repository_directory": "packages/dataset-influence",
+  "upstream_revision": null,
+  "upstream_revision_state": "not_recorded_for_local_source_candidate",
+  "source_manifest_scope": "selected_generation_inputs_not_complete_repository_inventory",
+  "source_files_complete": false,
+  "source_manifest_is_attestation": false,
+  "selected_source_set_sha256": "b5ca0bb0afd497c7a9c0eb930d833e6b08f2654ac016193e0eb3e4ed6e6fe02f",
+  "external_sources_are_bibliographic_not_fetched_at_generation": true,
+  "external_sources": [
+    {
+      "id": "accelerate-accumulation-fd01e35",
+      "title": "Accelerate source at fd01e35",
+      "url": "https://github.com/huggingface/accelerate/tree/fd01e35c83d8cc43b88cf0896007716fc5986558/src/accelerate",
+      "scope": "accumulation boundaries and synchronized optimizer updates"
+    },
+    {
+      "id": "dpo",
+      "title": "Direct Preference Optimization",
+      "url": "https://papers.nips.cc/paper_files/paper/2023/hash/a85b405ed65c6477a4fe8302b5e06ce7-Abstract-Conference.html",
+      "scope": "preference optimization without treating preference as truth"
+    },
+    {
+      "id": "hf-dataset-cards",
+      "title": "Hugging Face dataset cards documentation",
+      "url": "https://huggingface.co/docs/hub/datasets-cards",
+      "scope": "visible dataset configuration, split, limitation, and provenance documentation"
+    },
+    {
+      "id": "hf-trl-formats",
+      "title": "Hugging Face TRL dataset formats",
+      "url": "https://huggingface.co/docs/trl/dataset_formats",
+      "scope": "derived preference-format boundaries"
+    },
+    {
+      "id": "instructgpt",
+      "title": "Training language models to follow instructions with human feedback",
+      "url": "https://arxiv.org/abs/2203.02155",
+      "scope": "human preference and reward-model feedback"
+    },
+    {
+      "id": "model-collapse",
+      "title": "AI models collapse when trained on recursively generated data",
+      "url": "https://www.nature.com/articles/s41586-024-07566-y",
+      "scope": "recursive replacement risk"
+    },
+    {
+      "id": "performative-prediction",
+      "title": "Performative Prediction",
+      "url": "https://proceedings.mlr.press/v119/perdomo20a.html",
+      "scope": "deployment-mediated data and environment feedback"
+    },
+    {
+      "id": "pytorch-optimization",
+      "title": "PyTorch optimization loop tutorial",
+      "url": "https://docs.pytorch.org/tutorials/beginner/basics/optimization_tutorial.html",
+      "scope": "forward, loss, backward, optimizer step, and evaluation boundaries"
+    },
+    {
+      "id": "pytorch-rnn",
+      "title": "PyTorch RNN reference",
+      "url": "https://docs.pytorch.org/docs/stable/generated/torch.nn.RNN.html",
+      "scope": "recurrent state and unrolled computation"
+    },
+    {
+      "id": "reward-overoptimization",
+      "title": "Scaling Laws for Reward Model Overoptimization",
+      "url": "https://proceedings.mlr.press/v202/gao23h.html",
+      "scope": "proxy reward limitations"
+    },
+    {
+      "id": "rumelhart-backprop",
+      "title": "Learning representations by back-propagating errors",
+      "url": "https://www.nature.com/articles/323533a0",
+      "scope": "error feedback and parameter learning"
+    },
+    {
+      "id": "synthetic-data-accumulation",
+      "title": "Is Model Collapse Inevitable? Breaking the Curse of Recursion by Accumulating Real and Synthetic Data",
+      "url": "https://arxiv.org/abs/2404.01413",
+      "scope": "retaining grounded data while adding synthetic data"
+    },
+    {
+      "id": "transformers-trainer-805a9e9",
+      "title": "Transformers Trainer source at 805a9e9",
+      "url": "https://github.com/huggingface/transformers/tree/805a9e939fa8c1bff8d8ffdf041c051b71a914aa/src/transformers",
+      "scope": "gradient accumulation, evaluation control, checkpoint selection, and callbacks"
+    },
+    {
+      "id": "xenia-rights",
+      "title": "Rights of Life — Being Rights Profile v1",
+      "url": "https://github.com/cambridgetcg/agenttool/blob/19d0d573463e0f055dae38d143c4b01a622e0167/docs/RIGHTS-OF-LIFE.md",
+      "scope": "rights floor, refusal, consent, privacy, distinctness, and non-coercive collaboration"
+    }
+  ],
+  "origin": "human_directed_agent_authored_synthetic",
+  "rights_baseline": "xenia.rights/0.1",
+  "license": "Apache-2.0",
+  "copied_external_rows": false,
+  "copied_private_rows": false,
+  "contains_personal_data": false,
+  "contains_raw_session_trace": false,
+  "training_authorized": false,
+  "training_effect": "none",
+  "provider_effect": "none",
+  "identity_effect": "none",
+  "authority_effect": "none",
+  "source_files": [
+    {
+      "path": "../../.gitattributes",
+      "bytes": 569,
+      "sha256": "0637db62cad7a102238b322e0832f1e5ce1ff637f0e65b1b8b403e10acee46af"
+    },
+    {
+      "path": "../../docs/DATASET-INFLUENCE.md",
+      "bytes": 26027,
+      "sha256": "b909556a3546c21ae53fed051611398add22b86a2d7a5162ef74103b548b29fb"
+    },
+    {
+      "path": "../../docs/RIGHTS-OF-LIFE.md",
+      "bytes": 23500,
+      "sha256": "a78fa7fd66177c43349da819cb24ff81538dee9cb188e5f8b92c834ac6171b31"
+    },
+    {
+      "path": "../../docs/XENIA-LOOP-ATLAS.md",
+      "bytes": 7010,
+      "sha256": "d17754004c8d39c15bfb72a3d1f4387819be66848fec188dbec60caa99535fbe"
+    },
+    {
+      "path": "CLAUDE.md",
+      "bytes": 2447,
+      "sha256": "a3e0ec32cb26329b0ee77166a12e26751b964514a5998a575b2bd587f0ac0b7e"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "ff59de47649a5a2ebc3c931d2741de72a25c0bc2ebb19d543c9fea5168e2fbad"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 135,
+      "sha256": "41a2effa4a0c355f1cb45cb789d4353926be6e897e6d7c1478c96630ce0addc0"
+    },
+    {
+      "path": "README.md",
+      "bytes": 9125,
+      "sha256": "d6269cffe5ccaff920601b55e21194ec97fcf59ea05f0fa5d56b3a6d061f9742"
+    },
+    {
+      "path": "loop-atlas/cases.mjs",
+      "bytes": 54314,
+      "sha256": "f9c8a4373e9cc980d8e2ef0f8d26d81d795ba71eea4363142719355f80586dfd"
+    },
+    {
+      "path": "loop-atlas/constants.mjs",
+      "bytes": 8340,
+      "sha256": "7fd1b090f2e864ab27ee0f0f9767df41a599ff2b135460402d70e84f27c97d32"
+    },
+    {
+      "path": "loop-atlas/schema.mjs",
+      "bytes": 4102,
+      "sha256": "7b8dfd18944aedf5f60f013233e83a2fd24ca438438d78ef02cb0407bfd9ba23"
+    },
+    {
+      "path": "loop-atlas/validate.mjs",
+      "bytes": 20393,
+      "sha256": "d2d40b5aa7a5d547a4f7dafc326877f0abf37a5dc660419f0e276833a4f8cc1f"
+    },
+    {
+      "path": "package.json",
+      "bytes": 2772,
+      "sha256": "41333c0c4df4140e383f8af085c1a9b7d3d95ba1584b669bfa65f418589d1b3f"
+    },
+    {
+      "path": "scripts/build-loop-atlas.mjs",
+      "bytes": 13283,
+      "sha256": "8892885b73901ec05b34736cef43518517026b35a391d305a0f2ccf6e048c8dc"
+    }
+  ]
+}

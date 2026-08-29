@@ -1,0 +1,46 @@
+{
+  "_format": "agenttool.xenia-loop-atlas-hash-manifest/0.1",
+  "manifest_excludes_itself": true,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "ff59de47649a5a2ebc3c931d2741de72a25c0bc2ebb19d543c9fea5168e2fbad"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 135,
+      "sha256": "41a2effa4a0c355f1cb45cb789d4353926be6e897e6d7c1478c96630ce0addc0"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4501,
+      "sha256": "cacbb1e1d25943c3ec143fdd154d790623b76ba19a0869b36946138814da3aa4"
+    },
+    {
+      "path": "data/loop-counterfactuals.jsonl",
+      "bytes": 42621,
+      "sha256": "ff6be29e704dd1a06a76d536e5ca3b850c6fac750a16ac8df980ba2a4ee4c24a"
+    },
+    {
+      "path": "data/loop-reference.jsonl",
+      "bytes": 41706,
+      "sha256": "9874b90a6801573b97ce373690746b4619ae77a31ff82b59c83a30f4ccae7f6b"
+    },
+    {
+      "path": "provenance/row-manifest.json",
+      "bytes": 14145,
+      "sha256": "552f26a1c777d16aaeb1e8df62291e717421dac304cd248e3d0307a1fd296e11"
+    },
+    {
+      "path": "provenance/source-manifest.json",
+      "bytes": 7230,
+      "sha256": "accd6e17d315cb164d4e0a09832ded44386c274070a4f563796bdbeb09c08fe3"
+    },
+    {
+      "path": "schema/agenttool-xenia-loop-case-v0.1.schema.json",
+      "bytes": 10437,
+      "sha256": "d1f4487e640395e158e2561ead121a1b47f854f78e5af93eda165e95e1c88f42"
+    }
+  ]
+}

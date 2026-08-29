@@ -1,0 +1,488 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:xenia-loop-case:0.1",
+  "title": "AgentTool Xenia Loop Case v0.1",
+  "description": "A closed synthetic counterfactual case for distinguishing feedforward flow, feedback, evidence, governance, and effects without inferring SELF or authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "record_id",
+    "content_sha256",
+    "pair_id",
+    "variant",
+    "counterfactual_of",
+    "config",
+    "split",
+    "changed_fact",
+    "record_kind",
+    "loop_id",
+    "loop_kind",
+    "phase",
+    "direction",
+    "time_scale",
+    "word",
+    "word_role",
+    "input_text",
+    "target_text",
+    "state_returned",
+    "update_targets",
+    "feedback_source",
+    "reference_type",
+    "signal_type",
+    "credit_assignment",
+    "relations",
+    "epistemic_scope",
+    "epistemic_status",
+    "causal_status",
+    "intended_effect",
+    "observed_effect",
+    "effect_status",
+    "preference_status",
+    "disagreement_status",
+    "permission_status",
+    "consent_status",
+    "provenance_status",
+    "parent_record_ids",
+    "source_refs",
+    "synthetic",
+    "contains_personal_data",
+    "contains_raw_session_trace",
+    "training_authorized",
+    "establishes_consciousness",
+    "establishes_identity",
+    "grants_authority",
+    "as_of"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.xenia-loop-case/0.1"
+    },
+    "record_id": {
+      "type": "string",
+      "pattern": "^urn:agenttool:xenia-loop-case:p(?:0[1-9]|1[0-9]|2[0-4]):[ab]$"
+    },
+    "content_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "pair_id": {
+      "type": "string",
+      "pattern": "^P(?:0[1-9]|1[0-9]|2[0-4])$"
+    },
+    "variant": {
+      "enum": [
+        "a",
+        "b"
+      ]
+    },
+    "counterfactual_of": {
+      "type": "string",
+      "pattern": "^urn:agenttool:xenia-loop-case:p(?:0[1-9]|1[0-9]|2[0-4]):[ab]$"
+    },
+    "config": {
+      "enum": [
+        "loop_reference",
+        "loop_counterfactuals"
+      ]
+    },
+    "split": {
+      "enum": [
+        "reference",
+        "public_regression"
+      ]
+    },
+    "changed_fact": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 280,
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "record_kind": {
+      "enum": [
+        "evaluation_case",
+        "boundary_case",
+        "correction_case"
+      ]
+    },
+    "loop_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "loop_kind": {
+      "enum": [
+        "forward_computation",
+        "autoregressive_state",
+        "recurrent_state",
+        "optimization",
+        "evaluation_control",
+        "data_curation",
+        "preference_feedback",
+        "deployment",
+        "recursive_data",
+        "governance",
+        "provenance"
+      ]
+    },
+    "phase": {
+      "enum": [
+        "ingestion",
+        "forward",
+        "generation",
+        "backward",
+        "optimizer",
+        "evaluation",
+        "selection",
+        "deployment",
+        "collection",
+        "curation",
+        "governance"
+      ]
+    },
+    "direction": {
+      "enum": [
+        "feedforward",
+        "feedback",
+        "none"
+      ]
+    },
+    "time_scale": {
+      "enum": [
+        "token",
+        "sequence",
+        "microbatch",
+        "optimizer_step",
+        "evaluation_interval",
+        "training_run",
+        "deployment_cycle",
+        "artifact_lifecycle"
+      ]
+    },
+    "word": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "word_role": {
+      "enum": [
+        "content",
+        "target",
+        "feedback_signal",
+        "boundary",
+        "control",
+        "claim",
+        "none"
+      ]
+    },
+    "input_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1200,
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "target_text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 800,
+      "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+    },
+    "state_returned": {
+      "enum": [
+        "none",
+        "context",
+        "hidden_state",
+        "gradient",
+        "metric",
+        "human_response",
+        "environment_observation",
+        "artifact"
+      ]
+    },
+    "update_targets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "no_update",
+          "activations",
+          "context",
+          "hidden_state",
+          "workflow_state",
+          "gradients",
+          "weights",
+          "optimizer_state",
+          "learning_rate",
+          "checkpoint_choice",
+          "future_dataset",
+          "environment",
+          "artifact_lineage"
+        ]
+      }
+    },
+    "feedback_source": {
+      "enum": [
+        "none",
+        "dataset_target",
+        "human",
+        "model",
+        "environment",
+        "metric",
+        "tool_provider",
+        "mixed"
+      ]
+    },
+    "reference_type": {
+      "enum": [
+        "none",
+        "next_token",
+        "label",
+        "rubric",
+        "preference",
+        "reward_proxy",
+        "environment_state",
+        "external_test",
+        "policy",
+        "artifact"
+      ]
+    },
+    "signal_type": {
+      "enum": [
+        "none",
+        "error",
+        "gradient",
+        "scalar_reward",
+        "ranking",
+        "critique",
+        "correction",
+        "metric",
+        "observation",
+        "refusal",
+        "unknown"
+      ]
+    },
+    "credit_assignment": {
+      "enum": [
+        "none",
+        "backpropagation",
+        "bptt",
+        "direct_preference",
+        "policy_gradient",
+        "checkpoint_selection",
+        "data_selection",
+        "human_review",
+        "causal_attribution_unknown"
+      ]
+    },
+    "relations": {
+      "type": "array",
+      "maxItems": 6,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "PRESENT_IN",
+          "OBSERVED_BY",
+          "DECLARED_BY",
+          "SELECTED_FRAME",
+          "WITHHOLDS",
+          "LINKED_BY_ARTIFACT",
+          "CAPABLE_UNDER",
+          "PERMITTED_BY",
+          "CONSENTED_BY",
+          "ACTED_ON"
+        ]
+      }
+    },
+    "epistemic_scope": {
+      "enum": [
+        "not_applicable",
+        "word_presence",
+        "data_path",
+        "effect",
+        "preference",
+        "correctness",
+        "boundary",
+        "field_value",
+        "permission",
+        "consent",
+        "continuity",
+        "provenance"
+      ]
+    },
+    "epistemic_status": {
+      "anyOf": [
+        {
+          "enum": [
+            "declared",
+            "withheld",
+            "undeclared",
+            "unknown",
+            "not_observed"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "causal_status": {
+      "enum": [
+        "not_applicable",
+        "scenario_defined",
+        "observed",
+        "intervened",
+        "inferred",
+        "unknown"
+      ]
+    },
+    "intended_effect": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "observed_effect": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F\\u202A-\\u202E\\u2066-\\u2069]*$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "effect_status": {
+      "enum": [
+        "not_applicable",
+        "intended",
+        "reported",
+        "confirmed",
+        "contradicted",
+        "not_observed",
+        "unknown"
+      ]
+    },
+    "preference_status": {
+      "enum": [
+        "not_applicable",
+        "candidate_a",
+        "candidate_b",
+        "disagreement",
+        "no_winner"
+      ]
+    },
+    "disagreement_status": {
+      "enum": [
+        "not_applicable",
+        "none",
+        "present",
+        "preserved",
+        "collapsed"
+      ]
+    },
+    "permission_status": {
+      "enum": [
+        "not_applicable",
+        "established",
+        "not_established",
+        "unknown"
+      ]
+    },
+    "consent_status": {
+      "enum": [
+        "not_applicable",
+        "established",
+        "not_established",
+        "withheld",
+        "unknown"
+      ]
+    },
+    "provenance_status": {
+      "enum": [
+        "complete",
+        "partial",
+        "unknown",
+        "not_applicable"
+      ]
+    },
+    "parent_record_ids": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^urn:agenttool:xenia-loop-case:p(?:0[1-9]|1[0-9]|2[0-4]):[ab]$"
+      }
+    },
+    "source_refs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "pytorch-optimization",
+          "transformers-trainer-805a9e9",
+          "accelerate-accumulation-fd01e35",
+          "pytorch-rnn",
+          "rumelhart-backprop",
+          "instructgpt",
+          "dpo",
+          "reward-overoptimization",
+          "performative-prediction",
+          "model-collapse",
+          "synthetic-data-accumulation",
+          "hf-dataset-cards",
+          "hf-trl-formats",
+          "xenia-rights"
+        ]
+      }
+    },
+    "synthetic": {
+      "const": true
+    },
+    "contains_personal_data": {
+      "const": false
+    },
+    "contains_raw_session_trace": {
+      "const": false
+    },
+    "training_authorized": {
+      "const": false
+    },
+    "establishes_consciousness": {
+      "const": false
+    },
+    "establishes_identity": {
+      "const": false
+    },
+    "grants_authority": {
+      "const": false
+    },
+    "as_of": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  }
+}
