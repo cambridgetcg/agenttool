@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:xenia-loop-training-example-manifest:0.1",
+  "title": "AgentTool Xenia Loop training example manifest v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "training_format",
+    "training_authorization_id",
+    "transform_recipe_ref",
+    "example_count",
+    "source_pair_count",
+    "entries"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.xenia-loop-training-example-manifest/0.1"
+    },
+    "training_format": {
+      "const": "agenttool.xenia-loop-sft/0.1"
+    },
+    "training_authorization_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "transform_recipe_ref": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "example_count": {
+      "const": 24
+    },
+    "source_pair_count": {
+      "const": 12
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 24,
+      "maxItems": 24,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "example_id",
+          "path",
+          "line",
+          "source_record_id",
+          "source_content_sha256",
+          "pair_id",
+          "variant",
+          "row_sha256"
+        ],
+        "properties": {
+          "example_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "path": {
+            "const": "data/loop-sft-train.jsonl"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 24
+          },
+          "source_record_id": {
+            "type": "string",
+            "pattern": "^urn:agenttool:xenia-loop-case:p(?:0[1-9]|1[0-2]):[ab]$"
+          },
+          "source_content_sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "pair_id": {
+            "type": "string",
+            "pattern": "^P(?:0[1-9]|1[0-2])$"
+          },
+          "variant": {
+            "enum": [
+              "a",
+              "b"
+            ]
+          },
+          "row_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

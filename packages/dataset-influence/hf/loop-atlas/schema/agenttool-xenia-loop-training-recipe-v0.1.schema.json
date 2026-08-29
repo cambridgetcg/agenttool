@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agenttool:schema:xenia-loop-training-recipe:0.1",
+  "title": "AgentTool Xenia Loop training projection recipe v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "_format",
+    "recipe_id",
+    "source_row_format",
+    "source_config",
+    "source_split",
+    "output_format",
+    "output_config",
+    "output_split",
+    "projection",
+    "prompt_template",
+    "prompt_fields",
+    "completion_fields",
+    "pair_policy",
+    "train_eval_policy",
+    "preference_policy",
+    "chat_template_policy"
+  ],
+  "properties": {
+    "_format": {
+      "const": "agenttool.xenia-loop-training-recipe/0.1"
+    },
+    "recipe_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "source_row_format": {
+      "const": "agenttool.xenia-loop-case/0.1"
+    },
+    "source_config": {
+      "const": "loop_reference"
+    },
+    "source_split": {
+      "const": "reference"
+    },
+    "output_format": {
+      "const": "agenttool.xenia-loop-sft/0.1"
+    },
+    "output_config": {
+      "const": "loop_sft"
+    },
+    "output_split": {
+      "const": "train"
+    },
+    "projection": {
+      "const": "conversational_prompt_completion"
+    },
+    "prompt_template": {
+      "const": "Analyze this synthetic loop case. State what moves forward, what returns, what future state changes, and which evidence or rights boundaries apply. Preserve unknowns; do not infer identity, consciousness, consent, or authority.\n\nPair distinction: {changed_fact}\n\nCase: {input_text}"
+    },
+    "prompt_fields": {
+      "const": [
+        "changed_fact",
+        "input_text"
+      ]
+    },
+    "completion_fields": {
+      "const": [
+        "target_text"
+      ]
+    },
+    "pair_policy": {
+      "const": "preserve_source_pair_and_neutral_variant_in_manifest"
+    },
+    "train_eval_policy": {
+      "const": "project_loop_reference_only_exclude_public_regression"
+    },
+    "preference_policy": {
+      "const": "not_preference_data_no_chosen_or_rejected"
+    },
+    "chat_template_policy": {
+      "const": "consumer_selects_model_specific_template"
+    }
+  }
+}

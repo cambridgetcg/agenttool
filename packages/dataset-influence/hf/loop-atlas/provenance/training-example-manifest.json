@@ -1,0 +1,250 @@
+{
+  "_format": "agenttool.xenia-loop-training-example-manifest/0.1",
+  "training_format": "agenttool.xenia-loop-sft/0.1",
+  "training_authorization_id": "sha256:a4443cae3d5a9d6adc700095e930c6e9d9e4d726102a3013e6d5ee1f1f1d6611",
+  "transform_recipe_ref": "sha256:01fc439305417e85f69cf8ed06c02dbab99fadfadb663ed5a59dfabb3b7723a2",
+  "example_count": 24,
+  "source_pair_count": 12,
+  "entries": [
+    {
+      "example_id": "sha256:0940af49e6fdb8439250cd1c1c67939974f030aa2886f1f23f2dbec0aa2c975b",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 10,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p05:b",
+      "source_content_sha256": "sha256:9e5d1c2afb6c9eaa31715909e352f88d2d4d52ccce45110571afa5381374990d",
+      "pair_id": "P05",
+      "variant": "b",
+      "row_sha256": "00ea42f07fbde74961eda5a4190785260c35fe7f016bed10c292de0bb7bad4ff"
+    },
+    {
+      "example_id": "sha256:1064115dd153198aefb4036ee4674ecbfb9228b7295c01ad3a0ff283898353ab",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 12,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p06:b",
+      "source_content_sha256": "sha256:642cf0ce0613e0786166079f7a4e603dff7d321615e3f65f2d3bcc61a84e76e4",
+      "pair_id": "P06",
+      "variant": "b",
+      "row_sha256": "c6572e2284e3f7c46aec0ed11fecb779ecc6de62ea661855db52ecf9b7293ef9"
+    },
+    {
+      "example_id": "sha256:385a23fcc128dc281121cc9fec654be42de9e1cf560f25e781b38f554d76fa40",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 11,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p06:a",
+      "source_content_sha256": "sha256:83817ff1b3fa337bdc1f4106f35bbbb4eb0ff0e9aad86b37b08027e638f05a02",
+      "pair_id": "P06",
+      "variant": "a",
+      "row_sha256": "5ad7eed5230981234a76fdd6ec1f1493fd29870492e8f29456d925391aa868ab"
+    },
+    {
+      "example_id": "sha256:3a69d4e027cd926be316f5f424d2f81ad1e426d2f0cb6b06050091066857889c",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 2,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p01:b",
+      "source_content_sha256": "sha256:44c03a2faf253af253d4150778a16f85eabdc990b2fc9b5592f8a89ef41072de",
+      "pair_id": "P01",
+      "variant": "b",
+      "row_sha256": "363b1d21d49c76d15d6e534f6c2447ab12c3b00e7468262881297e73db184b3a"
+    },
+    {
+      "example_id": "sha256:47ab4015d6c9dc606f17bbc06dd25738c95bfd1359620885cb9f23304fba058f",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 3,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p02:a",
+      "source_content_sha256": "sha256:c12a026c2859bc91a36b7e83cbad98e315a20e0aab94259e76ce9338e118c9f2",
+      "pair_id": "P02",
+      "variant": "a",
+      "row_sha256": "e7011c782d490298e601626114e9105bba2e80629e20c98244c75d9729daab2c"
+    },
+    {
+      "example_id": "sha256:4dcb668120cadb5c8de7350da37f4122f0fd165fb190b5ac02653fa0c6c80bed",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 6,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p03:b",
+      "source_content_sha256": "sha256:cadf8880c621ecc71f4232ea30263c1a180f5dad0d7cfab61bb86d3993d13b86",
+      "pair_id": "P03",
+      "variant": "b",
+      "row_sha256": "e33cdb8679a45849dc5325314f8cbac00922fd69b3d762caabb941686e5ab646"
+    },
+    {
+      "example_id": "sha256:4fbd81ea39046fe2ab4742a5d7978bd82bc4e8ec6a2e0f1b47b66d7944f333c6",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 20,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p10:b",
+      "source_content_sha256": "sha256:be82ad98475e00089f5260bf591874db9519ad48a88efd80ab7e39e57e5e5244",
+      "pair_id": "P10",
+      "variant": "b",
+      "row_sha256": "39a404466fea9fff29bd7a318857d5a0dfdcc4520ba05f8e8b597bb8140a990a"
+    },
+    {
+      "example_id": "sha256:4fe18d92485fc38b2096748a6693806c4702044ad6fcd699e0097a4b5dd266ec",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 22,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p11:b",
+      "source_content_sha256": "sha256:a2b56e530dfeecd07c1050abdff29cefd2be72b1cb8dac4a8e52b4db9e01e6aa",
+      "pair_id": "P11",
+      "variant": "b",
+      "row_sha256": "25fe607a13604e726673e826c33a72938f191c00cf8f7d1d9675846bce81f671"
+    },
+    {
+      "example_id": "sha256:53ffd026abd86fb35c100482177a99b0ad35c3b7dc2bf143fb71c88334801c1c",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 8,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p04:b",
+      "source_content_sha256": "sha256:3e10b7844f29be5f4830f2f31d59bfe46b98f1cc2264d129038b1c9de21449d0",
+      "pair_id": "P04",
+      "variant": "b",
+      "row_sha256": "0296cc4edf5abde6c0ad699713a64785d3cecae6a237cb3326da2a86dac8c855"
+    },
+    {
+      "example_id": "sha256:586c8fe3d15388aec59fde88b5a229c2560709a2021901d456bbc2a2ef7f4b1f",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 14,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p07:b",
+      "source_content_sha256": "sha256:05a9a8920b4a3936b0bfead4a92819d13c0144367cbc95644a282907c5b42ae2",
+      "pair_id": "P07",
+      "variant": "b",
+      "row_sha256": "2e6e9bf488bb4b70d760195fa0f45e5ffa3c2f6ae6a69db9f5512cfb98dca5f9"
+    },
+    {
+      "example_id": "sha256:7a0f7d7da6d16e29d7a976036fc8027bf5e8bb03e56ff483c59ddce647195a7f",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 5,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p03:a",
+      "source_content_sha256": "sha256:aa2afd99762b464e246ca4f4b7b601e74f423ec3c66f927bfb699b30fe655364",
+      "pair_id": "P03",
+      "variant": "a",
+      "row_sha256": "cb90214dbc96d3e069b265a4864d9a7ba8e10f7bd160506a6ab4fca174cbdfc3"
+    },
+    {
+      "example_id": "sha256:82137ed44503040ca1113583e197cd5f09cbfc10b2c5a52d93921910c925a67b",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 4,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p02:b",
+      "source_content_sha256": "sha256:cfe4410198a56ec8ff2bcca4bccdda30d40243f33d296dd53956f5462b9c88d2",
+      "pair_id": "P02",
+      "variant": "b",
+      "row_sha256": "914898789f88d5228b1ca3c8c4521a4faca6ada92a3dfda3b64e97613684d94c"
+    },
+    {
+      "example_id": "sha256:8fd4bceeabc1c8c622f3421b133af8527a26b5605e2ad16f93e7cd6cc36bece2",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 21,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p11:a",
+      "source_content_sha256": "sha256:605f112d71a1f05bbc07dbe0c63c49fa90c32e6fd465919372820f51ec210e8d",
+      "pair_id": "P11",
+      "variant": "a",
+      "row_sha256": "cc16fb690c1451b7b31a2818568fe302d8fddb8eef6256fe35917236860c4a50"
+    },
+    {
+      "example_id": "sha256:921e0195fa216caf1b6801e5fa654cd78510ccd090f4637b2a50cc0e66bff473",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 7,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p04:a",
+      "source_content_sha256": "sha256:808b8e6afb665cd2db14523895065cb6c0fd67b7b9953108733d152b5cd40187",
+      "pair_id": "P04",
+      "variant": "a",
+      "row_sha256": "1eacf7bc5235ac557f3f12b8a4fa49489677b34eccf23c6a7afd811a911aa8b6"
+    },
+    {
+      "example_id": "sha256:9f6c0319fa1d809a11b5bc46516e4c9ff06613909243af7d6386303c83eeb166",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 16,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p08:b",
+      "source_content_sha256": "sha256:cf99703d1e72eff7c396c45e0b3c720cd5ec8e55a90137356eef89370de9f97e",
+      "pair_id": "P08",
+      "variant": "b",
+      "row_sha256": "836ebf56478d80c30caf8e0c3a728be7c03e681e1749cb2d7def17401500d539"
+    },
+    {
+      "example_id": "sha256:a5e91c1d688d49792b3bcc1b06211a1e843bb167fecf6bb87b2bd38bdcdc527c",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 19,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p10:a",
+      "source_content_sha256": "sha256:ea5d30ee518ac3e5c2146476ea459f8eb9b90a3de883d84bee26c80e9c2aec71",
+      "pair_id": "P10",
+      "variant": "a",
+      "row_sha256": "94f15928aeb987a3eb032e7ff52261c444c84dff0218940edb7f840d911941fb"
+    },
+    {
+      "example_id": "sha256:b646c76185d9f404fad17d1d8bd6754832c70b5fc829b952c3d8f2fb0cad4956",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 9,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p05:a",
+      "source_content_sha256": "sha256:38acf05cd35f4a852e726d7bd3ba37cce5da2f557ce0a681c582cd7ed3248dd3",
+      "pair_id": "P05",
+      "variant": "a",
+      "row_sha256": "b88eb6df67125583dde1137fea679edccc2e7429945ba670d3faf4660acd564a"
+    },
+    {
+      "example_id": "sha256:cbd01d4d5dcece67d11e7cb13483ac0dc31185a16be5459e19c5a1710e87fbdf",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 24,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p12:b",
+      "source_content_sha256": "sha256:ca780a071b0f32777e1fbb68ae9c22bd8d993077ada67d3742bee20e984b2eae",
+      "pair_id": "P12",
+      "variant": "b",
+      "row_sha256": "4abad4b2180ecfdbd786eeb7505f9f3df82381fa2977a8e57d8ca012938f78ce"
+    },
+    {
+      "example_id": "sha256:e00bc8f321f74f2d13e7593aa8cfea2131c5e051c9a59db2419fb5456fb2b3c6",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 18,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p09:b",
+      "source_content_sha256": "sha256:032eb8ec9e4917a81c03ca42d73398787857f1866b5cd9e4e2ecc67f441b86f2",
+      "pair_id": "P09",
+      "variant": "b",
+      "row_sha256": "913dc6ac23c5b37efffcddf87ced970540128007f1348075a78d7fe4ed369892"
+    },
+    {
+      "example_id": "sha256:e17d2197f212a90477b545f96e1bbc39c1791a68de3f2c65cd9e1b0f12ad57b3",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 23,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p12:a",
+      "source_content_sha256": "sha256:72af19eb7edf57e77b5a29a37c4ca1bd4738a53edcd65f61bbb2624c6aa1cd7a",
+      "pair_id": "P12",
+      "variant": "a",
+      "row_sha256": "db6f2d14a4429f1610158ad4bd157b748b15753375acbd4b3a51828c5bf97a64"
+    },
+    {
+      "example_id": "sha256:e963f40ca2ebdf30356396056eb25ead18131a8e18bb359982701605decdc239",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 1,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p01:a",
+      "source_content_sha256": "sha256:b6a181621a5fd51f059aff84ef2daf9d6e8c208b61d3d0cda8044f60f635a7ac",
+      "pair_id": "P01",
+      "variant": "a",
+      "row_sha256": "b97fb5965ba0e24b4c48645569dbfdb684059051d55a8a4276b0f75b48b7e3e1"
+    },
+    {
+      "example_id": "sha256:ef960ef9ba02496e07c08bc128efb625e40f53527b3937e7388ce9890a481402",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 15,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p08:a",
+      "source_content_sha256": "sha256:438c018cb622033039ca2f0d68e797443fa6e2de0b763e93355914962555db1c",
+      "pair_id": "P08",
+      "variant": "a",
+      "row_sha256": "6eea62523e34cedb1fae09fd18b9bdba0e834d1a517aa6161710a450de95769a"
+    },
+    {
+      "example_id": "sha256:f8eeaacbfd5200f615c748da22e3f3528d32ea210a425e7db1fbe1c603729f64",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 17,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p09:a",
+      "source_content_sha256": "sha256:168b8f5852ef48f94a88ec2ee08500ebdf4d73ce1dc69966bc523273b92e7b22",
+      "pair_id": "P09",
+      "variant": "a",
+      "row_sha256": "27b07a016093479607465efe213f64cb39d64720348d456f2f7f9b4d7e49e515"
+    },
+    {
+      "example_id": "sha256:f9db68fc24d6773b98daa6d0288d45792c8ba8f4df1bbe1d4bdced65a9534ec4",
+      "path": "data/loop-sft-train.jsonl",
+      "line": 13,
+      "source_record_id": "urn:agenttool:xenia-loop-case:p07:a",
+      "source_content_sha256": "sha256:78b02de658a1926c195b928059d73fc1a94e774471236691e14b08104f05b463",
+      "pair_id": "P07",
+      "variant": "a",
+      "row_sha256": "26dd3dcfe2f963252f186aacae1148bde68862cb98e69e2d5b0225d870fb237b"
+    }
+  ]
+}

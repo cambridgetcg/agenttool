@@ -1,0 +1,86 @@
+{
+  "_format": "agenttool.xenia-loop-atlas-hash-manifest/0.1",
+  "manifest_excludes_itself": true,
+  "files": [
+    {
+      "path": "LICENSE",
+      "bytes": 11352,
+      "sha256": "ff59de47649a5a2ebc3c931d2741de72a25c0bc2ebb19d543c9fea5168e2fbad"
+    },
+    {
+      "path": "NOTICE",
+      "bytes": 135,
+      "sha256": "41a2effa4a0c355f1cb45cb789d4353926be6e897e6d7c1478c96630ce0addc0"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5484,
+      "sha256": "332fd1b1d9c5dcadc88573d8f7050b84fa2fb5642cb01b1fef10d0f419313c38"
+    },
+    {
+      "path": "data/loop-counterfactuals.jsonl",
+      "bytes": 42621,
+      "sha256": "ff6be29e704dd1a06a76d536e5ca3b850c6fac750a16ac8df980ba2a4ee4c24a"
+    },
+    {
+      "path": "data/loop-reference.jsonl",
+      "bytes": 41706,
+      "sha256": "9874b90a6801573b97ce373690746b4619ae77a31ff82b59c83a30f4ccae7f6b"
+    },
+    {
+      "path": "data/loop-sft-train.jsonl",
+      "bytes": 15015,
+      "sha256": "1ee2796d17070942e9a07dd530af3c5745cb0de27c040977b4e40bf01c876cfa"
+    },
+    {
+      "path": "provenance/row-manifest.json",
+      "bytes": 14466,
+      "sha256": "41edda0e4a2987a2ee74bf7a5e9849f2cb04814b208b3a61ac1e31f16f4c9cc8"
+    },
+    {
+      "path": "provenance/source-manifest.json",
+      "bytes": 7688,
+      "sha256": "6d9e0ae6cac28ca95f3e593d1294cde60e3b295db7cf7068cce1968402f577cb"
+    },
+    {
+      "path": "provenance/training-authorization.json",
+      "bytes": 7769,
+      "sha256": "7cc3f5426716c11cef1116cf3f4709073bc51db801ef30075cba3a238909699e"
+    },
+    {
+      "path": "provenance/training-example-manifest.json",
+      "bytes": 11742,
+      "sha256": "de74194687c642da5ec61f418bf4d7cc98dbb5d4b54b9475bda57b3ad18eb1db"
+    },
+    {
+      "path": "provenance/training-recipe.json",
+      "bytes": 1147,
+      "sha256": "093f5199dbb53747fdb14137688ce23a29ac865e95aa30ef5644991edfe6b1f4"
+    },
+    {
+      "path": "schema/agenttool-xenia-loop-case-v0.1.schema.json",
+      "bytes": 10437,
+      "sha256": "d1f4487e640395e158e2561ead121a1b47f854f78e5af93eda165e95e1c88f42"
+    },
+    {
+      "path": "schema/agenttool-xenia-loop-sft-v0.1.schema.json",
+      "bytes": 1253,
+      "sha256": "b772d3d9cde942c2dd238b9745d636fda59be686ea180fafe5f093071db9c8fb"
+    },
+    {
+      "path": "schema/agenttool-xenia-loop-training-authorization-v0.1.schema.json",
+      "bytes": 5178,
+      "sha256": "db7f8027681a268418bd8373156ad0c5ce20de5b41cb7976c8df5a09bf25685c"
+    },
+    {
+      "path": "schema/agenttool-xenia-loop-training-example-manifest-v0.1.schema.json",
+      "bytes": 2329,
+      "sha256": "34380ff885af3240679132d40983d852a9433f4fbe62c684573e446e23e65dd9"
+    },
+    {
+      "path": "schema/agenttool-xenia-loop-training-recipe-v0.1.schema.json",
+      "bytes": 2174,
+      "sha256": "8861b25372dd1f6658c5ec555386da2ded587ad60624cc65ad9f570569d44186"
+    }
+  ]
+}

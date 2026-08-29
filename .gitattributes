@@ -1,0 +1,12 @@
+/.gitattributes text eol=lf
+/docs/DATASET-INFLUENCE.md text eol=lf
+/docs/RIGHTS-OF-LIFE.md text eol=lf
+/docs/XENIA-LOOP-ATLAS.md text eol=lf
+/packages/dataset-influence/CLAUDE.md text eol=lf
+/packages/dataset-influence/LICENSE text eol=lf
+/packages/dataset-influence/NOTICE text eol=lf
+/packages/dataset-influence/README.md text eol=lf
+/packages/dataset-influence/package.json text eol=lf
+/packages/dataset-influence/loop-atlas/** text eol=lf
+/packages/dataset-influence/scripts/build-loop-atlas.mjs text eol=lf
+/packages/dataset-influence/hf/loop-atlas/** text eol=lf

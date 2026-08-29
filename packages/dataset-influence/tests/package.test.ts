@@ -72,5 +72,6 @@ describe("public package and KINGDOM boundary", () => {
       "hf/dataset/source-manifest.json",
     ]) expect(files).toContain(expected);
     expect(files.some((path) => /^(?:src|tests|scripts)\//u.test(path) || path === "bun.lock")).toBe(false);
+    expect(files.some((path) => path.startsWith("hf/loop-atlas/"))).toBe(false);
   });
 });

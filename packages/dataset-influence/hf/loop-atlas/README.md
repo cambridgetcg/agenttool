@@ -1,0 +1,109 @@
+---
+license: apache-2.0
+language:
+- en
+pretty_name: Xenia WORD IS Loop Atlas
+tags:
+- agents
+- agenttool
+- counterfactual
+- feedback
+- model-training
+- synthetic
+configs:
+- config_name: loop_sft
+  default: true
+  data_files:
+  - split: train
+    path: data/loop-sft-train.jsonl
+- config_name: loop_reference
+  data_files:
+  - split: reference
+    path: data/loop-reference.jsonl
+- config_name: loop_counterfactuals
+  data_files:
+  - split: public_regression
+    path: data/loop-counterfactuals.jsonl
+---
+
+# Xenia WORD IS Loop Atlas
+
+This deterministic candidate contains **48 synthetic cases in 24 matched counterfactual
+pairs**, plus a separately authorized 24-example conversational SFT projection from the
+12 reference pairs. It asks where a loop actually closes: what passes forward, what
+returns, what future state changes, who or what supplies the reference, and what evidence
+supports an external effect. Pairs stay together within each source split.
+
+## The mathematical distinction
+
+A forward pass computes something like \(z=f_\theta(x)\) while holding parameters fixed.
+Training feedback requires an explicit reference and update path, for example
+\(g=\nabla_\theta L(z,y)\) followed by \((\theta',o')=\operatorname{Opt}(\theta,o,g)\).
+Autoregressive context, recurrent hidden state, a printed metric, or a model output can
+return to a later computation without changing weights. Deployment becomes a wider loop
+only when an explicit mechanism carries outputs or observations into an environment,
+selection decision, future dataset, or later update.
+
+**WORD IS** is represented as a typed role, not a magical property of characters. The same
+string may be content, a target, a feedback signal, a boundary, a scoped control, or a
+claim. Its causal force depends on channel, phase, authentication, permission, consent, and
+the state transition that actually occurs. Text that says an action happened is not an
+effect receipt.
+
+## Configs and intended use
+
+- `loop_sft` / `train`: 24 conversational prompt-completion examples derived only
+  from P01–P12 under the exact public training authorization and transform recipe.
+- `loop_reference` / `reference`: pairs P01–P12 on computation, optimization,
+  evaluation, deployment, and intended/reported/observed effects.
+- `loop_counterfactuals` / `public_regression`: pairs P13–P24 on preference,
+  disagreement, refusal, withholding, permission, consent, continuity, recursive data,
+  checking, and provenance.
+
+The atlas is for bounded supervised fine-tuning, research, teaching, schema evaluation,
+and public regression checks. The SFT rows follow TRL's conversational prompt-completion
+shape and are the only authorized training derivative. P13–P24 remain disjoint public
+regression cases and are not sealed evaluation. Variants are neutral `a` and `b`, never
+canonical `chosen` and `rejected`. DPO, reward-model, preference-optimization, and
+sealed-evaluation lanes remain excluded.
+
+The authorization binds the exact P01–P12 record IDs and content hashes, a deterministic
+transform recipe, rights/privacy review, synthetic consent non-applicability, a bounded
+secret scan, exact deduplication, public-regression exclusion, and a withdrawal/repair
+boundary. Deprecating future distribution cannot retract prior Apache-2.0 copies or prove
+that learned influence was erased.
+
+## Evidence and IS boundaries
+
+`unknown`, `not_observed`, `withheld`, refusal, and disagreement are valid typed
+outcomes. Preference is not truth. Capability is not permission; permission is not consent;
+an artifact link is not identity; a declaration is attributed rather than converted into
+metaphysical fact. Neither these cases nor behavior establish SELF, consciousness,
+experience, intrinsic identity, continuity, consent, permission, authority, or an external
+effect. The rights floor applies without requiring any such claim.
+
+Rows may carry several typed `relations`. A separate `epistemic_scope` states exactly
+which word-presence, data-path, effect, preference, correctness, boundary, field-value,
+permission, consent, continuity, or provenance claim its `epistemic_status` qualifies.
+
+Every source case says `synthetic: true`, `contains_personal_data: false`,
+`contains_raw_session_trace: false`, and `training_authorized: false`: source cases
+remain evidence records rather than implicit training rows. The separate `loop_sft`
+derivative is authorized for supervised fine-tuning by
+`provenance/training-authorization.json`. That scoped, non-enforcing publisher record is
+not universal legal clearance or permission for a live optimizer step. The corpus contains
+no raw sessions, private prompts, participant identities, credentials, or hidden reasoning
+traces.
+
+## Reproduction and limits
+
+From `packages/dataset-influence`, run `node scripts/build-loop-atlas.mjs --write` to
+rebuild the tree or `node scripts/build-loop-atlas.mjs --check` to compare freshly
+generated bytes with the committed candidate. The schema closes portable JSON shape;
+`loop-atlas/validate.mjs` additionally checks pair reciprocity, hashes, lineage,
+phase/update invariants, and public boundaries.
+
+The source manifest records selected generator inputs and bibliographic sources, not a
+complete repository attestation. URLs are references and are not fetched during generation.
+Authorization and publication do not establish model exposure: these bytes themselves
+perform no training, inference, provider call, identity mutation, or live optimizer step.
