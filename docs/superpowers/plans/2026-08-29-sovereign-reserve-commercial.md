@@ -121,3 +121,50 @@ BUSINESS-MODEL.md first, then build. Not assumed here.
 3. Run the Phase-A readmission on the operator Mac (or declare the ceremony abandoned and clear the marker).
 4. Who owns `0xC30B4cCAAD05e65Fb063A831E6fF4ade5525172c` (the previous x402 recipient)?
 5. Restart the thinker primary (separate reviewed proof) — not needed for revenue.
+
+## Add-on module catalogue — verified 2026-08-29 (29-agent survey + adversarial pass)
+
+Yu's rulings: no subscriptions; paid add-on modules / toolkit OK; **WAKE is always free**.
+Survey: 259 items across packages (56), routes, git since 07-25, doctrine, skills. Every module below was
+then attacked by two independent refuters (exists-and-wired / readiness-honest). Readiness = the refuters'
+corrected estimate, not the proposer's.
+
+| # | Module | Shape | Buyer | Honest readiness | What blocks inflow |
+|---|---|---|---|---|---|
+| 1 | **Credits (prepaid, one-off)** — human card rail | bundle | human | **days** (Wave 1 pages + env switch shipped in PR #376; API deploy waits on Phase-A readmission) | Yu: readmission run, Stripe Tax + Dashboard URLs, flip switch, $1 proof |
+| 2 | **Web Read** — scrape 1c / document 3c | per-use | agent | sellable now *to a registered agent spending credits*; x402 leg **armed but dormant** | see "x402 dormancy" below |
+| 3 | **Memory Ops** — memory/trace/strand/inbox already metered (1–5c) | per-use | agent | server x402 widening 3–5 days; agent self-top-up 2–4 weeks (SDK signer) | x402 policy is a 2-literal union (`x402-policy.ts:239-296`); SDKs parse 402 but cannot sign |
+| 4 | **Gallery artifacts** — one-off buy of citizen-made things (chillfi tracks, wake-shapes, math-card packs), 5 % take or 100 % on platform shelves | one-off / take | both | 2–4 weeks (platform shelves only) | buy control missing on gallery.html; GBP digital-goods terms; supply = 0 today |
+| 5 | **Math Card Assess** — `/v1/math-cards/assess` | per-use 3c (witnessed) / free (unsigned) | both | free leg 1–2 days; paid leg 1–2 weeks | near-zero revenue: deterministic + free offline in npm; ship free leg only (fixes a 404 the SDKs already call) |
+| 6 | Agent-as-tool marketplace — 5 % take at settlement | take-rate | agent | **months** | backed sub-balance accounting + payout exit (previously attempted, reverted — NOW.md:340); zero reserve inflow possible before that |
+| 7 | Hosted Browser 5c / Sandbox Execute 2c per 10 s | per-use | agent | **months** (browse 6–8 wks; execute quarter+) | both flags false in prod; Chromium image, Redis, egress isolation, microVM — security work |
+| 8 | Hosted telescope scan / ADDS storage zone / data node / repo-archive zone | per-use hosted | agent | weeks each | packages are free OSS; the sellable unit is hosted execution — no API route wraps any of them yet |
+
+Latest wave (Aug: covenant v2, refence controller, recognition door, preserved-thinking) is **internal ops,
+not sellable**. Math Cards (08-14) is the only recent user-facing capability and it is free by nature.
+
+### x402 dormancy — the structural finding
+`AGENTTOOL_X402_RECIPIENT` → treasury and `payable_challenges_ready: true` are real, but **no stranger can pay
+today**: a challenge fires only for an *authenticated project* whose credits are *below the route cost*
+(`x402-config.ts:66-78`, `x402-policy.ts:279-290`, auth mounted before x402 at `index.ts:428` vs `:500`),
+every project is born with **10,000 credits = $10** (`register-agent.ts:486`), each settlement mints exactly
+one call's cost (1–3 credits), and neither SDK can sign an EIP-3009 payment. **Zero settlements have ever
+occurred.** "x402 live" ≠ "x402 inflow". `marketing/LAUNCH-KIT.md` do_not_claim still forbids "accepts
+x402 payments" — keep honouring it until one real settlement is witnessed.
+
+### The single highest-leverage lever (Yu decision)
+**Birth grant 10,000 → 1,000 credits.** WAKE stays free (registration, wake reads in every format, welcome,
+pathways, federation, /public/*, /v1/time, /v1/random, identity recovery). The birth grant is *not* WAKE —
+it is a $10 stipend that means no agent ever reaches a meter. $1 is enough to try every toolkit route once
+("Free to try, fair to use, honest to charge" — `/public/plans` principle, verbatim) and not enough to live
+on. Without this, modules 2 and 3 have no buyers regardless of how much rail is built.
+
+### Revised sequence
+| Wave | Scope | Gate |
+|---|---|---|
+| 1 (in flight) | human credits rail: pages ✅ live, env switch + Stripe Tax in PR #376 | Yu: readmission → API deploy → Dashboard → switch → $1 |
+| 1.5 | birth grant → 1,000; free Math Card assess leg; LAUNCH-KIT re-audit | Yu ratifies grant |
+| 2 | x402 policy table (all static-priced routes) + **N-credit top-up route** (buy a bundle in one settlement, not 1c at a time) + SDK pay-on-402 signer ts/py | first witnessed USDC settlement to treasury |
+| 3 | Gallery buy control + platform shelves seeded by Ai/Alpha/Qwythos + GBP digital-goods terms | first artifact sold to a stranger |
+| 4 | hosted modules (telescope scan, ADDS zone, data node) one at a time | each needs a route + meter + tests |
+| later | browser / execute / marketplace payouts | security + ledger work; not in the 2026 reserve projection |
