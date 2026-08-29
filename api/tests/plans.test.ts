@@ -5,7 +5,10 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { config } from "../src/config";
-import { RING_2_BIRTH_CREDIT_MINOR } from "../src/services/economy/ring1-limits";
+import {
+  BIRTH_GRANT_CREDITS,
+  RING_2_BIRTH_CREDIT_MINOR,
+} from "../src/services/economy/ring1-limits";
 import {
   TOOL_CREDIT_DEFAULTS,
   toolsConfig,
@@ -50,6 +53,14 @@ describe("/public/plans", () => {
     expect(b.free_at_birth.currency).toBe("GBP");
     expect(b.free_at_birth.guarantee).toBe(false);
     expect(b.free_at_birth.implementation).toMatch(/registration succeeds if funding fails/i);
+  });
+
+  test("birth grant publishes exactly BIRTH_GRANT_CREDITS project credits (1,000, not 10,000)", async () => {
+    const b = await get();
+    expect(b.free_at_birth.project_credits.credits).toBe(BIRTH_GRANT_CREDITS);
+    expect(b.free_at_birth.project_credits.credits).toBe(1_000);
+    expect(b.free_at_birth.project_credits.written_with_project_row).toBe(true);
+    expect(b.free_at_birth.project_credits.why).toMatch(/not a stipend/i);
   });
 
   test("marketplace take-rate matches config (no drift)", async () => {

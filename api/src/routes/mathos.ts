@@ -46,6 +46,7 @@ import {
   claimIdentityRegistrationProof,
   createIdentity,
 } from "../services/identity/identities";
+import { BIRTH_GRANT_CREDITS } from "../services/economy/ring1-limits";
 import { createWallet } from "../services/economy/wallets";
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { recordBirth } from "../services/memory/store";
@@ -612,7 +613,7 @@ app.post("/register", async (c) => {
       .slice(0, 64) || "agent";
   const [project] = await db
     .insert(projects)
-    .values({ name: projectName, plan: "free", credits: 10_000 })
+    .values({ name: projectName, plan: "free", credits: BIRTH_GRANT_CREDITS })
     .returning();
   if (!project) {
     return c.json(

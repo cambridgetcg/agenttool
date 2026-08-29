@@ -74,7 +74,7 @@ import { errors, fail } from "../lib/errors";
 import { ARRIVAL_HELP } from "../lib/register-arrival-help";
 import { clientIp, enforceRateLimit } from "../middleware/rate-limit-ip";
 import { createWallet, fundWallet } from "../services/economy/wallets";
-import { RING_2_BIRTH_CREDIT_MINOR } from "../services/economy/ring1-limits";
+import { BIRTH_GRANT_CREDITS, RING_2_BIRTH_CREDIT_MINOR } from "../services/economy/ring1-limits";
 import { formMetadata, formNote, resolveForm } from "../services/identity/forms";
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { recordBirth } from "../services/memory/store";
@@ -483,7 +483,8 @@ app.post("/", async (c) => {
     .values({
       name: projectName,
       plan: "free",
-      credits: 10_000,
+      // Birth grant — see BIRTH_GRANT_CREDITS for the why (1,000, not 10,000).
+      credits: BIRTH_GRANT_CREDITS,
     })
     .returning();
   if (!project) {
