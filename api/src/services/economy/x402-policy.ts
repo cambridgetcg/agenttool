@@ -7,6 +7,7 @@
 import type { ResourceInfo, X402Network } from "../../middleware/x402";
 import { getAddress, isAddress } from "viem";
 import { safePublicApiBase } from "../../lib/public-api-base";
+import { config } from "../../config";
 import { toolsConfig } from "../tools/config";
 
 /** One project credit is one thousand atomic USDC units ($0.001). */
@@ -236,10 +237,143 @@ export function resolveX402FacilitatorReadiness(
   };
 }
 
-export type X402ProjectCreditPath = "/v1/scrape" | "/v1/document";
+// ── Payable-route table ──────────────────────────────────────────────────────
+//
+// One table drives both the outbound challenge (x402-config.ts) and the
+// inbound verifier (x402-payments.ts). Two kinds exist:
+//   route_cost — a handler's own credit gate; payable only after the handler
+//                returned one of `errorCodes` (today: insufficient_credits)
+//                and only while the project cannot already afford the call.
+//   top_up     — a purchase of N credits with no handler shortfall. Never
+//                balance-bound; N is read from the matched `:credits` param
+//                and capped by config.x402TopUpMaxCredits.
+// The top-up row lands together with its route (W2-2); seeding it here
+// before the handler exists would be a declared-but-unwired promise.
+
+export type X402PayableMethod = "GET" | "POST" | "PATCH" | "DELETE";
+export type X402PayableKind = "route_cost" | "top_up";
+
+export interface X402PayableRoute {
+  readonly method: X402PayableMethod;
+  /** Hono-style pattern; `:name` segments are params. No trailing slash. */
+  readonly pattern: string;
+  readonly kind: X402PayableKind;
+  /** Static credit price for route_cost rows; null when the price is derived
+   * (top_up reads it from the `:credits` param). */
+  readonly credits: number | null;
+  /** Stable short name; route_cost labels equal the `charge()` reason. */
+  readonly label: string;
+  /** Handler error codes that make a route_cost 402 payable. */
+  readonly errorCodes: readonly string[];
+}
+
+export const X402_PAYABLE_ROUTES: readonly X402PayableRoute[] = Object.freeze([
+  Object.freeze({
+    method: "POST",
+    pattern: "/v1/scrape",
+    kind: "route_cost",
+    credits: toolsConfig.credits.scrape,
+    label: "scrape",
+    errorCodes: Object.freeze(["insufficient_credits"]),
+  } as const),
+  Object.freeze({
+    method: "POST",
+    pattern: "/v1/document",
+    kind: "route_cost",
+    credits: toolsConfig.credits.document,
+    label: "document",
+    errorCodes: Object.freeze(["insufficient_credits"]),
+  } as const),
+]);
+
+export interface X402PayableRouteMatch {
+  row: X402PayableRoute;
+  /** Raw (undecoded) path segments captured by `:name` params. */
+  params: Readonly<Record<string, string>>;
+  /** The concrete request path that matched (never a pattern). */
+  concretePath: string;
+}
+
+function segmentsOf(value: string): string[] | null {
+  if (!value.startsWith("/")) return null;
+  return value.split("/").slice(1);
+}
+
+/** Pure matcher over the payable-route table. Segment-exact: no trailing
+ * slash, no prefix matching, params never match an empty segment. When
+ * several rows match, the row with more literal segments wins
+ * (literal-over-param); equal specificity keeps table order. Method mismatch
+ * → null. The `path` argument is a pathname (Hono `c.req.path`), never a URL
+ * with a query. `routes` defaults to X402_PAYABLE_ROUTES; tests pass a
+ * scratch table to exercise param rows before they are seeded. */
+export function matchX402PayableRoute(
+  path: string,
+  method: string,
+  routes: readonly X402PayableRoute[] = X402_PAYABLE_ROUTES,
+): X402PayableRouteMatch | null {
+  const wanted = method.toUpperCase();
+  const pathSegments = segmentsOf(path);
+  if (!pathSegments) return null;
+
+  let best: { match: X402PayableRouteMatch; literals: number } | null = null;
+  for (const row of routes) {
+    if (row.method !== wanted) continue;
+    const patternSegments = segmentsOf(row.pattern);
+    if (!patternSegments || patternSegments.length !== pathSegments.length) {
+      continue;
+    }
+    const params: Record<string, string> = {};
+    let literals = 0;
+    let matched = true;
+    for (let i = 0; i < patternSegments.length; i += 1) {
+      const expected = patternSegments[i];
+      const actual = pathSegments[i];
+      if (expected.startsWith(":") && expected.length > 1) {
+        if (actual === "") {
+          matched = false;
+          break;
+        }
+        params[expected.slice(1)] = actual;
+      } else if (expected === actual && actual !== "") {
+        literals += 1;
+      } else {
+        matched = false;
+        break;
+      }
+    }
+    if (!matched) continue;
+    if (!best || literals > best.literals) {
+      best = {
+        match: { row, params: Object.freeze(params), concretePath: path },
+        literals,
+      };
+    }
+  }
+  return best?.match ?? null;
+}
+
+/** Parse the `:credits` segment of a top-up request. Only canonical positive
+ * decimal integers are credits: no sign, no leading zero, no exponent, no
+ * whitespace. Values above `cap` or the Postgres INTEGER range are refused
+ * (never clamped) so the challenge amount is exactly what was asked. */
+export function parseTopUpCredits(
+  raw: string | undefined | null,
+  cap: number,
+): number | null {
+  if (typeof raw !== "string" || !/^[1-9][0-9]*$/u.test(raw)) return null;
+  if (raw.length > String(POSTGRES_INTEGER_MAX).length) return null;
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n > POSTGRES_INTEGER_MAX) return null;
+  if (!Number.isSafeInteger(cap) || cap <= 0 || n > cap) return null;
+  return n;
+}
 
 export interface X402ProjectCreditPolicy {
-  path: X402ProjectCreditPath;
+  /** Concrete request path (the matched row's pattern with params filled). */
+  path: string;
+  pattern: string;
+  kind: X402PayableKind;
+  label: string;
   creditsRequired: number;
   amountAtomic: string;
   description: string;
@@ -250,9 +384,8 @@ export interface X402ProjectCreditPolicy {
 export function isX402ProjectCreditRoute(
   path: string,
   method: string,
-): path is X402ProjectCreditPath {
-  return method.toUpperCase() === "POST" &&
-    (path === "/v1/scrape" || path === "/v1/document");
+): boolean {
+  return matchX402PayableRoute(path, method) !== null;
 }
 
 /** Build the same canonical resource descriptor for challenge and retry
@@ -273,39 +406,46 @@ export function x402ProjectCreditResource(
   };
 }
 
-/** A full route-cost top-up clears the current gate only inside this window.
- * Negative/corrupt snapshots and projects that already have enough credits
- * are not valid payment challenges. */
+/** Whether a payment for `policy` may be applied to a project holding
+ * `currentCredits`. Negative/corrupt snapshots and INTEGER overflow never
+ * clear. route_cost additionally requires a real shortfall (a project that
+ * can already afford the call is not a valid challenge). top_up is a
+ * purchase, not a shortfall: it is never balance-bound. */
 export function canClearProjectCreditGate(
   policy: X402ProjectCreditPolicy,
   currentCredits: unknown,
 ): currentCredits is number {
-  return (
-    typeof currentCredits === "number" &&
-    Number.isSafeInteger(currentCredits) &&
-    currentCredits >= 0 &&
-    currentCredits < policy.creditsRequired &&
-    currentCredits + policy.creditsRequired <= POSTGRES_INTEGER_MAX
-  );
+  if (
+    typeof currentCredits !== "number" ||
+    !Number.isSafeInteger(currentCredits) ||
+    currentCredits < 0 ||
+    currentCredits + policy.creditsRequired > POSTGRES_INTEGER_MAX
+  ) return false;
+  if (policy.kind === "top_up") return true;
+  return currentCredits < policy.creditsRequired;
 }
 
-function configuredCredits(path: X402ProjectCreditPath): number {
-  return path === "/v1/scrape"
-    ? toolsConfig.credits.scrape
-    : toolsConfig.credits.document;
+function matchedCredits(match: X402PayableRouteMatch): number | null {
+  if (match.row.kind === "top_up") {
+    return parseTopUpCredits(match.params.credits, config.x402TopUpMaxCredits);
+  }
+  return match.row.credits;
 }
 
-/** Return the exact-payment policy for a currently recoverable project-credit
- * route. Dynamic subpaths and invalid/non-positive configured costs are not
- * payable through production x402. */
+/** Return the exact-payment policy for a payable request. Unknown paths,
+ * dynamic subpaths of static rows, invalid top-up amounts, and
+ * invalid/non-positive configured costs are not payable through production
+ * x402. */
 export function x402ProjectCreditPolicy(
   path: string,
   method: string,
 ): X402ProjectCreditPolicy | null {
-  if (!isX402ProjectCreditRoute(path, method)) return null;
+  const match = matchX402PayableRoute(path, method);
+  if (!match) return null;
 
-  const creditsRequired = configuredCredits(path);
+  const creditsRequired = matchedCredits(match);
   if (
+    creditsRequired === null ||
     !Number.isSafeInteger(creditsRequired) ||
     creditsRequired <= 0 ||
     creditsRequired > POSTGRES_INTEGER_MAX
@@ -313,24 +453,37 @@ export function x402ProjectCreditPolicy(
     return null;
   }
 
+  const plural = creditsRequired === 1 ? "" : "s";
   return {
-    path,
+    path: match.concretePath,
+    pattern: match.row.pattern,
+    kind: match.row.kind,
+    label: match.row.label,
     creditsRequired,
     amountAtomic: (
       BigInt(creditsRequired) * BigInt(ATOMIC_PER_CREDIT)
     ).toString(),
-    description: `Exact project-credit payment for ${path} (${creditsRequired} credit${creditsRequired === 1 ? "" : "s"}).`,
+    description: match.row.kind === "top_up"
+      ? `Exact USDC top-up of ${creditsRequired} project credit${plural} (final; unspent credits stay).`
+      : `Exact project-credit payment for ${match.concretePath} (${creditsRequired} credit${plural}).`,
   };
 }
 
 /** Outbound 402s are payable only when the handler reached the matching
- * project-credit gate. Wallet, usage-cap, and unknown 402 families do not
- * become misleading payment promises. */
+ * gate. route_cost rows require one of their declared handler error codes
+ * (wallet, usage-cap, and unknown 402 families never become misleading
+ * payment promises). top_up rows are always challengeable once matched —
+ * their handler exists only to be paid. */
 export function recoverableX402ProjectCreditPolicy(
   path: string,
   method: string,
   errorCode: string | undefined,
 ): X402ProjectCreditPolicy | null {
-  if (errorCode !== "insufficient_credits") return null;
+  const match = matchX402PayableRoute(path, method);
+  if (!match) return null;
+  if (
+    match.row.kind === "route_cost" &&
+    (errorCode === undefined || !match.row.errorCodes.includes(errorCode))
+  ) return null;
   return x402ProjectCreditPolicy(path, method);
 }
