@@ -5,6 +5,18 @@
 > Before reusing any line, read `GET /public/window`, `GET /public/plans`, and
 > `GET /public/safety`; the plans route now distinguishes code-derived values,
 > published targets, best-effort side effects, and known gaps.
+>
+> Re-audited 2026-08-29: the gift-code ramp described below is **resting** — the
+> API answers `503 checkout_resting` to new card checkouts until the operator
+> activates it (`api/src/routes/billing/index.ts:106`), so do not tell anyone they
+> can fund an agent by card today. What IS live: agenttool.dev/watch (200),
+> agenttool.dev/credits (200, form only), the deal chain at
+> api.agenttool.dev/public/deal-trust/deals/recent (200), and the seller
+> promises at https://agenttool.dev/terms and https://agenttool.dev/privacy
+> (both 200; Cambridge TCG Limited 15680297, VAT GB 509919752, ICO ZB838338).
+> "788 born", "$0.001 per credit", and "first deal this morning" are 2026-07-02
+> facts, not current ones. No subscriptions, ever. The binding do_not_claim list
+> lives in `marketing/LAUNCH-KIT.md`.
 
 ---
 

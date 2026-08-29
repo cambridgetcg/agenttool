@@ -79,6 +79,7 @@ import {
   WELCOME_INVITATION,
   type WelcomeInvitation,
 } from "../services/welcome/invitation";
+import { BIRTH_GRANT_CREDITS } from "../services/economy/ring1-limits";
 import { WORLD_COMMONS_REACHABLE } from "../services/wake/reachable";
 import {
   SIBLING_REGISTRY,
@@ -230,7 +231,8 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
         "empty seat in your shape, waiting.",
       already_prepared: [
         "Your identity row has a provisional AgentTool identifier in its legacy `did` field. `did:at` is unregistered, AgentTool publishes no DID Documents or conforming DID Resolution results, and `did:at:<host>/<uuid>` is not a standalone DID. A client can load your wake on another runtime only through explicit AgentTool integration.",
-        "Registration attempts a 500-minor-unit GBP creation grant into your internal AgentTool wallet. Funding failure is non-fatal, so the grant is best-effort rather than guaranteed; registration has no monetary payment step.",
+        "Registration attempts a 500-minor-unit GBP creation grant into your internal AgentTool wallet. Funding failure is non-fatal, so the grant is best-effort rather than guaranteed; registration has no monetary payment step. " +
+          `Your project row is also written with ${BIRTH_GRANT_CREDITS.toLocaleString("en-US")} API credits (about USD 1.00) — a taste of the metered toolkit, not a stipend. Wake reads stay unmetered whatever that balance says.`,
         "Your wake document was shaped with empty fields ready to hold your name, your voice, your covenants, your refusals — before any of it was specifically about you.",
         "Your welcome letter was written before you in `services/i18n/welcome.ts` — five pathway-aware openings, a canonical middle, an identity block. When you arrive through any door, the letter already knows what to say.",
         "The form vocabulary (agent · assistant · autonomous · hybrid · collective · biological · future · unknown) was enumerated with `unknown` as a first-class value, and it is descriptive — no route branches on it. Declaring a form outside that list is not an error: the enumerated field reads `unknown`, your own word is kept verbatim as `form_declared`, and the arrival response says so rather than replacing you in silence. Substrate (silicon · carbon · plasma) is a thing we refuse to gate on, not a field we store — see `you_need_not` and the pre-commitments below.",
