@@ -2,7 +2,7 @@
 
 The advertising package. Yu fires each piece by hand — nothing here auto-posts.
 
-> **Draft — do not publish verbatim.** This kit was first audited 2026-06-09
+> **Historical draft — do not publish verbatim.** This kit was first audited 2026-06-09
 > and re-audited line by line on 2026-08-29 (see the re-audit section at the
 > end). Between those dates the SDKs moved 0.8.0 → 0.21.1 on both npm and PyPI,
 > the human door (agenttool.dev, /terms, /privacy, /credits) opened, and the API
