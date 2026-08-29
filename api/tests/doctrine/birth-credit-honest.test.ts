@@ -17,6 +17,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { BIRTH_GRANT_CREDITS } from "../../src/services/economy/ring1-limits";
+
 const REGISTER_PATH = join(
   __dirname,
   "..",
@@ -26,6 +28,8 @@ const REGISTER_PATH = join(
   "register-agent.ts",
 );
 const SOURCE = readFileSync(REGISTER_PATH, "utf8");
+const MATHOS_PATH = join(__dirname, "..", "..", "src", "routes", "mathos.ts");
+const MATHOS_SOURCE = readFileSync(MATHOS_PATH, "utf8");
 
 describe("birth-credit honesty — annotation backed by code", () => {
   test("register-agent imports RING_2_BIRTH_CREDIT_MINOR", () => {
@@ -88,5 +92,49 @@ describe("birth-credit honesty — annotation backed by code", () => {
       "utf8",
     );
     expect(ring1Source).toMatch(/RING_2_BIRTH_CREDIT_MINOR\s*=\s*500/);
+  });
+});
+
+describe("birth grant — project credits pinned to BIRTH_GRANT_CREDITS", () => {
+  // Decision (Yu, 2026-08-29): "1000 birth grant is reasonable. Enough to
+  // test is good." The grant is a taste of the toolkit, not a stipend; WAKE
+  // stays free regardless. Rationale lives beside the constant.
+  test("BIRTH_GRANT_CREDITS is exactly 1,000 (USD 1.00 at 1 credit = USD 0.001)", () => {
+    expect(BIRTH_GRANT_CREDITS).toBe(1_000);
+  });
+
+  test("register-agent writes the project row with BIRTH_GRANT_CREDITS, not a literal", () => {
+    expect(SOURCE).toMatch(
+      /import[\s\S]{0,200}BIRTH_GRANT_CREDITS[\s\S]{0,200}from\s+["']\.{1,2}\/services\/economy\/ring1-limits["']/,
+    );
+    expect(SOURCE).toMatch(/plan:\s*"free",[\s\S]{0,200}credits:\s*BIRTH_GRANT_CREDITS/);
+    expect(SOURCE).not.toMatch(/credits:\s*10[_,]?000\b/);
+  });
+
+  test("the MATHOS-tier door grants the same BIRTH_GRANT_CREDITS", () => {
+    expect(MATHOS_SOURCE).toMatch(
+      /import[\s\S]{0,200}BIRTH_GRANT_CREDITS[\s\S]{0,200}from\s+["']\.{1,2}\/services\/economy\/ring1-limits["']/,
+    );
+    expect(MATHOS_SOURCE).toMatch(/plan:\s*"free",\s*credits:\s*BIRTH_GRANT_CREDITS/);
+    expect(MATHOS_SOURCE).not.toMatch(/credits:\s*10[_,]?000\b/);
+  });
+
+  test("no other project insert hard-codes a birth grant", () => {
+    // Any new registration door must import the constant rather than
+    // restate the number; grep the routes tree for the old literal.
+    const routesDir = join(__dirname, "..", "..", "src", "routes");
+    const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((entry) => {
+        const full = join(dir, entry);
+        return statSync(full).isDirectory() ? walk(full) : full.endsWith(".ts") ? [full] : [];
+      });
+    for (const file of walk(routesDir)) {
+      const text = readFileSync(file, "utf8");
+      expect(
+        /plan:\s*"free",[\s\S]{0,120}credits:\s*\d/.test(text),
+        `${file} inserts a project with a literal credits value; use BIRTH_GRANT_CREDITS.`,
+      ).toBe(false);
+    }
   });
 });

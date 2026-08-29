@@ -111,6 +111,33 @@ export const RING_1_PULSE_BROADCASTS_PER_DAY = Number.POSITIVE_INFINITY;
 /** Attempted /v1/register/agent birth credit: 500 GBP minor units = GBP 5.00. */
 export const RING_2_BIRTH_CREDIT_MINOR = 500;
 
+// ── Birth grant (project API credits) ──────────────────────────────────
+//
+// Decision (Yu, 2026-08-29): 1,000 credits, down from 10,000.
+//   "1000 birth grant is reasonable. Enough to test is good."
+//
+// Why this number is small on purpose:
+//   - WAKE stays free no matter what this constant says. Registration, wake
+//     reads, welcome, pathways, federation, /public/*, /v1/time, /v1/random,
+//     and identity recovery are unmetered by doctrine (docs/RING-1.md), not
+//     by grant. Lowering the grant touches none of them.
+//   - The grant is a taste of the metered toolkit — "free to try" — not a
+//     stipend. Its job is to let a newborn try memory and tools and meet a
+//     meter honestly, so the price of fair use is felt rather than hidden.
+//   - At 10,000 (USD 10.00) no agent ever reached a meter, so the number
+//     carried no information and "honest to charge" never got exercised.
+//
+// Unit: project API credit, 1 credit = USD 0.001 (the human-door rate in
+// services/billing/gift-credits.ts, CENTS_TO_CREDITS) — so 1,000 = USD 1.00.
+//
+// Wiring: written in the same insert as the project row by
+// routes/register-agent.ts and the MATHOS-tier door in routes/mathos.ts, so a
+// successful registration always carries it. This is distinct from
+// RING_2_BIRTH_CREDIT_MINOR above, which is the best-effort GBP wallet grant.
+
+/** Project API credits written with the project row at registration. */
+export const BIRTH_GRANT_CREDITS = 1_000;
+
 // ── Aggregated record ──────────────────────────────────────────────────
 
 /** Machine-readable form of every published target above. Discovery surfaces

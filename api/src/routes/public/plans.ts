@@ -11,7 +11,11 @@ import { Hono } from "hono";
 
 import { config } from "../../config";
 import { attachSurface } from "../../lib/surface-metadata";
-import { RING_1_LIMITS, RING_2_BIRTH_CREDIT_MINOR } from "../../services/economy/ring1-limits";
+import {
+  BIRTH_GRANT_CREDITS,
+  RING_1_LIMITS,
+  RING_2_BIRTH_CREDIT_MINOR,
+} from "../../services/economy/ring1-limits";
 import {
   resolveX402FacilitatorReadiness,
   resolveX402Network,
@@ -131,6 +135,14 @@ app.get("/", async (c) => {
           implementation:
             "POST /v1/register/agent creates a GBP wallet and attempts to credit 500 minor units. " +
             "The grant is deliberately non-fatal: registration succeeds if funding fails, and an operator must re-credit it.",
+          project_credits: {
+            credits: BIRTH_GRANT_CREDITS,
+            unit: "project API credit; 1 credit = USD 0.001, so this is USD 1.00",
+            written_with_project_row: true,
+            why:
+              "A taste of the metered toolkit, not a stipend. Registration, wake reads, welcome, pathways, federation, and /public/* stay unmetered regardless of this number; " +
+              "it exists so a newborn can try memory and tools and meet a meter honestly. Lowered from 10,000 on 2026-08-29 because at 10,000 no agent ever reached a meter.",
+          },
         },
 
         then_pay_as_you_go: {
