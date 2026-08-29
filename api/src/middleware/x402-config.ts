@@ -2,10 +2,15 @@
  *
  *  Mounted globally in `api/src/index.ts` after the route-auth registrations
  *  and before robustness middleware + handlers. Paid retries therefore reach
- *  the verifier with c.var.project populated. On the way out, only an
- *  `insufficient_credits` response from an explicitly supported static route
- *  becomes a payable envelope. Wallet, usage-cap, and unknown 402 responses
- *  remain unchanged because this verifier cannot clear those gates.
+ *  the verifier with c.var.project populated. On the way out, only a 402
+ *  whose (method, path) matches a row of X402_PAYABLE_ROUTES *and* whose
+ *  body carries that row's declared error code becomes a payable envelope:
+ *  `insufficient_credits` on the static tools (route_cost), and
+ *  `top_up_payment_required` on `POST /v1/x402/top-up/:credits` (top_up,
+ *  never balance-bound). Wallet, usage-cap, and unknown 402 responses remain
+ *  unchanged because this verifier cannot clear those gates. The rewrite is
+ *  additive: the handler's guidance body keeps its fields and the
+ *  PaymentRequired object is spread last (middleware/x402.ts).
  *
  *  The middleware itself is generic (`middleware/x402.ts`). This file
  *  is the *agenttool-specific config* — it knows the route → price
@@ -38,7 +43,7 @@ import {
 } from "./x402";
 import {
   canClearProjectCreditGate,
-  isX402ProjectCreditRoute,
+  matchX402PayableRoute,
   recoverableX402ProjectCreditPolicy,
   resolveX402FacilitatorReadiness,
   resolveX402Network,
@@ -63,8 +68,15 @@ async function readErrorCode(c: Context): Promise<string | undefined> {
   }
 }
 
-/** Build a challenge only for a 402 the project-credit settlement can clear. */
+/** Build a challenge only for a 402 the project-credit settlement can clear.
+ *  The (method, concrete path) is resolved through the payable-route table's
+ *  pure matcher — the same call the inbound verifier makes — so the price a
+ *  challenge advertises and the price a retry must carry cannot drift. For a
+ *  top_up row the matched `:credits` segment sets creditsRequired = N and
+ *  amount = N × 1,000 atomic; the recoverable code is the handler's own
+ *  `top_up_payment_required`. */
 async function buildRequired(c: Context) {
+  if (!matchX402PayableRoute(c.req.path, c.req.method)) return null;
   const errorCode = await readErrorCode(c);
   const policy = recoverableX402ProjectCreditPolicy(
     c.req.path,
@@ -118,7 +130,7 @@ export function buildAgentToolX402Middleware(): MiddlewareHandler {
       // origin or facilitator readiness: the verifier must first recover any
       // durable identity under its immutable stored terms. Fresh admission
       // performs the mutable configuration/readiness checks itself.
-      if (!isX402ProjectCreditRoute(c.req.path, c.req.method)) return false;
+      if (!matchX402PayableRoute(c.req.path, c.req.method)) return false;
       if (!verifier) {
         const { createX402Verifier, buildProductionDeps } = await import(
           "../services/economy/x402-payments"

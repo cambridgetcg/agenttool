@@ -87,6 +87,7 @@ import {
   WAKE_ACKNOWLEDGEMENT_OPENAPI_PATHS,
   WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
 } from "./openapi-wake-acknowledge";
+import { x402TopUpOpenApiPaths } from "./openapi-x402-top-up";
 
 const app = new Hono();
 
@@ -1161,9 +1162,9 @@ const COMMON_SCHEMAS = {
   },
   X402Required: {
     type: "object",
-    additionalProperties: false,
+    additionalProperties: true,
     description:
-      "x402 V2 PaymentRequired. The PAYMENT-REQUIRED header contains canonical base64-encoded UTF-8 JSON of this object; the body mirrors it for SDK ergonomics.",
+      "x402 V2 PaymentRequired. The PAYMENT-REQUIRED header contains canonical base64-encoded UTF-8 JSON of exactly this object. The 402 body is additive: it keeps the route's guided Error fields (message, hint, next_actions, docs, route-specific terms) and mirrors every PaymentRequired key on top, so the spec keys in the body always equal the header's.",
     properties: {
       x402Version: { type: "integer", const: 2 },
       resource: { $ref: "#/components/schemas/X402Resource" },
@@ -7723,6 +7724,7 @@ function spec() {
           },
         },
       },
+      ...x402TopUpOpenApiPaths({ x402Response, staticToolResponseHeaders }),
       "/v1/scrape": {
         post: {
           tags: ["tools"],

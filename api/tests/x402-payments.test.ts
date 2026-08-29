@@ -16,6 +16,7 @@ import {
 } from "../src/middleware/x402";
 import { rateLimitHeaders } from "../src/middleware/rate-limit-headers";
 import { createX402PaymentsRouter } from "../src/routes/x402-payments";
+import { createX402TopUpRouter } from "../src/routes/x402-top-up";
 import {
   authorizationIdentityHash,
   classifyExactEvmSignature,
@@ -795,6 +796,169 @@ describe("createX402Verifier durable state machine", () => {
     expect(res.headers.get("payment-response")).toBeTruthy();
     expect(res.headers.get("x-credits-balance")).toBe(String(POLICY.creditsRequired));
     expect(getX402Payment).toBeDefined();
+  });
+});
+
+describe("top-up door lifecycle (W2-2)", () => {
+  const TOP_UP_PATH = "/v1/x402/top-up/3";
+  const TOP_UP_POLICY = x402ProjectCreditPolicy(TOP_UP_PATH, "POST")!;
+  const TOP_UP_RESOURCE = x402ProjectCreditResource(
+    TOP_UP_POLICY,
+    `http://localhost${TOP_UP_PATH}`,
+    "http://localhost",
+  )!;
+  const TOP_UP_REQUIREMENT = buildPaymentRequirements({
+    amountAtomic: TOP_UP_POLICY.amountAtomic,
+    payTo: RECIPIENT,
+  });
+  const TOP_UP_NONCE = `0x${"56".repeat(32)}`;
+
+  function topUpPayment(): PaymentPayload {
+    return payment({
+      resource: TOP_UP_RESOURCE,
+      accepted: TOP_UP_REQUIREMENT,
+      payload: exactPayload({
+        value: TOP_UP_POLICY.amountAtomic,
+        nonce: TOP_UP_NONCE,
+      }) as unknown as Record<string, unknown>,
+    });
+  }
+
+  function topUpApp(startingCredits: number) {
+    const ledger = { credits: startingCredits, applications: 0 };
+    const { deps, calls, rows } = makeDeps({
+      facilitator: {
+        async verify() {
+          calls.order.push("verify");
+          calls.verify += 1;
+          return { isValid: true, payer: PAYER };
+        },
+        async settle() {
+          calls.order.push("settle");
+          calls.settle += 1;
+          return {
+            success: true,
+            transaction: "0xtopup",
+            network: "eip155:8453",
+            payer: PAYER,
+            amount: TOP_UP_POLICY.amountAtomic,
+          };
+        },
+      },
+      async finalizeCredits(id, _projectId, credits) {
+        calls.order.push("finalize");
+        calls.finalize += 1;
+        const row = [...rows.values()].find((candidate) => candidate.id === id)!;
+        if (row.status === "settled") {
+          return { applied: false, balance: ledger.credits, status: "settled" };
+        }
+        row.status = "settled";
+        row.creditsApplied = credits;
+        ledger.credits += credits;
+        ledger.applications += 1;
+        return { applied: true, balance: ledger.credits, status: "settled" };
+      },
+    });
+    const app = new Hono<ProjectContext>();
+    app.use("*", projectMiddleware(startingCredits));
+    app.use("*", x402Middleware({
+      buildPaymentRequired: () => buildPaymentRequired(
+        TOP_UP_RESOURCE, [TOP_UP_REQUIREMENT], "top_up_payment_required",
+      ),
+      verifyPayment: createX402Verifier(deps),
+      buildSettlementHeader: settlementHeader,
+    }));
+    app.route("/v1/x402/top-up", createX402TopUpRouter());
+    return { app, calls, rows, ledger };
+  }
+
+  test("policy for the door prices N from the path and is never balance-bound", () => {
+    expect(TOP_UP_POLICY).toMatchObject({
+      kind: "top_up",
+      creditsRequired: 3,
+      amountAtomic: "3000",
+      path: TOP_UP_PATH,
+    });
+    expect(TOP_UP_RESOURCE.url).toBe(`http://localhost${TOP_UP_PATH}`);
+  });
+
+  test("bare request → 402 terms + challenge, nothing persisted or credited", async () => {
+    const { app, calls, ledger } = topUpApp(110_800);
+    const res = await app.request(`http://localhost${TOP_UP_PATH}`, { method: "POST" });
+    expect(res.status).toBe(402);
+    expect(res.headers.get("payment-required")).toBeTruthy();
+    const body = await res.json() as Record<string, unknown>;
+    expect(body).toMatchObject({
+      error: "top_up_payment_required",
+      credits: 3,
+      amount_atomic: "3000",
+      x402Version: 2,
+    });
+    expect(calls.order).toEqual([]);
+    expect(ledger.credits).toBe(110_800);
+  });
+
+  test("settle N=3 → exactly one durable credit of 3, 200 with the new balance and hash", async () => {
+    const { app, calls, rows, ledger } = topUpApp(110_800);
+    const signed = encodeCanonicalBase64Json(topUpPayment());
+    const res = await app.request(`http://localhost${TOP_UP_PATH}`, {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": signed },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("payment-required")).toBeNull();
+    expect(res.headers.get("payment-response")).toBeTruthy();
+    expect(res.headers.get("link")).toContain("rel=\"payment-status\"");
+    expect(calls.order).toEqual([
+      "inserted", "pending", "verify", "settlement_attempted", "settle", "external", "finalize",
+    ]);
+    expect(calls.finalize).toBe(1);
+    expect(ledger).toEqual({ credits: 110_803, applications: 1 });
+    const row = [...rows.values()][0]!;
+    expect(row).toMatchObject({
+      status: "settled",
+      creditsPurchased: 3,
+      creditsApplied: 3,
+      amountAtomic: "3000",
+      resource: TOP_UP_RESOURCE.url,
+    });
+    const body = await res.json() as Record<string, unknown>;
+    expect(body).toMatchObject({
+      credits_added: 3,
+      credits_total: 110_803,
+      authorization_hash: row.authorizationHash,
+      amount_atomic: "3000",
+      payment_status: `/v1/x402/payments/${row.authorizationHash}`,
+    });
+    expect(String(body.finality)).toMatch(/final/i);
+
+    // Replay of the settled authorization: 402, receipt echoed, no fresh
+    // challenge, and — the real boundary — no second credit.
+    const replay = await app.request(`http://localhost${TOP_UP_PATH}`, {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": signed },
+    });
+    expect(replay.status).toBe(402);
+    expect(replay.headers.get("payment-required")).toBeNull();
+    expect(replay.headers.get("payment-response")).toBeTruthy();
+    expect(replay.headers.get("link")).toContain(`/v1/x402/payments/${row.authorizationHash}`);
+    expect(((await replay.json()) as { error: string }).error).toBe("top_up_payment_required");
+    expect(calls.finalize).toBe(1);
+    expect(calls.settle).toBe(1);
+    expect(calls.verify).toBe(1);
+    expect(ledger).toEqual({ credits: 110_803, applications: 1 });
+    expect(row.creditsApplied).toBe(3);
+  });
+
+  test("a scrape-priced authorization presented at the door is refused before any I/O", async () => {
+    const { app, calls, ledger } = topUpApp(0);
+    const res = await app.request(`http://localhost${TOP_UP_PATH}`, {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": encodeCanonicalBase64Json(payment()) },
+    });
+    expect(res.status).toBe(402);
+    expect(calls.order).toEqual([]);
+    expect(ledger.credits).toBe(0);
   });
 });
 

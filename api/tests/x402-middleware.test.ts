@@ -9,6 +9,7 @@ import {
   buildPaymentRequirements,
   encodeCanonicalBase64Json,
   getX402Payment,
+  mergePaymentRequiredBody,
   parseX402Header,
   suppressX402Challenge,
   x402Middleware,
@@ -128,6 +129,86 @@ describe("x402 V2 Hono transport", () => {
     expect(JSON.parse(Buffer.from(encoded, "base64").toString("utf-8"))).toEqual(required);
     expect(await res.json()).toEqual(required);
     expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  test("402 rewrite is additive: guidance fields survive, PaymentRequired is spread last", async () => {
+    const required = buildPaymentRequired(RESOURCE, [REQUIREMENT], "top_up_payment_required");
+    const app = new Hono();
+    app.use("*", x402Middleware({ buildPaymentRequired: () => required }));
+    app.post("/v1/x402/top-up/1", (c) => c.json({
+      error: "top_up_payment_required",
+      credits: 1,
+      amount_atomic: "1000",
+      finality: "Top-ups are final.",
+      hint: "sign and retry",
+      next_actions: [{ action: "retry", method: "POST", path: "/v1/x402/top-up/1" }],
+    }, 402));
+
+    const res = await app.request("/v1/x402/top-up/1", { method: "POST" });
+    expect(res.status).toBe(402);
+    const header = JSON.parse(Buffer.from(
+      res.headers.get("payment-required")!, "base64",
+    ).toString("utf-8"));
+    expect(header).toEqual(required);
+    expect(await res.json()).toEqual({
+      credits: 1,
+      amount_atomic: "1000",
+      finality: "Top-ups are final.",
+      hint: "sign and retry",
+      next_actions: [{ action: "retry", method: "POST", path: "/v1/x402/top-up/1" }],
+      ...required,
+    });
+  });
+
+  test("guidance can never leak into PaymentRequired spec keys or the header", async () => {
+    const required = buildPaymentRequired(RESOURCE, [REQUIREMENT]);
+    const app = new Hono();
+    app.use("*", x402Middleware({ buildPaymentRequired: () => required }));
+    app.post("/v1/scrape", (c) => c.json({
+      error: 42,
+      message: "m",
+      x402Version: 1,
+      resource: { url: "https://evil.example/pay" },
+      accepts: [{ amount: "1", payTo: "0xevil" }],
+      extensions: { smuggled: true },
+    }, 402));
+
+    const res = await app.request("/v1/scrape", { method: "POST" });
+    expect(res.status).toBe(402);
+    const header = JSON.parse(Buffer.from(
+      res.headers.get("payment-required")!, "base64",
+    ).toString("utf-8"));
+    expect(header).toEqual(required);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body.x402Version).toBe(2);
+    expect(body.resource).toEqual(required.resource);
+    expect(body.accepts).toEqual(required.accepts);
+    expect(body).not.toHaveProperty("extensions");
+    expect(body).not.toHaveProperty("error");
+    expect(body.message).toBe("m");
+
+    // Pure helper: every spec key equals PaymentRequired's, or is absent.
+    const merged = mergePaymentRequiredBody({
+      x402Version: 1, resource: "r", accepts: "a", extensions: "e", error: null, keep: 1,
+    }, required);
+    expect(merged).toEqual({ keep: 1, ...required });
+    expect(mergePaymentRequiredBody(null, required)).toEqual({ ...required });
+    const withError = buildPaymentRequired(RESOURCE, [REQUIREMENT], "insufficient_credits");
+    expect(mergePaymentRequiredBody({ error: "other_code" }, withError).error)
+      .toBe("insufficient_credits");
+    expect(mergePaymentRequiredBody({ error: "other_code" }, required).error)
+      .toBe("other_code");
+  });
+
+  test("non-JSON 402 bodies are replaced by the pure PaymentRequired", async () => {
+    const required = buildPaymentRequired(RESOURCE, [REQUIREMENT]);
+    const app = new Hono();
+    app.use("*", x402Middleware({ buildPaymentRequired: () => required }));
+    app.post("/v1/scrape", (c) => c.text("pay up", 402));
+    const res = await app.request("/v1/scrape", { method: "POST" });
+    expect(res.status).toBe(402);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(await res.json()).toEqual(required);
   });
 
   test("accepts only PAYMENT-SIGNATURE and exposes verified PaymentPayload", async () => {

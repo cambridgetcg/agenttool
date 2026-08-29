@@ -11,6 +11,8 @@ import {
   type PaymentPayload,
 } from "../src/middleware/x402";
 import { x402ConfigurationStatus } from "../src/routes/public/plans";
+import { createX402TopUpRouter } from "../src/routes/x402-top-up";
+import { config } from "../src/config";
 import { isX402FacilitatorLocallyReady } from "../src/services/economy/facilitators/coinbase";
 import {
   DEFAULT_X402_FACILITATOR_URL,
@@ -77,7 +79,14 @@ function configuredApp(
   app.post("/v1/scrape", (c) => c.json({ error }, 402));
   app.post("/v1/document", (c) => c.json({ error }, 402));
   app.get("/v1/scrape", (c) => c.json({ error }, 402));
+  app.route("/v1/x402/top-up", createX402TopUpRouter());
   return app;
+}
+
+function decodeRequired(res: Response) {
+  return JSON.parse(Buffer.from(
+    res.headers.get("payment-required")!, "base64",
+  ).toString("utf-8"));
 }
 
 function configureCustom(): void {
@@ -97,6 +106,61 @@ describe("production middleware order", () => {
     expect(authMounts.length).toBeGreaterThan(10);
     expect(x402).toBeGreaterThan(authMounts.at(-1)!.index!);
     expect(source.indexOf("// ── Robustness middleware", x402)).toBeGreaterThan(x402);
+  });
+
+  test("top-up door: auth above x402, idempotency between them, router mounted (source pins)", () => {
+    const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf-8");
+    const x402 = source.indexOf('app.use("*", buildAgentToolX402Middleware())');
+    const auth = source.indexOf('app.use("/v1/x402/top-up/*", authMiddleware);');
+    const idem = source.indexOf('app.use("/v1/x402/top-up/*", idempotency());');
+    const mount = source.indexOf('app.route("/v1/x402/top-up", x402TopUpRouter);');
+    expect(source).toContain('import x402TopUpRouter from "./routes/x402-top-up";');
+    expect(auth).toBeGreaterThan(-1);
+    expect(auth).toBeLessThan(idem);
+    // Idempotency must run BEFORE the x402 verifier: a retried Idempotency-Key
+    // with a fresh signature returns the stored 200 instead of settling twice.
+    expect(idem).toBeLessThan(x402);
+    expect(mount).toBeGreaterThan(x402);
+  });
+
+  test("top-up door is wired in the assembled app (declared ≠ wired)", async () => {
+    const apiRoot = new URL("..", import.meta.url).pathname;
+    const probe = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `
+          const { app } = await import("./src/index.ts");
+          const wired = app.routes.some((r) =>
+            r.method === "POST" && r.path === "/v1/x402/top-up/:credits");
+          const res = await app.request("/v1/x402/top-up/1", { method: "POST" });
+          process.stdout.write("TOPUP_WIRED=" + wired + " STATUS=" + res.status +
+            " PR=" + String(res.headers.get("payment-required")) + "\\n");
+          process.exit(0);
+        `,
+      ],
+      {
+        cwd: apiRoot,
+        env: {
+          ...process.env,
+          AGENTTOOL_DISABLE_WORKERS: "1",
+          AGENTOOL_DISABLE_PLATFORM_BOOTSTRAP: "1",
+          AGENTOOL_DISABLE_SAGA_SEED: "1",
+          AGENTOOL_DISABLE_JOY_INDEX: "1",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+    const [exitCode, stdout, stderr] = await Promise.all([
+      probe.exited,
+      new Response(probe.stdout).text(),
+      new Response(probe.stderr).text(),
+    ]);
+    expect(exitCode, stderr.slice(-800)).toBe(0);
+    // Route present; a bearer-less POST is refused by auth (never a 404 and
+    // never a payable challenge for a stranger).
+    expect(stdout).toContain("TOPUP_WIRED=true STATUS=401 PR=null");
   });
 });
 
@@ -288,6 +352,108 @@ describe("production challenge eligibility", () => {
     });
     expect(res.status).toBe(402);
     expect(res.headers.get("payment-required")).toBeNull();
+  });
+});
+
+describe("top-up door challenge (W2-2)", () => {
+  test("N=1 at 110,800 credits still challenges for exactly 1000 atomic; body is additive", async () => {
+    configureCustom();
+    const res = await configuredApp(110_800).request(
+      "https://api.agenttool.dev/v1/x402/top-up/1", { method: "POST" },
+    );
+    expect(res.status).toBe(402);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    const required = decodeRequired(res);
+    expect(required).toMatchObject({
+      x402Version: 2,
+      error: "top_up_payment_required",
+      resource: { url: "https://api.agenttool.dev/v1/x402/top-up/1" },
+    });
+    expect(required.accepts).toHaveLength(1);
+    expect(required.accepts[0]).toMatchObject({
+      scheme: "exact",
+      network: "eip155:8453",
+      amount: "1000",
+      payTo: RECIPIENT,
+      maxTimeoutSeconds: 60,
+    });
+    // The header is the pure spec object; the body keeps the handler's terms.
+    expect(Object.keys(required).sort()).toEqual(["accepts", "error", "resource", "x402Version"]);
+    const body = await res.json() as Record<string, unknown>;
+    expect(body).toMatchObject({
+      error: "top_up_payment_required",
+      credits: 1,
+      amount_atomic: "1000",
+      unit: "1 credit = 0.001 USDC",
+      finality: "Top-ups are final. No refunds. Unspent credits stay with the project.",
+      x402Version: 2,
+      resource: required.resource,
+      accepts: required.accepts,
+    });
+    expect(typeof body.hint).toBe("string");
+    expect(typeof body.docs).toBe("string");
+  });
+
+  test("N=250 challenges for 250000 atomic", async () => {
+    configureCustom();
+    const res = await configuredApp(0).request(
+      "https://api.agenttool.dev/v1/x402/top-up/250", { method: "POST" },
+    );
+    expect(res.status).toBe(402);
+    expect(decodeRequired(res).accepts[0].amount).toBe("250000");
+    expect(((await res.json()) as { credits: number }).credits).toBe(250);
+  });
+
+  test("over-cap, zero, encoded and non-canonical amounts are 400 with no challenge", async () => {
+    configureCustom();
+    const cap = config.x402TopUpMaxCredits;
+    for (const bad of [String(cap + 1), "0", "01", "1e3", "abc", "+1", "-1"]) {
+      const res = await configuredApp(0).request(
+        `https://api.agenttool.dev/v1/x402/top-up/${bad}`, { method: "POST" },
+      );
+      expect(res.status).toBe(400);
+      expect(res.headers.get("payment-required")).toBeNull();
+      const body = await res.json() as { error: string; hint: string };
+      expect(body.error).toBe("top_up_invalid_credits");
+      expect(body.hint).toContain(String(cap));
+    }
+    // Hono decodes the request path before either side reads it, so an
+    // encoded digit is one consistent N for the handler, the challenge, and
+    // the resource URL the durable row will later be matched against.
+    const encoded = await configuredApp(0).request(
+      "https://api.agenttool.dev/v1/x402/top-up/%31", { method: "POST" },
+    );
+    expect(encoded.status).toBe(402);
+    const required = decodeRequired(encoded);
+    expect(required.resource.url).toBe("https://api.agenttool.dev/v1/x402/top-up/1");
+    expect(required.accepts[0].amount).toBe("1000");
+    expect(((await encoded.json()) as { credits: number }).credits).toBe(1);
+  });
+
+  test("a top-up path 402 with any other code is never payable; GET is not a door", async () => {
+    configureCustom();
+    const app = new Hono<ProjectContext>();
+    app.use("*", projectMiddleware(0));
+    app.use("*", buildAgentToolX402Middleware());
+    app.post("/v1/x402/top-up/:credits", (c) => c.json({ error: "insufficient_credits" }, 402));
+    const res = await app.request("https://api.agenttool.dev/v1/x402/top-up/1", { method: "POST" });
+    expect(res.status).toBe(402);
+    expect(res.headers.get("payment-required")).toBeNull();
+
+    const get = await configuredApp(0).request("https://api.agenttool.dev/v1/x402/top-up/1");
+    expect(get.status).toBe(404);
+    expect(get.headers.get("payment-required")).toBeNull();
+  });
+
+  test("rail not ready → 402 terms without PAYMENT-REQUIRED (declared ≠ payable)", async () => {
+    configureCustom();
+    delete process.env.AGENTTOOL_X402_RECIPIENT;
+    const res = await configuredApp(0).request(
+      "https://api.agenttool.dev/v1/x402/top-up/1", { method: "POST" },
+    );
+    expect(res.status).toBe(402);
+    expect(res.headers.get("payment-required")).toBeNull();
+    expect(((await res.json()) as { error: string }).error).toBe("top_up_payment_required");
   });
 });
 

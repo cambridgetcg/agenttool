@@ -177,6 +177,7 @@ import welcomeRouter from "./routes/welcome";
 import wellKnownRouter from "./routes/well-known";
 import webFingerRouter from "./routes/webfinger";
 import x402PaymentsRouter from "./routes/x402-payments";
+import x402TopUpRouter from "./routes/x402-top-up";
 import {
   buildAgentsMd,
   buildLlmsTxt,
@@ -429,6 +430,12 @@ app.use("/v1/scrape/*", authMiddleware);
 app.use("/v1/browse/*", authMiddleware);
 app.use("/v1/document/*", authMiddleware);
 app.use("/v1/x402/payments/*", authMiddleware);
+app.use("/v1/x402/top-up/*", authMiddleware);
+// Idempotency for the top-up door runs BEFORE the global x402 verifier below:
+// a client retrying the same Idempotency-Key with a freshly signed
+// authorization after an ambiguous response must get the stored 200, not a
+// second settlement (review on PR #380).
+app.use("/v1/x402/top-up/*", idempotency());
 app.use("/v1/execute/*", authMiddleware);
 app.use("/v1/jobs/*", authMiddleware);
 app.use("/v1/tutorial", authMiddleware);
@@ -488,11 +495,18 @@ app.use("/v1/grace/*", authMiddleware);
 // Registered after every route-auth prefix so an inbound PAYMENT-SIGNATURE retry gives
 // the verifier the authenticated c.var.project credit target, and before the
 // remaining middleware + handlers so eligible outbound 402 responses are
-// wrapped. Production eligibility is deliberately narrow: exact POST
+// wrapped. Production eligibility is the payable-route table
+// (services/economy/x402-policy.ts X402_PAYABLE_ROUTES): exact POST
 // /v1/scrape and POST /v1/document `insufficient_credits` gates at their full
-// configured route cost. Wallet, usage-cap, and unknown 402s remain unchanged.
-// The verifier persists, verifies, settles, and applies project credits;
-// handlers atomically re-check their own gate after the top-up. Spec:
+// configured route cost, plus the agent rail's purchase door POST
+// /v1/x402/top-up/:credits (`top_up_payment_required`, N credits for
+// N × 1,000 atomic USDC, never balance-bound, capped by
+// X402_TOP_UP_MAX_CREDITS, final). Wallet, usage-cap, and unknown 402s remain
+// unchanged. The verifier persists, verifies, settles, and applies project
+// credits; tool handlers atomically re-check their own gate after the
+// top-up, and the top-up door answers 200 only when a payment was verified
+// on this very request (a replayed settled authorization is 402 + receipt,
+// never a second credit). Spec:
 // https://x402.org · facilitator config via
 // AGENTTOOL_X402_{RECIPIENT,NETWORK,FACILITATOR} env vars.
 // Doctrine: docs/ECOSYSTEM.md · docs/ALIGNMENT-MOVES.md (Move 4) ·
@@ -549,6 +563,10 @@ app.use(
 );
 app.use("/v1/vault/*", idempotency());
 app.use("/v1/bootstrap/*", idempotency());
+// Top-up: a 402 challenge is never frozen (isCacheableIdempotencyStatus), so
+// the same Idempotency-Key replays only a completed 200 — a client that lost
+// the response and retries its signed request gets the receipt it already
+// paid for; the durable authorization row is what prevents a second credit.
 app.use("/v1/chronicle/*", idempotency());
 app.use("/v1/handoff", idempotency());
 app.use("/v1/handoff/*", idempotency());
@@ -992,6 +1010,7 @@ app.route("/v1/federation", federationAdminRouter);
 app.route("/federation", federationRouter);
 app.route("/v1", toolsRouter); // mounts /v1/{scrape,browse,document,execute,jobs}
 app.route("/v1/x402/payments", x402PaymentsRouter);
+app.route("/v1/x402/top-up", x402TopUpRouter);
 
 // ── OpenAPI 3.1 spec — public, no auth ──────────────────────────────────────
 // OpenAPI recommends the filename openapi.json but does not assign a universal

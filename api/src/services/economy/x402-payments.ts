@@ -34,7 +34,7 @@ import type {
 import {
   ATOMIC_PER_CREDIT,
   canClearProjectCreditGate,
-  isX402ProjectCreditRoute,
+  matchX402PayableRoute,
   resolveX402Facilitator,
   resolveX402FacilitatorReadiness,
   resolveX402Network,
@@ -326,6 +326,16 @@ export function getStashedSettlement(c: Context): FacilitatorSettleResult | unde
   return (c as Context & X402StashedState)._x402Settlement;
 }
 
+/** Durable identity + lifecycle status of the authorization this request
+ * presented, once the verifier reached a durable row. Handlers that are paid
+ * directly (the top-up door) echo the hash so a caller can reconcile through
+ * GET /v1/x402/payments/:hash. */
+export function getStashedX402PaymentState(
+  c: Context,
+): { authorizationHash: string; status: X402PaymentStatus } | undefined {
+  return (c as Context & X402StashedState)._x402PaymentState;
+}
+
 function statusPath(hash: string): string {
   return `/v1/x402/payments/${hash}`;
 }
@@ -521,7 +531,10 @@ export function createX402Verifier(deps: X402VerifierDeps) {
       // Route/project/version/payload decoding are stable request boundaries.
       // Mutable price, recipient, network and public-origin policy are
       // intentionally consulted only after a semantic durable-identity miss.
-      if (!isX402ProjectCreditRoute(c.req.path, c.req.method)) return false;
+      // The structural gate is the payable-route table's pure matcher over the
+      // concrete path (a top_up row matches `/v1/x402/top-up/<N>`); the stored
+      // resource path of a durable row must equal this same concrete path.
+      if (!matchX402PayableRoute(c.req.path, c.req.method)) return false;
       const project = (c as Context & {
         var: { project?: { id: string; credits?: unknown } };
       }).var?.project;
@@ -557,6 +570,9 @@ export function createX402Verifier(deps: X402VerifierDeps) {
         requirements = storedRequirements;
         resource = storedResource;
       } else {
+        // Fresh admission binds price and path through the matched policy:
+        // route_cost → the row's static credits; top_up → N from `:credits`,
+        // so amountAtomic = N × ATOMIC_PER_CREDIT and creditsPurchased = N.
         const policy = x402ProjectCreditPolicy(c.req.path, c.req.method);
         if (!policy) return false;
         const recipient = resolveX402Recipient(deps.recipient()).recipient;

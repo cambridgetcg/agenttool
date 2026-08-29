@@ -79,6 +79,17 @@ export const config = {
   // CPU — free to try, costly to farm (Sybil resistance). One source: the
   // register flow enforces it; /public/plans advertises it. No drift.
   registerAgentPowBits: envInt("AGENTTOOL_REGISTER_AGENT_POW_BITS", 18),
+
+  // ── x402 · agent USDC top-up cap (Wave 2 agent rail) ───────────────────
+  // Most credits one `POST /v1/x402/top-up/:credits` challenge may carry.
+  // 1 credit = 1,000 USDC atomic units (USD 0.001; ATOMIC_PER_CREDIT in
+  // services/economy/x402-policy.ts), so 10,000 credits = USD 10 per top-up.
+  // Top-ups are final: no refunds, unspent credits stay on the project.
+  // Non-positive or malformed overrides fall back to the default.
+  x402TopUpMaxCredits: (() => {
+    const n = envInt("X402_TOP_UP_MAX_CREDITS", 10_000);
+    return Number.isSafeInteger(n) && n > 0 && n <= 2_147_483_647 ? n : 10_000;
+  })(),
 } as const;
 
 // Both API and thinker import this module. Refuse a missing, wrong-pool,
