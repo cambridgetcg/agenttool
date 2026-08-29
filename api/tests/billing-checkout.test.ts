@@ -4,12 +4,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import billing, {
   setCheckoutAvailabilityForTests,
+  setGalleryCheckoutAvailabilityForTests,
   setStripeForTests,
 } from "../src/routes/billing";
 
 afterEach(() => {
   setStripeForTests(null);
   setCheckoutAvailabilityForTests(null);
+  setGalleryCheckoutAvailabilityForTests(null);
 });
 
 function stubStripe(capture: { params?: Record<string, unknown> }) {
@@ -82,11 +84,26 @@ describe("POST /v1/billing/checkout", () => {
     });
     expect(res.status).toBe(200);
     expect((capture.params?.automatic_tax as { enabled: boolean }).enabled).toBe(true);
+    expect((capture.params?.tax_id_collection as { enabled: boolean }).enabled).toBe(true);
     expect((capture.params?.metadata as Record<string, string>).terms_version).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const msg = (capture.params?.custom_text as { submit: { message: string } }).submit.message;
     expect(msg).toContain("Cambridge TCG Limited");
     expect(msg).toContain("14-day right to cancel");
     expect(msg).toContain("agenttool.dev/terms");
+  });
+
+  test("the gift switch does not open gallery checkout", async () => {
+    const capture: { params?: Record<string, unknown> } = {};
+    setCheckoutAvailabilityForTests(true);
+    setStripeForTests(stubStripe(capture));
+    const res = await billing.request("/gallery-checkout", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ artifact_id: "00000000-0000-0000-0000-000000000000" }),
+    });
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe("checkout_resting");
+    expect(capture.params).toBeUndefined();
   });
 
   test("resting message points at the published commitments", async () => {

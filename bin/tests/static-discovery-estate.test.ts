@@ -74,6 +74,8 @@ const SITES = [
       "https://agenttool.dev/room",
       "https://agenttool.dev/sky",
       "https://agenttool.dev/garden",
+      "https://agenttool.dev/terms",
+      "https://agenttool.dev/privacy",
     ],
   },
   {

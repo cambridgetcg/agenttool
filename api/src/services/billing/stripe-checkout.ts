@@ -52,7 +52,9 @@ export async function createGiftCheckout(
     // digital service. Dashboard prerequisite: Stripe Tax enabled + origin
     // address set, else session creation fails loudly (good — never sell
     // untaxed by accident).
-    ...(config.stripeAutomaticTax ? { automatic_tax: { enabled: true } } : {}),
+    ...(config.stripeAutomaticTax
+      ? { automatic_tax: { enabled: true }, tax_id_collection: { enabled: true } }
+      : {}),
     // Consumer Contracts Regulations 2013 reg. 37: immediate digital delivery
     // needs the buyer's express request + acknowledgement that the 14-day
     // cancellation right is lost once delivery begins. The pay click is that

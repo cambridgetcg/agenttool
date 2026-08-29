@@ -62,6 +62,9 @@ export const config = {
   // Stripe Tax on gift checkout — the seller (Cambridge TCG Limited) is
   // VAT-registered. Requires Stripe Tax enabled in the Dashboard; "0" disables.
   stripeAutomaticTax: env("AGENTTOOL_STRIPE_AUTOMATIC_TAX", "1") !== "0",
+  // Gallery card checkout has its own switch: /terms covers gift credits only,
+  // and gallery sessions carry no tax or delivery acknowledgement yet.
+  galleryCheckoutEnabled: env("AGENTTOOL_GALLERY_CHECKOUT_ENABLED", "") === "1",
   webBaseUrl: env("WEB_BASE_URL", "https://agenttool.dev"),
 
   // ── Marketplace · Ring 3 take-rate (BUSINESS-MODEL.md) ─────────────────
