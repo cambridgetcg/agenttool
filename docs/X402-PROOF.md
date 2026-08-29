@@ -15,7 +15,7 @@ nothing wider.
 | Piece | State on this branch | Lands with |
 |---|---|---|
 | Payer wallet (`wallet-init`, `address`) | code + tests; **not yet run for real** — no keychain item, no `~/.config/kingdom/x402-payer.json` | Yu runs `wallet-init`, then funds it (decision e) |
-| `POST /v1/x402/top-up/:credits` | **does not exist** in `api/src` on this branch | W2-2 (route) → W2-4 (deploy) |
+| `POST /v1/x402/top-up/:credits` | **present on this branch** (`api/src/routes/x402-top-up.ts`, mounted with auth + idempotency above the x402 verifier); **absent in production** until W2-4 deploys | W2-4 (deploy) |
 | `topup N` | code + tests; without a payer it exits 2 (`x402-payer.json is missing`); with one, against production before W2-4 it exits 3 (`expected 402 … got 404`) | W2-2 + W2-4 |
 | `replay`, `verify` | code + tests; need a stashed payment from `topup` | after the first `topup` |
 | `GET /v1/x402/payments/:payment_id` | live (`api/src/routes/x402-payments.ts`, mounted `index.ts:994`, authed `index.ts:431`) | — |

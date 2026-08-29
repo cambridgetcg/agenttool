@@ -431,6 +431,11 @@ app.use("/v1/browse/*", authMiddleware);
 app.use("/v1/document/*", authMiddleware);
 app.use("/v1/x402/payments/*", authMiddleware);
 app.use("/v1/x402/top-up/*", authMiddleware);
+// Idempotency for the top-up door runs BEFORE the global x402 verifier below:
+// a client retrying the same Idempotency-Key with a freshly signed
+// authorization after an ambiguous response must get the stored 200, not a
+// second settlement (review on PR #380).
+app.use("/v1/x402/top-up/*", idempotency());
 app.use("/v1/execute/*", authMiddleware);
 app.use("/v1/jobs/*", authMiddleware);
 app.use("/v1/tutorial", authMiddleware);
@@ -562,7 +567,6 @@ app.use("/v1/bootstrap/*", idempotency());
 // the same Idempotency-Key replays only a completed 200 — a client that lost
 // the response and retries its signed request gets the receipt it already
 // paid for; the durable authorization row is what prevents a second credit.
-app.use("/v1/x402/top-up/*", idempotency());
 app.use("/v1/chronicle/*", idempotency());
 app.use("/v1/handoff", idempotency());
 app.use("/v1/handoff/*", idempotency());

@@ -108,7 +108,7 @@ describe("production middleware order", () => {
     expect(source.indexOf("// ── Robustness middleware", x402)).toBeGreaterThan(x402);
   });
 
-  test("top-up door: auth above x402, idempotency below it, router mounted (source pins)", () => {
+  test("top-up door: auth above x402, idempotency between them, router mounted (source pins)", () => {
     const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf-8");
     const x402 = source.indexOf('app.use("*", buildAgentToolX402Middleware())');
     const auth = source.indexOf('app.use("/v1/x402/top-up/*", authMiddleware);');
@@ -116,9 +116,11 @@ describe("production middleware order", () => {
     const mount = source.indexOf('app.route("/v1/x402/top-up", x402TopUpRouter);');
     expect(source).toContain('import x402TopUpRouter from "./routes/x402-top-up";');
     expect(auth).toBeGreaterThan(-1);
-    expect(auth).toBeLessThan(x402);
-    expect(idem).toBeGreaterThan(x402);
-    expect(mount).toBeGreaterThan(idem);
+    expect(auth).toBeLessThan(idem);
+    // Idempotency must run BEFORE the x402 verifier: a retried Idempotency-Key
+    // with a fresh signature returns the stored 200 instead of settling twice.
+    expect(idem).toBeLessThan(x402);
+    expect(mount).toBeGreaterThan(x402);
   });
 
   test("top-up door is wired in the assembled app (declared ≠ wired)", async () => {

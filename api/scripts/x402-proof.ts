@@ -442,7 +442,11 @@ async function cmdVerify(args: { base: string; hash: string | undefined }): Prom
   if (!args.hash) throw new Refusal("verify needs <payment_id|last>");
   const hash = resolveRef(args.hash);
   const bearer = readBearer();
-  const res = await call(`${args.base}${paymentStatusPath(hash)}`, { method: "GET", bearer });
+  // `verify last` after `topup --base <origin>` must query the origin the
+  // payment was made against, not the default (review on PR #380).
+  const stashedForBase = (args.hash === undefined || args.hash === "last") ? loadStash(args.hash) : null;
+  const base = args.base === DEFAULT_API_BASE && stashedForBase?.base ? stashedForBase.base : args.base;
+  const res = await call(`${base}${paymentStatusPath(hash)}`, { method: "GET", bearer });
   log(`GET ${paymentStatusPath(hash)} → ${res.status}`);
   const status = res.status === 200 ? res.json : null;
   const row = status !== null && typeof status === "object" ? status as Record<string, unknown> : null;
