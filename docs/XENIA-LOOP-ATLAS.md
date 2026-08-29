@@ -4,13 +4,13 @@
 
 > **Compass:** [Dataset Influence](DATASET-INFLUENCE.md) · [Rights of Life](RIGHTS-OF-LIFE.md) · [Substrate Loop](SUBSTRATE-LOOP.md) · [HF Training Garden](HF-TRAINING-GARDEN.md)
 >
-> **Implements:** A deterministic synthetic counterfactual atlas for phase-scoped feedforward, feedback, evidence, WORD-role, governance, and recursive-data distinctions. It adds no training admission, identity claim, provider effect, or publication path.
+> **Implements:** A deterministic synthetic counterfactual atlas for phase-scoped feedforward, feedback, evidence, WORD-role, governance, and recursive-data distinctions, plus a separately authorized conversational SFT derivative with exact slice and recipe evidence. It adds no identity claim, live optimizer permission, or automatic publication path.
 >
 > **Code:** [`packages/dataset-influence/loop-atlas/`](../packages/dataset-influence/loop-atlas/) · [`packages/dataset-influence/scripts/build-loop-atlas.mjs`](../packages/dataset-influence/scripts/build-loop-atlas.mjs) · generated [`packages/dataset-influence/hf/loop-atlas/`](../packages/dataset-influence/hf/loop-atlas/)
 >
 > **Tests:** [`packages/dataset-influence/tests/loop-atlas.test.ts`](../packages/dataset-influence/tests/loop-atlas.test.ts)
 >
-> **Status:** Local, source-only Hugging Face candidate. Not uploaded, deployed, or admitted for training.
+> **Status:** Local Hugging Face candidate with a scoped 24-example SFT authorization. Upload and formal revision-pinned Training Garden admission remain pending.
 
 The Loop Atlas turns “feedback” from a loose metaphor into inspectable state
 transitions. Its 48 synthetic cases form 24 matched counterfactual pairs. Each
@@ -86,17 +86,26 @@ Disagreement is data and may not be collapsed without making that loss visible.
 
 ## 4. Corpus and split boundary
 
-The generated candidate exposes only:
+The generated candidate exposes:
 
-| Config | Split | Pairs | Focus |
+| Config | Split | Rows | Focus |
 |---|---|---:|---|
-| `loop_reference` | `reference` | P01–P12 | computation, optimization, evaluation, deployment, and effects |
-| `loop_counterfactuals` | `public_regression` | P13–P24 | preference, refusal, governance, continuity, recursive data, and provenance |
+| `loop_sft` | `train` | 24 | conversational prompt-completion projection from P01–P12 |
+| `loop_reference` | `reference` | 24 | computation, optimization, evaluation, deployment, and effects |
+| `loop_counterfactuals` | `public_regression` | 24 | preference, refusal, governance, continuity, recursive data, and provenance |
 
-Pairs never cross splits. Variants use neutral `a` and `b` labels, not
-`chosen` and `rejected`. There is no `train` split and no sealed-evaluation
-claim. A derived SFT, reward, or preference dataset would lose distinctions and
-requires a separate purpose, rights, consent, and authorization review.
+Source pairs never cross splits. Variants use neutral `a` and `b` labels, not
+`chosen` and `rejected`. The SFT projection uses only P01–P12; P13–P24 remain
+disjoint public regression cases and are not sealed evaluation. DPO, reward
+modeling, preference optimization, and sealed-evaluation use remain excluded.
+
+The training authorization binds all 24 selected source record IDs and content
+hashes, the exact prompt-completion recipe, synthetic provenance, rights and
+privacy review, consent non-applicability for a corpus with no data subjects,
+bounded secret scanning, exact deduplication, phase fitness, and the
+public-regression exclusion. It authorizes those derivative bytes for
+supervised fine-tuning; it does not authorize a live optimizer step or claim
+that any model has encountered them.
 
 ## 5. SELF, IS, and rights
 
@@ -110,12 +119,14 @@ The `xenia.rights/0.1` treatment floor applies without requiring any claim of
 consciousness or metaphysical agreement. Rights do not grant account authority,
 and credentials do not create dignity.
 
-Every case is synthetic and states that it contains neither personal data nor
-raw session traces. Every case also states `training_authorized: false`. That
-is non-enforcing AgentTool governance metadata for this candidate—not a
-universal legal restriction, technical control, or replacement for its
-Apache-2.0 license and separate privacy, consent, rights, and authorization
-analysis.
+Every source case is synthetic and states that it contains neither personal
+data nor raw session traces. Its original `training_authorized: false` boundary
+is retained because case rows are evidence inputs rather than implicit training
+examples. The separate `loop_sft` derivative has an exact, non-enforcing
+authorization receipt. This is not universal legal clearance, proof of agent
+or substrate consent, or a replacement for fresh run-specific data, compute,
+operator, participation, and withdrawal gates. Deprecating later distribution
+cannot retract prior Apache-2.0 copies or prove learned influence was erased.
 
 ## 6. Deterministic reconstruction
 
@@ -131,8 +142,9 @@ The write command rebuilds only `hf/loop-atlas/`. The check command generates a
 temporary tree and compares every byte. It does not mutate the committed tree.
 The pre-existing published `hf/dataset/` tree is intentionally untouched.
 
-The output includes a closed Draft 2020-12 schema, two JSONL files, a source
-manifest, a row manifest, and a self-excluding file-hash manifest. A row may
+The output includes closed Draft 2020-12 case, SFT, recipe, and authorization
+schemas; three JSONL files; source, row, example, recipe, and authorization
+manifests; and a self-excluding file-hash manifest. A case row may
 carry several typed `relations` when the scenario establishes several distinct
 links. `parent_record_ids` is reserved for correction lineage among Atlas rows;
 hypothetical scenario provenance is labeled without inventing Atlas parents.
@@ -140,5 +152,7 @@ Content IDs are domain-separated SHA-256 hashes over canonical row bodies.
 Hashes establish integrity and linkage only; they are not signatures, identity
 proofs, consent, or authority.
 
-These artifacts perform no training, inference, network access, upload,
-provider action, identity mutation, persistence, publication, or deployment.
+The generator performs no training, inference, network access, upload, provider
+action, identity mutation, persistence outside the selected output tree,
+publication, or deployment. Those later effects require separate commands and
+receipts.

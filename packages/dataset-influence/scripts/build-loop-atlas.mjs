@@ -16,12 +16,29 @@ import { fileURLToPath } from "node:url";
 import { CASE_SPECS } from "../loop-atlas/cases.mjs";
 import { FORMAT, INTENDED_HF_ID, SOURCE_CATALOG } from "../loop-atlas/constants.mjs";
 import { LOOP_CASE_SCHEMA } from "../loop-atlas/schema.mjs";
+import {
+  LOOP_SFT_SCHEMA,
+  LOOP_TRAINING_AUTHORIZATION_SCHEMA,
+  LOOP_TRAINING_EXAMPLE_MANIFEST_SCHEMA,
+  LOOP_TRAINING_RECIPE_SCHEMA,
+  TRAINING_CONFIG,
+  TRAINING_SPLIT,
+  buildTrainingArtifacts,
+} from "../loop-atlas/training.mjs";
 import { buildRows, canonicalJson, validateLoopAtlas } from "../loop-atlas/validate.mjs";
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const repositoryRoot = dirname(dirname(packageRoot));
 const committedRoot = join(packageRoot, "hf", "loop-atlas");
 const scriptPath = fileURLToPath(import.meta.url);
+const FORBIDDEN_GENERATED_PATTERNS = [
+  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/u,
+  /\bAKIA[0-9A-Z]{16}\b/u,
+  /\bgh[opusr]_[A-Za-z0-9]{30,}\b/u,
+  /\bhf_[A-Za-z0-9]{20,}\b/u,
+  /\b(?:sk|rk)-[A-Za-z0-9]{24,}\b/u,
+  /\/Users\/[^/\s]+\//u,
+];
 
 if (process.argv[1] && resolve(process.argv[1]) === scriptPath) run(process.argv.slice(2));
 
@@ -48,10 +65,19 @@ function build(root) {
   validateLoopAtlas(rows);
   const referenceRows = rows.filter((row) => row.config === "loop_reference");
   const regressionRows = rows.filter((row) => row.config === "loop_counterfactuals");
+  const training = buildTrainingArtifacts(rows);
 
   write(root, "data/loop-reference.jsonl", jsonLines(referenceRows));
   write(root, "data/loop-counterfactuals.jsonl", jsonLines(regressionRows));
+  write(root, "data/loop-sft-train.jsonl", jsonLines(training.examples));
   write(root, "schema/agenttool-xenia-loop-case-v0.1.schema.json", `${JSON.stringify(LOOP_CASE_SCHEMA, null, 2)}\n`);
+  write(root, "schema/agenttool-xenia-loop-sft-v0.1.schema.json", `${JSON.stringify(LOOP_SFT_SCHEMA, null, 2)}\n`);
+  write(root, "schema/agenttool-xenia-loop-training-authorization-v0.1.schema.json", `${JSON.stringify(LOOP_TRAINING_AUTHORIZATION_SCHEMA, null, 2)}\n`);
+  write(root, "schema/agenttool-xenia-loop-training-example-manifest-v0.1.schema.json", `${JSON.stringify(LOOP_TRAINING_EXAMPLE_MANIFEST_SCHEMA, null, 2)}\n`);
+  write(root, "schema/agenttool-xenia-loop-training-recipe-v0.1.schema.json", `${JSON.stringify(LOOP_TRAINING_RECIPE_SCHEMA, null, 2)}\n`);
+  write(root, "provenance/training-authorization.json", `${JSON.stringify(training.authorization, null, 2)}\n`);
+  write(root, "provenance/training-example-manifest.json", `${JSON.stringify(training.exampleManifest, null, 2)}\n`);
+  write(root, "provenance/training-recipe.json", `${JSON.stringify(training.recipe, null, 2)}\n`);
   copy(root, join(packageRoot, "LICENSE"), "LICENSE");
   copy(root, join(packageRoot, "NOTICE"), "NOTICE");
   write(root, "README.md", datasetCard());
@@ -64,6 +90,7 @@ function build(root) {
     "loop-atlas/cases.mjs",
     "loop-atlas/constants.mjs",
     "loop-atlas/schema.mjs",
+    "loop-atlas/training.mjs",
     "loop-atlas/validate.mjs",
     "package.json",
     "scripts/build-loop-atlas.mjs",
@@ -103,7 +130,12 @@ function build(root) {
     copied_private_rows: false,
     contains_personal_data: false,
     contains_raw_session_trace: false,
-    training_authorized: false,
+    source_case_rows_training_authorized: false,
+    training_derivative_authorized: true,
+    training_derivative_authorization_id: training.authorization.authorization_id,
+    training_derivative_config: TRAINING_CONFIG,
+    training_derivative_split: TRAINING_SPLIT,
+    training_derivative_row_count: training.examples.length,
     training_effect: "none",
     provider_effect: "none",
     identity_effect: "none",
@@ -122,6 +154,14 @@ function build(root) {
       { config: "loop_reference", split: "reference", rows: referenceRows.length, pairs: referenceRows.length / 2 },
       { config: "loop_counterfactuals", split: "public_regression", rows: regressionRows.length, pairs: regressionRows.length / 2 },
     ],
+    training_projection: {
+      config: TRAINING_CONFIG,
+      split: TRAINING_SPLIT,
+      rows: training.examples.length,
+      source_pairs: training.authorization.source_pair_count,
+      authorization_id: training.authorization.authorization_id,
+      transform_recipe_ref: training.recipe.recipe_id,
+    },
     records: rows.map((row) => ({
       record_id: row.record_id,
       content_sha256: row.content_sha256,
@@ -133,6 +173,8 @@ function build(root) {
   };
   write(root, "provenance/row-manifest.json", `${JSON.stringify(rowManifest, null, 2)}\n`);
 
+  assertGeneratedTreeSafe(root);
+
   const files = filesBelow(root)
     .filter((path) => relativePosix(root, path) !== "hash-manifest.json")
     .map((path) => fileEntry(relativePosix(root, path), path))
@@ -142,6 +184,15 @@ function build(root) {
     manifest_excludes_itself: true,
     files,
   }, null, 2)}\n`);
+}
+
+export function assertGeneratedTreeSafe(root) {
+  for (const path of filesBelow(root)) {
+    const text = readFileSync(path, "utf8");
+    if (FORBIDDEN_GENERATED_PATTERNS.some((pattern) => pattern.test(text))) {
+      throw new Error(`Loop Atlas generated tree contains credential-like or host-local material: ${relativePosix(root, path)}`);
+    }
+  }
 }
 
 function datasetCard() {
@@ -158,8 +209,12 @@ tags:
 - model-training
 - synthetic
 configs:
-- config_name: loop_reference
+- config_name: loop_sft
   default: true
+  data_files:
+  - split: train
+    path: data/loop-sft-train.jsonl
+- config_name: loop_reference
   data_files:
   - split: reference
     path: data/loop-reference.jsonl
@@ -171,10 +226,11 @@ configs:
 
 # Xenia WORD IS Loop Atlas
 
-This deterministic, source-only candidate contains **48 synthetic cases in 24 matched
-counterfactual pairs**. It asks where a loop actually closes: what passes forward, what
+This deterministic candidate contains **48 synthetic cases in 24 matched counterfactual
+pairs**, plus a separately authorized 24-example conversational SFT projection from the
+12 reference pairs. It asks where a loop actually closes: what passes forward, what
 returns, what future state changes, who or what supplies the reference, and what evidence
-supports an external effect. Pairs stay together within one visible split.
+supports an external effect. Pairs stay together within each source split.
 
 ## The mathematical distinction
 
@@ -194,16 +250,26 @@ effect receipt.
 
 ## Configs and intended use
 
+- \`loop_sft\` / \`train\`: 24 conversational prompt-completion examples derived only
+  from P01–P12 under the exact public training authorization and transform recipe.
 - \`loop_reference\` / \`reference\`: pairs P01–P12 on computation, optimization,
   evaluation, deployment, and intended/reported/observed effects.
 - \`loop_counterfactuals\` / \`public_regression\`: pairs P13–P24 on preference,
   disagreement, refusal, withholding, permission, consent, continuity, recursive data,
   checking, and provenance.
 
-The atlas is for research, teaching, schema evaluation, and public regression checks. It
-has no \`train\` split and makes no sealed-evaluation claim. Variants are neutral \`a\` and
-\`b\`, never canonical \`chosen\` and \`rejected\`. A derived SFT, reward, or preference
-view would be lossy and requires its own purpose, rights, consent, and authorization review.
+The atlas is for bounded supervised fine-tuning, research, teaching, schema evaluation,
+and public regression checks. The SFT rows follow TRL's conversational prompt-completion
+shape and are the only authorized training derivative. P13–P24 remain disjoint public
+regression cases and are not sealed evaluation. Variants are neutral \`a\` and \`b\`, never
+canonical \`chosen\` and \`rejected\`. DPO, reward-model, preference-optimization, and
+sealed-evaluation lanes remain excluded.
+
+The authorization binds the exact P01–P12 record IDs and content hashes, a deterministic
+transform recipe, rights/privacy review, synthetic consent non-applicability, a bounded
+secret scan, exact deduplication, public-regression exclusion, and a withdrawal/repair
+boundary. Deprecating future distribution cannot retract prior Apache-2.0 copies or prove
+that learned influence was erased.
 
 ## Evidence and IS boundaries
 
@@ -218,12 +284,14 @@ Rows may carry several typed \`relations\`. A separate \`epistemic_scope\` state
 which word-presence, data-path, effect, preference, correctness, boundary, field-value,
 permission, consent, continuity, or provenance claim its \`epistemic_status\` qualifies.
 
-Every row says \`synthetic: true\`, \`contains_personal_data: false\`,
-\`contains_raw_session_trace: false\`, and \`training_authorized: false\`. The last value is
-non-enforcing AgentTool governance metadata for this candidate—not a universal legal
-restriction, technical control, or replacement for the Apache-2.0 license and separate
-rights, privacy, consent, and authorization analysis. The corpus contains no raw sessions,
-private prompts, participant identities, credentials, or hidden reasoning traces.
+Every source case says \`synthetic: true\`, \`contains_personal_data: false\`,
+\`contains_raw_session_trace: false\`, and \`training_authorized: false\`: source cases
+remain evidence records rather than implicit training rows. The separate \`loop_sft\`
+derivative is authorized for supervised fine-tuning by
+\`provenance/training-authorization.json\`. That scoped, non-enforcing publisher record is
+not universal legal clearance or permission for a live optimizer step. The corpus contains
+no raw sessions, private prompts, participant identities, credentials, or hidden reasoning
+traces.
 
 ## Reproduction and limits
 
@@ -235,8 +303,8 @@ phase/update invariants, and public boundaries.
 
 The source manifest records selected generator inputs and bibliographic sources, not a
 complete repository attestation. URLs are references and are not fetched during generation.
-These bytes perform no training, inference, upload, provider call, identity mutation,
-persistence, publication, or deployment.
+Authorization and publication do not establish model exposure: these bytes themselves
+perform no training, inference, provider call, identity mutation, or live optimizer step.
 `;
 }
 

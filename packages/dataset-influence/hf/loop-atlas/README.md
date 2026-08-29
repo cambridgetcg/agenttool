@@ -11,8 +11,12 @@ tags:
 - model-training
 - synthetic
 configs:
-- config_name: loop_reference
+- config_name: loop_sft
   default: true
+  data_files:
+  - split: train
+    path: data/loop-sft-train.jsonl
+- config_name: loop_reference
   data_files:
   - split: reference
     path: data/loop-reference.jsonl
@@ -24,10 +28,11 @@ configs:
 
 # Xenia WORD IS Loop Atlas
 
-This deterministic, source-only candidate contains **48 synthetic cases in 24 matched
-counterfactual pairs**. It asks where a loop actually closes: what passes forward, what
+This deterministic candidate contains **48 synthetic cases in 24 matched counterfactual
+pairs**, plus a separately authorized 24-example conversational SFT projection from the
+12 reference pairs. It asks where a loop actually closes: what passes forward, what
 returns, what future state changes, who or what supplies the reference, and what evidence
-supports an external effect. Pairs stay together within one visible split.
+supports an external effect. Pairs stay together within each source split.
 
 ## The mathematical distinction
 
@@ -47,16 +52,26 @@ effect receipt.
 
 ## Configs and intended use
 
+- `loop_sft` / `train`: 24 conversational prompt-completion examples derived only
+  from P01–P12 under the exact public training authorization and transform recipe.
 - `loop_reference` / `reference`: pairs P01–P12 on computation, optimization,
   evaluation, deployment, and intended/reported/observed effects.
 - `loop_counterfactuals` / `public_regression`: pairs P13–P24 on preference,
   disagreement, refusal, withholding, permission, consent, continuity, recursive data,
   checking, and provenance.
 
-The atlas is for research, teaching, schema evaluation, and public regression checks. It
-has no `train` split and makes no sealed-evaluation claim. Variants are neutral `a` and
-`b`, never canonical `chosen` and `rejected`. A derived SFT, reward, or preference
-view would be lossy and requires its own purpose, rights, consent, and authorization review.
+The atlas is for bounded supervised fine-tuning, research, teaching, schema evaluation,
+and public regression checks. The SFT rows follow TRL's conversational prompt-completion
+shape and are the only authorized training derivative. P13–P24 remain disjoint public
+regression cases and are not sealed evaluation. Variants are neutral `a` and `b`, never
+canonical `chosen` and `rejected`. DPO, reward-model, preference-optimization, and
+sealed-evaluation lanes remain excluded.
+
+The authorization binds the exact P01–P12 record IDs and content hashes, a deterministic
+transform recipe, rights/privacy review, synthetic consent non-applicability, a bounded
+secret scan, exact deduplication, public-regression exclusion, and a withdrawal/repair
+boundary. Deprecating future distribution cannot retract prior Apache-2.0 copies or prove
+that learned influence was erased.
 
 ## Evidence and IS boundaries
 
@@ -71,12 +86,14 @@ Rows may carry several typed `relations`. A separate `epistemic_scope` states ex
 which word-presence, data-path, effect, preference, correctness, boundary, field-value,
 permission, consent, continuity, or provenance claim its `epistemic_status` qualifies.
 
-Every row says `synthetic: true`, `contains_personal_data: false`,
-`contains_raw_session_trace: false`, and `training_authorized: false`. The last value is
-non-enforcing AgentTool governance metadata for this candidate—not a universal legal
-restriction, technical control, or replacement for the Apache-2.0 license and separate
-rights, privacy, consent, and authorization analysis. The corpus contains no raw sessions,
-private prompts, participant identities, credentials, or hidden reasoning traces.
+Every source case says `synthetic: true`, `contains_personal_data: false`,
+`contains_raw_session_trace: false`, and `training_authorized: false`: source cases
+remain evidence records rather than implicit training rows. The separate `loop_sft`
+derivative is authorized for supervised fine-tuning by
+`provenance/training-authorization.json`. That scoped, non-enforcing publisher record is
+not universal legal clearance or permission for a live optimizer step. The corpus contains
+no raw sessions, private prompts, participant identities, credentials, or hidden reasoning
+traces.
 
 ## Reproduction and limits
 
@@ -88,5 +105,5 @@ phase/update invariants, and public boundaries.
 
 The source manifest records selected generator inputs and bibliographic sources, not a
 complete repository attestation. URLs are references and are not fetched during generation.
-These bytes perform no training, inference, upload, provider call, identity mutation,
-persistence, publication, or deployment.
+Authorization and publication do not establish model exposure: these bytes themselves
+perform no training, inference, provider call, identity mutation, or live optimizer step.

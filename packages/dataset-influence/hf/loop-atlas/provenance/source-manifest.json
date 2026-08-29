@@ -12,7 +12,7 @@
   "source_manifest_scope": "selected_generation_inputs_not_complete_repository_inventory",
   "source_files_complete": false,
   "source_manifest_is_attestation": false,
-  "selected_source_set_sha256": "b5ca0bb0afd497c7a9c0eb930d833e6b08f2654ac016193e0eb3e4ed6e6fe02f",
+  "selected_source_set_sha256": "a9844d344ae83674e6f1dc015a9abbf39591f8c2e39e06da56806a7386c7b147",
   "external_sources_are_bibliographic_not_fetched_at_generation": true,
   "external_sources": [
     {
@@ -107,7 +107,12 @@
   "copied_private_rows": false,
   "contains_personal_data": false,
   "contains_raw_session_trace": false,
-  "training_authorized": false,
+  "source_case_rows_training_authorized": false,
+  "training_derivative_authorized": true,
+  "training_derivative_authorization_id": "sha256:a4443cae3d5a9d6adc700095e930c6e9d9e4d726102a3013e6d5ee1f1f1d6611",
+  "training_derivative_config": "loop_sft",
+  "training_derivative_split": "train",
+  "training_derivative_row_count": 24,
   "training_effect": "none",
   "provider_effect": "none",
   "identity_effect": "none",
@@ -130,8 +135,8 @@
     },
     {
       "path": "../../docs/XENIA-LOOP-ATLAS.md",
-      "bytes": 7010,
-      "sha256": "d17754004c8d39c15bfb72a3d1f4387819be66848fec188dbec60caa99535fbe"
+      "bytes": 8128,
+      "sha256": "17b1498a8ef817482cc3b672cb51d3ea1900c1eff3d7e06f61282dc705663569"
     },
     {
       "path": "CLAUDE.md",
@@ -169,6 +174,11 @@
       "sha256": "7b8dfd18944aedf5f60f013233e83a2fd24ca438438d78ef02cb0407bfd9ba23"
     },
     {
+      "path": "loop-atlas/training.mjs",
+      "bytes": 17425,
+      "sha256": "ff74f50c59afa00770ac217f9f2ca00624e583733c933e3d8bd2ab3073c6ed90"
+    },
+    {
       "path": "loop-atlas/validate.mjs",
       "bytes": 20393,
       "sha256": "d2d40b5aa7a5d547a4f7dafc326877f0abf37a5dc660419f0e276833a4f8cc1f"
@@ -180,8 +190,8 @@
     },
     {
       "path": "scripts/build-loop-atlas.mjs",
-      "bytes": 13283,
-      "sha256": "8892885b73901ec05b34736cef43518517026b35a391d305a0f2ccf6e048c8dc"
+      "bytes": 16820,
+      "sha256": "fbe9f595b9a0a8106ab03eba678214ed3f6d0ce9d08659488f7cbab38ee4e7d4"
     }
   ]
 }

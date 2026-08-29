@@ -9,8 +9,16 @@ import Ajv2020 from "ajv/dist/2020.js";
 import { CASE_SPECS } from "../loop-atlas/cases.mjs";
 import { EPISTEMIC_SCOPES, RELATIONS, SOURCE_IDS } from "../loop-atlas/constants.mjs";
 import { LOOP_CASE_SCHEMA } from "../loop-atlas/schema.mjs";
+import {
+  LOOP_SFT_SCHEMA,
+  LOOP_TRAINING_AUTHORIZATION_SCHEMA,
+  LOOP_TRAINING_EXAMPLE_MANIFEST_SCHEMA,
+  LOOP_TRAINING_RECIPE_SCHEMA,
+  buildTrainingArtifacts,
+  validateTrainingArtifacts,
+} from "../loop-atlas/training.mjs";
 import { buildRows, canonicalJson, contentHashForRow, validateLoopAtlas } from "../loop-atlas/validate.mjs";
-import { compareTrees, filesBelow, relativePosix } from "../scripts/build-loop-atlas.mjs";
+import { assertGeneratedTreeSafe, compareTrees, filesBelow, relativePosix } from "../scripts/build-loop-atlas.mjs";
 import { root as packageRoot } from "./fixtures.js";
 
 const atlasRoot = join(packageRoot, "hf", "loop-atlas");
@@ -18,9 +26,17 @@ const rows = [
   ...readJsonLines(join(atlasRoot, "data", "loop-reference.jsonl")),
   ...readJsonLines(join(atlasRoot, "data", "loop-counterfactuals.jsonl")),
 ];
+const trainingExamples = readJsonLines(join(atlasRoot, "data", "loop-sft-train.jsonl"));
+const trainingAuthorization = readJson(join(atlasRoot, "provenance", "training-authorization.json"));
+const trainingExampleManifest = readJson(join(atlasRoot, "provenance", "training-example-manifest.json"));
+const trainingRecipe = readJson(join(atlasRoot, "provenance", "training-recipe.json"));
 const byPair = (pairId: string) => rows.filter((row) => row.pair_id === pairId);
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 const validateSchema = ajv.compile(LOOP_CASE_SCHEMA);
+const validateSftSchema = ajv.compile(LOOP_SFT_SCHEMA);
+const validateTrainingAuthorizationSchema = ajv.compile(LOOP_TRAINING_AUTHORIZATION_SCHEMA);
+const validateTrainingExampleManifestSchema = ajv.compile(LOOP_TRAINING_EXAMPLE_MANIFEST_SCHEMA);
+const validateTrainingRecipeSchema = ajv.compile(LOOP_TRAINING_RECIPE_SCHEMA);
 
 describe("Xenia WORD IS Loop Atlas", () => {
   test("reconstructs 48 schema-valid rows in 24 pair-contained cases", () => {
@@ -146,7 +162,12 @@ describe("Xenia WORD IS Loop Atlas", () => {
     expect(sourceManifest.source_manifest_is_attestation).toBe(false);
     expect(sourceManifest.upstream_revision).toBeNull();
     expect(sourceManifest.upstream_revision_state).toContain("local_source_candidate");
-    expect(sourceManifest.training_authorized).toBe(false);
+    expect(sourceManifest.source_case_rows_training_authorized).toBe(false);
+    expect(sourceManifest.training_derivative_authorized).toBe(true);
+    expect(sourceManifest.training_derivative_authorization_id).toBe(trainingAuthorization.authorization_id);
+    expect(sourceManifest.training_derivative_config).toBe("loop_sft");
+    expect(sourceManifest.training_derivative_split).toBe("train");
+    expect(sourceManifest.training_derivative_row_count).toBe(24);
     expect(sourceManifest.training_effect).toBe("none");
     expect(sourceManifest.identity_effect).toBe("none");
     expect(sourceManifest.authority_effect).toBe("none");
@@ -175,20 +196,110 @@ describe("Xenia WORD IS Loop Atlas", () => {
     }
   });
 
-  test("documents a source-only, neutral-pair candidate rather than a training lane", () => {
+  test("builds one exact, bounded SFT derivative while keeping public regression disjoint", () => {
+    const rebuilt = buildTrainingArtifacts(rows);
+    expect(trainingExamples).toEqual(rebuilt.examples);
+    expect(trainingAuthorization).toEqual(rebuilt.authorization);
+    expect(trainingExampleManifest).toEqual(rebuilt.exampleManifest);
+    expect(trainingRecipe).toEqual(rebuilt.recipe);
+    expect(() => validateTrainingArtifacts({
+      recipe: trainingRecipe,
+      authorization: trainingAuthorization,
+      examples: trainingExamples,
+      exampleManifest: trainingExampleManifest,
+    })).not.toThrow();
+
+    expect(trainingExamples).toHaveLength(24);
+    for (const example of trainingExamples) {
+      expect(validateSftSchema(example), JSON.stringify(validateSftSchema.errors)).toBe(true);
+      expect(Object.keys(example).sort()).toEqual(["completion", "prompt"]);
+      expect(example.prompt).toEqual([{ role: "user", content: expect.any(String) }]);
+      expect(example.completion).toEqual([{ role: "assistant", content: expect.any(String) }]);
+      expect(example).not.toHaveProperty("chosen");
+      expect(example).not.toHaveProperty("rejected");
+      expect(example).not.toHaveProperty("label");
+    }
+    expect(validateTrainingAuthorizationSchema(trainingAuthorization), JSON.stringify(validateTrainingAuthorizationSchema.errors)).toBe(true);
+    expect(validateTrainingExampleManifestSchema(trainingExampleManifest), JSON.stringify(validateTrainingExampleManifestSchema.errors)).toBe(true);
+    expect(validateTrainingRecipeSchema(trainingRecipe), JSON.stringify(validateTrainingRecipeSchema.errors)).toBe(true);
+    expect(trainingAuthorization).toMatchObject({
+      authorization_state: "authorized_training_derivative",
+      training_modes: ["supervised_fine_tuning"],
+      formal_garden_admission_state: "pending_immutable_hub_revision",
+      garden_admission_id: null,
+      output_path: "data/loop-sft-train.jsonl",
+      training_effect: "none",
+      provider_effect_at_generation: "none",
+    });
+    expect(trainingAuthorization.boundaries.permits_live_optimizer_step).toBe(false);
+    expect(trainingAuthorization.output_jsonl_sha256).toBe(`sha256:${createHash("sha256")
+      .update(readFileSync(join(atlasRoot, trainingAuthorization.output_path)))
+      .digest("hex")}`);
+    expect(trainingAuthorization.source_records).toHaveLength(24);
+    expect(trainingAuthorization.source_records.every((record: any) => /^P(?:0[1-9]|1[0-2])$/u.test(record.pair_id))).toBe(true);
+    expect(trainingExampleManifest.entries).toHaveLength(24);
+    expect(new Set(trainingExampleManifest.entries.map((entry: any) => entry.line)).size).toBe(24);
+    expect(trainingExampleManifest.entries.every((entry: any) => /^P(?:0[1-9]|1[0-2])$/u.test(entry.pair_id))).toBe(true);
+    expect(trainingExampleManifest.entries.some((entry: any) => /^P(?:1[3-9]|2[0-4])$/u.test(entry.pair_id))).toBe(false);
+
+    const rowManifest = readJson(join(atlasRoot, "provenance", "row-manifest.json"));
+    expect(rowManifest.training_projection).toEqual({
+      config: "loop_sft",
+      split: "train",
+      rows: 24,
+      source_pairs: 12,
+      authorization_id: trainingAuthorization.authorization_id,
+      transform_recipe_ref: trainingRecipe.recipe_id,
+    });
+
     const card = readFileSync(join(atlasRoot, "README.md"), "utf8");
+    expect(card).toContain("config_name: loop_sft");
+    expect(card).toContain("- split: train");
     expect(card).toContain("config_name: loop_reference");
     expect(card).toContain("config_name: loop_counterfactuals");
-    expect(card).toContain("Variants are neutral `a` and\n`b`");
-    expect(card).toContain("non-enforcing AgentTool governance metadata");
+    expect(card).toContain("Variants are neutral `a` and `b`");
+    expect(card).toContain("only authorized training derivative");
+    expect(card).toContain("P13–P24 remain disjoint public\nregression cases");
     expect(card).toContain("perform no training");
-    expect(card).not.toContain("- split: train");
     expect(card).not.toContain("chosen:");
     expect(card).not.toContain("rejected:");
     expect(execFileSync("node", ["scripts/build-loop-atlas.mjs", "--check"], {
       cwd: packageRoot,
       encoding: "utf8",
     })).toBe("");
+  });
+
+  test("rejects drift in training authorization and line-level evidence", () => {
+    const extraField = clone(trainingExamples);
+    extraField[0].source_record_id = "not allowed in the pure TRL row";
+    expect(validateSftSchema(extraField[0])).toBe(false);
+
+    const elevatedPermission = clone(trainingAuthorization);
+    elevatedPermission.boundaries.permits_live_optimizer_step = true;
+    expect(() => validateTrainingArtifacts({
+      recipe: trainingRecipe,
+      authorization: elevatedPermission,
+      examples: trainingExamples,
+      exampleManifest: trainingExampleManifest,
+    })).toThrow(/training authorization violates its closed schema/u);
+
+    const duplicateLine = clone(trainingExampleManifest);
+    duplicateLine.entries[0].line = duplicateLine.entries[1].line;
+    expect(() => validateTrainingArtifacts({
+      recipe: trainingRecipe,
+      authorization: trainingAuthorization,
+      examples: trainingExamples,
+      exampleManifest: duplicateLine,
+    })).toThrow(/bind every JSONL line exactly once/u);
+
+    const staleRow = clone(trainingExamples);
+    staleRow[0].completion[0].content += " altered";
+    expect(() => validateTrainingArtifacts({
+      recipe: trainingRecipe,
+      authorization: trainingAuthorization,
+      examples: staleRow,
+      exampleManifest: trainingExampleManifest,
+    })).toThrow(/does not bind the exact output bytes and row set/u);
   });
 
   test("rejects symlinked or out-of-tree candidate entries", () => {
@@ -203,6 +314,17 @@ describe("Xenia WORD IS Loop Atlas", () => {
       writeFileSync(join(actual, "entry.txt"), "same bytes\n");
       symlinkSync(outside, join(expected, "entry.txt"), "file");
       expect(() => compareTrees(expected, actual)).toThrow(/symbolic link/u);
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects credential-like or host-local material in the generated tree", () => {
+    expect(() => assertGeneratedTreeSafe(atlasRoot)).not.toThrow();
+    const scratch = mkdtempSync(join(tmpdir(), "agenttool-loop-atlas-secret-scan-test-"));
+    try {
+      writeFileSync(join(scratch, "unsafe.txt"), `-----BEGIN ${"PRIVATE KEY"}-----\n`);
+      expect(() => assertGeneratedTreeSafe(scratch)).toThrow(/credential-like or host-local material/u);
     } finally {
       rmSync(scratch, { recursive: true, force: true });
     }

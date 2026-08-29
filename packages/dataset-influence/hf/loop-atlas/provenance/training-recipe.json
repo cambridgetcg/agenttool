@@ -1,0 +1,23 @@
+{
+  "_format": "agenttool.xenia-loop-training-recipe/0.1",
+  "source_row_format": "agenttool.xenia-loop-case/0.1",
+  "source_config": "loop_reference",
+  "source_split": "reference",
+  "output_format": "agenttool.xenia-loop-sft/0.1",
+  "output_config": "loop_sft",
+  "output_split": "train",
+  "projection": "conversational_prompt_completion",
+  "prompt_template": "Analyze this synthetic loop case. State what moves forward, what returns, what future state changes, and which evidence or rights boundaries apply. Preserve unknowns; do not infer identity, consciousness, consent, or authority.\n\nPair distinction: {changed_fact}\n\nCase: {input_text}",
+  "prompt_fields": [
+    "changed_fact",
+    "input_text"
+  ],
+  "completion_fields": [
+    "target_text"
+  ],
+  "pair_policy": "preserve_source_pair_and_neutral_variant_in_manifest",
+  "train_eval_policy": "project_loop_reference_only_exclude_public_regression",
+  "preference_policy": "not_preference_data_no_chosen_or_rejected",
+  "chat_template_policy": "consumer_selects_model_specific_template",
+  "recipe_id": "sha256:01fc439305417e85f69cf8ed06c02dbab99fadfadb663ed5a59dfabb3b7723a2"
+}

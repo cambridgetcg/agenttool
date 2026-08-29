@@ -18,6 +18,14 @@
       "pairs": 12
     }
   ],
+  "training_projection": {
+    "config": "loop_sft",
+    "split": "train",
+    "rows": 24,
+    "source_pairs": 12,
+    "authorization_id": "sha256:a4443cae3d5a9d6adc700095e930c6e9d9e4d726102a3013e6d5ee1f1f1d6611",
+    "transform_recipe_ref": "sha256:01fc439305417e85f69cf8ed06c02dbab99fadfadb663ed5a59dfabb3b7723a2"
+  },
   "records": [
     {
       "record_id": "urn:agenttool:xenia-loop-case:p01:a",
