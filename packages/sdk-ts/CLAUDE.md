@@ -82,7 +82,7 @@ tests/
 scripts/
   check-parity.ts           — CI gate: method-shape parity with sdk-py
 dist/                       — Compiled JS + .d.ts files
-package.json                — Package config (v0.21.1, ESM)
+package.json                — Package config (v0.22.0, ESM)
 tsconfig.json               — TypeScript config
 ```
 
@@ -143,7 +143,7 @@ AgentTool Platform · "Welcome, don't block."
 ## Key Files
 - `src/client.ts` — Main `AgentTool` class composing the maintained service modules
 - `src/index.ts` — Public API surface and type exports
-- `package.json` — Package metadata (v0.21.1, ESM)
+- `package.json` — Package metadata (v0.22.0, ESM)
 - `scripts/check-parity.ts` — Parity gate against sdk-py
 - `tests/client.test.ts` — Primary test file
 - `tests/data.test.ts` — local data-node and sync wire + bearer-isolation contract
