@@ -495,13 +495,25 @@ class X402PayingTransport(httpx.BaseTransport):
             payment_id=_payment_id_from_status_link(status_link),
             credits_balance=second.headers.get("X-Credits-Balance"),
         )
-        self._emit(event)
+        # The settled response is the caller's artifact: an on_payment that
+        # raises must not turn a settlement into an apparent failure (a retry
+        # with a fresh idempotency key could authorise a second payment).
+        # Callback failures are swallowed on the success path and attached as
+        # the cause only when the retry itself was not accepted.
+        callback_error: Optional[BaseException] = None
+        try:
+            self._emit(event)
+        except Exception as exc:  # noqa: BLE001 — the caller's code, not ours
+            callback_error = exc
 
         # Wall 1: two requests, ever.
         if second.status_code == 402:
             body = _read_body(second)
             second.close()
-            raise _not_accepted_error(second, body, signed, event)
+            error = _not_accepted_error(second, body, signed, event)
+            if callback_error is not None:
+                raise error from callback_error
+            raise error
         return second
 
 

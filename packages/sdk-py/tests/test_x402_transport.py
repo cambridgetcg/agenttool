@@ -826,3 +826,46 @@ class TestHelpers:
         # And the public module carries the client class the parity target pins.
         x402_source = (path.parent / "x402.py").read_text(encoding="utf-8")
         assert re.search(r"^class X402Client\b", x402_source, flags=re.MULTILINE)
+
+
+def test_on_payment_raising_after_a_settled_retry_does_not_hide_the_settlement() -> None:
+    """A callback exception must never turn a settlement into an apparent failure
+    (a retry with a fresh idempotency key could authorise a second payment)."""
+    def boom(_event: X402PaymentEvent) -> None:
+        raise RuntimeError("caller's callback exploded")
+
+    at = AgentTool(
+        api_key="test-key-123",
+        x402=X402Payer(
+            signer=local_evm_signer(PAYER_KEY),
+            policy=_policy(),
+            on_payment=boom,
+            now_seconds=lambda: NOW,
+        ),
+    )
+    paying = at._http._transport
+    assert isinstance(paying, X402PayingTransport)
+    mock, calls = _sequence([_challenge_402, _settled_200])
+    paying._inner = mock
+
+    result = at.x402.top_up(1)  # must not raise: the settlement is the caller's artifact
+    assert result.credits_added == 1
+    assert len(calls) == 2, "exactly two requests, the second signed"
+
+
+def test_on_payment_raising_on_a_second_402_is_attached_as_the_cause() -> None:
+    def boom(_event: X402PaymentEvent) -> None:
+        raise RuntimeError("caller's callback exploded")
+
+    at = AgentTool(
+        api_key="test-key-123",
+        x402=X402Payer(signer=local_evm_signer(PAYER_KEY), policy=_policy(), on_payment=boom, now_seconds=lambda: NOW),
+    )
+    paying = at._http._transport
+    mock, calls = _sequence([_challenge_402, _challenge_402])
+    paying._inner = mock
+    import pytest
+    with pytest.raises(AgentToolError) as excinfo:
+        at.x402.top_up(1)
+    assert isinstance(excinfo.value.__cause__, RuntimeError)
+    assert len(calls) == 2
