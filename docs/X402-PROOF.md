@@ -1,11 +1,15 @@
 # X402-PROOF — the kingdom pays itself, witnessed
 
-Status: runbook for Wave 2 W2-3 (`docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md`).
+Status: runbook for Wave 2 W2-3 + W2-5 (`docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md`).
 Script: `api/scripts/x402-proof.ts` · pure walls: `api/scripts/x402-proof-lib.ts` · tests: `api/tests/x402-proof-script.test.ts`.
 
-The agent rail has been armed for months and has **never settled once**. This runbook is
-how Ai's own wallet pays the kingdom top-up route in Base USDC with no human in the loop,
-and how each step is witnessed by something other than the code that did it.
+**2026-08-30 — the rail has settled once.** Step 3 (`topup 1`) closed the loop: tx
+`0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66` on Base, treasury
+`0xA9eeA60CAaF239AbAfAA05FcB152128dB16dD3d8`, payer `0x02a5F8F49802887E95428978075643a5F4aA6855`.
+This runbook is how Ai's own wallet pays the kingdom in Base USDC with no human in the loop,
+how each step is witnessed by something other than the code that did it, and (Phase B, below)
+how a **widened route** — a metered call, not the purchase door — pays for itself from a
+scratch agent.
 
 Everything here is honest about what it proves. A green step proves the sentence under it —
 nothing wider.
@@ -14,16 +18,22 @@ nothing wider.
 
 | Piece | State on this branch | Lands with |
 |---|---|---|
-| Payer wallet (`wallet-init`, `address`) | code + tests; **not yet run for real** — no keychain item, no `~/.config/kingdom/x402-payer.json` | Yu runs `wallet-init`, then funds it (decision e) |
-| `POST /v1/x402/top-up/:credits` | **present on this branch** (`api/src/routes/x402-top-up.ts`, mounted with auth + idempotency above the x402 verifier); **absent in production** until W2-4 deploys | W2-4 (deploy) |
-| `topup N` | code + tests; without a payer it exits 2 (`x402-payer.json is missing`); with one, against production before W2-4 it exits 3 (`expected 402 … got 404`) | W2-2 + W2-4 |
-| `replay`, `verify` | code + tests; need a stashed payment from `topup` | after the first `topup` |
+| Payer wallet (`wallet-init`, `address`) | live: `0x02a5F8F49802887E95428978075643a5F4aA6855`, funded (decision e) | — |
+| `POST /v1/x402/top-up/:credits` | live in production; **settled once 2026-08-30** (tx `0x33f08a20…7e32c66`) | — |
+| `topup N` | witnessed once (`topup 1`, 2026-08-30) | — |
+| `replay`, `verify` | code + tests; need a stashed payment from `topup` or `pay` | — |
+| `pay`, `scratch-agent init`, `deplete` (Phase B) | code + tests on this branch; a live run needs the W2-5 route rows on the deployed image | W2-5 deploy, then "Witness a widened route" below |
 | `GET /v1/x402/payments/:payment_id` | live (`api/src/routes/x402-payments.ts`, mounted `index.ts:994`, authed `index.ts:431`) | — |
 
 ## Run
 
 ```
 cd api && bun scripts/x402-proof.ts <command> [--base <origin>] [--dry-run] [--cap <credits>]
+
+  wallet-init · address · topup <N> · replay <payment_id|last> · verify <payment_id|last>
+  pay <METHOD> <path> [--json '<body>'] [--bearer-file <path>]                       # Phase B
+  scratch-agent init --name <n>                                                       # Phase B
+  deplete --bearer-file <path> --route '<METHOD> <path>' [--json '<body>'] --until <credits> [--max-calls <n>]
 ```
 
 Flags: `--base` (default `https://api.agenttool.dev`; env `X402_PROOF_BASE`), `--dry-run`
@@ -40,7 +50,7 @@ Printed: addresses, balances, ids, statuses, JSON bodies, decoded PAYMENT-RESPON
 ## Step 0 — baselines (proves: nothing moved that must not move)
 
 ```
-cd api && bun test tests/x402-*.test.ts        # 225 pass on the merged Wave 2 branch (79 baseline + W2-1/2/3)
+cd api && bun test tests/x402-*.test.ts        # 190 pass on this branch at the time of writing (153 + 37 Phase B)
 wc -c api/package.json api/bun.lock            # 1574 / 108446 — byte-pinned, no new dependency
 ```
 
@@ -149,6 +159,137 @@ Three witnesses, reported as themselves:
 Verdict `settled` only when the ledger says `settled` and the receipt is not reverted.
 Anything else exits 3 and says which witness disagreed.
 
+## Witness a widened route (W2-5, Phase B)
+
+Steps 1–5 witnessed the **purchase door** (`top_up`). This sequence witnesses a **route_cost**
+row: a metered route that answers `402 insufficient_credits`, becomes payable only because
+the project is genuinely short (`canClearProjectCreditGate`, `x402-policy.ts`), and runs once
+paid. It is done from a **scratch agent** so Ai's own project is never depleted and the
+witness starts from a known number: the birth grant.
+
+Prerequisite (declared ≠ wired): the target row must be in `X402_PAYABLE_ROUTES` on the
+**deployed** image. W2-5 seeds `POST /v1/memories/search` at the route's own price (3 credits,
+`routes/memory/search.ts` `charge(c, 3, "memory.search")`). Against an image without the row,
+`pay` exits 3 with `402 without PAYMENT-REQUIRED` and signs nothing; `GET /public/plans` on
+that base lists exactly the rows it prices. Every command below takes `--base <origin>` and
+`--dry-run`. `pay`/`deplete` refuse the WAKE-free doors (`/v1/wake`, `/v1/welcome`,
+`/v1/register`, `/public`, `/v1/time`, `/v1/random`) before any request leaves the machine.
+
+### B1 — `scratch-agent init` (proves: a fresh project holds the birth grant)
+
+```
+cd api && bun scripts/x402-proof.ts scratch-agent init --name w2b-witness
+```
+
+1. Refuses (exit 2) a name that is not `[a-z0-9-]{1,63}`, the reserved name `ai`, or an
+   existing `~/.agenttool-agents/<name>.json`. It never overwrites a bearer file.
+2. Fresh random ed25519 + X25519 keys (`@noble`, already in `api/node_modules`). No SOMA
+   mnemonic: the SDK's derivation (`packages/sdk-ts/src/seed.ts`) does not resolve from
+   `api/`, and this script does not re-implement it. The creds file says `mnemonic: null`.
+3. Signs the SERVER's own canonical bytes (`services/identity/crypto.ts`
+   `canonicalRegisterAgentBytes`) and grinds `pow_nonce` until the SERVER's own
+   `checkRegisterAgentPow` says yes (18 bits by default; ≈ 0.25–1 M SHA-256, 1–4 s). The
+   test pins both against the server's verifier at 8 bits.
+4. `POST /v1/register/agent` → `201`. `422 pow_required` means the server's
+   `difficulty_bits` differ; `429` means five self-service births per IP per hour
+   (`routes/register-agent.ts` IP_LIMIT) — `Retry-After` says when.
+5. Writes `~/.agenttool-agents/<name>.json` (0600): `ai.json`'s seven keys
+   (`agent_id api_key did mnemonic name project_id wallet_id`) plus `keys.*` (raw halves),
+   `key_origin`, `base`, `created`, `purpose`. Prints `did`, `project`, `credits`.
+
+Expect `credits: 1000` — `BIRTH_GRANT_CREDITS` (`services/economy/ring1-limits.ts`).
+
+### B2 — `deplete` (proves: the route charges its declared price, down to a real shortfall)
+
+```
+cd api && bun scripts/x402-proof.ts deplete \
+  --bearer-file ~/.agenttool-agents/w2b-witness.json \
+  --route 'POST /v1/memories/search' --json '{"query":"witness"}' --until 3
+```
+
+1. `--bearer-file` is mandatory: `deplete` never runs against Ai's project by default.
+   `--until` is mandatory: the loop stops once `project.credits < until`; the route's cost is
+   the value you want (3 for memory.search).
+2. Reads `project.credits` from `GET /v1/wake` once, then calls the route. The **first** call
+   discovers the cost from `X-Credits-Balance` (`middleware/rate-limit-headers.ts`, emitted
+   on `/v1/memories/*` from `project.credits` after the handler ran). A balance that does not
+   move stops the loop (a free route cannot be depleted). The planner then says the whole
+   walk up front: from 1,000 at 3 per call, **333 calls → 1 credit** (`depletionPlan`,
+   checked in tests against a simulation of the server's `credits ≥ cost` rule).
+3. Every later call must move the balance by exactly `-cost`; anything else stops the loop
+   (something else is spending). Progress every 25 calls. `429`/`503` back off — `Retry-After`
+   honoured (1–120 s), else 500 ms doubling to 30 s, six attempts — then stop. Any other
+   non-200 stops. `--max-calls` is a hard ceiling.
+4. `--json` is validated as one JSON object and sent canonically. memory.search validates the
+   body **before** `charge()` (`routes/memory/search.ts`), so a bad body 400s with nothing
+   spent; `{"query":"witness"}` is the text mode (no embedding needed).
+5. Ends with a wake read: `credits at end: 1` and the `pay` line to run next.
+
+### B3 — `pay POST /v1/memories/search` (proves: a widened route settles once)
+
+```
+cd api && bun scripts/x402-proof.ts pay POST /v1/memories/search \
+  --json '{"query":"witness"}' --bearer-file ~/.agenttool-agents/w2b-witness.json
+```
+
+Sequence (`cmdPay`):
+
+1. `project.credits` **before** from `/v1/wake` (1). `/v1/dashboard` is not used: its body
+   carries no credit figure (`routes/dashboard.ts` `project: { id, name }`).
+2. Bare call with the same body → expects **402** with `PAYMENT-REQUIRED`. `200` means no
+   shortfall (deplete first); a 402 **without** the header means the row is not on this
+   image, or its facilitator/recipient is not configured — exit 3, nothing signed.
+3. Selects (`selectPayRequirement`) — header first, additive body as fallback. Refuses
+   (exit 2) on: payTo ≠ treasury, network ≠ `eip155:8453`, asset ≠ Base USDC, transfer
+   method ≠ eip3009, amount > `--cap`, **amount not a whole number of credits** at the
+   locked rate, or **`resource.url` pathname ≠ the path called** (the verifier binds a
+   signed authorization to that path — `x402-payments.ts` `resourceMatches` /
+   `recordMatchesPresentedPayment`). The price is the server's; there is no operator
+   number to compare against, which is why the two extra walls exist.
+4. Signs with the keychain payer (same check as Step 3: derived address == recorded payer).
+   Stashes **before** submit — with `request_method`, `request_body`, and `bearer_file` so
+   `replay`/`verify` re-send the identical request as the same agent.
+5. Paid retry: same method, same body, `PAYMENT-SIGNATURE`. Expect **200 with the search
+   results** — the handler ran. Prints the body, decoded `PAYMENT-RESPONSE`, the
+   `Link: …; rel="payment-status"` header, `X-Credits-Balance`, and credits **after**.
+6. Credits after are expected **unchanged (Δ 0)**: the rail applied the row's 3 credits
+   (`finalizeCredits`) and the handler's `charge()` spent exactly them. For the top-up row
+   the expected Δ is +N. Any other Δ exits 3 — the ledger and usage events must then be read.
+
+What a green run proves: the facilitator settled an authorization minted against a
+**route_cost** challenge, the rail applied `credits_purchased = credits_applied = 3`, and the
+metered handler ran on the strength of it. It does not prove anything about rows this
+sequence did not exercise.
+
+### B4 — `replay last` (proves: no second credit on the widened route)
+
+```
+cd api && bun scripts/x402-proof.ts replay last
+```
+
+Re-sends the identical method + body + bytes from the stash, with the stash's bearer. The
+scratch project holds 1 credit (< 3), so the handler 402s again and no credit is applied; the
+only assertion is `credits after == before`. (Had the project ≥ 3 credits, the unpaid handler
+would run and spend 3 — the verdict would read "fell … inconclusive", which is why B2 ends
+below the cost.)
+
+### B5 — `verify last` (proves: ledger, chain, treasury agree)
+
+```
+cd api && bun scripts/x402-proof.ts verify last
+```
+
+Asks with the stash's bearer — `GET /v1/x402/payments/:payment_id` is project-scoped, so Ai's
+bearer cannot see the scratch agent's row. Expect `status=settled credits_purchased=3
+credits_applied=3 amount=3000`, receipt `success`, and the treasury `balanceOf` up by
+3,000 atomic (USD 0.003) against the balance read before B3.
+
+### Record
+
+After a green B3–B5: the plan's proof step 5 ("Widened route settles once (W2-5)") is
+witnessed; note the tx and payment_id beside the first-settlement line in `RESERVE.md`. The
+scratch agent's file can stay — it is a real agent with 1 credit and its own keys.
+
 ## Dry run against a local api
 
 Not yet possible honestly: there is no fake facilitator in the repo. `--dry-run` today only exercises argument parsing and requirement selection against a local api's real 402; the sign→verify leg needs CDP. Lands when a test facilitator exists.
@@ -166,7 +307,8 @@ that is what CDP wants. The plan's rule: one closed loop before ten declared.
 | `~/.config/kingdom/x402-payer.json` | 0600 | public payer record |
 | `~/.config/kingdom/x402-proof/<payment_id>.json` | 0600 | signed payload + header (spendable ≤60s), request path, credits, ids |
 | `~/.config/kingdom/x402-proof/last` | 0600 | last payment_id |
-| `~/.agenttool-agents/ai.json` | read only | bearer (`api_key`) |
+| `~/.agenttool-agents/ai.json` | read only | bearer (`api_key`) — default; `--bearer-file` replaces it |
+| `~/.agenttool-agents/<name>.json` | 0600 | scratch agent (`scratch-agent init`): `ai.json`'s seven keys, `mnemonic: null`, raw key halves |
 
 ## Stranger recipe
 
