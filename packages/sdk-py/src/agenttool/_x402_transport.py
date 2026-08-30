@@ -448,14 +448,22 @@ class X402PayingTransport(httpx.BaseTransport):
             raise _refusal_error(first, challenge, selected)
 
         # Sign once. Fresh nonce; the narrowest window; the policy re-checked.
-        signed = sign_exact_evm_authorization(
-            requirement=selected.requirement,
-            policy=payer.policy,
-            payer_address=payer.payer_address,
-            signer=payer.signer,
-            now_seconds=payer.now_seconds(),
-            resource=challenge.required["resource"],
-        )
+        try:
+            signed = sign_exact_evm_authorization(
+                requirement=selected.requirement,
+                policy=payer.policy,
+                payer_address=payer.payer_address,
+                signer=payer.signer,
+                now_seconds=payer.now_seconds(),
+                resource=challenge.required["resource"],
+            )
+        except (TypeError, ValueError) as exc:
+            first.close()
+            raise AgentToolError(
+                f"x402 signer failed before any payment was sent: {exc}",
+                hint="The configured signer refused or errored (for example, a payer_address that does not match the key). No signature left the machine; nothing was charged.",
+                error_code="x402_signer_failed",
+            ) from exc
         first.close()
 
         # Wall 2: the same request, plus PAYMENT-SIGNATURE, through the same

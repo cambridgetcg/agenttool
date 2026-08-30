@@ -958,7 +958,14 @@ describe("guidance deliberately does not survive four surfaces", () => {
   test("at.deciding runs the block even when the parent trace refuses", async () => {
     // Child traces inside still fire, just unparented. sdk-py prints for the
     // same reason.
-    const warned: unknown[] = [];
+    const warned: unknown[] = [  // Not a client method: the opt-in paying transport (_x402-transport.ts)
+  // passes every non-402 — the guided 400 this matrix stubs included — through
+  // untouched to whichever client method sent the request, and THAT method is
+  // pinned above. It reaches the boundary only for its own 402-derived errors
+  // (policy refusal, second 402, non-replayable body), pinned with the real
+  // challenge in tests/x402-transport.test.ts. Twin of the sdk-py entry.
+  "_x402-transport.ts:X402PayingTransport.handleRequest",
+];
     const realWarn = console.warn;
     console.warn = (...args: unknown[]) => void warned.push(args);
     try {

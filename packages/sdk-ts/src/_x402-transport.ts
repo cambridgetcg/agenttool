@@ -408,7 +408,16 @@ export function x402PayingTransport(
         paymentId: paymentIdFromStatusLink(paymentStatusLink),
         creditsBalance: second.headers.get("X-Credits-Balance") ?? undefined,
       };
-      await emit(event);
+      // The settled response is the caller's artifact; a throwing onPayment
+      // must not discard it (credits were applied server-side). Callback
+      // failures are swallowed on the success path and surfaced only when the
+      // retry itself was not accepted (they ride along on that error).
+      let callbackError: unknown = undefined;
+      try {
+        await emit(event);
+      } catch (error) {
+        callbackError = error;
+      }
 
       // Wall 1: two fetches, ever.
       if (second.status === 402) {
@@ -418,7 +427,9 @@ export function x402PayingTransport(
         } catch {
           body = undefined;
         }
-        throw notAcceptedError(second, body, signed, event);
+        const err = notAcceptedError(second, body, signed, event);
+        if (callbackError !== undefined) (err as { cause?: unknown }).cause = callbackError;
+        throw err;
       }
       return second;
     },
