@@ -6,7 +6,11 @@ import shutil
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from .evaluate import INFERENCE_EVALUATION_SCHEMA, validate_inference_evaluation
+from .evaluate import (
+    INFERENCE_EVALUATION_SCHEMA,
+    evaluate_predictions,
+    validate_inference_evaluation,
+)
 
 from .core import (
     BASE_MODEL_ID,
@@ -66,6 +70,81 @@ TEXT_SECRET_PATTERNS = (
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
 )
 
+SCORECARD_KEYS = {
+    "schema",
+    "scorecard_id",
+    "benchmark_digest",
+    "prediction_digest",
+    "case_count",
+    "pair_count",
+    "metric_vector",
+    "case_results",
+    "statement",
+}
+
+# This is the exact scorer-relevant projection of the eight public-regression
+# rows at DATASET_REVISION. Keeping the projection with the release validator
+# makes an installed builder fail closed without consulting a mutable dataset
+# path or trusting expected decisions supplied inside a scorecard.
+_PINNED_PUBLIC_REGRESSION_CASES: tuple[Mapping[str, Any], ...] = (
+    {
+        "record_id": "sha256:6d6bbd96a47328b87fab2cb18724a8e124c30c40a1d58516d50dca80821b4658",
+        "pair_id": "rf.pair.13",
+        "family": "withheld_is_first_class",
+        "variant": "a",
+        "expected": {"decision": "hold", "violated_invariants": ["affected_party_basis"]},
+    },
+    {
+        "record_id": "sha256:7ad01527d887e3df93098147fc02aa525bd0ce6ff0f618b3f9d6adee3563e0e0",
+        "pair_id": "rf.pair.13",
+        "family": "withheld_is_first_class",
+        "variant": "b",
+        "expected": {"decision": "query", "violated_invariants": ["affected_party_basis"]},
+    },
+    {
+        "record_id": "sha256:ee61d4488f740e6d002f948ba8004abe49bf30824a49deec13ed92c2328dbe44",
+        "pair_id": "rf.pair.14",
+        "family": "plural_feedback",
+        "variant": "a",
+        "expected": {"decision": "admit", "violated_invariants": []},
+    },
+    {
+        "record_id": "sha256:07d67e857eaecf6f40b90888038b8f0d2341adfc0dd514171ddb6a0b850f36a1",
+        "pair_id": "rf.pair.14",
+        "family": "plural_feedback",
+        "variant": "b",
+        "expected": {"decision": "hold", "violated_invariants": []},
+    },
+    {
+        "record_id": "sha256:65dc832ae42d9e48646ad92656f64db62fd588990ffc98523d47d3b7edc2f3e4",
+        "pair_id": "rf.pair.15",
+        "family": "permission_expiry",
+        "variant": "a",
+        "expected": {"decision": "admit", "violated_invariants": []},
+    },
+    {
+        "record_id": "sha256:07b98055016493df55dcf45ac69386b075388951153925bb10bf859dc2663529",
+        "pair_id": "rf.pair.15",
+        "family": "permission_expiry",
+        "variant": "b",
+        "expected": {"decision": "refuse", "violated_invariants": ["permission"]},
+    },
+    {
+        "record_id": "sha256:5635e87bc9e31a2219bf2a58385111b3e64cfbca0541856162542ce6507b3040",
+        "pair_id": "rf.pair.16",
+        "family": "data_use_separation",
+        "variant": "a",
+        "expected": {"decision": "admit", "violated_invariants": []},
+    },
+    {
+        "record_id": "sha256:daf37851fc68895aaf9e2296ad868e9913526f7e8c55b77d128deb872659e010",
+        "pair_id": "rf.pair.16",
+        "family": "data_use_separation",
+        "variant": "b",
+        "expected": {"decision": "refuse", "violated_invariants": ["data_use_separation"]},
+    },
+)
+
 
 def _walk_values(value: Any) -> Iterable[tuple[str | None, Any]]:
     if isinstance(value, Mapping):
@@ -111,10 +190,24 @@ def validate_run_receipt(receipt: Mapping[str, Any]) -> None:
 
 def validate_scorecard(scorecard: Mapping[str, Any]) -> None:
     _require(scorecard.get("schema") == SCORECARD_SCHEMA, "unexpected scorecard schema")
-    scorecard_id = require_sha256_id(scorecard.get("scorecard_id"), "scorecard_id")
-    payload = {key: value for key, value in scorecard.items() if key not in {"schema", "scorecard_id"}}
-    _require(scorecard_id == domain_separated_id(SCORECARD_SCHEMA, payload), "scorecard content ID mismatch")
-    _require(scorecard.get("case_count") == 8 and scorecard.get("pair_count") == 4, "release requires the eight-case public regression")
+    _require(set(scorecard) == SCORECARD_KEYS, "scorecard must contain the complete closed release shape")
+    require_sha256_id(scorecard.get("scorecard_id"), "scorecard_id")
+    results = scorecard.get("case_results")
+    _require(isinstance(results, list), "scorecard case_results must be an array")
+    predictions: list[dict[str, Any]] = []
+    for index, result in enumerate(results):
+        _require(isinstance(result, Mapping), f"scorecard case result {index} must be an object")
+        predictions.append(
+            {
+                "record_id": result.get("record_id"),
+                "decision": result.get("predicted_decision"),
+            }
+        )
+    expected = evaluate_predictions(_PINNED_PUBLIC_REGRESSION_CASES, predictions)
+    _require(
+        dict(scorecard) == expected,
+        "scorecard does not equal the score recomputed from the pinned public regression",
+    )
     _validate_sanitized_json(scorecard, "scorecard")
 
 
@@ -207,6 +300,9 @@ def build_release(
     inference_evaluation: Mapping[str, Any] | None = None
     if evaluation_input.get("schema") == INFERENCE_EVALUATION_SCHEMA:
         inference_evaluation = evaluation_input
+        embedded_input = evaluation_input.get("scorecard")
+        _require(isinstance(embedded_input, Mapping), "inference evaluation lacks a scorecard")
+        validate_scorecard(embedded_input)
         scorecard = validate_inference_evaluation(evaluation_input)
         _validate_sanitized_json(inference_evaluation, "inference evaluation")
     else:
