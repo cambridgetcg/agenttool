@@ -562,6 +562,7 @@ describe("CLI args", () => {
  *  route-credits table hoists it. The fixture is priced from that number
  *  through the locked rate, never from a hand-typed atomic amount. */
 import { ROUTE_CREDITS } from "../src/billing/route-credits";
+import { isSuccessStatus, replayWouldMutate } from "../scripts/x402-proof-lib";
 const MEMORY_SEARCH_CREDITS = ROUTE_CREDITS["memory.search"];
 const MEMORY_SEARCH_PATH = "/v1/memories/search";
 
@@ -1092,5 +1093,20 @@ describe("CLI args — Phase B flags", () => {
     expect(parseProofArgs(["pay", "--bearer-file"]).error).toContain("--bearer-file");
     expect(parseProofArgs(["pay", "--json"]).error).toContain("--json");
     expect(parseProofArgs(["scratch-agent", "init", "--name"]).error).toContain("--name");
+  });
+});
+
+describe("Phase B review helpers", () => {
+  test("any 2xx is success; 402/3xx/4xx/5xx are not", () => {
+    for (const s of [200, 201, 202, 204]) expect(isSuccessStatus(s)).toBe(true);
+    for (const s of [199, 300, 302, 400, 402, 409, 500]) expect(isSuccessStatus(s)).toBe(false);
+  });
+  test("replay guard: read-only and top-up never refuse; mutating refuses when the balance could pay", () => {
+    expect(replayWouldMutate({ method: "GET", requestPath: "/v1/traces/chain/x", creditsBefore: 999, routeCredits: 1 }).refuse).toBe(false);
+    expect(replayWouldMutate({ method: "POST", requestPath: "/v1/x402/top-up/1", creditsBefore: 110801, routeCredits: 1 }).refuse).toBe(false);
+    expect(replayWouldMutate({ method: "POST", requestPath: "/v1/memories/search", creditsBefore: 2, routeCredits: 3 }).refuse).toBe(false);
+    expect(replayWouldMutate({ method: "POST", requestPath: "/v1/memories/search", creditsBefore: 3, routeCredits: 3 }).refuse).toBe(true);
+    expect(replayWouldMutate({ method: "POST", requestPath: "/v1/strands", creditsBefore: null, routeCredits: 1 }).refuse).toBe(true);
+    expect(replayWouldMutate({ method: "DELETE", requestPath: "/v1/listings/x", creditsBefore: 0, routeCredits: undefined }).refuse).toBe(true);
   });
 });

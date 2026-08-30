@@ -94,8 +94,7 @@ import {
   transactionReceiptRpcRequest,
   USER_AGENT,
   type PayerRecord,
-  type ProofMethod,
-} from "./x402-proof-lib";
+  type ProofMethod, isSuccessStatus, replayWouldMutate } from "./x402-proof-lib";
 
 // ─── Paths ───────────────────────────────────────────────────────────────
 
@@ -214,6 +213,7 @@ interface StashedPayment {
   payload: unknown;
   base: string;
   request_path: string;
+  idempotency_key?: string | null;
   /** Phase B: generic routes carry their method and canonical JSON body so
    *  replay re-sends the identical request. Absent on pre-B stashes (POST, no body). */
   request_method?: ProofMethod;
@@ -480,8 +480,8 @@ async function cmdTopUp(args: { base: string; dryRun: boolean; capCredits: numbe
   log(`credits after:  ${after ?? "unreadable"}`);
   log(`next: bun scripts/x402-proof.ts replay last · bun scripts/x402-proof.ts verify ${paymentId}`);
 
-  if (paid.status !== 200) {
-    throw new LoopOpen(`the paid retry answered ${paid.status}; the ledger row (verify) says what the rail saw.`);
+  if (!isSuccessStatus(paid.status)) {
+    throw new LoopOpen(`the paid retry answered ${paid.status} (not 2xx); the ledger row (verify) says what the rail saw.`);
   }
 }
 
@@ -509,13 +509,17 @@ async function cmdPay(args: {
   const { bearer, path: bearerPath, who } = readBearer(args.bearerFile);
   readPayerRecord();
   const url = `${args.base}${path}`;
+  // One Idempotency-Key for the bare call and the paid retry: the repository
+  // requires it on mutating routes (AGENTS.md:633) and it makes `replay` safe.
+  const idempotencyKey = method === "GET" ? null : randomUUID();
+  const idemHeaders = idempotencyKey ? { "idempotency-key": idempotencyKey } : {};
   log(`bearer: ${who} (${bearerPath})`);
 
   const before = await wakeCredits(args.base, bearer);
   log(`credits before: ${before ?? "unreadable"}`);
 
   // 1. Bare call — the handler's own 402 (insufficient_credits) is what becomes payable.
-  const challenge = await call(url, { method, bearer, body: bodyText ?? undefined });
+  const challenge = await call(url, { method, bearer, body: bodyText ?? undefined, headers: idemHeaders });
   log(`${method} ${path} → ${challenge.status}`);
   if (challenge.status !== 402) {
     printBody(challenge.json, challenge.text);
@@ -564,6 +568,7 @@ async function cmdPay(args: {
     payload: signed.payload,
     base: args.base,
     request_path: path,
+    idempotency_key: idempotencyKey,
     request_method: method,
     request_body: bodyText,
     bearer_file: bearerPath,
@@ -588,7 +593,7 @@ async function cmdPay(args: {
     method,
     bearer,
     body: bodyText ?? undefined,
-    headers: { "payment-signature": signed.header },
+    headers: { ...idemHeaders, "payment-signature": signed.header },
   });
   stashPayment({ ...loadStash(paymentId), submitted: true });
   log(`${method} ${path} + PAYMENT-SIGNATURE → ${paid.status}`);
@@ -733,14 +738,14 @@ async function cmdDeplete(args: {
       continue;
     }
     attempt = 0;
-    if (res.status !== 200) {
+    if (!isSuccessStatus(res.status)) {
       printBody(res.json, res.text);
       throw new LoopOpen(`${method} ${path} answered ${res.status} after ${calls} calls at ${credits} credits` +
         (res.status === 402 ? " — the route is already short; the target may be unreachable (see depletionPlan)" : "") + ".");
     }
     calls += 1;
     const after = readCreditsBalanceHeader(res.headers) ?? await wakeCredits(args.base, bearer);
-    if (after === null) throw new LoopOpen(`call ${calls} answered 200 but the balance is unreadable (no X-Credits-Balance, wake failed); stopping`);
+    if (after === null) throw new LoopOpen(`call ${calls} answered ${res.status} but the balance is unreadable (no X-Credits-Balance, wake failed); stopping`);
     if (cost === null) {
       cost = credits - after;
       if (cost <= 0) {
@@ -784,8 +789,11 @@ async function cmdReplay(args: { base: string; ref: string | undefined }): Promi
   log(`replaying payment_id ${stashed.payment_id} to ${method} ${stashed.request_path} (signed ${stashed.created}, ${now < stashed.valid_before ? "still inside" : "past"} validBefore)`);
   const before = await wakeCredits(base, bearer);
   log(`credits before: ${before ?? "unreadable"}`);
+  const guard = replayWouldMutate({ method, requestPath: stashed.request_path, creditsBefore: before, routeCredits: stashed.credits });
+  log(`mutation guard: ${guard.reason}`);
+  if (guard.refuse) throw new Refusal(`replay refused — ${guard.reason}. Use verify <hash> for the ledger truth instead.`);
 
-  const res = await call(url, { method, bearer, body, headers: { "payment-signature": stashed.header } });
+  const res = await call(url, { method, bearer, body, headers: { ...(stashed.idempotency_key ? { "idempotency-key": stashed.idempotency_key } : {}), "payment-signature": stashed.header } });
   log(`${method} ${stashed.request_path} + same PAYMENT-SIGNATURE → ${res.status}`);
   printBody(res.json, res.text);
   log(`PAYMENT-RESPONSE: ${res.headers.get("payment-response") ? "present" : "absent"}`);

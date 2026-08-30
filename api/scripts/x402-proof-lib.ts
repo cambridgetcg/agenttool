@@ -1161,3 +1161,33 @@ export function parseProofArgs(
   }
   return out;
 }
+
+// ─── Phase B review helpers ─────────────────────────────────────────────
+
+/** Any 2xx is success: widened routes legitimately answer 201 (create) as well as 200. */
+export function isSuccessStatus(status: number): boolean {
+  return status >= 200 && status < 300;
+}
+
+/** A replayed, already-settled authorization is refused by the verifier but the
+ *  handler still runs. For a MUTATING route that is safe only while the project
+ *  cannot afford the call on its own; if the balance has recovered, the replay
+ *  would execute as an ordinary paid mutation (duplicate resource). Top-up is
+ *  exempt: its handler only mints on a verified payment. */
+export function replayWouldMutate(input: {
+  method: string;
+  requestPath: string;
+  creditsBefore: number | null;
+  routeCredits: number | null | undefined;
+}): { refuse: boolean; reason: string } {
+  const mutating = input.method !== "GET";
+  const topUp = input.requestPath.startsWith("/v1/x402/top-up/");
+  if (!mutating || topUp) return { refuse: false, reason: "read-only or top-up: replay cannot mutate" };
+  if (input.creditsBefore === null || input.routeCredits === null || input.routeCredits === undefined) {
+    return { refuse: true, reason: "mutating route and the balance or route cost is unknown — refusing rather than risk a duplicate mutation" };
+  }
+  if (input.creditsBefore >= input.routeCredits) {
+    return { refuse: true, reason: `mutating route and project.credits ${input.creditsBefore} >= route cost ${input.routeCredits}: the replay would run as an ordinary paid call and repeat the mutation` };
+  }
+  return { refuse: false, reason: `mutating route but project.credits ${input.creditsBefore} < ${input.routeCredits}: the handler cannot be paid, so no mutation can occur` };
+}
