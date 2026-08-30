@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import math
 import os
@@ -370,9 +371,16 @@ def inspect_regular_tree(root: Path) -> RegularTree:
     return RegularTree(root=root, files=tuple(files), directories=tuple(directories))
 
 
-def sha256_file_hex(path: Path, *, max_bytes: int | None = None) -> tuple[int, str]:
+def sha256_file_hex(
+    path: Path,
+    *,
+    max_bytes: int | None = None,
+    snapshot: bytearray | None = None,
+) -> tuple[int, str]:
     digest = hashlib.sha256()
     size = 0
+    if snapshot is not None:
+        _require(not snapshot, "regular file hash snapshot must start empty")
     try:
         with _open_regular_binary(path) as handle:
             expected_size = os.fstat(handle.fileno()).st_size
@@ -386,6 +394,8 @@ def sha256_file_hex(path: Path, *, max_bytes: int | None = None) -> tuple[int, s
                 if max_bytes is not None:
                     _require(size <= max_bytes, "regular file grew beyond its hash byte bound")
                 digest.update(chunk)
+                if snapshot is not None:
+                    snapshot.extend(chunk)
             _require(size == expected_size, "regular file changed while it was hashed")
     except TrainingBundleError:
         raise
@@ -843,23 +853,67 @@ def inspect_model_export(
     )
 
 
-def read_jsonl(path: Path, expected_rows: int) -> list[dict[str, Any]]:
-    _require(path.is_file() and not path.is_symlink(), f"missing regular JSONL file: {path.name}")
+def _parse_jsonl_lines(
+    lines: Iterable[str],
+    *,
+    name: str,
+    expected_rows: int,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    try:
-        with path.open("r", encoding="utf-8", newline="") as handle:
-            for line_number, line in enumerate(handle, 1):
-                _require(line.endswith("\n"), f"{path.name}:{line_number} must end in LF")
-                value = json.loads(line)
-                _require(isinstance(value, dict), f"{path.name}:{line_number} must be an object")
-                rows.append(value)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise TrainingBundleError(f"invalid JSONL file: {path.name}") from exc
-    _require(len(rows) == expected_rows, f"{path.name} must contain exactly {expected_rows} rows")
+    for line_number, line in enumerate(lines, 1):
+        _require(line.endswith("\n"), f"{name}:{line_number} must end in LF")
+        value = _decode_json(line.encode("utf-8"))
+        _require(isinstance(value, dict), f"{name}:{line_number} must be an object")
+        rows.append(value)
+    _require(len(rows) == expected_rows, f"{name} must contain exactly {expected_rows} rows")
     return rows
 
 
-def verify_hash_manifest(root: Path) -> str:
+def read_jsonl(path: Path, expected_rows: int) -> list[dict[str, Any]]:
+    _require(path.is_file() and not path.is_symlink(), f"missing regular JSONL file: {path.name}")
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            return _parse_jsonl_lines(handle, name=path.name, expected_rows=expected_rows)
+    except TrainingBundleError:
+        raise
+    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
+        raise TrainingBundleError(f"invalid JSONL file: {path.name}") from exc
+
+
+def _read_snapshot_json(snapshot: Mapping[str, bytes], relative: str) -> Any:
+    _require(relative in snapshot, "verified dataset snapshot is missing a required file")
+    return _decode_json(snapshot[relative])
+
+
+def _read_snapshot_jsonl(
+    snapshot: Mapping[str, bytes],
+    relative: str,
+    expected_rows: int,
+) -> list[dict[str, Any]]:
+    _require(relative in snapshot, "verified dataset snapshot is missing a required file")
+    try:
+        text = snapshot[relative].decode("utf-8")
+        with io.StringIO(text, newline="") as handle:
+            return _parse_jsonl_lines(
+                handle,
+                name=PurePosixPath(relative).name,
+                expected_rows=expected_rows,
+            )
+    except TrainingBundleError:
+        raise
+    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
+        raise TrainingBundleError(
+            f"invalid JSONL file: {PurePosixPath(relative).name}"
+        ) from exc
+
+
+@dataclass(frozen=True)
+class _VerifiedDatasetSnapshot:
+    manifest_id: str
+    files: Mapping[str, bytes]
+
+
+def _verify_hash_manifest_snapshot(root: Path) -> _VerifiedDatasetSnapshot:
     tree = inspect_regular_tree(root)
     manifest_path = root / "hash-manifest.json"
     _require(manifest_path in tree.files, "dataset hash manifest is missing")
@@ -947,11 +1001,25 @@ def verify_hash_manifest(root: Path) -> str:
         if path != manifest_path
     )
     _require(actual_paths == expected_paths, "dataset tree differs from its self-excluding hash manifest")
+    snapshot: dict[str, bytes] = {}
     for relative, path, declared_bytes, declared_digest in claims:
-        size, digest = sha256_file_hex(path, max_bytes=declared_bytes)
+        captured = bytearray()
+        size, digest = sha256_file_hex(
+            path,
+            max_bytes=declared_bytes,
+            snapshot=captured,
+        )
         _require(declared_bytes == size, f"dataset byte count mismatch: {relative}")
         _require(declared_digest == digest, f"dataset digest mismatch: {relative}")
-    return sha256_id(manifest_bytes)
+        snapshot[relative] = bytes(captured)
+    return _VerifiedDatasetSnapshot(
+        manifest_id=sha256_id(manifest_bytes),
+        files=snapshot,
+    )
+
+
+def verify_hash_manifest(root: Path) -> str:
+    return _verify_hash_manifest_snapshot(root).manifest_id
 
 
 def _validate_content_id(document: Mapping[str, Any], schema_key: str, id_key: str, domain: str) -> None:
@@ -1173,21 +1241,43 @@ def load_and_validate_dataset(
     _require(authorization_id == AUTHORIZATION_ID, "authorization ID does not match the frozen experiment")
     _require(recipe_id == RECIPE_ID, "recipe ID does not match the frozen experiment")
     _require(training_manifest_id == TRAINING_MANIFEST_ID, "training manifest ID does not match the frozen experiment")
-    hash_manifest_id = verify_hash_manifest(root)
+    verified_snapshot = _verify_hash_manifest_snapshot(root)
+    hash_manifest_id = verified_snapshot.manifest_id
     _require(
         hash_manifest_id == DATASET_HASH_MANIFEST_ID,
         "dataset hash manifest does not match the reviewed frozen dataset revision",
     )
-    authorization = read_json(root / "provenance" / "training-authorization.json")
-    recipe = read_json(root / "provenance" / "training-recipe.json")
-    manifest = read_json(root / "provenance" / "training-manifest.json")
+    authorization = _read_snapshot_json(
+        verified_snapshot.files,
+        "provenance/training-authorization.json",
+    )
+    recipe = _read_snapshot_json(
+        verified_snapshot.files,
+        "provenance/training-recipe.json",
+    )
+    manifest = _read_snapshot_json(
+        verified_snapshot.files,
+        "provenance/training-manifest.json",
+    )
     _require(isinstance(authorization, dict) and isinstance(recipe, dict) and isinstance(manifest, dict), "dataset provenance documents must be objects")
     _validate_recipe(recipe, recipe_id)
     _validate_authorization(authorization, authorization_id, recipe_id)
     _validate_manifest(manifest, training_manifest_id, authorization_id, recipe_id)
-    train_rows = read_jsonl(root / "data" / "boundary-sft-train.jsonl", 18)
-    validation_rows = read_jsonl(root / "data" / "boundary-sft-validation.jsonl", 6)
-    public_rows = read_jsonl(root / "data" / "boundary-counterfactuals.jsonl", 8)
+    train_rows = _read_snapshot_jsonl(
+        verified_snapshot.files,
+        "data/boundary-sft-train.jsonl",
+        18,
+    )
+    validation_rows = _read_snapshot_jsonl(
+        verified_snapshot.files,
+        "data/boundary-sft-validation.jsonl",
+        6,
+    )
+    public_rows = _read_snapshot_jsonl(
+        verified_snapshot.files,
+        "data/boundary-counterfactuals.jsonl",
+        8,
+    )
     _validate_sft_rows(train_rows, "train", authorization_id, recipe_id)
     _validate_sft_rows(validation_rows, "validation", authorization_id, recipe_id)
     _validate_public_cases(public_rows)

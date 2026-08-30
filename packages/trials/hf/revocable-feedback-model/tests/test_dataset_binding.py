@@ -263,6 +263,68 @@ class DatasetBindingTests(unittest.TestCase):
             self.assertEqual(actual_id, expected_id)
             self.assertNotEqual(actual_id, DATASET_HASH_MANIFEST_ID)
 
+    def test_loader_consumes_the_same_bytes_verified_before_post_hash_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "dataset"
+            shutil.copytree(DATASET_ROOT, root)
+            train_path = root / TRAIN_DATA_PATH
+            verified_train_path = train_path.resolve()
+            injected_text = " [post-hash injected text]"
+            real_hash = core_module.sha256_file_hex
+            mutated = False
+
+            def hash_then_mutate(
+                path: Path,
+                *,
+                max_bytes: int | None = None,
+                snapshot: bytearray | None = None,
+            ) -> tuple[int, str]:
+                nonlocal mutated
+                result = real_hash(path, max_bytes=max_bytes, snapshot=snapshot)
+                if path == verified_train_path and not mutated:
+                    rows = [
+                        json.loads(line)
+                        for line in train_path.read_text(encoding="utf-8").splitlines()
+                    ]
+                    rows[0]["prompt"][1]["content"] += injected_text
+                    train_path.write_text(
+                        "".join(
+                            json.dumps(
+                                row,
+                                ensure_ascii=False,
+                                allow_nan=False,
+                                separators=(",", ":"),
+                                sort_keys=True,
+                            )
+                            + "\n"
+                            for row in rows
+                        ),
+                        encoding="utf-8",
+                        newline="\n",
+                    )
+                    mutated = True
+                return result
+
+            with mock.patch.object(
+                core_module,
+                "sha256_file_hex",
+                side_effect=hash_then_mutate,
+            ), mock.patch.object(
+                core_module,
+                "read_json",
+                side_effect=AssertionError("loader must consume the verified snapshot"),
+            ), mock.patch.object(
+                core_module,
+                "read_jsonl",
+                side_effect=AssertionError("loader must consume the verified snapshot"),
+            ):
+                bundle = load_frozen_dataset(root)
+
+            self.assertTrue(mutated)
+            self.assertEqual(bundle.hash_manifest_id, DATASET_HASH_MANIFEST_ID)
+            self.assertNotIn(injected_text, json.dumps(bundle.train_rows))
+            self.assertIn(injected_text, train_path.read_text(encoding="utf-8"))
+
     def test_manifest_bytes_are_bounded_before_decode(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "dataset"
