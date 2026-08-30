@@ -254,6 +254,46 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
                 )
             self.assertFalse(output.exists())
 
+    def test_build_rejects_self_consistent_tokenizer_substitution_before_output(
+        self,
+    ) -> None:
+        template, notice, license_path = default_bundle_paths()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run = root / "run"
+            model = run / "model-export"
+            write_minimal_model_export(model)
+            tokenizer_path = model / "tokenizer.json"
+            tokenizer = json.loads(tokenizer_path.read_text(encoding="utf-8"))
+            vocab = tokenizer["model"]["vocab"]
+            vocab["a"], vocab["b"] = vocab["b"], vocab["a"]
+            write_canonical_json(tokenizer_path, tokenizer)
+            substituted_model_export_id = inspect_model_export(model).model_export_id
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(substituted_model_export_id),
+            )
+            evaluation_path = root / "evaluation.json"
+            write_canonical_json(
+                evaluation_path,
+                inference_evaluation(substituted_model_export_id),
+            )
+            output = root / "release"
+
+            with self.assertRaisesRegex(
+                TrainingBundleError,
+                "publishable tokenizer semantics differ from the frozen reviewed base tokenizer",
+            ):
+                build_release(
+                    run_dir=run,
+                    scorecard_path=evaluation_path,
+                    output_dir=output,
+                    template_path=template,
+                    notice_path=notice,
+                    license_path=license_path,
+                )
+            self.assertFalse(output.exists())
+
     def test_inference_shape_rejects_rehashed_extra_and_missing_claims(self) -> None:
         evaluation = inference_evaluation()
         evaluation["garden_governed"] = True
@@ -657,6 +697,21 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
             )
             rehash_release_manifest(release)
             with self.assertRaises(TrainingBundleError):
+                verify_release(release)
+
+    def test_verify_rejects_rehashed_tokenizer_semantic_substitution(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            release, _ = build_fixture(Path(temporary))
+            tokenizer_path = release / "tokenizer.json"
+            tokenizer = json.loads(tokenizer_path.read_text(encoding="utf-8"))
+            vocab = tokenizer["model"]["vocab"]
+            vocab["a"], vocab["b"] = vocab["b"], vocab["a"]
+            write_canonical_json(tokenizer_path, tokenizer)
+            rehash_release_manifest(release)
+            with self.assertRaisesRegex(
+                TrainingBundleError,
+                "publishable tokenizer semantics differ from the frozen reviewed base tokenizer",
+            ):
                 verify_release(release)
 
     def test_verify_rejects_sanitized_json_bypass_even_when_rehashed(self) -> None:

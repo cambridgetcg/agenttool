@@ -86,6 +86,9 @@ TEST_REVIEWED_GENERATION_CONFIG: dict[str, object] = {
     "pad_token_id": 2,
     "transformers_version": "5.14.1",
 }
+TEST_REVIEWED_TOKENIZER_SEMANTICS_ID = (
+    "sha256:88a117624781ecfc6b4729d3b76baca3126f7d13ca4c3998439f48b418b1f283"
+)
 TEST_SERIALIZED_TENSORS: dict[str, tuple[str, tuple[int, ...]]] = {
     "model.embed_tokens.weight": ("F32", (6, 4)),
     "model.layers.0.input_layernorm.weight": ("F32", (4,)),
@@ -106,6 +109,7 @@ def architecture_patch() -> object:
         core_module,
         REVIEWED_MODEL_CONFIG=TEST_REVIEWED_MODEL_CONFIG,
         REVIEWED_GENERATION_CONFIG=TEST_REVIEWED_GENERATION_CONFIG,
+        REVIEWED_TOKENIZER_SEMANTICS_ID=TEST_REVIEWED_TOKENIZER_SEMANTICS_ID,
     )
 
 
@@ -210,18 +214,20 @@ def complete_test_safetensors_bytes(
     *,
     first_f32: bytes = b"\x00\x00\x00\x00",
     tensor_names: tuple[str, ...] | None = None,
+    tensor_specs: dict[str, tuple[str, tuple[int, ...]]] | None = None,
 ) -> bytes:
     if len(first_f32) != 4:
         raise ValueError("first test tensor value must contain exactly one F32")
+    selected_specs = TEST_SERIALIZED_TENSORS if tensor_specs is None else tensor_specs
     header: dict[str, object] = {"__metadata__": {"format": "pt"}}
     offset = 0
     selected_names = (
-        tuple(sorted(TEST_SERIALIZED_TENSORS))
+        tuple(sorted(selected_specs))
         if tensor_names is None
         else tuple(sorted(tensor_names))
     )
     for name in selected_names:
-        dtype, shape = TEST_SERIALIZED_TENSORS[name]
+        dtype, shape = selected_specs[name]
         elements = 1
         for dimension in shape:
             elements *= dimension

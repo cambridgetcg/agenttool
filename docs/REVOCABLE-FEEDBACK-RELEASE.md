@@ -76,9 +76,20 @@ inventory because `tie_word_embeddings` is true.
 Verification parses and hashes each config snapshot from the same retained
 bytes, and validates the complete tensor name/dtype/shape inventory while
 hashing each weight file through the same regular-file descriptor. Before any
-payload hashing, the publishable path permits at most 32 weight shards, 8 MiB
-of safetensors headers across them, and the reviewed 272 serialized tensor
-descriptors. Each parsed header seeds its file digest and is then discarded;
+weight descriptor is opened, the publishable gate also requires the canonical
+tokenizer-semantics projection of the exact token-to-ID map, ordered BPE merge
+pairs, and ordered added-token records to equal
+`sha256:befab413eb4c30dabe0969dff1118be41eeb2ebfcacb7d3b3c5ffe23dc60df42`
+under `agenttool-revocable-feedback-reviewed-tokenizer-semantics/0.1`. The
+projection comes from the same bounded parsed `tokenizer.json` snapshot used
+for its content digest. It normalizes the frozen base revision's exact
+single-space merge strings to the reviewed saved export's ordered two-string
+pairs; publishable candidates themselves must use that pair-array form.
+Generic model-export inspection remains structural and does not claim this
+base-tokenizer equality. The publishable path then permits at most 32 weight
+shards, 8 MiB of safetensors headers across them, and the reviewed 272
+serialized tensor descriptors. Each parsed header seeds its file digest and is
+then discarded;
 only the bounded descriptor map, digest state, and regular-file descriptor are
 retained while the exact union is checked. Once that union is established,
 each retained descriptor supplies the same bytes to the digest and an aligned

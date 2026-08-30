@@ -181,6 +181,18 @@ SHA256_ID = re.compile(r"^sha256:[0-9a-f]{64}$")
 REVISION = re.compile(r"^[0-9a-f]{40}$")
 
 MODEL_EXPORT_SCHEMA = "agenttool-revocable-feedback-model-export/0.1"
+REVIEWED_TOKENIZER_SEMANTICS_SCHEMA = (
+    "agenttool-revocable-feedback-reviewed-tokenizer-semantics/0.1"
+)
+# Derived from the exact vocabulary mapping, normalized ordered BPE merge
+# pairs, and ordered added-token records in
+# HuggingFaceTB/SmolLM2-135M-Instruct@12fd25f77366fa6b3b4b768ec3050bf629380bac.
+# The reviewed saved export has the same projection even though the frozen
+# source tokenizer encodes each merge pair as one exact single-space-delimited
+# string.
+REVIEWED_TOKENIZER_SEMANTICS_ID = (
+    "sha256:befab413eb4c30dabe0969dff1118be41eeb2ebfcacb7d3b3c5ffe23dc60df42"
+)
 MODEL_EXPORT_FILE = re.compile(
     r"^(?:config|generation_config|tokenizer_config|tokenizer)\.json$"
     r"|^model(?:-[0-9]{5}-of-[0-9]{5})?\.safetensors$"
@@ -1192,6 +1204,21 @@ def _inspect_model_export(
             canonical_json(json_values["generation_config.json"])
             == canonical_json(REVIEWED_GENERATION_CONFIG),
             "publishable generation config differs from the reviewed SmolLM2-135M export",
+        )
+        tokenizer_snapshot = json_values["tokenizer.json"]
+        tokenizer_model_snapshot = tokenizer_snapshot.get("model")
+        _require(
+            isinstance(tokenizer_model_snapshot, Mapping)
+            and domain_separated_id(
+                REVIEWED_TOKENIZER_SEMANTICS_SCHEMA,
+                {
+                    "vocab": tokenizer_model_snapshot.get("vocab"),
+                    "merges": tokenizer_model_snapshot.get("merges"),
+                    "added_tokens": tokenizer_snapshot.get("added_tokens"),
+                },
+            )
+            == REVIEWED_TOKENIZER_SEMANTICS_ID,
+            "publishable tokenizer semantics differ from the frozen reviewed base tokenizer",
         )
     weight_paths = sorted(
         (

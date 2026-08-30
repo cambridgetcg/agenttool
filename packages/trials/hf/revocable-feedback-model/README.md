@@ -140,11 +140,23 @@ check requires the pinned BPE/GPT2 types, unique contiguous integer vocabulary
 IDs, a typed nonempty BPE merge array, matching model/tokenizer vocabulary
 sizes, the fixed special-token and ID bindings, the reviewed ByteLevel outer
 pipeline and model controls, and the exact chat template used by this
-evaluator. Unemitted tokenizer sidecars are rejected because they can override
-those runtime bindings. This pinned structural check rejects missing,
-type-inconsistent, and internally incoherent tokenizer artifacts on Xenia's
-inference path; it does not prove artifact origin or claim universal tokenizer
-loadability.
+evaluator. The narrower publishable path also binds the exact token-to-ID map,
+ordered BPE merge pairs, and ordered added-token records from the frozen
+base revision through
+`agenttool-revocable-feedback-reviewed-tokenizer-semantics/0.1` identifier
+`sha256:befab413eb4c30dabe0969dff1118be41eeb2ebfcacb7d3b3c5ffe23dc60df42`.
+That projection is computed from the same bounded parsed `tokenizer.json`
+snapshot used for its file digest and is checked before weight descriptors or
+payloads are opened. The frozen base encodes merges as exact single-space
+strings while its reviewed saved export encodes the same ordered pairs as
+two-string arrays; publication accepts only the saved pair-array shape and the
+reviewed normalized projection. Unemitted tokenizer sidecars are rejected
+because they can override those runtime bindings. Generic run-artifact
+inspection retains the structural checks without claiming equality to the
+frozen base: it rejects missing, type-inconsistent, and internally incoherent
+tokenizer artifacts on Xenia's inference path. The strict build/verify gates
+additionally reject semantic substitutions at Xenia's publication boundary.
+Neither check proves artifact origin or claims universal tokenizer loadability.
 
 `build-release` and `verify-release` apply a narrower publication gate than the
 generic run-artifact inspector. They require the exact reviewed

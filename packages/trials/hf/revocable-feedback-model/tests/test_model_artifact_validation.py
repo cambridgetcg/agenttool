@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import xenia_revocable_feedback_model.core as core_module
@@ -422,6 +423,102 @@ class ModelArtifactValidationTests(unittest.TestCase):
                 with self.assertRaises(TrainingBundleError):
                     inspect_publishable_model_export(model)
 
+    def test_publishable_tokenizer_semantics_are_bound_to_the_reviewed_base(self) -> None:
+        def swap_ordinary_vocab_ids(value: dict[str, Any]) -> None:
+            vocab = value["model"]["vocab"]
+            vocab["a"], vocab["b"] = vocab["b"], vocab["a"]
+
+        def replace_merge_with_valid_alternative(value: dict[str, Any]) -> None:
+            model = value["model"]
+            vocab = model["vocab"]
+            vocab["ba"] = vocab.pop("ab")
+            model["merges"] = [["b", "a"]]
+
+        def append_extra_special_token(value: dict[str, Any]) -> None:
+            entry = dict(value["added_tokens"][0])
+            entry.update({"id": 3, "content": "a"})
+            value["added_tokens"].append(entry)
+
+        def reorder_added_tokens(value: dict[str, Any]) -> None:
+            value["added_tokens"].reverse()
+
+        mutations = {
+            "swapped ordinary vocabulary IDs": swap_ordinary_vocab_ids,
+            "changed valid merge bytes": replace_merge_with_valid_alternative,
+            "extra special added token": append_extra_special_token,
+            "changed added-token order": reorder_added_tokens,
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                model = Path(temporary) / "model"
+                write_minimal_model_export(model)
+                mutate_json(model / "tokenizer.json", mutate)
+
+                structural = inspect_model_export(model)
+                self.assertFalse(structural.reviewed_architecture)
+                with (
+                    patch.object(core_module, "_open_safetensors_header") as header_open,
+                    patch.object(core_module, "_hash_open_safetensors") as payload_hash,
+                ):
+                    with self.assertRaisesRegex(
+                        TrainingBundleError,
+                        "publishable tokenizer semantics differ from the frozen reviewed base tokenizer",
+                    ):
+                        inspect_publishable_model_export(model)
+                    header_open.assert_not_called()
+                    payload_hash.assert_not_called()
+
+    def test_publishable_tokenizer_merge_order_is_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+
+            expanded_config = dict(core_module.REVIEWED_MODEL_CONFIG)
+            expanded_config["vocab_size"] = 7
+            write_canonical_json(model / "config.json", expanded_config)
+            mutate_json(
+                model / "tokenizer.json",
+                lambda value: (
+                    value["model"]["vocab"].__setitem__("abab", 6),
+                    value["model"]["merges"].append(["ab", "ab"]),
+                ),
+            )
+            mutate_json(
+                model / "tokenizer_config.json",
+                lambda value: value.__setitem__("vocab_size", 7),
+            )
+            expanded_tensors = dict(TEST_SERIALIZED_TENSORS)
+            expanded_tensors["model.embed_tokens.weight"] = ("F32", (7, 4))
+            (model / "model.safetensors").write_bytes(
+                complete_test_safetensors_bytes(tensor_specs=expanded_tensors)
+            )
+            expanded_tokenizer_semantics_id = (
+                "sha256:417b26a0a79c5c702f9c33c42469e5fbf9c748bf3dca2228097bfcf878669c9b"
+            )
+
+            with patch.multiple(
+                core_module,
+                REVIEWED_MODEL_CONFIG=expanded_config,
+                REVIEWED_TOKENIZER_SEMANTICS_ID=expanded_tokenizer_semantics_id,
+            ):
+                inspect_publishable_model_export(model)
+                mutate_json(
+                    model / "tokenizer.json",
+                    lambda value: value["model"]["merges"].reverse(),
+                )
+                inspect_model_export(model)
+                with (
+                    patch.object(core_module, "_open_safetensors_header") as header_open,
+                    patch.object(core_module, "_hash_open_safetensors") as payload_hash,
+                ):
+                    with self.assertRaisesRegex(
+                        TrainingBundleError,
+                        "publishable tokenizer semantics differ from the frozen reviewed base tokenizer",
+                    ):
+                        inspect_publishable_model_export(model)
+                    header_open.assert_not_called()
+                    payload_hash.assert_not_called()
+
     def test_publishable_shards_must_form_the_exact_serialized_union(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             model = Path(temporary) / "model"
@@ -750,6 +847,44 @@ class ModelArtifactValidationTests(unittest.TestCase):
             self.assertTrue(changed)
             self.assertEqual(captured.model_export_id, expected.model_export_id)
             with self.assertRaises(TrainingBundleError):
+                inspect_publishable_model_export(model)
+
+    def test_reviewed_tokenizer_binding_uses_the_validated_json_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            expected = inspect_publishable_model_export(model)
+            original = core_module._validate_model_json
+            changed = False
+
+            def mutate_after_tokenizer_validation(
+                path: Path, *, expected_size: int
+            ) -> object:
+                nonlocal changed
+                inspected = original(path, expected_size=expected_size)
+                if path.name == "tokenizer.json" and not changed:
+                    mutate_json(
+                        path,
+                        lambda value: (
+                            value["model"]["vocab"].__setitem__("a", 4),
+                            value["model"]["vocab"].__setitem__("b", 3),
+                        ),
+                    )
+                    changed = True
+                return inspected
+
+            with patch.object(
+                core_module,
+                "_validate_model_json",
+                side_effect=mutate_after_tokenizer_validation,
+            ):
+                captured = inspect_publishable_model_export(model)
+            self.assertTrue(changed)
+            self.assertEqual(captured.model_export_id, expected.model_export_id)
+            with self.assertRaisesRegex(
+                TrainingBundleError,
+                "publishable tokenizer semantics differ from the frozen reviewed base tokenizer",
+            ):
                 inspect_publishable_model_export(model)
 
     def test_invalid_safetensors_header_fails_before_payload_hashing(self) -> None:
