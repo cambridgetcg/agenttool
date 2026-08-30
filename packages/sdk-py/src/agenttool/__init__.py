@@ -488,6 +488,32 @@ from .attestation_marketplace import (
     canonical_attestation_issue_bytes,
     sign_attestation_issue,
 )
+from .x402 import (
+    ATOMIC_PER_CREDIT,
+    BASE_NETWORK,
+    BASE_USDC,
+    KINGDOM_TREASURY,
+    TRANSFER_WITH_AUTHORIZATION_TYPES,
+    X402_CLIENT_REFUSAL_REASONS,
+    X402_NETWORKS,
+    X402_VERSION,
+    SignedX402Payment,
+    TransferWithAuthorizationTypedData,
+    X402ClientRefusal,
+    X402ClientRefusalReason,
+    X402PaymentRequired,
+    X402SelectedRequirement,
+    X402Signer,
+    X402SpendPolicy,
+    authorization_hash,
+    evm_address_from_private_key,
+    hash_transfer_with_authorization,
+    local_evm_signer,
+    parse_payment_required_body,
+    payment_is_still_replayable,
+    select_payable_requirement,
+    sign_exact_evm_authorization,
+)
 
 __all__ = [
     # Core
@@ -899,6 +925,32 @@ __all__ = [
     "ATTESTATION_ISSUE_SIGNATURE_CONTEXT",
     "ATTESTATION_ISSUE_FIELD_ORDER",
     "ATTESTATION_ISSUE_AUTHORIZATION_TTL_SECONDS",
+    # x402 payer — signs and pays on 402, opt-in only, never by default;
+    # spend policy mandatory (docs/X402-PROOF.md · x402.py doctrine)
+    "X402SpendPolicy",
+    "SignedX402Payment",
+    "X402ClientRefusal",
+    "X402ClientRefusalReason",
+    "X402SelectedRequirement",
+    "X402PaymentRequired",
+    "X402Signer",
+    "TransferWithAuthorizationTypedData",
+    "parse_payment_required_body",
+    "select_payable_requirement",
+    "sign_exact_evm_authorization",
+    "authorization_hash",
+    "payment_is_still_replayable",
+    "hash_transfer_with_authorization",
+    "local_evm_signer",
+    "evm_address_from_private_key",
+    "TRANSFER_WITH_AUTHORIZATION_TYPES",
+    "X402_CLIENT_REFUSAL_REASONS",
+    "X402_NETWORKS",
+    "X402_VERSION",
+    "BASE_NETWORK",
+    "BASE_USDC",
+    "KINGDOM_TREASURY",
+    "ATOMIC_PER_CREDIT",
 ]
 
 __version__ = "0.21.1"

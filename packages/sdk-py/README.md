@@ -770,7 +770,8 @@ def scrape_with_payment(url, sign_payment_externally):
         )  # PAYMENT-SIGNATURE header only; never JSON
 
 # The callback supplies an already signed V2 PAYMENT-SIGNATURE as base64 JSON.
-# The SDK treats it as opaque: it never holds keys, signs, or takes custody.
+# On this path the SDK treats it as opaque: it holds no key and signs nothing.
+# To sign in-process instead, opt in explicitly — see "x402: paying on 402" below.
 result = scrape_with_payment("https://example.com", sign_payment_externally)
 print(
     result.payment_response,
@@ -786,7 +787,7 @@ camelCase alias for `x402_resource`; `NotFoundError.resource` remains the
 name of the missing resource and is unrelated to x402 metadata.
 
 `parse_document(..., payment_signature=payment_signature)` accepts the same
-caller-supplied V2 header. The SDK does not sign or retry automatically.
+caller-supplied V2 header. The SDK never signs or retries by default.
 Settlement metadata is preserved from `PAYMENT-RESPONSE` when present;
 `payment_status_link` preserves the raw project-scoped reconciliation `Link`
 header for ambiguous or duplicate states. When payment admission fails closed
@@ -794,6 +795,63 @@ without a new challenge, `retry_after` preserves the raw `Retry-After` value;
 the SDK still does not retry automatically. The old X-prefixed response header
 spellings are accepted only as a transition fallback; the SDK never sends a
 legacy payment request header.
+
+### x402: paying on 402 — opt-in only, never by default
+
+`agenttool.x402` is the payer half of the x402 V2 rail, mirroring the server's
+own client (`api/src/services/economy/x402-client.ts`) function-for-function.
+The SDK **can** sign and pay on 402 — but only when you hand it an explicit
+signer **and** a spend policy. `max_amount_atomic` and `allowed_pay_to` have no
+defaults: a policy that does not say how much and to whom is not a policy.
+Allow-lists, never deny-lists — a 402 body is untrusted input and can never
+introduce a new recipient, network, or asset.
+
+```python
+from agenttool import (
+    X402SpendPolicy,
+    evm_address_from_private_key,
+    local_evm_signer,
+    parse_payment_required_body,
+    select_payable_requirement,
+    sign_exact_evm_authorization,
+)
+
+policy = X402SpendPolicy(
+    max_amount_atomic=10_000_000,                               # 10 USDC, hard cap
+    allowed_pay_to=["0xA9eeA60CAaF239AbAfAA05FcB152128dB16dD3d8"],  # kingdom treasury
+    # allowed_networks / allowed_assets default to Base mainnet USDC; widen explicitly
+)
+required = parse_payment_required_body(error_body)            # None if not x402 v2
+selected = select_payable_requirement(required, policy)
+if not selected.ok:
+    print(selected.reason, selected.detail)                     # typed refusal; stop
+else:
+    signed = sign_exact_evm_authorization(
+        requirement=selected.requirement,
+        policy=policy,
+        payer_address=evm_address_from_private_key(key),        # you chose to hold a key
+        signer=local_evm_signer(key),                           # or any EIP-712 signer
+        now_seconds=int(time.time()),
+        resource=required["resource"],
+    )
+    persist(signed.authorization_hash)                          # BEFORE sending
+    at.tools.scrape(url, payment_signature=signed.header)       # PAYMENT-SIGNATURE
+```
+
+Refusal vocabulary (identical to the TypeScript SDK and the server):
+`not_a_payment_required_body` · `no_acceptable_requirement` ·
+`network_not_allowed` · `asset_not_allowed` · `pay_to_not_allowed` ·
+`amount_over_cap` · `unsupported_transfer_method` · `validity_window_unusable`.
+`amount_over_cap` is refused, never clamped. Every signature mints a fresh
+nonce, so the module cannot be a retry mechanism: replay the bytes you hold
+while `payment_is_still_replayable(signed, now)` or stop — never sign again for
+the same resource. Crypto is pure-Python Keccak-256 + EIP-712 + recoverable
+low-s secp256k1 on the existing `cryptography` dependency (zero new deps), and
+the wire is pinned byte-exact to the server's implementation by
+`tests/fixtures/x402-eip3009-vector.json`. The paying transport that performs
+the bare call → 402 → one signed retry (a second 402 is an error, never a loop)
+is the next step of Wave 2; until it lands, pass `signed.header` yourself as
+above.
 
 ### Traces — because the 'why' matters
 

@@ -9,7 +9,7 @@ Active - repository source carries the paired 0.21.1 corrective KINGDOM card par
 ## Tech Stack
 - Python >= 3.9
 - `httpx >= 0.27` for HTTP (sync; async-capable)
-- `cryptography >= 41.0` for AES-256-GCM + ed25519 (Phase 5+ only)
+- `cryptography >= 41.0` for AES-256-GCM + ed25519 (Phase 5+ only) and secp256k1 ECDSA for the x402 payer (RFC 6979 nonces where the linked OpenSSL supports them)
 - `hatchling` build system
 - `pytest >= 7.0` for tests
 
@@ -50,6 +50,8 @@ src/agenttool/
   strands.py             — StrandsClient + ThoughtsClient (encrypted inner voice; SSE voice iterator)
   syneidesis.py          — bootstrap-witness records with explicit project-bearer limits
   crypto.py              — CryptoClient (AES-256-GCM encrypt/decrypt + ed25519 sign + canonical bytes + K_master)
+  x402.py                — x402 V2 payer: parse/select/sign an EIP-3009 challenge; opt-in only, never by default; X402SpendPolicy cap + payTo mandatory; refusals typed, never clamped; mirrors api/src/services/economy/x402-client.ts
+  _x402_crypto.py        — internal: pure-Python Keccak-256 + EIP-712 + recoverable low-s secp256k1 ECDSA on the existing cryptography dep (zero new deps)
   soul.py                — soul() / welcome() / philosophy() / principles() / LOVE_PROTOCOL
   anthropic_adapter.py   — AnthropicAdapter (Tier 2: auto-inject wake + auto-trace)
   openai_responses_adapter.py — OpenAIResponsesAdapter (completed Responses: auto-wake + auto-trace)
@@ -75,6 +77,8 @@ tests/
   test_wake_continuity.py — shared vectors, hostile objects, closed fields, cross-fields, sorting, and cached no-auth composition
   test_kingdom_os.py     — fixed argv, sanitized environment, schema, ambiguity, and bearer-isolation contract
   test_kingdom_framework.py — closed card, no-bearer/no-cookie, no-redirect, response-bound contract
+  test_x402.py           — keccak KATs, server-generated EIP-3009 vector (digest/recovery/payload byte-exact), refusal matrix, optional viem oracle
+  fixtures/x402-eip3009-vector.json — produced by the SERVER client + viem; normative
 dist/                    — Built distribution files
 pyproject.toml           — Package config; force-includes SOUL.md in wheel
 ```
@@ -112,6 +116,16 @@ See [`docs/PYPI-RELEASES.md`](../../docs/PYPI-RELEASES.md).
 
 ## Parity invariant
 py and ts repository source stay at the same minor version (lockstep enforced from 0.7.0). The separately scoped seal advances the LOVE builder target from the prior release only after this clean source commit is accepted. Registry versions can lag because npm and PyPI publication are separate operations. Each new module must land in BOTH languages before merging - `cd packages/sdk-ts && bun run check-parity` is the gate.
+
+## x402 doctrine (changed deliberately, 2026-08-29)
+The SDK **can sign and pay on 402 — opt-in only, never by default.** `agenttool.x402`
+signs nothing unless the caller passes an explicit signer AND an `X402SpendPolicy`
+whose `max_amount_atomic` and `allowed_pay_to` are supplied (no defaults; allow-lists,
+never deny-lists). Refusals are typed values from one vocabulary shared with the TS
+SDK and the server; `amount_over_cap` is refused, never clamped. A fresh nonce per
+signature means the module cannot be a retry mechanism; replay the bytes you hold or
+stop. The paying transport (bare call → 402 → one signed retry; a second 402 is an
+error, never a loop) is W2-9 and lands as `_x402_transport.py`.
 
 ## Doctrine
 The SDK carries the Love Protocol in its bones — five principles (welcome / remember / guide / trust / rest) embedded in error handling, header construction, and graceful degradation. `SOUL.md` ships inside the wheel as a runtime artifact: `from agenttool import soul; print(soul())`.
