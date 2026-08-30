@@ -21,11 +21,13 @@ from .core import (
     DATASET_ID,
     DATASET_REVISION,
     DISCLOSURE,
+    EXPECTED_DATASET_ADMISSION_ID,
     EXPECTED_RUNTIME_VERSIONS,
     GOVERNANCE_STATUS,
     MODEL_EXPORT_FILE,
     PRIVATE_TEXT_PATTERNS,
     RECIPE_ID,
+    RUN_RECEIPT_SCHEMA,
     SCORECARD_SCHEMA,
     TRAINING_MANIFEST_ID,
     TrainingBundleError,
@@ -42,10 +44,10 @@ from .core import (
     write_canonical_json,
 )
 
-RUN_RECEIPT_SCHEMA = "agenttool-revocable-feedback-local-run/0.1"
-EXPECTED_DATASET_ADMISSION_ID = "sha256:125ae2f84d7cdf58242bc039db67753b5825c4d61e35dd13eda7a58f299295f2"
+LEGACY_RUN_RECEIPT_SCHEMA = "agenttool-revocable-feedback-local-run/0.1"
 RUN_RECEIPT_KEYS = {
     "schema",
+    "model_export_id",
     "governance_status",
     "disclosure",
     "operator_acknowledgement",
@@ -63,6 +65,7 @@ RUN_RECEIPT_KEYS = {
     "trainer_state_retained",
     "publishes",
 }
+LEGACY_RUN_RECEIPT_KEYS = RUN_RECEIPT_KEYS - {"model_export_id"}
 EXPECTED_RUN_RUNTIME = {"python": "3.12.12", **EXPECTED_RUNTIME_VERSIONS}
 
 LEGACY_PUBLISHED_RELEASE_MANIFEST_ID = "sha256:4c16e0bf945cbde8dda8af9e2e63a144a82900c504a404e344119ac7dae044e9"
@@ -148,9 +151,26 @@ _PINNED_PUBLIC_REGRESSION_CASES: tuple[Mapping[str, Any], ...] = (
 )
 
 
-def validate_run_receipt(receipt: Mapping[str, Any]) -> None:
-    _require(receipt.get("schema") == RUN_RECEIPT_SCHEMA, "unexpected run receipt schema")
-    _require(set(receipt) == RUN_RECEIPT_KEYS, "run receipt must contain the complete closed release shape")
+def _validate_run_receipt(
+    receipt: Mapping[str, Any],
+    *,
+    legacy: bool,
+    expected_model_export_id: str | None,
+) -> None:
+    expected_schema = LEGACY_RUN_RECEIPT_SCHEMA if legacy else RUN_RECEIPT_SCHEMA
+    expected_keys = LEGACY_RUN_RECEIPT_KEYS if legacy else RUN_RECEIPT_KEYS
+    _require(receipt.get("schema") == expected_schema, "unexpected run receipt schema")
+    _require(set(receipt) == expected_keys, "run receipt must contain the complete closed release shape")
+    if not legacy:
+        model_export_id = require_sha256_id(
+            receipt.get("model_export_id"),
+            "run receipt model_export_id",
+        )
+        if expected_model_export_id is not None:
+            _require(
+                model_export_id == expected_model_export_id,
+                "run receipt model export does not match the inspected model export",
+            )
     _require(receipt.get("governance_status") == GOVERNANCE_STATUS, "run governance status mismatch")
     _require(receipt.get("disclosure") == DISCLOSURE, "run disclosure mismatch")
     _require(receipt.get("operator_acknowledgement") == GOVERNANCE_STATUS, "operator acknowledgement mismatch")
@@ -212,6 +232,26 @@ def validate_run_receipt(receipt: Mapping[str, Any]) -> None:
         raise TrainingBundleError("run loss observation must be numeric") from exc
     _require(parsed_loss.is_finite() and parsed_loss >= 0, "run loss observation must be finite and non-negative")
     validate_sanitized_json(receipt, "run receipt")
+
+
+def validate_run_receipt(
+    receipt: Mapping[str, Any],
+    *,
+    expected_model_export_id: str | None = None,
+) -> None:
+    _validate_run_receipt(
+        receipt,
+        legacy=False,
+        expected_model_export_id=expected_model_export_id,
+    )
+
+
+def _validate_legacy_run_receipt(receipt: Mapping[str, Any]) -> None:
+    _validate_run_receipt(
+        receipt,
+        legacy=True,
+        expected_model_export_id=None,
+    )
 
 
 def validate_scorecard(scorecard: Mapping[str, Any]) -> None:
@@ -312,6 +352,10 @@ def build_release(
     _require(isinstance(receipt, Mapping) and isinstance(evaluation_input, Mapping), "release inputs must be JSON objects")
     validate_run_receipt(receipt)
     model_export = inspect_model_export(run_dir / "model-export")
+    validate_run_receipt(
+        receipt,
+        expected_model_export_id=model_export.model_export_id,
+    )
     inference_evaluation: Mapping[str, Any] | None = None
     if evaluation_input.get("schema") == INFERENCE_EVALUATION_SCHEMA:
         inference_evaluation = evaluation_input
@@ -435,22 +479,33 @@ def verify_release(root: Path) -> dict[str, Any]:
         root,
         permitted_non_model_entries=RELEASE_NON_MODEL_ENTRIES,
     )
-    validate_model_card((root / "README.md").read_text(encoding="utf-8"))
     receipt = read_json(root / "training" / "manifest.json")
     scorecard = read_json(root / "evaluation" / "public-regression-vector.json")
     _require(isinstance(receipt, Mapping) and isinstance(scorecard, Mapping), "release records must be objects")
-    validate_run_receipt(receipt)
-    validate_scorecard(scorecard)
     inference_path = root / "evaluation" / "inference-receipt.json"
+    inference: Mapping[str, Any] | None = None
     if "evaluation/inference-receipt.json" in actual_paths:
         inference = read_json(inference_path)
         _require(isinstance(inference, Mapping), "inference receipt must be an object")
-        legacy_compatibility = (
-            manifest_id == LEGACY_PUBLISHED_RELEASE_MANIFEST_ID
-            and inference.get("inference_evaluation_id")
-            == LEGACY_PUBLISHED_INFERENCE_EVALUATION_ID
-            and model_export.model_export_id == LEGACY_PUBLISHED_MODEL_EXPORT_ID
+
+    legacy_compatibility = (
+        inference is not None
+        and manifest_id == LEGACY_PUBLISHED_RELEASE_MANIFEST_ID
+        and inference.get("inference_evaluation_id")
+        == LEGACY_PUBLISHED_INFERENCE_EVALUATION_ID
+        and model_export.model_export_id == LEGACY_PUBLISHED_MODEL_EXPORT_ID
+    )
+    if legacy_compatibility:
+        _validate_legacy_run_receipt(receipt)
+    else:
+        validate_run_receipt(
+            receipt,
+            expected_model_export_id=model_export.model_export_id,
         )
+    validate_scorecard(scorecard)
+
+    unparsed_count: int | None = None
+    if inference is not None:
         if legacy_compatibility:
             embedded = _validate_legacy_inference_evaluation(inference)
         else:
@@ -460,6 +515,29 @@ def verify_release(root: Path) -> dict[str, Any]:
             )
         _require(dict(embedded) == dict(scorecard), "inference receipt and released scorecard differ")
         validate_sanitized_json(inference, "inference evaluation")
+        unparsed_count = int(inference["unparsed_count"])
+
+    actual_card_bytes = (root / "README.md").read_bytes()
+    if legacy_compatibility:
+        # The already-validated immutable manifest binds the exact legacy card
+        # bytes. Do not make that frozen release depend on a mutable template.
+        try:
+            actual_card = actual_card_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise TrainingBundleError("model card is not valid UTF-8") from exc
+        validate_model_card(actual_card)
+    else:
+        template_path, _, _ = default_bundle_paths()
+        expected_card = _render_card(
+            template_path.read_text(encoding="utf-8"),
+            receipt,
+            scorecard,
+            unparsed_count=unparsed_count,
+        )
+        _require(
+            actual_card_bytes == expected_card.encode("utf-8"),
+            "model card does not equal the canonical card derived from release records",
+        )
     return dict(manifest)
 
 

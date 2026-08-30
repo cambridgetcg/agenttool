@@ -15,16 +15,18 @@ from .core import (
     BASE_MODEL_REVISION,
     DATASET_ID,
     DISCLOSURE,
+    EXPECTED_DATASET_ADMISSION_ID,
     EXPECTED_RUNTIME_VERSIONS,
     GOVERNANCE_STATUS,
+    RUN_RECEIPT_SCHEMA,
     DatasetBundle,
     TrainingBundleError,
     _require,
     completion_only_tokens,
     ensure_empty_output,
     fixed_training_plan,
+    inspect_model_export,
     load_and_validate_dataset,
-    require_sha256_id,
     require_revision,
     write_canonical_json,
 )
@@ -147,8 +149,12 @@ def train_bounded_model(
     confirmation: str,
     device: str,
 ) -> dict[str, Any]:
+    _require(
+        isinstance(dataset_admission_id, str)
+        and dataset_admission_id == EXPECTED_DATASET_ADMISSION_ID,
+        "dataset admission does not match the reviewed data-candidate admission",
+    )
     _require(confirmation == GOVERNANCE_STATUS, f"confirmation must equal {GOVERNANCE_STATUS}")
-    require_sha256_id(dataset_admission_id, "dataset_admission_id")
     versions = verify_runtime_versions()
     ensure_empty_output(output_dir)
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
@@ -225,8 +231,10 @@ def train_bounded_model(
     model_export = output_dir / "model-export"
     model.save_pretrained(model_export, safe_serialization=True)
     tokenizer.save_pretrained(model_export, save_jinja_files=False)
+    model_export_id = inspect_model_export(model_export).model_export_id
     receipt = {
-        "schema": "agenttool-revocable-feedback-local-run/0.1",
+        "schema": RUN_RECEIPT_SCHEMA,
+        "model_export_id": model_export_id,
         "governance_status": GOVERNANCE_STATUS,
         "disclosure": DISCLOSURE,
         "operator_acknowledgement": GOVERNANCE_STATUS,

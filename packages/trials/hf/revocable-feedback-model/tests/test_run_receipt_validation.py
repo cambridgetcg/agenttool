@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from typing import Any, Callable
 
-from test_bundle import perfect_scorecard, run_receipt
+from test_bundle import perfect_scorecard, run_receipt, write_minimal_model_export
 from xenia_revocable_feedback_model.core import TrainingBundleError, write_canonical_json
 from xenia_revocable_feedback_model.release import (
     build_release,
@@ -155,12 +155,41 @@ class RunReceiptValidationTests(unittest.TestCase):
                 with self.assertRaises(TrainingBundleError):
                     validate_run_receipt(forged)
 
+    def test_model_export_binding_is_required_and_can_be_independently_matched(self) -> None:
+        expected = run_receipt()["model_export_id"]
+        validate_run_receipt(run_receipt(), expected_model_export_id=expected)
+
+        for name, mutate in (
+            ("missing", lambda value: value.pop("model_export_id")),
+            ("malformed", lambda value: value.__setitem__("model_export_id", "forged")),
+            (
+                "extra",
+                lambda value: value.__setitem__("alternate_model_export_id", expected),
+            ),
+            (
+                "mismatched",
+                lambda value: value.__setitem__(
+                    "model_export_id",
+                    "sha256:" + "9" * 64,
+                ),
+            ),
+        ):
+            with self.subTest(name=name):
+                forged = run_receipt()
+                mutate(forged)
+                with self.assertRaises(TrainingBundleError):
+                    validate_run_receipt(
+                        forged,
+                        expected_model_export_id=expected,
+                    )
+
     def test_build_release_rejects_forged_receipt_before_write(self) -> None:
         template, notice, license_path = default_bundle_paths()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             run = root / "run"
-            forged = run_receipt()
+            model_export_id = write_minimal_model_export(run / "model-export")
+            forged = run_receipt(model_export_id)
             forged["dataset"]["authorization_id"] = "sha256:" + "7" * 64
             write_canonical_json(run / "run-receipt.json", forged)
             scorecard = root / "scorecard.json"

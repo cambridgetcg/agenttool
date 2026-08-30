@@ -13,10 +13,12 @@ from xenia_revocable_feedback_model.core import (
     DATASET_ID,
     DATASET_REVISION,
     DISCLOSURE,
+    EXPECTED_DATASET_ADMISSION_ID,
     EXPECTED_RUNTIME_VERSIONS,
     GOVERNANCE_STATUS,
     METRICS,
     RECIPE_ID,
+    RUN_RECEIPT_SCHEMA,
     TRAINING_MANIFEST_ID,
     TrainingBundleError,
     completion_only_tokens,
@@ -34,7 +36,6 @@ from xenia_revocable_feedback_model.evaluate import (
     validate_inference_evaluation,
 )
 from xenia_revocable_feedback_model.release import (
-    EXPECTED_DATASET_ADMISSION_ID,
     build_release,
     default_bundle_paths,
     validate_model_card,
@@ -86,9 +87,10 @@ def inference_evaluation(model_export_id: str | None = None) -> dict[str, object
     }
 
 
-def run_receipt() -> dict[str, object]:
+def run_receipt(model_export_id: str | None = None) -> dict[str, object]:
     return {
-        "schema": "agenttool-revocable-feedback-local-run/0.1",
+        "schema": RUN_RECEIPT_SCHEMA,
+        "model_export_id": model_export_id or identifier(31),
         "governance_status": GOVERNANCE_STATUS,
         "disclosure": DISCLOSURE,
         "operator_acknowledgement": GOVERNANCE_STATUS,
@@ -206,7 +208,10 @@ class BundleTests(unittest.TestCase):
             run = root / "run"
             model = run / "model-export"
             model_export_id = write_minimal_model_export(model)
-            write_canonical_json(run / "run-receipt.json", run_receipt())
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(model_export_id),
+            )
             scorecard = root / "scorecard.json"
             evaluation = inference_evaluation(model_export_id)
             self.assertEqual(validate_inference_evaluation(evaluation)["scorecard_id"], evaluation["scorecard"]["scorecard_id"])  # type: ignore[index]
@@ -232,9 +237,12 @@ class BundleTests(unittest.TestCase):
             root = Path(temporary)
             run = root / "run"
             model = run / "model-export"
-            write_minimal_model_export(model, config={})
+            model_export_id = write_minimal_model_export(model, config={})
             (model / "optimizer.pt").write_bytes(b"private")
-            write_canonical_json(run / "run-receipt.json", run_receipt())
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(model_export_id),
+            )
             scorecard = root / "scorecard.json"
             write_canonical_json(scorecard, perfect_scorecard())
             with self.assertRaises(TrainingBundleError):

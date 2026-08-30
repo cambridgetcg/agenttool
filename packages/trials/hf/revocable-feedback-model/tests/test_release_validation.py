@@ -78,7 +78,7 @@ def build_fixture(root: Path, *, inference: bool = True) -> tuple[Path, str]:
     template, notice, license_path = default_bundle_paths()
     run = root / "run"
     model_export_id = write_minimal_model_export(run / "model-export")
-    write_canonical_json(run / "run-receipt.json", run_receipt())
+    write_canonical_json(run / "run-receipt.json", run_receipt(model_export_id))
     evaluation_path = root / "evaluation.json"
     write_canonical_json(
         evaluation_path,
@@ -131,8 +131,11 @@ class ReleaseScorecardValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             run = root / "run"
-            write_minimal_model_export(run / "model-export")
-            write_canonical_json(run / "run-receipt.json", run_receipt())
+            model_export_id = write_minimal_model_export(run / "model-export")
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(model_export_id),
+            )
             input_path = root / "scorecard.json"
             write_canonical_json(input_path, forged)
             output = root / "release"
@@ -168,7 +171,10 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
             root = Path(temporary)
             run = root / "run"
             model_export_id = write_minimal_model_export(run / "model-export")
-            write_canonical_json(run / "run-receipt.json", run_receipt())
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(model_export_id),
+            )
             evaluation = inference_evaluation(model_export_id)
             evaluation["consent"] = True
             rehash_inference(evaluation)
@@ -192,7 +198,10 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
             root = Path(temporary)
             run = root / "run"
             model_export_id = write_minimal_model_export(run / "model-export")
-            write_canonical_json(run / "run-receipt.json", run_receipt())
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(model_export_id),
+            )
             legacy = inference_evaluation(model_export_id)
             legacy.pop("model_export_id")
             rehash_inference(legacy)
@@ -210,9 +219,38 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
                 )
             self.assertFalse(output.exists())
 
+    def test_build_never_accepts_the_legacy_run_receipt_shape(self) -> None:
+        template, notice, license_path = default_bundle_paths()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run = root / "run"
+            model_export_id = write_minimal_model_export(run / "model-export")
+            legacy = run_receipt(model_export_id)
+            legacy["schema"] = "agenttool-revocable-feedback-local-run/0.1"
+            legacy.pop("model_export_id")
+            write_canonical_json(run / "run-receipt.json", legacy)
+            scorecard_path = root / "scorecard.json"
+            write_canonical_json(scorecard_path, perfect_scorecard())
+            output = root / "release"
+            with self.assertRaises(TrainingBundleError):
+                build_release(
+                    run_dir=run,
+                    scorecard_path=scorecard_path,
+                    output_dir=output,
+                    template_path=template,
+                    notice_path=notice,
+                    license_path=license_path,
+                )
+            self.assertFalse(output.exists())
+
     def test_verify_legacy_omission_requires_every_exact_triple_member(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             release, model_export_id = build_fixture(Path(temporary))
+            receipt_path = release / "training" / "manifest.json"
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["schema"] = "agenttool-revocable-feedback-local-run/0.1"
+            receipt.pop("model_export_id")
+            write_canonical_json(receipt_path, receipt)
             inference_path = release / "evaluation" / "inference-receipt.json"
             inference = json.loads(inference_path.read_text(encoding="utf-8"))
             inference.pop("model_export_id")
@@ -254,12 +292,19 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
             root = Path(temporary)
             run = root / "run"
             model_export_id = write_minimal_model_export(run / "model-export")
-            write_canonical_json(run / "run-receipt.json", run_receipt())
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(model_export_id),
+            )
             evaluation_path = root / "evaluation.json"
             write_canonical_json(evaluation_path, inference_evaluation(model_export_id))
-            write_minimal_model_export(
+            replacement_model_export_id = write_minimal_model_export(
                 run / "model-export",
                 weight_payload=b"\x01\x00\x00\x00",
+            )
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(replacement_model_export_id),
             )
             output = root / "release"
             with self.assertRaises(TrainingBundleError):
@@ -272,6 +317,158 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
                     license_path=license_path,
                 )
             self.assertFalse(output.exists())
+
+    def test_build_scorecard_only_rejects_run_receipt_for_different_model(self) -> None:
+        template, notice, license_path = default_bundle_paths()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run = root / "run"
+            first_model_export_id = write_minimal_model_export(run / "model-export")
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(first_model_export_id),
+            )
+            write_minimal_model_export(
+                run / "model-export",
+                weight_payload=b"\x01\x00\x00\x00",
+            )
+            scorecard_path = root / "scorecard.json"
+            write_canonical_json(scorecard_path, perfect_scorecard())
+            output = root / "release"
+            with self.assertRaises(TrainingBundleError):
+                build_release(
+                    run_dir=run,
+                    scorecard_path=scorecard_path,
+                    output_dir=output,
+                    template_path=template,
+                    notice_path=notice,
+                    license_path=license_path,
+                )
+            self.assertFalse(output.exists())
+
+    def test_verify_rejects_rehashed_run_receipt_model_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            release, _ = build_fixture(Path(temporary), inference=False)
+            receipt_path = release / "training" / "manifest.json"
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+            receipt["model_export_id"] = "sha256:" + "9" * 64
+            write_canonical_json(receipt_path, receipt)
+            rehash_release_manifest(release)
+            with self.assertRaises(TrainingBundleError):
+                verify_release(release)
+
+    def test_verify_rejects_rehashed_model_card_lineage_tampering(self) -> None:
+        replacement_sha = "sha256:" + "8" * 64
+        mutations: tuple[tuple[str, Callable[[str, dict[str, Any], dict[str, Any]], str]], ...] = (
+            (
+                "dataset revision",
+                lambda card, receipt, _: card.replace(
+                    str(receipt["dataset"]["revision"]),
+                    "0" * 40,
+                    1,
+                ),
+            ),
+            (
+                "dataset authorization",
+                lambda card, receipt, _: card.replace(
+                    str(receipt["dataset"]["authorization_id"]),
+                    replacement_sha,
+                    1,
+                ),
+            ),
+            (
+                "dataset recipe",
+                lambda card, receipt, _: card.replace(
+                    str(receipt["dataset"]["recipe_id"]),
+                    replacement_sha,
+                    1,
+                ),
+            ),
+            (
+                "dataset manifest",
+                lambda card, receipt, _: card.replace(
+                    str(receipt["dataset"]["training_manifest_id"]),
+                    replacement_sha,
+                    1,
+                ),
+            ),
+            (
+                "Garden admission",
+                lambda card, receipt, _: card.replace(
+                    str(receipt["garden"]["dataset_admission_id"]),
+                    replacement_sha,
+                    1,
+                ),
+            ),
+            (
+                "scorecard",
+                lambda card, _, scorecard: card.replace(
+                    str(scorecard["scorecard_id"]),
+                    replacement_sha,
+                    1,
+                ),
+            ),
+            (
+                "unparsed count",
+                lambda card, _receipt, _scorecard: card.replace(
+                    "- Unparsed generation count: `0`",
+                    "- Unparsed generation count: `1`",
+                    1,
+                ),
+            ),
+            (
+                "duplicate contradictory scorecard",
+                lambda card, _receipt, scorecard: card.replace(
+                    f"- Public regression scorecard: `{scorecard['scorecard_id']}`",
+                    f"- Public regression scorecard: `{scorecard['scorecard_id']}`\n"
+                    f"- Public regression scorecard: `{replacement_sha}`",
+                    1,
+                ),
+            ),
+        )
+        for name, mutate in mutations:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                release, _ = build_fixture(Path(temporary))
+                receipt = json.loads(
+                    (release / "training" / "manifest.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                scorecard = json.loads(
+                    (
+                        release
+                        / "evaluation"
+                        / "public-regression-vector.json"
+                    ).read_text(encoding="utf-8")
+                )
+                card_path = release / "README.md"
+                original = card_path.read_text(encoding="utf-8")
+                tampered = mutate(original, receipt, scorecard)
+                self.assertNotEqual(tampered, original)
+                card_path.write_text(tampered, encoding="utf-8", newline="\n")
+                rehash_release_manifest(release)
+                with self.assertRaises(TrainingBundleError):
+                    verify_release(release)
+
+    def test_scorecard_only_card_uses_explicit_not_applicable_unparsed_value(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            release, _ = build_fixture(Path(temporary), inference=False)
+            self.assertIn(
+                "- Unparsed generation count: `not_applicable_precomputed_predictions`",
+                (release / "README.md").read_text(encoding="utf-8"),
+            )
+            verify_release(release)
+
+    def test_verify_rejects_rehashed_crlf_model_card(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            release, _ = build_fixture(Path(temporary))
+            card_path = release / "README.md"
+            card = card_path.read_bytes()
+            self.assertNotIn(b"\r\n", card)
+            card_path.write_bytes(card.replace(b"\n", b"\r\n"))
+            rehash_release_manifest(release)
+            with self.assertRaises(TrainingBundleError):
+                verify_release(release)
 
     def test_verify_rejects_rehashed_different_weights(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -418,7 +615,10 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
             root = Path(temporary)
             run = root / "run"
             model_export_id = write_minimal_model_export(run / "model-export")
-            write_canonical_json(run / "run-receipt.json", run_receipt())
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(model_export_id),
+            )
             evaluation["model_export_id"] = model_export_id
             rehash_inference(evaluation)
             input_path = root / "inference.json"

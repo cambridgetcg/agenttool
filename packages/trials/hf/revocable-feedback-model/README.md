@@ -11,7 +11,10 @@ It does not upload, publish, toggle repository visibility, read credentials,
 issue a Training Garden decision, or mint an HF training-host permit. Training
 is disabled unless the caller supplies the exact non-Garden acknowledgement,
 an immutable dataset revision, exact dataset artifact IDs, and a Garden
-**dataset admission** ID. A dataset admission is not run authority.
+**dataset admission** ID equal to the one reviewed for this experiment. That
+admission is checked before runtime inspection, output creation, environment
+mutation, or ML dependency/model loading. A dataset admission is not run
+authority.
 
 ## Governance boundary
 
@@ -88,7 +91,11 @@ parser receipt alongside the vector scorecard. Each new inference receipt also
 binds the complete sorted allowlisted model-export closure (weights and every
 model/tokenizer artifact) by a domain-separated content ID. Evaluation checks
 that closure before and after generation; build and verification independently
-require the same ID for the bytes being released.
+require the same ID for the bytes being released. The current closed run
+receipt schema is `agenttool-revocable-feedback-local-run/0.2`; training emits
+its independently inspected `model_export_id` only after both model and
+tokenizer saving complete. Release build and verification independently match
+that run binding to the model-export bytes as well.
 
 The release builder copies only safetensors, closed model/tokenizer config
 files, the model card, Apache license and notice, a sanitized training
@@ -105,9 +112,19 @@ symlinks, special nodes, nested model files, unknown or empty extra directories,
 mixed or unreferenced weight layouts, and raw tokenizer formats for which this
 pinned export has no bounded semantic validator.
 
-The immutable first public release predates `model_export_id`. `verify-release`
-recognizes that omission only for the exact already-published release-manifest,
-inference-receipt, and recomputed model-export ID triple. `build-release` never
-accepts the legacy shape, and any new or changed inference receipt must carry
-the current closed model-export binding. A scorecard-only release makes no
-claim that the released model produced those predictions.
+For current releases, verification validates the run receipt, scorecard, and
+optional inference receipt first, then reconstructs the model card from the
+bundled template and those machine records. The released card must match that
+canonical rendering byte for byte, including dataset lineage, scorecard ID,
+and the inference receipt's unparsed count (or the explicit scorecard-only
+`not_applicable_precomputed_predictions` value).
+
+The immutable first public release's run and inference receipts both predate
+`model_export_id`. `verify-release` recognizes those omissions only for the
+exact already-published release-manifest, inference-receipt, and recomputed
+model-export ID triple; that manifest already binds the exact legacy card
+bytes. Training and `build-release` never emit or accept either legacy shape.
+Any new run or inference receipt must carry its current closed model-export
+binding. A scorecard-only release makes no claim that the released model
+produced those predictions, while its run receipt still binds the bytes being
+released.

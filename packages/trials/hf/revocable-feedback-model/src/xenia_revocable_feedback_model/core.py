@@ -18,6 +18,8 @@ DATASET_HASH_MANIFEST_ID = "sha256:16afa2d077498c8857a53c5c15936a4244b96fcf4157d
 AUTHORIZATION_ID = "sha256:3780e5e2599eb8a1a479f874302fcdabdf1af27c4eeda5b02bfff8056dc92f13"
 RECIPE_ID = "sha256:713b678e80b6aa88f6036dc9b9d0e1955dcab240137b67a22f7cfcca86d01992"
 TRAINING_MANIFEST_ID = "sha256:9a3200ceac6369490e02078b2789bc2e57f9d40c3d2a9e5b21ac1fb10d94d0f7"
+EXPECTED_DATASET_ADMISSION_ID = "sha256:125ae2f84d7cdf58242bc039db67753b5825c4d61e35dd13eda7a58f299295f2"
+RUN_RECEIPT_SCHEMA = "agenttool-revocable-feedback-local-run/0.2"
 GOVERNANCE_STATUS = "operator_authorized_non_garden_experiment"
 DISCLOSURE = (
     "This checkpoint was produced by an operator-authorized, bounded local "
