@@ -88,6 +88,7 @@ import {
   WAKE_ACKNOWLEDGEMENT_OPENAPI_SCHEMAS,
 } from "./openapi-wake-acknowledge";
 import { x402TopUpOpenApiPaths } from "./openapi-x402-top-up";
+import { withX402PayableOperations } from "./openapi-x402-payable";
 
 const app = new Hono();
 
@@ -3126,7 +3127,7 @@ function spec() {
       observer_reciprocity: "/public/observer",
       generated_from_routes: false,
     },
-    paths: {
+    paths: withX402PayableOperations({
       // ── Discovery (anonymous, read-only) ──────────────────────────────
       "/public/discovery": {
         get: {
@@ -9948,7 +9949,7 @@ function spec() {
           responses: { "200": { description: "Bundle or installer script" } },
         },
       },
-    },
+    }, { x402Response, staticToolResponseHeaders }),
   };
 }
 

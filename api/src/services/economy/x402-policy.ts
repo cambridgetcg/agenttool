@@ -407,6 +407,13 @@ export function x402PayableRoutesForDisclosure(
   }));
 }
 
+/** The table's Hono pattern as an OpenAPI/URI-template path: `:name` →
+ * `{name}`. `GET /public/plans`, the OpenAPI fragment, and the well-known
+ * surfaces all publish this form so a row reads the same everywhere. */
+export function x402PayablePathTemplate(pattern: string): string {
+  return pattern.replace(/:([A-Za-z0-9_]+)/gu, "{$1}");
+}
+
 export interface X402PayableRouteMatch {
   row: X402PayableRoute;
   /** Raw (undecoded) path segments captured by `:name` params. */

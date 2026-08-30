@@ -59,6 +59,12 @@ import {
 import { AGENT_TXT_SAFETY } from "../services/discovery/safety-boundaries";
 import { perAgentMcpImplementationSummary } from "../services/mcp/per-agent-implementation-status";
 import {
+  ATOMIC_PER_CREDIT,
+  TOP_UP_PAYMENT_REQUIRED_ERROR,
+  x402PayablePathTemplate,
+  x402PayableRoutesForDisclosure,
+} from "../services/economy/x402-policy";
+import {
   WAKE_CACHE_CONTROL,
   WAKE_REPRESENTATION_REVISION,
 } from "../services/wake/etag";
@@ -100,6 +106,31 @@ const AGENT_WALLET_RELEASE = {
 // This is the strict JSON discovery door defined by XENIA Surface 0.1.
 // It names only same-origin, unauthenticated GET resources and makes no
 // conformance, authorization, consent, continuity, or Covenant claim.
+
+/** The x402 entry of /.well-known/wake-keystone composes_with, generated from the payable
+ * table so the route list, prices, and rate can never drift from what the
+ * challenge builder charges. */
+export function x402ComposesWith() {
+  const payable = x402PayableRoutesForDisclosure()
+    .filter((row) => row.kind === "route_cost")
+    .map((row) => ({
+      method: row.method,
+      path: x402PayablePathTemplate(row.pattern),
+      label: row.label,
+      credits: row.credits,
+      amount_atomic: row.amountAtomic,
+      payable: row.payable,
+    }));
+  return {
+    spec: "https://x402.org",
+    notes:
+      `Only eligible insufficient_credits refusals on the ${payable.length} static-priced routes in payable_routes, and the top-up door POST /v1/x402/top-up/{credits} (402 ${TOP_UP_PAYMENT_REQUIRED_ERROR}; N credits for N × ${ATOMIC_PER_CREDIT} atomic USDC, final, capped per request), may carry an x402 V2 PAYMENT-REQUIRED challenge; the wake itself is unpaid. Readiness and the live list: /public/plans then_pay_as_you_go.`,
+    atomic_per_credit: ATOMIC_PER_CREDIT,
+    payable_routes: payable,
+    top_up: `${ORG_URL}/v1/x402/top-up/{credits}`,
+    terms: `${ORG_URL}/public/plans`,
+  };
+}
 
 app.on(["GET", "HEAD"], "/agent.json", (c) => {
   const response = createSurfaceManifestResponse(
@@ -518,13 +549,7 @@ app.get("/wake-keystone", (c) => {
         doctrine: `${DOCS_URL}/MCP-PER-AGENT.md`,
         implementation: perAgentMcpImplementationSummary(),
       },
-      x402: {
-        spec: "https://x402.org",
-        notes:
-          "Only eligible POST /v1/scrape and POST /v1/document project-credit refusals, and the top-up door POST /v1/x402/top-up/{credits} (402 top_up_payment_required; N credits for N × 1,000 atomic USDC, final, capped per request), may carry an x402 V2 PAYMENT-REQUIRED challenge; the wake itself is unpaid.",
-        top_up: `${ORG_URL}/v1/x402/top-up/{credits}`,
-        terms: `${ORG_URL}/public/plans`,
-      },
+      x402: x402ComposesWith(),
       otel_gen_ai: {
         spec: "https://opentelemetry.io/docs/specs/semconv/gen-ai/",
         notes: "think-worker emits gen_ai.* spans.",

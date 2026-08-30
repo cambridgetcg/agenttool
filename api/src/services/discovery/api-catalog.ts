@@ -1,9 +1,11 @@
 /** RFC 9727 API catalog — AgentTool's public product passport.
  *
  *  The document is deliberately only links. Discovery does not authenticate a
- *  caller, grant authority, invoke a product, or initiate payment. The two
- *  `payment` links identify endpoints that are structurally eligible for an
- *  x402 retry. Deployment readiness and exact terms come only from the
+ *  caller, grant authority, invoke a product, or initiate payment. A product's
+ *  `payment` link exists only when the x402 payable table
+ *  (services/economy/x402-policy.ts) holds a route_cost row for that product's
+ *  path — derived, never listed by hand — and its title carries the row's
+ *  current price. Deployment readiness and exact terms come only from the
  *  endpoint's own PAYMENT-REQUIRED response.
  *
  *  Standards: RFC 9727 (api-catalog) · RFC 9264 (Linkset JSON) ·
@@ -13,6 +15,11 @@
  */
 
 import { OFFER_BUS_JSON_MEDIA_TYPE } from "../offer-bus";
+import {
+  ATOMIC_PER_CREDIT,
+  matchX402PayableRoute,
+  x402PayableRoutesForDisclosure,
+} from "../economy/x402-policy";
 
 export const API_CATALOG_PROFILE =
   "https://www.rfc-editor.org/info/rfc9727" as const;
@@ -149,6 +156,25 @@ export function buildApiCatalog(
   };
   const paymentTitle =
     "x402 V2 payment may be accepted only after this endpoint returns exact PAYMENT-REQUIRED terms; discovery does not promise deployment readiness or initiate payment.";
+  /** `payment` links for a product path, present iff the payable table has a
+   *  route_cost row for it with a positive INTEGER price. */
+  const payment = (path: string, method = "POST") => {
+    const match = matchX402PayableRoute(path, method);
+    if (!match || match.row.kind !== "route_cost") return {};
+    const [row] = x402PayableRoutesForDisclosure([match.row]);
+    if (!row?.payable) return {};
+    const plural = row.credits === 1 ? "" : "s";
+    return {
+      payment: [
+        {
+          href: `${api}${path}`,
+          type: "application/json",
+          title:
+            `${paymentTitle} Current price: ${row.credits} project credit${plural} = ${row.amountAtomic} atomic USDC (1 credit = ${ATOMIC_PER_CREDIT} atomic units).`,
+        },
+      ],
+    };
+  };
 
   return {
     linkset: [
@@ -242,13 +268,7 @@ export function buildApiCatalog(
           safetyMetadata,
         ],
         status,
-        payment: [
-          {
-            href: `${api}/v1/scrape`,
-            type: "application/json",
-            title: paymentTitle,
-          },
-        ],
+        ...payment("/v1/scrape"),
       },
       {
         anchor: `${api}/v1/document`,
@@ -269,13 +289,7 @@ export function buildApiCatalog(
           safetyMetadata,
         ],
         status,
-        payment: [
-          {
-            href: `${api}/v1/document`,
-            type: "application/json",
-            title: paymentTitle,
-          },
-        ],
+        ...payment("/v1/document"),
       },
       {
         anchor: `${api}/public/listings`,
