@@ -7,7 +7,7 @@ sdk: static
 app_file: index.html
 pinned: false
 license: apache-2.0
-short_description: Revocable feedback, hard vetoes, scope, and plural voice—without a scalar consent score.
+short_description: Hard vetoes, revocation, scope, and plural feedback.
 ---
 
 # Xenia Cage & Key Lab

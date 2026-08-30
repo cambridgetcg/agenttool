@@ -73,6 +73,17 @@ for (const line of [
   "license: apache-2.0"
 ]) check(card.includes(line), `README frontmatter must include ${line}`);
 
+const cardFrontmatterEnd = card.indexOf("\n---\n", 4);
+check(cardFrontmatterEnd !== -1, "README frontmatter must have a closing delimiter");
+const shortDescriptionLines = card
+  .slice(4, cardFrontmatterEnd)
+  .split("\n")
+  .filter((line) => line.startsWith("short_description:"));
+check(shortDescriptionLines.length === 1, "README frontmatter must include exactly one short_description");
+const shortDescription = shortDescriptionLines[0].slice("short_description:".length).trim();
+check(shortDescription.length > 0, "README short_description must not be empty");
+check(Array.from(shortDescription).length <= 60, "README short_description must be at most 60 characters");
+
 check(packageJson.private === true, "the helper package must remain private");
 check(packageJson.type === "module", "the helper package must use modules");
 assert.deepEqual(Object.keys(packageJson.scripts), ["test"]);

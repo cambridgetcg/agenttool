@@ -37,7 +37,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "8d44921e6ead0386680623c27f45553fd35816b6ff3c2b83c217e4cbc5709e72"
+      "sha256": "a4953aaca8dace8ad6bb435f5e08e7af31e9d54d8dfd0914c14c13b8c56a8a5d"
     },
     {
       "path": "assets/app.js",
@@ -61,7 +61,7 @@
     },
     {
       "path": "scripts/validate-space.mjs",
-      "sha256": "688e2a80ce7d8c85bcf2ccdb90292c5f38fd8c3bf0878ef5d581cd7b0d0bb9e9"
+      "sha256": "bf333a93828b51b2274cc6f1d01e80a1a0aa345f7b468bc628a30863ca5c3814"
     }
   ]
 }
