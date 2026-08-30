@@ -1,0 +1,8 @@
+{
+  "name": "xenia-cage-key-lab-space",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/validate-space.mjs"
+  }
+}

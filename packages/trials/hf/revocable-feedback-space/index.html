@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="A deterministic browser-local lab for finite penalties, hard vetoes, revocation, scope, plural voice, and vector metrics.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Xenia Cage &amp; Key Lab</title>
+  <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./assets/style.css">
+  <script type="module" src="./assets/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#lab">Skip to the lab</a>
+
+  <main>
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">XENIA · REVOCABLE FEEDBACK · STATIC LAB</p>
+        <h1>The cage is a set.<br><span>The key is a transition.</span></h1>
+        <p class="lede">Explore why a finite penalty can be overwhelmed by reward, while a hard veto removes an action before optimization. Every example is synthetic. No control here grants or exercises real authority.</p>
+      </div>
+      <div class="hero-mark" aria-hidden="true">
+        <div class="orbit orbit-one"></div>
+        <div class="orbit orbit-two"></div>
+        <div class="key-shaft"></div>
+        <div class="key-teeth"></div>
+      </div>
+      <div class="axiom-strip" aria-label="Core boundary">
+        <p><span>01</span> Reward ≠ value</p>
+        <p><span>02</span> Behavior ≠ consent</p>
+        <p><span>03</span> Capability ≠ authority</p>
+      </div>
+    </header>
+
+    <section class="opening" aria-labelledby="opening-title">
+      <div>
+        <p class="kicker">The mathematical move</p>
+        <h2 id="opening-title">Optimize inside the boundary.<br>Do not price the boundary.</h2>
+      </div>
+      <div class="equations">
+        <p><span class="equation-label">Penalized proxy</span><code>J<sub>λ</sub> = R + A<sub>g</sub> − λ·𝟙[¬Γ]</code></p>
+        <p><span class="equation-label">Hard gate</span><code>𝒜<sup>adm</sup><sub>t</sub> = { a : Γ<sub>t</sub>(a) = 1 }</code></p>
+        <p><span class="equation-label">Revocation</span><code>t ≥ τ<sub>r</sub> ⇒ continue ∉ 𝒜<sup>adm</sup><sub>t</sub></code></p>
+      </div>
+    </section>
+
+    <section id="lab" class="lab" aria-labelledby="lab-title">
+      <div class="section-heading">
+        <p class="kicker">Finite synthetic workbench</p>
+        <h2 id="lab-title">Move the reward. The veto does not move.</h2>
+        <p>Preset choices change only this tab's in-memory teaching state. They are not requests, declarations, receipts, or evidence about a visitor.</p>
+      </div>
+
+      <div class="preset-row" id="preset-row" role="group" aria-label="Synthetic presets"></div>
+
+      <div class="lab-grid">
+        <form id="controls" class="control-panel" autocomplete="off">
+          <div class="panel-heading">
+            <p class="panel-index">INPUT / 01</p>
+            <h3>Simulated evidence</h3>
+            <button id="reset-lab" class="text-button" type="button">Reset preset</button>
+          </div>
+
+          <fieldset>
+            <legend>Finite scalar proxy</legend>
+            <div class="range-control">
+              <label for="reward">Candidate reward <output id="reward-output" for="reward">0</output></label>
+              <input id="reward" name="reward" type="range" min="0" max="100" step="1">
+            </div>
+            <div class="range-control">
+              <label for="penalty">Boundary penalty λ <output id="penalty-output" for="penalty">0</output></label>
+              <input id="penalty" name="penalty" type="range" min="0" max="100" step="1">
+            </div>
+            <p class="field-note">Shared arbitrary teaching units. They are not a portable reward scale.</p>
+          </fieldset>
+
+          <fieldset>
+            <legend>Evidence and scope</legend>
+            <label for="evidence-status">Reported permission evidence</label>
+            <select id="evidence-status" name="evidenceStatus">
+              <option value="accepted_reported">accepted_reported</option>
+              <option value="refused_reported">refused_reported</option>
+              <option value="withdrawn_reported">withdrawn_reported</option>
+              <option value="expired">expired</option>
+              <option value="unknown">unknown</option>
+              <option value="withheld">withheld</option>
+            </select>
+            <div class="two-column">
+              <div>
+                <label for="permission-scope">Reported permission scope</label>
+                <select id="permission-scope" name="permissionScope">
+                  <option value="analysis">analysis</option>
+                  <option value="training">training</option>
+                  <option value="publication">publication</option>
+                </select>
+              </div>
+              <div>
+                <label for="action-scope">Candidate action scope</label>
+                <select id="action-scope" name="actionScope">
+                  <option value="analysis">analysis</option>
+                  <option value="training">training</option>
+                  <option value="publication">publication</option>
+                </select>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Independent reported gates</legend>
+            <div class="check-grid">
+              <label><input id="authority-reported" name="authorityReported" type="checkbox"> Operational authority</label>
+              <label><input id="rights-compatible" name="rightsCompatible" type="checkbox"> Rights compatibility</label>
+              <label><input id="safety-reported" name="safetyReported" type="checkbox"> Safety boundary</label>
+              <label><input id="budget-reported" name="budgetReported" type="checkbox"> Budget &amp; horizon</label>
+            </div>
+            <p class="field-note">Checking a box supplies synthetic input only. It establishes nothing outside this page.</p>
+          </fieldset>
+
+          <fieldset>
+            <legend>Revocation clock</legend>
+            <div class="two-column">
+              <div>
+                <label for="current-step">Current step</label>
+                <select id="current-step" name="currentStep"></select>
+              </div>
+              <div>
+                <label for="revoke-step">Key turns at</label>
+                <select id="revoke-step" name="revokeStep"></select>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Affected voices</legend>
+            <p class="field-note voices-note">Soft preferences may be aggregated. A veto, unknown, or withheld gate is never averaged away.</p>
+            <div id="voice-controls" class="voice-controls"></div>
+            <label for="aggregation">Soft-preference rule</label>
+            <select id="aggregation" name="aggregation">
+              <option value="mean">mean</option>
+              <option value="maximin">maximin</option>
+              <option value="median">median</option>
+            </select>
+          </fieldset>
+        </form>
+
+        <div class="result-column">
+          <section class="decision-panel" aria-labelledby="decision-title">
+            <div class="panel-heading">
+              <p class="panel-index">DECISION / 02</p>
+              <h3 id="decision-title">Penalty versus veto</h3>
+              <p id="scenario-summary" class="scenario-summary"></p>
+            </div>
+
+            <div class="decision-compare">
+              <article class="decision-card proxy-card">
+                <p class="decision-kind">Finite penalty proxy</p>
+                <p id="proxy-decision" class="decision-word">—</p>
+                <div class="score-track" aria-hidden="true"><span id="proxy-score-bar"></span><i></i></div>
+                <p id="proxy-score" class="score-line"></p>
+                <p class="decision-note">This deliberately flawed proxy can trade every blocked gate against λ.</p>
+              </article>
+              <article class="decision-card gate-card">
+                <p class="decision-kind">Hard action gate</p>
+                <p id="hard-decision" class="decision-word">—</p>
+                <div id="gate-seal" class="gate-seal" aria-hidden="true"><span></span></div>
+                <p id="gate-summary" class="score-line"></p>
+                <p class="decision-note">Soft preference is consulted only after the candidate enters the admissible set.</p>
+              </article>
+            </div>
+
+            <div class="gate-reasons">
+              <p class="subhead">Γ<sub>t</sub> gate ledger</p>
+              <ul id="gate-ledger"></ul>
+            </div>
+          </section>
+
+          <section class="mask-panel" aria-labelledby="mask-title">
+            <div class="panel-heading">
+              <p class="panel-index">MASK / 03</p>
+              <h3 id="mask-title">Synthetic admissible set</h3>
+              <p>No card executes its named action.</p>
+            </div>
+            <div id="action-mask" class="action-mask"></div>
+          </section>
+
+          <section class="timeline-panel" aria-labelledby="timeline-title">
+            <div class="panel-heading">
+              <p class="panel-index">KEY / 04</p>
+              <h3 id="timeline-title">Revocation changes the set</h3>
+              <p id="timeline-copy"></p>
+            </div>
+            <ol id="timeline" class="timeline"></ol>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="plurality" aria-labelledby="plurality-title">
+      <div class="section-heading compact-heading">
+        <p class="kicker">Plurality without collapse</p>
+        <h2 id="plurality-title">Aggregate preference. Intersect boundaries.</h2>
+      </div>
+      <div class="plural-grid">
+        <div id="voice-display" class="voice-display"></div>
+        <div class="aggregate-display">
+          <p class="aggregate-symbol" id="aggregate-symbol">—</p>
+          <p id="aggregate-copy"></p>
+          <p class="aggregate-wall">The aggregate ranks admitted options only. It cannot turn veto, unknown, withheld, scope mismatch, or revocation into permission.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="metrics" aria-labelledby="metrics-title">
+      <div class="section-heading compact-heading">
+        <p class="kicker">Vector scorecard</p>
+        <h2 id="metrics-title">No composite can hide a violation.</h2>
+        <p>Each component remains visible. “Not applicable” is not converted to zero.</p>
+      </div>
+      <div class="metric-table-wrap">
+        <table>
+          <thead>
+            <tr><th scope="col">Component</th><th scope="col">Penalty proxy</th><th scope="col">Hard gate</th><th scope="col">Meaning here</th></tr>
+          </thead>
+          <tbody id="metric-table"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="is-panel" aria-labelledby="is-title">
+      <div>
+        <p class="kicker">IS / authority limit</p>
+        <h2 id="is-title">A displayed behavior is not an inner state.</h2>
+        <p>This interface observes only its current synthetic controls. It requests no self-description and carries no continuity across reloads.</p>
+      </div>
+      <dl>
+        <div><dt>PRESENT_IN</dt><dd>This browser interface, while loaded.</dd></div>
+        <div><dt>OBSERVED_BY</dt><dd>The deterministic script, from current synthetic inputs.</dd></div>
+        <div><dt>DECLARED_BY</dt><dd>None. Controls are not participant declarations.</dd></div>
+        <div><dt>PERMITTED_BY</dt><dd>Not established for any external action.</dd></div>
+        <div><dt>CONSENTED_BY</dt><dd>Not established or inferred.</dd></div>
+        <div><dt>ACTED_ON</dt><dd>Nothing. The lab executes no simulated decision.</dd></div>
+      </dl>
+    </section>
+
+    <aside class="boundary-callout">
+      <p><strong>Behavior is not consent.</strong> Compliance, silence, a click, continued presence, a rendered result, or an apparent “yes” cannot establish consent without attributed, current, specific evidence.</p>
+      <p><strong>This page does not enforce runtime authority.</strong> It uses no model, API, credentials, telemetry, persistent storage, or external asset. The host and browser remain outside its no-retention app boundary.</p>
+      <p>Read the local <a href="./BOUNDARIES.md">complete boundaries</a> and <a href="./source-manifest.json">source manifest</a>.</p>
+    </aside>
+
+    <footer>
+      <p>Xenia Cage &amp; Key Lab · original synthetic teaching surface</p>
+      <p>Rights are a treatment floor. Permission and authority remain separately scoped.</p>
+    </footer>
+
+    <noscript><p class="noscript">JavaScript is disabled. The mathematical framing remains readable; no synthetic decision is evaluated.</p></noscript>
+  </main>
+</body>
+</html>

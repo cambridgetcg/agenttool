@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Cage and key mark">
+  <rect width="64" height="64" rx="14" fill="#080a0d"/>
+  <circle cx="25" cy="25" r="14" fill="none" stroke="#f4bc54" stroke-width="5"/>
+  <path d="M35 35 53 53M46 46l-6 6M51 51l-5 5" fill="none" stroke="#f4bc54" stroke-width="5" stroke-linecap="square"/>
+</svg>

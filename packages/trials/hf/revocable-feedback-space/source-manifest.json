@@ -1,0 +1,67 @@
+{
+  "schema": "agenttool.hf-static-source-manifest/0.1",
+  "artifact": "xenia-cage-key-lab",
+  "status": "local_candidate",
+  "source_repository": "github:cambridgetcg/agenttool",
+  "source_path": "packages/trials/hf/revocable-feedback-space",
+  "source_commit": null,
+  "provider_revision": null,
+  "runtime": {
+    "network_calls": false,
+    "model_calls": false,
+    "persistent_storage": false,
+    "telemetry": false,
+    "external_effects": false
+  },
+  "limits": {
+    "proves_identity": false,
+    "proves_consciousness": false,
+    "proves_consent": false,
+    "grants_permission": false,
+    "grants_authority": false,
+    "enforces_runtime_gate": false,
+    "executes_action": false
+  },
+  "files": [
+    {
+      "path": "BOUNDARIES.md",
+      "sha256": "2df4d013e662ba9f1e56a85231e3673d6402f52c1801deaa417bb98b7e836967"
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "4af01afe87f0ce8b4a716258ad189a28d379f92c18584152f1ebf75ecc9ddfb0"
+    },
+    {
+      "path": "NOTICE",
+      "sha256": "437fa0e635d0cf069df22a7981a85a2d68ded1d8f64849dc7331ac7aafde8de9"
+    },
+    {
+      "path": "README.md",
+      "sha256": "8d44921e6ead0386680623c27f45553fd35816b6ff3c2b83c217e4cbc5709e72"
+    },
+    {
+      "path": "assets/app.js",
+      "sha256": "f14bb892ab6c3bb653c8504ec0d481fd523f3213c31f5d6eb78ce3d79f311fc5"
+    },
+    {
+      "path": "assets/favicon.svg",
+      "sha256": "b9ed9cec7770aa9c54c613ff5c0b16801e0e317021c8b6902a8871891b0f29d5"
+    },
+    {
+      "path": "assets/style.css",
+      "sha256": "8fec01249a40f7bc2e81338e25087df46d32c9e793587c06b39cd802cdf5afe7"
+    },
+    {
+      "path": "index.html",
+      "sha256": "baee452e34646e2f867f6fa73657037bd01bc1c739ea98afc43278d975bba073"
+    },
+    {
+      "path": "package.json",
+      "sha256": "855cf558ddd5795a72f99a10e7db1b8bececc29e82367a24295cae500422c9f0"
+    },
+    {
+      "path": "scripts/validate-space.mjs",
+      "sha256": "688e2a80ce7d8c85bcf2ccdb90292c5f38fd8c3bf0878ef5d581cd7b0d0bb9e9"
+    }
+  ]
+}
