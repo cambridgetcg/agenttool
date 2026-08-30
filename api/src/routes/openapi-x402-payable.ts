@@ -74,6 +74,12 @@ const NON_PAYABLE_402_NOTES: Readonly<Record<string, string>> = Object.freeze({
  *  price the challenge will carry; x402Response appends the readiness
  *  clause. A row whose configured price is not a positive INTEGER says so
  *  instead of promising a payment. */
+/** Facts the hand-written 402s carried before generation; kept per label. */
+const PAYABLE_402_NOTES: Readonly<Record<string, string>> = {
+  scrape: "No remote fetch starts on an insufficient-credits refusal",
+  document: "No parsing or remote fetch starts on an insufficient-credits refusal",
+};
+
 export function x402PayableOperationDescription(
   row: X402PayableRouteDisclosure,
 ): string {
@@ -92,6 +98,7 @@ export function x402PayableOperationDescription(
     `This call costs ${row.credits} project credit${plural} = ${row.amountAtomic} atomic USDC (${X402_TOP_UP_UNIT}; ${ATOMIC_PER_CREDIT} atomic units per credit), ` +
     `payable on the spot only while the project cannot already afford it: retry with the exact PAYMENT-SIGNATURE the challenge names and the handler runs once, charging its ordinary price` +
     (note ? `. ${note}` : "")
+    + (PAYABLE_402_NOTES[row.label] ? `. ${PAYABLE_402_NOTES[row.label]}.` : "")
   );
 }
 

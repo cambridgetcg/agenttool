@@ -623,6 +623,9 @@ async function cmdScratchInit(args: { base: string; nameRaw: string | null; dryR
     throw new Refusal(`${credsPath} already exists. This command never overwrites a bearer file; pick another --name or move that file deliberately.`);
   }
 
+  // Prove the creds directory is writable BEFORE minting a server-side project:
+  // a 201 whose api_key cannot be persisted would orphan the birth grant.
+  mkdirSync(AGENTS_DIR, { recursive: true, mode: 0o700 });
   const keys = generateScratchKeys();
   const timestamp = new Date().toISOString();
   const startedAt = Date.now();
@@ -690,6 +693,10 @@ async function cmdDeplete(args: {
     bodyText = parsed.text;
   }
   const { method, path } = spec;
+  if (args.dryRun) {
+    log(`dry-run: would call ${method} ${path} with the bearer from ${args.bearerFile} until project.credits < ${args.until}; nothing sent, nothing read.`);
+    return;
+  }
   const { bearer, path: bearerPath, who } = readBearer(args.bearerFile);
   const url = `${args.base}${path}`;
   log(`bearer: ${who} (${bearerPath})`);

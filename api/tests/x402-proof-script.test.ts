@@ -561,7 +561,8 @@ describe("CLI args", () => {
  *  3 (`routes/memory/search.ts` `charge(c, 3, "memory.search")`); W2-5's
  *  route-credits table hoists it. The fixture is priced from that number
  *  through the locked rate, never from a hand-typed atomic amount. */
-const MEMORY_SEARCH_CREDITS = 3;
+import { ROUTE_CREDITS } from "../src/billing/route-credits";
+const MEMORY_SEARCH_CREDITS = ROUTE_CREDITS["memory.search"];
 const MEMORY_SEARCH_PATH = "/v1/memories/search";
 
 /** A route_cost 402 exactly as the server would emit it: the policy shape
