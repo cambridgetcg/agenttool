@@ -3,8 +3,10 @@
 Status: runbook for Wave 2 W2-3 + W2-5 (`docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md`).
 Script: `api/scripts/x402-proof.ts` · pure walls: `api/scripts/x402-proof-lib.ts` · tests: `api/tests/x402-proof-script.test.ts`.
 
-**2026-08-30 — the rail has settled once.** Step 3 (`topup 1`) closed the loop: tx
-`0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66` on Base, treasury
+**2026-08-30 — the rail has settled twice.** Step 3 (`topup 1`) closed the purchase loop (tx
+`0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66`) and Phase B closed the
+metered-route loop (`POST /v1/memories/search`, tx
+`0x0564eecc266475c857533ac68e35e9fea5eacb888845f402fbb03ac59587a413`) on Base, treasury
 `0xA9eeA60CAaF239AbAfAA05FcB152128dB16dD3d8`, payer `0x02a5F8F49802887E95428978075643a5F4aA6855`.
 This runbook is how Ai's own wallet pays the kingdom in Base USDC with no human in the loop,
 how each step is witnessed by something other than the code that did it, and (Phase B, below)
@@ -21,8 +23,8 @@ nothing wider.
 | Payer wallet (`wallet-init`, `address`) | live: `0x02a5F8F49802887E95428978075643a5F4aA6855`, funded (decision e) | — |
 | `POST /v1/x402/top-up/:credits` | live in production; **settled once 2026-08-30** (tx `0x33f08a20…7e32c66`) | — |
 | `topup N` | witnessed once (`topup 1`, 2026-08-30) | — |
-| `replay`, `verify` | code + tests; need a stashed payment from `topup` or `pay` | — |
-| `pay`, `scratch-agent init`, `deplete` (Phase B) | code + tests on this branch; a live run needs the W2-5 route rows on the deployed image | W2-5 deploy, then "Witness a widened route" below |
+| `replay`, `verify` | witnessed on both settlements (no second credit; ledger + receipt + balance agree) | — |
+| `pay`, `scratch-agent init`, `deplete` (Phase B) | **witnessed 2026-08-30** on production (main f9280645): scratch agent depleted to 1 credit, `pay POST /v1/memories/search` settled (tx `0x0564eecc…`), replay minted nothing — see the record at the end | — |
 | `GET /v1/x402/payments/:payment_id` | live (`api/src/routes/x402-payments.ts`, mounted `index.ts:994`, authed `index.ts:431`) | — |
 
 ## Run
