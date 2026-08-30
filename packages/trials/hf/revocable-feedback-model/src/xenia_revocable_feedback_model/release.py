@@ -40,12 +40,13 @@ from .core import (
     domain_separated_id,
     ensure_empty_output,
     fixed_training_plan,
-    inspect_model_export,
+    inspect_publishable_model_export,
     inspect_regular_tree,
     read_json,
     require_sha256_id,
     sha256_file_hex,
     validate_sanitized_json,
+    validate_publishable_model_load,
     write_canonical_json,
 )
 
@@ -309,7 +310,8 @@ def build_release(
     evaluation_input = read_json(scorecard_path)
     _require(isinstance(receipt, Mapping) and isinstance(evaluation_input, Mapping), "release inputs must be JSON objects")
     validate_run_receipt(receipt)
-    model_export = inspect_model_export(run_dir / "model-export")
+    model_export = inspect_publishable_model_export(run_dir / "model-export")
+    validate_publishable_model_load(model_export)
     validate_run_receipt(
         receipt,
         expected_model_export_id=model_export.model_export_id,
@@ -331,7 +333,7 @@ def build_release(
     ensure_empty_output(output_dir)
     for source in model_export.files:
         shutil.copyfile(source, output_dir / source.name)
-    copied_model_export = inspect_model_export(output_dir)
+    copied_model_export = inspect_publishable_model_export(output_dir)
     _require(
         copied_model_export.model_export_id == model_export.model_export_id,
         "copied model export differs from the validated input",
@@ -433,9 +435,23 @@ def verify_release(root: Path) -> dict[str, Any]:
     ]
     _require(not unexpected, "release contains a non-allowlisted artifact")
     _require(required_paths.issubset(actual_paths), "release is missing required public metadata")
-    model_export = inspect_model_export(
+    model_export = inspect_publishable_model_export(
         root,
         permitted_non_model_entries=RELEASE_NON_MODEL_ENTRIES,
+    )
+    manifest_model_entries = {
+        entry["path"]: (entry["bytes"], entry["sha256"])
+        for entry in entries
+        if len(Path(entry["path"]).parts) == 1
+        and MODEL_EXPORT_FILE.fullmatch(entry["path"]) is not None
+    }
+    _require(
+        manifest_model_entries
+        == {
+            entry["path"]: (entry["bytes"], entry["sha256"])
+            for entry in model_export.inventory
+        },
+        "release manifest model entries differ from the inspected model snapshot",
     )
     receipt = read_json(root / "training" / "manifest.json")
     scorecard = read_json(root / "evaluation" / "public-regression-vector.json")
@@ -503,6 +519,7 @@ def verify_release(root: Path) -> dict[str, Any]:
             actual_card_bytes == expected_card.encode("utf-8"),
             "model card does not equal the canonical card derived from release records",
         )
+    validate_publishable_model_load(model_export)
     return dict(manifest)
 
 

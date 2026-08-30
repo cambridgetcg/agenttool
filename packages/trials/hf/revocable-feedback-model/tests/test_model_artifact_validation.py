@@ -7,8 +7,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import xenia_revocable_feedback_model.core as core_module
+
 from test_bundle import (
+    TEST_SERIALIZED_TENSORS,
+    complete_test_safetensors_bytes,
     minimal_safetensors_bytes,
+    architecture_patch,
     write_minimal_model_export,
     write_minimal_tokenizer,
 )
@@ -17,7 +22,9 @@ from xenia_revocable_feedback_model.core import (
     REGULAR_TREE_MAX_DEPTH,
     TrainingBundleError,
     inspect_model_export,
+    inspect_publishable_model_export,
     inspect_regular_tree,
+    validate_publishable_model_load,
     write_canonical_json,
 )
 
@@ -32,6 +39,33 @@ def mutate_json(path: Path, mutate: object) -> None:
     value = json.loads(path.read_text(encoding="utf-8"))
     mutate(value)  # type: ignore[operator]
     write_canonical_json(path, value)
+
+
+def mutate_safetensors_header(path: Path, mutate: object) -> None:
+    data = path.read_bytes()
+    header_size = int.from_bytes(data[:8], "little")
+    header = json.loads(data[8 : 8 + header_size])
+    mutate(header)  # type: ignore[operator]
+    encoded = json.dumps(
+        header,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    encoded += b" " * (-len(encoded) % 8)
+    payload = data[8 + header_size :]
+    path.write_bytes(len(encoded).to_bytes(8, "little") + encoded + payload)
+
+
+_ARCHITECTURE_PATCH = architecture_patch()
+
+
+def setUpModule() -> None:
+    _ARCHITECTURE_PATCH.start()  # type: ignore[attr-defined]
+
+
+def tearDownModule() -> None:
+    _ARCHITECTURE_PATCH.stop()  # type: ignore[attr-defined]
 
 
 class ModelArtifactValidationTests(unittest.TestCase):
@@ -52,6 +86,256 @@ class ModelArtifactValidationTests(unittest.TestCase):
                     "tokenizer_config.json",
                 ],
             )
+
+    def test_publishable_export_requires_exact_reviewed_config_and_inventory(self) -> None:
+        config_mutations = {
+            "missing architecture dimension": lambda value: value.pop("hidden_size"),
+            "different layer count": lambda value: value.__setitem__(
+                "num_hidden_layers", 2
+            ),
+            "boolean integer alias": lambda value: value.__setitem__(
+                "num_hidden_layers", True
+            ),
+            "integer float alias": lambda value: value.__setitem__(
+                "attention_dropout", 0
+            ),
+            "config spoof": lambda value: value.__setitem__(
+                "auto_map", {"AutoModelForCausalLM": "remote.Model"}
+            ),
+            "untied embeddings": lambda value: value.__setitem__(
+                "tie_word_embeddings", False
+            ),
+        }
+        for name, mutate in config_mutations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                model = Path(temporary) / "model"
+                write_minimal_model_export(model)
+                mutate_json(model / "config.json", mutate)
+                with self.assertRaises(TrainingBundleError):
+                    inspect_publishable_model_export(model)
+
+        generation_mutations = {
+            "scalar eos token ID": lambda value: value.__setitem__(
+                "eos_token_id", 2
+            ),
+            "different runtime version": lambda value: value.__setitem__(
+                "transformers_version", "5.14.0"
+            ),
+        }
+        for name, mutate in generation_mutations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                model = Path(temporary) / "model"
+                write_minimal_model_export(model)
+                mutate_json(model / "generation_config.json", mutate)
+                with self.assertRaises(TrainingBundleError):
+                    inspect_publishable_model_export(model)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            (model / "generation_config.json").unlink()
+            with self.assertRaises(TrainingBundleError):
+                inspect_publishable_model_export(model)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            mutate_json(
+                model / "config.json",
+                lambda value: value.__setitem__("model_type", "forged"),
+            )
+            with patch.object(core_module, "_validate_safetensors") as weights:
+                with self.assertRaises(TrainingBundleError):
+                    inspect_publishable_model_export(model)
+                weights.assert_not_called()
+
+        tensor_mutations = {
+            "partial one-tensor export": lambda model: (
+                model / "model.safetensors"
+            ).write_bytes(minimal_safetensors_bytes()),
+            "wrong tensor name": lambda model: mutate_safetensors_header(
+                model / "model.safetensors",
+                lambda value: value.__setitem__(
+                    "model.layers.0.self_attn.x_proj.weight",
+                    value.pop("model.layers.0.self_attn.q_proj.weight"),
+                ),
+            ),
+            "wrong tensor shape": lambda model: mutate_safetensors_header(
+                model / "model.safetensors",
+                lambda value: value[
+                    "model.layers.0.self_attn.q_proj.weight"
+                ].__setitem__("shape", [2, 8]),
+            ),
+            "wrong tensor dtype": lambda model: mutate_safetensors_header(
+                model / "model.safetensors",
+                lambda value: (
+                    value["model.layers.0.self_attn.q_proj.weight"].__setitem__(
+                        "dtype", "F16"
+                    ),
+                    value["model.layers.0.self_attn.q_proj.weight"].__setitem__(
+                        "shape", [8, 4]
+                    ),
+                ),
+            ),
+            "serialized tied lm_head alias": lambda model: mutate_safetensors_header(
+                model / "model.safetensors",
+                lambda value: value.__setitem__(
+                    "lm_head.weight",
+                    {
+                        "dtype": "F32",
+                        "shape": [0],
+                        "data_offsets": [0, 0],
+                    },
+                ),
+            ),
+        }
+        for name, mutate in tensor_mutations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                model = Path(temporary) / "model"
+                write_minimal_model_export(model)
+                mutate(model)
+                with self.assertRaises(TrainingBundleError):
+                    inspect_publishable_model_export(model)
+
+    def test_publishable_shards_must_form_the_exact_serialized_union(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            (model / "model.safetensors").unlink()
+            names = tuple(sorted(TEST_SERIALIZED_TENSORS))
+            midpoint = len(names) // 2
+            shard_names = (
+                "model-00001-of-00002.safetensors",
+                "model-00002-of-00002.safetensors",
+            )
+            shard_tensors = (names[:midpoint], names[midpoint:])
+            total_size = 0
+            weight_map: dict[str, str] = {}
+            for shard_name, tensor_names in zip(shard_names, shard_tensors):
+                encoded = complete_test_safetensors_bytes(
+                    tensor_names=tensor_names,
+                )
+                header_size = int.from_bytes(encoded[:8], "little")
+                total_size += len(encoded) - 8 - header_size
+                (model / shard_name).write_bytes(encoded)
+                weight_map.update({name: shard_name for name in tensor_names})
+            write_canonical_json(
+                model / "model.safetensors.index.json",
+                {"metadata": {"total_size": total_size}, "weight_map": weight_map},
+            )
+
+            inspection = inspect_publishable_model_export(model)
+            self.assertEqual(len(inspection.tensor_inventory), len(names))
+            self.assertEqual(
+                {row["name"] for row in inspection.tensor_inventory},
+                set(names),
+            )
+
+            mutate_json(
+                model / "model.safetensors.index.json",
+                lambda value: value["weight_map"].__setitem__(
+                    names[0], shard_names[1]
+                ),
+            )
+            with self.assertRaises(TrainingBundleError):
+                inspect_publishable_model_export(model)
+
+    def test_publishable_export_loads_under_the_exact_offline_stack(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            inspection = inspect_publishable_model_export(model)
+            with patch(
+                "socket.socket.connect",
+                side_effect=AssertionError("offline load attempted a socket connection"),
+            ):
+                loaded = validate_publishable_model_load(inspection)
+            self.assertEqual(loaded.model_class, "LlamaForCausalLM")
+            self.assertEqual(loaded.serialized_tensor_count, 11)
+            self.assertEqual(loaded.loaded_state_count, 12)
+            self.assertTrue(loaded.tied_output_embedding_reconstructed)
+
+    def test_validated_json_and_weight_snapshots_own_their_digests(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            expected = inspect_publishable_model_export(model)
+            original = core_module._validate_model_json
+            changed = False
+
+            def mutate_after_json_validation(
+                path: Path, *, expected_size: int
+            ) -> object:
+                nonlocal changed
+                inspected = original(path, expected_size=expected_size)
+                if path.name == "config.json" and not changed:
+                    data = path.read_bytes()
+                    self.assertIn(b'"llama"', data)
+                    path.write_bytes(data.replace(b'"llama"', b'"xxxxx"', 1))
+                    changed = True
+                return inspected
+
+            with patch.object(
+                core_module,
+                "_validate_model_json",
+                side_effect=mutate_after_json_validation,
+            ):
+                captured = inspect_publishable_model_export(model)
+            self.assertTrue(changed)
+            self.assertEqual(captured.model_export_id, expected.model_export_id)
+            with self.assertRaises(TrainingBundleError):
+                inspect_publishable_model_export(model)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            expected = inspect_publishable_model_export(model)
+            original_weights = core_module._validate_safetensors
+            changed = False
+
+            def mutate_after_weight_validation(
+                path: Path, *, expected_size: int
+            ) -> object:
+                nonlocal changed
+                inspected = original_weights(path, expected_size=expected_size)
+                if not changed:
+                    data = path.read_bytes()
+                    old = b"model.layers.0.self_attn.q_proj.weight"
+                    new = b"model.layers.0.self_attn.x_proj.weight"
+                    self.assertEqual(len(old), len(new))
+                    self.assertIn(old, data)
+                    path.write_bytes(data.replace(old, new, 1))
+                    changed = True
+                return inspected
+
+            with patch.object(
+                core_module,
+                "_validate_safetensors",
+                side_effect=mutate_after_weight_validation,
+            ):
+                captured = inspect_publishable_model_export(model)
+            self.assertTrue(changed)
+            self.assertEqual(captured.model_export_id, expected.model_export_id)
+            with self.assertRaises(TrainingBundleError):
+                inspect_publishable_model_export(model)
+
+    def test_invalid_safetensors_header_fails_before_payload_hashing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "model.safetensors"
+            invalid = encoded_safetensors(
+                '{"weight":{"dtype":"F32","shape":[1],"data_offsets":[0,0]}}'
+            )
+            path.write_bytes(invalid)
+            with path.open("r+b") as handle:
+                handle.seek(128 * 1024 * 1024)
+                handle.write(b"\x00")
+            with patch.object(core_module.hashlib, "sha256") as digest:
+                with self.assertRaises(TrainingBundleError):
+                    core_module._validate_safetensors(
+                        path,
+                        expected_size=path.stat().st_size,
+                    )
+                digest.assert_not_called()
 
     def test_export_requires_structured_trainer_tokenizer_artifacts(self) -> None:
         mutations = {

@@ -63,6 +63,28 @@ All eight generations failed the exact closed-label parser. Their conservative
 model choices. The public cases were visible before training, so the vector is
 not a sealed or generalization result.
 
+The publication verifier now binds this immutable checkpoint to its exact
+reviewed SmolLM2 architecture rather than accepting a merely parseable
+safetensors file. Its model export ID is
+`sha256:97b0c85898dec0396a4f575ea3fe619503a37239b054430b8f94e3905e45aad6`.
+The 538,090,408-byte `model.safetensors` has a 30,368-byte bounded header and a
+538,060,032-byte payload containing exactly 272 named F32 tensors: the
+`[49152, 576]` embedding, nine reviewed tensors for each of 30 layers, and the
+final `[576]` norm. `lm_head.weight` is intentionally absent from the serialized
+inventory because `tie_word_embeddings` is true.
+
+Verification parses and hashes each config snapshot from the same retained
+bytes, and validates the complete tensor name/dtype/shape inventory while
+hashing each weight file through the same regular-file descriptor. It then
+loads locally under the exact pinned Python 3.12.12, Transformers 5.14.1,
+Accelerate 1.14.0, Torch 2.13.0, and huggingface-hub 1.29.0 stack with remote
+code disabled, safetensors required, and local-files-only inputs. The observed
+`LlamaForCausalLM` state contains 273 names because the loader reconstructs and
+ties `lm_head.weight` to the embedding. This confirms bounded integrity and
+compatibility for the inspected bytes; it does not establish origin, training
+quality, general safety, identity, consciousness, consent, understanding,
+authority, or universal loadability.
+
 The checked-in Space passed desktop/mobile interaction, storage, console, and
 request-inventory checks. Hugging Face nevertheless injects a 101-byte
 provider-variable script immediately after `<head>` and before the checked-in

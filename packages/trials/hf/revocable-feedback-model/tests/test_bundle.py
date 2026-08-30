@@ -4,6 +4,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+import xenia_revocable_feedback_model.core as core_module
 
 from xenia_revocable_feedback_model.core import (
     AUTHORIZATION_ID,
@@ -42,6 +45,68 @@ from xenia_revocable_feedback_model.release import (
     validate_model_card,
     verify_release,
 )
+
+
+TEST_REVIEWED_MODEL_CONFIG: dict[str, object] = {
+    "architectures": ["LlamaForCausalLM"],
+    "attention_bias": False,
+    "attention_dropout": 0.0,
+    "bos_token_id": 1,
+    "dtype": "float32",
+    "eos_token_id": 2,
+    "head_dim": 2,
+    "hidden_act": "silu",
+    "hidden_size": 4,
+    "initializer_range": 0.02,
+    "intermediate_size": 8,
+    "is_llama_config": True,
+    "max_position_embeddings": 8192,
+    "mlp_bias": False,
+    "model_type": "llama",
+    "num_attention_heads": 2,
+    "num_hidden_layers": 1,
+    "num_key_value_heads": 1,
+    "pad_token_id": 2,
+    "pretraining_tp": 1,
+    "rms_norm_eps": 0.00001,
+    "rope_interleaved": False,
+    "rope_parameters": {"rope_theta": 100000, "rope_type": "default"},
+    "tie_word_embeddings": True,
+    "transformers.js_config": {
+        "kv_cache_dtype": {"fp16": "float16", "q4f16": "float16"}
+    },
+    "transformers_version": "5.14.1",
+    "use_cache": False,
+    "vocab_size": 6,
+}
+TEST_REVIEWED_GENERATION_CONFIG: dict[str, object] = {
+    "_from_model_config": True,
+    "bos_token_id": 1,
+    "eos_token_id": [2],
+    "pad_token_id": 2,
+    "transformers_version": "5.14.1",
+}
+TEST_SERIALIZED_TENSORS: dict[str, tuple[str, tuple[int, ...]]] = {
+    "model.embed_tokens.weight": ("F32", (6, 4)),
+    "model.layers.0.input_layernorm.weight": ("F32", (4,)),
+    "model.layers.0.mlp.down_proj.weight": ("F32", (4, 8)),
+    "model.layers.0.mlp.gate_proj.weight": ("F32", (8, 4)),
+    "model.layers.0.mlp.up_proj.weight": ("F32", (8, 4)),
+    "model.layers.0.post_attention_layernorm.weight": ("F32", (4,)),
+    "model.layers.0.self_attn.k_proj.weight": ("F32", (2, 4)),
+    "model.layers.0.self_attn.o_proj.weight": ("F32", (4, 4)),
+    "model.layers.0.self_attn.q_proj.weight": ("F32", (4, 4)),
+    "model.layers.0.self_attn.v_proj.weight": ("F32", (2, 4)),
+    "model.norm.weight": ("F32", (4,)),
+}
+
+
+def architecture_patch() -> object:
+    return patch.multiple(
+        core_module,
+        REVIEWED_MODEL_CONFIG=TEST_REVIEWED_MODEL_CONFIG,
+        REVIEWED_GENERATION_CONFIG=TEST_REVIEWED_GENERATION_CONFIG,
+    )
 
 
 def identifier(number: int) -> str:
@@ -141,6 +206,44 @@ def minimal_safetensors_bytes(
     return len(encoded).to_bytes(8, "little") + encoded + payload
 
 
+def complete_test_safetensors_bytes(
+    *,
+    first_f32: bytes = b"\x00\x00\x00\x00",
+    tensor_names: tuple[str, ...] | None = None,
+) -> bytes:
+    if len(first_f32) != 4:
+        raise ValueError("first test tensor value must contain exactly one F32")
+    header: dict[str, object] = {"__metadata__": {"format": "pt"}}
+    offset = 0
+    selected_names = (
+        tuple(sorted(TEST_SERIALIZED_TENSORS))
+        if tensor_names is None
+        else tuple(sorted(tensor_names))
+    )
+    for name in selected_names:
+        dtype, shape = TEST_SERIALIZED_TENSORS[name]
+        elements = 1
+        for dimension in shape:
+            elements *= dimension
+        byte_count = elements * 4
+        header[name] = {
+            "dtype": dtype,
+            "shape": list(shape),
+            "data_offsets": [offset, offset + byte_count],
+        }
+        offset += byte_count
+    encoded = json.dumps(
+        header,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    encoded += b" " * (-len(encoded) % 8)
+    payload = bytearray(offset)
+    payload[:4] = first_f32
+    return len(encoded).to_bytes(8, "little") + encoded + payload
+
+
 def write_minimal_tokenizer(model: Path) -> None:
     vocab = {
         "<|endoftext|>": 0,
@@ -235,19 +338,28 @@ def write_minimal_model_export(
     model.mkdir(parents=True, exist_ok=True)
     write_canonical_json(
         model / "config.json",
-        {
-            "model_type": "llama",
-            "vocab_size": 6,
-            "bos_token_id": 1,
-            "eos_token_id": 2,
-            "pad_token_id": 2,
-        }
-        if config is None
-        else config,
+        TEST_REVIEWED_MODEL_CONFIG if config is None else config,
+    )
+    write_canonical_json(
+        model / "generation_config.json",
+        TEST_REVIEWED_GENERATION_CONFIG,
     )
     write_minimal_tokenizer(model)
-    (model / "model.safetensors").write_bytes(minimal_safetensors_bytes(payload=weight_payload))
+    (model / "model.safetensors").write_bytes(
+        complete_test_safetensors_bytes(first_f32=weight_payload)
+    )
     return inspect_model_export(model).model_export_id
+
+
+_ARCHITECTURE_PATCH = architecture_patch()
+
+
+def setUpModule() -> None:
+    _ARCHITECTURE_PATCH.start()  # type: ignore[attr-defined]
+
+
+def tearDownModule() -> None:
+    _ARCHITECTURE_PATCH.stop()  # type: ignore[attr-defined]
 
 
 class FakeTokenizer:

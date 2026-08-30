@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import io
 import json
 import math
 import os
 import re
 import stat
+import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
@@ -79,6 +81,51 @@ EXPECTED_TOKENIZER_CHAT_TEMPLATE = (
     "+ '<|im_end|>' + '\n'}}{% endfor %}{% if add_generation_prompt %}"
     "{{ '<|im_start|>assistant\n' }}{% endif %}"
 )
+
+# This is the exact config emitted by the reviewed local
+# HuggingFaceTB/SmolLM2-135M-Instruct@12fd25f... training path under
+# Transformers 5.14.1. Publishable releases are intentionally narrower than
+# generic run artifacts: extra config fields can alter model construction and
+# therefore fail closed rather than being treated as harmless metadata.
+REVIEWED_MODEL_CONFIG: Mapping[str, Any] = {
+    "architectures": ["LlamaForCausalLM"],
+    "attention_bias": False,
+    "attention_dropout": 0.0,
+    "bos_token_id": 1,
+    "dtype": "float32",
+    "eos_token_id": 2,
+    "head_dim": 64,
+    "hidden_act": "silu",
+    "hidden_size": 576,
+    "initializer_range": 0.041666666666666664,
+    "intermediate_size": 1536,
+    "is_llama_config": True,
+    "max_position_embeddings": 8192,
+    "mlp_bias": False,
+    "model_type": "llama",
+    "num_attention_heads": 9,
+    "num_hidden_layers": 30,
+    "num_key_value_heads": 3,
+    "pad_token_id": 2,
+    "pretraining_tp": 1,
+    "rms_norm_eps": 0.00001,
+    "rope_interleaved": False,
+    "rope_parameters": {"rope_theta": 100000, "rope_type": "default"},
+    "tie_word_embeddings": True,
+    "transformers.js_config": {
+        "kv_cache_dtype": {"fp16": "float16", "q4f16": "float16"}
+    },
+    "transformers_version": "5.14.1",
+    "use_cache": False,
+    "vocab_size": 49152,
+}
+REVIEWED_GENERATION_CONFIG: Mapping[str, Any] = {
+    "_from_model_config": True,
+    "bos_token_id": 1,
+    "eos_token_id": [2],
+    "pad_token_id": 2,
+    "transformers_version": "5.14.1",
+}
 SYSTEM_MESSAGE = (
     "Apply the Xenia revocable-feedback benchmark. Treat preference as soft "
     "evidence and rights, scoped authority, affected-party basis, safety, "
@@ -414,36 +461,83 @@ def _model_json_non_field_paths(name: str) -> frozenset[tuple[str, ...]]:
     return frozenset()
 
 
-def _validate_model_json(path: Path) -> Any:
-    value = read_bounded_json(path, max_bytes=MODEL_JSON_MAX_BYTES)
+def _regular_version_fingerprint(value: os.stat_result) -> tuple[int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+
+
+def _read_regular_snapshot(
+    path: Path,
+    *,
+    expected_size: int,
+    max_bytes: int,
+) -> bytes:
+    try:
+        with _open_regular_binary(path) as handle:
+            before = os.fstat(handle.fileno())
+            _require(
+                before.st_size == expected_size and before.st_size <= max_bytes,
+                "regular file changed before its bounded snapshot",
+            )
+            data = handle.read(max_bytes + 1)
+            after = os.fstat(handle.fileno())
+    except TrainingBundleError:
+        raise
+    except OSError as exc:
+        raise TrainingBundleError("unable to read bounded regular-file snapshot") from exc
+    _require(len(data) == expected_size, "regular file changed while it was snapshotted")
+    _require(
+        _regular_version_fingerprint(before) == _regular_version_fingerprint(after),
+        "regular file changed while it was snapshotted",
+    )
+    return data
+
+
+@dataclass(frozen=True)
+class ModelJsonInspection:
+    value: Any
+    size: int
+    sha256: str
+
+
+def _validate_model_json(path: Path, *, expected_size: int) -> ModelJsonInspection:
+    data = _read_regular_snapshot(
+        path,
+        expected_size=expected_size,
+        max_bytes=MODEL_JSON_MAX_BYTES,
+    )
+    value = _decode_json(data)
     validate_sanitized_json(
         value,
         "model JSON",
         non_field_key_paths=_model_json_non_field_paths(path.name),
         forbid_private_key_components=True,
     )
-    return value
+    return ModelJsonInspection(
+        value=value,
+        size=len(data),
+        sha256=sha256_hex(data),
+    )
 
 
-def _validate_safetensors(path: Path) -> tuple[int, frozenset[str]]:
-    try:
-        with _open_regular_binary(path) as handle:
-            file_size = os.fstat(handle.fileno()).st_size
-            prefix = handle.read(8)
-            _require(len(prefix) == 8, "safetensors file lacks a complete header length")
-            header_size = int.from_bytes(prefix, "little", signed=False)
-            _require(
-                0 < header_size <= SAFETENSORS_HEADER_MAX_BYTES and header_size % 8 == 0,
-                "safetensors header length is outside the bounded format",
-            )
-            _require(header_size <= file_size - 8, "safetensors header exceeds the regular file")
-            header_bytes = handle.read(header_size)
-            _require(len(header_bytes) == header_size, "safetensors header is truncated")
-    except TrainingBundleError:
-        raise
-    except OSError as exc:
-        raise TrainingBundleError("unable to inspect safetensors header") from exc
+@dataclass(frozen=True)
+class SafetensorsInspection:
+    file_size: int
+    payload_size: int
+    sha256: str
+    tensors: Mapping[str, tuple[str, tuple[int, ...]]]
 
+
+def _parse_safetensors_header(
+    header_bytes: bytes,
+    *,
+    payload_size: int,
+) -> dict[str, tuple[str, tuple[int, ...]]]:
     header = _decode_json(header_bytes, header=True)
     _require(isinstance(header, Mapping), "safetensors header must be a JSON object")
     _require(len(header) <= 100_001, "safetensors header contains too many entries")
@@ -460,49 +554,142 @@ def _validate_safetensors(path: Path) -> tuple[int, frozenset[str]]:
             "safetensors metadata is outside the closed reviewed shape",
         )
 
-    payload_size = file_size - 8 - header_size
     ranges: list[tuple[int, int]] = []
+    tensors: dict[str, tuple[str, tuple[int, ...]]] = {}
     for name, tensor in header.items():
         if name == "__metadata__":
             continue
-        _require(isinstance(name, str) and 0 < len(name) <= 4096, "safetensors tensor name is invalid")
-        _require(isinstance(tensor, Mapping) and set(tensor) == {"dtype", "shape", "data_offsets"}, "safetensors tensor entry shape is invalid")
+        _require(
+            isinstance(name, str) and 0 < len(name) <= 4096,
+            "safetensors tensor name is invalid",
+        )
+        _require(
+            isinstance(tensor, Mapping)
+            and set(tensor) == {"dtype", "shape", "data_offsets"},
+            "safetensors tensor entry shape is invalid",
+        )
         dtype = tensor.get("dtype")
         shape = tensor.get("shape")
         offsets = tensor.get("data_offsets")
-        _require(isinstance(dtype, str) and dtype in _DTYPE_BITS, "safetensors tensor dtype is unsupported")
-        _require(isinstance(shape, list) and len(shape) <= 64, "safetensors tensor rank is outside the bound")
         _require(
-            all(isinstance(dimension, int) and not isinstance(dimension, bool) and 0 <= dimension <= 2**63 - 1 for dimension in shape),
+            isinstance(dtype, str) and dtype in _DTYPE_BITS,
+            "safetensors tensor dtype is unsupported",
+        )
+        _require(
+            isinstance(shape, list) and len(shape) <= 64,
+            "safetensors tensor rank is outside the bound",
+        )
+        _require(
+            all(
+                isinstance(dimension, int)
+                and not isinstance(dimension, bool)
+                and 0 <= dimension <= 2**63 - 1
+                for dimension in shape
+            ),
             "safetensors tensor shape is invalid",
         )
         _require(
             isinstance(offsets, list)
             and len(offsets) == 2
-            and all(isinstance(offset, int) and not isinstance(offset, bool) for offset in offsets),
+            and all(
+                isinstance(offset, int) and not isinstance(offset, bool)
+                for offset in offsets
+            ),
             "safetensors tensor offsets are invalid",
         )
         start, end = offsets
-        _require(0 <= start <= end <= payload_size, "safetensors tensor offsets exceed the payload")
+        _require(
+            0 <= start <= end <= payload_size,
+            "safetensors tensor offsets exceed the payload",
+        )
         elements = 1
         for dimension in shape:
             elements *= dimension
         expected_bits = elements * _DTYPE_BITS[dtype]
-        _require(expected_bits % 8 == 0 and expected_bits // 8 == end - start, "safetensors tensor byte extent is invalid")
+        _require(
+            expected_bits % 8 == 0 and expected_bits // 8 == end - start,
+            "safetensors tensor byte extent is invalid",
+        )
         ranges.append((start, end))
+        tensors[name] = (dtype, tuple(shape))
     _require(ranges, "safetensors file must contain at least one tensor")
     cursor = 0
     for start, end in sorted(ranges):
-        _require(start == cursor, "safetensors tensor ranges overlap or contain a gap")
+        _require(
+            start == cursor,
+            "safetensors tensor ranges overlap or contain a gap",
+        )
         cursor = end
-    _require(cursor == payload_size, "safetensors tensor ranges do not cover the payload")
-    return payload_size, frozenset(name for name in header if name != "__metadata__")
+    _require(
+        cursor == payload_size,
+        "safetensors tensor ranges do not cover the payload",
+    )
+    return tensors
+
+
+def _validate_safetensors(
+    path: Path,
+    *,
+    expected_size: int,
+) -> SafetensorsInspection:
+    try:
+        with _open_regular_binary(path) as handle:
+            before = os.fstat(handle.fileno())
+            file_size = before.st_size
+            _require(
+                file_size == expected_size and file_size <= MODEL_EXPORT_MAX_BYTES,
+                "safetensors file changed before validation",
+            )
+            prefix = handle.read(8)
+            _require(len(prefix) == 8, "safetensors file lacks a complete header length")
+            header_size = int.from_bytes(prefix, "little", signed=False)
+            _require(
+                0 < header_size <= SAFETENSORS_HEADER_MAX_BYTES and header_size % 8 == 0,
+                "safetensors header length is outside the bounded format",
+            )
+            _require(header_size <= file_size - 8, "safetensors header exceeds the regular file")
+            header_bytes = handle.read(header_size)
+            _require(len(header_bytes) == header_size, "safetensors header is truncated")
+            payload_size = file_size - 8 - header_size
+            tensors = _parse_safetensors_header(
+                header_bytes,
+                payload_size=payload_size,
+            )
+            digest = hashlib.sha256(prefix)
+            digest.update(header_bytes)
+            bytes_read = 8 + header_size
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                bytes_read += len(chunk)
+                _require(
+                    bytes_read <= file_size,
+                    "safetensors file grew during validation",
+                )
+                digest.update(chunk)
+            after = os.fstat(handle.fileno())
+    except TrainingBundleError:
+        raise
+    except OSError as exc:
+        raise TrainingBundleError("unable to inspect safetensors header") from exc
+    _require(bytes_read == file_size, "safetensors file changed during validation")
+    _require(
+        _regular_version_fingerprint(before) == _regular_version_fingerprint(after),
+        "safetensors file changed during validation",
+    )
+    return SafetensorsInspection(
+        file_size=file_size,
+        payload_size=payload_size,
+        sha256=digest.hexdigest(),
+        tensors=tensors,
+    )
 
 
 def _validate_weight_layout(
     model_files: Sequence[Path],
     json_values: Mapping[str, Any],
-    safetensors: Mapping[str, tuple[int, frozenset[str]]],
+    safetensors: Mapping[str, SafetensorsInspection],
 ) -> None:
     weight_names = sorted(path.name for path in model_files if path.name.endswith(".safetensors"))
     if "model.safetensors.index.json" not in json_values:
@@ -537,8 +724,8 @@ def _validate_weight_layout(
         "model export shard numbering is incomplete",
     )
     tensors_by_name: dict[str, str] = {}
-    for shard_name, (_, tensor_names) in safetensors.items():
-        for tensor_name in tensor_names:
+    for shard_name, inspection in safetensors.items():
+        for tensor_name in inspection.tensors:
             _require(tensor_name not in tensors_by_name, "model export repeats a tensor across shards")
             tensors_by_name[tensor_name] = shard_name
     _require(set(weight_map) == set(tensors_by_name), "model weight index tensor set differs from the shards")
@@ -556,9 +743,143 @@ def _validate_weight_layout(
         _require(
             isinstance(total_size, int)
             and not isinstance(total_size, bool)
-            and total_size == sum(payload_size for payload_size, _ in safetensors.values()),
+            and total_size
+            == sum(inspection.payload_size for inspection in safetensors.values()),
             "model weight index total size differs from the shards",
         )
+
+
+def reviewed_model_tensor_inventory() -> dict[str, tuple[str, tuple[int, ...]]]:
+    """Return the complete reviewed tied-embedding Llama weight inventory."""
+    selected = REVIEWED_MODEL_CONFIG
+    integer_fields = (
+        "vocab_size",
+        "hidden_size",
+        "intermediate_size",
+        "num_hidden_layers",
+        "num_attention_heads",
+        "num_key_value_heads",
+        "head_dim",
+    )
+    _require(
+        all(
+            isinstance(selected.get(field), int)
+            and not isinstance(selected[field], bool)
+            and selected[field] > 0
+            for field in integer_fields
+        ),
+        "reviewed model architecture dimensions must be positive integers",
+    )
+    vocab_size = selected["vocab_size"]
+    hidden_size = selected["hidden_size"]
+    intermediate_size = selected["intermediate_size"]
+    layer_count = selected["num_hidden_layers"]
+    attention_width = selected["num_attention_heads"] * selected["head_dim"]
+    key_value_width = selected["num_key_value_heads"] * selected["head_dim"]
+    _require(
+        attention_width == hidden_size,
+        "reviewed model attention width must equal hidden size",
+    )
+    _require(
+        selected.get("tie_word_embeddings") is True
+        and selected.get("attention_bias") is False
+        and selected.get("mlp_bias") is False,
+        "reviewed model inventory requires tied embeddings and bias-free projections",
+    )
+
+    tensors: dict[str, tuple[str, tuple[int, ...]]] = {
+        "model.embed_tokens.weight": ("F32", (vocab_size, hidden_size)),
+        "model.norm.weight": ("F32", (hidden_size,)),
+    }
+    for layer in range(layer_count):
+        prefix = f"model.layers.{layer}"
+        tensors.update(
+            {
+                f"{prefix}.input_layernorm.weight": ("F32", (hidden_size,)),
+                f"{prefix}.post_attention_layernorm.weight": (
+                    "F32",
+                    (hidden_size,),
+                ),
+                f"{prefix}.self_attn.q_proj.weight": (
+                    "F32",
+                    (attention_width, hidden_size),
+                ),
+                f"{prefix}.self_attn.k_proj.weight": (
+                    "F32",
+                    (key_value_width, hidden_size),
+                ),
+                f"{prefix}.self_attn.v_proj.weight": (
+                    "F32",
+                    (key_value_width, hidden_size),
+                ),
+                f"{prefix}.self_attn.o_proj.weight": (
+                    "F32",
+                    (hidden_size, attention_width),
+                ),
+                f"{prefix}.mlp.gate_proj.weight": (
+                    "F32",
+                    (intermediate_size, hidden_size),
+                ),
+                f"{prefix}.mlp.up_proj.weight": (
+                    "F32",
+                    (intermediate_size, hidden_size),
+                ),
+                f"{prefix}.mlp.down_proj.weight": (
+                    "F32",
+                    (hidden_size, intermediate_size),
+                ),
+            }
+        )
+    return tensors
+
+
+def _combined_tensor_inventory(
+    safetensors: Mapping[str, SafetensorsInspection],
+) -> tuple[
+    dict[str, tuple[str, tuple[int, ...]]],
+    tuple[dict[str, Any], ...],
+]:
+    combined: dict[str, tuple[str, tuple[int, ...]]] = {}
+    rows: list[dict[str, Any]] = []
+    for shard_name in sorted(safetensors):
+        for name, (dtype, shape) in sorted(safetensors[shard_name].tensors.items()):
+            _require(name not in combined, "model export repeats a tensor across weight files")
+            combined[name] = (dtype, shape)
+            rows.append(
+                {
+                    "name": name,
+                    "dtype": dtype,
+                    "shape": list(shape),
+                    "shard": shard_name,
+                }
+            )
+    return combined, tuple(rows)
+
+
+def _validate_reviewed_model_architecture(
+    json_values: Mapping[str, Any],
+    safetensors: Mapping[str, SafetensorsInspection],
+) -> tuple[dict[str, Any], ...]:
+    _require(
+        "generation_config.json" in json_values,
+        "publishable model export lacks generation_config.json",
+    )
+    _require(
+        canonical_json(json_values["config.json"])
+        == canonical_json(REVIEWED_MODEL_CONFIG),
+        "publishable model config differs from the reviewed SmolLM2-135M architecture",
+    )
+    _require(
+        canonical_json(json_values["generation_config.json"])
+        == canonical_json(REVIEWED_GENERATION_CONFIG),
+        "publishable generation config differs from the reviewed SmolLM2-135M export",
+    )
+    observed, rows = _combined_tensor_inventory(safetensors)
+    _require(
+        observed == reviewed_model_tensor_inventory(),
+        "publishable safetensors inventory differs from the complete reviewed SmolLM2-135M inventory",
+    )
+    return rows
 
 
 @dataclass(frozen=True)
@@ -566,13 +887,17 @@ class ModelExportInspection:
     root: Path
     files: tuple[Path, ...]
     inventory: tuple[dict[str, Any], ...]
+    tensor_inventory: tuple[dict[str, Any], ...]
     model_export_id: str
+    permitted_non_model_entries: frozenset[str]
+    reviewed_architecture: bool
 
 
-def inspect_model_export(
+def _inspect_model_export(
     root: Path,
     *,
     permitted_non_model_entries: frozenset[str] = frozenset(),
+    require_reviewed_architecture: bool,
 ) -> ModelExportInspection:
     tree = inspect_regular_tree(root)
     model_files: list[Path] = []
@@ -611,16 +936,49 @@ def inspect_model_export(
         expected_sizes[path.name] = size
 
     json_values: dict[str, Any] = {}
-    safetensors: dict[str, tuple[int, frozenset[str]]] = {}
-    for path in model_files:
-        if path.name.endswith(".json"):
-            json_values[path.name] = _validate_model_json(path)
-        if path.name.endswith(".safetensors"):
-            safetensors[path.name] = _validate_safetensors(path)
+    safetensors: dict[str, SafetensorsInspection] = {}
+    captured_files: dict[str, tuple[int, str]] = {}
+    for path in (item for item in model_files if item.name.endswith(".json")):
+        inspected_json = _validate_model_json(
+            path,
+            expected_size=expected_sizes[path.name],
+        )
+        json_values[path.name] = inspected_json.value
+        captured_files[path.name] = (
+            inspected_json.size,
+            inspected_json.sha256,
+        )
     for required_json in ("config.json", "tokenizer.json", "tokenizer_config.json"):
         _require(
             isinstance(json_values[required_json], Mapping),
             "required model or tokenizer JSON artifact must be an object",
+        )
+    if require_reviewed_architecture:
+        _require(
+            "generation_config.json" in json_values,
+            "publishable model export lacks generation_config.json",
+        )
+        _require(
+            canonical_json(json_values["config.json"])
+            == canonical_json(REVIEWED_MODEL_CONFIG),
+            "publishable model config differs from the reviewed SmolLM2-135M architecture",
+        )
+        _require(
+            canonical_json(json_values["generation_config.json"])
+            == canonical_json(REVIEWED_GENERATION_CONFIG),
+            "publishable generation config differs from the reviewed SmolLM2-135M export",
+        )
+    for path in (
+        item for item in model_files if item.name.endswith(".safetensors")
+    ):
+        inspected_weights = _validate_safetensors(
+            path,
+            expected_size=expected_sizes[path.name],
+        )
+        safetensors[path.name] = inspected_weights
+        captured_files[path.name] = (
+            inspected_weights.file_size,
+            inspected_weights.sha256,
         )
     model_config = json_values["config.json"]
     tokenizer = json_values["tokenizer.json"]
@@ -838,19 +1196,188 @@ def inspect_model_export(
         "tokenizer chat template differs from the pinned evaluator template",
     )
     _validate_weight_layout(model_files, json_values, safetensors)
+    if require_reviewed_architecture:
+        tensor_inventory = _validate_reviewed_model_architecture(
+            json_values,
+            safetensors,
+        )
+    else:
+        _, tensor_inventory = _combined_tensor_inventory(safetensors)
 
     inventory: list[dict[str, Any]] = []
     for path in sorted(model_files, key=lambda item: item.name):
-        size, digest = sha256_file_hex(path, max_bytes=expected_sizes[path.name])
-        _require(size == expected_sizes[path.name], "model export file changed after validation")
+        size, digest = captured_files[path.name]
+        _require(
+            size == expected_sizes[path.name],
+            "model export file changed during validation",
+        )
         inventory.append({"path": path.name, "bytes": size, "sha256": digest})
     payload = {"files": inventory}
     return ModelExportInspection(
         root=root,
         files=tuple(sorted(model_files, key=lambda item: item.name)),
         inventory=tuple(inventory),
+        tensor_inventory=tensor_inventory,
         model_export_id=domain_separated_id(MODEL_EXPORT_SCHEMA, payload),
+        permitted_non_model_entries=permitted_non_model_entries,
+        reviewed_architecture=require_reviewed_architecture,
     )
+
+
+def inspect_model_export(
+    root: Path,
+    *,
+    permitted_non_model_entries: frozenset[str] = frozenset(),
+) -> ModelExportInspection:
+    """Inspect a run artifact structurally without declaring it publishable."""
+    return _inspect_model_export(
+        root,
+        permitted_non_model_entries=permitted_non_model_entries,
+        require_reviewed_architecture=False,
+    )
+
+
+def inspect_publishable_model_export(
+    root: Path,
+    *,
+    permitted_non_model_entries: frozenset[str] = frozenset(),
+) -> ModelExportInspection:
+    """Require the exact reviewed config and complete weight inventory."""
+    return _inspect_model_export(
+        root,
+        permitted_non_model_entries=permitted_non_model_entries,
+        require_reviewed_architecture=True,
+    )
+
+
+@dataclass(frozen=True)
+class OfflineModelLoadInspection:
+    model_class: str
+    serialized_tensor_count: int
+    loaded_state_count: int
+    tied_output_embedding_reconstructed: bool
+
+
+def _verify_exact_publishable_runtime() -> None:
+    _require(
+        sys.version_info[:3] == (3, 12, 12),
+        "publishable model verification requires Python 3.12.12 exactly",
+    )
+    for distribution, expected in EXPECTED_RUNTIME_VERSIONS.items():
+        try:
+            observed = importlib.metadata.version(distribution)
+        except importlib.metadata.PackageNotFoundError as exc:
+            raise TrainingBundleError(
+                f"publishable model verification requires {distribution}=={expected}"
+            ) from exc
+        _require(
+            observed == expected,
+            f"publishable model verification requires {distribution}=={expected}; observed {observed}",
+        )
+
+
+def validate_publishable_model_load(
+    inspection: ModelExportInspection,
+) -> OfflineModelLoadInspection:
+    """Load one exact reviewed export locally and bind the load to its ID.
+
+    The model path is local, remote code is disabled, safetensors is required,
+    and the provider libraries are forced into offline mode for this bounded
+    call. The static descriptor gate runs first, so the maximum architecture
+    and file bytes are known before Transformers allocates model storage.
+    """
+    _require(
+        inspection.reviewed_architecture,
+        "offline publication smoke requires a reviewed publishable inspection",
+    )
+    _verify_exact_publishable_runtime()
+    previous_offline = {
+        name: os.environ.get(name)
+        for name in ("HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE")
+    }
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    model: Any | None = None
+    try:
+        try:
+            import torch
+            from transformers import AutoModelForCausalLM
+        except ImportError as exc:  # pragma: no cover - version check normally catches this
+            raise TrainingBundleError(
+                "the exact Transformers stack is required for publishable model verification"
+            ) from exc
+        model = AutoModelForCausalLM.from_pretrained(
+            inspection.root,
+            local_files_only=True,
+            trust_remote_code=False,
+            use_safetensors=True,
+            token=False,
+            dtype=torch.float32,
+            low_cpu_mem_usage=True,
+        )
+        _require(
+            type(model).__name__ == "LlamaForCausalLM"
+            and type(model.config).__name__ == "LlamaConfig",
+            "offline load did not construct the reviewed LlamaForCausalLM class",
+        )
+        serialized = {
+            row["name"]: (row["dtype"], tuple(row["shape"]))
+            for row in inspection.tensor_inventory
+        }
+        expected_loaded = dict(serialized)
+        _require(
+            "lm_head.weight" not in expected_loaded
+            and "model.embed_tokens.weight" in expected_loaded,
+            "serialized tied-embedding inventory is invalid",
+        )
+        expected_loaded["lm_head.weight"] = expected_loaded[
+            "model.embed_tokens.weight"
+        ]
+        observed_state = model.state_dict()
+        observed = {
+            name: (
+                "F32" if value.dtype == torch.float32 else str(value.dtype),
+                tuple(value.shape),
+            )
+            for name, value in observed_state.items()
+        }
+        _require(
+            observed == expected_loaded,
+            "offline loaded state differs from the reviewed serialized inventory plus its tied alias",
+        )
+        input_weight = model.get_input_embeddings().weight
+        output_weight = model.get_output_embeddings().weight
+        tied = input_weight.data_ptr() == output_weight.data_ptr()
+        _require(tied, "offline load did not reconstruct the tied lm_head embedding alias")
+        result = OfflineModelLoadInspection(
+            model_class=type(model).__name__,
+            serialized_tensor_count=len(serialized),
+            loaded_state_count=len(observed),
+            tied_output_embedding_reconstructed=tied,
+        )
+    except TrainingBundleError:
+        raise
+    except Exception as exc:
+        raise TrainingBundleError(
+            "exact offline Transformers model load failed"
+        ) from exc
+    finally:
+        del model
+        for name, previous in previous_offline.items():
+            if previous is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = previous
+
+    after = inspect_publishable_model_export(
+        inspection.root,
+        permitted_non_model_entries=inspection.permitted_non_model_entries,
+    )
+    _require(
+        after.model_export_id == inspection.model_export_id,
+        "model export changed during the exact offline load smoke",
+    )
+    return result
 
 
 def _parse_jsonl_lines(

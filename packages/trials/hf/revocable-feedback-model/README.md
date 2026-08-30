@@ -54,19 +54,20 @@ closed; CPU is the conservative fallback.
 
 ## Commands
 
-Validate without model dependencies:
+Inspect the fixed plan without model dependencies:
 
 ```sh
 python3.12 -m venv .venv
 .venv/bin/python -m pip install -e .
 .venv/bin/python -m xenia_revocable_feedback_model plan
-.venv/bin/python -m pytest -q
 ```
 
-Install the exact training stack:
+Install the exact training and publication-verification stack, then run the
+tests:
 
 ```sh
 uv sync --python 3.12.12 --extra train --extra test
+uv run pytest -q
 ```
 
 Validate a local copy of the eventual immutable dataset:
@@ -115,8 +116,9 @@ bounded publication policy, not a general secret detector. Every model JSON
 artifact is parsed under explicit byte/node/depth bounds with duplicate keys,
 non-finite numbers, configured private field names, and configured private-text
 patterns rejected in keys and values. Safetensors files receive a bounded
-duplicate-safe header parse, an exact reviewed metadata shape, exact tensor descriptors, byte extents, and
-contiguous payload validation. The model export and release tree reject
+duplicate-safe header parse, an exact reviewed metadata shape, exact tensor
+descriptors and byte extents, and contiguous payload validation. The model
+export and release tree reject
 symlinks, special nodes, nested model files, unknown or empty extra directories,
 mixed or unreferenced weight layouts, and raw tokenizer formats for which this
 pinned export has no bounded semantic validator. Every publishable export must
@@ -130,6 +132,28 @@ those runtime bindings. This pinned structural check rejects missing,
 type-inconsistent, and internally incoherent tokenizer artifacts on Xenia's
 inference path; it does not prove artifact origin or claim universal tokenizer
 loadability.
+
+`build-release` and `verify-release` apply a narrower publication gate than the
+generic run-artifact inspector. They require the exact reviewed
+`LlamaForCausalLM` config: 576 hidden units, 1,536 intermediate units, 30
+layers, 9 attention heads, 3 key/value heads, head dimension 64, vocabulary
+49,152, FP32 parameters, bias-free projections, and tied word embeddings. The
+complete single-file or sharded safetensors union must contain exactly 272
+named F32 tensors with the reviewed shapes: the embedding, nine tensors per
+layer, and final norm. A serialized `lm_head.weight` is rejected because the
+supported loader reconstructs it as the tied embedding alias.
+
+Each bounded JSON file is validated and hashed from one retained regular-file
+snapshot. Each safetensors header is structurally validated before payload I/O,
+then header, payload, descriptor inventory, and digest remain bound to the same
+open regular-file descriptor. Publication verification additionally performs
+a local-files-only load under the exact Python/Transformers/Torch stack,
+disables remote code, requires safetensors, checks the 273-name loaded state and
+the reconstructed tied alias, and re-inspects the export afterward. These are
+bounded integrity and compatibility checks for this reviewed release. They do
+not prove artifact origin, training quality, general safety, identity,
+consciousness, consent, understanding, authority, or loadability under other
+runtimes.
 
 For current releases, verification validates the run receipt, scorecard, and
 optional inference receipt first, then reconstructs the model card from the

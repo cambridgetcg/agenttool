@@ -11,7 +11,9 @@ from typing import Any, Callable
 from unittest.mock import patch
 
 from test_bundle import (
+    architecture_patch,
     inference_evaluation,
+    minimal_safetensors_bytes,
     perfect_scorecard,
     public_cases,
     run_receipt,
@@ -23,6 +25,7 @@ from xenia_revocable_feedback_model.core import (
     TrainingBundleError,
     domain_separated_id,
     ensure_empty_output,
+    inspect_model_export,
     write_canonical_json,
 )
 from xenia_revocable_feedback_model.evaluate import (
@@ -39,6 +42,17 @@ from xenia_revocable_feedback_model.release import (
     validate_scorecard,
     verify_release,
 )
+
+
+_ARCHITECTURE_PATCH = architecture_patch()
+
+
+def setUpModule() -> None:
+    _ARCHITECTURE_PATCH.start()  # type: ignore[attr-defined]
+
+
+def tearDownModule() -> None:
+    _ARCHITECTURE_PATCH.stop()  # type: ignore[attr-defined]
 
 
 def rehash_scorecard(scorecard: dict[str, Any]) -> None:
@@ -155,6 +169,37 @@ class ReleaseScorecardValidationTests(unittest.TestCase):
 
 
 class ReleaseArtifactBindingTests(unittest.TestCase):
+    def test_build_rejects_self_consistent_partial_weights_before_output(self) -> None:
+        template, notice, license_path = default_bundle_paths()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run = root / "run"
+            model = run / "model-export"
+            write_minimal_model_export(model)
+            (model / "model.safetensors").write_bytes(minimal_safetensors_bytes())
+            model_export_id = inspect_model_export(model).model_export_id
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(model_export_id),
+            )
+            evaluation_path = root / "evaluation.json"
+            write_canonical_json(
+                evaluation_path,
+                inference_evaluation(model_export_id),
+            )
+            output = root / "release"
+
+            with self.assertRaises(TrainingBundleError):
+                build_release(
+                    run_dir=run,
+                    scorecard_path=evaluation_path,
+                    output_dir=output,
+                    template_path=template,
+                    notice_path=notice,
+                    license_path=license_path,
+                )
+            self.assertFalse(output.exists())
+
     def test_inference_shape_rejects_rehashed_extra_and_missing_claims(self) -> None:
         evaluation = inference_evaluation()
         evaluation["garden_governed"] = True
