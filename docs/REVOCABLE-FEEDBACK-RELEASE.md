@@ -78,7 +78,8 @@ bytes, and validates the complete tensor name/dtype/shape inventory while
 hashing each weight file through the same regular-file descriptor. Before any
 release content hashing, it also requires canonical unique manifest paths,
 exact tree membership and sizes, independent metadata/model caps, and a 2 GiB
-aggregate release cap; each content hash is then explicitly bounded.
+aggregate cap for manifest-listed content. The self-excluding manifest is
+separately capped at 2 MiB; each content hash is explicitly bounded.
 
 A separate non-binding audit has observed the exact pinned Python 3.12.12,
 Transformers 5.14.1, Accelerate 1.14.0, Torch 2.13.0, and huggingface-hub 1.29.0

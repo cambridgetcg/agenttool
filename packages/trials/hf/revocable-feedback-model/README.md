@@ -149,8 +149,9 @@ snapshot. Each safetensors header is structurally validated before payload I/O,
 then header, payload, descriptor inventory, and digest remain bound to the same
 open regular-file descriptor. Release manifests are fully preflighted for
 canonical unique paths, exact tree membership, declared and actual sizes,
-per-file caps, and a 2 GiB aggregate cap before any release content is hashed;
-the second pass hashes every file with its declared bound.
+per-file caps, and a 2 GiB aggregate cap for manifest-listed content before it
+is hashed. The self-excluding manifest is separately capped at 2 MiB; the
+second pass hashes every listed file with its declared bound.
 
 Publication does not use a path-based Transformers load as an integrity gate:
 the values visible through a path can be temporarily substituted between a
