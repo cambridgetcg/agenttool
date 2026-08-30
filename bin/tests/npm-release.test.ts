@@ -126,7 +126,7 @@ describe("standard npm release policy", () => {
     });
   });
 
-  test("keeps HF Scout on the protected LOVE prerelease lane", async () => {
+  test("keeps the HF Scout source candidate on the protected prerelease lane", async () => {
     const workflow = await readFile(
       join(import.meta.dir, "..", "..", ".github", "workflows", "publish-npm.yml"),
       "utf8",
@@ -154,7 +154,7 @@ describe("standard npm release policy", () => {
       prepack: packageJson.scripts?.prepack,
     }).toEqual({
       name: "@agenttool/hf-scout",
-      version: "0.2.0-dev.0",
+      version: "0.2.0-dev.1",
       private: undefined,
       license: "Apache-2.0",
       dependencies: undefined,

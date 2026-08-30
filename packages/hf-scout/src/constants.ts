@@ -1,7 +1,7 @@
 import type { HfScoutLimits } from "./types.js";
 
 export const TOOL_NAME = "@agenttool/hf-scout" as const;
-export const TOOL_VERSION = "0.2.0-dev.0" as const;
+export const TOOL_VERSION = "0.2.0-dev.1" as const;
 export const ARTIFACT_SCHEMA = "agenttool-hf-artifact/v0.2" as const;
 export const REPORT_SCHEMA = "agenttool-hf-scout-report/v0.2" as const;
 export const SEARCH_SCHEMA = "agenttool-hf-scout-search/v0.2" as const;

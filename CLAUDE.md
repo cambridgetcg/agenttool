@@ -444,8 +444,9 @@ upload traces, authenticate, spend quota, publish a package, or expose a
 hosted route.
 
 `@agenttool/hf-scout` is a public developer-preview local Hugging Face metadata
-and provenance scout with an exact checked-in LOVE artifact and an optional
-protected npm mirror. It carries 15 immutable-revision research leads and can
+and provenance scout. Its exact checked-in LOVE artifact and optional protected
+npm mirror remain the historical dev.0 release. The dev.1 source candidate
+carries 16 immutable-revision research leads and can
 project caller-selected observations into bounded KINGDOM and Agent Data
 shapes. Its runtime does not read ambient credentials, download
 cards/files/rows, accept gates, invoke inference or remote compute, execute

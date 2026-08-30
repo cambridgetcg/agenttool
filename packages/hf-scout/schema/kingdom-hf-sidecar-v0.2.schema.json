@@ -14,7 +14,7 @@
       "required": ["package", "version", "status"],
       "properties": {
         "package": { "const": "@agenttool/hf-scout" },
-        "version": { "const": "0.2.0-dev.0" },
+        "version": { "const": "0.2.0-dev.1" },
         "status": { "const": "developer_preview" }
       }
     },

@@ -6,6 +6,10 @@ release commit with a separately observed current Hub head. It is deliberately
 a scout, not an inference provider, credential bridge, downloader, or hosted
 service.
 
+This source tree is the `0.2.0-dev.1` candidate. The checked-in public
+`0.2.0-dev.0` LOVE artifact and its release documentation remain historical
+bytes rather than being regenerated from this newer source.
+
 ## What it does
 
 - Reads one explicitly selected public model, dataset, or Space through fixed
@@ -111,12 +115,13 @@ verifying a downloaded snapshot. This package never claims
 
 ## Phase-aware research treasures
 
-`research-leads` is an inert curated overlay, not a downloader. Its 15 pinned
+`research-leads` is an inert curated overlay, not a downloader. Its 16 pinned
 records cover pretraining data-selection experiments, quality filtering and
 decontamination, human disagreement and preference rationales, earliest-step
 reasoning errors, judge/rhetoric bias, simulated tool traces, tool-failure
 recovery, multilingual evaluation, gated safety labels, agent SFT/RL task
-bundles, and sparse-autoencoder sweeps. The DataDecide suite is deliberately
+bundles, the synthetic Xenia WORD IS loop atlas, and sparse-autoencoder sweeps.
+The DataDecide suite is deliberately
 split into three records because its evaluation results and data recipes
 declare ODC-By while its perplexity-results repository declares no license.
 Despite its name, the pinned `DataDecide-data-recipes` tree includes very
@@ -132,6 +137,12 @@ The intended ecosystem routes stay deliberately narrow:
 - ToolACE, AgentTrove, and tool-failure recovery become inert AgentTool parser
   and recovery fixtures. AgentTrove contains text traces and environment/tool
   transcripts; only the separate Agent RL 5K record declares binary tasks.
+- Xenia WORD IS becomes an offline conversational parser fixture and provenance
+  graph. Its generic catalog lane forbids `training_corpus_ingestion`, so
+  neither the whole dataset nor an arbitrary opaque slice can be admitted by
+  omission. The separate repository-only Garden dossier may assess only its exact
+  policy-bound, publisher-authorized SFT derivative; that narrower admission
+  is not live optimizer permission or evidence of model exposure.
 - ProcessBench and Global-MMLU remain sealed evaluation material, excluded
   from training and retrieval indexes.
 - Gemma Scope stays a metadata matrix unless a separately reviewed single-SAE
@@ -157,7 +168,7 @@ make preference, rhetoric, safety, or interpretability labels authoritative.
 AgentTool's `@agenttool/dark-continent-karma` package owns a separate
 `kingdom.hf-training-treasure/0.1` atlas. The atlas is the proposal-only,
 publishable research map; Scout is the transport/provenance boundary that can
-observe a repository and bind the 15 exact definitions curated here. Their
+observe a repository and bind the 16 exact definitions curated here. Their
 overlap is intentional, but neither silently imports the other. An atlas
 consumer must validate that package's schema and hash manifest separately;
 Scout does not turn an external atlas row into one of its canonical leads.

@@ -62,7 +62,7 @@ describe("release reconciliation", () => {
     ]);
     expect(report).toMatchObject({
       schema: "agenttool-hf-release-reconciliation/v0.2",
-      tool: { name: "@agenttool/hf-scout", version: "0.2.0-dev.0" },
+      tool: { name: "@agenttool/hf-scout", version: "0.2.0-dev.1" },
       operation: "reconcile_release",
       subject: { provider: "huggingface", kind: "model", id: "org/model" },
       release: {

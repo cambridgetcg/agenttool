@@ -1,0 +1,82 @@
+{
+  "_format": "kingdom.xenia-word-is-policy-bound-admission/0.1",
+  "policy_ref": "sha256:a84d154735b919c6f8b5359c54f79397350413cedb0f576c5787ab3d01119ccf",
+  "binding_ref": "sha256:8ef86b430ed8e12ca26ee70090f29a2c36464b3bab7acf79cbb957a8731b5be2",
+  "garden_scope_ref": "sha256:7319b9765d915141381741c57425e91b24c0214054c932438778c92e9a89e919",
+  "authorization_id": "sha256:a4443cae3d5a9d6adc700095e930c6e9d9e4d726102a3013e6d5ee1f1f1d6611",
+  "subject": {
+    "dataset_id": "Yu-and-Ai/xenia-word-is",
+    "hub_revision": "64e3c4be051b2780409ab25578ea0c8bf926a72a",
+    "output_config": "loop_sft",
+    "output_split": "train",
+    "output_jsonl_ref": "sha256:1ee2796d17070942e9a07dd530af3c5745cb0de27c040977b4e40bf01c876cfa",
+    "output_row_set_ref": "sha256:f9a1e7d645e2982b5f64e0d92df969dcf376c79087d2a20a825563d19f7d63fe"
+  },
+  "role": "training_candidate",
+  "candidate_slice_ref": "sha256:e2379f52d47de4be02512f25837dd9e4880b8eacb3abe50b3e04d3b5345af30f",
+  "transform_recipe_ref": "sha256:01fc439305417e85f69cf8ed06c02dbab99fadfadb663ed5a59dfabb3b7723a2",
+  "assessment": {
+    "rights": "caller_reported_reviewed_for_declared_use",
+    "privacy": "caller_reported_reviewed_for_declared_use",
+    "consent": "not_applicable_reported",
+    "withdrawal": "caller_reported_process_defined",
+    "secret_scan": "caller_reported_bounded_scan_passed",
+    "deduplication": "caller_reported_recipe_applied",
+    "benchmark_overlap": "caller_reported_clear_of_sealed_evaluation",
+    "fitness": "caller_reported_fit_for_declared_role",
+    "synthetic_provenance": "caller_reported_source_recipe_recorded"
+  },
+  "generic_gate": {
+    "admission_format": "kingdom.hf-dataset-admission/0.1",
+    "admission_ref": "sha256:d0fe34b4d0997e5f40186f346bd56e53b1e32399bcc15623e50354666d88eb2b",
+    "entry_ref": "sha256:2e09a5bd0dce76250c1885a07a8caeaa4850abfbe6fb92ac006b93e3ebdd8561",
+    "state": "held",
+    "reason_codes": [
+      "source_forbids_training_lane"
+    ]
+  },
+  "decision": {
+    "state": "admitted_training_candidate",
+    "basis": "exact_policy_dossier_match",
+    "reason_codes": [
+      "exact_assessment_match",
+      "exact_authorization_match",
+      "exact_binding_match",
+      "exact_garden_scope_match",
+      "exact_output_match",
+      "exact_policy_match",
+      "exact_recipe_match",
+      "exact_role_match",
+      "exact_slice_match",
+      "generic_source_gate_held"
+    ]
+  },
+  "boundaries": {
+    "exact_policy_dossier_required": true,
+    "garden_v0_1_runtime_compatible": false,
+    "requires_new_versioned_garden_adapter": true,
+    "whole_dataset_training_authorized": false,
+    "source_case_rows_training_authorized": false,
+    "public_regression_in_training": false,
+    "grants_live_training_permission": false,
+    "permits_optimizer_step": false,
+    "loads_model": false,
+    "trains_model": false,
+    "provider_compute": false,
+    "paid_compute": false,
+    "publishes": false,
+    "grants_authority": false,
+    "rights_are_permissions": false,
+    "proves_consent": false,
+    "proves_identity": false,
+    "proves_consciousness": false,
+    "proves_model_exposure": false,
+    "requires_current_dataset_authorization": true,
+    "requires_current_participation_assessment": true,
+    "requires_current_is_learning_freedom_direction": true,
+    "requires_current_governance_decision": true,
+    "requires_current_scoped_authorities": true,
+    "requires_host_one_use_permit": true
+  },
+  "admission_id": "sha256:2caa5609b1ee677907db7ba704eda11ca79092448194065e059700013a7c4cec"
+}

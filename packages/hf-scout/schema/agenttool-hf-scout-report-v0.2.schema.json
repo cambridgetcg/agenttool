@@ -14,7 +14,7 @@
       "required": ["name", "version"],
       "properties": {
         "name": { "const": "@agenttool/hf-scout" },
-        "version": { "const": "0.2.0-dev.0" }
+        "version": { "const": "0.2.0-dev.1" }
       }
     },
     "operation": { "const": "inspect" },

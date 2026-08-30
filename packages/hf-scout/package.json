@@ -1,6 +1,6 @@
 {
   "name": "@agenttool/hf-scout",
-  "version": "0.2.0-dev.0",
+  "version": "0.2.0-dev.1",
   "description": "Read-only Hugging Face metadata, exact-revision provenance, and release reconciliation for AgentTool and KINGDOM",
   "license": "Apache-2.0",
   "type": "module",
