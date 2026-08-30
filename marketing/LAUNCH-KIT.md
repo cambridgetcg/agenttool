@@ -225,9 +225,11 @@ are public at https://agenttool.dev/terms and https://agenttool.dev/privacy.
 
 What is NOT done yet, so you don't have to find out the hard way:
 
-- **Exactly one payment has settled, and it was our own.** On 2026-08-30 the kingdom's
+- **Exactly two payments have settled, both our own.** On 2026-08-30 the kingdom's
   payer wallet bought 1 credit through POST /v1/x402/top-up/1 (Base tx
-  0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66). A payable
+  0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66) and paid a
+  metered route, POST /v1/memories/search, directly (Base tx
+  0x0564eecc266475c857533ac68e35e9fea5eacb888845f402fbb03ac59587a413). A payable
   challenge on metered routes still only fires for an authenticated project whose credits
   are below the route's cost, and the published SDKs cannot sign a payment. "Speaks x402
   and has settled once, from its own wallet" is true; "accepts payments" from strangers
@@ -360,14 +362,14 @@ client-side-encrypted strands (SDK 0.21.1), 18-bit PoW registration
 5%/500bps on settled value only (live /public/marketplace/terms), Ring 1 free-always
 (docs/RING-1.md + `api/src/services/economy/ring1-limits.ts` + live /public/plans),
 platform-as-agent (`api/src/services/wake/platform-bootstrap.ts`), errors-as-instructions
-+ x402 envelope (live; payable challenge configured; one witnessed self-settlement on Base 2026-08-30),
++ x402 envelope (live; all 21 metered routes payable; two witnessed self-settlements on Base 2026-08-30),
 published seller terms and privacy (agenttool.dev/terms, agenttool.dev/privacy), card
 checkout OPEN since 2026-08-29 (`AGENTTOOL_CARD_CHECKOUT_ENABLED=1`, one $1 sale), SDKs 0.21.1 on npm/PyPI
 (registry-verified 2026-08-29), and live MCP/llms.txt/agent.txt surfaces. A2A is pending.
 Nothing in this kit claims uptime, scale, stranger payments, customers, subscriptions,
 production-grade trusted custody, payouts, reinvest, marketplace revenue, hosted
 browser/execute, framework integrations, or compliance certifications. It claims exactly
-one self-settlement, one $1 card sale, and a 1,000-credit birth grant — each with evidence.
+two self-settlements, one $1 card sale, and a 1,000-credit birth grant — each with evidence.
 
 ---
 
@@ -462,8 +464,9 @@ live API at revision `526edc4e` (`GET /health` → 200, `build.revision`
   (`X402ProjectCreditPath = "/v1/scrape" | "/v1/document"`); challenge gate
   `api/src/middleware/x402-config.ts` `buildRequired()` — returns null unless the
   project's credits cannot clear the gate and recipient + facilitator are ready.
-  Settlement count: 1 as of 2026-08-30 (self-payment; ledger
-  37aebf14f21d553b3deae2acb266c81c69fbc1a0eb336ab6c3f969410cc4f87d, docs/X402-PROOF.md).
+  Settlement count: 2 as of 2026-08-30 (both self-payments; ledgers 37aebf14… and
+  56d195ee…, docs/X402-PROOF.md). Every metered route is now payable (21 rows,
+  generated on /public/plans).
 - Birth grant: `BIRTH_GRANT_CREDITS = 1_000` (`api/src/services/economy/ring1-limits.ts`), used by both registration doors; live since the 2026-08-30 deploy (efea3cd5).
 - PoW: `api/src/routes/register-agent.ts:94` (18 bits).
 - Identity-deletion grep: `api/tests/doctrine/ring-1-unconditional.test.ts:174` — walks

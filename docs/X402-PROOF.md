@@ -327,3 +327,18 @@ It marks which sections are true today and which land with W2-2 / W2-4.
 | `replay last` | 402 again, credits 110,801 → 110,801 — no second credit |
 | `verify` | **settled** (ledger + receipt + balance agree); treasury 0.001 USDC |
 | payer after | 4.999 USDC |
+
+## Record — first widened-route settlement (2026-08-30, Phase B)
+
+| | |
+|---|---|
+| deploy | `main` f9280645 hand-staged (operator-authorized exception), canary-first; `/public/plans` → 21 generated `payable_routes` |
+| scratch agent | `did:at:8ac3e3d7-15f6-48fc-b550-3803d8ba32fe`, born with 1,000 credits; `deplete` ran 333 × `POST /v1/memories/search` in 87 s → 1 credit |
+| first attempt | `pay` signed at 12:09:38 **while the fleet was mid-restart** (image roll 12:08–12:11): settle threw, rail left ledger `5d08caa4…` **pending / manual investigation**, no USDC moved (payer and treasury unchanged). Correct fail-closed behaviour; the 60 s authorization expired unused. |
+| second attempt | fresh authorization → `POST /v1/memories/search` + PAYMENT-SIGNATURE → **200**; `PAYMENT-RESPONSE.success=true` |
+| tx | `0x0564eecc266475c857533ac68e35e9fea5eacb888845f402fbb03ac59587a413` — receipt success, block 50651250 |
+| ledger | `56d195ee1b7d27c851bda010b0166df048a282266557fb146fe549c8a4a78201` — settled, credits_purchased = credits_applied = 3 |
+| credits | 1 → 1 (3 minted by the rail, 3 spent by the handler — charge once) |
+| `replay last` | mutation guard: balance 1 < cost 3 → allowed; 402 again, credits 1 → 1 — no second credit |
+| `verify` | **settled**; treasury 0.004 USDC; payer 4.996 USDC |
+| lesson | never `pay` during a machine roll; the ledger's `pending` row is the honest record of an ambiguous I/O, and it is what manual_onchain_investigation is for (here: balances prove nothing moved). |
