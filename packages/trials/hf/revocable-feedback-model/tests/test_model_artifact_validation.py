@@ -21,10 +21,10 @@ from xenia_revocable_feedback_model.core import (
     MODEL_EXPORT_MAX_BYTES,
     REGULAR_TREE_MAX_DEPTH,
     TrainingBundleError,
+    audit_publishable_model_load,
     inspect_model_export,
     inspect_publishable_model_export,
     inspect_regular_tree,
-    validate_publishable_model_load,
     write_canonical_json,
 )
 
@@ -237,10 +237,34 @@ class ModelArtifactValidationTests(unittest.TestCase):
                     names[0], shard_names[1]
                 ),
             )
-            with self.assertRaises(TrainingBundleError):
-                inspect_publishable_model_export(model)
+            with patch.object(core_module, "_hash_open_safetensors") as payload_hash:
+                with self.assertRaises(TrainingBundleError):
+                    inspect_publishable_model_export(model)
+                payload_hash.assert_not_called()
 
-    def test_publishable_export_loads_under_the_exact_offline_stack(self) -> None:
+    def test_publishable_shard_count_is_bounded_before_descriptors_open(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            unsharded = model / "model.safetensors"
+            weight_bytes = unsharded.read_bytes()
+            unsharded.unlink()
+            shard_count = len(TEST_SERIALIZED_TENSORS) + 1
+            for shard in range(1, shard_count + 1):
+                (model / f"model-{shard:05d}-of-{shard_count:05d}.safetensors").write_bytes(
+                    weight_bytes
+                )
+            write_canonical_json(
+                model / "model.safetensors.index.json",
+                {"weight_map": {}},
+            )
+
+            with patch.object(core_module, "_open_safetensors_header") as open_header:
+                with self.assertRaises(TrainingBundleError):
+                    inspect_publishable_model_export(model)
+                open_header.assert_not_called()
+
+    def test_non_binding_load_audit_observes_the_exact_offline_stack(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             model = Path(temporary) / "model"
             write_minimal_model_export(model)
@@ -249,11 +273,89 @@ class ModelArtifactValidationTests(unittest.TestCase):
                 "socket.socket.connect",
                 side_effect=AssertionError("offline load attempted a socket connection"),
             ):
-                loaded = validate_publishable_model_load(inspection)
+                loaded = audit_publishable_model_load(inspection)
             self.assertEqual(loaded.model_class, "LlamaForCausalLM")
             self.assertEqual(loaded.serialized_tensor_count, 11)
             self.assertEqual(loaded.loaded_state_count, 12)
             self.assertTrue(loaded.tied_output_embedding_reconstructed)
+            self.assertEqual(
+                loaded.value_binding,
+                "not_established_by_path_based_load",
+            )
+
+    def test_load_audit_explicitly_does_not_bind_temporary_weight_values(self) -> None:
+        from transformers import AutoModelForCausalLM
+
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            inspection = inspect_publishable_model_export(model)
+            weight_path = model / "model.safetensors"
+            reviewed_bytes = weight_path.read_bytes()
+            substituted_bytes = complete_test_safetensors_bytes(
+                first_f32=b"\x00\x00\x80\x3f",
+            )
+            self.assertEqual(len(reviewed_bytes), len(substituted_bytes))
+            observed_values: list[float] = []
+            real_load = AutoModelForCausalLM.from_pretrained
+
+            def load_temporary_substitution(path: object, *args: object, **kwargs: object) -> object:
+                weight_path.write_bytes(substituted_bytes)
+                try:
+                    loaded = real_load(path, *args, **kwargs)
+                    observed_values.append(
+                        float(loaded.get_input_embeddings().weight[0, 0].item())
+                    )
+                    return loaded
+                finally:
+                    weight_path.write_bytes(reviewed_bytes)
+
+            with patch.object(
+                AutoModelForCausalLM,
+                "from_pretrained",
+                side_effect=load_temporary_substitution,
+            ):
+                audit = audit_publishable_model_load(inspection)
+
+            self.assertEqual(observed_values, [1.0])
+            self.assertEqual(
+                audit.value_binding,
+                "not_established_by_path_based_load",
+            )
+            self.assertEqual(
+                inspect_publishable_model_export(model).model_export_id,
+                inspection.model_export_id,
+            )
+
+    def test_wrong_union_rejects_sparse_payload_before_payload_hashing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            payload_size = 64 * 1024 * 1024
+            invalid = encoded_safetensors(
+                json.dumps(
+                    {
+                        "__metadata__": {"format": "pt"},
+                        "model.wrong.weight": {
+                            "dtype": "F32",
+                            "shape": [payload_size // 4],
+                            "data_offsets": [0, payload_size],
+                        },
+                    },
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+            weight_path = model / "model.safetensors"
+            weight_path.write_bytes(invalid)
+            with weight_path.open("r+b") as handle:
+                handle.seek(len(invalid) + payload_size - 1)
+                handle.write(b"\x00")
+
+            with patch.object(core_module, "_hash_open_safetensors") as payload_hash:
+                with self.assertRaises(TrainingBundleError):
+                    inspect_publishable_model_export(model)
+                payload_hash.assert_not_called()
 
     def test_validated_json_and_weight_snapshots_own_their_digests(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -290,15 +392,16 @@ class ModelArtifactValidationTests(unittest.TestCase):
             model = Path(temporary) / "model"
             write_minimal_model_export(model)
             expected = inspect_publishable_model_export(model)
-            original_weights = core_module._validate_safetensors
+            original_weights = core_module._hash_open_safetensors
             changed = False
 
             def mutate_after_weight_validation(
-                path: Path, *, expected_size: int
+                opened: object,
             ) -> object:
                 nonlocal changed
-                inspected = original_weights(path, expected_size=expected_size)
+                inspected = original_weights(opened)  # type: ignore[arg-type]
                 if not changed:
+                    path = model / "model.safetensors"
                     data = path.read_bytes()
                     old = b"model.layers.0.self_attn.q_proj.weight"
                     new = b"model.layers.0.self_attn.x_proj.weight"
@@ -310,7 +413,7 @@ class ModelArtifactValidationTests(unittest.TestCase):
 
             with patch.object(
                 core_module,
-                "_validate_safetensors",
+                "_hash_open_safetensors",
                 side_effect=mutate_after_weight_validation,
             ):
                 captured = inspect_publishable_model_export(model)

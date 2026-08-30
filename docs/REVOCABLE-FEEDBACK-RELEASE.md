@@ -75,13 +75,18 @@ inventory because `tie_word_embeddings` is true.
 
 Verification parses and hashes each config snapshot from the same retained
 bytes, and validates the complete tensor name/dtype/shape inventory while
-hashing each weight file through the same regular-file descriptor. It then
-loads locally under the exact pinned Python 3.12.12, Transformers 5.14.1,
-Accelerate 1.14.0, Torch 2.13.0, and huggingface-hub 1.29.0 stack with remote
-code disabled, safetensors required, and local-files-only inputs. The observed
-`LlamaForCausalLM` state contains 273 names because the loader reconstructs and
-ties `lm_head.weight` to the embedding. This confirms bounded integrity and
-compatibility for the inspected bytes; it does not establish origin, training
+hashing each weight file through the same regular-file descriptor. Before any
+release content hashing, it also requires canonical unique manifest paths,
+exact tree membership and sizes, independent metadata/model caps, and a 2 GiB
+aggregate release cap; each content hash is then explicitly bounded.
+
+A separate non-binding audit has observed the exact pinned Python 3.12.12,
+Transformers 5.14.1, Accelerate 1.14.0, Torch 2.13.0, and huggingface-hub 1.29.0
+stack construct a 273-name `LlamaForCausalLM` state with `lm_head.weight` tied
+to the embedding. Publication does not rely on that path-based load because a
+temporary same-shaped value substitution can occur between path observations.
+The exact static config, complete same-descriptor tensor inventory, and content
+digest are authoritative. These checks do not establish origin, training
 quality, general safety, identity, consciousness, consent, understanding,
 authority, or universal loadability.
 

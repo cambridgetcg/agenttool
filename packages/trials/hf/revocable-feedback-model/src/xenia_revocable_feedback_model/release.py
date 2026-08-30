@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import re
 import shutil
+import stat
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
 from .evaluate import (
@@ -27,7 +28,10 @@ from .core import (
     EXPECTED_DATASET_ADMISSION_ID,
     EXPECTED_RUNTIME_VERSIONS,
     GOVERNANCE_STATUS,
+    JSON_MAX_BYTES,
     MODEL_EXPORT_FILE,
+    MODEL_EXPORT_MAX_BYTES,
+    MODEL_JSON_MAX_BYTES,
     PRIVATE_TEXT_PATTERNS,
     RECIPE_ID,
     RUN_RECEIPT_SCHEMA,
@@ -35,6 +39,7 @@ from .core import (
     SCORECARD_STATEMENT,
     TRAINING_MANIFEST_ID,
     TrainingBundleError,
+    _decode_json,
     _require,
     canonical_json,
     domain_separated_id,
@@ -46,7 +51,6 @@ from .core import (
     require_sha256_id,
     sha256_file_hex,
     validate_sanitized_json,
-    validate_publishable_model_load,
     write_canonical_json,
 )
 
@@ -80,6 +84,18 @@ LEGACY_PUBLISHED_MODEL_EXPORT_ID = "sha256:97b0c85898dec0396a4f575ea3fe619503a37
 RELEASE_NON_MODEL_ENTRIES = frozenset(
     {"README.md", "LICENSE", "NOTICE", "hash-manifest.json", "training", "evaluation"}
 )
+RELEASE_REQUIRED_PATHS = frozenset(
+    {
+        "README.md",
+        "LICENSE",
+        "NOTICE",
+        "training/manifest.json",
+        "evaluation/public-regression-vector.json",
+    }
+)
+RELEASE_OPTIONAL_PATHS = frozenset({"evaluation/inference-receipt.json"})
+RELEASE_METADATA_PATHS = RELEASE_REQUIRED_PATHS | RELEASE_OPTIONAL_PATHS
+RELEASE_TOTAL_MAX_BYTES = MODEL_EXPORT_MAX_BYTES
 
 def _validate_run_receipt(
     receipt: Mapping[str, Any],
@@ -283,18 +299,158 @@ def _render_card(
 
 def _manifest_entries(root: Path) -> list[dict[str, Any]]:
     tree = inspect_regular_tree(root)
+    files = _release_files_from_tree(root, tree)
+    _validate_release_path_set(tuple(files))
+    sizes = _preflight_actual_release_files(files)
+    entries: list[dict[str, Any]] = []
+    for relative in sorted(files):
+        size, digest = sha256_file_hex(
+            files[relative],
+            max_bytes=sizes[relative],
+        )
+        _require(size == sizes[relative], "release file changed during manifest construction")
+        entries.append({"path": relative, "bytes": size, "sha256": digest})
+    return entries
+
+
+def _release_files_from_tree(root: Path, tree: Any) -> dict[str, Path]:
     _require(
         {path.relative_to(root).as_posix() for path in tree.directories}
         == {"evaluation", "training"},
         "release directory layout is not closed",
     )
-    entries: list[dict[str, Any]] = []
-    for path in tree.files:
-        if path.relative_to(root).as_posix() == "hash-manifest.json":
-            continue
-        size, digest = sha256_file_hex(path)
-        entries.append({"path": path.relative_to(root).as_posix(), "bytes": size, "sha256": digest})
-    return sorted(entries, key=lambda entry: entry["path"])
+    return {
+        path.relative_to(root).as_posix(): path
+        for path in tree.files
+        if path.relative_to(root).as_posix() != "hash-manifest.json"
+    }
+
+
+def _release_file_cap(relative: str) -> int:
+    if relative in RELEASE_METADATA_PATHS:
+        return JSON_MAX_BYTES
+    pure = PurePosixPath(relative)
+    if (
+        len(pure.parts) == 1
+        and MODEL_EXPORT_FILE.fullmatch(relative) is not None
+    ):
+        return (
+            MODEL_EXPORT_MAX_BYTES
+            if relative.endswith(".safetensors")
+            else MODEL_JSON_MAX_BYTES
+        )
+    raise TrainingBundleError("release contains a non-allowlisted artifact")
+
+
+def _canonical_release_path(value: Any) -> str:
+    _require(isinstance(value, str) and bool(value), "unsafe release path")
+    pure = PurePosixPath(value)
+    _require(
+        not pure.is_absolute()
+        and value == pure.as_posix()
+        and pure.parts
+        and all(part not in {"", ".", ".."} for part in pure.parts),
+        "release path is not canonical",
+    )
+    return value
+
+
+def _validate_release_path_set(paths: tuple[str, ...]) -> None:
+    path_set = set(paths)
+    _require(
+        RELEASE_REQUIRED_PATHS.issubset(path_set),
+        "release is missing required public metadata",
+    )
+    for relative in paths:
+        _release_file_cap(relative)
+
+
+def _preflight_actual_release_files(files: Mapping[str, Path]) -> dict[str, int]:
+    sizes: dict[str, int] = {}
+    total_size = 0
+    for relative in sorted(files):
+        cap = _release_file_cap(relative)
+        try:
+            status = files[relative].lstat()
+        except OSError as exc:
+            raise TrainingBundleError("release file is missing") from exc
+        _require(
+            stat.S_ISREG(status.st_mode) and not files[relative].is_symlink(),
+            "release file is not regular",
+        )
+        _require(status.st_size <= cap, "release file exceeds its independent byte cap")
+        sizes[relative] = status.st_size
+        total_size += status.st_size
+        _require(
+            total_size <= RELEASE_TOTAL_MAX_BYTES,
+            "release exceeds its aggregate byte cap",
+        )
+    return sizes
+
+
+def _preflight_manifest_entries(
+    root: Path,
+    tree: Any,
+    entries: Any,
+) -> tuple[tuple[str, int, str], ...]:
+    _require(isinstance(entries, list) and bool(entries), "release manifest files must be non-empty")
+    records: list[tuple[str, int, str]] = []
+    declared_total = 0
+    for entry in entries:
+        _require(
+            isinstance(entry, Mapping)
+            and set(entry) == {"path", "bytes", "sha256"},
+            "release hash entry has unexpected fields",
+        )
+        relative = _canonical_release_path(entry["path"])
+        byte_count = entry["bytes"]
+        digest = entry["sha256"]
+        _require(
+            isinstance(byte_count, int)
+            and not isinstance(byte_count, bool)
+            and byte_count >= 0,
+            "release byte count is invalid",
+        )
+        _require(
+            isinstance(digest, str)
+            and re.fullmatch(r"[0-9a-f]{64}", digest) is not None,
+            "release digest is invalid",
+        )
+        cap = _release_file_cap(relative)
+        _require(byte_count <= cap, "release file exceeds its independent byte cap")
+        declared_total += byte_count
+        _require(
+            declared_total <= RELEASE_TOTAL_MAX_BYTES,
+            "release exceeds its aggregate byte cap",
+        )
+        records.append((relative, byte_count, digest))
+
+    paths = tuple(relative for relative, _, _ in records)
+    _require(
+        paths == tuple(sorted(set(paths))),
+        "release entries must contain canonical unique sorted paths",
+    )
+    _validate_release_path_set(paths)
+    files = _release_files_from_tree(root, tree)
+    _require(set(files) == set(paths), "release tree differs from its manifest")
+    actual_sizes = _preflight_actual_release_files(files)
+    for relative, byte_count, _ in records:
+        _require(
+            actual_sizes[relative] == byte_count,
+            "release declared and actual sizes differ",
+        )
+    return tuple(records)
+
+
+def _bounded_release_source(path: Path, name: str) -> bytes:
+    snapshot = bytearray()
+    size, _ = sha256_file_hex(
+        path,
+        max_bytes=JSON_MAX_BYTES,
+        snapshot=snapshot,
+    )
+    _require(size == len(snapshot), f"{name} changed during its bounded read")
+    return bytes(snapshot)
 
 
 def build_release(
@@ -311,7 +467,6 @@ def build_release(
     _require(isinstance(receipt, Mapping) and isinstance(evaluation_input, Mapping), "release inputs must be JSON objects")
     validate_run_receipt(receipt)
     model_export = inspect_publishable_model_export(run_dir / "model-export")
-    validate_publishable_model_load(model_export)
     validate_run_receipt(
         receipt,
         expected_model_export_id=model_export.model_export_id,
@@ -330,6 +485,27 @@ def build_release(
     else:
         scorecard = evaluation_input
     validate_scorecard(scorecard)
+    template_bytes = _bounded_release_source(template_path, "model-card template")
+    license_bytes = _bounded_release_source(license_path, "license")
+    notice_bytes = _bounded_release_source(notice_path, "notice")
+    try:
+        template = template_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise TrainingBundleError("model-card template is not valid UTF-8") from exc
+    rendered_card = _render_card(
+        template,
+        receipt,
+        scorecard,
+        unparsed_count=(
+            None
+            if inference_evaluation is None
+            else int(inference_evaluation["unparsed_count"])
+        ),
+    ).encode("utf-8")
+    _require(
+        len(rendered_card) <= JSON_MAX_BYTES,
+        "rendered model card exceeds its independent byte cap",
+    )
     ensure_empty_output(output_dir)
     for source in model_export.files:
         shutil.copyfile(source, output_dir / source.name)
@@ -338,19 +514,9 @@ def build_release(
         copied_model_export.model_export_id == model_export.model_export_id,
         "copied model export differs from the validated input",
     )
-    template = template_path.read_text(encoding="utf-8")
-    (output_dir / "README.md").write_text(
-        _render_card(
-            template,
-            receipt,
-            scorecard,
-            unparsed_count=None if inference_evaluation is None else int(inference_evaluation["unparsed_count"]),
-        ),
-        encoding="utf-8",
-        newline="\n",
-    )
-    shutil.copyfile(license_path, output_dir / "LICENSE")
-    shutil.copyfile(notice_path, output_dir / "NOTICE")
+    (output_dir / "README.md").write_bytes(rendered_card)
+    (output_dir / "LICENSE").write_bytes(license_bytes)
+    (output_dir / "NOTICE").write_bytes(notice_bytes)
     write_canonical_json(output_dir / "training" / "manifest.json", receipt)
     write_canonical_json(output_dir / "evaluation" / "public-regression-vector.json", scorecard)
     if inference_evaluation is not None:
@@ -387,63 +553,30 @@ def verify_release(root: Path) -> dict[str, Any]:
     _require(payload["manifest_excludes_itself"] is True, "release manifest must exclude itself")
     _require(manifest_id == domain_separated_id("agenttool-sanitized-model-release-manifest/0.1", payload), "release manifest content ID mismatch")
     entries = manifest.get("files")
-    _require(isinstance(entries, list) and entries, "release manifest files must be non-empty")
-    expected_paths: list[str] = []
-    for entry in entries:
-        _require(isinstance(entry, Mapping) and set(entry) == {"path", "bytes", "sha256"}, "release hash entry has unexpected fields")
-        relative = entry["path"]
-        _require(isinstance(relative, str) and relative and not relative.startswith("/") and ".." not in Path(relative).parts, "unsafe release path")
-        _require(
-            isinstance(entry["bytes"], int)
-            and not isinstance(entry["bytes"], bool)
-            and entry["bytes"] >= 0,
-            "release byte count is invalid",
+    records = _preflight_manifest_entries(root, tree, entries)
+    verified_metadata: dict[str, bytes] = {}
+    for relative, byte_count, expected_digest in records:
+        snapshot = bytearray() if relative in RELEASE_METADATA_PATHS else None
+        size, digest = sha256_file_hex(
+            root / relative,
+            max_bytes=byte_count,
+            snapshot=snapshot,
         )
         _require(
-            isinstance(entry["sha256"], str)
-            and re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]) is not None,
-            "release digest is invalid",
+            size == byte_count and digest == expected_digest,
+            "release hash mismatch",
         )
-        path = root / relative
-        _require(path.is_file() and not path.is_symlink(), "release file is missing")
-        size, digest = sha256_file_hex(path)
-        _require(entry["bytes"] == size and entry["sha256"] == digest, "release hash mismatch")
-        expected_paths.append(relative)
-    _require(expected_paths == sorted(expected_paths), "release entries must be sorted")
-    actual_paths = sorted(
-        path.relative_to(root).as_posix()
-        for path in tree.files
-        if path.relative_to(root).as_posix() != "hash-manifest.json"
-    )
-    _require(actual_paths == expected_paths, "release tree differs from its manifest")
-    required_paths = {
-        "README.md",
-        "LICENSE",
-        "NOTICE",
-        "training/manifest.json",
-        "evaluation/public-regression-vector.json",
-    }
-    optional_paths = {"evaluation/inference-receipt.json"}
-    unexpected = [
-        path
-        for path in actual_paths
-        if path not in required_paths | optional_paths
-        and not (
-            len(Path(path).parts) == 1
-            and MODEL_EXPORT_FILE.fullmatch(path) is not None
-        )
-    ]
-    _require(not unexpected, "release contains a non-allowlisted artifact")
-    _require(required_paths.issubset(actual_paths), "release is missing required public metadata")
+        if snapshot is not None:
+            verified_metadata[relative] = bytes(snapshot)
     model_export = inspect_publishable_model_export(
         root,
         permitted_non_model_entries=RELEASE_NON_MODEL_ENTRIES,
     )
     manifest_model_entries = {
-        entry["path"]: (entry["bytes"], entry["sha256"])
-        for entry in entries
-        if len(Path(entry["path"]).parts) == 1
-        and MODEL_EXPORT_FILE.fullmatch(entry["path"]) is not None
+        relative: (byte_count, digest)
+        for relative, byte_count, digest in records
+        if len(PurePosixPath(relative).parts) == 1
+        and MODEL_EXPORT_FILE.fullmatch(relative) is not None
     }
     _require(
         manifest_model_entries
@@ -453,13 +586,16 @@ def verify_release(root: Path) -> dict[str, Any]:
         },
         "release manifest model entries differ from the inspected model snapshot",
     )
-    receipt = read_json(root / "training" / "manifest.json")
-    scorecard = read_json(root / "evaluation" / "public-regression-vector.json")
+    receipt = _decode_json(verified_metadata["training/manifest.json"])
+    scorecard = _decode_json(
+        verified_metadata["evaluation/public-regression-vector.json"]
+    )
     _require(isinstance(receipt, Mapping) and isinstance(scorecard, Mapping), "release records must be objects")
-    inference_path = root / "evaluation" / "inference-receipt.json"
     inference: Mapping[str, Any] | None = None
-    if "evaluation/inference-receipt.json" in actual_paths:
-        inference = read_json(inference_path)
+    if "evaluation/inference-receipt.json" in verified_metadata:
+        inference = _decode_json(
+            verified_metadata["evaluation/inference-receipt.json"]
+        )
         _require(isinstance(inference, Mapping), "inference receipt must be an object")
 
     legacy_compatibility = (
@@ -498,7 +634,7 @@ def verify_release(root: Path) -> dict[str, Any]:
         validate_sanitized_json(inference, "inference evaluation")
         unparsed_count = int(inference["unparsed_count"])
 
-    actual_card_bytes = (root / "README.md").read_bytes()
+    actual_card_bytes = verified_metadata["README.md"]
     if legacy_compatibility:
         # The already-validated immutable manifest binds the exact legacy card
         # bytes. Do not make that frozen release depend on a mutable template.
@@ -509,8 +645,17 @@ def verify_release(root: Path) -> dict[str, Any]:
         validate_model_card(actual_card)
     else:
         template_path, _, _ = default_bundle_paths()
+        try:
+            template = _bounded_release_source(
+                template_path,
+                "model-card template",
+            ).decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise TrainingBundleError(
+                "model-card template is not valid UTF-8"
+            ) from exc
         expected_card = _render_card(
-            template_path.read_text(encoding="utf-8"),
+            template,
             receipt,
             scorecard,
             unparsed_count=unparsed_count,
@@ -519,7 +664,6 @@ def verify_release(root: Path) -> dict[str, Any]:
             actual_card_bytes == expected_card.encode("utf-8"),
             "model card does not equal the canonical card derived from release records",
         )
-    validate_publishable_model_load(model_export)
     return dict(manifest)
 
 

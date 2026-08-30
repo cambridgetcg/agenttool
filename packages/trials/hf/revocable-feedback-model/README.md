@@ -62,7 +62,7 @@ python3.12 -m venv .venv
 .venv/bin/python -m xenia_revocable_feedback_model plan
 ```
 
-Install the exact training and publication-verification stack, then run the
+Install the exact training and non-binding load-audit test stack, then run the
 tests:
 
 ```sh
@@ -141,19 +141,28 @@ layers, 9 attention heads, 3 key/value heads, head dimension 64, vocabulary
 complete single-file or sharded safetensors union must contain exactly 272
 named F32 tensors with the reviewed shapes: the embedding, nine tensors per
 layer, and final norm. A serialized `lm_head.weight` is rejected because the
-supported loader reconstructs it as the tied embedding alias.
+reviewed tied-weight serialization omits it; the separate audit stack
+reconstructs it as the embedding alias.
 
 Each bounded JSON file is validated and hashed from one retained regular-file
 snapshot. Each safetensors header is structurally validated before payload I/O,
 then header, payload, descriptor inventory, and digest remain bound to the same
-open regular-file descriptor. Publication verification additionally performs
-a local-files-only load under the exact Python/Transformers/Torch stack,
-disables remote code, requires safetensors, checks the 273-name loaded state and
-the reconstructed tied alias, and re-inspects the export afterward. These are
-bounded integrity and compatibility checks for this reviewed release. They do
-not prove artifact origin, training quality, general safety, identity,
-consciousness, consent, understanding, authority, or loadability under other
-runtimes.
+open regular-file descriptor. Release manifests are fully preflighted for
+canonical unique paths, exact tree membership, declared and actual sizes,
+per-file caps, and a 2 GiB aggregate cap before any release content is hashed;
+the second pass hashes every file with its declared bound.
+
+Publication does not use a path-based Transformers load as an integrity gate:
+the values visible through a path can be temporarily substituted between a
+static inspection and a load. A separate test-only audit has observed the exact
+local Python/Transformers/Torch stack construct the 273-name state and tied
+alias with remote code disabled, safetensors required, and local-files-only
+inputs, but that observation does not bind loaded values to the release digest.
+The authoritative publication check is the exact config plus complete
+same-descriptor name/dtype/shape inventory and content digest. These bounded
+checks do not prove artifact origin, training quality, general safety,
+identity, consciousness, consent, understanding, authority, or loadability
+under other runtimes.
 
 For current releases, verification validates the run receipt, scorecard, and
 optional inference receipt first, then reconstructs the model card from the

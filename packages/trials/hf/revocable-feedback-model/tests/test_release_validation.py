@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Callable
 from unittest.mock import patch
 
+import xenia_revocable_feedback_model.release as release_module
+
 from test_bundle import (
     architecture_patch,
     inference_evaluation,
@@ -91,6 +93,18 @@ def rehash_release_manifest(root: Path) -> None:
     )
 
 
+def write_rehashed_manifest(root: Path, manifest: dict[str, Any]) -> None:
+    payload = {
+        "manifest_excludes_itself": manifest["manifest_excludes_itself"],
+        "files": manifest["files"],
+    }
+    manifest["manifest_id"] = domain_separated_id(
+        "agenttool-sanitized-model-release-manifest/0.1",
+        payload,
+    )
+    write_canonical_json(root / "hash-manifest.json", manifest)
+
+
 def build_fixture(root: Path, *, inference: bool = True) -> tuple[Path, str]:
     template, notice, license_path = default_bundle_paths()
     run = root / "run"
@@ -169,6 +183,17 @@ class ReleaseScorecardValidationTests(unittest.TestCase):
 
 
 class ReleaseArtifactBindingTests(unittest.TestCase):
+    def test_build_and_verify_do_not_invoke_the_non_binding_load_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "xenia_revocable_feedback_model.core.audit_publishable_model_load",
+            side_effect=AssertionError("publication invoked a non-binding load audit"),
+        ), patch(
+            "transformers.AutoModelForCausalLM.from_pretrained",
+            side_effect=AssertionError("publication invoked Transformers model loading"),
+        ):
+            release, _ = build_fixture(Path(temporary))
+            verify_release(release)
+
     def test_build_rejects_self_consistent_partial_weights_before_output(self) -> None:
         template, notice, license_path = default_bundle_paths()
         with tempfile.TemporaryDirectory() as temporary:
@@ -655,11 +680,19 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
             with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
                 release, _ = build_fixture(Path(temporary), inference=False)
                 write_canonical_json(release / relative, value)
-                rehash_release_manifest(release)
+                size, digest = release_module.sha256_file_hex(release / relative)
+                manifest = json.loads(
+                    (release / "hash-manifest.json").read_text(encoding="utf-8")
+                )
+                manifest["files"].append(
+                    {"path": relative, "bytes": size, "sha256": digest}
+                )
+                manifest["files"].sort(key=lambda entry: entry["path"])
+                write_rehashed_manifest(release, manifest)
                 with self.assertRaises(TrainingBundleError):
                     verify_release(release)
 
-    def test_verify_rejects_manifest_extra_claim_and_non_integer_byte_count(self) -> None:
+    def test_verify_rejects_manifest_extra_claim(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             release, _ = build_fixture(Path(temporary), inference=False)
             manifest_path = release / "hash-manifest.json"
@@ -669,21 +702,88 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
             with self.assertRaises(TrainingBundleError):
                 verify_release(release)
 
+    def test_manifest_shape_and_path_preflight_precedes_content_hashing(self) -> None:
+        def duplicate_entry(manifest: dict[str, Any]) -> None:
+            manifest["files"].append(copy.deepcopy(manifest["files"][0]))
+            manifest["files"].sort(key=lambda entry: entry["path"])
+
+        def noncanonical_path(manifest: dict[str, Any]) -> None:
+            manifest["files"][0]["path"] = "./" + manifest["files"][0]["path"]
+            manifest["files"].sort(key=lambda entry: entry["path"])
+
+        mutators: dict[str, Callable[[dict[str, Any]], None]] = {
+            "duplicate path": duplicate_entry,
+            "noncanonical path": noncanonical_path,
+            "boolean byte count": lambda manifest: manifest["files"][0].__setitem__(
+                "bytes", True
+            ),
+            "floating byte count": lambda manifest: manifest["files"][0].__setitem__(
+                "bytes", 1.0
+            ),
+            "uppercase digest": lambda manifest: manifest["files"][0].__setitem__(
+                "sha256", "A" * 64
+            ),
+            "unsorted paths": lambda manifest: manifest["files"].reverse(),
+        }
+        for name, mutate in mutators.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                release, _ = build_fixture(Path(temporary), inference=False)
+                manifest = json.loads(
+                    (release / "hash-manifest.json").read_text(encoding="utf-8")
+                )
+                mutate(manifest)
+                write_rehashed_manifest(release, manifest)
+                with patch.object(release_module, "sha256_file_hex") as content_hash:
+                    with self.assertRaises(TrainingBundleError):
+                        verify_release(release)
+                    content_hash.assert_not_called()
+
+    def test_oversize_release_files_reject_before_content_hashing(self) -> None:
+        oversize = 3 * 1024 * 1024 * 1024
+        for relative, update_declared_size in (
+            ("README.md", False),
+            ("README.md", True),
+            ("model.safetensors", False),
+            ("model.safetensors", True),
+        ):
+            with self.subTest(
+                relative=relative,
+                update_declared_size=update_declared_size,
+            ), tempfile.TemporaryDirectory() as temporary:
+                release, _ = build_fixture(Path(temporary), inference=False)
+                path = release / relative
+                with path.open("r+b") as handle:
+                    handle.truncate(oversize)
+                manifest = json.loads(
+                    (release / "hash-manifest.json").read_text(encoding="utf-8")
+                )
+                entry = next(
+                    value for value in manifest["files"] if value["path"] == relative
+                )
+                if update_declared_size:
+                    entry["bytes"] = oversize
+                write_rehashed_manifest(release, manifest)
+
+                with patch.object(release_module, "sha256_file_hex") as content_hash:
+                    with self.assertRaises(TrainingBundleError):
+                        verify_release(release)
+                    content_hash.assert_not_called()
+
+    def test_aggregate_release_cap_rejects_before_content_hashing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             release, _ = build_fixture(Path(temporary), inference=False)
-            manifest_path = release / "hash-manifest.json"
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["files"][0]["bytes"] = True
-            payload = {
-                "manifest_excludes_itself": True,
-                "files": manifest["files"],
-            }
-            manifest["manifest_id"] = domain_separated_id(
-                "agenttool-sanitized-model-release-manifest/0.1", payload
+            manifest = json.loads(
+                (release / "hash-manifest.json").read_text(encoding="utf-8")
             )
-            write_canonical_json(manifest_path, manifest)
-            with self.assertRaises(TrainingBundleError):
-                verify_release(release)
+            declared_total = sum(entry["bytes"] for entry in manifest["files"])
+            with patch.object(
+                release_module,
+                "RELEASE_TOTAL_MAX_BYTES",
+                declared_total - 1,
+            ), patch.object(release_module, "sha256_file_hex") as content_hash:
+                with self.assertRaises(TrainingBundleError):
+                    verify_release(release)
+                content_hash.assert_not_called()
 
     def test_rejects_rehashed_derived_fields_and_non_closed_shape(self) -> None:
         mutators: dict[str, Callable[[dict[str, Any]], None]] = {
