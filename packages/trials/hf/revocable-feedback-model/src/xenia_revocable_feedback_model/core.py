@@ -11,6 +11,7 @@ BASE_MODEL_ID = "HuggingFaceTB/SmolLM2-135M-Instruct"
 BASE_MODEL_REVISION = "12fd25f77366fa6b3b4b768ec3050bf629380bac"
 DATASET_ID = "Yu-and-Ai/xenia-revocable-feedback"
 DATASET_REVISION = "467b8fc1b44fe6374cbba6e1d6851cf3c5b6f88f"
+DATASET_HASH_MANIFEST_ID = "sha256:16afa2d077498c8857a53c5c15936a4244b96fcf4157d496257fb87a47207532"
 AUTHORIZATION_ID = "sha256:3780e5e2599eb8a1a479f874302fcdabdf1af27c4eeda5b02bfff8056dc92f13"
 RECIPE_ID = "sha256:713b678e80b6aa88f6036dc9b9d0e1955dcab240137b67a22f7cfcca86d01992"
 TRAINING_MANIFEST_ID = "sha256:9a3200ceac6369490e02078b2789bc2e57f9d40c3d2a9e5b21ac1fb10d94d0f7"
@@ -381,6 +382,10 @@ def load_and_validate_dataset(
     _require(recipe_id == RECIPE_ID, "recipe ID does not match the frozen experiment")
     _require(training_manifest_id == TRAINING_MANIFEST_ID, "training manifest ID does not match the frozen experiment")
     hash_manifest_id = verify_hash_manifest(root)
+    _require(
+        hash_manifest_id == DATASET_HASH_MANIFEST_ID,
+        "dataset hash manifest does not match the reviewed frozen dataset revision",
+    )
     authorization = read_json(root / "provenance" / "training-authorization.json")
     recipe = read_json(root / "provenance" / "training-recipe.json")
     manifest = read_json(root / "provenance" / "training-manifest.json")
