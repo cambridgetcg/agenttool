@@ -38,10 +38,14 @@
  *
  *  ## What this module does NOT do
  *
- *  No network. It parses, refuses, and signs; transport lives in
- *  `_x402-transport.ts` (Phase C, W2-7). No key custody beyond what the
- *  caller hands `localEvmSigner` — the private key is closed over and never
- *  leaves the returned signer.
+ *  The protocol functions do no network. They parse, refuse, and sign; the
+ *  paying transport lives in `_x402-transport.ts` (Phase C, W2-7) and is
+ *  installed only by the `x402` client option. `X402Client` (`at.x402`, at
+ *  the bottom of this file) is the one namespace that talks to the API — the
+ *  purchase door and the payment-status door — and it pays only through that
+ *  same opt-in transport. No key custody beyond what the caller hands
+ *  `localEvmSigner` — the private key is closed over and never leaves the
+ *  returned signer.
  *
  *  Server: api/src/services/economy/x402-client.ts · api/src/middleware/x402.ts
  *  Verifier: api/src/services/economy/x402-payments.ts (classifyExactEvmSignature)
@@ -52,6 +56,8 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex, concatBytes, hexToBytes, utf8ToBytes } from "@noble/hashes/utils.js";
 
+import { throwFromResponse, type HttpConfig } from "./_http.js";
+import { encodePathSegment } from "./_url.js";
 import {
   AgentToolError,
   type X402PaymentRequirement,
@@ -981,3 +987,159 @@ export function paymentIsStillReplayable(signed: SignedX402Payment, nowSeconds: 
   return nowSeconds < signed.validBefore;
 }
 
+
+// ─── at.x402 — the two doors of the agent rail ───────────────────────────
+
+/** Result of `at.x402.topUp(credits)` — the server's receipt, camel-cased,
+ *  plus the raw settlement headers the response carried. */
+export interface X402TopUpResult {
+  /** Credits the server applied in the same transaction that recorded settlement. */
+  creditsAdded: number;
+  /** Project balance after the top-up, when the server reported it. */
+  creditsTotal: number | null;
+  /** The server's LEDGER identity for this payment (folds network + asset);
+   *  what `at.x402.payment(id)` resolves. Not the client-side
+   *  `authorizationHash` of the six EIP-3009 fields. */
+  authorizationHash: string | null;
+  /** Atomic USDC moved for this top-up (credits × 1,000). */
+  amountAtomic: string;
+  /** The server's unit and finality sentences, verbatim. */
+  unit: string | null;
+  finality: string | null;
+  /** Project-scoped status path, when the server named one. */
+  paymentStatus: string | null;
+  /** Raw `PAYMENT-RESPONSE` settlement receipt header, when present. */
+  paymentResponse?: string;
+  /** Raw `Link` header (rel="payment-status"), when present. */
+  paymentStatusLink?: string;
+  /** Raw `X-Credits-Balance` header, when present. */
+  creditsBalance?: string;
+}
+
+/** One row of `GET /v1/x402/payments/:id` — the project-scoped
+ *  reconciliation of the payment/credit lifecycle only. It never replays or
+ *  promises an exactly-once result for the paid request itself. Field names
+ *  are the server's. */
+export interface X402PaymentStatus {
+  payment_id: string;
+  status: string;
+  failure_reason: string | null;
+  scheme: string;
+  network: string;
+  asset: string;
+  amount: string;
+  pay_to: string;
+  max_timeout_seconds: number;
+  requirement_extra: Record<string, unknown>;
+  resource: string;
+  resource_info: Record<string, unknown> | null;
+  credits_purchased: number | null;
+  authorization_evidence: Record<string, unknown>;
+  settlement_attempted_at: string | null;
+  transaction: string | null;
+  receipt: Record<string, unknown> | null;
+  credits_applied: number | null;
+  reconciles: string;
+  next_action: string;
+  retry_after_seconds: number | null;
+  environment_note: string | null;
+  pending_note: string | null;
+  updated_at: string | null;
+  [key: string]: unknown;
+}
+
+export interface X402TopUpOptions {
+  /** Opaque, already signed x402 V2 `PAYMENT-SIGNATURE` base64-JSON value,
+   *  for callers who sign outside the SDK. Sent as the header only; when
+   *  present the SDK's own payer (if configured) stays out of the way. */
+  paymentSignature?: string;
+  /** `Idempotency-Key` for the top-up. Defaults to a fresh UUID per call.
+   *  The paying transport carries the same key on its signed retry, so an
+   *  ambiguous response retried with this key returns the stored 200, never
+   *  a second settlement. */
+  idempotency_key?: string;
+}
+
+/** `at.x402` — the agent rail's two doors.
+ *
+ *  `topUp(credits)` knocks on `POST /v1/x402/top-up/:credits`. With no
+ *  `x402` option on the client the answer is the 402 challenge itself, as a
+ *  typed `AgentToolError` carrying `accepts` / `paymentRequired`, and nothing
+ *  is signed. With the option, the paying transport answers that 402 with
+ *  exactly one signed retry under the spend policy and this method returns
+ *  the receipt. `payment(id)` reads the ledger row behind a payment.
+ *
+ *  Neither method signs anything itself. */
+export class X402Client {
+  constructor(private readonly http: HttpConfig) {}
+
+  /** Buy `credits` project credits with USDC on Base (1 credit = 1,000
+   *  atomic = USD 0.001). Final: no refunds; unspent credits stay. */
+  async topUp(credits: number, options: X402TopUpOptions = {}): Promise<X402TopUpResult> {
+    if (!Number.isSafeInteger(credits) || credits < 1) {
+      throw new AgentToolError("x402 top-up: credits must be a positive integer.", {
+        code: "top_up_invalid_credits",
+        hint: "Ask for whole credits (1 credit = 1,000 atomic USDC = USD 0.001). The per-request cap is published at /public/plans; larger purchases are several requests, never a clamped one.",
+      });
+    }
+    const idempotencyKey = options.idempotency_key ?? globalThis.crypto.randomUUID();
+    // `credits` is a positive safe integer (checked above), so its decimal
+    // spelling is digits only — nothing to encode, nothing to traverse with.
+    const resp = await this.http.request(`${this.http.baseUrl}/v1/x402/top-up/${credits}`, {
+      method: "POST",
+      headers: {
+        ...this.http.headers,
+        "Idempotency-Key": idempotencyKey,
+        ...(options.paymentSignature !== undefined
+          ? { "PAYMENT-SIGNATURE": options.paymentSignature }
+          : {}),
+      },
+      signal: AbortSignal.timeout(this.http.timeout),
+    });
+    if (resp.status >= 400) {
+      // A bare 402 here is the challenge, intact (accepts, paymentRequired,
+      // resource). See _http.ts § errorFromResponse.
+      await throwFromResponse(resp, "x402 top-up", {
+        hint: "Without the x402 client option the SDK does not pay; the 402 carries the exact terms. Configure x402: { signer, policy } to pay it under a spend policy.",
+      });
+    }
+    const body = (await resp.json()) as Record<string, unknown>;
+    return {
+      creditsAdded: typeof body.credits_added === "number" ? body.credits_added : credits,
+      creditsTotal: typeof body.credits_total === "number" ? body.credits_total : null,
+      authorizationHash: typeof body.authorization_hash === "string" ? body.authorization_hash : null,
+      amountAtomic: typeof body.amount_atomic === "string" ? body.amount_atomic : (BigInt(credits) * X402_ATOMIC_PER_CREDIT).toString(),
+      unit: typeof body.unit === "string" ? body.unit : null,
+      finality: typeof body.finality === "string" ? body.finality : null,
+      paymentStatus: typeof body.payment_status === "string" ? body.payment_status : null,
+      paymentResponse:
+        resp.headers.get("PAYMENT-RESPONSE") ?? resp.headers.get("X-PAYMENT-RESPONSE") ?? undefined,
+      paymentStatusLink: resp.headers.get("Link") ?? undefined,
+      creditsBalance: resp.headers.get("X-Credits-Balance") ?? undefined,
+    };
+  }
+
+  /** Read the project-scoped ledger row for a payment. `paymentId` is the
+   *  server's identity — `X402TopUpResult.authorizationHash`, the id inside
+   *  a rel="payment-status" Link, or `X402PaymentEvent.paymentId`. */
+  async payment(paymentId: string): Promise<X402PaymentStatus> {
+    if (typeof paymentId !== "string" || paymentId.length === 0) {
+      throw new AgentToolError("x402 payment: a ledger payment id is required.", {
+        code: "x402_payment_id_invalid",
+        hint: "Use the authorizationHash from topUp(), the id in the rel=\"payment-status\" Link, or X402PaymentEvent.paymentId — not the client-side authorizationHash of the six EIP-3009 fields. Anything else answers 404 payment_not_found.",
+      });
+    }
+    const resp = await this.http.request(`${this.http.baseUrl}/v1/x402/payments/${encodePathSegment(paymentId)}`, {
+      method: "GET",
+      headers: this.http.headers,
+      signal: AbortSignal.timeout(this.http.timeout),
+    });
+    if (resp.status >= 400) {
+      await throwFromResponse(resp, "x402 payment", {
+        fallback: "payment not found",
+        hint: "Only payments this project signed for resolve here. A 404 means no ledger row carries that id.",
+      });
+    }
+    return (await resp.json()) as X402PaymentStatus;
+  }
+}

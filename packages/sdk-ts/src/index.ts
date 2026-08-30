@@ -155,11 +155,22 @@ export type {
   X402Network,
   X402PaymentPayload,
   X402PaymentRequired,
+  X402PaymentStatus,
   X402SelectedRequirement,
   X402SettleResponse,
   X402Signer,
   X402SpendPolicy,
+  X402TopUpOptions,
+  X402TopUpResult,
 } from "./x402.js";
+// at.x402 namespace + the opt-in paying transport's option/event shapes.
+export { X402Client } from "./x402.js";
+export type { X402ErrorCode } from "./errors.js";
+export type {
+  AgentToolX402Options,
+  X402PaymentCallback,
+  X402PaymentEvent,
+} from "./_x402-transport.js";
 export { register, DEFAULT_BASE_URL } from "./register.js";
 export { pathways } from "./pathways.js";
 export { bootstrapAgent } from "./bootstrap-agent.js";

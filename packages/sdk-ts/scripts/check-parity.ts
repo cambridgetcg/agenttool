@@ -203,6 +203,10 @@ const TARGETS: ParityTarget[] = [
     ["after_anchor", "before_anchor", "validate_baseline", "validate_subsequent"],
   ),
   target("window", "WindowClient"),
+  // at.x402 — the agent rail's purchase + payment-status doors. The module
+  // also carries the parse → refuse → sign functions (package-wide function
+  // parity covers those); the twins must land in the same release.
+  target("x402", "X402Client"),
 
   // Nested namespaces share a source file with their parent. Listing each
   // class prevents parent-property parity from hiding method drift within it.

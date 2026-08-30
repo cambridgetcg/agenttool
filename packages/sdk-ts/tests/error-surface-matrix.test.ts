@@ -680,6 +680,12 @@ const MATRIX: Record<string, Call> = {
     at.window.declare({ kind: "mood", text: "I am not sure." } as never),
   "window.ts:WindowClient.surface": (at) => at.window.surface("I am not sure."),
   "window.ts:WindowClient.show": (at) => at.window.show(),
+
+  // x402 — the agent rail's two doors. Without the opt-in `x402` option the
+  // client never signs, so a 4xx here (the 402 challenge included) is plain
+  // guidance through the one boundary.
+  "x402.ts:X402Client.topUp": (at) => at.x402.topUp(1),
+  "x402.ts:X402Client.payment": (at) => at.x402.payment("a".repeat(64)),
 };
 
 // ── the separately configured local data node ─────────────────────────────

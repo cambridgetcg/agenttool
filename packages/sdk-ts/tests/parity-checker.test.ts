@@ -80,6 +80,7 @@ describe("SDK parity checker", () => {
       "wake",
       "wake_continuity",
       "window",
+      "x402",
     ].sort());
 
     const wake = report.find((entry) => entry.module === "wake");
