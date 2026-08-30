@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import importlib.metadata
 import os
 import random
 import shutil
-import sys
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,7 +14,6 @@ from .core import (
     DATASET_ID,
     DISCLOSURE,
     EXPECTED_DATASET_ADMISSION_ID,
-    EXPECTED_RUNTIME_VERSIONS,
     GOVERNANCE_STATUS,
     RUN_RECEIPT_SCHEMA,
     DatasetBundle,
@@ -28,21 +25,13 @@ from .core import (
     inspect_model_export,
     load_and_validate_dataset,
     require_revision,
+    verify_expected_train_runtime,
     write_canonical_json,
 )
 
 
 def verify_runtime_versions() -> dict[str, str]:
-    _require(sys.version_info[:3] == (3, 12, 12), "Python 3.12.12 is required exactly")
-    observed: dict[str, str] = {}
-    for distribution, expected in EXPECTED_RUNTIME_VERSIONS.items():
-        try:
-            version = importlib.metadata.version(distribution)
-        except importlib.metadata.PackageNotFoundError as exc:
-            raise TrainingBundleError(f"required distribution is absent: {distribution}") from exc
-        _require(version == expected, f"{distribution} must be exactly {expected}; observed {version}")
-        observed[distribution] = version
-    return {"python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}", **observed}
+    return verify_expected_train_runtime()
 
 
 @contextmanager

@@ -28,6 +28,7 @@ from xenia_revocable_feedback_model.core import (
     domain_separated_id,
     ensure_empty_output,
     inspect_model_export,
+    legacy_fixed_training_plan,
     write_canonical_json,
 )
 from xenia_revocable_feedback_model.evaluate import (
@@ -36,6 +37,7 @@ from xenia_revocable_feedback_model.evaluate import (
     validate_inference_evaluation,
 )
 from xenia_revocable_feedback_model.release import (
+    LEGACY_EXPECTED_RUN_RUNTIME,
     _PINNED_PUBLIC_REGRESSION_CASES,
     _legacy_scorecard_from_current,
     _manifest_entries,
@@ -183,6 +185,33 @@ class ReleaseScorecardValidationTests(unittest.TestCase):
 
 
 class ReleaseArtifactBindingTests(unittest.TestCase):
+    def test_current_receipt_rejects_rehashed_runtime_drift_and_omission(self) -> None:
+        for name, mutate in (
+            (
+                "version drift",
+                lambda runtime: runtime.__setitem__("tokenizers", "0.22.3"),
+            ),
+            (
+                "transitive omission",
+                lambda runtime: runtime.pop("anyio"),
+            ),
+        ):
+            with self.subTest(name=name):
+                receipt = run_receipt()
+                runtime = receipt["runtime"]
+                mutate(runtime)
+                payload = {
+                    key: value
+                    for key, value in runtime.items()
+                    if key not in {"schema", "runtime_id"}
+                }
+                runtime["runtime_id"] = domain_separated_id(
+                    runtime["schema"],
+                    payload,
+                )
+                with self.assertRaises(TrainingBundleError):
+                    release_module.validate_run_receipt(receipt)
+
     def test_build_and_verify_do_not_invoke_the_non_binding_load_audit(self) -> None:
         with tempfile.TemporaryDirectory() as temporary, patch(
             "xenia_revocable_feedback_model.core.audit_publishable_model_load",
@@ -389,6 +418,8 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             receipt["schema"] = "agenttool-revocable-feedback-local-run/0.1"
             receipt.pop("model_export_id")
+            receipt["plan"] = legacy_fixed_training_plan()
+            receipt["runtime"] = dict(LEGACY_EXPECTED_RUN_RUNTIME)
             write_canonical_json(receipt_path, receipt)
             inference_path = release / "evaluation" / "inference-receipt.json"
             inference = json.loads(inference_path.read_text(encoding="utf-8"))

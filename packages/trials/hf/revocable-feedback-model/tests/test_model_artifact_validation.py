@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -85,6 +86,214 @@ def tearDownModule() -> None:
 
 
 class ModelArtifactValidationTests(unittest.TestCase):
+    def test_publishable_payload_rejects_representative_non_finite_f32(self) -> None:
+        non_finite = {
+            "positive infinity": bytes.fromhex("0000807f"),
+            "negative infinity": bytes.fromhex("000080ff"),
+            "quiet NaN": bytes.fromhex("0000c07f"),
+            "negative quiet NaN": bytes.fromhex("0000c0ff"),
+            "signaling NaN": bytes.fromhex("0100807f"),
+        }
+        for name, word in non_finite.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                model = Path(temporary) / "model"
+                write_minimal_model_export(model)
+                (model / "model.safetensors").write_bytes(
+                    complete_test_safetensors_bytes(first_f32=word)
+                )
+                inspect_model_export(model)
+                with self.assertRaisesRegex(
+                    TrainingBundleError,
+                    "publishable safetensors contain a non-finite F32 value",
+                ):
+                    inspect_publishable_model_export(model)
+
+    def test_publishable_payload_accepts_finite_f32_boundary_encodings(self) -> None:
+        finite = {
+            "positive zero": bytes.fromhex("00000000"),
+            "negative zero": bytes.fromhex("00000080"),
+            "smallest subnormal": bytes.fromhex("01000000"),
+            "positive max finite": bytes.fromhex("ffff7f7f"),
+            "negative max finite": bytes.fromhex("ffff7fff"),
+        }
+        for name, word in finite.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                model = Path(temporary) / "model"
+                write_minimal_model_export(model)
+                (model / "model.safetensors").write_bytes(
+                    complete_test_safetensors_bytes(first_f32=word)
+                )
+                inspect_publishable_model_export(model)
+
+    def test_non_finite_f32_is_rejected_at_first_middle_and_last_word(self) -> None:
+        for location in ("first", "middle", "last"):
+            with self.subTest(location=location), tempfile.TemporaryDirectory() as temporary:
+                model = Path(temporary) / "model"
+                write_minimal_model_export(model)
+                weights = model / "model.safetensors"
+                encoded = bytearray(complete_test_safetensors_bytes())
+                header_size = int.from_bytes(encoded[:8], "little")
+                payload_start = 8 + header_size
+                word_count = (len(encoded) - payload_start) // 4
+                word_index = {
+                    "first": 0,
+                    "middle": word_count // 2,
+                    "last": word_count - 1,
+                }[location]
+                start = payload_start + word_index * 4
+                encoded[start : start + 4] = bytes.fromhex("0000c07f")
+                weights.write_bytes(encoded)
+                with self.assertRaises(TrainingBundleError):
+                    inspect_publishable_model_export(model)
+
+    def test_finite_scan_handles_short_reads_without_changing_the_digest(self) -> None:
+        class ShortReadHandle:
+            def __init__(self, handle: object, widths: tuple[int, ...]) -> None:
+                self._handle = handle
+                self._widths = widths
+                self._index = 0
+
+            def read(self, requested: int = -1) -> bytes:
+                width = self._widths[self._index % len(self._widths)]
+                self._index += 1
+                return self._handle.read(min(requested, width))  # type: ignore[attr-defined]
+
+            def fileno(self) -> int:
+                return self._handle.fileno()  # type: ignore[attr-defined,no-any-return]
+
+            def close(self) -> None:
+                self._handle.close()  # type: ignore[attr-defined]
+
+        for widths in ((1, 3), (2, 2), (3, 1)):
+            with self.subTest(widths=widths), tempfile.TemporaryDirectory() as temporary:
+                path = Path(temporary) / "model.safetensors"
+                path.write_bytes(
+                    complete_test_safetensors_bytes(
+                        first_f32=bytes.fromhex("ffff7f7f")
+                    )
+                )
+                expected_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+                opened = core_module._open_safetensors_header(
+                    path,
+                    expected_size=path.stat().st_size,
+                )
+                opened.handle = ShortReadHandle(opened.handle, widths)
+                try:
+                    inspected = core_module._hash_open_safetensors(
+                        opened,
+                        require_finite_f32=True,
+                    )
+                finally:
+                    opened.handle.close()
+                self.assertEqual(inspected.sha256, expected_digest)
+
+                path.write_bytes(
+                    complete_test_safetensors_bytes(
+                        first_f32=bytes.fromhex("0000807f")
+                    )
+                )
+                opened = core_module._open_safetensors_header(
+                    path,
+                    expected_size=path.stat().st_size,
+                )
+                opened.handle = ShortReadHandle(opened.handle, widths)
+                try:
+                    with self.assertRaisesRegex(
+                        TrainingBundleError,
+                        "publishable safetensors contain a non-finite F32 value",
+                    ):
+                        core_module._hash_open_safetensors(
+                            opened,
+                            require_finite_f32=True,
+                        )
+                finally:
+                    opened.handle.close()
+
+    def test_finite_scan_uses_the_retained_descriptor_after_path_substitution(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / "model.safetensors"
+            path.write_bytes(
+                complete_test_safetensors_bytes(
+                    first_f32=bytes.fromhex("0000807f")
+                )
+            )
+            opened = core_module._open_safetensors_header(
+                path,
+                expected_size=path.stat().st_size,
+            )
+            replacement = root / "finite.safetensors"
+            replacement.write_bytes(complete_test_safetensors_bytes())
+            self.assertEqual(path.stat().st_size, replacement.stat().st_size)
+            os.replace(replacement, path)
+            try:
+                with self.assertRaisesRegex(
+                    TrainingBundleError,
+                    "publishable safetensors contain a non-finite F32 value",
+                ):
+                    core_module._hash_open_safetensors(
+                        opened,
+                        require_finite_f32=True,
+                    )
+            finally:
+                opened.handle.close()
+            self.assertTrue(opened.handle.closed)
+
+    def test_later_shard_non_finite_value_closes_every_retained_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            (model / "model.safetensors").unlink()
+            names = tuple(sorted(TEST_SERIALIZED_TENSORS))
+            midpoint = len(names) // 2
+            shard_names = (
+                "model-00001-of-00002.safetensors",
+                "model-00002-of-00002.safetensors",
+            )
+            weight_map: dict[str, str] = {}
+            total_size = 0
+            for index, (shard_name, tensor_names) in enumerate(
+                zip(shard_names, (names[:midpoint], names[midpoint:])),
+            ):
+                encoded = complete_test_safetensors_bytes(
+                    tensor_names=tensor_names,
+                    first_f32=(
+                        bytes.fromhex("0000807f")
+                        if index == 1
+                        else bytes.fromhex("00000000")
+                    ),
+                )
+                header_size = int.from_bytes(encoded[:8], "little")
+                total_size += len(encoded) - 8 - header_size
+                (model / shard_name).write_bytes(encoded)
+                weight_map.update({name: shard_name for name in tensor_names})
+            write_canonical_json(
+                model / "model.safetensors.index.json",
+                {"metadata": {"total_size": total_size}, "weight_map": weight_map},
+            )
+
+            opened: list[object] = []
+            original_open = core_module._open_safetensors_header
+
+            def track_open(path: Path, **kwargs: object) -> object:
+                result = original_open(path, **kwargs)  # type: ignore[arg-type]
+                opened.append(result)
+                return result
+
+            with patch.object(
+                core_module,
+                "_open_safetensors_header",
+                side_effect=track_open,
+            ):
+                with self.assertRaises(TrainingBundleError):
+                    inspect_publishable_model_export(model)
+            self.assertEqual(len(opened), 2)
+            self.assertTrue(
+                all(item.handle.closed for item in opened)  # type: ignore[attr-defined]
+            )
+
     def test_digest_covers_the_complete_sorted_allowlist(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             model = Path(temporary) / "model"
@@ -514,9 +723,13 @@ class ModelArtifactValidationTests(unittest.TestCase):
 
             def mutate_after_weight_validation(
                 opened: object,
+                **kwargs: object,
             ) -> object:
                 nonlocal changed
-                inspected = original_weights(opened)  # type: ignore[arg-type]
+                inspected = original_weights(  # type: ignore[arg-type]
+                    opened,
+                    **kwargs,
+                )
                 if not changed:
                     path = model / "model.safetensors"
                     data = path.read_bytes()

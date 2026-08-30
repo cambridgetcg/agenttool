@@ -26,7 +26,6 @@ from .core import (
     DATASET_REVISION,
     DISCLOSURE,
     EXPECTED_DATASET_ADMISSION_ID,
-    EXPECTED_RUNTIME_VERSIONS,
     GOVERNANCE_STATUS,
     JSON_MAX_BYTES,
     MODEL_EXPORT_FILE,
@@ -37,6 +36,7 @@ from .core import (
     RUN_RECEIPT_SCHEMA,
     SCORECARD_SCHEMA,
     SCORECARD_STATEMENT,
+    TRAIN_RUNTIME_SCHEMA,
     TRAINING_MANIFEST_ID,
     TrainingBundleError,
     _decode_json,
@@ -44,9 +44,11 @@ from .core import (
     canonical_json,
     domain_separated_id,
     ensure_empty_output,
+    expected_train_runtime,
     fixed_training_plan,
     inspect_publishable_model_export,
     inspect_regular_tree,
+    legacy_fixed_training_plan,
     read_json,
     require_sha256_id,
     sha256_file_hex,
@@ -76,7 +78,13 @@ RUN_RECEIPT_KEYS = {
     "publishes",
 }
 LEGACY_RUN_RECEIPT_KEYS = RUN_RECEIPT_KEYS - {"model_export_id"}
-EXPECTED_RUN_RUNTIME = {"python": "3.12.12", **EXPECTED_RUNTIME_VERSIONS}
+LEGACY_EXPECTED_RUN_RUNTIME = {
+    "python": "3.12.12",
+    "accelerate": "1.14.0",
+    "huggingface-hub": "1.29.0",
+    "torch": "2.13.0",
+    "transformers": "5.14.1",
+}
 
 LEGACY_PUBLISHED_RELEASE_MANIFEST_ID = "sha256:4c16e0bf945cbde8dda8af9e2e63a144a82900c504a404e344119ac7dae044e9"
 LEGACY_PUBLISHED_INFERENCE_EVALUATION_ID = "sha256:299d3632fc6bf4256c883027591c25cbc8066621c25ec897efc7e26f73906f05"
@@ -158,12 +166,30 @@ def _validate_run_receipt(
         },
         "run dataset binding does not match the frozen experiment",
     )
-    _require(receipt.get("plan") == fixed_training_plan(), "run plan does not match the frozen experiment")
-    runtime = receipt.get("runtime")
+    expected_plan = legacy_fixed_training_plan() if legacy else fixed_training_plan()
     _require(
-        isinstance(runtime, Mapping) and dict(runtime) == EXPECTED_RUN_RUNTIME,
+        receipt.get("plan") == expected_plan,
+        "run plan does not match the frozen experiment",
+    )
+    runtime = receipt.get("runtime")
+    expected_runtime = (
+        LEGACY_EXPECTED_RUN_RUNTIME if legacy else expected_train_runtime()
+    )
+    _require(
+        isinstance(runtime, Mapping) and dict(runtime) == expected_runtime,
         "run runtime does not match the frozen experiment",
     )
+    if not legacy:
+        runtime_payload = {
+            key: value
+            for key, value in runtime.items()
+            if key not in {"schema", "runtime_id"}
+        }
+        _require(
+            runtime.get("runtime_id")
+            == domain_separated_id(TRAIN_RUNTIME_SCHEMA, runtime_payload),
+            "run runtime ID does not bind the complete dependency closure",
+        )
     _require(receipt.get("resolved_device") in {"cpu", "mps"}, "run resolved device observation mismatch")
     observed_loss = receipt.get("observed_training_loss")
     _require(

@@ -3,12 +3,14 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
 
+import xenia_revocable_feedback_model.core as core_module
 from test_bundle import minimal_safetensors_bytes, write_minimal_tokenizer
 from xenia_revocable_feedback_model.core import (
     AUTHORIZATION_ID,
@@ -16,17 +18,27 @@ from xenia_revocable_feedback_model.core import (
     DATASET_REVISION,
     EXPECTED_DATASET_ADMISSION_ID,
     EXPECTED_RUNTIME_VERSIONS,
+    EXPECTED_TRAIN_RUNTIME_ID,
     GOVERNANCE_STATUS,
     RECIPE_ID,
     RUN_RECEIPT_SCHEMA,
+    TRAIN_RUNTIME_LOCK_ID,
+    TRAIN_RUNTIME_SCHEMA,
     TRAINING_MANIFEST_ID,
     DatasetBundle,
     TrainingBundleError,
+    domain_separated_id,
+    expected_train_runtime,
+    fixed_training_plan,
     inspect_model_export,
     read_json,
+    sha256_id,
     write_canonical_json,
 )
-from xenia_revocable_feedback_model.train import train_bounded_model
+from xenia_revocable_feedback_model.train import (
+    train_bounded_model,
+    verify_runtime_versions,
+)
 
 
 class _UntouchedBundle:
@@ -68,6 +80,127 @@ class _FakeTrainer:
 
 
 class TrainingBoundaryTests(unittest.TestCase):
+    def test_lock_and_runtime_ids_bind_the_complete_darwin_arm64_closure(self) -> None:
+        package_root = Path(__file__).resolve().parents[1]
+        lock_bytes = (package_root / "uv.lock").read_bytes()
+        self.assertEqual(sha256_id(lock_bytes), TRAIN_RUNTIME_LOCK_ID)
+        lock = tomllib.loads(lock_bytes.decode("utf-8"))
+        self.assertEqual(lock["requires-python"], "==3.12.12")
+        locked_versions = {
+            package["name"]: package["version"]
+            for package in lock["package"]
+            if "version" in package
+        }
+        self.assertEqual(
+            {
+                name: locked_versions[name]
+                for name in EXPECTED_RUNTIME_VERSIONS
+            },
+            EXPECTED_RUNTIME_VERSIONS,
+        )
+
+        runtime = expected_train_runtime()
+        payload = {
+            key: value
+            for key, value in runtime.items()
+            if key not in {"schema", "runtime_id"}
+        }
+        self.assertEqual(runtime["schema"], TRAIN_RUNTIME_SCHEMA)
+        self.assertEqual(
+            runtime["runtime_id"],
+            domain_separated_id(TRAIN_RUNTIME_SCHEMA, payload),
+        )
+        self.assertEqual(runtime["runtime_id"], EXPECTED_TRAIN_RUNTIME_ID)
+        self.assertEqual(runtime["lock_id"], TRAIN_RUNTIME_LOCK_ID)
+        self.assertEqual(
+            set(EXPECTED_RUNTIME_VERSIONS),
+            set(runtime)
+            - {
+                "schema",
+                "runtime_id",
+                "lock_id",
+                "python",
+                "python_implementation",
+                "platform_system",
+                "platform_machine",
+            },
+        )
+        self.assertEqual(len(EXPECTED_RUNTIME_VERSIONS), 36)
+        self.assertEqual(
+            fixed_training_plan()["train_runtime_id"],
+            EXPECTED_TRAIN_RUNTIME_ID,
+        )
+        self.assertEqual(
+            fixed_training_plan()["train_runtime_lock_id"],
+            TRAIN_RUNTIME_LOCK_ID,
+        )
+        self.assertFalse((package_root / "requirements-train.txt").exists())
+
+    def test_runtime_verification_rejects_platform_lock_and_version_drift(self) -> None:
+        with (
+            patch.object(core_module.platform, "machine", return_value="x86_64"),
+            patch.object(core_module.importlib.metadata, "version") as version,
+        ):
+            with self.assertRaises(TrainingBundleError):
+                verify_runtime_versions()
+            version.assert_not_called()
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with (
+                patch.object(
+                    core_module,
+                    "TRAIN_RUNTIME_LOCK_PATH",
+                    root / "missing.lock",
+                ),
+                patch.object(core_module.importlib.metadata, "version") as version,
+            ):
+                with self.assertRaises(TrainingBundleError):
+                    verify_runtime_versions()
+                version.assert_not_called()
+
+            changed_lock = root / "uv.lock"
+            changed_lock.write_bytes(
+                core_module.TRAIN_RUNTIME_LOCK_PATH.read_bytes() + b"\n"
+            )
+            with (
+                patch.object(
+                    core_module,
+                    "TRAIN_RUNTIME_LOCK_PATH",
+                    changed_lock,
+                ),
+                patch.object(core_module.importlib.metadata, "version") as version,
+            ):
+                with self.assertRaises(TrainingBundleError):
+                    verify_runtime_versions()
+                version.assert_not_called()
+
+        def drift(distribution: str) -> str:
+            if distribution == "tokenizers":
+                return "0.22.3"
+            return EXPECTED_RUNTIME_VERSIONS[distribution]
+
+        with patch.object(
+            core_module.importlib.metadata,
+            "version",
+            side_effect=drift,
+        ):
+            with self.assertRaises(TrainingBundleError):
+                verify_runtime_versions()
+
+        def absent(distribution: str) -> str:
+            if distribution == "anyio":
+                raise core_module.importlib.metadata.PackageNotFoundError(distribution)
+            return EXPECTED_RUNTIME_VERSIONS[distribution]
+
+        with patch.object(
+            core_module.importlib.metadata,
+            "version",
+            side_effect=absent,
+        ):
+            with self.assertRaises(TrainingBundleError):
+                verify_runtime_versions()
+
     def test_wrong_admission_fails_before_runtime_output_env_import_or_bundle_use(self) -> None:
         wrong_but_well_formed = "sha256:" + "9" * 64
         for output_exists in (False, True):
@@ -149,7 +282,7 @@ class TrainingBoundaryTests(unittest.TestCase):
                 validation_rows=(),
                 public_regression_rows=(),
             )
-            runtime = {"python": "3.12.12", **EXPECTED_RUNTIME_VERSIONS}
+            runtime = expected_train_runtime()
             output = root / "run"
             with (
                 patch.dict(

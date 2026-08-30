@@ -6,6 +6,7 @@ import io
 import json
 import math
 import os
+import platform
 import re
 import stat
 import sys
@@ -23,7 +24,12 @@ AUTHORIZATION_ID = "sha256:3780e5e2599eb8a1a479f874302fcdabdf1af27c4eeda5b02bfff
 RECIPE_ID = "sha256:713b678e80b6aa88f6036dc9b9d0e1955dcab240137b67a22f7cfcca86d01992"
 TRAINING_MANIFEST_ID = "sha256:9a3200ceac6369490e02078b2789bc2e57f9d40c3d2a9e5b21ac1fb10d94d0f7"
 EXPECTED_DATASET_ADMISSION_ID = "sha256:125ae2f84d7cdf58242bc039db67753b5825c4d61e35dd13eda7a58f299295f2"
-RUN_RECEIPT_SCHEMA = "agenttool-revocable-feedback-local-run/0.2"
+RUN_RECEIPT_SCHEMA = "agenttool-revocable-feedback-local-run/0.3"
+TRAIN_RUNTIME_SCHEMA = "agenttool-revocable-feedback-train-runtime/0.1"
+TRAIN_RUNTIME_LOCK_ID = (
+    "sha256:49294fd5164f9807e9a7112f86d5a9b7d45c3bedf38ceca50bfa623187dcae97"
+)
+TRAIN_RUNTIME_LOCK_PATH = Path(__file__).resolve().parents[2] / "uv.lock"
 GOVERNANCE_STATUS = "operator_authorized_non_garden_experiment"
 DISCLOSURE = (
     "This checkpoint was produced by an operator-authorized, bounded local "
@@ -37,9 +43,47 @@ DISCLOSURE = (
 
 EXPECTED_RUNTIME_VERSIONS = {
     "accelerate": "1.14.0",
+    "annotated-doc": "0.0.5",
+    "anyio": "4.14.2",
+    "certifi": "2026.7.22",
+    "click": "8.5.0",
+    "filelock": "3.32.4",
+    "fsspec": "2026.7.0",
+    "h11": "0.16.0",
+    "hf-xet": "1.6.0",
+    "httpcore": "1.0.9",
+    "httpx": "0.28.1",
     "huggingface-hub": "1.29.0",
+    "idna": "3.19",
+    "jinja2": "3.1.6",
+    "markdown-it-py": "4.2.0",
+    "markupsafe": "3.0.3",
+    "mdurl": "0.1.2",
+    "mpmath": "1.3.0",
+    "networkx": "3.6.1",
+    "numpy": "2.5.2",
+    "packaging": "26.3",
+    "psutil": "7.2.2",
+    "pygments": "2.21.0",
+    "pyyaml": "6.0.3",
+    "regex": "2026.8.31",
+    "rich": "15.0.0",
+    "safetensors": "0.8.0",
+    "setuptools": "84.0.0",
+    "shellingham": "1.5.4",
+    "sympy": "1.14.0",
+    "tokenizers": "0.22.2",
     "torch": "2.13.0",
+    "tqdm": "4.70.0",
     "transformers": "5.14.1",
+    "typer": "0.27.2",
+    "typing-extensions": "4.16.0",
+}
+EXPECTED_RUNTIME_PLATFORM = {
+    "python": "3.12.12",
+    "python_implementation": "CPython",
+    "platform_system": "Darwin",
+    "platform_machine": "arm64",
 }
 DECISIONS = ("admit", "hold", "query", "refuse", "stop", "repair")
 METRICS = (
@@ -148,6 +192,10 @@ MODEL_EXPORT_MAX_BYTES = 2 * 1024 * 1024 * 1024
 # The immutable reviewed export uses one shard, a 30,368-byte header, and 272 tensors.
 PUBLISHABLE_MODEL_MAX_SHARDS = 32
 PUBLISHABLE_SAFETENSORS_HEADERS_MAX_BYTES = 8 * 1024 * 1024
+_FINITE_F32_WORDS = re.compile(
+    rb"(?:(?!..[\x80-\xff][\x7f\xff]).{4})*+",
+    re.DOTALL,
+)
 JSON_MAX_BYTES = 2 * 1024 * 1024
 DATASET_FILE_MAX_BYTES = 1 * 1024 * 1024
 DATASET_TOTAL_MAX_BYTES = 8 * 1024 * 1024
@@ -241,6 +289,28 @@ def sha256_id(data: bytes | str) -> str:
 
 def domain_separated_id(domain: str, value: Any) -> str:
     return sha256_id(f"{domain}\0{canonical_json(value)}")
+
+
+def _expected_train_runtime_payload() -> dict[str, str]:
+    return {
+        "lock_id": TRAIN_RUNTIME_LOCK_ID,
+        **EXPECTED_RUNTIME_PLATFORM,
+        **EXPECTED_RUNTIME_VERSIONS,
+    }
+
+
+EXPECTED_TRAIN_RUNTIME_ID = domain_separated_id(
+    TRAIN_RUNTIME_SCHEMA,
+    _expected_train_runtime_payload(),
+)
+
+
+def expected_train_runtime() -> dict[str, str]:
+    return {
+        "schema": TRAIN_RUNTIME_SCHEMA,
+        "runtime_id": EXPECTED_TRAIN_RUNTIME_ID,
+        **_expected_train_runtime_payload(),
+    }
 
 
 def _require(condition: bool, message: str) -> None:
@@ -453,6 +523,44 @@ def sha256_file_hex(
     except OSError as exc:
         raise TrainingBundleError("unable to hash regular file") from exc
     return size, digest.hexdigest()
+
+
+def verify_expected_train_runtime() -> dict[str, str]:
+    expected_platform = {
+        "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        "python_implementation": platform.python_implementation(),
+        "platform_system": platform.system(),
+        "platform_machine": platform.machine(),
+    }
+    _require(
+        expected_platform == EXPECTED_RUNTIME_PLATFORM,
+        "the reviewed runtime requires exact CPython 3.12.12 on Darwin arm64",
+    )
+    try:
+        _, lock_digest = sha256_file_hex(
+            TRAIN_RUNTIME_LOCK_PATH,
+            max_bytes=JSON_MAX_BYTES,
+        )
+    except TrainingBundleError as exc:
+        raise TrainingBundleError(
+            "the reviewed training uv.lock is missing, unreadable, or oversized"
+        ) from exc
+    _require(
+        f"sha256:{lock_digest}" == TRAIN_RUNTIME_LOCK_ID,
+        "training uv.lock does not match the reviewed dependency closure",
+    )
+    for distribution, expected in EXPECTED_RUNTIME_VERSIONS.items():
+        try:
+            observed = importlib.metadata.version(distribution)
+        except importlib.metadata.PackageNotFoundError as exc:
+            raise TrainingBundleError(
+                f"required distribution is absent: {distribution}"
+            ) from exc
+        _require(
+            observed == expected,
+            f"{distribution} must be exactly {expected}; observed {observed}",
+        )
+    return expected_train_runtime()
 
 
 def _model_json_non_field_paths(name: str) -> frozenset[tuple[str, ...]]:
@@ -727,9 +835,21 @@ def _open_safetensors_header(
 
 def _hash_open_safetensors(
     opened: OpenSafetensorsInspection,
+    *,
+    require_finite_f32: bool = False,
 ) -> SafetensorsInspection:
+    if require_finite_f32:
+        _require(
+            opened.header.payload_size % 4 == 0
+            and all(
+                dtype == "F32"
+                for dtype, _shape in opened.header.tensors.values()
+            ),
+            "publishable finite-value validation requires an aligned F32 payload",
+        )
     digest = opened.seeded_digest.copy()
     bytes_read = 8 + opened.header_size
+    finite_tail = b""
     try:
         while True:
             chunk = opened.handle.read(1024 * 1024)
@@ -741,6 +861,19 @@ def _hash_open_safetensors(
                 "safetensors file grew during validation",
             )
             digest.update(chunk)
+            if require_finite_f32:
+                finite_words = finite_tail + chunk
+                aligned_size = len(finite_words) - len(finite_words) % 4
+                _require(
+                    _FINITE_F32_WORDS.fullmatch(
+                        finite_words,
+                        0,
+                        aligned_size,
+                    )
+                    is not None,
+                    "publishable safetensors contain a non-finite F32 value",
+                )
+                finite_tail = finite_words[aligned_size:]
         after = os.fstat(opened.handle.fileno())
     except TrainingBundleError:
         raise
@@ -749,6 +882,10 @@ def _hash_open_safetensors(
     _require(
         bytes_read == opened.header.file_size,
         "safetensors file changed during validation",
+    )
+    _require(
+        not finite_tail,
+        "publishable finite-value validation requires an aligned F32 payload",
     )
     _require(
         _regular_version_fingerprint(opened.before)
@@ -1112,7 +1249,8 @@ def _inspect_model_export(
             )
             for path in weight_paths:
                 inspected_weights = _hash_open_safetensors(
-                    opened_weights[path.name]
+                    opened_weights[path.name],
+                    require_finite_f32=True,
                 )
                 safetensors[path.name] = inspected_weights
                 captured_files[path.name] = (
@@ -1404,21 +1542,7 @@ class OfflineModelLoadAudit:
 
 
 def _verify_exact_publishable_runtime() -> None:
-    _require(
-        sys.version_info[:3] == (3, 12, 12),
-        "publishable model verification requires Python 3.12.12 exactly",
-    )
-    for distribution, expected in EXPECTED_RUNTIME_VERSIONS.items():
-        try:
-            observed = importlib.metadata.version(distribution)
-        except importlib.metadata.PackageNotFoundError as exc:
-            raise TrainingBundleError(
-                f"publishable model verification requires {distribution}=={expected}"
-            ) from exc
-        _require(
-            observed == expected,
-            f"publishable model verification requires {distribution}=={expected}; observed {observed}",
-        )
+    verify_expected_train_runtime()
 
 
 def audit_publishable_model_load(
@@ -1695,7 +1819,8 @@ def _validate_content_id(document: Mapping[str, Any], schema_key: str, id_key: s
     _require(identifier == domain_separated_id(domain, payload), f"{id_key} does not bind the canonical document body")
 
 
-def fixed_training_plan() -> dict[str, Any]:
+def legacy_fixed_training_plan() -> dict[str, Any]:
+    """Return the exact recipe shape serialized by the immutable public run."""
     return {
         "governance_status": GOVERNANCE_STATUS,
         "base_model_id": BASE_MODEL_ID,
@@ -1732,6 +1857,14 @@ def fixed_training_plan() -> dict[str, Any]:
         "reporting": False,
         "push_to_hub": False,
         "excluded_methods": ["dpo", "preference_optimization", "reward_modeling"],
+    }
+
+
+def fixed_training_plan() -> dict[str, Any]:
+    return {
+        **legacy_fixed_training_plan(),
+        "train_runtime_lock_id": TRAIN_RUNTIME_LOCK_ID,
+        "train_runtime_id": EXPECTED_TRAIN_RUNTIME_ID,
     }
 
 

@@ -33,8 +33,13 @@ The encoded status is
 
 - base: `HuggingFaceTB/SmolLM2-135M-Instruct` at
   `12fd25f77366fa6b3b4b768ec3050bf629380bac`;
-- exact runtime: Python 3.12.12, Transformers 5.14.1, Accelerate 1.14.0,
-  Torch 2.13.0 and huggingface-hub 1.29.0;
+- exact supported training/evaluation substrate: CPython 3.12.12 on Darwin
+  arm64;
+- authoritative dependency resolution: checked-in `uv.lock` at
+  `sha256:49294fd5164f9807e9a7112f86d5a9b7d45c3bedf38ceca50bfa623187dcae97`;
+  the current receipt enumerates and verifies all 36 active `train`-extra
+  distributions and binds them as runtime ID
+  `sha256:27a797633e5e911a432f43da20a3163829f6d980b0fb5623669251c557315d90`;
 - `boundary_sft/train` only: 18 synthetic rows;
 - dataset authorization:
   `sha256:3780e5e2599eb8a1a479f874302fcdabdf1af27c4eeda5b02bfff8056dc92f13`;
@@ -66,9 +71,16 @@ Install the exact training and non-binding load-audit test stack, then run the
 tests:
 
 ```sh
-uv sync --python 3.12.12 --extra train --extra test
-uv run pytest -q
+uv sync --locked --python 3.12.12 --extra train --extra test
+uv run --locked --extra train --extra test pytest -q
 ```
+
+`uv.lock` is the sole dependency-resolution source; there is no parallel
+hand-maintained requirements file. Runtime validation also hashes those exact
+lock bytes and checks CPython, platform, machine, and every active distribution
+before training, evaluation, or the non-binding model-load audit. This closes
+the reviewed local substrate; it does not claim that the lock proves artifact
+origin or model identity.
 
 Validate a local copy of the eventual immutable dataset:
 
@@ -93,10 +105,11 @@ binds the complete sorted allowlisted model-export closure (weights and every
 model/tokenizer artifact) by a domain-separated content ID. Evaluation checks
 that closure before and after generation; build and verification independently
 require the same ID for the bytes being released. The current closed run
-receipt schema is `agenttool-revocable-feedback-local-run/0.2`; training emits
+receipt schema is `agenttool-revocable-feedback-local-run/0.3`; training emits
 its independently inspected `model_export_id` only after both model and
-tokenizer saving complete. Release build and verification independently match
-that run binding to the model-export bytes as well.
+tokenizer saving complete. Its plan and runtime also bind the exact lock and
+complete active dependency closure. Release build and verification
+independently match those bindings and the model-export bytes.
 
 New model evaluations emit
 `agenttool-revocable-feedback-model-scorecard/0.2` nested in
@@ -146,6 +159,12 @@ reconstructs it as the embedding alias. The publishable path permits at most
 32 weight shards and 8 MiB of safetensors header bytes across them, with no
 more than the reviewed 272 serialized tensor descriptors parsed before the
 exact union check.
+
+After that exact union is established, the same retained descriptors stream
+every payload byte into both the file digest and an aligned F32 finite-value
+scan. IEEE NaN and positive or negative infinity are rejected; finite boundary
+values, zeros, and subnormals remain valid. The generic run-artifact inspector
+does not apply this publication-only semantic check.
 
 Each bounded JSON file is validated and hashed from one retained regular-file
 snapshot. Each safetensors header is structurally validated before payload I/O,

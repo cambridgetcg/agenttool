@@ -80,7 +80,10 @@ payload hashing, the publishable path permits at most 32 weight shards, 8 MiB
 of safetensors headers across them, and the reviewed 272 serialized tensor
 descriptors. Each parsed header seeds its file digest and is then discarded;
 only the bounded descriptor map, digest state, and regular-file descriptor are
-retained while the exact union is checked.
+retained while the exact union is checked. Once that union is established,
+each retained descriptor supplies the same bytes to the digest and an aligned
+F32 scan; IEEE NaN and positive or negative infinity fail publication
+verification.
 
 Before any release content hashing, verification also requires canonical
 unique manifest paths, exact tree membership and sizes, independent
@@ -97,6 +100,19 @@ The exact static config, complete same-descriptor tensor inventory, and content
 digest are authoritative. These checks do not establish origin, training
 quality, general safety, identity, consciousness, consent, understanding,
 authority, or universal loadability.
+
+Current run receipts use
+`agenttool-revocable-feedback-local-run/0.3`. Their supported training,
+evaluation, and non-binding load-audit substrate is CPython 3.12.12 on Darwin
+arm64. The authoritative `uv.lock` content ID is
+`sha256:49294fd5164f9807e9a7112f86d5a9b7d45c3bedf38ceca50bfa623187dcae97`;
+the receipt enumerates all 36 marker-selected `train`-extra distributions and
+binds the platform, lock, Python patch, and versions as runtime ID
+`sha256:27a797633e5e911a432f43da20a3163829f6d980b0fb5623669251c557315d90`.
+The exact immutable public `/0.1` receipt retains its historical four-package
+runtime map only behind the published release/inference/model triple. These
+runtime records establish reproducible dependency facts, not identity,
+consciousness, consent, understanding, origin, or authority.
 
 The checked-in Space passed desktop/mobile interaction, storage, console, and
 request-inventory checks. Hugging Face nevertheless injects a 101-byte
