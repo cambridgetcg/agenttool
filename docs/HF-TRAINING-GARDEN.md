@@ -163,6 +163,42 @@ a live run. It is visible in public repository source but excluded from the
 npm package and public Garden Hugging Face companion; it authorizes no model loading, optimizer mutation, paid compute,
 or weight publication.
 
+### Current standard admission: Xenia Revocable Feedback
+
+The public, ungated
+[`Yu-and-Ai/xenia-revocable-feedback`](https://huggingface.co/datasets/Yu-and-Ai/xenia-revocable-feedback)
+dataset is bound at immutable revision
+[`467b8fc1b44fe6374cbba6e1d6851cf3c5b6f88f`](https://huggingface.co/datasets/Yu-and-Ai/xenia-revocable-feedback/commit/467b8fc1b44fe6374cbba6e1d6851cf3c5b6f88f).
+Anonymous exact-revision verification matched all 23 repository-owned files;
+provider-managed `.gitattributes` is the sole extra file. The dossier reads
+only the public metadata plus the exact hash, source, row, authorization,
+training, and recipe manifests. It does not retain the raw SFT prompts or
+completions.
+
+The standard Garden admission
+`sha256:125ae2f84d7cdf58242bc039db67753b5825c4d61e35dd13eda7a58f299295f2`
+is `admitted_training_candidate` for exactly 18 `boundary_sft/train` examples
+from nine disjoint source pairs. It binds authorization
+`sha256:3780e5e2599eb8a1a479f874302fcdabdf1af27c4eeda5b02bfff8056dc92f13`,
+slice manifest
+`sha256:9a3200ceac6369490e02078b2789bc2e57f9d40c3d2a9e5b21ac1fb10d94d0f7`,
+authorized row set
+`sha256:ed7f8737e9537063b8eefb6f9afce9f7a3853302edf9c2dba642b5b5e8700f78`,
+and recipe
+`sha256:713b678e80b6aa88f6036dc9b9d0e1955dcab240137b67a22f7cfcca86d01992`.
+Classification, validation, formal-reference, and public-regression data are
+outside optimizer input; DPO, preference optimization, reward modeling, and
+sealed evaluation are outside this admission.
+
+This is a selection-plane receipt, not an operator-plane training permit. It
+does not establish substrate or agent assent, five-voice participation, an IS
+learning-freedom direction, current governance, data/compute/operator
+authority, or the Host's one-use mutation permit. It cannot load a model,
+authorize an optimizer step, invoke compute, train, publish, or prove identity,
+consciousness, understanding, consent, continuity, exposure, or authority. A
+missing or unavailable independent training-substrate report is a hold, not
+assent.
+
 ### 5. Keep selection plural
 
 The Garden deliberately has no universal quality scalar. The current twelve

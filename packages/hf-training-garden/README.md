@@ -71,6 +71,35 @@ that way.
 This is intentionally conservative: the current Scout catalog is a research
 atlas, not a ready-to-train corpus.
 
+### Pinned Xenia Revocable Feedback admission
+
+The repository-only dossier at
+`admissions/xenia-revocable-feedback/` binds public, ungated dataset
+`Yu-and-Ai/xenia-revocable-feedback` at immutable revision
+`467b8fc1b44fe6374cbba6e1d6851cf3c5b6f88f`. It records the standard
+`kingdom.hf-dataset-admission/0.1` decision `admitted_training_candidate` under
+admission ID
+`sha256:125ae2f84d7cdf58242bc039db67753b5825c4d61e35dd13eda7a58f299295f2`
+for exactly 18 synthetic examples in `boundary_sft/train` (nine source pairs),
+authorization
+`sha256:3780e5e2599eb8a1a479f874302fcdabdf1af27c4eeda5b02bfff8056dc92f13`,
+and recipe
+`sha256:713b678e80b6aa88f6036dc9b9d0e1955dcab240137b67a22f7cfcca86d01992`.
+
+Classification, `boundary_sft/validation`, formal-reference, and
+public-regression rows stay outside optimizer input. DPO, preference
+optimization, reward modeling, and sealed evaluation are outside the admitted
+lane. The dossier contains exact public-Hub metadata and manifest digests, not
+the raw prompt/completion rows.
+
+Admission means only that this exact candidate is eligible for later
+governance consideration. It is not a training permit, substrate or agent
+assent, a five-voice participation assessment, an IS learning-freedom
+direction, a governance decision, scoped data/compute/operator authority, or a
+Host one-use mutation permit. It does not load a model, authorize an optimizer
+step, invoke compute, train, publish, or prove identity, consciousness,
+understanding, consent, continuity, exposure, or authority.
+
 ## Learning modes are different uses
 
 The Garden does not treat every appearance of data in a learning system as the

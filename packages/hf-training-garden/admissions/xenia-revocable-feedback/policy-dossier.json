@@ -1,0 +1,102 @@
+{
+  "_format": "kingdom.hf-dataset-policy-dossier/0.1",
+  "binding_ref": "sha256:089f91b8dc5e518d53a5c817f0a602610571e36b1b73a8b9e6eb0a7ffc125ed1",
+  "garden_scope_ref": "sha256:ced0fd7a32e87de8e50915305997c3362abe8b77ea4c796ee8e221078535eab4",
+  "subject": {
+    "dataset_id": "Yu-and-Ai/xenia-revocable-feedback",
+    "lead_key": "xenia_revocable_feedback",
+    "hub_revision": "467b8fc1b44fe6374cbba6e1d6851cf3c5b6f88f",
+    "binding_definition_ref": "sha256:1191f08d4128f023347b171f9672decca2edb28fae5aa1a7e1796f76c65ee19c",
+    "binding_snapshot_ref": "sha256:168e965bbfde8dd6c41872472e1f289f1559b935cc48440743e2a1d509296311"
+  },
+  "rights": {
+    "baseline": "xenia.rights/0.1",
+    "baseline_sha256": "sha256:b72a6da110c582e5683bf0fabde5017db93d2199398014c8421a82f5318da313",
+    "selected_repository_profile_sha256": "sha256:a78fa7fd66177c43349da819cb24ff81538dee9cb188e5f8b92c834ac6171b31",
+    "rights_are_permissions": false
+  },
+  "evidence": {
+    "hub_hash_manifest_sha256": "sha256:16afa2d077498c8857a53c5c15936a4244b96fcf4157d496257fb87a47207532",
+    "source_manifest_sha256": "sha256:f6b8970c37562c83956ef3cd6aee718a996595ba8892220c3a3f4d3c215b26d8",
+    "row_manifest_sha256": "sha256:4b3cb3d314e8fb0b93677c7e34ded3a2c7292f7fda17030c6686f364480c249b",
+    "training_authorization_manifest_sha256": "sha256:e08ff4df02b329e39153e0adb80bb8c1ee58c5e77afdf822c44383deda58e5eb",
+    "training_example_manifest_sha256": "sha256:267caa432010ff9fc96b7b444a5558a8be5800d6eb5845e22ebff147b36e38e2",
+    "training_recipe_manifest_sha256": "sha256:882e30eb8e5dbca9f15fb0d8a27421fde7f3786609d17bffc9c6431b0490f3de"
+  },
+  "scope": {
+    "authorization_id": "sha256:3780e5e2599eb8a1a479f874302fcdabdf1af27c4eeda5b02bfff8056dc92f13",
+    "candidate_slice_ref": "sha256:9a3200ceac6369490e02078b2789bc2e57f9d40c3d2a9e5b21ac1fb10d94d0f7",
+    "transform_recipe_ref": "sha256:713b678e80b6aa88f6036dc9b9d0e1955dcab240137b67a22f7cfcca86d01992",
+    "output_jsonl_ref": "sha256:8b4a564e2e8e00eb822c1b07bfaafeccba17b74df85232d48e0652dbd303c9eb",
+    "output_row_set_ref": "sha256:ed7f8737e9537063b8eefb6f9afce9f7a3853302edf9c2dba642b5b5e8700f78",
+    "training_format": "agenttool-revocable-feedback-boundary-sft/0.1",
+    "output_config": "boundary_sft",
+    "output_split": "train",
+    "output_row_count": 18,
+    "source_pair_count": 9,
+    "role": "training_candidate",
+    "training_mode": "supervised_fine_tuning",
+    "excluded_lanes": [
+      "dpo",
+      "preference_optimization",
+      "reward_modeling",
+      "sealed_evaluation"
+    ]
+  },
+  "provenance": {
+    "origin": "human_directed_agent_authored_synthetic",
+    "license": "apache-2.0",
+    "copied_external_rows": false,
+    "copied_private_rows": false,
+    "contains_personal_data": false,
+    "contains_raw_session_trace": false,
+    "source_case_rows_training_authorized": false,
+    "training_derivative_authorized": true,
+    "public_regression_in_training": false
+  },
+  "assessment": {
+    "rights": "caller_reported_reviewed_for_declared_use",
+    "privacy": "caller_reported_reviewed_for_declared_use",
+    "consent": "not_applicable_reported",
+    "withdrawal": "caller_reported_process_defined",
+    "secret_scan": "caller_reported_bounded_scan_passed",
+    "deduplication": "caller_reported_recipe_applied",
+    "benchmark_overlap": "caller_reported_clear_of_sealed_evaluation",
+    "fitness": "caller_reported_fit_for_declared_role",
+    "synthetic_provenance": "caller_reported_source_recipe_recorded"
+  },
+  "withdrawal": {
+    "process_state": "caller_reported_process_defined",
+    "future_distribution": "deprecate_and_stop_future_authorized_use",
+    "prior_copies": "not_recalled_or_erased_by_admission",
+    "learned_influence": "may_persist_after_future_use_stops",
+    "new_training_use": "requires_fresh_current_authorization_and_governance",
+    "repair": "append_correction_and_contain_future_use"
+  },
+  "boundaries": {
+    "manifest_and_provenance_only": true,
+    "raw_dataset_rows_consumed": false,
+    "raw_training_examples_consumed": false,
+    "raw_prompts_or_completions_retained": false,
+    "raw_agent_traces_retained": false,
+    "personal_data_retained": false,
+    "participant_identifiers_retained": false,
+    "credentials_retained": false,
+    "free_form_prose_retained": false,
+    "local_paths_retained": false,
+    "urls_retained": false,
+    "timestamps_retained": false,
+    "grants_live_training_permission": false,
+    "permits_optimizer_step": false,
+    "loads_model": false,
+    "trains_model": false,
+    "proves_model_exposure": false,
+    "proves_identity": false,
+    "proves_consciousness": false,
+    "proves_consent": false,
+    "grants_authority": false,
+    "publishes": false,
+    "writes_hub": false
+  },
+  "policy_id": "sha256:37654981c31989a22d02efe8cabe8bfc1e04ef2afcb0cbf3c23769bf665c8a53"
+}

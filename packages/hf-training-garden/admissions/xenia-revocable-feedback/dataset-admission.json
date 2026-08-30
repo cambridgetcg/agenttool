@@ -1,0 +1,131 @@
+{
+  "_format": "kingdom.hf-dataset-admission/0.1",
+  "garden_scope_ref": "sha256:ced0fd7a32e87de8e50915305997c3362abe8b77ea4c796ee8e221078535eab4",
+  "policy_ref": "sha256:37654981c31989a22d02efe8cabe8bfc1e04ef2afcb0cbf3c23769bf665c8a53",
+  "entries": [
+    {
+      "profile": "kingdom.hf-dataset-admission-entry/0.1",
+      "binding": {
+        "schema": "agenttool-hf-research-binding/v0.1",
+        "lead_key": "xenia_revocable_feedback",
+        "artifact": {
+          "kind": "dataset",
+          "id": "Yu-and-Ai/xenia-revocable-feedback",
+          "revision": "467b8fc1b44fe6374cbba6e1d6851cf3c5b6f88f"
+        },
+        "definition_sha256": "1191f08d4128f023347b171f9672decca2edb28fae5aa1a7e1796f76c65ee19c",
+        "snapshot_sha256": "168e965bbfde8dd6c41872472e1f289f1559b935cc48440743e2a1d509296311",
+        "observation": {
+          "transport": "public_hub_api",
+          "repository_association": "provider_response",
+          "provenance_grade": "provider_observed_commit_metadata"
+        },
+        "matched_declared": {
+          "basis": "publisher_assertion",
+          "license": "apache-2.0",
+          "gated": false,
+          "private": false
+        },
+        "boundary": {
+          "publisher_metadata": "matched_unverified_assertion",
+          "research_annotation": "researcher_inference",
+          "legal_clearance": "not_assessed",
+          "gate_acceptance": "not_assessed",
+          "raw_rows_read": false,
+          "repository_files_downloaded": false,
+          "model_code_executed": false,
+          "remote_compute_invoked": false,
+          "hub_write_performed": false
+        }
+      },
+      "role": "training_candidate",
+      "candidate_slice_ref": "sha256:9a3200ceac6369490e02078b2789bc2e57f9d40c3d2a9e5b21ac1fb10d94d0f7",
+      "transform_recipe_ref": "sha256:713b678e80b6aa88f6036dc9b9d0e1955dcab240137b67a22f7cfcca86d01992",
+      "assessment": {
+        "rights": "caller_reported_reviewed_for_declared_use",
+        "privacy": "caller_reported_reviewed_for_declared_use",
+        "consent": "not_applicable_reported",
+        "withdrawal": "caller_reported_process_defined",
+        "secret_scan": "caller_reported_bounded_scan_passed",
+        "deduplication": "caller_reported_recipe_applied",
+        "benchmark_overlap": "caller_reported_clear_of_sealed_evaluation",
+        "fitness": "caller_reported_fit_for_declared_role",
+        "synthetic_provenance": "caller_reported_source_recipe_recorded"
+      },
+      "posture": "consider",
+      "decision": {
+        "state": "admitted_training_candidate",
+        "reason_codes": [
+          "candidate_eligible_for_declared_role"
+        ]
+      },
+      "entry_id": "sha256:26f3c5e33b00b1189fc1e67aae9a29e6bb311c2cdd5b0f34e678f7a96c44b812"
+    }
+  ],
+  "process": [
+    {
+      "order": 1,
+      "layer": "bedrock",
+      "stage": "rights_and_authority",
+      "question": "Are license, privacy, consent, gating, withdrawal, and use authority separately assessed?"
+    },
+    {
+      "order": 2,
+      "layer": "soil",
+      "stage": "immutable_provenance",
+      "question": "Is the Hub subject bound to one exact commit plus a minimized observation digest?"
+    },
+    {
+      "order": 3,
+      "layer": "roots",
+      "stage": "transform_recipe",
+      "question": "Are acquisition, parsing, filtering, secret scanning, and transform dependencies content-addressed?"
+    },
+    {
+      "order": 4,
+      "layer": "mycelium",
+      "stage": "selection_and_separation",
+      "question": "Are deduplication, decontamination, split leakage, mixture, and exclusion reasons explicit?"
+    },
+    {
+      "order": 5,
+      "layer": "habitat",
+      "stage": "phase_learning_and_wake",
+      "question": "Can each learning phase orient from digest-only WAKE, receive an exact IS action surface, and keep visible predecessor checkpoints without selecting one canonical head?"
+    },
+    {
+      "order": 6,
+      "layer": "canopy",
+      "stage": "reviewed_release_and_repair",
+      "question": "Does the release keep cards, hashes, limitations, withdrawal, and repair visible without claiming clearance or truth?"
+    }
+  ],
+  "boundaries": {
+    "selection_scope": "caller_supplied_metadata_and_digest_references_only",
+    "publisher_metadata": "unverified_assertion",
+    "assessments": "caller_reported_not_proven",
+    "raw_dataset_rows_received": false,
+    "raw_agent_traces_received": false,
+    "raw_chats_received": false,
+    "rejected_content_retained": false,
+    "downloads": false,
+    "gate_acceptance": false,
+    "credential_access": false,
+    "network": false,
+    "filesystem": false,
+    "provider_compute": false,
+    "paid_compute": false,
+    "trains_model": false,
+    "executes_artifacts": false,
+    "publishes": false,
+    "mutates_garden": false,
+    "grants_legal_clearance": false,
+    "proves_consent": false,
+    "proves_privacy": false,
+    "proves_safety": false,
+    "proves_quality": false,
+    "changes_karma": false,
+    "changes_rank_or_access": false
+  },
+  "admission_id": "sha256:125ae2f84d7cdf58242bc039db67753b5825c4d61e35dd13eda7a58f299295f2"
+}
