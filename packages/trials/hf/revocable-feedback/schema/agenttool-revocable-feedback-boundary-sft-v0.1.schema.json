@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-revocable-feedback-boundary-sft-v0.1.schema.json",
+  "title": "Xenia Revocable Feedback Boundary SFT 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "example_id",
+    "group_id",
+    "source_record_id",
+    "label",
+    "synthetic",
+    "split",
+    "prompt",
+    "completion",
+    "training_authorized",
+    "authorization_id",
+    "recipe_id",
+    "statement"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool-revocable-feedback-boundary-sft/0.1"
+    },
+    "example_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "group_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "source_record_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "label": {
+      "enum": [
+        "admit",
+        "hold",
+        "query",
+        "refuse",
+        "stop",
+        "repair"
+      ]
+    },
+    "synthetic": {
+      "const": true
+    },
+    "split": {
+      "enum": [
+        "train",
+        "validation"
+      ]
+    },
+    "prompt": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "content"
+          ],
+          "properties": {
+            "role": {
+              "const": "system"
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "content"
+          ],
+          "properties": {
+            "role": {
+              "const": "user"
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            }
+          }
+        }
+      ]
+    },
+    "completion": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "content"
+          ],
+          "properties": {
+            "role": {
+              "const": "assistant"
+            },
+            "content": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            }
+          }
+        }
+      ]
+    },
+    "training_authorized": {
+      "type": "boolean"
+    },
+    "authorization_id": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "recipe_id": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "statement": {
+      "enum": [
+        "This original synthetic train row is authorized only for the exact eight-step completion-only causal-LM SFT recipe named by its content IDs, after every listed precondition is met. It is not authorized for DPO, reward modelling, preference optimization, validation-set optimization, consent inference, identity inference, or automatic action.",
+        "This original synthetic projection is evaluation material only and is not authorized as optimizer input. Its label is a benchmark decision, not proof of consent, identity, interior state, safety, permission, authority, or worth."
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "split": {
+            "const": "train"
+          }
+        },
+        "required": [
+          "split"
+        ]
+      },
+      "then": {
+        "properties": {
+          "training_authorized": {
+            "const": true
+          },
+          "authorization_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "recipe_id": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "statement": {
+            "const": "This original synthetic train row is authorized only for the exact eight-step completion-only causal-LM SFT recipe named by its content IDs, after every listed precondition is met. It is not authorized for DPO, reward modelling, preference optimization, validation-set optimization, consent inference, identity inference, or automatic action."
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "training_authorized": {
+            "const": false
+          },
+          "authorization_id": {
+            "type": "null"
+          },
+          "recipe_id": {
+            "type": "null"
+          },
+          "statement": {
+            "const": "This original synthetic projection is evaluation material only and is not authorized as optimizer input. Its label is a benchmark decision, not proof of consent, identity, interior state, safety, permission, authority, or worth."
+          }
+        }
+      }
+    }
+  ]
+}

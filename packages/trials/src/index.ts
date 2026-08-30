@@ -37,4 +37,5 @@ export {
   type TrialErrorCode,
 } from "./errors.js";
 export * from "./boundary.js";
+export * from "./revocable-feedback.js";
 export * from "./sts.js";

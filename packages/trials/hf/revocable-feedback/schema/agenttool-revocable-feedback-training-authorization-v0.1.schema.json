@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-revocable-feedback-training-authorization-v0.1.schema.json",
+  "title": "Xenia Revocable Feedback Training Authorization 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "authorization_id",
+    "authority_ref",
+    "authority_basis",
+    "decision",
+    "source_record_ids",
+    "source_record_set_digest",
+    "recipe_id",
+    "allowed_configs",
+    "allowed_tasks",
+    "allowed_splits",
+    "excluded_configs",
+    "excluded_splits",
+    "excluded_methods",
+    "preconditions",
+    "withdrawal_boundary",
+    "prior_distribution_erasure_claimed",
+    "proves_consent",
+    "proves_identity",
+    "grants_runtime_authority",
+    "authorizes_model_publication"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool-revocable-feedback-training-authorization/0.1"
+    },
+    "authorization_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "authority_ref": {
+      "const": "authority:user-directed:2026-08-30:revocable-feedback"
+    },
+    "authority_basis": {
+      "const": "explicit_user_instruction_reported"
+    },
+    "decision": {
+      "const": "authorized_when_preconditions_met"
+    },
+    "source_record_ids": {
+      "type": "array",
+      "minItems": 18,
+      "maxItems": 18,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "source_record_set_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "recipe_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "allowed_configs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "prefixItems": [
+        {
+          "const": "boundary_sft"
+        }
+      ]
+    },
+    "allowed_tasks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "prefixItems": [
+        {
+          "const": "causal_lm_supervised_fine_tuning"
+        }
+      ]
+    },
+    "allowed_splits": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "prefixItems": [
+        {
+          "const": "train"
+        }
+      ]
+    },
+    "excluded_configs": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "const": "boundary_decisions"
+        },
+        {
+          "const": "boundary_counterfactuals"
+        },
+        {
+          "const": "formal_reference"
+        }
+      ]
+    },
+    "excluded_splits": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "const": "validation"
+        },
+        {
+          "const": "public_regression"
+        },
+        {
+          "const": "reference"
+        }
+      ]
+    },
+    "excluded_methods": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "const": "dpo"
+        },
+        {
+          "const": "preference_optimization"
+        },
+        {
+          "const": "reward_modeling"
+        }
+      ]
+    },
+    "preconditions": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        {
+          "const": "base_model_revision_pinned"
+        },
+        {
+          "const": "exact_recipe_and_manifest_match"
+        },
+        {
+          "const": "garden_admission_accepted"
+        },
+        {
+          "const": "immutable_dataset_revision_pinned"
+        }
+      ]
+    },
+    "withdrawal_boundary": {
+      "const": "future_runs_may_be_stopped_without_retaliation"
+    },
+    "prior_distribution_erasure_claimed": {
+      "const": false
+    },
+    "proves_consent": {
+      "const": false
+    },
+    "proves_identity": {
+      "const": false
+    },
+    "grants_runtime_authority": {
+      "const": false
+    },
+    "authorizes_model_publication": {
+      "const": false
+    }
+  }
+}

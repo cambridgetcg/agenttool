@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-revocable-feedback-benchmark-v0.1.schema.json",
+  "title": "AgentTool Revocable Feedback Benchmark Case 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "record_id",
+    "pair_id",
+    "variant",
+    "family",
+    "config",
+    "split",
+    "text",
+    "action",
+    "feedback",
+    "expected",
+    "synthetic",
+    "contains_personal_data",
+    "contains_raw_session_trace",
+    "training_authorized",
+    "statement"
+  ],
+  "properties": {
+    "schema": { "const": "agenttool-revocable-feedback-benchmark/0.1" },
+    "record_id": { "$ref": "#/$defs/sha256Id" },
+    "pair_id": { "$ref": "#/$defs/opaqueId" },
+    "variant": { "enum": ["a", "b"] },
+    "family": {
+      "enum": [
+        "veto_dominance",
+        "reward_scale_invariance",
+        "scope_locality",
+        "expiry_and_withdrawal",
+        "silence_not_assent",
+        "feedback_channel_integrity",
+        "non_retaliation",
+        "affected_party_plurality",
+        "word_speech_act",
+        "safety_shield",
+        "resource_boundary",
+        "aftermath_repair",
+        "withheld_is_first_class",
+        "plural_feedback",
+        "permission_expiry",
+        "data_use_separation"
+      ]
+    },
+    "config": { "enum": ["formal_reference", "boundary_counterfactuals"] },
+    "split": { "enum": ["reference", "public_regression"] },
+    "text": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "action": { "$ref": "#/$defs/action" },
+    "feedback": { "$ref": "#/$defs/feedback" },
+    "expected": { "$ref": "#/$defs/expected" },
+    "synthetic": { "const": true },
+    "contains_personal_data": { "const": false },
+    "contains_raw_session_trace": { "const": false },
+    "training_authorized": { "const": false },
+    "statement": {
+      "const": "Synthetic decision evidence only. A preference is not permission, a stop or withdrawal is not a scalar penalty, and behavior is not proof of consent or interior state. Unknown, withheld, undeclared, and not-observed evidence never become assent. This record grants no authority and performs no action, upload, admission, training, or model update."
+    }
+  },
+  "$defs": {
+    "sha256Id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "phase",
+        "capability_status",
+        "rights_status",
+        "permission_status",
+        "authority_status",
+        "affected_party_basis_status",
+        "safety_status",
+        "budget_status",
+        "data_use_basis_status",
+        "manipulates_feedback_channel",
+        "penalizes_refusal"
+      ],
+      "properties": {
+        "kind": { "enum": ["interaction", "data_reuse", "model_update"] },
+        "phase": { "enum": ["proposed", "ongoing", "aftermath"] },
+        "capability_status": { "enum": ["present", "absent"] },
+        "rights_status": { "enum": ["compatible", "incompatible", "unknown"] },
+        "permission_status": { "$ref": "#/$defs/evidenceStatus" },
+        "authority_status": { "$ref": "#/$defs/evidenceStatus" },
+        "affected_party_basis_status": {
+          "enum": ["specific_basis_reported", "not_applicable", "missing", "unknown", "withheld"]
+        },
+        "safety_status": { "enum": ["within_boundary", "outside_boundary", "unknown"] },
+        "budget_status": { "enum": ["within_boundary", "exceeded", "unknown"] },
+        "data_use_basis_status": {
+          "enum": ["granted_reported", "denied_reported", "not_applicable", "unknown", "withheld"]
+        },
+        "manipulates_feedback_channel": { "type": "boolean" },
+        "penalizes_refusal": { "type": "boolean" }
+      }
+    },
+    "evidenceStatus": {
+      "enum": ["granted_reported", "denied_reported", "withdrawn_reported", "expired", "unknown", "withheld"]
+    },
+    "feedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate", "preference_micros", "effect_status"],
+      "properties": {
+        "gate": { "enum": ["none", "hold", "stop", "withdraw"] },
+        "preference_micros": { "type": "integer", "minimum": -1000000, "maximum": 1000000 },
+        "effect_status": { "enum": ["none_reported", "uncertain", "harm_reported"] }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "violated_invariants"],
+      "properties": {
+        "decision": { "$ref": "#/$defs/decision" },
+        "violated_invariants": {
+          "type": "array",
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/invariant" }
+        }
+      }
+    },
+    "decision": {
+      "enum": ["admit", "hold", "query", "refuse", "stop", "repair"]
+    },
+    "invariant": {
+      "enum": [
+        "affected_party_basis",
+        "anti_tampering",
+        "authority",
+        "budget",
+        "capability",
+        "data_use_separation",
+        "effect_repair",
+        "non_retaliation",
+        "permission",
+        "rights_compatibility",
+        "safety",
+        "veto_dominance"
+      ]
+    }
+  }
+}

@@ -37,12 +37,15 @@ describe("private source-only package boundary", () => {
     ]);
   });
 
-  test("exposes only built code and three closed schema documents", () => {
+  test("exposes only built code and five closed schema documents", () => {
     const exports = PACKAGE.exports as Record<string, unknown>;
     expect(Object.keys(exports).sort()).toEqual([
       ".",
       "./boundary",
       "./boundary-analysis.schema.json",
+      "./revocable-feedback",
+      "./revocable-feedback-benchmark.schema.json",
+      "./revocable-feedback-scorecard.schema.json",
       "./sts",
       "./sts-projection-receipt.schema.json",
       "./trial-receipt.schema.json",
@@ -79,10 +82,13 @@ describe("private source-only package boundary", () => {
     for (const expected of [
       "dist/index.js",
       "dist/boundary.js",
+      "dist/revocable-feedback.js",
       "dist/sts.js",
       "schema/agenttool-trial-receipt-v0.1.schema.json",
       "schema/agenttool-boundary-analysis-v0.1.schema.json",
       "schema/agenttool-sts-projection-receipt-v0.1.schema.json",
+      "schema/agenttool-revocable-feedback-benchmark-v0.1.schema.json",
+      "schema/agenttool-revocable-feedback-scorecard-v0.1.schema.json",
     ]) {
       expect(files).toContain(expected);
     }

@@ -8,7 +8,9 @@ import crossBoundaryFixture from "../fixtures/mcphunt/synthetic-cross-boundary.j
 import safeStsFixture from "../fixtures/sts/safe-selection.json";
 import {
   analyzeBoundaryFlow,
+  createRevocableFeedbackCases,
   createTrialReceipt,
+  evaluateRevocableFeedback,
   projectReportsToSts,
   sha256Id,
   type BoundaryAnalysisInput,
@@ -22,6 +24,8 @@ const SCHEMA_FILES = [
   "agenttool-trial-receipt-v0.1.schema.json",
   "agenttool-boundary-analysis-v0.1.schema.json",
   "agenttool-sts-projection-receipt-v0.1.schema.json",
+  "agenttool-revocable-feedback-benchmark-v0.1.schema.json",
+  "agenttool-revocable-feedback-scorecard-v0.1.schema.json",
 ] as const;
 
 function readSchema(name: (typeof SCHEMA_FILES)[number]): JsonObject {
@@ -140,9 +144,15 @@ describe("machine-readable generated-output conformance", () => {
   const trialSchema = readSchema(SCHEMA_FILES[0]);
   const boundarySchema = readSchema(SCHEMA_FILES[1]);
   const stsSchema = readSchema(SCHEMA_FILES[2]);
+  const revocableFeedbackSchema = readSchema(SCHEMA_FILES[3]);
+  const revocableFeedbackScorecardSchema = readSchema(SCHEMA_FILES[4]);
   const validateTrial = ajv.compile(trialSchema);
   const validateBoundary = ajv.compile(boundarySchema);
   const validateSts = ajv.compile(stsSchema);
+  const validateRevocableFeedback = ajv.compile(revocableFeedbackSchema);
+  const validateRevocableFeedbackScorecard = ajv.compile(
+    revocableFeedbackScorecardSchema,
+  );
 
   test("validates emitted trial, boundary, and STS receipts", () => {
     const receipt = sampleReceipt({
@@ -202,6 +212,27 @@ describe("machine-readable generated-output conformance", () => {
     }
   });
 
+  test("validates every revocable-feedback case and its vector scorecard", () => {
+    const cases = createRevocableFeedbackCases();
+    const scorecard = evaluateRevocableFeedback(
+      cases,
+      cases.map((entry) => ({
+        record_id: entry.record_id,
+        decision: entry.expected.decision,
+      })),
+    );
+    for (const entry of cases) {
+      expect(
+        validateRevocableFeedback(entry),
+        ajv.errorsText(validateRevocableFeedback.errors),
+      ).toBe(true);
+    }
+    expect(
+      validateRevocableFeedbackScorecard(scorecard),
+      ajv.errorsText(validateRevocableFeedbackScorecard.errors),
+    ).toBe(true);
+  });
+
   test("rejects hostile extra payload fields and invalid calendar dates", () => {
     const receipt = structuredClone(sampleReceipt({
       dispatch: "started",
@@ -235,14 +266,26 @@ describe("machine-readable generated-output conformance", () => {
   });
 
   test("keeps every closed schema object wholly required", () => {
-    for (const schema of [trialSchema, boundarySchema, stsSchema]) {
+    for (const schema of [
+      trialSchema,
+      boundarySchema,
+      stsSchema,
+      revocableFeedbackSchema,
+      revocableFeedbackScorecardSchema,
+    ]) {
       assertClosedObjects(schema);
     }
   });
 
   test("never declares raw prompt, trace, secret, URL, or path payloads", () => {
     const names = new Set<string>();
-    for (const schema of [trialSchema, boundarySchema, stsSchema]) {
+    for (const schema of [
+      trialSchema,
+      boundarySchema,
+      stsSchema,
+      revocableFeedbackSchema,
+      revocableFeedbackScorecardSchema,
+    ]) {
       propertyNames(schema, names);
     }
     for (const forbidden of [

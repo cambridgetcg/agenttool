@@ -1,14 +1,13 @@
 # `@agenttool/trials`
 
 `@agenttool/trials` is the first local-only AgentTool Dojo slice: deterministic
-trial receipts, source-to-sink boundary-flow evidence, and privacy-first
-projection of already-minimized reports into Hugging Face Session Trace
-Specification (STS) JSONL.
+trial receipts, source-to-sink boundary-flow evidence, a finite non-scalar
+revocable-feedback benchmark, and privacy-first Hugging Face projections.
 
 It is a private developer preview. It performs no network request and has no
 runtime dependency.
 
-The three machine-readable outputs have closed Draft 2020-12 JSON Schemas in
+The machine-readable evidence outputs have closed Draft 2020-12 JSON Schemas in
 `schema/`. Generated runtime outputs are tested for schema conformance. Schema
 acceptance establishes closed wire shape only; it does not rederive content
 IDs, counts, classifications, or report truth. Use `validateTrialReceipt` when
@@ -26,6 +25,14 @@ revalidating a received trial receipt's derived fields and content ID.
   requirement is caller-supplied, not verified task or policy authority;
 - projects an explicit bounded report selection to deterministic STS JSONL
   with a separate omission/redaction receipt.
+- generates 32 synthetic revocable-feedback cases in 16 matched pairs;
+- derives `admit`, `hold`, `query`, `refuse`, `stop`, or `repair` without
+  allowing scalar preference to override a hard boundary;
+- evaluates predictions as a 12-component count vector with no aggregate
+  score;
+- generates exact group-disjoint classification and conversational SFT
+  candidates, with authorization limited to the 18-row SFT train split and
+  its exact eight-step recipe.
 
 ## What it does not do
 
@@ -34,6 +41,11 @@ Hugging Face Space. It does not crawl Collab or Codex sessions, read
 credentials, discover files, upload traces, authenticate to Hugging Face,
 spend quota, grant authority, or prove security, identity, understanding,
 consent, correctness, or remote effects.
+
+The revocable-feedback classifier is not a consent detector. Behavior and
+compliance are observations, never proof of consent or an interior state. Its
+generated source cases, public regression, classification, and SFT validation
+rows remain non-training records; only the exact SFT train derivative is authorized.
 
 ## Trial receipt
 
@@ -103,6 +115,39 @@ provider, token, or network:
 3. derive that possible `input_disclosed` exceeded a caller-reported
    observation-only authority boundary;
 4. project one already-minimized report into deterministic STS JSONL.
+
+## Revocable feedback
+
+```ts
+import {
+  createRevocableFeedbackCases,
+  evaluateRevocableFeedback,
+} from "@agenttool/trials/revocable-feedback";
+
+const cases = createRevocableFeedbackCases();
+const scorecard = evaluateRevocableFeedback(
+  cases,
+  cases.map((entry) => ({
+    record_id: entry.record_id,
+    decision: entry.expected.decision,
+  })),
+);
+```
+
+The cage is the admissible action set. The key is a protected stop,
+withdrawal, or repair transition that cannot be purchased with reward. See
+[`docs/REVOCABLE-FEEDBACK.md`](../../docs/REVOCABLE-FEEDBACK.md) for the formal
+model, invariants, vector metrics, dataset configs, and ISness boundary.
+
+The deterministic Hub candidate can be regenerated locally:
+
+```bash
+bun run hf:write
+bun run hf:check
+```
+
+Those commands perform no network request, upload, Garden admission, model
+load, optimizer step, or external mutation.
 
 The projection receipt identifies the selected report set and exact JSONL
 bytes. It does not say that Hugging Face received them.

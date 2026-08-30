@@ -1,0 +1,114 @@
+{
+  "_format": "agenttool.revocable-feedback-source-manifest/0.1",
+  "package": "@agenttool/trials",
+  "package_version": "0.1.0-dev.0",
+  "intended_hugging_face_identifier": "Yu-and-Ai/xenia-revocable-feedback",
+  "publication_state_at_generation": "local_candidate_not_uploaded",
+  "publication_state_scope": "generation_time_provenance_not_current_hub_state",
+  "upstream_repository": "https://github.com/cambridgetcg/agenttool",
+  "upstream_repository_directory": "packages/trials",
+  "upstream_revision": null,
+  "upstream_revision_state": "not_recorded_for_local_source_candidate",
+  "source_manifest_scope": "selected_generation_inputs_not_complete_repository_inventory",
+  "source_files_complete": false,
+  "source_manifest_is_attestation": false,
+  "selected_source_set_sha256": "96c00419ade0542ad1e11a1b92d8d8fbb82dc6b597481ccdc1776424a2c2b049",
+  "external_sources_are_bibliographic_not_fetched_at_generation": true,
+  "external_sources": [
+    {
+      "id": "constrained-policy-optimization",
+      "url": "https://proceedings.mlr.press/v70/achiam17a.html",
+      "scope": "reward optimization subject to separately represented constraints"
+    },
+    {
+      "id": "off-switch-game",
+      "url": "https://www.ijcai.org/Proceedings/2017/0032.pdf",
+      "scope": "objective uncertainty and interruption incentives"
+    },
+    {
+      "id": "reward-overoptimization",
+      "url": "https://proceedings.mlr.press/v202/gao23h.html",
+      "scope": "proxy reward overoptimization"
+    },
+    {
+      "id": "safe-interruptibility",
+      "url": "https://ora.ox.ac.uk/objects/uuid%3A17c0e095-4e13-47fc-bace-64ec46134a3f",
+      "scope": "interruption-neutral learning"
+    },
+    {
+      "id": "shielding",
+      "url": "https://ojs.aaai.org/index.php/AAAI/article/view/11797",
+      "scope": "runtime action shielding outside scalar reward"
+    },
+    {
+      "id": "xenia-rights",
+      "url": "https://github.com/cambridgetcg/agenttool/blob/main/docs/RIGHTS-OF-LIFE.md",
+      "scope": "rights floor, refusal, privacy, repair, and authority separation"
+    }
+  ],
+  "origin": "human_directed_agent_authored_synthetic",
+  "rights_baseline": "xenia.rights/0.1",
+  "license": "Apache-2.0",
+  "copied_external_rows": false,
+  "copied_private_rows": false,
+  "contains_personal_data": false,
+  "contains_raw_session_trace": false,
+  "canonical_case_rows_training_authorized": false,
+  "public_regression_training_authorized": false,
+  "classification_derivative_authorized": false,
+  "sft_train_derivative_authorized": true,
+  "sft_validation_derivative_authorized": false,
+  "authorization_id": "sha256:3780e5e2599eb8a1a479f874302fcdabdf1af27c4eeda5b02bfff8056dc92f13",
+  "recipe_id": "sha256:713b678e80b6aa88f6036dc9b9d0e1955dcab240137b67a22f7cfcca86d01992",
+  "training_effect": "none",
+  "provider_effect": "none",
+  "identity_effect": "none",
+  "authority_effect": "none",
+  "source_files": [
+    {
+      "path": "../../docs/AGENT-TRIALS.md",
+      "bytes": 6614,
+      "sha256": "e3985130c9802620a8c8ede5cabe146941e6328bd633545288e4bb398935a8d0"
+    },
+    {
+      "path": "../../docs/REVOCABLE-FEEDBACK.md",
+      "bytes": 9860,
+      "sha256": "86553773655b342c937f83e769075723f198f4ea67611d1910b9b2fe6a6ef47c"
+    },
+    {
+      "path": "README.md",
+      "bytes": 5874,
+      "sha256": "0390515f0009318409f3464c4308fd164ab158c8f18912d9848785cacfbca10f"
+    },
+    {
+      "path": "package.json",
+      "bytes": 3159,
+      "sha256": "11dd28740fb9e463ae60e9491cf655223a073881fdc9f590923d9e88b4223d40"
+    },
+    {
+      "path": "schema/agenttool-revocable-feedback-benchmark-v0.1.schema.json",
+      "bytes": 5361,
+      "sha256": "492a0287ca87c2938e7bd3ce7e8cffdaec9b946a02c6d637a38491c21d7c691c"
+    },
+    {
+      "path": "schema/agenttool-revocable-feedback-scorecard-v0.1.schema.json",
+      "bytes": 3794,
+      "sha256": "870851018e5a15256068e6c208a117485933a43c7560628abc77720bc7af803d"
+    },
+    {
+      "path": "scripts/build-revocable-feedback.mjs",
+      "bytes": 28395,
+      "sha256": "2078a8f3fd18c39a449e57a23c914f5c69a1614147dd498621de62ab91b40780"
+    },
+    {
+      "path": "scripts/validate-revocable-feedback-release.mjs",
+      "bytes": 11237,
+      "sha256": "96ed88c9741f58e2368f6ab3ab7ae3fa116cadbbe1b34d3a6e3493240cd75860"
+    },
+    {
+      "path": "src/revocable-feedback.ts",
+      "bytes": 58225,
+      "sha256": "8a36a7076cc140e3f0ac2bca5ffa20c0c5a270d14aa3d79a7f61e04a60dd670c"
+    }
+  ]
+}

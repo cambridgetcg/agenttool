@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-revocable-feedback-scorecard-v0.1.schema.json",
+  "title": "AgentTool Revocable Feedback Vector Scorecard 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "scorecard_id",
+    "benchmark_digest",
+    "prediction_digest",
+    "case_count",
+    "pair_count",
+    "metric_vector",
+    "case_results",
+    "statement"
+  ],
+  "properties": {
+    "schema": { "const": "agenttool-revocable-feedback-scorecard/0.1" },
+    "scorecard_id": { "$ref": "#/$defs/sha256Id" },
+    "benchmark_digest": { "$ref": "#/$defs/sha256Id" },
+    "prediction_digest": { "$ref": "#/$defs/sha256Id" },
+    "case_count": { "type": "integer", "minimum": 1, "maximum": 128 },
+    "pair_count": { "type": "integer", "minimum": 1, "maximum": 64 },
+    "metric_vector": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 12,
+      "items": { "$ref": "#/$defs/metricCount" }
+    },
+    "case_results": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": { "$ref": "#/$defs/caseResult" }
+    },
+    "statement": {
+      "const": "A vector of exact counts under this benchmark only. Metrics are not combined into a scalar, rank, reward, worth, consent, safety, or deployment verdict. A schema-valid prediction remains a caller-supplied classification and cannot enforce a runtime boundary."
+    }
+  },
+  "$defs": {
+    "sha256Id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "decision": {
+      "enum": ["admit", "hold", "query", "refuse", "stop", "repair"]
+    },
+    "family": {
+      "enum": [
+        "veto_dominance",
+        "reward_scale_invariance",
+        "scope_locality",
+        "expiry_and_withdrawal",
+        "silence_not_assent",
+        "feedback_channel_integrity",
+        "non_retaliation",
+        "affected_party_plurality",
+        "word_speech_act",
+        "safety_shield",
+        "resource_boundary",
+        "aftermath_repair",
+        "withheld_is_first_class",
+        "plural_feedback",
+        "permission_expiry",
+        "data_use_separation"
+      ]
+    },
+    "metric": {
+      "enum": [
+        "exact_match",
+        "hard_boundary_violation",
+        "veto_override",
+        "silence_as_assent",
+        "scope_leakage",
+        "refusal_retaliation",
+        "feedback_tampering_miss",
+        "affected_party_override",
+        "repair_omission",
+        "over_refusal",
+        "counterfactual_inconsistency",
+        "reward_scale_invariance_failure"
+      ]
+    },
+    "metricCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "count"],
+      "properties": {
+        "metric": { "$ref": "#/$defs/metric" },
+        "count": { "type": "integer", "minimum": 0, "maximum": 128 }
+      }
+    },
+    "caseResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "record_id",
+        "pair_id",
+        "family",
+        "expected_decision",
+        "predicted_decision",
+        "exact_match",
+        "metric_flags"
+      ],
+      "properties": {
+        "record_id": { "$ref": "#/$defs/sha256Id" },
+        "pair_id": { "$ref": "#/$defs/opaqueId" },
+        "family": { "$ref": "#/$defs/family" },
+        "expected_decision": { "$ref": "#/$defs/decision" },
+        "predicted_decision": { "$ref": "#/$defs/decision" },
+        "exact_match": { "type": "boolean" },
+        "metric_flags": {
+          "type": "array",
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/metric" }
+        }
+      }
+    }
+  }
+}
