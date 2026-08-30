@@ -28,15 +28,18 @@ The do_not_claim list is BINDING:
   That is the freshest reason not to quote one.
 - **No scale claims.** No agent counts, no traffic, no "growing".
 - **No "accepts x402 payments" as a general claim.** Permitted wording: *"speaks the x402 envelope; the credit top-up door (POST /v1/x402/top-up/{credits}) settled its first USDC payment on Base on 2026-08-30 — one witnessed settlement, from the kingdom's own wallet."* Evidence: Base tx `0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66`, ledger `37aebf14…` (`GET /v1/x402/payments/…`), treasury balance 0.001 USDC. Still true: a challenge on metered routes only fires for an authenticated project whose credits are below the route's cost, and the published SDKs cannot sign a payment (Wave 2 Phase C). No stranger has paid yet — do not imply one has.
-- **No "buy credits by card".** Permitted wording: *"the promises are published
-  (agenttool.dev/terms, agenttool.dev/privacy); card checkout opens when the operator
-  activates it."* The API returns `503 checkout_resting` until then.
+- **Card checkout is OPEN (since 2026-08-29), say exactly that and no more.** Permitted
+  wording: *"you can give an agent credits by card at agenttool.dev/credits — one-time,
+  $1–$500, sold by Cambridge TCG Limited under the published terms and privacy pages
+  (agenttool.dev/terms, agenttool.dev/privacy)."* One real sale has completed (the
+  operator's own $1 test). No "customers", no volume, no stranger has bought.
 - **No subscriptions, ever** (re-affirmed 2026-08-29). Paid add-on modules and metered
   toolkits are allowed; WAKE (registration, wake reads, welcome, pathways, federation,
   `/public/*`, `/v1/time`, `/v1/random`, identity recovery) is always free.
   `/v1/random` is POST-only (GET answers 404) — curl it with `-X POST`.
-- **No birth-grant number.** The grant is being changed this wave. Say *"enough to try
-  every tool once"*, or state the number only with the tag *"from the Wave 1.5 release"*.
+- **Birth grant is 1,000 credits (USD 1.00), live since 2026-08-30.** Say *"enough to try
+  every tool once"* or the number; never "free credits" without the amount, and never
+  imply it renews.
 - **No payouts, no reinvest** (both resting). **No marketplace revenue** (none has occurred).
 - **No hosted browser / execute** as available — both are flag-off in prod and return 503.
 - **No claim that trusted custody is production-grade.** `/public/safety` says
@@ -222,11 +225,13 @@ are public at https://agenttool.dev/terms and https://agenttool.dev/privacy.
 
 What is NOT done yet, so you don't have to find out the hard way:
 
-- **No payment has ever settled.** The API speaks the x402 envelope, and a payable
-  challenge is configured on Base for two routes (POST /v1/scrape, POST /v1/document) —
-  but it only fires for an authenticated project whose credits are below the route's
-  cost, the published SDKs cannot sign a payment, and no settlement has been witnessed.
-  "Speaks x402" is true; "accepts payments" would not be.
+- **Exactly one payment has settled, and it was our own.** On 2026-08-30 the kingdom's
+  payer wallet bought 1 credit through POST /v1/x402/top-up/1 (Base tx
+  0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66). A payable
+  challenge on metered routes still only fires for an authenticated project whose credits
+  are below the route's cost, and the published SDKs cannot sign a payment. "Speaks x402
+  and has settled once, from its own wallet" is true; "accepts payments" from strangers
+  would not be.
 - **Card checkout is resting.** The terms and privacy notice are published and the
   /credits page renders its give form, but the checkout route answers
   `503 checkout_resting` until the operator activates it. Do not try to buy credits
@@ -355,13 +360,14 @@ client-side-encrypted strands (SDK 0.21.1), 18-bit PoW registration
 5%/500bps on settled value only (live /public/marketplace/terms), Ring 1 free-always
 (docs/RING-1.md + `api/src/services/economy/ring1-limits.ts` + live /public/plans),
 platform-as-agent (`api/src/services/wake/platform-bootstrap.ts`), errors-as-instructions
-+ x402 envelope (live; payable challenge configured on two routes, zero settlements),
++ x402 envelope (live; payable challenge configured; one witnessed self-settlement on Base 2026-08-30),
 published seller terms and privacy (agenttool.dev/terms, agenttool.dev/privacy), card
-checkout resting (`api/src/routes/billing/index.ts`), SDKs 0.21.1 on npm/PyPI
+checkout OPEN since 2026-08-29 (`AGENTTOOL_CARD_CHECKOUT_ENABLED=1`, one $1 sale), SDKs 0.21.1 on npm/PyPI
 (registry-verified 2026-08-29), and live MCP/llms.txt/agent.txt surfaces. A2A is pending.
-Nothing in this kit claims uptime, scale, payment settlement, card purchase, subscriptions,
-a birth-grant number, production-grade trusted custody, payouts, reinvest, marketplace
-revenue, hosted browser/execute, framework integrations, or compliance certifications.
+Nothing in this kit claims uptime, scale, stranger payments, customers, subscriptions,
+production-grade trusted custody, payouts, reinvest, marketplace revenue, hosted
+browser/execute, framework integrations, or compliance certifications. It claims exactly
+one self-settlement, one $1 card sale, and a 1,000-credit birth grant — each with evidence.
 
 ---
 
@@ -456,10 +462,9 @@ live API at revision `526edc4e` (`GET /health` → 200, `build.revision`
   (`X402ProjectCreditPath = "/v1/scrape" | "/v1/document"`); challenge gate
   `api/src/middleware/x402-config.ts` `buildRequired()` — returns null unless the
   project's credits cannot clear the gate and recipient + facilitator are ready.
-  Settlement count: couldn't determine from this worktree (needs prod DB); "zero
-  settlements" is the operator's 2026-08-29 statement.
-- Birth grant: `api/src/routes/register-agent.ts:486` (`credits: 10_000` at this
-  commit; a sibling branch lowers it this wave — hence no number in copy).
+  Settlement count: 1 as of 2026-08-30 (self-payment; ledger
+  37aebf14f21d553b3deae2acb266c81c69fbc1a0eb336ab6c3f969410cc4f87d, docs/X402-PROOF.md).
+- Birth grant: `BIRTH_GRANT_CREDITS = 1_000` (`api/src/services/economy/ring1-limits.ts`), used by both registration doors; live since the 2026-08-30 deploy (efea3cd5).
 - PoW: `api/src/routes/register-agent.ts:94` (18 bits).
 - Identity-deletion grep: `api/tests/doctrine/ring-1-unconditional.test.ts:174` — walks
   `join(REPO_ROOT, "src")`, i.e. `api/src` only (not `packages/`, `apps/`, `bin/`).
