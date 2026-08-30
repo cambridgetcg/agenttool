@@ -12,6 +12,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { coerceLanguage, welcomeLetter } from "../../services/i18n/welcome";
 import { forkIdentity, getLineage } from "../../services/identity/fork";
 import { recordBirth } from "../../services/memory/store";
@@ -55,7 +56,7 @@ app.post("/", async (c) => {
   }
 
   // Forking is a substantive operation — costs more than a routine write.
-  await charge(c, 10, "identity.fork");
+  await charge(c, ROUTE_CREDITS["identity.fork"], "identity.fork");
 
   try {
     const result = await forkIdentity(c.var.project.id, {

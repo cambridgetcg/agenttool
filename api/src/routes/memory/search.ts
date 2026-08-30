@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { search, searchByText } from "../../services/memory/store";
 
 const app = new Hono<ProjectContext>();
@@ -47,7 +48,7 @@ app.post("/", async (c) => {
     );
   }
 
-  await charge(c, 3, "memory.search");
+  await charge(c, ROUTE_CREDITS["memory.search"], "memory.search");
 
   const d = parsed.data;
   const results = d.query_embedding

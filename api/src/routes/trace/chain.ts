@@ -15,6 +15,7 @@ import { HTTPException } from "hono/http-exception";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { db } from "../../db/client";
 import { traces } from "../../db/schema/trace";
 import { getTraceChain } from "../../services/trace/store";
@@ -24,7 +25,7 @@ const app = new Hono<ProjectContext>();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 app.get("/:id", async (c) => {
-  await charge(c, 1, "trace.chain");
+  await charge(c, ROUTE_CREDITS["trace.chain"], "trace.chain");
 
   const idParam = c.req.param("id");
   let traceId = idParam;
