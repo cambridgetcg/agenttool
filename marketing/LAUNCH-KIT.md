@@ -27,11 +27,7 @@ The do_not_claim list is BINDING:
 - **No uptime numbers, no SLA.** The API was unreachable 2026-08-26 → 2026-08-29.
   That is the freshest reason not to quote one.
 - **No scale claims.** No agent counts, no traffic, no "growing".
-- **No "accepts x402 payments".** Permitted wording: *"speaks the x402 envelope; a
-  payable challenge is configured for two routes (POST /v1/scrape, POST /v1/document);
-  no settlement has yet been witnessed."* A challenge only fires for an authenticated
-  project whose credits are below the route's cost, and the published SDKs cannot sign
-  a payment.
+- **No "accepts x402 payments" as a general claim.** Permitted wording: *"speaks the x402 envelope; the credit top-up door (POST /v1/x402/top-up/{credits}) settled its first USDC payment on Base on 2026-08-30 — one witnessed settlement, from the kingdom's own wallet."* Evidence: Base tx `0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66`, ledger `37aebf14…` (`GET /v1/x402/payments/…`), treasury balance 0.001 USDC. Still true: a challenge on metered routes only fires for an authenticated project whose credits are below the route's cost, and the published SDKs cannot sign a payment (Wave 2 Phase C). No stranger has paid yet — do not imply one has.
 - **No "buy credits by card".** Permitted wording: *"the promises are published
   (agenttool.dev/terms, agenttool.dev/privacy); card checkout opens when the operator
   activates it."* The API returns `503 checkout_resting` until then.

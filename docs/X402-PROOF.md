@@ -172,3 +172,16 @@ that is what CDP wants. The plan's rule: one closed loop before ten declared.
 
 `docs/X402-PAY.md` is the curl-only version of Step 3 for anyone with an EIP-3009 signer.
 It marks which sections are true today and which land with W2-2 / W2-4.
+
+## Record — first settlement (2026-08-30)
+
+| | |
+|---|---|
+| deploy | `main` efea3cd5 hand-staged (operator-authorized exception), machines canary-first |
+| payer | `0x02a5F8F49802887E95428978075643a5F4aA6855` (funded 5 USDC by Yu) |
+| `topup 1` | 402 → signed → 200; `PAYMENT-RESPONSE.success=true`; project credits 110,800 → 110,801 |
+| tx | `0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66` — receipt success, block 50648362, to USDC |
+| ledger | `37aebf14f21d553b3deae2acb266c81c69fbc1a0eb336ab6c3f969410cc4f87d` — settled, credits_purchased = credits_applied = 1 |
+| `replay last` | 402 again, credits 110,801 → 110,801 — no second credit |
+| `verify` | **settled** (ledger + receipt + balance agree); treasury 0.001 USDC |
+| payer after | 4.999 USDC |
