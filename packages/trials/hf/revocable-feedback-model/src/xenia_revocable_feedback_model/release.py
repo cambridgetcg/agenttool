@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -13,16 +14,23 @@ from .evaluate import (
 )
 
 from .core import (
+    AUTHORIZATION_ID,
     BASE_MODEL_ID,
     BASE_MODEL_REVISION,
+    DATASET_HASH_MANIFEST_ID,
     DATASET_ID,
+    DATASET_REVISION,
     DISCLOSURE,
+    EXPECTED_RUNTIME_VERSIONS,
     GOVERNANCE_STATUS,
+    RECIPE_ID,
     SCORECARD_SCHEMA,
+    TRAINING_MANIFEST_ID,
     TrainingBundleError,
     _require,
     domain_separated_id,
     ensure_empty_output,
+    fixed_training_plan,
     read_json,
     require_sha256_id,
     sha256_hex,
@@ -69,6 +77,29 @@ TEXT_SECRET_PATTERNS = (
     re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]{12,}\b", re.IGNORECASE),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
 )
+
+RUN_RECEIPT_SCHEMA = "agenttool-revocable-feedback-local-run/0.1"
+EXPECTED_DATASET_ADMISSION_ID = "sha256:125ae2f84d7cdf58242bc039db67753b5825c4d61e35dd13eda7a58f299295f2"
+RUN_RECEIPT_KEYS = {
+    "schema",
+    "governance_status",
+    "disclosure",
+    "operator_acknowledgement",
+    "garden",
+    "base",
+    "dataset",
+    "plan",
+    "runtime",
+    "resolved_device",
+    "observed_optimizer_steps",
+    "observed_training_loss",
+    "raw_prompts_retained",
+    "raw_generations_retained",
+    "optimizer_state_retained",
+    "trainer_state_retained",
+    "publishes",
+}
+EXPECTED_RUN_RUNTIME = {"python": "3.12.12", **EXPECTED_RUNTIME_VERSIONS}
 
 SCORECARD_KEYS = {
     "schema",
@@ -167,24 +198,68 @@ def _validate_sanitized_json(value: Any, name: str) -> None:
 
 
 def validate_run_receipt(receipt: Mapping[str, Any]) -> None:
-    _require(receipt.get("schema") == "agenttool-revocable-feedback-local-run/0.1", "unexpected run receipt schema")
+    _require(receipt.get("schema") == RUN_RECEIPT_SCHEMA, "unexpected run receipt schema")
+    _require(set(receipt) == RUN_RECEIPT_KEYS, "run receipt must contain the complete closed release shape")
     _require(receipt.get("governance_status") == GOVERNANCE_STATUS, "run governance status mismatch")
     _require(receipt.get("disclosure") == DISCLOSURE, "run disclosure mismatch")
+    _require(receipt.get("operator_acknowledgement") == GOVERNANCE_STATUS, "operator acknowledgement mismatch")
     _require(receipt.get("observed_optimizer_steps") == 8, "release requires exactly eight observed optimizer steps")
-    _require(receipt.get("publishes") is False, "run receipt must record no publication")
+    for key in (
+        "raw_prompts_retained",
+        "raw_generations_retained",
+        "optimizer_state_retained",
+        "trainer_state_retained",
+        "publishes",
+    ):
+        _require(receipt.get(key) is False, f"run receipt must record {key}=false")
     garden = receipt.get("garden")
     _require(isinstance(garden, Mapping), "run receipt Garden boundary is absent")
-    require_sha256_id(garden.get("dataset_admission_id"), "dataset_admission_id")
-    _require(garden.get("dataset_admission_effect") == "data_candidate_only", "dataset admission effect mismatch")
-    _require(garden.get("training_governance_decision_id") is None, "Garden training governance must be absent")
-    _require(garden.get("host_one_use_optimizer_permit_id") is None, "Host optimizer permit must be absent")
-    _require(garden.get("training_substrate_report") == "not_independently_available", "substrate availability mismatch")
+    _require(
+        dict(garden)
+        == {
+            "dataset_admission_id": EXPECTED_DATASET_ADMISSION_ID,
+            "dataset_admission_effect": "data_candidate_only",
+            "training_governance_decision_id": None,
+            "host_one_use_optimizer_permit_id": None,
+            "training_substrate_report": "not_independently_available",
+        },
+        "run Garden binding does not match the reviewed data-candidate admission",
+    )
     base = receipt.get("base")
     _require(base == {"model_id": BASE_MODEL_ID, "revision": BASE_MODEL_REVISION}, "run base binding mismatch")
     dataset = receipt.get("dataset")
-    _require(isinstance(dataset, Mapping) and dataset.get("id") == DATASET_ID, "run dataset binding mismatch")
-    for key in ("authorization_id", "recipe_id", "training_manifest_id", "hash_manifest_id"):
-        require_sha256_id(dataset.get(key), key)
+    _require(isinstance(dataset, Mapping), "run dataset binding is absent")
+    _require(
+        dict(dataset)
+        == {
+            "id": DATASET_ID,
+            "revision": DATASET_REVISION,
+            "hash_manifest_id": DATASET_HASH_MANIFEST_ID,
+            "authorization_id": AUTHORIZATION_ID,
+            "recipe_id": RECIPE_ID,
+            "training_manifest_id": TRAINING_MANIFEST_ID,
+        },
+        "run dataset binding does not match the frozen experiment",
+    )
+    _require(receipt.get("plan") == fixed_training_plan(), "run plan does not match the frozen experiment")
+    runtime = receipt.get("runtime")
+    _require(
+        isinstance(runtime, Mapping) and dict(runtime) == EXPECTED_RUN_RUNTIME,
+        "run runtime does not match the frozen experiment",
+    )
+    _require(receipt.get("resolved_device") in {"cpu", "mps"}, "run resolved device observation mismatch")
+    observed_loss = receipt.get("observed_training_loss")
+    _require(
+        isinstance(observed_loss, str)
+        and 0 < len(observed_loss) <= 64
+        and observed_loss == observed_loss.strip(),
+        "run loss observation must be a bounded string",
+    )
+    try:
+        parsed_loss = Decimal(observed_loss)
+    except InvalidOperation as exc:
+        raise TrainingBundleError("run loss observation must be numeric") from exc
+    _require(parsed_loss.is_finite() and parsed_loss >= 0, "run loss observation must be finite and non-negative")
     _validate_sanitized_json(receipt, "run receipt")
 
 

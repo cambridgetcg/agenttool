@@ -6,15 +6,22 @@ import unittest
 from pathlib import Path
 
 from xenia_revocable_feedback_model.core import (
+    AUTHORIZATION_ID,
     BASE_MODEL_ID,
     BASE_MODEL_REVISION,
+    DATASET_HASH_MANIFEST_ID,
     DATASET_ID,
+    DATASET_REVISION,
     DISCLOSURE,
+    EXPECTED_RUNTIME_VERSIONS,
     GOVERNANCE_STATUS,
     METRICS,
+    RECIPE_ID,
+    TRAINING_MANIFEST_ID,
     TrainingBundleError,
     completion_only_tokens,
     domain_separated_id,
+    fixed_training_plan,
     write_canonical_json,
 )
 from xenia_revocable_feedback_model.evaluate import (
@@ -26,6 +33,7 @@ from xenia_revocable_feedback_model.evaluate import (
     validate_inference_evaluation,
 )
 from xenia_revocable_feedback_model.release import (
+    EXPECTED_DATASET_ADMISSION_ID,
     build_release,
     default_bundle_paths,
     validate_model_card,
@@ -83,7 +91,7 @@ def run_receipt() -> dict[str, object]:
         "disclosure": DISCLOSURE,
         "operator_acknowledgement": GOVERNANCE_STATUS,
         "garden": {
-            "dataset_admission_id": identifier(11),
+            "dataset_admission_id": EXPECTED_DATASET_ADMISSION_ID,
             "dataset_admission_effect": "data_candidate_only",
             "training_governance_decision_id": None,
             "host_one_use_optimizer_permit_id": None,
@@ -92,14 +100,14 @@ def run_receipt() -> dict[str, object]:
         "base": {"model_id": BASE_MODEL_ID, "revision": BASE_MODEL_REVISION},
         "dataset": {
             "id": DATASET_ID,
-            "revision": "a" * 40,
-            "hash_manifest_id": identifier(12),
-            "authorization_id": identifier(13),
-            "recipe_id": identifier(14),
-            "training_manifest_id": identifier(15),
+            "revision": DATASET_REVISION,
+            "hash_manifest_id": DATASET_HASH_MANIFEST_ID,
+            "authorization_id": AUTHORIZATION_ID,
+            "recipe_id": RECIPE_ID,
+            "training_manifest_id": TRAINING_MANIFEST_ID,
         },
-        "plan": {"max_steps": 8},
-        "runtime": {"python": "3.12.12"},
+        "plan": fixed_training_plan(),
+        "runtime": {"python": "3.12.12", **EXPECTED_RUNTIME_VERSIONS},
         "resolved_device": "cpu",
         "observed_optimizer_steps": 8,
         "observed_training_loss": "1.25",
