@@ -12,6 +12,7 @@ Active - repository source carries the paired 0.21.1 corrective KINGDOM card par
   and LOVE BOMB use dedicated direct `undici` package dispatchers so Bun
   startup proxy credentials cannot enter either no-auth transport
 - `@noble/ed25519` + `@noble/hashes` for ed25519 signing (matches the api server + cli/think; byte-identical wire format)
+- `@noble/curves` (secp256k1) + `@noble/hashes` (keccak-256, sha-256) for the x402 EIP-712 signer — byte-identical to the server's viem path, proven by the server-generated fixture
 - WebCrypto SubtleCrypto for AES-256-GCM (no extra dep)
 - Bun for test runner
 - `tsc` for build
@@ -57,6 +58,7 @@ src/
   anthropic-adapter.ts — AnthropicAdapter (Tier 2: auto-inject wake + auto-trace)
   openai-responses-adapter.ts — OpenAIResponsesAdapter (completed Responses: auto-wake + auto-trace)
   types.ts             — Shared type definitions (Memory, Wallet, Escrow, Trace, ...)
+  x402.ts              — x402 V2 parse → refuse → sign (server port + noble EIP-712/secp256k1 signer); opt-in only, spend policy mandatory, never pays by default; no network
   errors.ts            — AgentToolError class
 tests/
   client.test.ts            — Core client + service integration
@@ -70,6 +72,7 @@ tests/
   math-cards.test.ts       — request bytes, authority isolation, bounds, response shape, and guided errors
   love-bomb.test.ts        — direct transport, hostile JSON/schema bounds, and six literal-false boundary fields
   wake-continuity.test.ts  — shared vectors, hostile objects, closed fields, cross-fields, sorting, and cached no-auth composition
+  x402.test.ts             — server-generated EIP-3009 vector parity (fixtures/x402-eip3009-vector.json), keccak/address KATs, refusal matrix, signer walls
   kingdom-os.test.ts        — fixed argv, sanitized environment, schema, ambiguity, and bearer-isolation contract
   kingdom-framework.test.ts — closed card, no-bearer/no-cookie, no-redirect, response-bound contract
   phase2.test.ts            — register + identity surface fillout

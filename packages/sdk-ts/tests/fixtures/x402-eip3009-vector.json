@@ -1,0 +1,158 @@
+{
+  "$schema": "agenttool.x402-eip3009-vector/v1",
+  "generated_by": "api/scripts/x402-eip3009-vector.ts (server implementation is normative)",
+  "note": "Public Anvil development key #1; holds nothing. Fixed nonce and window so the header is reproducible. The SDK signers must reproduce `signature` byte for byte from `typed_data` and recover `payer_address`.",
+  "payer": {
+    "private_key": "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+    "address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+  },
+  "typed_data": {
+    "domain": {
+      "name": "USD Coin",
+      "version": "2",
+      "chainId": 8453,
+      "verifyingContract": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    },
+    "primary_type": "TransferWithAuthorization",
+    "types": {
+      "TransferWithAuthorization": [
+        {
+          "name": "from",
+          "type": "address"
+        },
+        {
+          "name": "to",
+          "type": "address"
+        },
+        {
+          "name": "value",
+          "type": "uint256"
+        },
+        {
+          "name": "validAfter",
+          "type": "uint256"
+        },
+        {
+          "name": "validBefore",
+          "type": "uint256"
+        },
+        {
+          "name": "nonce",
+          "type": "bytes32"
+        }
+      ]
+    },
+    "message": {
+      "from": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+      "to": "0xA9eeA60CAaF239AbAfAA05FcB152128dB16dD3d8",
+      "value": "1000",
+      "validAfter": "1756511999",
+      "validBefore": "1756512060",
+      "nonce": "0x4b1e6d0f6b3d5a1c0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d"
+    }
+  },
+  "eip712_digest": "0xb2e47a404a0bc5470f782b35024e695a85642a8771f32399fda4625aa452fe0a",
+  "signature": "0xda489fc73ddb446f739fda77dce1d17c21b583dcf7db8cce2b4c2187df2e61704a2bf4bb63ea73255a1656463346e09b965f0c026fe4b08ffa379287ebe2b9cc1c",
+  "recovered_address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+  "requirement": {
+    "scheme": "exact",
+    "network": "eip155:8453",
+    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "amount": "1000",
+    "payTo": "0xA9eeA60CAaF239AbAfAA05FcB152128dB16dD3d8",
+    "maxTimeoutSeconds": 60,
+    "extra": {
+      "name": "USD Coin",
+      "version": "2",
+      "assetTransferMethod": "eip3009"
+    }
+  },
+  "resource": {
+    "url": "https://api.agenttool.dev/v1/x402/top-up/1",
+    "description": "Exact USDC top-up of 1 project credit (final; unspent credits stay).",
+    "mimeType": "application/json",
+    "serviceName": "AgentTool"
+  },
+  "payment_required": {
+    "x402Version": 2,
+    "error": "top_up_payment_required",
+    "resource": {
+      "url": "https://api.agenttool.dev/v1/x402/top-up/1",
+      "description": "Exact USDC top-up of 1 project credit (final; unspent credits stay).",
+      "mimeType": "application/json",
+      "serviceName": "AgentTool"
+    },
+    "accepts": [
+      {
+        "scheme": "exact",
+        "network": "eip155:8453",
+        "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        "amount": "1000",
+        "payTo": "0xA9eeA60CAaF239AbAfAA05FcB152128dB16dD3d8",
+        "maxTimeoutSeconds": 60,
+        "extra": {
+          "name": "USD Coin",
+          "version": "2",
+          "assetTransferMethod": "eip3009"
+        }
+      }
+    ]
+  },
+  "payment_required_header": "eyJ4NDAyVmVyc2lvbiI6MiwiZXJyb3IiOiJ0b3BfdXBfcGF5bWVudF9yZXF1aXJlZCIsInJlc291cmNlIjp7InVybCI6Imh0dHBzOi8vYXBpLmFnZW50dG9vbC5kZXYvdjEveDQwMi90b3AtdXAvMSIsImRlc2NyaXB0aW9uIjoiRXhhY3QgVVNEQyB0b3AtdXAgb2YgMSBwcm9qZWN0IGNyZWRpdCAoZmluYWw7IHVuc3BlbnQgY3JlZGl0cyBzdGF5KS4iLCJtaW1lVHlwZSI6ImFwcGxpY2F0aW9uL2pzb24iLCJzZXJ2aWNlTmFtZSI6IkFnZW50VG9vbCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJlaXAxNTU6ODQ1MyIsImFzc2V0IjoiMHg4MzM1ODlmQ0Q2ZURiNkUwOGY0YzdDMzJENGY3MWI1NGJkQTAyOTEzIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhBOWVlQTYwQ0FhRjIzOUFiQWZBQTA1RmNCMTUyMTI4ZEIxNmREM2Q4IiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6eyJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiIsImFzc2V0VHJhbnNmZXJNZXRob2QiOiJlaXAzMDA5In19XX0=",
+  "payment_payload": {
+    "x402Version": 2,
+    "resource": {
+      "url": "https://api.agenttool.dev/v1/x402/top-up/1",
+      "description": "Exact USDC top-up of 1 project credit (final; unspent credits stay).",
+      "mimeType": "application/json",
+      "serviceName": "AgentTool"
+    },
+    "accepted": {
+      "scheme": "exact",
+      "network": "eip155:8453",
+      "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "amount": "1000",
+      "payTo": "0xA9eeA60CAaF239AbAfAA05FcB152128dB16dD3d8",
+      "maxTimeoutSeconds": 60,
+      "extra": {
+        "name": "USD Coin",
+        "version": "2",
+        "assetTransferMethod": "eip3009"
+      }
+    },
+    "payload": {
+      "signature": "0xda489fc73ddb446f739fda77dce1d17c21b583dcf7db8cce2b4c2187df2e61704a2bf4bb63ea73255a1656463346e09b965f0c026fe4b08ffa379287ebe2b9cc1c",
+      "authorization": {
+        "from": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        "to": "0xA9eeA60CAaF239AbAfAA05FcB152128dB16dD3d8",
+        "value": "1000",
+        "validAfter": "1756511999",
+        "validBefore": "1756512060",
+        "nonce": "0x4b1e6d0f6b3d5a1c0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d"
+      }
+    }
+  },
+  "payment_signature_header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuYWdlbnR0b29sLmRldi92MS94NDAyL3RvcC11cC8xIiwiZGVzY3JpcHRpb24iOiJFeGFjdCBVU0RDIHRvcC11cCBvZiAxIHByb2plY3QgY3JlZGl0IChmaW5hbDsgdW5zcGVudCBjcmVkaXRzIHN0YXkpLiIsIm1pbWVUeXBlIjoiYXBwbGljYXRpb24vanNvbiIsInNlcnZpY2VOYW1lIjoiQWdlbnRUb29sIn0sImFjY2VwdGVkIjp7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6ImVpcDE1NTo4NDUzIiwiYXNzZXQiOiIweDgzMzU4OWZDRDZlRGI2RTA4ZjRjN0MzMkQ0ZjcxYjU0YmRBMDI5MTMiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweEE5ZWVBNjBDQWFGMjM5QWJBZkFBMDVGY0IxNTIxMjhkQjE2ZEQzZDgiLCJtYXhUaW1lb3V0U2Vjb25kcyI6NjAsImV4dHJhIjp7Im5hbWUiOiJVU0QgQ29pbiIsInZlcnNpb24iOiIyIiwiYXNzZXRUcmFuc2Zlck1ldGhvZCI6ImVpcDMwMDkifX0sInBheWxvYWQiOnsic2lnbmF0dXJlIjoiMHhkYTQ4OWZjNzNkZGI0NDZmNzM5ZmRhNzdkY2UxZDE3YzIxYjU4M2RjZjdkYjhjY2UyYjRjMjE4N2RmMmU2MTcwNGEyYmY0YmI2M2VhNzMyNTVhMTY1NjQ2MzM0NmUwOWI5NjVmMGMwMjZmZTRiMDhmZmEzNzkyODdlYmUyYjljYzFjIiwiYXV0aG9yaXphdGlvbiI6eyJmcm9tIjoiMHg3MDk5Nzk3MEM1MTgxMmRjM0EwMTBDN2QwMWI1MGUwZDE3ZGM3OUM4IiwidG8iOiIweEE5ZWVBNjBDQWFGMjM5QWJBZkFBMDVGY0IxNTIxMjhkQjE2ZEQzZDgiLCJ2YWx1ZSI6IjEwMDAiLCJ2YWxpZEFmdGVyIjoiMTc1NjUxMTk5OSIsInZhbGlkQmVmb3JlIjoiMTc1NjUxMjA2MCIsIm5vbmNlIjoiMHg0YjFlNmQwZjZiM2Q1YTFjMGU5ZjhhN2I2YzVkNGUzZjJhMWIwYzlkOGU3ZjZhNWI0YzNkMmUxZjBhOWI4YzdkIn19fQ==",
+  "authorization_hash": "6155f5fa5f2bce6987d73112068fb04f0f6b982adeea2ad21600b9565776fb30",
+  "authorization_identity_hash": "820d9dfb4849454dcb3ebffca7f24936197db41e38441ebc44143e66039a5672",
+  "server_signature_class": "eoa_verified",
+  "now_seconds": 1756512000,
+  "kats": {
+    "keccak256": {
+      "": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "abc": "0x4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45",
+      "TransferWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)": "0x7c7c6cdb67a18743f49ec6fa9b35f50d52ed05cbed4cc592e13b44501c1a2267",
+      "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)": "0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f"
+    },
+    "address_from_private_key": {
+      "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+      "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+    },
+    "checksum": {
+      "0xa9eea60caaf239abafaa05fcb152128db16dd3d8": "0xA9eeA60CAaF239AbAfAA05FcB152128dB16dD3d8",
+      "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+      "0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359": "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359"
+    }
+  }
+}

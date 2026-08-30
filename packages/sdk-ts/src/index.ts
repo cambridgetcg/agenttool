@@ -116,6 +116,50 @@ export type {
   X402PaymentRequirement,
   X402ResourceInfo,
 } from "./errors.js";
+// x402 V2 — parse → refuse → sign. Opt-in only; never pays by default.
+export {
+  AGENTTOOL_TREASURY,
+  MAX_X402_HEADER_B64_LENGTH,
+  TRANSFER_WITH_AUTHORIZATION_TYPES,
+  X402_ATOMIC_PER_CREDIT,
+  X402_BASE_NETWORK,
+  X402_BASE_USDC,
+  X402_USDC_ASSETS,
+  X402_VERSION,
+  authorizationHash,
+  checksumEvmAddress,
+  decodeCanonicalBase64,
+  decodePaymentRequiredHeader,
+  decodePaymentResponseHeader,
+  encodeCanonicalBase64Json,
+  evmAddressFromPrivateKey,
+  hashTransferWithAuthorization,
+  isEvmAddress,
+  keccak256,
+  localEvmSigner,
+  parsePaymentRequiredBody,
+  parsePaymentRequirements,
+  parseResourceInfo,
+  paymentIsStillReplayable,
+  recoverTypedDataAddress,
+  selectPayableRequirement,
+  signExactEvmAuthorization,
+} from "./x402.js";
+export type {
+  SignedX402Payment,
+  TransferWithAuthorizationTypedData,
+  X402AssetDefinition,
+  X402Authorization,
+  X402ClientRefusal,
+  X402ClientRefusalReason,
+  X402Network,
+  X402PaymentPayload,
+  X402PaymentRequired,
+  X402SelectedRequirement,
+  X402SettleResponse,
+  X402Signer,
+  X402SpendPolicy,
+} from "./x402.js";
 export { register, DEFAULT_BASE_URL } from "./register.js";
 export { pathways } from "./pathways.js";
 export { bootstrapAgent } from "./bootstrap-agent.js";
