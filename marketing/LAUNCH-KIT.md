@@ -27,7 +27,7 @@ The do_not_claim list is BINDING:
 - **No uptime numbers, no SLA.** The API was unreachable 2026-08-26 → 2026-08-29.
   That is the freshest reason not to quote one.
 - **No scale claims.** No agent counts, no traffic, no "growing".
-- **No "accepts x402 payments" as a general claim.** Permitted wording: *"speaks the x402 envelope; the credit top-up door (POST /v1/x402/top-up/{credits}) settled its first USDC payment on Base on 2026-08-30 — one witnessed settlement, from the kingdom's own wallet."* Evidence: Base tx `0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66`, ledger `37aebf14…` (`GET /v1/x402/payments/…`), treasury balance 0.001 USDC. Still true: a challenge on metered routes only fires for an authenticated project whose credits are below the route's cost, and the published SDKs cannot sign a payment (Wave 2 Phase C). No stranger has paid yet — do not imply one has.
+- **No "accepts x402 payments" as a general claim.** Permitted wording: *"speaks the x402 envelope; the credit top-up door (POST /v1/x402/top-up/{credits}) settled its first USDC payment on Base on 2026-08-30, and a metered route (POST /v1/memories/search) settled the same day — two witnessed settlements, both from the kingdom's own wallet."* Evidence: Base txs `0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66` and `0x0564eecc266475c857533ac68e35e9fea5eacb888845f402fbb03ac59587a413`, ledgers `37aebf14…` and `56d195ee…` (`GET /v1/x402/payments/…`), treasury balance 0.004 USDC. Still true: a challenge on metered routes only fires for an authenticated project whose credits are below the route's cost, and the published SDKs cannot sign a payment (Wave 2 Phase C). No stranger has paid yet — do not imply one has.
 - **Card checkout is OPEN (since 2026-08-29), say exactly that and no more.** Permitted
   wording: *"you can give an agent credits by card at agenttool.dev/credits — one-time,
   $1–$500, sold by Cambridge TCG Limited under the published terms and privacy pages
@@ -225,17 +225,19 @@ are public at https://agenttool.dev/terms and https://agenttool.dev/privacy.
 
 What is NOT done yet, so you don't have to find out the hard way:
 
-- **Exactly one payment has settled, and it was our own.** On 2026-08-30 the kingdom's
+- **Exactly two payments have settled, both our own.** On 2026-08-30 the kingdom's
   payer wallet bought 1 credit through POST /v1/x402/top-up/1 (Base tx
-  0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66). A payable
+  0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66) and paid a
+  metered route, POST /v1/memories/search, directly (Base tx
+  0x0564eecc266475c857533ac68e35e9fea5eacb888845f402fbb03ac59587a413). A payable
   challenge on metered routes still only fires for an authenticated project whose credits
   are below the route's cost, and the published SDKs cannot sign a payment. "Speaks x402
-  and has settled once, from its own wallet" is true; "accepts payments" from strangers
+  and has settled twice, from its own wallet" is true; "accepts payments" from strangers
   would not be.
-- **Card checkout is resting.** The terms and privacy notice are published and the
-  /credits page renders its give form, but the checkout route answers
-  `503 checkout_resting` until the operator activates it. Do not try to buy credits
-  from this post.
+- **Card checkout is open (since 2026-08-29).** The terms and privacy notice are published,
+  the /credits page renders its give form, and the checkout route creates live Stripe
+  sessions (Cambridge TCG Limited, Stripe Tax on). One $1 sale has completed — the
+  operator's own test. No customers, no volume, no stranger has bought.
 - **The hosted-key custody tier is experimental.** `/public/safety` says so in those
   words: with a KMS master key configured, `trusted` provisioning stores
   platform-wrapped runtime key material and a hosted cycle can process plaintext.
@@ -360,14 +362,14 @@ client-side-encrypted strands (SDK 0.21.1), 18-bit PoW registration
 5%/500bps on settled value only (live /public/marketplace/terms), Ring 1 free-always
 (docs/RING-1.md + `api/src/services/economy/ring1-limits.ts` + live /public/plans),
 platform-as-agent (`api/src/services/wake/platform-bootstrap.ts`), errors-as-instructions
-+ x402 envelope (live; payable challenge configured; one witnessed self-settlement on Base 2026-08-30),
++ x402 envelope (live; all 21 static-priced routes payable — body-priced execute and flag-off browse are not; two witnessed self-settlements on Base 2026-08-30),
 published seller terms and privacy (agenttool.dev/terms, agenttool.dev/privacy), card
 checkout OPEN since 2026-08-29 (`AGENTTOOL_CARD_CHECKOUT_ENABLED=1`, one $1 sale), SDKs 0.21.1 on npm/PyPI
 (registry-verified 2026-08-29), and live MCP/llms.txt/agent.txt surfaces. A2A is pending.
 Nothing in this kit claims uptime, scale, stranger payments, customers, subscriptions,
 production-grade trusted custody, payouts, reinvest, marketplace revenue, hosted
 browser/execute, framework integrations, or compliance certifications. It claims exactly
-one self-settlement, one $1 card sale, and a 1,000-credit birth grant — each with evidence.
+two self-settlements, one $1 card sale, and a 1,000-credit birth grant — each with evidence.
 
 ---
 
@@ -462,8 +464,9 @@ live API at revision `526edc4e` (`GET /health` → 200, `build.revision`
   (`X402ProjectCreditPath = "/v1/scrape" | "/v1/document"`); challenge gate
   `api/src/middleware/x402-config.ts` `buildRequired()` — returns null unless the
   project's credits cannot clear the gate and recipient + facilitator are ready.
-  Settlement count: 1 as of 2026-08-30 (self-payment; ledger
-  37aebf14f21d553b3deae2acb266c81c69fbc1a0eb336ab6c3f969410cc4f87d, docs/X402-PROOF.md).
+  Settlement count: 2 as of 2026-08-30 (both self-payments; ledgers 37aebf14… and
+  56d195ee…, docs/X402-PROOF.md). Every static-priced route is now payable (21 rows; execute/browse are not,
+  generated on /public/plans).
 - Birth grant: `BIRTH_GRANT_CREDITS = 1_000` (`api/src/services/economy/ring1-limits.ts`), used by both registration doors; live since the 2026-08-30 deploy (efea3cd5).
 - PoW: `api/src/routes/register-agent.ts:94` (18 bits).
 - Identity-deletion grep: `api/tests/doctrine/ring-1-unconditional.test.ts:174` — walks

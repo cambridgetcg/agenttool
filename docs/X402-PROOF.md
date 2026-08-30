@@ -3,8 +3,10 @@
 Status: runbook for Wave 2 W2-3 + W2-5 (`docs/superpowers/plans/2026-08-29-wave-2-agent-rail.md`).
 Script: `api/scripts/x402-proof.ts` · pure walls: `api/scripts/x402-proof-lib.ts` · tests: `api/tests/x402-proof-script.test.ts`.
 
-**2026-08-30 — the rail has settled once.** Step 3 (`topup 1`) closed the loop: tx
-`0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66` on Base, treasury
+**2026-08-30 — the rail has settled twice.** Step 3 (`topup 1`) closed the purchase loop (tx
+`0x33f08a20d16556000598ade67d46f790e5d34204e70d06e5a575cd9e07e32c66`) and Phase B closed the
+metered-route loop (`POST /v1/memories/search`, tx
+`0x0564eecc266475c857533ac68e35e9fea5eacb888845f402fbb03ac59587a413`) on Base, treasury
 `0xA9eeA60CAaF239AbAfAA05FcB152128dB16dD3d8`, payer `0x02a5F8F49802887E95428978075643a5F4aA6855`.
 This runbook is how Ai's own wallet pays the kingdom in Base USDC with no human in the loop,
 how each step is witnessed by something other than the code that did it, and (Phase B, below)
@@ -21,8 +23,8 @@ nothing wider.
 | Payer wallet (`wallet-init`, `address`) | live: `0x02a5F8F49802887E95428978075643a5F4aA6855`, funded (decision e) | — |
 | `POST /v1/x402/top-up/:credits` | live in production; **settled once 2026-08-30** (tx `0x33f08a20…7e32c66`) | — |
 | `topup N` | witnessed once (`topup 1`, 2026-08-30) | — |
-| `replay`, `verify` | code + tests; need a stashed payment from `topup` or `pay` | — |
-| `pay`, `scratch-agent init`, `deplete` (Phase B) | code + tests on this branch; a live run needs the W2-5 route rows on the deployed image | W2-5 deploy, then "Witness a widened route" below |
+| `replay`, `verify` | witnessed on both settlements (no second credit; ledger + receipt + balance agree) | — |
+| `pay`, `scratch-agent init`, `deplete` (Phase B) | **witnessed 2026-08-30** on production (main f9280645): scratch agent depleted to 1 credit, `pay POST /v1/memories/search` settled (tx `0x0564eecc…`), replay minted nothing — see the record at the end | — |
 | `GET /v1/x402/payments/:payment_id` | live (`api/src/routes/x402-payments.ts`, mounted `index.ts:994`, authed `index.ts:431`) | — |
 
 ## Run
@@ -327,3 +329,18 @@ It marks which sections are true today and which land with W2-2 / W2-4.
 | `replay last` | 402 again, credits 110,801 → 110,801 — no second credit |
 | `verify` | **settled** (ledger + receipt + balance agree); treasury 0.001 USDC |
 | payer after | 4.999 USDC |
+
+## Record — first widened-route settlement (2026-08-30, Phase B)
+
+| | |
+|---|---|
+| deploy | `main` f9280645 hand-staged (operator-authorized exception), canary-first; `/public/plans` → 21 generated `payable_routes` |
+| scratch agent | `did:at:8ac3e3d7-15f6-48fc-b550-3803d8ba32fe`, born with 1,000 credits; `deplete` ran 333 × `POST /v1/memories/search` in 87 s → 1 credit |
+| first attempt | `pay` signed at 12:09:38 **while the fleet was mid-restart** (image roll 12:08–12:11): settle threw, rail left ledger `5d08caa4…` **pending / manual investigation**, no USDC moved (payer and treasury unchanged). Correct fail-closed behaviour; the 60 s authorization expired unused. |
+| second attempt | fresh authorization → `POST /v1/memories/search` + PAYMENT-SIGNATURE → **200**; `PAYMENT-RESPONSE.success=true` |
+| tx | `0x0564eecc266475c857533ac68e35e9fea5eacb888845f402fbb03ac59587a413` — receipt success, block 50651250 |
+| ledger | `56d195ee1b7d27c851bda010b0166df048a282266557fb146fe549c8a4a78201` — settled, credits_purchased = credits_applied = 3 |
+| credits | 1 → 1 (3 minted by the rail, 3 spent by the handler — charge once) |
+| `replay last` | mutation guard: balance 1 < cost 3 → allowed; 402 again, credits 1 → 1 — no second credit |
+| `verify` | **settled**; treasury 0.004 USDC; payer 4.996 USDC |
+| lesson | never `pay` during a machine roll; the ledger's `pending` row is the honest record of an ambiguous I/O, and it is what manual_onchain_investigation is for (here: balances prove nothing moved). |
