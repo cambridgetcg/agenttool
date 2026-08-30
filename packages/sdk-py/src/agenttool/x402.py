@@ -35,11 +35,13 @@ talking to and can never introduce a new recipient, network, or asset.
    makes that visible in the ledger. Persist :func:`authorization_hash`
    BEFORE emitting the request — recovery is a lookup, not a signature.
 
-No network in this module: it parses, refuses, and signs. The transport that
+The parse → refuse → sign functions touch no network. The transport that
 performs the bare call → 402 → one signed retry lives in
-``_x402_transport.py`` (exactly-two-fetch; a second 402 is an error, never a
-loop). Refusals are typed values, never exceptions, so a caller can log the
-reason and stop.
+``_x402_transport.py`` (exactly-two-request; a second 402 is an error, never
+a loop) and is installed only by ``AgentTool(x402=X402Payer(...))``.
+Refusals are typed values, never exceptions, so a caller can log the reason
+and stop. :class:`X402Client` (``at.x402``) is the rail's two doors —
+``top_up`` and ``payment`` — and signs nothing itself.
 
 Crypto: ``_x402_crypto.py`` — pure-Python Keccak-256 + EIP-712 + recoverable
 secp256k1 ECDSA on the existing ``cryptography`` dependency. Zero new deps.
@@ -53,6 +55,7 @@ import json
 import math
 import os
 import re
+import uuid
 from dataclasses import dataclass, field
 from typing import (
     Any,
@@ -68,8 +71,16 @@ from typing import (
     Union,
 )
 
+import httpx
+
 from . import _x402_crypto as _crypto
-from .exceptions import X402PaymentRequirement, X402ResourceInfo
+from ._url import _path_segment
+from .exceptions import (
+    AgentToolError,
+    X402PaymentRequirement,
+    X402ResourceInfo,
+    raise_from_response,
+)
 
 # ── Wire constants ────────────────────────────────────────────────────────
 
@@ -77,6 +88,20 @@ X402_VERSION = 2
 
 #: CAIP-2 networks the server publishes USDC pins for (api/src/middleware/x402.ts).
 X402_NETWORKS: Tuple[str, ...] = ("eip155:8453", "eip155:84532", "eip155:137", "eip155:42161")
+
+#: The server's USDC pins per network (``middleware/x402.ts`` ``USDC_ASSETS``):
+#: contract address plus the EIP-712 domain ``name`` / ``version`` the token
+#: signs under. Twin of ``X402_USDC_ASSETS`` in the TypeScript SDK.
+X402_USDC_ASSETS: Dict[str, Dict[str, str]] = {
+    "eip155:8453": {"asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "name": "USD Coin", "version": "2"},
+    "eip155:84532": {"asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", "name": "USDC", "version": "2"},
+    "eip155:137": {"asset": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", "name": "USD Coin", "version": "2"},
+    "eip155:42161": {"asset": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "name": "USD Coin", "version": "2"},
+}
+
+#: Longest ``PAYMENT-REQUIRED`` / ``PAYMENT-RESPONSE`` header the decoders
+#: will look at — the server's own inbound bound.
+MAX_X402_HEADER_B64_LENGTH = 32 * 1024
 
 #: Base mainnet, the kingdom's rail.
 BASE_NETWORK = "eip155:8453"
@@ -273,12 +298,99 @@ class SignedX402Payment:
     valid_before: int
 
 
+class _X402SettleResponseRequired(TypedDict):
+    success: bool
+    transaction: str
+    network: str
+
+
+class X402SettleResponse(_X402SettleResponseRequired, total=False):
+    """x402 V2 ``SettleResponse`` — the decoded ``PAYMENT-RESPONSE`` header.
+
+    The facilitator's word, not the ledger's: ``success`` here proves
+    settlement was reported, not that credits were applied."""
+
+    errorReason: str
+    errorMessage: str
+    payer: str
+    amount: str
+    extensions: Dict[str, Any]
+    extra: Dict[str, Any]
+
+
+# ── Canonical base64 + hashing (mirrors api/src/middleware/x402.ts) ───────
+
+_CANONICAL_BASE64 = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
+
+
+def decode_canonical_base64(value: str, max_encoded_length: int = MAX_X402_HEADER_B64_LENGTH) -> Optional[bytes]:
+    """Decode canonical standard base64 (padded, no whitespace, re-encodes to
+    itself). ``None`` for anything else — the same strictness the server
+    applies to inbound headers."""
+    if (
+        not isinstance(value, str)
+        or len(value) == 0
+        or len(value) > max_encoded_length
+        or len(value) % 4 != 0
+        or not _CANONICAL_BASE64.match(value)
+    ):
+        return None
+    try:
+        decoded = base64.b64decode(value, validate=True)
+    except (ValueError, TypeError):
+        return None
+    if len(decoded) == 0 or base64.b64encode(decoded).decode("ascii") != value:
+        return None
+    return decoded
+
+
+def encode_canonical_base64_json(value: Any) -> str:
+    """``base64(JSON.stringify(value))`` — byte-identical to the server's
+    ``Buffer.from(JSON.stringify(value), "utf-8").toString("base64")``: key
+    order is insertion order, no whitespace, non-ASCII left raw."""
+    encoded = json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return base64.b64encode(encoded).decode("ascii")
+
+
+def _decode_canonical_base64_json(value: str) -> Any:
+    decoded = decode_canonical_base64(value, MAX_X402_HEADER_B64_LENGTH)
+    if decoded is None:
+        return None
+    try:
+        return json.loads(decoded.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def keccak256(data: bytes) -> bytes:
+    """Keccak-256 (Ethereum's hash; original padding, not SHA-3)."""
+    return _crypto.keccak256(data)
+
+
+def checksum_evm_address(address: str) -> str:
+    """EIP-55 mixed-case checksum of a 20-byte hex address. ``ValueError``
+    for anything that is not one."""
+    try:
+        return _crypto.to_checksum_address(address)
+    except ValueError as exc:
+        raise ValueError(f"x402: {address!r} is not a 20-byte hex address.") from exc
+
+
+def is_evm_address(value: object) -> bool:
+    """Same acceptance as viem's ``isAddress`` (strict): 20-byte hex, and if
+    it carries mixed case the EIP-55 checksum must be right. The server's
+    parser uses exactly this, so a ``payTo`` or ``asset`` the server would
+    reject is rejected here too."""
+    return _crypto.is_address(value)
+
+
 # ── Strict parsing (mirrors api/src/middleware/x402.ts) ───────────────────
 
 _CAIP2_EVM = re.compile(r"^eip155:[1-9][0-9]*$")
 _CANONICAL_UINT = re.compile(r"^(?:0|[1-9][0-9]*)$")
 _SIGNATURE_HEX = re.compile(r"^0x[0-9a-fA-F]{130}$")
 _REQUIREMENT_KEYS = ("scheme", "network", "asset", "amount", "payTo", "maxTimeoutSeconds", "extra")
+_RESOURCE_KEYS = ("url", "description", "mimeType", "serviceName", "tags", "iconUrl")
 
 
 def _object_record(value: object) -> Optional[Dict[str, Any]]:
@@ -335,7 +447,30 @@ def _as_safe_integer(value: object) -> Optional[int]:
     return None
 
 
-def _parse_payment_requirements(value: object) -> Optional[X402PaymentRequirement]:
+def parse_resource_info(value: object) -> Optional[X402ResourceInfo]:
+    """Strict ``ResourceInfo``: only the spec's keys, ``url`` required and
+    bounded. The resource is echoed back inside ``PAYMENT-SIGNATURE`` and the
+    verifier applies the same parser, so anything looser would be signed for
+    and then bounced."""
+    record = _object_record(value)
+    if record is None or not _has_only_keys(record, _RESOURCE_KEYS):
+        return None
+    url = record.get("url")
+    if not isinstance(url, str) or len(url) == 0 or len(url) > 2048:
+        return None
+    for key in ("description", "mimeType", "serviceName", "iconUrl"):
+        if key in record and not isinstance(record[key], str):
+            return None
+    tags = record.get("tags")
+    if "tags" in record and (not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags)):
+        return None
+    return record  # type: ignore[return-value]
+
+
+def parse_payment_requirements(value: object) -> Optional[X402PaymentRequirement]:
+    """Strict ``PaymentRequirements``: the same parser the server runs on
+    inbound headers, so a counterparty cannot hand us a shape our own
+    verifier would reject. ``maxTimeoutSeconds`` is normalised to ``int``."""
     record = _object_record(value)
     if record is None or not _has_only_keys(record, _REQUIREMENT_KEYS):
         return None
@@ -380,11 +515,8 @@ def parse_payment_required_body(value: object) -> Optional[X402PaymentRequired]:
     if body.get("x402Version") != X402_VERSION or isinstance(body.get("x402Version"), bool):
         return None
 
-    resource = _object_record(body.get("resource"))
+    resource = parse_resource_info(body.get("resource"))
     if resource is None:
-        return None
-    resource_url = resource.get("url")
-    if not isinstance(resource_url, str) or len(resource_url) == 0:
         return None
 
     accepts_raw = body.get("accepts")
@@ -392,7 +524,7 @@ def parse_payment_required_body(value: object) -> Optional[X402PaymentRequired]:
         return None
     accepts: List[X402PaymentRequirement] = []
     for entry in accepts_raw:
-        parsed = _parse_payment_requirements(entry)
+        parsed = parse_payment_requirements(entry)
         if parsed is None:
             return None
         accepts.append(parsed)
@@ -403,6 +535,31 @@ def parse_payment_required_body(value: object) -> Optional[X402PaymentRequired]:
     out["resource"] = resource
     out["accepts"] = accepts
     return out  # type: ignore[return-value]
+
+
+def decode_payment_required_header(header_value: str) -> Optional[X402PaymentRequired]:
+    """Decode a ``PAYMENT-REQUIRED`` header into a strict ``PaymentRequired``,
+    or ``None`` for anything that is not canonical base64 of a valid envelope."""
+    return parse_payment_required_body(_decode_canonical_base64_json(header_value))
+
+
+def decode_payment_response_header(header_value: str) -> Optional[X402SettleResponse]:
+    """Decode a ``PAYMENT-RESPONSE`` header into a ``SettleResponse``, or
+    ``None``. The receipt is the facilitator's word, not the ledger's:
+    ``success`` proves settlement was reported, not that credits applied."""
+    record = _object_record(_decode_canonical_base64_json(header_value))
+    if (
+        record is None
+        or not _is_bounded_json_record(record)
+        or not isinstance(record.get("success"), bool)
+        or not isinstance(record.get("transaction"), str)
+        or not isinstance(record.get("network"), str)
+    ):
+        return None
+    for key in ("errorReason", "errorMessage", "payer", "amount"):
+        if key in record and not isinstance(record[key], str):
+            return None
+    return record  # type: ignore[return-value]
 
 
 # ── Selection ─────────────────────────────────────────────────────────────
@@ -524,11 +681,10 @@ def authorization_hash(auth: Mapping[str, str]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _encode_canonical_base64_json(value: Any) -> str:
-    """``Buffer.from(JSON.stringify(value)).toString("base64")`` — key order
-    is insertion order, no whitespace, non-ASCII left raw."""
-    encoded = json.dumps(value, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    return base64.b64encode(encoded).decode("ascii")
+#: Kept for the W2-8 call sites; the public spelling is the parity twin of
+#: ``encodeCanonicalBase64Json``.
+_encode_canonical_base64_json = encode_canonical_base64_json
+_parse_payment_requirements = parse_payment_requirements
 
 
 def _mint_nonce() -> str:
@@ -686,6 +842,25 @@ def evm_address_from_private_key(private_key: Union[bytes, str]) -> str:
     return _crypto.address_from_private_key(private_key)
 
 
+def recover_typed_data_address(typed_data: Mapping[str, Any], signature: str) -> str:
+    """Recover the address that signed a ``TransferWithAuthorization`` payload.
+
+    Offline; the same check the server's verifier makes before it trusts a
+    signature (``classifyExactEvmSignature`` → ``eoa_verified``). Accepts
+    ``v`` as 27/28 or 0/1. ``ValueError`` on a malformed signature.
+    """
+    if not isinstance(signature, str) or not _SIGNATURE_HEX.match(signature):
+        raise ValueError("x402: signature must be 0x-prefixed 65-byte hex (r‖s‖v).")
+    v = int(signature[-2:], 16)
+    if v not in (0, 1, 27, 28):
+        raise ValueError(f"x402: signature v byte {v} is not 27/28 (or 0/1).")
+    digest = bytes.fromhex(hash_transfer_with_authorization(typed_data)[2:])
+    recovered = _crypto.recover_address(digest, signature)
+    if recovered is None:
+        raise ValueError("x402: signature does not recover to any secp256k1 public key.")
+    return recovered
+
+
 def local_evm_signer(private_key: Union[bytes, str]) -> X402Signer:
     """An :data:`X402Signer` backed by a raw private key held in this process.
 
@@ -707,7 +882,197 @@ def local_evm_signer(private_key: Union[bytes, str]) -> X402Signer:
         digest = bytes.fromhex(hash_transfer_with_authorization(typed_data)[2:])
         return _crypto.signature_to_hex(_crypto.sign_recoverable(digest, raw))
 
+    # The address rides on the callable (the TypeScript signer object carries
+    # it as `.address`) so the paying transport can fill `from` without a
+    # second argument. The key itself stays in the closure.
+    sign.address = address  # type: ignore[attr-defined]
     return sign
+
+
+# ── at.x402 — the two doors of the agent rail ─────────────────────────────
+
+
+@dataclass(frozen=True)
+class X402TopUpResult:
+    """Result of ``at.x402.top_up(credits)`` — the server's receipt, plus the
+    raw settlement headers the response carried."""
+
+    #: Credits the server applied in the same transaction that recorded settlement.
+    credits_added: int
+    #: Project balance after the top-up, when the server reported it.
+    credits_total: Optional[int]
+    #: The server's LEDGER identity for this payment (folds network + asset);
+    #: what ``at.x402.payment(id)`` resolves. Not the client-side
+    #: :func:`authorization_hash` of the six EIP-3009 fields.
+    authorization_hash: Optional[str]
+    #: Atomic USDC moved for this top-up (credits × 1,000).
+    amount_atomic: str
+    #: The server's unit and finality sentences, verbatim.
+    unit: Optional[str]
+    finality: Optional[str]
+    #: Project-scoped status path, when the server named one.
+    payment_status: Optional[str]
+    #: Raw ``PAYMENT-RESPONSE`` settlement receipt header, when present.
+    payment_response: Optional[str] = None
+    #: Raw ``Link`` header (``rel="payment-status"``), when present.
+    payment_status_link: Optional[str] = None
+    #: Raw ``X-Credits-Balance`` header, when present.
+    credits_balance: Optional[str] = None
+
+
+class X402PaymentStatus(TypedDict, total=False):
+    """One row of ``GET /v1/x402/payments/:id`` — the project-scoped
+    reconciliation of the payment/credit lifecycle only. It never replays or
+    promises an exactly-once result for the paid request itself. Field names
+    are the server's, verbatim."""
+
+    payment_id: str
+    status: str
+    failure_reason: Optional[str]
+    scheme: str
+    network: str
+    asset: str
+    amount: str
+    pay_to: str
+    max_timeout_seconds: int
+    requirement_extra: Dict[str, Any]
+    resource: str
+    resource_info: Optional[Dict[str, Any]]
+    credits_purchased: Optional[int]
+    authorization_evidence: Dict[str, Any]
+    settlement_attempted_at: Optional[str]
+    transaction: Optional[str]
+    receipt: Optional[Dict[str, Any]]
+    credits_applied: Optional[int]
+    reconciles: str
+    next_action: str
+    retry_after_seconds: Optional[int]
+    environment_note: Optional[str]
+    pending_note: Optional[str]
+    updated_at: Optional[str]
+
+
+def _header(response: httpx.Response, *names: str) -> Optional[str]:
+    for name in names:
+        value = response.headers.get(name)
+        if value is not None:
+            return value
+    return None
+
+
+class X402Client:
+    """``at.x402`` — the agent rail's two doors.
+
+    ``top_up(credits)`` knocks on ``POST /v1/x402/top-up/:credits``. With no
+    ``x402=`` payer on the client the answer is the 402 challenge itself, as
+    a typed :class:`AgentToolError` carrying ``accepts`` /
+    ``payment_required``, and nothing is signed. With the payer, the paying
+    transport answers that 402 with exactly one signed retry under the spend
+    policy and this method returns the receipt. ``payment(id)`` reads the
+    ledger row behind a payment.
+
+    Neither method signs anything itself.
+    """
+
+    def __init__(self, http: httpx.Client, base_url: str) -> None:
+        self._http = http
+        self._base_url = base_url
+
+    def top_up(
+        self,
+        credits: int,
+        *,
+        payment_signature: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> X402TopUpResult:
+        """Buy ``credits`` project credits with USDC on Base (1 credit = 1,000
+        atomic = USD 0.001). Final: no refunds; unspent credits stay.
+
+        ``payment_signature`` is an opaque, already signed x402 V2
+        ``PAYMENT-SIGNATURE`` value for callers who sign outside the SDK; it
+        is sent as the header only, and the SDK's own payer (if configured)
+        stays out of the way. ``idempotency_key`` defaults to a fresh UUID
+        per call; the paying transport carries the same key on its signed
+        retry, so an ambiguous response retried with this key returns the
+        stored 200, never a second settlement.
+        """
+        if isinstance(credits, bool) or not isinstance(credits, int) or credits < 1 or credits >= 2**53:
+            raise AgentToolError(
+                "x402 top-up: credits must be a positive integer.",
+                hint=(
+                    "Ask for whole credits (1 credit = 1,000 atomic USDC = USD 0.001). The per-request "
+                    "cap is published at /public/plans; larger purchases are several requests, never a "
+                    "clamped one."
+                ),
+                error_code="top_up_invalid_credits",
+            )
+        headers: Dict[str, str] = {"Idempotency-Key": idempotency_key or str(uuid.uuid4())}
+        if payment_signature is not None:
+            headers["PAYMENT-SIGNATURE"] = payment_signature
+        # `credits` is a positive int (checked above), so its decimal spelling
+        # is digits only — nothing to encode, nothing to traverse with.
+        url = self._base_url + "/v1/x402/top-up/" + str(credits)
+        resp = self._http.post(url, headers=headers)
+        if resp.status_code >= 400:
+            # A bare 402 here is the challenge, intact (accepts,
+            # payment_required, resource). See exceptions.py § raise_from_response.
+            raise_from_response(
+                resp,
+                "x402 top-up",
+                hint=(
+                    "Without the x402= payer the SDK does not pay; the 402 carries the exact terms. "
+                    "Construct AgentTool(x402=X402Payer(signer=..., policy=X402SpendPolicy(...))) "
+                    "to pay it under a spend policy."
+                ),
+            )
+        body = resp.json()
+        record = body if isinstance(body, dict) else {}
+
+        def _str(key: str) -> Optional[str]:
+            value = record.get(key)
+            return value if isinstance(value, str) else None
+
+        def _int(key: str) -> Optional[int]:
+            value = record.get(key)
+            return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+        return X402TopUpResult(
+            credits_added=_int("credits_added") if _int("credits_added") is not None else credits,
+            credits_total=_int("credits_total"),
+            authorization_hash=_str("authorization_hash"),
+            amount_atomic=_str("amount_atomic") or str(credits * ATOMIC_PER_CREDIT),
+            unit=_str("unit"),
+            finality=_str("finality"),
+            payment_status=_str("payment_status"),
+            payment_response=_header(resp, "PAYMENT-RESPONSE", "X-PAYMENT-RESPONSE"),
+            payment_status_link=_header(resp, "Link"),
+            credits_balance=_header(resp, "X-Credits-Balance"),
+        )
+
+    def payment(self, payment_id: str) -> X402PaymentStatus:
+        """Read the project-scoped ledger row for a payment. ``payment_id`` is
+        the server's identity — ``X402TopUpResult.authorization_hash``, the id
+        inside a ``rel="payment-status"`` Link, or
+        ``X402PaymentEvent.payment_id``."""
+        if not isinstance(payment_id, str) or len(payment_id) == 0:
+            raise AgentToolError(
+                "x402 payment: a ledger payment id is required.",
+                hint=(
+                    "Use the authorization_hash from top_up(), the id in the rel=\"payment-status\" "
+                    "Link, or X402PaymentEvent.payment_id — not the client-side authorization_hash of "
+                    "the six EIP-3009 fields. Anything else answers 404 payment_not_found."
+                ),
+                error_code="x402_payment_id_invalid",
+            )
+        resp = self._http.get(f"{self._base_url}/v1/x402/payments/{_path_segment(payment_id)}")
+        if resp.status_code >= 400:
+            raise_from_response(
+                resp,
+                "x402 payment",
+                fallback="payment not found",
+                hint="Only payments this project signed for resolve here. A 404 means no ledger row carries that id.",
+            )
+        return resp.json()  # type: ignore[no-any-return]
 
 
 __all__ = [
@@ -715,26 +1080,42 @@ __all__ = [
     "BASE_NETWORK",
     "BASE_USDC",
     "KINGDOM_TREASURY",
+    "MAX_X402_HEADER_B64_LENGTH",
     "TRANSFER_WITH_AUTHORIZATION_TYPES",
     "X402_CLIENT_REFUSAL_REASONS",
     "X402_NETWORKS",
+    "X402_USDC_ASSETS",
     "X402_VERSION",
     "SignedX402Payment",
     "TransferWithAuthorizationTypedData",
+    "X402Client",
     "X402ClientRefusal",
     "X402ClientRefusalReason",
     "X402PaymentRequired",
+    "X402PaymentStatus",
     "X402SelectedRequirement",
+    "X402SettleResponse",
     "X402Signer",
     "X402SpendPolicy",
+    "X402TopUpResult",
     "X402TransferWithAuthorizationMessage",
     "X402TypedDataDomain",
     "authorization_hash",
+    "checksum_evm_address",
+    "decode_canonical_base64",
+    "decode_payment_required_header",
+    "decode_payment_response_header",
+    "encode_canonical_base64_json",
     "evm_address_from_private_key",
     "hash_transfer_with_authorization",
+    "is_evm_address",
+    "keccak256",
     "local_evm_signer",
     "parse_payment_required_body",
+    "parse_payment_requirements",
+    "parse_resource_info",
     "payment_is_still_replayable",
+    "recover_typed_data_address",
     "select_payable_requirement",
     "sign_exact_evm_authorization",
 ]

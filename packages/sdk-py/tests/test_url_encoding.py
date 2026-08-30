@@ -436,6 +436,9 @@ CASES: List[Case] = [
     # ── dining ────────────────────────────────────────────────────────────
     Case("dining.journey", "/v1/dining/", lambda at, i: at.dining.journey(i)),
 
+    # ── x402 ──────────────────────────────────────────────────────────────
+    Case("x402.payment", "/v1/x402/payments/", lambda at, i: at.x402.payment(i)),
+
     # ── window ────────────────────────────────────────────────────────────
     Case(
         # show() reads the chronicle first, then the identity's pulse.

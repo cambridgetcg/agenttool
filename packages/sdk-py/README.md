@@ -39,6 +39,23 @@ and 261,910-byte sdist
 (`sha256:e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d`).
 The registry remains a non-authoritative convenience.
 
+## Repository source line — 0.22.0
+
+Repository source declares the paired 0.22.0 line: the SDK **can sign and pay
+on x402 V2 challenges — opt-in only, never by default.** `agenttool.x402`
+mirrors the server's own payer function-for-function on the existing
+`cryptography` dependency (pure-Python Keccak-256 + EIP-712 + recoverable
+low-s secp256k1; zero new deps), and `AgentTool(x402=X402Payer(...))` installs
+a paying transport that answers a challenged 402 with exactly ONE signed
+retry under a mandatory spend policy (`max_amount_atomic` + `allowed_pay_to`,
+no defaults; allow-lists never deny-lists; over-cap refused, never clamped; a
+second 402 is an error, never a loop). `at.x402.top_up(credits)` and
+`at.x402.payment(id)` are the rail's two doors. Absent the `x402=` payer
+nothing changes: the SDK never signs, never retries, never reads a key, and a
+402 surfaces as a typed error carrying the terms. Source preparation alone
+establishes no 0.22.0 artifact, tag, publication, deployment, or settlement
+receipt; the SDK-driven settlements are W2-10 of the Wave 2 plan.
+
 ## Repository source line — 0.21.1
 
 Repository source declares the paired 0.21.1 line as a corrective patch over
@@ -786,15 +803,17 @@ rail; marketplace-wallet balances are separate. `x402Resource` is the
 camelCase alias for `x402_resource`; `NotFoundError.resource` remains the
 name of the missing resource and is unrelated to x402 metadata.
 
-`parse_document(..., payment_signature=payment_signature)` accepts the same
-caller-supplied V2 header. The SDK never signs or retries by default.
+`parse_document(..., payment_signature=payment_signature)` and
+`at.x402.top_up(credits, payment_signature=...)` accept the same
+caller-supplied V2 header. Without the `x402=` payer the SDK does not sign or
+retry; with it, exactly one signed retry under your policy, never more.
 Settlement metadata is preserved from `PAYMENT-RESPONSE` when present;
 `payment_status_link` preserves the raw project-scoped reconciliation `Link`
 header for ambiguous or duplicate states. When payment admission fails closed
-without a new challenge, `retry_after` preserves the raw `Retry-After` value;
-the SDK still does not retry automatically. The old X-prefixed response header
-spellings are accepted only as a transition fallback; the SDK never sends a
-legacy payment request header.
+without a new challenge, `retry_after` preserves the raw `Retry-After` value
+and the SDK does not retry — with or without the payer. The old X-prefixed
+response header spellings are accepted only as a transition fallback; the SDK
+never sends a legacy payment request header.
 
 ### x402: paying on 402 — opt-in only, never by default
 
@@ -848,10 +867,88 @@ while `payment_is_still_replayable(signed, now)` or stop — never sign again fo
 the same resource. Crypto is pure-Python Keccak-256 + EIP-712 + recoverable
 low-s secp256k1 on the existing `cryptography` dependency (zero new deps), and
 the wire is pinned byte-exact to the server's implementation by
-`tests/fixtures/x402-eip3009-vector.json`. The paying transport that performs
-the bare call → 402 → one signed retry (a second 402 is an error, never a loop)
-is the next step of Wave 2; until it lands, pass `signed.header` yourself as
-above.
+`tests/fixtures/x402-eip3009-vector.json`.
+
+#### Paying on 402 through the client — `AgentTool(x402=X402Payer(...))`
+
+Hand the client a payer and it answers a challenged 402 for you — bare
+request → 402 with `PAYMENT-REQUIRED` → exactly ONE signed retry of the *same*
+request (method, URL, body, bearer, `Idempotency-Key`) plus
+`PAYMENT-SIGNATURE`. Nothing else changes.
+
+```python
+import os
+
+from agenttool import (
+    AgentTool,
+    KINGDOM_TREASURY,
+    X402Payer,
+    X402SpendPolicy,
+    local_evm_signer,
+)
+
+at = AgentTool(
+    api_key=os.environ["AT_API_KEY"],
+    x402=X402Payer(
+        # Whoever holds the key. Omit `signer` to read AT_X402_PRIVATE_KEY —
+        # honoured only because this X402Payer exists.
+        signer=local_evm_signer(os.environ["PAYER_PRIVATE_KEY"]),
+        policy=X402SpendPolicy(
+            max_amount_atomic=10_000,              # 10 credits' worth — hard cap per payment, MANDATORY
+            allowed_pay_to=[KINGDOM_TREASURY],     # recipients — MANDATORY
+            # allowed_networks / allowed_assets / max_validity_seconds:
+            # Base mainnet USDC, 60 s — allow-lists; widen explicitly or not at all
+        ),
+        on_payment=lambda event: persist(event.authorization_hash, event.payment_id),
+    ),
+)
+
+# POST /v1/x402/top-up/1 → 402 challenge → ONE signed retry → 200 receipt
+receipt = at.x402.top_up(1)
+receipt.credits_added          # 1
+receipt.credits_total          # balance after
+receipt.authorization_hash     # the server's ledger id for this payment
+at.x402.payment(receipt.authorization_hash)   # GET /v1/x402/payments/:id
+```
+
+What the payer changes, exactly — and nothing else:
+
+- **The cap and the recipients are mandatory; there are no defaults.**
+  `X402SpendPolicy` refuses to exist without `max_amount_atomic` and
+  `allowed_pay_to`; `X402Payer` refuses anything that is not such a policy
+  (`x402_spend_policy_invalid`), before any request is made. Allow-lists,
+  never deny-lists — a 402 is untrusted input and cannot introduce a
+  recipient, asset, or network. Over-cap is refused (`amount_over_cap`),
+  **never clamped**.
+- **Exactly two requests.** A second 402 is `x402_payment_not_accepted`
+  (with `err.details["authorization_hash"]` / `["payment_id"]` to look up);
+  the SDK never loops and never signs twice for one request.
+- **Refusals are typed.** A challenge the policy will not pay raises an
+  `AgentToolError` whose `code` is the refusal reason, with the challenge
+  still attached (`accepts`, `payment_required`, `x402_resource`). Nothing
+  was signed; one request happened.
+- **It stays out of the way.** A request that already carries your own
+  `payment_signature=` is never signed over. A 402 without a challenge — a
+  fail-closed admission with `Retry-After`, or a replay-suppressed 402 echoing
+  `PAYMENT-RESPONSE` — surfaces untouched, headers intact. A body that cannot
+  be re-sent (an iterator stream) is refused before anything is signed
+  (`x402_request_not_replayable`).
+- **The env variable alone changes nothing.** `AT_X402_PRIVATE_KEY` is read
+  only when `x402=` is present without `signer`.
+- **Keys.** `local_evm_signer` keeps the key in a closure and refuses to sign
+  a `from` that is not its own address. Any callable `typed_data -> "0x…"`
+  works — a wallet, an HSM — with `payer_address=` beside it when it carries
+  no `.address`; the signature must recover to that address.
+- **Not with a caller-owned `transport=`.** That transport keeps its own
+  payment boundary (a broker's `allowPaymentSignature`); `x402=` beside it is
+  `conflicting_x402_transport`. Sign outside the SDK there, as above.
+- Rate: 1 credit = 1,000 atomic USDC (USD 0.001). Top-ups are final.
+
+`on_payment` receives an `X402PaymentEvent` — `authorization_hash` (the six
+EIP-3009 fields, client-side), `valid_before`, `status`, `payment_response`,
+`payment_status_link`, `payment_id` (the server's ledger id, parsed from the
+`rel="payment-status"` Link) and `credits_balance` — the identity of what was
+emitted, so recovery is a lookup, never a fresh signature.
 
 ### Traces — because the 'why' matters
 

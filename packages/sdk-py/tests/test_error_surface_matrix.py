@@ -661,6 +661,11 @@ MATRIX: Dict[str, Callable[[AgentTool], Any]] = {
     ),
     "window.WindowClient.surface": lambda at: at.window.surface("I am not sure."),
     "window.WindowClient.show": lambda at: at.window.show(),
+    # x402 — the agent rail's two doors. Without the opt-in `x402=` payer the
+    # client never signs, so a 4xx here (the 402 challenge included) is plain
+    # guidance through the one boundary.
+    "x402.X402Client.top_up": lambda at: at.x402.top_up(1),
+    "x402.X402Client.payment": lambda at: at.x402.payment("a" * 64),
 }
 
 
@@ -747,6 +752,15 @@ DELIBERATE_EXCEPTIONS = {
     # Not an exception: the public look is reached through look_at_lounge,
     # which is pinned in DOORS.
     "lounge.LoungeClient.look",
+    # 5. Not a client method: the opt-in paying transport (_x402_transport.py
+    # § X402PayingTransport.handle_request) passes every non-402 — the guided
+    # 400 this matrix stubs included — through untouched to whichever client
+    # method sent the request, and THAT method is pinned above. The transport
+    # reaches the boundary only to build its own 402-derived errors (a policy
+    # refusal, a second 402, a non-replayable body), each of which carries the
+    # server's 402 envelope and guidance intact; test_x402_transport.py pins
+    # those with the real challenge.
+    "_x402_transport.X402PayingTransport.handle_request",
 }
 
 

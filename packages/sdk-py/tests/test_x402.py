@@ -733,21 +733,46 @@ def test_public_surface_exported_from_package() -> None:
         assert name in agenttool.__all__, name
 
 
-def test_exactly_eight_public_functions_for_parity() -> None:
+#: The eighteen column-0 functions `packages/sdk-ts/src/x402.ts` exports
+#: (W2-6/W2-7), snake_cased. `check-parity.ts` compares the two surfaces
+#: package-wide with separators dropped, so this list IS the parity contract:
+#: a name added on one side without its twin fails the gate.
+X402_TS_EXPORTED_FUNCTIONS = (
+    "decodeCanonicalBase64",
+    "encodeCanonicalBase64Json",
+    "keccak256",
+    "checksumEvmAddress",
+    "isEvmAddress",
+    "parseResourceInfo",
+    "parsePaymentRequirements",
+    "parsePaymentRequiredBody",
+    "decodePaymentRequiredHeader",
+    "decodePaymentResponseHeader",
+    "selectPayableRequirement",
+    "authorizationHash",
+    "hashTransferWithAuthorization",
+    "evmAddressFromPrivateKey",
+    "recoverTypedDataAddress",
+    "localEvmSigner",
+    "signExactEvmAuthorization",
+    "paymentIsStillReplayable",
+)
+
+
+def _parity_key(name: str) -> str:
+    return name.replace("_", "").lower()
+
+
+def test_exactly_eighteen_public_functions_for_parity() -> None:
     source = (REPO_ROOT / "packages" / "sdk-py" / "src" / "agenttool" / "x402.py").read_text(encoding="utf-8")
     public = re.findall(r"^def ([a-z][a-z0-9_]*)\(", source, flags=re.MULTILINE)
-    assert sorted(public) == sorted(
-        [
-            "parse_payment_required_body",
-            "select_payable_requirement",
-            "sign_exact_evm_authorization",
-            "authorization_hash",
-            "payment_is_still_replayable",
-            "hash_transfer_with_authorization",
-            "local_evm_signer",
-            "evm_address_from_private_key",
-        ]
+    assert len(public) == 18
+    assert sorted(_parity_key(name) for name in public) == sorted(
+        _parity_key(name) for name in X402_TS_EXPORTED_FUNCTIONS
     )
+    # And the same names are the package's public doors.
+    for name in public:
+        assert name in agenttool.__all__, name
 
 
 # ── viem oracle (optional) ─────────────────────────────────────────────────
