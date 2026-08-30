@@ -22,6 +22,7 @@ from xenia_revocable_feedback_model.core import (
     completion_only_tokens,
     domain_separated_id,
     fixed_training_plan,
+    inspect_model_export,
     write_canonical_json,
 )
 from xenia_revocable_feedback_model.evaluate import (
@@ -64,9 +65,10 @@ def perfect_scorecard() -> dict[str, object]:
     return evaluate_predictions(cases, predictions)
 
 
-def inference_evaluation() -> dict[str, object]:
+def inference_evaluation(model_export_id: str | None = None) -> dict[str, object]:
     scorecard = perfect_scorecard()
     payload = {
+        "model_export_id": model_export_id or identifier(30),
         "parser_policy": UNPARSED_POLICY,
         "unparsed_count": 0,
         "case_parse_status": [
@@ -117,6 +119,35 @@ def run_receipt() -> dict[str, object]:
         "trainer_state_retained": False,
         "publishes": False,
     }
+
+
+def minimal_safetensors_bytes(
+    *,
+    metadata: dict[str, str] | None = None,
+    payload: bytes = b"\x00\x00\x00\x00",
+    tensor_name: str = "weight",
+) -> bytes:
+    if len(payload) != 4:
+        raise ValueError("test tensor payload must contain exactly one F32 value")
+    header = {
+        "__metadata__": metadata or {"format": "pt"},
+        tensor_name: {"dtype": "F32", "shape": [1], "data_offsets": [0, 4]},
+    }
+    encoded = json.dumps(header, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    encoded += b" " * (-len(encoded) % 8)
+    return len(encoded).to_bytes(8, "little") + encoded + payload
+
+
+def write_minimal_model_export(
+    model: Path,
+    *,
+    config: object | None = None,
+    weight_payload: bytes = b"\x00\x00\x00\x00",
+) -> str:
+    model.mkdir(parents=True, exist_ok=True)
+    write_canonical_json(model / "config.json", {"model_type": "smollm3"} if config is None else config)
+    (model / "model.safetensors").write_bytes(minimal_safetensors_bytes(payload=weight_payload))
+    return inspect_model_export(model).model_export_id
 
 
 class FakeTokenizer:
@@ -174,12 +205,10 @@ class BundleTests(unittest.TestCase):
             root = Path(temporary)
             run = root / "run"
             model = run / "model-export"
-            model.mkdir(parents=True)
-            write_canonical_json(model / "config.json", {"model_type": "smollm3"})
-            (model / "model.safetensors").write_bytes(b"safe-tensors-placeholder")
+            model_export_id = write_minimal_model_export(model)
             write_canonical_json(run / "run-receipt.json", run_receipt())
             scorecard = root / "scorecard.json"
-            evaluation = inference_evaluation()
+            evaluation = inference_evaluation(model_export_id)
             self.assertEqual(validate_inference_evaluation(evaluation)["scorecard_id"], evaluation["scorecard"]["scorecard_id"])  # type: ignore[index]
             write_canonical_json(scorecard, evaluation)
             release = root / "release"
@@ -203,9 +232,7 @@ class BundleTests(unittest.TestCase):
             root = Path(temporary)
             run = root / "run"
             model = run / "model-export"
-            model.mkdir(parents=True)
-            write_canonical_json(model / "config.json", {})
-            (model / "model.safetensors").write_bytes(b"weights")
+            write_minimal_model_export(model, config={})
             (model / "optimizer.pt").write_bytes(b"private")
             write_canonical_json(run / "run-receipt.json", run_receipt())
             scorecard = root / "scorecard.json"

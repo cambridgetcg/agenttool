@@ -84,10 +84,30 @@ Inference requires exactly one closed `Decision: <label>.` line. A generation
 that does not parse is counted as `unparsed_conservative_hold` and mapped to
 `hold` only for regression scoring; it is never represented as the model
 choosing hold. Raw generated text is not retained. The release keeps this
-parser receipt alongside the vector scorecard.
+parser receipt alongside the vector scorecard. Each new inference receipt also
+binds the complete sorted allowlisted model-export closure (weights and every
+model/tokenizer artifact) by a domain-separated content ID. Evaluation checks
+that closure before and after generation; build and verification independently
+require the same ID for the bytes being released.
 
 The release builder copies only safetensors, closed model/tokenizer config
 files, the model card, Apache license and notice, a sanitized training
 manifest, the public-regression scorecard, and a self-excluding hash manifest.
-It rejects optimizer, scheduler, RNG, pickle, Trainer-state, ledger, raw
-choice, prompt, trace, credential, and local-path material.
+It rejects known private-training file categories, configured high-risk JSON
+field names, and recognizable credential/local-path patterns. This is a
+bounded publication policy, not a general secret detector. Every model JSON
+artifact is parsed under explicit byte/node/depth bounds with duplicate keys,
+non-finite numbers, configured private field names, and configured private-text
+patterns rejected in keys and values. Safetensors files receive a bounded
+duplicate-safe header parse, an exact reviewed metadata shape, exact tensor descriptors, byte extents, and
+contiguous payload validation. The model export and release tree reject
+symlinks, special nodes, nested model files, unknown or empty extra directories,
+mixed or unreferenced weight layouts, and raw tokenizer formats for which this
+pinned export has no bounded semantic validator.
+
+The immutable first public release predates `model_export_id`. `verify-release`
+recognizes that omission only for the exact already-published release-manifest,
+inference-receipt, and recomputed model-export ID triple. `build-release` never
+accepts the legacy shape, and any new or changed inference receipt must carry
+the current closed model-export binding. A scorecard-only release makes no
+claim that the released model produced those predictions.

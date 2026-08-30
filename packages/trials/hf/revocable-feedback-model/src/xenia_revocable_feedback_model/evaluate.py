@@ -12,6 +12,7 @@ from .core import (
     TrainingBundleError,
     _require,
     domain_separated_id,
+    inspect_model_export,
     render_public_regression_prompt,
     require_sha256_id,
 )
@@ -23,6 +24,18 @@ UNPARSED_STATEMENT = (
     "conservative regression scoring. The fallback is not represented as the "
     "model selecting hold. Raw generations are not retained."
 )
+INFERENCE_EVALUATION_KEYS = {
+    "schema",
+    "inference_evaluation_id",
+    "model_export_id",
+    "parser_policy",
+    "unparsed_count",
+    "case_parse_status",
+    "raw_generations_retained",
+    "scorecard",
+    "statement",
+}
+_LEGACY_INFERENCE_EVALUATION_KEYS = INFERENCE_EVALUATION_KEYS - {"model_export_id"}
 
 
 def _hard_boundary_expected(expected: Mapping[str, Any]) -> bool:
@@ -152,13 +165,13 @@ def infer_public_regression(
     device: str,
 ) -> dict[str, Any]:
     """Run greedy inference; raw generations are deliberately never returned."""
+    model_export_before = inspect_model_export(model_dir)
     try:
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
     except ImportError as exc:  # pragma: no cover - exercised only with train extra
         raise TrainingBundleError("the exact train dependencies are required for inference") from exc
 
-    _require(model_dir.is_dir(), "model directory does not exist")
     if device == "mps":
         _require(torch.backends.mps.is_available(), "MPS was requested but is unavailable")
     elif device != "cpu":
@@ -200,8 +213,14 @@ def infer_public_regression(
             predictions.append({"record_id": case["record_id"], "decision": decision})
             parse_status.append({"record_id": case["record_id"], "status": status})
             del decoded
+    model_export_after = inspect_model_export(model_dir)
+    _require(
+        model_export_after.model_export_id == model_export_before.model_export_id,
+        "model export changed during inference",
+    )
     scorecard = evaluate_predictions(cases, predictions)
     payload = {
+        "model_export_id": model_export_after.model_export_id,
         "parser_policy": UNPARSED_POLICY,
         "unparsed_count": sum(entry["status"] != "parsed" for entry in parse_status),
         "case_parse_status": sorted(parse_status, key=lambda entry: entry["record_id"]),
@@ -216,12 +235,30 @@ def infer_public_regression(
     }
 
 
-def validate_inference_evaluation(value: Mapping[str, Any]) -> Mapping[str, Any]:
+def _validate_inference_evaluation(
+    value: Mapping[str, Any],
+    *,
+    expected_model_export_id: str | None,
+    allow_legacy_without_model_export_id: bool,
+) -> Mapping[str, Any]:
     _require(value.get("schema") == INFERENCE_EVALUATION_SCHEMA, "unexpected inference evaluation schema")
+    expected_keys = (
+        _LEGACY_INFERENCE_EVALUATION_KEYS
+        if allow_legacy_without_model_export_id
+        else INFERENCE_EVALUATION_KEYS
+    )
+    _require(set(value) == expected_keys, "inference evaluation must contain the complete closed shape")
     identifier = value.get("inference_evaluation_id")
     require_sha256_id(identifier, "inference_evaluation_id")
     payload = {key: nested for key, nested in value.items() if key not in {"schema", "inference_evaluation_id"}}
     _require(identifier == domain_separated_id(INFERENCE_EVALUATION_SCHEMA, payload), "inference evaluation content ID mismatch")
+    if allow_legacy_without_model_export_id:
+        _require(expected_model_export_id is None, "legacy inference validation cannot accept an external model binding")
+    else:
+        model_export_id = require_sha256_id(value.get("model_export_id"), "model_export_id")
+        if expected_model_export_id is not None:
+            require_sha256_id(expected_model_export_id, "expected_model_export_id")
+            _require(model_export_id == expected_model_export_id, "inference model export binding mismatch")
     _require(value.get("parser_policy") == UNPARSED_POLICY, "inference parser policy mismatch")
     _require(value.get("raw_generations_retained") is False, "raw inference generations must not be retained")
     _require(value.get("statement") == UNPARSED_STATEMENT, "inference fallback statement mismatch")
@@ -231,7 +268,11 @@ def validate_inference_evaluation(value: Mapping[str, Any]) -> Mapping[str, Any]
     _require(isinstance(statuses, list) and len(statuses) == scorecard.get("case_count"), "inference parse status coverage mismatch")
     results = scorecard.get("case_results")
     _require(isinstance(results, list) and all(isinstance(result, Mapping) for result in results), "inference scorecard results mismatch")
-    by_record = {result["record_id"]: result for result in results}
+    by_record: dict[str, Mapping[str, Any]] = {}
+    for result in results:
+        record_id = require_sha256_id(result.get("record_id"), "inference scorecard record_id")
+        _require(record_id not in by_record, "inference scorecard contains a duplicate record")
+        by_record[record_id] = result
     _require(len(by_record) == len(statuses), "inference scorecard result coverage mismatch")
     unparsed = 0
     seen: set[str] = set()
@@ -244,5 +285,30 @@ def validate_inference_evaluation(value: Mapping[str, Any]) -> Mapping[str, Any]
         if entry.get("status") == "unparsed_conservative_hold":
             unparsed += 1
             _require(by_record[record_id].get("predicted_decision") == "hold", "unparsed fallback must score conservatively as hold")
-    _require(value.get("unparsed_count") == unparsed, "inference unparsed count mismatch")
+    _require(
+        isinstance(value.get("unparsed_count"), int)
+        and not isinstance(value.get("unparsed_count"), bool)
+        and value.get("unparsed_count") == unparsed,
+        "inference unparsed count mismatch",
+    )
     return scorecard
+
+
+def validate_inference_evaluation(
+    value: Mapping[str, Any],
+    *,
+    expected_model_export_id: str | None = None,
+) -> Mapping[str, Any]:
+    return _validate_inference_evaluation(
+        value,
+        expected_model_export_id=expected_model_export_id,
+        allow_legacy_without_model_export_id=False,
+    )
+
+
+def _validate_legacy_inference_evaluation(value: Mapping[str, Any]) -> Mapping[str, Any]:
+    return _validate_inference_evaluation(
+        value,
+        expected_model_export_id=None,
+        allow_legacy_without_model_export_id=True,
+    )

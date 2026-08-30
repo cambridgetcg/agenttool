@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import json
 import re
 import shutil
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
 from .evaluate import (
     INFERENCE_EVALUATION_SCHEMA,
+    _validate_legacy_inference_evaluation,
     evaluate_predictions,
     validate_inference_evaluation,
 )
@@ -23,6 +23,8 @@ from .core import (
     DISCLOSURE,
     EXPECTED_RUNTIME_VERSIONS,
     GOVERNANCE_STATUS,
+    MODEL_EXPORT_FILE,
+    PRIVATE_TEXT_PATTERNS,
     RECIPE_ID,
     SCORECARD_SCHEMA,
     TRAINING_MANIFEST_ID,
@@ -31,51 +33,13 @@ from .core import (
     domain_separated_id,
     ensure_empty_output,
     fixed_training_plan,
+    inspect_model_export,
+    inspect_regular_tree,
     read_json,
     require_sha256_id,
-    sha256_hex,
+    sha256_file_hex,
+    validate_sanitized_json,
     write_canonical_json,
-)
-
-SAFE_MODEL_FILE = re.compile(
-    r"^(?:config|generation_config|tokenizer_config|special_tokens_map|added_tokens)\.json$"
-    r"|^(?:tokenizer\.json|tokenizer\.model|vocab\.json|merges\.txt)$"
-    r"|^model(?:-[0-9]{5}-of-[0-9]{5})?\.safetensors$"
-    r"|^model\.safetensors\.index\.json$"
-)
-FORBIDDEN_NAME_PARTS = (
-    "optimizer",
-    "scheduler",
-    "trainer_state",
-    "training_args",
-    "rng_state",
-    "checkpoint",
-    "ledger",
-    "transcript",
-    "trace",
-)
-FORBIDDEN_SUFFIXES = (".bin", ".pt", ".pth", ".pkl", ".pickle", ".db", ".sqlite", ".sqlite3")
-FORBIDDEN_KEYS = {
-    "access_token",
-    "api_key",
-    "authorization_header",
-    "credential",
-    "credentials",
-    "prompt",
-    "prompts",
-    "raw_choice",
-    "raw_choices",
-    "raw_generation",
-    "raw_generations",
-    "trace",
-    "traces",
-}
-TEXT_SECRET_PATTERNS = (
-    re.compile(r"/Users/"),
-    re.compile(r"[A-Za-z]:\\Users\\"),
-    re.compile(r"\bhf_[A-Za-z0-9]{20,}\b"),
-    re.compile(r"\bBearer\s+[A-Za-z0-9._~+/-]{12,}\b", re.IGNORECASE),
-    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
 )
 
 RUN_RECEIPT_SCHEMA = "agenttool-revocable-feedback-local-run/0.1"
@@ -100,6 +64,13 @@ RUN_RECEIPT_KEYS = {
     "publishes",
 }
 EXPECTED_RUN_RUNTIME = {"python": "3.12.12", **EXPECTED_RUNTIME_VERSIONS}
+
+LEGACY_PUBLISHED_RELEASE_MANIFEST_ID = "sha256:4c16e0bf945cbde8dda8af9e2e63a144a82900c504a404e344119ac7dae044e9"
+LEGACY_PUBLISHED_INFERENCE_EVALUATION_ID = "sha256:299d3632fc6bf4256c883027591c25cbc8066621c25ec897efc7e26f73906f05"
+LEGACY_PUBLISHED_MODEL_EXPORT_ID = "sha256:97b0c85898dec0396a4f575ea3fe619503a37239b054430b8f94e3905e45aad6"
+RELEASE_NON_MODEL_ENTRIES = frozenset(
+    {"README.md", "LICENSE", "NOTICE", "hash-manifest.json", "training", "evaluation"}
+)
 
 SCORECARD_KEYS = {
     "schema",
@@ -177,26 +148,6 @@ _PINNED_PUBLIC_REGRESSION_CASES: tuple[Mapping[str, Any], ...] = (
 )
 
 
-def _walk_values(value: Any) -> Iterable[tuple[str | None, Any]]:
-    if isinstance(value, Mapping):
-        for key, nested in value.items():
-            yield str(key), nested
-            yield from _walk_values(nested)
-    elif isinstance(value, list):
-        for nested in value:
-            yield None, nested
-            yield from _walk_values(nested)
-
-
-def _validate_sanitized_json(value: Any, name: str) -> None:
-    for key, nested in _walk_values(value):
-        if key is not None:
-            _require(key.lower() not in FORBIDDEN_KEYS, f"{name} contains forbidden private field: {key}")
-        if isinstance(nested, str):
-            for pattern in TEXT_SECRET_PATTERNS:
-                _require(pattern.search(nested) is None, f"{name} contains a credential or local-path pattern")
-
-
 def validate_run_receipt(receipt: Mapping[str, Any]) -> None:
     _require(receipt.get("schema") == RUN_RECEIPT_SCHEMA, "unexpected run receipt schema")
     _require(set(receipt) == RUN_RECEIPT_KEYS, "run receipt must contain the complete closed release shape")
@@ -260,7 +211,7 @@ def validate_run_receipt(receipt: Mapping[str, Any]) -> None:
     except InvalidOperation as exc:
         raise TrainingBundleError("run loss observation must be numeric") from exc
     _require(parsed_loss.is_finite() and parsed_loss >= 0, "run loss observation must be finite and non-negative")
-    _validate_sanitized_json(receipt, "run receipt")
+    validate_sanitized_json(receipt, "run receipt")
 
 
 def validate_scorecard(scorecard: Mapping[str, Any]) -> None:
@@ -283,7 +234,7 @@ def validate_scorecard(scorecard: Mapping[str, Any]) -> None:
         dict(scorecard) == expected,
         "scorecard does not equal the score recomputed from the pinned public regression",
     )
-    _validate_sanitized_json(scorecard, "scorecard")
+    validate_sanitized_json(scorecard, "scorecard")
 
 
 def _card_short_description(card: str) -> str:
@@ -302,27 +253,8 @@ def validate_model_card(card: str) -> None:
     _require(DISCLOSURE in card, "model card is missing the exact audit disclosure")
     _require("{{" not in card and "}}" not in card, "model card contains unresolved placeholders")
     _require(GOVERNANCE_STATUS in card, "model card is missing the exact governance status")
-    for pattern in TEXT_SECRET_PATTERNS:
+    for pattern in PRIVATE_TEXT_PATTERNS:
         _require(pattern.search(card) is None, "model card contains a credential or local-path pattern")
-
-
-def _safe_model_sources(model_dir: Path, *, release_root: bool = False) -> list[Path]:
-    _require(model_dir.is_dir() and not model_dir.is_symlink(), "model export is not a regular directory")
-    files = sorted(path for path in model_dir.iterdir() if path.is_file() and not path.is_symlink())
-    if release_root:
-        metadata = {"README.md", "LICENSE", "NOTICE", "hash-manifest.json"}
-        unknown = [path.name for path in files if path.name not in metadata and SAFE_MODEL_FILE.fullmatch(path.name) is None]
-        _require(not unknown, f"release root contains a non-allowlisted file: {unknown[0] if unknown else ''}")
-        files = [path for path in files if path.name not in metadata]
-    _require(files, "model export is empty")
-    for path in files:
-        lowered = path.name.lower()
-        _require(not any(part in lowered for part in FORBIDDEN_NAME_PARTS), f"private training file refused: {path.name}")
-        _require(not lowered.endswith(FORBIDDEN_SUFFIXES), f"unsafe serialized file refused: {path.name}")
-        _require(SAFE_MODEL_FILE.fullmatch(path.name) is not None, f"model export file is not allowlisted: {path.name}")
-    _require(any(path.name.endswith(".safetensors") for path in files), "model export lacks safetensors weights")
-    _require(any(path.name == "config.json" for path in files), "model export lacks config.json")
-    return files
 
 
 def _render_card(
@@ -351,12 +283,19 @@ def _render_card(
 
 
 def _manifest_entries(root: Path) -> list[dict[str, Any]]:
+    tree = inspect_regular_tree(root)
+    _require(
+        {path.relative_to(root).as_posix() for path in tree.directories}
+        == {"evaluation", "training"},
+        "release directory layout is not closed",
+    )
     entries: list[dict[str, Any]] = []
-    for path in sorted(item for item in root.rglob("*") if item.is_file() and item.name != "hash-manifest.json"):
-        _require(not path.is_symlink(), "release contains a symlink")
-        data = path.read_bytes()
-        entries.append({"path": path.relative_to(root).as_posix(), "bytes": len(data), "sha256": sha256_hex(data)})
-    return entries
+    for path in tree.files:
+        if path.relative_to(root).as_posix() == "hash-manifest.json":
+            continue
+        size, digest = sha256_file_hex(path)
+        entries.append({"path": path.relative_to(root).as_posix(), "bytes": size, "sha256": digest})
+    return sorted(entries, key=lambda entry: entry["path"])
 
 
 def build_release(
@@ -372,21 +311,29 @@ def build_release(
     evaluation_input = read_json(scorecard_path)
     _require(isinstance(receipt, Mapping) and isinstance(evaluation_input, Mapping), "release inputs must be JSON objects")
     validate_run_receipt(receipt)
+    model_export = inspect_model_export(run_dir / "model-export")
     inference_evaluation: Mapping[str, Any] | None = None
     if evaluation_input.get("schema") == INFERENCE_EVALUATION_SCHEMA:
         inference_evaluation = evaluation_input
         embedded_input = evaluation_input.get("scorecard")
         _require(isinstance(embedded_input, Mapping), "inference evaluation lacks a scorecard")
         validate_scorecard(embedded_input)
-        scorecard = validate_inference_evaluation(evaluation_input)
-        _validate_sanitized_json(inference_evaluation, "inference evaluation")
+        scorecard = validate_inference_evaluation(
+            evaluation_input,
+            expected_model_export_id=model_export.model_export_id,
+        )
+        validate_sanitized_json(inference_evaluation, "inference evaluation")
     else:
         scorecard = evaluation_input
     validate_scorecard(scorecard)
-    model_sources = _safe_model_sources(run_dir / "model-export")
     ensure_empty_output(output_dir)
-    for source in model_sources:
+    for source in model_export.files:
         shutil.copyfile(source, output_dir / source.name)
+    copied_model_export = inspect_model_export(output_dir)
+    _require(
+        copied_model_export.model_export_id == model_export.model_export_id,
+        "copied model export differs from the validated input",
+    )
     template = template_path.read_text(encoding="utf-8")
     (output_dir / "README.md").write_text(
         _render_card(
@@ -417,9 +364,19 @@ def build_release(
 
 
 def verify_release(root: Path) -> dict[str, Any]:
-    _require(root.is_dir() and not root.is_symlink(), "release root is not a regular directory")
+    tree = inspect_regular_tree(root)
+    _require(
+        {path.relative_to(root).as_posix() for path in tree.directories}
+        == {"evaluation", "training"},
+        "release directory layout is not closed",
+    )
     manifest = read_json(root / "hash-manifest.json")
     _require(isinstance(manifest, Mapping), "release hash manifest must be an object")
+    _require(
+        set(manifest) == {"schema", "manifest_id", "manifest_excludes_itself", "files"},
+        "release hash manifest must contain the complete closed shape",
+    )
+    validate_sanitized_json(manifest, "release hash manifest")
     _require(manifest.get("schema") == "agenttool-sanitized-model-release-manifest/0.1", "release manifest schema mismatch")
     manifest_id = require_sha256_id(manifest.get("manifest_id"), "manifest_id")
     payload = {"manifest_excludes_itself": manifest.get("manifest_excludes_itself"), "files": manifest.get("files")}
@@ -432,13 +389,28 @@ def verify_release(root: Path) -> dict[str, Any]:
         _require(isinstance(entry, Mapping) and set(entry) == {"path", "bytes", "sha256"}, "release hash entry has unexpected fields")
         relative = entry["path"]
         _require(isinstance(relative, str) and relative and not relative.startswith("/") and ".." not in Path(relative).parts, "unsafe release path")
+        _require(
+            isinstance(entry["bytes"], int)
+            and not isinstance(entry["bytes"], bool)
+            and entry["bytes"] >= 0,
+            "release byte count is invalid",
+        )
+        _require(
+            isinstance(entry["sha256"], str)
+            and re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]) is not None,
+            "release digest is invalid",
+        )
         path = root / relative
-        _require(path.is_file() and not path.is_symlink(), f"release file is missing: {relative}")
-        data = path.read_bytes()
-        _require(entry["bytes"] == len(data) and entry["sha256"] == sha256_hex(data), f"release hash mismatch: {relative}")
+        _require(path.is_file() and not path.is_symlink(), "release file is missing")
+        size, digest = sha256_file_hex(path)
+        _require(entry["bytes"] == size and entry["sha256"] == digest, "release hash mismatch")
         expected_paths.append(relative)
     _require(expected_paths == sorted(expected_paths), "release entries must be sorted")
-    actual_paths = sorted(path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file() and path.name != "hash-manifest.json")
+    actual_paths = sorted(
+        path.relative_to(root).as_posix()
+        for path in tree.files
+        if path.relative_to(root).as_posix() != "hash-manifest.json"
+    )
     _require(actual_paths == expected_paths, "release tree differs from its manifest")
     required_paths = {
         "README.md",
@@ -448,10 +420,21 @@ def verify_release(root: Path) -> dict[str, Any]:
         "evaluation/public-regression-vector.json",
     }
     optional_paths = {"evaluation/inference-receipt.json"}
-    unexpected = [path for path in actual_paths if path not in required_paths | optional_paths and SAFE_MODEL_FILE.fullmatch(Path(path).name) is None]
-    _require(not unexpected, f"release contains a non-allowlisted artifact: {unexpected[0] if unexpected else ''}")
+    unexpected = [
+        path
+        for path in actual_paths
+        if path not in required_paths | optional_paths
+        and not (
+            len(Path(path).parts) == 1
+            and MODEL_EXPORT_FILE.fullmatch(path) is not None
+        )
+    ]
+    _require(not unexpected, "release contains a non-allowlisted artifact")
     _require(required_paths.issubset(actual_paths), "release is missing required public metadata")
-    _safe_model_sources(root, release_root=True)
+    model_export = inspect_model_export(
+        root,
+        permitted_non_model_entries=RELEASE_NON_MODEL_ENTRIES,
+    )
     validate_model_card((root / "README.md").read_text(encoding="utf-8"))
     receipt = read_json(root / "training" / "manifest.json")
     scorecard = read_json(root / "evaluation" / "public-regression-vector.json")
@@ -459,12 +442,24 @@ def verify_release(root: Path) -> dict[str, Any]:
     validate_run_receipt(receipt)
     validate_scorecard(scorecard)
     inference_path = root / "evaluation" / "inference-receipt.json"
-    if inference_path.exists():
+    if "evaluation/inference-receipt.json" in actual_paths:
         inference = read_json(inference_path)
         _require(isinstance(inference, Mapping), "inference receipt must be an object")
-        embedded = validate_inference_evaluation(inference)
+        legacy_compatibility = (
+            manifest_id == LEGACY_PUBLISHED_RELEASE_MANIFEST_ID
+            and inference.get("inference_evaluation_id")
+            == LEGACY_PUBLISHED_INFERENCE_EVALUATION_ID
+            and model_export.model_export_id == LEGACY_PUBLISHED_MODEL_EXPORT_ID
+        )
+        if legacy_compatibility:
+            embedded = _validate_legacy_inference_evaluation(inference)
+        else:
+            embedded = validate_inference_evaluation(
+                inference,
+                expected_model_export_id=model_export.model_export_id,
+            )
         _require(dict(embedded) == dict(scorecard), "inference receipt and released scorecard differ")
-        _validate_sanitized_json(inference, "inference evaluation")
+        validate_sanitized_json(inference, "inference evaluation")
     return dict(manifest)
 
 
