@@ -7,7 +7,7 @@ import os
 import re
 import stat
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping, Sequence
 
 BASE_MODEL_ID = "HuggingFaceTB/SmolLM2-135M-Instruct"
@@ -96,6 +96,9 @@ MODEL_EXPORT_FILE = re.compile(
 MODEL_JSON_MAX_BYTES = 64 * 1024 * 1024
 SAFETENSORS_HEADER_MAX_BYTES = 16 * 1024 * 1024
 MODEL_EXPORT_MAX_BYTES = 2 * 1024 * 1024 * 1024
+JSON_MAX_BYTES = 2 * 1024 * 1024
+DATASET_FILE_MAX_BYTES = 1 * 1024 * 1024
+DATASET_TOTAL_MAX_BYTES = 8 * 1024 * 1024
 SANITIZED_JSON_MAX_NODES = 2_000_000
 SANITIZED_JSON_MAX_DEPTH = 128
 REGULAR_TREE_MAX_NODES = 100_000
@@ -262,7 +265,7 @@ def read_bounded_json(path: Path, *, max_bytes: int) -> Any:
 
 
 def read_json(path: Path) -> Any:
-    return read_bounded_json(path, max_bytes=2 * 1024 * 1024)
+    return read_bounded_json(path, max_bytes=JSON_MAX_BYTES)
 
 
 def _scan_private_text(value: str, name: str) -> None:
@@ -857,31 +860,98 @@ def read_jsonl(path: Path, expected_rows: int) -> list[dict[str, Any]]:
 
 
 def verify_hash_manifest(root: Path) -> str:
+    tree = inspect_regular_tree(root)
     manifest_path = root / "hash-manifest.json"
-    manifest = read_json(manifest_path)
+    _require(manifest_path in tree.files, "dataset hash manifest is missing")
+    try:
+        with _open_regular_binary(manifest_path) as handle:
+            manifest_size = os.fstat(handle.fileno()).st_size
+            _require(
+                manifest_size <= JSON_MAX_BYTES,
+                "dataset hash manifest exceeds its byte bound",
+            )
+            manifest_bytes = handle.read(JSON_MAX_BYTES + 1)
+            _require(
+                len(manifest_bytes) <= JSON_MAX_BYTES,
+                "dataset hash manifest grew beyond its byte bound",
+            )
+            _require(
+                len(manifest_bytes) == manifest_size,
+                "dataset hash manifest changed while it was read",
+            )
+    except TrainingBundleError:
+        raise
+    except OSError as exc:
+        raise TrainingBundleError("unable to read dataset hash manifest") from exc
+    manifest = _decode_json(manifest_bytes)
     _require(isinstance(manifest, dict), "dataset hash manifest must be an object")
+    _require(
+        set(manifest) == {"_format", "manifest_excludes_itself", "files"}
+        and manifest.get("_format")
+        == "agenttool.revocable-feedback-hash-manifest/0.1",
+        "dataset hash manifest must contain the complete closed format",
+    )
     _require(manifest.get("manifest_excludes_itself") is True, "dataset hash manifest must exclude itself")
     entries = manifest.get("files")
     _require(isinstance(entries, list) and entries, "dataset hash manifest files must be non-empty")
+    claims: list[tuple[str, Path, int, str]] = []
     expected_paths: list[str] = []
+    declared_total = 0
     for entry in entries:
         _require(isinstance(entry, dict) and set(entry) == {"path", "bytes", "sha256"}, "dataset hash entry has unexpected fields")
         relative = entry["path"]
-        _require(isinstance(relative, str) and relative and not relative.startswith("/") and ".." not in Path(relative).parts, "unsafe dataset manifest path")
+        _require(isinstance(relative, str) and bool(relative), "unsafe dataset manifest path")
+        relative_path = PurePosixPath(relative)
+        _require(
+            not relative_path.is_absolute()
+            and relative_path.as_posix() == relative
+            and "\\" not in relative
+            and ":" not in relative
+            and all(part not in {"", ".", ".."} for part in relative_path.parts)
+            and relative != "hash-manifest.json",
+            "unsafe dataset manifest path",
+        )
+        declared_bytes = entry["bytes"]
+        _require(
+            isinstance(declared_bytes, int)
+            and not isinstance(declared_bytes, bool)
+            and declared_bytes >= 0,
+            "dataset byte count must be a non-negative integer",
+        )
+        _require(
+            declared_bytes <= DATASET_FILE_MAX_BYTES,
+            "dataset manifest file exceeds the independent byte bound",
+        )
+        declared_digest = entry["sha256"]
+        _require(
+            isinstance(declared_digest, str)
+            and re.fullmatch(r"[0-9a-f]{64}", declared_digest) is not None,
+            "dataset digest must be a lowercase SHA-256 hex value",
+        )
         path = root / relative
-        _require(path.is_file() and not path.is_symlink(), f"dataset manifest file is missing: {relative}")
-        data = path.read_bytes()
-        _require(entry["bytes"] == len(data), f"dataset byte count mismatch: {relative}")
-        _require(entry["sha256"] == sha256_hex(data), f"dataset digest mismatch: {relative}")
+        claims.append((relative, path, declared_bytes, declared_digest))
         expected_paths.append(relative)
-    _require(expected_paths == sorted(expected_paths), "dataset hash entries must be sorted")
+        declared_total += declared_bytes
+    _require(
+        expected_paths == sorted(expected_paths)
+        and len(set(expected_paths)) == len(expected_paths),
+        "dataset hash entries must be sorted and unique",
+    )
+    _require(
+        declared_total <= DATASET_TOTAL_MAX_BYTES,
+        "dataset manifest exceeds the independent total byte bound",
+    )
     actual_paths = sorted(
         path.relative_to(root).as_posix()
-        for path in root.rglob("*")
-        if path.is_file() and path.name != "hash-manifest.json"
+        for path in tree.files
+        if path != manifest_path
     )
     _require(actual_paths == expected_paths, "dataset tree differs from its self-excluding hash manifest")
-    return sha256_id(manifest_path.read_bytes())
+    for relative, path, declared_bytes, declared_digest in claims:
+        size, digest = sha256_file_hex(path, max_bytes=declared_bytes)
+        _require(declared_bytes == size, f"dataset byte count mismatch: {relative}")
+        _require(declared_digest == digest, f"dataset digest mismatch: {relative}")
+    return sha256_id(manifest_bytes)
 
 
 def _validate_content_id(document: Mapping[str, Any], schema_key: str, id_key: str, domain: str) -> None:
