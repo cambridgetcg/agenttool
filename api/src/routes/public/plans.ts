@@ -24,12 +24,11 @@ import {
   resolveX402FacilitatorReadiness,
   resolveX402Network,
   resolveX402Recipient,
+  x402PayablePathTemplate,
+  x402PayableRoutesForDisclosure,
 } from "../../services/economy/x402-policy";
 import { isX402FacilitatorLocallyReady } from "../../services/economy/facilitators/coinbase";
-import {
-  TOOL_CREDIT_DEFAULTS,
-  toolsConfig,
-} from "../../services/tools/config";
+import { TOOL_CREDIT_DEFAULTS } from "../../services/tools/config";
 
 const app = new Hono();
 
@@ -129,8 +128,57 @@ export function x402TopUpDisclosure(
   };
 }
 
+/** Every static-priced credit gate an agent can pay through on the spot,
+ * published from the x402 payable table (services/economy/x402-policy.ts) —
+ * the same rows the challenge builder and verifier use, so the method, path,
+ * credits, and atomic USDC here are what a 402 will actually carry. The
+ * top-up door is disclosed separately by x402TopUpDisclosure(). `payable` is
+ * structural (a positive INTEGER price); whether a challenge is attached
+ * today is configuration.payable_challenges_ready. */
+export function x402PayableRoutesDisclosure() {
+  return x402PayableRoutesForDisclosure()
+    .filter((row) => row.kind === "route_cost")
+    .map((row) => ({
+      method: row.method,
+      path: x402PayablePathTemplate(row.pattern),
+      label: row.label,
+      credits: row.credits,
+      amount_atomic: row.amountAtomic,
+      error_codes: [...row.errorCodes],
+      payable: row.payable,
+    }));
+}
+
+/** Environment overrides for the static tools' prices; the price itself is
+ * read from the payable table (which reads toolsConfig), never typed here. */
+const STATIC_TOOL_ENV_OVERRIDES = Object.freeze({
+  scrape: "CREDIT_SCRAPE",
+  document: "CREDIT_DOCUMENT",
+} as const);
+
+/** metered_tools.static_attempts — the environment-overridable static tools,
+ * enumerated from the payable table's rows whose label names one. */
+export function staticAttemptDisclosure() {
+  const out: Record<
+    string,
+    { configured_credits: number | null; default_credits: number; environment_override: string }
+  > = {};
+  for (const row of x402PayableRoutesForDisclosure()) {
+    if (row.kind !== "route_cost") continue;
+    if (!Object.hasOwn(STATIC_TOOL_ENV_OVERRIDES, row.label)) continue;
+    const label = row.label as keyof typeof STATIC_TOOL_ENV_OVERRIDES;
+    out[label] = {
+      configured_credits: row.credits,
+      default_credits: TOOL_CREDIT_DEFAULTS[label],
+      environment_override: STATIC_TOOL_ENV_OVERRIDES[label],
+    };
+  }
+  return out;
+}
+
 app.get("/", async (c) => {
   const bps = config.platformTakeRateBps;
+  const payableRoutes = x402PayableRoutesDisclosure();
   const ipRateLimitDisabled = process.env.AGENTTOOL_DISABLE_WORKERS === "1";
   const x402Configuration = await x402ConfigurationStatus();
 
@@ -179,29 +227,22 @@ app.get("/", async (c) => {
         then_pay_as_you_go: {
           ring: 2,
           how:
-            "Production x402 can make the POST /v1/scrape and POST /v1/document insufficient_credits gates payable at their full configured project-credit cost, and POST /v1/x402/top-up/{credits} lets an agent buy credits outright with USDC on Base — no human, no card. " +
+            `Production x402 can make the insufficient_credits gate on ${payableRoutes.length} static-priced routes (payable_routes below) payable at their full configured project-credit cost, and POST /v1/x402/top-up/{credits} lets an agent buy credits outright with USDC on Base — no human, no card. ` +
             x402Configuration.status,
           configuration: x402Configuration,
+          payable_routes: payableRoutes,
+          payable_routes_note:
+            `Generated from the x402 payable table, the same rows the challenge builder prices: amount_atomic = credits × ${ATOMIC_PER_CREDIT}. \`payable\` is structural (a positive integer price); a PAYMENT-REQUIRED header is attached only while configuration.payable_challenges_ready is true, and only after the handler itself answered 402 with one of error_codes. The same rows carry a 402 response and x-agenttool-x402 on their OpenAPI operations.`,
           top_up: x402TopUpDisclosure(x402Configuration.payable_challenges_ready),
           implementation_status:
-            "Only eligible static project-credit 402 responses (insufficient_credits on the two static tools) and the top-up door's own top_up_payment_required 402 are converted to x402 V2 exact/EIP-3009 challenges; the 402 body keeps the route's guidance and mirrors PaymentRequired on top. Direct EOA signatures use offline recovery; bounded EIP-1271/ERC-6492 signatures defer to the facilitator behind the durable 5-attempt/10-minute project cap. Wallet insufficient_balance, usage-cap, and unknown 402 responses pass through unchanged because project-credit settlement cannot clear them. x402 bursting for the published Ring 1 storage targets is not live.",
+            `Only eligible static project-credit 402 responses (insufficient_credits on the ${payableRoutes.length} static-priced routes in payable_routes) and the top-up door's own top_up_payment_required 402 are converted to x402 V2 exact/EIP-3009 challenges; the 402 body keeps the route's guidance and mirrors PaymentRequired on top. Direct EOA signatures use offline recovery; bounded EIP-1271/ERC-6492 signatures defer to the facilitator behind the durable 5-attempt/10-minute project cap. Wallet insufficient_balance, usage-cap, and unknown 402 responses pass through unchanged because project-credit settlement cannot clear them. x402 bursting for the published Ring 1 storage targets is not live.`,
           subscriptions: false,
         },
 
         metered_tools: {
           unit: "project_credit",
-          static_attempts: {
-            scrape: {
-              configured_credits: toolsConfig.credits.scrape,
-              default_credits: TOOL_CREDIT_DEFAULTS.scrape,
-              environment_override: "CREDIT_SCRAPE",
-            },
-            document: {
-              configured_credits: toolsConfig.credits.document,
-              default_credits: TOOL_CREDIT_DEFAULTS.document,
-              environment_override: "CREDIT_DOCUMENT",
-            },
-          },
+          static_attempts: staticAttemptDisclosure(),
+          all_static_prices: "then_pay_as_you_go.payable_routes — one row per static-priced credit gate, generated from the same table.",
           billing_boundary:
             "After request-schema validation, the debit and failure-default usage row are reserved before destination-policy, transport, representation, or parser work. Those failures retain the reservation; schema-invalid and insufficient-credit requests do not debit.",
         },

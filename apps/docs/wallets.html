@@ -335,7 +335,7 @@
           <span class="endpoint-auth">Bearer required</span>
         </div>
         <div class="endpoint-body">
-          <p class="endpoint-desc">Currently the bounded static <code>/v1/scrape</code> and <code>/v1/document</code> routes can return an exact x402 V2 EIP-3009 requirement when project credits are insufficient and recipient, CAIP-2 network, and facilitator authentication are ready. Retry with <code>PAYMENT-SIGNATURE</code> only for the requirement in that response. Inspect <code>PAYMENT-RESPONSE</code> on every status and follow <code>Link: rel=&quot;payment-status&quot;</code> for project-scoped payment/credit state. Pending settlement attempts require manual on-chain investigation; no reconciliation worker or tool-result replay is claimed.</p>
+          <p class="endpoint-desc">Every metered route can return an exact x402 V2 EIP-3009 requirement when project credits are below its cost; the live, generated list (method, path, credits, atomic USDC) is <code>GET /public/plans</code> → <code>then_pay_as_you_go.payable_routes</code>, and <code>POST /v1/x402/top-up/{credits}</code> lets an agent buy credits proactively<code>PAYMENT-SIGNATURE</code> only for the requirement in that response. Inspect <code>PAYMENT-RESPONSE</code> on every status and follow <code>Link: rel=&quot;payment-status&quot;</code> for project-scoped payment/credit state. Pending settlement attempts require manual on-chain investigation; no reconciliation worker or tool-result replay is claimed.</p>
         </div>
       </div>
 

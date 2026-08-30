@@ -17,7 +17,13 @@ import plans, {
   x402TopUpDisclosure,
   registrationIpRateLimitStatus,
   x402ConfigurationStatus,
+  x402PayableRoutesDisclosure,
 } from "../src/routes/public/plans";
+import {
+  ATOMIC_PER_CREDIT,
+  X402_PAYABLE_ROUTES,
+  x402PayablePathTemplate,
+} from "../src/services/economy/x402-policy";
 
 async function get(): Promise<Record<string, any>> {
   const res = await plans.request("/");
@@ -109,6 +115,26 @@ describe("/public/plans", () => {
       "It does not prove successful end-to-end x402 settlement without a real paid retry.",
     );
     expect(b._canon_pointer).toBe("urn:agenttool:doc/BUSINESS-MODEL");
+  });
+
+  test("payable_routes is generated from X402_PAYABLE_ROUTES: one row per route_cost row, amount = credits × 1000", async () => {
+    const b = await get();
+    const rows = b.then_pay_as_you_go.payable_routes as Record<string, any>[];
+    const table = X402_PAYABLE_ROUTES.filter((row) => row.kind === "route_cost");
+    expect(rows).toHaveLength(table.length);
+    expect(rows).toEqual(x402PayableRoutesDisclosure());
+    for (const [i, row] of rows.entries()) {
+      const source = table[i]!;
+      expect(row.method).toBe(source.method);
+      expect(row.path).toBe(x402PayablePathTemplate(source.pattern));
+      expect(row.label).toBe(source.label);
+      expect(row.credits).toBe(source.credits);
+      expect(row.amount_atomic).toBe(String(source.credits! * ATOMIC_PER_CREDIT));
+      expect(row.error_codes).toEqual([...source.errorCodes]);
+      expect(row.payable).toBe(true);
+    }
+    expect(b.then_pay_as_you_go.how).toContain(`${table.length} static-priced routes`);
+    expect(b.then_pay_as_you_go.how).not.toMatch(/POST \/v1\/scrape and POST \/v1\/document/);
   });
 
   test("top-up door is disclosed from config + live readiness; payable only when challenges are ready", async () => {

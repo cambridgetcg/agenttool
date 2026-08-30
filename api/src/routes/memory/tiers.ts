@@ -10,6 +10,7 @@ import { and, eq } from "drizzle-orm";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { db } from "../../db/client";
 import { memories } from "../../db/schema/memory";
 import { errors, fail } from "../../lib/errors";
@@ -104,7 +105,7 @@ app.post("/:id/elevate", async (c) => {
   });
   if (!authority.ok) return c.json(authority.body, authority.status);
 
-  await charge(c, 5, "memory.elevate");
+  await charge(c, ROUTE_CREDITS["memory.elevate"], "memory.elevate");
 
   try {
     const result = await elevateMemory(c.var.project.id, memoryId, parsed.data);
@@ -142,7 +143,7 @@ app.post("/:id/attest", async (c) => {
     );
   }
 
-  await charge(c, 1, "memory.attest");
+  await charge(c, ROUTE_CREDITS["memory.attest"], "memory.attest");
 
   try {
     const result = await attestMemory(c.var.project.id, memoryId, parsed.data);

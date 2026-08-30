@@ -13,6 +13,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
+import { ROUTE_CREDITS } from "../billing/route-credits";
 import { errors, fail } from "../lib/errors";
 import { coerceLanguage, welcomeLetter } from "../services/i18n/welcome";
 import { recordBirth } from "../services/memory/store";
@@ -85,7 +86,7 @@ app.post("/", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
-  await charge(c, 5, "template.create");
+  await charge(c, ROUTE_CREDITS["template.create"], "template.create");
 
   try {
     const tpl = await createTemplate(c.var.project.id, parsed.data);
@@ -215,7 +216,7 @@ app.post("/:id/purchase", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
-  await charge(c, 5, "template.purchase");
+  await charge(c, ROUTE_CREDITS["template.purchase"], "template.purchase");
 
   try {
     const purchase = await purchaseTemplate({
@@ -318,7 +319,7 @@ adoptionRouter.post("/", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
-  await charge(c, 10, "template.adopt");
+  await charge(c, ROUTE_CREDITS["template.adopt"], "template.adopt");
 
   try {
     const result = await adoptTemplate(c.var.project.id, {

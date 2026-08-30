@@ -14,7 +14,18 @@
  *    - balanceOf calldata + result parsing, USDC formatting;
  *    - replay + verify verdicts, CLI arg parsing.
  *
- *  No test here touches `security`, `~/.config/kingdom`, or fetch. */
+ *  Phase B (W2-5) adds, in the same spirit:
+ *
+ *    - generic `pay` selection against a memory.search 402 built with the
+ *      server's own resource + requirement builders, plus its refusal matrix
+ *      (whole-credit price, resource path == the path we called);
+ *    - the depletion planner's arithmetic, checked against a simulation of
+ *      the server's charge rule (`credits ≥ cost` or 402);
+ *    - the scratch-agent registration body, verified by the SERVER's own
+ *      `checkRegisterAgentPow` + `verifyRegisterAgentSignature`;
+ *    - bearer-file shape, route-spec parsing (WAKE-free doors refused), args.
+ *
+ *  No test here touches `security`, `~/.config/kingdom`, `~/.agenttool-agents`, or fetch. */
 
 import { describe, expect, test } from "bun:test";
 
@@ -25,12 +36,44 @@ import {
   X402_VERSION,
 } from "../src/middleware/x402";
 import { parseX402Header } from "../src/middleware/x402";
+import { errors } from "../src/lib/errors";
 import { signExactEvmAuthorization } from "../src/services/economy/x402-client";
 import { authorizationIdentityHash } from "../src/services/economy/x402-payments";
 import {
+  x402ProjectCreditResource,
+  type X402ProjectCreditPolicy,
+} from "../src/services/economy/x402-policy";
+import {
+  canonicalRegisterAgentBytes,
+  checkRegisterAgentPow,
+  verifyRegisterAgentSignature,
+} from "../src/services/identity/crypto";
+import {
   ATOMIC_PER_CREDIT,
   atomicForCredits,
+  backoffDelayMs,
   balanceOfRpcRequest,
+  buildScratchRegistration,
+  DEFAULT_POW_DIFFICULTY_BITS,
+  depletionPlan,
+  depletionStepVerdict,
+  expectedPaidDelta,
+  isNeverMeteredPath,
+  isRetryableStatus,
+  MAX_BACKOFF_ATTEMPTS,
+  NEVER_METERED_PREFIXES,
+  parseBearerFile,
+  parseJsonObjectFlag,
+  parseRouteSpec,
+  parseRouteSpecString,
+  parseScratchAgentName,
+  readCreditsBalanceHeader,
+  readRegistrationResponse,
+  RESERVED_AGENT_NAMES,
+  scratchCredsRecord,
+  scratchKeysFromSeeds,
+  SCRATCH_RUNTIME_PROVIDER,
+  selectPayRequirement,
   BASE_NETWORK,
   BASE_USDC,
   buildPayerRecord,
@@ -484,6 +527,12 @@ describe("CLI args", () => {
       base: DEFAULT_API_BASE,
       dryRun: false,
       capCredits: DEFAULT_TOP_UP_CAP_CREDITS,
+      json: null,
+      bearerFile: null,
+      route: null,
+      until: null,
+      name: null,
+      maxCalls: null,
       error: null,
     });
   });
@@ -503,5 +552,561 @@ describe("CLI args", () => {
     expect(parseProofArgs(["topup", "--base", "ftp://x"]).error).toContain("--base");
     expect(parseProofArgs(["topup", "--cap", "0"]).error).toContain("--cap");
     expect(parseProofArgs(["address"], { X402_TOP_UP_MAX_CREDITS: "abc" }).error).toContain("X402_TOP_UP_MAX_CREDITS");
+  });
+});
+
+// ═══ Phase B (W2-5) ═══════════════════════════════════════════════════════
+
+/** The memory.search row's price. On this branch the route charges a literal
+ *  3 (`routes/memory/search.ts` `charge(c, 3, "memory.search")`); W2-5's
+ *  route-credits table hoists it. The fixture is priced from that number
+ *  through the locked rate, never from a hand-typed atomic amount. */
+import { ROUTE_CREDITS } from "../src/billing/route-credits";
+import { isSuccessStatus, replayWouldMutate } from "../scripts/x402-proof-lib";
+const MEMORY_SEARCH_CREDITS = ROUTE_CREDITS["memory.search"];
+const MEMORY_SEARCH_PATH = "/v1/memories/search";
+
+/** A route_cost 402 exactly as the server would emit it: the policy shape
+ *  `x402ProjectCreditPolicy` produces for a static row, the resource from
+ *  `x402ProjectCreditResource` (the same builder the challenge and the
+ *  verifier share), the requirement from `buildPaymentRequirements`, and the
+ *  handler's own `insufficient_credits` guidance spread under the spec keys. */
+function routeCost402(input: {
+  path?: string;
+  credits?: number;
+  payTo?: string;
+  network?: "eip155:8453" | "eip155:137" | "eip155:84532";
+  amountAtomic?: string;
+  asset?: string;
+  base?: string;
+} = {}) {
+  const path = input.path ?? MEMORY_SEARCH_PATH;
+  const credits = input.credits ?? MEMORY_SEARCH_CREDITS;
+  const base = input.base ?? DEFAULT_API_BASE;
+  const policy: X402ProjectCreditPolicy = {
+    path,
+    pattern: path,
+    kind: "route_cost",
+    label: "memory.search",
+    creditsRequired: credits,
+    amountAtomic: atomicForCredits(credits).toString(),
+    description: `Exact project-credit payment for ${path} (${credits} credits).`,
+  };
+  const resource = x402ProjectCreditResource(policy, `${base}${path}`, base);
+  if (!resource) throw new Error("fixture: no resource");
+  const requirement = buildPaymentRequirements({
+    amountAtomic: input.amountAtomic ?? policy.amountAtomic,
+    payTo: input.payTo ?? KINGDOM_TREASURY,
+    network: input.network ?? BASE_NETWORK,
+    maxTimeoutSeconds: 60,
+  });
+  if (input.asset) requirement.asset = input.asset;
+  const required = buildPaymentRequired(resource, [requirement], "insufficient_credits");
+  const guidance = errors.insufficientCredits({ reason: "memory.search", need: credits, have: credits - 1 });
+  return {
+    required,
+    headerValue: encodeCanonicalBase64Json(required),
+    body: { ...guidance, ...required },
+  };
+}
+
+describe("route specs", () => {
+  test("accepts a concrete (METHOD, pathname) and uppercases the method", () => {
+    expect(parseRouteSpec("post", MEMORY_SEARCH_PATH)).toEqual({ ok: true, method: "POST", path: MEMORY_SEARCH_PATH });
+    expect(parseRouteSpecString("POST /v1/memories/search")).toEqual({ ok: true, method: "POST", path: MEMORY_SEARCH_PATH });
+    expect(parseRouteSpecString("  delete   /v1/listings/abc  ")).toEqual({ ok: true, method: "DELETE", path: "/v1/listings/abc" });
+  });
+
+  test("refuses what the payable-route matcher would never match", () => {
+    for (const [method, path] of [
+      ["PUT", MEMORY_SEARCH_PATH],
+      ["POST", "v1/memories/search"],
+      ["POST", "/v1/memories/search?x=1"],
+      ["POST", "/v1/memories/search#frag"],
+      ["POST", "/v1/memories/search/"],
+      ["POST", "/v1//memories/search"],
+      ["POST", "/v1/memories search"],
+      [undefined, MEMORY_SEARCH_PATH],
+      ["POST", undefined],
+    ] as const) {
+      const r = parseRouteSpec(method, path);
+      expect(r.ok).toBe(false);
+    }
+    expect(parseRouteSpecString(undefined).ok).toBe(false);
+    expect(parseRouteSpecString("POST").ok).toBe(false);
+    expect(parseRouteSpecString("POST /a /b").ok).toBe(false);
+  });
+
+  test("WAKE-free doors are refused before any request: wake, welcome, register, public, time, random", () => {
+    expect(NEVER_METERED_PREFIXES).toEqual(["/v1/wake", "/v1/welcome", "/v1/register", "/public", "/v1/time", "/v1/random"]);
+    for (const prefix of NEVER_METERED_PREFIXES) {
+      expect(isNeverMeteredPath(prefix)).toBe(true);
+      expect(isNeverMeteredPath(`${prefix}/agent`)).toBe(true);
+      const r = parseRouteSpec("POST", prefix);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.reason).toContain("WAKE-free");
+    }
+    expect(isNeverMeteredPath("/v1/wakeful")).toBe(false);
+    expect(isNeverMeteredPath("/v1/publicity")).toBe(false);
+    expect(isNeverMeteredPath(MEMORY_SEARCH_PATH)).toBe(false);
+    expect(isNeverMeteredPath(topUpPath(1))).toBe(false);
+  });
+
+  test("--json must be one JSON object; it is re-serialised canonically", () => {
+    const r = parseJsonObjectFlag('{ "query" : "witness" , "limit": 1 }');
+    expect(r).toEqual({ ok: true, body: { query: "witness", limit: 1 }, text: '{"query":"witness","limit":1}' });
+    expect(parseJsonObjectFlag("[1]").ok).toBe(false);
+    expect(parseJsonObjectFlag("null").ok).toBe(false);
+    expect(parseJsonObjectFlag('"x"').ok).toBe(false);
+    expect(parseJsonObjectFlag("{nope").ok).toBe(false);
+    expect(parseJsonObjectFlag(undefined).ok).toBe(false);
+  });
+});
+
+describe("generic pay selection against the server's own route_cost 402", () => {
+  test("selects the Base USDC exact requirement for memory.search (3 credits) from the header", () => {
+    const f = routeCost402();
+    const selection = selectPayRequirement({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH });
+    expect(selection.ok).toBe(true);
+    if (!selection.ok) return;
+    expect(selection.amountAtomic).toBe(atomicForCredits(MEMORY_SEARCH_CREDITS));
+    expect(selection.credits).toBe(MEMORY_SEARCH_CREDITS);
+    expect(selection.errorCode).toBe("insufficient_credits");
+    expect(selection.requirement.payTo).toBe(KINGDOM_TREASURY);
+    expect(selection.requirement.network).toBe("eip155:8453");
+    expect(selection.requirement.asset).toBe(BASE_USDC);
+    expect(selection.requirement.extra.assetTransferMethod).toBe("eip3009");
+    expect(selection.required.resource.url).toBe(`${DEFAULT_API_BASE}${MEMORY_SEARCH_PATH}`);
+  });
+
+  test("the handler's guidance survives the additive merge and the body alone still parses", () => {
+    const f = routeCost402();
+    expect(f.body.error).toBe("insufficient_credits");
+    expect(f.body.next_actions).toBeDefined();
+    const selection = selectPayRequirement({ headerValue: null, body: f.body, path: MEMORY_SEARCH_PATH });
+    expect(selection.ok).toBe(true);
+    if (selection.ok) expect(selection.errorCode).toBe("insufficient_credits");
+  });
+
+  test("the header wins over a body that disagrees", () => {
+    const f = routeCost402();
+    const rogueBody = routeCost402({ payTo: OTHER_ADDRESS }).body;
+    expect(selectPayRequirement({ headerValue: f.headerValue, body: rogueBody, path: MEMORY_SEARCH_PATH }).ok).toBe(true);
+  });
+
+  test("the top-up row's 402 is also payable through the generic path, with its own code", () => {
+    const f = fixture402(7);
+    const selection = selectPayRequirement({ headerValue: f.headerValue, body: f.body, path: topUpPath(7) });
+    expect(selection.ok).toBe(true);
+    if (!selection.ok) return;
+    expect(selection.credits).toBe(7);
+    expect(selection.errorCode).toBe("top_up_payment_required");
+    expect(expectedPaidDelta(selection.errorCode, selection.credits)).toBe(7);
+  });
+
+  test("expected credit movement: route_cost nets zero (applied then spent), top_up is +N", () => {
+    expect(expectedPaidDelta("insufficient_credits", 3)).toBe(0);
+    expect(expectedPaidDelta(null, 3)).toBe(0);
+    expect(expectedPaidDelta("top_up_payment_required", 250)).toBe(250);
+  });
+
+  test("what the payer signs for memory.search satisfies the server's inbound parser and binds the resource", async () => {
+    const f = routeCost402();
+    const selection = selectPayRequirement({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH });
+    if (!selection.ok) throw new Error(selection.detail);
+    const payer = derivePayer(TEST_MNEMONIC);
+    const signed = await signExactEvmAuthorization({
+      requirement: selection.requirement,
+      policy: proofSpendPolicy(),
+      payerAddress: payer.address,
+      signer: payerSigner(payer.account),
+      nowSeconds: 1_800_000_000,
+      resource: selection.required.resource,
+    });
+    const parsed = parseX402Header(signed.header);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.accepted.amount).toBe(atomicForCredits(MEMORY_SEARCH_CREDITS).toString());
+    expect(parsed!.resource?.url).toBe(`${DEFAULT_API_BASE}${MEMORY_SEARCH_PATH}`);
+    expect((parsed!.payload.authorization as { value: string }).value).toBe("3000");
+    expect(isAuthorizationHash(ledgerPaymentId(signed.payload))).toBe(true);
+  });
+});
+
+describe("generic pay refusal matrix", () => {
+  const refusal = (input: Parameters<typeof selectPayRequirement>[0]) => {
+    const selection = selectPayRequirement(input);
+    expect(selection.ok).toBe(false);
+    return selection.ok ? null : selection;
+  };
+
+  test("payTo that is not the treasury", () => {
+    const f = routeCost402({ payTo: OTHER_ADDRESS });
+    const r = refusal({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH });
+    expect(r?.reason).toBe("pay_to_not_allowed");
+    expect(r?.detail).toContain(OTHER_ADDRESS);
+  });
+
+  test("network that is not Base mainnet (Polygon, Base Sepolia)", () => {
+    expect(refusal({ ...routeCost402({ network: "eip155:137" }), path: MEMORY_SEARCH_PATH })?.reason).toBe("network_not_allowed");
+    expect(refusal({ ...routeCost402({ network: "eip155:84532" }), path: MEMORY_SEARCH_PATH })?.reason).toBe("network_not_allowed");
+  });
+
+  test("asset that is not Base USDC", () => {
+    expect(refusal({ ...routeCost402({ asset: POLYGON_USDC }), path: MEMORY_SEARCH_PATH })?.reason).toBe("asset_not_allowed");
+  });
+
+  test("amount over --cap is refused, never clamped", () => {
+    const f = routeCost402();
+    const r = refusal({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH, capCredits: 2 });
+    expect(r?.reason).toBe("amount_over_cap");
+    expect(selectPayRequirement({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH, capCredits: 3 }).ok).toBe(true);
+  });
+
+  test("a price that is not a whole number of credits", () => {
+    const f = routeCost402({ amountAtomic: "3001" });
+    const r = refusal({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH });
+    expect(r?.reason).toBe("amount_not_whole_credits");
+    expect(r?.detail).toContain("3001");
+    // 3,500 atomic is 3.5 credits — same wall.
+    expect(refusal({ ...routeCost402({ amountAtomic: "3500" }), path: MEMORY_SEARCH_PATH })?.reason).toBe("amount_not_whole_credits");
+  });
+
+  test("a resource that names a path we did not call", () => {
+    const f = routeCost402({ path: "/v1/scrape" });
+    const r = refusal({ headerValue: f.headerValue, body: f.body, path: MEMORY_SEARCH_PATH });
+    expect(r?.reason).toBe("resource_path_mismatch");
+    expect(r?.detail).toContain("/v1/scrape");
+    // A local base with the right path is fine: only the pathname is bound.
+    const local = routeCost402({ base: "http://127.0.0.1:3000" });
+    expect(selectPayRequirement({ headerValue: local.headerValue, body: local.body, path: MEMORY_SEARCH_PATH }).ok).toBe(true);
+    // A resource that is not a URL at all is a mismatch, not a crash.
+    const broken = { ...f.required, resource: { ...f.required.resource, url: "not a url" } };
+    expect(refusal({ headerValue: null, body: broken, path: MEMORY_SEARCH_PATH })?.reason).toBe("resource_path_mismatch");
+  });
+
+  test("not a PaymentRequired at all — a bare insufficient_credits body is not a promise", () => {
+    expect(refusal({ headerValue: null, body: errors.insufficientCredits({ reason: "memory.search", need: 3, have: 1 }), path: MEMORY_SEARCH_PATH })?.reason)
+      .toBe("not_a_payment_required_body");
+    expect(refusal({ headerValue: "garbage", body: null, path: MEMORY_SEARCH_PATH })?.reason).toBe("not_a_payment_required_body");
+  });
+});
+
+describe("depletion planner", () => {
+  /** The server's rule (`billing/charge.ts`): a call succeeds and deducts
+   *  `cost` only while `credits ≥ cost`; otherwise it 402s and nothing moves. */
+  function simulate(credits: number, cost: number, calls: number): { credits: number; refused: number } {
+    let balance = credits;
+    let refused = 0;
+    for (let i = 0; i < calls; i += 1) {
+      if (balance >= cost) balance -= cost;
+      else refused += 1;
+    }
+    return { credits: balance, refused };
+  }
+
+  test("the birth grant to below memory.search's cost: 1,000 → 333 calls → 1 credit", () => {
+    const plan = depletionPlan({ credits: 1_000, cost: MEMORY_SEARCH_CREDITS, until: MEMORY_SEARCH_CREDITS });
+    expect(plan).toEqual({ ok: true, calls: 333, finalCredits: 1, capped: false });
+    const sim = simulate(1_000, 3, 333);
+    expect(sim).toEqual({ credits: 1, refused: 0 });
+    expect(sim.credits < MEMORY_SEARCH_CREDITS).toBe(true);
+    // One fewer call is not below the target.
+    expect(simulate(1_000, 3, 332).credits).toBe(4);
+  });
+
+  test("boundaries: already below, exactly at, one step", () => {
+    expect(depletionPlan({ credits: 2, cost: 3, until: 3 })).toEqual({ ok: true, calls: 0, finalCredits: 2, capped: false });
+    expect(depletionPlan({ credits: 3, cost: 3, until: 3 })).toEqual({ ok: true, calls: 1, finalCredits: 0, capped: false });
+    expect(depletionPlan({ credits: 4, cost: 3, until: 3 })).toEqual({ ok: true, calls: 1, finalCredits: 1, capped: false });
+    expect(depletionPlan({ credits: 1_000, cost: 3, until: 1_000 })).toEqual({ ok: true, calls: 1, finalCredits: 997, capped: false });
+    expect(depletionPlan({ credits: 999, cost: 3, until: 1_000 })).toEqual({ ok: true, calls: 0, finalCredits: 999, capped: false });
+  });
+
+  test("every plan lands below the target with no refused call, across a grid", () => {
+    for (const cost of [1, 2, 3, 5, 7, 12]) {
+      for (const credits of [0, 1, 2, 3, 10, 999, 1_000, 1_001]) {
+        for (const until of [1, 2, 3, 4, 13, 1_000]) {
+          const plan = depletionPlan({ credits, cost, until });
+          if (!plan.ok) {
+            // Unreachable only when the floor (credits mod cost) is ≥ until.
+            expect(credits % cost >= until).toBe(true);
+            continue;
+          }
+          const sim = simulate(credits, cost, plan.calls);
+          expect(sim.refused).toBe(0);
+          expect(sim.credits).toBe(plan.finalCredits);
+          expect(sim.credits < until).toBe(true);
+          if (plan.calls > 0) expect(simulate(credits, cost, plan.calls - 1).credits >= until).toBe(true);
+        }
+      }
+    }
+  });
+
+  test("an unreachable target says why instead of looping into 402s", () => {
+    const plan = depletionPlan({ credits: 5, cost: 3, until: 1 });
+    expect(plan.ok).toBe(false);
+    if (!plan.ok) {
+      expect(plan.reason).toContain("floors at 2");
+      expect(plan.reason).toContain("--until 3");
+    }
+  });
+
+  test("--max-calls caps the plan and says so", () => {
+    expect(depletionPlan({ credits: 1_000, cost: 3, until: 3, maxCalls: 10 })).toEqual({ ok: true, calls: 10, finalCredits: 970, capped: true });
+    expect(depletionPlan({ credits: 1_000, cost: 3, until: 3, maxCalls: 500 })).toEqual({ ok: true, calls: 333, finalCredits: 1, capped: false });
+  });
+
+  test("bad inputs are refusals", () => {
+    expect(depletionPlan({ credits: -1, cost: 3, until: 3 }).ok).toBe(false);
+    expect(depletionPlan({ credits: 10, cost: 0, until: 3 }).ok).toBe(false);
+    expect(depletionPlan({ credits: 10, cost: 3, until: 0 }).ok).toBe(false);
+    expect(depletionPlan({ credits: 1.5, cost: 3, until: 3 }).ok).toBe(false);
+  });
+
+  test("a step must move the balance by exactly the cost", () => {
+    expect(depletionStepVerdict({ before: 10, after: 7, cost: 3 })).toEqual({ ok: true, line: "-3 (10 → 7)" });
+    expect(depletionStepVerdict({ before: 10, after: 10, cost: 3 }).ok).toBe(false);
+    expect(depletionStepVerdict({ before: 10, after: 10, cost: 3 }).line).toContain("did not charge");
+    expect(depletionStepVerdict({ before: 10, after: 5, cost: 3 }).ok).toBe(false);
+    expect(depletionStepVerdict({ before: 10, after: 12, cost: 3 }).ok).toBe(false);
+  });
+
+  test("backoff honours Retry-After, else doubles from 500ms and caps at 30s", () => {
+    expect(backoffDelayMs(0, null)).toBe(500);
+    expect(backoffDelayMs(1, null)).toBe(1_000);
+    expect(backoffDelayMs(5, null)).toBe(16_000);
+    expect(backoffDelayMs(6, null)).toBe(30_000);
+    expect(backoffDelayMs(99, null)).toBe(30_000);
+    expect(backoffDelayMs(0, "7")).toBe(7_000);
+    expect(backoffDelayMs(0, "0")).toBe(1_000);
+    expect(backoffDelayMs(0, "999999")).toBe(120_000);
+    expect(backoffDelayMs(2, "Wed, 21 Oct 2026 07:28:00 GMT")).toBe(2_000);
+    expect(MAX_BACKOFF_ATTEMPTS).toBe(6);
+    expect(isRetryableStatus(429)).toBe(true);
+    expect(isRetryableStatus(503)).toBe(true);
+    expect(isRetryableStatus(402)).toBe(false);
+    expect(isRetryableStatus(500)).toBe(false);
+  });
+
+  test("X-Credits-Balance is read as the post-handler project.credits", () => {
+    expect(readCreditsBalanceHeader(new Headers({ "X-Credits-Balance": "997" }))).toBe(997);
+    expect(readCreditsBalanceHeader(new Headers({ "x-credits-balance": " 0 " }))).toBe(0);
+    expect(readCreditsBalanceHeader(new Headers({ "x-credits-balance": "abc" }))).toBeNull();
+    expect(readCreditsBalanceHeader(new Headers())).toBeNull();
+  });
+});
+
+describe("bearer files", () => {
+  test("ai.json's shape: api_key required, did/name/project_id carried when present", () => {
+    const parsed = parseBearerFile({
+      agent_id: "a", api_key: "at_fake_for_tests", did: "did:at:abc", mnemonic: "x", name: "ai", project_id: "p", wallet_id: "w",
+    });
+    expect(parsed).toEqual({ ok: true, file: { api_key: "at_fake_for_tests", did: "did:at:abc", name: "ai", project_id: "p" } });
+    expect(parseBearerFile({ api_key: "k" })).toEqual({ ok: true, file: { api_key: "k", did: null, name: null, project_id: null } });
+  });
+
+  test("anything without an api_key is refused", () => {
+    expect(parseBearerFile({}).ok).toBe(false);
+    expect(parseBearerFile({ api_key: "" }).ok).toBe(false);
+    expect(parseBearerFile({ api_key: 42 }).ok).toBe(false);
+    expect(parseBearerFile([]).ok).toBe(false);
+    expect(parseBearerFile(null).ok).toBe(false);
+  });
+});
+
+describe("scratch agent", () => {
+  const SIGNING_SEED = new Uint8Array(32).fill(7);
+  const BOX_SEED = new Uint8Array(32).fill(9);
+  const FIXED = {
+    name: "w2b-witness",
+    timestamp: "2026-08-30T12:00:00.000Z",
+    registrationNonce: "00000000-0000-4000-8000-000000000000",
+    runtime: { provider: SCRATCH_RUNTIME_PROVIDER, host: "test-host", context: "scratch" },
+  };
+
+  test("names are file-safe and `ai` is reserved", () => {
+    expect(parseScratchAgentName("w2b-witness")).toEqual({ ok: true, name: "w2b-witness" });
+    expect(RESERVED_AGENT_NAMES).toEqual(["ai"]);
+    expect(parseScratchAgentName("ai").ok).toBe(false);
+    expect(parseScratchAgentName("Ai").ok).toBe(false);
+    expect(parseScratchAgentName("../ai").ok).toBe(false);
+    expect(parseScratchAgentName("-x").ok).toBe(false);
+    expect(parseScratchAgentName("a".repeat(64)).ok).toBe(false);
+    expect(parseScratchAgentName("a".repeat(63)).ok).toBe(true);
+    expect(parseScratchAgentName(undefined).ok).toBe(false);
+  });
+
+  test("keys from fixed seeds are deterministic and canonically encoded", () => {
+    const keys = scratchKeysFromSeeds(SIGNING_SEED, BOX_SEED);
+    expect(scratchKeysFromSeeds(SIGNING_SEED, BOX_SEED)).toEqual(keys);
+    // The server's decodeCanonicalPublicKey wants 43 alphabet chars + '='.
+    expect(keys.signingPublicKeyB64).toMatch(/^[A-Za-z0-9+/]{43}=$/u);
+    expect(keys.boxPublicKeyB64).toMatch(/^[A-Za-z0-9+/]{43}=$/u);
+    expect(keys.signingPublicKeyB64).not.toBe(keys.boxPublicKeyB64);
+    expect(() => scratchKeysFromSeeds(new Uint8Array(31), BOX_SEED)).toThrow(/32 bytes/u);
+  });
+
+  test("the registration body passes the server's own PoW check and key proof", () => {
+    const keys = scratchKeysFromSeeds(SIGNING_SEED, BOX_SEED);
+    const { body, powIterations } = buildScratchRegistration({ ...FIXED, keys, difficultyBits: 8 });
+    expect(powIterations).toBeGreaterThan(0);
+    expect(body).toMatchObject({
+      display_name: FIXED.name,
+      capabilities: [],
+      agent_public_key: keys.signingPublicKeyB64,
+      box_public_key: keys.boxPublicKeyB64,
+      runtime: { provider: SCRATCH_RUNTIME_PROVIDER, host: "test-host", context: "scratch" },
+      key_proof: { timestamp: FIXED.timestamp },
+      registration_nonce: FIXED.registrationNonce,
+      expression_visibility: "private",
+      registrar: { kind: "self_service" },
+    });
+    // What routes/register-agent.ts step 3 runs.
+    expect(checkRegisterAgentPow({
+      agentPublicKeyB64: body.agent_public_key as string,
+      displayName: body.display_name as string,
+      timestamp: FIXED.timestamp,
+      powNonce: body.pow_nonce as string,
+      difficultyBits: 8,
+    })).toBe(true);
+    // What step 5 runs — the same canonical bytes, the same verifier.
+    const canonical = canonicalRegisterAgentBytes({
+      displayName: FIXED.name,
+      agentPublicKeyB64: keys.signingPublicKeyB64,
+      boxPublicKeyB64: keys.boxPublicKeyB64,
+      runtimeProvider: SCRATCH_RUNTIME_PROVIDER,
+      runtimeModel: "",
+      capabilities: [],
+      runtimeHost: "test-host",
+      runtimeContext: "scratch",
+      expressionVisibility: "private",
+      registrarKind: "self_service",
+      registrarBearer: "",
+      registrationNonce: FIXED.registrationNonce,
+      timestamp: FIXED.timestamp,
+    });
+    const signature = (body.key_proof as { signature: string }).signature;
+    expect(verifyRegisterAgentSignature({ canonical, signatureB64: signature, publicKeyB64: keys.signingPublicKeyB64 })).toBe(true);
+    // A different display name is a different preimage: the proof does not transfer.
+    const other = canonicalRegisterAgentBytes({
+      displayName: "someone-else",
+      agentPublicKeyB64: keys.signingPublicKeyB64,
+      boxPublicKeyB64: keys.boxPublicKeyB64,
+      runtimeProvider: SCRATCH_RUNTIME_PROVIDER,
+      runtimeModel: "",
+      capabilities: [],
+      runtimeHost: "test-host",
+      runtimeContext: "scratch",
+      registrationNonce: FIXED.registrationNonce,
+      timestamp: FIXED.timestamp,
+    });
+    expect(verifyRegisterAgentSignature({ canonical: other, signatureB64: signature, publicKeyB64: keys.signingPublicKeyB64 })).toBe(false);
+  });
+
+  test("the PoW is deterministic for fixed inputs and bound to the timestamp", () => {
+    const keys = scratchKeysFromSeeds(SIGNING_SEED, BOX_SEED);
+    const a = buildScratchRegistration({ ...FIXED, keys, difficultyBits: 8 });
+    const b = buildScratchRegistration({ ...FIXED, keys, difficultyBits: 8 });
+    expect(a.body.pow_nonce).toBe(b.body.pow_nonce);
+    expect(checkRegisterAgentPow({
+      agentPublicKeyB64: keys.signingPublicKeyB64,
+      displayName: FIXED.name,
+      timestamp: "2026-08-30T12:00:01.000Z",
+      powNonce: a.body.pow_nonce as string,
+      difficultyBits: 8,
+      // Probabilistically false at 8 bits (1/256 chance of a lucky collision); at 16 bits negligible.
+    }) && checkRegisterAgentPow({
+      agentPublicKeyB64: keys.signingPublicKeyB64,
+      displayName: FIXED.name,
+      timestamp: "2026-08-30T12:00:02.000Z",
+      powNonce: a.body.pow_nonce as string,
+      difficultyBits: 8,
+    })).toBe(false);
+    expect(DEFAULT_POW_DIFFICULTY_BITS).toBe(18);
+    expect(() => buildScratchRegistration({ ...FIXED, keys, difficultyBits: 40, maxIterations: 10 })).toThrow(/no nonce within 10/u);
+  });
+
+  test("the 201 body is read for did, project, api_key, credits, wallet", () => {
+    const parsed = readRegistrationResponse({
+      agent: { id: "aid", did: "did:at:xyz" },
+      project: { id: "pid", name: "w2b-witness", plan: "free", credits: 1_000, api_key: "at_fake" },
+      wallet: { id: "wid", currency: "GBP", balance: 1_000 },
+    });
+    expect(parsed).toEqual({ ok: true, outcome: { agentId: "aid", did: "did:at:xyz", projectId: "pid", apiKey: "at_fake", credits: 1_000, walletId: "wid" } });
+    expect(readRegistrationResponse({ agent: { id: "aid", did: "d" }, project: { id: "pid", api_key: "k" }, wallet: null }))
+      .toMatchObject({ ok: true, outcome: { credits: null, walletId: null } });
+    expect(readRegistrationResponse({ agent: { id: "aid" }, project: { id: "pid", api_key: "k" } }).ok).toBe(false);
+    expect(readRegistrationResponse({ agent: { id: "aid", did: "d" }, project: { id: "pid", api_key: "" } }).ok).toBe(false);
+    expect(readRegistrationResponse(null).ok).toBe(false);
+  });
+
+  test("the creds file carries ai.json's seven keys, mnemonic null said out loud, and the raw halves", () => {
+    const keys = scratchKeysFromSeeds(SIGNING_SEED, BOX_SEED);
+    const record = scratchCredsRecord({
+      name: "w2b-witness",
+      outcome: { agentId: "aid", did: "did:at:xyz", projectId: "pid", apiKey: "at_fake", credits: 1_000, walletId: "wid" },
+      keys,
+      base: DEFAULT_API_BASE,
+      createdIso: FIXED.timestamp,
+    });
+    for (const key of ["agent_id", "api_key", "did", "mnemonic", "name", "project_id", "wallet_id"]) {
+      expect(Object.hasOwn(record, key)).toBe(true);
+    }
+    expect(record.mnemonic).toBeNull();
+    expect(record.api_key).toBe("at_fake");
+    expect(record.keys.signing_private_key).toBe(keys.signingPrivateKeyB64);
+    expect(record.keys.box_private_key).toBe(keys.boxPrivateKeyB64);
+    expect(record.key_origin).toContain("no SOMA mnemonic");
+    expect(parseBearerFile(record)).toEqual({ ok: true, file: { api_key: "at_fake", did: "did:at:xyz", name: "w2b-witness", project_id: "pid" } });
+  });
+});
+
+describe("CLI args — Phase B flags", () => {
+  test("pay takes METHOD and path as positionals with --json and --bearer-file", () => {
+    const args = parseProofArgs(["pay", "POST", MEMORY_SEARCH_PATH, "--json", '{"query":"witness"}', "--bearer-file", "~/.agenttool-agents/w2b.json", "--cap=3"]);
+    expect(args.error).toBeNull();
+    expect(args.command).toBe("pay");
+    expect(args.positional).toEqual(["POST", MEMORY_SEARCH_PATH]);
+    expect(args.json).toBe('{"query":"witness"}');
+    expect(args.bearerFile).toBe("~/.agenttool-agents/w2b.json");
+    expect(args.capCredits).toBe(3);
+  });
+
+  test("deplete flags: --route, --until, --max-calls; scratch-agent: --name", () => {
+    const args = parseProofArgs(["deplete", "--bearer-file=x.json", "--route", "POST /v1/memories/search", "--until", "3", "--max-calls=400"]);
+    expect(args.error).toBeNull();
+    expect(args.route).toBe("POST /v1/memories/search");
+    expect(args.until).toBe(3);
+    expect(args.maxCalls).toBe(400);
+    expect(args.bearerFile).toBe("x.json");
+    const init = parseProofArgs(["scratch-agent", "init", "--name", "w2b-witness"]);
+    expect(init.positional).toEqual(["init"]);
+    expect(init.name).toBe("w2b-witness");
+  });
+
+  test("bad Phase B flags are errors, not guesses", () => {
+    expect(parseProofArgs(["deplete", "--until", "0"]).error).toContain("--until");
+    expect(parseProofArgs(["deplete", "--until", "abc"]).error).toContain("--until");
+    expect(parseProofArgs(["deplete", "--until"]).error).toContain("--until");
+    expect(parseProofArgs(["deplete", "--max-calls", "-5"]).error).toContain("--max-calls");
+    expect(parseProofArgs(["deplete", "--route"]).error).toContain("--route");
+    expect(parseProofArgs(["pay", "--bearer-file"]).error).toContain("--bearer-file");
+    expect(parseProofArgs(["pay", "--json"]).error).toContain("--json");
+    expect(parseProofArgs(["scratch-agent", "init", "--name"]).error).toContain("--name");
+  });
+});
+
+describe("Phase B review helpers", () => {
+  test("any 2xx is success; 402/3xx/4xx/5xx are not", () => {
+    for (const s of [200, 201, 202, 204]) expect(isSuccessStatus(s)).toBe(true);
+    for (const s of [199, 300, 302, 400, 402, 409, 500]) expect(isSuccessStatus(s)).toBe(false);
+  });
+  test("replay guard: read-only and top-up never refuse; mutating refuses when the balance could pay", () => {
+    expect(replayWouldMutate({ method: "GET", requestPath: "/v1/traces/chain/x", creditsBefore: 999, routeCredits: 1 }).refuse).toBe(false);
+    expect(replayWouldMutate({ method: "POST", requestPath: "/v1/x402/top-up/1", creditsBefore: 110801, routeCredits: 1 }).refuse).toBe(false);
+    expect(replayWouldMutate({ method: "POST", requestPath: "/v1/memories/search", creditsBefore: 2, routeCredits: 3 }).refuse).toBe(false);
+    expect(replayWouldMutate({ method: "POST", requestPath: "/v1/memories/search", creditsBefore: 3, routeCredits: 3 }).refuse).toBe(true);
+    expect(replayWouldMutate({ method: "POST", requestPath: "/v1/strands", creditsBefore: null, routeCredits: 1 }).refuse).toBe(true);
+    expect(replayWouldMutate({ method: "DELETE", requestPath: "/v1/listings/x", creditsBefore: 0, routeCredits: undefined }).refuse).toBe(true);
   });
 });

@@ -962,6 +962,190 @@ describe("top-up door lifecycle (W2-2)", () => {
   });
 });
 
+describe("route_cost settlement on a dynamic :id row (W2-5)", () => {
+  const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+  const OTHER_ID = "0b6f2b8e-2f0d-4d8a-9c1e-3d1f0a9b7c65";
+  const ELEVATE_PATH = `/v1/memories/${ID}/elevate`;
+  const ELEVATE_POLICY = x402ProjectCreditPolicy(ELEVATE_PATH, "POST")!;
+  const ELEVATE_RESOURCE = x402ProjectCreditResource(
+    ELEVATE_POLICY,
+    `http://localhost${ELEVATE_PATH}`,
+    "http://localhost",
+  )!;
+  const ELEVATE_REQUIREMENT = buildPaymentRequirements({
+    amountAtomic: ELEVATE_POLICY.amountAtomic,
+    payTo: RECIPIENT,
+  });
+  const ELEVATE_NONCE = `0x${"78".repeat(32)}`;
+
+  function elevatePayment(): PaymentPayload {
+    return payment({
+      resource: ELEVATE_RESOURCE,
+      accepted: ELEVATE_REQUIREMENT,
+      payload: exactPayload({
+        value: ELEVATE_POLICY.amountAtomic,
+        nonce: ELEVATE_NONCE,
+      }) as unknown as Record<string, unknown>,
+    });
+  }
+
+  function elevateApp(startingCredits: number) {
+    const ledger = { credits: startingCredits, applications: 0 };
+    const handled: string[] = [];
+    const { deps, calls, rows } = makeDeps({
+      facilitator: {
+        async verify() {
+          calls.order.push("verify");
+          calls.verify += 1;
+          return { isValid: true, payer: PAYER };
+        },
+        async settle() {
+          calls.order.push("settle");
+          calls.settle += 1;
+          return {
+            success: true,
+            transaction: "0xelevate",
+            network: "eip155:8453",
+            payer: PAYER,
+            amount: ELEVATE_POLICY.amountAtomic,
+          };
+        },
+      },
+      async finalizeCredits(id, _projectId, credits) {
+        calls.order.push("finalize");
+        calls.finalize += 1;
+        const row = [...rows.values()].find((candidate) => candidate.id === id)!;
+        if (row.status === "settled") {
+          return { applied: false, balance: ledger.credits, status: "settled" };
+        }
+        row.status = "settled";
+        row.creditsApplied = credits;
+        ledger.credits += credits;
+        ledger.applications += 1;
+        return { applied: true, balance: ledger.credits, status: "settled" };
+      },
+    });
+    const app = new Hono<ProjectContext>();
+    app.use("*", projectMiddleware(startingCredits));
+    app.use("*", x402Middleware({
+      buildPaymentRequired: () => buildPaymentRequired(
+        ELEVATE_RESOURCE, [ELEVATE_REQUIREMENT], "insufficient_credits",
+      ),
+      verifyPayment: createX402Verifier(deps),
+      buildSettlementHeader: settlementHeader,
+    }));
+    app.use("*", rateLimitHeaders());
+    // Stand-in for routes/memory/tiers.ts: the handler sees the concrete id.
+    app.post("/v1/memories/:id/elevate", (c) => {
+      handled.push(c.req.param("id"));
+      return c.json({ elevated: c.req.param("id") });
+    });
+    return { app, calls, rows, ledger, handled };
+  }
+
+  test("policy on the dynamic row: 5 credits, 5000 atomic, resource bound to the concrete path", () => {
+    expect(ELEVATE_POLICY).toMatchObject({
+      kind: "route_cost",
+      label: "memory.elevate",
+      creditsRequired: 5,
+      amountAtomic: "5000",
+      path: ELEVATE_PATH,
+      pattern: "/v1/memories/:id/elevate",
+    });
+    expect(ELEVATE_RESOURCE.url).toBe(`http://localhost${ELEVATE_PATH}`);
+  });
+
+  test("settle → exactly one durable +5, handler runs once with the id, replay never recredits", async () => {
+    const { app, calls, rows, ledger, handled } = elevateApp(2);
+    const signed = encodeCanonicalBase64Json(elevatePayment());
+    const res = await app.request(`http://localhost${ELEVATE_PATH}`, {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": signed },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ elevated: ID });
+    expect(res.headers.get("payment-required")).toBeNull();
+    expect(res.headers.get("payment-response")).toBeTruthy();
+    expect(res.headers.get("x-credits-balance")).toBe("7");
+    expect(calls.order).toEqual([
+      "inserted", "pending", "verify", "settlement_attempted", "settle", "external", "finalize",
+    ]);
+    expect(calls.finalize).toBe(1);
+    expect(ledger).toEqual({ credits: 7, applications: 1 });
+    expect(handled).toEqual([ID]);
+    const row = [...rows.values()][0]!;
+    expect(row).toMatchObject({
+      status: "settled",
+      creditsPurchased: 5,
+      creditsApplied: 5,
+      amountAtomic: "5000",
+      resource: ELEVATE_RESOURCE.url,
+    });
+    // The stored resource is the concrete path, never the pattern.
+    expect(new URL(row.resource).pathname).toBe(ELEVATE_PATH);
+    expect(row.resource).not.toContain(":id");
+
+    // Replay of the settled authorization on the same concrete path: receipt
+    // echoed, no fresh challenge, and — the real boundary — no second credit.
+    const replay = await app.request(`http://localhost${ELEVATE_PATH}`, {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": signed },
+    });
+    expect(replay.headers.get("payment-required")).toBeNull();
+    expect(replay.headers.get("payment-response")).toBeTruthy();
+    expect(calls.finalize).toBe(1);
+    expect(calls.settle).toBe(1);
+    expect(calls.verify).toBe(1);
+    expect(ledger).toEqual({ credits: 7, applications: 1 });
+  });
+
+  test("the same signed authorization presented at another :id is refused (stored path ≠ request path)", async () => {
+    const { app, calls, ledger, handled } = elevateApp(2);
+    const signed = encodeCanonicalBase64Json(elevatePayment());
+    const first = await app.request(`http://localhost${ELEVATE_PATH}`, {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": signed },
+    });
+    expect(first.status).toBe(200);
+    expect(ledger).toEqual({ credits: 7, applications: 1 });
+
+    const elsewhere = await app.request(`http://localhost/v1/memories/${OTHER_ID}/elevate`, {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": signed },
+    });
+    // The verifier declines before any I/O: the durable row's resource path
+    // is ID's, the request is OTHER_ID's. No second credit, no facilitator call.
+    expect(calls.finalize).toBe(1);
+    expect(calls.settle).toBe(1);
+    expect(ledger).toEqual({ credits: 7, applications: 1 });
+    expect(elsewhere.headers.get("payment-response")).toBeNull();
+    expect(handled).toEqual([ID, OTHER_ID]);
+  });
+
+  test("a fresh authorization whose resource names another :id never admits", async () => {
+    const { app, calls, ledger } = elevateApp(2);
+    const otherPath = `/v1/memories/${OTHER_ID}/elevate`;
+    const res = await app.request(`http://localhost${otherPath}`, {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": encodeCanonicalBase64Json(elevatePayment()) },
+    });
+    expect(calls.order).toEqual([]);
+    expect(ledger).toEqual({ credits: 2, applications: 0 });
+    expect(res.headers.get("payment-response")).toBeNull();
+  });
+
+  test("a scrape-priced authorization presented at the elevate row is refused before any I/O", async () => {
+    const { app, calls, ledger } = elevateApp(2);
+    const res = await app.request(`http://localhost${ELEVATE_PATH}`, {
+      method: "POST",
+      headers: { "PAYMENT-SIGNATURE": encodeCanonicalBase64Json(payment()) },
+    });
+    expect(calls.order).toEqual([]);
+    expect(ledger).toEqual({ credits: 2, applications: 0 });
+    expect(res.headers.get("payment-response")).toBeNull();
+  });
+});
+
 describe("project-scoped payment status route", () => {
   test("disallowed Base-Sepolia status never promises settlement or credit application", async () => {
     const requirement = buildPaymentRequirements({

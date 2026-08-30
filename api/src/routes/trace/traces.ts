@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { errors, fail } from "../../lib/errors";
 import {
   canonicalTraceBytes,
@@ -116,7 +117,7 @@ app.post("/", async (c) => {
     );
   }
 
-  await charge(c, 1, "trace.write");
+  await charge(c, ROUTE_CREDITS["trace.write"], "trace.write");
 
   // Stamp origin AFTER caller metadata so the middleware value wins —
   // unspoofable via the body. Doctrine: docs/ACTIVITY.md §Origin signal.

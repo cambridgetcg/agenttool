@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { searchTraces } from "../../services/trace/store";
 
 const app = new Hono<ProjectContext>();
@@ -35,7 +36,7 @@ app.post("/", async (c) => {
     );
   }
 
-  await charge(c, 2, "trace.search");
+  await charge(c, ROUTE_CREDITS["trace.search"], "trace.search");
 
   const results = await searchTraces(c.var.project.id, parsed.data);
   return c.json({ results, count: results.length });

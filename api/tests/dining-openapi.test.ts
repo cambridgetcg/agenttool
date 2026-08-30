@@ -26,6 +26,10 @@ describe("Agent Dining OpenAPI contract", () => {
       join(routesDir, "openapi-x402-top-up.ts"),
       "utf8",
     );
+    const x402Payable = readFileSync(
+      join(routesDir, "openapi-x402-payable.ts"),
+      "utf8",
+    );
 
     // @agenttool/whitehack-scan 0.10.0 fails closed above 10,000 lines.
     expect(main.split("\n").length).toBeLessThanOrEqual(10_000);
@@ -33,6 +37,9 @@ describe("Agent Dining OpenAPI contract", () => {
     expect(wakeObserve.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(wakeAcknowledge.split("\n").length).toBeLessThanOrEqual(10_000);
     expect(x402TopUp.split("\n").length).toBeLessThanOrEqual(10_000);
+    expect(x402Payable.split("\n").length).toBeLessThanOrEqual(10_000);
+    expect(main).toContain("paths: withX402PayableOperations({");
+    expect(main).toContain("}, { x402Response, staticToolResponseHeaders }),");
     expect(main).toContain("...x402TopUpOpenApiPaths({ x402Response, staticToolResponseHeaders })");
     expect(x402TopUp).toContain('"/v1/x402/top-up/{credits}"');
     expect(main).toContain("...MARKETPLACE_DINING_OPENAPI_PATHS");

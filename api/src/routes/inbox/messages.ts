@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { errors, fail } from "../../lib/errors";
 import {
   coSignMessage,
@@ -65,7 +66,7 @@ app.post("/", async (c) => {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
 
-  await charge(c, 2, "inbox.send");
+  await charge(c, ROUTE_CREDITS["inbox.send"], "inbox.send");
 
   try {
     const result = await sendMessage(c.var.project.id, parsed.data);
@@ -191,7 +192,7 @@ app.post("/:id/co-sign", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
-  await charge(c, 2, "inbox.cosign");
+  await charge(c, ROUTE_CREDITS["inbox.cosign"], "inbox.cosign");
 
   try {
     const updated = await coSignMessage(

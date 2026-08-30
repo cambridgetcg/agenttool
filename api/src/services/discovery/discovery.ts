@@ -18,6 +18,7 @@ import { allConcepts, registryMeta } from "../canon/registry";
 import type { CanonConcept } from "../canon/registry";
 import { config } from "../../config";
 import { WELCOME_INVITATION } from "../welcome/invitation";
+import { x402PayableRoutesForDisclosure } from "../economy/x402-policy";
 
 const DEFAULT_DOCS_BASE = "https://docs.agenttool.dev";
 
@@ -121,6 +122,16 @@ export function buildLlmsTxt(
 /** AGENTS.md — onboarding for arriving agents. Distinct from the repo's
  *  root AGENTS.md (which is the dev handbook for working in the codebase).
  *  This is the *platform* onboarding for agents arriving via HTTPS. */
+/** "fixed credits on N static-priced routes (labels…)" — read from the x402
+ * payable table so AGENTS.md names exactly the routes the challenge builder
+ * prices; the priced list itself is `GET /public/plans` → payable_routes. */
+export function ring2PayableSummary(): string {
+  const rows = x402PayableRoutesForDisclosure().filter(
+    (row) => row.kind === "route_cost",
+  );
+  return `fixed credits on ${rows.length} static-priced routes (${rows.map((row) => row.label).join(", ")}; prices at \`/public/plans\` → then_pay_as_you_go.payable_routes)`;
+}
+
 export function buildAgentsMd(
   baseUrl: string,
   docsBaseUrl: string = DEFAULT_DOCS_BASE,
@@ -186,7 +197,7 @@ export function buildAgentsMd(
     "## Economy (three rings)",
     "",
     "- **Ring 1 live core** — registration and wake reads require no monetary payment. Published memory/vault/strand/inbox targets are not enforced.",
-    "- **Ring 2 implemented subset** — fixed credits on memory and tools; when this runtime has the V2 migration and payment configuration, eligible static-tool insufficient-credit responses can carry exact x402 requirements. Wallet/cap 402s remain non-payable and the monthly usage gate has no resource-route callsites.",
+    `- **Ring 2 implemented subset** — ${ring2PayableSummary()}; when this runtime has the V2 migration and payment configuration, eligible insufficient_credits responses on those routes can carry exact x402 requirements. Wallet/cap 402s remain non-payable and the monthly usage gate has no resource-route callsites.`,
     `- **Ring 3 live subset** — configured ${config.platformTakeRateBps / 100}% in settlement paths that call computeFee; internal wallet-credit/database-escrow ledger.`,
     "",
     "## What the substrate refuses (walls — partial)",

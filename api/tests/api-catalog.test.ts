@@ -20,6 +20,10 @@ import {
   type ApiCatalogLinkTarget,
 } from "../src/services/discovery/api-catalog";
 import { discoveryLinkHeader } from "../src/services/discovery/arrival";
+import {
+  matchX402PayableRoute,
+  x402PayableRoutesForDisclosure,
+} from "../src/services/economy/x402-policy";
 
 const API = "https://api.agenttool.dev";
 const DOCS = "https://docs.agenttool.dev";
@@ -160,15 +164,25 @@ describe("RFC 9727 product passport document", () => {
       (context) => context.payment !== undefined,
     );
 
-    expect(paymentContexts.map((context) => context.anchor)).toEqual([
-      `${API}/v1/scrape`,
-      `${API}/v1/document`,
-    ]);
+    // Derived from the payable table, not listed by hand: a product carries
+    // `payment` iff the table prices its path.
+    const products = document.linkset[0]!.item!.map((item) => item.href);
+    const expectedAnchors = products.filter((href) => {
+      const match = matchX402PayableRoute(href.slice(API.length), "POST");
+      return match !== null && match.row.kind === "route_cost";
+    });
+    expect(expectedAnchors).toEqual([`${API}/v1/scrape`, `${API}/v1/document`]);
+    expect(paymentContexts.map((context) => context.anchor)).toEqual(expectedAnchors);
     for (const context of paymentContexts) {
       expect(context.payment).toHaveLength(1);
       expect(context.payment?.[0]?.href).toBe(context.anchor);
       expect(context.payment?.[0]?.title).toMatch(
         /may be accepted only after.*exact PAYMENT-REQUIRED.*does not promise deployment readiness or initiate payment/i,
+      );
+      const match = matchX402PayableRoute(context.anchor.slice(API.length), "POST")!;
+      const [row] = x402PayableRoutesForDisclosure([match.row]);
+      expect(context.payment?.[0]?.title).toContain(
+        `${row!.credits} project credit${row!.credits === 1 ? "" : "s"} = ${row!.amountAtomic} atomic USDC`,
       );
     }
   });

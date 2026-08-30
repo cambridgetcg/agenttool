@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { ROUTE_CREDITS } from "../../billing/route-credits";
 import {
   createStrand,
   getStrand,
@@ -56,7 +57,7 @@ app.post("/", async (c) => {
       400,
     );
   }
-  await charge(c, 1, "strand.create");
+  await charge(c, ROUTE_CREDITS["strand.create"], "strand.create");
   const strand = await createStrand(c.var.project.id, parsed.data);
   return c.json(strand, 201);
 });

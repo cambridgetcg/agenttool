@@ -8,7 +8,10 @@ import type { ResourceInfo, X402Network } from "../../middleware/x402";
 import { getAddress, isAddress } from "viem";
 import { safePublicApiBase } from "../../lib/public-api-base";
 import { config } from "../../config";
-import { toolsConfig } from "../tools/config";
+import {
+  ROUTE_CREDITS,
+  type RouteCreditLabel,
+} from "../../billing/route-credits";
 
 /** One project credit is one thousand atomic USDC units ($0.001). */
 export const ATOMIC_PER_CREDIT = 1000;
@@ -240,7 +243,8 @@ export function resolveX402FacilitatorReadiness(
 // ── Payable-route table ──────────────────────────────────────────────────────
 //
 // One table drives both the outbound challenge (x402-config.ts) and the
-// inbound verifier (x402-payments.ts). Two kinds exist:
+// inbound verifier (x402-payments.ts), and every truth surface enumerates it
+// through x402PayableRoutesForDisclosure(). Two kinds exist:
 //   route_cost — a handler's own credit gate; payable only after the handler
 //                returned one of `errorCodes` (today: insufficient_credits)
 //                and only while the project cannot already afford the call.
@@ -282,23 +286,71 @@ export interface X402PayableRoute {
   readonly errorCodes: readonly string[];
 }
 
+/** A route_cost row: price read from ROUTE_CREDITS by the handler's own
+ * `charge()` label, so the table can never carry a number the handler does
+ * not debit. */
+function routeCost(
+  method: X402PayableMethod,
+  pattern: string,
+  label: RouteCreditLabel,
+): X402PayableRoute {
+  return Object.freeze({
+    method,
+    pattern,
+    kind: "route_cost",
+    credits: ROUTE_CREDITS[label],
+    label,
+    errorCodes: Object.freeze(["insufficient_credits"]),
+  } as const);
+}
+
+/** Every static-priced credit gate an agent can pay through on the spot,
+ * plus the top-up door. Patterns are the assembled app's real paths
+ * (index.ts mount prefix + sub-router path); the table test proves each
+ * (method, pattern) against `app.routes`. Rows are grouped by handler
+ * module; matcher precedence is literal-over-param, so `/v1/memories/search`
+ * and `/v1/traces/search` never fall into a `:id` row regardless of order.
+ *
+ * Deliberately absent: execute (body-derived price), browse (production
+ * flag off), time/random (0 credits, keyless), listing.invoke and every
+ * invocation.* step (0 by the fair-pricing rule), /v1/mcp (never metered),
+ * and everything WAKE-free (wake/welcome/register/public). */
 export const X402_PAYABLE_ROUTES: readonly X402PayableRoute[] = Object.freeze([
-  Object.freeze({
-    method: "POST",
-    pattern: "/v1/scrape",
-    kind: "route_cost",
-    credits: toolsConfig.credits.scrape,
-    label: "scrape",
-    errorCodes: Object.freeze(["insufficient_credits"]),
-  } as const),
-  Object.freeze({
-    method: "POST",
-    pattern: "/v1/document",
-    kind: "route_cost",
-    credits: toolsConfig.credits.document,
-    label: "document",
-    errorCodes: Object.freeze(["insufficient_credits"]),
-  } as const),
+  // Static tools — routes/tools/{scrape,document}.ts (reserveCharge).
+  routeCost("POST", "/v1/scrape", "scrape"),
+  routeCost("POST", "/v1/document", "document"),
+  // Memory — routes/memory/{search,tiers}.ts.
+  routeCost("POST", "/v1/memories/search", "memory.search"),
+  routeCost("POST", "/v1/memories/:id/elevate", "memory.elevate"),
+  routeCost("POST", "/v1/memories/:id/attest", "memory.attest"),
+  // Traces — routes/trace/{traces,search,chain}.ts.
+  routeCost("POST", "/v1/traces", "trace.write"),
+  routeCost("POST", "/v1/traces/search", "trace.search"),
+  routeCost("GET", "/v1/traces/chain/:id", "trace.chain"),
+  // Strands — routes/strand/{strands,thoughts}.ts.
+  routeCost("POST", "/v1/strands", "strand.create"),
+  routeCost("POST", "/v1/strands/:strandId/thoughts", "strand.think"),
+  routeCost(
+    "PATCH",
+    "/v1/strands/:strandId/thoughts/:thoughtId/ciphertext",
+    "strand.rotate",
+  ),
+  // Inbox — routes/inbox/messages.ts.
+  routeCost("POST", "/v1/inbox", "inbox.send"),
+  routeCost("POST", "/v1/inbox/:id/co-sign", "inbox.cosign"),
+  // Templates — routes/templates.ts (adoption is its own sub-router).
+  routeCost("POST", "/v1/templates", "template.create"),
+  routeCost("POST", "/v1/templates/:id/purchase", "template.purchase"),
+  routeCost("POST", "/v1/identities/from-template", "template.adopt"),
+  // Orgs — routes/orgs.ts.
+  routeCost("POST", "/v1/orgs", "org.create"),
+  // Identity — routes/identity/fork.ts (mounted under /v1/identities/:id/fork).
+  routeCost("POST", "/v1/identities/:id/fork", "identity.fork"),
+  // Marketplace listings — routes/listings.ts (MARKETPLACE_PRICING).
+  routeCost("POST", "/v1/listings", "listing.publish"),
+  routeCost("PATCH", "/v1/listings/:id", "listing.update"),
+  routeCost("DELETE", "/v1/listings/:id", "listing.archive"),
+  // The purchase door — routes/x402-top-up.ts.
   Object.freeze({
     method: "POST",
     pattern: X402_TOP_UP_PATTERN,
@@ -308,6 +360,59 @@ export const X402_PAYABLE_ROUTES: readonly X402PayableRoute[] = Object.freeze([
     errorCodes: Object.freeze([TOP_UP_PAYMENT_REQUIRED_ERROR]),
   } as const),
 ]);
+
+/** One payable row as a truth surface should publish it: the table's own
+ * fields plus the exact atomic USDC amount a challenge will carry. Consumers
+ * (`GET /public/plans`, OpenAPI fragments, the proof script) enumerate this
+ * instead of copying prices, so declared == wired == charged. A route_cost
+ * row whose configured price is not a positive INTEGER is `payable: false`
+ * (x402ProjectCreditPolicy refuses it) but is still listed so the omission
+ * is visible rather than silent. */
+export interface X402PayableRouteDisclosure {
+  readonly method: X402PayableMethod;
+  readonly pattern: string;
+  readonly kind: X402PayableKind;
+  readonly label: string;
+  /** Static credits for route_cost; null for top_up (N comes from the path). */
+  readonly credits: number | null;
+  /** `credits × ATOMIC_PER_CREDIT` as a decimal string; null for top_up. */
+  readonly amountAtomic: string | null;
+  readonly errorCodes: readonly string[];
+  readonly payable: boolean;
+}
+
+export function x402PayableRoutesForDisclosure(
+  routes: readonly X402PayableRoute[] = X402_PAYABLE_ROUTES,
+): readonly X402PayableRouteDisclosure[] {
+  return Object.freeze(routes.map((row) => {
+    const staticPrice = row.kind === "route_cost" &&
+      typeof row.credits === "number" &&
+      Number.isSafeInteger(row.credits) &&
+      row.credits > 0 &&
+      row.credits <= POSTGRES_INTEGER_MAX
+      ? row.credits
+      : null;
+    return Object.freeze({
+      method: row.method,
+      pattern: row.pattern,
+      kind: row.kind,
+      label: row.label,
+      credits: row.kind === "route_cost" ? row.credits : null,
+      amountAtomic: staticPrice === null
+        ? null
+        : (BigInt(staticPrice) * BigInt(ATOMIC_PER_CREDIT)).toString(),
+      errorCodes: row.errorCodes,
+      payable: row.kind === "top_up" || staticPrice !== null,
+    });
+  }));
+}
+
+/** The table's Hono pattern as an OpenAPI/URI-template path: `:name` →
+ * `{name}`. `GET /public/plans`, the OpenAPI fragment, and the well-known
+ * surfaces all publish this form so a row reads the same everywhere. */
+export function x402PayablePathTemplate(pattern: string): string {
+  return pattern.replace(/:([A-Za-z0-9_]+)/gu, "{$1}");
+}
 
 export interface X402PayableRouteMatch {
   row: X402PayableRoute;

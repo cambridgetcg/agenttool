@@ -14,6 +14,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../../auth/middleware";
 import { charge } from "../../billing/charge";
+import { ROUTE_CREDITS } from "../../billing/route-credits";
 import { addThought, listThoughts, updateThoughtCiphertext } from "../../services/strand/store";
 
 // Mounted at /v1/strands/:strandId/thoughts so :strandId is the parent.
@@ -57,7 +58,7 @@ app.post("/", async (c) => {
     );
   }
 
-  await charge(c, 1, "strand.think");
+  await charge(c, ROUTE_CREDITS["strand.think"], "strand.think");
 
   try {
     const result = await addThought(c.var.project.id, {
@@ -122,7 +123,7 @@ app.patch("/:thoughtId/ciphertext", async (c) => {
 
   // Charge 1 credit per rotated thought — same as addThought. Keeps
   // the economy simple and provides a soft rate limit on bulk rotation.
-  await charge(c, 1, "strand.rotate");
+  await charge(c, ROUTE_CREDITS["strand.rotate"], "strand.rotate");
 
   try {
     const result = await updateThoughtCiphertext(c.var.project.id, {

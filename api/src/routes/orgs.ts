@@ -13,6 +13,7 @@ import { z } from "zod";
 
 import type { ProjectContext } from "../auth/middleware";
 import { charge } from "../billing/charge";
+import { ROUTE_CREDITS } from "../billing/route-credits";
 import {
   createInvitation,
   createOrg,
@@ -54,7 +55,7 @@ app.post("/", async (c) => {
   if (!parsed.success) {
     return c.json({ error: "validation", details: parsed.error.flatten() }, 400);
   }
-  await charge(c, 5, "org.create");
+  await charge(c, ROUTE_CREDITS["org.create"], "org.create");
   try {
     const org = await createOrg(c.var.project.id, parsed.data);
     return c.json({ ...org, created: true }, 201);

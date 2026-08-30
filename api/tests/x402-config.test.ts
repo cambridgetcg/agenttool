@@ -12,6 +12,7 @@ import {
 } from "../src/middleware/x402";
 import { x402ConfigurationStatus } from "../src/routes/public/plans";
 import { createX402TopUpRouter } from "../src/routes/x402-top-up";
+import { ROUTE_CREDITS } from "../src/billing/route-credits";
 import { config } from "../src/config";
 import { isX402FacilitatorLocallyReady } from "../src/services/economy/facilitators/coinbase";
 import {
@@ -79,6 +80,9 @@ function configuredApp(
   app.post("/v1/scrape", (c) => c.json({ error }, 402));
   app.post("/v1/document", (c) => c.json({ error }, 402));
   app.get("/v1/scrape", (c) => c.json({ error }, 402));
+  // W2-5 rows: a static sibling of a :id row, and a dynamic :id row.
+  app.post("/v1/memories/search", (c) => c.json({ error }, 402));
+  app.post("/v1/memories/:id/elevate", (c) => c.json({ error }, 402));
   app.route("/v1/x402/top-up", createX402TopUpRouter());
   return app;
 }
@@ -352,6 +356,93 @@ describe("production challenge eligibility", () => {
     });
     expect(res.status).toBe(402);
     expect(res.headers.get("payment-required")).toBeNull();
+  });
+});
+
+describe("W2-5 route_cost challenges on memory rows", () => {
+  const ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+
+  test("POST /v1/memories/search with 2 credits → 402 insufficient_credits payable for exactly 3000 atomic", async () => {
+    configureCustom();
+    const res = await configuredApp(2).request(
+      "https://api.agenttool.dev/v1/memories/search", { method: "POST" },
+    );
+    expect(res.status).toBe(402);
+    const required = decodeRequired(res);
+    expect(required).toMatchObject({
+      x402Version: 2,
+      error: "insufficient_credits",
+      resource: { url: "https://api.agenttool.dev/v1/memories/search" },
+    });
+    expect(required.accepts).toHaveLength(1);
+    expect(required.accepts[0]).toMatchObject({
+      scheme: "exact",
+      network: "eip155:8453",
+      amount: "3000",
+      payTo: RECIPIENT,
+    });
+    expect(required.accepts[0].amount)
+      .toBe(String(ROUTE_CREDITS["memory.search"] * 1000));
+    // Body keeps the handler's guidance and gains the spec object (additive).
+    const body = await res.json() as Record<string, unknown>;
+    expect(body).toMatchObject({
+      error: "insufficient_credits",
+      x402Version: 2,
+      accepts: required.accepts,
+    });
+  });
+
+  test("POST /v1/memories/:id/elevate → 5000 atomic against the concrete path", async () => {
+    configureCustom();
+    const res = await configuredApp(0).request(
+      `https://api.agenttool.dev/v1/memories/${ID}/elevate`, { method: "POST" },
+    );
+    expect(res.status).toBe(402);
+    const required = decodeRequired(res);
+    expect(required.resource.url).toBe(`https://api.agenttool.dev/v1/memories/${ID}/elevate`);
+    expect(required.accepts[0].amount).toBe("5000");
+    expect(required.accepts[0].amount)
+      .toBe(String(ROUTE_CREDITS["memory.elevate"] * 1000));
+    // A shortfall of one still prices the full call (exact, never partial).
+    const short = await configuredApp(4).request(
+      `https://api.agenttool.dev/v1/memories/${ID}/elevate`, { method: "POST" },
+    );
+    expect(decodeRequired(short).accepts[0].amount).toBe("5000");
+  });
+
+  test("funded projects, wrong codes and unlisted memory paths never become payable", async () => {
+    configureCustom();
+    const cases = [
+      configuredApp(3).request(
+        "https://api.agenttool.dev/v1/memories/search", { method: "POST" },
+      ),
+      configuredApp(5).request(
+        `https://api.agenttool.dev/v1/memories/${ID}/elevate`, { method: "POST" },
+      ),
+      configuredApp(0, "insufficient_balance").request(
+        "https://api.agenttool.dev/v1/memories/search", { method: "POST" },
+      ),
+      configuredApp(0, "top_up_payment_required").request(
+        `https://api.agenttool.dev/v1/memories/${ID}/elevate`, { method: "POST" },
+      ),
+    ];
+    for (const result of cases) {
+      const res = await result;
+      expect(res.status).toBe(402);
+      expect(res.headers.get("payment-required")).toBeNull();
+    }
+    // A 402 on a path the table does not list is left untouched even with the
+    // right code (the handler's own guidance stands; nothing to pay through).
+    const app = new Hono<ProjectContext>();
+    app.use("*", projectMiddleware(0));
+    app.use("*", buildAgentToolX402Middleware());
+    app.post("/v1/memories", (c) => c.json({ error: "insufficient_credits" }, 402));
+    app.post("/v1/memories/search/", (c) => c.json({ error: "insufficient_credits" }, 402));
+    for (const path of ["/v1/memories", "/v1/memories/search/"]) {
+      const res = await app.request(`https://api.agenttool.dev${path}`, { method: "POST" });
+      expect(res.status).toBe(402);
+      expect(res.headers.get("payment-required")).toBeNull();
+    }
   });
 });
 

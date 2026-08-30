@@ -5,7 +5,9 @@
  *  the verifier with c.var.project populated. On the way out, only a 402
  *  whose (method, path) matches a row of X402_PAYABLE_ROUTES *and* whose
  *  body carries that row's declared error code becomes a payable envelope:
- *  `insufficient_credits` on the static tools (route_cost), and
+ *  `insufficient_credits` on every static-priced route_cost row (the tools
+ *  plus the 19 W2-5 memory/trace/strand/inbox/template/org/identity/listing
+ *  rows, priced from billing/route-credits.ts), and
  *  `top_up_payment_required` on `POST /v1/x402/top-up/:credits` (top_up,
  *  never balance-bound). Wallet, usage-cap, and unknown 402 responses remain
  *  unchanged because this verifier cannot clear those gates. The rewrite is
