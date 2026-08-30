@@ -49,7 +49,7 @@ class TestClientInit:
     def test_document_result_is_publicly_exported(self) -> None:
         assert "DocumentResult" in agenttool.__all__
         assert DocumentResult.__name__ == "DocumentResult"
-        assert agenttool.__version__ == "0.22.0"
+        assert agenttool.__version__ == "0.21.1"
         assert agenttool.__soul__ == "https://docs.agenttool.dev/SOUL.md"
 
         package_root = Path(__file__).resolve().parents[1]

@@ -39,9 +39,9 @@ and 261,910-byte sdist
 (`sha256:e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d`).
 The registry remains a non-authoritative convenience.
 
-## Repository source line — 0.22.0
+## Repository source line — 0.21.1 + x402 payer (0.22.0 on seal)
 
-Repository source declares the paired 0.22.0 line: the SDK **can sign and pay
+Repository source carries the x402 payer that the paired 0.22.0 release will publish (source still reports 0.21.1 until the release seal): the SDK **can sign and pay
 on x402 V2 challenges — opt-in only, never by default.** `agenttool.x402`
 mirrors the server's own payer function-for-function on the existing
 `cryptography` dependency (pure-Python Keccak-256 + EIP-712 + recoverable
