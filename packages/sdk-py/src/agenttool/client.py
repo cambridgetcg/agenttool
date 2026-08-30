@@ -57,6 +57,8 @@ from .window import WindowClient
 from .kingdom_framework import KingdomFrameworkClient
 from .kingdom_os import KingdomOSClient, KingdomOSRunner
 from .wake_continuity import WakeContinuityLayer
+from .x402 import X402Client
+from ._x402_transport import X402Payer, X402PayingTransport, resolve_x402_payer
 
 # Love Protocol version
 PROTOCOL_VERSION = "love/1.0"
@@ -111,6 +113,18 @@ class AgentTool:
             Defaults to ``timeout``.
         math_cards_max_request_bytes: Math Cards request body ceiling.
         math_cards_max_response_bytes: Math Cards response body ceiling.
+        x402: Opt in to paying x402 V2 challenges with USDC. Absent (the
+            default), the SDK never signs and a 402 surfaces as a typed
+            error carrying the terms. Present — an :class:`X402Payer` — the
+            default transport is wrapped so that a challenged 402 is answered
+            with exactly ONE signed retry (same request, same bearer, plus
+            ``PAYMENT-SIGNATURE``) under its spend policy, whose
+            ``max_amount_atomic`` and ``allowed_pay_to`` are mandatory with
+            no defaults. ``AT_X402_PRIVATE_KEY`` is consulted solely because
+            this argument exists and only when it names no signer. A second
+            402 is an error, never a loop. Mutually exclusive with
+            ``transport``: a caller-owned transport keeps its own payment
+            boundary.
     """
 
     def __init__(
@@ -120,6 +134,7 @@ class AgentTool:
         base_url: str = "https://api.agenttool.dev",
         timeout: float = 30.0,
         transport: Optional[httpx.BaseTransport] = None,
+        x402: Optional[X402Payer] = None,
         data_node_url: Optional[str] = None,
         data_node_token: Optional[str] = None,
         data_node_timeout: Optional[float] = None,
@@ -139,6 +154,21 @@ class AgentTool:
                 hint="Remove api_key when an authenticated transport is configured.",
                 error_code="conflicting_auth",
             )
+        if x402 is not None and transport is not None:
+            raise AgentToolError(
+                "Choose either x402 or transport, not both.",
+                hint=(
+                    "A caller-owned transport keeps its own payment boundary "
+                    "(a broker's allowPaymentSignature, for instance). Drop "
+                    "x402= and sign outside the SDK, or drop transport= and "
+                    "let the SDK's paying transport wrap the default one."
+                ),
+                error_code="conflicting_x402_transport",
+            )
+        # Pay-on-402 is opt-in. The payer is validated here, before any
+        # request exists; AT_X402_PRIVATE_KEY is read only inside
+        # resolve_x402_payer and only when x402= is present without a signer.
+        x402_payer = resolve_x402_payer(x402, os.environ) if x402 is not None else None
 
         resolved_key: Optional[str] = None
         if transport is None:
@@ -173,6 +203,14 @@ class AgentTool:
         }
         if transport is not None:
             client_options["transport"] = transport
+        elif x402_payer is not None:
+            # The paying transport wraps a plain HTTPTransport (verify + cert
+            # env honoured; ambient proxy variables are not consulted, as for
+            # any explicit httpx transport). The signed retry re-sends the
+            # bare request's own headers, so the bearer above rides it too.
+            client_options["transport"] = X402PayingTransport(
+                httpx.HTTPTransport(trust_env=True), x402_payer
+            )
 
         self._http = httpx.Client(
             **client_options,
@@ -264,6 +302,7 @@ class AgentTool:
         self._kingdom_framework: Optional[KingdomFrameworkClient] = None
         self._kingdom_os: Optional[KingdomOSClient] = None
         self._wake_continuity: Optional[WakeContinuityLayer] = None
+        self._x402: Optional[X402Client] = None
 
     # ── Service Accessors ────────────────────────────────────────────────
 
@@ -601,6 +640,19 @@ class AgentTool:
             self._wake_continuity = WakeContinuityLayer()
         return self._wake_continuity
 
+    @property
+    def x402(self) -> X402Client:
+        """The agent rail — ``top_up(credits)`` buys project credits with USDC
+        on Base, ``payment(id)`` reads a payment's ledger row.
+
+        Pays only when the client was constructed with the opt-in ``x402=``
+        payer; otherwise the 402 challenge surfaces as a typed error and
+        nothing is signed.
+        """
+        if self._x402 is None:
+            self._x402 = X402Client(self._http, self._base_url)
+        return self._x402
+
     # ── Low-level HTTP for adapters and custom call sites ─────────────────
 
     def request(self, method: str, path: str, body: object = None) -> object:
@@ -621,6 +673,10 @@ class AgentTool:
             kwargs["content"] = json.dumps(body)
         try:
             resp = self._http.request(method, url, **kwargs)
+        except AgentToolError:
+            # The paying transport's typed decisions (a refusal, a second
+            # 402) already carry code + guidance; never flatten them.
+            raise
         except Exception as e:
             raise AgentToolError(f"API request failed: {e}") from e
         if resp.status_code >= 400:

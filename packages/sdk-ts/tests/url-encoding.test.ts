@@ -737,6 +737,9 @@ const CASES: EncodingCase[] = [
     prefix: "/v1/attestation-grants/",
     invoke: (at, id) => at.attestationMarketplace.cancel(id),
   },
+
+  // ── x402 ──────────────────────────────────────────────────────────────
+  { method: "x402.payment", prefix: "/v1/x402/payments/", invoke: (at, id) => at.x402.payment(id) },
 ];
 
 /** A client wired to both authorities the table addresses: the hosted API and
@@ -1062,6 +1065,11 @@ const PATH_INTERPOLATION_EXEMPTIONS: PathExemption[] = [
     file: "vault.ts",
     expression: "qs",
     why: "Already a full query string: ?version= and ?limit= over locally-checked numbers.",
+  },
+  {
+    file: "x402.ts",
+    expression: "credits",
+    why: "A locally-checked positive safe integer (Number.isSafeInteger, >= 1) whose decimal spelling is digits only; the method refuses anything else before any request.",
   },
 ];
 

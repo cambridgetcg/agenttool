@@ -46,6 +46,12 @@ import {
 } from "./kingdom-framework.js";
 import { KingdomOSClient, type KingdomOSOptions } from "./kingdom-os.js";
 import { WakeContinuityLayer } from "./wake-continuity.js";
+import { X402Client } from "./x402.js";
+import {
+  resolveX402Options,
+  x402PayingTransport,
+  type AgentToolX402Options,
+} from "./_x402-transport.js";
 
 /** SDK version — sent as the `X-Agenttool-Client` origin signal on every
  *  request so /v1/activity can label events `sdk-ts`. Keep in lockstep
@@ -94,6 +100,18 @@ export interface AgentToolOptions {
    * the hosted API bearer or transport.
    */
   kingdomOS?: KingdomOSOptions;
+  /**
+   * Opt in to paying x402 V2 challenges with USDC. Absent (the default), the
+   * SDK never signs and a 402 surfaces as a typed error carrying the terms.
+   * Present, the selected transport is wrapped so that a challenged 402 is
+   * answered with exactly ONE signed retry — same request, same bearer, plus
+   * `PAYMENT-SIGNATURE` — under `policy`. `policy.maxAmountAtomic` and
+   * `policy.allowedPayTo` are mandatory with no defaults; construction throws
+   * `x402_spend_policy_invalid` without them. `signer` may be omitted only to
+   * read `AT_X402_PRIVATE_KEY`, which is consulted solely because this option
+   * object exists. A second 402 is an error, never a loop.
+   */
+  x402?: AgentToolX402Options;
 }
 
 /**
@@ -152,6 +170,7 @@ export class AgentTool {
   private _kingdomFramework: KingdomFrameworkClient | undefined;
   private _kingdomOS: KingdomOSClient | undefined;
   private _wakeContinuity: WakeContinuityLayer | undefined;
+  private _x402: X402Client | undefined;
 
   /**
    * Create a new AgentTool client.
@@ -182,6 +201,20 @@ export class AgentTool {
         });
       }
       transport = directBearerTransport(resolvedKey);
+    }
+
+    // Pay-on-402 is opt-in and wraps whichever transport was selected, so the
+    // signed retry authenticates exactly as the bare request did. The policy
+    // is validated here, before any request exists; AT_X402_PRIVATE_KEY is
+    // read only inside resolveX402Options and only when the option is present.
+    if (options?.x402 !== undefined) {
+      transport = x402PayingTransport(
+        transport,
+        resolveX402Options(
+          options.x402,
+          typeof process !== "undefined" ? process.env : {},
+        ),
+      );
     }
 
     this.http = {
@@ -478,6 +511,15 @@ export class AgentTool {
   get wakeContinuity(): WakeContinuityLayer {
     this._wakeContinuity ??= new WakeContinuityLayer();
     return this._wakeContinuity;
+  }
+
+  /** Access the agent rail — `topUp(credits)` buys project credits with USDC
+   *  on Base, `payment(id)` reads a payment's ledger row. Pays only when the
+   *  client was constructed with the opt-in `x402` option; otherwise the 402
+   *  challenge surfaces as a typed error and nothing is signed. */
+  get x402(): X402Client {
+    this._x402 ??= new X402Client(this.http);
+    return this._x402;
   }
 
   /**

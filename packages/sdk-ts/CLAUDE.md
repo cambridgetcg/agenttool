@@ -12,6 +12,7 @@ Active - repository source carries the paired 0.21.1 corrective KINGDOM card par
   and LOVE BOMB use dedicated direct `undici` package dispatchers so Bun
   startup proxy credentials cannot enter either no-auth transport
 - `@noble/ed25519` + `@noble/hashes` for ed25519 signing (matches the api server + cli/think; byte-identical wire format)
+- `@noble/curves` (secp256k1) + `@noble/hashes` (keccak-256, sha-256) for the x402 EIP-712 signer — byte-identical to the server's viem path, proven by the server-generated fixture
 - WebCrypto SubtleCrypto for AES-256-GCM (no extra dep)
 - Bun for test runner
 - `tsc` for build
@@ -57,6 +58,8 @@ src/
   anthropic-adapter.ts — AnthropicAdapter (Tier 2: auto-inject wake + auto-trace)
   openai-responses-adapter.ts — OpenAIResponsesAdapter (completed Responses: auto-wake + auto-trace)
   types.ts             — Shared type definitions (Memory, Wallet, Escrow, Trace, ...)
+  x402.ts              — x402 V2 parse → refuse → sign (server port + noble EIP-712/secp256k1 signer) + X402Client (at.x402: topUp / payment). The SDK CAN sign and pay on 402 — opt-in only via the `x402` client option, never by default; maxAmountAtomic + allowedPayTo mandatory (no defaults, allow-lists never deny-lists); amount_over_cap refused, never clamped
+  _x402-transport.ts   — internal paying transport wrapped over the selected transport when `x402` is present: bare → 402 → exactly ONE signed retry (same method/body/bearer/Idempotency-Key + PAYMENT-SIGNATURE); second 402 = x402_payment_not_accepted, never a loop; refusals typed; AT_X402_PRIVATE_KEY read only when the option is present without a signer
   errors.ts            — AgentToolError class
 tests/
   client.test.ts            — Core client + service integration
@@ -70,6 +73,8 @@ tests/
   math-cards.test.ts       — request bytes, authority isolation, bounds, response shape, and guided errors
   love-bomb.test.ts        — direct transport, hostile JSON/schema bounds, and six literal-false boundary fields
   wake-continuity.test.ts  — shared vectors, hostile objects, closed fields, cross-fields, sorting, and cached no-auth composition
+  x402.test.ts             — server-generated EIP-3009 vector parity (fixtures/x402-eip3009-vector.json), keccak/address KATs, refusal matrix, signer walls
+  x402-transport.test.ts   — pay-on-402 doctrine: exactly two fetches, same request + PAYMENT-SIGNATURE, second 402 = typed error, refusals unsigned, no option = untouched 402, env fallback only with the option, at.x402 shapes
   kingdom-os.test.ts        — fixed argv, sanitized environment, schema, ambiguity, and bearer-isolation contract
   kingdom-framework.test.ts — closed card, no-bearer/no-cookie, no-redirect, response-bound contract
   phase2.test.ts            — register + identity surface fillout
@@ -112,6 +117,8 @@ run a second local `npm publish` path. See [`docs/NPM-RELEASES.md`](../../docs/N
 - **API**: Authenticated hosted calls go to `https://api.agenttool.dev` (configurable via `baseUrl`); `at.kingdomFramework`, `at.mathCards`, and standalone `LoveBombClient` use separate credential-free requests; pure `WakeContinuityLayer` / `at.wakeContinuity` performs no request; `at.data` and `at.kingdomOS` are separate local authorities
 - **Auth**: Reads `AT_API_KEY`, accepts `apiKey`, or accepts a mutually
   exclusive authenticated `transport` that receives no Authorization header.
+  `AT_X402_PRIVATE_KEY` is read ONLY when the `x402` option object is passed
+  without a `signer`; the variable alone never makes the SDK pay.
   The public KINGDOM framework, Math Cards, and LOVE BOMB clients receive
   neither bearer nor authenticated transport; the local KINGDOM OS adapter
   and pure WAKE continuity layer receive neither.

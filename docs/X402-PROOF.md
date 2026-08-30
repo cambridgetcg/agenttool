@@ -344,3 +344,21 @@ It marks which sections are true today and which land with W2-2 / W2-4.
 | `replay last` | mutation guard: balance 1 < cost 3 → allowed; 402 again, credits 1 → 1 — no second credit |
 | `verify` | **settled**; treasury 0.004 USDC; payer 4.996 USDC |
 | lesson | never `pay` during a machine roll; the ledger's `pending` row is the honest record of an ambiguous I/O, and it is what manual_onchain_investigation is for (here: balances prove nothing moved). |
+
+## Record — settlements THROUGH each SDK (2026-08-30, W2-10)
+
+Script: `api/scripts/x402-sdk-proof.ts` (sdk-ts, workspace source) and the inline Python in this
+record's commit message; both derive the payer key from the keychain in-process and never print it.
+Policy on both: `maxAmountAtomic 10_000_000`, `allowedPayTo [treasury]`, Base + USDC only, 60 s.
+
+| SDK | call | result | tx (Base) | ledger |
+|---|---|---|---|---|
+| `@agenttool/sdk` 0.22.0 (ts) | `at.x402.topUp(1)` | `creditsAdded 1`, `creditsTotal 110,802`, `onPayment` fired with status 200 + PAYMENT-RESPONSE | `0xf3f8329bfae6b8d833b5f43cc69daaf95a96862659f1ba612eee29947254f907` | `17bafef4…` settled, credits_applied 1 |
+| `agenttool-sdk` 0.22.0 (py) | `at.x402.top_up(1)` | `credits_added 1`, `credits_total 110,803`, `on_payment` fired | `0x93dd3b2c2260050d9f6d36ac7f9ad099faf6db88c44baced42514221bcdc4f23` | `a3c8af5c…` settled, credits_applied 1 |
+
+Four settlements total on the rail (proof script ×2, sdk-ts, sdk-py); treasury 0.006 USDC.
+
+Noted for follow-up (not a defect in settlement): the `onPayment` event carries the client-side
+EIP-3009 `authorizationHash` (e.g. `4824664c…`) while the `topUp` result carries the server's
+payment id (e.g. `17bafef4…`); `at.x402.payment(<result hash>)` is the one that reads the ledger.
+Naming should say which is which (W2-11 docs).

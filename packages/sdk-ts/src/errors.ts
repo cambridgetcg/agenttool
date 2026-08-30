@@ -19,6 +19,8 @@
  * Doctrine: `docs/PATTERN-ERRORS-AS-INSTRUCTIONS.md`.
  */
 
+import type { X402ClientRefusalReason } from "./x402.js";
+
 /** One structured step an agent can take next.
  *
  *  Same shape across the entire substrate:
@@ -72,6 +74,39 @@ export interface X402PaymentRequirement {
   extra: X402Eip3009Extra;
   [key: string]: unknown;
 }
+
+/** Stable `code` values an `AgentToolError` carries when the SDK's own x402
+ *  payer (the opt-in `x402` client option) decides something — as opposed
+ *  to codes the server sent. Every one of these is raised before or after
+ *  exactly one signed retry; none of them means "sign again".
+ *
+ *  - Construction (no request made): `x402_option_invalid`,
+ *    `x402_spend_policy_invalid`, `x402_signer_missing`,
+ *    `x402_signer_invalid`, `x402_private_key_invalid`.
+ *  - Challenge refused by the spend policy (one fetch, nothing signed): the
+ *    {@link X402ClientRefusalReason} vocabulary — `amount_over_cap` is refused,
+ *    never clamped.
+ *  - Signing: `x402_signer_from_mismatch`, `x402_signature_invalid`.
+ *  - Before signing: `x402_request_not_replayable` (a stream body could not
+ *    be re-sent).
+ *  - After the signed retry: `x402_payment_not_accepted` (a second 402; the
+ *    SDK never loops). `err.details.authorizationHash` / `paymentId` and
+ *    `err.paymentStatusLink` say what to look up.
+ *  - Local argument checks on `at.x402`: `top_up_invalid_credits`,
+ *    `x402_payment_id_invalid`. */
+export type X402ErrorCode =
+  | X402ClientRefusalReason
+  | "x402_option_invalid"
+  | "x402_spend_policy_invalid"
+  | "x402_signer_missing"
+  | "x402_signer_invalid"
+  | "x402_private_key_invalid"
+  | "x402_signer_from_mismatch"
+  | "x402_signature_invalid"
+  | "x402_request_not_replayable"
+  | "x402_payment_not_accepted"
+  | "top_up_invalid_credits"
+  | "x402_payment_id_invalid";
 
 /** Header containers accepted by {@link AgentToolError.fromResponseBody}. */
 export type AgentToolResponseHeaders =

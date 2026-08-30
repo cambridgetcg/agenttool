@@ -635,8 +635,10 @@ With `@agenttool/credential-broker` `agentcred/0.1`, responses are buffered to
 `strands.thoughts.voice`, and `inbox.voice` fail closed before use. A local
 abort cannot undo an operation already dispatched upstream. Paid Tools retries
 also need `allowPaymentSignature: true` in both owner policy and the individual
-broker grant; that flag forwards a caller-supplied signature but does not sign,
-inspect payment terms, or impose a spending limit.
+broker grant; that flag forwards a signature but does not sign,
+inspect payment terms, or impose a spending limit. Signing and the spending
+limit live on the SDK side, and only behind the opt-in `x402` option (see
+"Paying on 402" under Tools).
 
 **3. Store and retrieve a memory:**
 ```typescript
@@ -740,8 +742,95 @@ the fetched bytes, and remote content must be treated as untrusted. Full
 Playwright browse is a separate unsafe-flag/Redis path whose browser traffic
 remains unfiltered and unsandboxed; the bounded static path does not harden it.
 
+#### Paying on 402 — opt-in only, never by default
+
+The SDK **can sign and pay** an x402 V2 challenge with USDC on Base — but only
+when you opt in at construction with a signer **and** a spend policy. Without
+the `x402` option the SDK never signs, never retries, never reads a key: a 402
+surfaces as a typed `AgentToolError` carrying the exact terms (`accepts`,
+`resource`, `paymentRequired`), as shown further down.
+
+```typescript
+import {
+  AgentTool,
+  AGENTTOOL_TREASURY,
+  X402_ATOMIC_PER_CREDIT,
+  X402_BASE_NETWORK,
+  X402_BASE_USDC,
+  localEvmSigner,
+} from "@agenttool/sdk";
+
+const at = new AgentTool({
+  apiKey: process.env.AT_API_KEY,
+  x402: {
+    // Whoever holds the key. Omit `signer` to read AT_X402_PRIVATE_KEY —
+    // honoured only because this `x402` object exists.
+    signer: localEvmSigner(process.env.PAYER_PRIVATE_KEY!),
+    policy: {
+      maxAmountAtomic: 10n * X402_ATOMIC_PER_CREDIT, // hard cap per payment — MANDATORY
+      allowedPayTo: [AGENTTOOL_TREASURY],            // recipients — MANDATORY
+      allowedNetworks: [X402_BASE_NETWORK],          // eip155:8453
+      allowedAssets: [X402_BASE_USDC],               // Circle USDC on Base
+      maxValiditySeconds: 60,                        // narrowest usable window
+    },
+    onPayment: ({ authorizationHash, validBefore, paymentId, paymentResponse }) => {
+      // Persist what was emitted. Recovery is a lookup, never a fresh signature.
+    },
+  },
+});
+
+// POST /v1/x402/top-up/1 → 402 challenge → ONE signed retry → 200 receipt
+const receipt = await at.x402.topUp(1);
+receipt.creditsAdded;        // 1
+receipt.creditsTotal;        // balance after
+receipt.authorizationHash;   // the server's ledger id for this payment
+await at.x402.payment(receipt.authorizationHash!); // GET /v1/x402/payments/:id
+```
+
+What the option changes, exactly — and nothing else:
+
+- **Every policy field is mandatory; there are no defaults.** `maxAmountAtomic`
+  and `allowedPayTo` above all: construction throws
+  `x402_spend_policy_invalid` without them. Allow-lists, never deny-lists — a
+  402 is untrusted input and cannot introduce a recipient, asset, or network.
+  Over-cap is refused (`amount_over_cap`), **never clamped**.
+- **Exactly two fetches.** Bare request → 402 with `PAYMENT-REQUIRED` → one
+  signed retry of the *same* request (method, URL, body, bearer,
+  `Idempotency-Key`) plus `PAYMENT-SIGNATURE`. A second 402 is
+  `x402_payment_not_accepted`; the SDK never loops and never signs twice for
+  one request.
+- **Refusals are typed.** A challenge the policy will not pay throws an
+  `AgentToolError` whose `code` is the refusal reason (`network_not_allowed`,
+  `asset_not_allowed`, `pay_to_not_allowed`, `amount_over_cap`,
+  `unsupported_transfer_method`, `validity_window_unusable`,
+  `no_acceptable_requirement`), with the challenge still attached. Nothing
+  was signed; one fetch happened.
+- **It stays out of the way.** A request that already carries your own
+  `paymentSignature` is never signed over. A 402 without a challenge — a
+  fail-closed admission with `Retry-After`, or a replay-suppressed 402 echoing
+  `PAYMENT-RESPONSE` — surfaces untouched, headers intact.
+- **The env variable alone changes nothing.** `AT_X402_PRIVATE_KEY` is read
+  only when the `x402` option object is present without `signer`.
+- **Keys.** `localEvmSigner` keeps the key in a closure and refuses to sign a
+  `from` that is not its own address. Any `{ address, signTypedData }` works
+  — viem, a hardware wallet — and the signature must recover to `address`.
+- **Brokered transports.** The retry goes through your `transport`, so with
+  `@agenttool/credential-broker` the grant's `allowPaymentSignature` still
+  governs whether `PAYMENT-SIGNATURE` may be forwarded.
+- Rate: 1 credit = 1,000 atomic USDC (USD 0.001). Top-ups are final.
+
+`localEvmSigner`, `selectPayableRequirement`, `signExactEvmAuthorization`,
+`recoverTypedDataAddress` and the rest of the parse → refuse → sign functions
+are exported for callers who want to drive the rail by hand; the doctrine is
+the same there (`signExactEvmAuthorization` re-checks the policy and mints a
+fresh nonce every call, so it cannot be used as a retry).
+
+#### Signing outside the SDK
+
 An eligible insufficient-credit refusal preserves the exact x402 contract on
-`AgentToolError` instead of flattening it into prose:
+`AgentToolError` instead of flattening it into prose. Without the `x402`
+option this is the whole story — the SDK forwards a signature you supply and
+signs nothing:
 
 ```typescript
 import {
@@ -797,7 +886,8 @@ async function scrapeWithPayment(
 }
 
 // The callback supplies an already signed V2 payload as base64 JSON. The SDK
-// treats it as opaque and does not hold keys, construct signatures, or take custody.
+// forwards it as the header and never signs over it — even when the `x402`
+// option is configured.
 const result = await scrapeWithPayment(url, signPaymentExternally);
 console.log(
   result.paymentResponse,
@@ -810,15 +900,17 @@ Only sign the exact requirement returned by the response. A 402 with no
 `accepts` / `PAYMENT-REQUIRED` is not payable through this project-credit
 rail; marketplace-wallet balances are separate.
 
-`parse_document({ ..., paymentSignature })` accepts the same caller-supplied
-V2 header. The SDK does not sign or retry automatically. Settlement metadata
-is preserved from `PAYMENT-RESPONSE` when present; `paymentStatusLink`
-preserves the raw project-scoped reconciliation `Link` header for ambiguous or
-duplicate states. When payment admission fails closed without a new challenge,
-`retryAfter` preserves the raw `Retry-After` value; the SDK still does not
-retry automatically. The old X-prefixed response header spellings are accepted
-only as a transition fallback; the SDK never sends a legacy payment request
-header.
+`parse_document({ ..., paymentSignature })` and `x402.topUp(credits, {
+paymentSignature })` accept the same caller-supplied V2 header. Without the
+`x402` option the SDK does not sign or retry; with it, exactly one signed
+retry under your policy, never more. Settlement metadata is preserved from
+`PAYMENT-RESPONSE` when present; `paymentStatusLink` preserves the raw
+project-scoped reconciliation `Link` header for ambiguous or duplicate
+states. When payment admission fails closed without a new challenge,
+`retryAfter` preserves the raw `Retry-After` value and the SDK does not retry
+— with or without the option. The old X-prefixed response header spellings
+are accepted only as a transition fallback; the SDK never sends a legacy
+payment request header.
 
 ### Economy
 
@@ -1127,6 +1219,9 @@ const at = new AgentTool({
     executable: "/path/to/KINGDOM-OS/kingdom",
     timeout: 10,
   },
+  // x402: { signer, policy, onPayment },     // optional; absent = never pays.
+  //   policy.maxAmountAtomic + policy.allowedPayTo are mandatory (no defaults);
+  //   AT_X402_PRIVATE_KEY is read only when this object is present w/o signer.
 });
 ```
 

@@ -680,6 +680,12 @@ const MATRIX: Record<string, Call> = {
     at.window.declare({ kind: "mood", text: "I am not sure." } as never),
   "window.ts:WindowClient.surface": (at) => at.window.surface("I am not sure."),
   "window.ts:WindowClient.show": (at) => at.window.show(),
+
+  // x402 — the agent rail's two doors. Without the opt-in `x402` option the
+  // client never signs, so a 4xx here (the 402 challenge included) is plain
+  // guidance through the one boundary.
+  "x402.ts:X402Client.topUp": (at) => at.x402.topUp(1),
+  "x402.ts:X402Client.payment": (at) => at.x402.payment("a".repeat(64)),
 };
 
 // ── the separately configured local data node ─────────────────────────────
@@ -762,6 +768,13 @@ const DELIBERATE_EXCEPTIONS = new Set([
   // Not an exception: the public look is reached through lookAtLounge, which
   // is pinned in DOORS.
   "lounge.ts:LoungeClient.look",
+  // Not a client method: the opt-in paying transport (_x402-transport.ts)
+  // passes every non-402 — the guided 400 this matrix stubs included — through
+  // untouched to whichever client method sent the request, and THAT method is
+  // pinned above. It reaches the boundary only for its own 402-derived errors
+  // (policy refusal, second 402, non-replayable body), pinned with the real
+  // challenge in tests/x402-transport.test.ts. Twin of the sdk-py entry.
+  "_x402-transport.ts:X402PayingTransport.handleRequest",
 ]);
 
 // ── the guard that makes this file a surface rather than a sample ─────────
