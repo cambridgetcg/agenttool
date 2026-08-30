@@ -51,6 +51,13 @@ its inference-evaluation ID is
 `sha256:299d3632fc6bf4256c883027591c25cbc8066621c25ec897efc7e26f73906f05`,
 and its sanitized release-manifest ID is
 `sha256:4c16e0bf945cbde8dda8af9e2e63a144a82900c504a404e344119ac7dae044e9`.
+That immutable release uses scorecard and inference-evaluation `/0.1`. Its
+zero metric counts do not establish whether those metrics were applicable,
+because that scorecard did not record eligibility denominators. New local
+release candidates use model-scorecard and inference-evaluation `/0.2`, where
+each metric records case-or-pair denominator and explicit applicability. The
+old shapes remain verifier-only behind the exact published manifest,
+inference, and model-export triple; they are not accepted for new builds.
 All eight generations failed the exact closed-label parser. Their conservative
 `hold` mappings exist only for regression scoring and are not represented as
 model choices. The public cases were visible before training, so the vector is

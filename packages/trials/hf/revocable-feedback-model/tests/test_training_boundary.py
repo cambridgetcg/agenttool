@@ -9,7 +9,7 @@ from types import ModuleType, SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
 
-from test_bundle import minimal_safetensors_bytes
+from test_bundle import minimal_safetensors_bytes, write_minimal_tokenizer
 from xenia_revocable_feedback_model.core import (
     AUTHORIZATION_ID,
     DATASET_HASH_MANIFEST_ID,
@@ -40,13 +40,22 @@ class _FakeTokenizer:
     eos_token_id = 2
 
     def save_pretrained(self, path: Path, **_: object) -> None:
-        write_canonical_json(path / "tokenizer_config.json", {"tokenizer_class": "Fake"})
+        write_minimal_tokenizer(path)
 
 
 class _FakeModel:
     def save_pretrained(self, path: Path, **_: object) -> None:
         path.mkdir(parents=True, exist_ok=True)
-        write_canonical_json(path / "config.json", {"model_type": "smollm3"})
+        write_canonical_json(
+            path / "config.json",
+            {
+                "model_type": "llama",
+                "vocab_size": 6,
+                "bos_token_id": 1,
+                "eos_token_id": 2,
+                "pad_token_id": 2,
+            },
+        )
         (path / "model.safetensors").write_bytes(minimal_safetensors_bytes())
 
 

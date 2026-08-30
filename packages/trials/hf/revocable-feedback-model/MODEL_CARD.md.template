@@ -49,6 +49,10 @@ sealed or generalization result and not a scalar rank. The base is a tiny,
 primarily English model and may be inaccurate, brittle, biased, or produce
 text outside the six intended labels. Generated behavior cannot establish an
 inner state or enforce rights, permission, authority, withdrawal, or safety.
+New `agenttool-revocable-feedback-model-scorecard/0.2` records distinguish an
+applicable metric with zero counted observations from an inapplicable metric
+with a zero denominator. The frozen first public `/0.1` scorecard predates those
+denominators, so its zero counts alone do not establish metric applicability.
 
 ## License
 

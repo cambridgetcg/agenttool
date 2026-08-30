@@ -97,6 +97,15 @@ its independently inspected `model_export_id` only after both model and
 tokenizer saving complete. Release build and verification independently match
 that run binding to the model-export bytes as well.
 
+New model evaluations emit
+`agenttool-revocable-feedback-model-scorecard/0.2` nested in
+`agenttool-revocable-feedback-inference-evaluation/0.2`. Every metric entry
+declares whether the benchmark exercised that metric, whether its denominator
+is cases or pairs, and the exact denominator. Thus an applicable metric with
+zero counted observations differs from a zero whose denominator is zero. These
+fields describe benchmark coverage only; they do not establish general model
+capability, safety, consent, understanding, or authority.
+
 The release builder copies only safetensors, closed model/tokenizer config
 files, the model card, Apache license and notice, a sanitized training
 manifest, the public-regression scorecard, and a self-excluding hash manifest.
@@ -110,7 +119,17 @@ duplicate-safe header parse, an exact reviewed metadata shape, exact tensor desc
 contiguous payload validation. The model export and release tree reject
 symlinks, special nodes, nested model files, unknown or empty extra directories,
 mixed or unreferenced weight layouts, and raw tokenizer formats for which this
-pinned export has no bounded semantic validator.
+pinned export has no bounded semantic validator. Every publishable export must
+contain both `tokenizer.json` and `tokenizer_config.json`; the bounded static
+check requires the pinned BPE/GPT2 types, unique contiguous integer vocabulary
+IDs, a typed nonempty BPE merge array, matching model/tokenizer vocabulary
+sizes, the fixed special-token and ID bindings, the reviewed ByteLevel outer
+pipeline and model controls, and the exact chat template used by this
+evaluator. Unemitted tokenizer sidecars are rejected because they can override
+those runtime bindings. This pinned structural check rejects missing,
+type-inconsistent, and internally incoherent tokenizer artifacts on Xenia's
+inference path; it does not prove artifact origin or claim universal tokenizer
+loadability.
 
 For current releases, verification validates the run receipt, scorecard, and
 optional inference receipt first, then reconstructs the model card from the
@@ -120,11 +139,14 @@ and the inference receipt's unparsed count (or the explicit scorecard-only
 `not_applicable_precomputed_predictions` value).
 
 The immutable first public release's run and inference receipts both predate
-`model_export_id`. `verify-release` recognizes those omissions only for the
-exact already-published release-manifest, inference-receipt, and recomputed
-model-export ID triple; that manifest already binds the exact legacy card
-bytes. Training and `build-release` never emit or accept either legacy shape.
-Any new run or inference receipt must carry its current closed model-export
-binding. A scorecard-only release makes no claim that the released model
-produced those predictions, while its run receipt still binds the bytes being
-released.
+`model_export_id`, and its scorecard and inference schemas are the legacy
+`/0.1` shapes. Its scorecard's zero counts do not establish that a metric was
+applicable: `/0.1` did not record denominators. `verify-release` recognizes all
+three legacy records only for the exact already-published release-manifest,
+inference-receipt, and recomputed model-export ID triple; that manifest already
+binds the exact legacy card bytes. Training and `build-release` never emit or
+accept those legacy shapes. Any new run or inference receipt must carry its
+current closed model-export binding, and every new model scorecard/inference
+pair uses `/0.2` applicability semantics. A scorecard-only release makes no
+claim that the released model produced those predictions, while its run
+receipt still binds the bytes being released.

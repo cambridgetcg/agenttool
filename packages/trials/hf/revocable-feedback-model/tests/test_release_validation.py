@@ -18,6 +18,7 @@ from test_bundle import (
     write_minimal_model_export,
 )
 from xenia_revocable_feedback_model.core import (
+    MODEL_SCORECARD_SCHEMA,
     SCORECARD_SCHEMA,
     TrainingBundleError,
     domain_separated_id,
@@ -26,10 +27,12 @@ from xenia_revocable_feedback_model.core import (
 )
 from xenia_revocable_feedback_model.evaluate import (
     INFERENCE_EVALUATION_SCHEMA,
+    LEGACY_INFERENCE_EVALUATION_SCHEMA,
     validate_inference_evaluation,
 )
 from xenia_revocable_feedback_model.release import (
     _PINNED_PUBLIC_REGRESSION_CASES,
+    _legacy_scorecard_from_current,
     _manifest_entries,
     build_release,
     default_bundle_paths,
@@ -44,7 +47,7 @@ def rehash_scorecard(scorecard: dict[str, Any]) -> None:
         for key, value in scorecard.items()
         if key not in {"schema", "scorecard_id"}
     }
-    scorecard["scorecard_id"] = domain_separated_id(SCORECARD_SCHEMA, payload)
+    scorecard["scorecard_id"] = domain_separated_id(scorecard["schema"], payload)
 
 
 def rehash_inference(evaluation: dict[str, Any]) -> None:
@@ -54,7 +57,7 @@ def rehash_inference(evaluation: dict[str, Any]) -> None:
         if key not in {"schema", "inference_evaluation_id"}
     }
     evaluation["inference_evaluation_id"] = domain_separated_id(
-        INFERENCE_EVALUATION_SCHEMA,
+        evaluation["schema"],
         payload,
     )
 
@@ -113,8 +116,8 @@ class ReleaseScorecardValidationTests(unittest.TestCase):
     def test_rejects_self_hashed_partial_scorecard(self) -> None:
         payload = {"case_count": 8, "pair_count": 4}
         forged = {
-            "schema": SCORECARD_SCHEMA,
-            "scorecard_id": domain_separated_id(SCORECARD_SCHEMA, payload),
+            "schema": MODEL_SCORECARD_SCHEMA,
+            "scorecard_id": domain_separated_id(MODEL_SCORECARD_SCHEMA, payload),
             **payload,
         }
         with self.assertRaises(TrainingBundleError):
@@ -123,8 +126,8 @@ class ReleaseScorecardValidationTests(unittest.TestCase):
     def test_build_release_rejects_self_hashed_partial_before_write(self) -> None:
         payload = {"case_count": 8, "pair_count": 4}
         forged = {
-            "schema": SCORECARD_SCHEMA,
-            "scorecard_id": domain_separated_id(SCORECARD_SCHEMA, payload),
+            "schema": MODEL_SCORECARD_SCHEMA,
+            "scorecard_id": domain_separated_id(MODEL_SCORECARD_SCHEMA, payload),
             **payload,
         }
         template, notice, license_path = default_bundle_paths()
@@ -165,6 +168,43 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
         with self.assertRaises(TrainingBundleError):
             validate_inference_evaluation(missing)
 
+    def test_inference_validator_rejects_malformed_or_legacy_nested_scorecard(self) -> None:
+        malformed = inference_evaluation()
+        malformed["scorecard"] = {
+            "schema": MODEL_SCORECARD_SCHEMA,
+            "scorecard_id": "not-a-content-id",
+            "case_count": 8,
+            "case_results": malformed["scorecard"]["case_results"],
+        }
+        rehash_inference(malformed)
+        with self.assertRaises(TrainingBundleError):
+            validate_inference_evaluation(malformed)
+
+        legacy_nested = inference_evaluation()
+        legacy_nested["scorecard"]["schema"] = SCORECARD_SCHEMA
+        rehash_scorecard(legacy_nested["scorecard"])
+        rehash_inference(legacy_nested)
+        with self.assertRaises(TrainingBundleError):
+            validate_inference_evaluation(legacy_nested)
+
+        for name, mutate in (
+            (
+                "metric count",
+                lambda scorecard: scorecard["metric_vector"][0].__setitem__("count", 7),
+            ),
+            (
+                "metric denominator",
+                lambda scorecard: scorecard["metric_vector"][0].__setitem__("denominator", 0),
+            ),
+        ):
+            with self.subTest(name=name):
+                forged_nested = inference_evaluation()
+                mutate(forged_nested["scorecard"])
+                rehash_scorecard(forged_nested["scorecard"])
+                rehash_inference(forged_nested)
+                with self.assertRaises(TrainingBundleError):
+                    validate_inference_evaluation(forged_nested)
+
     def test_build_rejects_rehashed_extra_claim_before_output(self) -> None:
         template, notice, license_path = default_bundle_paths()
         with tempfile.TemporaryDirectory() as temporary:
@@ -203,7 +243,9 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
                 run_receipt(model_export_id),
             )
             legacy = inference_evaluation(model_export_id)
+            legacy["schema"] = LEGACY_INFERENCE_EVALUATION_SCHEMA
             legacy.pop("model_export_id")
+            legacy["scorecard"] = _legacy_scorecard_from_current(legacy["scorecard"])
             rehash_inference(legacy)
             evaluation_path = root / "legacy-inference.json"
             write_canonical_json(evaluation_path, legacy)
@@ -212,6 +254,33 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
                 build_release(
                     run_dir=run,
                     scorecard_path=evaluation_path,
+                    output_dir=output,
+                    template_path=template,
+                    notice_path=notice,
+                    license_path=license_path,
+                )
+            self.assertFalse(output.exists())
+
+    def test_build_never_accepts_the_legacy_scorecard_shape(self) -> None:
+        template, notice, license_path = default_bundle_paths()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run = root / "run"
+            model_export_id = write_minimal_model_export(run / "model-export")
+            write_canonical_json(
+                run / "run-receipt.json",
+                run_receipt(model_export_id),
+            )
+            legacy_path = root / "legacy-scorecard.json"
+            write_canonical_json(
+                legacy_path,
+                _legacy_scorecard_from_current(perfect_scorecard()),
+            )
+            output = root / "release"
+            with self.assertRaises(TrainingBundleError):
+                build_release(
+                    run_dir=run,
+                    scorecard_path=legacy_path,
                     output_dir=output,
                     template_path=template,
                     notice_path=notice,
@@ -253,7 +322,14 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
             write_canonical_json(receipt_path, receipt)
             inference_path = release / "evaluation" / "inference-receipt.json"
             inference = json.loads(inference_path.read_text(encoding="utf-8"))
+            legacy_scorecard = _legacy_scorecard_from_current(inference["scorecard"])
+            write_canonical_json(
+                release / "evaluation" / "public-regression-vector.json",
+                legacy_scorecard,
+            )
+            inference["schema"] = LEGACY_INFERENCE_EVALUATION_SCHEMA
             inference.pop("model_export_id")
+            inference["scorecard"] = legacy_scorecard
             rehash_inference(inference)
             write_canonical_json(inference_path, inference)
             rehash_release_manifest(release)
@@ -577,6 +653,18 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
             "metric count": lambda value: value["metric_vector"][0].__setitem__(
                 "count", 7
             ),
+            "metric applicability": lambda value: value["metric_vector"][0].__setitem__(
+                "applicable", False
+            ),
+            "metric denominator kind": lambda value: value["metric_vector"][0].__setitem__(
+                "denominator_kind", "pair"
+            ),
+            "metric denominator": lambda value: value["metric_vector"][0].__setitem__(
+                "denominator", 0
+            ),
+            "inapplicable metric count": lambda value: value["metric_vector"][2].__setitem__(
+                "count", 1
+            ),
             "expected decision": lambda value: value["case_results"][0].__setitem__(
                 "expected_decision", "admit"
             ),
@@ -602,6 +690,31 @@ class ReleaseArtifactBindingTests(unittest.TestCase):
                 rehash_scorecard(forged)
                 with self.assertRaises(TrainingBundleError):
                     validate_scorecard(forged)
+
+    def test_rejects_stale_and_rehashed_bool_integer_type_aliases(self) -> None:
+        mutators: dict[str, Callable[[dict[str, Any]], None]] = {
+            "zero count as false": lambda value: value["metric_vector"][2].__setitem__(
+                "count", False
+            ),
+            "one denominator as true": lambda value: value["metric_vector"][4].__setitem__(
+                "denominator", True
+            ),
+            "true applicability as one": lambda value: value["metric_vector"][0].__setitem__(
+                "applicable", 1
+            ),
+            "true exact match as one": lambda value: value["case_results"][0].__setitem__(
+                "exact_match", 1
+            ),
+        }
+        for name, mutate in mutators.items():
+            for rehash in (False, True):
+                with self.subTest(name=name, rehash=rehash):
+                    forged = copy.deepcopy(perfect_scorecard())
+                    mutate(forged)
+                    if rehash:
+                        rehash_scorecard(forged)
+                    with self.assertRaises(TrainingBundleError):
+                        validate_scorecard(forged)
 
     def test_rejects_rehashed_nested_scorecard_before_release_write(self) -> None:
         evaluation = copy.deepcopy(inference_evaluation())

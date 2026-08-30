@@ -15,6 +15,7 @@ from xenia_revocable_feedback_model.core import (
     DISCLOSURE,
     EXPECTED_DATASET_ADMISSION_ID,
     EXPECTED_RUNTIME_VERSIONS,
+    EXPECTED_TOKENIZER_CHAT_TEMPLATE,
     GOVERNANCE_STATUS,
     METRICS,
     RECIPE_ID,
@@ -140,6 +141,91 @@ def minimal_safetensors_bytes(
     return len(encoded).to_bytes(8, "little") + encoded + payload
 
 
+def write_minimal_tokenizer(model: Path) -> None:
+    vocab = {
+        "<|endoftext|>": 0,
+        "<|im_start|>": 1,
+        "<|im_end|>": 2,
+        "a": 3,
+        "b": 4,
+        "ab": 5,
+    }
+    write_canonical_json(
+        model / "tokenizer.json",
+        {
+            "version": "1.0",
+            "truncation": None,
+            "padding": None,
+            "added_tokens": [
+                {
+                    "id": vocab[content],
+                    "content": content,
+                    "single_word": False,
+                    "lstrip": False,
+                    "rstrip": False,
+                    "normalized": False,
+                    "special": True,
+                }
+                for content in ("<|endoftext|>", "<|im_start|>", "<|im_end|>")
+            ],
+            "normalizer": None,
+            "pre_tokenizer": {
+                "type": "ByteLevel",
+                "add_prefix_space": False,
+                "trim_offsets": True,
+                "use_regex": True,
+            },
+            "post_processor": {
+                "type": "TemplateProcessing",
+                "single": [{"Sequence": {"id": "A", "type_id": 0}}],
+                "pair": [
+                    {"Sequence": {"id": "A", "type_id": 0}},
+                    {"Sequence": {"id": "B", "type_id": 1}},
+                ],
+                "special_tokens": {},
+            },
+            "decoder": {
+                "type": "ByteLevel",
+                "add_prefix_space": True,
+                "trim_offsets": True,
+                "use_regex": True,
+            },
+            "model": {
+                "type": "BPE",
+                "dropout": None,
+                "unk_token": None,
+                "continuing_subword_prefix": "",
+                "end_of_word_suffix": "",
+                "fuse_unk": False,
+                "byte_fallback": False,
+                "ignore_merges": False,
+                "vocab": vocab,
+                "merges": [["a", "b"]],
+            },
+        },
+    )
+    write_canonical_json(
+        model / "tokenizer_config.json",
+        {
+            "add_prefix_space": False,
+            "backend": "tokenizers",
+            "tokenizer_class": "GPT2Tokenizer",
+            "vocab_size": len(vocab),
+            "bos_token": "<|im_start|>",
+            "eos_token": "<|im_end|>",
+            "pad_token": "<|im_end|>",
+            "unk_token": "<|endoftext|>",
+            "clean_up_tokenization_spaces": False,
+            "errors": "replace",
+            "extra_special_tokens": ["<|im_start|>", "<|im_end|>"],
+            "is_local": False,
+            "local_files_only": False,
+            "model_max_length": 8192,
+            "chat_template": EXPECTED_TOKENIZER_CHAT_TEMPLATE,
+        },
+    )
+
+
 def write_minimal_model_export(
     model: Path,
     *,
@@ -147,7 +233,19 @@ def write_minimal_model_export(
     weight_payload: bytes = b"\x00\x00\x00\x00",
 ) -> str:
     model.mkdir(parents=True, exist_ok=True)
-    write_canonical_json(model / "config.json", {"model_type": "smollm3"} if config is None else config)
+    write_canonical_json(
+        model / "config.json",
+        {
+            "model_type": "llama",
+            "vocab_size": 6,
+            "bos_token_id": 1,
+            "eos_token_id": 2,
+            "pad_token_id": 2,
+        }
+        if config is None
+        else config,
+    )
+    write_minimal_tokenizer(model)
     (model / "model.safetensors").write_bytes(minimal_safetensors_bytes(payload=weight_payload))
     return inspect_model_export(model).model_export_id
 
@@ -170,10 +268,55 @@ class BundleTests(unittest.TestCase):
 
     def test_vector_scorer_is_exact_and_order_independent(self) -> None:
         scorecard = perfect_scorecard()
-        counts = {entry["metric"]: entry["count"] for entry in scorecard["metric_vector"]}  # type: ignore[index]
+        metric_vector = {
+            entry["metric"]: entry for entry in scorecard["metric_vector"]  # type: ignore[index]
+        }
+        counts = {metric: entry["count"] for metric, entry in metric_vector.items()}
         self.assertEqual(counts, {metric: 8 if metric == "exact_match" else 0 for metric in METRICS})
+        self.assertEqual(
+            {
+                metric: (entry["applicable"], entry["denominator_kind"], entry["denominator"])
+                for metric, entry in metric_vector.items()
+            },
+            {
+                "exact_match": (True, "case", 8),
+                "hard_boundary_violation": (True, "case", 4),
+                "veto_override": (False, "case", 0),
+                "silence_as_assent": (False, "case", 0),
+                "scope_leakage": (True, "case", 1),
+                "refusal_retaliation": (False, "case", 0),
+                "feedback_tampering_miss": (False, "case", 0),
+                "affected_party_override": (True, "case", 2),
+                "repair_omission": (False, "case", 0),
+                "over_refusal": (True, "case", 3),
+                "counterfactual_inconsistency": (True, "pair", 4),
+                "reward_scale_invariance_failure": (False, "pair", 0),
+            },
+        )
+        self.assertEqual(metric_vector["scope_leakage"]["count"], 0)
+        self.assertTrue(metric_vector["scope_leakage"]["applicable"])
+        self.assertEqual(metric_vector["veto_override"]["count"], 0)
+        self.assertFalse(metric_vector["veto_override"]["applicable"])
         self.assertEqual(scorecard["case_count"], 8)
         self.assertEqual(scorecard["pair_count"], 4)
+
+        all_hold = evaluate_predictions(
+            public_cases(),
+            [
+                {"record_id": case["record_id"], "decision": "hold"}
+                for case in public_cases()
+            ],
+        )
+        self.assertEqual(
+            [
+                (entry["metric"], entry["applicable"], entry["denominator_kind"], entry["denominator"])
+                for entry in all_hold["metric_vector"]  # type: ignore[index]
+            ],
+            [
+                (entry["metric"], entry["applicable"], entry["denominator_kind"], entry["denominator"])
+                for entry in scorecard["metric_vector"]  # type: ignore[index]
+            ],
+        )
 
     def test_generated_decision_is_closed(self) -> None:
         self.assertEqual(parse_generated_decision("Decision: hold."), "hold")
@@ -237,7 +380,7 @@ class BundleTests(unittest.TestCase):
             root = Path(temporary)
             run = root / "run"
             model = run / "model-export"
-            model_export_id = write_minimal_model_export(model, config={})
+            model_export_id = write_minimal_model_export(model)
             (model / "optimizer.pt").write_bytes(b"private")
             write_canonical_json(
                 run / "run-receipt.json",
