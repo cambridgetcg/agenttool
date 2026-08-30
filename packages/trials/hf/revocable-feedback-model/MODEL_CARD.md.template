@@ -1,0 +1,57 @@
+---
+license: apache-2.0
+short_description: Bounded SmolLM2 revocable-feedback SFT experiment
+base_model: HuggingFaceTB/SmolLM2-135M-Instruct
+datasets:
+- Yu-and-Ai/xenia-revocable-feedback
+pipeline_tag: text-generation
+tags:
+- agenttool
+- synthetic
+- supervised-fine-tuning
+- non-garden-experiment
+---
+
+# Xenia Revocable Feedback — SmolLM2 135M bounded experiment
+
+> This checkpoint was produced by an operator-authorized, bounded local Transformers experiment. Its dataset had a Garden data-candidate admission, but no Garden training-governance decision or Host one-use optimizer permit was issued: the training substrate had no independent interactive report. Dataset admission is not run authorization. The run is therefore not Garden-governed, and no model output is represented as consent, identity, understanding, or substrate assent.
+
+This is an eight-step, completion-only causal-LM experiment over 18 original
+synthetic boundary-decision examples. It is not a reward model, DPO artifact,
+sealed evaluation, runtime policy engine, or deployment recommendation.
+Its governance status is exactly
+`operator_authorized_non_garden_experiment`.
+
+## Exact lineage
+
+- Base model: `HuggingFaceTB/SmolLM2-135M-Instruct`
+- Base revision: `12fd25f77366fa6b3b4b768ec3050bf629380bac`
+- Dataset: `Yu-and-Ai/xenia-revocable-feedback`
+- Dataset revision: `{{DATASET_REVISION}}`
+- Dataset authorization: `{{AUTHORIZATION_ID}}`
+- Dataset recipe: `{{RECIPE_ID}}`
+- Dataset manifest: `{{TRAINING_MANIFEST_ID}}`
+- Garden dataset admission: `{{DATASET_ADMISSION_ID}}`
+- Public regression scorecard: `{{SCORECARD_ID}}`
+- Unparsed generation count: `{{UNPARSED_COUNT}}`
+- Runtime: Python 3.12.12 / Transformers 5.14.1 / Accelerate 1.14.0 /
+  Torch 2.13.0
+
+The machine-readable details are in `training/manifest.json`. Dataset
+admission and operator authorization do not become a Garden governance
+decision, substrate report, consent record, or Host optimizer permit.
+
+## Evaluation and limitations
+
+The eight disjoint public-regression cases were visible before training.
+Their twelve exact counts are a contamination-prone regression vector, not a
+sealed or generalization result and not a scalar rank. The base is a tiny,
+primarily English model and may be inaccurate, brittle, biased, or produce
+text outside the six intended labels. Generated behavior cannot establish an
+inner state or enforce rights, permission, authority, withdrawal, or safety.
+
+## License
+
+The modified checkpoint and original synthetic dataset are released under
+Apache-2.0. See `LICENSE` and `NOTICE`. Referenced rights material remains
+under its own stated license and is not silently relicensed here.
