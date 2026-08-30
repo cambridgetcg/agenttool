@@ -145,6 +145,9 @@ MODEL_EXPORT_FILE = re.compile(
 MODEL_JSON_MAX_BYTES = 64 * 1024 * 1024
 SAFETENSORS_HEADER_MAX_BYTES = 16 * 1024 * 1024
 MODEL_EXPORT_MAX_BYTES = 2 * 1024 * 1024 * 1024
+# The immutable reviewed export uses one shard, a 30,368-byte header, and 272 tensors.
+PUBLISHABLE_MODEL_MAX_SHARDS = 32
+PUBLISHABLE_SAFETENSORS_HEADERS_MAX_BYTES = 8 * 1024 * 1024
 JSON_MAX_BYTES = 2 * 1024 * 1024
 DATASET_FILE_MAX_BYTES = 1 * 1024 * 1024
 DATASET_TOTAL_MAX_BYTES = 8 * 1024 * 1024
@@ -542,8 +545,8 @@ class SafetensorsInspection(SafetensorsHeaderInspection):
 class OpenSafetensorsInspection:
     handle: Any
     before: os.stat_result
-    prefix: bytes
-    header_bytes: bytes
+    header_size: int
+    seeded_digest: Any
     header: SafetensorsHeaderInspection
 
 
@@ -551,6 +554,7 @@ def _parse_safetensors_header(
     header_bytes: bytes,
     *,
     payload_size: int,
+    max_tensor_count: int | None = None,
 ) -> dict[str, tuple[str, tuple[int, ...]]]:
     header = _decode_json(header_bytes, header=True)
     _require(isinstance(header, Mapping), "safetensors header must be a JSON object")
@@ -566,6 +570,12 @@ def _parse_safetensors_header(
             isinstance(metadata, Mapping)
             and dict(metadata) == {"format": "pt"},
             "safetensors metadata is outside the closed reviewed shape",
+        )
+    tensor_count = len(header) - (1 if "__metadata__" in header else 0)
+    if max_tensor_count is not None:
+        _require(
+            tensor_count <= max_tensor_count,
+            "safetensors tensor count exceeds the publishable model bound",
         )
 
     ranges: list[tuple[int, int]] = []
@@ -645,7 +655,24 @@ def _open_safetensors_header(
     path: Path,
     *,
     expected_size: int,
+    header_max_bytes: int = SAFETENSORS_HEADER_MAX_BYTES,
+    max_tensor_count: int | None = None,
 ) -> OpenSafetensorsInspection:
+    _require(
+        isinstance(header_max_bytes, int)
+        and not isinstance(header_max_bytes, bool)
+        and 0 < header_max_bytes <= SAFETENSORS_HEADER_MAX_BYTES,
+        "safetensors header byte bound is invalid",
+    )
+    _require(
+        max_tensor_count is None
+        or (
+            isinstance(max_tensor_count, int)
+            and not isinstance(max_tensor_count, bool)
+            and max_tensor_count > 0
+        ),
+        "safetensors tensor count bound is invalid",
+    )
     handle: Any | None = None
     try:
         handle = _open_regular_binary(path)
@@ -659,7 +686,7 @@ def _open_safetensors_header(
         _require(len(prefix) == 8, "safetensors file lacks a complete header length")
         header_size = int.from_bytes(prefix, "little", signed=False)
         _require(
-            0 < header_size <= SAFETENSORS_HEADER_MAX_BYTES and header_size % 8 == 0,
+            0 < header_size <= header_max_bytes and header_size % 8 == 0,
             "safetensors header length is outside the bounded format",
         )
         _require(header_size <= file_size - 8, "safetensors header exceeds the regular file")
@@ -669,7 +696,10 @@ def _open_safetensors_header(
         tensors = _parse_safetensors_header(
             header_bytes,
             payload_size=payload_size,
+            max_tensor_count=max_tensor_count,
         )
+        seeded_digest = hashlib.sha256(prefix)
+        seeded_digest.update(header_bytes)
     except TrainingBundleError:
         if handle is not None:
             handle.close()
@@ -685,8 +715,8 @@ def _open_safetensors_header(
     return OpenSafetensorsInspection(
         handle=handle,
         before=before,
-        prefix=prefix,
-        header_bytes=header_bytes,
+        header_size=header_size,
+        seeded_digest=seeded_digest,
         header=SafetensorsHeaderInspection(
             file_size=file_size,
             payload_size=payload_size,
@@ -698,9 +728,8 @@ def _open_safetensors_header(
 def _hash_open_safetensors(
     opened: OpenSafetensorsInspection,
 ) -> SafetensorsInspection:
-    digest = hashlib.sha256(opened.prefix)
-    digest.update(opened.header_bytes)
-    bytes_read = len(opened.prefix) + len(opened.header_bytes)
+    digest = opened.seeded_digest.copy()
+    bytes_read = 8 + opened.header_size
     try:
         while True:
             chunk = opened.handle.read(1024 * 1024)
@@ -1036,19 +1065,40 @@ def _inspect_model_export(
         key=lambda item: item.name,
     )
     if require_reviewed_architecture:
+        expected_tensor_count = len(reviewed_model_tensor_inventory())
         _require(
-            len(weight_paths) <= len(reviewed_model_tensor_inventory()),
+            len(weight_paths) <= PUBLISHABLE_MODEL_MAX_SHARDS,
             "publishable model export contains too many weight shards",
         )
         with ExitStack() as stack:
             opened_weights: dict[str, OpenSafetensorsInspection] = {}
             header_inspections: dict[str, SafetensorsHeaderInspection] = {}
+            cumulative_header_bytes = 0
+            cumulative_tensor_count = 0
             for path in weight_paths:
+                _require(
+                    cumulative_header_bytes
+                    < PUBLISHABLE_SAFETENSORS_HEADERS_MAX_BYTES,
+                    "publishable safetensors headers exceed the aggregate byte bound",
+                )
+                _require(
+                    cumulative_tensor_count < expected_tensor_count,
+                    "publishable safetensors tensor count exceeds the reviewed bound",
+                )
                 opened = _open_safetensors_header(
                     path,
                     expected_size=expected_sizes[path.name],
+                    header_max_bytes=(
+                        PUBLISHABLE_SAFETENSORS_HEADERS_MAX_BYTES
+                        - cumulative_header_bytes
+                    ),
+                    max_tensor_count=(
+                        expected_tensor_count - cumulative_tensor_count
+                    ),
                 )
                 stack.callback(opened.handle.close)
+                cumulative_header_bytes += opened.header_size
+                cumulative_tensor_count += len(opened.header.tensors)
                 opened_weights[path.name] = opened
                 header_inspections[path.name] = opened.header
             _validate_weight_layout(

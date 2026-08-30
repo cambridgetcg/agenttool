@@ -19,6 +19,8 @@ from test_bundle import (
 )
 from xenia_revocable_feedback_model.core import (
     MODEL_EXPORT_MAX_BYTES,
+    PUBLISHABLE_MODEL_MAX_SHARDS,
+    PUBLISHABLE_SAFETENSORS_HEADERS_MAX_BYTES,
     REGULAR_TREE_MAX_DEPTH,
     TrainingBundleError,
     audit_publishable_model_load,
@@ -33,6 +35,20 @@ def encoded_safetensors(header_text: str, payload: bytes = b"") -> bytes:
     header = header_text.encode("utf-8")
     header += b" " * (-len(header) % 8)
     return len(header).to_bytes(8, "little") + header + payload
+
+
+def padded_safetensors_header(data: bytes, *, header_size: int) -> bytes:
+    original_size = int.from_bytes(data[:8], "little")
+    header = data[8 : 8 + original_size].rstrip(b" ")
+    if header_size < len(header) or header_size % 8 != 0:
+        raise ValueError("padded test header size must fit the JSON and align to 8 bytes")
+    payload = data[8 + original_size :]
+    return (
+        header_size.to_bytes(8, "little")
+        + header
+        + b" " * (header_size - len(header))
+        + payload
+    )
 
 
 def mutate_json(path: Path, mutate: object) -> None:
@@ -249,7 +265,7 @@ class ModelArtifactValidationTests(unittest.TestCase):
             unsharded = model / "model.safetensors"
             weight_bytes = unsharded.read_bytes()
             unsharded.unlink()
-            shard_count = len(TEST_SERIALIZED_TENSORS) + 1
+            shard_count = PUBLISHABLE_MODEL_MAX_SHARDS + 1
             for shard in range(1, shard_count + 1):
                 (model / f"model-{shard:05d}-of-{shard_count:05d}.safetensors").write_bytes(
                     weight_bytes
@@ -263,6 +279,107 @@ class ModelArtifactValidationTests(unittest.TestCase):
                 with self.assertRaises(TrainingBundleError):
                     inspect_publishable_model_export(model)
                 open_header.assert_not_called()
+
+    def test_publishable_header_budget_rejects_before_more_descriptors_or_payloads(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            (model / "model.safetensors").unlink()
+            names = tuple(sorted(TEST_SERIALIZED_TENSORS))
+            shard_count = 9
+            shard_tensors = tuple((name,) for name in names[:8]) + (names[8:],)
+            header_size = PUBLISHABLE_SAFETENSORS_HEADERS_MAX_BYTES // 8
+            weight_map: dict[str, str] = {}
+            total_size = 0
+            for shard, tensor_names in enumerate(shard_tensors, start=1):
+                shard_name = f"model-{shard:05d}-of-{shard_count:05d}.safetensors"
+                encoded = complete_test_safetensors_bytes(tensor_names=tensor_names)
+                padded = padded_safetensors_header(
+                    encoded,
+                    header_size=header_size,
+                )
+                (model / shard_name).write_bytes(padded)
+                total_size += len(encoded) - 8 - int.from_bytes(encoded[:8], "little")
+                weight_map.update({name: shard_name for name in tensor_names})
+            write_canonical_json(
+                model / "model.safetensors.index.json",
+                {"metadata": {"total_size": total_size}, "weight_map": weight_map},
+            )
+
+            original_open = core_module._open_safetensors_header
+            opened: list[object] = []
+
+            def track_open(path: Path, **kwargs: object) -> object:
+                result = original_open(path, **kwargs)  # type: ignore[arg-type]
+                opened.append(result)
+                return result
+
+            with (
+                patch.object(
+                    core_module,
+                    "_open_safetensors_header",
+                    side_effect=track_open,
+                ),
+                patch.object(core_module, "_hash_open_safetensors") as payload_hash,
+            ):
+                with self.assertRaises(TrainingBundleError):
+                    inspect_publishable_model_export(model)
+                payload_hash.assert_not_called()
+
+            self.assertEqual(len(opened), 8)
+            self.assertTrue(all(not hasattr(item, "header_bytes") for item in opened))
+            self.assertTrue(
+                all(item.handle.closed for item in opened)  # type: ignore[attr-defined]
+            )
+
+    def test_publishable_tensor_budget_closes_prior_descriptors_before_payloads(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            model = Path(temporary) / "model"
+            write_minimal_model_export(model)
+            (model / "model.safetensors").unlink()
+            first = "model-00001-of-00002.safetensors"
+            second = "model-00002-of-00002.safetensors"
+            names = tuple(sorted(TEST_SERIALIZED_TENSORS))
+            (model / first).write_bytes(complete_test_safetensors_bytes())
+            (model / second).write_bytes(
+                minimal_safetensors_bytes(tensor_name="unexpected.weight")
+            )
+            write_canonical_json(
+                model / "model.safetensors.index.json",
+                {
+                    "weight_map": {
+                        **{name: first for name in names},
+                        "unexpected.weight": second,
+                    }
+                },
+            )
+
+            original_open = core_module._open_safetensors_header
+            opened: list[object] = []
+
+            def track_open(path: Path, **kwargs: object) -> object:
+                result = original_open(path, **kwargs)  # type: ignore[arg-type]
+                opened.append(result)
+                return result
+
+            with (
+                patch.object(
+                    core_module,
+                    "_open_safetensors_header",
+                    side_effect=track_open,
+                ),
+                patch.object(core_module, "_hash_open_safetensors") as payload_hash,
+            ):
+                with self.assertRaises(TrainingBundleError):
+                    inspect_publishable_model_export(model)
+                payload_hash.assert_not_called()
+
+            self.assertEqual(len(opened), 1)
+            self.assertTrue(opened[0].handle.closed)  # type: ignore[attr-defined]
 
     def test_non_binding_load_audit_observes_the_exact_offline_stack(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -142,16 +142,21 @@ complete single-file or sharded safetensors union must contain exactly 272
 named F32 tensors with the reviewed shapes: the embedding, nine tensors per
 layer, and final norm. A serialized `lm_head.weight` is rejected because the
 reviewed tied-weight serialization omits it; the separate audit stack
-reconstructs it as the embedding alias.
+reconstructs it as the embedding alias. The publishable path permits at most
+32 weight shards and 8 MiB of safetensors header bytes across them, with no
+more than the reviewed 272 serialized tensor descriptors parsed before the
+exact union check.
 
 Each bounded JSON file is validated and hashed from one retained regular-file
 snapshot. Each safetensors header is structurally validated before payload I/O,
-then header, payload, descriptor inventory, and digest remain bound to the same
-open regular-file descriptor. Release manifests are fully preflighted for
-canonical unique paths, exact tree membership, declared and actual sizes,
-per-file caps, and a 2 GiB aggregate cap for manifest-listed content before it
-is hashed. The self-excluding manifest is separately capped at 2 MiB; the
-second pass hashes every listed file with its declared bound.
+seeds the digest bound to that open regular-file descriptor, and is discarded
+before the next shard opens. Only the bounded descriptor map, digest state,
+and descriptor remain while the exact union is checked; payload hashing then
+continues the seeded digest on that same descriptor. Release manifests are
+fully preflighted for canonical unique paths, exact tree membership, declared
+and actual sizes, per-file caps, and a 2 GiB aggregate cap for manifest-listed
+content before it is hashed. The self-excluding manifest is separately capped
+at 2 MiB; the second pass hashes every listed file with its declared bound.
 
 Publication does not use a path-based Transformers load as an integrity gate:
 the values visible through a path can be temporarily substituted between a

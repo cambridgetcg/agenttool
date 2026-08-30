@@ -76,8 +76,15 @@ inventory because `tie_word_embeddings` is true.
 Verification parses and hashes each config snapshot from the same retained
 bytes, and validates the complete tensor name/dtype/shape inventory while
 hashing each weight file through the same regular-file descriptor. Before any
-release content hashing, it also requires canonical unique manifest paths,
-exact tree membership and sizes, independent metadata/model caps, and a 2 GiB
+payload hashing, the publishable path permits at most 32 weight shards, 8 MiB
+of safetensors headers across them, and the reviewed 272 serialized tensor
+descriptors. Each parsed header seeds its file digest and is then discarded;
+only the bounded descriptor map, digest state, and regular-file descriptor are
+retained while the exact union is checked.
+
+Before any release content hashing, verification also requires canonical
+unique manifest paths, exact tree membership and sizes, independent
+metadata/model caps, and a 2 GiB
 aggregate cap for manifest-listed content. The self-excluding manifest is
 separately capped at 2 MiB; each content hash is explicitly bounded.
 
