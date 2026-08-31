@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "xenia-revocable-feedback-model-bundle"
+version = "0.1.0.dev0"
+description = "Bounded non-Garden SmolLM2 experiment and sanitized model release builder"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = "==3.12.12"
+classifiers = ["Private :: Do Not Upload"]
+dependencies = []
+
+[project.optional-dependencies]
+train = [
+  "accelerate==1.14.0",
+  "huggingface-hub==1.29.0",
+  "jinja2==3.1.6",
+  "numpy==2.5.2",
+  "safetensors==0.8.0",
+  "tokenizers==0.22.2",
+  "torch==2.13.0",
+  "transformers==5.14.1",
+]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+xenia-rf-model = "xenia_revocable_feedback_model.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/xenia_revocable_feedback_model"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

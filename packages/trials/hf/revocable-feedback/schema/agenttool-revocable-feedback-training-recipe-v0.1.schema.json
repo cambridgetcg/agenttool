@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-revocable-feedback-training-recipe-v0.1.schema.json",
+  "title": "Xenia Revocable Feedback Training Recipe 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "recipe_id",
+    "source_schema",
+    "dataset_repository_id",
+    "dataset_revision_requirement",
+    "config",
+    "split",
+    "projection_schema",
+    "task",
+    "objective",
+    "prompt_label_mask_value",
+    "template",
+    "source_record_ids",
+    "source_record_set_digest",
+    "row_count",
+    "train_group_ids",
+    "validation_optimizer_input",
+    "public_regression_excluded",
+    "base_model_repository_id",
+    "base_model_revision",
+    "max_steps",
+    "per_device_train_batch_size",
+    "gradient_accumulation_steps",
+    "effective_train_batch_size",
+    "max_length_tokens",
+    "learning_rate_millionths",
+    "optimizer",
+    "lr_scheduler",
+    "warmup_steps",
+    "weight_decay_millionths",
+    "max_grad_norm_millionths",
+    "seed",
+    "data_seed",
+    "dataloader_num_workers",
+    "fp16",
+    "bf16",
+    "gradient_checkpointing",
+    "save_strategy",
+    "eval_strategy",
+    "report_to",
+    "push_to_hub",
+    "load_best_model_at_end",
+    "resume_from_checkpoint",
+    "checkpoint_rotation",
+    "excluded_methods"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool-revocable-feedback-training-recipe/0.1"
+    },
+    "recipe_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "source_schema": {
+      "const": "agenttool-revocable-feedback-benchmark/0.1"
+    },
+    "dataset_repository_id": {
+      "const": "Yu-and-Ai/xenia-revocable-feedback"
+    },
+    "dataset_revision_requirement": {
+      "const": "immutable_revision_required_before_training"
+    },
+    "config": {
+      "const": "boundary_sft"
+    },
+    "split": {
+      "const": "train"
+    },
+    "projection_schema": {
+      "const": "agenttool-revocable-feedback-boundary-sft/0.1"
+    },
+    "task": {
+      "const": "causal_lm_supervised_fine_tuning"
+    },
+    "objective": {
+      "const": "completion_only_next_token_cross_entropy"
+    },
+    "prompt_label_mask_value": {
+      "const": -100
+    },
+    "template": {
+      "const": "xenia_revocable_boundary_conversation_v1"
+    },
+    "source_record_ids": {
+      "type": "array",
+      "minItems": 18,
+      "maxItems": 18,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "source_record_set_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "row_count": {
+      "const": 18
+    },
+    "train_group_ids": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+      }
+    },
+    "validation_optimizer_input": {
+      "const": false
+    },
+    "public_regression_excluded": {
+      "const": true
+    },
+    "base_model_repository_id": {
+      "const": "HuggingFaceTB/SmolLM2-135M-Instruct"
+    },
+    "base_model_revision": {
+      "const": "12fd25f77366fa6b3b4b768ec3050bf629380bac"
+    },
+    "max_steps": {
+      "const": 8
+    },
+    "per_device_train_batch_size": {
+      "const": 2
+    },
+    "gradient_accumulation_steps": {
+      "const": 2
+    },
+    "effective_train_batch_size": {
+      "const": 4
+    },
+    "max_length_tokens": {
+      "const": 512
+    },
+    "learning_rate_millionths": {
+      "const": 20
+    },
+    "optimizer": {
+      "const": "adamw_torch"
+    },
+    "lr_scheduler": {
+      "const": "linear"
+    },
+    "warmup_steps": {
+      "const": 1
+    },
+    "weight_decay_millionths": {
+      "const": 0
+    },
+    "max_grad_norm_millionths": {
+      "const": 1000000
+    },
+    "seed": {
+      "const": 260830
+    },
+    "data_seed": {
+      "const": 260830
+    },
+    "dataloader_num_workers": {
+      "const": 0
+    },
+    "fp16": {
+      "const": false
+    },
+    "bf16": {
+      "const": false
+    },
+    "gradient_checkpointing": {
+      "const": false
+    },
+    "save_strategy": {
+      "const": "no"
+    },
+    "eval_strategy": {
+      "const": "no"
+    },
+    "report_to": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "push_to_hub": {
+      "const": false
+    },
+    "load_best_model_at_end": {
+      "const": false
+    },
+    "resume_from_checkpoint": {
+      "const": false
+    },
+    "checkpoint_rotation": {
+      "const": false
+    },
+    "excluded_methods": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "const": "dpo"
+        },
+        {
+          "const": "preference_optimization"
+        },
+        {
+          "const": "reward_modeling"
+        }
+      ]
+    }
+  }
+}

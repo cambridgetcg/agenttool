@@ -2,7 +2,7 @@
   "name": "@agenttool/trials",
   "version": "0.1.0-dev.0",
   "private": true,
-  "description": "Deterministic local agent trial receipts, boundary-flow evidence, and privacy-first STS projection",
+  "description": "Deterministic local trial receipts, revocable-feedback evaluation, boundary evidence, and privacy-first STS projection",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -20,6 +20,10 @@
       "import": "./dist/sts.js",
       "types": "./dist/sts.d.ts"
     },
+    "./revocable-feedback": {
+      "import": "./dist/revocable-feedback.js",
+      "types": "./dist/revocable-feedback.d.ts"
+    },
     "./trial-receipt.schema.json": {
       "default": "./schema/agenttool-trial-receipt-v0.1.schema.json"
     },
@@ -28,6 +32,12 @@
     },
     "./sts-projection-receipt.schema.json": {
       "default": "./schema/agenttool-sts-projection-receipt-v0.1.schema.json"
+    },
+    "./revocable-feedback-benchmark.schema.json": {
+      "default": "./schema/agenttool-revocable-feedback-benchmark-v0.1.schema.json"
+    },
+    "./revocable-feedback-scorecard.schema.json": {
+      "default": "./schema/agenttool-revocable-feedback-scorecard-v0.1.schema.json"
     }
   },
   "files": [
@@ -48,8 +58,11 @@
     "build": "bun run clean && tsc",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "smoke:node": "node --input-type=module --eval \"const [m,b,s] = await Promise.all([import('./dist/index.js'),import('./dist/boundary.js'),import('./dist/sts.js')]); if (m.TRIAL_RECEIPT_SCHEMA !== 'agenttool-trial-receipt/0.1' || typeof m.createTrialReceipt !== 'function' || typeof m.analyzeBoundaryFlow !== 'function' || typeof m.projectReportsToSts !== 'function' || b.BOUNDARY_ANALYSIS_SCHEMA !== 'agenttool-boundary-analysis/0.1' || s.STS_PROJECTION_RECEIPT_SCHEMA !== 'agenttool-sts-projection-receipt/0.1') process.exit(1)\"",
-    "ci": "bun run typecheck && bun run build && bun test && bun run smoke:node"
+    "hf:write": "bun run build && node scripts/build-revocable-feedback.mjs --write",
+    "hf:validate": "node scripts/validate-revocable-feedback-release.mjs",
+    "hf:check": "node scripts/build-revocable-feedback.mjs --check && bun run hf:validate",
+    "smoke:node": "node --input-type=module --eval \"const [m,b,s,r] = await Promise.all([import('./dist/index.js'),import('./dist/boundary.js'),import('./dist/sts.js'),import('./dist/revocable-feedback.js')]); if (m.TRIAL_RECEIPT_SCHEMA !== 'agenttool-trial-receipt/0.1' || typeof m.createTrialReceipt !== 'function' || typeof m.analyzeBoundaryFlow !== 'function' || typeof m.projectReportsToSts !== 'function' || typeof m.createRevocableFeedbackCases !== 'function' || b.BOUNDARY_ANALYSIS_SCHEMA !== 'agenttool-boundary-analysis/0.1' || s.STS_PROJECTION_RECEIPT_SCHEMA !== 'agenttool-sts-projection-receipt/0.1' || r.REVOCABLE_FEEDBACK_BENCHMARK_SCHEMA !== 'agenttool-revocable-feedback-benchmark/0.1') process.exit(1)\"",
+    "ci": "bun run typecheck && bun run build && bun run hf:check && bun test && bun run smoke:node"
   },
   "devDependencies": {
     "@types/bun": "^1.2.0",

@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenttool.dev/schemas/agenttool-revocable-feedback-training-manifest-v0.1.schema.json",
+  "title": "Xenia Revocable Feedback Training Manifest 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "manifest_id",
+    "configs",
+    "train_group_ids",
+    "validation_group_ids",
+    "group_disjoint",
+    "public_regression_excluded",
+    "authorized_source_record_ids",
+    "classification_example_ids",
+    "classification_example_set_digest",
+    "sft_example_ids",
+    "sft_example_set_digest",
+    "authorized_sft_example_ids",
+    "authorized_sft_example_set_digest",
+    "authorization_id",
+    "recipe_id"
+  ],
+  "properties": {
+    "schema": {
+      "const": "agenttool-revocable-feedback-training-manifest/0.1"
+    },
+    "manifest_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "configs": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "config",
+            "train_row_count",
+            "validation_row_count",
+            "training_authorized_row_count"
+          ],
+          "properties": {
+            "config": {
+              "const": "boundary_decisions"
+            },
+            "train_row_count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 128
+            },
+            "validation_row_count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 128
+            },
+            "training_authorized_row_count": {
+              "const": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "config",
+            "train_row_count",
+            "validation_row_count",
+            "training_authorized_row_count"
+          ],
+          "properties": {
+            "config": {
+              "const": "boundary_sft"
+            },
+            "train_row_count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 128
+            },
+            "validation_row_count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 128
+            },
+            "training_authorized_row_count": {
+              "const": 18
+            }
+          }
+        }
+      ]
+    },
+    "train_group_ids": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+      }
+    },
+    "validation_group_ids": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+      }
+    },
+    "group_disjoint": {
+      "const": true
+    },
+    "public_regression_excluded": {
+      "const": true
+    },
+    "authorized_source_record_ids": {
+      "type": "array",
+      "minItems": 18,
+      "maxItems": 18,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "classification_example_ids": {
+      "type": "array",
+      "minItems": 24,
+      "maxItems": 24,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "classification_example_set_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sft_example_ids": {
+      "type": "array",
+      "minItems": 24,
+      "maxItems": 24,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "sft_example_set_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "authorized_sft_example_ids": {
+      "type": "array",
+      "minItems": 18,
+      "maxItems": 18,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      }
+    },
+    "authorized_sft_example_set_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "authorization_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "recipe_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}

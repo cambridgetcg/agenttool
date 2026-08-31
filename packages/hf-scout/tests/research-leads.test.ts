@@ -46,8 +46,8 @@ async function reportFor(
 describe("phase-aware HF research leads", () => {
   test("keeps a frozen pinned catalog without volatile popularity or account state", () => {
     const catalog = getCuratedHfResearchCatalog();
-    expect(catalog.curated_on).toBe("2026-08-29");
-    expect(catalog.leads).toHaveLength(16);
+    expect(catalog.curated_on).toBe("2026-08-30");
+    expect(catalog.leads).toHaveLength(17);
     expect(Object.isFrozen(catalog)).toBe(true);
     expect(Object.isFrozen(catalog.leads[0])).toBe(true);
     expect(catalog.leads.filter((lead) => lead.key.startsWith("datadecide_")))
@@ -105,6 +105,51 @@ describe("phase-aware HF research leads", () => {
       },
     });
     expect(xeniaWordIs.research.forbidden_uses).toContain("training_corpus_ingestion");
+    const revocableFeedback = catalog.leads.find(
+      (lead) => lead.key === "xenia_revocable_feedback",
+    )!;
+    expect(revocableFeedback).toMatchObject({
+      match: {
+        kind: "dataset",
+        id: "Yu-and-Ai/xenia-revocable-feedback",
+        revision: "467b8fc1b44fe6374cbba6e1d6851cf3c5b6f88f",
+        declared: {
+          basis: "publisher_assertion",
+          license: "apache-2.0",
+          gated: false,
+          private: false,
+        },
+      },
+      origin_assertions: {
+        basis: "publisher_assertion",
+        features: ["failure_mode_matrix"],
+      },
+      research: {
+        basis: "researcher_inference",
+        evidence_paper_ids: [],
+        phase: "agent_trace_sft",
+        payload: "conversation_text",
+        priority: 17,
+        primary: "agenttool_fixture",
+        secondary: ["kingdom_registry", "yutabase_provenance"],
+        mode: "offline_parser_fixture",
+        boundaries: [
+          "benchmark_excluded_from_training",
+          "synthetic_or_simulated_not_truth",
+          "upstream_terms_separate",
+        ],
+        bounded_uses: ["offline_parser_fixture", "provenance_graph"],
+        forbidden_uses: [
+          "benchmark_tuning",
+          "license_clearance_inference",
+          "retrieval_index_ingestion",
+          "sole_evaluator_training",
+          "truth_or_intent_authority",
+        ],
+      },
+    });
+    expect(revocableFeedback.research.forbidden_uses)
+      .not.toContain("training_corpus_ingestion");
     expect(JSON.stringify(catalog)).not.toMatch(/downloads|likes|trending|updated_at|access_token/u);
   });
 
@@ -156,6 +201,37 @@ describe("phase-aware HF research leads", () => {
         hub_write_performed: false,
       },
     });
+  });
+
+  test("binds the revocable-feedback lead without turning metadata into a training permit", async () => {
+    const lead = getCuratedHfResearchCatalog().leads
+      .find((entry) => entry.key === "xenia_revocable_feedback")!;
+    expect(pinnedHfResearchLeadUrl(lead)).toBe(
+      "https://huggingface.co/datasets/Yu-and-Ai/xenia-revocable-feedback/tree/467b8fc1b44fe6374cbba6e1d6851cf3c5b6f88f",
+    );
+
+    const binding = bindHfResearchLead(await reportFor(lead), lead);
+    expect(binding).toMatchObject({
+      lead_key: "xenia_revocable_feedback",
+      artifact: {
+        kind: "dataset",
+        id: "Yu-and-Ai/xenia-revocable-feedback",
+        revision: "467b8fc1b44fe6374cbba6e1d6851cf3c5b6f88f",
+      },
+      matched_declared: {
+        license: "apache-2.0",
+        gated: false,
+        private: false,
+      },
+      boundary: {
+        legal_clearance: "not_assessed",
+        raw_rows_read: false,
+        repository_files_downloaded: false,
+        remote_compute_invoked: false,
+        hub_write_performed: false,
+      },
+    });
+    expect(binding.boundary).not.toHaveProperty("training_authorized");
   });
 
   test("binds exact immutable report bytes without upgrading caller-owned provenance", async () => {
