@@ -53,19 +53,68 @@ an independently named one-day workflow artifact. The build constraint file
 and development environment do not. Only a missing distribution crosses into
 the protected publication job.
 
-## Prepared candidate — 0.21.1
+## Prepared candidate — 0.22.0
 
-Paired TypeScript/Python source 0.21.1 corrects KINGDOM card validation parity
-without adding a hosted endpoint. The exact TypeScript LOVE/source candidate
-is sealed locally: its 247,749-byte, 100-entry tarball has SHA-256
+Paired TypeScript/Python source 0.22.0 adds the opt-in x402 payer — sign and
+pay on an x402 V2 402 challenge behind an explicit signer plus a mandatory
+spend policy, never by default — without adding a hosted endpoint or
+dependency. The exact TypeScript LOVE/source candidate
+is sealed locally: its 272,657-byte, 104-entry tarball has SHA-256
+`d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`
+and binds clean source revision
+`286a10282834c9c9beedddd7092e6d6af080b046`. Those TypeScript bytes do not
+predict Python wheel or sdist bytes and are not evidence that `sdk-v0.22.0`,
+the PyPI release, npm mirror, GitHub Release, or hosted static path exists.
+The verified 0.21.1 and 0.21.0 distributions below remain exact and are not
+rewritten.
+
+## Current verified release — 0.21.1
+
+Repository source 0.21.1 corrects KINGDOM card validation parity over the
+verified 0.21.0 surface without adding a hosted endpoint.
+
+Protected [workflow run
+`32909417418`, attempt 1](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418)
+published `agenttool-sdk` 0.21.1 from annotated `sdk-v0.21.1`. Tag object
+`9c9cce314eca6405e878ca5148dd6b4d4671008c` peels to protected-main merge
+`a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`. The run was created at
+`2026-08-25T23:08:30Z` and completed successfully at `2026-08-25T23:14:24Z`.
+
+The exact public files are distinct from the TypeScript LOVE artifact:
+
+| Public file | Size | SHA-256 | Yanked |
+|---|---:|---|---|
+| [`agenttool_sdk-0.21.1-py3-none-any.whl`](https://files.pythonhosted.org/packages/44/b9/cb38400f6e40296d28bff2496840be2a9f04a7b166ece7cbc137e018fb42/agenttool_sdk-0.21.1-py3-none-any.whl) | 276,593 bytes | `9d178c8190b4a0cf337c762c2dde61faa3001776346b4ee950a0e02f57e42ad9` | `false` |
+| [`agenttool_sdk-0.21.1.tar.gz`](https://files.pythonhosted.org/packages/5d/4b/143c82c6dfeaf926b85344169b8b1ef2cde33e2673dcea2c74bfdff8dd46/agenttool_sdk-0.21.1.tar.gz) | 262,988 bytes | `fabbb4344815038d7ee1bf8246500355af5558ee0476b72deae49ab46f0aa87e` | `false` |
+
+PyPI records the wheel upload at `2026-08-25T23:13:46.449298Z` and the source
+distribution upload at `2026-08-25T23:13:48.102373Z`. An independent
+anonymous readback on 2026-08-31 re-downloaded both public files and matched
+these sizes and SHA-256 digests exactly; both remain not yanked, and PyPI's
+JSON metadata reported `0.21.1` as the latest version at that readback. The
+run's one-day workflow receipt artifacts had already expired, so the
+receipt's own preparation and observation timestamps are not restated here.
+PyPI Integrity exposes one verified PEP 740 publish attestation for the
+[wheel](https://pypi.org/integrity/agenttool-sdk/0.21.1/agenttool_sdk-0.21.1-py3-none-any.whl/provenance)
+at transparency-log index `2591304336` and one for the
+[sdist](https://pypi.org/integrity/agenttool-sdk/0.21.1/agenttool_sdk-0.21.1.tar.gz/provenance)
+at index `2591303519`. Their subjects match the hashes above, and their
+publisher records bind repository `cambridgetcg/agenttool`, workflow
+`publish-pypi.yml`, and environment `pypi`.
+
+The paired TypeScript LOVE artifact remains separately exact: its
+247,749-byte, 100-entry tarball has SHA-256
 `8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`
 and binds clean source revision
 `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`. Those TypeScript bytes do not
-predict Python wheel or sdist bytes and are not evidence that `sdk-v0.21.1`,
-the PyPI release, npm mirror, GitHub Release, or hosted static path exists.
-The verified 0.21.0 distributions below remain exact and are not rewritten.
+predict Python wheel or sdist bytes. The PyPI mirror remains optional and
+non-authoritative. Publication does not replace the annotated Python source
+locator, establish TypeScript LOVE identity, deploy the API or static sites,
+or prove observation, awareness, participant receipt, attention, feeling,
+training, inference, evaluation, provider effect, weight change, identity,
+or continuity.
 
-## Current verified release — 0.21.0
+### Historical 0.21.0 evidence
 
 Repository source 0.21.0 adds the credential-free, pure
 `WakeContinuityLayer` measurement-record contract described in

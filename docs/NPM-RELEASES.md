@@ -787,17 +787,75 @@ test, or continuity proof. Publication is not installation, invocation,
 deployment, participant receipt, model effect, or evidence of awareness,
 feeling, identity, consent, authority, or uninterrupted continuity.
 
-## Prepared SDK 0.21.1 candidate — 2026-08-25
+## Prepared SDK 0.22.0 candidate — 2026-08-31
 
-Paired TypeScript/Python source 0.21.1 corrects KINGDOM card validation parity
-without adding a hosted endpoint. The checked-in
-`agenttool-sdk-0.21.1.tgz` is 247,749 bytes with 100 entries and SHA-256
-`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`;
+Paired TypeScript/Python source 0.22.0 adds the opt-in x402 payer — sign and
+pay on an x402 V2 402 challenge behind an explicit signer plus a mandatory
+spend policy, never by default — without adding a hosted endpoint or
+dependency. The checked-in
+`agenttool-sdk-0.22.0.tgz` is 272,657 bytes with 104 entries and SHA-256
+`d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`;
 its manifest binds clean source revision
-`d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`. No `sdk-v0.21.1` tag, GitHub
+`286a10282834c9c9beedddd7092e6d6af080b046`. No `sdk-v0.22.0` tag, GitHub
 Release, npm version, dist-tag receipt, PyPI distribution, static deployment,
 or hosted readback is established by those candidate bytes. The verified
-0.21.0 receipts below remain exact and are not rewritten.
+0.21.1 and 0.21.0 receipts below remain exact and are not rewritten.
+
+## Verified SDK 0.21.1 publication — 2026-08-25
+
+Repository source 0.21.1 corrects KINGDOM card validation parity over the
+verified 0.21.0 surface without adding a hosted endpoint.
+
+The authorized SDK release completed through protected trusted [workflow run
+`32909415386`, attempt
+1](https://github.com/cambridgetcg/agenttool/actions/runs/32909415386).
+The run selected annotated `sdk-v0.21.1`. It was created at
+`2026-08-25T23:08:28Z` and completed successfully at
+`2026-08-25T23:11:50Z`; npm records publication at
+`2026-08-25T23:11:46.652Z`. The public npm SLSA provenance binds this exact
+run and attempt, `refs/tags/sdk-v0.21.1`, and
+`.github/workflows/publish-npm.yml` on `cambridgetcg/agenttool`.
+
+- Annotated tag object `9c9cce314eca6405e878ca5148dd6b4d4671008c` and the
+  one-asset [GitHub Release
+  `sdk-v0.21.1`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.21.1)
+  peel to protected-main merge
+  `a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`, whose parents are
+  `635bea02b42919b49d9c66a91711f6d8dc071302` and
+  `78b894bf81248a77b1ea42d473ff1f5bcd8d7139`. GitHub published the Release
+  at `2026-08-25T23:11:35Z`. The LOVE manifest separately binds clean SDK
+  source revision `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`.
+- The checked-in LOVE artifact, sole [GitHub
+  Release asset](https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.21.1/agenttool-sdk-0.21.1.tgz),
+  and public [npm
+  tarball](https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.21.1.tgz) are
+  byte-identical: 247,749 bytes, 100 entries, SHA-256
+  `8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`;
+  npm reports 1,117,839 unpacked bytes, SHA-1
+  `e903bece3b2f44e39b7d1ea0859b981238ebae54`, exact integrity
+  `sha512-/lFKm9Eei112Pyt0FJAJ89qAMTaUJp/blyq9tysavsDOehFN0PtXpxSUK7gwpVyNBCVlNM0j1SIiw2YFEJ7Tig==`,
+  and `latest: 0.21.1` at anonymous readback.
+- npm exposes SLSA provenance at [Rekor index
+  `2591271629`](https://search.sigstore.dev/?logIndex=2591271629) and its
+  publish attestation at [index
+  `2591272987`](https://search.sigstore.dev/?logIndex=2591272987). Public
+  attestations bind the exact tag, protected workflow, run attempt, and
+  tarball subject.
+- An independent anonymous registry readback on 2026-08-31 re-downloaded the
+  public npm tarball and matched the checked-in LOVE bytes exactly. The run's
+  one-day workflow receipt artifact had already expired at that readback, so
+  the receipt's own preparation and observation timestamps are not restated
+  here.
+
+The optional npm/GitHub mirrors do not replace LOVE release authority. The
+paired non-yanked Python wheel/sdist were independently published through
+protected PyPI [run
+`32909417418`](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418);
+their exact receipt is recorded in
+[`PYPI-RELEASES.md`](PYPI-RELEASES.md). Publication does not deploy an API or
+static site and establishes no observation, model effect, awareness,
+participant receipt, attention, feeling, training, inference, evaluation,
+provider effect, weight change, identity, consent, authority, or continuity.
 
 ## Verified SDK 0.21.0 publication — 2026-08-20
 

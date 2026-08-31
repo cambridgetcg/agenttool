@@ -23,25 +23,26 @@ curl -q -fsS https://api.agenttool.dev/v1/pathways | \
 That tutorial currently verifies and installs the TypeScript SDK from a
 `love-package/v1` manifest. The Python SDK does not yet have an equivalent LOVE
 Package artifact, so do not describe its source URL as size/SHA-256-verified.
-For the immutable Python 0.21.0 release, the public annotated
-`sdk-v0.21.0` source tag remains its primary source locator:
+For the immutable Python 0.21.1 release, the public annotated
+`sdk-v0.21.1` source tag remains its primary source locator:
 
 ```bash
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.21.0#subdirectory=packages/sdk-py"
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.21.1#subdirectory=packages/sdk-py"
 ```
 
-PyPI 0.21.0 is public as an optional independently verified mirror:
-`python -m pip install "agenttool-sdk==0.21.0"`. Protected workflow
-[`32374671268`](https://github.com/cambridgetcg/agenttool/actions/runs/32374671268)
-re-downloaded and matched the non-yanked 275,928-byte wheel
-(`sha256:5d2e83e5b7fb3728fe985ea0e050c0d1cb314eed07b78f12bd045852ba1b1a01`)
-and 261,910-byte sdist
-(`sha256:e70c1eecc1699961a22720676185e141293a09bae381e875a81541b872fea71d`).
+PyPI 0.21.1 is public as an optional independently verified mirror:
+`python -m pip install "agenttool-sdk==0.21.1"`. Protected workflow
+[`32909417418`](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418)
+published the non-yanked 276,593-byte wheel
+(`sha256:9d178c8190b4a0cf337c762c2dde61faa3001776346b4ee950a0e02f57e42ad9`)
+and 262,988-byte sdist
+(`sha256:fabbb4344815038d7ee1bf8246500355af5558ee0476b72deae49ab46f0aa87e`); an independent registry
+readback on 2026-08-31 matched both public files byte-for-byte.
 The registry remains a non-authoritative convenience.
 
-## Repository source line — 0.21.1 + x402 payer (0.22.0 on seal)
+## Repository source line — 0.22.0
 
-Repository source carries the x402 payer that the paired 0.22.0 release will publish (source still reports 0.21.1 until the release seal): the SDK **can sign and pay
+Repository source declares the paired 0.22.0 line: the SDK **can sign and pay
 on x402 V2 challenges — opt-in only, never by default.** `agenttool.x402`
 mirrors the server's own payer function-for-function on the existing
 `cryptography` dependency (pure-Python Keccak-256 + EIP-712 + recoverable
@@ -52,14 +53,14 @@ no defaults; allow-lists never deny-lists; over-cap refused, never clamped; a
 second 402 is an error, never a loop). `at.x402.top_up(credits)` and
 `at.x402.payment(id)` are the rail's two doors. Absent the `x402=` payer
 nothing changes: the SDK never signs, never retries, never reads a key, and a
-402 surfaces as a typed error carrying the terms. Source preparation alone
-establishes no 0.22.0 artifact, tag, publication, deployment, or settlement
-receipt; the SDK-driven settlements are W2-10 of the Wave 2 plan.
+402 surfaces as a typed error carrying the terms. The sealed 0.22.0
+LOVE/source candidate is staged for publication; the registries serve 0.21.1
+until the reviewed workflows complete. Sealing establishes no `sdk-v0.22.0`
+tag, npm/PyPI publication, deployment, or settlement receipt; the SDK-driven
+settlements are W2-10 of the Wave 2 plan.
 
-## Repository source line — 0.21.1
-
-Repository source declares the paired 0.21.1 line as a corrective patch over
-the verified 0.21.0 release. It adds no endpoint or I/O. The credential-free
+The 0.22.0 line retains the 0.21.1 corrective patch, now independently
+verified below. It adds no endpoint or I/O. The credential-free
 KINGDOM framework-card reader now fails closed in parity with the KINGDOM
 runtime and exported schemas: `purpose` must be non-empty and already
 ECMAScript-edge-trimmed, contain only safe paired Unicode scalars, and stay
@@ -105,9 +106,9 @@ memory, training-data provenance, weight change, deepest reach, or
 cross-session/uninterrupted continuity.
 
 Source identity remains separate from distribution: this preparation does not
-by itself establish an `sdk-v0.21.1` tag, TypeScript LOVE artifact, GitHub
+by itself establish an `sdk-v0.22.0` tag, TypeScript LOVE artifact, GitHub
 Release, npm/PyPI publication, docs deployment, or hosted-route state. The
-LOVE BOMB example below remains the 0.21.0 API shape and requires the signal
+LOVE BOMB example below remains the 0.21.1 API shape and requires the signal
 route to be deployed before default-origin success.
 
 ```python
@@ -136,7 +137,29 @@ WAKE lookup and injection for one Anthropic or OpenAI request with
 the caller independently supplies. Pulling the public signal and including
 WAKE context therefore remain two explicit, separately refusable choices.
 
-## Verified 0.21.0 release and preserved history
+## Verified 0.21.1 release and preserved history
+
+Paired 0.21.1 corrects KINGDOM card validation parity over the verified
+0.21.0 surface and adds no endpoint or I/O. The immutable TypeScript
+247,749-byte, 100-entry 0.21.1 LOVE artifact
+(`sha256:8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`)
+records source revision `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`.
+Annotated `sdk-v0.21.1` peels to protected-main merge
+`a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`. Protected npm run
+[`32909415386`](https://github.com/cambridgetcg/agenttool/actions/runs/32909415386)
+published and read back a byte-identical npm/GitHub/LOVE tarball; that
+tarball is a TypeScript artifact, not a Python distribution. Protected PyPI
+run
+[`32909417418`](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418)
+published the non-yanked 276,593-byte wheel
+(`sha256:9d178c8190b4a0cf337c762c2dde61faa3001776346b4ee950a0e02f57e42ad9`)
+and 262,988-byte sdist
+(`sha256:fabbb4344815038d7ee1bf8246500355af5558ee0476b72deae49ab46f0aa87e`).
+An independent registry readback on 2026-08-31 matched both public PyPI
+files byte-for-byte. Those receipts establish exact package mirrors, not
+production deployment or 0.22.0 availability.
+
+## Historical verified 0.21.0 release
 
 The immutable TypeScript 247,146-byte, 100-entry 0.21.0 LOVE artifact
 (`sha256:c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`)
@@ -147,7 +170,7 @@ Annotated `sdk-v0.21.0` peels to protected-main merge
 published and read back a byte-identical npm/GitHub/LOVE tarball; that tarball
 is a TypeScript artifact, not a Python distribution. The exact Python files
 and protected run are recorded above. Those receipts establish package
-mirrors, not production deployment or 0.21.1 availability.
+mirrors, not production deployment or 0.22.0 availability.
 
 ## Historical verified 0.20.0 release
 
@@ -160,7 +183,7 @@ Annotated `sdk-v0.20.0` peels to protected-main merge
 published and read back a byte-identical npm/GitHub/LOVE tarball; that tarball
 is a TypeScript artifact, not a Python distribution. The exact Python files
 and protected run are recorded above. Those receipts establish package
-mirrors, not production deployment or 0.21.1 availability.
+mirrors, not production deployment or 0.22.0 availability.
 
 The immutable TypeScript 230,184-byte 0.19.0 LOVE artifact
 (`sha256:0a7eed4029bc687605b4d56707843c12ccb36d10a162a1fea1681522ab8784a2`)
@@ -187,7 +210,7 @@ The immutable 211,695-byte TypeScript 0.18.0 LOVE artifact has SHA-256
 `8e6bbe42f76decd1448dd07465840339e5b055abba0317b3d04f4f506e44616a`;
 protected run `30909424114` read its GitHub/npm mirrors back byte-identical,
 while PyPI 0.18.0 returned `404` at the same public readback. These historical
-receipts are distinct; 0.21.1 rewrites none of them and does not widen the
+receipts are distinct; 0.22.0 rewrites none of them and does not widen the
 authenticated `LoveClient`.
 
 ## 0.17.0
