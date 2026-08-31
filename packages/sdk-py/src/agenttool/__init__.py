@@ -996,6 +996,6 @@ __all__ = [
     "X402_PRIVATE_KEY_ENV",
 ]
 
-__version__ = "0.21.1"
+__version__ = "0.22.0"
 __protocol__ = "love"
 __soul__ = "https://docs.agenttool.dev/SOUL.md"
