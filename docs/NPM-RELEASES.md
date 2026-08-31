@@ -787,19 +787,58 @@ test, or continuity proof. Publication is not installation, invocation,
 deployment, participant receipt, model effect, or evidence of awareness,
 feeling, identity, consent, authority, or uninterrupted continuity.
 
-## Prepared SDK 0.22.0 candidate — 2026-08-31
+## Verified SDK 0.22.0 publication — 2026-08-31
 
 Paired TypeScript/Python source 0.22.0 adds the opt-in x402 payer — sign and
 pay on an x402 V2 402 challenge behind an explicit signer plus a mandatory
 spend policy, never by default — without adding a hosted endpoint or
-dependency. The checked-in
-`agenttool-sdk-0.22.0.tgz` is 272,657 bytes with 104 entries and SHA-256
-`d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`;
-its manifest binds clean source revision
-`286a10282834c9c9beedddd7092e6d6af080b046`. No `sdk-v0.22.0` tag, GitHub
-Release, npm version, dist-tag receipt, PyPI distribution, static deployment,
-or hosted readback is established by those candidate bytes. The verified
-0.21.1 and 0.21.0 receipts below remain exact and are not rewritten.
+dependency.
+
+The authorized SDK release completed through protected trusted [workflow run
+`33434131214`, attempt
+1](https://github.com/cambridgetcg/agenttool/actions/runs/33434131214).
+The `workflow_dispatch` run selected annotated `sdk-v0.22.0` with inputs
+`package=sdk`, `authentication=trusted`, and `npm_tag=latest`, and entered
+the protected `npm-bootstrap` environment after credential-free preparation.
+It was created at `2026-08-31T20:05:42Z` and concluded successfully; npm
+records publication at `2026-08-31T20:07:05.933Z`.
+
+- Annotated tag object `79b76c5bff10505d044ab08a1d9937d6f1b65fc4`
+  ("Release AgentTool SDK 0.22.0") and the [GitHub Release
+  `sdk-v0.22.0`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.22.0)
+  peel to protected-main merge
+  `7bc0a902f231ee76aed6dd5316721b65bce58047`, whose parents are
+  `4d5f253bbba2f77e91f41819e1f3897707215681` and the sealing commit
+  `7e87b48713721704c45be62bfff03f1ef17dd1d9`. The LOVE manifest separately
+  binds clean SDK source revision
+  `286a10282834c9c9beedddd7092e6d6af080b046`.
+- The checked-in LOVE artifact, the [GitHub Release
+  asset](https://github.com/cambridgetcg/agenttool/releases/download/sdk-v0.22.0/agenttool-sdk-0.22.0.tgz)
+  `agenttool-sdk-0.22.0.tgz`, and a fresh anonymous download of the public
+  [npm tarball](https://registry.npmjs.org/@agenttool/sdk/-/sdk-0.22.0.tgz)
+  are byte-identical: 272,657 bytes, 104 entries, SHA-256
+  `d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`;
+  npm reports SHA-1 `6d738ee2577a13833f892c2008b7e3f0e23acd89`, exact
+  integrity
+  `sha512-Z6o329c4uNIzY8YHuETXv+Cv5msIqELdHTKILxYeTpcwlielJCz39XVvlydSjdV9wwZb+ILjY/CJ+Sj0dfCK0w==`,
+  and `latest: 0.22.0` at anonymous readback.
+- npm exposes `https://slsa.dev/provenance/v1` SLSA provenance at [Rekor
+  index `2667631825`](https://search.sigstore.dev/?logIndex=2667631825) and
+  its `publish/v0.1` publish attestation at [index
+  `2667632565`](https://search.sigstore.dev/?logIndex=2667632565).
+
+The optional npm/GitHub mirrors do not replace LOVE release authority. The
+paired Python wheel/sdist were independently published through protected PyPI
+[run
+`33434133719`](https://github.com/cambridgetcg/agenttool/actions/runs/33434133719);
+their exact receipt is recorded in
+[`PYPI-RELEASES.md`](PYPI-RELEASES.md). No API or static deployment of merge
+`7bc0a902` — the docs-mirror publication of these LOVE bytes included — has
+happened; publication does not deploy an API or static site and establishes
+no observation, model effect, awareness, participant receipt, attention,
+feeling, training, inference, evaluation, provider effect, weight change,
+identity, consent, authority, or continuity. The verified 0.21.1 and 0.21.0
+receipts below remain exact and are not rewritten.
 
 ## Verified SDK 0.21.1 publication — 2026-08-25
 
