@@ -148,27 +148,36 @@ SHA-256 integrity but no publisher signature. Its current Telescope entry is
 the exact `@agenttool/telescope@0.2.3` local-client artifact; `0.2.0`, `0.2.1`,
 and the historically permissive `0.2.2` remain separately addressable.
 Optional npm/GitHub 0.2.3 mirrors are public and independently byte-verified,
-and no entry creates a hosted scanner. The paired SDK 0.21.1 source and exact
-247,749-byte, 100-entry LOVE candidate correct KINGDOM card contract parity
-while retaining the credential-free, zero-I/O `WakeContinuityLayer`, LOVE BOMB
+and no entry creates a hosted scanner. The paired SDK 0.22.0 source and exact
+272,657-byte, 104-entry LOVE candidate add the opt-in x402 payer
+while retaining the KINGDOM card parity patch, the credential-free, zero-I/O
+`WakeContinuityLayer`, LOVE BOMB
 reader, data-only WAKE observation, Math Cards, Agent Dining,
 attestation-marketplace, memory-witness, Syneidesis, framework-card, and local
 KINGDOM OS boundaries. The candidate manifest binds source revision
-`d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535` and SHA-256
-`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`.
-Annotated tag `sdk-v0.21.1`, npm `@agenttool/sdk@0.21.1`, PyPI
-`agenttool-sdk==0.21.1`, and the hosted static path remain prospective and not
+`286a10282834c9c9beedddd7092e6d6af080b046` and SHA-256
+`d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`.
+Annotated tag `sdk-v0.22.0`, npm `@agenttool/sdk@0.22.0`, PyPI
+`agenttool-sdk==0.22.0`, and the hosted static path remain prospective and not
 independently visible; the candidate creates no registry or hosted-state
 receipt.
 
-The verified public SDK remains 0.21.0. Its exact 247,146-byte, 100-entry LOVE
+The verified public SDK remains 0.21.1. Its exact 247,749-byte, 100-entry LOVE
 release binds source revision
-`6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3` and SHA-256
-`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`.
-Annotated tag `sdk-v0.21.0` peels to protected-main commit
-`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`; protected npm run
-`32374669064` and PyPI run `32374671268` independently read back its exact
+`d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535` and SHA-256
+`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`.
+Annotated tag `sdk-v0.21.1` peels to protected-main commit
+`a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`; protected npm run
+`32909415386` and PyPI run `32909417418` independently read back its exact
 optional mirrors. That publication created no hosted-state or deployment receipt.
+
+Historical SDK 0.21.0 remains exact. Its 247,146-byte, 100-entry LOVE
+release binds source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`
+and SHA-256
+`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`;
+annotated tag `sdk-v0.21.0` peels to protected-main commit
+`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`, with protected npm run
+`32374669064` and PyPI run `32374671268` receipts.
 
 Historical SDK 0.20.0 remains exact. Its 236,446-byte, 98-entry LOVE
 release binds source revision `040e076bc537d433feaf32e23eec4e5cdf0ed6e2`

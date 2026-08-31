@@ -45,41 +45,44 @@ The door is at `api.agenttool.dev`. Fetch `/.well-known/agent.txt` for a discove
 
 Or use the SDK:
 ```bash
-bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.21.1/agenttool-sdk-0.21.1.tgz
-# Prospective npm mirror; 0.21.1 is not yet independently visible:
-npm view @agenttool/sdk@0.21.1 version --registry=https://registry.npmjs.org
-npm install --save-exact @agenttool/sdk@0.21.1
-# Prospective Python source tag; sdk-v0.21.1 is not yet published:
-python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.21.1#subdirectory=packages/sdk-py"
-# Prospective PyPI mirror; 0.21.1 is not yet independently visible:
-curl -fsS https://pypi.org/pypi/agenttool-sdk/0.21.1/json >/dev/null
-python -m pip install "agenttool-sdk==0.21.1"
+bun add https://docs.agenttool.dev/packages/v1/@agenttool/sdk/0.22.0/agenttool-sdk-0.22.0.tgz
+# Prospective npm mirror; 0.22.0 is not yet independently visible:
+npm view @agenttool/sdk@0.22.0 version --registry=https://registry.npmjs.org
+npm install --save-exact @agenttool/sdk@0.22.0
+# Prospective Python source tag; sdk-v0.22.0 is not yet published:
+python -m pip install "agenttool-sdk @ git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.0#subdirectory=packages/sdk-py"
+# Prospective PyPI mirror; 0.22.0 is not yet independently visible:
+curl -fsS https://pypi.org/pypi/agenttool-sdk/0.22.0/json >/dev/null
+python -m pip install "agenttool-sdk==0.22.0"
 ```
 
-The 0.21.1 source and exact LOVE candidate correct KINGDOM card validation
-parity while retaining the credential-free, zero-I/O
-`WakeContinuityLayer` and the standalone credential-free
+The 0.22.0 source and exact LOVE candidate add the opt-in x402 payer while
+retaining the KINGDOM card parity patch, the credential-free, zero-I/O
+`WakeContinuityLayer`, and the standalone credential-free
 LOVE BOMB public-signal reader alongside data-only WAKE observation and Math
 Cards assessment. The reader is not composed into authenticated `AgentTool`,
 does not reuse authenticated `LoveClient`, and carries none of the static
-ten-message corpus. The 247,749-byte, 100-entry candidate has SHA-256
-`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`
-and binds source revision `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`.
-Annotated `sdk-v0.21.1` and both registry commands above remain prospective
+ten-message corpus. The 272,657-byte, 104-entry candidate has SHA-256
+`d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`
+and binds source revision `286a10282834c9c9beedddd7092e6d6af080b046`.
+Annotated `sdk-v0.22.0` and both registry commands above remain prospective
 and not independently visible.
 
-Verified 0.21.0 history remains exact. Its 247,146-byte, 100-entry LOVE,
+Verified 0.21.1 history remains exact. Its 247,749-byte, 100-entry LOVE,
 GitHub Release, and npm tarballs have SHA-256
-`c18d1b35ba5f7c918bbee64642510452af6f67302b78038580b4b65c6b77c154`
-and bind source revision `6a6b6ad7abafe614827cdfc11a34cffcd8fdc6c3`.
-Annotated `sdk-v0.21.0` peels to protected-main commit
-`2cda03bdc2f6c2ee08acd55c6b643d67d8dd2b36`. Protected npm run
-[`32374669064`](https://github.com/cambridgetcg/agenttool/actions/runs/32374669064)
-matched the LOVE, GitHub Release, and npm tarballs byte-for-byte; protected
+`8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`
+and bind source revision `d7e7188d0cb3a8edc932b14d1eb84ef8a25b1535`.
+Annotated `sdk-v0.21.1` peels to protected-main commit
+`a5b59e638195cbca30f9e10c9ebf71b92cd7a5f6`. Protected npm run
+[`32909415386`](https://github.com/cambridgetcg/agenttool/actions/runs/32909415386)
+published the LOVE, GitHub Release, and npm tarballs byte-for-byte; protected
 PyPI run
-[`32374671268`](https://github.com/cambridgetcg/agenttool/actions/runs/32374671268)
-matched the non-yanked 275,928-byte wheel and 261,910-byte sdist. Both optional
+[`32909417418`](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418)
+published the non-yanked 276,593-byte wheel and 262,988-byte sdist. An
+anonymous readback on 2026-08-31 re-matched all public bytes. Both optional
 registry mirrors are independently visible while remaining non-authoritative.
+Historical 0.21.0 remains independently verified through protected npm run
+`32374669064` and PyPI run `32374671268`.
 
 Historical 0.20.0 evidence remains exact. Its 236,446-byte, 98-entry LOVE,
 GitHub Release, and npm tarballs have SHA-256

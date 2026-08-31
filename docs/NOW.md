@@ -2,7 +2,7 @@
 
 > What's hot · what just landed · what's queued. Read this first if you're returning to the codebase after a few days.
 >
-> Updated: 2026-08-29 (the Xenia Loop Atlas source is merged, its public, ungated Hugging Face dataset passed exact anonymous byte and loader verification, and its exact SFT derivative is revision-pinned as a Training Garden candidate)
+> Updated: 2026-08-31 (the paired SDK 0.22.0 x402-payer LOVE candidate is sealed; the 2026-08-25 SDK 0.21.1 npm/PyPI publications are recorded as the current verified release after a fresh anonymous byte readback; verified 0.21.0 receipts remain immutable public history)
 
 > **Compass:** [SOUL](SOUL.md) (why) · [KIN](KIN.md) (who else this is for) · [FOCUS](FOCUS.md) (what bears weight) · [ROADMAP](ROADMAP.md) (horizons + slices) · [MAP](MAP.md) (doctrine index) · [STACK](STACK.md) (deploy) · [DEVELOPMENT](DEVELOPMENT.md) (contribute)
 >
@@ -13,6 +13,12 @@
 > **Tests:** `bin/tests/boring-spine-gate.test.ts` · `bin/tests/love-packages.test.ts` · `bin/tests/discovery-telescope-roundtrip.test.ts` (current release spine; other rows name their own evidence)
 >
 > *This doc is **time-sensitive**.* `ROADMAP.md` lists horizons; this lists *what just happened*. If the "Updated:" line above is older than a week, run `git log --oneline -30` and trust git over this file.
+
+## Just landed (2026-08-31)
+
+| Ship | Commit / receipt | What |
+|---|---|---|
+| **SDK 0.22.0 — x402 payer candidate sealed; 0.21.1 exact public mirrors** | SDK LOVE source `286a10282834c9c9beedddd7092e6d6af080b046`; prospective `sdk-v0.22.0`; verified [`sdk-v0.21.1`](https://github.com/cambridgetcg/agenttool/releases/tag/sdk-v0.21.1) via protected npm [run `32909415386`](https://github.com/cambridgetcg/agenttool/actions/runs/32909415386) and PyPI [run `32909417418`](https://github.com/cambridgetcg/agenttool/actions/runs/32909417418) | Paired TypeScript/Python source 0.22.0 adds the opt-in x402 payer — sign and pay on an x402 V2 402 challenge behind an explicit signer plus a mandatory spend policy (amount cap and pay-to allow-lists with no defaults; over-cap refused, never clamped; exactly ONE signed retry, never a loop; absent the option the SDK never signs, never retries, never reads a key). The exact TypeScript LOVE/source candidate is 272,657 bytes and 104 entries with SHA-256 `d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0`. SDK tag, GitHub Release, npm `@agenttool/sdk@0.22.0`, PyPI `agenttool-sdk==0.22.0`, static deployment, and all independent readbacks remain prospective. The 0.21.1 corrective candidate sealed on 2026-08-25 is now the current verified public release: merge `a5b59e63`, byte-identical 247,749-byte LOVE/GitHub/npm tarballs (`sha256:8c768b481d7211679c3ee25477723e588806ca4f4106c970f2bf19113365a3fb`), non-yanked 276,593-byte wheel (`sha256:9d178c8190b4a0cf337c762c2dde61faa3001776346b4ee950a0e02f57e42ad9`) and 262,988-byte sdist (`sha256:fabbb4344815038d7ee1bf8246500355af5558ee0476b72deae49ab46f0aa87e`), independently re-matched byte-for-byte on 2026-08-31. Candidate sealing is not publication or deployment and grants no conformance, permission, identity, consent, or authority. |
 
 ## Just landed (2026-08-29)
 

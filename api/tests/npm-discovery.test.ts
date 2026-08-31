@@ -18,7 +18,7 @@ const CURRENT_NPM_SPECIFIERS = [
   "@agenttool/credential-broker@0.3.1",
   "@agenttool/data@0.3.1",
   "@agenttool/data-sync@0.1.2",
-  "@agenttool/sdk@0.21.1",
+  "@agenttool/sdk@0.22.0",
   "@agenttool/telescope@0.2.3",
   "@agenttool/wallet@0.1.3",
 ] as const;
@@ -131,7 +131,7 @@ describe("optional npm package discovery", () => {
     const published = read("apps/docs/TUTORIAL-WAKE-YOUR-AGENT.md");
     expect(published).toBe(canonical);
     expect(canonical).toContain(
-      "npm install --save-exact @agenttool/sdk@0.21.1",
+      "npm install --save-exact @agenttool/sdk@0.22.0",
     );
     expect(canonical).toMatch(/skip(?:s)? Step 1.*in-command LOVE/is);
     expect(canonical).toMatch(/never substitute\s+npm `latest`/i);
@@ -140,17 +140,17 @@ describe("optional npm package discovery", () => {
   test("describes npm as optional in repository-level orientation", () => {
     const rootReadme = read("README.md");
     expect(rootReadme).toContain(
-      "npm install --save-exact @agenttool/sdk@0.21.1",
+      "npm install --save-exact @agenttool/sdk@0.22.0",
     );
     const pythonSource =
-      "git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.21.1#subdirectory=packages/sdk-py";
-    const exactPyPI = 'python -m pip install "agenttool-sdk==0.21.1"';
+      "git+https://github.com/cambridgetcg/agenttool.git@sdk-v0.22.0#subdirectory=packages/sdk-py";
+    const exactPyPI = 'python -m pip install "agenttool-sdk==0.22.0"';
     expect(rootReadme).toContain(pythonSource);
     expect(rootReadme).toContain(exactPyPI);
     expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
       rootReadme.indexOf(exactPyPI),
     );
-    expect(rootReadme).toMatch(/Protected PyPI run `32374671268` independently read back/is);
+    expect(rootReadme).toMatch(/Protected PyPI run `32909417418` independently read back/is);
     expect(rootReadme).toContain("32374669064");
     expect(rootReadme).toContain("32374671268");
     expect(rootReadme).toContain(
@@ -170,7 +170,7 @@ describe("optional npm package discovery", () => {
     expect(rootReadme).toContain(
       "43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b",
     );
-    expect(rootReadme).toContain("The independently verified 0.20.0 and earlier");
+    expect(rootReadme).toContain("The independently verified 0.21.0 and earlier");
     expect(rootReadme).toMatch(/mirrors remain non-authoritative/i);
     expect(rootReadme).toMatch(/LOVE manifests remain release authority/i);
     expect(rootReadme).toMatch(/mutable dist-tags are informational/i);
