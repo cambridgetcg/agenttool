@@ -52,9 +52,9 @@ a challenged 402 with exactly ONE signed retry under a mandatory spend policy
 deny-lists; over-cap refused, never clamped; a second 402 is a typed error,
 never a loop). `at.x402.topUp(credits)` and `at.x402.payment(id)` are the
 rail's two doors. Absent the `x402` option nothing changes: the SDK never
-signs, never retries, never reads a key. The sealed 0.22.0 LOVE/source
-candidate is staged for publication; the registries serve 0.21.1 until the
-reviewed workflows complete.
+signs, never retries, never reads a key. The 0.22.0 LOVE/source
+release is published: protected npm run 33434131214 and PyPI run 33434133719
+independently read back the exact registry mirrors.
 
 The 0.22.0 line retains the 0.21.1 corrective patch, now independently
 verified below. It adds no endpoint or I/O. The credential-free

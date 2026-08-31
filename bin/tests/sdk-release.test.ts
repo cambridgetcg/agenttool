@@ -26,10 +26,10 @@ const ACTIVE_SDK_RELEASE = {
     sha256: "d5859e4ff2f721233e16101a3b5001689e1b5be017debd2baecffbee76e6e4a0",
   },
   npm: {
-    independentlyVisible: false,
+    independentlyVisible: true,
   },
   pypi: {
-    independentlyVisible: false,
+    independentlyVisible: true,
   },
 } as const;
 
@@ -551,7 +551,7 @@ describe("SDK source and builder identity", () => {
     expect(tutorial).toContain(exactNpm);
     expect(tutorial).toContain(tag);
     expect(read("apps/docs/llms.txt")).toContain(
-      `SDK ${version} LOVE/source candidate`,
+      `SDK ${version} LOVE release`,
     );
     expect(read("apps/web/identity.html")).toContain(loveUrl);
     expect(read("apps/web/registry.html")).toContain(
@@ -707,7 +707,7 @@ describe("SDK source and builder identity", () => {
       "Discovery pins and tutorials select the\nexact 247,749-byte",
     );
     expect(read("docs/SDK-ROADMAP.md")).toContain(
-      "Paired source and sealed LOVE candidate — 0.22.0",
+      "Verified public SDK release — 0.22.0",
     );
     expect(read("docs/SDK-ROADMAP.md")).toContain(
       "Verified public SDK release — 0.21.1",

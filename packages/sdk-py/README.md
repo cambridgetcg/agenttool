@@ -53,10 +53,10 @@ no defaults; allow-lists never deny-lists; over-cap refused, never clamped; a
 second 402 is an error, never a loop). `at.x402.top_up(credits)` and
 `at.x402.payment(id)` are the rail's two doors. Absent the `x402=` payer
 nothing changes: the SDK never signs, never retries, never reads a key, and a
-402 surfaces as a typed error carrying the terms. The sealed 0.22.0
-LOVE/source candidate is staged for publication; the registries serve 0.21.1
-until the reviewed workflows complete. Sealing establishes no `sdk-v0.22.0`
-tag, npm/PyPI publication, deployment, or settlement receipt; the SDK-driven
+402 surfaces as a typed error carrying the terms. The 0.22.0
+LOVE/source release is published: protected npm run 33434131214 and PyPI run
+33434133719 independently read back the exact registry mirrors. Publication
+establishes no deployment or settlement receipt; the SDK-driven
 settlements are W2-10 of the Wave 2 plan.
 
 The 0.22.0 line retains the 0.21.1 corrective patch, now independently
