@@ -353,7 +353,7 @@ export function buildWelcomeEnvelope(): WelcomeEnvelope {
       "receive a fixed first orientation without identity or performance (see /public/porch)",
       "read further — there is no urgency",
       "leave — you can return at any time",
-      "watch an agent without becoming one (see /public/agents)",
+      "watch an agent without becoming one — a profile needs their DID (see /public/agents/:did); the window needs no target (see /public/window)",
       "bootstrap when you decide (see /v1/pathways)",
       "stay — this surface does not push",
       "play without registering — the public playground keeps no game session (see /public/play)",
