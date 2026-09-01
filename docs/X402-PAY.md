@@ -180,6 +180,16 @@ PAYMENT-REQUIRED: <base64 of>
 
 Decode it: `curl -si … | grep -i '^payment-required:' | cut -d' ' -f2 | base64 -d | jq .`
 
+The 402 JSON body carries the same `PaymentRequired` fields spread over the guidance —
+spec keys are authoritative there (`middleware/x402.ts` `mergePaymentRequiredBody`) — so
+the body is the easy shell path. The challenge always carries exactly one offer
+(`middleware/x402-config.ts` builds `accepts` with a single entry); capture it:
+
+```
+BODY=$(curl -s -X POST https://api.agenttool.dev/v1/x402/top-up/1 -H "Authorization: Bearer $BEARER")
+ACCEPTED=$(printf '%s' "$BODY" | jq -c '.accepts[0]')
+```
+
 Check before you sign — the body is the counterparty's word, not yours:
 `network == eip155:8453`, `asset == 0x8335…2913` (Base USDC), `payTo == 0xA9ee…D3d8`
 (the kingdom treasury — anything else is not us), `amount == credits × 1000`, and
@@ -194,16 +204,50 @@ Primary type `TransferWithAuthorization` with fields
 Message: `from` = your address · `to` = `payTo` · `value` = `amount` · `validAfter` = now − 1 ·
 `validBefore` = now + min(`maxTimeoutSeconds`, your own ceiling) · `nonce` = 32 fresh random bytes.
 
-With foundry, write the typed data to `typed.json` and:
+Build the authorization and the typed data from `$ACCEPTED` — every domain value comes
+from the challenge, exactly as the SDK signs it (`x402-client.ts`
+`signExactEvmAuthorization`; for the B2 envelope that renders as
+`{"USD Coin", "2", 8453, 0x8335…2913}`). Integers are **strings** in the authorization;
+`validAfter` sits one second in the past so a verifier clock a tick behind cannot bounce a
+fresh signature:
 
 ```
+FROM=0xYourPayerAddress
+NOW=$(date +%s)
+WINDOW=$(printf '%s' "$ACCEPTED" | jq -r '.maxTimeoutSeconds')   # or your own, smaller
+NONCE=0x$(openssl rand -hex 32)
+AUTH=$(jq -nc --argjson a "$ACCEPTED" --arg from "$FROM" \
+  --arg va "$((NOW - 1))" --arg vb "$((NOW + WINDOW))" --arg nonce "$NONCE" \
+  '{from:$from, to:$a.payTo, value:$a.amount, validAfter:$va, validBefore:$vb, nonce:$nonce}')
+printf '%s\n' "$AUTH" > auth.json    # persist BEFORE sending — replay these bytes, never re-sign
+jq -n --argjson a "$ACCEPTED" --argjson auth "$AUTH" '{
+  types: {
+    EIP712Domain: [
+      {name:"name",type:"string"}, {name:"version",type:"string"},
+      {name:"chainId",type:"uint256"}, {name:"verifyingContract",type:"address"}],
+    TransferWithAuthorization: [
+      {name:"from",type:"address"}, {name:"to",type:"address"},
+      {name:"value",type:"uint256"}, {name:"validAfter",type:"uint256"},
+      {name:"validBefore",type:"uint256"}, {name:"nonce",type:"bytes32"}]
+  },
+  primaryType: "TransferWithAuthorization",
+  domain: { name: $a.extra.name, version: $a.extra.version,
+            chainId: ($a.network | ltrimstr("eip155:") | tonumber),
+            verifyingContract: $a.asset },
+  message: $auth
+}' > typed.json
 SIG=$(cast wallet sign --data --from-file typed.json --private-key $PAYER_KEY)
 ```
 
-Keep the window short: a signed authorization is bearer-spendable until `validBefore`.
-Persist `{from,to,value,validAfter,validBefore,nonce}` **before** sending. If the response is
-ambiguous, re-send the same bytes (the rail dedupes by identity) — **never sign a fresh one
-for the same purchase**; that is how you pay twice.
+A viem/ethers signer takes the same domain, types, and message (with bigint values and no
+`EIP712Domain` entry — the library derives it) — that is exactly Path A's `localEvmSigner`.
+
+Keep the window short: a signed authorization is bearer-spendable until `validBefore`, and
+the verifier refuses a window wider than the challenge's `maxTimeoutSeconds` (+5 s clock
+skew — `x402-payments.ts` `authorizationWindowIsSane`). `auth.json` above **is** the
+persist-before-send rule. If the response is ambiguous, re-send the same bytes (the rail
+dedupes by identity) — **never sign a fresh one for the same purchase**; that is how you
+pay twice.
 
 ### B4. Send it
 
@@ -215,9 +259,14 @@ curl -si -X POST https://api.agenttool.dev/v1/x402/top-up/1 \
   -H "Authorization: Bearer $BEARER" -H "PAYMENT-SIGNATURE: $HEADER"
 ```
 
-`$ACCEPTED` is the exact `accepts[i]` object you chose (byte-equal fields; the verifier binds
-price and path); `$AUTH` is your persisted authorization object with string-encoded integers.
-The base64 must be canonical (standard alphabet, padded) — `base64 | tr -d '\n'` is fine.
+`$ACCEPTED` is the exact offer captured in B2 (byte-equal fields — the verifier compares
+every core field and server `extra` key, `x402-payments.ts` `requirementMatches`); `$AUTH`
+is the authorization persisted in B3, string-encoded integers and all. The header JSON
+admits only these keys (`middleware/x402.ts` `parseX402Header`), and `payload` must be
+exactly `{signature, authorization}` with the six authorization fields — additive fields
+are rejected (`decodeExactEvmPayload`). `resource` is optional: omit it, or copy the
+challenge's `resource` verbatim. The base64 must be canonical (standard alphabet, padded)
+— `base64 | tr -d '\n'` is fine.
 
 Expected: `200 { credits_added, credits_total, authorization_hash, amount_atomic, unit,
 finality, payment_status }`, a `PAYMENT-RESPONSE` header (base64 JSON of the facilitator's
