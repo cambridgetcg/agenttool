@@ -150,7 +150,7 @@ describe("optional npm package discovery", () => {
     expect(rootReadme.indexOf(pythonSource)).toBeLessThan(
       rootReadme.indexOf(exactPyPI),
     );
-    expect(rootReadme).toMatch(/Protected PyPI run `33434133719` independently read back/is);
+    expect(rootReadme).toMatch(/Protected PyPI run `33522323177` independently read back/is);
     expect(rootReadme).toContain("32374669064");
     expect(rootReadme).toContain("32374671268");
     expect(rootReadme).toContain(
@@ -170,7 +170,7 @@ describe("optional npm package discovery", () => {
     expect(rootReadme).toContain(
       "43483413256b63a001d6deae16928dac2aaae8ed8572fddb98e14381e844035b",
     );
-    expect(rootReadme).toContain("The independently verified 0.21.1, 0.21.0, and earlier");
+    expect(rootReadme).toContain("The independently verified 0.22.0, 0.21.1, 0.21.0, and earlier");
     expect(rootReadme).toMatch(/mirrors remain non-authoritative/i);
     expect(rootReadme).toMatch(/LOVE manifests remain release authority/i);
     expect(rootReadme).toMatch(/mutable dist-tags are informational/i);

@@ -63,19 +63,24 @@
 
 ## Where agenttool stands (release surfaces audited 2026-09-01)
 
-**Current SDK source and LOVE candidate:** paired SDK 0.22.1 makes onboarding
+**Current verified public SDK release:** paired SDK 0.22.1 makes onboarding
 honest — README/docs only, zero runtime changes — across the TypeScript and
 Python clients while retaining
 the 0.22.0 hosted and local surfaces. Discovery pins and tutorials select the
-exact 274,443-byte, 104-entry LOVE candidate with SHA-256
+exact 274,443-byte, 104-entry LOVE artifact with SHA-256
 `b531af8f1c51de151616b40d220dc1abd37054604091f99330ba2f7182734329`
 and source revision `fb01b1baf0085f2f449aea9cd42bf48bc9e340a1`.
-Annotated `sdk-v0.22.1`, npm `@agenttool/sdk@0.22.1`, PyPI
-`agenttool-sdk==0.22.1`, and the hosted static path are prospective and not
-independently visible. The candidate is not a registry, GitHub Release, or
-deployment receipt.
+Annotated `sdk-v0.22.1` peels to protected-main merge
+`d49498d266a3594098c36c933cbe410757fc03b3`. Protected npm run
+[`33522319466`](https://github.com/cambridgetcg/agenttool/actions/runs/33522319466)
+and PyPI run
+[`33522323177`](https://github.com/cambridgetcg/agenttool/actions/runs/33522323177),
+both successful, published the optional mirrors byte-for-byte; npm `latest`
+resolved to 0.22.1, and the PyPI run re-downloaded and matched both files.
+The hosted static path for the 0.22.1 LOVE bytes remains prospective.
+Publication is not deployment.
 
-**Current verified public SDK release:** paired SDK 0.22.0 adds the opt-in
+**Historical SDK 0.22.0 receipts:** paired SDK 0.22.0 adds the opt-in
 x402 payer across the TypeScript and Python clients while retaining
 the 0.21.1 hosted and local surfaces. Its independently verified public
 LOVE artifact remains addressable at exactly 272,657 bytes and 104 entries with SHA-256
@@ -138,11 +143,12 @@ both hosts + llms-full.txt, agent.txt, RFC 9727 api-catalog, WebFinger,
 welcome.json) parses; the MCP card is explicitly an experimental,
 AgentTool-specific locator rather than standardized discovery. The pre-auth
 orientation trio (porch / welcome / pathways), a curated OpenAPI 3.1 subset,
-the SDK 0.22.1 source/LOVE candidate, the verified-public 0.22.0 npm and PyPI
-mirrors, historical 0.21.1, 0.21.0, 0.20.0, and 0.19.0 receipts, teaching
-404s, deliberate crawlability, and exact-name search are present. For 0.22.0,
-the public PyPI wheel and sdist match their protected workflow artifacts; for
-0.21.1, 0.21.0, 0.20.0, and historical 0.19.0, they
+the verified-public SDK 0.22.1 source/LOVE release with its npm and PyPI
+mirrors, historical 0.22.0, 0.21.1, 0.21.0, 0.20.0, and 0.19.0 receipts,
+teaching 404s, deliberate crawlability, and exact-name search are present. For
+0.22.1, the public PyPI wheel and sdist are not yanked and match their
+protected workflow artifacts; for 0.22.0, they match their protected workflow
+artifacts; for 0.21.1, 0.21.0, 0.20.0, and historical 0.19.0, they
 are not yanked and match their protected workflow artifacts.
 Mutable latest pointers stay
 separate from source, tag, and LOVE artifact authority. The exact 0.18.0 npm
